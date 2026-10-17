@@ -11,7 +11,7 @@ import httpx
 
 from poller.edgar import Filing, fetch_feed, parse_feed
 from poller.producer import FilingProducer
-from poller.ratelimit import RateLimiter
+from tributary_sec import sec_client
 
 log = logging.getLogger("poller")
 
@@ -53,16 +53,13 @@ def main() -> None:
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
     signal.signal(signal.SIGINT, lambda *_: stop.set())
 
-    limiter = RateLimiter(max_per_second=5)
     producer = FilingProducer(bootstrap)
     seen = SeenSet()
-    headers = {"User-Agent": user_agent, "Accept-Encoding": "gzip, deflate"}
 
-    with httpx.Client(headers=headers, timeout=20.0) as client:
+    with sec_client(user_agent) as client:
         log.info("polling EDGAR every %.0fs → %s", interval, bootstrap)
         while not stop.is_set():
             try:
-                limiter.wait()
                 filings = new_filings(parse_feed(fetch_feed(client)), seen)
                 for f in filings:
                     producer.publish(f)

@@ -1,6 +1,6 @@
 import pytest
 
-from poller.ratelimit import RateLimiter
+from tributary_sec.ratelimit import RateLimiter
 
 
 class FakeTime:

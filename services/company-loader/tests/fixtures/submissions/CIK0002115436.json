@@ -1,0 +1,14 @@
+{
+ "cik": "0002115436",
+ "name": "ExxonMobil Holdings Corp",
+ "tickers": [
+  "XOM"
+ ],
+ "exchanges": [
+  "NYSE"
+ ],
+ "sic": "2911",
+ "sicDescription": "Petroleum Refining",
+ "entityType": "operating",
+ "formerNames": []
+}

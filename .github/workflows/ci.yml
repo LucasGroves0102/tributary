@@ -24,7 +24,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install ruff pytest -e services/poller -e services/bronze-loader
+      - run: pip install ruff pytest -e libs/sec -e services/poller -e services/bronze-loader -e services/company-loader
       - run: ruff check .
       - run: ./scripts/migrate.sh
       - run: pytest

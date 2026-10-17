@@ -41,7 +41,7 @@ class Filing:
 
 def fetch_feed(client: httpx.Client) -> bytes:
     """Return the raw Atom XML as bytes (the feed is ISO-8859-1; ElementTree reads the
-    declaration). The client must carry a declared User-Agent or the SEC returns 403."""
+    declaration). Pass a client from tributary_sec.sec_client."""
     resp = client.get(FEED_URL, params=FEED_PARAMS)
     resp.raise_for_status()
     return resp.content

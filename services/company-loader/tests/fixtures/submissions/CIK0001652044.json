@@ -1,0 +1,20 @@
+{
+ "cik": "0001652044",
+ "name": "Alphabet Inc.",
+ "tickers": [
+  "GOOGL",
+  "GOOG",
+  "GOOGM",
+  "GOOGN"
+ ],
+ "exchanges": [
+  "Nasdaq",
+  "Nasdaq",
+  "Nasdaq",
+  "Nasdaq"
+ ],
+ "sic": "7370",
+ "sicDescription": "Services-Computer Programming, Data Processing, Etc.",
+ "entityType": "operating",
+ "formerNames": []
+}

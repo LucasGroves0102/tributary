@@ -1,4 +1,4 @@
-.PHONY: up up-all down logs topics consume migrate psql lint test
+.PHONY: up up-all down logs topics consume migrate companies psql lint test
 
 COMPOSE := $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo docker-compose)
 
@@ -22,6 +22,10 @@ consume:   ## watch the raw filings topic
 
 migrate:   ## apply new db/migrations/*.sql (needs DATABASE_URL, e.g. from .env)
 	set -a; . ./.env; set +a; ./scripts/migrate.sh
+
+companies: ## refresh company identity from the SEC (run daily)
+	$(COMPOSE) --profile jobs build company-loader
+	$(COMPOSE) --profile jobs run --rm company-loader
 
 psql:      ## open a psql shell on the Tributary database
 	$(COMPOSE) exec postgres psql -U tributary

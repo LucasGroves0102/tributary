@@ -1,0 +1,16 @@
+{
+ "cik": "0000034088",
+ "name": "EXXON MOBIL CORP",
+ "tickers": [],
+ "exchanges": [],
+ "sic": "2911",
+ "sicDescription": "Petroleum Refining",
+ "entityType": "operating",
+ "formerNames": [
+  {
+   "name": "EXXON CORP",
+   "from": "1994-05-11T00:00:00.000Z",
+   "to": "1999-11-30T00:00:00.000Z"
+  }
+ ]
+}
