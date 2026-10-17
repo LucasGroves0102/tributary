@@ -1,0 +1,61 @@
+# Run: make authz-test
+name: Tributary access model
+model_file: ./model.fga
+
+tuples:
+  # every company points at both tier objects (written by the sync for granted companies)
+  - {user: tier:financials, relation: financials_tier, object: company:nvda}
+  - {user: tier:filings, relation: filings_tier, object: company:nvda}
+  - {user: tier:financials, relation: financials_tier, object: company:tsla}
+  - {user: tier:filings, relation: filings_tier, object: company:tsla}
+
+  # alice: Free plan, granted Nvidia directly
+  - {user: user:alice, relation: subscriber, object: tier:financials}
+  - {user: user:alice, relation: viewer, object: company:nvda}
+
+  # bob: Pro plan, member of acme, which is granted Nvidia
+  - {user: user:bob, relation: subscriber, object: tier:financials}
+  - {user: user:bob, relation: subscriber, object: tier:filings}
+  - {user: user:bob, relation: member, object: organization:acme}
+  - {user: organization:acme#member, relation: viewer, object: company:nvda}
+
+  # carol: Pro plan, no grants at all
+  - {user: user:carol, relation: subscriber, object: tier:financials}
+  - {user: user:carol, relation: subscriber, object: tier:filings}
+
+tests:
+  - name: Free plan reads granted financials but not filings
+    check:
+      - user: user:alice
+        object: company:nvda
+        assertions: {viewer: true, can_read_financials: true, can_read_filings: false}
+
+  - name: No grant means no access, whatever the plan
+    check:
+      - user: user:alice
+        object: company:tsla
+        assertions: {viewer: false, can_read_financials: false, can_read_filings: false}
+      - user: user:carol
+        object: company:nvda
+        assertions: {viewer: false, can_read_financials: false, can_read_filings: false}
+
+  - name: Organization grant reaches its members, and Pro adds filings
+    check:
+      - user: user:bob
+        object: company:nvda
+        assertions: {viewer: true, can_read_financials: true, can_read_filings: true}
+      - user: user:bob
+        object: company:tsla
+        assertions: {can_read_financials: false, can_read_filings: false}
+
+  - name: Listing what a user can read
+    list_objects:
+      - user: user:bob
+        type: company
+        assertions:
+          can_read_filings: [company:nvda]
+      - user: user:alice
+        type: company
+        assertions:
+          can_read_financials: [company:nvda]
+          can_read_filings: []

@@ -1,0 +1,27 @@
+model
+  schema 1.1
+
+# A person using Tributary. user:<user_id> from the app database.
+type user
+
+# Companies can be granted to a whole organization.
+type organization
+  relations
+    define member: [user]
+
+# Data tiers, granted by plans: tier:financials (Free and Pro), tier:filings (Pro only).
+type tier
+  relations
+    define subscriber: [user]
+
+# company:<company_id>, the canonical ID from silver.companies.
+# Reading a company's data needs BOTH a grant for the company AND the tier for that data.
+# Watchlists are preferences and never appear here.
+type company
+  relations
+    define viewer: [user, organization#member]
+    # each company points at the tier objects that gate its datasets
+    define financials_tier: [tier]
+    define filings_tier: [tier]
+    define can_read_financials: viewer and subscriber from financials_tier
+    define can_read_filings: viewer and subscriber from filings_tier

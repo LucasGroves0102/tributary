@@ -22,6 +22,7 @@ services:
 
   postgres:
     image: pgvector/pgvector:pg16
+    command: ["postgres", "-c", "wal_level=logical"]  # Debezium CDC (FR7)
     ports:
       - "${POSTGRES_PORT:-5433}:5432"  # 5433 on the host avoids clashing with a local Postgres
     environment:
@@ -35,6 +36,42 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+
+  # FR8 authorization. Started by `make up` after its database is migrated.
+  openfga:
+    image: openfga/openfga:v1.8.4
+    command: run
+    profiles: ["authz"]
+    ports:
+      - "8081:8080"  # HTTP API; 8080 on the host is kafka-ui
+    environment:
+      OPENFGA_DATASTORE_ENGINE: postgres
+      OPENFGA_DATASTORE_URI: postgres://${POSTGRES_USER:-tributary}:${POSTGRES_PASSWORD:-tributary}@postgres:5432/openfga?sslmode=disable
+      OPENFGA_PLAYGROUND_ENABLED: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  openfga-migrate:
+    image: openfga/openfga:v1.8.4
+    command: migrate
+    profiles: ["tools"]
+    environment:
+      OPENFGA_DATASTORE_ENGINE: postgres
+      OPENFGA_DATASTORE_URI: postgres://${POSTGRES_USER:-tributary}:${POSTGRES_PASSWORD:-tributary}@postgres:5432/openfga?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # OpenFGA CLI: make authz, make authz-test
+  fga:
+    image: openfga/cli:v0.6.3
+    profiles: ["tools"]
+    working_dir: /authz
+    volumes:
+      - ./authz:/authz:ro
+    environment:
+      FGA_API_URL: http://openfga:8080
 
   # Dev UI: browse topics and messages at http://localhost:8080
   kafka-ui:

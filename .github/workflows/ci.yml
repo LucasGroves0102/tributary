@@ -19,6 +19,8 @@ jobs:
     env:
       DATABASE_URL: postgresql://tributary:tributary@localhost:5432/tributary
       TEST_DATABASE_URL: postgresql://tributary:tributary@localhost:5432/tributary
+      APP_DATABASE_URL: postgresql://tributary:tributary@localhost:5432/app
+      APP_TEST_DATABASE_URL: postgresql://tributary:tributary@localhost:5432/app
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -26,5 +28,16 @@ jobs:
           python-version: "3.12"
       - run: pip install ruff pytest -e libs/sec -e services/poller -e services/bronze-loader -e services/company-loader -e services/facts-fetcher -e services/doc-fetcher -e services/parser
       - run: ruff check .
-      - run: ./scripts/migrate.sh
+      - run: ./scripts/create-databases.sh
+      - run: ./scripts/migrate.sh db/migrations "$DATABASE_URL"
+      - run: ./scripts/migrate.sh db/app/migrations "$APP_DATABASE_URL"
       - run: pytest
+
+  authz:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: OpenFGA model tests
+        run: >-
+          docker run --rm -v "$PWD/authz:/authz:ro" -w /authz
+          openfga/cli:v0.6.3 model test --tests model.fga.yaml

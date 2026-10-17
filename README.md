@@ -8,8 +8,10 @@ citations — only from the data each caller is allowed to see.
 
 ```bash
 cp .env.example .env   # set SEC_USER_AGENT to your name/email
-make up                # Kafka + Postgres
-make migrate           # create/upgrade the schema
+make up                # Kafka, Postgres, OpenFGA
+make migrate           # create/upgrade the tributary and app databases
+make seed-app          # demo users (alice, bob, carol, dave) with plans and grants
+make authz             # OpenFGA store + model (authz/model.fga)
 make companies         # load company identity (FR5); then: SELECT * FROM silver.resolve_company('FB');
 make financials        # XBRL financials for tracked companies → gold.quarterly_financials
 make seed-documents    # load recent 10-K/10-Q/8-K history (fetched and parsed by up-all)
@@ -25,9 +27,9 @@ make consume           # watch filings arrive (or open the Kafka UI at http://lo
 |---|---|
 | `services/` | One folder per deployable service or job (poller, bronze-loader, company-loader, facts-fetcher, doc-fetcher, parser, fetcher, parser, parser-rs, query-api, agent) |
 | `libs/` | Shared Python packages (`sec`: SEC HTTP client with User-Agent and rate limiting) |
-| `db/` | Migrations, medallion transforms, RLS policies, app schema |
+| `db/` | Analytics migrations (`db/migrations`) and the app database (`db/app`) |
 | `streaming/` | Debezium configs and Kafka topic docs |
-| `authz/` | OpenFGA model |
+| `authz/` | OpenFGA authorization model and its tests (`make authz-test`) |
 | `tests/` | Adversarial, integration and propagation tests |
 | `deploy/` | Helm chart and Terraform |
 | `observability/` | OpenTelemetry, Prometheus, Grafana |
