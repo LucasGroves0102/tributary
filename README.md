@@ -4,15 +4,13 @@ Real-time SEC filings platform: streams new EDGAR filings and company financials
 resolves every company to one identity, and serves an AI agent that answers questions with
 citations — only from the data each caller is allowed to see.
 
-See [docs/BRD.docx](docs/BRD.docx) for the full requirements.
-
 ## Quickstart
 
 ```bash
 cp .env.example .env   # set SEC_USER_AGENT to your name/email
 make up                # Kafka + Postgres
 make up-all            # + poller
-make consume           # watch filings arrive
+make consume           # watch filings arrive (or open the Kafka UI at http://localhost:8080)
 ```
 
 ## Layout

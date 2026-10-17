@@ -37,6 +37,18 @@ services:
       timeout: 5s
       retries: 10
 
+  # Dev UI: browse topics and messages at http://localhost:8080
+  kafka-ui:
+    image: ghcr.io/kafbat/kafka-ui:v1.0.0
+    ports:
+      - "8080:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: tributary
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+    depends_on:
+      kafka:
+        condition: service_healthy
+
   # Started with `make up-all` once the poller is written
   poller:
     build: ./services/poller

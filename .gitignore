@@ -10,3 +10,8 @@ venv/
 target/
 .terraform/
 *.tfstate*
+
+# Private planning/info docs: kept local, never committed
+CLAUDE.md
+ROADMAP.md
+docs/
