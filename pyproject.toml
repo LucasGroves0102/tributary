@@ -7,7 +7,7 @@ target-version = "py312"
 select = ["E", "F", "I", "B", "UP"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["poller", "bronze_loader", "company_loader", "doc_fetcher", "facts_fetcher", "filing_parser", "tributary_sec"]
+known-first-party = ["poller", "bronze_loader", "company_loader", "doc_fetcher", "facts_fetcher", "filing_parser", "authz_sync", "tributary_authz", "tributary_sec"]
 
 [tool.pytest.ini_options]
 testpaths = ["libs", "services", "tests"]

@@ -14,3 +14,15 @@ field existed have no `source` and came from the feed.
 
 `documents.fetched` references the document in `bronze.filing_documents` instead of
 embedding it: a 10-K is ~2 MB of HTML, over Kafka's default 1 MB message limit.
+
+## CDC topics (Debezium, from the `app` database)
+
+| Topic | Key | Producer | Consumers |
+|---|---|---|---|
+| `app.public.users` | `{user_id}` | Debezium | authz-sync |
+| `app.public.subscriptions` | `{user_id}` | Debezium | authz-sync |
+| `app.public.company_grants` | `{grant_id}` | Debezium | authz-sync |
+| `app.public.plan_tiers` | `{plan_id, tier}` | Debezium | authz-sync |
+
+Values are Debezium envelopes `{before, after, op, source, ...}` (JSON, no schemas). Topics
+are compacted, and each delete is followed by a tombstone. See `streaming/debezium/`.

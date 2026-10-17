@@ -1,6 +1,8 @@
-.PHONY: up up-all down logs topics consume migrate seed-app authz authz-test backfill companies financials financials-rebuild seed-documents reparse psql lint test
+.PHONY: up up-all down logs topics consume migrate seed-app authz authz-test cdc propagation-test backfill companies financials financials-rebuild seed-documents reparse psql lint test
 
 COMPOSE := $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo docker-compose)
+# use the repo virtualenv when there is one, so `make test` works without activating it
+BIN := $(if $(wildcard .venv/bin/pytest),.venv/bin/,)
 
 up:        ## Kafka, Postgres, OpenFGA
 	$(COMPOSE) up -d
@@ -30,6 +32,12 @@ migrate:   ## apply new migrations to the tributary and app databases
 
 seed-app:  ## demo users, grants and watchlists in the app database
 	set -a; . ./.env; set +a; psql "$$APP_DATABASE_URL" -v ON_ERROR_STOP=1 -q -f db/app/seed.sql
+
+cdc:       ## register or update the Debezium connector for the app database
+	set -a; . ./.env; set +a; ./scripts/register-connector.sh
+
+propagation-test: ## revoke access live and time propagation (needs the stack + authz-sync)
+	set -a; . ./.env; set +a; E2E=1 $(BIN)pytest -q -s tests/propagation
 
 authz:     ## create the OpenFGA store if missing and write authz/model.fga
 	COMPOSE="$(COMPOSE)" ./scripts/authz-bootstrap.sh
@@ -65,7 +73,7 @@ psql:      ## open a psql shell on the Tributary database
 	$(COMPOSE) exec postgres psql -U tributary
 
 lint:
-	ruff check .
+	$(BIN)ruff check .
 
 test:
-	pytest
+	$(BIN)pytest

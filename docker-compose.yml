@@ -37,6 +37,26 @@ services:
       timeout: 5s
       retries: 10
 
+  # FR7 CDC: Kafka Connect with Debezium. Register the connector with `make cdc`.
+  connect:
+    image: quay.io/debezium/connect:2.7.3.Final
+    ports:
+      - "8083:8083"
+    environment:
+      BOOTSTRAP_SERVERS: kafka:29092
+      GROUP_ID: connect
+      CONFIG_STORAGE_TOPIC: connect.configs
+      OFFSET_STORAGE_TOPIC: connect.offsets
+      STATUS_STORAGE_TOPIC: connect.statuses
+      CONFIG_STORAGE_REPLICATION_FACTOR: 1
+      OFFSET_STORAGE_REPLICATION_FACTOR: 1
+      STATUS_STORAGE_REPLICATION_FACTOR: 1
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+
   # FR8 authorization. Started by `make up` after its database is migrated.
   openfga:
     image: openfga/openfga:v1.8.4
@@ -135,6 +155,22 @@ services:
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       DATABASE_URL: postgresql://${POSTGRES_USER:-tributary}:${POSTGRES_PASSWORD:-tributary}@postgres:5432/${POSTGRES_DB:-tributary}
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+
+  authz-sync:
+    build:
+      context: .
+      dockerfile: services/authz-sync/Dockerfile
+    profiles: ["app"]
+    env_file: .env
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      DATABASE_URL: postgresql://${POSTGRES_USER:-tributary}:${POSTGRES_PASSWORD:-tributary}@postgres:5432/${POSTGRES_DB:-tributary}
+      FGA_API_URL: http://openfga:8080
     depends_on:
       kafka:
         condition: service_healthy

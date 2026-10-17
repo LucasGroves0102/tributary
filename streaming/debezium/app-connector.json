@@ -1,0 +1,25 @@
+{
+  "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+  "plugin.name": "pgoutput",
+  "database.hostname": "postgres",
+  "database.port": "5432",
+  "database.user": "${POSTGRES_USER}",
+  "database.password": "${POSTGRES_PASSWORD}",
+  "database.dbname": "app",
+  "topic.prefix": "app",
+  "table.include.list": "public.users,public.subscriptions,public.company_grants,public.plan_tiers",
+  "slot.name": "app_debezium",
+  "publication.name": "app_debezium",
+  "publication.autocreate.mode": "filtered",
+  "snapshot.mode": "initial",
+
+  "key.converter": "org.apache.kafka.connect.json.JsonConverter",
+  "key.converter.schemas.enable": "false",
+  "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+  "value.converter.schemas.enable": "false",
+
+  "tombstones.on.delete": "true",
+  "topic.creation.default.replication.factor": "1",
+  "topic.creation.default.partitions": "1",
+  "topic.creation.default.cleanup.policy": "compact"
+}

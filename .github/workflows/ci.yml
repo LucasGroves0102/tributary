@@ -26,7 +26,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install ruff pytest -e libs/sec -e services/poller -e services/bronze-loader -e services/company-loader -e services/facts-fetcher -e services/doc-fetcher -e services/parser
+      - run: pip install ruff pytest -e libs/sec -e libs/authz -e services/poller -e services/bronze-loader -e services/company-loader -e services/facts-fetcher -e services/doc-fetcher -e services/parser -e services/authz-sync
       - run: ruff check .
       - run: ./scripts/create-databases.sh
       - run: ./scripts/migrate.sh db/migrations "$DATABASE_URL"

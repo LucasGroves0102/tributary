@@ -1,0 +1,19 @@
+[project]
+name = "tributary-authz-sync"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "confluent-kafka>=2.5",
+    "psycopg[binary]>=3.2",
+    "tributary-authz",
+]
+
+[project.scripts]
+authz-sync = "authz_sync.main:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
