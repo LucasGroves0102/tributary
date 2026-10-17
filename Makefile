@@ -1,4 +1,4 @@
-.PHONY: up up-all down logs topics consume migrate companies psql lint test
+.PHONY: up up-all down logs topics consume migrate companies financials financials-rebuild psql lint test
 
 COMPOSE := $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo docker-compose)
 
@@ -26,6 +26,14 @@ migrate:   ## apply new db/migrations/*.sql (needs DATABASE_URL, e.g. from .env)
 companies: ## refresh company identity from the SEC (run daily)
 	$(COMPOSE) --profile jobs build company-loader
 	$(COMPOSE) --profile jobs run --rm company-loader
+
+financials: ## fetch XBRL facts for tracked companies → bronze/silver/gold (run daily)
+	$(COMPOSE) --profile jobs build facts-fetcher
+	$(COMPOSE) --profile jobs run --rm facts-fetcher
+
+financials-rebuild: ## re-derive silver/gold from stored bronze (after changing metric_tags)
+	$(COMPOSE) --profile jobs build facts-fetcher
+	$(COMPOSE) --profile jobs run --rm facts-fetcher facts-fetcher --rebuild
 
 psql:      ## open a psql shell on the Tributary database
 	$(COMPOSE) exec postgres psql -U tributary

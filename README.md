@@ -11,6 +11,7 @@ cp .env.example .env   # set SEC_USER_AGENT to your name/email
 make up                # Kafka + Postgres
 make migrate           # create/upgrade the schema
 make companies         # load company identity (FR5); then: SELECT * FROM silver.resolve_company('FB');
+make financials        # XBRL financials for tracked companies → gold.quarterly_financials
 make up-all            # + poller and bronze-loader
 make psql              # query it: SELECT * FROM bronze.filings ORDER BY filed_at DESC LIMIT 10;
 make consume           # watch filings arrive (or open the Kafka UI at http://localhost:8080)
@@ -20,7 +21,7 @@ make consume           # watch filings arrive (or open the Kafka UI at http://lo
 
 | Path | What |
 |---|---|
-| `services/` | One folder per deployable service or job (poller, bronze-loader, company-loader, fetcher, parser, parser-rs, query-api, agent) |
+| `services/` | One folder per deployable service or job (poller, bronze-loader, company-loader, facts-fetcher, fetcher, parser, parser-rs, query-api, agent) |
 | `libs/` | Shared Python packages (`sec`: SEC HTTP client with User-Agent and rate limiting) |
 | `db/` | Migrations, medallion transforms, RLS policies, app schema |
 | `streaming/` | Debezium configs and Kafka topic docs |

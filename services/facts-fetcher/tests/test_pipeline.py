@@ -1,0 +1,137 @@
+"""bronze → silver → gold against a real Postgres with migrations applied, using trimmed real
+SEC payloads. Skipped unless TEST_DATABASE_URL is set; every test is rolled back."""
+
+import os
+from datetime import date
+from pathlib import Path
+
+import pytest
+
+from facts_fetcher.db import refresh_gold, refresh_silver, store_payload, tracked_ciks
+
+psycopg = pytest.importorskip("psycopg")
+DSN = os.environ.get("TEST_DATABASE_URL")
+pytestmark = pytest.mark.skipif(not DSN, reason="TEST_DATABASE_URL not set")
+
+FIXTURES = Path(__file__).parent / "fixtures"
+NVDA, COST, JPM = "0001045810", "0000909832", "0000019617"
+XOM, XOM_HOLDINGS = "0000034088", "0002115436"
+# company_id → CIKs; Exxon's holdings CIK belongs to the original company
+COMPANIES = {NVDA: [NVDA], COST: [COST], JPM: [JPM], XOM: [XOM, XOM_HOLDINGS]}
+
+
+def raw(cik: str) -> bytes:
+    return (FIXTURES / f"CIK{cik}.json").read_bytes()
+
+
+@pytest.fixture
+def conn():
+    with psycopg.connect(DSN) as c, c.transaction(force_rollback=True):
+        c.execute("TRUNCATE gold.quarterly_financials, silver.financial_facts,"
+                  " bronze.company_facts, silver.company_aliases, silver.company_ciks,"
+                  " silver.companies")
+        for company_id, ciks in COMPANIES.items():
+            c.execute("INSERT INTO silver.companies (company_id, name, current_cik, tracked)"
+                      " VALUES (%s, %s, %s, true)", (company_id, company_id, ciks[-1]))
+            for cik in ciks:
+                c.execute("INSERT INTO silver.company_ciks (cik, company_id) VALUES (%s, %s)",
+                          (cik, company_id))
+        yield c
+
+
+@pytest.fixture
+def loaded(conn):
+    for company_id, ciks in COMPANIES.items():
+        for cik in ciks:
+            store_payload(conn, cik, raw(cik))
+            refresh_silver(conn, cik)
+        refresh_gold(conn, company_id)
+    return conn
+
+
+def quarters(conn, company_id, metric):
+    return conn.execute(
+        "SELECT period_end, value, value_source, source_tag, source_accessions"
+        " FROM gold.quarterly_financials WHERE company_id = %s AND metric = %s"
+        " ORDER BY period_end DESC", (company_id, metric)
+    ).fetchall()
+
+
+def test_tracked_ciks(conn):
+    assert tracked_ciks(conn)[XOM] == [XOM, XOM_HOLDINGS]
+
+
+def test_store_payload_dedupes_on_content(conn):
+    assert store_payload(conn, NVDA, raw(NVDA)) is True
+    assert store_payload(conn, NVDA, raw(NVDA)) is False
+    assert conn.execute("SELECT count(*) FROM bronze.company_facts").fetchone()[0] == 1
+
+
+def test_nvidia_last_four_revenue_quarters(loaded):
+    q = quarters(loaded, NVDA, "revenue")[:4]
+    assert [(r[0], r[1], r[2]) for r in q] == [
+        (date(2026, 7, 26), 96221000000, "reported"),
+        (date(2026, 4, 26), 81615000000, "reported"),
+        (date(2026, 1, 25), 68127000000, "derived"),  # FY 215.938B - 9 months 147.811B
+        (date(2025, 10, 26), 57006000000, "reported"),
+    ]
+    assert q[2][3] == "us-gaap:Revenues"
+    assert q[2][4] == ["0001045810-25-000230", "0001045810-26-000021"]  # 9-month 10-Q, 10-K
+
+
+def test_cash_flow_quarters_derived_from_year_to_date(loaded):
+    latest = quarters(loaded, NVDA, "operating_cash_flow")[0]
+    assert (latest[0], latest[1], latest[2]) == (date(2026, 7, 26), 24077000000, "derived")
+
+
+def test_sixteen_week_fourth_quarter(loaded):
+    q4 = next(r for r in quarters(loaded, COST, "revenue") if r[0] == date(2025, 8, 31))
+    assert (q4[1], q4[2]) == (86156000000, "derived")
+
+
+def test_bank_revenue_and_missing_metrics(loaded):
+    assert quarters(loaded, JPM, "revenue")[0][1:4] == (
+        57347000000, "reported", "us-gaap:RevenuesNetOfInterestExpense")
+    assert quarters(loaded, JPM, "gross_profit") == []
+
+
+def test_eps_is_never_derived(loaded):
+    assert all(r[2] == "reported" for r in quarters(loaded, NVDA, "eps_diluted"))
+
+
+def test_successor_cik_facts_land_on_original_company(loaded):
+    q = {r[0]: r[1] for r in quarters(loaded, XOM, "revenue")}
+    assert q[date(2026, 6, 30)] == 116017000000  # reported under the holdings CIK
+    assert q[date(2026, 3, 31)] == 85138000000   # reported under the original CIK
+
+
+def test_restatement_wins_and_original_is_kept(loaded):
+    loaded.execute(
+        "INSERT INTO silver.financial_facts (cik, metric, tag, unit, period_start, period_end,"
+        " value, accession_no, form, filed)"
+        " VALUES (%s, 'revenue', 'Revenues', 'USD', '2026-04-27', '2026-07-26', 99000000000,"
+        " 'restated-1', '10-Q/A', '2026-09-30')", (NVDA,))
+    refresh_gold(loaded, NVDA)
+    latest = quarters(loaded, NVDA, "revenue")[0]
+    assert (latest[1], latest[4]) == (99000000000, ["restated-1"])
+    originals = loaded.execute(
+        "SELECT count(*) FROM silver.financial_facts WHERE cik = %s AND metric = 'revenue'"
+        " AND period_end = '2026-07-26' AND accession_no = '0001045810-26-000075'", (NVDA,)
+    ).fetchone()[0]
+    assert originals > 0
+
+
+def test_refresh_is_idempotent(loaded):
+    before = loaded.execute("SELECT count(*) FROM gold.quarterly_financials").fetchone()[0]
+    assert refresh_silver(loaded, NVDA) == 0
+    refresh_gold(loaded, NVDA)
+    after = loaded.execute("SELECT count(*) FROM gold.quarterly_financials").fetchone()[0]
+    assert before == after
+
+
+def test_every_gold_row_has_provenance(loaded):
+    missing = loaded.execute(
+        "SELECT count(*) FROM gold.quarterly_financials WHERE accession_no IS NULL"
+        " OR source_tag IS NULL OR cardinality(source_accessions) = 0"
+    ).fetchone()[0]
+    assert missing == 0
