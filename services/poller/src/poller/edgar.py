@@ -26,8 +26,9 @@ class Filing:
     company_name: str
     role: str  # Issuer, Reporting, Subject, Filed by, Filer
     form_type: str
-    filed_at: datetime  # SEC acceptance time, with timezone
+    filed_at: datetime  # SEC acceptance time, with timezone (midnight ET from daily-index)
     url: str  # filing index page
+    source: str = "feed"  # feed: live poller; daily-index: backfill
 
     @property
     def key(self) -> tuple[str, str]:

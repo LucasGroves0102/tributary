@@ -1,4 +1,4 @@
-.PHONY: up up-all down logs topics consume migrate companies financials financials-rebuild seed-documents reparse psql lint test
+.PHONY: up up-all down logs topics consume migrate backfill companies financials financials-rebuild seed-documents reparse psql lint test
 
 COMPOSE := $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo docker-compose)
 
@@ -22,6 +22,10 @@ consume:   ## watch the raw filings topic
 
 migrate:   ## apply new db/migrations/*.sql (needs DATABASE_URL, e.g. from .env)
 	set -a; . ./.env; set +a; ./scripts/migrate.sh
+
+backfill:  ## publish missed filings from EDGAR daily indexes: make backfill DAYS=7
+	$(COMPOSE) --profile app build poller
+	$(COMPOSE) --profile app run --rm poller poller-backfill --days $(or $(DAYS),1)
 
 companies: ## refresh company identity from the SEC (run daily)
 	$(COMPOSE) --profile jobs build company-loader
