@@ -1,4 +1,4 @@
-.PHONY: up up-all down logs topics consume lint test
+.PHONY: up up-all down logs topics consume migrate psql lint test
 
 COMPOSE := $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo docker-compose)
 
@@ -19,6 +19,12 @@ topics:
 
 consume:   ## watch the raw filings topic
 	$(COMPOSE) exec kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic filings.raw --from-beginning
+
+migrate:   ## apply new db/migrations/*.sql (needs DATABASE_URL, e.g. from .env)
+	set -a; . ./.env; set +a; ./scripts/migrate.sh
+
+psql:      ## open a psql shell on the Tributary database
+	$(COMPOSE) exec postgres psql -U tributary
 
 lint:
 	ruff check .

@@ -9,7 +9,9 @@ citations — only from the data each caller is allowed to see.
 ```bash
 cp .env.example .env   # set SEC_USER_AGENT to your name/email
 make up                # Kafka + Postgres
-make up-all            # + poller
+make migrate           # create/upgrade the schema
+make up-all            # + poller and bronze-loader
+make psql              # query it: SELECT * FROM bronze.filings ORDER BY filed_at DESC LIMIT 10;
 make consume           # watch filings arrive (or open the Kafka UI at http://localhost:8080)
 ```
 

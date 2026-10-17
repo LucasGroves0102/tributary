@@ -30,7 +30,6 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-tributary}
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./db/migrations:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
       interval: 5s
@@ -58,6 +57,19 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
     depends_on:
       kafka:
+        condition: service_healthy
+
+  bronze-loader:
+    build: ./services/bronze-loader
+    profiles: ["app"]
+    env_file: .env
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      DATABASE_URL: postgresql://${POSTGRES_USER:-tributary}:${POSTGRES_PASSWORD:-tributary}@postgres:5432/${POSTGRES_DB:-tributary}
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
 
 volumes:
