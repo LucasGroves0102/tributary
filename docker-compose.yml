@@ -177,6 +177,21 @@ services:
       postgres:
         condition: service_healthy
 
+  query-api:
+    build:
+      context: .
+      dockerfile: services/query-api/Dockerfile
+    profiles: ["app"]
+    ports:
+      - "8000:8000"
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-tributary}:${POSTGRES_PASSWORD:-tributary}@postgres:5432/${POSTGRES_DB:-tributary}
+      FGA_API_URL: http://openfga:8080
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   # Batch job: make companies
   company-loader:
     build:

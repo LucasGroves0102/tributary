@@ -1,0 +1,130 @@
+"""Route behavior with fake layers: who gets checked, what's refused, and failing closed."""
+
+from datetime import date
+
+import pytest
+from fastapi.testclient import TestClient
+
+from query_api.app import create_app
+from query_api.authorizer import AuthzUnavailable
+
+from .conftest import SECRET
+
+NVDA, TSLA = "0001045810", "0001318605"
+
+
+class FakeAuthorizer:
+    def __init__(self, grants: dict[str, dict[str, set[str]]], down: bool = False):
+        self.grants, self.down, self.checks = grants, down, []
+
+    def can(self, user_id, tier, company_id):
+        self.checks.append((user_id, tier, company_id))
+        if self.down:
+            raise AuthzUnavailable("down")
+        return tier in self.grants.get(user_id, {}).get(company_id, set())
+
+    def readable(self, user_id):
+        if self.down:
+            raise AuthzUnavailable("down")
+        return self.grants.get(user_id, {})
+
+
+class FakeStore:
+    def __init__(self):
+        self.calls = []
+
+    def financials(self, user_id, company_id, metrics, quarters):
+        self.calls.append(("financials", user_id, company_id))
+        return [{"metric": "revenue", "period_start": date(2026, 4, 27),
+                 "period_end": date(2026, 7, 26), "value": 96221000000, "unit": "USD",
+                 "value_source": "reported", "source_tag": "us-gaap:Revenues",
+                 "accession_no": "0001045810-26-000075", "form": "10-Q",
+                 "filed": date(2026, 8, 26), "source_accessions": ["0001045810-26-000075"],
+                 "ingested_at": "2026-10-17T09:56:49Z"}]
+
+    def sections(self, *args):
+        self.calls.append(("sections",) + args[:2])
+        return []
+
+    def filings(self, *args):
+        self.calls.append(("filings",) + args[:2])
+        return []
+
+    def search(self, user_id, q):
+        return [{"company_id": NVDA, "name": "NVIDIA CORP", "matched_on": "ticker",
+                 "matched_alias": "NVDA", "is_current": True},
+                {"company_id": TSLA, "name": "Tesla, Inc.", "matched_on": "name",
+                 "matched_alias": "Tesla, Inc.", "is_current": True}]
+
+    def names(self, user_id, ids):
+        return {NVDA: "NVIDIA CORP"}
+
+
+GRANTS = {"alice": {NVDA: {"financials"}}}
+
+
+@pytest.fixture
+def client():
+    store, authz = FakeStore(), FakeAuthorizer(GRANTS)
+    c = TestClient(create_app(authz, store, SECRET))
+    c.store, c.authz = store, authz
+    return c
+
+
+def test_requires_token(client):
+    assert client.get(f"/v1/companies/{NVDA}/financials").status_code == 401
+    bad = {"Authorization": "Bearer not-a-jwt"}
+    assert client.get(f"/v1/companies/{NVDA}/financials", headers=bad).status_code == 401
+
+
+def test_permitted_financials_with_citation(client, token):
+    r = client.get(f"/v1/companies/{NVDA}/financials", headers=token("alice"))
+    assert r.status_code == 200
+    row = r.json()["rows"][0]
+    assert row["citation"]["accession_no"] == "0001045810-26-000075"
+    assert row["freshness"]["filed"] == "2026-08-26"
+    assert "as_of" in r.json()
+
+
+def test_denied_never_reaches_the_database(client, token):
+    for path in (f"/v1/companies/{TSLA}/financials", f"/v1/companies/{NVDA}/filings",
+                 f"/v1/companies/{NVDA}/sections/1A"):
+        assert client.get(path, headers=token("alice")).status_code == 403
+    assert client.store.calls == []
+
+
+def test_user_comes_from_token_not_parameters(client, token):
+    client.get(f"/v1/companies/{NVDA}/financials?user_id=bob", headers=token("alice"))
+    assert client.authz.checks == [("alice", "financials", NVDA)]
+
+
+def test_fails_closed_when_openfga_is_down(token):
+    c = TestClient(create_app(FakeAuthorizer(GRANTS, down=True), FakeStore(), SECRET))
+    assert c.get(f"/v1/companies/{NVDA}/financials", headers=token("alice")).status_code == 503
+    assert c.get("/v1/me", headers=token("alice")).status_code == 503
+
+
+@pytest.mark.parametrize("path", [
+    "/v1/companies/NVDA/financials",              # not a company_id
+    "/v1/companies/0001045810'--/financials",     # injection attempt
+    f"/v1/companies/{NVDA}/sections/1A;DROP",     # bad section key
+])
+def test_rejects_malformed_identifiers(client, token, path):
+    assert client.get(path, headers=token("alice")).status_code in (404, 422)
+    assert client.store.calls == []
+
+
+def test_unknown_metric(client, token):
+    r = client.get(f"/v1/companies/{NVDA}/financials?metrics=salary", headers=token("alice"))
+    assert r.status_code == 422
+
+
+def test_search_shows_access_per_result(client, token):
+    results = client.get("/v1/companies/search?q=n", headers=token("alice")).json()["results"]
+    assert {r["company_id"]: r["access"] for r in results} == {NVDA: ["financials"], TSLA: []}
+
+
+def test_me(client, token):
+    body = client.get("/v1/me", headers=token("alice")).json()
+    assert body == {"user_id": "alice", "companies": [
+        {"company_id": NVDA, "name": "NVIDIA CORP", "tiers": ["financials"]}]}

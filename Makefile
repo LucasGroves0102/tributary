@@ -1,4 +1,4 @@
-.PHONY: up up-all down logs topics consume migrate seed-app authz authz-test cdc propagation-test backfill companies financials financials-rebuild seed-documents reparse psql lint test
+.PHONY: up up-all down logs topics consume migrate seed-app authz authz-test cdc propagation-test token backfill companies financials financials-rebuild seed-documents reparse psql lint test
 
 COMPOSE := $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo docker-compose)
 # use the repo virtualenv when there is one, so `make test` works without activating it
@@ -38,6 +38,9 @@ cdc:       ## register or update the Debezium connector for the app database
 
 propagation-test: ## revoke access live and time propagation (needs the stack + authz-sync)
 	set -a; . ./.env; set +a; E2E=1 $(BIN)pytest -q -s tests/propagation
+
+token:     ## dev bearer token for the Query API: make token USER=alice
+	@set -a; . ./.env; set +a; $(BIN)query-api-token $(or $(USER_ID),$(USER))
 
 authz:     ## create the OpenFGA store if missing and write authz/model.fga
 	COMPOSE="$(COMPOSE)" ./scripts/authz-bootstrap.sh
