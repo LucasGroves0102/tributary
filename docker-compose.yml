@@ -74,7 +74,37 @@ services:
       postgres:
         condition: service_healthy
 
-  # Batch job, not a service: make companies
+  doc-fetcher:
+    build:
+      context: .
+      dockerfile: services/doc-fetcher/Dockerfile
+    profiles: ["app"]
+    env_file: .env
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      DATABASE_URL: postgresql://${POSTGRES_USER:-tributary}:${POSTGRES_PASSWORD:-tributary}@postgres:5432/${POSTGRES_DB:-tributary}
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+
+  parser:
+    build:
+      context: .
+      dockerfile: services/parser/Dockerfile
+    profiles: ["app"]
+    env_file: .env
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      DATABASE_URL: postgresql://${POSTGRES_USER:-tributary}:${POSTGRES_PASSWORD:-tributary}@postgres:5432/${POSTGRES_DB:-tributary}
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+
+  # Batch job: make companies
   company-loader:
     build:
       context: .

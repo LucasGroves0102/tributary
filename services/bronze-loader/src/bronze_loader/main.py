@@ -6,7 +6,7 @@ import signal
 import threading
 
 import psycopg
-from confluent_kafka import Consumer, KafkaException
+from confluent_kafka import Consumer, KafkaError, KafkaException
 
 from bronze_loader.db import insert_filings
 from bronze_loader.rows import to_row
@@ -50,6 +50,8 @@ def main() -> None:
                 rows = []
                 for m in msgs:
                     if m.error():
+                        if m.error().code() == KafkaError.UNKNOWN_TOPIC_OR_PART:
+                            continue  # topic not created yet
                         raise KafkaException(m.error())
                     try:
                         rows.append(to_row(m.value(), m.partition(), m.offset()))

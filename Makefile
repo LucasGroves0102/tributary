@@ -1,4 +1,4 @@
-.PHONY: up up-all down logs topics consume migrate companies financials financials-rebuild psql lint test
+.PHONY: up up-all down logs topics consume migrate companies financials financials-rebuild seed-documents reparse psql lint test
 
 COMPOSE := $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo docker-compose)
 
@@ -34,6 +34,14 @@ financials: ## fetch XBRL facts for tracked companies → bronze/silver/gold (ru
 financials-rebuild: ## re-derive silver/gold from stored bronze (after changing metric_tags)
 	$(COMPOSE) --profile jobs build facts-fetcher
 	$(COMPOSE) --profile jobs run --rm facts-fetcher facts-fetcher --rebuild
+
+seed-documents: ## publish tracked companies' recent 10-K/10-Q/8-K filings to filings.raw
+	$(COMPOSE) --profile app build doc-fetcher
+	$(COMPOSE) --profile app run --rm doc-fetcher doc-fetcher-seed
+
+reparse:   ## re-parse every stored document (after changing the parser)
+	$(COMPOSE) --profile app build parser
+	$(COMPOSE) --profile app run --rm parser parser --reparse-all
 
 psql:      ## open a psql shell on the Tributary database
 	$(COMPOSE) exec postgres psql -U tributary
