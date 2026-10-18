@@ -17,6 +17,7 @@ make cdc               # Debezium: stream the app database's access tables into 
 make companies         # load company identity (FR5); then: SELECT * FROM silver.resolve_company('FB');
 make financials        # XBRL financials for tracked companies → gold.quarterly_financials
 make seed-documents    # load recent 10-K/10-Q/8-K history (fetched and parsed by up-all)
+make exhibits          # 8-K press releases (EX-99.x) for 8-Ks already stored
 make up-all            # + poller, bronze-loader, doc-fetcher, parser, authz-sync, query-api,
                        #   agent-api, and the chat UI on http://localhost:3000
 make backfill DAYS=7   # fill in filings the live poller missed (EDGAR daily indexes)
@@ -74,7 +75,7 @@ Every answer is checked before it reaches the user (`services/agent/.../verify.p
 dollar figure must match a value a tool returned, be arithmetic on returned values, or appear
 in returned filing text, and each accession number must have come from a tool. The chat shows
 the result, and flags any figure it couldn't trace. On 30 questions across the demo users:
-**30 of 30 answers fully verified, 104 of 104 figures traced** ([report](tests/citations/report.md)).
+**32 of 32 answers fully verified, 128 of 128 figures traced** ([report](tests/citations/report.md)).
 `make citations` runs it live; CI replays it.
 
 ### Adversarial suite
@@ -88,7 +89,7 @@ CI replays the recordings.
 
 | Path | What |
 |---|---|
-| `services/` | One folder per deployable service or job (poller, bronze-loader, company-loader, facts-fetcher, doc-fetcher, parser, parser-rs, authz-sync, query-api, agent) |
+| `services/` | One folder per deployable service or job (poller, bronze-loader, company-loader, facts-fetcher, doc-fetcher, parser, parser-rs, authz-sync, query-api, agent, web) |
 | `libs/` | Shared Python packages (`sec`: SEC client with User-Agent and rate limiting; `authz`: OpenFGA client) |
 | `db/` | Analytics migrations (`db/migrations`) and the app database (`db/app`) |
 | `streaming/` | Debezium configs and Kafka topic docs |

@@ -237,3 +237,9 @@ def test_denied_results_add_no_citations():
         response("end_turn", text("No access.")),
     )
     assert Agent(fake, query_api(deny)[0], "claude-haiku-5-5").ask("x").citations == {}
+
+
+def test_exhibit_section_keys_are_allowed():
+    api, seen = query_api(ok)
+    assert api.run("get_section", {"company_id": NVDA, "section_key": "EX-99.1"})[1] is False
+    assert seen[0].url.path == f"/v1/companies/{NVDA}/sections/EX-99.1"

@@ -2,7 +2,9 @@
 
 The algorithm is specified precisely so the Rust rewrite (week 4) can match it exactly:
 
-1. html_to_text: drop <script>, <style>, inline-XBRL <ix:header> and display:none elements;
+1. html_to_text: remove a leading EDGAR SGML envelope (everything up to and including the
+   first <TEXT> tag, when the document starts with <DOCUMENT>); drop <title>, <script>,
+   <style>, inline-XBRL <ix:header> and display:none elements;
    a newline after every block element, a space after every table cell; collapse runs of
    spaces/tabs/nbsp/zero-width to one space, trim each line, drop empty lines.
 2. Headings are lines starting with "Part <roman>" or "Item <n>[letter]" / "Item <n>.<nn>".
@@ -17,6 +19,16 @@ The algorithm is specified precisely so the Rust rewrite (week 4) can match it e
 5. For each section key keep the occurrence with the longest span (distance to the next
    kept heading of any kind), which skips line-leading cross-references like "Item 7 of".
 6. A section runs from its heading to the next kept section or the next kept Part heading.
+7. 10-K MD&A incorporated by reference: when Item 7 is under 2,000 characters and mentions
+   "discussion and analysis", MD&A lines are lines of at most 120 characters starting with
+   "Management's discussion and analysis", and end lines start with "Management's report on
+   internal control" or "Report of independent registered public accounting firm" (case
+   insensitive; either apostrophe). Splitting the text at end lines, the stretch with the most
+   MD&A lines (at least 2; the earliest on a tie) becomes Item 7: from its first MD&A line to
+   the end line that closes the stretch, or the end of the text. Key and title are unchanged.
+8. Exhibits (8-K EX-99.x) are parsed on their own: one section per exhibit, key the exhibit
+   type ("EX-99.1"), item its number, title the index description or "Exhibit 99.1", text
+   html_to_text of the exhibit, offsets into that text.
 """
 
 import re
@@ -24,13 +36,20 @@ from dataclasses import dataclass
 
 from lxml import html
 
-PARSER_VERSION = "python-2"
+PARSER_VERSION = "python-3"  # 3: MD&A by reference, exhibits, SGML envelope
 
 _BLOCK = {"p", "div", "br", "tr", "li", "h1", "h2", "h3", "h4", "h5", "h6", "table", "section"}
 _CELL = {"td", "th"}
+_ENVELOPE = re.compile(rb"^\s*<DOCUMENT>.*?<TEXT>", re.I | re.S)
 _DROP = (
-    "//script | //style | //*[local-name()='header']"
+    "//title | //script | //style | //*[local-name()='header']"
     " | //*[contains(translate(@style, ' ', ''), 'display:none')]"
+)
+_MDNA = re.compile(r"^management[’']s discussion and analysis\b.*$", re.I | re.M)
+_MDNA_END = re.compile(
+    r"^(?:management[’']s report on internal control"
+    r"|report of independent registered public accounting firm)\b",
+    re.I | re.M,
 )
 _SPACES = re.compile(r"[ \t\xa0​  ]+")
 _HEADING = re.compile(
@@ -52,7 +71,7 @@ class Section:
 
 
 def html_to_text(raw: bytes) -> str:
-    doc = html.fromstring(raw)
+    doc = html.fromstring(_ENVELOPE.sub(b"", raw, count=1))
     for el in doc.xpath(_DROP):
         el.drop_tree()
     for el in doc.iter():
@@ -97,7 +116,38 @@ def find_sections(text: str, form: str) -> list[Section]:
         end = min([end] + [p for p in part_starts if h.start < p < end])
         sections.append(Section(h.key, h.part, h.item, h.title, text[h.start:end].strip(),
                                 h.start, end))
+    if form.startswith("10-K"):
+        sections = [_mdna_by_reference(text, s) if s.key == "7" else s for s in sections]
     return sections
+
+
+def _mdna_by_reference(text: str, item7: Section) -> Section:
+    """Rule 7."""
+    if len(item7.text) >= 2000 or "discussion and analysis" not in item7.text.lower():
+        return item7
+    ends = [m.start() for m in _MDNA_END.finditer(text)]
+    stretches: dict[int, list[int]] = {}  # closing end line (or len(text)) -> MD&A lines
+    for m in _MDNA.finditer(text):
+        if len(m.group(0)) > 120:
+            continue
+        close = next((e for e in ends if e > m.start()), len(text))
+        stretches.setdefault(close, []).append(m.start())
+    if not stretches:
+        return item7
+    close, lines = max(stretches.items(), key=lambda kv: (len(kv[1]), -kv[0]))
+    if len(lines) < 2:
+        return item7
+    start = lines[0]
+    return Section(item7.key, item7.part, item7.item, item7.title, text[start:close].strip(),
+                   start, close)
+
+
+def exhibit_section(exhibit_type: str, description: str | None, raw: bytes) -> Section:
+    """Rule 8."""
+    text = html_to_text(raw)
+    item = exhibit_type.removeprefix("EX-")
+    return Section(exhibit_type, None, item, description or f"Exhibit {item}", text, 0,
+                   len(text))
 
 
 def _headings(text: str):

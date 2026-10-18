@@ -11,8 +11,8 @@ import httpx
 import psycopg
 from confluent_kafka import Consumer, KafkaError, KafkaException, Producer
 
-from doc_fetcher.db import already_fetched, insert_document, tracked_ciks
-from doc_fetcher.index import parse_index
+from doc_fetcher.db import already_fetched, insert_document, insert_exhibit, tracked_ciks
+from doc_fetcher.index import parse_exhibits, parse_index
 from tributary_sec import sec_client
 
 IN_TOPIC = "filings.raw"
@@ -84,6 +84,8 @@ def handle(conn: psycopg.Connection, client: httpx.Client, producer: Producer, e
     doc_resp = client.get(index.url)
     doc_resp.raise_for_status()
     digest = insert_document(conn, accession, cik, form, index, doc_resp.content)
+    if form == "8-K":
+        fetch_exhibits(conn, client, accession, index_resp.content)
     producer.produce(
         OUT_TOPIC,
         key=cik.encode(),
@@ -95,6 +97,16 @@ def handle(conn: psycopg.Connection, client: httpx.Client, producer: Producer, e
     )
     producer.flush(10)
     log.info("%s %s %s: %d KB", cik, form, accession, len(doc_resp.content) // 1024)
+
+
+def fetch_exhibits(conn: psycopg.Connection, client: httpx.Client, accession: str,
+                   index_html: bytes) -> int:
+    exhibits = parse_exhibits(index_html)
+    for exhibit in exhibits:
+        resp = client.get(exhibit.url)
+        resp.raise_for_status()
+        insert_exhibit(conn, accession, exhibit, resp.content)
+    return len(exhibits)
 
 
 if __name__ == "__main__":

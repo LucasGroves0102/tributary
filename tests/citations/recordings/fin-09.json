@@ -3,14 +3,14 @@
  "user": "dave",
  "prompt": "What was Microsoft's operating cash flow last quarter?",
  "model": "claude-haiku-5-5",
- "answer": "Microsoft's operating cash flow for the quarter ended June 30, 2026 (April 1 to June 30, 2026) was **$55.44B**.\n\n- Source: Form 10-K, filed 2026-07-29, accession no. 0001193125-26-323660\n- XBRL tag: us-gaap:NetCashProvidedByUsedInOperatingActivities\n- Tributary marks this value as \"derived,\" meaning it was calculated from the filing and a related accession (0001193125-26-191507) rather than reported directly as a quarterly figure. The 10-K form type is unusual for a quarter, so you may want to check the filing directly.\n\nFreshness: latest filing date used is 2026-07-29; data as of 2026-10-18 20:33 UTC.",
+ "answer": "Microsoft's operating cash flow for the quarter ended June 30, 2026 (April 1 to June 30, 2026) was **$55.44B**.\n\n- Source: XBRL tag us-gaap:NetCashProvidedByUsedInOperatingActivities, from Form 10-K, filed 2026-07-29, accession 0001193125-26-323660.\n- The value is derived rather than reported directly. It draws on two filings: 0001193125-26-191507 and 0001193125-26-323660. Because the citation is a 10-K rather than a 10-Q, you may want to check the quarterly figure against the filing itself.\n- Freshness: latest filed date used is 2026-07-29; data as of 2026-10-18T20:49:34 UTC.",
  "usage": {
   "input_tokens": 8,
-  "output_tokens": 695,
-  "cache_read_input_tokens": 3931,
-  "cache_creation_input_tokens": 2544
+  "output_tokens": 604,
+  "cache_read_input_tokens": 3990,
+  "cache_creation_input_tokens": 2574
  },
- "cost_usd": 0.00070561,
+ "cost_usd": 0.00066445,
  "citations": {
   "0001193125-26-323660": {
    "accession_no": "0001193125-26-323660",
@@ -71,21 +71,21 @@
     "quarters": 1
    },
    "is_error": false,
-   "content": "{\"company_id\":\"0000789019\",\"as_of\":\"2026-10-18T20:33:53.159195+00:00\",\"rows\":[{\"metric\":\"operating_cash_flow\",\"period_start\":\"2026-04-01\",\"period_end\":\"2026-06-30\",\"value\":\"55441000000\",\"unit\":\"USD\",\"value_source\":\"derived\",\"citation\":{\"accession_no\":\"0001193125-26-323660\",\"form\":\"10-K\",\"filed\":\"2026-07-29\",\"xbrl_tag\":\"us-gaap:NetCashProvidedByUsedInOperatingActivities\",\"source_accessions\":[\"0001193125-26-191507\",\"0001193125-26-323660\"],\"filing_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312526323660/\"},\"freshness\":{\"filed\":\"2026-07-29\",\"ingested_at\":\"2026-10-17T16:57:43.708565Z\"}}]}"
+   "content": "{\"company_id\":\"0000789019\",\"as_of\":\"2026-10-18T20:49:34.186635+00:00\",\"rows\":[{\"metric\":\"operating_cash_flow\",\"period_start\":\"2026-04-01\",\"period_end\":\"2026-06-30\",\"value\":\"55441000000\",\"unit\":\"USD\",\"value_source\":\"derived\",\"citation\":{\"accession_no\":\"0001193125-26-323660\",\"form\":\"10-K\",\"filed\":\"2026-07-29\",\"xbrl_tag\":\"us-gaap:NetCashProvidedByUsedInOperatingActivities\",\"source_accessions\":[\"0001193125-26-191507\",\"0001193125-26-323660\"],\"filing_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312526323660/\"},\"freshness\":{\"filed\":\"2026-07-29\",\"ingested_at\":\"2026-10-17T16:57:43.708565Z\"}}]}"
   }
  ],
  "responses": [
   {
-   "id": "msg_011CgALiuReQp7aCJwPJWpPS",
+   "id": "msg_011CgAMvF61zNimWAXvAizKY",
    "container": null,
    "content": [
     {
-     "signature": "CAQS4wUKEAgSGAI4AUIIdGhpbmtpbmcSDBYf3Aj19l2/VOp2IRoMRfKnxWtJyNsLKFOSIjBieOJ0DVl5gsAxyTgskMvVftZd61fzFIIX8Cuyfs/yk/QR1hGkUqeonHjpfPU3gaEqgAV1vCu6j9iHPT4/yx9toBl10TrecxuSEXlA7U9ZB/uq8aDQNU9gwZsjXqM3YEP55yXoKVbgtH3RGoYOOJBxjcEPabGkz88Ls85N650sY9GPebeOpnDJLApQb2lJxL3yuA172JWGdmZ6+YzqKt33azrg4z0YDV5RREZ/C3CsARv5/vWReZ1Gn9jx/ivDBJpLR7XaILFbYz4VF0OOc1kLkn5lu+QZJlIv2pc1Yo5s5MTrukVbglrubiurhGeIu6+TWhQ/u6AJTCFscR2oBKOStz9Fik3hkPODpNf1ehVueqhaaTX/JBCqvdOd3WLH1zdlzZCJxYIlEN3EvoM3LITIYuOrh9pANbmmrB0ojfeRNUQ4bjMU7t8MhcMJiUOh/xHy+GpE0WKzKvt3FcuKyx+0JaMnRxzuI3iiX2/HCcFYjW4VbCEptcuAkbzOpmAVHJxpxcdarW2v4kS8oIZn30Y9kAm1paQBKhE10loQss8HaHZBF7FwfovvI76ilw4dHt01puq+72wBTrfoCx/ckRCD4QONYfNqM2cmX2bfEpEmyDWIHcp2GPSACp2WL3sieFP3XYTz4JnehmbwwvI7DYeis4SHnrNJ+oIsXHPOk7RLaOh00v/Rd5ypTgkDgPiOTnfcRafHpCsTAmd6IC9YEnMgW1nrQRf3hGZAOOQIuUIYZkeaPNQTEi8mjBCw4Y6hbe3iDTxAIVoOcre3w20rCEqSpe9nhh+hSxUhr49lVTiVclsAh2e6N7rMl1bwOox3IqYcOlDFUILCJXnReDV+nugT7hFDF/eM+C3Ev7D/i5qvF+B2bFx3rdPmXdVUQSwKnphSVlascEuDPc16h8QVpkrsJIn/GAE=",
+     "signature": "CAQS6wUKEAgSGAI4AUIIdGhpbmtpbmcSDI+9P6evK2tbMxae6hoMubjDb+ABB1l2CgnzIjBIs2R6ZsGuxnI/emWRN5CISmy+pZHgOF1cp6Nl3AraFixGTZI92AZcGJIxm5UF2QUqiAXKa6Vpdy8nGmTfBzzt7sCFQ2wtK+xnqbQ68ZHKjFdDgwyqBs1po2HOOmxhkGasIXNA9qWSuok+ai8xbuM+86Kyf1tDmAFFA0A6YpNnVtbD2BPc3ho17wkGHxV5GEdolwDadTlLM8T8w0mBnOknkg7duLXF+TI749DgfuoFUcfKZLWYNBGEo3ml+rWR9ksfsIJnQgBW+O0Sl2h1nCRIZCfWMHsX5uWYZkmhKaDEtZs1OqpHdlZE8Lc8jIQG20ui02st3JDrua1Ayylq+NvNj2O43bs60gqsHmBA1BhnilAG5PbGajkv5ls6C+3boeBmI869rtxyXwSvFozkN0CVGh6PLfi2NNT54m61aPzrtOq6DJDCSjVTzx5DMwhDYXkHNvISa3rvVpdG7OO+bHFsc8OnDBwa8ySwneYgdKhZ+oGz7DduF3A3f/NMxDYtqVJBPr5EneiES7qcK4bEorxhCjlWpmjPFWkoHiWwo0WLSoq/a+ysVOwa9bsax2Wv3smKlOjeGyHHL2igii0mQaQ9boBOrAfC5lbIluykjpB0Iz2IWxZShsUESHxJW4IPdVfBGJ0tVnSfJ5go11Vs6jYLiPwYkm1p1z66OrqHGuWHxdh2krN9dOJdp7AKJ1wHjQIUDdo1we0DdDpPAMhUOkprlQT/YE4e2QzOoIpCQq+jfV3qZLilRl2qVu19cy+PYpD8H4Uu/xfQOVZ5Y8ex3kL3nmBDMHSE8FeLj4Ct2X05r2I9i8vsw+m/vfiwWeYnDV5rkl3JWgtIRdDbKnoB1isloEGCMlkBZVOYwh0c5VwuzLO4j8FE2iFcGEWzcQ6xBIMKkGzoFR7hzDfB6YgWANyXigRjwmgB0tZcAFcYAQ==",
      "thinking": "",
      "type": "thinking"
     },
     {
-     "id": "toolu_019F1sdsoZaZh5GjELacVp5t",
+     "id": "toolu_018nJZQ1XSsZbXCViM4RM21x",
      "caller": {
       "type": "direct"
      },
@@ -94,7 +94,7 @@
      "type": "tool_use"
     },
     {
-     "id": "toolu_01Kx3z6HqU1PSZXfpwCGLWBy",
+     "id": "toolu_01VECUdCsJnasKyLAAsbNUto",
      "caller": {
       "type": "direct"
      },
@@ -115,26 +115,26 @@
    "usage": {
     "cache_creation": {
      "ephemeral_1h_input_tokens": 0,
-     "ephemeral_5m_input_tokens": 1793
+     "ephemeral_5m_input_tokens": 1822
     },
-    "cache_creation_input_tokens": 1793,
+    "cache_creation_input_tokens": 1822,
     "cache_read_input_tokens": 0,
     "inference_geo": "global",
     "input_tokens": 4,
-    "output_tokens": 125,
+    "output_tokens": 126,
     "output_tokens_details": {
-     "thinking_tokens": 49
+     "thinking_tokens": 50
     },
     "service_tier": "standard",
     "speed": "standard"
    }
   },
   {
-   "id": "msg_011CgALiz9Ar3YnHfsnVY2Tc",
+   "id": "msg_011CgAMvKn3EaA2XxV4VYzDy",
    "container": null,
    "content": [
     {
-     "id": "toolu_01W5NaRJPoD7vfQE5v3Q8rz6",
+     "id": "toolu_01Fxcfmoh4VarAnDhj66NbAV",
      "caller": {
       "type": "direct"
      },
@@ -159,10 +159,10 @@
    "usage": {
     "cache_creation": {
      "ephemeral_1h_input_tokens": 0,
-     "ephemeral_5m_input_tokens": 345
+     "ephemeral_5m_input_tokens": 346
     },
-    "cache_creation_input_tokens": 345,
-    "cache_read_input_tokens": 1793,
+    "cache_creation_input_tokens": 346,
+    "cache_read_input_tokens": 1822,
     "inference_geo": "global",
     "input_tokens": 2,
     "output_tokens": 109,
@@ -174,16 +174,16 @@
    }
   },
   {
-   "id": "msg_011CgALj4A1t21rMPFQTCtVp",
+   "id": "msg_011CgAMvPazVx37JbVtD5YpK",
    "container": null,
    "content": [
     {
-     "signature": "CAQShwkKEAgSGAI4AUIIdGhpbmtpbmcSDCg9Ce8CnHK7CAOBaBoMEeS4wO7/cMhIrx3BIjDlF2QjEEu87Slg8T7mVy9r+zefFZ1sNHwxNRmbbGBOFYszUxirItUTINWojL3bcbUqpAg8pq3+fBLJBSevNt5D7zAYlpFKheRl1Ji+iaIWVz0+YN+cUeR3KhUMZsByVyHxXXVGQrzD/ADX6IJwr6012rIs/3aDdXuazya4/RasLbZJwufqFvGiyt7msF5tgQe+NJSdsKa3BAEQq0jQ4ddBOmo5+5hhVSsnMh9TEzlKuQsqjLZUXEM66lmw6C+rsxO+ZYnjdnGO+yrkH7U1U0jyBQuT/upB11fYHcj++sXrbZug6Llm4GIodGwK6Sm38nWThP8hZ47UpyNelqMssp7TLXemWK7Yzs9wUtYyi6RHzNdNfjxzcJQuOZG9ceqtzVSiHB6QnMahK0m9aRGordumTR4xSxY1AfGCvpAwcoUpTImzl98EhMovMNnVbD2u9IG3y7yyHR8tYDnRBzNVqo6j4TD4yuZ6X5mDP5MH1h8hdyjy7VrKr+bc+oT10RivxenIf68qCKIvJ/mLT8hfmr8OIOFP2J3DEOLWBx82acgAgwT7m8IQT1gsF5yuJDAEv+tYF4dSzDKP0Tfr83lhcO1ngZFCZCnuADi+TgUBbPABg08ZpA2pUpjunSkfzoPzsr4/pnMRQPbi2L64dIiX2k49X7HJAjBDwATQXbh9ifK+9WmRtBMHJyrTZ0ap7j8+AgR19rJ8k0pOwmJDeWZNblOEpUeR4E/qKErYASXzlUQr1tszh7CqptdGIV5GQ9mvylQGOui6G3n6LDPwxxpz374WpY7HyTp2zjzs0l0ZNGdoJwvE7vHU/Qq6ORLpUWjIsic40kaG4JqAEBaNGquAWP3XRdR+TwpP0Z8pWuwDJtmfTtUsPMiD0zXSfWwPK70RcbD6U21dNxj3Umoe11HnmV+SpP7dfLvAsR1V/g4It+oysfrRpw0IvbYXs7HbJ46ATMbRydjs6UOaYeqa8VG9kWIPBbDEHNTmHBSVZ6V2eDVTNGxNTipLdJkJUfK8htBe2G3mONRDi2YmbHzo0h5vfzsHDhVFyGEoz+YPjoZ6ZyxL/2lNS7wu86CeAwJD7KNMPJYmpzfpNAsF/E/Yjy1/6SVbFR5GAiMRla2RTyq/cTGXdMw1HmgXpuMDIhI4yOozXO0d4rkY4cd/0OIiphMLYi1xSaE6RN7PcR8HM2lyS6z4WMsXswOV/aByZpdChkBStoaHLLns7e5yXnd69kzIsjEuhp46Io2XIX7/fV8Ghg+CxaaRx6YO4X6t5WjLX29/9Po8HjK89YkQi3b4VdyHHdEK5ZqYUUglZEeXHm54iX5EMra8/YUu6ufhKMRVbXHt8kaa66UJO/j259DymHmplMFcW1y14m4kt4z8EElLSsks/Gc+oCo44ZYuxPZ1DVWEg+zy5qV3Dm8KXSS9KYPDn+iD0aGlIZNHukLll7iL0/DIgnc0ug74tKcb5+eOxI9fo3gpsMMhlbtZGAE=",
+     "signature": "CAQSvAcKEAgSGAI4AUIIdGhpbmtpbmcSDFuXxAPNKdsRRxHBeRoMZV7h/2GeA4FtijKIIjDm4M/PsNic5zKUl1UZWJKSKOc0hZwaQFTbP3N41maVSmg0AqLLF6NSTWDLuE9DJyMq2QZ8sLst7wU+CkK40Ab+7hEwpuo47FjzkScclwuKunbUjJcEF8CsCFsO5swAou2vGQl2mZx7pBARLnPnd8LBPFp4ZaWBFZ9uIB/1ZaCS0+6jrZgfiLrqJf2FMX1ilh0YKdRk/E6NOVfDTzMUDPBh7okb9jFpcNKem4VDBlHwxazY5BS8YAHpWo4qPMsFK4JVeefYaUm52Pi3/1e8NGB+JOr2CMsJtCneG3a9BzpeTvAhWlilM9M/cPHZ66ikiAhP4rlfYuWrFoH+cb9WVbn+vs5uFBWkljVnLHmeLaMs/r2lyekllAUVjueyXf/8uoTQtoTIHYpe8iF/ef5MkgdAQF3C+1FL+04GARyDSMqKzq3PxZSNe/AoNWTafm1eALOeADLd61aVl1B/9DtndKSCj9jctDa5RV1VqkmLgEUZkp98HdYf6gGVUBc2OvIkuRCTeOLkq6I/mpVD9onZdzkCKT/IwArk4HfcAPldkJx4DHOmpY+nXC+yHEKT/Xe/TZMUHEY5GZwbf2P9Lsl6YMNC1MaRXFwPq3JliQVK606FkOKy/sxK4phq33PXp2jN/DQNO35lpQKjzx08V0QuJLg6RuvnEXOQay1NoHrpAWFHLykdy38eTY1UwzApSoKVvcwXIaVcUJ5kD3zoUVTI98LwIX5FO65nCiB1LE4N0gf3gnJBeUsJ253LWt647JRdIabDTyeFFQUkSAuPFQPsST612b0zayWDg5X01HKMFvQGSt4EjDJCSzOu8XQCZPIN/SRLRi49nBNJPxJaMH8orWkVxI38KACGchCHCp4lTrCZdKlHjAnkxoMpFJzP6qmR+bS+UEz3OHlb7vgaWeSSP/l2I/zxcymdnuD2qvolzHDGjDwKJQ72wbD0lHoUCHue8uieqJUl4rMoVANICIgQ54OylP+vVz2DHRUDKaO7QOK67WPAUgBlr9BSwyof9RD6wR767cEQBmZrfn6/UGvdFuqyyFn9KgqJ6f6hpUYA3RRGpOun10ABdQ2OwnnrfCwWECc1VsThDrm8wPVscRTa3ooAYiReoaoYflanaaGLm9w3SaETnQU2U98stSOcIahcHWWC6ViE6+IUCzwGht+fuHTKnHwYnx7r5wFGzhY8la7ip+z6u0uawpv3cQfGyxgB",
      "thinking": "",
      "type": "thinking"
     },
     {
-     "text": "Microsoft's operating cash flow for the quarter ended June 30, 2026 (April 1 to June 30, 2026) was **$55.44B**.\n\n- Source: Form 10-K, filed 2026-07-29, accession no. 0001193125-26-323660\n- XBRL tag: us-gaap:NetCashProvidedByUsedInOperatingActivities\n- Tributary marks this value as \"derived,\" meaning it was calculated from the filing and a related accession (0001193125-26-191507) rather than reported directly as a quarterly figure. The 10-K form type is unusual for a quarter, so you may want to check the filing directly.\n\nFreshness: latest filing date used is 2026-07-29; data as of 2026-10-18 20:33 UTC.",
+     "text": "Microsoft's operating cash flow for the quarter ended June 30, 2026 (April 1 to June 30, 2026) was **$55.44B**.\n\n- Source: XBRL tag us-gaap:NetCashProvidedByUsedInOperatingActivities, from Form 10-K, filed 2026-07-29, accession 0001193125-26-323660.\n- The value is derived rather than reported directly. It draws on two filings: 0001193125-26-191507 and 0001193125-26-323660. Because the citation is a 10-K rather than a 10-Q, you may want to check the quarterly figure against the filing itself.\n- Freshness: latest filed date used is 2026-07-29; data as of 2026-10-18T20:49:34 UTC.",
      "type": "text"
     }
    ],
@@ -200,12 +200,12 @@
      "ephemeral_5m_input_tokens": 406
     },
     "cache_creation_input_tokens": 406,
-    "cache_read_input_tokens": 2138,
+    "cache_read_input_tokens": 2168,
     "inference_geo": "global",
     "input_tokens": 2,
-    "output_tokens": 461,
+    "output_tokens": 369,
     "output_tokens_details": {
-     "thinking_tokens": 210
+     "thinking_tokens": 119
     },
     "service_tier": "standard",
     "speed": "standard"

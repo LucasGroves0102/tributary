@@ -7,7 +7,7 @@ from typing import Any
 
 import httpx
 
-SECTION_KEY = re.compile(r"(?:[IV]+-)?[0-9]{1,2}[A-C]?(?:\.[0-9]{2})?")
+SECTION_KEY = re.compile(r"(?:[IV]+-)?[0-9]{1,2}[A-C]?(?:\.[0-9]{2})?|EX-99\.[0-9]{1,2}")
 METRICS = ["revenue", "gross_profit", "operating_income", "net_income", "eps_diluted",
            "operating_cash_flow", "total_assets", "cash"]
 COMPANY_ID = {"type": "string", "pattern": r"^\d{10}$",
@@ -68,7 +68,8 @@ TOOLS: list[dict] = [
         "name": "get_section",
         "description": 'Text of one filing section, latest filing first. 10-K keys look like '
                        '"1A" (risk factors) or "7" (MD&A), 10-Q keys "I-2" or "II-1A", 8-K '
-                       'keys "2.02". Text is cut at max_chars; "truncated" says if there is '
+                       'keys "2.02", and 8-K exhibits "EX-99.1" (usually the earnings press '
+                       'release). Text is cut at max_chars; "truncated" says if there is '
                        "more.",
         "input_schema": {
             "type": "object",
@@ -134,7 +135,7 @@ def _route(name: str, a: dict[str, Any]) -> tuple[str, dict]:
     if name == "get_section":
         key = str(a["section_key"])
         if not SECTION_KEY.fullmatch(key):
-            raise ValueError('section_key looks like "1A", "II-1A" or "2.02"')
+            raise ValueError('section_key looks like "1A", "II-1A", "2.02" or "EX-99.1"')
         params = {"max_chars": min(int(a.get("max_chars", 8000)), 20_000)}
         for k in ("form", "accession_no"):
             if a.get(k):

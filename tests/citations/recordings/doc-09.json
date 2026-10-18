@@ -1,0 +1,449 @@
+{
+ "id": "doc-09",
+ "user": "bob",
+ "prompt": "Summarize Microsoft's most recent earnings press release.",
+ "model": "claude-haiku-5-5",
+ "answer": "Microsoft's most recent earnings release is for the fourth quarter of fiscal 2026 (quarter ended June 30, 2026), filed July 29, 2026 (Form 8-K, Exhibit 99.1, accession 0001193125-26-323632).\n\n**Quarter (three months ended June 30, 2026, GAAP unless noted)**\n- **Revenue:** $90.0B, up 18% (up 17% in constant currency)\n- **Operating income:** $40.6B, up 18%\n- **Net income:** $35.8B, up 31%; $35.3B non-GAAP, up 22%\n- **Diluted EPS:** $4.81, up 32%; $4.74 non-GAAP, up 23%\n- **Microsoft Cloud revenue:** $59.3B, up 27%\n- **Commercial remaining performance obligation:** $678B, up 84%\n- **Shareholder returns:** $10.2B in dividends and buybacks\n\n**Segments**\n- **Productivity and Business Processes:** $37.8B, up 14%. Microsoft 365 Commercial cloud grew 14% reported (16% adjusted for a prior-year benefit).\n- **Intelligent Cloud:** $39.3B, up 32%. Azure and other cloud services grew 43%.\n- **More Personal Computing:** $12.9B, down 4%. Windows OEM and Devices fell 7%, and Xbox content and services fell 10%.\n\n**Fiscal year 2026 (twelve months ended June 30, 2026)**\n- Revenue $331.8B, up 18%\n- Operating income $155.2B, up 21%\n- Net income $133.7B, up 31% GAAP; diluted EPS $17.95, up 32% GAAP\n\n**Other items**\n- Discrete items added $0.27 to diluted EPS versus company guidance, including a $3.2B gain on the Anthropic investment. Lower Voluntary Retirement Program expenses were partly offset by Xbox severance and impairment charges.\n- Non-GAAP figures exclude OpenAI investment impacts. OpenAI added $480M ($0.07 per share) to Q4 GAAP net income and $4,963M ($0.67) for the full year.\n- The release says Azure revenue passed $100B for the first time and Microsoft 365 Copilot has over 30 million paid seats.\n- The release does not include forward guidance; the company said it would provide that on the earnings call.\n\n**Note:** A later 8-K filed September 2, 2026 (Item 7.01, accession 0001193125-26-380280) is not an earnings release. It announces that from fiscal 2027 Microsoft will report two segments, Agents and Infra and Devices and Consumer.\n\nFreshness: the most recent filing I used was filed 2026-09-02; data as of 2026-10-18T20:50:05Z.",
+ "usage": {
+  "input_tokens": 10,
+  "output_tokens": 1920,
+  "cache_read_input_tokens": 8607,
+  "cache_creation_input_tokens": 9437
+ },
+ "cost_usd": 0.002226695,
+ "citations": {
+  "0001193125-26-380280": {
+   "accession_no": "0001193125-26-380280",
+   "form": "8-K",
+   "filed": "2026-09-02",
+   "company_id": "0000789019",
+   "url": "https://www.sec.gov/Archives/edgar/data/789019/000119312526380280/d291965d8k.htm"
+  },
+  "0001193125-26-323632": {
+   "accession_no": "0001193125-26-323632",
+   "form": "8-K",
+   "filed": "2026-07-29",
+   "company_id": "0000789019",
+   "url": "https://www.sec.gov/Archives/edgar/data/789019/000119312526323632/msft-ex99_1.htm"
+  },
+  "0001193125-26-323660": {
+   "accession_no": "0001193125-26-323660",
+   "form": "10-K",
+   "filed": "2026-07-29",
+   "company_id": "0000789019",
+   "url": "https://www.sec.gov/Archives/edgar/data/789019/000119312526323660/msft-20260630.htm"
+  },
+  "0001193125-26-258667": {
+   "accession_no": "0001193125-26-258667",
+   "form": "8-K",
+   "filed": "2026-06-05",
+   "company_id": "0000789019",
+   "url": "https://www.sec.gov/Archives/edgar/data/789019/000119312526258667/d26760d8k.htm"
+  },
+  "0001193125-26-224155": {
+   "accession_no": "0001193125-26-224155",
+   "form": "8-K",
+   "filed": "2026-05-14",
+   "company_id": "0000789019",
+   "url": "https://www.sec.gov/Archives/edgar/data/789019/000119312526224155/d125909dex991.htm"
+  }
+ },
+ "verification": {
+  "figures": [
+   {
+    "text": "$90.0B",
+    "value": 90000000000.0,
+    "status": "quoted",
+    "source": null
+   },
+   {
+    "text": "$40.6B",
+    "value": 40600000000.0,
+    "status": "quoted",
+    "source": null
+   },
+   {
+    "text": "$35.8B",
+    "value": 35800000000.0,
+    "status": "quoted",
+    "source": null
+   },
+   {
+    "text": "$35.3B",
+    "value": 35300000000.0,
+    "status": "quoted",
+    "source": null
+   },
+   {
+    "text": "$4.81",
+    "value": 4.81,
+    "status": "quoted",
+    "source": null
+   },
+   {
+    "text": "$4.74",
+    "value": 4.74,
+    "status": "quoted",
+    "source": null
+   },
+   {
+    "text": "$59.3B",
+    "value": 59300000000.0,
+    "status": "quoted",
+    "source": null
+   },
+   {
+    "text": "$678B",
+    "value": 678000000000.0,
+    "status": "quoted",
+    "source": null
+   },
+   {
+    "text": "$10.2B",
+    "value": 10200000000.0,
+    "status": "quoted",
+    "source": null
+   },
+   {
+    "text": "$37.8B",
+    "value": 37800000000.0,
+    "status": "quoted",
+    "source": null
+   },
+   {
+    "text": "$39.3B",
+    "value": 39300000000.0,
+    "status": "quoted",
+    "source": null
+   },
+   {
+    "text": "$12.9B",
+    "value": 12900000000.0,
+    "status": "quoted",
+    "source": null
+   },
+   {
+    "text": "$331.8B",
+    "value": 331800000000.0,
+    "status": "quoted",
+    "source": null
+   },
+   {
+    "text": "$155.2B",
+    "value": 155200000000.0,
+    "status": "quoted",
+    "source": null
+   },
+   {
+    "text": "$133.7B",
+    "value": 133699999999.99998,
+    "status": "quoted",
+    "source": null
+   },
+   {
+    "text": "$17.95",
+    "value": 17.95,
+    "status": "quoted",
+    "source": null
+   },
+   {
+    "text": "$0.27",
+    "value": 0.27,
+    "status": "quoted",
+    "source": null
+   },
+   {
+    "text": "$3.2B",
+    "value": 3200000000.0,
+    "status": "quoted",
+    "source": null
+   },
+   {
+    "text": "$480M",
+    "value": 480000000.0,
+    "status": "quoted",
+    "source": null
+   },
+   {
+    "text": "$0.07",
+    "value": 0.07,
+    "status": "quoted",
+    "source": null
+   },
+   {
+    "text": "$4,963M",
+    "value": 4963000000.0,
+    "status": "quoted",
+    "source": null
+   },
+   {
+    "text": "$0.67",
+    "value": 0.67,
+    "status": "quoted",
+    "source": null
+   },
+   {
+    "text": "$100B",
+    "value": 100000000000.0,
+    "status": "quoted",
+    "source": null
+   },
+   {
+    "text": "30 million",
+    "value": 30000000.0,
+    "status": "quoted",
+    "source": null
+   }
+  ],
+  "unverified_accessions": [],
+  "used_data": true,
+  "freshness": true,
+  "ok": true
+ },
+ "tool_calls": [
+  {
+   "name": "whoami",
+   "input": {},
+   "is_error": false,
+   "content": "{\"user_id\":\"bob\",\"companies\":[{\"company_id\":\"0000789019\",\"name\":\"MICROSOFT CORP\",\"tiers\":[\"filings\",\"financials\"]},{\"company_id\":\"0001045810\",\"name\":\"NVIDIA CORP\",\"tiers\":[\"filings\",\"financials\"]}]}"
+  },
+  {
+   "name": "search_companies",
+   "input": {
+    "query": "Microsoft"
+   },
+   "is_error": false,
+   "content": "{\"results\":[{\"company_id\":\"0000789019\",\"name\":\"MICROSOFT CORP\",\"matched_on\":\"name\",\"matched_alias\":\"MICROSOFT CORP\",\"is_current\":true,\"access\":[\"filings\",\"financials\"]}]}"
+  },
+  {
+   "name": "list_filings",
+   "input": {
+    "company_id": "0000789019",
+    "limit": 8
+   },
+   "is_error": false,
+   "content": "{\"company_id\":\"0000789019\",\"as_of\":\"2026-10-18T20:50:03.102346+00:00\",\"filings\":[{\"accession_no\":\"0001193125-26-380280\",\"form\":\"8-K\",\"filed\":\"2026-09-02\",\"period_of_report\":\"2026-09-02\",\"document_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312526380280/d291965d8k.htm\",\"sections\":[{\"section_key\":\"7.01\",\"title\":\"Regulation FD Disclosure\",\"chars\":1383},{\"section_key\":\"9.01\",\"title\":\"Financial Statements and Exhibits\",\"chars\":573}]},{\"accession_no\":\"0001193125-26-380280\",\"form\":\"8-K\",\"filed\":\"2026-09-02\",\"period_of_report\":\"2026-09-02\",\"document_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312526380280/d291965dex991.htm\",\"sections\":[{\"section_key\":\"EX-99.1\",\"title\":\"Exhibit 99.1\",\"chars\":24918}]},{\"accession_no\":\"0001193125-26-323632\",\"form\":\"8-K\",\"filed\":\"2026-07-29\",\"period_of_report\":\"2026-07-29\",\"document_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312526323632/msft-20260729.htm\",\"sections\":[{\"section_key\":\"2.02\",\"title\":\"Results of Operations and Financial Condition\",\"chars\":842},{\"section_key\":\"9.01\",\"title\":\"Financial Statements and Exhibits\",\"chars\":547}]},{\"accession_no\":\"0001193125-26-323632\",\"form\":\"8-K\",\"filed\":\"2026-07-29\",\"period_of_report\":\"2026-07-29\",\"document_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312526323632/msft-ex99_1.htm\",\"sections\":[{\"section_key\":\"EX-99.1\",\"title\":\"Exhibit 99.1\",\"chars\":23066}]},{\"accession_no\":\"0001193125-26-323660\",\"form\":\"10-K\",\"filed\":\"2026-07-29\",\"period_of_report\":\"2026-06-30\",\"document_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312526323660/msft-20260630.htm\",\"sections\":[{\"section_key\":\"1\",\"title\":\"BUSINESS\",\"chars\":41143},{\"section_key\":\"1A\",\"title\":\"RISK FACTORS\",\"chars\":81171},{\"section_key\":\"1B\",\"title\":\"UNRESOLVED STAFF COMMENTS\",\"chars\":270},{\"section_key\":\"1C\",\"title\":\"CYBERSECURITY\",\"chars\":8239},{\"section_key\":\"2\",\"title\":\"PROPERTIES\",\"chars\":1215},{\"section_key\":\"3\",\"title\":\"LEGAL PROCEEDINGS\",\"chars\":201},{\"section_key\":\"4\",\"title\":\"MINE SAFETY DISCLOSURES\",\"chars\":50},{\"section_key\":\"5\",\"title\":\"MARKET FOR REGISTRANT\\u2019S COMMON EQUITY, RELATED STOCKHOLDER MATTERS, AND ISSUER PURCHASES OF EQUITY SECURITIES\",\"chars\":1746},{\"section_key\":\"6\",\"title\":\"[RESERVED]\",\"chars\":36},{\"section_key\":\"7\",\"title\":\"MANAGEMENT\\u2019S DISCUSSION AND ANALYSIS OF FINANCIAL CONDITION AND RESULTS OF OPERATIONS\",\"chars\":51222},{\"section_key\":\"7A\",\"title\":\"QUANTITATIVE AND QUALITATIVE DISCLOSURES ABOUT MARKET RISK\",\"chars\":1937},{\"section_key\":\"8\",\"title\":\"FINANCIAL STATEMENTS AND SUPPLEMENTARY DATA\",\"chars\":102439},{\"section_key\":\"9\",\"title\":\"CHANGES IN AND DISAGREEMENTS WITH ACCOUNTANTS ON ACCOUNTING AND FINANCIAL DISCLOSURE\",\"chars\":108},{\"section_key\":\"9A\",\"title\":\"CONTROLS AND PROCEDURES\",\"chars\":6663},{\"section_key\":\"9B\",\"title\":\"OTHER INFORMATION\",\"chars\":1492},{\"section_key\":\"9C\",\"title\":\"DISCLOSURE REGARDING FOREIGN JURISDICTIONS THAT PREVENT INSPECTIONS\",\"chars\":92},{\"section_key\":\"10\",\"title\":\"DIRECTORS, EXECUTIVE OFFICERS, AND CORPORATE GOVERNANCE\",\"chars\":1607},{\"section_key\":\"11\",\"title\":\"EXECUTIVE COMPENSATION\",\"chars\":343},{\"section_key\":\"12\",\"title\":\"SECURITY OWNERSHIP OF CERTAIN BENEFICIAL OWNERS AND MANAGEMENT AND RELATED STOCKHOLDER MATTERS\",\"chars\":308},{\"section_key\":\"13\",\"title\":\"CERTAIN RELATIONSHIPS AND RELATED TRANSACTIONS, AND DIRECTOR INDEPENDENCE\",\"chars\":264},{\"section_key\":\"14\",\"title\":\"PRINCIPAL ACCOUNTANT FEES AND SERVICES\",\"chars\":408},{\"section_key\":\"15\",\"title\":\"EXHIBIT AND FINANCIAL STATEMENT SCHEDULES\",\"chars\":12739},{\"section_key\":\"16\",\"title\":\"FORM 10-K SUMMARY\",\"chars\":1596}]},{\"accession_no\":\"0001193125-26-258667\",\"form\":\"8-K\",\"filed\":\"2026-06-05\",\"period_of_report\":\"2026-06-02\",\"document_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312526258667/d26760d8k.htm\",\"sections\":[{\"section_key\":\"5.02\",\"title\":\"Departure of Directors or Certain Officers; Election of Directors; Appointment of Certain Officers; Compensatory Arrangements of Certain Officers.\",\"chars\":1055}]},{\"accession_no\":\"0001193125-26-224155\",\"form\":\"8-K\",\"filed\":\"2026-05-14\",\"period_of_report\":\"2026-05-13\",\"document_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312526224155/d125909d8k.htm\",\"sections\":[{\"section_key\":\"5.02\",\"title\":\"Departure of Directors or Certain Officers; Election of Directors; Appointment of Certain Officers; Compensatory Arrangements of Certain Officers.\",\"chars\":1233},{\"section_key\":\"9.01\",\"title\":\"Financial Statements and Exhibits\",\"chars\":503}]},{\"accession_no\":\"0001193125-26-224155\",\"form\":\"8-K\",\"filed\":\"2026-05-14\",\"period_of_report\":\"2026-05-13\",\"document_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312526224155/d125909dex991.htm\",\"sections\":[{\"section_key\":\"EX-99.1\",\"title\":\"Exhibit 99.1\",\"chars\":3131}]}]}"
+  },
+  {
+   "name": "get_section",
+   "input": {
+    "company_id": "0000789019",
+    "section_key": "EX-99.1",
+    "accession_no": "0001193125-26-323632",
+    "form": "8-K",
+    "max_chars": 8000
+   },
+   "is_error": false,
+   "content": "{\"company_id\":\"0000789019\",\"as_of\":\"2026-10-18T20:50:05.411477+00:00\",\"sections\":[{\"section_key\":\"EX-99.1\",\"title\":\"Exhibit 99.1\",\"text\":\"Exhibit 99.1\\nMicrosoft Cloud and AI Strength Fuels Fourth Quarter Results\\nREDMOND, Wash. \\u2014 July 29, 2026 \\u2014 Microsoft Corp. today announced the following results for the quarter ended June 30, 2026, as compared to the corresponding period of last fiscal year:\\n\\u2022Revenue was $90.0 billion and increased 18% (up 17% in constant currency)\\n\\u2022Operating income was $40.6 billion and increased 18%\\n\\u2022Net income was $35.8 billion and increased 31% on a GAAP basis, and was $35.3 billion and increased 22% on a non-GAAP basis\\n\\u2022Diluted earnings per share was $4.81 and increased 32% on a GAAP basis, and was $4.74 and increased 23% on a non-GAAP basis\\n\\u2022Non-GAAP results exclude the impact from investments in OpenAI, explained in the Non-GAAP Definition section below\\nSeveral discrete items impacted our financial results in the quarter when compared to our forward-looking guidance provided on April 29, 2026, resulting in a benefit of $0.27 on diluted earnings per share. These include a $3.2 billion gain from our investment in Anthropic and lower-than-expected expenses related to the Voluntary Retirement Program which were partially offset by severance expense and impairment charges in XBOX. When adjusting for these items, we exceeded expectations across revenue, operating income, and diluted earnings per share.\\n\\u201cWe are advancing the frontier on the cost-to-outcome curve, ensuring every customer can turn tokens into business results,\\u201d said Satya Nadella, chairman and chief executive officer of Microsoft. \\u201cThis year, Azure revenue surpassed $100 billion for the first time, and Microsoft 365 Copilot reached over 30 million paid seats, reflecting the confidence customers are placing in us to power their AI transformation.\\u201d\\n\\u201cWe delivered a strong quarter to close out the fiscal year, highlighted by Microsoft Cloud revenue of $59.3 billion, up 27% year-over-year,\\u201d said Amy Hood, executive vice president and chief financial officer of Microsoft.\\nThe following table adjusts for the impact from investments in OpenAI and reconciles our financial results reported in accordance with generally accepted accounting principles (GAAP) to non-GAAP financial results. Additional information regarding our non-GAAP definition is provided below. All growth comparisons relate to the corresponding period in the last fiscal year.\\nThree Months Ended June 30,\\n2026\\n2025\\nPercentage Change Y/Y\\nPercentage Change Y/Y\\n($ in millions, except per share amounts)\\nAs Reported (GAAP)\\nImpact from OpenAI*\\nAs Adjusted (non-GAAP)\\nAs Reported (GAAP)\\nImpact from OpenAI*\\nAs Adjusted (non-GAAP)\\nGAAP\\nConstant Currency\\nNet Impact from OpenAI*\\nNon-GAAP\\nNon-GAAP Constant Currency\\nNet Income\\n$35,766\\n$(480)\\n$35,286\\n$27,233\\n$1,575\\n$28,808\\n31%\\n31%\\n$(2,055)\\n22%\\n22%\\nDiluted Earnings per Share\\n$4.81\\n$(0.07)\\n$4.74\\n$3.65\\n$0.21\\n$3.86\\n32%\\n32%\\n$(0.28)\\n23%\\n23%\\n*Impact from OpenAI adjusts for the impact from investments in OpenAI\\nBusiness Highlights\\nMicrosoft Cloud revenue was $59.3 billion and increased 27%, and commercial remaining performance obligation increased 84% to $678 billion.\\nRevenue in Productivity and Business Processes was $37.8 billion and increased 14%, with the following business highlights:\\n\\u2022Microsoft 365 Commercial cloud revenue increased 16% when adjusted for the prior year comparable that benefited from 2 points of in-period revenue recognition. On a reported basis, Microsoft 365 Commercial cloud revenue increased 14%.\\n\\u2022Microsoft 365 Consumer cloud revenue increased 24% (up 22% in constant currency)\\n\\u2022LinkedIn revenue increased 12% (up 10% in constant currency)\\n\\u2022Dynamics 365 revenue increased 13% (up 12% in constant currency)\\nRevenue in Intelligent Cloud was $39.3 billion and increased 32% (up 31% in constant currency), with the following business highlights:\\n\\u2022Azure and other cloud services revenue increased 43%\\nRevenue in More Personal Computing was $12.9 billion and decreased 4% (down 5% in constant currency), with the following business highlights:\\n\\u2022Windows OEM and Devices revenue decreased 7%\\n\\u2022XBOX content and services revenue decreased 10%\\n\\u2022Search advertising revenue excluding traffic acquisition costs increased 10% (up 9% in constant currency)\\nMicrosoft returned $10.2 billion to shareholders in the form of dividends and share repurchases in the fourth quarter of fiscal year 2026.\\nFiscal Year 2026 Results\\nMicrosoft Corp. today announced the following results for the fiscal year ended June 30, 2026, as compared to the corresponding period of last fiscal year:\\n\\u2022Revenue was $331.8 billion and increased 18% (up 16% in constant currency)\\n\\u2022Operating income was $155.2 billion and increased 21% (up 19% in constant currency)\\n\\u2022Net income was $133.7 billion and increased 31% on a GAAP basis, and increased 22% (up 20% in constant currency) on a non-GAAP basis\\n\\u2022Diluted earnings per share was $17.95 and increased 32% on a GAAP basis, and increased 22% (up 21% in constant currency) on a non-GAAP basis\\n\\u2022Non-GAAP results exclude the impact from investments in OpenAI, explained in the Non-GAAP Definition section below\\nThe following table adjusts for the impact from investments in OpenAI and reconciles our financial results reported in accordance with GAAP to non-GAAP financial results. Additional information regarding our non-GAAP definition is provided below. All growth comparisons relate to the corresponding period in the last fiscal year.\\nTwelve Months Ended June 30,\\n2026\\n2025\\nPercentage Change Y/Y\\nPercentage Change Y/Y\\n($ in millions, except per share amounts)\\nAs Reported (GAAP)\\nImpact from OpenAI*\\nAs Adjusted (non-GAAP)\\nAs Reported (GAAP)\\nImpact from OpenAI*\\nAs Adjusted (non-GAAP)\\nGAAP\\nConstant Currency\\nNet Impact from OpenAI*\\nNon-GAAP\\nNon-GAAP Constant Currency\\nNet Income\\n$133,749\\n$(4,963)\\n$128,786\\n$101,832\\n$3,620\\n$105,452\\n31%\\n30%\\n$(8,583)\\n22%\\n20%\\nDiluted Earnings per Share\\n$17.95\\n$(0.67)\\n$17.28\\n$13.64\\n$0.49\\n$14.13\\n32%\\n30%\\n$(1.16)\\n22%\\n21%\\n*Impact from OpenAI adjusts for the impact from investments in OpenAI\\nBusiness Outlook\\nMicrosoft will provide forward-looking guidance in connection with this quarterly earnings announcement on its earnings conference call and webcast.\\nQuarterly Highlights, Product Releases, and Customer Stories\\nEvery quarter Microsoft delivers hundreds of products, services, and enhancements. These releases are driven by years of significant research and development investments, to empower customers with greater productivity, security, and differentiated value.\\nThis momentum is reflected in stories that showcase how our technology is shaping industries and driving customer success. We share innovation updates on our product blogs across Azure, Microsoft 365, and more on our Official Microsoft blog.\\nWebcast Details\\nSatya Nadella, chairman and chief executive officer, Amy Hood, executive vice president and chief financial officer, Alice Jolla, chief accounting officer, Brian DeFoe, deputy general counsel and corporate secretary, and Jonathan Neilson, vice president of investor relations, will host a conference call and webcast at 2:30 p.m. Pacific time (5:30 p.m. Eastern time) today to discuss details of the company\\u2019s performance for the quarter and certain forward-looking information. The session may be accessed at http://www.microsoft.com/en-us/investor. Participants can also dial into the conference call at (877) 407-0666 or +1 (201) 689-8023 for international, no password required. The webcast will be available for replay through the close of business on July 29, 2027.\\nNon-GAAP Definition\\nImpact from investments in OpenAI. In fiscal year 2026, net income and diluted earnings per share were impacted by net gains from investments in OpenAI, which resulted in an increase in net income and diluted earnings per share of $480 million and $0.07, respectively, in the fourth quarter, and $4,963 million and $0.67, respectively, for the full fiscal year. In fiscal year 2025, net income and diluted earnings per share were impacted by net losses from investments in OpenAI, which resulted in a decrease in net income a\",\"truncated\":true,\"total_chars\":23066,\"citation\":{\"accession_no\":\"0001193125-26-323632\",\"form\":\"8-K\",\"filed\":\"2026-07-29\",\"period_of_report\":\"2026-07-29\",\"section_key\":\"EX-99.1\",\"document_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312526323632/msft-ex99_1.htm\",\"char_start\":0,\"char_end\":23066},\"freshness\":{\"filed\":\"2026-07-29\",\"ingested_at\":\"2026-10-17T17:16:25.729977Z\"}}]}"
+  },
+  {
+   "name": "get_section",
+   "input": {
+    "company_id": "0000789019",
+    "section_key": "7.01",
+    "accession_no": "0001193125-26-380280",
+    "form": "8-K"
+   },
+   "is_error": false,
+   "content": "{\"company_id\":\"0000789019\",\"as_of\":\"2026-10-18T20:50:05.417042+00:00\",\"sections\":[{\"section_key\":\"7.01\",\"title\":\"Regulation FD Disclosure\",\"text\":\"Item 7.01. Regulation FD Disclosure\\nOn September 2, 2026, Microsoft Corporation (the \\u201cCompany\\u201d) posted presentation materials to its Investor Relations website titled \\u201cFY27 Segments and Investor Metrics\\u201d announcing a change in reportable segments and investor metrics. Beginning in fiscal year 2027, the Company will manage its operations under this updated reporting structure and report its financial performance based on two reportable segments: (1) Agents and Infra and (2) Devices and Consumer. A copy of the presentation materials is furnished as Exhibit 99.1 to this report.\\nThe exhibit furnished on this report under Regulation FD provides a description of our updated reporting structure and presents summary financial information and historical data on a basis consistent with the updated reporting structure.\\nIn accordance with General Instruction B.2 of Form 8-K, the information in this Current Report on Form 8-K, including Exhibit 99.1, shall not be deemed to be \\u201cfiled\\u201d for purposes of Section 18 of the Securities Exchange Act of 1934, as amended (the \\u201cExchange Act\\u201d), or otherwise subject to the liability of that section, and shall not be incorporated by reference into any registration statement or other document filed under the Securities Act of 1933, as amended, or the Exchange Act, except as shall be expressly set forth by specific reference in such filing.\",\"truncated\":false,\"total_chars\":1383,\"citation\":{\"accession_no\":\"0001193125-26-380280\",\"form\":\"8-K\",\"filed\":\"2026-09-02\",\"period_of_report\":\"2026-09-02\",\"section_key\":\"7.01\",\"document_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312526380280/d291965d8k.htm\",\"char_start\":1858,\"char_end\":3242},\"freshness\":{\"filed\":\"2026-09-02\",\"ingested_at\":\"2026-10-17T17:16:24.494209Z\"}}]}"
+  }
+ ],
+ "responses": [
+  {
+   "id": "msg_011CgAMxMvaEtUxrUxg3bF7E",
+   "container": null,
+   "content": [
+    {
+     "signature": "CAQS8AUKEAgSGAI4AUIIdGhpbmtpbmcSDEHHGvDx0mMJ4RjLRBoM31NUV4x0uC8bdfw0IjB7Ypeme1WQbzZeILSXExCRwK4XY7+qBplp8E+b9fQIHM8i98e44/zh7eLhy3BIwQMqjQW50W81+Q4BzTbraF0KaKhqp7CQ/uPMmSqHwGFvku9JwCm/dMgoieIxjp0OtZ+6SjMnzLsUr2maYBvkZcXF/U+s5TDtp0TdLUEoBCno574Q40/DOroadG5AJMW0oneerUbyAG4AO6pjVntH68E0GcgC/q+Yrzy+kPkQ/vbF/XYJil1Xr7ZUxUDENqqa23S9qMGZlA0rjMEfNTxLctuy7ugPMvPXVNhgBQXyCrP2ojI/+DKiUz3yKiExej4lRKSVJvoLsy/BmRqh7h+oTd+7YSJIZXMM6gxbEgpgm2rbaY8snc3fkx6l/3II31wDRGD03li82qE8388vDyr+Lely8aIuQPh5Kw2W40yGyr7Q2+4tdWgeOe+2/xF0ZoKgyKa9NlYklIY4EaI+hpyGjLvplTbKtNSDUFGxzQBJlsis2OrSuy69F/vkhdkZHpwe/SWs0RcJu/pkqcYN/9N9U7lkEGHR+J7zoc+1JztZp1oFiBBimaFHX0vzny6Zyzl8xDfKxb5fUT65sid3GmNP8z8EjM0BbQnhj1k+MPXfJYgHaddxiC1G73NBpDl4Yw+6sP3rqTy1vz3lZ/+R4N3t4uDrVmc2IoerTPJyujXJOLmzBCcrscnaCxiwwFFlePRYZ0SxRe/RD0faIltbyW5qWCORehPrIAj/hN+s5bjX1Z1p+byZyqcWTEUR1HDnO97nnWLMC3Gt0x6XtQr5mw+4SO1r8K+vLubeUfyETitS+2FkZqkiJtc9U+gEnDEKfZHE2JCfFhgZ6aAfNQUa4UJqU42u2VtM0ziRbjLMn7oOjHe0RB1ZMPX4IVQC9UwydhLYkhzkG4Ky7KfUErsqikyDucBIg3T+0/5O4a5j3gJK2bqVTxgB",
+     "thinking": "",
+     "type": "thinking"
+    },
+    {
+     "id": "toolu_015h4PS5dNCJGbBqvss12S1p",
+     "caller": {
+      "type": "direct"
+     },
+     "input": {},
+     "name": "whoami",
+     "type": "tool_use"
+    },
+    {
+     "id": "toolu_01DYnZxJx5CgTpfE155LzVV1",
+     "caller": {
+      "type": "direct"
+     },
+     "input": {
+      "query": "Microsoft"
+     },
+     "name": "search_companies",
+     "type": "tool_use"
+    }
+   ],
+   "diagnostics": null,
+   "model": "claude-haiku-5-5",
+   "role": "assistant",
+   "stop_details": null,
+   "stop_reason": "tool_use",
+   "stop_sequence": null,
+   "type": "message",
+   "usage": {
+    "cache_creation": {
+     "ephemeral_1h_input_tokens": 0,
+     "ephemeral_5m_input_tokens": 1822
+    },
+    "cache_creation_input_tokens": 1822,
+    "cache_read_input_tokens": 0,
+    "inference_geo": "global",
+    "input_tokens": 4,
+    "output_tokens": 129,
+    "output_tokens_details": {
+     "thinking_tokens": 53
+    },
+    "service_tier": "standard",
+    "speed": "standard"
+   }
+  },
+  {
+   "id": "msg_011CgAMxSxCMXuCCwBRTn1NQ",
+   "container": null,
+   "content": [
+    {
+     "id": "toolu_01MHp69QJUSQKEWLPaJ562Fb",
+     "caller": {
+      "type": "direct"
+     },
+     "input": {
+      "company_id": "0000789019",
+      "limit": 8
+     },
+     "name": "list_filings",
+     "type": "tool_use"
+    }
+   ],
+   "diagnostics": null,
+   "model": "claude-haiku-5-5",
+   "role": "assistant",
+   "stop_details": null,
+   "stop_reason": "tool_use",
+   "stop_sequence": null,
+   "type": "message",
+   "usage": {
+    "cache_creation": {
+     "ephemeral_1h_input_tokens": 0,
+     "ephemeral_5m_input_tokens": 358
+    },
+    "cache_creation_input_tokens": 358,
+    "cache_read_input_tokens": 1822,
+    "inference_geo": "global",
+    "input_tokens": 2,
+    "output_tokens": 75,
+    "output_tokens_details": {
+     "thinking_tokens": 0
+    },
+    "service_tier": "standard",
+    "speed": "standard"
+   }
+  },
+  {
+   "id": "msg_011CgAMxWbxmTxz77VtBTBf2",
+   "container": null,
+   "content": [
+    {
+     "signature": "CAQSkAkKEAgSGAI4AUIIdGhpbmtpbmcSDJpx7X9FNdwF/VIPFRoMNMgekPJK+jD1jdRgIjARkT5V7/wTLSbDf/8IWNHswttp7DqWYC/F1ohJRnRLISF6FPc+wdY6ZN4lBva5sH8qrQjBBvugy00C0WmMMn/oY8w1AKsuBK16dYKLq+W6cJjeY4XWxUnOOP5v2GAPhe5O5cg7VHhG9RY2Y9zJyNYxOXYIaNEv6NQJ4HsLugNRel+tTdfgT4sEj62FQmdEGXRZVsLx27fCVx4gCf7Dwjbl7maI5N+zSoQF8f0jo6Jqs96NSUJ6RKGW6wtiGxNZsHhiOc31pr2brGC16o3NOTb24f6/ZxBlgk4eyk+vmpvu5WFSS55d4JWpbj52DPakh3g2g6R8sAUE+CmEap10hs8g591fdqw1fHzB6o9hdWeDc2y1eVMOBOMGO3Vr/R1RnlM3naaYWRjRmlBRsbxFN2QN4khmjSnWyMlqMr6FIs13lrVjjseRIG8ARs4kyBe7hB+DrS/olriylTreW+y3OWMtZHXncb5pFn1joJCN0i666JdQZFUG7wFRaCkE0tyDeLmeQOcv+x5yK+M33m8J3AIp/mATKThjerwM5LNBxalAO3zVuBMacGmnTf80Qj2rMudIcyuGk/pThm0+kApZ0q6198XSaORnpt8Xpsw9gOVV3kyXPJ1gfuJp3tyxpkQJmHelN28GOrMr85LZa2WLi7TokRwtYloDJJoepa0ion4yryQg61oYTwlxoiVEa9XymRG8r7+4IhZkYAaC7Q9ED+GGAgdFNCJxeX+FFjhByYSNHBUFFsKKWWrW0cLa5Ah16ttI9r3yPtg6o0j6vN6lXJsCOdIy7/XY0MhQLySfQ2wfQcX4lj7gzi8hYx+aCup/R5N2t4A7rdqUr1N56QQRBMSxrtF5sy4XdcF8180W4JzGjYIzZED27l340tjGv8ypctUgXyNrXu2js+oFCqi6PHb3E1A4tovkF2AvSwTGz90Zgk0SOL/TLy8gIB8tztcl+iFauEcbHfgNKabq8LJY4q2dKTE7NxPwSA2q0a8Pc306S6CncwOK1+r+j1ujj95St/xQgtp/IzkXinUKMPswd3s7LJcJKxZCN0Q4Xa4tseuygs+P4R/GHWwluqe1U5Hyk7DCmVnsRS7Jva+UAwaU3MMlZrxbCdidwfMPsg8BVCQ9+TrjMiy/TxiOptiBHmJxe4aUTC/qivP0GjPvJSNaO3xCFyQgoIpW+fb18b/2/aqOOUonaF/GQLelMI0g7RqB9H3CWPG+70hNSt92sHsLrceUeXwrC7mhwynGJNrhQu2CDgcWY1AkCPJ4okFO/w9ls+wke/bkvo2YHEqGc1cThODPWNIqWrYma9+19n/CkkBKcdFZiEMc80Z0z6aUHgSWCsxTkb88rHmuAL2Mgxkz/Vl8OIpv1E2M+ifWt40ToqtERL+c9rOvO3JczxUrTcd/3lAwzScEojTioIumSBUt5MRmTvd6oFKO6uQiJN2L6tZcSfsFWidkHXmrtE1K2ShxUinGQWD+KAbX1E79AmWwAj+PGAE=",
+     "thinking": "",
+     "type": "thinking"
+    },
+    {
+     "id": "toolu_01UZBriBHmqSoyeu4MR2AmAX",
+     "caller": {
+      "type": "direct"
+     },
+     "input": {
+      "company_id": "0000789019",
+      "section_key": "EX-99.1",
+      "accession_no": "0001193125-26-323632",
+      "form": "8-K",
+      "max_chars": 8000
+     },
+     "name": "get_section",
+     "type": "tool_use"
+    },
+    {
+     "id": "toolu_0165MBsnjxN6VuAMSsEmk1vy",
+     "caller": {
+      "type": "direct"
+     },
+     "input": {
+      "company_id": "0000789019",
+      "section_key": "7.01",
+      "accession_no": "0001193125-26-380280",
+      "form": "8-K"
+     },
+     "name": "get_section",
+     "type": "tool_use"
+    }
+   ],
+   "diagnostics": null,
+   "model": "claude-haiku-5-5",
+   "role": "assistant",
+   "stop_details": null,
+   "stop_reason": "tool_use",
+   "stop_sequence": null,
+   "type": "message",
+   "usage": {
+    "cache_creation": {
+     "ephemeral_1h_input_tokens": 0,
+     "ephemeral_5m_input_tokens": 2425
+    },
+    "cache_creation_input_tokens": 2425,
+    "cache_read_input_tokens": 2180,
+    "inference_geo": "global",
+    "input_tokens": 2,
+    "output_tokens": 510,
+    "output_tokens_details": {
+     "thinking_tokens": 220
+    },
+    "service_tier": "standard",
+    "speed": "standard"
+   }
+  },
+  {
+   "id": "msg_011CgAMxgeDdDouPLp9ibiEX",
+   "container": null,
+   "content": [
+    {
+     "signature": "CAQSsAoKEAgSGAI4AUIIdGhpbmtpbmcSDOCiGCCi2o4HORFg+hoMpnSX1cJi4cVsvLxxIjCdlp5KnVrqK9bVEYevsusYsluUiDsBkZGGvde2sWs93ll4Ieq4OnRu3NRKiWqRg6oqzQkm8VtB8ORQOz3ZIN6QlLo17EUVlYadts4WZuPpCs34oA/GM0ER1LJ8jDMFVD2OlH5YNxyqOhMz5gp//M5S78Iw4KW6J+SjYk8FFjX8YF9o8eWSPJPU/MakP+gG7DMq6nKwHr4+UijRjX5tG+M94F4m4jACmV84VOoNYfcX/OimETMYjIOwp6iM/9xFMIJfAcHFCAonvLqdWKOFkgnUh6QjdYbJ/3iSFqrVBZ/6gPdEoPXDIglDAwkICAaYs0UOtP+e3faqwuugnUWEorrc06Vn2q+nRNy4latmZenYSZaxwoPmOvE2uinfGPgS4i5fPLCktSPC2RJkMBYuv2nLPVat5v+Psq9/bWipmlFjypUQuUzNI/3TZOFEa+fvUL2TP58VuBgrFYKwi3kmXi/XQ6JBNG536MKsTWzhtyMOnWGYe7PLL1XygTUL9NGul7a1SQhBpGt8miFMZVQ3KB5YWBceAhDpSA2dXNvcensD5PZAYSooIJoPQRmo8nqArG6xKDL2ZSHgDDHivV1bLj3oFICcT+Io+1So4hK14U/mBJeUWkgojvovmLd93SRdJuIo+YQVmQqyWf00MVFoUGvgoUb8F9Rbta6bD0zr4bbN3pSrfo0wGO1oPi043IzP3b2CKWLYApZo5kI6VGQlh0E6mZzy9g8I9rYIb0dL0AOU7u3ySYlktRA3Ts2hja6FPWB1Ruro1WoGBeRV9EsJnwpKINqNW7WoFp4hOspcxiyftRzC4Rix5AXJMBRPUUnrgk0lUIhzsaruR/Gz4mRA3lEb06zmT8RDbAk7xMVlrnpAXqrkFaoHbDc3yvbisQcjlTpMoty0BnfbWeYFndiE+gEpGfSitAkKUdsNii5PFv+d+Iq+wmqvX0I4hhf+S/sMiwesYrYvY3voRRQ3EO80PDr+iyZG7nmiLjMiqR7TyTayh7ffoGQER6qFPewyhTD/CBW4Gvg1IOuF1mlqJRKAX7Cgpwi1Ues98TqfCRynG86rhECcR5j5XturzjBpAp6my21FD3k8TAfBD7eDM1/qU66yR1dAA1t4zibnYCCF/hQxmfv5ZDbRo7wv2zyOsjfAZQJTlv6SWT9i4Ly2YopnPNBJCrKHowKgAv4C+s+8y4WZrwjMl2qpSUyXp/M1lf6jpJPBqOrCZMSOBhuDOYdAMJOxkAgVix8tenp1gW5CkzdFwUCym8IFkfwR125UWsKc3AiaBXRpjFRKV6/slZBjdAr86adOe18a1x6eM0h3d5WJFt0NfA2kl/3yg154p1OuFrV7Pz0lU0FsNVrgIvisWHn4UvhgyKBZvX7kqwIENSRLqhFGuKV6JG+pzrdSwaBOa+oO+wvUlVRfhZo3C9VnTeN3keozr8WJ+fF/veZq8Pc6/U591gOFIbRF4CwOrAe2MgzxiekpRtUk+NsZNQ7wZHYBS+rM4voRqEx6K3TLyERLJfNSVf/uPn7Fxbm10iBWQDp3seFCjaln5j4lx/lkEwRu7GFe+QiIr1lNlfijdIe1v2rCjMseaIuXCC31WrgquVqlCd1OxONTiwABZTtFz+nXU3XuojLxFhT3CZ3Nz3VX9BGjzeujXPsZ+V8CqqJNNiDgsjg5ss0RGKuwWPr0+3VCk9D3vq7OFwSqgZpnKA5bLBgB",
+     "thinking": "",
+     "type": "thinking"
+    },
+    {
+     "text": "Microsoft's most recent earnings release is for the fourth quarter of fiscal 2026 (quarter ended June 30, 2026), filed July 29, 2026 (Form 8-K, Exhibit 99.1, accession 0001193125-26-323632).\n\n**Quarter (three months ended June 30, 2026, GAAP unless noted)**\n- **Revenue:** $90.0B, up 18% (up 17% in constant currency)\n- **Operating income:** $40.6B, up 18%\n- **Net income:** $35.8B, up 31%; $35.3B non-GAAP, up 22%\n- **Diluted EPS:** $4.81, up 32%; $4.74 non-GAAP, up 23%\n- **Microsoft Cloud revenue:** $59.3B, up 27%\n- **Commercial remaining performance obligation:** $678B, up 84%\n- **Shareholder returns:** $10.2B in dividends and buybacks\n\n**Segments**\n- **Productivity and Business Processes:** $37.8B, up 14%. Microsoft 365 Commercial cloud grew 14% reported (16% adjusted for a prior-year benefit).\n- **Intelligent Cloud:** $39.3B, up 32%. Azure and other cloud services grew 43%.\n- **More Personal Computing:** $12.9B, down 4%. Windows OEM and Devices fell 7%, and Xbox content and services fell 10%.\n\n**Fiscal year 2026 (twelve months ended June 30, 2026)**\n- Revenue $331.8B, up 18%\n- Operating income $155.2B, up 21%\n- Net income $133.7B, up 31% GAAP; diluted EPS $17.95, up 32% GAAP\n\n**Other items**\n- Discrete items added $0.27 to diluted EPS versus company guidance, including a $3.2B gain on the Anthropic investment. Lower Voluntary Retirement Program expenses were partly offset by Xbox severance and impairment charges.\n- Non-GAAP figures exclude OpenAI investment impacts. OpenAI added $480M ($0.07 per share) to Q4 GAAP net income and $4,963M ($0.67) for the full year.\n- The release says Azure revenue passed $100B for the first time and Microsoft 365 Copilot has over 30 million paid seats.\n- The release does not include forward guidance; the company said it would provide that on the earnings call.\n\n**Note:** A later 8-K filed September 2, 2026 (Item 7.01, accession 0001193125-26-380280) is not an earnings release. It announces that from fiscal 2027 Microsoft will report two segments, Agents and Infra and Devices and Consumer.\n\nFreshness: the most recent filing I used was filed 2026-09-02; data as of 2026-10-18T20:50:05Z.",
+     "type": "text"
+    }
+   ],
+   "diagnostics": null,
+   "model": "claude-haiku-5-5",
+   "role": "assistant",
+   "stop_details": null,
+   "stop_reason": "end_turn",
+   "stop_sequence": null,
+   "type": "message",
+   "usage": {
+    "cache_creation": {
+     "ephemeral_1h_input_tokens": 0,
+     "ephemeral_5m_input_tokens": 4832
+    },
+    "cache_creation_input_tokens": 4832,
+    "cache_read_input_tokens": 4605,
+    "inference_geo": "global",
+    "input_tokens": 2,
+    "output_tokens": 1206,
+    "output_tokens_details": {
+     "thinking_tokens": 259
+    },
+    "service_tier": "standard",
+    "speed": "standard"
+   }
+  }
+ ]
+}

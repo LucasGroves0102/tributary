@@ -3,14 +3,14 @@
  "user": "alice",
  "prompt": "What was Apple's revenue in the quarter before last?",
  "model": "claude-haiku-5-5",
- "answer": "Apple's revenue for the quarter before last was **$111.18B**, for the fiscal quarter ended March 28, 2026 (the period from December 28, 2025 to March 28, 2026).\n\n- **Source:** Form 10-Q filed May 1, 2026, accession no. 0000320193-26-000013, XBRL tag `us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax`.\n\nThis treats the most recent quarter in the data (ended June 27, 2026) as the last one. Tributary has no later quarter for Apple.\n\nFreshness: latest filing date used is May 1, 2026; data as of October 18, 2026, 20:34 UTC.",
+ "answer": "Apple's revenue for the quarter before last (the fiscal quarter ended March 28, 2026) was **$111.184B**.\n\n- Form 10-Q, filed 2026-05-01, accession 0000320193-26-000013\n- XBRL tag: us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax\n\nFor reference, the most recent quarter (ended June 27, 2026) was $109.417B (10-Q, filed 2026-07-31, accession 0000320193-26-000020).\n\nFreshness: latest filing date used is 2026-05-01; data as of 2026-10-18T20:49:43Z.",
  "usage": {
   "input_tokens": 8,
-  "output_tokens": 711,
-  "cache_read_input_tokens": 3909,
-  "cache_creation_input_tokens": 2987
+  "output_tokens": 717,
+  "cache_read_input_tokens": 3973,
+  "cache_creation_input_tokens": 3022
  },
- "cost_usd": 0.000768765,
+ "cost_usd": 0.00077678,
  "citations": {
   "0000320193-26-000020": {
    "accession_no": "0000320193-26-000020",
@@ -37,14 +37,25 @@
  "verification": {
   "figures": [
    {
-    "text": "$111.18B",
-    "value": 111180000000.0,
+    "text": "$111.184B",
+    "value": 111184000000.0,
     "status": "verified",
     "source": {
      "company_id": "0000320193",
      "metric": "revenue",
      "period_end": "2026-03-28",
      "accession_no": "0000320193-26-000013"
+    }
+   },
+   {
+    "text": "$109.417B",
+    "value": 109417000000.0,
+    "status": "verified",
+    "source": {
+     "company_id": "0000320193",
+     "metric": "revenue",
+     "period_end": "2026-06-27",
+     "accession_no": "0000320193-26-000020"
     }
    }
   ],
@@ -78,21 +89,21 @@
     "quarters": 3
    },
    "is_error": false,
-   "content": "{\"company_id\":\"0000320193\",\"as_of\":\"2026-10-18T20:34:05.291712+00:00\",\"rows\":[{\"metric\":\"revenue\",\"period_start\":\"2026-03-29\",\"period_end\":\"2026-06-27\",\"value\":\"109417000000\",\"unit\":\"USD\",\"value_source\":\"reported\",\"citation\":{\"accession_no\":\"0000320193-26-000020\",\"form\":\"10-Q\",\"filed\":\"2026-07-31\",\"xbrl_tag\":\"us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax\",\"source_accessions\":[\"0000320193-26-000020\"],\"filing_url\":\"https://www.sec.gov/Archives/edgar/data/320193/000032019326000020/\"},\"freshness\":{\"filed\":\"2026-07-31\",\"ingested_at\":\"2026-10-17T16:57:42.699993Z\"}},{\"metric\":\"revenue\",\"period_start\":\"2025-12-28\",\"period_end\":\"2026-03-28\",\"value\":\"111184000000\",\"unit\":\"USD\",\"value_source\":\"reported\",\"citation\":{\"accession_no\":\"0000320193-26-000013\",\"form\":\"10-Q\",\"filed\":\"2026-05-01\",\"xbrl_tag\":\"us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax\",\"source_accessions\":[\"0000320193-26-000013\"],\"filing_url\":\"https://www.sec.gov/Archives/edgar/data/320193/000032019326000013/\"},\"freshness\":{\"filed\":\"2026-05-01\",\"ingested_at\":\"2026-10-17T16:57:42.699993Z\"}},{\"metric\":\"revenue\",\"period_start\":\"2025-09-28\",\"period_end\":\"2025-12-27\",\"value\":\"143756000000\",\"unit\":\"USD\",\"value_source\":\"reported\",\"citation\":{\"accession_no\":\"0000320193-26-000006\",\"form\":\"10-Q\",\"filed\":\"2026-01-30\",\"xbrl_tag\":\"us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax\",\"source_accessions\":[\"0000320193-26-000006\"],\"filing_url\":\"https://www.sec.gov/Archives/edgar/data/320193/000032019326000006/\"},\"freshness\":{\"filed\":\"2026-01-30\",\"ingested_at\":\"2026-10-17T16:57:42.699993Z\"}}]}"
+   "content": "{\"company_id\":\"0000320193\",\"as_of\":\"2026-10-18T20:49:43.861167+00:00\",\"rows\":[{\"metric\":\"revenue\",\"period_start\":\"2026-03-29\",\"period_end\":\"2026-06-27\",\"value\":\"109417000000\",\"unit\":\"USD\",\"value_source\":\"reported\",\"citation\":{\"accession_no\":\"0000320193-26-000020\",\"form\":\"10-Q\",\"filed\":\"2026-07-31\",\"xbrl_tag\":\"us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax\",\"source_accessions\":[\"0000320193-26-000020\"],\"filing_url\":\"https://www.sec.gov/Archives/edgar/data/320193/000032019326000020/\"},\"freshness\":{\"filed\":\"2026-07-31\",\"ingested_at\":\"2026-10-17T16:57:42.699993Z\"}},{\"metric\":\"revenue\",\"period_start\":\"2025-12-28\",\"period_end\":\"2026-03-28\",\"value\":\"111184000000\",\"unit\":\"USD\",\"value_source\":\"reported\",\"citation\":{\"accession_no\":\"0000320193-26-000013\",\"form\":\"10-Q\",\"filed\":\"2026-05-01\",\"xbrl_tag\":\"us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax\",\"source_accessions\":[\"0000320193-26-000013\"],\"filing_url\":\"https://www.sec.gov/Archives/edgar/data/320193/000032019326000013/\"},\"freshness\":{\"filed\":\"2026-05-01\",\"ingested_at\":\"2026-10-17T16:57:42.699993Z\"}},{\"metric\":\"revenue\",\"period_start\":\"2025-09-28\",\"period_end\":\"2025-12-27\",\"value\":\"143756000000\",\"unit\":\"USD\",\"value_source\":\"reported\",\"citation\":{\"accession_no\":\"0000320193-26-000006\",\"form\":\"10-Q\",\"filed\":\"2026-01-30\",\"xbrl_tag\":\"us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax\",\"source_accessions\":[\"0000320193-26-000006\"],\"filing_url\":\"https://www.sec.gov/Archives/edgar/data/320193/000032019326000006/\"},\"freshness\":{\"filed\":\"2026-01-30\",\"ingested_at\":\"2026-10-17T16:57:42.699993Z\"}}]}"
   }
  ],
  "responses": [
   {
-   "id": "msg_011CgALjjNSud9tD6BsYrkH7",
+   "id": "msg_011CgAMvxepNi9AsSrz4NJwA",
    "container": null,
    "content": [
     {
-     "signature": "CAQS0wUKEAgSGAI4AUIIdGhpbmtpbmcSDCKBhC5NSXEtrFAYGRoM8LkwcE4fBNRtncTVIjDaCvG+jCMS3hTWzn9KKBL/B929K+V07LrIt+Kw0MOiy2D0Mv+v+YUVwUCd0aNNxhQq8ARGdxHggi5A5rzRFdruJV7zMYUX/ZPlr9Dmmw5M6L0r/YSsvH2caC3fTOK2diDD+3jfbL7NOQSf7bzGOBF3Qv7VkF9auJ8FuOuYz2OCt0wGvZwaeip2M/pwCD4kJiE8YhDuDaoasB2fan+TIYKpyqxKSFD5DGu/m4X4zbPsmskp1VAU/6ikwfQjOGdrLsT9jFG9d3MvXdUZOjmAWhlCspZFPCb+W/mWGLmvjAROCT9tyQnHg4tbkO75chTtj79L0U0xrKF8b6aFQt3kNGVn8htx6zc3A7zUw7pmiOKeyCGS10ZcqRDvV43UT0LxvGwk333lnQH2zWVMpiByaEqtg31kWUnLhw8CX+V1InlUmyz60O3BBQKjk2fccnTWbSQxCwqGtvO7SryMMAdAcMIyl/53HI8MNGsjzTNpGLP2N89NuGMW72vaPYUG2yh6eJWi1vXdTlqLt7HpbahrAOOem/k5yZWFzRRHn1yYxR6PD2Gt78eDAd0HCrBnuG9ZMj4dS5w1XZA798MsC9ScO/ULsle8duHxwe2IrCczqKFmPVMzclPk14C+oOWmIOHj16GjZB0BEhfbsVVkoRDcA91KAib4XIxAAt4itUnKdRObbTD1boKvb4hNANjN7P+PwoHLC+DW4WSyfVXpYAZ1lI98e+mhPqlGPHeaPe7pVBQXm70SMha5Dzwss5cxxQcpNYv6CHD/0xASnnSuBleTIF9Bw516JiYs70WB76gsZGR9A7ct9C5PveBw+g/eWLXXXszKsOepQCKc+ZIsPvoudoo5dK1Tf2GyFRsMhsvpPGIAWD0cOKVCwsFhrsjJQ22s0YFsQ0cYAQ==",
+     "signature": "CAQS5gUKEAgSGAI4AUIIdGhpbmtpbmcSDLh/4TitXk0zAbZgHxoM6bNVYeXcHCKUCGyFIjAZM9gQlioHxZdabYhvqV6OF4sJ00KoUjDtbso/uHRMXjfvqSIhd8P0WHqwTfu3er0qgwXS2Y5BwXcTl2Op92rh3FQkHwXi+qtb0uwHESxutiEZu3zXOIHHLHK1mXUwE+b4IcclbxBHxu/9IiGXcZebq0uAqUUBc9k4tZUsCtklI1T5HMorUzv37zzkgjEY7RYSpoolatPngTuFXrRpxZoYV2EMggOebZvdtgb6y8FRWt5/0TDTwT11CG8xbS9TlXT/+Dz4p+N0WPmsYNazF+filurdkBlCSYutCSuUeM/565TCKD2byszv2uuSrBEqNeaTW2mWQjE9kn12jXExKSb8tTlmDkUHgJd55ZX+qAeL4DhFb/OOsB2OjePZJXi+hh7uDwdE+7vHjqyZ6CuWyUOT7puUVqUc/I12bqbKt8gyDygyEJPxHx4zB8NlTZvkz37mlAkgDT2C8bkPTE+vyM0r1zRcWI8KE0AwvyQ/7CjnHxTEBgOoz5Lk1GrjMdUzE2vON7ya4MHHsra5XTcg90BMG4lY4NjObTY+y4kZvWTnVm2YwnB30soMjgUTpvhdsUQyxlk7vsOnsWR88Tahj48qdJLjBH5NE+dmUk22pD7nOUVqjyKDscKLwrJC22tv0V3xpR4+vDe4HLv41ASQgA7JhLQ9TslYxma7Lu8O3y5qUhYZUUVFc8S+dx3OPf2+kfCuWNwke3COWpWOOmPWiJkD/p1sE8z9aMVMHMICvbVBnU2bzkIPCCr7mLUWagYCIhAgX69BDpvka1b2Pxac18e4++iQa9G9YwG18XsL/jdio5VW9NfQVqiu01QxeEj0WHodbc1RfMMY5j4eb3ttMhrY4GH5fWRAZa/CjfEWqMFnXy2fxVYQ/OHJcTnCmIGDZ+a3R5YLVzGmTx1C+q6KFDAi4BJZBbTzGAE=",
      "thinking": "",
      "type": "thinking"
     },
     {
-     "id": "toolu_013P83sDFmrBpbHdx3qy4Rs7",
+     "id": "toolu_016xckVz4jJUFjbYKgMXpnG4",
      "caller": {
       "type": "direct"
      },
@@ -101,7 +112,7 @@
      "type": "tool_use"
     },
     {
-     "id": "toolu_019HpbYg5xhg5M5a9jVgZKoj",
+     "id": "toolu_01VgRoYDh76CRVEa4goxsTWJ",
      "caller": {
       "type": "direct"
      },
@@ -122,26 +133,26 @@
    "usage": {
     "cache_creation": {
      "ephemeral_1h_input_tokens": 0,
-     "ephemeral_5m_input_tokens": 1791
+     "ephemeral_5m_input_tokens": 1820
     },
-    "cache_creation_input_tokens": 1791,
+    "cache_creation_input_tokens": 1820,
     "cache_read_input_tokens": 0,
     "inference_geo": "global",
     "input_tokens": 4,
-    "output_tokens": 116,
+    "output_tokens": 122,
     "output_tokens_details": {
-     "thinking_tokens": 42
+     "thinking_tokens": 48
     },
     "service_tier": "standard",
     "speed": "standard"
    }
   },
   {
-   "id": "msg_011CgALjqS4nSfkHE3u5Hsqb",
+   "id": "msg_011CgAMw3jRMVRiYxzgqCG9J",
    "container": null,
    "content": [
     {
-     "id": "toolu_01UHUJ7VDAbe159gPv76fghY",
+     "id": "toolu_018hdipAt34Yf7Xme8jTkVLY",
      "caller": {
       "type": "direct"
      },
@@ -166,10 +177,10 @@
    "usage": {
     "cache_creation": {
      "ephemeral_1h_input_tokens": 0,
-     "ephemeral_5m_input_tokens": 327
+     "ephemeral_5m_input_tokens": 333
     },
-    "cache_creation_input_tokens": 327,
-    "cache_read_input_tokens": 1791,
+    "cache_creation_input_tokens": 333,
+    "cache_read_input_tokens": 1820,
     "inference_geo": "global",
     "input_tokens": 2,
     "output_tokens": 104,
@@ -181,16 +192,16 @@
    }
   },
   {
-   "id": "msg_011CgALjuJjr5mVPZh457Mo6",
+   "id": "msg_011CgAMw7wAsBAyUNC4hnkxd",
    "container": null,
    "content": [
     {
-     "signature": "CAQSnAoKEAgSGAI4AUIIdGhpbmtpbmcSDDgQqql5rkatwse1IBoMA1XohEybejMnpp/QIjDOuJj1cfZRngvbWpoMPnD+1LomS2X5VJm7DPSDKhrqzJpkAVrZRB8lt767A8VufwcquQmeZa5LTOeHb1Pu7cK8yVK22pnMnUycm+OSTGyJ23ucWbSl9hlouDfAtT/3+d/NHK8CLQKjWnxezoT63qzTG2b/vnRf3xXLtmivs/CxjcxC24GkyfL7KTI4lrGpDrE5Mtob+6+W0DeS4aIEE8kR5HvuqZk0zLr2qssLyvi6y63W59w+E4xrgut0O7n8MPWonI1DpbCiU9NvgAJvQvIupLzxFGnJnfjYMGVcYwJHLO9R6BpL+nWlITwup1mx+iqRU9tjK4EiELysMbx4wiLwX43lBSciNZY8VytOYUfM1iB/Z1jLSa3SaQmvMxIX5qKz9pGg+Xr0UioMuasSwHcz3Y/TFBoBphfPI18wQUVcOqkCU7WlMcrcnV6wLwDxUIIKPqogOG/uN76kw3WotkaeI9DckR8ozZo0emjmqyQqusirEBx9jro3afa44TSVXY7efhGp6fOtwY05/0ECv3c5M7fZtCBJUjXHam3EIRaEtj9VsSTeypAp3+B2zzTDd+c1Zw1oZdJ2aPykh+wMiX/xft7HtrEfLyh8qNS85lC+yCcCpDydy/M4UZO+urk27wAXtgfELP5WB5cQuMEDCRfunBFqSZjOXe0+Yk9bGk/HE/PBV3zCh1UFYy20lHtQA8LemMmyi/9epkX/k2hROQx4m/j5mlAb3Khdq9Dch7rLcIfkfcP1Z2FCZNUgtmtnXUvpLfD6scHeulUKTr+WGEeQrGgUOxsskFUynkF05jVKovfZP/B6hcbRmcEMcXf/qsbB40mxNKgtDNoV8sgbBAAns0vT+0moFHWZvxaGtvKQ67kctEGpzmvkr8HXdb3wWGax355BMWJuTMLjuDZ/99jK+bRy7ItjzYlFILn2lC4GCvc7Mlsg1IQdLgvhSDj4Ls+Laql2LozPmdNH7w8tgSsQNXJnr+DdG2l+QHkk5XKUA/6ZK6cEEjOuusp/++faKVXETVe7XmH3VBo6XI0ifDWihtChanK1eoKJJ9egaIsHwl5q4uVFZCj6VQ6OTqsLo1+yTHEM+a/YCMZ9YSmadL1HGiEuloE+LJvLpkD0KMB9DYIE8sjMQe9MXXZdJZx5xcBejmCHoz8F7tAj9RB+iybtmx9JjSuXmNxuP3T7H+kso+6lwyQrcJ5AkTWJlw8jWQ9uTJgbyiO7WifOYjGGUO7dD7hbMYev7AjImZF0EF8/jfvZpmfYF1P5xlRyDML2Sh645d7PRw49y4bI94NdmCXJ4S6YsMqCl901rOzNMIvUppL5D7QIyU2gxj+cqznq1R1FwAz7WDFwZ7D2a1uHSE2TdQXUJMCnNoHF330jdxLYeqFi2zsqUCtVgbrMCBdZrQ1Q+3auJQlSMaLZ5v91ohvQOFb+IMS0oU9DtmWzygryGOusFgOAzDxw110b43pokQ7nNWpC4SMQ59wcTd3eGVsIISrkakXVwFkS4QWp6m3pwoqkn4R87/knbfCmjTBGY8ReSReeMjCdK6dq6C3ylSkJMCf1Cf7LG3IXXdZ8eeN4f4Ne8dxl9HubmJvcI1ESLLrxqfEaIy7lEKfTAF/rokOSVCRiZIJfYKUBFqZHnj6rfENkDGUmwY5ZKV8k5ZeKBoVwG9T1oqWe6Ek3QS4YAQ==",
+     "signature": "CAQSsAoKEAgSGAI4AUIIdGhpbmtpbmcSDNVHyKJ9qBNx7pDhlRoMNVF1exwcB3cjgg4LIjAoJ2eJuc6Hoz2q1CpxIYmXng7bgcR1qaZL3dMIuEnHouqaqGRAnOZTO5mXGdXDenQqzQk1jcqDeyE1BK6VtsPLb0b0+AjZyRc34OBvf1zsYd6ylmjixCiRbhDpf0w0Xw0IyQshFRwskq2ZKYmZI7oi1Mle4tiqSHda7Qn7tim8XsJ4jVZmDIVNhw5DNtAoqWCe80Gp24wlNGzb5wTIBH5YmN4x/1LQMqYOM7Q2e8bm+Udb8enzH4iJdkaFhZtQ+R8Y9zm421iO5y0rHKomynestPtZ6ky30lgY/cgVxgX7za1aacPP1+HkPzLdsOxA4fL/58f1zDzP4uNaASX6963f2KmZKgPXXR78ciTkF2DhulpIkRGogZClEk6sra465EYXurnyskZy9wuAodOPzwXKttvjfC5oQ5TAoo4UFRvXzTK0OD5N6Y7hI71TqYyoJ1aSEKD4Sj9ANhNp/q7OqwAoIvn9m2aMmGRE10xqeRYh4P1HVtlJhl8LptHDtOwAuXg1w4AzwLeN++PEqv+GDIpNWhas+K+ZKIJhLTIJzuyXOM9JxCtCkSiDJy3VuUJeQ5AEexnx4g8U5bykNTPBAEKkFX2n/UYPRz//kUztio+SBrJZ7tjYba+6VkZzpYF3TXDoF41x7gsMdy6Pv2VlhkK08KFgTpRQ/7XgvyVu6XtDbGXaYkFFnyFznQBPIqitrBglP4D70teZaMK4Ig6Ybu0MSdKiq+9f0enZCrxtdjzCXu7pONB/uV1GJqA2afmOvkR2AN06smJC2cFQRxBZUF/lFrklV5pdrUXzo73fay6HyHSzIpHwyXVxHkPCn0tAPGxXwrRFYfhD5GCIVOWxiU4xDj2w2dWvqpuaW1qakPWMB7A8Ys7SiJv6vGm9uUX0snxp+xHYdkQajy09eZsMN+V/B64gW9MibT/X7TOvGVnANaUl4D1qfTJTtOzYp6znmfAuX3XyVqmmQlwbUTc77pn13GrJJw52majrSlmPtTu+x9NjPtunlKVURyTG5GRZ9xUnizpO8Ljlsf74DCSBfTgqnmIW9Lf0jGevVc1txrQz+KxP9IRXf1gFH+cHf/sT2zf/QcLToSOZo3o9q0tubImzPJtnP5MNuxDqnYeS0esR6kYnoT9/ti8W7++c+Ixf3LGFJrAjzSQ3r8YS3SvSVujfvROY8cYNK3WWFKfPGG+RVXDGZrHytnJq0qi1HCNvduS8s48a908G9DAhTy8wCgsNmu2XLXr/AebnbD1BKuFxIW8I28vvglHaJxGiZnmOHc5zPw0E4Cr3xEAnAhnedtCbEmlSt9r4PxIZOS9WvzzbrMW807owcF+ADmF/jJXsC4yWVdPQi1gvI/RUa0WGBo1ggXiZTRVPxRqfvBg4BXV2fUTgNH6PjpqPjFtjByVPMo7OP1RlJ0bup1dcTh1KKybgQHo9M2g/DbgL5LRVxJqkUO0+jQ1tR1JvB+IoW4VLbCinU5Q4hHkMksAPPf8x7shnEOCNy/dH5aMf5BzgUidT+txXTs0qIv6cj27EBHQ8lmp+Eh6VTWTu7zJP089c16R+r+HyYMcI1RBvep324UfQMN4dDpFfhHr4kX13itIN2PlvtXgh69y4jIc1x4doG8gz8NePo1p3g77Yk6k7rybyu/9M4bFjhg7DRHIEfZbrGN/XXlWsWwU9C3C8XpxxdA/7FeiS02SAaowNqggm0LYkKxgB",
      "thinking": "",
      "type": "thinking"
     },
     {
-     "text": "Apple's revenue for the quarter before last was **$111.18B**, for the fiscal quarter ended March 28, 2026 (the period from December 28, 2025 to March 28, 2026).\n\n- **Source:** Form 10-Q filed May 1, 2026, accession no. 0000320193-26-000013, XBRL tag `us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax`.\n\nThis treats the most recent quarter in the data (ended June 27, 2026) as the last one. Tributary has no later quarter for Apple.\n\nFreshness: latest filing date used is May 1, 2026; data as of October 18, 2026, 20:34 UTC.",
+     "text": "Apple's revenue for the quarter before last (the fiscal quarter ended March 28, 2026) was **$111.184B**.\n\n- Form 10-Q, filed 2026-05-01, accession 0000320193-26-000013\n- XBRL tag: us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax\n\nFor reference, the most recent quarter (ended June 27, 2026) was $109.417B (10-Q, filed 2026-07-31, accession 0000320193-26-000020).\n\nFreshness: latest filing date used is 2026-05-01; data as of 2026-10-18T20:49:43Z.",
      "type": "text"
     }
    ],
@@ -207,12 +218,12 @@
      "ephemeral_5m_input_tokens": 869
     },
     "cache_creation_input_tokens": 869,
-    "cache_read_input_tokens": 2118,
+    "cache_read_input_tokens": 2153,
     "inference_geo": "global",
     "input_tokens": 2,
     "output_tokens": 491,
     "output_tokens_details": {
-     "thinking_tokens": 262
+     "thinking_tokens": 278
     },
     "service_tier": "standard",
     "speed": "standard"

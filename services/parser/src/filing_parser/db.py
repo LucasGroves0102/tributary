@@ -43,3 +43,13 @@ def all_accessions(conn: psycopg.Connection) -> list[str]:
     return [r[0] for r in conn.execute(
         "SELECT accession_no FROM bronze.filing_documents ORDER BY filed"
     ).fetchall()]
+
+
+def load_exhibits(conn: psycopg.Connection,
+                  accession_no: str) -> list[tuple[str, str | None, bytes]]:
+    """(exhibit_type, description, uncompressed HTML) for each stored exhibit."""
+    rows = conn.execute(
+        "SELECT exhibit_type, description, content_gzip FROM bronze.filing_exhibits"
+        " WHERE accession_no = %s ORDER BY exhibit_type", (accession_no,),
+    ).fetchall()
+    return [(t, d, gzip.decompress(c)) for t, d, c in rows]

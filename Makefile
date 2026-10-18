@@ -1,4 +1,4 @@
-.PHONY: up up-all down logs topics consume migrate seed-app authz authz-test cdc propagation-test token backfill companies financials financials-rebuild seed-documents reparse psql lint test hooks secrets ask adversarial web citations typecheck
+.PHONY: up up-all down logs topics consume migrate seed-app authz authz-test cdc propagation-test token backfill companies financials financials-rebuild seed-documents reparse psql lint test hooks secrets ask adversarial web citations typecheck exhibits
 
 COMPOSE := $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo docker-compose)
 # use the repo virtualenv when there is one, so `make test` works without activating it
@@ -80,6 +80,10 @@ financials-rebuild: ## re-derive silver/gold from stored bronze (after changing 
 seed-documents: ## publish tracked companies' recent 10-K/10-Q/8-K filings to filings.raw
 	$(COMPOSE) --profile app build doc-fetcher
 	$(COMPOSE) --profile app run --rm doc-fetcher doc-fetcher-seed
+
+exhibits:  ## fetch EX-99.x exhibits for stored 8-Ks, then re-parse
+	@set -a; . ./.env; set +a; $(BIN)doc-fetcher-exhibits
+	$(MAKE) reparse
 
 reparse:   ## re-parse every stored document (after changing the parser)
 	$(COMPOSE) --profile app build parser

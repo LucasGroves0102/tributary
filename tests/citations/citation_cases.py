@@ -29,6 +29,8 @@ CASES: list[tuple[str, str, str]] = [  # (id, user, question)
     ("doc-05", "bob", "What does Nvidia's latest 10-Q say about liquidity and capital resources?"),
     ("doc-06", "bob", "List the filings Microsoft has made recently."),
     ("doc-07", "bob", "What does Nvidia's latest 10-K say about competition?"),
+    ("doc-08", "bob", "What guidance did Nvidia give in its latest earnings press release?"),
+    ("doc-09", "bob", "Summarize Microsoft's most recent earnings press release."),
     ("mix-01", "bob", "What was Nvidia's revenue last quarter, and what does management say "
                       "drove it?"),
     ("mix-02", "bob", "Compare Microsoft's and Nvidia's net income last quarter and summarize "

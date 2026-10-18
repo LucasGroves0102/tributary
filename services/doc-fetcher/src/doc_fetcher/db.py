@@ -5,7 +5,7 @@ import hashlib
 
 import psycopg
 
-from doc_fetcher.index import FilingIndex
+from doc_fetcher.index import Exhibit, FilingIndex
 
 
 def tracked_ciks(conn: psycopg.Connection) -> set[str]:
@@ -40,3 +40,32 @@ def insert_document(
          index.url, gzip.compress(content), digest, len(content)),
     )
     return digest
+
+
+def insert_exhibit(conn: psycopg.Connection, accession_no: str, exhibit: Exhibit,
+                   content: bytes) -> None:
+    conn.execute(
+        """
+        INSERT INTO bronze.filing_exhibits
+            (accession_no, exhibit_type, description, document_name, url, content_gzip,
+             content_sha256, size_bytes)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (accession_no, exhibit_type) DO NOTHING
+        """,
+        (accession_no, exhibit.exhibit_type, exhibit.description, exhibit.document_name,
+         exhibit.url, gzip.compress(content), hashlib.sha256(content).hexdigest(),
+         len(content)),
+    )
+
+
+def eight_ks_without_exhibits(conn: psycopg.Connection) -> list[tuple[str, str]]:
+    """(accession_no, cik) of stored 8-Ks with no exhibits fetched yet."""
+    return conn.execute(
+        """
+        SELECT d.accession_no, d.cik FROM bronze.filing_documents d
+        WHERE d.form = '8-K'
+          AND NOT EXISTS (SELECT 1 FROM bronze.filing_exhibits e
+                          WHERE e.accession_no = d.accession_no)
+        ORDER BY d.filed
+        """
+    ).fetchall()

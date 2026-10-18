@@ -94,3 +94,51 @@ def test_10q_body_without_part_one_heading():
     ])
     keys = [s.key for s in find_sections(text, "10-Q")]
     assert keys == ["I-2", "II-1A"]
+
+
+def _mdna_10k(*body_lines: str) -> str:
+    head = ["Part II", "Item 7. Management’s Discussion and Analysis of Financial Condition",
+            "Item 8. Financial Statements"]
+    body = ["Part II",
+            "Item 7. Management’s Discussion and Analysis of Financial Condition",
+            "Reference is made to Management’s discussion and analysis in the Financial Section.",
+            "Item 8. Financial Statements", "See the Financial Section.",
+            "FINANCIAL SECTION", "Management’s discussion and analysis", *body_lines]
+    return "\n".join(head + body)
+
+
+def test_mdna_incorporated_by_reference_is_found():
+    text = _mdna_10k(
+        "Management’s report on internal control over financial reporting",  # contents
+        "Management’s discussion and analysis", "Revenue grew on strong demand.",
+        "Management’s discussion and analysis", "Liquidity remained strong.",
+        "Report of Independent Registered Public Accounting Firm", "We have audited ...")
+    mdna = next(s for s in find_sections(text, "10-K") if s.key == "7")
+    assert mdna.text.startswith("Management’s discussion and analysis\nRevenue grew")
+    assert mdna.text.endswith("Liquidity remained strong.")
+    assert text[mdna.char_start:mdna.char_end].strip() == mdna.text
+    assert mdna.title.startswith("Management’s Discussion")
+
+
+def test_mdna_needs_a_run_of_headings():
+    text = _mdna_10k("Revenue grew.",
+                     "Report of Independent Registered Public Accounting Firm", "We audited.")
+    mdna = next(s for s in find_sections(text, "10-K") if s.key == "7")
+    assert mdna.text.startswith("Item 7.")  # one MD&A line is not enough: Item 7 unchanged
+
+
+def test_exhibit_section():
+    from filing_parser.sections import exhibit_section
+
+    s = exhibit_section("EX-99.1", None, b"<html><body><p>NVIDIA Announces Results</p>"
+                                         b"<p>Revenue of $46.7 billion</p></body></html>")
+    assert (s.key, s.item, s.title, s.part) == ("EX-99.1", "99.1", "Exhibit 99.1", None)
+    assert s.text == "NVIDIA Announces Results\nRevenue of $46.7 billion"
+    assert (s.char_start, s.char_end) == (0, len(s.text))
+
+
+def test_edgar_envelope_and_title_are_dropped():
+    raw = (b"<DOCUMENT>\n<TYPE>EX-99.1\n<SEQUENCE>2\n<FILENAME>pr.htm\n<DESCRIPTION>EX-99.1\n"
+           b"<TEXT>\n<HTML><HEAD><TITLE>pr</TITLE></HEAD><BODY><P>Results</P></BODY></HTML>\n"
+           b"</TEXT>\n</DOCUMENT>")
+    assert html_to_text(raw) == "Results"
