@@ -49,7 +49,9 @@ class Store:
             cur.execute(
                 """
                 SELECT metric, period_start, period_end, value, unit, value_source,
-                       source_tag, accession_no, form, filed, source_accessions, ingested_at
+                       source_tag, accession_no, form, filed, source_accessions, ingested_at,
+                       (SELECT f.cik FROM silver.financial_facts f
+                        WHERE f.accession_no = q.accession_no LIMIT 1) AS filer_cik
                 FROM (
                     SELECT *, row_number() OVER (PARTITION BY metric ORDER BY period_end DESC)
                     FROM gold.quarterly_financials

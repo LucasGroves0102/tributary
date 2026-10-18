@@ -1,0 +1,12 @@
+.env
+.git
+.venv
+**/node_modules
+**/dist
+**/__pycache__
+**/*.egg-info
+.pytest_cache
+.ruff_cache
+CLAUDE.md
+ROADMAP.md
+docs

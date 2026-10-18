@@ -4,4 +4,5 @@ WORKDIR /app
 COPY services/agent/pyproject.toml .
 COPY services/agent/src ./src
 RUN pip install --no-cache-dir .
-ENTRYPOINT ["agent-ask"]
+EXPOSE 8001
+CMD ["agent-api"]

@@ -18,6 +18,7 @@ def build_app():
         authorizer=FgaAuthorizer(FgaClient(os.environ["FGA_API_URL"])),
         store=Store(pool),
         jwt_secret=check_secret(os.environ["QUERY_API_JWT_SECRET"]),
+        demo_users=frozenset(u for u in os.environ.get("DEMO_USERS", "").split(",") if u),
     )
 
 

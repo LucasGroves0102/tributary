@@ -157,3 +157,77 @@ def test_cost_estimate():
     assert answer.cost_usd == pytest.approx(0.60)
     assert Agent(FakeMessages(response("end_turn")), query_api(ok)[0],
                  "some-future-model").ask("x").cost_usd is None
+
+
+class FakeStream:
+    def __init__(self, response, chunks):
+        self._response, self._chunks = response, chunks
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def __iter__(self):
+        return iter(NS(type="text", text=c) for c in self._chunks)
+
+    def get_final_message(self):
+        return self._response
+
+
+class FakeStreamingMessages(FakeMessages):
+    def stream(self, **kwargs):
+        r = self.create(**kwargs)
+        return FakeStream(r, [b.text for b in r.content if b.type == "text"])
+
+
+def test_streams_text_and_tool_events():
+    fake = FakeStreamingMessages(
+        response("tool_use", tool_use("t1", "whoami", {})),
+        response("end_turn", text("Nvidia "), text("grew.")),
+    )
+    events = list(Agent(fake, query_api(ok)[0], "claude-haiku-5-5", stream=True)
+                  .events("NVDA?"))
+    assert [e["type"] for e in events] == ["tool", "text", "text", "done"]
+    assert events[0] == {"type": "tool", "round": 0, "name": "whoami", "input": {},
+                         "is_error": False}
+    assert "".join(e["text"] for e in events if e["type"] == "text") == "Nvidia grew."
+    assert events[-1]["answer"].text == "Nvidia grew."
+
+
+def test_history_comes_before_the_question():
+    fake = FakeMessages(response("end_turn", text("And the quarter before was ...")))
+    history = [{"role": "user", "content": "NVDA revenue?"},
+               {"role": "assistant", "content": "$96.2B"}]
+    Agent(fake, query_api(ok)[0], "claude-haiku-5-5").ask("and before that?", history)
+    assert fake.requests[0]["messages"] == [*history,
+                                            {"role": "user", "content": "and before that?"}]
+
+
+def test_collects_citations_from_tool_results():
+    def financials(request):
+        return httpx.Response(200, json={"company_id": NVDA, "rows": [
+            {"metric": "revenue", "citation": {
+                "accession_no": "0001045810-26-000075", "form": "10-Q", "filed": "2026-08-26",
+                "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/x/"}}]})
+
+    fake = FakeMessages(
+        response("tool_use", tool_use("t1", "get_financials", {"company_id": NVDA})),
+        response("end_turn", text("Revenue was $96.2B (0001045810-26-000075).")),
+    )
+    answer = Agent(fake, query_api(financials)[0], "claude-haiku-5-5").ask("NVDA?")
+    assert answer.citations == {"0001045810-26-000075": {
+        "accession_no": "0001045810-26-000075", "form": "10-Q", "filed": "2026-08-26",
+        "company_id": NVDA, "url": "https://www.sec.gov/Archives/edgar/data/1045810/x/"}}
+
+
+def test_denied_results_add_no_citations():
+    def deny(request):
+        return httpx.Response(403, json={"detail": "no"})
+
+    fake = FakeMessages(
+        response("tool_use", tool_use("t1", "get_financials", {"company_id": NVDA})),
+        response("end_turn", text("No access.")),
+    )
+    assert Agent(fake, query_api(deny)[0], "claude-haiku-5-5").ask("x").citations == {}

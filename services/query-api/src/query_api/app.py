@@ -6,17 +6,28 @@ from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Path, Query
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import BaseModel
 
-from query_api.auth import Unauthenticated, verify
+from query_api.auth import Unauthenticated, mint, verify
 from query_api.authorizer import Authorizer, AuthzUnavailable
 from query_api.store import Store
 
 METRICS = ["revenue", "gross_profit", "operating_income", "net_income", "eps_diluted",
            "operating_cash_flow", "total_assets", "cash"]
+EDGAR = "https://www.sec.gov/Archives/edgar/data"
 CompanyId = Annotated[str, Path(pattern=r"^\d{10}$", description="canonical company_id")]
 
 
-def create_app(authorizer: Authorizer, store: Store, jwt_secret: str) -> FastAPI:
+DEMO_TOKEN_TTL = 8 * 3600
+
+
+class DemoLogin(BaseModel):
+    user_id: str
+
+
+def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
+               demo_users: frozenset[str] = frozenset()) -> FastAPI:
+    """demo_users: accounts anyone may sign in as without a password (empty disables it)."""
     app = FastAPI(title="Tributary Query API", version="1")
     bearer = HTTPBearer(auto_error=False)
 
@@ -50,6 +61,19 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str) -> FastAPI
     @app.get("/health")
     def health() -> dict:
         return {"status": "ok"}
+
+    @app.get("/v1/demo/users")
+    def demo_user_list() -> dict:
+        if not demo_users:
+            raise HTTPException(404)
+        return {"users": sorted(demo_users)}
+
+    @app.post("/v1/demo/token")
+    def demo_token(body: DemoLogin) -> dict:
+        if body.user_id not in demo_users:
+            raise HTTPException(404)
+        return {"token": mint(body.user_id, jwt_secret, DEMO_TOKEN_TTL),
+                "expires_in": DEMO_TOKEN_TTL}
 
     @app.get("/v1/me")
     def me(user_id: User) -> dict:
@@ -92,7 +116,8 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str) -> FastAPI
                 "value_source": r["value_source"],
                 "citation": {"accession_no": r["accession_no"], "form": r["form"],
                              "filed": r["filed"], "xbrl_tag": r["source_tag"],
-                             "source_accessions": r["source_accessions"]},
+                             "source_accessions": r["source_accessions"],
+                             "filing_url": filing_url(r.get("filer_cik"), r["accession_no"])},
                 "freshness": {"filed": r["filed"], "ingested_at": r["ingested_at"]},
             } for r in rows
         ]}
@@ -131,6 +156,13 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str) -> FastAPI
         ]}
 
     return app
+
+
+def filing_url(cik: str | None, accession_no: str) -> str | None:
+    """EDGAR filing index, e.g. https://www.sec.gov/Archives/edgar/data/1045810/000104581026000075/"""
+    if not cik:
+        return None
+    return f"{EDGAR}/{int(cik)}/{accession_no.replace('-', '')}/"
 
 
 def _now() -> str:

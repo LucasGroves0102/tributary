@@ -128,3 +128,29 @@ def test_me(client, token):
     body = client.get("/v1/me", headers=token("alice")).json()
     assert body == {"user_id": "alice", "companies": [
         {"company_id": NVDA, "name": "NVIDIA CORP", "tiers": ["financials"]}]}
+
+
+def test_financials_link_to_the_filing(token):
+    class Store(FakeStore):
+        def financials(self, *args):
+            return [{**super().financials(*args)[0], "filer_cik": "0001045810"}]
+
+    c = TestClient(create_app(FakeAuthorizer(GRANTS), Store(), SECRET))
+    row = c.get(f"/v1/companies/{NVDA}/financials", headers=token("alice")).json()["rows"][0]
+    assert row["citation"]["filing_url"] == \
+        "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000075/"
+
+
+def test_demo_login_is_off_by_default(client):
+    assert client.get("/v1/demo/users").status_code == 404
+    assert client.post("/v1/demo/token", json={"user_id": "alice"}).status_code == 404
+
+
+def test_demo_login_only_for_listed_users():
+    c = TestClient(create_app(FakeAuthorizer(GRANTS), FakeStore(), SECRET,
+                              demo_users=frozenset({"alice", "bob"})))
+    assert c.get("/v1/demo/users").json() == {"users": ["alice", "bob"]}
+    assert c.post("/v1/demo/token", json={"user_id": "mallory"}).status_code == 404
+    token = c.post("/v1/demo/token", json={"user_id": "alice"}).json()["token"]
+    me = c.get("/v1/me", headers={"Authorization": f"Bearer {token}"}).json()
+    assert me["user_id"] == "alice"

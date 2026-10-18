@@ -15,3 +15,5 @@ target/
 CLAUDE.md
 ROADMAP.md
 docs/
+node_modules/
+dist/

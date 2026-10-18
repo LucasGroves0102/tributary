@@ -1,5 +1,7 @@
 """Tool loop over the Query API that answers with citations."""
 
+import json
+from collections.abc import Generator, Iterator, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -40,9 +42,11 @@ FALLBACK_MODELS = {"claude-opus-5-5", "claude-opus-5"}
 
 
 class MessagesClient(Protocol):
-    """The slice of anthropic.Anthropic().messages the agent uses."""
+    """The slice of anthropic.Anthropic().messages the agent uses (stream only if streaming)."""
 
     def create(self, **kwargs: Any) -> Any: ...
+
+    def stream(self, **kwargs: Any) -> Any: ...
 
 
 class ToolRunner(Protocol):
@@ -86,6 +90,7 @@ class Answer:
     rounds: int = 0
     tool_calls: list[ToolCall] = field(default_factory=list)
     usage: Usage = field(default_factory=Usage)
+    citations: dict[str, dict] = field(default_factory=dict)  # accession_no -> filing
 
     @property
     def cost_usd(self) -> float | None:
@@ -95,19 +100,29 @@ class Answer:
 class Agent:
     def __init__(self, messages: MessagesClient, api: ToolRunner, model: str,
                  max_rounds: int = 6, max_tokens: int = 8000,
-                 effort: str | None = None) -> None:
+                 effort: str | None = None, stream: bool = False) -> None:
         self._messages = messages
         self._api = api
         self.model = model
         self._max_rounds = max_rounds
         self._max_tokens = max_tokens
         self._effort = effort
+        self._stream = stream
 
-    def ask(self, question: str) -> Answer:
-        messages: list[dict] = [{"role": "user", "content": question}]
+    def ask(self, question: str, history: Sequence[dict] = ()) -> Answer:
+        for event in self.events(question, history):
+            if event["type"] == "done":
+                return event["answer"]
+        raise AssertionError("events() ended without a done event")
+
+    def events(self, question: str, history: Sequence[dict] = ()) -> Iterator[dict]:
+        """Yields {"type": "text"} deltas (when streaming), one {"type": "tool"} per tool call,
+        then {"type": "done", "answer": Answer}. Rounds count from 0. history: earlier
+        user/assistant text turns."""
+        messages: list[dict] = [*history, {"role": "user", "content": question}]
         answer = Answer(text="", stop="max_rounds", model=self.model)
         while answer.rounds < self._max_rounds:
-            response = self._messages.create(**self._request(messages))
+            response = yield from self._respond(self._request(messages), answer.rounds)
             answer.rounds += 1
             answer.usage.add(response.usage)
             text = "".join(b.text for b in response.content if b.type == "text")
@@ -116,12 +131,35 @@ class Agent:
                 answer.stop = response.stop_reason
                 if response.stop_reason == "refusal":
                     answer.text = text or "The model declined to answer this request."
-                return answer
+                yield {"type": "done", "answer": answer}
+                return
             messages.append({"role": "assistant", "content": response.content})
-            messages.append({"role": "user", "content": self._run_tools(response, answer)})
+            results = []
+            for block in response.content:
+                if block.type != "tool_use":
+                    continue
+                args = dict(block.input or {})
+                content, is_error = self._api.run(block.name, args)
+                answer.tool_calls.append(ToolCall(block.name, args, is_error))
+                if not is_error:
+                    _collect_citations(content, answer.citations)
+                results.append({"type": "tool_result", "tool_use_id": block.id,
+                                "content": content, "is_error": is_error})
+                yield {"type": "tool", "round": answer.rounds - 1, "name": block.name,
+                       "input": args, "is_error": is_error}
+            messages.append({"role": "user", "content": results})
         answer.text = (f"Stopped after {self._max_rounds} rounds of tool calls without a final "
                        "answer. Try a narrower question.")
-        return answer
+        yield {"type": "done", "answer": answer}
+
+    def _respond(self, req: dict, round_: int) -> Generator[dict, None, Any]:
+        if not self._stream:
+            return self._messages.create(**req)
+        with self._messages.stream(**req) as stream:
+            for event in stream:
+                if event.type == "text":
+                    yield {"type": "text", "round": round_, "text": event.text}
+            return stream.get_final_message()
 
     def _request(self, messages: list[dict]) -> dict:
         req: dict[str, Any] = {
@@ -139,13 +177,29 @@ class Agent:
             req["extra_body"] = {"fallbacks": "default"}
         return req
 
-    def _run_tools(self, response: Any, answer: Answer) -> list[dict]:
-        results = []
-        for block in response.content:
-            if block.type != "tool_use":
-                continue
-            content, is_error = self._api.run(block.name, dict(block.input or {}))
-            answer.tool_calls.append(ToolCall(block.name, dict(block.input or {}), is_error))
-            results.append({"type": "tool_result", "tool_use_id": block.id,
-                            "content": content, "is_error": is_error})
-        return results
+
+
+def _collect_citations(content: str, into: dict[str, dict]) -> None:
+    """Every filing a tool result mentions, by accession number."""
+    try:
+        data = json.loads(content)
+    except ValueError:
+        return
+
+    def walk(node: Any, company_id: str | None) -> None:
+        if isinstance(node, list):
+            for item in node:
+                walk(item, company_id)
+        elif isinstance(node, dict):
+            company_id = node.get("company_id", company_id)
+            if "accession_no" in node and "form" in node:
+                acc = node["accession_no"]
+                url = node.get("filing_url") or node.get("document_url")
+                prev = into.get(acc, {})
+                into[acc] = {"accession_no": acc, "form": node["form"],
+                             "filed": node.get("filed"), "company_id": company_id,
+                             "url": url or prev.get("url")}
+            for value in node.values():
+                walk(value, company_id)
+
+    walk(data, None)

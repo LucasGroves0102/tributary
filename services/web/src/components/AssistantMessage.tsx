@@ -1,0 +1,134 @@
+import { useMemo, useState } from "react";
+
+import { renderAnswer } from "../markdown";
+import type { Answer, Citation, ToolCall } from "../types";
+
+export interface AssistantTurn {
+  id: number;
+  role: "assistant";
+  rounds: Record<number, string>;
+  tools: (ToolCall & { round: number })[];
+  answer?: Answer;
+  error?: string;
+}
+
+const TOOL_LABEL: Record<string, string> = {
+  whoami: "Checked access",
+  search_companies: "Searched companies",
+  get_financials: "Read financials",
+  list_filings: "Listed filings",
+  get_section: "Read filing section",
+};
+
+export function AssistantMessage({ turn }: { turn: AssistantTurn }) {
+  const finalRound = turn.answer ? turn.answer.rounds - 1 : maxRound(turn);
+  const text = turn.answer?.text ?? turn.rounds[finalRound] ?? "";
+  const citations = turn.answer?.citations ?? [];
+  const html = useMemo(() => renderAnswer(text, citations), [text, citations]);
+  const pending = !turn.answer && !turn.error;
+
+  return (
+    <article className="message assistant" aria-busy={pending}>
+      <Trace turn={turn} finalRound={finalRound} />
+      {turn.error ? (
+        <p className="error">{turn.error}</p>
+      ) : text ? (
+        <div className="answer" dangerouslySetInnerHTML={{ __html: html }} />
+      ) : (
+        <p className="muted thinking">Working…</p>
+      )}
+      {turn.answer && <Sources citations={usedCitations(turn.answer)} />}
+      {turn.answer && <Meta answer={turn.answer} />}
+    </article>
+  );
+}
+
+function maxRound(turn: AssistantTurn): number {
+  const rounds = [...Object.keys(turn.rounds).map(Number), ...turn.tools.map((t) => t.round)];
+  return rounds.length ? Math.max(...rounds) : 0;
+}
+
+function Trace({ turn, finalRound }: { turn: AssistantTurn; finalRound: number }) {
+  const [open, setOpen] = useState(false);
+  if (!turn.tools.length) return null;
+  const denied = turn.tools.filter((t) => t.is_error).length;
+  const notes = Object.entries(turn.rounds).filter(([r]) => Number(r) !== finalRound);
+
+  return (
+    <div className="trace">
+      <button className="trace-toggle" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <span className="chevron">{open ? "▾" : "▸"}</span>
+        {turn.tools.length} tool call{turn.tools.length === 1 ? "" : "s"}
+        {denied > 0 && <span className="denied-count">{denied} denied</span>}
+      </button>
+      {open && (
+        <ol className="trace-list">
+          {notes.map(([r, note]) => (
+            <li key={`note-${r}`} className="note">
+              {note}
+            </li>
+          ))}
+          {turn.tools.map((t, i) => (
+            <li key={i} className={t.is_error ? "tool denied" : "tool allowed"}>
+              <span className="status">{t.is_error ? "denied" : "ok"}</span>
+              <span>{TOOL_LABEL[t.name] ?? t.name}</span>
+              <code>{argsSummary(t.input)}</code>
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  );
+}
+
+function argsSummary(input: Record<string, unknown>): string {
+  return Object.entries(input)
+    .map(([k, v]) => `${k}=${Array.isArray(v) ? v.join(",") : String(v)}`)
+    .join("  ");
+}
+
+/** Citations whose accession number appears in the answer text. */
+function usedCitations(answer: Answer): Citation[] {
+  return answer.citations
+    .filter((c) => answer.text.includes(c.accession_no))
+    .sort((a, b) => (b.filed ?? "").localeCompare(a.filed ?? ""));
+}
+
+function Sources({ citations }: { citations: Citation[] }) {
+  if (!citations.length) return null;
+  return (
+    <div className="sources">
+      <h3>Sources</h3>
+      <ul>
+        {citations.map((c) => (
+          <li key={c.accession_no}>
+            <span className="form">{c.form}</span>
+            <span className="muted">{c.filed}</span>
+            {c.url ? (
+              <a href={c.url} target="_blank" rel="noopener noreferrer" className="accession">
+                {c.accession_no}
+              </a>
+            ) : (
+              <span className="accession">{c.accession_no}</span>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function Meta({ answer }: { answer: Answer }) {
+  const used = usedCitations(answer);
+  const latest = used.map((c) => c.filed).filter(Boolean).sort().at(-1);
+  const tokens = answer.usage.input_tokens + answer.usage.cache_read_input_tokens +
+    answer.usage.cache_creation_input_tokens + answer.usage.output_tokens;
+  return (
+    <footer className="meta">
+      {latest && <span>Data as of filing {latest}</span>}
+      <span>{answer.model}</span>
+      <span>{tokens.toLocaleString()} tokens</span>
+      {answer.cost_usd !== null && <span>${answer.cost_usd.toFixed(4)}</span>}
+    </footer>
+  );
+}

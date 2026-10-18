@@ -17,7 +17,8 @@ make cdc               # Debezium: stream the app database's access tables into 
 make companies         # load company identity (FR5); then: SELECT * FROM silver.resolve_company('FB');
 make financials        # XBRL financials for tracked companies → gold.quarterly_financials
 make seed-documents    # load recent 10-K/10-Q/8-K history (fetched and parsed by up-all)
-make up-all            # + poller, bronze-loader, doc-fetcher, parser, authz-sync, query-api
+make up-all            # + poller, bronze-loader, doc-fetcher, parser, authz-sync, query-api,
+                       #   agent-api, and the chat UI on http://localhost:3000
 make backfill DAYS=7   # fill in filings the live poller missed (EDGAR daily indexes)
 make psql              # query it: SELECT * FROM bronze.filings ORDER BY filed_at DESC LIMIT 10;
 make consume           # watch filings arrive (or open the Kafka UI at http://localhost:8080)
@@ -45,13 +46,22 @@ curl -H "Authorization: Bearer $(make -s token USER=alice)" \
   "localhost:8000/v1/companies/0001045810/sections/1A"                  # 403: Free plan
 ```
 
+### Chat
+
+![Chat UI](.github/assets/chat.png)
+
+`services/web` (React, TypeScript, Vite). Pick a demo user and ask; answers stream in with the
+agent's tool calls (allowed or denied), and accession numbers link to the filing on EDGAR
+only when a tool actually returned them. Model output is sanitized, and nginx serves it with
+a strict Content-Security-Policy. `make web` runs the dev server on :5173.
+
 ### Agent
 
-A Claude tool loop over the Query API (`services/agent`). Its tools take no user parameter:
-the agent holds the asking user's token, so it sees exactly what that user may read, and it
-cites the filing, section or XBRL tag, and freshness for every figure. Needs
-`ANTHROPIC_API_KEY` in `.env`; the model is `AGENT_MODEL`. Each answer logs its tokens and
-cost. Tests use a scripted fake model, so CI spends nothing.
+A Claude tool loop over the Query API (`services/agent`), served by `agent-api` as
+server-sent events with per-user rate limits and a daily spend cap. Its tools take no user
+parameter: the agent holds the asking user's token, so it sees exactly what that user may
+read, and it cites the filing, section or XBRL tag, and freshness for every figure. Needs
+`ANTHROPIC_API_KEY` in `.env`; the model is `AGENT_MODEL`. Tests use a scripted fake model.
 
 ```bash
 make ask USER=alice Q="How has Nvidia's revenue changed over the last 4 quarters?"

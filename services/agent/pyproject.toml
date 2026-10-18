@@ -4,11 +4,14 @@ version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
     "anthropic>=1.15,<2",
+    "fastapi>=0.115",
     "httpx>=0.27",
+    "uvicorn>=0.30",
 ]
 
 [project.scripts]
 agent-ask = "tributary_agent.cli:main"
+agent-api = "tributary_agent.server:main"
 
 [build-system]
 requires = ["setuptools>=68"]
