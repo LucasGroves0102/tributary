@@ -45,11 +45,24 @@ curl -H "Authorization: Bearer $(make -s token USER=alice)" \
   "localhost:8000/v1/companies/0001045810/sections/1A"                  # 403: Free plan
 ```
 
+### Agent
+
+A Claude tool loop over the Query API (`services/agent`). Its tools take no user parameter:
+the agent holds the asking user's token, so it sees exactly what that user may read, and it
+cites the filing, section or XBRL tag, and freshness for every figure. Needs
+`ANTHROPIC_API_KEY` in `.env`; the model is `AGENT_MODEL`. Each answer logs its tokens and
+cost. Tests use a scripted fake model, so CI spends nothing.
+
+```bash
+make ask USER=alice Q="How has Nvidia's revenue changed over the last 4 quarters?"
+make ask USER=alice Q="What are Nvidia's main risk factors?"   # free plan: no filings access
+```
+
 ## Layout
 
 | Path | What |
 |---|---|
-| `services/` | One folder per deployable service or job (poller, bronze-loader, company-loader, facts-fetcher, doc-fetcher, parser, authz-sync, query-api, fetcher, parser, parser-rs, query-api, agent) |
+| `services/` | One folder per deployable service or job (poller, bronze-loader, company-loader, facts-fetcher, doc-fetcher, parser, parser-rs, authz-sync, query-api, agent) |
 | `libs/` | Shared Python packages (`sec`: SEC client with User-Agent and rate limiting; `authz`: OpenFGA client) |
 | `db/` | Analytics migrations (`db/migrations`) and the app database (`db/app`) |
 | `streaming/` | Debezium configs and Kafka topic docs |
