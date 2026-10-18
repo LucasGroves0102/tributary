@@ -1,5 +1,6 @@
 """Minimal OpenFGA HTTP client."""
 
+from collections.abc import Set as AbstractSet
 from typing import NamedTuple
 
 import httpx
@@ -48,7 +49,8 @@ class FgaClient:
             if not token:
                 return tuples
 
-    def write(self, writes: set[Tuple] = frozenset(), deletes: set[Tuple] = frozenset()) -> None:
+    def write(self, writes: AbstractSet[Tuple] = frozenset(),
+              deletes: AbstractSet[Tuple] = frozenset()) -> None:
         """Apply in chunks of WRITE_LIMIT. Each chunk is atomic; the whole call is not."""
         # deletes first: when a change both revokes and grants, never widen access in between
         ops = [("deletes", t) for t in sorted(deletes)] + [("writes", t) for t in sorted(writes)]

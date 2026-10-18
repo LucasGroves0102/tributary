@@ -1,4 +1,4 @@
-.PHONY: up up-all down logs topics consume migrate seed-app authz authz-test cdc propagation-test token backfill companies financials financials-rebuild seed-documents reparse psql lint test hooks secrets ask adversarial web citations
+.PHONY: up up-all down logs topics consume migrate seed-app authz authz-test cdc propagation-test token backfill companies financials financials-rebuild seed-documents reparse psql lint test hooks secrets ask adversarial web citations typecheck
 
 COMPOSE := $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo docker-compose)
 # use the repo virtualenv when there is one, so `make test` works without activating it
@@ -90,6 +90,10 @@ psql:      ## open a psql shell on the Tributary database
 
 lint:
 	$(BIN)ruff check .
+
+typecheck:
+	$(BIN)pyright --pythonpath $(or $(wildcard .venv/bin/python),python3)
+	cd services/web && npm run -s typecheck
 
 hooks:     ## install the git pre-commit hook (gitleaks secret scan)
 	$(BIN)pre-commit install

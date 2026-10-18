@@ -12,3 +12,17 @@ known-first-party = ["poller", "bronze_loader", "company_loader", "doc_fetcher",
 [tool.pytest.ini_options]
 testpaths = ["libs", "services", "tests"]
 addopts = "--import-mode=importlib"
+
+[tool.pyright]
+include = ["libs/sec/src", "libs/authz/src", "services/*/src"]
+exclude = ["**/node_modules", "services/web"]
+pythonVersion = "3.12"
+typeCheckingMode = "standard"
+
+[tool.coverage.run]
+source = ["libs", "services"]
+omit = ["*/tests/*", "services/web/*"]
+
+[tool.coverage.report]
+fail_under = 80
+skip_covered = true
