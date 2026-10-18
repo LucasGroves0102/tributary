@@ -1,4 +1,4 @@
-.PHONY: up up-all down logs topics consume migrate seed-app authz authz-test cdc propagation-test token backfill companies financials financials-rebuild seed-documents reparse psql lint test
+.PHONY: up up-all down logs topics consume migrate seed-app authz authz-test cdc propagation-test token backfill companies financials financials-rebuild seed-documents reparse psql lint test hooks secrets
 
 COMPOSE := $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo docker-compose)
 # use the repo virtualenv when there is one, so `make test` works without activating it
@@ -77,6 +77,12 @@ psql:      ## open a psql shell on the Tributary database
 
 lint:
 	$(BIN)ruff check .
+
+hooks:     ## install the git pre-commit hook (gitleaks secret scan)
+	$(BIN)pre-commit install
+
+secrets:   ## scan the full git history for secrets (same check as CI)
+	docker run --rm -v "$$PWD:/repo" -w /repo zricethezav/gitleaks:v8.30.1 git --redact --no-banner .
 
 test:
 	$(BIN)pytest

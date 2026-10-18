@@ -8,6 +8,7 @@ citations — only from the data each caller is allowed to see.
 
 ```bash
 cp .env.example .env   # set SEC_USER_AGENT to your name/email
+make hooks             # pre-commit secret scan (gitleaks)
 make up                # Kafka, Postgres, OpenFGA
 make migrate           # create/upgrade the tributary and app databases
 make seed-app          # demo users (alice, bob, carol, dave) with plans and grants
