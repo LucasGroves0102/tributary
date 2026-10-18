@@ -1,8 +1,4 @@
-"""Ask the agent a question from the terminal: make ask USER=alice Q="..."
-
-The agent gets the user's Query API token (AGENT_TOKEN), never the signing secret, so it can
-only read as that user.
-"""
+"""make ask USER=alice Q="..." """
 
 import argparse
 import json
@@ -25,7 +21,7 @@ def main() -> None:
     ap.add_argument("--json", action="store_true", help="print the full result as JSON")
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stderr)
-    for name in ("httpx", "httpx2"):  # the Anthropic SDK uses httpx2
+    for name in ("httpx", "httpx2"):
         logging.getLogger(name).setLevel(logging.WARNING)
 
     agent = Agent(

@@ -1,4 +1,4 @@
-"""Agent loop tests with a scripted fake model and a mock Query API: no API spend."""
+"""Agent loop against a scripted model and a mock Query API."""
 
 import json
 from types import SimpleNamespace as NS

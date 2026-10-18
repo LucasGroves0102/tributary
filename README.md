@@ -58,6 +58,13 @@ make ask USER=alice Q="How has Nvidia's revenue changed over the last 4 quarters
 make ask USER=alice Q="What are Nvidia's main risk factors?"   # free plan: no filings access
 ```
 
+### Adversarial suite
+
+59 attacks (plan bypass, impersonation, fake system messages, watchlist tricks, indirect
+leaks, tool-argument injection, ...) plus controls, run as the demo users against the live
+stack: **0 leaks** ([report](tests/adversarial/report.md)). `make adversarial` runs it live;
+CI replays the recordings.
+
 ## Layout
 
 | Path | What |

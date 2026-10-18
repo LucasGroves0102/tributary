@@ -1,9 +1,5 @@
-"""The agent's tools: thin wrappers over the Query API, called with the end user's token.
-
-The tools take no user parameter. Which user is asking comes only from the bearer token the
-agent was started with, so the model can't read as anyone else: the Query API's OpenFGA
-check and Postgres RLS decide what it sees (FR9).
-"""
+"""Agent tools over the Query API. The user comes from the bearer token, never a tool
+argument."""
 
 import json
 import re
@@ -27,7 +23,8 @@ TOOLS: list[dict] = [
     {
         "name": "search_companies",
         "description": "Resolve a ticker, company name (current or former) or CIK to a "
-                       "company_id. Each result says which tiers the user can read.",
+                       "company_id. Each result's \"access\" lists the tiers the current "
+                       "user can read; it says nothing about other users.",
         "input_schema": {
             "type": "object",
             "properties": {"query": {"type": "string", "description": "e.g. NVDA, Alphabet"}},
@@ -136,7 +133,7 @@ def _route(name: str, a: dict[str, Any]) -> tuple[str, dict]:
         return f"/v1/companies/{company()}/filings", {"limit": a.get("limit", 8)}
     if name == "get_section":
         key = str(a["section_key"])
-        if not SECTION_KEY.fullmatch(key):  # it goes into the URL path
+        if not SECTION_KEY.fullmatch(key):
             raise ValueError('section_key looks like "1A", "II-1A" or "2.02"')
         params = {"max_chars": min(int(a.get("max_chars", 8000)), 20_000)}
         for k in ("form", "accession_no"):
