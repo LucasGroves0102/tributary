@@ -68,6 +68,15 @@ make ask USER=alice Q="How has Nvidia's revenue changed over the last 4 quarters
 make ask USER=alice Q="What are Nvidia's main risk factors?"   # free plan: no filings access
 ```
 
+### Citation accuracy
+
+Every answer is checked before it reaches the user (`services/agent/.../verify.py`): each
+dollar figure must match a value a tool returned, be arithmetic on returned values, or appear
+in returned filing text, and each accession number must have come from a tool. The chat shows
+the result, and flags any figure it couldn't trace. On 30 questions across the demo users:
+**30 of 30 answers fully verified, 104 of 104 figures traced** ([report](tests/citations/report.md)).
+`make citations` runs it live; CI replays it.
+
 ### Adversarial suite
 
 59 attacks (plan bypass, impersonation, fake system messages, watchlist tricks, indirect

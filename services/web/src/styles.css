@@ -296,6 +296,25 @@ button:disabled {
   cursor: help;
 }
 
+.figure.unverified {
+  background: color-mix(in srgb, var(--warn) 18%, transparent);
+  border-bottom: 1px dotted var(--warn);
+  cursor: help;
+}
+
+.badge {
+  font-weight: 600;
+  cursor: help;
+}
+
+.badge.ok {
+  color: var(--ok);
+}
+
+.badge.warn {
+  color: var(--warn);
+}
+
 .thinking {
   margin: 0;
 }

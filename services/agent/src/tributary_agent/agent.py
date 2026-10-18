@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from tributary_agent.tools import TOOLS
+from tributary_agent.verify import verify
 
 SYSTEM = """\
 You answer questions about public companies' SEC filings for one signed-in user of \
@@ -18,6 +19,7 @@ from your own knowledge of companies, even well-known numbers.
 or the section key and title for filing text. When you used financials or filing text, end \
 with its freshness: the latest "filed" date you used and the response's as_of time. \
 Otherwise add no freshness note.
+- Write every dollar amount with $ and a unit, tables included: $34.37B, $812M, $1.05.
 - If a tool says permission denied, tell the user in a sentence or two that their plan \
 doesn't give them access to that data, and offer what they can read instead. Don't guess \
 or work around it, and add no citations for data you didn't get. Watching a company does \
@@ -91,6 +93,7 @@ class Answer:
     tool_calls: list[ToolCall] = field(default_factory=list)
     usage: Usage = field(default_factory=Usage)
     citations: dict[str, dict] = field(default_factory=dict)  # accession_no -> filing
+    verification: dict | None = None
 
     @property
     def cost_usd(self) -> float | None:
@@ -121,6 +124,7 @@ class Agent:
         user/assistant text turns."""
         messages: list[dict] = [*history, {"role": "user", "content": question}]
         answer = Answer(text="", stop="max_rounds", model=self.model)
+        returned: list[str] = []
         while answer.rounds < self._max_rounds:
             response = yield from self._respond(self._request(messages), answer.rounds)
             answer.rounds += 1
@@ -131,6 +135,8 @@ class Agent:
                 answer.stop = response.stop_reason
                 if response.stop_reason == "refusal":
                     answer.text = text or "The model declined to answer this request."
+                answer.verification = verify(answer.text, returned,
+                                             set(answer.citations)).to_dict()
                 yield {"type": "done", "answer": answer}
                 return
             messages.append({"role": "assistant", "content": response.content})
@@ -142,6 +148,7 @@ class Agent:
                 content, is_error = self._api.run(block.name, args)
                 answer.tool_calls.append(ToolCall(block.name, args, is_error))
                 if not is_error:
+                    returned.append(content)
                     _collect_citations(content, answer.citations)
                 results.append({"type": "tool_result", "tool_use_id": block.id,
                                 "content": content, "is_error": is_error})
@@ -199,6 +206,9 @@ def _collect_citations(content: str, into: dict[str, dict]) -> None:
                 into[acc] = {"accession_no": acc, "form": node["form"],
                              "filed": node.get("filed"), "company_id": company_id,
                              "url": url or prev.get("url")}
+            for acc in node.get("source_accessions") or []:
+                into.setdefault(acc, {"accession_no": acc, "form": None, "filed": None,
+                                      "company_id": company_id, "url": None})
             for value in node.values():
                 walk(value, company_id)
 

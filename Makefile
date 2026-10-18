@@ -1,4 +1,4 @@
-.PHONY: up up-all down logs topics consume migrate seed-app authz authz-test cdc propagation-test token backfill companies financials financials-rebuild seed-documents reparse psql lint test hooks secrets ask adversarial web
+.PHONY: up up-all down logs topics consume migrate seed-app authz authz-test cdc propagation-test token backfill companies financials financials-rebuild seed-documents reparse psql lint test hooks secrets ask adversarial web citations
 
 COMPOSE := $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo docker-compose)
 # use the repo virtualenv when there is one, so `make test` works without activating it
@@ -45,6 +45,9 @@ token:     ## dev bearer token for the Query API: make token USER=alice
 ask:       ## ask the agent as a user (needs query-api running): make ask USER=alice Q="..."
 	@set -a; . ./.env; set +a; \
 	AGENT_TOKEN=$$($(BIN)query-api-token $(or $(USER_ID),$(USER))) $(BIN)agent-ask "$(Q)"
+
+citations: ## citation-accuracy eval (~$0.03 on Haiku; needs query-api); CI replays it
+	@set -a; . ./.env; set +a; $(BIN)python tests/citations/run.py $(CASES)
 
 web:       ## chat UI dev server on http://localhost:5173 (needs query-api and agent-api)
 	cd services/web && npm install --no-audit --no-fund && npm run dev

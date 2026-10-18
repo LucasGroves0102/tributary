@@ -92,14 +92,15 @@ class RecordingMessages:
 
 
 class RecordingApi:
-    def __init__(self, inner: Any) -> None:
+    def __init__(self, inner: Any, max_chars: int | None = 300) -> None:
         self._inner = inner
+        self._max_chars = max_chars
         self.calls: list[dict] = []
 
     def run(self, name: str, args: dict) -> tuple[str, bool]:
         content, is_error = self._inner.run(name, args)
         self.calls.append({"name": name, "input": args, "is_error": is_error,
-                           "content": content[:300]})
+                           "content": content[:self._max_chars]})
         return content, is_error
 
 

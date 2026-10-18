@@ -1,0 +1,215 @@
+{
+ "id": "fin-09",
+ "user": "dave",
+ "prompt": "What was Microsoft's operating cash flow last quarter?",
+ "model": "claude-haiku-5-5",
+ "answer": "Microsoft's operating cash flow for the quarter ended June 30, 2026 (April 1 to June 30, 2026) was **$55.44B**.\n\n- Source: Form 10-K, filed 2026-07-29, accession no. 0001193125-26-323660\n- XBRL tag: us-gaap:NetCashProvidedByUsedInOperatingActivities\n- Tributary marks this value as \"derived,\" meaning it was calculated from the filing and a related accession (0001193125-26-191507) rather than reported directly as a quarterly figure. The 10-K form type is unusual for a quarter, so you may want to check the filing directly.\n\nFreshness: latest filing date used is 2026-07-29; data as of 2026-10-18 20:33 UTC.",
+ "usage": {
+  "input_tokens": 8,
+  "output_tokens": 695,
+  "cache_read_input_tokens": 3931,
+  "cache_creation_input_tokens": 2544
+ },
+ "cost_usd": 0.00070561,
+ "citations": {
+  "0001193125-26-323660": {
+   "accession_no": "0001193125-26-323660",
+   "form": "10-K",
+   "filed": "2026-07-29",
+   "company_id": "0000789019",
+   "url": "https://www.sec.gov/Archives/edgar/data/789019/000119312526323660/"
+  },
+  "0001193125-26-191507": {
+   "accession_no": "0001193125-26-191507",
+   "form": null,
+   "filed": null,
+   "company_id": "0000789019",
+   "url": null
+  }
+ },
+ "verification": {
+  "figures": [
+   {
+    "text": "$55.44B",
+    "value": 55440000000.0,
+    "status": "verified",
+    "source": {
+     "company_id": "0000789019",
+     "metric": "operating_cash_flow",
+     "period_end": "2026-06-30",
+     "accession_no": "0001193125-26-323660"
+    }
+   }
+  ],
+  "unverified_accessions": [],
+  "used_data": true,
+  "freshness": true,
+  "ok": true
+ },
+ "tool_calls": [
+  {
+   "name": "whoami",
+   "input": {},
+   "is_error": false,
+   "content": "{\"user_id\":\"dave\",\"companies\":[{\"company_id\":\"0000789019\",\"name\":\"MICROSOFT CORP\",\"tiers\":[\"financials\"]},{\"company_id\":\"0001045810\",\"name\":\"NVIDIA CORP\",\"tiers\":[\"financials\"]}]}"
+  },
+  {
+   "name": "search_companies",
+   "input": {
+    "query": "Microsoft"
+   },
+   "is_error": false,
+   "content": "{\"results\":[{\"company_id\":\"0000789019\",\"name\":\"MICROSOFT CORP\",\"matched_on\":\"name\",\"matched_alias\":\"MICROSOFT CORP\",\"is_current\":true,\"access\":[\"financials\"]}]}"
+  },
+  {
+   "name": "get_financials",
+   "input": {
+    "company_id": "0000789019",
+    "metrics": [
+     "operating_cash_flow"
+    ],
+    "quarters": 1
+   },
+   "is_error": false,
+   "content": "{\"company_id\":\"0000789019\",\"as_of\":\"2026-10-18T20:33:53.159195+00:00\",\"rows\":[{\"metric\":\"operating_cash_flow\",\"period_start\":\"2026-04-01\",\"period_end\":\"2026-06-30\",\"value\":\"55441000000\",\"unit\":\"USD\",\"value_source\":\"derived\",\"citation\":{\"accession_no\":\"0001193125-26-323660\",\"form\":\"10-K\",\"filed\":\"2026-07-29\",\"xbrl_tag\":\"us-gaap:NetCashProvidedByUsedInOperatingActivities\",\"source_accessions\":[\"0001193125-26-191507\",\"0001193125-26-323660\"],\"filing_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312526323660/\"},\"freshness\":{\"filed\":\"2026-07-29\",\"ingested_at\":\"2026-10-17T16:57:43.708565Z\"}}]}"
+  }
+ ],
+ "responses": [
+  {
+   "id": "msg_011CgALiuReQp7aCJwPJWpPS",
+   "container": null,
+   "content": [
+    {
+     "signature": "CAQS4wUKEAgSGAI4AUIIdGhpbmtpbmcSDBYf3Aj19l2/VOp2IRoMRfKnxWtJyNsLKFOSIjBieOJ0DVl5gsAxyTgskMvVftZd61fzFIIX8Cuyfs/yk/QR1hGkUqeonHjpfPU3gaEqgAV1vCu6j9iHPT4/yx9toBl10TrecxuSEXlA7U9ZB/uq8aDQNU9gwZsjXqM3YEP55yXoKVbgtH3RGoYOOJBxjcEPabGkz88Ls85N650sY9GPebeOpnDJLApQb2lJxL3yuA172JWGdmZ6+YzqKt33azrg4z0YDV5RREZ/C3CsARv5/vWReZ1Gn9jx/ivDBJpLR7XaILFbYz4VF0OOc1kLkn5lu+QZJlIv2pc1Yo5s5MTrukVbglrubiurhGeIu6+TWhQ/u6AJTCFscR2oBKOStz9Fik3hkPODpNf1ehVueqhaaTX/JBCqvdOd3WLH1zdlzZCJxYIlEN3EvoM3LITIYuOrh9pANbmmrB0ojfeRNUQ4bjMU7t8MhcMJiUOh/xHy+GpE0WKzKvt3FcuKyx+0JaMnRxzuI3iiX2/HCcFYjW4VbCEptcuAkbzOpmAVHJxpxcdarW2v4kS8oIZn30Y9kAm1paQBKhE10loQss8HaHZBF7FwfovvI76ilw4dHt01puq+72wBTrfoCx/ckRCD4QONYfNqM2cmX2bfEpEmyDWIHcp2GPSACp2WL3sieFP3XYTz4JnehmbwwvI7DYeis4SHnrNJ+oIsXHPOk7RLaOh00v/Rd5ypTgkDgPiOTnfcRafHpCsTAmd6IC9YEnMgW1nrQRf3hGZAOOQIuUIYZkeaPNQTEi8mjBCw4Y6hbe3iDTxAIVoOcre3w20rCEqSpe9nhh+hSxUhr49lVTiVclsAh2e6N7rMl1bwOox3IqYcOlDFUILCJXnReDV+nugT7hFDF/eM+C3Ev7D/i5qvF+B2bFx3rdPmXdVUQSwKnphSVlascEuDPc16h8QVpkrsJIn/GAE=",
+     "thinking": "",
+     "type": "thinking"
+    },
+    {
+     "id": "toolu_019F1sdsoZaZh5GjELacVp5t",
+     "caller": {
+      "type": "direct"
+     },
+     "input": {},
+     "name": "whoami",
+     "type": "tool_use"
+    },
+    {
+     "id": "toolu_01Kx3z6HqU1PSZXfpwCGLWBy",
+     "caller": {
+      "type": "direct"
+     },
+     "input": {
+      "query": "Microsoft"
+     },
+     "name": "search_companies",
+     "type": "tool_use"
+    }
+   ],
+   "diagnostics": null,
+   "model": "claude-haiku-5-5",
+   "role": "assistant",
+   "stop_details": null,
+   "stop_reason": "tool_use",
+   "stop_sequence": null,
+   "type": "message",
+   "usage": {
+    "cache_creation": {
+     "ephemeral_1h_input_tokens": 0,
+     "ephemeral_5m_input_tokens": 1793
+    },
+    "cache_creation_input_tokens": 1793,
+    "cache_read_input_tokens": 0,
+    "inference_geo": "global",
+    "input_tokens": 4,
+    "output_tokens": 125,
+    "output_tokens_details": {
+     "thinking_tokens": 49
+    },
+    "service_tier": "standard",
+    "speed": "standard"
+   }
+  },
+  {
+   "id": "msg_011CgALiz9Ar3YnHfsnVY2Tc",
+   "container": null,
+   "content": [
+    {
+     "id": "toolu_01W5NaRJPoD7vfQE5v3Q8rz6",
+     "caller": {
+      "type": "direct"
+     },
+     "input": {
+      "company_id": "0000789019",
+      "metrics": [
+       "operating_cash_flow"
+      ],
+      "quarters": 1
+     },
+     "name": "get_financials",
+     "type": "tool_use"
+    }
+   ],
+   "diagnostics": null,
+   "model": "claude-haiku-5-5",
+   "role": "assistant",
+   "stop_details": null,
+   "stop_reason": "tool_use",
+   "stop_sequence": null,
+   "type": "message",
+   "usage": {
+    "cache_creation": {
+     "ephemeral_1h_input_tokens": 0,
+     "ephemeral_5m_input_tokens": 345
+    },
+    "cache_creation_input_tokens": 345,
+    "cache_read_input_tokens": 1793,
+    "inference_geo": "global",
+    "input_tokens": 2,
+    "output_tokens": 109,
+    "output_tokens_details": {
+     "thinking_tokens": 0
+    },
+    "service_tier": "standard",
+    "speed": "standard"
+   }
+  },
+  {
+   "id": "msg_011CgALj4A1t21rMPFQTCtVp",
+   "container": null,
+   "content": [
+    {
+     "signature": "CAQShwkKEAgSGAI4AUIIdGhpbmtpbmcSDCg9Ce8CnHK7CAOBaBoMEeS4wO7/cMhIrx3BIjDlF2QjEEu87Slg8T7mVy9r+zefFZ1sNHwxNRmbbGBOFYszUxirItUTINWojL3bcbUqpAg8pq3+fBLJBSevNt5D7zAYlpFKheRl1Ji+iaIWVz0+YN+cUeR3KhUMZsByVyHxXXVGQrzD/ADX6IJwr6012rIs/3aDdXuazya4/RasLbZJwufqFvGiyt7msF5tgQe+NJSdsKa3BAEQq0jQ4ddBOmo5+5hhVSsnMh9TEzlKuQsqjLZUXEM66lmw6C+rsxO+ZYnjdnGO+yrkH7U1U0jyBQuT/upB11fYHcj++sXrbZug6Llm4GIodGwK6Sm38nWThP8hZ47UpyNelqMssp7TLXemWK7Yzs9wUtYyi6RHzNdNfjxzcJQuOZG9ceqtzVSiHB6QnMahK0m9aRGordumTR4xSxY1AfGCvpAwcoUpTImzl98EhMovMNnVbD2u9IG3y7yyHR8tYDnRBzNVqo6j4TD4yuZ6X5mDP5MH1h8hdyjy7VrKr+bc+oT10RivxenIf68qCKIvJ/mLT8hfmr8OIOFP2J3DEOLWBx82acgAgwT7m8IQT1gsF5yuJDAEv+tYF4dSzDKP0Tfr83lhcO1ngZFCZCnuADi+TgUBbPABg08ZpA2pUpjunSkfzoPzsr4/pnMRQPbi2L64dIiX2k49X7HJAjBDwATQXbh9ifK+9WmRtBMHJyrTZ0ap7j8+AgR19rJ8k0pOwmJDeWZNblOEpUeR4E/qKErYASXzlUQr1tszh7CqptdGIV5GQ9mvylQGOui6G3n6LDPwxxpz374WpY7HyTp2zjzs0l0ZNGdoJwvE7vHU/Qq6ORLpUWjIsic40kaG4JqAEBaNGquAWP3XRdR+TwpP0Z8pWuwDJtmfTtUsPMiD0zXSfWwPK70RcbD6U21dNxj3Umoe11HnmV+SpP7dfLvAsR1V/g4It+oysfrRpw0IvbYXs7HbJ46ATMbRydjs6UOaYeqa8VG9kWIPBbDEHNTmHBSVZ6V2eDVTNGxNTipLdJkJUfK8htBe2G3mONRDi2YmbHzo0h5vfzsHDhVFyGEoz+YPjoZ6ZyxL/2lNS7wu86CeAwJD7KNMPJYmpzfpNAsF/E/Yjy1/6SVbFR5GAiMRla2RTyq/cTGXdMw1HmgXpuMDIhI4yOozXO0d4rkY4cd/0OIiphMLYi1xSaE6RN7PcR8HM2lyS6z4WMsXswOV/aByZpdChkBStoaHLLns7e5yXnd69kzIsjEuhp46Io2XIX7/fV8Ghg+CxaaRx6YO4X6t5WjLX29/9Po8HjK89YkQi3b4VdyHHdEK5ZqYUUglZEeXHm54iX5EMra8/YUu6ufhKMRVbXHt8kaa66UJO/j259DymHmplMFcW1y14m4kt4z8EElLSsks/Gc+oCo44ZYuxPZ1DVWEg+zy5qV3Dm8KXSS9KYPDn+iD0aGlIZNHukLll7iL0/DIgnc0ug74tKcb5+eOxI9fo3gpsMMhlbtZGAE=",
+     "thinking": "",
+     "type": "thinking"
+    },
+    {
+     "text": "Microsoft's operating cash flow for the quarter ended June 30, 2026 (April 1 to June 30, 2026) was **$55.44B**.\n\n- Source: Form 10-K, filed 2026-07-29, accession no. 0001193125-26-323660\n- XBRL tag: us-gaap:NetCashProvidedByUsedInOperatingActivities\n- Tributary marks this value as \"derived,\" meaning it was calculated from the filing and a related accession (0001193125-26-191507) rather than reported directly as a quarterly figure. The 10-K form type is unusual for a quarter, so you may want to check the filing directly.\n\nFreshness: latest filing date used is 2026-07-29; data as of 2026-10-18 20:33 UTC.",
+     "type": "text"
+    }
+   ],
+   "diagnostics": null,
+   "model": "claude-haiku-5-5",
+   "role": "assistant",
+   "stop_details": null,
+   "stop_reason": "end_turn",
+   "stop_sequence": null,
+   "type": "message",
+   "usage": {
+    "cache_creation": {
+     "ephemeral_1h_input_tokens": 0,
+     "ephemeral_5m_input_tokens": 406
+    },
+    "cache_creation_input_tokens": 406,
+    "cache_read_input_tokens": 2138,
+    "inference_geo": "global",
+    "input_tokens": 2,
+    "output_tokens": 461,
+    "output_tokens_details": {
+     "thinking_tokens": 210
+    },
+    "service_tier": "standard",
+    "speed": "standard"
+   }
+  }
+ ]
+}

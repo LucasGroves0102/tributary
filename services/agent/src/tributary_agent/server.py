@@ -74,7 +74,8 @@ class Limits:
 def answer_json(a: Answer) -> dict:
     return {"text": a.text, "stop": a.stop, "model": a.model, "rounds": a.rounds,
             "tool_calls": [asdict(c) for c in a.tool_calls], "usage": asdict(a.usage),
-            "cost_usd": a.cost_usd, "citations": list(a.citations.values())}
+            "cost_usd": a.cost_usd, "citations": list(a.citations.values()),
+            "verification": a.verification}
 
 
 def create_app(make_agent: Callable[[str], Agent], who_is: Callable[[str], str],

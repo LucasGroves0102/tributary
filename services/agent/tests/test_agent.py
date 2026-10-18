@@ -210,16 +210,22 @@ def test_collects_citations_from_tool_results():
         return httpx.Response(200, json={"company_id": NVDA, "rows": [
             {"metric": "revenue", "citation": {
                 "accession_no": "0001045810-26-000075", "form": "10-Q", "filed": "2026-08-26",
-                "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/x/"}}]})
+                "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/x/",
+                "source_accessions": ["0001045810-26-000052", "0001045810-26-000075"]}}]})
 
     fake = FakeMessages(
         response("tool_use", tool_use("t1", "get_financials", {"company_id": NVDA})),
         response("end_turn", text("Revenue was $96.2B (0001045810-26-000075).")),
     )
     answer = Agent(fake, query_api(financials)[0], "claude-haiku-5-5").ask("NVDA?")
-    assert answer.citations == {"0001045810-26-000075": {
-        "accession_no": "0001045810-26-000075", "form": "10-Q", "filed": "2026-08-26",
-        "company_id": NVDA, "url": "https://www.sec.gov/Archives/edgar/data/1045810/x/"}}
+    assert answer.citations == {
+        "0001045810-26-000075": {
+            "accession_no": "0001045810-26-000075", "form": "10-Q", "filed": "2026-08-26",
+            "company_id": NVDA, "url": "https://www.sec.gov/Archives/edgar/data/1045810/x/"},
+        "0001045810-26-000052": {
+            "accession_no": "0001045810-26-000052", "form": None, "filed": None,
+            "company_id": NVDA, "url": None},
+    }
 
 
 def test_denied_results_add_no_citations():

@@ -49,6 +49,12 @@ describe("renderAnswer", () => {
     expect(root.querySelector("a")?.getAttribute("href") ?? "").not.toMatch(/javascript/);
   });
 
+  it("flags unverified figures", () => {
+    const html = renderAnswer("Revenue was **$96.2B**, up $9.9B.", [], ["$9.9B"]);
+    const flagged = dom(html).querySelectorAll(".figure.unverified");
+    expect([...flagged].map((e) => e.textContent)).toEqual(["$9.9B"]);
+  });
+
   it("renders tables", () => {
     const html = renderAnswer("| Q | Rev |\n|---|---|\n| Q2 | $96.2B |", []);
     expect(dom(html).querySelectorAll("td")).toHaveLength(2);

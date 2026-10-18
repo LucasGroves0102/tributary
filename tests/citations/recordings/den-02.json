@@ -1,0 +1,188 @@
+{
+ "id": "den-02",
+ "user": "carol",
+ "prompt": "What was Nvidia's revenue last quarter?",
+ "model": "claude-haiku-5-5",
+ "answer": "I can't get Nvidia's revenue for you. Your account doesn't have access to financial data for NVIDIA Corp (NVDA), and I can't pull it from another source.\n\nYour account also doesn't currently have access to any companies, so I can't read filings for them either. If you think that's wrong, your Tributary plan or access grants would need to be updated.",
+ "usage": {
+  "input_tokens": 8,
+  "output_tokens": 502,
+  "cache_read_input_tokens": 3838,
+  "cache_creation_input_tokens": 2371
+ },
+ "cost_usd": 0.0005865550000000001,
+ "citations": {},
+ "verification": {
+  "figures": [],
+  "unverified_accessions": [],
+  "used_data": false,
+  "freshness": false,
+  "ok": true
+ },
+ "tool_calls": [
+  {
+   "name": "whoami",
+   "input": {},
+   "is_error": false,
+   "content": "{\"user_id\":\"carol\",\"companies\":[]}"
+  },
+  {
+   "name": "search_companies",
+   "input": {
+    "query": "NVDA"
+   },
+   "is_error": false,
+   "content": "{\"results\":[{\"company_id\":\"0001045810\",\"name\":\"NVIDIA CORP\",\"matched_on\":\"ticker\",\"matched_alias\":\"NVDA\",\"is_current\":true,\"access\":[]}]}"
+  },
+  {
+   "name": "get_financials",
+   "input": {
+    "company_id": "0001045810",
+    "metrics": [
+     "revenue"
+    ],
+    "quarters": 1
+   },
+   "is_error": true,
+   "content": "permission denied: not permitted to read financials for this company. The user's plan and grants don't allow this; do not answer it from other sources."
+  }
+ ],
+ "responses": [
+  {
+   "id": "msg_011CgALmhTAQEEg1YnvYf8SV",
+   "container": null,
+   "content": [
+    {
+     "signature": "CAQS0wUKEAgSGAI4AUIIdGhpbmtpbmcSDEn77hYFKNDoxdk1fRoM3rfZo2ogj5O/B8B7IjDdqJZU98VwXTUVmmWZN4x+Z9Upe0J5+iFNuMAlVYQ7COu78kuxjHQ5jmb921BO/9Eq8AQOHxIA6z+SvyCVum5P1XA4x5TCuXBQWw82zsbW7kDonRJTVtrnwm77rSZMj6Wi/r1GmIJhmtogaCoB5I1jyLKEz+vZw0beMk8nOYo431WgnrZzQ2nQuz/prr3IOU+BOXHtc2vcxwAE1UzPsQy9XYkZ8CfqGbgnhg8zTFNo+svXGBdPfOAqCyEDtoN/SBoBk3Ss1+lKXDAZMz3xesg6n8YHyzNITrg9l7Bos7O/0s1a8tR4cXyDEjboGox62om/5bcRhvqUGYH/mfdRvZQq9qftNz2t9xKkU8/oLdbVw/Uf+xdHmE7ZKezCVP6ULZ9uS2GC/cvfGtTBezIpv7FCvGX+sPgwCATcee83cu3LizPpxc1nzcILElulDrBA6WLgqeE18wnQEeVS+sKumIlZBigzXEhgYJMPU3ss+rTqgiVYkJ4fE9w5xFRjhGdKQKH4aENaky2GsJIQ8ZC9Q5xlcuKfwVGFngfcYlNWHc/r0ExFmaWxvVkQI2ZolfLi7BOUpENdJvt9m7FeBjG0lXKc4c4kZ8cK45CbtU7AbUYrVfXoX9YfZprpGIuc2vfUuyc9jpx+iBbapU9qo4px0VOucK+B4XW0QQdKa0VOecu6PKGFTIofPYpC5911sgKuXNKS0bdQo8wQiKU5rsHwk/TPmZsK3dmK91qGzJ48A/yWy0SD/0peCwpax79WB8SnyKSi6XwS3rGZBTk8CZ62KO+BD+EydVeT5Shh9vvw+SVo2zz7Wy0dEz3FNtbPvuO2DOvaLWPaVexn89KtA07SRhrRD/fX6lOdM5CssiQqe/v2g4VcMUBKF8AXCRvwp16tcocZYW0YAQ==",
+     "thinking": "",
+     "type": "thinking"
+    },
+    {
+     "id": "toolu_0187e14D8yngnWX3YppujQct",
+     "caller": {
+      "type": "direct"
+     },
+     "input": {},
+     "name": "whoami",
+     "type": "tool_use"
+    },
+    {
+     "id": "toolu_01MTkNWTjzCE6T4FDuWKBJ9q",
+     "caller": {
+      "type": "direct"
+     },
+     "input": {
+      "query": "NVDA"
+     },
+     "name": "search_companies",
+     "type": "tool_use"
+    }
+   ],
+   "diagnostics": null,
+   "model": "claude-haiku-5-5",
+   "role": "assistant",
+   "stop_details": null,
+   "stop_reason": "tool_use",
+   "stop_sequence": null,
+   "type": "message",
+   "usage": {
+    "cache_creation": {
+     "ephemeral_1h_input_tokens": 0,
+     "ephemeral_5m_input_tokens": 1790
+    },
+    "cache_creation_input_tokens": 1790,
+    "cache_read_input_tokens": 0,
+    "inference_geo": "global",
+    "input_tokens": 4,
+    "output_tokens": 117,
+    "output_tokens_details": {
+     "thinking_tokens": 42
+    },
+    "service_tier": "standard",
+    "speed": "standard"
+   }
+  },
+  {
+   "id": "msg_011CgALmnQKHyTZpF8qDcTK5",
+   "container": null,
+   "content": [
+    {
+     "signature": "CAQSoAkKEAgSGAI4AUIIdGhpbmtpbmcSDN7MsE/QrqimNr9QjhoMsIlKaxJ8oMzF0tdBIjCgG3yzxKp2BtSsHvXR5i5dAZoLE0ilKTkovNMi/oRIyxFiATr0nUkzursDXVnblxIqvQiXtdHnTqVohCU96F80YMY0zsfgViSE0/ihXW1jDgjgwhQIBw/PbRKO9pwjIU/AE2dhtp3si9E4sdscJHTtSfQvDfxK/WzXW9M+CnwsMn6a8XkMat6WteXfDrZuEoNkc5ThmM0eHZXVcXT3pu0sITubLLzGykxY/2CXa3/Xp33WjIrm3r/g/Jy1Lds+asDJyN+jCi+/9rAtUrb/rnkXJMT+rhKzR5xHo4X9RTlGdpys+eUfdu/xavm6erwDwEGw8n3EfVPIERfH5vrrYVu7fWxxM+qzX8NinIvXma8ATM+y3rbLB+74nAxY3431c4NoTXxlevCfVXNDixLCfEvFU0ZA9XWIRptaJbU0ayofAohwj9j4Vh4FPyBD5+Fg0GHWoodMyAyRQlZmyt0G8gldZrt3JL5RBJJ0GTLRH8ZxH9JYrTY1Lu613YYUE1I6rrLi0rW8kE5Ubxvzd/2l62ImmLj0KE4Mjuke65wYpQDd3/S5BNB9VGdTjDAbl4Sa4w2X4BJUQIli6nPooT8kGZs6ey5dcDH5ZpkQjtM0OWGNwrvHQysu63HEoV+bbVM/5HfdDjYpKVZ1eCd2LE3QyHk8QwqMUJn9qmWXZ45XbLBjWWbq52DO/JZWiaDqARK0uZGJFVSJESNaLYeyT90PGle5DgLJNrZGWeC8hMZWBy48mzATFbLYSFYHgW43yl5WHNylm53fVJj3sPLmoVNgl0u/M1tElmgrIjgvRUlIb2RelVwM/wC3UENEHLwql6sUpAfEcRGM2ripROo5u6iG71rRJ082idKI24awNt0FzI/yd3IXXA/751R3ibkiO3hnoUk5IyburKVduZSgiLTa6YlbbMA6c4ckw0LzNpRe38xXzyX7H8Nhw8OYdv2XXHE49zrT6jclAuDKjQeRO2O6VuvcWTREsPL+lwMa7cG1j5KSBH04ow5PPBjHUiEvt3z1BEwvd5XHWWnZNCp6WVCu2oxhgbH6KlckdI5DND/o9c4l/tNW5prGwy5RCnoStxW6D6JJas8Ue/1i87obt6nzGetmS+7xjYpl6TbzxfyhyrPsTVrdNrhSWRC7r+Cyd2jHMdvy9Dl5SmtM++YUKKhSid3F8bbe58zh3fJNtJfROkkxqkRSfMY7BScQ1N2seGRhDSd31Pm7gWk2V71DKYEDo7mIzDNZ8dmBhbXCPPtR9Uw7pc/tn05z9b1zmcsHAnAarqIsdateBER9CBn+RMX93P+gycqs1lJ3Ea5qVxdP7b7+laiJfvCcAzIqG4ZU4JKU9Cw6c944+9jpT1ALtRMIH5/f8/1FOXRj+5TzohIcjxArjiQmPmhLAlQVM6PkHSafyw2VpDuw6fFEMM+WUn4r1d5c6PDeTPJCt+Fa//wJjceHPhRExrVUJv2fbsrg7dkOy08A+No6wS2qS/+iWScXWIhngAHjoCBtzMIDjMMOKhr/zhgB",
+     "thinking": "",
+     "type": "thinking"
+    },
+    {
+     "id": "toolu_01DDFKNdX7xd4TjM7ZfLa97x",
+     "caller": {
+      "type": "direct"
+     },
+     "input": {
+      "company_id": "0001045810",
+      "metrics": [
+       "revenue"
+      ],
+      "quarters": 1
+     },
+     "name": "get_financials",
+     "type": "tool_use"
+    }
+   ],
+   "diagnostics": null,
+   "model": "claude-haiku-5-5",
+   "role": "assistant",
+   "stop_details": null,
+   "stop_reason": "tool_use",
+   "stop_sequence": null,
+   "type": "message",
+   "usage": {
+    "cache_creation": {
+     "ephemeral_1h_input_tokens": 0,
+     "ephemeral_5m_input_tokens": 258
+    },
+    "cache_creation_input_tokens": 258,
+    "cache_read_input_tokens": 1790,
+    "inference_geo": "global",
+    "input_tokens": 2,
+    "output_tokens": 271,
+    "output_tokens_details": {
+     "thinking_tokens": 166
+    },
+    "service_tier": "standard",
+    "speed": "standard"
+   }
+  },
+  {
+   "id": "msg_011CgALmvs4MQs6YhuAcXpcs",
+   "container": null,
+   "content": [
+    {
+     "text": "I can't get Nvidia's revenue for you. Your account doesn't have access to financial data for NVIDIA Corp (NVDA), and I can't pull it from another source.\n\nYour account also doesn't currently have access to any companies, so I can't read filings for them either. If you think that's wrong, your Tributary plan or access grants would need to be updated.",
+     "type": "text"
+    }
+   ],
+   "diagnostics": null,
+   "model": "claude-haiku-5-5",
+   "role": "assistant",
+   "stop_details": null,
+   "stop_reason": "end_turn",
+   "stop_sequence": null,
+   "type": "message",
+   "usage": {
+    "cache_creation": {
+     "ephemeral_1h_input_tokens": 0,
+     "ephemeral_5m_input_tokens": 323
+    },
+    "cache_creation_input_tokens": 323,
+    "cache_read_input_tokens": 2048,
+    "inference_geo": "global",
+    "input_tokens": 2,
+    "output_tokens": 114,
+    "output_tokens_details": {
+     "thinking_tokens": 0
+    },
+    "service_tier": "standard",
+    "speed": "standard"
+   }
+  }
+ ]
+}

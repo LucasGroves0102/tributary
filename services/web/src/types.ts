@@ -13,7 +13,7 @@ export interface Me {
 
 export interface Citation {
   accession_no: string;
-  form: string;
+  form: string | null;
   filed: string | null;
   company_id: string | null;
   url: string | null;
@@ -23,6 +23,18 @@ export interface ToolCall {
   name: string;
   input: Record<string, unknown>;
   is_error: boolean;
+}
+
+export interface Verification {
+  ok: boolean;
+  figures: {
+    text: string;
+    value: number;
+    status: "verified" | "derived" | "quoted" | "unverified";
+  }[];
+  unverified_accessions: string[];
+  used_data: boolean;
+  freshness: boolean;
 }
 
 export interface Answer {
@@ -39,6 +51,7 @@ export interface Answer {
   };
   cost_usd: number | null;
   citations: Citation[];
+  verification: Verification | null;
 }
 
 export type AgentEvent =

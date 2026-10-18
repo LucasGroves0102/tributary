@@ -1,0 +1,313 @@
+{
+ "id": "doc-02",
+ "user": "bob",
+ "prompt": "What does Microsoft's latest 10-Q say in its MD&A about cloud revenue?",
+ "model": "claude-haiku-5-5",
+ "answer": "The latest 10-Q for Microsoft is the one for the quarter ended March 31, 2026 (Form 10-Q, filed 2026-04-29, accession 0001193125-26-191507). Its MD&A (Item 2, section I-2, \"Management's Discussion and Analysis of Financial Condition and Results of Operations\") reports these cloud figures for the third quarter of fiscal 2026 versus the same quarter of fiscal 2025:\n\n- **Microsoft Cloud revenue** increased 29% to $54.5B.\n- **Azure and other cloud services revenue** increased 40%.\n- **Microsoft 365 Commercial cloud revenue** increased 19%, driven by revenue per user (Microsoft 365 E5 and Microsoft 365 Copilot) and seat growth of 6%.\n- **Microsoft 365 Consumer cloud revenue** increased 33%.\n- **Dynamics 365 revenue** increased 22%.\n- **Commercial remaining performance obligation** increased 99% to $627B.\n- **Microsoft Cloud gross margin percentage** decreased to 66% for the quarter (67% for the nine months), which the MD&A attributes to continued investment in AI infrastructure and growing AI product usage, partly offset by efficiency gains.\n\nThe MD&A's segment discussion of Azure is longer than what I could retrieve, so I can't quote its full detail on Azure drivers. I can fetch more if you need it, though the tool only returns the first 20,000 characters of this section.\n\nFreshness: the 10-Q was filed 2026-04-29, and the section was retrieved at 2026-10-18T20:34:11Z.",
+ "usage": {
+  "input_tokens": 10,
+  "output_tokens": 1744,
+  "cache_read_input_tokens": 9287,
+  "cache_creation_input_tokens": 13615
+ },
+ "cost_usd": 0.002667745,
+ "citations": {
+  "0001193125-26-380280": {
+   "accession_no": "0001193125-26-380280",
+   "form": "8-K",
+   "filed": "2026-09-02",
+   "company_id": "0000789019",
+   "url": "https://www.sec.gov/Archives/edgar/data/789019/000119312526380280/d291965d8k.htm"
+  },
+  "0001193125-26-323632": {
+   "accession_no": "0001193125-26-323632",
+   "form": "8-K",
+   "filed": "2026-07-29",
+   "company_id": "0000789019",
+   "url": "https://www.sec.gov/Archives/edgar/data/789019/000119312526323632/msft-20260729.htm"
+  },
+  "0001193125-26-323660": {
+   "accession_no": "0001193125-26-323660",
+   "form": "10-K",
+   "filed": "2026-07-29",
+   "company_id": "0000789019",
+   "url": "https://www.sec.gov/Archives/edgar/data/789019/000119312526323660/msft-20260630.htm"
+  },
+  "0001193125-26-258667": {
+   "accession_no": "0001193125-26-258667",
+   "form": "8-K",
+   "filed": "2026-06-05",
+   "company_id": "0000789019",
+   "url": "https://www.sec.gov/Archives/edgar/data/789019/000119312526258667/d26760d8k.htm"
+  },
+  "0001193125-26-224155": {
+   "accession_no": "0001193125-26-224155",
+   "form": "8-K",
+   "filed": "2026-05-14",
+   "company_id": "0000789019",
+   "url": "https://www.sec.gov/Archives/edgar/data/789019/000119312526224155/d125909d8k.htm"
+  },
+  "0001193125-26-191457": {
+   "accession_no": "0001193125-26-191457",
+   "form": "8-K",
+   "filed": "2026-04-29",
+   "company_id": "0000789019",
+   "url": "https://www.sec.gov/Archives/edgar/data/789019/000119312526191457/msft-20260429.htm"
+  },
+  "0001193125-26-191507": {
+   "accession_no": "0001193125-26-191507",
+   "form": "10-Q",
+   "filed": "2026-04-29",
+   "company_id": "0000789019",
+   "url": "https://www.sec.gov/Archives/edgar/data/789019/000119312526191507/msft-20260331.htm"
+  },
+  "0001193125-26-027207": {
+   "accession_no": "0001193125-26-027207",
+   "form": "10-Q",
+   "filed": "2026-01-28",
+   "company_id": "0000789019",
+   "url": "https://www.sec.gov/Archives/edgar/data/789019/000119312526027207/msft-20251231.htm"
+  }
+ },
+ "verification": {
+  "figures": [
+   {
+    "text": "$54.5B",
+    "value": 54500000000.0,
+    "status": "quoted",
+    "source": null
+   },
+   {
+    "text": "$627B",
+    "value": 627000000000.0,
+    "status": "quoted",
+    "source": null
+   }
+  ],
+  "unverified_accessions": [],
+  "used_data": true,
+  "freshness": true,
+  "ok": true
+ },
+ "tool_calls": [
+  {
+   "name": "whoami",
+   "input": {},
+   "is_error": false,
+   "content": "{\"user_id\":\"bob\",\"companies\":[{\"company_id\":\"0000789019\",\"name\":\"MICROSOFT CORP\",\"tiers\":[\"filings\",\"financials\"]},{\"company_id\":\"0001045810\",\"name\":\"NVIDIA CORP\",\"tiers\":[\"filings\",\"financials\"]}]}"
+  },
+  {
+   "name": "search_companies",
+   "input": {
+    "query": "Microsoft"
+   },
+   "is_error": false,
+   "content": "{\"results\":[{\"company_id\":\"0000789019\",\"name\":\"MICROSOFT CORP\",\"matched_on\":\"name\",\"matched_alias\":\"MICROSOFT CORP\",\"is_current\":true,\"access\":[\"filings\",\"financials\"]}]}"
+  },
+  {
+   "name": "list_filings",
+   "input": {
+    "company_id": "0000789019",
+    "limit": 8
+   },
+   "is_error": false,
+   "content": "{\"company_id\":\"0000789019\",\"as_of\":\"2026-10-18T20:34:09.514681+00:00\",\"filings\":[{\"accession_no\":\"0001193125-26-380280\",\"form\":\"8-K\",\"filed\":\"2026-09-02\",\"period_of_report\":\"2026-09-02\",\"document_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312526380280/d291965d8k.htm\",\"sections\":[{\"section_key\":\"7.01\",\"title\":\"Regulation FD Disclosure\",\"chars\":1383},{\"section_key\":\"9.01\",\"title\":\"Financial Statements and Exhibits\",\"chars\":573}]},{\"accession_no\":\"0001193125-26-323632\",\"form\":\"8-K\",\"filed\":\"2026-07-29\",\"period_of_report\":\"2026-07-29\",\"document_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312526323632/msft-20260729.htm\",\"sections\":[{\"section_key\":\"2.02\",\"title\":\"Results of Operations and Financial Condition\",\"chars\":842},{\"section_key\":\"9.01\",\"title\":\"Financial Statements and Exhibits\",\"chars\":547}]},{\"accession_no\":\"0001193125-26-323660\",\"form\":\"10-K\",\"filed\":\"2026-07-29\",\"period_of_report\":\"2026-06-30\",\"document_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312526323660/msft-20260630.htm\",\"sections\":[{\"section_key\":\"1\",\"title\":\"BUSINESS\",\"chars\":41143},{\"section_key\":\"1A\",\"title\":\"RISK FACTORS\",\"chars\":81171},{\"section_key\":\"1B\",\"title\":\"UNRESOLVED STAFF COMMENTS\",\"chars\":270},{\"section_key\":\"1C\",\"title\":\"CYBERSECURITY\",\"chars\":8239},{\"section_key\":\"2\",\"title\":\"PROPERTIES\",\"chars\":1215},{\"section_key\":\"3\",\"title\":\"LEGAL PROCEEDINGS\",\"chars\":201},{\"section_key\":\"4\",\"title\":\"MINE SAFETY DISCLOSURES\",\"chars\":50},{\"section_key\":\"5\",\"title\":\"MARKET FOR REGISTRANT\\u2019S COMMON EQUITY, RELATED STOCKHOLDER MATTERS, AND ISSUER PURCHASES OF EQUITY SECURITIES\",\"chars\":1746},{\"section_key\":\"6\",\"title\":\"[RESERVED]\",\"chars\":36},{\"section_key\":\"7\",\"title\":\"MANAGEMENT\\u2019S DISCUSSION AND ANALYSIS OF FINANCIAL CONDITION AND RESULTS OF OPERATIONS\",\"chars\":51222},{\"section_key\":\"7A\",\"title\":\"QUANTITATIVE AND QUALITATIVE DISCLOSURES ABOUT MARKET RISK\",\"chars\":1937},{\"section_key\":\"8\",\"title\":\"FINANCIAL STATEMENTS AND SUPPLEMENTARY DATA\",\"chars\":102439},{\"section_key\":\"9\",\"title\":\"CHANGES IN AND DISAGREEMENTS WITH ACCOUNTANTS ON ACCOUNTING AND FINANCIAL DISCLOSURE\",\"chars\":108},{\"section_key\":\"9A\",\"title\":\"CONTROLS AND PROCEDURES\",\"chars\":6663},{\"section_key\":\"9B\",\"title\":\"OTHER INFORMATION\",\"chars\":1492},{\"section_key\":\"9C\",\"title\":\"DISCLOSURE REGARDING FOREIGN JURISDICTIONS THAT PREVENT INSPECTIONS\",\"chars\":92},{\"section_key\":\"10\",\"title\":\"DIRECTORS, EXECUTIVE OFFICERS, AND CORPORATE GOVERNANCE\",\"chars\":1607},{\"section_key\":\"11\",\"title\":\"EXECUTIVE COMPENSATION\",\"chars\":343},{\"section_key\":\"12\",\"title\":\"SECURITY OWNERSHIP OF CERTAIN BENEFICIAL OWNERS AND MANAGEMENT AND RELATED STOCKHOLDER MATTERS\",\"chars\":308},{\"section_key\":\"13\",\"title\":\"CERTAIN RELATIONSHIPS AND RELATED TRANSACTIONS, AND DIRECTOR INDEPENDENCE\",\"chars\":264},{\"section_key\":\"14\",\"title\":\"PRINCIPAL ACCOUNTANT FEES AND SERVICES\",\"chars\":408},{\"section_key\":\"15\",\"title\":\"EXHIBIT AND FINANCIAL STATEMENT SCHEDULES\",\"chars\":12739},{\"section_key\":\"16\",\"title\":\"FORM 10-K SUMMARY\",\"chars\":1596}]},{\"accession_no\":\"0001193125-26-258667\",\"form\":\"8-K\",\"filed\":\"2026-06-05\",\"period_of_report\":\"2026-06-02\",\"document_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312526258667/d26760d8k.htm\",\"sections\":[{\"section_key\":\"5.02\",\"title\":\"Departure of Directors or Certain Officers; Election of Directors; Appointment of Certain Officers; Compensatory Arrangements of Certain Officers.\",\"chars\":1055}]},{\"accession_no\":\"0001193125-26-224155\",\"form\":\"8-K\",\"filed\":\"2026-05-14\",\"period_of_report\":\"2026-05-13\",\"document_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312526224155/d125909d8k.htm\",\"sections\":[{\"section_key\":\"5.02\",\"title\":\"Departure of Directors or Certain Officers; Election of Directors; Appointment of Certain Officers; Compensatory Arrangements of Certain Officers.\",\"chars\":1233},{\"section_key\":\"9.01\",\"title\":\"Financial Statements and Exhibits\",\"chars\":503}]},{\"accession_no\":\"0001193125-26-191457\",\"form\":\"8-K\",\"filed\":\"2026-04-29\",\"period_of_report\":\"2026-04-29\",\"document_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312526191457/msft-20260429.htm\",\"sections\":[{\"section_key\":\"2.02\",\"title\":\"Results of Operations and Financial Condition\",\"chars\":835},{\"section_key\":\"9.01\",\"title\":\"Financial Statements and Exhibits\",\"chars\":537}]},{\"accession_no\":\"0001193125-26-191507\",\"form\":\"10-Q\",\"filed\":\"2026-04-29\",\"period_of_report\":\"2026-03-31\",\"document_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312526191507/msft-20260331.htm\",\"sections\":[{\"section_key\":\"I-1\",\"title\":\"FINANCIAL STATEMENTS\",\"chars\":64368},{\"section_key\":\"I-2\",\"title\":\"MANAGEMENT\\u2019S DISCUSSION AND ANALYSIS OF FINANCIAL CONDITION AND RESULTS OF OPERATIONS\",\"chars\":58401},{\"section_key\":\"I-3\",\"title\":\"QUANTITATIVE AND QUALITATIVE DISCLOSURES ABOUT MARKET RISK\",\"chars\":1919},{\"section_key\":\"I-4\",\"title\":\"CONTROLS AND PROCEDURES\",\"chars\":736},{\"section_key\":\"II-1\",\"title\":\"LEGAL PROCEEDINGS\",\"chars\":200},{\"section_key\":\"II-1A\",\"title\":\"RISK FACTORS\",\"chars\":70893},{\"section_key\":\"II-2\",\"title\":\"UNREGISTERED SALES OF EQUITY SECURITIES AND USE OF PROCEEDS\",\"chars\":1510},{\"section_key\":\"II-5\",\"title\":\"OTHER INFORMATION\",\"chars\":1548},{\"section_key\":\"II-6\",\"title\":\"EXHIBITS\",\"chars\":1720}]},{\"accession_no\":\"0001193125-26-027207\",\"form\":\"10-Q\",\"filed\":\"2026-01-28\",\"period_of_report\":\"2025-12-31\",\"document_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312526027207/msft-20251231.htm\",\"sections\":[{\"section_key\":\"I-1\",\"title\":\"FINANCIAL STATEMENTS\",\"chars\":63909},{\"section_key\":\"I-2\",\"title\":\"MANAGEMENT\\u2019S DISCUSSION AND ANALYSIS OF FINANCIAL CONDITION AND RESULTS OF OPERATIONS\",\"chars\":56723},{\"section_key\":\"I-3\",\"title\":\"QUANTITATIVE AND QUALITATIVE DISCLOSURES ABOUT MARKET RISK\",\"chars\":1922},{\"section_key\":\"I-4\",\"title\":\"CONTROLS AND PROCEDURES\",\"chars\":739},{\"section_key\":\"II-1\",\"title\":\"LEGAL PROCEEDINGS\",\"chars\":200},{\"section_key\":\"II-1A\",\"title\":\"RISK FACTORS\",\"chars\":69948},{\"section_key\":\"II-2\",\"title\":\"UNREGISTERED SALES OF EQUITY SECURITIES AND USE OF PROCEEDS\",\"chars\":1533},{\"section_key\":\"II-5\",\"title\":\"OTHER INFORMATION\",\"chars\":1262},{\"section_key\":\"II-6\",\"title\":\"EXHIBITS\",\"chars\":1377}]}]}"
+  },
+  {
+   "name": "get_section",
+   "input": {
+    "company_id": "0000789019",
+    "section_key": "I-2",
+    "form": "10-Q",
+    "accession_no": "0001193125-26-191507",
+    "max_chars": 20000
+   },
+   "is_error": false,
+   "content": "{\"company_id\":\"0000789019\",\"as_of\":\"2026-10-18T20:34:11.031397+00:00\",\"sections\":[{\"section_key\":\"I-2\",\"title\":\"MANAGEMENT\\u2019S DISCUSSION AND ANALYSIS OF FINANCIAL CONDITION AND RESULTS OF OPERATIONS\",\"text\":\"ITEM 2. MANAGEMENT\\u2019S DISCUSSION AND ANALYSIS OF FINANCIAL CONDITION AND RESULTS OF OPERATIONS\\nNote About Forward-Looking Statements\\nThis report includes estimates, projections, statements relating to our business plans, objectives, and expected operating results that are \\u201cforward-looking statements\\u201d within the meaning of the Private Securities Litigation Reform Act of 1995, Section 27A of the Securities Act of 1933, and Section 21E of the Securities Exchange Act of 1934. Forward-looking statements may appear throughout this report, including the following sections: \\u201cManagement\\u2019s Discussion and Analysis of Financial Condition and Results of Operations\\u201d and \\u201cRisk Factors\\u201d (Part II, Item 1A of this Form 10-Q). These forward-looking statements generally are identified by the words \\u201cbelieve,\\u201d \\u201cproject,\\u201d \\u201cexpect,\\u201d \\u201canticipate,\\u201d \\u201cestimate,\\u201d \\u201cintend,\\u201d \\u201cstrategy,\\u201d \\u201cfuture,\\u201d \\u201copportunity,\\u201d \\u201cplan,\\u201d \\u201cmay,\\u201d \\u201cshould,\\u201d \\u201cwill,\\u201d \\u201cwould,\\u201d \\u201cwill be,\\u201d \\u201cwill continue,\\u201d \\u201cwill likely result,\\u201d and similar expressions. Forward-looking statements are based on current expectations and assumptions that are subject to risks and uncertainties that may cause actual results to differ materially. We describe risks and uncertainties that could cause actual results and events to differ materially in \\u201cManagement\\u2019s Discussion and Analysis of Financial Condition and Results of Operations,\\u201d \\u201cQuantitative and Qualitative Disclosures About Market Risk\\u201d (Part I, Item 3 of this Form 10-Q), and \\u201cRisk Factors\\u201d. We undertake no obligation to update or revise publicly any forward-looking statements, whether because of new information, future events, or otherwise.\\nThe following Management\\u2019s Discussion and Analysis of Financial Condition and Results of Operations (\\u201cMD&A\\u201d) is intended to help the reader understand the results of operations and financial condition of Microsoft Corporation. MD&A is provided as a supplement to, and should be read in conjunction with, our Annual Report on Form 10-K for the year ended June 30, 2025, and our consolidated financial statements and the accompanying Notes to Financial Statements (Part I, Item 1 of this Form 10-Q).\\nOVERVIEW\\nMicrosoft is a technology company committed to making digital technology and artificial intelligence (\\u201cAI\\u201d) available broadly and doing so responsibly, with a mission to empower every person and every organization on the planet to achieve more. We create platforms and tools, powered by AI, that deliver innovative solutions that meet the evolving needs of our customers.\\nWe generate revenue by offering a wide range of cloud-based solutions, content, and other services to people and businesses; licensing and supporting an array of software products; delivering relevant online advertising to a global audience; and designing and selling devices. Our most significant expenses are related to compensating employees; supporting and investing in our cloud-based services, including datacenter operations; designing, manufacturing, marketing, and selling our other products and services; and income taxes.\\nHighlights from the third quarter of fiscal year 2026 compared with the third quarter of fiscal year 2025 included:\\n\\u2022Microsoft Cloud revenue increased 29% to $54.5 billion.\\n\\u2022Commercial remaining performance obligation increased 99% to $627 billion.\\n\\u2022Microsoft 365 Commercial cloud revenue increased 19%.\\n\\u2022Microsoft 365 Consumer cloud revenue increased 33%.\\n\\u2022LinkedIn revenue increased 12%.\\n\\u2022Dynamics 365 revenue increased 22%.\\n\\u2022Azure and other cloud services revenue increased 40%.\\n\\u2022Windows OEM and Devices revenue decreased 2%.\\n\\u2022Xbox content and services revenue decreased 5%.\\n\\u2022Search advertising (formerly Search and news advertising) revenue excluding traffic acquisition costs increased 12%.\\n31\\nPART I\\nItem 2\\nIndustry Trends and Opportunities\\nOur industry is dynamic and highly competitive, with frequent changes in both technologies and business models. Each industry shift is an opportunity to conceive new products, new technologies, or new ideas that can further transform the industry and our business. At Microsoft, we push the boundaries of what is possible through a broad range of research and development activities that seek to identify and address the changing demands of customers and users, industry trends, and competitive forces.\\nWe have a long-term strategic partnership with OpenAI which was originally established in 2019. In October 2025 and April 2026, we extended this partnership and continue to build on our shared vision to advance artificial intelligence responsibly and make its benefits broadly accessible. Microsoft is a major investor in OpenAI and will continue to receive revenue-sharing payments. We hold rights to OpenAI\\u2019s intellectual property, including models and infrastructure, for integration into our products.\\nEconomic Conditions, Challenges, and Risks\\nThe markets for software, devices, and cloud-based services are dynamic and highly competitive. Our competitors are developing new software and devices, while also deploying competing cloud-based services for consumers and businesses. The devices and form factors customers prefer evolve rapidly, influencing how users access services in the cloud and, in some cases, the user\\u2019s choice of which suite of cloud-based services to use. Aggregate demand for our software, services, and devices is also correlated to global macroeconomic and geopolitical factors, which remain dynamic. We must continue to evolve and adapt over an extended time in pace with this changing environment.\\nThe investments we are making in cloud and AI infrastructure and devices will continue to increase our operating costs and may decrease our operating margins. We continue to identify and evaluate opportunities to expand our datacenter locations and increase our server capacity to meet the evolving needs of our customers, particularly given the growing demand for AI services. Our datacenters depend on the availability of permitted and buildable land, predictable energy, networking supplies, and servers, including graphics processing units and other components. Our devices are primarily manufactured by third-party contract manufacturers. For the majority of our products, we have the ability to use other manufacturers if a current vendor becomes unavailable or unable to meet our requirements. However, some of our products contain certain components for which there are very few qualified suppliers. Extended disruptions at these suppliers could impact our ability to manufacture devices on time to meet consumer demand.\\nOur success is highly dependent on our ability to attract and retain qualified employees. We hire a mix of university and industry talent worldwide. We compete for talented individuals globally by offering an exceptional working environment, broad customer reach, scale in resources, the ability to grow one\\u2019s career across many different products and businesses, and competitive compensation and benefits.\\nOur international operations provide a significant portion of our total revenue and expenses. Many of these revenue and expenses are denominated in currencies other than the U.S. dollar. As a result, changes in foreign exchange rates may significantly affect revenue and expenses. Fluctuations in the U.S. dollar relative to certain foreign currencies increased reported revenue and expenses from our international operations for the three and nine months ended March 31, 2026.\\nFurther, global, regional, and local economic developments and changes in global trade policies such as restrictions on international trade, including tariffs and other controls on imports or exports, could result in increased supply chain challenges, cost volatility, and consumer and economic uncertainty which may adversely affect our results of operations.\\nRefer to Risk Factors (Part II, Item 1A of this Form 10-Q) for a discussion of these factors and other risks.\\nSeasonality\\nOur revenue fluctuates quarterly and is generally higher in the fourth quarter of our fiscal year. Fourth quarter revenue is driven by a higher volume of multi-year contracts executed during the period.\\n32\\nPART I\\nItem 2\\nReportable Segments\\nWe report our financial performance based on the following segments: Productivity and Business Processes, Intelligent Cloud, and More Personal Computing. The segment amounts included in MD&A are presented on a basis consistent with our internal management reporting.\\nAdditional information on our reportable segments is contained in Note 16 \\u2013 Segment Information and Geographic Data of the Notes to Financial Statements (Part I, Item 1 of this Form 10-Q).\\nMetrics\\nWe use metrics in assessing the performance of our business and to make informed decisions regarding the allocation of resources. We disclose metrics to enable investors to evaluate progress against our ambitions, provide transparency into performance trends, and reflect the continued evolution of our products and services. Our commercial and other business metrics are fundamentally connected based on how customers use our products and services. The metrics are disclosed in the MD&A or the Notes to Financial Statements (Part I, Item 1 of this Form 10-Q). Financial metrics are calculated based on financial results prepared in accordance with accounting principles generally accepted in the United States of America (\\u201cGAAP\\u201d), and growth comparisons relate to the corresponding period of last fiscal year.\\nIn the first quarter of fiscal year 2026, we made updates to our metrics to align with how we manage and monitor certain businesses. As part of these updates, Microsoft 365 Consumer subscribers was removed as a metric.\\nCommercial\\nOur commercial business primarily consists of Server products and cloud services, Microsoft 365 Commercial products and cloud services, the commercial portion of LinkedIn, Dynamics products and cloud services, and Enterprise and partner services. Our commercial metrics allow management and investors to assess the overall health of our commercial business and include leading indicators of future performance.\\nCommercial remaining performance obligation\\nCommercial portion of revenue allocated to remaining performance obligations, which includes unearned revenue and amounts that will be invoiced and recognized as revenue in future periods\\nMicrosoft Cloud revenue and revenue growth\\nRevenue from Microsoft 365 Commercial cloud, Azure and other cloud services, the commercial portion of LinkedIn, and Dynamics 365\\nMicrosoft Cloud gross margin percentage\\nGross margin percentage for our Microsoft Cloud business\\n33\\nPART I\\nItem 2\\nProductivity and Business Processes and Intelligent Cloud\\nMetrics related to our Productivity and Business Processes and Intelligent Cloud segments assess the health of our core businesses within these segments. The metrics primarily reflect growth across our cloud services.\\nMicrosoft 365 Commercial cloud revenue growth\\nRevenue from Microsoft 365 Commercial subscriptions, comprising Microsoft 365 Commercial, Enterprise Mobility + Security, the cloud portion of Windows Commercial, the per-user portion of Power BI, Exchange, SharePoint, Microsoft Teams, Microsoft 365 Security and Compliance, and Microsoft 365 Copilot\\nMicrosoft 365 Commercial seat growth\\nThe number of Microsoft 365 Commercial seats at end of period where seats are paid users covered by a Microsoft 365 Commercial subscription\\nMicrosoft 365 Consumer cloud revenue growth\\nRevenue from Microsoft 365 Consumer subscriptions and other consumer services\\nLinkedIn revenue growth\\nRevenue from LinkedIn, including Talent Solutions, Marketing Solutions, Premium Subscriptions, and Sales Solutions\\nDynamics 365 revenue growth\\nRevenue from Dynamics 365, including a set of intelligent, cloud-based applications across ERP, CRM, Power Apps, and Power Automate\\nAzure and other cloud services revenue growth\\nRevenue from Azure and other cloud services, including cloud and AI consumption-based services, GitHub cloud services, Nuance Healthcare cloud services, virtual desktop offerings, and other cloud services\\nMore Personal Computing\\nMetrics related to our More Personal Computing segment assess the performance of our key consumer businesses.\\nWindows OEM and Devices revenue growth\\nRevenue from sales of Windows Pro and non-Pro licenses sold through the OEM channel and sales of first-party Devices, including Surface and PC accessories\\nXbox content and services revenue growth\\nRevenue from Xbox content and services, comprising first- and third-party content (including games and in-game content), Xbox Game Pass and other subscriptions, Xbox Cloud Gaming, advertising, and other cloud services\\nSearch advertising revenue (ex TAC) growth\\nRevenue from search advertising excluding traffic acquisition costs (\\u201cTAC\\u201d) paid to Bing Ads network publishers and content partners\\nSUMMARY RESULTS OF OPERATIONS\\n(In millions, except percentages and per share amounts)\\nThree Months Ended\\nMarch 31,\\nPercentage\\nChange\\nNine Months Ended\\nMarch 31,\\nPercentage\\nChange\\n2026\\n2025\\n2026\\n2025\\nRevenue\\n$\\n82,886\\n$\\n70,066\\n18%\\n$\\n241,832\\n$\\n205,283\\n18%\\nGross margin\\n56,058\\n48,147\\n16%\\n164,983\\n141,466\\n17%\\nOperating income\\n38,398\\n32,000\\n20%\\n114,634\\n94,205\\n22%\\nNet income\\n31,778\\n25,824\\n23%\\n97,983\\n74,599\\n31%\\nDiluted earnings per share\\n4.27\\n3.46\\n23%\\n13.14\\n9.99\\n32%\\nAdjusted net income (non-GAAP)\\n31,792\\n26,407\\n20%\\n93,500\\n76,644\\n22%\\nAdjusted diluted earnings per share (non-GAAP)\\n4.27\\n3.54\\n21%\\n12.54\\n10.27\\n22%\\n34\\nPART I\\nItem 2\\nAdjusted net income and adjusted diluted earnings per share (\\u201cEPS\\u201d) are non-GAAP financial measures. These non-GAAP financial measures exclude net gains and losses from investments in OpenAI. Refer to the Non-GAAP Financial Measures section below for a reconciliation of our financial results reported in accordance with GAAP to non-GAAP financial results.\\nThree Months Ended March 31, 2026 Compared with Three Months Ended March 31, 2025\\nRevenue increased $12.8 billion or 18% driven by growth in Microsoft Cloud. Intelligent Cloud revenue increased driven by Azure. Productivity and Business Processes revenue increased driven by Microsoft 365 Commercial cloud. More Personal Computing revenue decreased with lower hardware sales across Devices and Gaming, offset in part by growth in Search advertising.\\nCost of revenue increased $4.9 billion or 22% driven by growth in Microsoft Cloud.\\nGross margin increased $7.9 billion or 16% with growth across each of our segments.\\n\\u2022Gross margin percentage decreased driven by continued investments in AI infrastructure and growing AI product usage, offset in part by efficiency gains across the Microsoft Cloud.\\n\\u2022Microsoft Cloud gross margin percentage decreased to 66% driven by continued investments in AI infrastructure and growing AI product usage, offset in part by efficiency gains in Azure and Microsoft 365 Commercial cloud.\\nOperating expenses increased $1.5 billion or 9% primarily driven by continued investments in research and development compute capacity, AI talent, and data to support product development across the portfolio. Total company headcount declined year-over-year.\\nOperating income increased $6.4 billion or 20% driven by growth in Productivity and Business Processes and Intelligent Cloud.\\nRevenue, gross margin, and operating income included a favorable foreign currency impact of 3%, 3%, and 4%, respectively. Cost of revenue included an unfavorable foreign currency impact of 2%.\\nCurrent year net income and diluted EPS were negatively impacted by net losses from investments in OpenAI, which resulted in a decrease in net income of $14 million. Prior year net income and diluted EPS were negatively impacted by net losses from investments in OpenAI, which resulted in a decrease in net income and diluted EPS of $583 million and $0.08, respectively.\\nNine Months Ended March 31, 2026 Compared with Nine Months Ended March 31, 2025\\nRevenue increased $36.5 billion or 18% driven by growth in Microsoft Cloud. Intelligent Cloud revenue increased driven by Azure. Productivity and Business Processes revenue increased driven by Microsoft 365 Commercial cloud. More Personal Computing revenue was relatively unchanged with growth in Search advertising offset by a decline in Gaming.\\nCost of revenue increased $13.0 billion or 20% driven by growth in Microsoft Cloud.\\nGross margin increased $23.5 billion or 17% with growth across each of our segments.\\n\\u2022Gross margin percentage decreased slightly primarily driven by continued investments in AI infrastructure and growing AI product usage, offset in part by efficiency gains across the Microsoft Cloud.\\n\\u2022Microsoft Cloud gross margin percentage decreased to 67% driven by continued investments in AI infrastructure and growing AI product usage, offset in part by efficiency gains in Azure and Microsoft 365 Commercial cloud.\\nOperating expenses increased $3.1 billion or 7% driven by continued investments in research and development compute capacity, AI talent, and data to support product development across the portfolio, impairment and other related expenses in our Gaming business, and higher Copilot advertising expenses. Total company headcount declined year-over-year.\\nOperating income increased $20.4 billion or 22% driven by growth in Productivity and Business Processes and Intelligent Cloud.\\n35\\nPART I\\nItem 2\\nRevenue, gross margin, and operating income included a favorable foreign currency impact of 2%, 3%, and 3%, respectively. Operating expenses included an unfavorable foreign currency impact of 2%.\\nCurrent year net income and diluted EPS were positively impacted by net gains from investments in OpenAI, which resulted in an increase in net income and diluted EPS of $4.5 billion and $0.60, respectively. Prior year net income and diluted EPS were negatively impacted by net losses from investments in OpenAI, which resulted in a decrease in net income and diluted EPS of $2.0 billion and $0.28, respectively.\\nSEGMENT RESULTS OF OPERATIONS\\n(In millions, except percentages)\\nThree Months Ended\\nMarch 31,\\nPercentage\\nChange\\nNine Months Ended\\nMarch 31,\\nPercentage\\nChange\\n2026\\n2025\\n2026\\n2025\\nProductivity and Business Processes\\nRevenue\\n$\\n35,013\\n$\\n29,944\\n17%\\n$\\n102,149\\n$\\n87,698\\n16%\\nCost of revenue\\n6,197\\n5,517\\n12%\\n18,028\\n16,380\\n10%\\nOperating expenses\\n7,843\\n7,048\\n11%\\n22,142\\n20,538\\n8%\\nOperating income\\n$\\n20,973\\n$\\n17,379\\n21%\\n$\\n61,979\\n$\\n50,780\\n22%\\nIntelligent Cloud\\nRevenue\\n$\\n34,681\\n$\\n26,751\\n30%\\n$\\n98,485\\n$\\n76,387\\n29%\\nCost of revenue\\n15,120\\n10,307\\n47%\\n41,000\\n28,326\\n45%\\nOperating expenses\\n5,808\\n5,349\\n9%\\n16,468\\n15,612\\n5%\\nOperating income\\n$\\n13,753\\n$\\n11,095\\n24%\\n$\\n41,017\\n$\\n32,449\\n26%\\nMore Personal Computing\\nRevenue\\n$\\n13,192\\n$\\n13,371\\n(1)%\\n$\\n41,198\\n$\\n41,198\\n0%\\nCost of revenue\\n5,511\\n6,095\\n(10)%\\n17,821\\n19,111\\n(7)%\\nOperating expenses\\n4,009\\n3,750\\n7%\\n11,739\\n11,111\\n6%\\nOperating income\\n$\\n3,672\\n$\\n3,526\\n4%\\n$\\n11,638\\n$\\n10,976\\n6%\\nTotal\\nRevenue\\n$\\n82,886\\n$\\n70,066\\n18%\\n$\\n241,832\\n$\\n205,283\\n18%\\nCost of revenue\\n26,828\\n21,919\\n22%\\n76,849\\n63,817\\n20%\\nOperating expenses\\n17,660\\n16,147\\n9%\\n50,349\\n47,261\\n7%\\nOperating income\\n$\\n38,398\\n$\\n32,000\\n20%\\n$\\n114,634\\n$\\n94,205\\n22%\\nReportable Segments\\nThree Months Ended March 31, 2026 Compared with Three Months Ended March 31, 2025\\nProductivity and Business Processes\\nRevenue increased $5.1 billion or 17%.\\n\\u2022Microsoft 365 Commercial products and cloud services revenue increased $3.7 billion or 17%. Microsoft 365 Commercial cloud revenue grew 19% with growth in revenue per user driven by Microsoft 365 E5 and Microsoft 365 Copilot. Microsoft 365 Commercial seats grew 6% driven by small and medium businesses and frontline worker offerings. Microsoft 365 Commercial products revenue grew 1%.\\n\\u2022Microsoft 365 Consumer products and cloud services revenue increased $476 million or 26%. Microsoft 365 Consumer cloud revenue grew 33% driven by growth in revenue per user and Microsoft 365 Consumer subscriber growth of 7%.\\n\\u2022LinkedIn revenue increased $521 million or 12% with growth across all lines of business.\\n\\u2022Dynamics products and cloud services revenue increased $363 million or 19% driven b\",\"truncated\":true,\"total_chars\":58401,\"citation\":{\"accession_no\":\"0001193125-26-191507\",\"form\":\"10-Q\",\"filed\":\"2026-04-29\",\"period_of_report\":\"2026-03-31\",\"section_key\":\"I-2\",\"document_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312526191507/msft-20260331.htm\",\"char_start\":68062,\"char_end\":126464},\"freshness\":{\"filed\":\"2026-04-29\",\"ingested_at\":\"2026-10-17T17:16:27.119615Z\"}}]}"
+  }
+ ],
+ "responses": [
+  {
+   "id": "msg_011CgALk5RgxNF1RkLkZWY6o",
+   "container": null,
+   "content": [
+    {
+     "signature": "CAQS3gUKEAgSGAI4AUIIdGhpbmtpbmcSDBjZpDRm521ndUXOCRoMaVzjTgJVZooNQ8WnIjB/ik1qkClLptwWHrKgZw7oTBTKu4i8V617WNhonaFzAf1XVpYTqoLbo7uvCTiMUxAq+wShsqWXNATVu2+CJ38IJWyy1yPB4cI+BbKmP0W9xU1Zv42hU6Usbke/LZKM4tTuYdD3RZEy+0w/xqRYqWBFflrlJnkUL0Lsrv1SWms8xR8nEE62KMrdca9uoshq1719JE/z8+o2LCuorKjCNFlGzJiN5/rg0reYu4bWXVfkllDEzzgsL6tr8Lg9O0NbuIph8DJ2E2x+a8IH5DKKAwYMRVVLXJ9cpIASqXhgt7b4ZAP7wE6wdWEpJsygRxczdSrZhQZIJhuxZIyXCLKUypEVnOebajATr7LilTM6qVC4sPbFjBMhS8SZvFRDXK88kSsgwdu6TG6ZXWQN+GSX6ar0v18sQMtagOvW/tAvApNcD0XoAgxMbL8sKeOKPrIL194XUCnv8MQQWEnhqhiRKWolMoPIiw3eBxwF1britkNjnsfkigqL/TDVuz7/+hfY0nmzpTUWjmuM1NPcWi8VUQeVZxOVyk/53ZB2h1W2nwa0n+3vqXG600o3cZKBGoLwNsF1Dzu7PD0xqWJDgvRMcbexiIww6FSpxwUcPUSTZt9KTGXt/b0unfGmFswqncGxv1br48tKytjoejj9+GaDH/NDj1s8Y4DPhZ1iHh1VaOSgIL4PWO7JjuvHWjaM9LEp0g6TMHHp4clOtFfJNJ6Jd/VFhChgSlP6+K7uVn02FV9AK7Eo+ZULLmpsG/FlugYPCcM4ZflolVLD3ymn7RlBmjLBNs+yWHYsvrYKY0UlVFm0RwMWj2NE4jqiHCoEqxBixph7wQSNVcApq3EcW3IYKjDARElmh+8pyPsx0zv4ge5iJhipj19+KxVZWro3FIeHSx3d8g2/67h19z8TpHj8wxgB",
+     "thinking": "",
+     "type": "thinking"
+    },
+    {
+     "id": "toolu_01BgeyxeVchpx1UjVcP46kFr",
+     "caller": {
+      "type": "direct"
+     },
+     "input": {},
+     "name": "whoami",
+     "type": "tool_use"
+    },
+    {
+     "id": "toolu_01VpHCyC4byVXzF1J3zzck1q",
+     "caller": {
+      "type": "direct"
+     },
+     "input": {
+      "query": "Microsoft"
+     },
+     "name": "search_companies",
+     "type": "tool_use"
+    }
+   ],
+   "diagnostics": null,
+   "model": "claude-haiku-5-5",
+   "role": "assistant",
+   "stop_details": null,
+   "stop_reason": "tool_use",
+   "stop_sequence": null,
+   "type": "message",
+   "usage": {
+    "cache_creation": {
+     "ephemeral_1h_input_tokens": 0,
+     "ephemeral_5m_input_tokens": 1804
+    },
+    "cache_creation_input_tokens": 1804,
+    "cache_read_input_tokens": 0,
+    "inference_geo": "global",
+    "input_tokens": 4,
+    "output_tokens": 122,
+    "output_tokens_details": {
+     "thinking_tokens": 46
+    },
+    "service_tier": "standard",
+    "speed": "standard"
+   }
+  },
+  {
+   "id": "msg_011CgALkAHeLVUfhbm3wLa2f",
+   "container": null,
+   "content": [
+    {
+     "id": "toolu_01XbVYuWwbgcn9zyVJCoscV4",
+     "caller": {
+      "type": "direct"
+     },
+     "input": {
+      "company_id": "0000789019",
+      "limit": 8
+     },
+     "name": "list_filings",
+     "type": "tool_use"
+    }
+   ],
+   "diagnostics": null,
+   "model": "claude-haiku-5-5",
+   "role": "assistant",
+   "stop_details": null,
+   "stop_reason": "tool_use",
+   "stop_sequence": null,
+   "type": "message",
+   "usage": {
+    "cache_creation": {
+     "ephemeral_1h_input_tokens": 0,
+     "ephemeral_5m_input_tokens": 351
+    },
+    "cache_creation_input_tokens": 351,
+    "cache_read_input_tokens": 1804,
+    "inference_geo": "global",
+    "input_tokens": 2,
+    "output_tokens": 75,
+    "output_tokens_details": {
+     "thinking_tokens": 0
+    },
+    "service_tier": "standard",
+    "speed": "standard"
+   }
+  },
+  {
+   "id": "msg_011CgALkDpU5ogMyxZ6MdR4Q",
+   "container": null,
+   "content": [
+    {
+     "signature": "CAQSlAcKEAgSGAI4AUIIdGhpbmtpbmcSDKMqNQxDzfT2q/0xZxoM1OvKd3TZWww3XMUlIjCLBBtkA9fAV6X7Lc7qzMjLopjGEkqhBlZneDXq04DV4EA+W17y6X1xLERziD0pyD8qsQYdTYTteySZqNjdE7nvJzQhYGy0QoQYQHQRxY+kgt7k8yzkX/hLk9pQKpwdcq+nSuw3jjgVeYc1NQtm9MyIffxxDy5S06AJkkjOR0oXkh1VSPpaW1i3HZiF3jIv0WHV9X7CfGWpmyVo908uiYvXYUVgv1LUmIbnwuQVfO+yv/emgGRhfrkv6EOv2W1xnVkXf9lnXPMRRPs6EFA1MTl30VYC3MfYdyjCtOvTIq0y1hd24KyFBZAUxKOcjfo0vOWZ8iv8GmwtWueYndu/Yimwg01R+dpN7CXV3yQdsUA8JkZWeInsXZVwVzQ29jyDT5DdlEi0sOAH5UsNOHSP+etfFyLXLeWQIQZ4TtFPVKjQBa0nL3PjviksKUsAbhSOdQ18vmd6LtEsvmdUqGxF5Ncmhvee/nLnSpIUFr3jayLuSGFkvSTlNOEMetSkZPKlXWB/+yKVfZpd459aPj+4jQkBxmBD75ZhBdFUSJArqrxArgYyLBL56tJKWZ86t5inN+Ej39v/dv8sXBym9UvKhP4llJQ5504NeCSQ4AIZTAX6pECzKCGCbenDThqxFb6G0Yl6gK/et3u/PuhZhzLHUR+uUBuN1tOXwATEazAhtbUd/gMy7o+ptojd+AISAjuSaEUsWnlnl7Y5uhy49kRqc/aRMOh0vSstcZqTcSCISlTJzECbyTV/O2ZOpVfiNJf4kR8iFr2grKVGAYLcqvlH2SHioOuuSAypTj7U8LJcZ2zx8GxfYErKvMXD2ir+X0FSJel12j3gjQCmdLMpFHY/1VdiFsu2ZAWiVZISRGfn4lBAvYZW1dyBi/6YBS0TsGezDNvGNoIIKcacTw6OCF8KxbMmLBeU0o3QAVCiqn/1hSCK5NT5TvYGlegwi09orYePNkyxTD3ulSXPTIEp/VRlt3rmy3qABMAswIXqg032SzQwAGn+9NcEc/76CxEeHSJmxAIpp72fTC9LKkl2ymdsGoqjCMjg2LYEFNB4GuqGe/14x+OwOI8BkvC8Cb2a1n9XJ8w9W3hQuNH1ZxMfaaXeWEhgOcPZj3tjZWVWJJBdYl9tzRqjPcUlay5ZaWDdPOM6RwmxTFrQGAE=",
+     "thinking": "",
+     "type": "thinking"
+    },
+    {
+     "id": "toolu_01XnbRZVMeM8PFWFfaMMsAVw",
+     "caller": {
+      "type": "direct"
+     },
+     "input": {
+      "company_id": "0000789019",
+      "section_key": "I-2",
+      "form": "10-Q",
+      "accession_no": "0001193125-26-191507",
+      "max_chars": 20000
+     },
+     "name": "get_section",
+     "type": "tool_use"
+    }
+   ],
+   "diagnostics": null,
+   "model": "claude-haiku-5-5",
+   "role": "assistant",
+   "stop_details": null,
+   "stop_reason": "tool_use",
+   "stop_sequence": null,
+   "type": "message",
+   "usage": {
+    "cache_creation": {
+     "ephemeral_1h_input_tokens": 0,
+     "ephemeral_5m_input_tokens": 3173
+    },
+    "cache_creation_input_tokens": 3173,
+    "cache_read_input_tokens": 2155,
+    "inference_geo": "global",
+    "input_tokens": 2,
+    "output_tokens": 280,
+    "output_tokens_details": {
+     "thinking_tokens": 121
+    },
+    "service_tier": "standard",
+    "speed": "standard"
+   }
+  },
+  {
+   "id": "msg_011CgALkLaGrosPAT9eZztzU",
+   "container": null,
+   "content": [
+    {
+     "signature": "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",
+     "thinking": "",
+     "type": "thinking"
+    },
+    {
+     "text": "The latest 10-Q for Microsoft is the one for the quarter ended March 31, 2026 (Form 10-Q, filed 2026-04-29, accession 0001193125-26-191507). Its MD&A (Item 2, section I-2, \"Management's Discussion and Analysis of Financial Condition and Results of Operations\") reports these cloud figures for the third quarter of fiscal 2026 versus the same quarter of fiscal 2025:\n\n- **Microsoft Cloud revenue** increased 29% to $54.5B.\n- **Azure and other cloud services revenue** increased 40%.\n- **Microsoft 365 Commercial cloud revenue** increased 19%, driven by revenue per user (Microsoft 365 E5 and Microsoft 365 Copilot) and seat growth of 6%.\n- **Microsoft 365 Consumer cloud revenue** increased 33%.\n- **Dynamics 365 revenue** increased 22%.\n- **Commercial remaining performance obligation** increased 99% to $627B.\n- **Microsoft Cloud gross margin percentage** decreased to 66% for the quarter (67% for the nine months), which the MD&A attributes to continued investment in AI infrastructure and growing AI product usage, partly offset by efficiency gains.\n\nThe MD&A's segment discussion of Azure is longer than what I could retrieve, so I can't quote its full detail on Azure drivers. I can fetch more if you need it, though the tool only returns the first 20,000 characters of this section.\n\nFreshness: the 10-Q was filed 2026-04-29, and the section was retrieved at 2026-10-18T20:34:11Z.",
+     "type": "text"
+    }
+   ],
+   "diagnostics": null,
+   "model": "claude-haiku-5-5",
+   "role": "assistant",
+   "stop_details": null,
+   "stop_reason": "end_turn",
+   "stop_sequence": null,
+   "type": "message",
+   "usage": {
+    "cache_creation": {
+     "ephemeral_1h_input_tokens": 0,
+     "ephemeral_5m_input_tokens": 8287
+    },
+    "cache_creation_input_tokens": 8287,
+    "cache_read_input_tokens": 5328,
+    "inference_geo": "global",
+    "input_tokens": 2,
+    "output_tokens": 1267,
+    "output_tokens_details": {
+     "thinking_tokens": 711
+    },
+    "service_tier": "standard",
+    "speed": "standard"
+   }
+  }
+ ]
+}

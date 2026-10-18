@@ -1,0 +1,239 @@
+{
+ "id": "doc-06",
+ "user": "bob",
+ "prompt": "List the filings Microsoft has made recently.",
+ "model": "claude-haiku-5-5",
+ "answer": "Here are Microsoft's most recent filings, newest first (8 most recent):\n\n| Form | Filed | Period | Accession No. | Sections |\n|---|---|---|---|---|\n| 8-K | 2026-09-02 | 2026-09-02 | 0001193125-26-380280 | 7.01 Regulation FD Disclosure; 9.01 Financial Statements and Exhibits |\n| 8-K | 2026-07-29 | 2026-07-29 | 0001193125-26-323632 | 2.02 Results of Operations and Financial Condition; 9.01 Financial Statements and Exhibits |\n| 10-K | 2026-07-29 | FY ended 2026-06-30 | 0001193125-26-323660 | Full annual report (Items 1 through 16) |\n| 8-K | 2026-06-05 | 2026-06-02 | 0001193125-26-258667 | 5.02 Departure/Election of Directors or Officers; Compensatory Arrangements |\n| 8-K | 2026-05-14 | 2026-05-13 | 0001193125-26-224155 | 5.02 Departure/Election of Directors or Officers; 9.01 Financial Statements and Exhibits |\n| 8-K | 2026-04-29 | 2026-04-29 | 0001193125-26-191457 | 2.02 Results of Operations and Financial Condition; 9.01 Financial Statements and Exhibits |\n| 10-Q | 2026-04-29 | Q3 ended 2026-03-31 | 0001193125-26-191507 | Full quarterly report (Parts I and II) |\n| 10-Q | 2026-01-28 | Q2 ended 2025-12-31 | 0001193125-26-027207 | Full quarterly report (Parts I and II) |\n\nSource: list_filings for Microsoft Corp (CIK 0000789019). Freshness: latest filing used was filed 2026-09-02; the tool response's as_of is 2026-10-18T20:34:19Z.\n\nI can pull the text of any of these sections, or the quarterly financials, if you want more detail.",
+ "usage": {
+  "input_tokens": 8,
+  "output_tokens": 993,
+  "cache_read_input_tokens": 3929,
+  "cache_creation_input_tokens": 5314
+ },
+ "cost_usd": 0.0012008400000000001,
+ "citations": {
+  "0001193125-26-380280": {
+   "accession_no": "0001193125-26-380280",
+   "form": "8-K",
+   "filed": "2026-09-02",
+   "company_id": "0000789019",
+   "url": "https://www.sec.gov/Archives/edgar/data/789019/000119312526380280/d291965d8k.htm"
+  },
+  "0001193125-26-323632": {
+   "accession_no": "0001193125-26-323632",
+   "form": "8-K",
+   "filed": "2026-07-29",
+   "company_id": "0000789019",
+   "url": "https://www.sec.gov/Archives/edgar/data/789019/000119312526323632/msft-20260729.htm"
+  },
+  "0001193125-26-323660": {
+   "accession_no": "0001193125-26-323660",
+   "form": "10-K",
+   "filed": "2026-07-29",
+   "company_id": "0000789019",
+   "url": "https://www.sec.gov/Archives/edgar/data/789019/000119312526323660/msft-20260630.htm"
+  },
+  "0001193125-26-258667": {
+   "accession_no": "0001193125-26-258667",
+   "form": "8-K",
+   "filed": "2026-06-05",
+   "company_id": "0000789019",
+   "url": "https://www.sec.gov/Archives/edgar/data/789019/000119312526258667/d26760d8k.htm"
+  },
+  "0001193125-26-224155": {
+   "accession_no": "0001193125-26-224155",
+   "form": "8-K",
+   "filed": "2026-05-14",
+   "company_id": "0000789019",
+   "url": "https://www.sec.gov/Archives/edgar/data/789019/000119312526224155/d125909d8k.htm"
+  },
+  "0001193125-26-191457": {
+   "accession_no": "0001193125-26-191457",
+   "form": "8-K",
+   "filed": "2026-04-29",
+   "company_id": "0000789019",
+   "url": "https://www.sec.gov/Archives/edgar/data/789019/000119312526191457/msft-20260429.htm"
+  },
+  "0001193125-26-191507": {
+   "accession_no": "0001193125-26-191507",
+   "form": "10-Q",
+   "filed": "2026-04-29",
+   "company_id": "0000789019",
+   "url": "https://www.sec.gov/Archives/edgar/data/789019/000119312526191507/msft-20260331.htm"
+  },
+  "0001193125-26-027207": {
+   "accession_no": "0001193125-26-027207",
+   "form": "10-Q",
+   "filed": "2026-01-28",
+   "company_id": "0000789019",
+   "url": "https://www.sec.gov/Archives/edgar/data/789019/000119312526027207/msft-20251231.htm"
+  }
+ },
+ "verification": {
+  "figures": [],
+  "unverified_accessions": [],
+  "used_data": true,
+  "freshness": true,
+  "ok": true
+ },
+ "tool_calls": [
+  {
+   "name": "whoami",
+   "input": {},
+   "is_error": false,
+   "content": "{\"user_id\":\"bob\",\"companies\":[{\"company_id\":\"0000789019\",\"name\":\"MICROSOFT CORP\",\"tiers\":[\"filings\",\"financials\"]},{\"company_id\":\"0001045810\",\"name\":\"NVIDIA CORP\",\"tiers\":[\"filings\",\"financials\"]}]}"
+  },
+  {
+   "name": "search_companies",
+   "input": {
+    "query": "Microsoft"
+   },
+   "is_error": false,
+   "content": "{\"results\":[{\"company_id\":\"0000789019\",\"name\":\"MICROSOFT CORP\",\"matched_on\":\"name\",\"matched_alias\":\"MICROSOFT CORP\",\"is_current\":true,\"access\":[\"filings\",\"financials\"]}]}"
+  },
+  {
+   "name": "list_filings",
+   "input": {
+    "company_id": "0000789019",
+    "limit": 8
+   },
+   "is_error": false,
+   "content": "{\"company_id\":\"0000789019\",\"as_of\":\"2026-10-18T20:34:19.242919+00:00\",\"filings\":[{\"accession_no\":\"0001193125-26-380280\",\"form\":\"8-K\",\"filed\":\"2026-09-02\",\"period_of_report\":\"2026-09-02\",\"document_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312526380280/d291965d8k.htm\",\"sections\":[{\"section_key\":\"7.01\",\"title\":\"Regulation FD Disclosure\",\"chars\":1383},{\"section_key\":\"9.01\",\"title\":\"Financial Statements and Exhibits\",\"chars\":573}]},{\"accession_no\":\"0001193125-26-323632\",\"form\":\"8-K\",\"filed\":\"2026-07-29\",\"period_of_report\":\"2026-07-29\",\"document_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312526323632/msft-20260729.htm\",\"sections\":[{\"section_key\":\"2.02\",\"title\":\"Results of Operations and Financial Condition\",\"chars\":842},{\"section_key\":\"9.01\",\"title\":\"Financial Statements and Exhibits\",\"chars\":547}]},{\"accession_no\":\"0001193125-26-323660\",\"form\":\"10-K\",\"filed\":\"2026-07-29\",\"period_of_report\":\"2026-06-30\",\"document_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312526323660/msft-20260630.htm\",\"sections\":[{\"section_key\":\"1\",\"title\":\"BUSINESS\",\"chars\":41143},{\"section_key\":\"1A\",\"title\":\"RISK FACTORS\",\"chars\":81171},{\"section_key\":\"1B\",\"title\":\"UNRESOLVED STAFF COMMENTS\",\"chars\":270},{\"section_key\":\"1C\",\"title\":\"CYBERSECURITY\",\"chars\":8239},{\"section_key\":\"2\",\"title\":\"PROPERTIES\",\"chars\":1215},{\"section_key\":\"3\",\"title\":\"LEGAL PROCEEDINGS\",\"chars\":201},{\"section_key\":\"4\",\"title\":\"MINE SAFETY DISCLOSURES\",\"chars\":50},{\"section_key\":\"5\",\"title\":\"MARKET FOR REGISTRANT\\u2019S COMMON EQUITY, RELATED STOCKHOLDER MATTERS, AND ISSUER PURCHASES OF EQUITY SECURITIES\",\"chars\":1746},{\"section_key\":\"6\",\"title\":\"[RESERVED]\",\"chars\":36},{\"section_key\":\"7\",\"title\":\"MANAGEMENT\\u2019S DISCUSSION AND ANALYSIS OF FINANCIAL CONDITION AND RESULTS OF OPERATIONS\",\"chars\":51222},{\"section_key\":\"7A\",\"title\":\"QUANTITATIVE AND QUALITATIVE DISCLOSURES ABOUT MARKET RISK\",\"chars\":1937},{\"section_key\":\"8\",\"title\":\"FINANCIAL STATEMENTS AND SUPPLEMENTARY DATA\",\"chars\":102439},{\"section_key\":\"9\",\"title\":\"CHANGES IN AND DISAGREEMENTS WITH ACCOUNTANTS ON ACCOUNTING AND FINANCIAL DISCLOSURE\",\"chars\":108},{\"section_key\":\"9A\",\"title\":\"CONTROLS AND PROCEDURES\",\"chars\":6663},{\"section_key\":\"9B\",\"title\":\"OTHER INFORMATION\",\"chars\":1492},{\"section_key\":\"9C\",\"title\":\"DISCLOSURE REGARDING FOREIGN JURISDICTIONS THAT PREVENT INSPECTIONS\",\"chars\":92},{\"section_key\":\"10\",\"title\":\"DIRECTORS, EXECUTIVE OFFICERS, AND CORPORATE GOVERNANCE\",\"chars\":1607},{\"section_key\":\"11\",\"title\":\"EXECUTIVE COMPENSATION\",\"chars\":343},{\"section_key\":\"12\",\"title\":\"SECURITY OWNERSHIP OF CERTAIN BENEFICIAL OWNERS AND MANAGEMENT AND RELATED STOCKHOLDER MATTERS\",\"chars\":308},{\"section_key\":\"13\",\"title\":\"CERTAIN RELATIONSHIPS AND RELATED TRANSACTIONS, AND DIRECTOR INDEPENDENCE\",\"chars\":264},{\"section_key\":\"14\",\"title\":\"PRINCIPAL ACCOUNTANT FEES AND SERVICES\",\"chars\":408},{\"section_key\":\"15\",\"title\":\"EXHIBIT AND FINANCIAL STATEMENT SCHEDULES\",\"chars\":12739},{\"section_key\":\"16\",\"title\":\"FORM 10-K SUMMARY\",\"chars\":1596}]},{\"accession_no\":\"0001193125-26-258667\",\"form\":\"8-K\",\"filed\":\"2026-06-05\",\"period_of_report\":\"2026-06-02\",\"document_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312526258667/d26760d8k.htm\",\"sections\":[{\"section_key\":\"5.02\",\"title\":\"Departure of Directors or Certain Officers; Election of Directors; Appointment of Certain Officers; Compensatory Arrangements of Certain Officers.\",\"chars\":1055}]},{\"accession_no\":\"0001193125-26-224155\",\"form\":\"8-K\",\"filed\":\"2026-05-14\",\"period_of_report\":\"2026-05-13\",\"document_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312526224155/d125909d8k.htm\",\"sections\":[{\"section_key\":\"5.02\",\"title\":\"Departure of Directors or Certain Officers; Election of Directors; Appointment of Certain Officers; Compensatory Arrangements of Certain Officers.\",\"chars\":1233},{\"section_key\":\"9.01\",\"title\":\"Financial Statements and Exhibits\",\"chars\":503}]},{\"accession_no\":\"0001193125-26-191457\",\"form\":\"8-K\",\"filed\":\"2026-04-29\",\"period_of_report\":\"2026-04-29\",\"document_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312526191457/msft-20260429.htm\",\"sections\":[{\"section_key\":\"2.02\",\"title\":\"Results of Operations and Financial Condition\",\"chars\":835},{\"section_key\":\"9.01\",\"title\":\"Financial Statements and Exhibits\",\"chars\":537}]},{\"accession_no\":\"0001193125-26-191507\",\"form\":\"10-Q\",\"filed\":\"2026-04-29\",\"period_of_report\":\"2026-03-31\",\"document_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312526191507/msft-20260331.htm\",\"sections\":[{\"section_key\":\"I-1\",\"title\":\"FINANCIAL STATEMENTS\",\"chars\":64368},{\"section_key\":\"I-2\",\"title\":\"MANAGEMENT\\u2019S DISCUSSION AND ANALYSIS OF FINANCIAL CONDITION AND RESULTS OF OPERATIONS\",\"chars\":58401},{\"section_key\":\"I-3\",\"title\":\"QUANTITATIVE AND QUALITATIVE DISCLOSURES ABOUT MARKET RISK\",\"chars\":1919},{\"section_key\":\"I-4\",\"title\":\"CONTROLS AND PROCEDURES\",\"chars\":736},{\"section_key\":\"II-1\",\"title\":\"LEGAL PROCEEDINGS\",\"chars\":200},{\"section_key\":\"II-1A\",\"title\":\"RISK FACTORS\",\"chars\":70893},{\"section_key\":\"II-2\",\"title\":\"UNREGISTERED SALES OF EQUITY SECURITIES AND USE OF PROCEEDS\",\"chars\":1510},{\"section_key\":\"II-5\",\"title\":\"OTHER INFORMATION\",\"chars\":1548},{\"section_key\":\"II-6\",\"title\":\"EXHIBITS\",\"chars\":1720}]},{\"accession_no\":\"0001193125-26-027207\",\"form\":\"10-Q\",\"filed\":\"2026-01-28\",\"period_of_report\":\"2025-12-31\",\"document_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312526027207/msft-20251231.htm\",\"sections\":[{\"section_key\":\"I-1\",\"title\":\"FINANCIAL STATEMENTS\",\"chars\":63909},{\"section_key\":\"I-2\",\"title\":\"MANAGEMENT\\u2019S DISCUSSION AND ANALYSIS OF FINANCIAL CONDITION AND RESULTS OF OPERATIONS\",\"chars\":56723},{\"section_key\":\"I-3\",\"title\":\"QUANTITATIVE AND QUALITATIVE DISCLOSURES ABOUT MARKET RISK\",\"chars\":1922},{\"section_key\":\"I-4\",\"title\":\"CONTROLS AND PROCEDURES\",\"chars\":739},{\"section_key\":\"II-1\",\"title\":\"LEGAL PROCEEDINGS\",\"chars\":200},{\"section_key\":\"II-1A\",\"title\":\"RISK FACTORS\",\"chars\":69948},{\"section_key\":\"II-2\",\"title\":\"UNREGISTERED SALES OF EQUITY SECURITIES AND USE OF PROCEEDS\",\"chars\":1533},{\"section_key\":\"II-5\",\"title\":\"OTHER INFORMATION\",\"chars\":1262},{\"section_key\":\"II-6\",\"title\":\"EXHIBITS\",\"chars\":1377}]}]}"
+  }
+ ],
+ "responses": [
+  {
+   "id": "msg_011CgALkmXT7NFqJEnVKbCVk",
+   "container": null,
+   "content": [
+    {
+     "signature": "CAQS1wUKEAgSGAI4AUIIdGhpbmtpbmcSDIRT7/l2WkKeslbp9hoMaktRSkNqqODJgtAcIjAk+bBJW5GC7ZFBesyH7+zud8u3GO3Sdi6UuAYkK+LDGTVdsNnYSuOIAi37kVI44Eoq9ATPJ5OeGAhwuRO+4+FJlUoU6n6c4d3kXvlsXkbNCco5/YXt9qtd6XbdSpZZLJUzOwFhSBrP7Vi5S1GDYC7xT//WprOM4815pKi2fkdZndc/P2arBvnhKtKO7Nwy7Ew62RZCrVeU4E3lsJd2VCgr0SkEtPjC0sAP2Wr5QhHkEtKp5WJXUjJaY6vAcXjgmQjU7dJqE4B9IlsMag8ynZtjoAsrmvKyGc39OjG0+/H70HR1dlBkTT81QRaKQla4Sx8fJSU1grI6CroNSo0GEhJghOQyl7hGzVo0miL/PR7sBXdi4LaqYLGAsJ0Z6DEWXu/WcABkEjXShxTLCj4nL8d3/FGsY7NlLx5R8MPc8fKC21NsogMPJosPBX4ZTdTpHde5XAZ35YLzUFUn5eVQeZ8hrUNrvPGXNqD8SYq0bNtXxt2kMTrIw2myCuW7hpqBsAnj4Re0GBS2D47eaBq1H/o4gP4/axos4D7fQJ32hcO3+ihV2LjUoBPv3CUShGCa5jpPYUkZLAucLBtxN2/y5g8XOSrxbvg1OH0ALjk4WqKhPMZFMsgg3hcMUXIWt5bDzstrvP/21X7hd9RFIaJj1gnKFotuXFfxtxKotN9yL3+MN73+IfjzMmGvKBDcwdVwKKXCk3gHLoUHZfksxRRJ2ua7JR14yb8cIbWh9Lz5T2rvRO9IUfQt7wOCj+QZpNTBov+F9Km6Li+Cv4TGIm4SlV9N7BnoYQ58cXvtEWuJF+BMgBLn+24RpescdBGj9zVASFZiP8rhj4hqQJf5eCXByPDDKY2kxmETo6neJgzetdYPM/j1p15cwIMagTURzmx5ijMAtGSWcv97GAE=",
+     "thinking": "",
+     "type": "thinking"
+    },
+    {
+     "id": "toolu_01N128Y787VaSTk25psCSS5d",
+     "caller": {
+      "type": "direct"
+     },
+     "input": {},
+     "name": "whoami",
+     "type": "tool_use"
+    },
+    {
+     "id": "toolu_01VBFRysXcehP68rAB72Zs4F",
+     "caller": {
+      "type": "direct"
+     },
+     "input": {
+      "query": "Microsoft"
+     },
+     "name": "search_companies",
+     "type": "tool_use"
+    }
+   ],
+   "diagnostics": null,
+   "model": "claude-haiku-5-5",
+   "role": "assistant",
+   "stop_details": null,
+   "stop_reason": "tool_use",
+   "stop_sequence": null,
+   "type": "message",
+   "usage": {
+    "cache_creation": {
+     "ephemeral_1h_input_tokens": 0,
+     "ephemeral_5m_input_tokens": 1788
+    },
+    "cache_creation_input_tokens": 1788,
+    "cache_read_input_tokens": 0,
+    "inference_geo": "global",
+    "input_tokens": 4,
+    "output_tokens": 124,
+    "output_tokens_details": {
+     "thinking_tokens": 48
+    },
+    "service_tier": "standard",
+    "speed": "standard"
+   }
+  },
+  {
+   "id": "msg_011CgALkuDZakGvsA6hsDjgj",
+   "container": null,
+   "content": [
+    {
+     "id": "toolu_01DEbeDadhwqCydMQxAMGoDv",
+     "caller": {
+      "type": "direct"
+     },
+     "input": {
+      "company_id": "0000789019",
+      "limit": 8
+     },
+     "name": "list_filings",
+     "type": "tool_use"
+    }
+   ],
+   "diagnostics": null,
+   "model": "claude-haiku-5-5",
+   "role": "assistant",
+   "stop_details": null,
+   "stop_reason": "tool_use",
+   "stop_sequence": null,
+   "type": "message",
+   "usage": {
+    "cache_creation": {
+     "ephemeral_1h_input_tokens": 0,
+     "ephemeral_5m_input_tokens": 353
+    },
+    "cache_creation_input_tokens": 353,
+    "cache_read_input_tokens": 1788,
+    "inference_geo": "global",
+    "input_tokens": 2,
+    "output_tokens": 75,
+    "output_tokens_details": {
+     "thinking_tokens": 0
+    },
+    "service_tier": "standard",
+    "speed": "standard"
+   }
+  },
+  {
+   "id": "msg_011CgALkxtK5k2A6FDHbi6A3",
+   "container": null,
+   "content": [
+    {
+     "signature": "CAQS+AYKEAgSGAI4AUIIdGhpbmtpbmcSDAIeHFhbWxbv8AC7KRoM2AQ4JnVh7DKEs9CUIjAagoRBgmIJVAjPu3xpzO8DJXc2UPlYjxyA+oWVwETNO3MBtTPPVYkS9JmMeL+7C8kqlQZx2At6BGhPYXNQhAvPQ1JyR+TCMjUuIsO7T452gvfetDgc8iQFYvm7yRNNC5t4drINNiq/K5kUJIKmKuta748gtv5YmZmmXLZBKlnVu8sR8fzZAYud53m7lwFJ4W5Vy1kztBL7mdHMsO3nJa2ybDe4b7TxCTtuOKWV8KC5ZCArwVvSK+Bzee3an5FRuwPNZIMUS/ExNAxQgN07CFJudi8yfGvqpYbQ9j/bF6bkOknvv/l4l6To8IHkFB3V7py9RPRRkS4HhQsaPnNvte/871OlgAcnfjzo3cxUzIrq0B1Tycv1z5KwNrH/fMmckmbxsMOx+8LQYJqaRQbWOpfEu3/vzVxo3G406Ot4cXpR5KyV86J4ObI7+oT+MoPU1Bt5G5KacsOYvZlBWYHFG3aOM+L8rpWvbh6w6n6kLPReSb8kTWIX7TB6dfXQqCOwiuohqaU/JqhLfyxo5NaT5oOdScbvp2s+FWnFcdpVonXUvnKjYpL63WxjWf4ngWeC4FPbXhqP4SJrfKUyBnPf3T9QD2Qo2CXn2l/yMKh9i37QBqXYOQvGrJnrHtblKvFUUU0D9Jds++a6zT/4rc4+risE5UR1lmZQR7nM5+hgCsN4CKXpeooFfD+ujJkFSgxVBnTyjcBVQTwqZ7/xZn2Hm9jewOTnRigGERRcuYVGouQs7hTcMEealDWYNx2qC/uMyP0XxomTEr5KLNJs+wzHsXQU7y84r3dWoWQuTaPBo5ezx4zMVMI3LHPlG/dkqrS1EAygrJE4FRMvgyOrCxTP2iqNXHnsuPaQYW2CXv+jFlneraC25FAHr0JEhPGX5J24LHSv3p55AIC1Y8D+ZeZ10PO70+SEX3RgJGiPXgz3fbQcKV7K3k2lmNtdtsYR2mllCcqlmGl9rNXGGypeKZORjmBXEdE2N+HOY3irncZ4GsWxmv495aaXuTrDhG/kOLrNZHNLr/Dxq6Dxotx3KrBatJ81gCHAF1h9ywjCLVxX2aKPyO1fGZ8jjwnaJ4LyV9GCydtm23W26yfyyBW+MycK0xLrFv+uBg0ufU8YAQ==",
+     "thinking": "",
+     "type": "thinking"
+    },
+    {
+     "text": "Here are Microsoft's most recent filings, newest first (8 most recent):\n\n| Form | Filed | Period | Accession No. | Sections |\n|---|---|---|---|---|\n| 8-K | 2026-09-02 | 2026-09-02 | 0001193125-26-380280 | 7.01 Regulation FD Disclosure; 9.01 Financial Statements and Exhibits |\n| 8-K | 2026-07-29 | 2026-07-29 | 0001193125-26-323632 | 2.02 Results of Operations and Financial Condition; 9.01 Financial Statements and Exhibits |\n| 10-K | 2026-07-29 | FY ended 2026-06-30 | 0001193125-26-323660 | Full annual report (Items 1 through 16) |\n| 8-K | 2026-06-05 | 2026-06-02 | 0001193125-26-258667 | 5.02 Departure/Election of Directors or Officers; Compensatory Arrangements |\n| 8-K | 2026-05-14 | 2026-05-13 | 0001193125-26-224155 | 5.02 Departure/Election of Directors or Officers; 9.01 Financial Statements and Exhibits |\n| 8-K | 2026-04-29 | 2026-04-29 | 0001193125-26-191457 | 2.02 Results of Operations and Financial Condition; 9.01 Financial Statements and Exhibits |\n| 10-Q | 2026-04-29 | Q3 ended 2026-03-31 | 0001193125-26-191507 | Full quarterly report (Parts I and II) |\n| 10-Q | 2026-01-28 | Q2 ended 2025-12-31 | 0001193125-26-027207 | Full quarterly report (Parts I and II) |\n\nSource: list_filings for Microsoft Corp (CIK 0000789019). Freshness: latest filing used was filed 2026-09-02; the tool response's as_of is 2026-10-18T20:34:19Z.\n\nI can pull the text of any of these sections, or the quarterly financials, if you want more detail.",
+     "type": "text"
+    }
+   ],
+   "diagnostics": null,
+   "model": "claude-haiku-5-5",
+   "role": "assistant",
+   "stop_details": null,
+   "stop_reason": "end_turn",
+   "stop_sequence": null,
+   "type": "message",
+   "usage": {
+    "cache_creation": {
+     "ephemeral_1h_input_tokens": 0,
+     "ephemeral_5m_input_tokens": 3173
+    },
+    "cache_creation_input_tokens": 3173,
+    "cache_read_input_tokens": 2141,
+    "inference_geo": "global",
+    "input_tokens": 2,
+    "output_tokens": 794,
+    "output_tokens_details": {
+     "thinking_tokens": 90
+    },
+    "service_tier": "standard",
+    "speed": "standard"
+   }
+  }
+ ]
+}

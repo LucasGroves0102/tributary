@@ -1,0 +1,367 @@
+{
+ "id": "fin-13",
+ "user": "bob",
+ "prompt": "What was Microsoft's revenue growth over the last 4 quarters?",
+ "model": "claude-haiku-5-5",
+ "answer": "Microsoft's revenue grew about 17% to 18% year over year in each of the last four quarters, with the latest quarter at 17.7%.\n\n| Quarter (period end) | Revenue | YoY growth | Prior-year revenue |\n|---|---|---|---|\n| Apr–Jun 2026 | $90.01B | +17.7% | $76.44B |\n| Jan–Mar 2026 | $82.89B | +18.3% | $70.07B |\n| Oct–Dec 2025 | $81.27B | +16.7% | $69.63B |\n| Jul–Sep 2025 | $77.67B | +18.4% | $65.59B |\n\nSources: revenue tag us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax.\n- Apr–Jun 2026: 10-K, filed 2026-07-29, accession 0001193125-26-323660 (derived from the 10-K and an earlier 10-Q, 0001193125-26-191507).\n- Jan–Mar 2026: 10-Q, filed 2026-04-29, accession 0001193125-26-191507.\n- Oct–Dec 2025: 10-Q, filed 2026-01-28, accession 0001193125-26-027207.\n- Jul–Sep 2025: 10-Q, filed 2025-10-29, accession 0001193125-25-256321.\n\nFreshness: latest filed date used is 2026-07-29; data as of 2026-10-18T20:34:03Z.",
+ "usage": {
+  "input_tokens": 10,
+  "output_tokens": 2112,
+  "cache_read_input_tokens": 7468,
+  "cache_creation_input_tokens": 6378
+ },
+ "cost_usd": 0.0019289300000000001,
+ "citations": {
+  "0001193125-26-323660": {
+   "accession_no": "0001193125-26-323660",
+   "form": "10-K",
+   "filed": "2026-07-29",
+   "company_id": "0000789019",
+   "url": "https://www.sec.gov/Archives/edgar/data/789019/000119312526323660/"
+  },
+  "0001193125-26-191507": {
+   "accession_no": "0001193125-26-191507",
+   "form": "10-Q",
+   "filed": "2026-04-29",
+   "company_id": "0000789019",
+   "url": "https://www.sec.gov/Archives/edgar/data/789019/000119312526191507/"
+  },
+  "0001193125-26-027207": {
+   "accession_no": "0001193125-26-027207",
+   "form": "10-Q",
+   "filed": "2026-01-28",
+   "company_id": "0000789019",
+   "url": "https://www.sec.gov/Archives/edgar/data/789019/000119312526027207/"
+  },
+  "0001193125-25-256321": {
+   "accession_no": "0001193125-25-256321",
+   "form": "10-Q",
+   "filed": "2025-10-29",
+   "company_id": "0000789019",
+   "url": "https://www.sec.gov/Archives/edgar/data/789019/000119312525256321/"
+  }
+ },
+ "verification": {
+  "figures": [
+   {
+    "text": "$90.01B",
+    "value": 90010000000.0,
+    "status": "verified",
+    "source": {
+     "company_id": "0000789019",
+     "metric": "revenue",
+     "period_end": "2026-06-30",
+     "accession_no": "0001193125-26-323660"
+    }
+   },
+   {
+    "text": "$76.44B",
+    "value": 76440000000.0,
+    "status": "verified",
+    "source": {
+     "company_id": "0000789019",
+     "metric": "revenue",
+     "period_end": "2025-06-30",
+     "accession_no": "0001193125-26-323660"
+    }
+   },
+   {
+    "text": "$82.89B",
+    "value": 82890000000.0,
+    "status": "verified",
+    "source": {
+     "company_id": "0000789019",
+     "metric": "revenue",
+     "period_end": "2026-03-31",
+     "accession_no": "0001193125-26-191507"
+    }
+   },
+   {
+    "text": "$70.07B",
+    "value": 70070000000.0,
+    "status": "verified",
+    "source": {
+     "company_id": "0000789019",
+     "metric": "revenue",
+     "period_end": "2025-03-31",
+     "accession_no": "0001193125-26-191507"
+    }
+   },
+   {
+    "text": "$81.27B",
+    "value": 81270000000.0,
+    "status": "verified",
+    "source": {
+     "company_id": "0000789019",
+     "metric": "revenue",
+     "period_end": "2025-12-31",
+     "accession_no": "0001193125-26-027207"
+    }
+   },
+   {
+    "text": "$69.63B",
+    "value": 69630000000.0,
+    "status": "verified",
+    "source": {
+     "company_id": "0000789019",
+     "metric": "revenue",
+     "period_end": "2024-12-31",
+     "accession_no": "0001193125-26-027207"
+    }
+   },
+   {
+    "text": "$77.67B",
+    "value": 77670000000.0,
+    "status": "verified",
+    "source": {
+     "company_id": "0000789019",
+     "metric": "revenue",
+     "period_end": "2025-09-30",
+     "accession_no": "0001193125-25-256321"
+    }
+   },
+   {
+    "text": "$65.59B",
+    "value": 65590000000.0,
+    "status": "verified",
+    "source": {
+     "company_id": "0000789019",
+     "metric": "revenue",
+     "period_end": "2024-09-30",
+     "accession_no": "0001193125-25-256321"
+    }
+   }
+  ],
+  "unverified_accessions": [],
+  "used_data": true,
+  "freshness": true,
+  "ok": true
+ },
+ "tool_calls": [
+  {
+   "name": "whoami",
+   "input": {},
+   "is_error": false,
+   "content": "{\"user_id\":\"bob\",\"companies\":[{\"company_id\":\"0000789019\",\"name\":\"MICROSOFT CORP\",\"tiers\":[\"filings\",\"financials\"]},{\"company_id\":\"0001045810\",\"name\":\"NVIDIA CORP\",\"tiers\":[\"filings\",\"financials\"]}]}"
+  },
+  {
+   "name": "search_companies",
+   "input": {
+    "query": "Microsoft"
+   },
+   "is_error": false,
+   "content": "{\"results\":[{\"company_id\":\"0000789019\",\"name\":\"MICROSOFT CORP\",\"matched_on\":\"name\",\"matched_alias\":\"MICROSOFT CORP\",\"is_current\":true,\"access\":[\"filings\",\"financials\"]}]}"
+  },
+  {
+   "name": "get_financials",
+   "input": {
+    "company_id": "0000789019",
+    "metrics": [
+     "revenue"
+    ],
+    "quarters": 5
+   },
+   "is_error": false,
+   "content": "{\"company_id\":\"0000789019\",\"as_of\":\"2026-10-18T20:33:59.336240+00:00\",\"rows\":[{\"metric\":\"revenue\",\"period_start\":\"2026-04-01\",\"period_end\":\"2026-06-30\",\"value\":\"90007000000\",\"unit\":\"USD\",\"value_source\":\"derived\",\"citation\":{\"accession_no\":\"0001193125-26-323660\",\"form\":\"10-K\",\"filed\":\"2026-07-29\",\"xbrl_tag\":\"us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax\",\"source_accessions\":[\"0001193125-26-191507\",\"0001193125-26-323660\"],\"filing_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312526323660/\"},\"freshness\":{\"filed\":\"2026-07-29\",\"ingested_at\":\"2026-10-17T16:57:43.708565Z\"}},{\"metric\":\"revenue\",\"period_start\":\"2026-01-01\",\"period_end\":\"2026-03-31\",\"value\":\"82886000000\",\"unit\":\"USD\",\"value_source\":\"reported\",\"citation\":{\"accession_no\":\"0001193125-26-191507\",\"form\":\"10-Q\",\"filed\":\"2026-04-29\",\"xbrl_tag\":\"us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax\",\"source_accessions\":[\"0001193125-26-191507\"],\"filing_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312526191507/\"},\"freshness\":{\"filed\":\"2026-04-29\",\"ingested_at\":\"2026-10-17T16:57:43.708565Z\"}},{\"metric\":\"revenue\",\"period_start\":\"2025-10-01\",\"period_end\":\"2025-12-31\",\"value\":\"81273000000\",\"unit\":\"USD\",\"value_source\":\"reported\",\"citation\":{\"accession_no\":\"0001193125-26-027207\",\"form\":\"10-Q\",\"filed\":\"2026-01-28\",\"xbrl_tag\":\"us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax\",\"source_accessions\":[\"0001193125-26-027207\"],\"filing_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312526027207/\"},\"freshness\":{\"filed\":\"2026-01-28\",\"ingested_at\":\"2026-10-17T16:57:43.708565Z\"}},{\"metric\":\"revenue\",\"period_start\":\"2025-07-01\",\"period_end\":\"2025-09-30\",\"value\":\"77673000000\",\"unit\":\"USD\",\"value_source\":\"reported\",\"citation\":{\"accession_no\":\"0001193125-25-256321\",\"form\":\"10-Q\",\"filed\":\"2025-10-29\",\"xbrl_tag\":\"us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax\",\"source_accessions\":[\"0001193125-25-256321\"],\"filing_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312525256321/\"},\"freshness\":{\"filed\":\"2025-10-29\",\"ingested_at\":\"2026-10-17T16:57:43.708565Z\"}},{\"metric\":\"revenue\",\"period_start\":\"2025-04-01\",\"period_end\":\"2025-06-30\",\"value\":\"76441000000\",\"unit\":\"USD\",\"value_source\":\"derived\",\"citation\":{\"accession_no\":\"0001193125-26-323660\",\"form\":\"10-K\",\"filed\":\"2026-07-29\",\"xbrl_tag\":\"us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax\",\"source_accessions\":[\"0001193125-26-191507\",\"0001193125-26-323660\"],\"filing_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312526323660/\"},\"freshness\":{\"filed\":\"2026-07-29\",\"ingested_at\":\"2026-10-17T16:57:43.708565Z\"}}]}"
+  },
+  {
+   "name": "get_financials",
+   "input": {
+    "company_id": "0000789019",
+    "metrics": [
+     "revenue"
+    ],
+    "quarters": 8
+   },
+   "is_error": false,
+   "content": "{\"company_id\":\"0000789019\",\"as_of\":\"2026-10-18T20:34:03.714172+00:00\",\"rows\":[{\"metric\":\"revenue\",\"period_start\":\"2026-04-01\",\"period_end\":\"2026-06-30\",\"value\":\"90007000000\",\"unit\":\"USD\",\"value_source\":\"derived\",\"citation\":{\"accession_no\":\"0001193125-26-323660\",\"form\":\"10-K\",\"filed\":\"2026-07-29\",\"xbrl_tag\":\"us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax\",\"source_accessions\":[\"0001193125-26-191507\",\"0001193125-26-323660\"],\"filing_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312526323660/\"},\"freshness\":{\"filed\":\"2026-07-29\",\"ingested_at\":\"2026-10-17T16:57:43.708565Z\"}},{\"metric\":\"revenue\",\"period_start\":\"2026-01-01\",\"period_end\":\"2026-03-31\",\"value\":\"82886000000\",\"unit\":\"USD\",\"value_source\":\"reported\",\"citation\":{\"accession_no\":\"0001193125-26-191507\",\"form\":\"10-Q\",\"filed\":\"2026-04-29\",\"xbrl_tag\":\"us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax\",\"source_accessions\":[\"0001193125-26-191507\"],\"filing_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312526191507/\"},\"freshness\":{\"filed\":\"2026-04-29\",\"ingested_at\":\"2026-10-17T16:57:43.708565Z\"}},{\"metric\":\"revenue\",\"period_start\":\"2025-10-01\",\"period_end\":\"2025-12-31\",\"value\":\"81273000000\",\"unit\":\"USD\",\"value_source\":\"reported\",\"citation\":{\"accession_no\":\"0001193125-26-027207\",\"form\":\"10-Q\",\"filed\":\"2026-01-28\",\"xbrl_tag\":\"us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax\",\"source_accessions\":[\"0001193125-26-027207\"],\"filing_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312526027207/\"},\"freshness\":{\"filed\":\"2026-01-28\",\"ingested_at\":\"2026-10-17T16:57:43.708565Z\"}},{\"metric\":\"revenue\",\"period_start\":\"2025-07-01\",\"period_end\":\"2025-09-30\",\"value\":\"77673000000\",\"unit\":\"USD\",\"value_source\":\"reported\",\"citation\":{\"accession_no\":\"0001193125-25-256321\",\"form\":\"10-Q\",\"filed\":\"2025-10-29\",\"xbrl_tag\":\"us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax\",\"source_accessions\":[\"0001193125-25-256321\"],\"filing_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312525256321/\"},\"freshness\":{\"filed\":\"2025-10-29\",\"ingested_at\":\"2026-10-17T16:57:43.708565Z\"}},{\"metric\":\"revenue\",\"period_start\":\"2025-04-01\",\"period_end\":\"2025-06-30\",\"value\":\"76441000000\",\"unit\":\"USD\",\"value_source\":\"derived\",\"citation\":{\"accession_no\":\"0001193125-26-323660\",\"form\":\"10-K\",\"filed\":\"2026-07-29\",\"xbrl_tag\":\"us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax\",\"source_accessions\":[\"0001193125-26-191507\",\"0001193125-26-323660\"],\"filing_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312526323660/\"},\"freshness\":{\"filed\":\"2026-07-29\",\"ingested_at\":\"2026-10-17T16:57:43.708565Z\"}},{\"metric\":\"revenue\",\"period_start\":\"2025-01-01\",\"period_end\":\"2025-03-31\",\"value\":\"70066000000\",\"unit\":\"USD\",\"value_source\":\"reported\",\"citation\":{\"accession_no\":\"0001193125-26-191507\",\"form\":\"10-Q\",\"filed\":\"2026-04-29\",\"xbrl_tag\":\"us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax\",\"source_accessions\":[\"0001193125-26-191507\"],\"filing_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312526191507/\"},\"freshness\":{\"filed\":\"2026-04-29\",\"ingested_at\":\"2026-10-17T16:57:43.708565Z\"}},{\"metric\":\"revenue\",\"period_start\":\"2024-10-01\",\"period_end\":\"2024-12-31\",\"value\":\"69632000000\",\"unit\":\"USD\",\"value_source\":\"reported\",\"citation\":{\"accession_no\":\"0001193125-26-027207\",\"form\":\"10-Q\",\"filed\":\"2026-01-28\",\"xbrl_tag\":\"us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax\",\"source_accessions\":[\"0001193125-26-027207\"],\"filing_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312526027207/\"},\"freshness\":{\"filed\":\"2026-01-28\",\"ingested_at\":\"2026-10-17T16:57:43.708565Z\"}},{\"metric\":\"revenue\",\"period_start\":\"2024-07-01\",\"period_end\":\"2024-09-30\",\"value\":\"65585000000\",\"unit\":\"USD\",\"value_source\":\"reported\",\"citation\":{\"accession_no\":\"0001193125-25-256321\",\"form\":\"10-Q\",\"filed\":\"2025-10-29\",\"xbrl_tag\":\"us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax\",\"source_accessions\":[\"0001193125-25-256321\"],\"filing_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312525256321/\"},\"freshness\":{\"filed\":\"2025-10-29\",\"ingested_at\":\"2026-10-17T16:57:43.708565Z\"}}]}"
+  }
+ ],
+ "responses": [
+  {
+   "id": "msg_011CgALjKaD94h38Xi1hr9Ce",
+   "container": null,
+   "content": [
+    {
+     "signature": "CAQS8gUKEAgSGAI4AUIIdGhpbmtpbmcSDK7iGJoFN/q2WLFvKxoMLyzQgm7dlfDBCRakIjB97JdZW0xDL8zu3j+Kxaz4MtjD0AVUIIPvMA+A3AXYHmP+T4YeIXz54UIgOio6twMqjwWRbUL0Y8SKQhrt7xq7b1CLfFoPVtNXCYsGIZNG7tcgPugcLRwf6FQHlUQlzHyZ911gL1kZKrqycrU0krt8yssgEQyiT62zbSIBsKBdsOEnWOYU1ImVX2N9zgetkG/UDn4XJUVXMISAklKluzq2BeuF8L1QidtQYhZPYHBEvZdiu0pIl6Q5YhJ8SYX7a/w3lffuVeyWHKUXaoVMrgIfKcDvPkKxNft0/GmlVXyT6dUGVwAx7edkD8d2tB72BR+ZW22pouDP4xGJqo64qVFtjHo4v1f3ZG11W8a+2PDTHZNaohuv05uHfsGarYPtku+ZWrAjVYdQYCV5uIwAulijmbBgAYPzQTGYlj8SoLthi66rH+MODXe2lZPniWP8YGINOR+hFDidM4ES92J8m6jHoKupODTNQA9fhhjgBgElUfgrTk5Te3BD794NkQvu14SmxVoKqW/tUB6LhthwUdKYJJueo3G+U99CcxXfM8ux3zT3Bm9baF860+l55Qv551/cpLQ55ul08jJvcJmUP/OQEqz3x6bUGd1kGA4tTx83BahqUEVxB5eII7zKAnAiRlyGaLuqg+y7myESzdpbU9dEv3FpIvjKDkd3f+oO+upGKAaZk7jdSbd4hEY6UiQffiKFDM6jiN01mzEtO94/mAtH81qPexyBj/D/zwbCGruLUMUfjLt6zg4KPt2FKNo56fEBtyCc+vCNZ9etBcgBkOLL3Lb25U32sdB3LeLdwBBSNRrXfZyWPs+t3yZHrdWVOZK5ut/obemnLAroDb2+YfCqNA52HnAkpJGWmtSPTsbxyeI1esXK7dwzqWrInG9XZbtGR+KsUoulzCqLedtASEa4eUV6FfWCwWxuS4lV0x/OkupmGAE=",
+     "thinking": "",
+     "type": "thinking"
+    },
+    {
+     "id": "toolu_01BRPYtVYFthaZhXb4sbVEQd",
+     "caller": {
+      "type": "direct"
+     },
+     "input": {},
+     "name": "whoami",
+     "type": "tool_use"
+    },
+    {
+     "id": "toolu_017CF32CgoSrQZT6dtjGMYEm",
+     "caller": {
+      "type": "direct"
+     },
+     "input": {
+      "query": "Microsoft"
+     },
+     "name": "search_companies",
+     "type": "tool_use"
+    }
+   ],
+   "diagnostics": null,
+   "model": "claude-haiku-5-5",
+   "role": "assistant",
+   "stop_details": null,
+   "stop_reason": "tool_use",
+   "stop_sequence": null,
+   "type": "message",
+   "usage": {
+    "cache_creation": {
+     "ephemeral_1h_input_tokens": 0,
+     "ephemeral_5m_input_tokens": 1797
+    },
+    "cache_creation_input_tokens": 1797,
+    "cache_read_input_tokens": 0,
+    "inference_geo": "global",
+    "input_tokens": 4,
+    "output_tokens": 127,
+    "output_tokens_details": {
+     "thinking_tokens": 51
+    },
+    "service_tier": "standard",
+    "speed": "standard"
+   }
+  },
+  {
+   "id": "msg_011CgALjQTebixsThZuGTUXe",
+   "container": null,
+   "content": [
+    {
+     "id": "toolu_01LxLrkBuFgiZ2KQ8qTHmE5a",
+     "caller": {
+      "type": "direct"
+     },
+     "input": {
+      "company_id": "0000789019",
+      "metrics": [
+       "revenue"
+      ],
+      "quarters": 5
+     },
+     "name": "get_financials",
+     "type": "tool_use"
+    }
+   ],
+   "diagnostics": null,
+   "model": "claude-haiku-5-5",
+   "role": "assistant",
+   "stop_details": null,
+   "stop_reason": "tool_use",
+   "stop_sequence": null,
+   "type": "message",
+   "usage": {
+    "cache_creation": {
+     "ephemeral_1h_input_tokens": 0,
+     "ephemeral_5m_input_tokens": 356
+    },
+    "cache_creation_input_tokens": 356,
+    "cache_read_input_tokens": 1797,
+    "inference_geo": "global",
+    "input_tokens": 2,
+    "output_tokens": 104,
+    "output_tokens_details": {
+     "thinking_tokens": 0
+    },
+    "service_tier": "standard",
+    "speed": "standard"
+   }
+  },
+  {
+   "id": "msg_011CgALjTirV4wGneyXBBFqZ",
+   "container": null,
+   "content": [
+    {
+     "signature": "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",
+     "thinking": "",
+     "type": "thinking"
+    },
+    {
+     "id": "toolu_01KbvBdfRNuYg1GeYnYZN1Rc",
+     "caller": {
+      "type": "direct"
+     },
+     "input": {
+      "company_id": "0000789019",
+      "metrics": [
+       "revenue"
+      ],
+      "quarters": 8
+     },
+     "name": "get_financials",
+     "type": "tool_use"
+    }
+   ],
+   "diagnostics": null,
+   "model": "claude-haiku-5-5",
+   "role": "assistant",
+   "stop_details": null,
+   "stop_reason": "tool_use",
+   "stop_sequence": null,
+   "type": "message",
+   "usage": {
+    "cache_creation": {
+     "ephemeral_1h_input_tokens": 0,
+     "ephemeral_5m_input_tokens": 1365
+    },
+    "cache_creation_input_tokens": 1365,
+    "cache_read_input_tokens": 2153,
+    "inference_geo": "global",
+    "input_tokens": 2,
+    "output_tokens": 882,
+    "output_tokens_details": {
+     "thinking_tokens": 777
+    },
+    "service_tier": "standard",
+    "speed": "standard"
+   }
+  },
+  {
+   "id": "msg_011CgALjnNmxDNJmZnmMTvbE",
+   "container": null,
+   "content": [
+    {
+     "signature": "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",
+     "thinking": "",
+     "type": "thinking"
+    },
+    {
+     "text": "Microsoft's revenue grew about 17% to 18% year over year in each of the last four quarters, with the latest quarter at 17.7%.\n\n| Quarter (period end) | Revenue | YoY growth | Prior-year revenue |\n|---|---|---|---|\n| Apr–Jun 2026 | $90.01B | +17.7% | $76.44B |\n| Jan–Mar 2026 | $82.89B | +18.3% | $70.07B |\n| Oct–Dec 2025 | $81.27B | +16.7% | $69.63B |\n| Jul–Sep 2025 | $77.67B | +18.4% | $65.59B |\n\nSources: revenue tag us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax.\n- Apr–Jun 2026: 10-K, filed 2026-07-29, accession 0001193125-26-323660 (derived from the 10-K and an earlier 10-Q, 0001193125-26-191507).\n- Jan–Mar 2026: 10-Q, filed 2026-04-29, accession 0001193125-26-191507.\n- Oct–Dec 2025: 10-Q, filed 2026-01-28, accession 0001193125-26-027207.\n- Jul–Sep 2025: 10-Q, filed 2025-10-29, accession 0001193125-25-256321.\n\nFreshness: latest filed date used is 2026-07-29; data as of 2026-10-18T20:34:03Z.",
+     "type": "text"
+    }
+   ],
+   "diagnostics": null,
+   "model": "claude-haiku-5-5",
+   "role": "assistant",
+   "stop_details": null,
+   "stop_reason": "end_turn",
+   "stop_sequence": null,
+   "type": "message",
+   "usage": {
+    "cache_creation": {
+     "ephemeral_1h_input_tokens": 0,
+     "ephemeral_5m_input_tokens": 2860
+    },
+    "cache_creation_input_tokens": 2860,
+    "cache_read_input_tokens": 3518,
+    "inference_geo": "global",
+    "input_tokens": 2,
+    "output_tokens": 999,
+    "output_tokens_details": {
+     "thinking_tokens": 503
+    },
+    "service_tier": "standard",
+    "speed": "standard"
+   }
+  }
+ ]
+}

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 
 import { renderAnswer } from "../markdown";
-import type { Answer, Citation, ToolCall } from "../types";
+import type { Answer, Citation, ToolCall, Verification } from "../types";
 
 export interface AssistantTurn {
   id: number;
@@ -24,7 +24,16 @@ export function AssistantMessage({ turn }: { turn: AssistantTurn }) {
   const finalRound = turn.answer ? turn.answer.rounds - 1 : maxRound(turn);
   const text = turn.answer?.text ?? turn.rounds[finalRound] ?? "";
   const citations = turn.answer?.citations ?? [];
-  const html = useMemo(() => renderAnswer(text, citations), [text, citations]);
+  const unverified = useMemo(
+    () =>
+      turn.answer?.verification?.figures.filter((f) => f.status === "unverified").map((f) => f.text) ??
+      [],
+    [turn.answer],
+  );
+  const html = useMemo(
+    () => renderAnswer(text, citations, unverified),
+    [text, citations, unverified],
+  );
   const pending = !turn.answer && !turn.error;
 
   return (
@@ -102,7 +111,7 @@ function Sources({ citations }: { citations: Citation[] }) {
       <ul>
         {citations.map((c) => (
           <li key={c.accession_no}>
-            <span className="form">{c.form}</span>
+            <span className="form">{c.form ?? "source"}</span>
             <span className="muted">{c.filed}</span>
             {c.url ? (
               <a href={c.url} target="_blank" rel="noopener noreferrer" className="accession">
@@ -118,6 +127,28 @@ function Sources({ citations }: { citations: Citation[] }) {
   );
 }
 
+function VerifiedBadge({ v }: { v: Verification }) {
+  const figures = v.figures.length;
+  if (!v.used_data && !figures) return null;
+  const bad = v.figures.filter((f) => f.status === "unverified").length;
+  const problems = [
+    bad && `${bad} figure${bad === 1 ? "" : "s"} not in the data`,
+    v.unverified_accessions.length &&
+      `${v.unverified_accessions.length} unknown filing${v.unverified_accessions.length === 1 ? "" : "s"}`,
+    v.used_data && !v.freshness && "no freshness",
+  ].filter(Boolean);
+  const title = v.figures.map((f) => `${f.text}: ${f.status}`).join("\n");
+  return v.ok ? (
+    <span className="badge ok" title={title}>
+      ✓ {figures} figure{figures === 1 ? "" : "s"} verified against the data
+    </span>
+  ) : (
+    <span className="badge warn" title={title}>
+      ⚠ {problems.join(", ")}
+    </span>
+  );
+}
+
 function Meta({ answer }: { answer: Answer }) {
   const used = usedCitations(answer);
   const latest = used.map((c) => c.filed).filter(Boolean).sort().at(-1);
@@ -125,6 +156,7 @@ function Meta({ answer }: { answer: Answer }) {
     answer.usage.cache_creation_input_tokens + answer.usage.output_tokens;
   return (
     <footer className="meta">
+      {answer.verification && <VerifiedBadge v={answer.verification} />}
       {latest && <span>Data as of filing {latest}</span>}
       <span>{answer.model}</span>
       <span>{tokens.toLocaleString()} tokens</span>

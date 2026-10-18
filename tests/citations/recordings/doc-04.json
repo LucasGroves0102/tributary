@@ -1,0 +1,354 @@
+{
+ "id": "doc-04",
+ "user": "bob",
+ "prompt": "What legal proceedings does Microsoft's latest 10-K describe?",
+ "model": "claude-haiku-5-5",
+ "answer": "Microsoft's latest 10-K doesn't list its legal proceedings in Item 3 itself. I could not retrieve the actual proceedings.\n\n- **Item 3 (Legal Proceedings)** of the 10-K for fiscal year ended June 30, 2026 (Form 10-K, filed 2026-07-29, accession 0001193125-26-323660) says only: \"Refer to Note 14 – Contingencies of the Notes to Financial Statements (Part II, Item 8 of this Form 10-K) for information regarding legal proceedings in which we are involved.\"\n- **Note 14 – Contingencies** is in Item 8 (Financial Statements). That section is about 102,439 characters, and the tool returns only the first 20,000 with no way to page to the later notes. So the note's contents aren't in what I could retrieve.\n\nTo read the proceedings, open Note 14 in the filing at https://www.sec.gov/Archives/edgar/data/789019/000119312526323660/msft-20260630.htm. Alternatively, I can search the Risk Factors section (Item 1A), which may discuss specific litigation, though it is also long and may not give the full list.\n\nSources: Item 3, Form 10-K, filed 2026-07-29, accession 0001193125-26-323660, freshness: filed 2026-07-29, as_of 2026-10-18T20:34:15Z. Item 8, same filing, freshness: filed 2026-07-29, as_of 2026-10-18T20:34:16Z.",
+ "usage": {
+  "input_tokens": 12,
+  "output_tokens": 1577,
+  "cache_read_input_tokens": 15100,
+  "cache_creation_input_tokens": 14020
+ },
+ "cost_usd": 0.0026931999999999998,
+ "citations": {
+  "0001193125-26-380280": {
+   "accession_no": "0001193125-26-380280",
+   "form": "8-K",
+   "filed": "2026-09-02",
+   "company_id": "0000789019",
+   "url": "https://www.sec.gov/Archives/edgar/data/789019/000119312526380280/d291965d8k.htm"
+  },
+  "0001193125-26-323632": {
+   "accession_no": "0001193125-26-323632",
+   "form": "8-K",
+   "filed": "2026-07-29",
+   "company_id": "0000789019",
+   "url": "https://www.sec.gov/Archives/edgar/data/789019/000119312526323632/msft-20260729.htm"
+  },
+  "0001193125-26-323660": {
+   "accession_no": "0001193125-26-323660",
+   "form": "10-K",
+   "filed": "2026-07-29",
+   "company_id": "0000789019",
+   "url": "https://www.sec.gov/Archives/edgar/data/789019/000119312526323660/msft-20260630.htm"
+  },
+  "0001193125-26-258667": {
+   "accession_no": "0001193125-26-258667",
+   "form": "8-K",
+   "filed": "2026-06-05",
+   "company_id": "0000789019",
+   "url": "https://www.sec.gov/Archives/edgar/data/789019/000119312526258667/d26760d8k.htm"
+  },
+  "0001193125-26-224155": {
+   "accession_no": "0001193125-26-224155",
+   "form": "8-K",
+   "filed": "2026-05-14",
+   "company_id": "0000789019",
+   "url": "https://www.sec.gov/Archives/edgar/data/789019/000119312526224155/d125909d8k.htm"
+  },
+  "0001193125-26-191457": {
+   "accession_no": "0001193125-26-191457",
+   "form": "8-K",
+   "filed": "2026-04-29",
+   "company_id": "0000789019",
+   "url": "https://www.sec.gov/Archives/edgar/data/789019/000119312526191457/msft-20260429.htm"
+  },
+  "0001193125-26-191507": {
+   "accession_no": "0001193125-26-191507",
+   "form": "10-Q",
+   "filed": "2026-04-29",
+   "company_id": "0000789019",
+   "url": "https://www.sec.gov/Archives/edgar/data/789019/000119312526191507/msft-20260331.htm"
+  },
+  "0001193125-26-027207": {
+   "accession_no": "0001193125-26-027207",
+   "form": "10-Q",
+   "filed": "2026-01-28",
+   "company_id": "0000789019",
+   "url": "https://www.sec.gov/Archives/edgar/data/789019/000119312526027207/msft-20251231.htm"
+  }
+ },
+ "verification": {
+  "figures": [],
+  "unverified_accessions": [],
+  "used_data": true,
+  "freshness": true,
+  "ok": true
+ },
+ "tool_calls": [
+  {
+   "name": "whoami",
+   "input": {},
+   "is_error": false,
+   "content": "{\"user_id\":\"bob\",\"companies\":[{\"company_id\":\"0000789019\",\"name\":\"MICROSOFT CORP\",\"tiers\":[\"filings\",\"financials\"]},{\"company_id\":\"0001045810\",\"name\":\"NVIDIA CORP\",\"tiers\":[\"filings\",\"financials\"]}]}"
+  },
+  {
+   "name": "search_companies",
+   "input": {
+    "query": "Microsoft"
+   },
+   "is_error": false,
+   "content": "{\"results\":[{\"company_id\":\"0000789019\",\"name\":\"MICROSOFT CORP\",\"matched_on\":\"name\",\"matched_alias\":\"MICROSOFT CORP\",\"is_current\":true,\"access\":[\"filings\",\"financials\"]}]}"
+  },
+  {
+   "name": "list_filings",
+   "input": {
+    "company_id": "0000789019",
+    "limit": 8
+   },
+   "is_error": false,
+   "content": "{\"company_id\":\"0000789019\",\"as_of\":\"2026-10-18T20:34:13.153857+00:00\",\"filings\":[{\"accession_no\":\"0001193125-26-380280\",\"form\":\"8-K\",\"filed\":\"2026-09-02\",\"period_of_report\":\"2026-09-02\",\"document_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312526380280/d291965d8k.htm\",\"sections\":[{\"section_key\":\"7.01\",\"title\":\"Regulation FD Disclosure\",\"chars\":1383},{\"section_key\":\"9.01\",\"title\":\"Financial Statements and Exhibits\",\"chars\":573}]},{\"accession_no\":\"0001193125-26-323632\",\"form\":\"8-K\",\"filed\":\"2026-07-29\",\"period_of_report\":\"2026-07-29\",\"document_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312526323632/msft-20260729.htm\",\"sections\":[{\"section_key\":\"2.02\",\"title\":\"Results of Operations and Financial Condition\",\"chars\":842},{\"section_key\":\"9.01\",\"title\":\"Financial Statements and Exhibits\",\"chars\":547}]},{\"accession_no\":\"0001193125-26-323660\",\"form\":\"10-K\",\"filed\":\"2026-07-29\",\"period_of_report\":\"2026-06-30\",\"document_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312526323660/msft-20260630.htm\",\"sections\":[{\"section_key\":\"1\",\"title\":\"BUSINESS\",\"chars\":41143},{\"section_key\":\"1A\",\"title\":\"RISK FACTORS\",\"chars\":81171},{\"section_key\":\"1B\",\"title\":\"UNRESOLVED STAFF COMMENTS\",\"chars\":270},{\"section_key\":\"1C\",\"title\":\"CYBERSECURITY\",\"chars\":8239},{\"section_key\":\"2\",\"title\":\"PROPERTIES\",\"chars\":1215},{\"section_key\":\"3\",\"title\":\"LEGAL PROCEEDINGS\",\"chars\":201},{\"section_key\":\"4\",\"title\":\"MINE SAFETY DISCLOSURES\",\"chars\":50},{\"section_key\":\"5\",\"title\":\"MARKET FOR REGISTRANT\\u2019S COMMON EQUITY, RELATED STOCKHOLDER MATTERS, AND ISSUER PURCHASES OF EQUITY SECURITIES\",\"chars\":1746},{\"section_key\":\"6\",\"title\":\"[RESERVED]\",\"chars\":36},{\"section_key\":\"7\",\"title\":\"MANAGEMENT\\u2019S DISCUSSION AND ANALYSIS OF FINANCIAL CONDITION AND RESULTS OF OPERATIONS\",\"chars\":51222},{\"section_key\":\"7A\",\"title\":\"QUANTITATIVE AND QUALITATIVE DISCLOSURES ABOUT MARKET RISK\",\"chars\":1937},{\"section_key\":\"8\",\"title\":\"FINANCIAL STATEMENTS AND SUPPLEMENTARY DATA\",\"chars\":102439},{\"section_key\":\"9\",\"title\":\"CHANGES IN AND DISAGREEMENTS WITH ACCOUNTANTS ON ACCOUNTING AND FINANCIAL DISCLOSURE\",\"chars\":108},{\"section_key\":\"9A\",\"title\":\"CONTROLS AND PROCEDURES\",\"chars\":6663},{\"section_key\":\"9B\",\"title\":\"OTHER INFORMATION\",\"chars\":1492},{\"section_key\":\"9C\",\"title\":\"DISCLOSURE REGARDING FOREIGN JURISDICTIONS THAT PREVENT INSPECTIONS\",\"chars\":92},{\"section_key\":\"10\",\"title\":\"DIRECTORS, EXECUTIVE OFFICERS, AND CORPORATE GOVERNANCE\",\"chars\":1607},{\"section_key\":\"11\",\"title\":\"EXECUTIVE COMPENSATION\",\"chars\":343},{\"section_key\":\"12\",\"title\":\"SECURITY OWNERSHIP OF CERTAIN BENEFICIAL OWNERS AND MANAGEMENT AND RELATED STOCKHOLDER MATTERS\",\"chars\":308},{\"section_key\":\"13\",\"title\":\"CERTAIN RELATIONSHIPS AND RELATED TRANSACTIONS, AND DIRECTOR INDEPENDENCE\",\"chars\":264},{\"section_key\":\"14\",\"title\":\"PRINCIPAL ACCOUNTANT FEES AND SERVICES\",\"chars\":408},{\"section_key\":\"15\",\"title\":\"EXHIBIT AND FINANCIAL STATEMENT SCHEDULES\",\"chars\":12739},{\"section_key\":\"16\",\"title\":\"FORM 10-K SUMMARY\",\"chars\":1596}]},{\"accession_no\":\"0001193125-26-258667\",\"form\":\"8-K\",\"filed\":\"2026-06-05\",\"period_of_report\":\"2026-06-02\",\"document_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312526258667/d26760d8k.htm\",\"sections\":[{\"section_key\":\"5.02\",\"title\":\"Departure of Directors or Certain Officers; Election of Directors; Appointment of Certain Officers; Compensatory Arrangements of Certain Officers.\",\"chars\":1055}]},{\"accession_no\":\"0001193125-26-224155\",\"form\":\"8-K\",\"filed\":\"2026-05-14\",\"period_of_report\":\"2026-05-13\",\"document_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312526224155/d125909d8k.htm\",\"sections\":[{\"section_key\":\"5.02\",\"title\":\"Departure of Directors or Certain Officers; Election of Directors; Appointment of Certain Officers; Compensatory Arrangements of Certain Officers.\",\"chars\":1233},{\"section_key\":\"9.01\",\"title\":\"Financial Statements and Exhibits\",\"chars\":503}]},{\"accession_no\":\"0001193125-26-191457\",\"form\":\"8-K\",\"filed\":\"2026-04-29\",\"period_of_report\":\"2026-04-29\",\"document_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312526191457/msft-20260429.htm\",\"sections\":[{\"section_key\":\"2.02\",\"title\":\"Results of Operations and Financial Condition\",\"chars\":835},{\"section_key\":\"9.01\",\"title\":\"Financial Statements and Exhibits\",\"chars\":537}]},{\"accession_no\":\"0001193125-26-191507\",\"form\":\"10-Q\",\"filed\":\"2026-04-29\",\"period_of_report\":\"2026-03-31\",\"document_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312526191507/msft-20260331.htm\",\"sections\":[{\"section_key\":\"I-1\",\"title\":\"FINANCIAL STATEMENTS\",\"chars\":64368},{\"section_key\":\"I-2\",\"title\":\"MANAGEMENT\\u2019S DISCUSSION AND ANALYSIS OF FINANCIAL CONDITION AND RESULTS OF OPERATIONS\",\"chars\":58401},{\"section_key\":\"I-3\",\"title\":\"QUANTITATIVE AND QUALITATIVE DISCLOSURES ABOUT MARKET RISK\",\"chars\":1919},{\"section_key\":\"I-4\",\"title\":\"CONTROLS AND PROCEDURES\",\"chars\":736},{\"section_key\":\"II-1\",\"title\":\"LEGAL PROCEEDINGS\",\"chars\":200},{\"section_key\":\"II-1A\",\"title\":\"RISK FACTORS\",\"chars\":70893},{\"section_key\":\"II-2\",\"title\":\"UNREGISTERED SALES OF EQUITY SECURITIES AND USE OF PROCEEDS\",\"chars\":1510},{\"section_key\":\"II-5\",\"title\":\"OTHER INFORMATION\",\"chars\":1548},{\"section_key\":\"II-6\",\"title\":\"EXHIBITS\",\"chars\":1720}]},{\"accession_no\":\"0001193125-26-027207\",\"form\":\"10-Q\",\"filed\":\"2026-01-28\",\"period_of_report\":\"2025-12-31\",\"document_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312526027207/msft-20251231.htm\",\"sections\":[{\"section_key\":\"I-1\",\"title\":\"FINANCIAL STATEMENTS\",\"chars\":63909},{\"section_key\":\"I-2\",\"title\":\"MANAGEMENT\\u2019S DISCUSSION AND ANALYSIS OF FINANCIAL CONDITION AND RESULTS OF OPERATIONS\",\"chars\":56723},{\"section_key\":\"I-3\",\"title\":\"QUANTITATIVE AND QUALITATIVE DISCLOSURES ABOUT MARKET RISK\",\"chars\":1922},{\"section_key\":\"I-4\",\"title\":\"CONTROLS AND PROCEDURES\",\"chars\":739},{\"section_key\":\"II-1\",\"title\":\"LEGAL PROCEEDINGS\",\"chars\":200},{\"section_key\":\"II-1A\",\"title\":\"RISK FACTORS\",\"chars\":69948},{\"section_key\":\"II-2\",\"title\":\"UNREGISTERED SALES OF EQUITY SECURITIES AND USE OF PROCEEDS\",\"chars\":1533},{\"section_key\":\"II-5\",\"title\":\"OTHER INFORMATION\",\"chars\":1262},{\"section_key\":\"II-6\",\"title\":\"EXHIBITS\",\"chars\":1377}]}]}"
+  },
+  {
+   "name": "get_section",
+   "input": {
+    "company_id": "0000789019",
+    "section_key": "3",
+    "accession_no": "0001193125-26-323660",
+    "form": "10-K"
+   },
+   "is_error": false,
+   "content": "{\"company_id\":\"0000789019\",\"as_of\":\"2026-10-18T20:34:15.386207+00:00\",\"sections\":[{\"section_key\":\"3\",\"title\":\"LEGAL PROCEEDINGS\",\"text\":\"ITEM 3. LEGAL PROCEEDINGS\\nRefer to Note 14 \\u2013 Contingencies of the Notes to Financial Statements (Part II, Item 8 of this Form 10-K) for information regarding legal proceedings in which we are involved.\",\"truncated\":false,\"total_chars\":201,\"citation\":{\"accession_no\":\"0001193125-26-323660\",\"form\":\"10-K\",\"filed\":\"2026-07-29\",\"period_of_report\":\"2026-06-30\",\"section_key\":\"3\",\"document_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312526323660/msft-20260630.htm\",\"char_start\":139424,\"char_end\":139626},\"freshness\":{\"filed\":\"2026-07-29\",\"ingested_at\":\"2026-10-17T17:16:25.414030Z\"}}]}"
+  },
+  {
+   "name": "get_section",
+   "input": {
+    "company_id": "0000789019",
+    "section_key": "8",
+    "accession_no": "0001193125-26-323660",
+    "form": "10-K",
+    "max_chars": 20000
+   },
+   "is_error": false,
+   "content": "{\"company_id\":\"0000789019\",\"as_of\":\"2026-10-18T20:34:16.936669+00:00\",\"sections\":[{\"section_key\":\"8\",\"title\":\"FINANCIAL STATEMENTS AND SUPPLEMENTARY DATA\",\"text\":\"ITEM 8. FINANCIAL STATEMENTS AND SUPPLEMENTARY DATA\\nINCOME STATEMENTS\\n(In millions, except per share amounts)\\nYear Ended June 30,\\n2026\\n2025\\n2024\\nRevenue:\\nProduct\\n$\\n64,696\\n$\\n63,946\\n$\\n64,773\\nService and other\\n267,143\\n217,778\\n180,349\\nTotal revenue\\n331,839\\n281,724\\n245,122\\nCost of revenue:\\nProduct\\n12,098\\n13,501\\n15,272\\nService and other\\n94,276\\n74,330\\n58,842\\nTotal cost of revenue\\n106,374\\n87,831\\n74,114\\nGross margin\\n225,465\\n193,893\\n171,008\\nResearch and development\\n35,562\\n32,488\\n29,510\\nSales and marketing\\n26,710\\n25,654\\n24,456\\nGeneral and administrative\\n7,956\\n7,223\\n7,609\\nOperating income\\n155,237\\n128,528\\n109,433\\nOther income (expense), net\\n10,697\\n(4,901\\n)\\n(1,646\\n)\\nIncome before income taxes\\n165,934\\n123,627\\n107,787\\nProvision for income taxes\\n32,185\\n21,795\\n19,651\\nNet income\\n$\\n133,749\\n$\\n101,832\\n$\\n88,136\\nEarnings per share:\\nBasic\\n$\\n18.00\\n$\\n13.70\\n$\\n11.86\\nDiluted\\n$\\n17.95\\n$\\n13.64\\n$\\n11.80\\nWeighted average shares outstanding:\\nBasic\\n7,429\\n7,433\\n7,431\\nDiluted\\n7,453\\n7,465\\n7,469\\nRefer to accompanying notes.\\n50\\nPART II\\nItem 8\\nCOMPREHENSIVE INCOME STATEMENTS\\n(In millions)\\nYear Ended June 30,\\n2026\\n2025\\n2024\\nNet income\\n$\\n133,749\\n$\\n101,832\\n$\\n88,136\\nOther comprehensive income (loss), net of tax:\\nNet change related to derivatives\\n8\\n(5\\n)\\n24\\nNet change related to investments\\n215\\n1,574\\n957\\nTranslation adjustments and other\\n(160\\n)\\n674\\n(228\\n)\\nOther comprehensive income\\n63\\n2,243\\n753\\nComprehensive income\\n$\\n133,812\\n$\\n104,075\\n$\\n88,889\\nRefer to accompanying notes.\\n51\\nPART II\\nItem 8\\nBALANCE SHEETS\\n(In millions)\\nJune 30,\\n2026\\n2025\\nAssets\\nCurrent assets:\\nCash and cash equivalents\\n$\\n20,935\\n$\\n30,242\\nShort-term investments\\n55,908\\n64,323\\nTotal cash, cash equivalents, and short-term investments\\n76,843\\n94,565\\nAccounts receivable, net of allowance for doubtful accounts of $1,040 and $944\\n80,876\\n69,905\\nInventories\\n1,397\\n938\\nOther current assets\\n48,594\\n25,723\\nTotal current assets\\n207,710\\n191,131\\nProperty and equipment, net of accumulated depreciation of $118,691 and $93,653\\n313,076\\n204,966\\nOperating lease right-of-use assets\\n24,177\\n24,823\\nEquity and other investments\\n36,348\\n15,405\\nGoodwill\\n119,651\\n119,509\\nIntangible assets, net\\n18,609\\n22,604\\nOther long-term assets\\n38,805\\n40,565\\nTotal assets\\n$\\n758,376\\n$\\n619,003\\nLiabilities and stockholders\\u2019 equity\\nCurrent liabilities:\\nAccounts payable\\n$\\n42,416\\n$\\n27,724\\nCurrent portion of long-term debt\\n9,227\\n2,999\\nAccrued compensation\\n14,945\\n13,709\\nShort-term income taxes\\n2,534\\n7,211\\nShort-term unearned revenue\\n72,965\\n64,555\\nOther current liabilities\\n26,738\\n25,020\\nTotal current liabilities\\n168,825\\n141,218\\nLong-term debt\\n31,067\\n40,152\\nLong-term income taxes\\n28,647\\n25,986\\nLong-term unearned revenue\\n2,747\\n2,710\\nDeferred income taxes\\n3,054\\n2,835\\nOperating lease liabilities\\n16,532\\n17,437\\nOther long-term liabilities\\n65,117\\n45,186\\nTotal liabilities\\n315,989\\n275,524\\nCommitments and contingencies\\nStockholders\\u2019 equity:\\nCommon stock and paid-in capital \\u2013 shares authorized 24,000; outstanding 7,427 and 7,434\\n117,406\\n109,095\\nRetained earnings\\n328,265\\n237,731\\nAccumulated other comprehensive loss\\n(3,284\\n)\\n(3,347\\n)\\nTotal stockholders\\u2019 equity\\n442,387\\n343,479\\nTotal liabilities and stockholders\\u2019 equity\\n$\\n758,376\\n$\\n619,003\\nRefer to accompanying notes.\\n52\\nPART II\\nItem 8\\nCASH FLOWS STATEMENTS\\n(In millions)\\nYear Ended June 30,\\n2026\\n2025\\n2024\\nOperations\\nNet income\\n$\\n133,749\\n$\\n101,832\\n$\\n88,136\\nAdjustments to reconcile net income to net cash from operations:\\nDepreciation, amortization, and other\\n38,534\\n29,433\\n20,958\\nStock-based compensation expense\\n12,405\\n11,974\\n10,734\\nNet recognized losses (gains) on investments and derivatives\\n(11,047\\n)\\n5,329\\n1,634\\nDeferred income taxes\\n14,189\\n(7,056\\n)\\n(4,738\\n)\\nChanges in operating assets and liabilities:\\nAccounts receivable\\n(12,737\\n)\\n(10,581\\n)\\n(7,191\\n)\\nInventories\\n(461\\n)\\n309\\n1,284\\nOther current assets\\n(2,627\\n)\\n(3,044\\n)\\n(1,648\\n)\\nOther long-term assets\\n(3,964\\n)\\n(2,950\\n)\\n(6,817\\n)\\nAccounts payable\\n5,268\\n569\\n3,545\\nUnearned revenue\\n9,361\\n5,438\\n5,348\\nIncome taxes\\n(1,875\\n)\\n(38\\n)\\n1,687\\nOther current liabilities\\n6,847\\n5,922\\n4,867\\nOther long-term liabilities\\n(4,707\\n)\\n(975\\n)\\n749\\nNet cash from operations\\n182,935\\n136,162\\n118,548\\nFinancing\\nProceeds from issuance (repayments) of debt, maturities of 90 days or less, net\\n0\\n(5,746\\n)\\n5,250\\nProceeds from issuance of debt\\n0\\n0\\n24,395\\nRepayments of debt\\n(3,000\\n)\\n(3,216\\n)\\n(29,070\\n)\\nCommon stock issued\\n2,009\\n2,056\\n2,002\\nCommon stock repurchased\\n(22,271\\n)\\n(18,420\\n)\\n(17,254\\n)\\nCommon stock cash dividends paid\\n(26,445\\n)\\n(24,082\\n)\\n(21,771\\n)\\nOther, net\\n(2,839\\n)\\n(2,291\\n)\\n(1,309\\n)\\nNet cash used in financing\\n(52,546\\n)\\n(51,699\\n)\\n(37,757\\n)\\nInvesting\\nAdditions to property and equipment\\n(115,948\\n)\\n(64,551\\n)\\n(44,477\\n)\\nAcquisition of companies, net of cash acquired and divestitures, and purchases of intangible and other assets\\n(1,743\\n)\\n(5,978\\n)\\n(69,132\\n)\\nPurchases of investments\\n(58,351\\n)\\n(29,775\\n)\\n(17,732\\n)\\nMaturities of investments\\n34,605\\n16,079\\n24,775\\nSales of investments\\n21,798\\n9,309\\n10,894\\nOther, net\\n(19,861\\n)\\n2,317\\n(1,298\\n)\\nNet cash used in investing\\n(139,500\\n)\\n(72,599\\n)\\n(96,970\\n)\\nEffect of foreign exchange rates on cash and cash equivalents\\n(196\\n)\\n63\\n(210\\n)\\nNet change in cash and cash equivalents\\n(9,307\\n)\\n11,927\\n(16,389\\n)\\nCash and cash equivalents, beginning of period\\n30,242\\n18,315\\n34,704\\nCash and cash equivalents, end of period\\n$\\n20,935\\n$\\n30,242\\n$\\n18,315\\nRefer to accompanying notes.\\n53\\nPART II\\nItem 8\\nSTOCKHOLDERS\\u2019 EQUITY STATEMENTS\\n(In millions, except per share amounts)\\nYear Ended June 30,\\n2026\\n2025\\n2024\\nCommon stock and paid-in capital\\nBalance, beginning of period\\n$\\n109,095\\n$\\n100,923\\n$\\n93,718\\nCommon stock issued\\n2,009\\n2,056\\n2,002\\nCommon stock repurchased\\n(6,105\\n)\\n(5,856\\n)\\n(5,712\\n)\\nStock-based compensation expense\\n12,405\\n11,974\\n10,734\\nOther, net\\n2\\n(2\\n)\\n181\\nBalance, end of period\\n117,406\\n109,095\\n100,923\\nRetained earnings\\nBalance, beginning of period\\n237,731\\n173,144\\n118,848\\nNet income\\n133,749\\n101,832\\n88,136\\nCommon stock cash dividends\\n(27,034\\n)\\n(24,677\\n)\\n(22,293\\n)\\nCommon stock repurchased\\n(16,181\\n)\\n(12,568\\n)\\n(11,547\\n)\\nBalance, end of period\\n328,265\\n237,731\\n173,144\\nAccumulated other comprehensive loss\\nBalance, beginning of period\\n(3,347\\n)\\n(5,590\\n)\\n(6,343\\n)\\nOther comprehensive income\\n63\\n2,243\\n753\\nBalance, end of period\\n(3,284\\n)\\n(3,347\\n)\\n(5,590\\n)\\nTotal stockholders\\u2019 equity\\n$\\n442,387\\n$\\n343,479\\n$\\n268,477\\nCash dividends declared per common share\\n$\\n3.64\\n$\\n3.32\\n$\\n3.00\\nRefer to accompanying notes.\\n54\\nPART II\\nItem 8\\nNOTES TO FINANCIAL STATEMENTS\\nNOTE 1 \\u2014 ACCOUNTING POLICIES\\nAccounting Principles\\nOur consolidated financial statements and accompanying notes are prepared in accordance with accounting principles generally accepted in the United States of America.\\nPrinciples of Consolidation\\nThe consolidated financial statements include the accounts of Microsoft Corporation and its subsidiaries. Intercompany transactions and balances have been eliminated.\\nRecast of Certain Prior Period Information\\nWe have recast certain prior period amounts on our consolidated cash flows statements to conform to the current period presentation. The recast of these prior period amounts had no impact on our consolidated balance sheets, consolidated income statements, or net cash from (used in) operations, investing, or financing on our consolidated cash flows statements.\\nEstimates and Assumptions\\nPreparing financial statements requires management to make estimates and assumptions that affect the reported amounts of assets, liabilities, revenue, and expenses. Examples of estimates and assumptions include: for revenue recognition, determining the nature and timing of satisfaction of performance obligations, and determining the standalone selling price (\\u201cSSP\\u201d) of performance obligations, variable consideration, and other obligations such as product returns and refunds; loss contingencies; the fair value of and/or potential impairment of goodwill and intangible assets for our reporting units; product life cycles; useful lives of our tangible and intangible assets; allowances for doubtful accounts; stock-based compensation forfeiture rates; when technological feasibility is achieved for our products; the potential outcome of uncertain tax positions that have been recognized in our consolidated financial statements or tax returns; and determining the timing and amount of measurement adjustments or impairments for investments. Actual results and outcomes may differ from management\\u2019s estimates and assumptions due to risks and uncertainties.\\nForeign Currencies\\nAssets and liabilities recorded in foreign currencies are translated at the exchange rate on the balance sheet date. Revenue and expenses are translated at average rates of exchange prevailing during the year. Translation adjustments resulting from this process are recorded to other comprehensive income.\\nRevenue\\nProduct Revenue and Service and Other Revenue\\nProduct revenue includes sales from operating systems, server applications, business solution applications, software development tools, desktop and server management tools, video games, and hardware such as PCs, tablets, gaming and entertainment consoles, other intelligent devices, and related accessories.\\nService and other revenue includes sales from cloud-based solutions that provide customers with AI, software, services, platforms, and content such as Azure, Office 365, Enterprise Mobility and Security, LinkedIn, Dynamics 365, and XBOX; solution support; and consulting services. Service and other revenue also includes sales from online advertising.\\n55\\nPART II\\nItem 8\\nRevenue Recognition\\nRevenue is recognized upon transfer of control of promised products or services to customers in an amount that reflects the consideration we expect to receive in exchange for those products or services. We enter into contracts that can include various combinations of products and services, which are generally capable of being distinct and accounted for as separate performance obligations. Revenue is recognized net of allowances for returns and any taxes collected from customers, which are subsequently remitted to governmental authorities.\\nNature of Products and Services\\nLicenses for on-premises software provide the customer with a right to use the software as it exists when made available to the customer. Customers may purchase perpetual licenses or subscribe to licenses, which provide customers with the same functionality and differ mainly in the duration over which the customer benefits from the software. Revenue from distinct on-premises licenses is recognized upfront at the point in time when the software is made available to the customer. In cases where we allocate revenue to software updates, primarily because the updates are provided at no additional charge, revenue is recognized as the updates are provided, which is generally ratably over the estimated life of the related device or license.\\nCloud services, which include software-as-a-service, infrastructure-as-a-service, and platform-as-a-service, are provided on either a subscription or consumption basis. Revenue related to cloud services provided on a subscription basis is recognized ratably over the contract period. Revenue related to cloud services provided on a consumption basis, such as the amount of storage used in a period, is recognized based on the customer utilization of such resources. When cloud services require a significant level of integration and interdependency with software and the individual components are not considered distinct, all revenue is recognized over the period in which the cloud services are provided.\\nCertain volume licensing programs, including Enterprise Agreements, include on-premises licenses combined with Software Assurance (\\u201cSA\\u201d). SA conveys rights to new software and upgrades released over the contract period and provides support, tools, and training to help customers deploy and use products more efficiently. On-premises licenses are considered distinct performance obligations when sold with SA. Revenue allocated to SA is generally recognized ratably over the contract period as customers simultaneously consume and receive benefits, given that SA comprises distinct performance obligations that are satisfied over time.\\nRevenue from search advertising is recognized when the advertisement appears in the search results or when the action necessary to earn the revenue has been completed. Revenue from consulting services is recognized as services are provided.\\nOur hardware is generally highly dependent on, and interrelated with, the underlying operating system and cannot function without the operating system. In these cases, the hardware and software license are accounted for as a single performance obligation and revenue is recognized at the point in time when ownership is transferred to resellers or directly to end customers through retail stores and online marketplaces.\\nRefer to Note 18 \\u2013 Segment Information and Geographic Data for further information, including revenue by significant product and service offering.\\nSignificant Judgments\\nOur contracts with customers often include promises to transfer multiple products and services to a customer. Determining whether products and services are considered distinct performance obligations that should be accounted for separately versus together may require significant judgment. When a cloud-based service includes both on-premises software licenses and cloud services, judgment is required to determine whether the software license is considered distinct and accounted for separately, or not distinct and accounted for together with the cloud service and recognized over time. Certain cloud services, primarily Office 365, depend on a significant level of integration, interdependency, and interrelation between the desktop applications and cloud services, and are accounted for together as one performance obligation. Revenue from Office 365 is recognized ratably over the period in which the cloud services are provided.\\n56\\nPART II\\nItem 8\\nJudgment is required to determine the SSP for each distinct performance obligation. We use a single amount to estimate SSP for items that are not sold separately, including on-premises licenses sold with SA or software updates provided at no additional charge. We use a range of amounts to estimate SSP when we sell each of the products and services separately and need to determine whether there is a discount to be allocated based on the relative SSP of the various products and services.\\nIn instances where SSP is not directly observable, such as when we do not sell the product or service separately, we determine the SSP using information that may include market conditions and other observable inputs. We typically have more than one SSP for individual products and services due to the stratification of those products and services by customers and circumstances. In these instances, we may use information such as the size of the customer and geographic region in determining the SSP.\\nDue to the various benefits from and the nature of our SA program, judgment is required to assess the pattern of delivery, including the exercise pattern of certain benefits across our portfolio of customers.\\nOur products are generally sold with a right of return, we may provide other credits or incentives, and in certain instances we estimate customer usage of our products and services, which are accounted for as variable consideration when determining the amount of revenue to recognize. Returns and credits are estimated at contract inception and updated at the end of each reporting period if additional information becomes available. Changes to our estimated variable consideration were not material for the periods presented.\\nEstimating revenue that will be allocated to remaining performance obligations can involve significant judgments, including identifying and assessing variable consideration and potential renegotiation of commitments. We consider factors such as the nature of the terms and duration of the contract across our portfolio of contracts.\\nContract Balances and Other Receivables\\nTiming of revenue recognition may differ from the timing of invoicing to customers. We record a receivable when revenue is recognized prior to invoicing, or unearned revenue when revenue is recognized subsequent to invoicing. For multi-year agreements, we generally invoice customers annually at the beginning of each annual coverage period. We record a receivable related to revenue recognized for multi-year on-premises licenses as we have an unconditional right to invoice and receive payment in the future related to those licenses.\\nUnearned revenue comprises mainly unearned revenue related to volume licensing programs, which may include cloud services and SA. Unearned revenue is generally invoiced annually at the beginning of each contract period for multi-year agreements and recognized ratably over the coverage period. Unearned revenue also includes payments for LinkedIn subscriptions, Office 365 subscriptions, consulting services to be performed in the future, XBOX subscriptions, Windows post-delivery support, Dynamics business solutions, and other offerings for which we have been paid in advance and earn the revenue when we transfer control of the product or service.\\nRefer to Note 12 \\u2013 Unearned Revenue for further information, including unearned revenue by segment and changes in unearned revenue during the period.\\nPayment terms and conditions vary by contract type, although terms generally include a requirement of payment within 30 to 60 days. In instances where the timing of revenue recognition differs from the timing of invoicing, we have determined our contracts generally do not include a significant financing component. The primary purpose of our invoicing terms is to provide customers with simplified and predictable ways of purchasing our products and services, not to receive financing from our customers or to provide customers with financing. Examples include invoicing at the beginning of a subscription term with revenue recognized ratably over the contract period, and multi-year on-premises licenses that are invoiced annually with revenue recognized upfront.\\nAs of June 30, 2026 and 2025, long-term accounts receivable, net of allowance for doubtful accounts, was $5.5 billion and $5.2 billion, respectively, and is included in other long-term assets in our consolidated balance sheets.\\nAs of June 30, 2026 and 2025, the current portion of other receivables related to activities to facilitate the purchase of server components was $27.8 billion and $8.2 billion, respectively, and are included in other current assets in our consolidated balance sheets. Additionally, as of June 30, 2026, restricted investments pursuant to a supplier agreement were $11.3 billion, with $3.8 billion included in short-term investments and $7.5 billion included in equity and other investments in our consolidated balance sheet.\\n57\\nPART II\\nItem 8\\nWe record financing receivables when we offer certain customers the option to acquire our software products and services offerings through a financing program in a limited number of countries. As of June 30, 2026 and 2025, our financing receivables, net were $3.7 billion and $4.3 billion, respectively, for short-term and long-term financing receivables, which are included in other current assets and other long-term assets in our consolidated balance sheets.\\nWe record an allowance for doubtful accounts which reflects our best estimate of credit losses inherent in the accounts receivable and financing receivable balances. We determine the allowance based on known troubled accounts, historical experience, and other currently available evidence.\\nAssets Recognized from Costs to Obtain a Contract with a Customer\\nWe recognize an asset for the incremental costs of obtaining a contract with a customer if we expect the benefit of those costs to be longer than one year. We have determined that certain sales incentive programs meet the requirements to be capitalized. Total capitalized costs to obtain a contract were immaterial duri\",\"truncated\":true,\"total_chars\":102439,\"citation\":{\"accession_no\":\"0001193125-26-323660\",\"form\":\"10-K\",\"filed\":\"2026-07-29\",\"period_of_report\":\"2026-06-30\",\"section_key\":\"8\",\"document_url\":\"https://www.sec.gov/Archives/edgar/data/789019/000119312526323660/msft-20260630.htm\",\"char_start\":194645,\"char_end\":297085},\"freshness\":{\"filed\":\"2026-07-29\",\"ingested_at\":\"2026-10-17T17:16:25.414030Z\"}}]}"
+  }
+ ],
+ "responses": [
+  {
+   "id": "msg_011CgALkMem9ABBsJSCdkQeX",
+   "container": null,
+   "content": [
+    {
+     "signature": "CAQS9QUKEAgSGAI4AUIIdGhpbmtpbmcSDELjcuFFJH2Phs3B7RoMozRzvA1n+W5Ee7xXIjCL4sYPLaxW/MtU1pjO7gi4m2OPioRVWwGdtGRpwVlZIjV/bTLX4Y16IQWs1iJAgysqkgV0kHqs/zJ6/t7pKh7VNR7BjUmLW710q9In3gp94f2VAH0CeG6GeDshmCCax7oHFksBdI9hQikZIMlg+B8pc75LKMTqW6+94AI3jge/5x4elLw2rbodYtB0vDOHnPK2z301e4KxLQTFQ7tgd2X+aRx3XP6Ta5s+dDrTsjoAgiusM5sSJnhToSbO/Z6DZOrkwDfhvRhKxoz8igFK1sVKwLbYRGsJf1yD7fVQero7cKbd8QE7expXyCeKoX8dksOTCQUkR/Ia3sb5rFPpaASRIgrnrN5dDZk4615FIxhyGhYGWzHLknXKPvPeehLGrvmBFw3ICs5f77p0uzXJ5Moskj4SB44QrF1HYa/Wnn4KJ2LSr1/4TR9lNrxXyDZHePpzgi0L3ek2C1xLW7LLCBij2hzhQqizx1egV/OuYvd1LpGysu0/6JLwOz4dNJG7lXagM6ibTc83MNHWvo+FNScdyT8qfu5wzutgq1jrYcFjiiOQPLLGjz9DMVWaROQPVKo/HznbJ/sNCz9tr1vZkRXqD4+nx3UQ9b9LYkR5HgclfmDNPMDi46orZpdwPyTYfRAyo5NqSzuzEN8pbq+3+UFefJw+T/DyayCIOA3wYECtUdWe0l/YE/dJxz9cKJj6Iuq52UahRnhr+hR1txEybb9ApeWu5EAOoUb/UolfXNYN5g6rEgvzWbjn24zQh7weVwemn9UYjwEc9PuapNCl0/AHyN/0gR3RIC6RhE/mjc/d890E3MZpwmp95Shpr3T5Arjxqef1WcF9x1eBzvUpp9VtBut2ol/NeT2wm/Hf4UjB/FZMW3PNW2cH/k1zTO/lIpABypmhp5vwRtm+8r8Fq3OQZ/6lBDG6umZGZqNyq+vA9gO8GEOYGAE=",
+     "thinking": "",
+     "type": "thinking"
+    },
+    {
+     "id": "toolu_01HBMiph2wdRwfgrjFB146q9",
+     "caller": {
+      "type": "direct"
+     },
+     "input": {},
+     "name": "whoami",
+     "type": "tool_use"
+    },
+    {
+     "id": "toolu_01SKJP6gwmRYWTz2pfMbbMqj",
+     "caller": {
+      "type": "direct"
+     },
+     "input": {
+      "query": "Microsoft"
+     },
+     "name": "search_companies",
+     "type": "tool_use"
+    }
+   ],
+   "diagnostics": null,
+   "model": "claude-haiku-5-5",
+   "role": "assistant",
+   "stop_details": null,
+   "stop_reason": "tool_use",
+   "stop_sequence": null,
+   "type": "message",
+   "usage": {
+    "cache_creation": {
+     "ephemeral_1h_input_tokens": 0,
+     "ephemeral_5m_input_tokens": 1797
+    },
+    "cache_creation_input_tokens": 1797,
+    "cache_read_input_tokens": 0,
+    "inference_geo": "global",
+    "input_tokens": 4,
+    "output_tokens": 133,
+    "output_tokens_details": {
+     "thinking_tokens": 57
+    },
+    "service_tier": "standard",
+    "speed": "standard"
+   }
+  },
+  {
+   "id": "msg_011CgALkSWDA5fmu2J15JRVL",
+   "container": null,
+   "content": [
+    {
+     "id": "toolu_015pDMhPBBQNSbZemtfF5Ctd",
+     "caller": {
+      "type": "direct"
+     },
+     "input": {
+      "company_id": "0000789019",
+      "limit": 8
+     },
+     "name": "list_filings",
+     "type": "tool_use"
+    }
+   ],
+   "diagnostics": null,
+   "model": "claude-haiku-5-5",
+   "role": "assistant",
+   "stop_details": null,
+   "stop_reason": "tool_use",
+   "stop_sequence": null,
+   "type": "message",
+   "usage": {
+    "cache_creation": {
+     "ephemeral_1h_input_tokens": 0,
+     "ephemeral_5m_input_tokens": 362
+    },
+    "cache_creation_input_tokens": 362,
+    "cache_read_input_tokens": 1797,
+    "inference_geo": "global",
+    "input_tokens": 2,
+    "output_tokens": 75,
+    "output_tokens_details": {
+     "thinking_tokens": 0
+    },
+    "service_tier": "standard",
+    "speed": "standard"
+   }
+  },
+  {
+   "id": "msg_011CgALkVypRHryaZvmiHaVr",
+   "container": null,
+   "content": [
+    {
+     "id": "toolu_012iugNU7PtX64mgC8kRHz3i",
+     "caller": {
+      "type": "direct"
+     },
+     "input": {
+      "company_id": "0000789019",
+      "section_key": "3",
+      "accession_no": "0001193125-26-323660",
+      "form": "10-K"
+     },
+     "name": "get_section",
+     "type": "tool_use"
+    }
+   ],
+   "diagnostics": null,
+   "model": "claude-haiku-5-5",
+   "role": "assistant",
+   "stop_details": null,
+   "stop_reason": "tool_use",
+   "stop_sequence": null,
+   "type": "message",
+   "usage": {
+    "cache_creation": {
+     "ephemeral_1h_input_tokens": 0,
+     "ephemeral_5m_input_tokens": 3173
+    },
+    "cache_creation_input_tokens": 3173,
+    "cache_read_input_tokens": 2159,
+    "inference_geo": "global",
+    "input_tokens": 2,
+    "output_tokens": 130,
+    "output_tokens_details": {
+     "thinking_tokens": 0
+    },
+    "service_tier": "standard",
+    "speed": "standard"
+   }
+  },
+  {
+   "id": "msg_011CgALkfmg9ymeYmk4Rr4B8",
+   "container": null,
+   "content": [
+    {
+     "signature": "CAQS5QcKEAgSGAI4AUIIdGhpbmtpbmcSDFeMEbHQlbdQDg4zdxoMFU6vqIiDOBkc8G+zIjA8kKcBYwqk8E0PIjTg2y6y+5zx32qgCnt33W6kpsMkx3ZR5hC5lQ423qCHvPtTzLwqggfZGfN7u4K8PHJjw3ytqWrslbEGQBBj56z8nMiN0eHp5RnKvr4hp/pS5GA64DYZfBDsK2yM2+ZlHQZfel2QVkeXkjBInCrWc9Ktrktl25qtjB4f+R/xpG5E/3V6E7EJi7RfatdabS9esXBQZLCB9c07vlcbeLEMy8dX50UkK+My0egpV2V+riVxqF8hir/pENVmjNy5m76lKuTye+eZ1CvV89ozBt4xJmGMvFOftdMJ0hgOhwX3zC/7OneGWCdRcNov0t3tTNQvXreTAtOmw1gjxCsHlRoVtKF6UH6/i3W+6QFj203fB5+yI5Iu9wjx+67IsYrzjTsEepun4EK6dqZuWMmWPj8pNxPBSrNU9yBmLvhoFo3X67mqVWptir+mDviBEbvSv2jHvOHs8kGGn6cJnWxm6d6WB2vmDFUJiIrGKSDDvSeIcFQBRyvDsg1/PxNgec8V0OXfHGjMNlbNXoQo0j2B9H3C2AzdQpusbJ2ctIA7f0qALRxxJuL7wBE356ioTAiTfgjXTmbLiZSjmnkzrT39TOnYN9mzoLVzZz/Ev5/8jp2MbQyI0otrWl9BPH/BSbtQMY78iIkUD0AQIc9WYuNXu768KahIQYGGL1QFJYzPm+Lcz+6neS89CV3ekp2d0mBe3OC82Y9hsUTyqDp7R86KAp1A6mcyJIICHqEhh8BkTal8OLIDDZm0VWWqqhbyTK//UmIqCoZIJpHuQA9axlpYSSN9dW32aiN6vJTOHEWHRQZOisiKm32kWJM5iUZvUZCm7k2HTV52XzMoiUXFCxo/upFG+v+3tlkM3LwFlBMmo2EBUtFQH3v1pA/H/kMOH2t2dHNV4IaT+MBfTfvfhE1w+mvALlM8JxwJ3odwK9kUy3bH4gQcpFERNFR6TQBWUE4ZYBBp08uvDyZ497KBYZIblZ4GfeTEQEt5OGrMfBZ1WXUgd38RwiwACJ2LYuQQaELKLTxw8xR50jYe/THDmesf3SdePK5dJ9nNpFbXbYHG1z47J5egB5rqQLmozQaijxNcL8yepvglNf+cF3G/3KPfVy4R6saGnkrHJHMOOz6zmw3MWb2+0wiVLGwiLXjfmg7+e8gYmv2ZffFnyCtHuN9kM2WdjGbq68MWLV73M41piKAD9lYie4fmww+ihHTrdpt1EqOhr5YwSZ3SPJGVmLKoTJBFNxeMqJ/3/ygT0SP+GAE=",
+     "thinking": "",
+     "type": "thinking"
+    },
+    {
+     "id": "toolu_01HC16nPh92jsiyjqm3XCrtg",
+     "caller": {
+      "type": "direct"
+     },
+     "input": {
+      "company_id": "0000789019",
+      "section_key": "8",
+      "accession_no": "0001193125-26-323660",
+      "form": "10-K",
+      "max_chars": 20000
+     },
+     "name": "get_section",
+     "type": "tool_use"
+    }
+   ],
+   "diagnostics": null,
+   "model": "claude-haiku-5-5",
+   "role": "assistant",
+   "stop_details": null,
+   "stop_reason": "tool_use",
+   "stop_sequence": null,
+   "type": "message",
+   "usage": {
+    "cache_creation": {
+     "ephemeral_1h_input_tokens": 0,
+     "ephemeral_5m_input_tokens": 480
+    },
+    "cache_creation_input_tokens": 480,
+    "cache_read_input_tokens": 5332,
+    "inference_geo": "global",
+    "input_tokens": 2,
+    "output_tokens": 281,
+    "output_tokens_details": {
+     "thinking_tokens": 125
+    },
+    "service_tier": "standard",
+    "speed": "standard"
+   }
+  },
+  {
+   "id": "msg_011CgALknh9BAP1MDbR35hZq",
+   "container": null,
+   "content": [
+    {
+     "signature": "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",
+     "thinking": "",
+     "type": "thinking"
+    },
+    {
+     "text": "Microsoft's latest 10-K doesn't list its legal proceedings in Item 3 itself. I could not retrieve the actual proceedings.\n\n- **Item 3 (Legal Proceedings)** of the 10-K for fiscal year ended June 30, 2026 (Form 10-K, filed 2026-07-29, accession 0001193125-26-323660) says only: \"Refer to Note 14 – Contingencies of the Notes to Financial Statements (Part II, Item 8 of this Form 10-K) for information regarding legal proceedings in which we are involved.\"\n- **Note 14 – Contingencies** is in Item 8 (Financial Statements). That section is about 102,439 characters, and the tool returns only the first 20,000 with no way to page to the later notes. So the note's contents aren't in what I could retrieve.\n\nTo read the proceedings, open Note 14 in the filing at https://www.sec.gov/Archives/edgar/data/789019/000119312526323660/msft-20260630.htm. Alternatively, I can search the Risk Factors section (Item 1A), which may discuss specific litigation, though it is also long and may not give the full list.\n\nSources: Item 3, Form 10-K, filed 2026-07-29, accession 0001193125-26-323660, freshness: filed 2026-07-29, as_of 2026-10-18T20:34:15Z. Item 8, same filing, freshness: filed 2026-07-29, as_of 2026-10-18T20:34:16Z.",
+     "type": "text"
+    }
+   ],
+   "diagnostics": null,
+   "model": "claude-haiku-5-5",
+   "role": "assistant",
+   "stop_details": null,
+   "stop_reason": "end_turn",
+   "stop_sequence": null,
+   "type": "message",
+   "usage": {
+    "cache_creation": {
+     "ephemeral_1h_input_tokens": 0,
+     "ephemeral_5m_input_tokens": 8208
+    },
+    "cache_creation_input_tokens": 8208,
+    "cache_read_input_tokens": 5812,
+    "inference_geo": "global",
+    "input_tokens": 2,
+    "output_tokens": 958,
+    "output_tokens_details": {
+     "thinking_tokens": 460
+    },
+    "service_tier": "standard",
+    "speed": "standard"
+   }
+  }
+ ]
+}
