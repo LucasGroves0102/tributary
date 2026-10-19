@@ -1,0 +1,11 @@
+[Unit]
+Description=Nightly Postgres logical backup
+
+[Timer]
+# After the nightly CronJobs (02:00-04:00 New York) have loaded the day's data.
+OnCalendar=*-*-* 05:00:00 America/New_York
+RandomizedDelaySec=10min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
