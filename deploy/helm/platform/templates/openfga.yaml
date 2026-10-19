@@ -15,7 +15,7 @@ spec:
   template:
     metadata:
       labels:
-        {{- include "platform.labels" (dict "root" $ "name" "openfga-migrate") | nindent 8 }}
+        {{- include "platform.podLabels" (dict "root" $ "name" "openfga-migrate") | nindent 8 }}
     spec:
       {{- include "platform.podSecurity" (dict "uid" 65532) | nindent 6 }}
       restartPolicy: Never
@@ -66,7 +66,7 @@ spec:
   template:
     metadata:
       labels:
-        {{- include "platform.labels" $ctx | nindent 8 }}
+        {{- include "platform.podLabels" $ctx | nindent 8 }}
     spec:
       {{- include "platform.podSecurity" (dict "uid" 65532) | nindent 6 }}
       containers:
@@ -106,7 +106,7 @@ spec:
   template:
     metadata:
       labels:
-        {{- include "platform.labels" (dict "root" $ "name" "setup-openfga") | nindent 8 }}
+        {{- include "platform.podLabels" (dict "root" $ "name" "setup-openfga") | nindent 8 }}
     spec:
       {{- include "platform.podSecurity" (dict "uid" 10001) | nindent 6 }}
       restartPolicy: Never

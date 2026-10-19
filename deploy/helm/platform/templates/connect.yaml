@@ -29,7 +29,7 @@ spec:
   template:
     metadata:
       labels:
-        {{- include "platform.labels" $ctx | nindent 8 }}
+        {{- include "platform.podLabels" $ctx | nindent 8 }}
     spec:
       {{- include "platform.podSecurity" (dict "uid" 1001) | nindent 6 }}
       initContainers:
@@ -100,7 +100,7 @@ spec:
   template:
     metadata:
       labels:
-        {{- include "platform.labels" (dict "root" $ "name" "setup-connector") | nindent 8 }}
+        {{- include "platform.podLabels" (dict "root" $ "name" "setup-connector") | nindent 8 }}
     spec:
       {{- include "platform.podSecurity" (dict "uid" 10001) | nindent 6 }}
       restartPolicy: Never

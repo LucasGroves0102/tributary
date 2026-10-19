@@ -22,7 +22,7 @@ spec:
       template:
         metadata:
           labels:
-            {{- include "tributary.labels" $ctx | nindent 12 }}
+            {{- include "tributary.podLabels" $ctx | nindent 12 }}
             {{- include "tributary.uses" $ctx | nindent 12 }}
         spec:
           {{- include "tributary.podSpec" $ctx | nindent 10 }}

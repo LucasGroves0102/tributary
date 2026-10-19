@@ -3,7 +3,15 @@ app.kubernetes.io/name: {{ .name }}
 app.kubernetes.io/part-of: tributary-platform
 app.kubernetes.io/instance: {{ .root.Release.Name }}
 app.kubernetes.io/managed-by: {{ .root.Release.Service }}
-helm.sh/chart: {{ .root.Chart.Name }}-{{ .root.Chart.Version }}
+helm.sh/chart: {{ printf "%s-%s" .root.Chart.Name .root.Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{/* Pod templates leave out helm.sh/chart: with Flux it changes on every commit, and a
+changed pod template restarts the pod. */}}
+{{- define "platform.podLabels" -}}
+app.kubernetes.io/name: {{ .name }}
+app.kubernetes.io/part-of: tributary-platform
+app.kubernetes.io/instance: {{ .root.Release.Name }}
 {{- end }}
 
 {{- define "platform.selector" -}}

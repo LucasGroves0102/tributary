@@ -44,7 +44,7 @@ spec:
   template:
     metadata:
       labels:
-        {{- include "platform.labels" $ctx | nindent 8 }}
+        {{- include "platform.podLabels" $ctx | nindent 8 }}
     spec:
       {{- include "platform.podSecurity" (dict "uid" 1000) | nindent 6 }}
       terminationGracePeriodSeconds: 60
