@@ -1,0 +1,124 @@
+image:
+  registry: ghcr.io/lucasgroves0102
+  # Commit SHA built by CI (required).
+  tag: ""
+  pullPolicy: IfNotPresent
+  pullSecret: ghcr
+
+# Created outside the chart. Keys: database-url, app-database-url, jwt-secret,
+# anthropic-api-key, sec-user-agent.
+secretName: tributary
+
+# The node as seen from pods (k3s bridge). Postgres runs on the host; kubelet probes come from here.
+hostAddress: 10.42.0.1
+
+postgres:
+  port: 5432
+
+kafka:
+  namespace: platform
+  bootstrap: kafka.platform.svc.cluster.local:9092
+  port: 9092
+
+openfga:
+  namespace: platform
+  url: http://openfga.platform.svc.cluster.local:8080
+  port: 8080
+
+# Sign-in as alice, bob, carol or dave without a password, and seed them on every deploy.
+demo:
+  enabled: true
+  users: alice,bob,carol,dave
+
+logLevel: INFO
+
+# CronJob schedules are in this zone (EDGAR's daily index lands late evening ET).
+timeZone: America/New_York
+
+resources:
+  requests:
+    cpu: 25m
+    memory: 96Mi
+  limits:
+    memory: 256Mi
+
+# uses: postgres, kafka, openfga, sec (SEC_USER_AGENT + HTTPS out), anthropic (API key + HTTPS
+# out), jwt, query-api, demo. Each adds the env vars and network access it needs.
+# from: components allowed to connect on `port`; public: any pod in the cluster.
+services:
+  poller:
+    uses: [kafka, sec]
+    env:
+      POLL_INTERVAL_SECONDS: "30"
+  bronze-loader:
+    uses: [kafka, postgres]
+  doc-fetcher:
+    uses: [kafka, postgres, sec]
+  parser:
+    uses: [kafka, postgres]
+    resources:
+      requests:
+        cpu: 100m
+        memory: 192Mi
+      limits:
+        memory: 768Mi
+  authz-sync:
+    uses: [kafka, postgres, openfga]
+  query-api:
+    port: 8000
+    uses: [postgres, openfga, jwt, demo]
+    from: [web, agent-api]
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        memory: 384Mi
+  agent-api:
+    image: agent
+    port: 8001
+    uses: [anthropic, query-api]
+    from: [web]
+    env:
+      AGENT_MODEL: claude-haiku-5-5
+      AGENT_RATE_PER_HOUR: "30"
+      AGENT_DAILY_BUDGET_USD: "2"
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        memory: 384Mi
+  web:
+    port: 8080
+    probePath: /
+    public: true
+    resources:
+      requests:
+        cpu: 10m
+        memory: 16Mi
+      limits:
+        memory: 64Mi
+
+# Staggered so at most one SEC batch job runs at a time.
+jobs:
+  backfill:
+    image: poller
+    command: [poller-backfill, --days, "2"]
+    schedule: "0 2 * * *"
+    uses: [kafka, sec]
+  companies:
+    image: company-loader
+    schedule: "0 3 * * *"
+    uses: [postgres, sec]
+  financials:
+    image: facts-fetcher
+    schedule: "0 4 * * *"
+    uses: [postgres, sec]
+  # Run once to fill a new database: kubectl create job --from=cronjob/seed-documents seed-1
+  seed-documents:
+    image: doc-fetcher
+    command: [doc-fetcher-seed]
+    schedule: "0 0 1 1 *"
+    suspend: true
+    uses: [kafka, postgres, sec]

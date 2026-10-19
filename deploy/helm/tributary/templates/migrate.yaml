@@ -1,0 +1,23 @@
+{{- $env := dict }}
+{{- if .Values.demo.enabled }}{{ $_ := set $env "SEED_DEMO_USERS" "1" }}{{ end }}
+{{- $ctx := dict "root" $ "name" "migrate" "image" "migrate" "restartPolicy" "Never" "uses" (list "postgres" "app-postgres") "env" $env }}
+# Applies db/ migrations before every install and upgrade; a failure stops the release.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: migrate
+  labels:
+    {{- include "tributary.labels" $ctx | nindent 4 }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 600
+  template:
+    metadata:
+      labels:
+        {{- include "tributary.labels" $ctx | nindent 8 }}
+        {{- include "tributary.uses" $ctx | nindent 8 }}
+    spec:
+      {{- include "tributary.podSpec" $ctx | nindent 6 }}

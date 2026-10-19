@@ -73,8 +73,24 @@ jobs:
           docker run --rm -v "$PWD/authz:/authz:ro" -w /authz
           openfga/cli:v0.6.3 model test --tests model.fga.yaml
 
+  chart:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: helm lint
+        run: >-
+          docker run --rm -v "$PWD:/repo" -w /repo alpine/helm:3.19.0
+          lint --strict deploy/helm/tributary --set image.tag=ci
+      - name: kubeconform
+        run: >-
+          docker run --rm -v "$PWD:/repo" -w /repo alpine/helm:3.19.0
+          template tributary deploy/helm/tributary --namespace tributary --set image.tag=ci
+          | docker run --rm -i ghcr.io/yannh/kubeconform:v0.7.0
+          -strict -summary -kubernetes-version 1.36.0 -
+
   images:
-    needs: [secrets, python, web, authz]
+    name: image ${{ matrix.service }}
+    needs: [secrets, python, web, authz, chart]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -88,6 +104,9 @@ jobs:
         include:
           - service: bronze-loader
             context: services/bronze-loader
+          - service: migrate
+            context: .
+            file: db/Dockerfile
     env:
       PUSH: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     steps:
@@ -104,7 +123,7 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
-          file: services/${{ matrix.service }}/Dockerfile
+          file: ${{ matrix.file || format('services/{0}/Dockerfile', matrix.service) }}
           push: ${{ env.PUSH == 'true' }}
           tags: |
             ${{ steps.image.outputs.name }}:${{ github.sha }}

@@ -1,0 +1,29 @@
+{{- range $name, $job := .Values.jobs }}
+{{- $ctx := merge (dict "root" $ "name" $name "image" ($job.image | default $name) "restartPolicy" "Never") $job }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "tributary.labels" $ctx | nindent 4 }}
+spec:
+  schedule: {{ $job.schedule | quote }}
+  timeZone: {{ $.Values.timeZone }}
+  suspend: {{ $job.suspend | default false }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: {{ $job.timeoutSeconds | default 3600 }}
+      ttlSecondsAfterFinished: 604800
+      template:
+        metadata:
+          labels:
+            {{- include "tributary.labels" $ctx | nindent 12 }}
+            {{- include "tributary.uses" $ctx | nindent 12 }}
+        spec:
+          {{- include "tributary.podSpec" $ctx | nindent 10 }}
+{{- end }}

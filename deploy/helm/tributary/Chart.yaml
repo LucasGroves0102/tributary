@@ -1,0 +1,6 @@
+apiVersion: v2
+name: tributary
+description: SEC filings pipeline, permission-checked Query API and citation agent
+type: application
+version: 0.1.0
+kubeVersion: ">=1.30.0-0"

@@ -1,0 +1,48 @@
+{{- range $name, $svc := .Values.services }}
+{{- $ctx := merge (dict "root" $ "name" $name "image" ($svc.image | default $name)) $svc }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "tributary.labels" $ctx | nindent 4 }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      {{- include "tributary.selector" $ctx | nindent 6 }}
+  {{- if $svc.port }}
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 0
+  {{- else }}
+  # Kafka consumers: stop the old pod before starting the new one.
+  strategy:
+    type: Recreate
+  {{- end }}
+  template:
+    metadata:
+      labels:
+        {{- include "tributary.labels" $ctx | nindent 8 }}
+        {{- include "tributary.uses" $ctx | nindent 8 }}
+    spec:
+      {{- include "tributary.podSpec" $ctx | nindent 6 }}
+{{- if $svc.port }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "tributary.labels" $ctx | nindent 4 }}
+spec:
+  selector:
+    {{- include "tributary.selector" $ctx | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ $svc.port }}
+      targetPort: http
+{{- end }}
+{{- end }}

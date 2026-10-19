@@ -1,0 +1,160 @@
+{{- $labels := dict "root" $ "name" "network" }}
+# Nothing in or out unless a policy below allows it.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  labels:
+    {{- include "tributary.labels" $labels | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+  labels:
+    {{- include "tributary.labels" $labels | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-postgres
+  labels:
+    {{- include "tributary.labels" $labels | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      tributary.io/postgres: "true"
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: {{ .Values.hostAddress }}/32
+      ports:
+        - {protocol: TCP, port: {{ .Values.postgres.port }}}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-kafka
+  labels:
+    {{- include "tributary.labels" $labels | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      tributary.io/kafka: "true"
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.kafka.namespace }}
+      ports:
+        - {protocol: TCP, port: {{ .Values.kafka.port }}}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-openfga
+  labels:
+    {{- include "tributary.labels" $labels | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      tributary.io/openfga: "true"
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.openfga.namespace }}
+      ports:
+        - {protocol: TCP, port: {{ .Values.openfga.port }}}
+---
+# HTTPS to the internet (SEC, Anthropic); private networks stay unreachable.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-internet
+  labels:
+    {{- include "tributary.labels" $labels | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      tributary.io/internet: "true"
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 100.64.0.0/10]
+      ports:
+        - {protocol: TCP, port: 443}
+{{- range $name, $svc := .Values.services }}
+{{- if $svc.port }}
+---
+# Who may connect to {{ $name }}; the node is always allowed, for kubelet probes.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ingress-{{ $name }}
+  labels:
+    {{- include "tributary.labels" $labels | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "tributary.selector" (dict "root" $ "name" $name) | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - ipBlock:
+            cidr: {{ $.Values.hostAddress }}/32
+        {{- if $svc.public }}
+        - namespaceSelector: {}
+        {{- end }}
+        {{- with $svc.from }}
+        - podSelector:
+            matchExpressions:
+              - {key: app.kubernetes.io/name, operator: In, values: {{ toJson . }}}
+        {{- end }}
+      ports:
+        - {protocol: TCP, port: {{ $svc.port }}}
+{{- with $svc.from }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: egress-{{ $name }}
+  labels:
+    {{- include "tributary.labels" $labels | nindent 4 }}
+spec:
+  podSelector:
+    matchExpressions:
+      - {key: app.kubernetes.io/name, operator: In, values: {{ toJson . }}}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "tributary.selector" (dict "root" $ "name" $name) | nindent 14 }}
+      ports:
+        - {protocol: TCP, port: {{ $svc.port }}}
+{{- end }}
+{{- end }}
+{{- end }}
