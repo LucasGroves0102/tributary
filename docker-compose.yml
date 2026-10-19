@@ -2,7 +2,7 @@ services:
   kafka:
     image: apache/kafka:3.8.0
     ports:
-      - "9092:9092"
+      - "127.0.0.1:9092:9092"
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
@@ -24,7 +24,7 @@ services:
     image: pgvector/pgvector:pg16
     command: ["postgres", "-c", "wal_level=logical"]  # Debezium CDC (FR7)
     ports:
-      - "${POSTGRES_PORT:-5433}:5432"  # 5433 on the host avoids clashing with a local Postgres
+      - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"  # 5433 on the host avoids clashing with a local Postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-tributary}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tributary}
@@ -41,7 +41,7 @@ services:
   connect:
     image: quay.io/debezium/connect:2.7.3.Final
     ports:
-      - "8083:8083"
+      - "127.0.0.1:8083:8083"
     environment:
       BOOTSTRAP_SERVERS: kafka:29092
       GROUP_ID: connect
@@ -63,7 +63,7 @@ services:
     command: run
     profiles: ["authz"]
     ports:
-      - "8081:8080"  # HTTP API; 8080 on the host is kafka-ui
+      - "127.0.0.1:8081:8080"  # HTTP API; 8080 on the host is kafka-ui
     environment:
       OPENFGA_DATASTORE_ENGINE: postgres
       OPENFGA_DATASTORE_URI: postgres://${POSTGRES_USER:-tributary}:${POSTGRES_PASSWORD:-tributary}@postgres:5432/openfga?sslmode=disable
@@ -97,7 +97,7 @@ services:
   kafka-ui:
     image: ghcr.io/kafbat/kafka-ui:v1.0.0
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     environment:
       KAFKA_CLUSTERS_0_NAME: tributary
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
@@ -183,7 +183,7 @@ services:
       dockerfile: services/query-api/Dockerfile
     profiles: ["app"]
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     env_file: .env
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-tributary}:${POSTGRES_PASSWORD:-tributary}@postgres:5432/${POSTGRES_DB:-tributary}
@@ -199,7 +199,7 @@ services:
       dockerfile: services/agent/Dockerfile
     profiles: ["app"]
     ports:
-      - "8001:8001"
+      - "127.0.0.1:8001:8001"
     env_file: .env
     environment:
       QUERY_API_URL: http://query-api:8000
@@ -212,7 +212,7 @@ services:
       dockerfile: services/web/Dockerfile
     profiles: ["app"]
     ports:
-      - "3000:8080"
+      - "127.0.0.1:3000:8080"
     depends_on:
       - query-api
       - agent-api
