@@ -1,0 +1,68 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: cloudflared
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+# Prometheus scrapes metrics; the node runs the probes.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: metrics
+  namespace: cloudflared
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: cloudflared
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - ipBlock: {cidr: 10.42.0.1/32}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - {protocol: TCP, port: 2000}
+---
+# Out: DNS, Cloudflare's edge (7844 QUIC/TCP, 443), and the web Service. Nothing else.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: egress
+  namespace: cloudflared
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: cloudflared
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 100.64.0.0/10]
+      ports:
+        - {protocol: UDP, port: 7844}
+        - {protocol: TCP, port: 7844}
+        - {protocol: TCP, port: 443}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: tributary
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: web
+      ports:
+        - {protocol: TCP, port: 8080}

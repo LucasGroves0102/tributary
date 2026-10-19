@@ -125,8 +125,10 @@ spec:
     - from:
         - ipBlock:
             cidr: {{ $.Values.hostAddress }}/32
-        {{- if $svc.public }}
-        - namespaceSelector: {}
+        {{- range $svc.fromNamespaces }}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ . }}
         {{- end }}
         {{- with $svc.from }}
         - podSelector:

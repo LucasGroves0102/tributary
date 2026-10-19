@@ -44,7 +44,7 @@ resources:
 
 # uses: postgres, kafka, openfga, sec (SEC_USER_AGENT + HTTPS out), anthropic (API key + HTTPS
 # out), jwt, query-api, demo. Each adds the env vars and network access it needs.
-# from: components allowed to connect on `port`; public: any pod in the cluster.
+# from: components allowed to connect on `port`; fromNamespaces: any pod in these namespaces.
 services:
   poller:
     uses: [kafka, sec]
@@ -92,7 +92,7 @@ services:
   web:
     port: 8080
     probePath: /
-    public: true
+    fromNamespaces: [cloudflared]
     resources:
       requests:
         cpu: 10m

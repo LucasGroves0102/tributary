@@ -120,6 +120,7 @@ jobs:
           awk 'FNR==1{print "---"} 1' deploy/flux/clusters/hermes/*.yaml
           deploy/flux/clusters/hermes/flux-system/gotk-sync.yaml deploy/flux/namespaces/*.yaml
           deploy/flux/releases/*.yaml deploy/flux/images/*.yaml deploy/flux/notifications/*.yaml
+          deploy/flux/cloudflared/*.yaml
           | docker run --rm -i ghcr.io/yannh/kubeconform:v0.7.0@sha256:85dbef6b4b312b99133decc9c6fc9495e9fc5f92293d4ff3b7e1b30f5611823c
           -strict -summary -kubernetes-version 1.36.0 -schema-location default
           -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'

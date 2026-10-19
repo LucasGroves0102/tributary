@@ -47,7 +47,7 @@ decides its environment variables, which Secret keys it can read, and its networ
 | `demo` | `DEMO_USERS` when `demo.enabled` | |
 
 A service with a `port` gets a Service, health probes, and an ingress policy admitting only the
-components in its `from` list (`public: true` admits any pod). Everything else is denied.
+components in its `from` list and pods in its `fromNamespaces`. Everything else is denied.
 
 Every pod runs as non-root with a read-only root filesystem, no capabilities, the
 `RuntimeDefault` seccomp profile and no service account token.
