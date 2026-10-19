@@ -49,7 +49,9 @@ export function App() {
     };
   }, [user]);
 
-  useEffect(() => bottom.current?.scrollIntoView({ behavior: "smooth", block: "end" }), [turns]);
+  useEffect(() => {
+    bottom.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [turns]);
 
   const update = useCallback((id: number, f: (t: AssistantTurn) => AssistantTurn) => {
     setTurns((ts) => ts.map((t) => (t.id === id && t.role === "assistant" ? f(t) : t)));
