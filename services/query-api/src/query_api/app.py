@@ -129,6 +129,14 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
         return {"company_id": company_id, "as_of": _now(),
                 "filings": store.filings(user_id, company_id, limit)}
 
+    @app.get("/v1/filings/latest")
+    def latest_filings(user_id: User,
+                       limit: Annotated[int, Query(ge=1, le=50)] = 20) -> dict:
+        """Newest parsed filings across the companies the caller can read filings for."""
+        companies = sorted(c for c, tiers in readable(user_id).items() if "filings" in tiers)
+        rows = store.latest_filings(user_id, companies, limit) if companies else []
+        return {"as_of": _now(), "filings": rows}
+
     @app.get("/v1/companies/{company_id}/sections/{section_key}")
     def sections(
         user_id: User, company_id: CompanyId,

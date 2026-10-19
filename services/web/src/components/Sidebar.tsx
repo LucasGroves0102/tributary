@@ -1,3 +1,4 @@
+import { href, type Route } from "../route";
 import type { Me } from "../types";
 
 export const SUGGESTIONS = {
@@ -19,17 +20,30 @@ interface Props {
   user: string | null;
   me: Me | null;
   busy: boolean;
+  route: Route;
   onUser: (u: string) => void;
   onPrompt: (p: string) => void;
 }
 
-export function Sidebar({ users, user, me, busy, onUser, onPrompt }: Props) {
+export function Sidebar({ users, user, me, busy, route, onUser, onPrompt }: Props) {
   return (
     <aside className="sidebar">
       <div className="brand">
         <img src="/favicon.svg" alt="" width={26} height={26} />
         <span>Tributary</span>
       </div>
+
+      <nav className="views" aria-label="View">
+        <a href={href({ view: "ask" })} aria-current={route.view === "ask" ? "page" : undefined}>
+          Ask
+        </a>
+        <a
+          href={href({ view: "explore" })}
+          aria-current={route.view !== "ask" ? "page" : undefined}
+        >
+          Explore
+        </a>
+      </nav>
 
       <section>
         <h2>Signed in as</h2>
@@ -59,7 +73,9 @@ export function Sidebar({ users, user, me, busy, onUser, onPrompt }: Props) {
           <ul className="access">
             {me.companies.map((c) => (
               <li key={c.company_id}>
-                <span className="company">{c.name ?? c.company_id}</span>
+                <a className="company" href={href({ view: "company", companyId: c.company_id })}>
+                  {c.name ?? c.company_id}
+                </a>
                 <span className="tiers">
                   {c.tiers.map((t) => (
                     <span key={t} className={`tier ${t}`}>

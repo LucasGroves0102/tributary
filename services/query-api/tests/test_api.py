@@ -50,6 +50,10 @@ class FakeStore:
         self.calls.append(("filings",) + args[:2])
         return []
 
+    def latest_filings(self, user_id, company_ids, limit):
+        self.calls.append(("latest_filings", user_id, tuple(company_ids)))
+        return []
+
     def search(self, user_id, q):
         return [{"company_id": NVDA, "name": "NVIDIA CORP", "matched_on": "ticker",
                  "matched_alias": "NVDA", "is_current": True},
@@ -154,3 +158,21 @@ def test_demo_login_only_for_listed_users():
     token = c.post("/v1/demo/token", json={"user_id": "alice"}).json()["token"]
     me = c.get("/v1/me", headers={"Authorization": f"Bearer {token}"}).json()
     assert me["user_id"] == "alice"
+
+
+def test_latest_filings_only_queries_filings_tier_companies(token):
+    grants = {"bob": {NVDA: {"financials", "filings"}, TSLA: {"financials"}}}
+    store = FakeStore()
+    client = TestClient(create_app(FakeAuthorizer(grants), store, SECRET))
+    assert client.get("/v1/filings/latest", headers=token("bob")).status_code == 200
+    assert store.calls == [("latest_filings", "bob", (NVDA,))]
+
+
+def test_latest_filings_without_filings_access_skips_the_database(client, token):
+    r = client.get("/v1/filings/latest", headers=token("alice"))
+    assert r.json()["filings"] == [] and client.store.calls == []
+
+
+def test_latest_filings_fails_closed_when_openfga_is_down(token):
+    client = TestClient(create_app(FakeAuthorizer(GRANTS, down=True), FakeStore(), SECRET))
+    assert client.get("/v1/filings/latest", headers=token("alice")).status_code == 503

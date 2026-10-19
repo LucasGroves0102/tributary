@@ -25,7 +25,7 @@ class AllowAll:
         return True
 
     def readable(self, _):
-        return {}
+        return {A: {"financials", "filings"}, B: {"financials", "filings"}}
 
 
 class OneConnection:
@@ -101,3 +101,9 @@ def test_unknown_user_sees_nothing(client, token):
 def test_filings_index_respects_rls(client, token):
     r = client.get(f"/v1/companies/{B}/filings", headers=token("t-pro"))
     assert r.json()["filings"] == []
+
+
+def test_latest_filings_respect_rls(client, token):
+    r = client.get("/v1/filings/latest", headers=token("t-pro"))
+    assert [f["company_id"] for f in r.json()["filings"]] == [A]
+    assert client.get("/v1/filings/latest", headers=token("t-free")).json()["filings"] == []

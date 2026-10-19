@@ -2,7 +2,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ApiError, ask, demoUsers, login, me as fetchMe } from "./api";
 import { AssistantMessage, type AssistantTurn } from "./components/AssistantMessage";
+import { CompanyPage } from "./components/explore/CompanyPage";
+import { ExploreHome } from "./components/explore/ExploreHome";
+import { FilingReader } from "./components/explore/FilingReader";
 import { SUGGESTIONS, Sidebar } from "./components/Sidebar";
+import { href, useRoute } from "./route";
 import type { AgentEvent, HistoryTurn, Me } from "./types";
 
 type Turn = { id: number; role: "user"; text: string } | AssistantTurn;
@@ -20,6 +24,7 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const abort = useRef<AbortController | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
+  const route = useRoute();
 
   useEffect(() => {
     demoUsers()
@@ -117,10 +122,42 @@ export function App() {
         user={user}
         me={me}
         busy={busy}
+        route={route}
         onUser={setUser}
-        onPrompt={(p) => void submit(p)}
+        onPrompt={(p) => {
+          window.location.hash = href({ view: "ask" });
+          void submit(p);
+        }}
       />
-      <main className="chat">
+      {route.view !== "ask" && (
+        <main className="explore">
+          {error && <div className="banner">{error}</div>}
+          {!token ? (
+            <p className="muted page">Signing in…</p>
+          ) : route.view === "explore" ? (
+            <ExploreHome token={token} me={me} />
+          ) : route.view === "company" ? (
+            <CompanyPage
+              key={`${user}-${route.companyId}`}
+              token={token}
+              companyId={route.companyId}
+              onAsk={(q) => {
+                setDraft(q);
+                window.location.hash = href({ view: "ask" });
+              }}
+            />
+          ) : (
+            <FilingReader
+              key={user}
+              token={token}
+              companyId={route.companyId}
+              accessionNo={route.accessionNo}
+              sectionKey={route.section}
+            />
+          )}
+        </main>
+      )}
+      <main className="chat" hidden={route.view !== "ask"}>
         {error && <div className="banner">{error}</div>}
         <div className="thread">
           {turns.length === 0 ? (

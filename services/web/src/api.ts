@@ -1,4 +1,13 @@
-import type { AgentEvent, HistoryTurn, Me } from "./types";
+import type {
+  AgentEvent,
+  Filing,
+  FinancialRow,
+  HistoryTurn,
+  LatestFiling,
+  Me,
+  SearchResult,
+  Section,
+} from "./types";
 
 const QUERY = "/api/query";
 const AGENT = "/api/agent";
@@ -36,6 +45,36 @@ export async function login(userId: string): Promise<string> {
 export async function me(token: string): Promise<Me> {
   return json<Me>(await fetch(`${QUERY}/v1/me`, { headers: { Authorization: `Bearer ${token}` } }));
 }
+
+function get<T>(token: string, path: string, params: Record<string, string | number> = {}) {
+  const qs = new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)]));
+  const url = `${QUERY}${path}${qs.size ? `?${qs}` : ""}`;
+  return fetch(url, { headers: { Authorization: `Bearer ${token}` } }).then((r) => json<T>(r));
+}
+
+export const searchCompanies = (token: string, q: string) =>
+  get<{ results: SearchResult[] }>(token, "/v1/companies/search", { q }).then((r) => r.results);
+
+export const financials = (token: string, companyId: string, quarters: number) =>
+  get<{ as_of: string; rows: FinancialRow[] }>(
+    token,
+    `/v1/companies/${companyId}/financials`,
+    { quarters },
+  );
+
+export const filings = (token: string, companyId: string) =>
+  get<{ filings: Filing[] }>(token, `/v1/companies/${companyId}/filings`, { limit: 20 }).then(
+    (r) => r.filings,
+  );
+
+export const section = (token: string, companyId: string, key: string, accessionNo: string) =>
+  get<{ sections: Section[] }>(token, `/v1/companies/${companyId}/sections/${encodeURIComponent(key)}`, {
+    accession_no: accessionNo,
+    max_chars: 50000,
+  }).then((r) => r.sections[0] ?? null);
+
+export const latestFilings = (token: string) =>
+  get<{ as_of: string; filings: LatestFiling[] }>(token, "/v1/filings/latest", { limit: 20 });
 
 /** Splits a server-sent event stream into JSON payloads, across arbitrary chunk boundaries. */
 export class SseParser {

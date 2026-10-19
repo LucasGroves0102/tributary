@@ -79,6 +79,24 @@ class Store:
                 """, (company_id, limit))
             return cur.fetchall()
 
+    def latest_filings(self, user_id: str, company_ids: list[str], limit: int) -> list[dict]:
+        """Newest parsed filings of these companies (no text)."""
+        with self._session(user_id) as cur:
+            cur.execute(
+                """
+                SELECT s.company_id, c.name, s.accession_no, s.form, s.filed,
+                       s.period_of_report, s.document_url, count(*) AS sections,
+                       max(s.ingested_at) AS ingested_at
+                FROM gold.filing_sections s
+                JOIN silver.companies c USING (company_id)
+                WHERE s.company_id = ANY(%s)
+                GROUP BY s.company_id, c.name, s.accession_no, s.form, s.filed,
+                         s.period_of_report, s.document_url
+                ORDER BY s.filed DESC, max(s.ingested_at) DESC
+                LIMIT %s
+                """, (company_ids, limit))
+            return cur.fetchall()
+
     def sections(self, user_id: str, company_id: str, section_key: str, form: str | None,
                  accession_no: str | None, limit: int, max_chars: int) -> list[dict]:
         with self._session(user_id) as cur:

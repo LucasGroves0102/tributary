@@ -64,3 +64,60 @@ export interface HistoryTurn {
   role: "user" | "assistant";
   content: string;
 }
+
+export interface SearchResult {
+  company_id: string;
+  name: string;
+  matched_on: string;
+  matched_alias: string;
+  is_current: boolean;
+  access: Tier[];
+}
+
+export interface FinancialRow {
+  metric: string;
+  period_start: string | null;
+  period_end: string;
+  value: string;
+  unit: string;
+  value_source: "reported" | "derived";
+  citation: {
+    accession_no: string;
+    form: string;
+    filed: string;
+    xbrl_tag: string;
+    source_accessions: string[] | null;
+    filing_url: string | null;
+  };
+  freshness: { filed: string; ingested_at: string };
+}
+
+export interface Filing {
+  accession_no: string;
+  form: string;
+  filed: string;
+  period_of_report: string | null;
+  document_url: string | null;
+  sections: { section_key: string; title: string | null; chars: number }[];
+}
+
+export interface LatestFiling {
+  company_id: string;
+  name: string;
+  accession_no: string;
+  form: string;
+  filed: string;
+  period_of_report: string | null;
+  document_url: string | null;
+  sections: number;
+  ingested_at: string;
+}
+
+export interface Section {
+  section_key: string;
+  title: string | null;
+  text: string;
+  truncated: boolean;
+  total_chars: number;
+  citation: { accession_no: string; form: string; filed: string; document_url: string | null };
+}
