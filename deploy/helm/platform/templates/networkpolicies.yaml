@@ -1,0 +1,179 @@
+{{- $labels := dict "root" $ "name" "network" }}
+{{- $host := printf "%s/32" .Values.hostAddress }}
+# Nothing in or out unless a policy below allows it.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  labels:
+    {{- include "platform.labels" $labels | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+  labels:
+    {{- include "platform.labels" $labels | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+---
+# Kafka: clients in the Tributary namespace and Connect; the node for probes.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: kafka
+  labels:
+    {{- include "platform.labels" $labels | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "platform.selector" (dict "root" $ "name" "kafka") | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - ipBlock: {cidr: {{ $host }}}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.clientNamespace }}
+          podSelector:
+            matchLabels:
+              tributary.io/kafka: "true"
+        - podSelector:
+            matchLabels:
+              {{- include "platform.selector" (dict "root" $ "name" "connect") | nindent 14 }}
+      ports:
+        - {protocol: TCP, port: 9092}
+---
+# OpenFGA: its clients in the Tributary namespace and the setup Job; the node for probes.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: openfga
+  labels:
+    {{- include "platform.labels" $labels | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "platform.selector" (dict "root" $ "name" "openfga") | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - ipBlock: {cidr: {{ $host }}}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.clientNamespace }}
+          podSelector:
+            matchLabels:
+              tributary.io/openfga: "true"
+        - podSelector:
+            matchLabels:
+              {{- include "platform.selector" (dict "root" $ "name" "setup-openfga") | nindent 14 }}
+      ports:
+        - {protocol: TCP, port: 8080}
+  egress:
+    - to:
+        - ipBlock: {cidr: {{ $host }}}
+      ports:
+        - {protocol: TCP, port: {{ .Values.postgres.port }}}
+---
+# Connect: reads the app database, writes Kafka; only the setup Job uses its REST API.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: connect
+  labels:
+    {{- include "platform.labels" $labels | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "platform.selector" (dict "root" $ "name" "connect") | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - ipBlock: {cidr: {{ $host }}}
+        - podSelector:
+            matchLabels:
+              {{- include "platform.selector" (dict "root" $ "name" "setup-connector") | nindent 14 }}
+      ports:
+        - {protocol: TCP, port: 8083}
+  egress:
+    - to:
+        - ipBlock: {cidr: {{ $host }}}
+      ports:
+        - {protocol: TCP, port: {{ .Values.postgres.port }}}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "platform.selector" (dict "root" $ "name" "kafka") | nindent 14 }}
+      ports:
+        - {protocol: TCP, port: 9092}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: openfga-migrate
+  labels:
+    {{- include "platform.labels" $labels | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "platform.selector" (dict "root" $ "name" "openfga-migrate") | nindent 6 }}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock: {cidr: {{ $host }}}
+      ports:
+        - {protocol: TCP, port: {{ .Values.postgres.port }}}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: setup-openfga
+  labels:
+    {{- include "platform.labels" $labels | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "platform.selector" (dict "root" $ "name" "setup-openfga") | nindent 6 }}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "platform.selector" (dict "root" $ "name" "openfga") | nindent 14 }}
+      ports:
+        - {protocol: TCP, port: 8080}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: setup-connector
+  labels:
+    {{- include "platform.labels" $labels | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "platform.selector" (dict "root" $ "name" "setup-connector") | nindent 6 }}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "platform.selector" (dict "root" $ "name" "connect") | nindent 14 }}
+      ports:
+        - {protocol: TCP, port: 8083}

@@ -1,0 +1,122 @@
+{{- $ctx := dict "root" $ "name" "openfga" }}
+# Applies OpenFGA's own schema migrations before each release.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: openfga-migrate
+  labels:
+    {{- include "platform.labels" (dict "root" $ "name" "openfga-migrate") | nindent 4 }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      labels:
+        {{- include "platform.labels" (dict "root" $ "name" "openfga-migrate") | nindent 8 }}
+    spec:
+      {{- include "platform.podSecurity" (dict "uid" 65532) | nindent 6 }}
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: {{ .Values.images.openfga }}
+          args: [migrate]
+          env:
+            {{- include "platform.datastore" . | nindent 12 }}
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {memory: 128Mi}
+          {{- include "platform.containerSecurity" . | nindent 10 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: openfga
+  labels:
+    {{- include "platform.labels" $ctx | nindent 4 }}
+spec:
+  selector:
+    {{- include "platform.selector" $ctx | nindent 4 }}
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openfga
+  labels:
+    {{- include "platform.labels" $ctx | nindent 4 }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      {{- include "platform.selector" $ctx | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "platform.labels" $ctx | nindent 8 }}
+    spec:
+      {{- include "platform.podSecurity" (dict "uid" 65532) | nindent 6 }}
+      containers:
+        - name: openfga
+          image: {{ .Values.images.openfga }}
+          args: [run]
+          env:
+            {{- include "platform.datastore" . | nindent 12 }}
+            - {name: OPENFGA_PLAYGROUND_ENABLED, value: "false"}
+            - {name: OPENFGA_LOG_FORMAT, value: json}
+          ports:
+            - {name: http, containerPort: 8080}
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.openfga.resources | nindent 12 }}
+          {{- include "platform.containerSecurity" . | nindent 10 }}
+---
+# Finds or creates the "tributary" store and writes authz/model.fga when it changed.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: setup-openfga
+  labels:
+    {{- include "platform.labels" (dict "root" $ "name" "setup-openfga") | nindent 4 }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 600
+  template:
+    metadata:
+      labels:
+        {{- include "platform.labels" (dict "root" $ "name" "setup-openfga") | nindent 8 }}
+    spec:
+      {{- include "platform.podSecurity" (dict "uid" 10001) | nindent 6 }}
+      restartPolicy: Never
+      {{- with .Values.images.pullSecret }}
+      imagePullSecrets:
+        - name: {{ . }}
+      {{- end }}
+      containers:
+        - name: setup
+          image: {{ include "platform.setupImage" . }}
+          args: [openfga]
+          env:
+            - {name: FGA_API_URL, value: "http://openfga:8080"}
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {memory: 64Mi}
+          {{- include "platform.containerSecurity" . | nindent 10 }}

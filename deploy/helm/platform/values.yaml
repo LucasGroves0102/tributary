@@ -1,0 +1,51 @@
+# Created outside the chart. Keys: postgres-password, openfga-datastore-uri.
+secretName: platform
+
+# Namespace whose pods may use Kafka (label tributary.io/kafka) and OpenFGA (tributary.io/openfga).
+clientNamespace: tributary
+
+# The node as seen from pods (k3s bridge). Postgres runs on the host; kubelet probes come from here.
+hostAddress: 10.42.0.1
+
+postgres:
+  port: 5432
+  user: tributary
+
+images:
+  kafka: apache/kafka:3.8.0@sha256:c89f315cff967322c5d2021434b32271393cb193aa7ec1d43e97341924e57069
+  connect: quay.io/debezium/connect:2.7.3.Final@sha256:a51bbb3a08d0de2cd56f76b956060bdaa3beb112ec13dac2668886b92dd5dd0b
+  openfga: openfga/openfga:v1.8.4@sha256:0ad225772d28527eacbe71fda9f2349b332100a710c2f2a624b188470b38f1ac
+  # Built by CI from deploy/platform-setup; tag is the commit SHA (required).
+  setup:
+    repository: ghcr.io/lucasgroves0102/tributary-platform-setup
+    tag: ""
+  pullSecret: ghcr
+
+kafka:
+  clusterId: tributary-platform-01
+  storage: 10Gi
+  heap: 512m
+  retentionHours: 168
+  resources:
+    requests:
+      cpu: 100m
+      memory: 768Mi
+    limits:
+      memory: 1Gi
+
+connect:
+  heap: 512m
+  resources:
+    requests:
+      cpu: 100m
+      memory: 640Mi
+    limits:
+      memory: 1Gi
+
+openfga:
+  resources:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      memory: 256Mi

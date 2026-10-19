@@ -1,0 +1,121 @@
+{{- $ctx := dict "root" $ "name" "connect" }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: connect
+  labels:
+    {{- include "platform.labels" $ctx | nindent 4 }}
+spec:
+  selector:
+    {{- include "platform.selector" $ctx | nindent 4 }}
+  ports:
+    - name: http
+      port: 8083
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: connect
+  labels:
+    {{- include "platform.labels" $ctx | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "platform.selector" $ctx | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "platform.labels" $ctx | nindent 8 }}
+    spec:
+      {{- include "platform.podSecurity" (dict "uid" 1001) | nindent 6 }}
+      initContainers:
+        # The entrypoint writes connect-distributed.properties; give it a writable copy.
+        - name: config
+          image: {{ .Values.images.connect }}
+          command: [sh, -c, "cp -r /kafka/config/. /config/"]
+          {{- include "platform.containerSecurity" . | nindent 10 }}
+          volumeMounts:
+            - {name: config, mountPath: /config}
+      containers:
+        - name: connect
+          image: {{ .Values.images.connect }}
+          env:
+            - {name: BOOTSTRAP_SERVERS, value: "kafka:9092"}
+            - {name: GROUP_ID, value: connect}
+            - {name: CONFIG_STORAGE_TOPIC, value: connect.configs}
+            - {name: OFFSET_STORAGE_TOPIC, value: connect.offsets}
+            - {name: STATUS_STORAGE_TOPIC, value: connect.statuses}
+            - {name: CONFIG_STORAGE_REPLICATION_FACTOR, value: "1"}
+            - {name: OFFSET_STORAGE_REPLICATION_FACTOR, value: "1"}
+            - {name: STATUS_STORAGE_REPLICATION_FACTOR, value: "1"}
+            - {name: HEAP_OPTS, value: "-Xmx{{ .Values.connect.heap }} -Xms256m"}
+            # Connector configs reference ${env:POSTGRES_PASSWORD}, so it is never stored in Kafka.
+            - {name: CONNECT_CONFIG_PROVIDERS, value: env}
+            - {name: CONNECT_CONFIG_PROVIDERS_ENV_CLASS, value: org.apache.kafka.common.config.provider.EnvVarConfigProvider}
+            {{- include "platform.postgresPassword" . | nindent 12 }}
+          ports:
+            - {name: http, containerPort: 8083}
+          startupProbe:
+            httpGet: {path: /, port: http}
+            periodSeconds: 5
+            failureThreshold: 36
+          readinessProbe:
+            httpGet: {path: /, port: http}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /, port: http}
+            periodSeconds: 20
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.connect.resources | nindent 12 }}
+          {{- include "platform.containerSecurity" . | nindent 10 }}
+          volumeMounts:
+            - {name: config, mountPath: /kafka/config}
+            - {name: logs, mountPath: /kafka/logs}
+            - {name: data, mountPath: /kafka/data}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - {name: config, emptyDir: {sizeLimit: 16Mi}}
+        - {name: logs, emptyDir: {sizeLimit: 256Mi}}
+        - {name: data, emptyDir: {sizeLimit: 64Mi}}
+        - {name: tmp, emptyDir: {sizeLimit: 64Mi}}
+---
+# Registers (or updates) the Debezium connector for the app database after each release.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: setup-connector
+  labels:
+    {{- include "platform.labels" (dict "root" $ "name" "setup-connector") | nindent 4 }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 600
+  template:
+    metadata:
+      labels:
+        {{- include "platform.labels" (dict "root" $ "name" "setup-connector") | nindent 8 }}
+    spec:
+      {{- include "platform.podSecurity" (dict "uid" 10001) | nindent 6 }}
+      restartPolicy: Never
+      {{- with .Values.images.pullSecret }}
+      imagePullSecrets:
+        - name: {{ . }}
+      {{- end }}
+      containers:
+        - name: setup
+          image: {{ include "platform.setupImage" . }}
+          args: [connector]
+          env:
+            - {name: CONNECT_URL, value: "http://connect:8083"}
+            - {name: POSTGRES_USER, value: {{ .Values.postgres.user | quote }}}
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {memory: 64Mi}
+          {{- include "platform.containerSecurity" . | nindent 10 }}

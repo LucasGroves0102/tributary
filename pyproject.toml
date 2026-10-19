@@ -14,7 +14,7 @@ testpaths = ["libs", "services", "tests"]
 addopts = "--import-mode=importlib"
 
 [tool.pyright]
-include = ["libs/sec/src", "libs/authz/src", "services/*/src"]
+include = ["libs/sec/src", "libs/authz/src", "services/*/src", "deploy/platform-setup"]
 exclude = ["**/node_modules", "services/web"]
 pythonVersion = "3.12"
 typeCheckingMode = "standard"

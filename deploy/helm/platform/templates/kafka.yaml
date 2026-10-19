@@ -1,0 +1,112 @@
+{{- $ctx := dict "root" $ "name" "kafka" }}
+{{- $fqdn := printf "kafka.%s.svc.cluster.local" .Release.Namespace }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+  labels:
+    {{- include "platform.labels" $ctx | nindent 4 }}
+spec:
+  selector:
+    {{- include "platform.selector" $ctx | nindent 4 }}
+  ports:
+    - name: kafka
+      port: 9092
+      targetPort: kafka
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-headless
+  labels:
+    {{- include "platform.labels" $ctx | nindent 4 }}
+spec:
+  clusterIP: None
+  selector:
+    {{- include "platform.selector" $ctx | nindent 4 }}
+  ports:
+    - name: kafka
+      port: 9092
+---
+# One broker in KRaft mode (broker + controller); the controller listens on localhost only.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kafka
+  labels:
+    {{- include "platform.labels" $ctx | nindent 4 }}
+spec:
+  serviceName: kafka-headless
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "platform.selector" $ctx | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "platform.labels" $ctx | nindent 8 }}
+    spec:
+      {{- include "platform.podSecurity" (dict "uid" 1000) | nindent 6 }}
+      terminationGracePeriodSeconds: 60
+      initContainers:
+        # The image writes server.properties at startup; give it a writable copy of its config.
+        - name: config
+          image: {{ .Values.images.kafka }}
+          command: [sh, -c, "cp -r /opt/kafka/config/. /config/"]
+          {{- include "platform.containerSecurity" . | nindent 10 }}
+          volumeMounts:
+            - {name: config, mountPath: /config}
+      containers:
+        - name: kafka
+          image: {{ .Values.images.kafka }}
+          env:
+            - {name: CLUSTER_ID, value: {{ .Values.kafka.clusterId | quote }}}
+            - {name: KAFKA_NODE_ID, value: "1"}
+            - {name: KAFKA_PROCESS_ROLES, value: "broker,controller"}
+            - {name: KAFKA_LISTENERS, value: "PLAINTEXT://:9092,CONTROLLER://localhost:9093"}
+            - {name: KAFKA_ADVERTISED_LISTENERS, value: "PLAINTEXT://{{ $fqdn }}:9092"}
+            - {name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP, value: "PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT"}
+            - {name: KAFKA_CONTROLLER_LISTENER_NAMES, value: CONTROLLER}
+            - {name: KAFKA_CONTROLLER_QUORUM_VOTERS, value: "1@localhost:9093"}
+            - {name: KAFKA_INTER_BROKER_LISTENER_NAME, value: PLAINTEXT}
+            - {name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR, value: "1"}
+            - {name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR, value: "1"}
+            - {name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR, value: "1"}
+            - {name: KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS, value: "0"}
+            - {name: KAFKA_AUTO_CREATE_TOPICS_ENABLE, value: "true"}
+            - {name: KAFKA_LOG_DIRS, value: /var/lib/kafka/data}
+            - {name: KAFKA_LOG_RETENTION_HOURS, value: {{ .Values.kafka.retentionHours | quote }}}
+            - {name: KAFKA_HEAP_OPTS, value: "-Xmx{{ .Values.kafka.heap }} -Xms{{ .Values.kafka.heap }}"}
+          ports:
+            - {name: kafka, containerPort: 9092}
+          startupProbe:
+            tcpSocket: {port: kafka}
+            periodSeconds: 5
+            failureThreshold: 36
+          readinessProbe:
+            tcpSocket: {port: kafka}
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket: {port: kafka}
+            periodSeconds: 20
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.kafka.resources | nindent 12 }}
+          {{- include "platform.containerSecurity" . | nindent 10 }}
+          volumeMounts:
+            - {name: data, mountPath: /var/lib/kafka/data}
+            - {name: config, mountPath: /opt/kafka/config}
+            - {name: logs, mountPath: /opt/kafka/logs}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - {name: config, emptyDir: {sizeLimit: 16Mi}}
+        - {name: logs, emptyDir: {sizeLimit: 256Mi}}
+        - {name: tmp, emptyDir: {sizeLimit: 64Mi}}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: {{ .Values.kafka.storage }}

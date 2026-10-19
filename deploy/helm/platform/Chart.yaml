@@ -1,0 +1,6 @@
+apiVersion: v2
+name: platform
+description: Kafka, Kafka Connect with Debezium, and OpenFGA for Tributary
+type: application
+version: 0.1.0
+kubeVersion: ">=1.30.0-0"
