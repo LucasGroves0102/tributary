@@ -2,6 +2,7 @@
 # Restore the latest backup of each database into a scratch database, compare tables and row
 # counts with the live database, then drop the scratch copies. Runs as the postgres user.
 set -euo pipefail
+cd /
 export PGOPTIONS="-c client_min_messages=warning"
 
 dir="${BACKUP_DIR:-/var/backups/postgres}"

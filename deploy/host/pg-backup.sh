@@ -2,6 +2,7 @@
 # Logical backup of the host Postgres: roles plus one custom-format dump per database, each
 # checked readable before the backup is published. Runs as the postgres user (peer auth).
 set -euo pipefail
+cd /
 
 dir="${BACKUP_DIR:-/var/backups/postgres}"
 keep_days="${KEEP_DAYS:-14}"
