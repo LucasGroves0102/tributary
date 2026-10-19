@@ -18,3 +18,4 @@ ROADMAP.md
 docs/
 node_modules/
 dist/
+deploy/helm/monitoring/charts/

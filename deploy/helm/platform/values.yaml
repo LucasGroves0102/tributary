@@ -1,6 +1,9 @@
 # Created outside the chart. Keys: postgres-password, openfga-datastore-uri.
 secretName: platform
 
+# Namespace of kafka-exporter (consumer lag for alerts).
+monitoringNamespace: monitoring
+
 # Namespace whose pods may use Kafka (label tributary.io/kafka) and OpenFGA (tributary.io/openfga).
 clientNamespace: tributary
 

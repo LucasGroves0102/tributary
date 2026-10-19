@@ -1,0 +1,242 @@
+# Secrets created outside the chart (deploy/secrets/monitoring-*.yaml):
+#   grafana-admin         admin-user, admin-password
+#   alertmanager-discord  webhook-url
+#   postgres-exporter     password (Postgres login "monitoring", role pg_monitor)
+
+kube-prometheus-stack:
+  # k3s runs these inside the k3s process; there is nothing separate to scrape.
+  kubeEtcd: {enabled: false}
+  kubeScheduler: {enabled: false}
+  kubeControllerManager: {enabled: false}
+  kubeProxy: {enabled: false}
+  defaultRules:
+    rules:
+      etcd: false
+      kubeSchedulerAlerting: false
+      kubeSchedulerRecording: false
+      kubeControllerManager: false
+      kubeProxy: false
+
+  prometheus:
+    prometheusSpec:
+      retention: 15d
+      retentionSize: 15GB
+      # Pick up ServiceMonitors and rules from every release, not only this one's.
+      ruleSelectorNilUsesHelmValues: false
+      serviceMonitorSelectorNilUsesHelmValues: false
+      podMonitorSelectorNilUsesHelmValues: false
+      resources:
+        requests: {cpu: 100m, memory: 400Mi}
+        limits: {memory: 1Gi}
+      storageSpec:
+        volumeClaimTemplate:
+          spec:
+            accessModes: [ReadWriteOnce]
+            resources:
+              requests:
+                storage: 20Gi
+
+  alertmanager:
+    config:
+      route:
+        group_by: [alertname, namespace]
+        group_wait: 30s
+        group_interval: 5m
+        repeat_interval: 12h
+        receiver: discord
+        routes:
+          - receiver: "null"
+            matchers: ['alertname =~ "Watchdog|InfoInhibitor"']
+          - receiver: "null"
+            matchers: ['severity = "info"']
+      receivers:
+        - name: "null"
+        - name: discord
+          discord_configs:
+            - webhook_url_file: /etc/alertmanager/secrets/alertmanager-discord/webhook-url
+              send_resolved: true
+    alertmanagerSpec:
+      secrets: [alertmanager-discord]
+      resources:
+        requests: {cpu: 10m, memory: 32Mi}
+        limits: {memory: 128Mi}
+
+  grafana:
+    admin:
+      existingSecret: grafana-admin
+    testFramework:
+      enabled: false
+    persistence:
+      enabled: true
+      size: 1Gi
+    additionalDataSources:
+      - name: Loki
+        type: loki
+        uid: loki
+        url: http://loki:3100
+        access: proxy
+    resources:
+      requests: {cpu: 25m, memory: 128Mi}
+      limits: {memory: 384Mi}
+
+  prometheus-node-exporter:
+    extraArgs:
+      - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|run/containerd/.+|var/lib/docker/.+|var/lib/kubelet/.+)($|/)
+      - --collector.filesystem.fs-types-exclude=^(autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|fusectl|hugetlbfs|iso9660|mqueue|nsfs|overlay|proc|procfs|pstore|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tracefs|erofs)$
+      # pg-backup writes its last success time here (deploy/host/pg-backup.sh).
+      - --collector.textfile.directory=/host/root/var/lib/node_exporter/textfile_collector
+
+loki:
+  fullnameOverride: loki
+  deploymentMode: SingleBinary
+  loki:
+    auth_enabled: false
+    commonConfig:
+      replication_factor: 1
+    storage:
+      type: filesystem
+    schemaConfig:
+      configs:
+        - from: "2026-10-01"
+          store: tsdb
+          object_store: filesystem
+          schema: v13
+          index:
+            prefix: index_
+            period: 24h
+    limits_config:
+      retention_period: 336h
+    compactor:
+      retention_enabled: true
+      delete_request_store: filesystem
+  singleBinary:
+    replicas: 1
+    persistence:
+      size: 20Gi
+      enableStatefulSetAutoDeletePVC: false
+    resources:
+      requests: {cpu: 50m, memory: 192Mi}
+      limits: {memory: 768Mi}
+  read: {replicas: 0}
+  write: {replicas: 0}
+  backend: {replicas: 0}
+  gateway: {enabled: false}
+  chunksCache: {enabled: false}
+  resultsCache: {enabled: false}
+  lokiCanary: {enabled: false}
+  test: {enabled: false}
+  minio: {enabled: false}
+
+alloy:
+  alloy:
+    mounts:
+      varlog: true
+      extra:
+        - {name: machine-id, mountPath: /etc/machine-id, readOnly: true}
+    configMap:
+      content: |
+        // Every container's logs (Deployments, Jobs and CronJob runs), through the Kubernetes API.
+        discovery.kubernetes "pods" {
+          role = "pod"
+        }
+
+        discovery.relabel "pods" {
+          targets = discovery.kubernetes.pods.targets
+          rule {
+            source_labels = ["__meta_kubernetes_namespace"]
+            target_label  = "namespace"
+          }
+          rule {
+            source_labels = ["__meta_kubernetes_pod_name"]
+            target_label  = "pod"
+          }
+          rule {
+            source_labels = ["__meta_kubernetes_pod_container_name"]
+            target_label  = "container"
+          }
+          rule {
+            source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+            target_label  = "app"
+          }
+          rule {
+            source_labels = ["__meta_kubernetes_pod_label_job_name"]
+            target_label  = "job_name"
+          }
+        }
+
+        loki.source.kubernetes "pods" {
+          targets    = discovery.relabel.pods.output
+          forward_to = [loki.write.default.receiver]
+        }
+
+        loki.source.kubernetes_events "events" {
+          log_format = "json"
+          forward_to = [loki.write.default.receiver]
+        }
+
+        // The host's journal: Postgres, k3s, sshd, ufw, pg-backup.
+        loki.relabel "journal" {
+          forward_to = []
+          rule {
+            source_labels = ["__journal__systemd_unit"]
+            target_label  = "unit"
+          }
+          rule {
+            source_labels = ["__journal_syslog_identifier"]
+            target_label  = "identifier"
+          }
+          rule {
+            source_labels = ["__journal_priority_keyword"]
+            target_label  = "level"
+          }
+        }
+
+        loki.source.journal "host" {
+          path          = "/var/log/journal"
+          relabel_rules = loki.relabel.journal.rules
+          labels        = {source = "journal"}
+          forward_to    = [loki.write.default.receiver]
+        }
+
+        loki.write "default" {
+          endpoint {
+            url = "http://loki:3100/loki/api/v1/push"
+          }
+        }
+    resources:
+      requests: {cpu: 25m, memory: 96Mi}
+      limits: {memory: 384Mi}
+  controller:
+    volumes:
+      extra:
+        - name: machine-id
+          hostPath:
+            path: /etc/machine-id
+            type: File
+
+prometheus-postgres-exporter:
+  config:
+    datasource:
+      host: 10.42.0.1
+      user: monitoring
+      passwordSecret:
+        name: postgres-exporter
+        key: password
+      database: postgres
+      sslmode: disable
+  serviceMonitor:
+    enabled: true
+  resources:
+    requests: {cpu: 10m, memory: 32Mi}
+    limits: {memory: 128Mi}
+
+prometheus-kafka-exporter:
+  kafkaServer:
+    - kafka.platform.svc.cluster.local:9092
+  prometheus:
+    serviceMonitor:
+      enabled: true
+      namespace: monitoring
+  resources:
+    requests: {cpu: 10m, memory: 32Mi}
+    limits: {memory: 128Mi}

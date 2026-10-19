@@ -32,7 +32,7 @@ spec:
         - {protocol: UDP, port: 53}
         - {protocol: TCP, port: 53}
 ---
-# Kafka: clients in the Tributary namespace, Connect, and itself (admin tools reconnect through
+# Kafka: clients in the Tributary namespace, Connect, kafka-exporter, and itself (admin tools reconnect through
 # the advertised address); the node for probes.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -57,6 +57,12 @@ spec:
         - podSelector:
             matchExpressions:
               - {key: app.kubernetes.io/name, operator: In, values: [connect, kafka]}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.monitoringNamespace }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus-kafka-exporter
       ports:
         - {protocol: TCP, port: 9092}
 ---

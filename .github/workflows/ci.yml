@@ -100,6 +100,21 @@ jobs:
           | docker run --rm -i ghcr.io/yannh/kubeconform:v0.7.0@sha256:85dbef6b4b312b99133decc9c6fc9495e9fc5f92293d4ff3b7e1b30f5611823c
           -strict -summary -kubernetes-version 1.36.0 -
 
+      - name: helm lint (monitoring)
+        run: >-
+          docker run --rm -v "$PWD:/repo" -w /repo --entrypoint sh alpine/helm:3.19.0@sha256:aef9b56f64e866207d9591d0abd8f6d767b36aadd12edf68f8a719716d9d29c9 -c
+          "helm repo add prometheus-community https://prometheus-community.github.io/helm-charts >/dev/null
+          && helm repo add grafana https://grafana.github.io/helm-charts >/dev/null
+          && helm dependency build deploy/helm/monitoring
+          && helm lint --strict deploy/helm/monitoring
+          && helm template monitoring deploy/helm/monitoring --namespace monitoring > monitoring.yaml"
+      - name: kubeconform (monitoring)
+        run: >-
+          docker run --rm -i ghcr.io/yannh/kubeconform:v0.7.0@sha256:85dbef6b4b312b99133decc9c6fc9495e9fc5f92293d4ff3b7e1b30f5611823c
+          -strict -summary -kubernetes-version 1.36.0 -schema-location default
+          -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
+          - < monitoring.yaml
+
   images:
     name: image ${{ matrix.service }}
     needs: [secrets, python, web, authz, chart]

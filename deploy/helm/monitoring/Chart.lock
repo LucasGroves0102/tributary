@@ -1,0 +1,18 @@
+dependencies:
+- name: kube-prometheus-stack
+  repository: https://prometheus-community.github.io/helm-charts
+  version: 92.10.1
+- name: loki
+  repository: https://grafana.github.io/helm-charts
+  version: 7.3.0
+- name: alloy
+  repository: https://grafana.github.io/helm-charts
+  version: 1.14.0
+- name: prometheus-postgres-exporter
+  repository: https://prometheus-community.github.io/helm-charts
+  version: 8.2.0
+- name: prometheus-kafka-exporter
+  repository: https://prometheus-community.github.io/helm-charts
+  version: 4.0.0
+digest: sha256:cc133e51771a6f61e00a232c6bfe380898723aba627018408647988df4047fc5
+generated: "2026-10-19T13:21:30.339714922-07:00"

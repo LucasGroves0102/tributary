@@ -11,4 +11,4 @@ NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
-ReadWritePaths=/var/backups/postgres
+ReadWritePaths=/var/backups/postgres -/var/lib/node_exporter/textfile_collector
