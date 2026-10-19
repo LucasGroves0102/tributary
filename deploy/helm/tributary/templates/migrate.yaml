@@ -20,4 +20,8 @@ spec:
         {{- include "tributary.labels" $ctx | nindent 8 }}
         {{- include "tributary.uses" $ctx | nindent 8 }}
     spec:
+      # Runs before the chart's postgres Service exists.
+      hostAliases:
+        - ip: {{ .Values.hostAddress | quote }}
+          hostnames: [postgres]
       {{- include "tributary.podSpec" $ctx | nindent 6 }}

@@ -19,6 +19,10 @@ spec:
     spec:
       {{- include "platform.podSecurity" (dict "uid" 65532) | nindent 6 }}
       restartPolicy: Never
+      # Runs before the chart's postgres Service exists.
+      hostAliases:
+        - ip: {{ .Values.hostAddress | quote }}
+          hostnames: [postgres]
       containers:
         - name: migrate
           image: {{ .Values.images.openfga }}
