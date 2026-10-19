@@ -6,7 +6,7 @@ import signal
 import threading
 
 import psycopg
-from confluent_kafka import Consumer, KafkaError, KafkaException
+from confluent_kafka import Consumer, KafkaError, KafkaException, Message
 
 from bronze_loader.db import insert_filings
 from bronze_loader.rows import to_row
@@ -15,6 +15,18 @@ TOPIC = "filings.raw"
 GROUP_ID = "bronze-loader"
 
 log = logging.getLogger("bronze_loader")
+
+
+def readable(msgs: list[Message]) -> list[Message]:
+    """Messages carrying data. A topic not created yet is skipped; other errors raise."""
+    out = []
+    for m in msgs:
+        err = m.error()
+        if err is None:
+            out.append(m)
+        elif err.code() != KafkaError.UNKNOWN_TOPIC_OR_PART:
+            raise KafkaException(err)
+    return out
 
 
 def main() -> None:
@@ -44,15 +56,11 @@ def main() -> None:
         log.info("consuming %s → bronze.filings", TOPIC)
         try:
             while not stop.is_set():
-                msgs = consumer.consume(num_messages=batch_size, timeout=1.0)
+                msgs = readable(consumer.consume(num_messages=batch_size, timeout=1.0))
                 if not msgs:
-                    continue
+                    continue  # nothing consumed, so no offset to commit
                 rows = []
                 for m in msgs:
-                    if m.error():
-                        if m.error().code() == KafkaError.UNKNOWN_TOPIC_OR_PART:
-                            continue  # topic not created yet
-                        raise KafkaException(m.error())
                     try:
                         rows.append(to_row(m.value(), m.partition(), m.offset()))
                     except (ValueError, KeyError) as e:
