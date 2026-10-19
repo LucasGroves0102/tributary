@@ -62,7 +62,7 @@ spec:
               kubernetes.io/metadata.name: {{ .Values.monitoringNamespace }}
           podSelector:
             matchLabels:
-              app.kubernetes.io/name: prometheus-kafka-exporter
+              app: prometheus-kafka-exporter
       ports:
         - {protocol: TCP, port: 9092}
 ---
