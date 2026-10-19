@@ -4,4 +4,6 @@ WORKDIR /app
 COPY services/parser/pyproject.toml .
 COPY services/parser/src ./src
 RUN pip install --no-cache-dir .
+RUN useradd --system --uid 10001 --no-create-home app
+USER 10001
 CMD ["parser"]

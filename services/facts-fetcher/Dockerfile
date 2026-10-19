@@ -6,4 +6,6 @@ RUN pip install --no-cache-dir /libs/sec
 COPY services/facts-fetcher/pyproject.toml .
 COPY services/facts-fetcher/src ./src
 RUN pip install --no-cache-dir .
+RUN useradd --system --uid 10001 --no-create-home app
+USER 10001
 CMD ["facts-fetcher"]

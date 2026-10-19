@@ -6,4 +6,6 @@ RUN pip install --no-cache-dir /libs/sec
 COPY services/company-loader/pyproject.toml .
 COPY services/company-loader/src ./src
 RUN pip install --no-cache-dir .
+RUN useradd --system --uid 10001 --no-create-home app
+USER 10001
 CMD ["company-loader"]

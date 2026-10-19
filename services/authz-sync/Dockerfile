@@ -6,4 +6,6 @@ RUN pip install --no-cache-dir /libs/authz
 COPY services/authz-sync/pyproject.toml .
 COPY services/authz-sync/src ./src
 RUN pip install --no-cache-dir .
+RUN useradd --system --uid 10001 --no-create-home app
+USER 10001
 CMD ["authz-sync"]

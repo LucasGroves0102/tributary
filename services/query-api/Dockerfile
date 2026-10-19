@@ -7,4 +7,6 @@ COPY services/query-api/pyproject.toml .
 COPY services/query-api/src ./src
 RUN pip install --no-cache-dir .
 EXPOSE 8000
+RUN useradd --system --uid 10001 --no-create-home app
+USER 10001
 CMD ["query-api"]
