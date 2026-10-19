@@ -1,0 +1,6 @@
+# Kubernetes Secrets in deploy/secrets are committed encrypted. Only values under data/stringData
+# are encrypted; the private key lives on the server.
+creation_rules:
+  - path_regex: ^deploy/secrets/.*\.yaml$
+    encrypted_regex: ^(data|stringData)$
+    age: age1rkelyhgl43tvw2hcwwhjseumcvt67txhu0sap50h84mp57zdzc9s4j4ktg
