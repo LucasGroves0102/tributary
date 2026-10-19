@@ -1,0 +1,52 @@
+# CI tags every image of a green main build main-<run number>-<sha>; the newest build wins and
+# is written into deploy/flux/releases as a commit, so every deploy is a revertible commit.
+apiVersion: image.toolkit.fluxcd.io/v1
+kind: ImageRepository
+metadata:
+  name: tributary
+  namespace: flux-system
+spec:
+  image: ghcr.io/lucasgroves0102/tributary-query-api
+  interval: 2m
+  secretRef:
+    name: ghcr
+---
+apiVersion: image.toolkit.fluxcd.io/v1
+kind: ImagePolicy
+metadata:
+  name: tributary
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: tributary
+  filterTags:
+    pattern: '^main-(?P<build>\d+)-[0-9a-f]{40}$'
+    extract: '$build'
+  policy:
+    numerical:
+      order: asc
+---
+apiVersion: image.toolkit.fluxcd.io/v1
+kind: ImageUpdateAutomation
+metadata:
+  name: tributary
+  namespace: flux-system
+spec:
+  interval: 2m
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  git:
+    checkout:
+      ref:
+        branch: main
+    commit:
+      author:
+        name: fluxcdbot
+        email: fluxcdbot@users.noreply.github.com
+      messageTemplate: "Deploy new images [skip ci]"
+    push:
+      branch: main
+  update:
+    path: ./deploy/flux/releases
+    strategy: Setters

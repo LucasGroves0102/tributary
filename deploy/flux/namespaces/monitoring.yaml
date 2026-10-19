@@ -1,0 +1,9 @@
+# node-exporter and Alloy read the host's /proc, /sys and journal.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
