@@ -26,8 +26,9 @@ pytestmark = pytest.mark.skipif(not DSN, reason="TEST_DATABASE_URL not set")
 FIXTURES = Path(__file__).parent / "fixtures"
 NVDA, COST, JPM = "0001045810", "0000909832", "0000019617"
 XOM, XOM_HOLDINGS = "0000034088", "0002115436"
+HD = "0000354950"
 # company_id → CIKs; Exxon's holdings CIK belongs to the original company
-COMPANIES = {NVDA: [NVDA], COST: [COST], JPM: [JPM], XOM: [XOM, XOM_HOLDINGS]}
+COMPANIES = {NVDA: [NVDA], COST: [COST], JPM: [JPM], XOM: [XOM, XOM_HOLDINGS], HD: [HD]}
 
 
 def raw(cik: str) -> bytes:
@@ -107,6 +108,38 @@ def test_bank_revenue_and_missing_metrics(loaded):
 
 def test_eps_is_never_derived(loaded):
     assert all(r[2] == "reported" for r in quarters(loaded, NVDA, "eps_diluted"))
+
+
+def test_preferred_tag_derived_beats_fallback_reported(loaded):
+    # cash-flow D&A is year-to-date only; the income-statement line (852M) is reported quarterly
+    q2 = quarters(loaded, HD, "depreciation_amortization")[0]
+    assert q2[:4] == (date(2026, 8, 2), 929000000, "derived",
+                      "us-gaap:DepreciationDepletionAndAmortization")  # 1.839B - 910M
+
+
+def test_outflows_are_positive(loaded):
+    q4 = date(2026, 2, 1)  # FY - 9 months
+    assert {m: next(r[1] for r in quarters(loaded, HD, m) if r[0] == q4)
+            for m in ("capex", "dividends_paid", "share_buybacks")} == {
+        "capex": 1058000000, "dividends_paid": 2289000000, "share_buybacks": 0}
+
+
+def test_per_share_values_and_share_counts_are_never_derived(loaded):
+    for metric in ("eps_basic", "weighted_shares_diluted"):
+        rows = quarters(loaded, HD, metric)
+        assert rows and all(r[2] == "reported" for r in rows)
+        assert date(2026, 2, 1) not in [r[0] for r in rows]
+
+
+def test_instants_are_balance_sheet_values(loaded):
+    debt = quarters(loaded, HD, "long_term_debt")[0]
+    assert debt[:4] == (date(2026, 8, 2), 43951000000, "reported",
+                        "us-gaap:LongTermDebtAndCapitalLeaseObligations")
+    # dei cover-page counts are dated weeks after the quarter; only balance-sheet dates appear
+    shares = quarters(loaded, HD, "shares_outstanding")
+    assert [(r[0], r[1]) for r in shares[:2]] == [
+        (date(2026, 8, 2), 998000000), (date(2026, 5, 3), 997000000)]
+    assert date(2026, 8, 18) not in [r[0] for r in shares]
 
 
 def test_successor_cik_facts_land_on_original_company(loaded):
