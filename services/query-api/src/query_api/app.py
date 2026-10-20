@@ -7,12 +7,14 @@ from datetime import UTC, date, datetime
 from typing import Annotated, Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Path, Query
+from fastapi.responses import Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from prometheus_client import Counter
 from pydantic import BaseModel, Field
 
 from query_api.auth import Unauthenticated, mint, verify
 from query_api.authorizer import Authorizer, AuthzUnavailable
+from query_api.csv_export import csv_response
 from query_api.formula import (
     CATALOG,
     Analysis,
@@ -51,6 +53,9 @@ DERIVED_METRICS = [
     "revenue_growth", "net_income_growth", "eps_growth", "payout_ratio", "debt_to_equity",
     "net_debt", "current_ratio", "roe",
 ]
+FINANCIALS_CSV = ["metric", "view", "period_start", "period_end", "fiscal_period",
+                  "calendar_period", "value", "unit", "value_source", "accession_no", "form",
+                  "filed", "xbrl_tag", "source_accessions", "filing_url", "ingested_at"]
 CompanyId = Annotated[str, Path(pattern=r"^\d{10}$", description="canonical company_id")]
 
 
@@ -174,7 +179,7 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
     def metrics() -> dict:
         return {"metrics": METRICS, "derived_metrics": DERIVED_METRICS}
 
-    @app.get("/v1/companies/{company_id}/financials")
+    @app.get("/v1/companies/{company_id}/financials", response_model=dict)
     def financials(
         user_id: User, company_id: CompanyId,
         metrics: Annotated[list[str] | None, Query(description="default: all")] = None,
@@ -184,7 +189,10 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
         basis: Annotated[Literal["fiscal", "calendar"], Query(
             description="fiscal: every fiscal quarter; calendar: one per calendar quarter")]
             = "fiscal",
-    ) -> dict:
+        fmt: Annotated[Literal["json", "csv"], Query(
+            alias="format", description="csv: one row per value, with its source filing")]
+            = "json",
+    ) -> dict | Response:
         unknown = set(metrics or []) - set(METRICS) - set(DERIVED_METRICS)
         if unknown:
             raise HTTPException(422, f"unknown metrics: {sorted(unknown)}")
@@ -192,6 +200,15 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
         rows = store.financials(user_id, company_id, metrics or METRICS + DERIVED_METRICS,
                                 quarters, view, basis)
         meta = {"company_id": company_id, "view": view, "basis": basis, "as_of": _now()}
+        if fmt == "csv":
+            return csv_response(f"{company_id}-financials-{view}-{basis}.csv", FINANCIALS_CSV, ([
+                r["metric"], view, r["period_start"], r["period_end"],
+                _period("FY", r.get("fiscal_year"), r.get("fiscal_quarter")),
+                _period("CY", r.get("calendar_year"), r.get("calendar_quarter")),
+                r["value"], r["unit"], r["value_source"], r["accession_no"], r["form"],
+                r["filed"], r["source_tag"], r["source_accessions"],
+                filing_url(r.get("filer_cik"), r["accession_no"]), r["ingested_at"],
+            ] for r in rows))
         return {**meta, "rows": [
             {
                 "metric": r["metric"], "period_start": r["period_start"],

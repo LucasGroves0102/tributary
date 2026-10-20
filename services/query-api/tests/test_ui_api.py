@@ -311,3 +311,33 @@ def test_peers_of_an_ungranted_company_ignore_its_revenue(token):
 def test_peers_of_unknown_company(token):
     c = peer_client({})
     assert c.get(f"/v1/companies/{AAPL}/peers", headers=token("carol")).status_code == 404
+
+
+def test_financials_csv_cites_every_value(token):
+    c = TestClient(create_app(FakeAuthorizer({"alice": {NVDA: {"financials"}}}), FakeStore(),
+                              SECRET))
+    r = c.get(f"/v1/companies/{NVDA}/financials?format=csv&view=ttm", headers=token("alice"))
+    assert r.status_code == 200 and r.headers["content-type"].startswith("text/csv")
+    assert "attachment" in r.headers["content-disposition"]
+    header, row = r.text.splitlines()
+    assert header.split(",") == ["metric", "view", "period_start", "period_end", "fiscal_period",
+                                 "calendar_period", "value", "unit", "value_source",
+                                 "accession_no", "form", "filed", "xbrl_tag",
+                                 "source_accessions", "filing_url", "ingested_at"]
+    assert row.split(",")[:12] == ["revenue", "ttm", "2026-04-27", "2026-07-26", "FY2027 Q2",
+                                   "CY2026 Q2", "96221000000", "USD", "reported",
+                                   "0001045810-26-000075", "10-Q", "2026-08-26"]
+
+
+def test_financials_csv_is_permission_checked(token):
+    store = FakeStore()
+    c = TestClient(create_app(FakeAuthorizer({"alice": {NVDA: {"financials"}}}), store, SECRET))
+    r = c.get(f"/v1/companies/{TSLA}/financials?format=csv", headers=token("alice"))
+    assert r.status_code == 403 and store.calls == []
+
+
+def test_csv_neutralizes_formulas():
+    from query_api.csv_export import cell
+    assert cell("=HYPERLINK(1)") == "'=HYPERLINK(1)"
+    assert cell(Decimal("-5")) == "-5" and cell(None) == "" and cell(["NYSE", "Nasdaq"]) == \
+        "NYSE Nasdaq"
