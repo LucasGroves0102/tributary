@@ -39,6 +39,8 @@ class ScreenStore:
         self.compiled.append(compiled)
         rows = []
         for cid, name in ((NVDA, "NVIDIA CORP"), (TSLA, "Tesla, Inc.")):
+            if "ids" in compiled.params and cid not in compiled.params["ids"]:
+                continue
             row = {**meta(cid, name), "total": 2}
             for i in compiled.slots.values():
                 row[f"v{i}"] = Decimal("130497000000")

@@ -189,6 +189,7 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-tributary}:${POSTGRES_PASSWORD:-tributary}@postgres:5432/${POSTGRES_DB:-tributary}
+      APP_DATABASE_URL: postgresql://${POSTGRES_USER:-tributary}:${POSTGRES_PASSWORD:-tributary}@postgres:5432/app
       FGA_API_URL: http://openfga:8080
       DEMO_USERS: alice,bob,carol,dave
     depends_on:

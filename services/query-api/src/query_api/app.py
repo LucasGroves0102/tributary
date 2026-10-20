@@ -27,6 +27,7 @@ from query_api.formula import (
 )
 from query_api.store import Store
 from query_api.ui import add_ui_routes
+from query_api.watchlist import Watchlists
 from tributary_telemetry.http import instrument
 
 METRICS = [
@@ -77,9 +78,11 @@ class FormulaRequest(BaseModel):
 
 def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
                demo_users: frozenset[str] = frozenset(),
-               today: Callable[[], date] | None = None) -> FastAPI:
+               today: Callable[[], date] | None = None,
+               watchlists: Watchlists | None = None) -> FastAPI:
     """demo_users: accounts anyone may sign in as without a password (empty disables it).
-    today: the current US Eastern date (EDGAR's), injectable for tests."""
+    today: the current US Eastern date (EDGAR's), injectable for tests.
+    watchlists: the app database's watchlists (None: watchlist routes answer 503)."""
     app = FastAPI(title="Tributary Query API", version="1")
     instrument(app)
     bearer = HTTPBearer(auto_error=False)
@@ -128,7 +131,7 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
         return access
 
     add_ui_routes(app, store=store, current_user=current_user, require=require,
-                  allowed=allowed, readable=readable, today=today)
+                  allowed=allowed, readable=readable, today=today, watchlists=watchlists)
 
     @app.get("/health")
     def health() -> dict:

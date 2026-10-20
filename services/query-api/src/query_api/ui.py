@@ -29,6 +29,7 @@ from query_api.screener import (
     shape,
 )
 from query_api.store import Store
+from query_api.watchlist import MAX_ENTRIES, UnknownUser, Watchlists
 
 CompanyId = Annotated[str, Path(pattern=r"^\d{10}$", description="canonical company_id")]
 EXPECTED_METHOD = (
@@ -41,6 +42,8 @@ EXPECTED_METHOD = (
 Band = Literal["lt100m", "100m-1b", "1b-10b", "10b-100b", "gte100b"]
 Format = Annotated[Literal["json", "csv"], Query(alias="format")]
 MAX_JSON_ROWS = 500
+WATCHLIST_COLUMNS = ("revenue_ttm", "revenue_growth_q", "operating_margin_ttm",
+                     "free_cash_flow_ttm")
 META_CSV = ["company_id", "name", "tickers", "exchanges", "sic", "industry", "fiscal_year_end",
             "filer_category", "state_of_incorporation"]
 
@@ -49,8 +52,14 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
                   require: Callable[[str, str, str], None],
                   allowed: Callable[[str, str, str], bool],
                   readable: Callable[[str], dict[str, set[str]]],
-                  today: Callable[[], date] | None = None) -> None:
+                  today: Callable[[], date] | None = None,
+                  watchlists: Watchlists | None = None) -> None:
     clock = today or _today_eastern
+
+    def saved(user_id: str) -> list[dict]:
+        if watchlists is None:
+            raise HTTPException(503, "watchlists unavailable")
+        return watchlists.list(user_id)
 
     def run_screen(user_id: str, screen: Screen, access: dict[str, set[str]]):
         granted = sorted(c for c, t in access.items() if "financials" in t)
@@ -59,7 +68,8 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
         except ScreenError as e:
             raise HTTPException(422, str(e)) from None
         rows = store.screen(user_id, compiled)
-        shaped = [{**shape(r, compiled, r["company_id"] in granted),
+        can_read = set(granted)
+        shaped = [{**shape(r, compiled, r["company_id"] in can_read),
                    "access": sorted(access.get(r["company_id"], set()))} for r in rows]
         total = rows[0]["total"] if rows else (0 if screen.offset == 0 else None)
         return compiled, shaped, total
@@ -138,11 +148,102 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
         return {"company_id": company_id, "as_of": clock(), "method": EXPECTED_METHOD,
                 "expected": [_expected(r) for r in rows]}
 
+    @app.get("/v1/watchlist", response_model=dict)
+    def watchlist(
+        user_id: Annotated[str, Depends(current_user)],
+        columns: Annotated[list[str] | None, Query(description="screener column keys")] = None,
+        sort: Annotated[str, Query(pattern=r"^-?[a-z0-9_]{1,64}$")] = "name",
+        fmt: Format = "json",
+    ) -> dict | Response:
+        """The caller's watchlist: public metadata, last periodic report and next expected
+        filing for every entry; metric values only for companies the caller can read
+        financials for. Watching a company grants nothing."""
+        entries = {e["company_id"]: e["added_at"] for e in saved(user_id)}
+        ids = sorted(entries)
+        access = readable(user_id)
+        screen = Screen(columns=columns if columns is not None else list(WATCHLIST_COLUMNS),
+                        company_ids=ids, coverage=False, sort=sort, limit=max(len(ids), 1))
+        compiled, rows, _ = run_screen(user_id, screen, access)
+        last = store.last_reports(user_id, ids) if ids else {}
+        nxt = {r["company_id"]: _expected(r)
+               for r in (store.expected_filings(user_id, ids, clock(), 1) if ids else [])}
+        rows = [{**r, "added_at": entries.get(r["company_id"]),
+                 "last_filing": last.get(r["company_id"]),
+                 "next_expected": nxt.get(r["company_id"])} for r in rows]
+        if fmt == "csv":
+            header = [*META_CSV, "access", "added_at", "last_form", "last_filing_date",
+                      "last_period_end", "next_form", "next_period_end", "next_expected_date",
+                      "next_expected_basis", *compiled.columns]
+            return csv_response("watchlist.csv", header, ([
+                *(r[k] for k in META_CSV), r["access"], r["added_at"],
+                *_pick(r["last_filing"], "form", "filing_date", "period_end"),
+                *_pick(r["next_expected"], "form", "period_end", "expected_date", "basis"),
+                *(r["values"][k] for k in compiled.columns)] for r in rows))
+        return {"as_of": _now(), "columns": column_info(compiled.columns),
+                "expected_method": EXPECTED_METHOD, "companies": rows}
+
+    @app.put("/v1/watchlist/{company_id}")
+    def watch(user_id: Annotated[str, Depends(current_user)], company_id: CompanyId) -> dict:
+        """Add a company (public identity: an unknown company is a 404). Grants nothing."""
+        if watchlists is None:
+            raise HTTPException(503, "watchlists unavailable")
+        if not store.profiles(user_id, [company_id]):
+            raise HTTPException(404, "unknown company")
+        if watchlists.count(user_id) >= MAX_ENTRIES:
+            raise HTTPException(409, f"a watchlist holds at most {MAX_ENTRIES} companies")
+        try:
+            added = watchlists.add(user_id, company_id)
+        except UnknownUser:
+            raise HTTPException(409, "no account to save a watchlist to") from None
+        return {"company_id": company_id, "added": added}
+
+    @app.delete("/v1/watchlist/{company_id}")
+    def unwatch(user_id: Annotated[str, Depends(current_user)], company_id: CompanyId) -> dict:
+        if watchlists is None:
+            raise HTTPException(503, "watchlists unavailable")
+        return {"company_id": company_id, "removed": watchlists.remove(user_id, company_id)}
+
+    @app.get("/v1/calendar/expected-filings", response_model=dict)
+    def calendar(
+        user_id: Annotated[str, Depends(current_user)],
+        days: Annotated[int, Query(ge=1, le=180)] = 30,
+        scope: Annotated[Literal["watchlist", "readable"], Query(
+            description="watchlist: your watchlist; readable: companies you can read")]
+            = "watchlist",
+        fmt: Format = "json",
+    ) -> dict | Response:
+        """Expected 10-Q/10-K filings in the next `days` days, plus ones already due or
+        overdue (period over, not filed yet). Estimates from public metadata."""
+        ids = sorted({e["company_id"] for e in saved(user_id)} if scope == "watchlist"
+                     else readable(user_id))
+        start = clock()
+        end = date.fromordinal(start.toordinal() + days)
+        rows = [r for r in (store.expected_filings(user_id, ids, start, 2) if ids else [])
+                if r["expected_date"] is not None and r["expected_date"] <= end]
+        profiles = store.profiles(user_id, sorted({r["company_id"] for r in rows})) if rows \
+            else {}
+        rows.sort(key=lambda r: (r["expected_date"], profiles.get(r["company_id"], {})
+                                 .get("name") or "", r["company_id"]))
+        items = [{"company_id": r["company_id"],
+                  "name": profiles.get(r["company_id"], {}).get("name"), **_expected(r)}
+                 for r in rows]
+        if fmt == "csv":
+            keys = ["company_id", "name", "form", "period_end", "expected_date", "deadline",
+                    "basis", "typical_lag_days", "status"]
+            return csv_response("expected-filings.csv", keys,
+                                ([i[k] for k in keys] for i in items))
+        return {"as_of": start, "through": end, "scope": scope, "method": EXPECTED_METHOD,
+                "filings": items}
+
     @app.get("/v1/screener/columns")
     def screener_columns() -> dict:
         return {"columns": column_info(sorted(COLUMNS)),
                 "filer_categories": list(FILER_CATEGORIES),
                 "bands": list(get_args(Band))}
+
+
+def _pick(d: dict | None, *keys: str) -> list:
+    return [d.get(k) if d else None for k in keys]
 
 
 def _expected(r: dict) -> dict:

@@ -45,6 +45,7 @@ decides its environment variables, which Secret keys it can read, and its networ
 | uses | Env | Network |
 |---|---|---|
 | `postgres` | `DATABASE_URL` | host Postgres |
+| `app-postgres` | `APP_DATABASE_URL` (query-api: watchlists) | host Postgres |
 | `kafka` | `KAFKA_BOOTSTRAP_SERVERS` | Kafka in `platform` |
 | `openfga` | `FGA_API_URL`, `FGA_API_TOKEN` when `openfga.auth.enabled` | OpenFGA in `platform` |
 | `sec` | `SEC_USER_AGENT` | HTTPS to public addresses |

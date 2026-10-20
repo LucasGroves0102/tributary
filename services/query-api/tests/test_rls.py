@@ -179,3 +179,19 @@ def test_screener_value_filters_never_match_hidden_values(client, token):
     assert list(screen(client, token, "t-free", "where=revenue_q:gte:0")) == [A]
     assert screen(client, token, "t-nobody", "where=revenue_q:gte:0") == {}
     assert list(screen(client, token, "t-free", "where=revenue_q:lt:0")) == []
+
+
+class Watching:
+    def list(self, user_id):
+        return [{"company_id": c, "added_at": None} for c in (A, B)]
+
+
+def test_watchlist_values_respect_rls(client, token):
+    """Watching B grants nothing: with layer 1 allowing everything, RLS still hides B's values
+    while its metadata (public) is listed."""
+    store = Store(OneConnection(client.app_conn))
+    c = TestClient(create_app(AllowAll(), store, SECRET, watchlists=Watching()))
+    r = c.get("/v1/watchlist?columns=revenue_q", headers=token("t-free"))
+    assert r.status_code == 200, r.text
+    assert {row["company_id"]: row["values"] for row in r.json()["companies"]} == {
+        A: {"revenue_q": "1"}, B: {"revenue_q": None}}

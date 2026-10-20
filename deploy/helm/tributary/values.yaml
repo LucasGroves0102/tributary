@@ -57,8 +57,9 @@ resources:
 
 # tmpSize: size limit of the /tmp emptyDir (default 64Mi; the root filesystem is read-only).
 # databaseUrlKey: secretName key for DATABASE_URL instead of database-url (e.g. a throwaway DB).
-# uses: postgres, kafka, openfga, sec (SEC_USER_AGENT + HTTPS out), anthropic (API key + HTTPS
-# out), jwt, query-api, demo. Each adds the env vars and network access it needs.
+# uses: postgres, app-postgres (APP_DATABASE_URL), kafka, openfga, sec (SEC_USER_AGENT + HTTPS
+# out), anthropic (API key + HTTPS out), jwt, query-api, demo. Each adds the env vars and
+# network access it needs.
 # from: components allowed to connect on `port`; fromNamespaces: any pod in these namespaces.
 services:
   poller:
@@ -81,7 +82,7 @@ services:
     uses: [kafka, postgres, openfga]
   query-api:
     port: 8000
-    uses: [postgres, openfga, jwt, demo]
+    uses: [postgres, app-postgres, openfga, jwt, demo]
     from: [web, agent-api]
     resources:
       requests:

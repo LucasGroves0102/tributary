@@ -9,16 +9,20 @@ from query_api.app import create_app
 from query_api.auth import check_secret
 from query_api.authorizer import FgaAuthorizer
 from query_api.store import Store
+from query_api.watchlist import AppWatchlists
 from tributary_authz import FgaClient
 from tributary_telemetry import configure_logging
 
 
 def build_app():
     pool = ConnectionPool(os.environ["DATABASE_URL"], min_size=1, max_size=10, open=True)
+    app_url = os.environ.get("APP_DATABASE_URL")  # watchlists; unset: those routes give 503
+    app_pool = ConnectionPool(app_url, min_size=1, max_size=4, open=True) if app_url else None
     return create_app(
         authorizer=FgaAuthorizer(FgaClient.from_env()),
         store=Store(pool),
         jwt_secret=check_secret(os.environ["QUERY_API_JWT_SECRET"]),
+        watchlists=AppWatchlists(app_pool) if app_pool else None,
         demo_users=frozenset(u for u in os.environ.get("DEMO_USERS", "").split(",") if u),
     )
 
