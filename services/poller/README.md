@@ -28,6 +28,9 @@ set -a; . ./.env; set +a; .venv/bin/poller   # locally
 
 Config (env): `SEC_USER_AGENT` (required), `KAFKA_BOOTSTRAP_SERVERS` (default
 `localhost:9092`), `POLL_INTERVAL_SECONDS` (default 30), `METRICS_PORT`, `LOG_LEVEL`.
+SEC requests share one rate limit with every other service (`libs/sec`): `SEC_CALLER_CLASS`
+(`live` for the poller, `batch` for the backfill job) and `SEC_LIMITER_DATABASE_URL` (default
+`DATABASE_URL`; without either, a local 2 req/s limit).
 
 ## Backfill (FR1b)
 

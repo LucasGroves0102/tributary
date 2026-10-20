@@ -29,6 +29,9 @@ On k3s, `seed-documents` is a suspended CronJob for filling a new database
 
 Config (env): `SEC_USER_AGENT`, `DATABASE_URL` (both required), `KAFKA_BOOTSTRAP_SERVERS`
 (default `localhost:9092`), `METRICS_PORT`, `LOG_LEVEL`.
+SEC requests share one rate limit with every other service (`libs/sec`): `SEC_CALLER_CLASS`
+(`live` for the consumer, `bulk` for the seed job, default `batch`) and
+`SEC_LIMITER_DATABASE_URL` (default `DATABASE_URL`).
 
 ## Tests
 

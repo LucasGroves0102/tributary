@@ -48,7 +48,7 @@ decides its environment variables, which Secret keys it can read, and its networ
 | `app-postgres` | `APP_DATABASE_URL` (query-api: watchlists) | host Postgres |
 | `kafka` | `KAFKA_BOOTSTRAP_SERVERS` | Kafka in `platform` |
 | `openfga` | `FGA_API_URL`, `FGA_API_TOKEN` when `openfga.auth.enabled` | OpenFGA in `platform` |
-| `sec` | `SEC_USER_AGENT` | HTTPS to public addresses |
+| `sec` | `SEC_USER_AGENT`; `SEC_LIMITER_DATABASE_URL` (always `database-url`) and `SEC_CALLER_CLASS` (`secClass`, default `live` for services, `batch` for jobs) for the shared SEC rate limit | HTTPS to public addresses, host Postgres |
 | `anthropic` | `ANTHROPIC_API_KEY` | HTTPS to public addresses |
 | `jwt` | `QUERY_API_JWT_SECRET` | |
 | `query-api` | `QUERY_API_URL` | |

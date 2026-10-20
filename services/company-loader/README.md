@@ -30,6 +30,8 @@ make companies   # docker-compose job
 On k3s it runs nightly as the `companies` CronJob (03:00 New York).
 
 Config (env): `SEC_USER_AGENT`, `DATABASE_URL` (both required), `LOG_LEVEL`.
+SEC requests share one rate limit with every other service (`libs/sec`): `SEC_CALLER_CLASS`
+(`batch` for both jobs) and `SEC_LIMITER_DATABASE_URL` (default `DATABASE_URL`).
 
 ## Bulk submissions: `company-loader-submissions`
 
