@@ -11,15 +11,13 @@ from company_loader.build import Lineage, build, parse_tickers, tracked_ciks
 from company_loader.db import load
 from company_loader.sec import fetch_submissions, fetch_tickers
 from tributary_sec import sec_client
+from tributary_telemetry import configure_logging
 
 log = logging.getLogger("company_loader")
 
 
 def main() -> None:
-    logging.basicConfig(
-        level=os.environ.get("LOG_LEVEL", "INFO"),
-        format="%(asctime)s %(levelname)s %(name)s %(message)s",
-    )
+    configure_logging()
     user_agent = os.environ["SEC_USER_AGENT"]
     dsn = os.environ["DATABASE_URL"]
 

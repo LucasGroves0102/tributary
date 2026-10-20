@@ -4,16 +4,30 @@ import logging
 import os
 import signal
 import threading
+import time
 from collections import deque
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
+from typing import Protocol
 
 import httpx
+from prometheus_client import Counter, Gauge
 
 from poller.edgar import Filing, fetch_feed, parse_feed
 from poller.producer import FilingProducer
 from tributary_sec import sec_client
+from tributary_telemetry import configure_logging, serve_metrics
 
 log = logging.getLogger("poller")
+
+POLLS = Counter("tributary_poller_polls_total", "Feed polls by result (ok, http_error, failed)",
+                ["result"])
+LAST_SUCCESS = Gauge("tributary_poller_last_success_timestamp_seconds",
+                     "Unix time of the last poll that fetched the feed and published it")
+
+
+class Publisher(Protocol):
+    def publish(self, filing: Filing) -> None: ...
+    def flush(self, timeout: float = 10.0) -> None: ...
 
 
 class SeenSet:
@@ -41,10 +55,7 @@ def new_filings(filings: Iterable[Filing], seen: SeenSet) -> list[Filing]:
 
 
 def main() -> None:
-    logging.basicConfig(
-        level=os.environ.get("LOG_LEVEL", "INFO"),
-        format="%(asctime)s %(levelname)s %(name)s %(message)s",
-    )
+    configure_logging()
     user_agent = os.environ["SEC_USER_AGENT"]
     bootstrap = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
     interval = float(os.environ.get("POLL_INTERVAL_SECONDS", "30"))
@@ -56,24 +67,38 @@ def main() -> None:
     producer = FilingProducer(bootstrap)
     seen = SeenSet()
 
+    serve_metrics()
     with sec_client(user_agent) as client:
         log.info("polling EDGAR every %.0fs → %s", interval, bootstrap)
         while not stop.is_set():
-            try:
-                filings = new_filings(parse_feed(fetch_feed(client)), seen)
-                for f in filings:
-                    producer.publish(f)
-                producer.flush()
-                log.info("published %d new filings", len(filings))
-            except httpx.HTTPStatusError as e:
-                # 403 usually means a missing/invalid User-Agent; 429 means slow down
-                log.error("EDGAR returned %s", e.response.status_code)
-            except (httpx.TransportError, ValueError) as e:
-                log.error("poll failed: %s", e)
+            poll_once(client, producer, seen)
             stop.wait(interval)
 
     producer.flush()
     log.info("stopped")
+
+
+def poll_once(client: httpx.Client, producer: Publisher, seen: SeenSet,
+              clock: Callable[[], float] = time.time) -> None:
+    """Fetch the feed once and publish what's new. Errors are logged, not raised."""
+    try:
+        filings = new_filings(parse_feed(fetch_feed(client)), seen)
+        for f in filings:
+            producer.publish(f)
+        producer.flush()
+    except httpx.HTTPStatusError as e:
+        # 403 usually means a missing/invalid User-Agent; 429 means slow down
+        POLLS.labels("http_error").inc()
+        log.error("EDGAR returned %s", e.response.status_code,
+                  extra={"status": e.response.status_code})
+        return
+    except (httpx.TransportError, ValueError) as e:
+        POLLS.labels("failed").inc()
+        log.error("poll failed: %s", e)
+        return
+    POLLS.labels("ok").inc()
+    LAST_SUCCESS.set(clock())
+    log.info("published %d new filings", len(filings), extra={"filings": len(filings)})
 
 
 if __name__ == "__main__":

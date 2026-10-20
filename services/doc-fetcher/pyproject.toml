@@ -8,6 +8,8 @@ dependencies = [
     "lxml>=5.0",
     "psycopg[binary]>=3.2",
     "tributary-sec",
+    "prometheus-client>=0.20",
+    "tributary-telemetry",
 ]
 
 [project.scripts]

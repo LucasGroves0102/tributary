@@ -10,6 +10,7 @@ from confluent_kafka import Producer
 
 from doc_fetcher.db import tracked_ciks
 from tributary_sec import sec_client
+from tributary_telemetry import configure_logging
 
 SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik}.json"
 LIMITS = {"10-K": 2, "10-Q": 4}  # most recent N...
@@ -47,10 +48,7 @@ def select_filings(cik: str, submissions: dict, today: date) -> list[dict]:
 
 
 def main() -> None:
-    logging.basicConfig(
-        level=os.environ.get("LOG_LEVEL", "INFO"),
-        format="%(asctime)s %(levelname)s %(name)s %(message)s",
-    )
+    configure_logging()
     producer = Producer({
         "bootstrap.servers": os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
         "enable.idempotence": True,

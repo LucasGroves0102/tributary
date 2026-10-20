@@ -9,6 +9,7 @@ import psycopg
 from facts_fetcher.db import refresh_gold, refresh_silver, store_payload, tracked_ciks
 from facts_fetcher.sec import fetch_company_facts
 from tributary_sec import sec_client
+from tributary_telemetry import configure_logging
 
 log = logging.getLogger("facts_fetcher")
 
@@ -18,10 +19,7 @@ def main() -> None:
     parser.add_argument("--rebuild", action="store_true",
                         help="skip the SEC; re-derive silver and gold from stored bronze")
     args = parser.parse_args()
-    logging.basicConfig(
-        level=os.environ.get("LOG_LEVEL", "INFO"),
-        format="%(asctime)s %(levelname)s %(name)s %(message)s",
-    )
+    configure_logging()
     dsn = os.environ["DATABASE_URL"]
 
     with psycopg.connect(dsn) as conn:

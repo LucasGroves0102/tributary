@@ -1,16 +1,19 @@
 """Tributary Query API. Read-only; every data route is permission-checked twice:
 OpenFGA first (layer 1), then Postgres row-level security (layer 2, in Store)."""
 
+import logging
 from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Path, Query
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from prometheus_client import Counter
 from pydantic import BaseModel
 
 from query_api.auth import Unauthenticated, mint, verify
 from query_api.authorizer import Authorizer, AuthzUnavailable
 from query_api.store import Store
+from tributary_telemetry.http import instrument
 
 METRICS = ["revenue", "gross_profit", "operating_income", "net_income", "eps_diluted",
            "operating_cash_flow", "total_assets", "cash"]
@@ -19,6 +22,12 @@ CompanyId = Annotated[str, Path(pattern=r"^\d{10}$", description="canonical comp
 
 
 DEMO_TOKEN_TTL = 8 * 3600
+
+PERMISSION_CHECKS = Counter("tributary_permission_checks_total",
+                            "OpenFGA checks by tier (list: readable companies) and result "
+                            "(allowed, denied, error)", ["tier", "result"])
+
+log = logging.getLogger("query_api")
 
 
 class DemoLogin(BaseModel):
@@ -29,6 +38,7 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
                demo_users: frozenset[str] = frozenset()) -> FastAPI:
     """demo_users: accounts anyone may sign in as without a password (empty disables it)."""
     app = FastAPI(title="Tributary Query API", version="1")
+    instrument(app)
     bearer = HTTPBearer(auto_error=False)
 
     def current_user(
@@ -45,18 +55,28 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
 
     def require(user_id: str, tier: str, company_id: str) -> None:
         """Layer 1. Same answer whether the company doesn't exist or isn't permitted."""
+        fields = {"user_id": user_id, "tier": tier, "company_id": company_id}
         try:
             allowed = authorizer.can(user_id, tier, company_id)
-        except AuthzUnavailable:
+        except AuthzUnavailable as e:
+            PERMISSION_CHECKS.labels(tier, "error").inc()
+            log.warning("authorization unavailable: %s", e, extra=fields)
             raise HTTPException(503, "authorization unavailable") from None  # fail closed
         if not allowed:
+            PERMISSION_CHECKS.labels(tier, "denied").inc()
+            log.info("permission denied", extra=fields)
             raise HTTPException(403, f"not permitted to read {tier} for this company")
+        PERMISSION_CHECKS.labels(tier, "allowed").inc()
 
     def readable(user_id: str) -> dict[str, set[str]]:
         try:
-            return authorizer.readable(user_id)
-        except AuthzUnavailable:
+            access = authorizer.readable(user_id)
+        except AuthzUnavailable as e:
+            PERMISSION_CHECKS.labels("list", "error").inc()
+            log.warning("authorization unavailable: %s", e, extra={"user_id": user_id})
             raise HTTPException(503, "authorization unavailable") from None
+        PERMISSION_CHECKS.labels("list", "allowed").inc()
+        return access
 
     @app.get("/health")
     def health() -> dict:

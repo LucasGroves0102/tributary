@@ -10,10 +10,12 @@ import time
 import httpx
 import psycopg
 from confluent_kafka import Consumer, KafkaError, KafkaException, Producer
+from prometheus_client import Counter
 
 from doc_fetcher.db import already_fetched, insert_document, insert_exhibit, tracked_ciks
 from doc_fetcher.index import parse_exhibits, parse_index
 from tributary_sec import sec_client
+from tributary_telemetry import CONSUMED, SKIPPED, configure_logging, count_delivery, serve_metrics
 
 IN_TOPIC = "filings.raw"
 OUT_TOPIC = "documents.fetched"
@@ -23,12 +25,12 @@ TRACKED_REFRESH_SECONDS = 300
 
 log = logging.getLogger("doc_fetcher")
 
+DOCUMENTS = Counter("tributary_documents_fetched_total",
+                    "Primary documents fetched and stored in bronze", ["form"])
+
 
 def main() -> None:
-    logging.basicConfig(
-        level=os.environ.get("LOG_LEVEL", "INFO"),
-        format="%(asctime)s %(levelname)s %(name)s %(message)s",
-    )
+    configure_logging()
     dsn = os.environ["DATABASE_URL"]
     bootstrap = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
 
@@ -44,6 +46,7 @@ def main() -> None:
     })
     consumer.subscribe([IN_TOPIC])
     producer = Producer({"bootstrap.servers": bootstrap, "enable.idempotence": True})
+    serve_metrics()
 
     with psycopg.connect(dsn, autocommit=True) as conn, \
             sec_client(os.environ["SEC_USER_AGENT"]) as client:
@@ -60,12 +63,15 @@ def main() -> None:
                     if msg.error().code() == KafkaError.UNKNOWN_TOPIC_OR_PART:
                         continue  # topic not created yet: nothing has been produced to it
                     raise KafkaException(msg.error())
+                CONSUMED.labels(IN_TOPIC).inc()
                 try:
                     event = json.loads(msg.value())
                     if event["form_type"] in FORMS and event["cik"] in tracked:
                         handle(conn, client, producer, event)
                 except (ValueError, KeyError, httpx.HTTPError) as e:
                     # TODO: route to a dead-letter topic instead of dropping
+                    reason = "sec" if isinstance(e, httpx.HTTPError) else "invalid"
+                    SKIPPED.labels(IN_TOPIC, reason).inc()
                     log.error("skipping %d:%d: %s", msg.partition(), msg.offset(), e)
                 consumer.commit(msg, asynchronous=False)
         finally:
@@ -94,9 +100,13 @@ def handle(conn: psycopg.Connection, client: httpx.Client, producer: Producer, e
             "document_name": index.document_name, "url": index.url,
             "content_sha256": digest, "size_bytes": len(doc_resp.content),
         }).encode(),
+        on_delivery=count_delivery,
     )
     producer.flush(10)
-    log.info("%s %s %s: %d KB", cik, form, accession, len(doc_resp.content) // 1024)
+    DOCUMENTS.labels(form).inc()
+    log.info("%s %s %s: %d KB", cik, form, accession, len(doc_resp.content) // 1024,
+             extra={"cik": cik, "form": form, "accession_no": accession,
+                    "size_bytes": len(doc_resp.content)})
 
 
 def fetch_exhibits(conn: psycopg.Connection, client: httpx.Client, accession: str,

@@ -10,6 +10,7 @@ from query_api.auth import check_secret
 from query_api.authorizer import FgaAuthorizer
 from query_api.store import Store
 from tributary_authz import FgaClient
+from tributary_telemetry import configure_logging
 
 
 def build_app():
@@ -23,7 +24,9 @@ def build_app():
 
 
 def main() -> None:
-    uvicorn.run(build_app(), host="0.0.0.0", port=int(os.environ.get("PORT", "8000")))
+    configure_logging()
+    uvicorn.run(build_app(), host="0.0.0.0", port=int(os.environ.get("PORT", "8000")),
+                log_config=None, access_log=False)
 
 
 if __name__ == "__main__":

@@ -20,7 +20,10 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
 from tributary_agent.agent import Agent, Answer
+from tributary_agent.telemetry import record_answer, record_error
 from tributary_agent.tools import QueryApi
+from tributary_telemetry import configure_logging
+from tributary_telemetry.http import forward_request_id, instrument, request_id_headers
 
 log = logging.getLogger("tributary_agent")
 
@@ -83,6 +86,7 @@ def create_app(make_agent: Callable[[str], Agent], who_is: Callable[[str], str],
     """make_agent(token) builds an agent reading as the token's user; who_is(token) returns
     that user's id or raises HTTPException."""
     app = FastAPI(title="Tributary Agent", version="1")
+    instrument(app)
     bearer = HTTPBearer(auto_error=False)
 
     def token(creds: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)]) -> str:
@@ -109,12 +113,19 @@ def create_app(make_agent: Callable[[str], Agent], who_is: Callable[[str], str],
                     if event["type"] == "done":
                         answer = event["answer"]
                         limits.spend(answer.cost_usd or 0)
+                        record_answer(answer)
                         log.info("user=%s rounds=%d cost=%.4f stop=%s", user_id, answer.rounds,
-                                 answer.cost_usd or 0, answer.stop)
+                                 answer.cost_usd or 0, answer.stop,
+                                 extra={"user_id": user_id, "rounds": answer.rounds,
+                                        "stop": answer.stop, "cost_usd": answer.cost_usd,
+                                        "input_tokens": answer.usage.input_tokens,
+                                        "output_tokens": answer.usage.output_tokens,
+                                        "tool_calls": len(answer.tool_calls)})
                         event = {"type": "done", "answer": answer_json(answer)}
                     yield f"data: {json.dumps(event, default=str)}\n\n"
             except anthropic.APIError as e:
-                log.warning("model error for %s: %s", user_id, e)
+                record_error()
+                log.warning("model error for %s: %s", user_id, e, extra={"user_id": user_id})
                 yield f"data: {json.dumps({'type': 'error', 'message': 'model unavailable'})}\n\n"
 
         return StreamingResponse(stream(), media_type="text/event-stream",
@@ -126,7 +137,8 @@ def create_app(make_agent: Callable[[str], Agent], who_is: Callable[[str], str],
 def query_api_who_is(base_url: str) -> Callable[[str], str]:
     def who_is(tok: str) -> str:
         try:
-            r = httpx.get(f"{base_url}/v1/me", headers={"Authorization": f"Bearer {tok}"},
+            r = httpx.get(f"{base_url}/v1/me",
+                          headers={"Authorization": f"Bearer {tok}", **request_id_headers()},
                           timeout=10)
         except httpx.HTTPError:
             raise HTTPException(503, "query api unavailable") from None
@@ -143,7 +155,8 @@ def build_app() -> FastAPI:
     base_url = os.environ.get("QUERY_API_URL", "http://localhost:8000")
     messages = anthropic.Anthropic().messages
     model = os.environ.get("AGENT_MODEL", "claude-haiku-5-5")
-    http = httpx.Client(base_url=base_url, timeout=30)
+    http = httpx.Client(base_url=base_url, timeout=30,
+                        event_hooks={"request": [forward_request_id]})
     return create_app(
         make_agent=lambda tok: Agent(messages, QueryApi(base_url, tok, http=http), model,
                                      stream=True, effort=os.environ.get("AGENT_EFFORT") or None),
@@ -154,8 +167,9 @@ def build_app() -> FastAPI:
 
 
 def main() -> None:
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-    uvicorn.run(build_app(), host="0.0.0.0", port=int(os.environ.get("PORT", "8001")))
+    configure_logging()
+    uvicorn.run(build_app(), host="0.0.0.0", port=int(os.environ.get("PORT", "8001")),
+                log_config=None, access_log=False)
 
 
 if __name__ == "__main__":
