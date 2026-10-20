@@ -17,6 +17,11 @@ dependencies:
   - name: prometheus-postgres-exporter
     version: 8.2.0
     repository: https://prometheus-community.github.io/helm-charts
+  - name: prometheus-postgres-exporter
+    alias: ops-exporter
+    version: 8.2.0
+    repository: https://prometheus-community.github.io/helm-charts
+    condition: opsDatabase.enabled
   - name: prometheus-kafka-exporter
     version: 4.0.0
     repository: https://prometheus-community.github.io/helm-charts

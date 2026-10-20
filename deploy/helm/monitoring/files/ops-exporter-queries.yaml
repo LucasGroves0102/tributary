@@ -1,0 +1,19 @@
+# postgres_exporter --extend.query-path: metrics from the tributary database's ops views.
+tributary_companyfacts:
+  query: |
+    SELECT company_id, company, missing_filings, behind_seconds
+    FROM ops.companyfacts_lag
+  cache_seconds: 300
+  metrics:
+    - company_id:
+        usage: LABEL
+        description: Company ID (first CIK in its lineage)
+    - company:
+        usage: LABEL
+        description: Company name
+    - missing_filings:
+        usage: GAUGE
+        description: 10-K/10-Q filings on EDGAR that the SEC companyfacts API doesn't reflect yet
+    - behind_seconds:
+        usage: GAUGE
+        description: Seconds since the oldest such filing was accepted, 0 when up to date

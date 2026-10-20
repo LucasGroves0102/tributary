@@ -27,6 +27,13 @@ spec:
           labels: {severity: warning}
           annotations:
             summary: No new filings published to filings.raw in 2 hours
+        - alert: CompanyFactsBehindEdgar
+          # ops-exporter (opsDatabase.enabled); the financials job runs nightly.
+          expr: max by (company) (tributary_companyfacts_behind_seconds) > 3 * 86400
+          for: 1h
+          labels: {severity: warning}
+          annotations:
+            summary: "{{`{{ $labels.company }}`}} has a 10-K/10-Q on EDGAR from {{`{{ $value | humanizeDuration }}`}} ago that the SEC companyfacts API doesn't reflect"
         - alert: PostgresBackupMissing
           expr: |
             time() - pg_backup_last_success_timestamp_seconds > 26 * 3600

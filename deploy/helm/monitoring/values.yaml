@@ -2,6 +2,18 @@
 #   grafana-admin         admin-user, admin-password
 #   alertmanager-discord  webhook-url
 #   postgres-exporter     password (Postgres login "monitoring", role pg_monitor)
+#   grafana-postgres      password (Postgres login "grafana_reader", role ops_reader);
+#                         only read when opsDatabase.enabled
+
+# The tributary database's ops views (db/migrations/010_ops.sql), read by a Grafana datasource
+# (uid "tributary", used by the freshness dashboard) and by ops-exporter for alerts. Needs the
+# grafana_reader login, its pg_hba line and the grafana-postgres secret.
+opsDatabase:
+  enabled: false
+  host: 10.42.0.1
+  port: 5432
+  database: tributary
+  user: grafana_reader
 
 kube-prometheus-stack:
   # k3s runs these inside the k3s process; there is nothing separate to scrape.
@@ -69,6 +81,10 @@ kube-prometheus-stack:
     persistence:
       enabled: true
       size: 1Gi
+    # Expanded in the ops datasource (templates/ops-database.yaml); unset without the secret.
+    envValueFrom:
+      TRIBUTARY_DB_PASSWORD:
+        secretKeyRef: {name: grafana-postgres, key: password, optional: true}
     additionalDataSources:
       - name: Loki
         type: loki
@@ -226,6 +242,51 @@ prometheus-postgres-exporter:
       sslmode: disable
   serviceMonitor:
     enabled: true
+  resources:
+    requests: {cpu: 10m, memory: 32Mi}
+    limits: {memory: 128Mi}
+
+# Same login and secret as the Grafana datasource; only the queries in
+# files/ops-exporter-queries.yaml, none of the built-in collectors.
+ops-exporter:
+  config:
+    datasource:
+      host: 10.42.0.1
+      user: grafana_reader
+      passwordSecret:
+        name: grafana-postgres
+        key: password
+      database: tributary
+      sslmode: disable
+    disableDefaultMetrics: true
+    disableSettingsMetrics: true
+    disableCollectorDatabase: true
+    disableCollectorBgwriter: true
+    extraArgs:
+      - --extend.query-path=/etc/ops-exporter/queries.yaml
+      - --no-collector.locks
+      - --no-collector.replication
+      - --no-collector.replication_slots
+      - --no-collector.roles
+      - --no-collector.stat_activity
+      - --no-collector.stat_archiver
+      - --no-collector.stat_database
+      - --no-collector.stat_progress_vacuum
+      - --no-collector.stat_replication
+      - --no-collector.stat_user_tables
+      - --no-collector.statio_user_tables
+      - --no-collector.wal
+  extraVolumes:
+    - name: queries
+      configMap:
+        name: ops-exporter-queries
+  extraVolumeMounts:
+    - name: queries
+      mountPath: /etc/ops-exporter
+      readOnly: true
+  serviceMonitor:
+    enabled: true
+    interval: 60s
   resources:
     requests: {cpu: 10m, memory: 32Mi}
     limits: {memory: 128Mi}
