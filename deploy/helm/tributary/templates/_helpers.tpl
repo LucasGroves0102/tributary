@@ -23,7 +23,8 @@ app.kubernetes.io/instance: {{ .root.Release.Name }}
 {{- define "tributary.uses" -}}
 {{- $labels := dict }}
 {{- range .uses }}
-{{- if has . (list "sec" "anthropic") }}{{ $_ := set $labels "internet" "true" }}
+{{- if eq . "sec" }}{{ $_ := set $labels "internet" "true" }}{{ $_ := set $labels "postgres" "true" }}
+{{- else if eq . "anthropic" }}{{ $_ := set $labels "internet" "true" }}
 {{- else if eq . "app-postgres" }}{{ $_ := set $labels "postgres" "true" }}
 {{- else if has . (list "postgres" "kafka" "openfga") }}{{ $_ := set $labels . "true" }}
 {{- end }}
@@ -73,6 +74,11 @@ tributary.io/{{ $k }}: {{ $v | quote }}
 {{- end }}
 {{- else if eq . "sec" }}
 {{ include "tributary.secretEnv" (dict "root" $root "env" "SEC_USER_AGENT" "key" "sec-user-agent") }}
+{{- /* The shared SEC token bucket is per host IP, so always the main database, never
+databaseUrlKey's. */}}
+{{ include "tributary.secretEnv" (dict "root" $root "env" "SEC_LIMITER_DATABASE_URL" "key" "database-url") }}
+- name: SEC_CALLER_CLASS
+  value: {{ $.secClass | default $.defaultSecClass | quote }}
 {{- else if eq . "anthropic" }}
 {{ include "tributary.secretEnv" (dict "root" $root "env" "ANTHROPIC_API_KEY" "key" "anthropic-api-key") }}
 {{- else if eq . "jwt" }}

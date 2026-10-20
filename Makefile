@@ -63,7 +63,7 @@ authz-test: ## run the OpenFGA model tests in authz/model.fga.yaml
 
 backfill:  ## publish missed filings from EDGAR daily indexes: make backfill DAYS=7
 	$(COMPOSE) --profile app build poller
-	$(COMPOSE) --profile app run --rm poller poller-backfill --days $(or $(DAYS),1)
+	$(COMPOSE) --profile app run --rm -e SEC_CALLER_CLASS=batch poller poller-backfill --days $(or $(DAYS),1)
 
 companies: ## refresh company identity from the SEC (run daily)
 	$(COMPOSE) --profile jobs build company-loader
@@ -82,7 +82,7 @@ financials-rebuild: ## re-derive silver/gold from stored bronze (after changing 
 
 seed-documents: ## publish tracked companies' recent 10-K/10-Q/8-K filings to filings.raw
 	$(COMPOSE) --profile app build doc-fetcher
-	$(COMPOSE) --profile app run --rm doc-fetcher doc-fetcher-seed
+	$(COMPOSE) --profile app run --rm -e SEC_CALLER_CLASS=bulk doc-fetcher doc-fetcher-seed
 
 exhibits:  ## fetch EX-99.x exhibits for stored 8-Ks, then re-parse
 	@set -a; . ./.env; set +a; $(BIN)doc-fetcher-exhibits
