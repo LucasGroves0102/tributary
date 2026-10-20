@@ -42,6 +42,8 @@ resources:
   limits:
     memory: 256Mi
 
+# scratch: size of an emptyDir mounted at /scratch (the root filesystem is read-only).
+# databaseUrlKey: secretName key for DATABASE_URL instead of database-url (e.g. a throwaway DB).
 # uses: postgres, kafka, openfga, sec (SEC_USER_AGENT + HTTPS out), anthropic (API key + HTTPS
 # out), jwt, query-api, demo. Each adds the env vars and network access it needs.
 # from: components allowed to connect on `port`; fromNamespaces: any pod in these namespaces.
@@ -115,6 +117,28 @@ jobs:
     image: facts-fetcher
     schedule: "0 4 * * *"
     uses: [postgres, sec]
+  # Every SEC filer's XBRL facts from the nightly companyfacts.zip (one ~1.4 GB download).
+  # Each run loads at most BULK_LIMIT changed companies and resumes where the last stopped, so
+  # the first load takes ~40 runs; after that a night only touches companies that changed.
+  # Ships suspended. First run against a throwaway DB: set databaseUrlKey, then
+  # kubectl create job --from=cronjob/financials-bulk financials-bulk-1
+  financials-bulk:
+    image: facts-fetcher
+    command: [facts-fetcher-bulk]
+    schedule: "0 5 * * *"
+    suspend: true
+    timeoutSeconds: 3600
+    uses: [postgres, sec]
+    scratch: 2Gi
+    env:
+      BULK_DIR: /scratch
+      BULK_LIMIT: "500"
+    resources:
+      requests:
+        cpu: 250m
+        memory: 256Mi
+      limits:
+        memory: 1Gi
   # Run once to fill a new database: kubectl create job --from=cronjob/seed-documents seed-1
   seed-documents:
     image: doc-fetcher
