@@ -16,6 +16,9 @@ Kafka, Kafka Connect with Debezium, and OpenFGA for the `tributary` chart. Insta
 
 ## Install
 
+Flux installs it from [deploy/flux/releases/platform.yaml](../../flux/releases), with the setup
+image tag kept current by image automation. By hand:
+
 ```bash
 helm upgrade --install platform deploy/helm/platform \
   --namespace platform --set images.setup.tag=<commit sha> --wait
@@ -35,7 +38,7 @@ pod, so it is never stored in Kafka.
 
 | | Kind | Port | Reachable from |
 |---|---|---|---|
-| Kafka | StatefulSet, 10Gi volume | 9092 | Tributary pods labelled `tributary.io/kafka`, Connect |
+| Kafka | StatefulSet, 10Gi volume | 9092 | Tributary pods labelled `tributary.io/kafka`, Connect, kafka-exporter in `monitoring` |
 | Kafka Connect | Deployment | 8083 | `setup-connector` |
 | OpenFGA | Deployment | 8080 | Tributary pods labelled `tributary.io/openfga`, `setup-openfga` |
 

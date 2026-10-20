@@ -74,7 +74,7 @@ make ask USER=alice Q="What are Nvidia's main risk factors?"   # free plan: no f
 Every answer is checked before it reaches the user (`services/agent/.../verify.py`): each
 dollar figure must match a value a tool returned, be arithmetic on returned values, or appear
 in returned filing text, and each accession number must have come from a tool. The chat shows
-the result, and flags any figure it couldn't trace. On 30 questions across the demo users:
+the result, and flags any figure it couldn't trace. On 32 questions across the demo users:
 **32 of 32 answers fully verified, 128 of 128 figures traced** ([report](tests/citations/report.md)).
 `make citations` runs it live; CI replays it.
 
@@ -90,11 +90,11 @@ CI replays the recordings.
 | Path | What |
 |---|---|
 | `services/` | One folder per deployable service or job (poller, bronze-loader, company-loader, facts-fetcher, doc-fetcher, parser, parser-rs, authz-sync, query-api, agent, web) |
-| `libs/` | Shared Python packages (`sec`: SEC client with User-Agent and rate limiting; `authz`: OpenFGA client) |
+| `libs/` | Shared Python packages (`sec`: SEC client with User-Agent and rate limiting; `authz`: OpenFGA client; `telemetry`: JSON logs and Prometheus metrics) |
 | `db/` | Analytics migrations (`db/migrations`) and the app database (`db/app`) |
 | `streaming/` | Debezium configs and Kafka topic docs |
 | `authz/` | OpenFGA authorization model and its tests (`make authz-test`) |
-| `tests/` | Adversarial, integration and propagation tests |
-| `deploy/` | Helm chart and Terraform |
-| `observability/` | OpenTelemetry, Prometheus, Grafana |
+| `tests/` | Adversarial, citation, integration and propagation tests |
+| `deploy/` | Helm charts (services, platform, monitoring), Flux, SOPS secrets, Terraform, host backup scripts |
+| `observability/` | Placeholder; monitoring lives in `deploy/helm/monitoring` |
 | `benchmarks/` | Python vs Rust parser |

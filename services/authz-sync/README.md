@@ -18,5 +18,33 @@ restart never briefly revokes access that a later event would restore.
 
 Logs the delay from the app database commit to applied permissions for each change.
 
-Config (env): `DATABASE_URL`, `FGA_API_URL` (both required), `KAFKA_BOOTSTRAP_SERVERS`,
-`LOG_LEVEL`.
+Upstream: the [app database](../../db/app) streamed by [Debezium](../../streaming/debezium).
+Downstream: the [Query API](../query-api) checks OpenFGA (layer 1) and reads `authz.user_access`
+through row-level security (layer 2). The model it writes against is
+[authz/model.fga](../../authz/model.fga).
+
+| | |
+|---|---|
+| Input | `app.public.users`, `app.public.subscriptions`, `app.public.plan_tiers`, `app.public.company_grants` (compacted; waits until all exist) |
+| Output | OpenFGA tuples in store `tributary`; `authz.user_access` rows `(user_id, company_id, tier)` |
+| Metrics | `tributary_authz_reconciles_total`, `tributary_authz_changes_total{kind}`, `tributary_authz_propagation_seconds`, `tributary_authz_caught_up` |
+
+## Run
+
+Needs `make up`, `make migrate`, `make authz` and `make cdc` first.
+
+```bash
+make up-all                                       # in docker-compose
+set -a; . ./.env; set +a; .venv/bin/authz-sync    # locally
+make propagation-test                             # revoke live and time propagation
+```
+
+Config (env): `DATABASE_URL`, `FGA_API_URL` (both required), `FGA_API_TOKEN` (OpenFGA
+preshared key, when enabled), `KAFKA_BOOTSTRAP_SERVERS` (default `localhost:9092`),
+`METRICS_PORT`, `LOG_LEVEL`.
+
+## Tests
+
+`pytest services/authz-sync`: state rebuilding and desired-permission computation are pure
+(`state.py`); the reconciler is tested against a fake OpenFGA client and Postgres when
+`TEST_DATABASE_URL` is set. The live end-to-end check is [tests/propagation](../../tests/propagation).
