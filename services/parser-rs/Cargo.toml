@@ -11,8 +11,12 @@ name = "filing_parser"
 [dependencies]
 encoding_rs = "0.8"
 flate2 = "1"
+postgres = { version = "0.19", default-features = false }
+prometheus = { version = "0.14", default-features = false, features = ["process"] }
+rdkafka = { version = "0.39", default-features = false, features = ["libz-static"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+signal-hook = { version = "0.4", default-features = false }
 
 [profile.release]
 lto = true
