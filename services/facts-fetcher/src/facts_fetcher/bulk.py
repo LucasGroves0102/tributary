@@ -4,7 +4,8 @@ Entries are read one at a time in name order. A payload with the same SHA-256 as
 one is only marked as seen; changed ones are written in small batches, one transaction each,
 together with the run's progress in bronze.bulk_loads. A run stops after `limit` changed
 entries, so the first load of every filer is a series of short runs, each resuming after the
-last committed entry; once caught up, a night only touches the companies that changed.
+last committed entry; once caught up, a night only touches the companies that changed. One
+download can serve several runs (--rounds), with a pause between them (--pause-seconds).
 """
 
 import argparse
@@ -14,7 +15,7 @@ import re
 import tempfile
 import time
 import zipfile
-from collections.abc import Collection, Iterable
+from collections.abc import Callable, Collection, Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -213,6 +214,22 @@ def run(conn: psycopg.Connection, path: Path, source: str, last_modified: str | 
     return stats
 
 
+def run_rounds(run_once: Callable[[], RunStats], rounds: int, pause_seconds: float,
+               sleep: Callable[[float], None] = time.sleep) -> RunStats:
+    """Call run_once up to `rounds` times, pausing between calls, until a run completes."""
+    stats = RunStats()
+    for i in range(rounds):
+        if i:
+            log.info("pausing %.0fs before round %d of %d", pause_seconds, i + 1, rounds)
+            sleep(pause_seconds)
+        stats = run_once()
+        log.info("round %d: %d entries, %d changed, %d new facts", i + 1, stats.entries,
+                 stats.changed, stats.facts)
+        if stats.completed:
+            break
+    return stats
+
+
 def local_source(path: Path) -> tuple[str, str]:
     """(source, version) for a zip on disk: its file:// URI and modification time."""
     mtime = datetime.fromtimestamp(path.stat().st_mtime, UTC).isoformat()
@@ -228,6 +245,12 @@ def main(argv: Iterable[str] | None = None) -> None:
                         help="where to download the zip (default: $BULK_DIR or the temp dir)")
     parser.add_argument("--limit", type=int, default=int(os.environ.get("BULK_LIMIT", LIMIT)),
                         help=f"changed entries per run (default: $BULK_LIMIT or {LIMIT})")
+    parser.add_argument("--rounds", type=int, default=int(os.environ.get("BULK_ROUNDS", 1)),
+                        help="runs per download, stopping early once complete"
+                             " (default: $BULK_ROUNDS or 1)")
+    parser.add_argument("--pause-seconds", type=float,
+                        default=float(os.environ.get("BULK_PAUSE_SECONDS", 0)),
+                        help="pause between rounds (default: $BULK_PAUSE_SECONDS or 0)")
     args = parser.parse_args(None if argv is None else list(argv))
     configure_logging()
     started = time.monotonic()
@@ -250,7 +273,8 @@ def main(argv: Iterable[str] | None = None) -> None:
                      got.last_modified, time.monotonic() - started)
             path, source, version = got.path, BULK_URL, got.last_modified
         try:
-            stats = run(conn, path, source, version, args.limit)
+            stats = run_rounds(lambda: run(conn, path, source, version, args.limit),
+                               args.rounds, args.pause_seconds)
         finally:
             if got is not None:
                 got.path.unlink()

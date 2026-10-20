@@ -2,14 +2,16 @@
 and company metadata in silver.companies.
 
 Each run loads at most --max-ciks changed CIKs, committing every few CIKs, so the first load of
-~1M CIKs is many short resumable runs. CIKs whose content hash is unchanged are skipped.
+~1M CIKs is many short resumable runs. CIKs whose content hash is unchanged are skipped. One
+download can serve several runs (--rounds), with a pause between them (--pause-seconds).
 """
 
 import argparse
 import logging
 import os
+import time
 from collections import defaultdict
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
 from email.utils import format_datetime, parsedate_to_datetime
 from itertools import batched
@@ -119,6 +121,21 @@ def run(conn: psycopg.Connection, f: BinaryIO, snapshot: datetime, max_ciks: int
     return counts
 
 
+def run_rounds(run_once: Callable[[], dict], rounds: int, pause_seconds: float,
+               sleep: Callable[[float], None] = time.sleep) -> dict:
+    """Call run_once up to `rounds` times, pausing between calls, until a run completes."""
+    counts: dict = {}
+    for i in range(rounds):
+        if i:
+            log.info("pausing %.0fs before round %d of %d", pause_seconds, i + 1, rounds)
+            sleep(pause_seconds)
+        counts = run_once()
+        log.info("round %d: %s", i + 1, counts)
+        if counts.get("complete"):
+            break
+    return counts
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--zip", type=Path, help="use this local zip instead of downloading")
@@ -126,6 +143,10 @@ def main() -> None:
                         help="where to download submissions.zip (default /tmp)")
     parser.add_argument("--max-ciks", type=int, default=500,
                         help="changed CIKs to load in this run (default 500)")
+    parser.add_argument("--rounds", type=int, default=1,
+                        help="runs per download, stopping early once complete (default 1)")
+    parser.add_argument("--pause-seconds", type=float, default=0,
+                        help="pause between rounds (default 0)")
     parser.add_argument("--dbname", default=os.environ.get("SUBMISSIONS_DBNAME") or None,
                         help="database on DATABASE_URL's server to load instead of its own"
                              " (default: $SUBMISSIONS_DBNAME)")
@@ -150,8 +171,11 @@ def main() -> None:
             snapshot = modified
             log.info("downloaded submissions.zip (%d MB, %s)",
                      path.stat().st_size >> 20, snapshot.isoformat())
-        with path.open("rb") as f:
-            counts = run(conn, f, snapshot, args.max_ciks)
+        def run_once() -> dict:
+            with path.open("rb") as f:
+                return run(conn, f, snapshot, args.max_ciks)
+
+        counts = run_rounds(run_once, args.rounds, args.pause_seconds)
     log.info("done: %s", counts)
 
 

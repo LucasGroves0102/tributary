@@ -14,12 +14,14 @@ import pytest
 
 from facts_fetcher.bulk import (
     BULK_URL,
+    RunStats,
     Unchanged,
     checkpoint,
     download,
     entry_names,
     read_entry,
     run,
+    run_rounds,
 )
 from facts_fetcher.payload import Payload, digest, project
 
@@ -236,3 +238,20 @@ def test_a_cik_mapped_later_gets_gold_rows_on_the_next_complete_run(conn, bulk_z
     assert stats.changed == 0 and stats.gold_rows > 0
     assert conn.execute("SELECT count(*) FROM gold.quarterly_financials"
                         " WHERE company_id = %s", (COST,)).fetchone()[0] > 0
+
+
+def test_rounds_pause_between_runs_and_stop_once_complete():
+    results = iter([RunStats(changed=500), RunStats(changed=500), RunStats(changed=7,
+                                                                           completed=True)])
+    paused = []
+    stats = run_rounds(lambda: next(results), rounds=5, pause_seconds=600, sleep=paused.append)
+    assert stats.completed and stats.changed == 7
+    assert paused == [600, 600]
+
+
+def test_rounds_stop_at_the_limit_without_a_trailing_pause():
+    paused = []
+    stats = run_rounds(lambda: RunStats(changed=500), rounds=2, pause_seconds=60,
+                       sleep=paused.append)
+    assert not stats.completed
+    assert paused == [60]
