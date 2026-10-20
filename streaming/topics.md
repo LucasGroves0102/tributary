@@ -8,9 +8,12 @@
 `filings.raw` has one event per filer, so a Form 4 produces two events (Reporting + Issuer)
 with the same accession number. Consumers must be idempotent on `(accession_no, cik)`.
 
-`source` is `feed` (live poller; `filed_at` is the exact acceptance time) or `daily-index`
-(backfill; `filed_at` is midnight US Eastern and `role` is `Unknown`). Events from before the
-field existed have no `source` and came from the feed.
+`source` is `feed` (live poller; `filed_at` is the exact acceptance time), `daily-index`
+(backfill; `filed_at` is midnight US Eastern and `role` is `Unknown`) or `seed`
+(doc-fetcher-seed history load; `filed_at` is the exact acceptance time, corrected from the
+submissions API, and `role` is `Filer`). Only `feed` events count in freshness and live-coverage
+metrics. Events from before the field existed have no `source` and came from the feed; earlier
+seed events without it were marked `seed` in bronze by `db/migrations/016_seed_source.sql`.
 
 `documents.fetched` references the document in `bronze.filing_documents` instead of
 embedding it: a 10-K is ~2 MB of HTML, over Kafka's default 1 MB message limit.

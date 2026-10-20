@@ -7,7 +7,7 @@ import httpx
 import pytest
 
 from tributary_agent.agent import Agent
-from tributary_agent.tools import TOOLS, QueryApi
+from tributary_agent.tools import TOOLS, MetricTools, QueryApi
 
 NVDA = "0001045810"
 
@@ -250,3 +250,34 @@ def test_financials_view_and_basis_pass_through():
     args = {"company_id": NVDA, "metrics": ["roe"], "view": "ttm", "basis": "calendar"}
     assert api.run("get_financials", args)[1] is False
     assert (seen[0].url.params["view"], seen[0].url.params["basis"]) == ("ttm", "calendar")
+
+
+def financials_metrics(tools):
+    tool = next(t for t in tools if t["name"] == "get_financials")
+    return tool["input_schema"]["properties"]["metrics"]["items"].get("enum")
+
+
+def test_metric_names_come_from_the_query_api():
+    calls = []
+
+    def handler(request):
+        calls.append(request.url.path)
+        if len(calls) == 1:
+            return httpx.Response(503)
+        return httpx.Response(200, json={"metrics": ["revenue"], "derived_metrics": ["roe"]})
+
+    api, _ = query_api(handler)
+    tools = MetricTools()
+    assert tools.get(api) is TOOLS  # API down: no enum, keep trying
+    assert financials_metrics(tools.get(api)) == ["revenue", "roe"]
+    assert financials_metrics(tools.get(api)) == ["revenue", "roe"]
+    assert calls == ["/v1/metrics"] * 2
+    assert financials_metrics(TOOLS) is None
+
+
+def test_agent_sends_the_tools_it_was_given():
+    fake = FakeMessages(response("end_turn", text("done")))
+    api, _ = query_api(lambda r: httpx.Response(
+        200, json={"metrics": ["revenue"], "derived_metrics": []}))
+    Agent(fake, api, "claude-haiku-5-5", tools=MetricTools().get(api)).ask("hi")
+    assert financials_metrics(fake.requests[0]["tools"]) == ["revenue"]

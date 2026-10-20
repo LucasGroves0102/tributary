@@ -32,6 +32,15 @@ class Store:
                 cur.execute("RESET ROLE")
                 cur.execute("SELECT set_config('app.user_id', '', true)")
 
+    def metric_names(self) -> dict[str, list[str]]:
+        """{metrics: silver.metrics, derived_metrics: gold.derived_metrics}, by name."""
+        with self._session("") as cur:
+            cur.execute(
+                "SELECT ARRAY(SELECT metric FROM silver.metrics ORDER BY 1) AS metrics,"
+                "       ARRAY(SELECT metric FROM gold.derived_metrics ORDER BY 1)"
+                "           AS derived_metrics")
+            return dict(cur.fetchone() or {})
+
     def search(self, user_id: str, q: str, limit: int = 5) -> list[dict]:
         with self._session(user_id) as cur:
             cur.execute(

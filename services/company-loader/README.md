@@ -11,7 +11,9 @@ Sources:
 - `data.sec.gov/submissions`: former names and industry, fetched for tracked companies only
   (the bulk load below covers every company; this keeps tracked ones current between loads)
 - `src/company_loader/data/`: curated files the SEC doesn't publish
-  - `tracked.csv`: companies whose financials and documents get fetched
+  - `tracked.csv`: companies whose financials and documents get fetched: the 20 demo
+    companies plus TSLA (the demo watchlist trap) and LLY (in the adversarial ground truth).
+    Every ticker must be in `tests/fixtures/company_tickers.json`
   - `successions.csv`: old CIK → new CIK (e.g. Google Inc. → Alphabet)
   - `ticker_history.csv`: retired tickers (e.g. FB)
 
@@ -41,11 +43,11 @@ Loads the SEC's nightly `submissions.zip` (~1.6 GB, one JSON per CIK plus
   year end (MMDD), state of incorporation, filer categories; former names as aliases
   (`silver.refresh_company_metadata`)
 - `silver.filings`: the live filings.raw sink (`bronze.filings`) plus the bulk history, one row
-  per (accession, CIK), `source` = feed / daily-index / submissions
+  per (accession, CIK), `source` = feed / daily-index / seed / submissions
 
 History is never published to `filings.raw`, so doc-fetcher and the ops freshness views only see
 live filings. The SEC's `acceptanceDateTime` is labelled UTC but runs ahead of it by the US
-Eastern offset; `accepted_at` stores the corrected time.
+Eastern offset; `accepted_at` stores the corrected time (`tributary_sec.acceptance_time`).
 
 Each run downloads the zip through `libs/sec` to `--download-dir` (default `/tmp`;
 If-Modified-Since the last finished load; a 304 ends the run), then loads at most `--max-ciks`

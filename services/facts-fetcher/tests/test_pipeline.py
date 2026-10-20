@@ -268,3 +268,49 @@ def test_ttm_of_a_fiscal_year_matches_the_10k(loaded):
 def test_every_gold_refresh_is_checked(loaded):
     checked = loaded.execute("SELECT company_id FROM ops.quality_companies ORDER BY 1")
     assert [r[0] for r in checked] == sorted(COMPANIES)
+
+
+def gold_rows(conn):
+    quarterly = conn.execute(
+        "SELECT company_id, metric, period_start, period_end, value, value_source, source_tag,"
+        " accession_no, form, filed, source_accessions, ingested_at"
+        " FROM gold.quarterly_financials ORDER BY company_id, metric, period_end").fetchall()
+    derived = conn.execute(
+        "SELECT company_id, span, metric, period_start, period_end, value, value_source,"
+        " source_tag, inputs, accession_no, form, filed, source_accessions, ingested_at"
+        " FROM gold.derived_financials ORDER BY company_id, span, metric, period_end").fetchall()
+    return quarterly, derived
+
+
+def test_repeated_refreshes_produce_identical_rows(loaded):
+    first = gold_rows(loaded)
+    refresh_gold(loaded, list(COMPANIES))
+    assert gold_rows(loaded) == first
+
+
+# Two year-to-date chains (from Jan 1 and from Feb 1) derive the same quarter from the same
+# 10-Q, with equal tag, value and filing: only the earlier accession differs.
+YTD_CHAINS = [
+    ("2025-01-01", "2025-06-30", 600, "tie-a", "2025-08-01"),
+    ("2025-02-01", "2025-06-30", 500, "tie-b", "2025-08-01"),
+    ("2025-01-01", "2025-09-30", 900, "tie-c", "2025-11-01"),
+    ("2025-02-01", "2025-09-30", 800, "tie-c", "2025-11-01"),
+]
+
+
+def test_tied_candidates_resolve_the_same_way_in_any_order(conn):
+    results = []
+    for facts in (YTD_CHAINS, YTD_CHAINS[::-1]):
+        conn.execute("DELETE FROM silver.financial_facts")
+        for start, end, value, accession, filed in facts:
+            conn.execute(
+                "INSERT INTO silver.financial_facts (cik, metric, tag, unit, period_start,"
+                " period_end, value, accession_no, form, filed, ingested_at)"
+                " VALUES (%s, 'revenue', 'Revenues', 'USD', %s, %s, %s, %s, '10-Q', %s,"
+                " '2025-11-02')", (HD, start, end, value, accession, filed))
+        for _ in range(2):
+            refresh_gold(conn, [HD])
+            results.append(gold_rows(conn)[0])
+    assert all(r == results[0] for r in results)
+    assert quarters(conn, HD, "revenue") == [
+        (date(2025, 9, 30), 300, "derived", "us-gaap:Revenues", ["tie-b", "tie-c"])]

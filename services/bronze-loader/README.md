@@ -2,7 +2,8 @@
 
 FR4, week 1. Consumes `filings.raw` (from [poller](../poller), `poller-backfill` and
 `doc-fetcher-seed`) and writes each event to `bronze.filings`, the raw sink of live filings.
-`silver.filings` and the `ops` freshness views read that table.
+`silver.filings` and the `ops` freshness views read that table; they tell the producers apart
+by the event's `source` (`feed`, `daily-index`, `seed`; see `streaming/topics.md`).
 
 | | |
 |---|---|

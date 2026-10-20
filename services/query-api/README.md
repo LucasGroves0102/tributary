@@ -20,7 +20,7 @@ request parameters. Dev tokens: `make token USER=alice`.
 | `POST /v1/demo/token` | `DEMO_USERS` set | an 8-hour token for a demo account |
 | `GET /v1/me` | token | companies the caller can read, with tiers |
 | `GET /v1/companies/search?q=` | token | candidates (public identity) + caller's access |
-| `GET /v1/metrics` | | metric names served by `financials` |
+| `GET /v1/metrics` | | metric names served by `financials`: `silver.metrics` and `gold.derived_metrics`, read once |
 | `GET /v1/companies/{id}/financials?metrics=&quarters=` | financials | values + citation + freshness |
 | `GET /v1/companies/{id}/filings?limit=` | filings | recent filings and their sections |
 | `GET /v1/filings/latest?limit=` | token | newest parsed filings across the companies the caller can read filings for |

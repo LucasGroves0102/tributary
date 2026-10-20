@@ -32,6 +32,11 @@ class FakeAuthorizer:
 class FakeStore:
     def __init__(self):
         self.calls = []
+        self.metric_reads = 0
+
+    def metric_names(self):
+        self.metric_reads += 1
+        return {"metrics": ["eps_diluted", "revenue"], "derived_metrics": ["gross_margin", "roe"]}
 
     def financials(self, user_id, company_id, metrics, quarters, view, basis):
         self.calls.append(("financials", user_id, company_id))
@@ -122,6 +127,14 @@ def test_fails_closed_when_openfga_is_down(token):
 def test_rejects_malformed_identifiers(client, token, path):
     assert client.get(path, headers=token("alice")).status_code in (404, 422)
     assert client.store.calls == []
+
+
+def test_metric_list_is_read_from_the_store_once(client, token):
+    for _ in range(2):
+        assert client.get("/v1/metrics").json() == {
+            "metrics": ["eps_diluted", "revenue"], "derived_metrics": ["gross_margin", "roe"]}
+    client.get(f"/v1/companies/{NVDA}/financials", headers=token("alice"))
+    assert client.store.metric_reads == 1
 
 
 def test_unknown_metric(client, token):

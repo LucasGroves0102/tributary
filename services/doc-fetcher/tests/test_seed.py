@@ -23,7 +23,8 @@ def test_selects_recent_10k_10q_and_8k():
 def test_events_match_filings_raw_schema():
     e = select_filings(NVDA, SUBMISSIONS, today=date(2026, 10, 17))[0]
     assert set(e) == {"accession_no", "cik", "company_name", "role", "form_type",
-                      "filed_at", "url"}
+                      "filed_at", "url", "source"}
+    assert e["source"] == "seed"
     assert e["url"] == ("https://www.sec.gov/Archives/edgar/data/1045810/000104581026000078/"
                         "0001045810-26-000078-index.htm")
 
@@ -32,3 +33,10 @@ def test_old_filings_of_a_retired_cik_are_skipped():
     # e.g. Google Inc.'s last 10-Ks are from 2015-2016
     events = select_filings(NVDA, SUBMISSIONS, today=date(2030, 1, 1))
     assert [e for e in events if e["form_type"] in ("10-K", "10-Q")] == []
+
+
+def test_acceptance_time_is_corrected_to_utc():
+    # the filing index shows "Accepted 2026-02-25 16:42:19" (EST); the API says 02:42:19Z
+    events = select_filings(NVDA, SUBMISSIONS, today=date(2026, 10, 17))
+    ten_k = next(e for e in events if e["accession_no"] == "0001045810-26-000021")
+    assert ten_k["filed_at"] == "2026-02-25T21:42:19+00:00"
