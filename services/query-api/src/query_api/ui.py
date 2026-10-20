@@ -24,6 +24,8 @@ from query_api.screener import (
     Screen,
     ScreenError,
     band_filters,
+    band_label,
+    band_of,
     column_info,
     compile_screen,
     parse_filter,
@@ -49,6 +51,9 @@ RECAP_FORMS = ("10-K", "10-Q", "10-K/A", "10-Q/A")
 Band = Literal["lt100m", "100m-1b", "1b-10b", "10b-100b", "gte100b"]
 Format = Annotated[Literal["json", "csv"], Query(alias="format")]
 MAX_JSON_ROWS = 500
+DEFAULT_PEER_COLUMNS = ("revenue_ttm", "revenue_growth_ttm", "gross_margin_ttm",
+                        "operating_margin_ttm", "net_margin_ttm", "free_cash_flow_ttm",
+                        "debt_to_equity_q")
 WATCHLIST_COLUMNS = ("revenue_ttm", "revenue_growth_q", "operating_margin_ttm",
                      "free_cash_flow_ttm")
 META_CSV = ["company_id", "name", "tickers", "exchanges", "sic", "industry", "fiscal_year_end",
@@ -276,6 +281,51 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
                 "flags": flags,
                 **({} if flags is not None else
                    {"flags_unavailable": "one-time-item flags need filings access"})}
+
+    @app.get("/v1/companies/{company_id}/peers", response_model=dict)
+    def peers(
+        user_id: Annotated[str, Depends(current_user)], company_id: CompanyId,
+        limit: Annotated[int, Query(ge=1, le=50)] = 10,
+        columns: Annotated[list[str] | None, Query(description="screener column keys")] = None,
+    ) -> dict:
+        """Suggested peers: same SIC (then 3- and 2-digit groups), then the same revenue size
+        band, then the same filer category. Metadata is public; metric values and size bands
+        only for companies the caller can read financials for (the company's own revenue is
+        used only if the caller can read it)."""
+        access = readable(user_id)
+        cols = columns if columns is not None else list(DEFAULT_PEER_COLUMNS)
+        _, target, _ = run_screen(user_id, Screen(columns=cols, company_ids=[company_id],
+                                                  coverage=False, sort="name", limit=1), access)
+        if not target:
+            raise HTTPException(404, "unknown company")
+        revenue = target[0]["values"].get("revenue_ttm") if "revenue_ttm" in cols else None
+        granted = sorted(c for c, t in access.items() if "financials" in t)
+        if revenue is None and company_id in granted:
+            _, own, _ = run_screen(user_id, Screen(columns=["revenue_ttm"],
+                                                   company_ids=[company_id], coverage=False,
+                                                   sort="name", limit=1), access)
+            revenue = own[0]["values"]["revenue_ttm"] if own else None
+        ranked = store.peers(user_id, company_id, granted, revenue, limit)
+        ids = [p["company_id"] for p in ranked]
+        compiled, rows, _ = run_screen(user_id, Screen(columns=cols, company_ids=ids,
+                                                       coverage=False, sort="company_id",
+                                                       limit=max(len(ids), 1)), access)
+        by_id = {r["company_id"]: r for r in rows}
+        own_band = band_of(revenue)
+        return {
+            "company_id": company_id, "as_of": _now(), "columns": column_info(compiled.columns),
+            "company": {**target[0], "revenue_band": band_label(own_band)},
+            "method": "Same 4-digit SIC first, then 3- and 2-digit SIC groups; within a level, "
+                      "the same TTM revenue size band (companies you can read), the same SEC "
+                      "filer category, then closest revenue.",
+            "peers": [{**by_id[p["company_id"]],
+                       "match": {"sic_level": p["sic_level"],
+                                 "same_filer_category": p["same_filer_category"],
+                                 "revenue_band": band_label(p["revenue_band"]),
+                                 "same_revenue_band": own_band is not None
+                                 and p["revenue_band"] == own_band}}
+                      for p in ranked if p["company_id"] in by_id],
+        }
 
     @app.get("/v1/screener/columns")
     def screener_columns() -> dict:

@@ -299,3 +299,22 @@ LANGUAGE sql STABLE AS $$
       AND s.text ~* k.pattern
     ORDER BY s.char_start, k.flag
 $$;
+
+-- Peer suggestions -----------------------------------------------------------------------------
+
+-- Candidate peers of a company from public metadata: companies with financials sharing its
+-- 4-digit SIC (sic_level 4), else its 3-digit (3) or 2-digit (2) group, and whether they have
+-- the same SEC filer category (a public-float size proxy). The Query API ranks them, adding
+-- revenue size bands only for companies the caller can read.
+CREATE FUNCTION gold.peer_candidates(p_company_id text)
+RETURNS TABLE (company_id text, sic_level int, same_filer_category boolean)
+LANGUAGE sql STABLE AS $$
+    SELECT c.company_id,
+           CASE WHEN c.sic = t.sic THEN 4 WHEN left(c.sic, 3) = left(t.sic, 3) THEN 3 ELSE 2 END,
+           coalesce(gold.filer_category(c.filer_categories)
+                    = gold.filer_category(t.filer_categories), false)
+    FROM silver.companies t
+    JOIN silver.companies c ON left(c.sic, 2) = left(t.sic, 2) AND c.company_id <> t.company_id
+    WHERE t.company_id = p_company_id AND t.sic IS NOT NULL
+      AND EXISTS (SELECT 1 FROM gold.financials_coverage v WHERE v.company_id = c.company_id)
+$$;

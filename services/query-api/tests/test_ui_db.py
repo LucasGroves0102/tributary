@@ -212,3 +212,63 @@ def test_recap_and_flags_respect_rls(recap_conn, token):
     assert [(f["flag"], f["matches"], f["citation"]["char_start"]) for f in flags] == [
         ("impairment", 2, 1023), ("restructuring", 1, 1052)]
     assert "goodwill impairment" in flags[0]["snippet"]
+
+
+P1, P2, P3, P4 = "9100000011", "9100000012", "9100000013", "9100000014"
+
+
+class AllowAllCompanies(AllowAll):
+    def readable(self, _):
+        return {c: {"financials"} for c in (P1, P2, P3, P4)}
+
+
+@pytest.fixture
+def peer_conn(conn):
+    # P4 is not granted to t-free and sorts first by name: only RLS keeps its revenue out
+    for cid, name, sic, revenue in ((P1, "UI Peer target", "3571", 200),
+                                    (P2, "UI Peer B", "3571", 150),
+                                    (P3, "UI Peer C", "3572", 210),
+                                    (P4, "UI Peer A", "3571", 190)):
+        conn.execute("INSERT INTO silver.companies (company_id, name, current_cik, sic)"
+                     " VALUES (%s, %s, %s, %s)", (cid, name, cid, sic))
+        conn.execute("INSERT INTO silver.company_ciks (cik, company_id) VALUES (%s, %s)",
+                     (cid, cid))
+        acc = f"{cid}-26-000001"
+        conn.execute(
+            "INSERT INTO gold.quarterly_financials (company_id, metric, period_start, period_end,"
+            " value, unit, value_source, source_tag, accession_no, filed, source_accessions,"
+            " ingested_at) VALUES (%s, 'revenue', '2026-04-01', '2026-06-30', %s, 'USD',"
+            " 'reported', 'us-gaap:Revenues', %s, '2026-08-01', ARRAY[%s], now())",
+            (cid, revenue // 4, acc, acc))
+        conn.execute(
+            "INSERT INTO gold.derived_financials (company_id, span, metric, period_start,"
+            " period_end, value, unit, value_source, inputs, accession_no, filed,"
+            " source_accessions, ingested_at) VALUES (%s, 'ttm', 'revenue', '2025-07-01',"
+            " '2026-06-30', %s, 'USD', 'ttm', '{}', %s, '2026-08-01', ARRAY[%s], now())",
+            (cid, revenue, acc, acc))
+    conn.execute("INSERT INTO authz.user_access (user_id, company_id, tier) VALUES"
+                 " ('t-free', %s, 'financials'), ('t-free', %s, 'financials'),"
+                 " ('t-free', %s, 'financials')", (P1, P2, P3))
+    return conn
+
+
+def peers(conn, token, user):
+    c = TestClient(create_app(AllowAllCompanies(), Store(OneConnection(conn)), SECRET))
+    r = c.get(f"/v1/companies/{P1}/peers?columns=revenue_ttm", headers=token(user))
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def test_peers_rank_by_sic_then_size_band(peer_conn, token):
+    body = peers(peer_conn, token, "t-free")
+    assert body["company"]["revenue_band"] == "<$100M"
+    assert [(p["company_id"], p["match"]["sic_level"], p["match"]["same_revenue_band"],
+             p["values"]["revenue_ttm"]) for p in body["peers"]] == [
+        (P2, 4, True, "150"), (P4, 4, False, None), (P3, 3, True, "210")]
+
+
+def test_peers_without_access_rank_by_public_metadata_only(peer_conn, token):
+    body = peers(peer_conn, token, "t-nobody")
+    assert body["company"]["revenue_band"] is None
+    assert [p["company_id"] for p in body["peers"]] == [P4, P2, P3]  # SIC level, then name
+    assert all(p["values"]["revenue_ttm"] is None for p in body["peers"])

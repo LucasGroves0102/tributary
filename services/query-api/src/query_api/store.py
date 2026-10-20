@@ -5,6 +5,7 @@ skipped."""
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import date
+from decimal import Decimal
 from typing import Any, Protocol
 
 import psycopg
@@ -141,6 +142,33 @@ class Store:
         """gold.filing_flags rows (RLS: filings tier)."""
         with self._session(user_id) as cur:
             cur.execute("SELECT * FROM gold.filing_flags(%s)", (accession_no,))
+            return cur.fetchall()
+
+    def peers(self, user_id: str, company_id: str, granted: list[str], revenue: Decimal | None,
+              limit: int) -> list[dict]:
+        """Ranked peer candidates (gold.peer_candidates): SIC level, then the same revenue size
+        band as `revenue` (only companies in `granted` have one; RLS applies too), then the
+        same filer category, then revenue closeness, then name."""
+        with self._session(user_id) as cur:
+            cur.execute(
+                """
+                SELECT p.company_id, p.sic_level, p.same_filer_category,
+                       gold.revenue_band(r.value) AS revenue_band
+                FROM gold.peer_candidates(%(company)s) p
+                JOIN silver.companies c ON c.company_id = p.company_id
+                LEFT JOIN gold.latest_financials r
+                       ON r.company_id = p.company_id AND r.company_id = ANY(%(granted)s)
+                      AND r.span = 'ttm' AND r.metric = 'revenue'
+                ORDER BY p.sic_level DESC,
+                         coalesce(gold.revenue_band(r.value)
+                                  = gold.revenue_band(%(revenue)s::numeric), false) DESC,
+                         p.same_filer_category DESC,
+                         CASE WHEN r.value > 0 AND %(revenue)s::numeric > 0
+                              THEN abs(ln(r.value / %(revenue)s::numeric)) END NULLS LAST,
+                         c.name, p.company_id
+                LIMIT %(limit)s
+                """, {"company": company_id, "granted": granted, "revenue": revenue,
+                      "limit": limit})
             return cur.fetchall()
 
     def financials(self, user_id: str, company_id: str, metrics: list[str], quarters: int,

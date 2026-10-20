@@ -118,6 +118,13 @@ def band_label(band: int | None) -> str | None:
     return BAND_LABELS[band] if band is not None else None
 
 
+def band_of(value: Decimal | None) -> int | None:
+    """Python twin of gold.revenue_band."""
+    if value is None or value <= 0:
+        return None
+    return next(i for i, (_, high) in enumerate(BANDS.values()) if high is None or value < high)
+
+
 def _like(text: str) -> str:
     """ILIKE pattern matching text anywhere, with its wildcards escaped."""
     return "%" + text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"

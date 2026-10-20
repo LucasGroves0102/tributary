@@ -264,3 +264,50 @@ def test_recap_rejects_bad_input(token, path):
     c = recap_client({"alice": {NVDA: {"financials"}}})
     assert c.get(path, headers=token("alice")).status_code == 422
     assert c.store.calls == []
+
+
+AAPL = "0000320193"
+
+
+class PeerStore(UIStore):
+    def peers(self, user_id, company_id, granted, revenue, limit):
+        self.calls.append(("peers", company_id, tuple(granted), revenue, limit))
+        return [{"company_id": NVDA, "sic_level": 4, "same_filer_category": True,
+                 "revenue_band": 4 if NVDA in granted else None},
+                {"company_id": TSLA, "sic_level": 2, "same_filer_category": True,
+                 "revenue_band": None}]
+
+
+def peer_client(grants):
+    store = PeerStore()
+    c = TestClient(create_app(FakeAuthorizer(grants), store, SECRET))
+    c.store = store
+    return c
+
+
+def test_peers_metrics_only_where_permitted(token):
+    c = peer_client({"alice": {NVDA: {"financials"}}})
+    r = c.get(f"/v1/companies/{NVDA}/peers?limit=5", headers=token("alice"))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["company"]["revenue_band"] == ">=$100B"
+    peers = {p["company_id"]: p for p in body["peers"]}
+    assert peers[NVDA]["values"]["revenue_ttm"] == "130497000000"
+    assert peers[NVDA]["match"] == {"sic_level": 4, "same_filer_category": True,
+                                    "revenue_band": ">=$100B", "same_revenue_band": True}
+    assert set(peers[TSLA]["values"].values()) == {None}
+    assert peers[TSLA]["match"]["revenue_band"] is None
+    assert ("peers", NVDA, (NVDA,), Decimal("130497000000"), 5) in c.store.calls
+
+
+def test_peers_of_an_ungranted_company_ignore_its_revenue(token):
+    c = peer_client({"carol": {}})
+    body = c.get(f"/v1/companies/{TSLA}/peers", headers=token("carol")).json()
+    assert body["company"]["revenue_band"] is None
+    assert ("peers", TSLA, (), None, 10) in c.store.calls
+    assert all(v is None for p in body["peers"] for v in p["values"].values())
+
+
+def test_peers_of_unknown_company(token):
+    c = peer_client({})
+    assert c.get(f"/v1/companies/{AAPL}/peers", headers=token("carol")).status_code == 404
