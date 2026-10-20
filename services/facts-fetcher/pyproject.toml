@@ -11,6 +11,7 @@ dependencies = [
 
 [project.scripts]
 facts-fetcher = "facts_fetcher.main:main"
+facts-fetcher-bulk = "facts_fetcher.bulk:main"
 
 [build-system]
 requires = ["setuptools>=68"]

@@ -1,13 +1,23 @@
 """bronze → silver → gold against a real Postgres with migrations applied, using trimmed real
 SEC payloads. Skipped unless TEST_DATABASE_URL is set; every test is rolled back."""
 
+import gzip
+import json
 import os
 from datetime import date
 from pathlib import Path
 
 import pytest
 
-from facts_fetcher.db import refresh_gold, refresh_silver, store_payload, tracked_ciks
+from facts_fetcher.db import (
+    latest_hashes,
+    refresh_gold,
+    refresh_silver,
+    store_payload,
+    tracked_ciks,
+)
+from facts_fetcher.main import rebuild
+from facts_fetcher.payload import digest
 
 psycopg = pytest.importorskip("psycopg")
 DSN = os.environ.get("TEST_DATABASE_URL")
@@ -41,11 +51,11 @@ def conn():
 
 @pytest.fixture
 def loaded(conn):
-    for company_id, ciks in COMPANIES.items():
+    for ciks in COMPANIES.values():
         for cik in ciks:
             store_payload(conn, cik, raw(cik))
-            refresh_silver(conn, cik)
-        refresh_gold(conn, company_id)
+        refresh_silver(conn, ciks)
+    refresh_gold(conn, list(COMPANIES))
     return conn
 
 
@@ -111,7 +121,7 @@ def test_restatement_wins_and_original_is_kept(loaded):
         " value, accession_no, form, filed)"
         " VALUES (%s, 'revenue', 'Revenues', 'USD', '2026-04-27', '2026-07-26', 99000000000,"
         " 'restated-1', '10-Q/A', '2026-09-30')", (NVDA,))
-    refresh_gold(loaded, NVDA)
+    refresh_gold(loaded, [NVDA])
     latest = quarters(loaded, NVDA, "revenue")[0]
     assert (latest[1], latest[4]) == (99000000000, ["restated-1"])
     originals = loaded.execute(
@@ -123,8 +133,8 @@ def test_restatement_wins_and_original_is_kept(loaded):
 
 def test_refresh_is_idempotent(loaded):
     before = loaded.execute("SELECT count(*) FROM gold.quarterly_financials").fetchone()[0]
-    assert refresh_silver(loaded, NVDA) == 0
-    refresh_gold(loaded, NVDA)
+    assert refresh_silver(loaded, [NVDA]) == 0
+    refresh_gold(loaded, [NVDA])
     after = loaded.execute("SELECT count(*) FROM gold.quarterly_financials").fetchone()[0]
     assert before == after
 
@@ -135,3 +145,74 @@ def test_every_gold_row_has_provenance(loaded):
         " OR source_tag IS NULL OR cardinality(source_accessions) = 0"
     ).fetchone()[0]
     assert missing == 0
+
+
+def test_set_based_refresh_matches_one_company_at_a_time(loaded):
+    def snapshot():
+        return loaded.execute(
+            "SELECT company_id, metric, period_end, value, value_source, source_accessions"
+            " FROM gold.quarterly_financials ORDER BY 1, 2, 3").fetchall()
+    together = snapshot()
+    for company_id in COMPANIES:
+        loaded.execute("SELECT gold.refresh_quarterly_financials(%s::text)", (company_id,))
+    assert snapshot() == together
+
+
+def test_preferred_tag_beats_reported_over_derived(loaded):
+    # a lower-priority tag reports the quarter that Revenues (priority 2) only derives
+    loaded.execute(
+        "INSERT INTO silver.financial_facts (cik, metric, tag, unit, period_start, period_end,"
+        " value, accession_no, form, filed)"
+        " VALUES (%s, 'revenue', 'SalesRevenueNet', 'USD', '2025-10-27', '2026-01-25', 1,"
+        " 'other-tag-1', '10-K', '2026-02-25')", (NVDA,))
+    refresh_gold(loaded, [NVDA])
+    q = next(r for r in quarters(loaded, NVDA, "revenue") if r[0] == date(2026, 1, 25))
+    assert (q[1], q[2], q[3]) == (68127000000, "derived", "us-gaap:Revenues")
+
+
+def test_instants_are_never_derived(loaded):
+    rows = loaded.execute(
+        "SELECT DISTINCT value_source FROM gold.quarterly_financials"
+        " WHERE metric IN ('total_assets', 'cash')").fetchall()
+    assert rows == [("reported",)]
+
+
+def test_bronze_keeps_mapped_facts_and_the_raw_payload(conn):
+    nvda = json.loads(raw(NVDA))
+    nvda["facts"]["us-gaap"]["SomethingUnmapped"] = {"units": {"USD": []}}
+    payload = json.dumps(nvda).encode()
+    store_payload(conn, NVDA, payload)
+    facts, raw_gzip, size = conn.execute(
+        "SELECT payload, raw_gzip, size_bytes FROM bronze.company_facts").fetchone()
+    assert "SomethingUnmapped" not in facts["facts"]["us-gaap"]
+    assert "Revenues" in facts["facts"]["us-gaap"]
+    assert gzip.decompress(raw_gzip) == payload and size == len(payload)
+
+
+def test_only_the_latest_payload_keeps_its_raw_copy(conn):
+    store_payload(conn, NVDA, raw(NVDA))
+    store_payload(conn, NVDA, raw(NVDA) + b" ")
+    assert conn.execute(
+        "SELECT count(*), count(raw_gzip) FROM bronze.company_facts").fetchone() == (2, 1)
+    # the SEC going back to an earlier payload makes it the latest again, with its raw copy
+    assert store_payload(conn, NVDA, raw(NVDA)) is False
+    assert latest_hashes(conn)[NVDA] == digest(raw(NVDA))
+    assert conn.execute(
+        "SELECT count(raw_gzip) FROM bronze.company_facts WHERE payload_sha256 = %s",
+        (digest(raw(NVDA)),)).fetchone() == (1,)
+
+
+def test_rebuild_reprojects_from_raw_after_metric_tags_change(loaded):
+    loaded.execute("INSERT INTO silver.metric_tags (metric, tag, priority)"
+                   " VALUES ('revenue', 'NoSuchTagYet', 99)")
+    before = loaded.execute("SELECT count(*) FROM silver.financial_facts").fetchone()[0]
+    nvda = json.loads(raw(NVDA))
+    nvda["facts"]["us-gaap"]["NoSuchTagYet"] = nvda["facts"]["us-gaap"]["Revenues"]
+    store_payload(loaded, NVDA, json.dumps(nvda).encode())  # new payload, projected with it
+    loaded.execute("UPDATE bronze.company_facts SET payload = '{}'")  # as if projected before
+    rebuild(loaded)
+    after = loaded.execute(
+        "SELECT count(*) FROM silver.financial_facts WHERE tag = 'NoSuchTagYet'").fetchone()[0]
+    assert after > 0
+    assert loaded.execute("SELECT count(*) FROM silver.financial_facts").fetchone()[0] \
+        == before + after

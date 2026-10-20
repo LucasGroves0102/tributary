@@ -1,4 +1,4 @@
-.PHONY: up up-all down logs topics consume migrate seed-app authz authz-test cdc propagation-test token backfill companies financials financials-rebuild seed-documents reparse psql lint test hooks secrets ask adversarial web citations typecheck exhibits
+.PHONY: up up-all down logs topics consume migrate seed-app authz authz-test cdc propagation-test token backfill companies financials financials-bulk financials-rebuild seed-documents reparse psql lint test hooks secrets ask adversarial web citations typecheck exhibits
 
 COMPOSE := $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo docker-compose)
 # use the repo virtualenv when there is one, so `make test` works without activating it
@@ -72,6 +72,9 @@ companies: ## refresh company identity from the SEC (run daily)
 financials: ## fetch XBRL facts for tracked companies → bronze/silver/gold (run daily)
 	$(COMPOSE) --profile jobs build facts-fetcher
 	$(COMPOSE) --profile jobs run --rm facts-fetcher
+
+financials-bulk: ## every filer's XBRL facts from a local companyfacts.zip: make financials-bulk ZIP=... LIMIT=500
+	@set -a; . ./.env; set +a; $(BIN)facts-fetcher-bulk --zip $(ZIP) --limit $(or $(LIMIT),500)
 
 financials-rebuild: ## re-derive silver/gold from stored bronze (after changing metric_tags)
 	$(COMPOSE) --profile jobs build facts-fetcher

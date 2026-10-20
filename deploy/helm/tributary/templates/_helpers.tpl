@@ -59,7 +59,7 @@ tributary.io/{{ $k }}: {{ $v | quote }}
   value: {{ $root.Values.logLevel | quote }}
 {{- range .uses }}
 {{- if eq . "postgres" }}
-{{ include "tributary.secretEnv" (dict "root" $root "env" "DATABASE_URL" "key" "database-url") }}
+{{ include "tributary.secretEnv" (dict "root" $root "env" "DATABASE_URL" "key" ($.databaseUrlKey | default "database-url")) }}
 {{- else if eq . "app-postgres" }}
 {{ include "tributary.secretEnv" (dict "root" $root "env" "APP_DATABASE_URL" "key" "app-database-url") }}
 {{- else if eq . "kafka" }}
@@ -151,8 +151,17 @@ containers:
     volumeMounts:
       - name: tmp
         mountPath: /tmp
+      {{- with .scratch }}
+      - name: scratch
+        mountPath: /scratch
+      {{- end }}
 volumes:
   - name: tmp
     emptyDir:
       sizeLimit: 64Mi
+  {{- with .scratch }}
+  - name: scratch
+    emptyDir:
+      sizeLimit: {{ . }}
+  {{- end }}
 {{- end }}
