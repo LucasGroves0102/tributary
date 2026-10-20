@@ -14,6 +14,10 @@ in the `platform` namespace; Postgres runs on the host.
 
 ## Install
 
+Flux installs it from [deploy/flux/releases/tributary.yaml](../../flux/releases) after the
+platform release, with `image.tag` set by image automation to the newest green CI build
+(`main-<run>-<sha>`). By hand:
+
 ```bash
 helm upgrade --install tributary deploy/helm/tributary \
   --namespace tributary --set image.tag=<commit sha>
@@ -29,6 +33,9 @@ kubectl -n tributary create job --from=cronjob/companies companies-1
 kubectl -n tributary create job --from=cronjob/financials financials-1
 kubectl -n tributary create job --from=cronjob/seed-documents seed-documents-1
 ```
+
+`financials-bulk` (every filer's XBRL facts) and `submissions` (every filer's filing history)
+also ship suspended; their comments in `values.yaml` describe the first run.
 
 ## Components
 
