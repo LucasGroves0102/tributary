@@ -9,7 +9,9 @@ Kafka, Kafka Connect with Debezium, and OpenFGA for the `tributary` chart. Insta
   the `app` and `openfga` databases owned by the `tributary` login (which has `REPLICATION`).
 - In the `platform` namespace:
   - Secret `platform` with keys `postgres-password` and `openfga-datastore-uri`
-    (`postgres://tributary:<password>@postgres:5432/openfga?sslmode=disable`).
+    (`postgres://tributary:<password>@postgres:5432/openfga?sslmode=disable`), and with
+    `openfga.auth.enabled`: `openfga-preshared-keys` (comma-separated keys OpenFGA accepts) and
+    `openfga-api-token` (the key `setup-openfga` sends).
   - Secret `ghcr` (type `kubernetes.io/dockerconfigjson`) for the setup image.
 
 ## Install

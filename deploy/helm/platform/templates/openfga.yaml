@@ -77,6 +77,10 @@ spec:
             {{- include "platform.datastore" . | nindent 12 }}
             - {name: OPENFGA_PLAYGROUND_ENABLED, value: "false"}
             - {name: OPENFGA_LOG_FORMAT, value: json}
+            {{- if .Values.openfga.auth.enabled }}
+            - {name: OPENFGA_AUTHN_METHOD, value: preshared}
+            {{- include "platform.secretEnv" (dict "root" $ "env" "OPENFGA_AUTHN_PRESHARED_KEYS" "key" "openfga-preshared-keys") | nindent 12 }}
+            {{- end }}
           ports:
             - {name: http, containerPort: 8080}
           readinessProbe:
@@ -120,6 +124,9 @@ spec:
           args: [openfga]
           env:
             - {name: FGA_API_URL, value: "http://openfga:8080"}
+            {{- if .Values.openfga.auth.enabled }}
+            {{- include "platform.secretEnv" (dict "root" $ "env" "FGA_API_TOKEN" "key" "openfga-api-token") | nindent 12 }}
+            {{- end }}
           resources:
             requests: {cpu: 10m, memory: 32Mi}
             limits: {memory: 64Mi}

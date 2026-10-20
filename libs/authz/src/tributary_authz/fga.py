@@ -1,5 +1,6 @@
 """Minimal OpenFGA HTTP client."""
 
+import os
 from collections.abc import Set as AbstractSet
 from typing import NamedTuple
 
@@ -24,9 +25,18 @@ class FgaError(RuntimeError):
 
 class FgaClient:
     def __init__(self, api_url: str, store_name: str = STORE_NAME,
-                 client: httpx.Client | None = None) -> None:
+                 client: httpx.Client | None = None, api_token: str | None = None) -> None:
+        """api_token is sent as a bearer token (OpenFGA preshared-key auth)."""
         self._http = client or httpx.Client(base_url=api_url, timeout=10.0)
+        if api_token:
+            self._http.headers["Authorization"] = f"Bearer {api_token}"
         self.store_id = self._find_store(store_name)
+
+    @classmethod
+    def from_env(cls, client: httpx.Client | None = None) -> "FgaClient":
+        """FGA_API_URL, and FGA_API_TOKEN if set."""
+        return cls(os.environ["FGA_API_URL"], client=client,
+                   api_token=os.environ.get("FGA_API_TOKEN") or None)
 
     def check(self, user: str, relation: str, object: str) -> bool:
         body = self._post("check", {"tuple_key": {"user": user, "relation": relation,

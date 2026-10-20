@@ -1,4 +1,5 @@
-# Created outside the chart. Keys: postgres-password, openfga-datastore-uri.
+# Created outside the chart. Keys: postgres-password, openfga-datastore-uri, and when
+# openfga.auth.enabled: openfga-preshared-keys, openfga-api-token.
 secretName: platform
 
 # Namespace of kafka-exporter (consumer lag for alerts).
@@ -46,6 +47,10 @@ connect:
       memory: 1Gi
 
 openfga:
+  # Require a preshared key: the server accepts any of openfga-preshared-keys (comma-separated)
+  # and setup-openfga sends openfga-api-token.
+  auth:
+    enabled: false
   resources:
     requests:
       cpu: 25m

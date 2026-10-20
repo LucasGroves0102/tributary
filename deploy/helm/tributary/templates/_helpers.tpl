@@ -61,6 +61,9 @@ tributary.io/{{ $k }}: {{ $v | quote }}
 {{- else if eq . "openfga" }}
 - name: FGA_API_URL
   value: {{ $root.Values.openfga.url | quote }}
+{{- if $root.Values.openfga.auth.enabled }}
+{{ include "tributary.secretEnv" (dict "root" $root "env" "FGA_API_TOKEN" "key" "openfga-api-token") }}
+{{- end }}
 {{- else if eq . "sec" }}
 {{ include "tributary.secretEnv" (dict "root" $root "env" "SEC_USER_AGENT" "key" "sec-user-agent") }}
 {{- else if eq . "anthropic" }}

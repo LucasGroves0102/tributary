@@ -43,6 +43,14 @@ securityContext:
     drop: [ALL]
 {{- end }}
 
+{{- define "platform.secretEnv" -}}
+- name: {{ .env }}
+  valueFrom:
+    secretKeyRef:
+      name: {{ .root.Values.secretName }}
+      key: {{ .key }}
+{{- end }}
+
 {{- define "platform.postgresPassword" -}}
 - name: POSTGRES_PASSWORD
   valueFrom:
