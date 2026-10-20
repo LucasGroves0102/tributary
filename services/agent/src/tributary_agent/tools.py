@@ -20,6 +20,10 @@ METRICS = [
     # cash flow
     "operating_cash_flow", "capex", "depreciation_amortization", "stock_based_compensation",
     "dividends_paid", "share_buybacks",
+    # derived: ratios are fractions; eps_growth is quarter-only, roe TTM-only
+    "gross_margin", "operating_margin", "net_margin", "free_cash_flow", "fcf_margin",
+    "revenue_growth", "net_income_growth", "eps_growth", "payout_ratio", "debt_to_equity",
+    "net_debt", "current_ratio", "roe",
 ]
 COMPANY_ID = {"type": "string", "pattern": r"^\d{10}$",
               "description": "10-digit canonical company_id from search_companies or whoami"}
@@ -46,7 +50,10 @@ TOOLS: list[dict] = [
     {
         "name": "get_financials",
         "description": "Quarterly financials from XBRL, most recent first. Each row cites its "
-                       "filing (accession_no, form, filed, xbrl_tag) and freshness.",
+                       "filing (accession_no, form, filed, xbrl_tag) and freshness, and is "
+                       "labelled with its fiscal and calendar quarter. Derived metrics list "
+                       "their inputs. To compare companies with different fiscal years, use "
+                       "basis=calendar.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -55,6 +62,12 @@ TOOLS: list[dict] = [
                             "description": "default: all"},
                 "quarters": {"type": "integer", "minimum": 1, "maximum": 40,
                              "description": "default 4"},
+                "view": {"type": "string", "enum": ["quarter", "ttm"],
+                         "description": "quarter (default), or trailing twelve months ending "
+                                        "each quarter"},
+                "basis": {"type": "string", "enum": ["fiscal", "calendar"],
+                          "description": "fiscal (default): every fiscal quarter; calendar: "
+                                         "one row per calendar quarter"},
             },
             "required": ["company_id"],
             "additionalProperties": False,
@@ -140,6 +153,9 @@ def _route(name: str, a: dict[str, Any]) -> tuple[str, dict]:
         params: dict[str, Any] = {"quarters": a.get("quarters", 4)}
         if a.get("metrics"):
             params["metrics"] = a["metrics"]
+        for key in ("view", "basis"):
+            if a.get(key):
+                params[key] = a[key]
         return f"/v1/companies/{company()}/financials", params
     if name == "list_filings":
         return f"/v1/companies/{company()}/filings", {"limit": a.get("limit", 8)}

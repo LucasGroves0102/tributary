@@ -243,3 +243,10 @@ def test_exhibit_section_keys_are_allowed():
     api, seen = query_api(ok)
     assert api.run("get_section", {"company_id": NVDA, "section_key": "EX-99.1"})[1] is False
     assert seen[0].url.path == f"/v1/companies/{NVDA}/sections/EX-99.1"
+
+
+def test_financials_view_and_basis_pass_through():
+    api, seen = query_api(ok)
+    args = {"company_id": NVDA, "metrics": ["roe"], "view": "ttm", "basis": "calendar"}
+    assert api.run("get_financials", args)[1] is False
+    assert (seen[0].url.params["view"], seen[0].url.params["basis"]) == ("ttm", "calendar")
