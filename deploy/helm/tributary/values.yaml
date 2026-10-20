@@ -130,6 +130,25 @@ jobs:
     image: facts-fetcher
     schedule: "0 4 * * *"
     uses: [postgres, sec]
+  # Filing history and company metadata for every SEC filer from the bulk submissions.zip
+  # (~1.6 GB, downloaded to /tmp; skipped when unchanged since the last finished load). Each run
+  # loads at most --max-ciks changed CIKs, committing as it goes; the first load (~1M CIKs) takes
+  # ~20 runs: kubectl create job --from=cronjob/submissions submissions-1. Set
+  # env.SUBMISSIONS_DBNAME to load a throwaway database on the same server instead.
+  submissions:
+    image: company-loader
+    command: [company-loader-submissions, --max-ciks, "50000"]
+    schedule: "30 5 * * *"
+    suspend: true
+    timeoutSeconds: 7200
+    tmpSize: 3Gi
+    uses: [postgres, sec]
+    resources:
+      requests:
+        cpu: 250m
+        memory: 256Mi
+      limits:
+        memory: 1Gi
   # Run once to fill a new database: kubectl create job --from=cronjob/seed-documents seed-1
   seed-documents:
     image: doc-fetcher

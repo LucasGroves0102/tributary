@@ -154,5 +154,5 @@ containers:
 volumes:
   - name: tmp
     emptyDir:
-      sizeLimit: 64Mi
+      sizeLimit: {{ .tmpSize | default "64Mi" }}
 {{- end }}
