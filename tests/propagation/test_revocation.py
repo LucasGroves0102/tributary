@@ -18,7 +18,7 @@ NVDA = "0001045810"
 
 @pytest.fixture(scope="module")
 def stack():
-    fga = tributary_authz.FgaClient(os.environ["FGA_API_URL"])
+    fga = tributary_authz.FgaClient.from_env()
     with psycopg.connect(os.environ["APP_DATABASE_URL"], autocommit=True) as app, \
             psycopg.connect(os.environ["DATABASE_URL"], autocommit=True) as analytics:
         yield fga, app, analytics

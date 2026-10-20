@@ -56,7 +56,7 @@ def main() -> None:
 
     state = AppState()
     with psycopg.connect(os.environ["DATABASE_URL"], autocommit=True) as conn:
-        reconciler = Reconciler(FgaClient(os.environ["FGA_API_URL"]), conn)
+        reconciler = Reconciler(FgaClient.from_env(), conn)
         caught_up = not pending
         CAUGHT_UP.set(int(caught_up))
         if caught_up:

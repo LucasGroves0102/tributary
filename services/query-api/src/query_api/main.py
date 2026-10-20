@@ -16,7 +16,7 @@ from tributary_telemetry import configure_logging
 def build_app():
     pool = ConnectionPool(os.environ["DATABASE_URL"], min_size=1, max_size=10, open=True)
     return create_app(
-        authorizer=FgaAuthorizer(FgaClient(os.environ["FGA_API_URL"])),
+        authorizer=FgaAuthorizer(FgaClient.from_env()),
         store=Store(pool),
         jwt_secret=check_secret(os.environ["QUERY_API_JWT_SECRET"]),
         demo_users=frozenset(u for u in os.environ.get("DEMO_USERS", "").split(",") if u),

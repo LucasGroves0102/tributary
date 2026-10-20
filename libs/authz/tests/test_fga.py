@@ -5,17 +5,58 @@ import httpx
 from tributary_authz import FgaClient, Tuple
 
 
-def client_with(handler) -> FgaClient:
+def client_with(handler, api_token=None) -> FgaClient:
     def route(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/stores":
             return httpx.Response(200, json={"stores": [{"id": "S1", "name": "tributary"}]})
         return handler(request)
     http = httpx.Client(base_url="http://fga", transport=httpx.MockTransport(route))
-    return FgaClient("http://fga", client=http)
+    return FgaClient("http://fga", client=http, api_token=api_token)
 
 
 def test_finds_store_by_name():
     assert client_with(lambda r: httpx.Response(404)).store_id == "S1"
+
+
+def test_sends_api_token_on_every_request():
+    seen = []
+
+    def handler(request):
+        seen.append(request.headers.get("authorization"))
+        return httpx.Response(200, json={"allowed": True})
+
+    fga = client_with(handler, api_token="k1")
+    fga.check("user:alice", "viewer", "company:1")
+    assert seen == ["Bearer k1"]
+
+
+def test_no_authorization_header_without_token():
+    seen = []
+
+    def handler(request):
+        seen.append(request.headers.get("authorization"))
+        return httpx.Response(200, json={"allowed": True})
+
+    client_with(handler).check("user:alice", "viewer", "company:1")
+    assert seen == [None]
+
+
+def test_from_env(monkeypatch):
+    seen = []
+
+    def handler(request):
+        seen.append(request.headers.get("authorization"))
+        return httpx.Response(200, json={"stores": [{"id": "S1", "name": "tributary"}]})
+
+    def http():
+        return httpx.Client(base_url="http://fga", transport=httpx.MockTransport(handler))
+
+    monkeypatch.setenv("FGA_API_URL", "http://fga")
+    monkeypatch.setenv("FGA_API_TOKEN", "k2")
+    assert FgaClient.from_env(http()).store_id == "S1"
+    monkeypatch.setenv("FGA_API_TOKEN", "")
+    FgaClient.from_env(http())
+    assert seen == ["Bearer k2", None]
 
 
 def test_write_chunks_at_100():

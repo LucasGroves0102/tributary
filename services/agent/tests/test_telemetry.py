@@ -47,7 +47,7 @@ def app(messages, seen):
                         event_hooks={"request": [forward_request_id]})
     return TestClient(create_app(
         lambda tok: Agent(messages, QueryApi("http://query-api", tok, http=http), MODEL),
-        lambda tok: "alice", Limits(per_hour=100, daily_budget_usd=100)))
+        lambda tok: "alice", Limits(per_hour=100, per_ip_per_hour=100, daily_budget_usd=100)))
 
 
 def ask(c, headers=None):

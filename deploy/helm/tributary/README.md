@@ -9,7 +9,7 @@ in the `platform` namespace; Postgres runs on the host.
   `tributary`, `app` and `openfga` databases and a `query_api` role granted to the login.
 - In the release namespace:
   - Secret `tributary` with keys `database-url`, `app-database-url`, `jwt-secret`,
-    `anthropic-api-key`, `sec-user-agent`.
+    `anthropic-api-key`, `sec-user-agent`, and `openfga-api-token` when `openfga.auth.enabled`.
   - Secret `ghcr` (type `kubernetes.io/dockerconfigjson`) with a token that can read packages.
 
 ## Install
@@ -39,7 +39,7 @@ decides its environment variables, which Secret keys it can read, and its networ
 |---|---|---|
 | `postgres` | `DATABASE_URL` | host Postgres |
 | `kafka` | `KAFKA_BOOTSTRAP_SERVERS` | Kafka in `platform` |
-| `openfga` | `FGA_API_URL` | OpenFGA in `platform` |
+| `openfga` | `FGA_API_URL`, `FGA_API_TOKEN` when `openfga.auth.enabled` | OpenFGA in `platform` |
 | `sec` | `SEC_USER_AGENT` | HTTPS to public addresses |
 | `anthropic` | `ANTHROPIC_API_KEY` | HTTPS to public addresses |
 | `jwt` | `QUERY_API_JWT_SECRET` | |
