@@ -1,0 +1,71 @@
+{
+ "cik": "0000004926",
+ "entityType": "other",
+ "sic": "",
+ "sicDescription": "",
+ "ownerOrg": null,
+ "insiderTransactionForOwnerExists": 0,
+ "insiderTransactionForIssuerExists": 0,
+ "name": "AMERICAN ENTERPRISE DEVELOPMENT CORP",
+ "tickers": [],
+ "exchanges": [],
+ "ein": null,
+ "lei": null,
+ "description": "",
+ "website": "",
+ "investorWebsite": "",
+ "category": "",
+ "fiscalYearEnd": "0630",
+ "stateOfIncorporation": "",
+ "stateOfIncorporationDescription": "",
+ "addresses": {
+  "mailing": {
+   "street1": "200 BERKELEY STREET",
+   "street2": "BOSTON, MASSACHUSETTS  02116",
+   "city": null,
+   "stateOrCountry": null,
+   "zipCode": null,
+   "stateOrCountryDescription": null,
+   "isForeignLocation": null,
+   "foreignStateTerritory": null,
+   "country": null,
+   "countryCode": null
+  },
+  "business": {
+   "street1": null,
+   "street2": null,
+   "city": null,
+   "stateOrCountry": "",
+   "zipCode": null,
+   "stateOrCountryDescription": "",
+   "isForeignLocation": null,
+   "foreignStateTerritory": null,
+   "country": null,
+   "countryCode": null
+  }
+ },
+ "phone": null,
+ "flags": "",
+ "formerNames": [],
+ "filings": {
+  "recent": {
+   "accessionNumber": [],
+   "filingDate": [],
+   "reportDate": [],
+   "acceptanceDateTime": [],
+   "act": [],
+   "form": [],
+   "fileNumber": [],
+   "filmNumber": [],
+   "items": [],
+   "core_type": [],
+   "size": [],
+   "isXBRL": [],
+   "isInlineXBRL": [],
+   "isXBRLNumeric": [],
+   "primaryDocument": [],
+   "primaryDocDescription": []
+  },
+  "files": []
+ }
+}

@@ -1,0 +1,66 @@
+{
+ "accessionNumber": [
+  "0001209191-15-071245",
+  "0000320193-94-000002"
+ ],
+ "filingDate": [
+  "2015-09-17",
+  "1994-01-26"
+ ],
+ "reportDate": [
+  "2015-09-15",
+  "1993-12-31"
+ ],
+ "acceptanceDateTime": [
+  "2015-09-18T02:31:14.000Z",
+  "1994-01-26T10:00:00.000Z"
+ ],
+ "act": [
+  "",
+  ""
+ ],
+ "form": [
+  "4",
+  "10-Q"
+ ],
+ "fileNumber": [
+  "",
+  "000-10030"
+ ],
+ "filmNumber": [
+  "",
+  "94502732"
+ ],
+ "items": [
+  "",
+  ""
+ ],
+ "core_type": [
+  "4",
+  "10-Q"
+ ],
+ "size": [
+  8997,
+  233311
+ ],
+ "isXBRL": [
+  0,
+  0
+ ],
+ "isInlineXBRL": [
+  0,
+  0
+ ],
+ "isXBRLNumeric": [
+  null,
+  null
+ ],
+ "primaryDocument": [
+  "xslF345X03/doc4.xml",
+  ""
+ ],
+ "primaryDocDescription": [
+  "FORM 4 SUBMISSION",
+  ""
+ ]
+}

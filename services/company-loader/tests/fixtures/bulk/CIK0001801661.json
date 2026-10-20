@@ -1,0 +1,118 @@
+{
+ "cik": "0001801661",
+ "entityType": "operating",
+ "sic": "7374",
+ "sicDescription": "Services-Computer Processing & Data Preparation",
+ "ownerOrg": "06 Technology",
+ "insiderTransactionForOwnerExists": 0,
+ "insiderTransactionForIssuerExists": 1,
+ "name": "Firy Inc.",
+ "tickers": [
+  "FIRY"
+ ],
+ "exchanges": [
+  "NYSE"
+ ],
+ "ein": "844478274",
+ "lei": null,
+ "description": "",
+ "website": "",
+ "investorWebsite": "",
+ "category": "Non-accelerated filer<br>Smaller reporting company",
+ "fiscalYearEnd": "1231",
+ "stateOfIncorporation": "DE",
+ "stateOfIncorporationDescription": "DE",
+ "addresses": {
+  "mailing": {
+   "street1": "6625 BADURA AVENUE",
+   "street2": null,
+   "city": "LAS VEGAS",
+   "stateOrCountry": "NV",
+   "zipCode": "89118",
+   "stateOrCountryDescription": "NV",
+   "isForeignLocation": 0,
+   "foreignStateTerritory": null,
+   "country": null,
+   "countryCode": null
+  },
+  "business": {
+   "street1": "6625 BADURA AVENUE",
+   "street2": null,
+   "city": "LAS VEGAS",
+   "stateOrCountry": "NV",
+   "zipCode": "89118",
+   "stateOrCountryDescription": "NV",
+   "isForeignLocation": null,
+   "foreignStateTerritory": null,
+   "country": null,
+   "countryCode": null
+  }
+ },
+ "phone": "415-762-0511",
+ "flags": "",
+ "formerNames": [
+  {
+   "name": "Skillz Inc.",
+   "from": "2020-10-07T04:00:00.000Z",
+   "to": "2026-06-18T04:00:00.000Z"
+  },
+  {
+   "name": "Flying Eagle Acquisition Corp.",
+   "from": "2020-02-03T05:00:00.000Z",
+   "to": "2020-12-17T05:00:00.000Z"
+  }
+ ],
+ "filings": {
+  "recent": {
+   "accessionNumber": [
+    "0001801661-26-000124"
+   ],
+   "filingDate": [
+    "2026-10-16"
+   ],
+   "reportDate": [
+    "2026-10-14"
+   ],
+   "acceptanceDateTime": [
+    "2026-10-17T05:56:48.000Z"
+   ],
+   "act": [
+    ""
+   ],
+   "form": [
+    "4"
+   ],
+   "fileNumber": [
+    ""
+   ],
+   "filmNumber": [
+    ""
+   ],
+   "items": [
+    ""
+   ],
+   "core_type": [
+    "4"
+   ],
+   "size": [
+    8857
+   ],
+   "isXBRL": [
+    0
+   ],
+   "isInlineXBRL": [
+    0
+   ],
+   "isXBRLNumeric": [
+    0
+   ],
+   "primaryDocument": [
+    "xslF345X06/wk-form4_1792202205.xml"
+   ],
+   "primaryDocDescription": [
+    "FORM 4"
+   ]
+  },
+  "files": []
+ }
+}

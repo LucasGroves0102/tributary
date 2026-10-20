@@ -26,13 +26,18 @@ _MERGE = [
     INSERT INTO silver.companies AS c
         (company_id, name, current_cik, sic, sic_description, entity_type, tracked)
     SELECT * FROM stg_companies
+    -- industry fields only come with a submissions record; otherwise keep the bulk load's
     ON CONFLICT (company_id) DO UPDATE SET
-        name = EXCLUDED.name, current_cik = EXCLUDED.current_cik, sic = EXCLUDED.sic,
-        sic_description = EXCLUDED.sic_description, entity_type = EXCLUDED.entity_type,
+        name = EXCLUDED.name, current_cik = EXCLUDED.current_cik,
+        sic = coalesce(EXCLUDED.sic, c.sic),
+        sic_description = coalesce(EXCLUDED.sic_description, c.sic_description),
+        entity_type = coalesce(EXCLUDED.entity_type, c.entity_type),
         tracked = EXCLUDED.tracked, updated_at = now()
     WHERE (c.name, c.current_cik, c.sic, c.sic_description, c.entity_type, c.tracked)
-        IS DISTINCT FROM (EXCLUDED.name, EXCLUDED.current_cik, EXCLUDED.sic,
-                          EXCLUDED.sic_description, EXCLUDED.entity_type, EXCLUDED.tracked)
+        IS DISTINCT FROM (EXCLUDED.name, EXCLUDED.current_cik,
+                          coalesce(EXCLUDED.sic, c.sic),
+                          coalesce(EXCLUDED.sic_description, c.sic_description),
+                          coalesce(EXCLUDED.entity_type, c.entity_type), EXCLUDED.tracked)
     """,
     # companies that dropped out of the SEC file stay, but stop being tracked
     """
@@ -90,6 +95,9 @@ _DELETE_MERGED = """
     WHERE NOT EXISTS (SELECT 1 FROM silver.company_ciks k WHERE k.company_id = c.company_id)
 """
 
+# 7. metadata and names from the bulk submissions load (bronze.submissions), where present
+_REFRESH_METADATA = "SELECT silver.refresh_company_metadata()"
+
 
 def load(conn: psycopg.Connection, snap: Snapshot, today: date) -> dict[str, int]:
     """Apply a snapshot atomically. Returns row counts for logging."""
@@ -112,6 +120,7 @@ def load(conn: psycopg.Connection, snap: Snapshot, today: date) -> dict[str, int
         opened = cur.rowcount
         cur.execute(_DELETE_MERGED)
         merged = cur.rowcount
+        cur.execute(_REFRESH_METADATA)
     return {
         "companies": len(snap.companies),
         "tracked": sum(c.tracked for c in snap.companies),
