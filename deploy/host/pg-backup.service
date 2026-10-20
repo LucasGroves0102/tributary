@@ -1,7 +1,6 @@
 [Unit]
 Description=Postgres logical backup
 After=postgresql.service
-OnSuccess=pg-backup-offsite.service
 
 [Service]
 Type=oneshot
