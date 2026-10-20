@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 import httpx
 import pytest
 
-from company_loader.bulk import SUBMISSIONS_ZIP_URL, cik_entries, download
+from company_loader.bulk import SUBMISSIONS_ZIP_URL, cik_entries, download, run_rounds
 
 LAST_MODIFIED = "Sat, 17 Oct 2026 07:12:03 GMT"
 
@@ -58,3 +58,11 @@ def test_pages_follow_their_main_entry(bulk_zip):
         "0000320193": ["CIK0000320193.json", "CIK0000320193-submissions-001.json"],
         "0001801661": ["CIK0001801661.json"],
     }
+
+
+def test_rounds_pause_between_runs_and_stop_once_complete():
+    results = iter([{"loaded": 500, "complete": False}, {"loaded": 3, "complete": True}])
+    paused = []
+    counts = run_rounds(lambda: next(results), rounds=4, pause_seconds=300, sleep=paused.append)
+    assert counts == {"loaded": 3, "complete": True}
+    assert paused == [300]
