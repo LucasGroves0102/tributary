@@ -1,0 +1,21 @@
+[Unit]
+Description=Copy the latest Postgres backup to R2
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=postgres
+Group=postgres
+ExecStart=/usr/local/bin/pg-backup-offsite
+Environment=R2_BUCKET=tributary-backups
+Environment=AGE_RECIPIENT=age1rkelyhgl43tvw2hcwwhjseumcvt67txhu0sap50h84mp57zdzc9s4j4ktg
+# R2_ENDPOINT=https://<account id>.r2.cloudflarestorage.com
+EnvironmentFile=/etc/pg-backup/offsite.env
+LoadCredential=r2-access-key-id:/etc/pg-backup/r2-access-key-id
+LoadCredential=r2-secret-access-key:/etc/pg-backup/r2-secret-access-key
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/var/backups/postgres -/var/lib/node_exporter/textfile_collector
