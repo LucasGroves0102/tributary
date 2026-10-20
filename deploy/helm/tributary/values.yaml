@@ -6,7 +6,7 @@ image:
   pullSecret: ghcr
 
 # Created outside the chart. Keys: database-url, app-database-url, jwt-secret,
-# anthropic-api-key, sec-user-agent.
+# anthropic-api-key, sec-user-agent, and openfga-api-token when openfga.auth.enabled.
 secretName: tributary
 
 # The node as seen from pods (k3s bridge). Postgres runs on the host; kubelet probes come from here.
@@ -24,6 +24,9 @@ openfga:
   namespace: platform
   url: http://openfga.platform.svc.cluster.local:8080
   port: 8080
+  # Send secretName's openfga-api-token as FGA_API_TOKEN (OpenFGA preshared-key auth).
+  auth:
+    enabled: false
 
 # Sign-in as alice, bob, carol or dave without a password, and seed them on every deploy.
 demo:
@@ -82,6 +85,7 @@ services:
     env:
       AGENT_MODEL: claude-haiku-5-5
       AGENT_RATE_PER_HOUR: "30"
+      AGENT_IP_RATE_PER_HOUR: "10"
       AGENT_DAILY_BUDGET_USD: "2"
     resources:
       requests:

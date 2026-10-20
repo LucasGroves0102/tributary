@@ -14,7 +14,7 @@ from typing import Annotated, Literal
 import anthropic
 import httpx
 import uvicorn
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
@@ -40,31 +40,56 @@ class LimitExceeded(Exception):
 
 
 class Limits:
-    """Questions per user per hour, and model spend per UTC day across all users."""
+    """Questions per hour per user and per client IP, and model spend per UTC day across all
+    users."""
 
-    def __init__(self, per_hour: int, daily_budget_usd: float,
+    def __init__(self, per_hour: int, per_ip_per_hour: int, daily_budget_usd: float,
                  clock: Callable[[], float] = time.time) -> None:
         self._per_hour = per_hour
+        self._per_ip = per_ip_per_hour
         self._budget = daily_budget_usd
         self._clock = clock
         self._lock = threading.Lock()
-        self._asked: dict[str, deque[float]] = defaultdict(deque)
+        self._by_user: dict[str, deque[float]] = defaultdict(deque)
+        self._by_ip: dict[str, deque[float]] = defaultdict(deque)
+        self._swept = clock()
         self._spent: dict[str, float] = defaultdict(float)  # UTC date -> USD
 
     def _today(self) -> str:
         return datetime.fromtimestamp(self._clock(), UTC).date().isoformat()
 
-    def acquire(self, user_id: str) -> None:
+    @staticmethod
+    def _recent(asked: deque[float], now: float) -> deque[float]:
+        while asked and asked[0] <= now - 3600:
+            asked.popleft()
+        return asked
+
+    def _sweep(self, now: float) -> None:
+        """Drops users and IPs with no questions in the last hour, at most once an hour."""
+        if now - self._swept < 3600:
+            return
+        self._swept = now
+        for windows in (self._by_user, self._by_ip):
+            for key in [k for k, v in windows.items() if not self._recent(v, now)]:
+                del windows[key]
+
+    def acquire(self, user_id: str, client_ip: str) -> None:
         now = self._clock()
         with self._lock:
             if self._spent[self._today()] >= self._budget:
                 raise LimitExceeded("The demo's daily model budget is used up. Try tomorrow.")
-            asked = self._asked[user_id]
-            while asked and asked[0] <= now - 3600:
-                asked.popleft()
-            if len(asked) >= self._per_hour:
-                raise LimitExceeded(f"Limit of {self._per_hour} questions per hour reached.")
-            asked.append(now)
+            self._sweep(now)
+            by_ip = self._recent(self._by_ip[client_ip], now)
+            by_user = self._recent(self._by_user[user_id], now)
+            if len(by_ip) >= self._per_ip:
+                raise LimitExceeded(f"Limit of {self._per_ip} questions per hour reached. "
+                                    "Try again later.")
+            if len(by_user) >= self._per_hour:
+                raise LimitExceeded(f"Demo user {user_id} has reached its limit of "
+                                    f"{self._per_hour} questions per hour. "
+                                    "Try another demo user.")
+            by_ip.append(now)
+            by_user.append(now)
 
     def spend(self, usd: float) -> None:
         with self._lock:
@@ -79,9 +104,10 @@ def answer_json(a: Answer) -> dict:
 
 
 def create_app(make_agent: Callable[[str], Agent], who_is: Callable[[str], str],
-               limits: Limits) -> FastAPI:
+               limits: Limits, client_ip_header: str = "X-Client-IP") -> FastAPI:
     """make_agent(token) builds an agent reading as the token's user; who_is(token) returns
-    that user's id or raises HTTPException."""
+    that user's id or raises HTTPException. The client IP is read from client_ip_header, set
+    by the web proxy, else the connection's peer address."""
     app = FastAPI(title="Tributary Agent", version="1")
     bearer = HTTPBearer(auto_error=False)
 
@@ -90,15 +116,22 @@ def create_app(make_agent: Callable[[str], Agent], who_is: Callable[[str], str],
             raise HTTPException(401, "missing bearer token")
         return creds.credentials
 
+    def client_ip(request: Request) -> str:
+        ip = request.headers.get(client_ip_header, "").strip()
+        if ip:
+            return ip
+        return request.client.host if request.client else "unknown"
+
     @app.get("/health")
     def health() -> dict:
         return {"status": "ok"}
 
     @app.post("/v1/ask")
-    def ask(body: AskRequest, tok: Annotated[str, Depends(token)]) -> StreamingResponse:
+    def ask(body: AskRequest, tok: Annotated[str, Depends(token)],
+            ip: Annotated[str, Depends(client_ip)]) -> StreamingResponse:
         user_id = who_is(tok)
         try:
-            limits.acquire(user_id)
+            limits.acquire(user_id, ip)
         except LimitExceeded as e:
             raise HTTPException(429, str(e)) from None
         agent = make_agent(tok)
@@ -149,6 +182,7 @@ def build_app() -> FastAPI:
                                      stream=True, effort=os.environ.get("AGENT_EFFORT") or None),
         who_is=query_api_who_is(base_url),
         limits=Limits(int(os.environ.get("AGENT_RATE_PER_HOUR", "30")),
+                      int(os.environ.get("AGENT_IP_RATE_PER_HOUR", "10")),
                       float(os.environ.get("AGENT_DAILY_BUDGET_USD", "2"))),
     )
 
