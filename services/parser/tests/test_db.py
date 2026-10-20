@@ -66,3 +66,18 @@ def test_gold_prefers_rust_parser(conn):
     assert conn.execute(
         "SELECT parser, text FROM gold.filing_sections WHERE section_key = '8.01'"
     ).fetchone() == ("rust", "from rust")
+
+
+def test_write_replaces_the_other_parsers_rows(conn):
+    conn.execute(
+        "INSERT INTO silver.filing_sections (accession_no, section_key, parser, parser_version,"
+        " item, title, text, char_start, char_end)"
+        " VALUES (%s, '7.01', 'rust', 'rust-1', '7.01', 'Regulation FD.', 'stale', 0, 5)",
+        (ACC,))
+    write_sections(conn, ACC, parse(HTML, "8-K"))
+    assert conn.execute(
+        "SELECT DISTINCT parser FROM silver.filing_sections WHERE accession_no = %s", (ACC,)
+    ).fetchall() == [("python",)]
+    assert conn.execute(
+        "SELECT section_key FROM gold.filing_sections ORDER BY section_key").fetchall() == [
+        ("8.01",), ("9.01",)]

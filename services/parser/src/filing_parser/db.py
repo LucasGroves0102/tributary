@@ -21,11 +21,11 @@ def load_document(conn: psycopg.Connection, accession_no: str) -> tuple[str, byt
 
 
 def write_sections(conn: psycopg.Connection, accession_no: str, sections: list[Section]) -> None:
-    """Replace this parser's sections for the document, atomically."""
+    """Replace the document's sections, whichever parser wrote them, atomically: a document
+    has one parser's sections, so gold never mixes parsers or keeps the other parser's rows."""
     with conn.transaction(), conn.cursor() as cur:
         cur.execute(
-            "DELETE FROM silver.filing_sections WHERE accession_no = %s AND parser = %s",
-            (accession_no, PARSER),
+            "DELETE FROM silver.filing_sections WHERE accession_no = %s", (accession_no,),
         )
         cur.executemany(
             """
