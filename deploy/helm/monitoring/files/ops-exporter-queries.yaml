@@ -17,3 +17,21 @@ tributary_companyfacts:
     - behind_seconds:
         usage: GAUGE
         description: Seconds since the oldest such filing was accepted, 0 when up to date
+tributary_financials_quality:
+  query: |
+    SELECT check_name, severity, findings, companies
+    FROM ops.quality_summary
+  cache_seconds: 300
+  metrics:
+    - check_name:
+        usage: LABEL
+        description: Data-quality check on gold financials (ops.check_financials)
+    - severity:
+        usage: LABEL
+        description: error or warning
+    - findings:
+        usage: GAUGE
+        description: Findings of the check in each company's latest run
+    - companies:
+        usage: GAUGE
+        description: Companies with at least one finding
