@@ -145,10 +145,13 @@ pub mod tests {
         out
     }
 
+    /// (exhibit_type, description, content)
+    type FakeExhibit = (String, Option<String>, Vec<u8>);
+
     #[derive(Default)]
     pub struct FakeStore {
         pub documents: HashMap<String, (String, Vec<u8>)>,
-        pub exhibits: HashMap<String, Vec<(String, Option<String>, Vec<u8>)>>,
+        pub exhibits: HashMap<String, Vec<FakeExhibit>>,
         pub sections: HashMap<String, Vec<Section>>,
         pub writes: usize,
     }
