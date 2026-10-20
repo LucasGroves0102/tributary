@@ -25,4 +25,4 @@ spec:
   values:
     images:
       setup:
-        tag: main-63-85a37896ec0b7f1141f323dbfc14a81284f0a608 # {"$imagepolicy": "flux-system:tributary:tag"}
+        tag: main-66-66a0916bfe56fb6c02c60fed0b4dee96992b1921 # {"$imagepolicy": "flux-system:tributary:tag"}

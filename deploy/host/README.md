@@ -22,5 +22,16 @@ sudo systemctl daemon-reload && sudo systemctl enable --now pg-backup.timer
 sudo -u postgres deploy/host/pg-restore-test.sh    # verify a restore
 ```
 
+## Postgres settings
+
+`/etc/postgresql/16/main/conf.d/tributary.conf` sets `wal_level = logical`,
+`listen_addresses = '*'` (pods reach it over the k3s bridge; `pg_hba.conf` limits who) and
+`max_slot_wal_keep_size = 20GB`. The last one caps how much WAL a replication slot may hold:
+Debezium's slot only advances on app-database traffic (it writes a heartbeat every 10 s to
+keep it moving), and a stuck slot would otherwise keep every database's WAL until the disk
+fills. Past the cap the slot is invalidated and Debezium re-snapshots the app tables. Reload
+after a change: `sudo -u postgres psql -c "SELECT pg_reload_conf()"`. The
+`ReplicationSlotRetainingWal` alert fires above 10 GB.
+
 The `PostgresBackupMissing` alert ([deploy/helm/monitoring](../helm/monitoring)) fires when no
 backup succeeded in 26 hours. Alloy ships the unit's journal to Loki.
