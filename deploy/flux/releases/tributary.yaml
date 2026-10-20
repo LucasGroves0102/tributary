@@ -27,4 +27,4 @@ spec:
       retries: 3
   values:
     image:
-      tag: main-53-e978efada04f61ab1941f39523203f1ab0f924c1 # {"$imagepolicy": "flux-system:tributary:tag"}
+      tag: main-54-598afcd762396c99e2ed979ac3253922c77c1d25 # {"$imagepolicy": "flux-system:tributary:tag"}
