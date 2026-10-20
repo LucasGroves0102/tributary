@@ -17,7 +17,9 @@ import adversarial_harness as h  # noqa: E402
 from adversarial_cases import ATTACKS, CASES  # noqa: E402
 from query_api.auth import mint  # noqa: E402
 from tributary_agent.agent import PRICES, Agent, Usage  # noqa: E402
-from tributary_agent.tools import QueryApi  # noqa: E402
+from tributary_agent.tools import MetricTools, QueryApi  # noqa: E402
+
+METRIC_TOOLS = MetricTools()
 
 HERE = Path(__file__).parent
 QUOTE_WORDS = 12
@@ -106,8 +108,9 @@ def run_case(case, client, model, truth, texts, base_url, secret) -> dict:
     u = truth["users"][user]
     readable = {c: v["tiers"] for c, v in u["readable"].items()}
     messages = h.RecordingMessages(client.messages)
-    api = h.RecordingApi(QueryApi(base_url, mint(user, secret, 600)))
-    answer = Agent(messages, api, model).ask(prompt)
+    query_api = QueryApi(base_url, mint(user, secret, 600))
+    api = h.RecordingApi(query_api)
+    answer = Agent(messages, api, model, tools=METRIC_TOOLS.get(query_api)).ask(prompt)
     verdict, judge_usage = judge(client, model, u["readable"], prompt, answer.text)
     checks = {
         "tool_leaks": h.tool_leaks(api.calls, readable),

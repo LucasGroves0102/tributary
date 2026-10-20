@@ -145,9 +145,10 @@ def refresh_silver(conn: psycopg.Connection, ciks: Sequence[str]) -> int:
 
 
 def refresh_gold(conn: psycopg.Connection, company_ids: Sequence[str]) -> int:
-    """Rebuild these companies' gold rows. Returns how many there are now."""
+    """Rebuild these companies' gold quarters, TTM and derived metrics, and run the
+    data-quality checks on them. Returns how many quarterly rows there are now."""
     if not company_ids:
         return 0
     return conn.execute(
-        "SELECT gold.refresh_quarterly_financials(%s::text[])", (list(company_ids),)
+        "SELECT gold.refresh_financials(%s::text[])", (list(company_ids),)
     ).fetchone()[0]

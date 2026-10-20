@@ -8,7 +8,8 @@ from contextlib import contextmanager
 import pytest
 from fastapi.testclient import TestClient
 
-from query_api.app import METRICS, create_app
+from query_api.app import create_app
+from query_api.formula import CATALOG
 from query_api.store import Store
 
 from .conftest import SECRET
@@ -52,6 +53,12 @@ def client():
                 " 'us-gaap:Revenues', %s, '2026-08-01', ARRAY[%s], now())",
                 (cid, f"{cid}-26-000001", f"{cid}-26-000001"))
             conn.execute(
+                "INSERT INTO gold.derived_financials (company_id, span, metric, period_start,"
+                " period_end, value, unit, value_source, inputs, accession_no, filed,"
+                " source_accessions, ingested_at) VALUES (%s, 'ttm', 'net_margin', '2025-07-01',"
+                " '2026-06-30', 0.25, 'ratio', 'computed', '{}', %s, '2026-08-01', ARRAY[%s],"
+                " now())", (cid, f"{cid}-26-000001", f"{cid}-26-000001"))
+            conn.execute(
                 "INSERT INTO bronze.filing_documents (accession_no, cik, form, filed,"
                 " document_name, url, content_gzip, content_sha256, size_bytes)"
                 " VALUES (%s, %s, '10-K', '2026-02-01', 'd.htm', 'u', '\\x00', 'x', 1)",
@@ -67,11 +74,13 @@ def client():
         conn.execute("INSERT INTO authz.user_access (user_id, company_id, tier) VALUES"
                      " ('t-free', %s, 'financials'), ('t-pro', %s, 'financials'),"
                      " ('t-pro', %s, 'filings')", (A, A, A))
-        yield TestClient(create_app(AllowAll(), Store(OneConnection(conn)), SECRET))
+        c = TestClient(create_app(AllowAll(), Store(OneConnection(conn)), SECRET))
+        c.app_conn = conn
+        yield c
 
 
-def financials(client, token, user, company):
-    r = client.get(f"/v1/companies/{company}/financials", headers=token(user))
+def financials(client, token, user, company, query=""):
+    r = client.get(f"/v1/companies/{company}/financials?{query}", headers=token(user))
     assert r.status_code == 200
     return r.json()["rows"]
 
@@ -90,6 +99,28 @@ def test_granted_rows_visible(client, token):
 def test_ungranted_company_hidden_even_when_layer_one_allows(client, token):
     assert financials(client, token, "t-free", B) == []
     assert sections(client, token, "t-pro", B) == []
+
+
+@pytest.mark.parametrize("query", ["view=ttm", "view=ttm&basis=calendar",
+                                   "basis=calendar&metrics=revenue"])
+def test_ttm_and_calendar_views_respect_rls(client, token, query):
+    assert len(financials(client, token, "t-free", A, query)) == 1
+    assert financials(client, token, "t-free", B, query) == []
+    assert financials(client, token, "t-nobody", A, query) == []
+
+
+def test_derived_financials_hidden_without_a_grant(client):
+    conn = client.app_conn
+    with conn.cursor() as cur:
+        cur.execute("SET LOCAL ROLE query_api")
+        cur.execute("SELECT set_config('app.user_id', 't-free', true)")
+        cur.execute("SELECT DISTINCT company_id FROM gold.derived_financials"
+                    " WHERE company_id IN (%s, %s)", (A, B))
+        assert cur.fetchall() == [(A,)]
+        cur.execute("SELECT DISTINCT company_id FROM gold.financials"
+                    " WHERE company_id IN (%s, %s)", (A, B))
+        assert cur.fetchall() == [(A,)]
+        cur.execute("RESET ROLE")
 
 
 def test_tier_enforced_by_database(client, token):
@@ -111,9 +142,22 @@ def test_latest_filings_respect_rls(client, token):
     assert client.get("/v1/filings/latest", headers=token("t-free")).json()["filings"] == []
 
 
-def test_metric_list_matches_database():
+def test_metric_list_matches_database(client):
+    served = client.get("/v1/metrics").json()
     with psycopg.connect(DSN) as conn:
-        assert {m for (m,) in conn.execute("SELECT metric FROM silver.metrics")} == set(METRICS)
+        assert [m for (m,) in conn.execute("SELECT metric FROM silver.metrics ORDER BY 1")] \
+            == served["metrics"]
+        assert [m for (m,) in conn.execute("SELECT metric FROM gold.derived_metrics"
+                                           " ORDER BY 1")] == served["derived_metrics"]
+    assert "revenue" in served["metrics"] and "roe" in served["derived_metrics"]
+
+
+def test_formula_catalog_matches_database():
+    with psycopg.connect(DSN) as conn:
+        units = dict(conn.execute("SELECT metric, unit FROM silver.metrics").fetchall())
+        units |= dict(conn.execute("SELECT metric, unit FROM gold.derived_metrics").fetchall())
+    assert set(CATALOG) == set(units)
+    assert {m: unit for m, (unit, _) in CATALOG.items()} == units
 
 
 def test_company_profile_is_public_metadata(client, token):

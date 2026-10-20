@@ -2,32 +2,31 @@
 OpenFGA first (layer 1), then Postgres row-level security (layer 2, in Store)."""
 
 import logging
-from datetime import UTC, datetime
-from typing import Annotated
+from datetime import UTC, date, datetime
+from typing import Annotated, Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Path, Query
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from prometheus_client import Counter
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from query_api.auth import Unauthenticated, mint, verify
 from query_api.authorizer import Authorizer, AuthzUnavailable
+from query_api.formula import (
+    CATALOG,
+    Analysis,
+    FormulaError,
+    Node,
+    alignment,
+    analyze,
+    compile_formula,
+    parse,
+    suggest,
+    to_dict,
+)
 from query_api.store import Store
 from tributary_telemetry.http import instrument
 
-METRICS = [
-    # income statement
-    "revenue", "cost_of_revenue", "gross_profit", "research_and_development", "sga",
-    "operating_income", "interest_expense", "pretax_income", "income_tax", "net_income",
-    "eps_basic", "eps_diluted", "weighted_shares_basic", "weighted_shares_diluted",
-    # balance sheet
-    "cash", "short_term_investments", "receivables", "inventory", "current_assets",
-    "total_assets", "current_liabilities", "long_term_debt_current", "long_term_debt",
-    "total_liabilities", "stockholders_equity", "shares_outstanding",
-    # cash flow
-    "operating_cash_flow", "capex", "depreciation_amortization", "stock_based_compensation",
-    "dividends_paid", "share_buybacks",
-]
 EDGAR = "https://www.sec.gov/Archives/edgar/data"
 CompanyId = Annotated[str, Path(pattern=r"^\d{10}$", description="canonical company_id")]
 
@@ -43,6 +42,16 @@ log = logging.getLogger("query_api")
 
 class DemoLogin(BaseModel):
     user_id: str
+
+
+class FormulaRequest(BaseModel):
+    formula: str = Field(max_length=2000, description="e.g. net_income / revenue")
+    default_company: str | None = Field(None, pattern=r"^\d{10}$",
+                                        description="company_id of metrics without a ticker")
+    basis: Literal["fiscal", "calendar"] = "fiscal"
+    view: Literal["quarter", "ttm"] = "quarter"
+    start: date | None = Field(None, alias="from", description="earliest period end")
+    end: date | None = Field(None, alias="to", description="latest period end")
 
 
 def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
@@ -64,20 +73,26 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
 
     User = Annotated[str, Depends(current_user)]
 
-    def require(user_id: str, tier: str, company_id: str) -> None:
-        """Layer 1. Same answer whether the company doesn't exist or isn't permitted."""
+    def allowed(user_id: str, tier: str, company_id: str) -> bool:
+        """Layer 1 check; OpenFGA unreachable → 503 (fail closed)."""
         fields = {"user_id": user_id, "tier": tier, "company_id": company_id}
         try:
-            allowed = authorizer.can(user_id, tier, company_id)
+            ok = authorizer.can(user_id, tier, company_id)
         except AuthzUnavailable as e:
             PERMISSION_CHECKS.labels(tier, "error").inc()
             log.warning("authorization unavailable: %s", e, extra=fields)
-            raise HTTPException(503, "authorization unavailable") from None  # fail closed
-        if not allowed:
+            raise HTTPException(503, "authorization unavailable") from None
+        if not ok:
             PERMISSION_CHECKS.labels(tier, "denied").inc()
             log.info("permission denied", extra=fields)
-            raise HTTPException(403, f"not permitted to read {tier} for this company")
+            return False
         PERMISSION_CHECKS.labels(tier, "allowed").inc()
+        return True
+
+    def require(user_id: str, tier: str, company_id: str) -> None:
+        """Layer 1. Same answer whether the company doesn't exist or isn't permitted."""
+        if not allowed(user_id, tier, company_id):
+            raise HTTPException(403, f"not permitted to read {tier} for this company")
 
     def readable(user_id: str) -> dict[str, set[str]]:
         try:
@@ -125,26 +140,47 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
             for r in store.search(user_id, q)
         ]}
 
+    known: dict[str, list[str]] = {}
+
+    def metric_names() -> dict[str, list[str]]:
+        """Read once from the database: metrics change only with a migration (and a deploy)."""
+        if not known:
+            known.update(store.metric_names())
+        return known
+
     @app.get("/v1/metrics")
     def metrics() -> dict:
-        return {"metrics": METRICS}
+        """Metric names financials accepts: reported (silver.metrics) and derived."""
+        return metric_names()
 
     @app.get("/v1/companies/{company_id}/financials")
     def financials(
         user_id: User, company_id: CompanyId,
         metrics: Annotated[list[str] | None, Query(description="default: all")] = None,
         quarters: Annotated[int, Query(ge=1, le=40)] = 4,
+        view: Annotated[Literal["quarter", "ttm"], Query(
+            description="quarter, or trailing twelve months ending each quarter")] = "quarter",
+        basis: Annotated[Literal["fiscal", "calendar"], Query(
+            description="fiscal: every fiscal quarter; calendar: one per calendar quarter")]
+            = "fiscal",
     ) -> dict:
-        unknown = set(metrics or []) - set(METRICS)
+        names = metric_names()
+        every = names["metrics"] + names["derived_metrics"]
+        unknown = set(metrics or []) - set(every)
         if unknown:
             raise HTTPException(422, f"unknown metrics: {sorted(unknown)}")
         require(user_id, "financials", company_id)
-        rows = store.financials(user_id, company_id, metrics or METRICS, quarters)
-        return {"company_id": company_id, "as_of": _now(), "rows": [
+        rows = store.financials(user_id, company_id, metrics or every, quarters, view, basis)
+        meta = {"company_id": company_id, "view": view, "basis": basis, "as_of": _now()}
+        return {**meta, "rows": [
             {
                 "metric": r["metric"], "period_start": r["period_start"],
-                "period_end": r["period_end"], "value": r["value"], "unit": r["unit"],
-                "value_source": r["value_source"],
+                "period_end": r["period_end"],
+                "fiscal_period": _period("FY", r.get("fiscal_year"), r.get("fiscal_quarter")),
+                "calendar_period": _period("CY", r.get("calendar_year"),
+                                           r.get("calendar_quarter")),
+                "value": r["value"], "unit": r["unit"], "value_source": r["value_source"],
+                **({"inputs": r["inputs"]} if r.get("inputs") else {}),
                 "citation": {"accession_no": r["accession_no"], "form": r["form"],
                              "filed": r["filed"], "xbrl_tag": r["source_tag"],
                              "source_accessions": r["source_accessions"],
@@ -194,7 +230,106 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
             } for r in rows
         ]}
 
+    def checked(body: FormulaRequest) -> tuple[Node, Analysis]:
+        try:
+            ast = parse(body.formula)
+            a = analyze(ast, body.view)
+        except FormulaError as e:
+            raise HTTPException(422, {"errors": [e.to_dict()]}) from None
+        if a.bare and not body.default_company:
+            raise HTTPException(422, {"errors": [_no_default(a.bare).to_dict()]})
+        return ast, a
+
+    def not_yours(user_id: str, tickers: dict[str, tuple[int, int]]) -> list[dict]:
+        """The same error for a ticker that matches nothing and one the caller can't read;
+        suggestions come only from the caller's own companies."""
+        mine = sorted(c for c, tiers in readable(user_id).items() if "financials" in tiers)
+        names = [t for ts in (store.tickers(user_id, mine) if mine else {}).values() for t in ts]
+        out = []
+        for t, (pos, length) in tickers.items():
+            s = suggest(t, names)
+            out.append(FormulaError(f"{t} isn't one of your companies", pos, length,
+                                    f"Did you mean {s}?" if s else
+                                    "Only companies granted to you can be charted",
+                                    code="company").to_dict())
+        return out
+
+    @app.post("/v1/formulas/validate")
+    def validate_formula(user_id: User, body: FormulaRequest) -> dict:
+        """Parse and check a formula: names, units, limits, and that every ticker is one of
+        the caller's companies. Reads no financial data."""
+        try:
+            ast, a = checked(body)
+        except HTTPException as e:
+            return {"valid": False, **e.detail}
+        resolved = store.resolve_tickers(user_id, sorted(a.tickers)) if a.tickers else {}
+        if a.tickers:
+            mine = {c for c, tiers in readable(user_id).items() if "financials" in tiers}
+            bad = {t: p for t, p in a.tickers.items() if resolved.get(t) not in mine}
+            if bad:
+                return {"valid": False, "errors": not_yours(user_id, bad)}
+        ids = {resolved[t] for t in a.tickers} | ({body.default_company} if a.bare else set())
+        return {"valid": True, "unit": a.unit, "alignment": alignment(body.basis, ids),
+                "ast": to_dict(ast), "inputs": _inputs(a, {**resolved, None: body.default_company})}
+
+    @app.post("/v1/formulas/evaluate")
+    def evaluate_formula(user_id: User, body: FormulaRequest) -> dict:
+        """A formula's series. Every company it references is checked (layer 1) before the
+        query, which runs under RLS like every Store query."""
+        ast, a = checked(body)
+        resolved = store.resolve_tickers(user_id, sorted(a.tickers)) if a.tickers else {}
+        companies: dict[str | None, str] = {t: resolved[t] for t in a.tickers if t in resolved}
+        if a.bare and body.default_company:
+            companies[None] = body.default_company
+            require(user_id, "financials", body.default_company)
+        checks: dict[str, bool] = {}
+        denied = {}
+        for t, p in a.tickers.items():
+            cid = resolved.get(t)
+            if cid is not None and cid not in checks:
+                checks[cid] = allowed(user_id, "financials", cid)
+            if cid is None or not checks[cid]:
+                denied[t] = p
+        if denied:
+            raise HTTPException(403, {"errors": not_yours(user_id, denied)})
+        compiled = compile_formula(ast, a, companies, body.basis, body.start, body.end)
+        rows = store.formula(user_id, compiled)
+        return {
+            "formula": body.formula, "unit": a.unit, "basis": body.basis, "view": body.view,
+            "alignment": compiled.alignment, "as_of": _now(),
+            "inputs": _inputs(a, companies),
+            "points": [_point(r, compiled.alignment) for r in rows],
+        }
+
     return app
+
+
+def _no_default(at: tuple[int, int]) -> FormulaError:
+    return FormulaError("Metrics without a ticker need a default company", at[0], at[1],
+                        "Pass default_company, or write TICKER.metric", code="company")
+
+
+def _inputs(a: Analysis, companies: dict[str | None, str | None]) -> list[dict]:
+    return [{"input": i, "ref": inp.ref, "ticker": inp.ticker,
+             "company_id": companies.get(inp.ticker), "metric": inp.metric, "span": inp.span,
+             "lag_quarters": inp.lag, "unit": CATALOG[inp.metric][0]}
+            for i, inp in enumerate(a.inputs)]
+
+
+def _point(r: dict, align: str) -> dict:
+    year, quarter = divmod(r["period_key"], 4)
+    prefix = "FY" if align == "fiscal" and r["fiscal_key"] else "CY"
+    inputs = [{
+        "input": x["input"], "period_start": x["period_start"], "period_end": x["period_end"],
+        "value": x["value"], "value_source": x["value_source"],
+        "citation": {"accession_no": x["accession_no"], "form": x["form"], "filed": x["filed"],
+                     "source_accessions": x["source_accessions"],
+                     "filing_url": filing_url(x.get("filer_cik"), x["accession_no"])},
+        "freshness": {"filed": x["filed"], "ingested_at": x["ingested_at"]},
+    } for x in r["inputs"]]
+    return {"period": f"{prefix}{year} Q{quarter + 1}", "period_key": r["period_key"],
+            "period_end": r["period_end"], "value": r["value"], "inputs": inputs,
+            "source_accessions": sorted({a for x in r["inputs"] for a in x["source_accessions"]})}
 
 
 def filing_url(cik: str | None, accession_no: str) -> str | None:
@@ -205,6 +340,11 @@ def filing_url(cik: str | None, accession_no: str) -> str | None:
 
 
 _PROFILE = {"name": None, "sic": None, "industry": None, "exchanges": None}
+
+
+def _period(prefix: str, year: int | None, quarter: int | None) -> str | None:
+    """e.g. FY2026 Q1, CY2025 Q4; None when the fiscal year end is unknown."""
+    return f"{prefix}{year} Q{quarter}" if year and quarter else None
 
 
 def _now() -> str:

@@ -9,6 +9,8 @@ from typing import Any, Protocol
 import psycopg
 from psycopg.rows import dict_row
 
+from query_api.formula import Compiled
+
 
 class Pool(Protocol):
     def connection(self) -> Any: ...  # context manager yielding a psycopg.Connection
@@ -30,6 +32,15 @@ class Store:
                 cur.execute("RESET ROLE")
                 cur.execute("SELECT set_config('app.user_id', '', true)")
 
+    def metric_names(self) -> dict[str, list[str]]:
+        """{metrics: silver.metrics, derived_metrics: gold.derived_metrics}, by name."""
+        with self._session("") as cur:
+            cur.execute(
+                "SELECT ARRAY(SELECT metric FROM silver.metrics ORDER BY 1) AS metrics,"
+                "       ARRAY(SELECT metric FROM gold.derived_metrics ORDER BY 1)"
+                "           AS derived_metrics")
+            return dict(cur.fetchone() or {})
+
     def search(self, user_id: str, q: str, limit: int = 5) -> list[dict]:
         with self._session(user_id) as cur:
             cur.execute(
@@ -47,23 +58,57 @@ class Store:
                         " FROM silver.companies WHERE company_id = ANY(%s)", (company_ids,))
             return {r.pop("company_id"): r for r in cur.fetchall()}
 
-    def financials(self, user_id: str, company_id: str, metrics: list[str],
-                   quarters: int) -> list[dict]:
+    def resolve_tickers(self, user_id: str, tickers: list[str]) -> dict[str, str]:
+        """ticker → company_id, by silver.resolve_company's best ticker match (public identity).
+        Tickers that match nothing are absent."""
+        with self._session(user_id) as cur:
+            cur.execute(
+                "SELECT t.ticker,"
+                "       (SELECT r.company_id FROM silver.resolve_company(t.ticker)"
+                "        WITH ORDINALITY r WHERE r.matched_on = 'ticker'"
+                "        ORDER BY r.ordinality LIMIT 1) AS company_id"
+                " FROM unnest(%s::text[]) t(ticker)", (tickers,))
+            return {r["ticker"]: r["company_id"] for r in cur.fetchall() if r["company_id"]}
+
+    def tickers(self, user_id: str, company_ids: list[str]) -> dict[str, list[str]]:
+        """company_id → its current tickers."""
+        with self._session(user_id) as cur:
+            cur.execute("SELECT company_id, array_agg(DISTINCT upper(alias) ORDER BY upper(alias))"
+                        "  AS tickers"
+                        " FROM silver.company_aliases"
+                        " WHERE alias_type = 'ticker' AND valid_to IS NULL"
+                        "   AND company_id = ANY(%s)"
+                        " GROUP BY company_id", (company_ids,))
+            return {r["company_id"]: r["tickers"] for r in cur.fetchall()}
+
+    def formula(self, user_id: str, compiled: Compiled) -> list[dict]:
+        """Points of a compiled formula (query_api.formula.compile)."""
+        with self._session(user_id) as cur:
+            cur.execute(compiled.sql, compiled.params)  # pyright: ignore[reportArgumentType]
+            return cur.fetchall()
+
+    def financials(self, user_id: str, company_id: str, metrics: list[str], quarters: int,
+                   view: str = "quarter", basis: str = "fiscal") -> list[dict]:
+        """view: quarter | ttm. basis: fiscal (every fiscal period) | calendar (one row per
+        calendar quarter)."""
         with self._session(user_id) as cur:
             cur.execute(
                 """
-                SELECT metric, period_start, period_end, value, unit, value_source,
-                       source_tag, accession_no, form, filed, source_accessions, ingested_at,
+                SELECT metric, period_start, period_end, fiscal_year, fiscal_quarter,
+                       calendar_year, calendar_quarter, value, unit, value_source,
+                       source_tag, inputs, accession_no, form, filed, source_accessions,
+                       ingested_at,
                        (SELECT f.cik FROM silver.financial_facts f
                         WHERE f.accession_no = q.accession_no LIMIT 1) AS filer_cik
                 FROM (
                     SELECT *, row_number() OVER (PARTITION BY metric ORDER BY period_end DESC)
-                    FROM gold.quarterly_financials
-                    WHERE company_id = %s AND metric = ANY(%s)
+                    FROM gold.financials
+                    WHERE company_id = %s AND span = %s AND metric = ANY(%s)
+                      AND (%s = 'fiscal' OR calendar_primary)
                 ) q
                 WHERE row_number <= %s
                 ORDER BY metric, period_end DESC
-                """, (company_id, metrics, quarters))
+                """, (company_id, view, metrics, basis, quarters))
             return cur.fetchall()
 
     def filings(self, user_id: str, company_id: str, limit: int) -> list[dict]:

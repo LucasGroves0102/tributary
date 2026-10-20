@@ -83,5 +83,40 @@
   "cik_str": 1652044,
   "ticker": "GOOG",
   "title": "Alphabet Inc."
+ },
+ "17": {
+  "cik_str": 200406,
+  "ticker": "JNJ",
+  "title": "JOHNSON & JOHNSON"
+ },
+ "18": {
+  "cik_str": 21344,
+  "ticker": "KO",
+  "title": "COCA COLA CO"
+ },
+ "19": {
+  "cik_str": 354950,
+  "ticker": "HD",
+  "title": "HOME DEPOT, INC."
+ },
+ "20": {
+  "cik_str": 77476,
+  "ticker": "PEP",
+  "title": "PEPSICO INC"
+ },
+ "21": {
+  "cik_str": 63908,
+  "ticker": "MCD",
+  "title": "MCDONALDS CORP"
+ },
+ "22": {
+  "cik_str": 865752,
+  "ticker": "MNST",
+  "title": "Monster Beverage Corp"
+ },
+ "23": {
+  "cik_str": 1418135,
+  "ticker": "KDP",
+  "title": "Keurig Dr Pepper Inc."
  }
 }

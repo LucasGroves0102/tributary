@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field
 
 from tributary_agent.agent import Agent, Answer
 from tributary_agent.telemetry import record_answer, record_error
-from tributary_agent.tools import QueryApi
+from tributary_agent.tools import MetricTools, QueryApi
 from tributary_telemetry import configure_logging
 from tributary_telemetry.http import forward_request_id, instrument, request_id_headers
 
@@ -190,9 +190,15 @@ def build_app() -> FastAPI:
     model = os.environ.get("AGENT_MODEL", "claude-haiku-5-5")
     http = httpx.Client(base_url=base_url, timeout=30,
                         event_hooks={"request": [forward_request_id]})
+    tools = MetricTools()
+
+    def make_agent(tok: str) -> Agent:
+        api = QueryApi(base_url, tok, http=http)
+        return Agent(messages, api, model, stream=True,
+                     effort=os.environ.get("AGENT_EFFORT") or None, tools=tools.get(api))
+
     return create_app(
-        make_agent=lambda tok: Agent(messages, QueryApi(base_url, tok, http=http), model,
-                                     stream=True, effort=os.environ.get("AGENT_EFFORT") or None),
+        make_agent=make_agent,
         who_is=query_api_who_is(base_url),
         limits=Limits(int(os.environ.get("AGENT_RATE_PER_HOUR", "30")),
                       int(os.environ.get("AGENT_IP_RATE_PER_HOUR", "10")),

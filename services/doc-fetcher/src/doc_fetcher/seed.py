@@ -3,13 +3,13 @@
 import json
 import logging
 import os
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
 import psycopg
 from confluent_kafka import Producer
 
 from doc_fetcher.db import tracked_ciks
-from tributary_sec import sec_client
+from tributary_sec import acceptance_time, sec_client
 from tributary_telemetry import configure_logging
 
 SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik}.json"
@@ -34,15 +34,19 @@ def select_filings(cik: str, submissions: dict, today: date) -> list[dict]:
         elif form != "8-K" or filed < today - timedelta(days=EIGHT_K_DAYS):
             continue
         accession = recent["accessionNumber"][i]
+        accepted = acceptance_time(recent["acceptanceDateTime"][i])
+        if accepted is None:
+            continue
         events.append({
             "accession_no": accession,
             "cik": cik,
             "company_name": submissions["name"],
             "role": "Filer",
             "form_type": form,
-            "filed_at": datetime.fromisoformat(recent["acceptanceDateTime"][i]).isoformat(),
+            "filed_at": accepted.isoformat(),
             "url": (f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/"
                     f"{accession.replace('-', '')}/{accession}-index.htm"),
+            "source": "seed",
         })
     return events
 
