@@ -146,6 +146,12 @@ jobs:
     timeoutSeconds: 10800
     uses: [postgres, sec]
     tmpSize: 2Gi
+    resources:
+      requests:
+        cpu: 250m
+        memory: 256Mi
+      limits:
+        memory: 1Gi
     env:
       BULK_LIMIT: "500"
       BULK_ROUNDS: "12"
