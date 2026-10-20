@@ -126,6 +126,20 @@ jobs:
           -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
           -
 
+  terraform:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        module: [cluster, cloudflare]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - name: fmt and validate
+        run: >-
+          docker run --rm -v "$PWD:/repo" -w /repo/deploy/terraform/${{ matrix.module }}
+          --entrypoint sh hashicorp/terraform:1.16.6@sha256:bfffc1ded5fbf0a17beaaf22eb4793980abdb19d0761ff6a3a0efb2ab4d9b316 -c
+          "terraform fmt -check -recursive && terraform init -backend=false -input=false >/dev/null
+          && terraform validate"
+
   images:
     name: image ${{ matrix.service }}
     needs: [secrets, python, web, authz, chart]
