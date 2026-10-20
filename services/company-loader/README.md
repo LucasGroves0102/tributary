@@ -11,7 +11,9 @@ Sources:
 - `data.sec.gov/submissions`: former names and industry, fetched for tracked companies only
   (the bulk load below covers every company; this keeps tracked ones current between loads)
 - `src/company_loader/data/`: curated files the SEC doesn't publish
-  - `tracked.csv`: companies whose financials and documents get fetched
+  - `tracked.csv`: companies whose financials and documents get fetched: the 20 demo
+    companies plus TSLA (the demo watchlist trap) and LLY (in the adversarial ground truth).
+    Every ticker must be in `tests/fixtures/company_tickers.json`
   - `successions.csv`: old CIK → new CIK (e.g. Google Inc. → Alphabet)
   - `ticker_history.csv`: retired tickers (e.g. FB)
 
