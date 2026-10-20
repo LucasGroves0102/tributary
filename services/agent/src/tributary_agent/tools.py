@@ -1,6 +1,7 @@
 """Agent tools over the Query API. The user comes from the bearer token, never a tool
 argument."""
 
+import copy
 import json
 import re
 from typing import Any
@@ -8,23 +9,6 @@ from typing import Any
 import httpx
 
 SECTION_KEY = re.compile(r"(?:[IV]+-)?[0-9]{1,2}[A-C]?(?:\.[0-9]{2})?|EX-99\.[0-9]{1,2}")
-METRICS = [
-    # income statement
-    "revenue", "cost_of_revenue", "gross_profit", "research_and_development", "sga",
-    "operating_income", "interest_expense", "pretax_income", "income_tax", "net_income",
-    "eps_basic", "eps_diluted", "weighted_shares_basic", "weighted_shares_diluted",
-    # balance sheet
-    "cash", "short_term_investments", "receivables", "inventory", "current_assets",
-    "total_assets", "current_liabilities", "long_term_debt_current", "long_term_debt",
-    "total_liabilities", "stockholders_equity", "shares_outstanding",
-    # cash flow
-    "operating_cash_flow", "capex", "depreciation_amortization", "stock_based_compensation",
-    "dividends_paid", "share_buybacks",
-    # derived: ratios are fractions; eps_growth is quarter-only, roe TTM-only
-    "gross_margin", "operating_margin", "net_margin", "free_cash_flow", "fcf_margin",
-    "revenue_growth", "net_income_growth", "eps_growth", "payout_ratio", "debt_to_equity",
-    "net_debt", "current_ratio", "roe",
-]
 COMPANY_ID = {"type": "string", "pattern": r"^\d{10}$",
               "description": "10-digit canonical company_id from search_companies or whoami"}
 
@@ -58,7 +42,8 @@ TOOLS: list[dict] = [
             "type": "object",
             "properties": {
                 "company_id": COMPANY_ID,
-                "metrics": {"type": "array", "items": {"type": "string", "enum": METRICS},
+                # enum: the Query API's /v1/metrics (with_metrics)
+                "metrics": {"type": "array", "items": {"type": "string"},
                             "description": "default: all"},
                 "quarters": {"type": "integer", "minimum": 1, "maximum": 40,
                              "description": "default 4"},
@@ -112,12 +97,46 @@ TOOLS: list[dict] = [
 ]
 
 
+def with_metrics(metrics: list[str]) -> list[dict]:
+    """TOOLS with get_financials' metric names limited to these."""
+    tools = copy.deepcopy(TOOLS)
+    for tool in tools:
+        if tool["name"] == "get_financials":
+            tool["input_schema"]["properties"]["metrics"]["items"]["enum"] = metrics
+    return tools
+
+
+class MetricTools:
+    """with_metrics(the Query API's metric names), fetched once; plain TOOLS until it answers."""
+
+    def __init__(self) -> None:
+        self._tools: list[dict] | None = None
+
+    def get(self, api: "QueryApi") -> list[dict]:
+        if self._tools is None:
+            names = api.metric_names()
+            if not names:
+                return TOOLS
+            self._tools = with_metrics(names)
+        return self._tools
+
+
 class QueryApi:
     """Runs tool calls against the Query API as the user whose token this holds."""
 
     def __init__(self, base_url: str, token: str, http: httpx.Client | None = None) -> None:
         self._http = http or httpx.Client(base_url=base_url, timeout=30)
         self._headers = {"Authorization": f"Bearer {token}"}
+
+    def metric_names(self) -> list[str] | None:
+        """Every metric get_financials accepts (/v1/metrics); None if the API can't say."""
+        try:
+            r = self._http.get("/v1/metrics", headers=self._headers)
+            r.raise_for_status()
+            body = r.json()
+            return list(body["metrics"]) + list(body["derived_metrics"])
+        except (httpx.HTTPError, ValueError, KeyError, TypeError):
+            return None
 
     def run(self, name: str, args: dict[str, Any]) -> tuple[str, bool]:
         """(tool_result content, is_error). Never raises for API errors: the model is told."""
