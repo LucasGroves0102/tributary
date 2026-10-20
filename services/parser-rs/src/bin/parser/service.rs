@@ -62,7 +62,10 @@ pub fn parse_one(
     let sections = match sections(store, accession_no, &form, &content) {
         Ok(s) => s,
         Err(e) => {
-            metrics.parse_failures.with_label_values(&[form.as_str()]).inc();
+            metrics
+                .parse_failures
+                .with_label_values(&[form.as_str()])
+                .inc();
             return Err(e);
         }
     };
@@ -290,7 +293,10 @@ pub mod tests {
         assert!(
             matches!(accession_no(Some(&b"{\"cik\": \"1\"}"[..])), Err(Failure::Skip(r)) if r == "'accession_no'")
         );
-        assert!(matches!(accession_no(Some(&b"[1]"[..])), Err(Failure::Fatal(_))));
+        assert!(matches!(
+            accession_no(Some(&b"[1]"[..])),
+            Err(Failure::Fatal(_))
+        ));
         assert!(matches!(accession_no(None), Err(Failure::Fatal(_))));
     }
 }

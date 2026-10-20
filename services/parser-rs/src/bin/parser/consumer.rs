@@ -161,7 +161,13 @@ mod tests {
         let stop = AtomicBool::new(false);
         let missing: &[u8] = br#"{"accession_no": "b"}"#;
         let mut source = FakeSource::new(
-            &[Some(EVENT), None, Some(&b"{"[..]), Some(missing), Some(EVENT)],
+            &[
+                Some(EVENT),
+                None,
+                Some(&b"{"[..]),
+                Some(missing),
+                Some(EVENT),
+            ],
             &stop,
         );
         let mut store = FakeStore::with(&[("a", "8-K", fixture("8-K"))]);
