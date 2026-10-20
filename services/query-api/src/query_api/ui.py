@@ -9,6 +9,7 @@ values need `financials` on that company, section text `filings`.
 
 from collections.abc import Callable
 from datetime import UTC, date, datetime
+from decimal import Decimal, InvalidOperation, localcontext
 from typing import Annotated, Literal, get_args
 from zoneinfo import ZoneInfo
 
@@ -28,6 +29,7 @@ from query_api.screener import (
     parse_filter,
     shape,
 )
+from query_api.shapes import filing_url, period
 from query_api.store import Store
 from query_api.watchlist import MAX_ENTRIES, UnknownUser, Watchlists
 
@@ -39,6 +41,11 @@ EXPECTED_METHOD = (
     "deadlines by filer category: 10-K 60/75/90 days and 10-Q 40/40/45 days after the period "
     "end for large accelerated/accelerated/non-accelerated filers, moved off weekends (holidays "
     "not modelled).")
+Accession = Annotated[str, Path(pattern=r"^\d{10}-\d{2}-\d{6}$")]
+RECAP_METRICS = ("revenue", "gross_profit", "operating_income", "net_income", "eps_diluted",
+                 "operating_cash_flow", "free_cash_flow", "gross_margin", "operating_margin",
+                 "net_margin", "cash", "total_assets", "long_term_debt", "stockholders_equity")
+RECAP_FORMS = ("10-K", "10-Q", "10-K/A", "10-Q/A")
 Band = Literal["lt100m", "100m-1b", "1b-10b", "10b-100b", "gte100b"]
 Format = Annotated[Literal["json", "csv"], Query(alias="format")]
 MAX_JSON_ROWS = 500
@@ -235,11 +242,97 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
         return {"as_of": start, "through": end, "scope": scope, "method": EXPECTED_METHOD,
                 "filings": items}
 
+    @app.get("/v1/filings/{accession_no}/recap", response_model=dict)
+    def recap(
+        user_id: Annotated[str, Depends(current_user)], accession_no: Accession,
+        metrics: Annotated[list[str] | None, Query(description="default: main metrics")]
+            = None,
+    ) -> dict:
+        """A 10-Q/10-K's metrics vs the prior quarter and the year-ago quarter, each value cited;
+        plus one-time-item flags from its MD&A when the caller can read filings."""
+        unknown = set(metrics or []) - set(m for m, _, _ in COLUMNS.values())
+        if unknown:
+            raise HTTPException(422, f"unknown metrics: {sorted(unknown)}")
+        filing = store.filing(user_id, accession_no)
+        # an unknown accession gets the same answer as a company the caller can't read
+        if filing is None:
+            raise HTTPException(403, "not permitted to read financials for this company")
+        company_id = filing["company_id"]
+        require(user_id, "financials", company_id)
+        if filing["form"] not in RECAP_FORMS:
+            raise HTTPException(422, "recaps are for 10-K and 10-Q filings")
+        rows = store.recap(user_id, company_id, accession_no, filing["period_end"],
+                           list(metrics or RECAP_METRICS))
+        flags = None
+        if allowed(user_id, "filings", company_id):
+            flags = [_flag(f, accession_no) for f in store.filing_flags(user_id, accession_no)]
+        return {"accession_no": accession_no, "company_id": company_id, "form": filing["form"],
+                "filed": filing["filing_date"], "period_end": filing["period_end"],
+                "as_of": _now(),
+                "note": "Values as currently reported: a restated value cites the restating "
+                        "filing. pct_change is null for ratios (change is in ratio points) and "
+                        "when the earlier value is 0.",
+                "metrics": _recap_metrics(rows, filing.get("cik")),
+                "flags": flags,
+                **({} if flags is not None else
+                   {"flags_unavailable": "one-time-item flags need filings access"})}
+
     @app.get("/v1/screener/columns")
     def screener_columns() -> dict:
         return {"columns": column_info(sorted(COLUMNS)),
                 "filer_categories": list(FILER_CATEGORIES),
                 "bands": list(get_args(Band))}
+
+
+def _recap_metrics(rows: list[dict], cik: str | None) -> list[dict]:
+    """Rows (one per comparison) → one entry per metric and span with changes vs current."""
+    out: dict[tuple[str, str], dict] = {}
+    for r in rows:
+        entry = out.setdefault((r["metric"], r["span"]), {
+            "metric": r["metric"], "span": r["span"], "unit": r["unit"],
+            "current": None, "prior_quarter": None, "year_ago": None})
+        entry[r["comparison"]] = _recap_value(r, cik)
+    for e in out.values():
+        cur = e["current"]
+        for k in ("prior_quarter", "year_ago"):
+            if cur and e[k]:
+                e[k].update(_change(cur["value"], e[k]["value"], e["unit"]))
+    return [e for e in out.values() if e["current"]]
+
+
+def _recap_value(r: dict, cik: str | None) -> dict:
+    return {"value": r["value"], "period_start": r["period_start"],
+            "period_end": r["period_end"],
+            "fiscal_period": period("FY", r["fiscal_year"], r["fiscal_quarter"]),
+            "calendar_period": period("CY", r["calendar_year"], r["calendar_quarter"]),
+            "value_source": r["value_source"],
+            "citation": {"accession_no": r["accession_no"], "form": r["form"],
+                         "filed": r["filed"], "xbrl_tag": r["source_tag"],
+                         "source_accessions": r["source_accessions"],
+                         "filing_url": filing_url(cik, r["accession_no"])},
+            "freshness": {"filed": r["filed"], "ingested_at": r["ingested_at"]}}
+
+
+def _change(current: Decimal, earlier: Decimal, unit: str) -> dict:
+    """change = current - earlier (exact); pct_change = change / |earlier|, 6 decimals."""
+    change = current - earlier
+    pct = None
+    if unit != "ratio" and earlier != 0:
+        with localcontext() as ctx:
+            ctx.prec = 60
+            try:
+                pct = (change / abs(earlier)).quantize(Decimal("0.000001"))
+            except InvalidOperation:
+                pct = None
+    return {"change": change, "pct_change": pct}
+
+
+def _flag(f: dict, accession_no: str) -> dict:
+    return {"flag": f["flag"], "section_key": f["section_key"], "title": f["title"],
+            "matches": f["matches"], "snippet": f["snippet"],
+            "citation": {"accession_no": accession_no, "form": f["form"], "filed": f["filed"],
+                         "section_key": f["section_key"], "char_start": f["char_start"],
+                         "document_url": f["document_url"]}}
 
 
 def _pick(d: dict | None, *keys: str) -> list:

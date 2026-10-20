@@ -149,3 +149,66 @@ def test_last_reports_include_amendments(conn):
     last = Store(OneConnection(conn)).last_reports("t-nobody", [C, W])
     assert (last[C]["form"], str(last[C]["period_end"])) == ("10-Q/A", "2026-06-30")
     assert last[W]["form"] == "10-Q"
+
+
+R = "9100000004"
+ACC = f"{R}-26-000002"
+MDNA = ("We recorded a goodwill impairment of $5 million and restructuring charges. "
+        "Impairment testing continues.")
+
+
+@pytest.fixture
+def recap_conn(conn):
+    conn.execute("INSERT INTO silver.companies (company_id, name, current_cik, fiscal_year_end)"
+                 " VALUES (%s, 'UI Test R', %s, '1231')", (R, R))
+    conn.execute("INSERT INTO silver.company_ciks (cik, company_id) VALUES (%s, %s)", (R, R))
+    for period, value, acc in (("2025-06-30", 100, f"{R}-25-000002"),
+                               ("2026-03-31", 120, f"{R}-26-000001"),
+                               ("2026-06-30", 130, ACC)):
+        conn.execute(
+            "INSERT INTO gold.quarterly_financials (company_id, metric, period_start, period_end,"
+            " value, unit, value_source, source_tag, accession_no, form, filed,"
+            " source_accessions, ingested_at) VALUES (%s, 'revenue', %s::date - 90, %s, %s,"
+            " 'USD', 'reported', 'us-gaap:Revenues', %s, '10-Q', %s::date + 30, ARRAY[%s], now())",
+            (R, period, period, value, acc, period, acc))
+    conn.execute("INSERT INTO bronze.submission_filings (accession_no, cik, form, filing_date,"
+                 " report_date) VALUES (%s, %s, '10-Q', '2026-07-30', '2026-06-30')", (ACC, R))
+    conn.execute("INSERT INTO bronze.filing_documents (accession_no, cik, form, filed,"
+                 " period_of_report, document_name, url, content_gzip, content_sha256,"
+                 " size_bytes) VALUES (%s, %s, '10-Q', '2026-07-30', '2026-06-30', 'q.htm',"
+                 " 'https://www.sec.gov/q.htm', '\\x00', 'x', 1)", (ACC, R))
+    conn.execute("INSERT INTO silver.filing_sections (accession_no, section_key, parser,"
+                 " parser_version, part, item, title, text, char_start, char_end)"
+                 " VALUES (%s, 'I-2', 'python', 't', 'I', '2', 'MD&A', %s, 1000, %s)",
+                 (ACC, MDNA, 1000 + len(MDNA)))
+    conn.execute("INSERT INTO authz.user_access (user_id, company_id, tier) VALUES"
+                 " ('t-free', %s, 'financials'), ('t-pro', %s, 'financials'),"
+                 " ('t-pro', %s, 'filings')", (R, R, R))
+    return conn
+
+
+def recap(conn, token, user):
+    r = client(conn).get(f"/v1/filings/{ACC}/recap?metrics=revenue", headers=token(user))
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def test_recap_vs_prior_and_year_ago(recap_conn, token):
+    body = recap(recap_conn, token, "t-free")
+    assert (body["form"], body["period_end"]) == ("10-Q", "2026-06-30")
+    [rev] = body["metrics"]
+    assert (rev["metric"], rev["span"], rev["current"]["value"]) == ("revenue", "quarter", "130")
+    assert rev["current"]["fiscal_period"] == "FY2026 Q2"
+    assert rev["current"]["citation"]["accession_no"] == ACC
+    assert (rev["prior_quarter"]["value"], rev["prior_quarter"]["change"],
+            rev["prior_quarter"]["pct_change"]) == ("120", "10", "0.083333")
+    assert (rev["year_ago"]["value"], rev["year_ago"]["pct_change"]) == ("100", "0.300000")
+    assert body["flags"] == []  # layer 1 allows all here; RLS has no filings rows for t-free
+
+
+def test_recap_and_flags_respect_rls(recap_conn, token):
+    assert recap(recap_conn, token, "t-nobody")["metrics"] == []
+    flags = recap(recap_conn, token, "t-pro")["flags"]
+    assert [(f["flag"], f["matches"], f["citation"]["char_start"]) for f in flags] == [
+        ("impairment", 2, 1023), ("restructuring", 1, 1052)]
+    assert "goodwill impairment" in flags[0]["snippet"]

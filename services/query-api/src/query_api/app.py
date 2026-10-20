@@ -25,6 +25,8 @@ from query_api.formula import (
     suggest,
     to_dict,
 )
+from query_api.shapes import filing_url
+from query_api.shapes import period as _period
 from query_api.store import Store
 from query_api.ui import add_ui_routes
 from query_api.watchlist import Watchlists
@@ -49,7 +51,6 @@ DERIVED_METRICS = [
     "revenue_growth", "net_income_growth", "eps_growth", "payout_ratio", "debt_to_equity",
     "net_debt", "current_ratio", "roe",
 ]
-EDGAR = "https://www.sec.gov/Archives/edgar/data"
 CompanyId = Annotated[str, Path(pattern=r"^\d{10}$", description="canonical company_id")]
 
 
@@ -351,19 +352,7 @@ def _point(r: dict, align: str) -> dict:
             "source_accessions": sorted({a for x in r["inputs"] for a in x["source_accessions"]})}
 
 
-def filing_url(cik: str | None, accession_no: str) -> str | None:
-    """EDGAR filing index, e.g. https://www.sec.gov/Archives/edgar/data/1045810/000104581026000075/"""
-    if not cik:
-        return None
-    return f"{EDGAR}/{int(cik)}/{accession_no.replace('-', '')}/"
-
-
 _PROFILE = {"name": None, "sic": None, "industry": None, "exchanges": None}
-
-
-def _period(prefix: str, year: int | None, quarter: int | None) -> str | None:
-    """e.g. FY2026 Q1, CY2025 Q4; None when the fiscal year end is unknown."""
-    return f"{prefix}{year} Q{quarter}" if year and quarter else None
 
 
 def _now() -> str:

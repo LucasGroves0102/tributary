@@ -104,6 +104,45 @@ class Store:
                         (company_ids,))
             return {r.pop("company_id"): r for r in cur.fetchall()}
 
+    def filing(self, user_id: str, accession_no: str) -> dict | None:
+        """A filing's company, form, dates and period from the public filing index."""
+        with self._session(user_id) as cur:
+            cur.execute(
+                """
+                SELECT f.company_id, f.cik, f.form, f.filing_date,
+                       coalesce(f.report_date, d.period_of_report) AS period_end
+                FROM silver.filings f
+                LEFT JOIN bronze.filing_documents d ON d.accession_no = f.accession_no
+                WHERE f.accession_no = %s AND f.company_id IS NOT NULL
+                ORDER BY f.report_date IS NULL, f.cik
+                LIMIT 1
+                """, (accession_no,))
+            return cur.fetchone()
+
+    def recap(self, user_id: str, company_id: str, accession_no: str, period_end: date | None,
+              metrics: list[str]) -> list[dict]:
+        """gold.filing_recap rows. Without a period of report, the latest period this filing
+        is cited for (under RLS like the rest)."""
+        with self._session(user_id) as cur:
+            cur.execute(
+                """
+                SELECT * FROM gold.filing_recap(
+                    %(company)s,
+                    coalesce(%(period_end)s::date,
+                             (SELECT max(q.period_end) FROM gold.quarterly_financials q
+                              WHERE q.company_id = %(company)s
+                                AND q.accession_no = %(accession)s)),
+                    %(metrics)s)
+                """, {"company": company_id, "period_end": period_end,
+                      "accession": accession_no, "metrics": metrics})
+            return cur.fetchall()
+
+    def filing_flags(self, user_id: str, accession_no: str) -> list[dict]:
+        """gold.filing_flags rows (RLS: filings tier)."""
+        with self._session(user_id) as cur:
+            cur.execute("SELECT * FROM gold.filing_flags(%s)", (accession_no,))
+            return cur.fetchall()
+
     def financials(self, user_id: str, company_id: str, metrics: list[str], quarters: int,
                    view: str = "quarter", basis: str = "fiscal") -> list[dict]:
         """view: quarter | ttm. basis: fiscal (every fiscal period) | calendar (one row per

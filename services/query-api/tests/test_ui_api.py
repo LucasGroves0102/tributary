@@ -1,6 +1,7 @@
 """UI routes with fake layers: expected filings, watchlist, recap, peers, CSV exports."""
 
 from datetime import date
+from decimal import Decimal
 
 import pytest
 from fastapi.testclient import TestClient
@@ -156,3 +157,110 @@ def test_calendar_window(client, token):
 def test_calendar_of_readable_companies(client, token):
     client.get("/v1/calendar/expected-filings?scope=readable", headers=token("alice"))
     assert ("expected_filings", "alice", (NVDA,), TODAY, 2) in client.store.calls
+
+
+ACC_NVDA, ACC_TSLA, ACC_8K = "0001045810-26-000075", "0001318605-26-000010", "0001045810-26-000080"
+
+
+def recap_row(comparison, metric, value, period_end, unit="USD"):
+    return {"comparison": comparison, "metric": metric, "span": "quarter",
+            "period_start": None, "period_end": period_end, "fiscal_year": 2027,
+            "fiscal_quarter": 2, "calendar_year": 2026, "calendar_quarter": 2,
+            "value": Decimal(value), "unit": unit, "value_source": "reported",
+            "source_tag": "us-gaap:Revenues", "accession_no": ACC_NVDA, "form": "10-Q",
+            "filed": date(2026, 8, 26), "source_accessions": [ACC_NVDA],
+            "ingested_at": "2026-08-26T21:00:00Z"}
+
+
+class RecapStore(UIStore):
+    def filing(self, user_id, accession_no):
+        self.calls.append(("filing", accession_no))
+        return {ACC_NVDA: {"company_id": NVDA, "cik": "0001045810", "form": "10-Q",
+                           "filing_date": date(2026, 8, 26), "period_end": date(2026, 7, 26)},
+                ACC_TSLA: {"company_id": TSLA, "cik": "0001318605", "form": "10-Q",
+                           "filing_date": date(2026, 7, 23), "period_end": date(2026, 6, 30)},
+                ACC_8K: {"company_id": NVDA, "cik": "0001045810", "form": "8-K",
+                         "filing_date": date(2026, 8, 26), "period_end": None},
+                }.get(accession_no)
+
+    def recap(self, user_id, company_id, accession_no, period_end, metrics):
+        self.calls.append(("recap", company_id, period_end, tuple(metrics)))
+        return [recap_row("current", "revenue", "46743000000", date(2026, 7, 26)),
+                recap_row("prior_quarter", "revenue", "44062000000", date(2026, 4, 26)),
+                recap_row("year_ago", "revenue", "30040000000", date(2025, 7, 27)),
+                recap_row("current", "gross_margin", "0.72", date(2026, 7, 26), "ratio"),
+                recap_row("year_ago", "gross_margin", "0.75", date(2025, 7, 27), "ratio"),
+                recap_row("current", "net_income", "5", date(2026, 7, 26)),
+                recap_row("prior_quarter", "net_income", "0", date(2026, 4, 26)),
+                recap_row("year_ago", "cash", "1", date(2025, 7, 27))]  # no current: dropped
+
+    def filing_flags(self, user_id, accession_no):
+        self.calls.append(("filing_flags", accession_no))
+        return [{"flag": "impairment", "section_key": "I-2", "title": "MD&A", "matches": 2,
+                 "char_start": 51234, "snippet": "...goodwill impairment of...",
+                 "document_url": "https://www.sec.gov/x.htm", "form": "10-Q",
+                 "filed": date(2026, 8, 26)}]
+
+
+def recap_client(grants):
+    store = RecapStore()
+    c = TestClient(create_app(FakeAuthorizer(grants), store, SECRET))
+    c.store = store
+    return c
+
+
+def test_recap_changes_and_citations(token):
+    c = recap_client({"alice": {NVDA: {"financials"}}})
+    r = c.get(f"/v1/filings/{ACC_NVDA}/recap", headers=token("alice"))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    m = {(e["metric"], e["span"]): e for e in body["metrics"]}
+    rev = m[("revenue", "quarter")]
+    assert rev["current"]["value"] == "46743000000"
+    assert rev["current"]["fiscal_period"] == "FY2027 Q2"
+    assert rev["current"]["citation"]["filing_url"] == \
+        "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000075/"
+    assert (rev["prior_quarter"]["change"], rev["prior_quarter"]["pct_change"]) == \
+        ("2681000000", "0.060846")
+    assert (rev["year_ago"]["change"], rev["year_ago"]["pct_change"]) == \
+        ("16703000000", "0.556025")
+    gm = m[("gross_margin", "quarter")]
+    assert (gm["year_ago"]["change"], gm["year_ago"]["pct_change"]) == ("-0.03", None)
+    assert gm["prior_quarter"] is None
+    assert m[("net_income", "quarter")]["prior_quarter"]["pct_change"] is None  # from 0
+    assert ("cash", "quarter") not in m
+    # free plan: no filings tier, so no flags and no section query
+    assert body["flags"] is None and "flags_unavailable" in body
+    assert ("filing_flags", ACC_NVDA) not in c.store.calls
+    assert c.store.calls[1][:3] == ("recap", NVDA, date(2026, 7, 26))
+
+
+def test_recap_flags_with_filings_access(token):
+    c = recap_client({"bob": {NVDA: {"financials", "filings"}}})
+    body = c.get(f"/v1/filings/{ACC_NVDA}/recap", headers=token("bob")).json()
+    assert body["flags"][0]["citation"] == {
+        "accession_no": ACC_NVDA, "form": "10-Q", "filed": "2026-08-26", "section_key": "I-2",
+        "char_start": 51234, "document_url": "https://www.sec.gov/x.htm"}
+    assert "flags_unavailable" not in body
+
+
+def test_recap_denied_and_unknown_look_the_same(token):
+    c = recap_client({"alice": {NVDA: {"financials"}}})
+    denied = c.get(f"/v1/filings/{ACC_TSLA}/recap", headers=token("alice"))
+    unknown = c.get("/v1/filings/0000000000-26-000001/recap", headers=token("alice"))
+    assert denied.status_code == unknown.status_code == 403
+    assert denied.json() == unknown.json()
+    assert not any(call[0] in ("recap", "filing_flags") for call in c.store.calls)
+
+
+def test_recap_only_for_periodic_reports(token):
+    c = recap_client({"alice": {NVDA: {"financials"}}})
+    assert c.get(f"/v1/filings/{ACC_8K}/recap", headers=token("alice")).status_code == 422
+
+
+@pytest.mark.parametrize("path", ["/v1/filings/0001045810-26-75/recap",
+                                  f"/v1/filings/{ACC_NVDA}/recap?metrics=salary"])
+def test_recap_rejects_bad_input(token, path):
+    c = recap_client({"alice": {NVDA: {"financials"}}})
+    assert c.get(path, headers=token("alice")).status_code == 422
+    assert c.store.calls == []

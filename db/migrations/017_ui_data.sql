@@ -215,3 +215,87 @@ SELECT d.company_id, d.form, d.period_end,
 FROM dated d
 ORDER BY d.company_id, d.period_end
 $$;
+
+-- Filing recaps --------------------------------------------------------------------------------
+
+-- A 10-Q/10-K's metrics against the prior quarter and the year-ago quarter, as currently in gold
+-- (restatements win, so a value may cite a later filing than the one recapped). Rows:
+--   current: per metric and span (quarter, ttm), the period ending within 7 days of
+--     p_period_end (the filing's period of report), closest first
+--   prior_quarter: the same metric and span ending 80-120 days earlier (latest first)
+--   year_ago: the same metric and span ending 350-380 days earlier (closest to 364 first)
+-- Reads gold.financials (security_invoker), so RLS applies: no rows without a financials grant.
+CREATE FUNCTION gold.filing_recap(p_company_id text, p_period_end date, p_metrics text[])
+RETURNS TABLE (comparison text, metric text, span text, period_start date, period_end date,
+               fiscal_year int, fiscal_quarter int, calendar_year int, calendar_quarter int,
+               value numeric, unit text, value_source text, source_tag text,
+               accession_no text, form text, filed date, source_accessions text[],
+               ingested_at timestamptz)
+LANGUAGE sql STABLE AS $$
+WITH cur AS (
+    SELECT DISTINCT ON (f.span, f.metric) f.*
+    FROM gold.financials f
+    WHERE f.company_id = p_company_id AND f.metric = ANY(p_metrics)
+      AND f.period_end BETWEEN p_period_end - 7 AND p_period_end + 7
+    ORDER BY f.span, f.metric, abs(f.period_end - p_period_end), f.period_end DESC
+),
+matched AS (
+    SELECT 'current' AS comparison, c.* FROM cur c
+    UNION ALL
+    SELECT 'prior_quarter', p.*
+    FROM cur c
+    CROSS JOIN LATERAL (
+        SELECT f.* FROM gold.financials f
+        WHERE f.company_id = c.company_id AND f.span = c.span AND f.metric = c.metric
+          AND f.period_end BETWEEN c.period_end - 120 AND c.period_end - 80
+        ORDER BY f.period_end DESC
+        LIMIT 1
+    ) p
+    UNION ALL
+    SELECT 'year_ago', y.*
+    FROM cur c
+    CROSS JOIN LATERAL (
+        SELECT f.* FROM gold.financials f
+        WHERE f.company_id = c.company_id AND f.span = c.span AND f.metric = c.metric
+          AND f.period_end BETWEEN c.period_end - 380 AND c.period_end - 350
+        ORDER BY abs(c.period_end - f.period_end - 364), f.period_end DESC
+        LIMIT 1
+    ) y
+)
+SELECT m.comparison, m.metric, m.span, m.period_start, m.period_end, m.fiscal_year,
+       m.fiscal_quarter, m.calendar_year, m.calendar_quarter, m.value, m.unit, m.value_source,
+       m.source_tag, m.accession_no, m.form, m.filed, m.source_accessions, m.ingested_at
+FROM matched m
+ORDER BY m.metric, m.span, m.comparison
+$$;
+
+-- One-time-item mentions in a filing's MD&A (10-K Item 7, 10-Q Part I Item 2) and press-release
+-- exhibits (EX-99.x): a keyword pass, not a judgement. One row per flag and section, citing the
+-- first match (char_start: offset into the parser's document text, like the section's) with a
+-- snippet around it. Reads gold.filing_sections (security_invoker): RLS needs the filings tier.
+CREATE FUNCTION gold.filing_flags(p_accession_no text)
+RETURNS TABLE (flag text, section_key text, title text, matches int, char_start int,
+               snippet text, document_url text, form text, filed date)
+LANGUAGE sql STABLE AS $$
+    SELECT k.flag, s.section_key, s.title,
+           regexp_count(s.text, k.pattern, 1, 'i'),
+           s.char_start + regexp_instr(s.text, k.pattern, 1, 1, 0, 'i') - 1,
+           btrim(substr(s.text, greatest(1, regexp_instr(s.text, k.pattern, 1, 1, 0, 'i') - 160),
+                        360)),
+           s.document_url, s.form, s.filed
+    FROM gold.filing_sections s
+    CROSS JOIN (VALUES
+        ('impairment',    '\mimpairments?\M'),
+        ('restructuring', '\mrestructuring\M'),
+        ('one_time',      '\m(one-time|non-?recurring)\M'),
+        ('gain_on_sale',  '\mgains? on (the )?(sale|disposal|divestiture)'),
+        ('loss_on_sale',  '\mloss(es)? on (the )?(sale|disposal|divestiture|extinguishment)'),
+        ('write_down',    '\mwrite-?(downs?|offs?)\M'),
+        ('litigation',    '\m(litigation|legal) (settlements?|charges?|reserves?)\M')
+    ) AS k(flag, pattern)
+    WHERE s.accession_no = p_accession_no
+      AND (s.section_key IN ('7', 'I-2') OR (s.form LIKE '10-Q%' AND s.section_key = '2')
+           OR s.section_key LIKE 'EX-99%')
+      AND s.text ~* k.pattern
+    ORDER BY s.char_start, k.flag
+$$;
