@@ -21,7 +21,7 @@ over Kafka's default 1 MB message limit. Event shapes are in
 | Command | Make target | Does |
 |---|---|---|
 | `doc-fetcher` | `make up-all` | the consumer above |
-| `doc-fetcher-seed` | `make seed-documents` | publishes each tracked company's last 2 10-Ks and last 4 10-Qs (within 2 years) and last 180 days of 8-Ks to `filings.raw`, so history flows through the same path as live filings |
+| `doc-fetcher-seed` | `make seed-documents` | publishes each tracked company's last 2 10-Ks and last 4 10-Qs (within 2 years) and last 180 days of 8-Ks to `filings.raw` with `source: seed` and the acceptance time corrected to UTC (`tributary_sec.acceptance_time`), so history flows through the same path as live filings without counting as live in the freshness views |
 | `doc-fetcher-exhibits` | `make exhibits` | fetches EX-99.x exhibits for stored 8-Ks that have none, then `make exhibits` re-parses |
 
 On k3s, `seed-documents` is a suspended CronJob for filling a new database

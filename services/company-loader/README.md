@@ -41,11 +41,11 @@ Loads the SEC's nightly `submissions.zip` (~1.6 GB, one JSON per CIK plus
   year end (MMDD), state of incorporation, filer categories; former names as aliases
   (`silver.refresh_company_metadata`)
 - `silver.filings`: the live filings.raw sink (`bronze.filings`) plus the bulk history, one row
-  per (accession, CIK), `source` = feed / daily-index / submissions
+  per (accession, CIK), `source` = feed / daily-index / seed / submissions
 
 History is never published to `filings.raw`, so doc-fetcher and the ops freshness views only see
 live filings. The SEC's `acceptanceDateTime` is labelled UTC but runs ahead of it by the US
-Eastern offset; `accepted_at` stores the corrected time.
+Eastern offset; `accepted_at` stores the corrected time (`tributary_sec.acceptance_time`).
 
 Each run downloads the zip through `libs/sec` to `--download-dir` (default `/tmp`;
 If-Modified-Since the last finished load; a 304 ends the run), then loads at most `--max-ciks`
