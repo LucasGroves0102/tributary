@@ -44,17 +44,18 @@ EXPECTED_METHOD = (
     "end for large accelerated/accelerated/non-accelerated filers, moved off weekends (holidays "
     "not modelled).")
 Accession = Annotated[str, Path(pattern=r"^\d{10}-\d{2}-\d{6}$")]
-RECAP_METRICS = ("revenue", "gross_profit", "operating_income", "net_income", "eps_diluted",
-                 "operating_cash_flow", "free_cash_flow", "gross_margin", "operating_margin",
-                 "net_margin", "cash", "total_assets", "long_term_debt", "stockholders_equity")
+RECAP_METRICS: tuple[str, ...] = (
+    "revenue", "gross_profit", "operating_income", "net_income", "eps_diluted",
+    "operating_cash_flow", "free_cash_flow", "gross_margin", "operating_margin", "net_margin",
+    "cash", "total_assets", "long_term_debt", "stockholders_equity")
 RECAP_FORMS = ("10-K", "10-Q", "10-K/A", "10-Q/A")
 Band = Literal["lt100m", "100m-1b", "1b-10b", "10b-100b", "gte100b"]
 Format = Annotated[Literal["json", "csv"], Query(alias="format")]
 MAX_JSON_ROWS = 500
-DEFAULT_PEER_COLUMNS = ("revenue_ttm", "revenue_growth_ttm", "gross_margin_ttm",
+DEFAULT_PEER_COLUMNS: tuple[str, ...] = ("revenue_ttm", "revenue_growth_ttm", "gross_margin_ttm",
                         "operating_margin_ttm", "net_margin_ttm", "free_cash_flow_ttm",
                         "debt_to_equity_q")
-WATCHLIST_COLUMNS = ("revenue_ttm", "revenue_growth_q", "operating_margin_ttm",
+WATCHLIST_COLUMNS: tuple[str, ...] = ("revenue_ttm", "revenue_growth_q", "operating_margin_ttm",
                      "free_cash_flow_ttm")
 META_CSV = ["company_id", "name", "tickers", "exchanges", "sic", "industry", "fiscal_year_end",
             "filer_category", "state_of_incorporation"]

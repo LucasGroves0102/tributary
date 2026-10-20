@@ -5,3 +5,7 @@ FR8, week 2. Postgres row-level security for the Query API. This folder holds no
 [`../migrations/007_query_api_rls.sql`](../migrations/007_query_api_rls.sql) (column grants in
 `008_filing_urls.sql`), applied by `make migrate`. Tests:
 `services/query-api/tests/test_rls.py`.
+
+`017_ui_data.sql` grants `gold.latest_financials` (security_invoker, so the policies above
+apply), `gold.financials_coverage` (company ids only, public) and `silver.filings` (the public
+SEC filing index).

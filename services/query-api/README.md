@@ -1,7 +1,7 @@
 # query-api
 
-FR8, week 2. Read-only HTTP API over the gold tables; the [agent](../agent) and the
-[web](../web) app reach data only through it. Every data route is permission-checked twice:
+FR8, week 2. HTTP API over the gold tables, read-only except for the caller's own watchlist
+(app database); the [agent](../agent) and the [web](../web) app reach data only through it. Every data route is permission-checked twice:
 
 1. **OpenFGA** (`authorizer.py`): `can_read_financials` / `can_read_filings` on the company,
    before any query. Denied → 403 (same response whether the company exists or not).
@@ -21,12 +21,20 @@ request parameters. Dev tokens: `make token USER=alice`.
 | `GET /v1/me` | token | companies the caller can read, with tiers |
 | `GET /v1/companies/search?q=` | token | candidates (public identity) + caller's access |
 | `GET /v1/metrics` | | metric names served by `financials` |
-| `GET /v1/companies/{id}/financials?metrics=&quarters=` | financials | values + citation + freshness |
+| `GET /v1/companies/{id}/financials?metrics=&quarters=&view=&basis=&format=` | financials | values + citation + freshness; `format=csv`: one row per value with its source filing |
 | `GET /v1/companies/{id}/filings?limit=` | filings | recent filings and their sections |
 | `GET /v1/filings/latest?limit=` | token | newest parsed filings across the companies the caller can read filings for |
 | `GET /v1/companies/{id}/sections/{key}?form=&accession_no=&limit=&max_chars=` | filings | section text + citation |
 | `POST /v1/formulas/validate` | token | AST, unit and inputs, or errors with positions |
 | `POST /v1/formulas/evaluate` | financials, every company in the formula | series; each point cites every input's filing |
+| `GET /v1/screener?columns=&where=&...&format=` | token | companies with financials: public metadata + latest values where permitted ([Screener](#screener)) |
+| `GET /v1/screener/columns` | | column keys, filer categories, size bands |
+| `GET /v1/watchlist?columns=&sort=&format=` | token, app DB | the caller's watchlist: metadata, last report, next expected filing, values where permitted |
+| `PUT` / `DELETE /v1/watchlist/{id}` | token, app DB | add / remove a company (grants nothing) |
+| `GET /v1/calendar/expected-filings?days=&scope=&format=` | token | expected 10-Q/10-K filings in the next N days (watchlist or readable companies) |
+| `GET /v1/companies/{id}/expected-filings?periods=` | token | estimated next 10-Q/10-K dates with their basis |
+| `GET /v1/filings/{accession}/recap?metrics=` | financials (flags: filings) | metrics vs prior quarter and year-ago, cited; one-time-item flags |
+| `GET /v1/companies/{id}/peers?limit=&columns=` | token | suggested peers (SIC, size band, filer category), values where permitted |
 
 `{id}` is the canonical 10-digit `company_id`. Prometheus metrics are on `/metrics` (including
 `tributary_permission_checks_total{tier,result}`); the web proxy blocks it and `/docs` from the
@@ -66,6 +74,90 @@ query, which runs through `Store` under RLS like every other route. Each point h
 (`FY2026 Q1` or `CY2025 Q4`), `period_key`, `period_end` (the latest of its unlagged inputs),
 `value`, `source_accessions`, and per input its period, value, citation and freshness.
 
+## Public metadata vs permissioned data
+
+Company identity and metadata (`silver.companies`: name, tickers, SIC, exchange, fiscal year
+end, state, filer category), the SEC filing index (`silver.filings`: accession, form, dates,
+period of report) and what is derived only from them (expected filing dates, peer candidates,
+"has financials" via `gold.financials_coverage`) are public: any signed-in caller gets them, still
+through `Store`. Financial values need `financials` on that company and section text `filings`,
+checked in OpenFGA and again by RLS. Routes that list many companies (screener, watchlist,
+peers) take the caller's readable companies from OpenFGA (`readable()`), read values only for
+those (in SQL, and RLS filters again) and null any value of other companies before responding.
+SQL for these routes is in `db/migrations/017_ui_data.sql`.
+
+## Screener
+
+`GET /v1/screener`: every company with gold financials (`access=financials`: only companies you
+can read). Columns are `<metric>_ttm` (trailing twelve months; balance-sheet metrics at the
+quarter end) or `<metric>_q` (latest fiscal quarter) for every metric in the formula catalog,
+each the latest value with its own `sources[key]` (`period_end`, `accession_no`, `form`,
+`filed`). Filters: `sic` (4-digit, repeatable), `sic_prefix` (1-3 digits), `industry` (SIC
+description contains), `q` (name contains or exact ticker), `exchange`,
+`fiscal_year_end_month`, `filer_category` (`large_accelerated`, `accelerated`,
+`non_accelerated`), `revenue_band` / `assets_band` (`lt100m`, `100m-1b`, `1b-10b`, `10b-100b`,
+`gte100b` on `revenue_ttm` / `total_assets_q`) and `where=<column>:<gt|gte|lt|lte>:<number>`
+(ratios as fractions: `operating_margin_ttm:gte:0.2`). `sort` is a column key or `name`, `sic`,
+`fiscal_year_end`, `filer_category`, `state_of_incorporation`, `-` for descending; nulls last.
+`limit` (500 as JSON, 5000 as CSV), `offset`, `format=json|csv`. JSON:
+`{as_of, total, limit, offset, sort, columns: [{key, metric, span, unit}], rows: [{company_id,
+name, tickers, exchanges, sic, industry, fiscal_year_end, filer_category, filer_categories,
+state_of_incorporation, access: [tiers], values: {key: value}, sources: {key: {...}}}]}`.
+
+Companies you can't read financials for are **listed with metadata only** (values and sources
+null, `access` without `financials`), because identity is public and the screener is how you
+find companies; but **they never match a value filter** (it can't be evaluated without reading
+the value, and evaluating it would be an oracle), and a value sort puts them last. The SQL
+(`screener.py`) holds no user input: column and sort keys come from fixed catalogs, every
+value is a bind parameter.
+
+## Watchlist and calendar
+
+`GET /v1/watchlist` reads the caller's rows in the app database's `watchlists`
+(`APP_DATABASE_URL`; unset → 503) and returns per company the public metadata, `last_filing`
+(latest 10-K/10-Q or amendment: form, filing date, period), `next_expected` (below), `added_at`
+and, only where the caller can read financials, `values` for `columns` (default `revenue_ttm`,
+`revenue_growth_q` (YoY of the latest quarter), `operating_margin_ttm`, `free_cash_flow_ttm`).
+A watchlist entry grants nothing. `PUT`/`DELETE /v1/watchlist/{id}` add or remove a company
+(at most 500; an unknown company is a 404). `GET /v1/calendar/expected-filings?days=30` lists
+expected filings of the watchlist (`scope=readable`: of companies you can read) up to `days`
+ahead, including ones already due or overdue.
+
+## Expected filing dates
+
+`gold.expected_filings` (estimates, labelled `estimate: true` with `basis` and `method`): the
+next fiscal period ends one quarter after the last reported one (snapped to month ends, else
+91 days for 52/53-week years); it's a 10-K when it ends within 20 days of the fiscal year end.
+`expected_date` = period end + the median filing lag of the company's last 8 10-Qs (or 4 10-Ks),
+needing at least 2, capped at the SEC deadline (`basis` `history` or `history_capped`), else the
+deadline (`deadline`); no history and no filer category → no date (`basis` null). SEC deadlines
+(Form 10-K / 10-Q General Instruction A): 10-K 60 / 75 / 90 days, 10-Q 40 / 40 / 45 days after
+the period end for large accelerated / accelerated / non-accelerated filers, moved off weekends
+(Rule 0-3; holidays not modelled). `status`: `upcoming`, `due` (period over, before the
+deadline), `overdue`. Companies with no periodic report in 400 days get none.
+
+## Filing recap
+
+`GET /v1/filings/{accession}/recap` resolves the filing in the public index (unknown accession
+→ the same 403 as a company you can't read), checks `financials`, then returns per metric and
+span (`quarter`, `ttm`) the `current` value (period ending within 7 days of the period of
+report), `prior_quarter` (80-120 days earlier) and `year_ago` (350-380 days), each with
+citation and freshness, and `change` / `pct_change` (6 decimals; null for ratios, where
+`change` is in ratio points, and from 0). Values are as currently in gold, so a restated value
+cites the restating filing. With `filings` access, `flags` lists one-time-item keyword matches
+(impairment, restructuring, one-time/non-recurring, gain or loss on sale, write-down,
+litigation settlement) in MD&A and EX-99 sections, each citing section and character offset;
+without it `flags` is null.
+
+## Peers
+
+`GET /v1/companies/{id}/peers`: companies with financials in the same 4-digit SIC, then the
+3- and 2-digit groups; within a level, the same TTM revenue size band first (only for
+companies you can read, and only if you can read the company's own revenue), then the same
+filer category, revenue closeness and name. Each peer has screener-style metadata, `values`
+where permitted and `match` (`sic_level`, `same_filer_category`, `revenue_band`,
+`same_revenue_band`).
+
 ## Run
 
 ```bash
@@ -75,7 +167,8 @@ make token USER=alice                             # query-api-token: dev JWT for
 ```
 
 Config (env): `DATABASE_URL`, `FGA_API_URL`, `QUERY_API_JWT_SECRET` (all required; the secret
-must be at least 32 bytes), `FGA_API_TOKEN` (OpenFGA preshared key, when enabled),
+must be at least 32 bytes), `APP_DATABASE_URL` (the app database, for watchlists; unset makes
+the watchlist routes answer 503), `FGA_API_TOKEN` (OpenFGA preshared key, when enabled),
 `DEMO_USERS` (comma-separated accounts allowed to sign in without a password; unset disables
 the demo routes), `PORT` (default 8000), `LOG_LEVEL`.
 
@@ -85,6 +178,9 @@ the demo routes), `PORT` (default 8000), `LOG_LEVEL`.
 `test_api.py` and `test_formula_api.py` use a fake authorizer and store; `test_formula.py`
 covers the formula grammar, checks and compiled SQL; `test_formula_db.py` evaluates formulas
 over real gold rows (PepsiCo, Coca-Cola, Apple) with both permission layers (needs
-`TEST_DATABASE_URL`); `test_rls.py` wires the API to an authorizer that
+`TEST_DATABASE_URL`); `test_screener.py` and `test_ui_api.py` cover the UI routes with fakes
+(including stores that return values for every company, to prove layer 1 nulls them);
+`test_ui_db.py` runs expected dates, recaps, flags and peers on real Postgres and
+`test_watchlist_db.py` the app-database watchlist (`APP_TEST_DATABASE_URL`); `test_rls.py` wires the API to an authorizer that
 allows everything and checks that row-level security alone still hides ungranted rows (needs
 `TEST_DATABASE_URL`).
