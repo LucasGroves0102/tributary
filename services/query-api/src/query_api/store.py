@@ -4,12 +4,15 @@ skipped."""
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import date
+from decimal import Decimal
 from typing import Any, Protocol
 
 import psycopg
 from psycopg.rows import dict_row
 
 from query_api.formula import Compiled
+from query_api.screener import Compiled as Screen
 
 
 class Pool(Protocol):
@@ -85,6 +88,96 @@ class Store:
         """Points of a compiled formula (query_api.formula.compile)."""
         with self._session(user_id) as cur:
             cur.execute(compiled.sql, compiled.params)  # pyright: ignore[reportArgumentType]
+            return cur.fetchall()
+
+    def screen(self, user_id: str, compiled: Screen) -> list[dict]:
+        """Rows of a compiled screen (query_api.screener)."""
+        with self._session(user_id) as cur:
+            cur.execute(compiled.sql, compiled.params)  # pyright: ignore[reportArgumentType]
+            return cur.fetchall()
+
+    def expected_filings(self, user_id: str, company_ids: list[str], as_of: date,
+                         periods: int) -> list[dict]:
+        """Estimated next 10-Q/10-K filings (gold.expected_filings; public filing index)."""
+        with self._session(user_id) as cur:
+            cur.execute("SELECT * FROM gold.expected_filings(%s, %s, %s)",
+                        (company_ids, as_of, periods))
+            return cur.fetchall()
+
+    def last_reports(self, user_id: str, company_ids: list[str]) -> dict[str, dict]:
+        """company_id → its latest 10-K/10-Q (or amendment) from the public filing index."""
+        with self._session(user_id) as cur:
+            cur.execute("SELECT DISTINCT ON (company_id) company_id, accession_no, form,"
+                        "       filing_date, period_end"
+                        " FROM silver.company_reports(%s)"
+                        " ORDER BY company_id, filing_date DESC, accession_no DESC",
+                        (company_ids,))
+            return {r.pop("company_id"): r for r in cur.fetchall()}
+
+    def filing(self, user_id: str, accession_no: str) -> dict | None:
+        """A filing's company, form, dates and period from the public filing index."""
+        with self._session(user_id) as cur:
+            cur.execute(
+                """
+                SELECT f.company_id, f.cik, f.form, f.filing_date,
+                       coalesce(f.report_date, d.period_of_report) AS period_end
+                FROM silver.filings f
+                LEFT JOIN bronze.filing_documents d ON d.accession_no = f.accession_no
+                WHERE f.accession_no = %s AND f.company_id IS NOT NULL
+                ORDER BY f.report_date IS NULL, f.cik
+                LIMIT 1
+                """, (accession_no,))
+            return cur.fetchone()
+
+    def recap(self, user_id: str, company_id: str, accession_no: str, period_end: date | None,
+              metrics: list[str]) -> list[dict]:
+        """gold.filing_recap rows. Without a period of report, the latest period this filing
+        is cited for (under RLS like the rest)."""
+        with self._session(user_id) as cur:
+            cur.execute(
+                """
+                SELECT * FROM gold.filing_recap(
+                    %(company)s,
+                    coalesce(%(period_end)s::date,
+                             (SELECT max(q.period_end) FROM gold.quarterly_financials q
+                              WHERE q.company_id = %(company)s
+                                AND q.accession_no = %(accession)s)),
+                    %(metrics)s)
+                """, {"company": company_id, "period_end": period_end,
+                      "accession": accession_no, "metrics": metrics})
+            return cur.fetchall()
+
+    def filing_flags(self, user_id: str, accession_no: str) -> list[dict]:
+        """gold.filing_flags rows (RLS: filings tier)."""
+        with self._session(user_id) as cur:
+            cur.execute("SELECT * FROM gold.filing_flags(%s)", (accession_no,))
+            return cur.fetchall()
+
+    def peers(self, user_id: str, company_id: str, granted: list[str], revenue: Decimal | None,
+              limit: int) -> list[dict]:
+        """Ranked peer candidates (gold.peer_candidates): SIC level, then the same revenue size
+        band as `revenue` (only companies in `granted` have one; RLS applies too), then the
+        same filer category, then revenue closeness, then name."""
+        with self._session(user_id) as cur:
+            cur.execute(
+                """
+                SELECT p.company_id, p.sic_level, p.same_filer_category,
+                       gold.revenue_band(r.value) AS revenue_band
+                FROM gold.peer_candidates(%(company)s) p
+                JOIN silver.companies c ON c.company_id = p.company_id
+                LEFT JOIN gold.latest_financials r
+                       ON r.company_id = p.company_id AND r.company_id = ANY(%(granted)s)
+                      AND r.span = 'ttm' AND r.metric = 'revenue'
+                ORDER BY p.sic_level DESC,
+                         coalesce(gold.revenue_band(r.value)
+                                  = gold.revenue_band(%(revenue)s::numeric), false) DESC,
+                         p.same_filer_category DESC,
+                         CASE WHEN r.value > 0 AND %(revenue)s::numeric > 0
+                              THEN abs(ln(r.value / %(revenue)s::numeric)) END NULLS LAST,
+                         c.name, p.company_id
+                LIMIT %(limit)s
+                """, {"company": company_id, "granted": granted, "revenue": revenue,
+                      "limit": limit})
             return cur.fetchall()
 
     def financials(self, user_id: str, company_id: str, metrics: list[str], quarters: int,

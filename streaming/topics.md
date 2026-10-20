@@ -26,6 +26,10 @@ embedding it: a 10-K is ~2 MB of HTML, over Kafka's default 1 MB message limit.
 | `app.public.subscriptions` | `{user_id}` | Debezium | authz-sync |
 | `app.public.company_grants` | `{grant_id}` | Debezium | authz-sync |
 | `app.public.plan_tiers` | `{plan_id, tier}` | Debezium | authz-sync |
+| `app.public.debezium_heartbeat` | `{id}` | Debezium (its own heartbeat query, every 10 s) | none |
+| `__debezium-heartbeat.app` | `{serverName}` | Debezium heartbeat | none |
 
 Values are Debezium envelopes `{before, after, op, source, ...}` (JSON, no schemas). Topics
 are compacted, and each delete is followed by a tombstone. See `streaming/debezium/`.
+The heartbeat topics only exist so Debezium's replication slot keeps advancing while the app
+tables are idle; nothing consumes them.

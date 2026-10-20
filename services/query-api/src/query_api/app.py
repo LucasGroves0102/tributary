@@ -2,16 +2,19 @@
 OpenFGA first (layer 1), then Postgres row-level security (layer 2, in Store)."""
 
 import logging
+from collections.abc import Callable
 from datetime import UTC, date, datetime
 from typing import Annotated, Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Path, Query
+from fastapi.responses import Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from prometheus_client import Counter
 from pydantic import BaseModel, Field
 
 from query_api.auth import Unauthenticated, mint, verify
 from query_api.authorizer import Authorizer, AuthzUnavailable
+from query_api.csv_export import csv_response
 from query_api.formula import (
     CATALOG,
     Analysis,
@@ -24,10 +27,16 @@ from query_api.formula import (
     suggest,
     to_dict,
 )
+from query_api.shapes import filing_url
+from query_api.shapes import period as _period
 from query_api.store import Store
+from query_api.ui import add_ui_routes
+from query_api.watchlist import Watchlists
 from tributary_telemetry.http import instrument
 
-EDGAR = "https://www.sec.gov/Archives/edgar/data"
+FINANCIALS_CSV = ["metric", "view", "period_start", "period_end", "fiscal_period",
+                  "calendar_period", "value", "unit", "value_source", "accession_no", "form",
+                  "filed", "xbrl_tag", "source_accessions", "filing_url", "ingested_at"]
 CompanyId = Annotated[str, Path(pattern=r"^\d{10}$", description="canonical company_id")]
 
 
@@ -55,8 +64,12 @@ class FormulaRequest(BaseModel):
 
 
 def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
-               demo_users: frozenset[str] = frozenset()) -> FastAPI:
-    """demo_users: accounts anyone may sign in as without a password (empty disables it)."""
+               demo_users: frozenset[str] = frozenset(),
+               today: Callable[[], date] | None = None,
+               watchlists: Watchlists | None = None) -> FastAPI:
+    """demo_users: accounts anyone may sign in as without a password (empty disables it).
+    today: the current US Eastern date (EDGAR's), injectable for tests.
+    watchlists: the app database's watchlists (None: watchlist routes answer 503)."""
     app = FastAPI(title="Tributary Query API", version="1")
     instrument(app)
     bearer = HTTPBearer(auto_error=False)
@@ -103,6 +116,9 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
             raise HTTPException(503, "authorization unavailable") from None
         PERMISSION_CHECKS.labels("list", "allowed").inc()
         return access
+
+    add_ui_routes(app, store=store, current_user=current_user, require=require,
+                  allowed=allowed, readable=readable, today=today, watchlists=watchlists)
 
     @app.get("/health")
     def health() -> dict:
@@ -153,7 +169,7 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
         """Metric names financials accepts: reported (silver.metrics) and derived."""
         return metric_names()
 
-    @app.get("/v1/companies/{company_id}/financials")
+    @app.get("/v1/companies/{company_id}/financials", response_model=dict)
     def financials(
         user_id: User, company_id: CompanyId,
         metrics: Annotated[list[str] | None, Query(description="default: all")] = None,
@@ -163,7 +179,10 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
         basis: Annotated[Literal["fiscal", "calendar"], Query(
             description="fiscal: every fiscal quarter; calendar: one per calendar quarter")]
             = "fiscal",
-    ) -> dict:
+        fmt: Annotated[Literal["json", "csv"], Query(
+            alias="format", description="csv: one row per value, with its source filing")]
+            = "json",
+    ) -> dict | Response:
         names = metric_names()
         every = names["metrics"] + names["derived_metrics"]
         unknown = set(metrics or []) - set(every)
@@ -172,6 +191,15 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
         require(user_id, "financials", company_id)
         rows = store.financials(user_id, company_id, metrics or every, quarters, view, basis)
         meta = {"company_id": company_id, "view": view, "basis": basis, "as_of": _now()}
+        if fmt == "csv":
+            return csv_response(f"{company_id}-financials-{view}-{basis}.csv", FINANCIALS_CSV, ([
+                r["metric"], view, r["period_start"], r["period_end"],
+                _period("FY", r.get("fiscal_year"), r.get("fiscal_quarter")),
+                _period("CY", r.get("calendar_year"), r.get("calendar_quarter")),
+                r["value"], r["unit"], r["value_source"], r["accession_no"], r["form"],
+                r["filed"], r["source_tag"], r["source_accessions"],
+                filing_url(r.get("filer_cik"), r["accession_no"]), r["ingested_at"],
+            ] for r in rows))
         return {**meta, "rows": [
             {
                 "metric": r["metric"], "period_start": r["period_start"],
@@ -332,19 +360,7 @@ def _point(r: dict, align: str) -> dict:
             "source_accessions": sorted({a for x in r["inputs"] for a in x["source_accessions"]})}
 
 
-def filing_url(cik: str | None, accession_no: str) -> str | None:
-    """EDGAR filing index, e.g. https://www.sec.gov/Archives/edgar/data/1045810/000104581026000075/"""
-    if not cik:
-        return None
-    return f"{EDGAR}/{int(cik)}/{accession_no.replace('-', '')}/"
-
-
 _PROFILE = {"name": None, "sic": None, "industry": None, "exchanges": None}
-
-
-def _period(prefix: str, year: int | None, quarter: int | None) -> str | None:
-    """e.g. FY2026 Q1, CY2025 Q4; None when the fiscal year end is unknown."""
-    return f"{prefix}{year} Q{quarter}" if year and quarter else None
 
 
 def _now() -> str:

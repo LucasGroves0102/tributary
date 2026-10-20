@@ -57,8 +57,9 @@ resources:
 
 # tmpSize: size limit of the /tmp emptyDir (default 64Mi; the root filesystem is read-only).
 # databaseUrlKey: secretName key for DATABASE_URL instead of database-url (e.g. a throwaway DB).
-# uses: postgres, kafka, openfga, sec (SEC_USER_AGENT + HTTPS out), anthropic (API key + HTTPS
-# out), jwt, query-api, demo. Each adds the env vars and network access it needs.
+# uses: postgres, app-postgres (APP_DATABASE_URL), kafka, openfga, sec (SEC_USER_AGENT + HTTPS
+# out), anthropic (API key + HTTPS out), jwt, query-api, demo. Each adds the env vars and
+# network access it needs.
 # from: components allowed to connect on `port`; fromNamespaces: any pod in these namespaces.
 services:
   poller:
@@ -85,7 +86,7 @@ services:
     uses: [kafka, postgres, openfga]
   query-api:
     port: 8000
-    uses: [postgres, openfga, jwt, demo]
+    uses: [postgres, app-postgres, openfga, jwt, demo]
     from: [web, agent-api]
     resources:
       requests:
@@ -140,13 +141,12 @@ jobs:
   # night). A run loads batches of BULK_LIMIT changed companies back to back, saving progress
   # after each; a stopped run resumes where it left off. Once caught up, a night only touches the
   # companies that changed and finishes in one batch.
-  # Ships suspended. First run against a throwaway DB: set databaseUrlKey, then
-  # kubectl create job --from=cronjob/financials-bulk financials-bulk-1
+  # Run now: kubectl create job --from=cronjob/financials-bulk financials-bulk-1. Set
+  # databaseUrlKey to load a throwaway database instead.
   financials-bulk:
     image: facts-fetcher
     command: [facts-fetcher-bulk]
     schedule: "0 5 * * *"
-    suspend: true
     timeoutSeconds: 14400
     uses: [postgres, sec]
     tmpSize: 2Gi
@@ -170,7 +170,6 @@ jobs:
     image: company-loader
     command: [company-loader-submissions, --max-ciks, "20000", --rounds, "60"]
     schedule: "30 5 * * *"
-    suspend: true
     timeoutSeconds: 28800
     tmpSize: 3Gi
     uses: [postgres, sec]

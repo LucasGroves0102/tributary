@@ -25,7 +25,11 @@ lookup: `SELECT * FROM silver.resolve_company('FB');`.
 
 Row-level security: `007_query_api_rls.sql` creates the `query_api` role and policies on
 `gold.quarterly_financials` and `silver.filing_sections` (behind `gold.filing_sections`) that
-return only rows granted in `authz.user_access` for the transaction's `app.user_id`. `010_ops.sql` creates the `ops_reader` group role (SELECT on `ops` views only).
+return only rows granted in `authz.user_access` for the transaction's `app.user_id`. `017_ui_data.sql` adds what the
+research UI reads: `gold.latest_financials` (security_invoker, RLS applies),
+`gold.financials_coverage` (company ids with financials only; runs as its owner, so public),
+`silver.filings` granted as the public SEC filing index, and the functions
+`gold.expected_filings`, `gold.filing_recap`, `gold.filing_flags`, `gold.peer_candidates`. `010_ops.sql` creates the `ops_reader` group role (SELECT on `ops` views only).
 
 ## Migrations
 
