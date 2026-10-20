@@ -45,6 +45,11 @@ jobs:
       - run: ./scripts/create-databases.sh
       - run: ./scripts/migrate.sh db/migrations "$DATABASE_URL"
       - run: ./scripts/migrate.sh db/app/migrations "$APP_DATABASE_URL"
+      - name: Rust parser service, for the parser equivalence test
+        run: |
+          rustup toolchain install 1.99.1 --profile minimal
+          cargo +1.99.1 build --locked --bin parser --manifest-path services/parser-rs/Cargo.toml
+          echo "PARSER_RS_BIN=$PWD/services/parser-rs/target/debug/parser" >> "$GITHUB_ENV"
       - run: pytest --cov --cov-report=term
       - if: always()
         run: coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY"
@@ -74,6 +79,7 @@ jobs:
         working-directory: services/parser-rs
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - run: apt-get update && apt-get install -y --no-install-recommends make g++  # librdkafka
       - run: rustup component add clippy rustfmt
       - run: cargo fmt --check
       - run: cargo clippy --locked --all-targets -- -D warnings
@@ -157,7 +163,7 @@ jobs:
 
   images:
     name: image ${{ matrix.service }}
-    needs: [secrets, python, web, authz, chart]
+    needs: [secrets, python, web, rust, authz, chart]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -166,7 +172,7 @@ jobs:
       fail-fast: false
       matrix:
         service: [agent, authz-sync, bronze-loader, company-loader, doc-fetcher, facts-fetcher,
-                  parser, poller, query-api, web]
+                  parser, parser-rs, poller, query-api, web]
         context: [.]
         include:
           - service: migrate
@@ -221,7 +227,7 @@ jobs:
         run: |
           prefix="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/tributary"
           for s in agent authz-sync bronze-loader company-loader doc-fetcher facts-fetcher \
-                   migrate parser platform-setup poller query-api web; do
+                   migrate parser parser-rs platform-setup poller query-api web; do
             docker buildx imagetools create \
               -t "$prefix-$s:main-${{ github.run_number }}-${{ github.sha }}" \
               "$prefix-$s:${{ github.sha }}"

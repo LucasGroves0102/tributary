@@ -13,7 +13,8 @@ citations from the `gold.filing_sections` view.
 | Metrics | `tributary_documents_parsed_total{form}`, `tributary_parse_failures_total{form}`, `tributary_parse_duration_seconds{form}` |
 
 Section keys: 10-K `1A`, 10-Q `II-1A`, 8-K `2.02`, 8-K exhibits `EX-99.1`. Re-parsing an
-accession replaces its rows for this parser.
+accession replaces its rows from either parser, so a document always has one parser's sections
+([parser-rs](../parser-rs) is the Rust build of this service).
 
 The algorithm is specified in the docstring of `src/filing_parser/sections.py` so the Rust
 rewrite ([parser-rs](../parser-rs), week 4) can produce identical output for benchmarking. It

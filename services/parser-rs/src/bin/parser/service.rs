@@ -62,16 +62,16 @@ pub fn parse_one(
     let sections = match sections(store, accession_no, &form, &content) {
         Ok(s) => s,
         Err(e) => {
-            metrics.parse_failures.with_label_values(&[&form]).inc();
+            metrics.parse_failures.with_label_values(&[form.as_str()]).inc();
             return Err(e);
         }
     };
     let seconds = t0.elapsed().as_secs_f64();
     store.write_sections(accession_no, &sections)?;
-    metrics.parsed.with_label_values(&[&form]).inc();
+    metrics.parsed.with_label_values(&[form.as_str()]).inc();
     metrics
         .parse_seconds
-        .with_label_values(&[&form])
+        .with_label_values(&[form.as_str()])
         .observe(seconds);
     let ms = seconds * 1000.0;
     log::info(
@@ -281,16 +281,16 @@ pub mod tests {
 
     #[test]
     fn reads_the_accession_number() {
-        let ok = br#"{"accession_no": "0001045810-26-000078", "form": "8-K"}"#;
+        let ok: &[u8] = br#"{"accession_no": "0001045810-26-000078", "form": "8-K"}"#;
         assert_eq!(accession_no(Some(ok)).unwrap(), "0001045810-26-000078");
         assert!(matches!(
-            accession_no(Some(b"not json")),
+            accession_no(Some(&b"not json"[..])),
             Err(Failure::Skip(_))
         ));
         assert!(
-            matches!(accession_no(Some(b"{\"cik\": \"1\"}")), Err(Failure::Skip(r)) if r == "'accession_no'")
+            matches!(accession_no(Some(&b"{\"cik\": \"1\"}"[..])), Err(Failure::Skip(r)) if r == "'accession_no'")
         );
-        assert!(matches!(accession_no(Some(b"[1]")), Err(Failure::Fatal(_))));
+        assert!(matches!(accession_no(Some(&b"[1]"[..])), Err(Failure::Fatal(_))));
         assert!(matches!(accession_no(None), Err(Failure::Fatal(_))));
     }
 }

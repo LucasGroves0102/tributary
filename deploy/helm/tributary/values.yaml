@@ -69,7 +69,11 @@ services:
     uses: [kafka, postgres]
   doc-fetcher:
     uses: [kafka, postgres, sec]
+  # image: parser (Python) or parser-rs (Rust). Both consume documents.fetched as group
+  # parser-python, write the same silver.filing_sections rows (parser = python | rust) and
+  # expose the same metrics and logs, so switching or rolling back is this one value.
   parser:
+    image: parser
     uses: [kafka, postgres]
     resources:
       requests:

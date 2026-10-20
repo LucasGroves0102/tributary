@@ -1,7 +1,7 @@
 //! The Python parser's Prometheus metrics (same names, help, labels and buckets), and the
 //! /metrics server libs/telemetry's `serve_metrics` runs for workers.
 
-use std::io::{Read, Write};
+use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
 use std::time::Duration;
 
@@ -68,12 +68,6 @@ impl Metrics {
             skipped,
         })
     }
-
-    pub fn render(&self) -> String {
-        let mut out = Vec::new();
-        let _ = TextEncoder::new().encode(&self.registry.gather(), &mut out);
-        String::from_utf8(out).unwrap_or_default()
-    }
 }
 
 /// Serve the registry on 0.0.0.0:`port` from a background thread, on any path.
@@ -89,8 +83,11 @@ pub fn serve(registry: Registry, port: u16) -> std::io::Result<()> {
 
 fn respond(mut stream: TcpStream, registry: &Registry) -> std::io::Result<()> {
     stream.set_read_timeout(Some(Duration::from_secs(5)))?;
-    let mut request = [0; 4096];
-    let _ = stream.read(&mut request)?;
+    let mut reader = BufReader::new(&stream);
+    let mut line = String::new();
+    while reader.read_line(&mut line)? > 2 {
+        line.clear(); // request line and headers, up to the blank line
+    }
     let encoder = TextEncoder::new();
     let mut body = Vec::new();
     encoder
@@ -107,7 +104,17 @@ fn respond(mut stream: TcpStream, registry: &Registry) -> std::io::Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use std::io::Read;
+
     use super::*;
+
+    fn render(m: &Metrics) -> String {
+        let mut out = Vec::new();
+        TextEncoder::new()
+            .encode(&m.registry.gather(), &mut out)
+            .unwrap();
+        String::from_utf8(out).unwrap()
+    }
 
     #[test]
     fn exposes_the_python_names_and_labels() {
@@ -119,7 +126,7 @@ mod tests {
         m.skipped
             .with_label_values(&["documents.fetched", "invalid"])
             .inc();
-        let text = m.render();
+        let text = render(&m);
         for line in [
             "# HELP tributary_documents_parsed_total Documents parsed into sections",
             "# TYPE tributary_documents_parsed_total counter",
