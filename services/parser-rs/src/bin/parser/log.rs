@@ -169,7 +169,7 @@ mod tests {
     fn escapes_non_ascii_like_json_dumps() {
         assert_eq!(
             dumps(&Value::from("Caf\u{e9} \u{1F600}\n")),
-            r#""Café 😀\n""#
+            r#""Caf\u00e9 \ud83d\ude00\n""#
         );
     }
 
