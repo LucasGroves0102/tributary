@@ -133,9 +133,9 @@ jobs:
     schedule: "0 4 * * *"
     uses: [postgres, sec]
   # Every SEC filer's XBRL facts from the nightly companyfacts.zip (one ~1.4 GB download per
-  # night). A run loads batches of BULK_LIMIT changed companies with a pause between batches,
-  # saving progress after each; the next night resumes where it stopped. Once caught up, a night
-  # only touches the companies that changed and finishes in one batch.
+  # night). A run loads batches of BULK_LIMIT changed companies back to back, saving progress
+  # after each; a stopped run resumes where it left off. Once caught up, a night only touches the
+  # companies that changed and finishes in one batch.
   # Ships suspended. First run against a throwaway DB: set databaseUrlKey, then
   # kubectl create job --from=cronjob/financials-bulk financials-bulk-1
   financials-bulk:
@@ -143,7 +143,7 @@ jobs:
     command: [facts-fetcher-bulk]
     schedule: "0 5 * * *"
     suspend: true
-    timeoutSeconds: 10800
+    timeoutSeconds: 14400
     uses: [postgres, sec]
     tmpSize: 2Gi
     resources:
@@ -154,21 +154,20 @@ jobs:
         memory: 1Gi
     env:
       BULK_LIMIT: "500"
-      BULK_ROUNDS: "12"
-      BULK_PAUSE_SECONDS: "600"
+      BULK_ROUNDS: "60"
+      BULK_PAUSE_SECONDS: "0"
   # Filing history and company metadata for every SEC filer from the bulk submissions.zip
   # (~1.6 GB, downloaded to /tmp; skipped when unchanged since the last finished load). A run
-  # loads batches of --max-ciks changed CIKs with a pause between batches, committing as it
-  # goes; the next night resumes where it stopped (the first load is ~1M CIKs).
+  # loads batches of --max-ciks changed CIKs back to back, committing as it goes; a stopped run
+  # resumes where it left off (the first load is ~1M CIKs).
   # Run now: kubectl create job --from=cronjob/submissions submissions-1. Set
   # env.SUBMISSIONS_DBNAME to load a throwaway database on the same server instead.
   submissions:
     image: company-loader
-    command: [company-loader-submissions, --max-ciks, "20000", --rounds, "10",
-              --pause-seconds, "600"]
+    command: [company-loader-submissions, --max-ciks, "20000", --rounds, "60"]
     schedule: "30 5 * * *"
     suspend: true
-    timeoutSeconds: 14400
+    timeoutSeconds: 28800
     tmpSize: 3Gi
     uses: [postgres, sec]
     resources:
