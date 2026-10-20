@@ -1,5 +1,6 @@
 {{- range $name, $svc := .Values.services }}
-{{- $ctx := merge (dict "root" $ "name" $name "image" ($svc.image | default $name)) $svc }}
+{{- $metricsPort := include "tributary.metricsPort" (dict "root" $ "svc" $svc) }}
+{{- $ctx := merge (dict "root" $ "name" $name "image" ($svc.image | default $name) "metricsPort" $metricsPort) $svc }}
 ---
 apiVersion: apps/v1
 kind: Deployment

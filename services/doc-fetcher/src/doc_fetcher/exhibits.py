@@ -10,13 +10,13 @@ from doc_fetcher.db import eight_ks_without_exhibits
 from doc_fetcher.index import index_url
 from doc_fetcher.main import fetch_exhibits
 from tributary_sec import sec_client
+from tributary_telemetry import configure_logging
 
 log = logging.getLogger("doc_fetcher.exhibits")
 
 
 def main() -> None:
-    logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"),
-                        format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    configure_logging()
     with psycopg.connect(os.environ["DATABASE_URL"], autocommit=True) as conn, \
             sec_client(os.environ["SEC_USER_AGENT"]) as client:
         pending = eight_ks_without_exhibits(conn)

@@ -5,6 +5,8 @@ requires-python = ">=3.12"
 dependencies = [
     "confluent-kafka>=2.5",
     "psycopg[binary]>=3.2",
+    "prometheus-client>=0.20",
+    "tributary-telemetry",
 ]
 
 [project.scripts]

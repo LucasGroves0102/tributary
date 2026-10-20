@@ -19,6 +19,7 @@ from facts_fetcher.db import (
 from facts_fetcher.payload import reproject
 from facts_fetcher.sec import fetch_company_facts
 from tributary_sec import sec_client
+from tributary_telemetry import configure_logging
 
 REBUILD_BATCH = 50  # CIKs per transaction
 
@@ -48,10 +49,7 @@ def main() -> None:
     parser.add_argument("--rebuild", action="store_true",
                         help="skip the SEC; re-derive silver and gold from stored bronze")
     args = parser.parse_args()
-    logging.basicConfig(
-        level=os.environ.get("LOG_LEVEL", "INFO"),
-        format="%(asctime)s %(levelname)s %(name)s %(message)s",
-    )
+    configure_logging()
     dsn = os.environ["DATABASE_URL"]
 
     with psycopg.connect(dsn) as conn:

@@ -3,9 +3,10 @@
 import json
 import logging
 
-from confluent_kafka import KafkaError, Message, Producer
+from confluent_kafka import Producer
 
 from poller.edgar import Filing
+from tributary_telemetry import count_delivery
 
 TOPIC = "filings.raw"
 
@@ -28,7 +29,7 @@ class FilingProducer:
             TOPIC,
             key=filing.cik.encode(),
             value=json.dumps(filing.to_dict()).encode(),
-            on_delivery=_on_delivery,
+            on_delivery=count_delivery,
         )
         self._producer.poll(0)  # serve delivery callbacks
 
@@ -37,7 +38,3 @@ class FilingProducer:
         if remaining:
             log.warning("%d messages still undelivered after flush", remaining)
 
-
-def _on_delivery(err: KafkaError | None, msg: Message) -> None:
-    if err is not None:
-        log.error("delivery failed for key=%s: %s", msg.key(), err)

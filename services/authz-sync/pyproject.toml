@@ -6,6 +6,8 @@ dependencies = [
     "confluent-kafka>=2.5",
     "psycopg[binary]>=3.2",
     "tributary-authz",
+    "prometheus-client>=0.20",
+    "tributary-telemetry",
 ]
 
 [project.scripts]

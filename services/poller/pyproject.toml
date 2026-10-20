@@ -7,6 +7,8 @@ dependencies = [
     "tributary-sec",
     "tzdata",  # zoneinfo data for America/New_York on slim images
     "confluent-kafka>=2.5",
+    "prometheus-client>=0.20",
+    "tributary-telemetry",
 ]
 
 [project.scripts]

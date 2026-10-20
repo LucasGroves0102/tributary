@@ -6,28 +6,38 @@ import os
 import signal
 import threading
 import time
+from collections.abc import Callable
 
 import psycopg
 from confluent_kafka import OFFSET_BEGINNING, Consumer, KafkaError, KafkaException, TopicPartition
+from prometheus_client import Counter, Gauge, Histogram
 
 from authz_sync.reconcile import Reconciler
 from authz_sync.state import AppState
 from tributary_authz import FgaClient
+from tributary_telemetry import CONSUMED, configure_logging, serve_metrics
 
 TABLES = ("users", "subscriptions", "plan_tiers", "company_grants")
 TOPICS = [f"app.public.{t}" for t in TABLES]
 
 log = logging.getLogger("authz_sync")
 
+RECONCILES = Counter("tributary_authz_reconciles_total", "Reconciliations applied")
+CHANGES = Counter("tributary_authz_changes_total",
+                  "OpenFGA tuples and authz.user_access rows added or deleted", ["kind"])
+PROPAGATION = Histogram("tributary_authz_propagation_seconds",
+                        "App DB commit to permissions applied in OpenFGA and Postgres",
+                        buckets=(0.1, 0.25, 0.5, 1, 2, 5, 10, 30, 60, 300))
+CAUGHT_UP = Gauge("tributary_authz_caught_up",
+                  "1 once the startup replay of the CDC topics has been reconciled")
+
 
 def main() -> None:
-    logging.basicConfig(
-        level=os.environ.get("LOG_LEVEL", "INFO"),
-        format="%(asctime)s %(levelname)s %(name)s %(message)s",
-    )
+    configure_logging()
     stop = threading.Event()
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
     signal.signal(signal.SIGINT, lambda *_: stop.set())
+    serve_metrics()
 
     consumer = Consumer({
         "bootstrap.servers": os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
@@ -46,8 +56,9 @@ def main() -> None:
 
     state = AppState()
     with psycopg.connect(os.environ["DATABASE_URL"], autocommit=True) as conn:
-        reconciler = Reconciler(FgaClient(os.environ["FGA_API_URL"]), conn)
+        reconciler = Reconciler(FgaClient.from_env(), conn)
         caught_up = not pending
+        CAUGHT_UP.set(int(caught_up))
         if caught_up:
             reconcile(state, reconciler, "startup (empty topics)")
         try:
@@ -59,6 +70,7 @@ def main() -> None:
                         if m.error().code() == KafkaError.UNKNOWN_TOPIC_OR_PART:
                             continue
                         raise KafkaException(m.error())
+                    CONSUMED.labels(m.topic()).inc()
                     if m.value() is None:  # tombstone after a delete; already applied
                         continue
                     event = json.loads(m.value())
@@ -72,6 +84,7 @@ def main() -> None:
                             del pending[(tp.topic, tp.partition)]
                     if not pending:
                         caught_up = True
+                        CAUGHT_UP.set(1)
                         reconcile(state, reconciler, "startup replay")
                 elif msgs:
                     reconcile(state, reconciler, f"{len(msgs)} events", oldest_commit_ms)
@@ -81,11 +94,19 @@ def main() -> None:
 
 
 def reconcile(state: AppState, reconciler: Reconciler, why: str,
-              since_commit_ms: int | None = None) -> None:
+              since_commit_ms: int | None = None,
+              clock: Callable[[], float] = time.time) -> None:
     counts = reconciler.apply(state.desired_tuples(), state.desired_access())
+    RECONCILES.inc()
+    for kind, n in counts.items():
+        CHANGES.labels(kind).inc(n)
+    extra: dict = dict(counts)
     if since_commit_ms is not None:  # app DB commit → permissions applied everywhere
-        why += f", applied {time.time() * 1000 - since_commit_ms:.0f} ms after app commit"
-    log.info("reconciled (%s): %s", why, counts)
+        lag_ms = clock() * 1000 - since_commit_ms
+        PROPAGATION.observe(lag_ms / 1000)
+        why += f", applied {lag_ms:.0f} ms after app commit"
+        extra["propagation_ms"] = round(lag_ms)
+    log.info("reconciled (%s): %s", why, counts, extra=extra)
 
 
 def wait_for_topics(consumer: Consumer, stop: threading.Event) -> list[TopicPartition] | None:

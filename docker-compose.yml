@@ -119,7 +119,9 @@ services:
         condition: service_healthy
 
   bronze-loader:
-    build: ./services/bronze-loader
+    build:
+      context: .
+      dockerfile: services/bronze-loader/Dockerfile
     profiles: ["app"]
     env_file: .env
     environment:

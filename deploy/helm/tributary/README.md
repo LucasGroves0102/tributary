@@ -9,7 +9,7 @@ in the `platform` namespace; Postgres runs on the host.
   `tributary`, `app` and `openfga` databases and a `query_api` role granted to the login.
 - In the release namespace:
   - Secret `tributary` with keys `database-url`, `app-database-url`, `jwt-secret`,
-    `anthropic-api-key`, `sec-user-agent`.
+    `anthropic-api-key`, `sec-user-agent`, and `openfga-api-token` when `openfga.auth.enabled`.
   - Secret `ghcr` (type `kubernetes.io/dockerconfigjson`) with a token that can read packages.
 
 ## Install
@@ -39,7 +39,7 @@ decides its environment variables, which Secret keys it can read, and its networ
 |---|---|---|
 | `postgres` | `DATABASE_URL` | host Postgres |
 | `kafka` | `KAFKA_BOOTSTRAP_SERVERS` | Kafka in `platform` |
-| `openfga` | `FGA_API_URL` | OpenFGA in `platform` |
+| `openfga` | `FGA_API_URL`, `FGA_API_TOKEN` when `openfga.auth.enabled` | OpenFGA in `platform` |
 | `sec` | `SEC_USER_AGENT` | HTTPS to public addresses |
 | `anthropic` | `ANTHROPIC_API_KEY` | HTTPS to public addresses |
 | `jwt` | `QUERY_API_JWT_SECRET` | |
@@ -48,6 +48,12 @@ decides its environment variables, which Secret keys it can read, and its networ
 
 A service with a `port` gets a Service, health probes, and an ingress policy admitting only the
 components in its `from` list and pods in its `fromNamespaces`. Everything else is denied.
+
+Every service also gets a PodMonitor and a policy letting Prometheus (`metrics.podLabels` in
+`metrics.namespace`) reach its `/metrics`: on `port` for HTTP services, and on `metrics.port`
+(passed as `METRICS_PORT`) for workers. `metrics: false` opts a service out (`web`). The
+monitoring chart's Prometheus selects PodMonitors from every namespace and release, so they
+need no `release` label. CronJobs aren't scraped; kube-state-metrics reports their job status.
 
 Every pod runs as non-root with a read-only root filesystem, no capabilities, the
 `RuntimeDefault` seccomp profile and no service account token.

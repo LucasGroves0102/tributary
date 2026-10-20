@@ -6,8 +6,10 @@ import os
 from pathlib import Path
 
 import pytest
+from prometheus_client import REGISTRY
 
 from filing_parser.db import load_document, write_sections
+from filing_parser.main import parse_one
 from filing_parser.sections import parse
 
 psycopg = pytest.importorskip("psycopg")
@@ -44,6 +46,14 @@ def test_parse_and_write_is_idempotent(conn):
         " ORDER BY section_key").fetchall()
     assert rows == [("8.01", "0001045810", "https://example/doc", "python"),
                     ("9.01", "0001045810", "https://example/doc", "python")]
+
+
+def test_parse_one_counts_parsed_documents(conn):
+    parsed = REGISTRY.get_sample_value("tributary_documents_parsed_total", {"form": "8-K"}) or 0
+    parse_one(conn, ACC)
+    assert REGISTRY.get_sample_value("tributary_documents_parsed_total",
+                                     {"form": "8-K"}) == parsed + 1
+    assert REGISTRY.get_sample_value("tributary_parse_duration_seconds_count", {"form": "8-K"})
 
 
 def test_gold_prefers_rust_parser(conn):

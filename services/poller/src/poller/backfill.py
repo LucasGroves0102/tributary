@@ -13,6 +13,7 @@ from datetime import date, timedelta
 from poller.daily_index import available_days, fetch_master, parse_master
 from poller.producer import FilingProducer
 from tributary_sec import sec_client
+from tributary_telemetry import configure_logging
 
 log = logging.getLogger("poller.backfill")
 
@@ -33,10 +34,7 @@ def main() -> None:
     ap.add_argument("--start", type=date.fromisoformat, help="first day (YYYY-MM-DD)")
     ap.add_argument("--end", type=date.fromisoformat, help="last day (default yesterday)")
     args = ap.parse_args()
-    logging.basicConfig(
-        level=os.environ.get("LOG_LEVEL", "INFO"),
-        format="%(asctime)s %(levelname)s %(name)s %(message)s",
-    )
+    configure_logging()
     end = args.end or date.today() - timedelta(days=1)
     start = args.start or end - timedelta(days=args.days - 1)
     wanted = days_in_range(start, end)

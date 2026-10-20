@@ -7,14 +7,20 @@ import threading
 
 import psycopg
 from confluent_kafka import Consumer, KafkaError, KafkaException, Message
+from prometheus_client import Counter
 
 from bronze_loader.db import insert_filings
-from bronze_loader.rows import to_row
+from bronze_loader.rows import FilingRow, to_row
+from tributary_telemetry import CONSUMED, SKIPPED, configure_logging, serve_metrics
 
 TOPIC = "filings.raw"
 GROUP_ID = "bronze-loader"
 
 log = logging.getLogger("bronze_loader")
+
+FILINGS = Counter("tributary_bronze_filings_total",
+                  "filings.raw events written to bronze.filings (inserted) or already there "
+                  "(duplicate)", ["result"])
 
 
 def readable(msgs: list[Message]) -> list[Message]:
@@ -29,11 +35,22 @@ def readable(msgs: list[Message]) -> list[Message]:
     return out
 
 
+def to_rows(msgs: list[Message]) -> list[FilingRow]:
+    """Rows for the well-formed messages; malformed ones are logged, counted and dropped."""
+    CONSUMED.labels(TOPIC).inc(len(msgs))
+    rows = []
+    for m in msgs:
+        try:
+            rows.append(to_row(m.value(), m.partition(), m.offset()))
+        except (ValueError, KeyError) as e:
+            # TODO: route to a dead-letter topic instead of dropping
+            SKIPPED.labels(TOPIC, "malformed").inc()
+            log.error("skipping malformed message at %d:%d: %s", m.partition(), m.offset(), e)
+    return rows
+
+
 def main() -> None:
-    logging.basicConfig(
-        level=os.environ.get("LOG_LEVEL", "INFO"),
-        format="%(asctime)s %(levelname)s %(name)s %(message)s",
-    )
+    configure_logging()
     dsn = os.environ["DATABASE_URL"]
     bootstrap = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
     batch_size = int(os.environ.get("BATCH_SIZE", "500"))
@@ -51,6 +68,7 @@ def main() -> None:
         }
     )
     consumer.subscribe([TOPIC])
+    serve_metrics()
 
     with psycopg.connect(dsn) as conn:
         log.info("consuming %s → bronze.filings", TOPIC)
@@ -59,18 +77,14 @@ def main() -> None:
                 msgs = readable(consumer.consume(num_messages=batch_size, timeout=1.0))
                 if not msgs:
                     continue  # nothing consumed, so no offset to commit
-                rows = []
-                for m in msgs:
-                    try:
-                        rows.append(to_row(m.value(), m.partition(), m.offset()))
-                    except (ValueError, KeyError) as e:
-                        # TODO: route to a dead-letter topic instead of dropping
-                        log.error("skipping malformed message at %d:%d: %s",
-                                  m.partition(), m.offset(), e)
+                rows = to_rows(msgs)
                 inserted = insert_filings(conn, rows)
                 consumer.commit(asynchronous=False)
+                FILINGS.labels("inserted").inc(inserted)
+                FILINGS.labels("duplicate").inc(len(rows) - inserted)
                 log.info("batch of %d: %d new, %d already present",
-                         len(msgs), inserted, len(rows) - inserted)
+                         len(msgs), inserted, len(rows) - inserted,
+                         extra={"messages": len(msgs), "inserted": inserted})
         finally:
             consumer.close()
     log.info("stopped")

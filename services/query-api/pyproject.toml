@@ -8,6 +8,8 @@ dependencies = [
     "psycopg[binary,pool]>=3.2",
     "pyjwt>=2.9",
     "tributary-authz",
+    "prometheus-client>=0.20",
+    "tributary-telemetry",
 ]
 
 [project.optional-dependencies]

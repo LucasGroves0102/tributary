@@ -1,0 +1,19 @@
+{{- range $name, $svc := .Values.services }}
+{{- with include "tributary.metricsPort" (dict "root" $ "svc" $svc) }}
+{{- $ctx := dict "root" $ "name" $name }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "tributary.labels" $ctx | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "tributary.selector" $ctx | nindent 6 }}
+  podMetricsEndpoints:
+    - port: {{ if $svc.port }}http{{ else }}metrics{{ end }}
+      path: /metrics
+{{- end }}
+{{- end }}

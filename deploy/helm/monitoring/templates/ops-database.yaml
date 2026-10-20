@@ -1,0 +1,39 @@
+{{- if .Values.opsDatabase.enabled }}
+{{- $db := .Values.opsDatabase }}
+# Picked up by the Grafana datasource sidecar.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasource-tributary
+  labels:
+    grafana_datasource: "1"
+    app.kubernetes.io/part-of: tributary-monitoring
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+data:
+  tributary.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Tributary
+        type: grafana-postgresql-datasource
+        uid: tributary
+        url: {{ printf "%s:%v" $db.host $db.port }}
+        user: {{ $db.user }}
+        jsonData:
+          database: {{ $db.database }}
+          sslmode: disable
+          postgresVersion: 1600
+          maxOpenConns: 2
+        secureJsonData:
+          password: $TRIBUTARY_DB_PASSWORD
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ops-exporter-queries
+  labels:
+    app.kubernetes.io/part-of: tributary-monitoring
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+data:
+  queries.yaml: |
+{{ .Files.Get "files/ops-exporter-queries.yaml" | indent 4 }}
+{{- end }}
