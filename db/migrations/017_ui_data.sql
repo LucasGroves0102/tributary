@@ -74,3 +74,144 @@ LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$
 $$;
 
 GRANT SELECT ON gold.financials_coverage, gold.latest_financials TO query_api;
+
+-- Expected filing dates ------------------------------------------------------------------------
+
+-- The SEC filing index (silver.filings: form, dates, period of report) is public metadata. The
+-- view runs with its owner's privileges, so query_api needs no grant on the bronze tables.
+GRANT SELECT ON silver.filings TO query_api;
+
+-- Periodic reports (10-K, 10-Q, transition reports and amendments) of these companies, with
+-- the period they cover: the submissions' report date, else the fetched document's period.
+CREATE FUNCTION silver.company_reports(p_company_ids text[])
+RETURNS TABLE (company_id text, accession_no text, form text, filing_date date, period_end date)
+LANGUAGE sql STABLE AS $$
+    SELECT DISTINCT ON (f.company_id, f.accession_no)
+           f.company_id, f.accession_no, f.form, f.filing_date,
+           coalesce(f.report_date, d.period_of_report)
+    FROM silver.filings f
+    LEFT JOIN bronze.filing_documents d ON d.accession_no = f.accession_no
+    WHERE f.company_id = ANY(p_company_ids)
+      AND f.form IN ('10-K', '10-Q', '10-K/A', '10-Q/A', '10-KT', '10-QT')
+    ORDER BY f.company_id, f.accession_no, f.report_date NULLS LAST
+$$;
+
+-- SEC deadline in days after the period end (Form 10-K and 10-Q General Instruction A):
+-- 10-K 60 / 75 / 90 days and 10-Q 40 / 40 / 45 days for large accelerated / accelerated /
+-- non-accelerated filers. NULL when the category is unknown.
+CREATE FUNCTION gold.filing_deadline_days(category text, form text) RETURNS int
+LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$
+    SELECT CASE form
+        WHEN '10-K' THEN CASE category WHEN 'large_accelerated' THEN 60
+                                       WHEN 'accelerated' THEN 75
+                                       WHEN 'non_accelerated' THEN 90 END
+        WHEN '10-Q' THEN CASE category WHEN 'large_accelerated' THEN 40
+                                       WHEN 'accelerated' THEN 40
+                                       WHEN 'non_accelerated' THEN 45 END
+    END
+$$;
+
+-- A due date on a Saturday or Sunday moves to the Monday (Rule 0-3). Holidays are not modelled.
+CREATE FUNCTION gold.next_business_day(d date) RETURNS date
+LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$
+    SELECT d + CASE extract(isodow FROM d) WHEN 6 THEN 2 WHEN 7 THEN 1 ELSE 0 END
+$$;
+
+-- Estimated next 10-Q / 10-K filings: the p_periods fiscal periods after the latest one a
+-- company has reported, as of p_as_of. Estimates, never facts:
+--   period_end: the last reported period end plus 3 months (snapped to the month end when the
+--     last one ended on a month end), else plus 91 days per quarter (52/53-week years)
+--   form: 10-K when the period ends within 20 days of the fiscal year end (silver.companies,
+--     MMDD), 10-Q otherwise; without a fiscal year end, 10-K when a 10-K covered the period a
+--     year earlier
+--   deadline: SEC deadline for the filer category, moved off weekends
+--   expected_date: period_end + the median filing lag of the company's last 8 original 10-Qs
+--     (4 10-Ks) of that form, when there are at least 2, capped at the deadline; else the
+--     deadline. basis says which: history, history_capped (history later than the deadline),
+--     deadline, or NULL (no history and no filer category: no estimate)
+--   status: upcoming (period not over), due (over, deadline not passed), overdue
+-- Companies whose last periodic report is over 400 days old get no estimate.
+CREATE FUNCTION gold.expected_filings(p_company_ids text[], p_as_of date DEFAULT current_date,
+                                      p_periods int DEFAULT 2)
+RETURNS TABLE (company_id text, form text, period_end date, expected_date date, deadline date,
+               deadline_days int, filer_category text, basis text, typical_lag_days int,
+               lag_samples int, last_period_end date, last_filed date, status text)
+LANGUAGE sql STABLE AS $$
+WITH reports AS (  -- originals: the first filing per form and period
+    SELECT r.company_id, r.form, r.period_end, min(r.filing_date) AS filing_date
+    FROM silver.company_reports(p_company_ids) r
+    WHERE r.form IN ('10-K', '10-Q') AND r.period_end IS NOT NULL AND r.filing_date <= p_as_of
+    GROUP BY r.company_id, r.form, r.period_end
+),
+latest AS (
+    SELECT r.company_id, max(r.period_end) AS last_period_end, max(r.filing_date) AS last_filed
+    FROM reports r
+    GROUP BY r.company_id
+),
+lags AS (
+    SELECT x.company_id, x.form,
+           percentile_disc(0.5) WITHIN GROUP (ORDER BY x.lag) AS lag,
+           count(*)::int AS samples
+    FROM (
+        SELECT r.company_id, r.form, r.filing_date - r.period_end AS lag,
+               row_number() OVER (PARTITION BY r.company_id, r.form
+                                  ORDER BY r.period_end DESC) AS n
+        FROM reports r
+        WHERE r.filing_date - r.period_end BETWEEN 1 AND 180
+    ) x
+    WHERE x.n <= CASE x.form WHEN '10-K' THEN 4 ELSE 8 END
+    GROUP BY x.company_id, x.form
+),
+periods AS (
+    SELECT l.company_id, l.last_period_end, l.last_filed,
+           CASE WHEN l.last_period_end
+                     = (date_trunc('month', l.last_period_end) + interval '1 month - 1 day')::date
+                THEN (date_trunc('month', l.last_period_end + make_interval(months => 3 * k.k))
+                      + interval '1 month - 1 day')::date
+                ELSE l.last_period_end + 91 * k.k
+           END AS period_end
+    FROM latest l
+    CROSS JOIN generate_series(1, p_periods) AS k(k)
+    WHERE l.last_filed >= p_as_of - 400
+),
+typed AS (
+    SELECT p.*, gold.filer_category(c.filer_categories) AS category,
+           CASE
+               WHEN c.fiscal_year_end IS NOT NULL THEN
+                   CASE WHEN gold.fiscal_year_end(p.period_end, c.fiscal_year_end) - p.period_end
+                             <= 20
+                        THEN '10-K' ELSE '10-Q' END
+               WHEN EXISTS (SELECT 1 FROM reports r
+                            WHERE r.company_id = p.company_id AND r.form = '10-K'
+                              AND r.period_end BETWEEN p.period_end - 380 AND p.period_end - 350)
+                   THEN '10-K'
+               ELSE '10-Q'
+           END AS form
+    FROM periods p
+    JOIN silver.companies c ON c.company_id = p.company_id
+),
+dated AS (
+    SELECT t.*, g.lag, coalesce(g.samples, 0) AS samples,
+           gold.filing_deadline_days(t.category, t.form) AS deadline_days,
+           gold.next_business_day(t.period_end + gold.filing_deadline_days(t.category, t.form))
+               AS deadline,
+           CASE WHEN g.samples >= 2 THEN gold.next_business_day(t.period_end + g.lag) END
+               AS from_history
+    FROM typed t
+    LEFT JOIN lags g ON g.company_id = t.company_id AND g.form = t.form
+)
+SELECT d.company_id, d.form, d.period_end,
+       coalesce(least(d.from_history, d.deadline), d.from_history, d.deadline) AS expected_date,
+       d.deadline, d.deadline_days, d.category,
+       CASE WHEN d.from_history > d.deadline THEN 'history_capped'
+            WHEN d.from_history IS NOT NULL THEN 'history'
+            WHEN d.deadline IS NOT NULL THEN 'deadline'
+       END AS basis,
+       d.lag, d.samples, d.last_period_end, d.last_filed,
+       CASE WHEN p_as_of <= d.period_end THEN 'upcoming'
+            WHEN p_as_of <= coalesce(d.deadline, d.from_history, p_as_of) THEN 'due'
+            ELSE 'overdue'
+       END AS status
+FROM dated d
+ORDER BY d.company_id, d.period_end
+$$;

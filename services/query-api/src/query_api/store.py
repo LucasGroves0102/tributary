@@ -4,6 +4,7 @@ skipped."""
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import date
 from typing import Any, Protocol
 
 import psycopg
@@ -84,6 +85,24 @@ class Store:
         with self._session(user_id) as cur:
             cur.execute(compiled.sql, compiled.params)  # pyright: ignore[reportArgumentType]
             return cur.fetchall()
+
+    def expected_filings(self, user_id: str, company_ids: list[str], as_of: date,
+                         periods: int) -> list[dict]:
+        """Estimated next 10-Q/10-K filings (gold.expected_filings; public filing index)."""
+        with self._session(user_id) as cur:
+            cur.execute("SELECT * FROM gold.expected_filings(%s, %s, %s)",
+                        (company_ids, as_of, periods))
+            return cur.fetchall()
+
+    def last_reports(self, user_id: str, company_ids: list[str]) -> dict[str, dict]:
+        """company_id → its latest 10-K/10-Q (or amendment) from the public filing index."""
+        with self._session(user_id) as cur:
+            cur.execute("SELECT DISTINCT ON (company_id) company_id, accession_no, form,"
+                        "       filing_date, period_end"
+                        " FROM silver.company_reports(%s)"
+                        " ORDER BY company_id, filing_date DESC, accession_no DESC",
+                        (company_ids,))
+            return {r.pop("company_id"): r for r in cur.fetchall()}
 
     def financials(self, user_id: str, company_id: str, metrics: list[str], quarters: int,
                    view: str = "quarter", basis: str = "fiscal") -> list[dict]:

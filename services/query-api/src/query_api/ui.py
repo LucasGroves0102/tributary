@@ -8,10 +8,11 @@ values need `financials` on that company, section text `filings`.
 """
 
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Annotated, Literal, get_args
+from zoneinfo import ZoneInfo
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Path, Query
 from fastapi.responses import Response
 
 from query_api.csv_export import csv_response
@@ -29,6 +30,14 @@ from query_api.screener import (
 )
 from query_api.store import Store
 
+CompanyId = Annotated[str, Path(pattern=r"^\d{10}$", description="canonical company_id")]
+EXPECTED_METHOD = (
+    "Estimate, not a filing. Period end: the last reported fiscal period end plus one quarter. "
+    "Expected date: period end plus the company's median filing lag over its last 8 10-Qs or "
+    "4 10-Ks (at least 2 needed), capped at the SEC deadline; otherwise the deadline. SEC "
+    "deadlines by filer category: 10-K 60/75/90 days and 10-Q 40/40/45 days after the period "
+    "end for large accelerated/accelerated/non-accelerated filers, moved off weekends (holidays "
+    "not modelled).")
 Band = Literal["lt100m", "100m-1b", "1b-10b", "10b-100b", "gte100b"]
 Format = Annotated[Literal["json", "csv"], Query(alias="format")]
 MAX_JSON_ROWS = 500
@@ -39,7 +48,9 @@ META_CSV = ["company_id", "name", "tickers", "exchanges", "sic", "industry", "fi
 def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str],
                   require: Callable[[str, str, str], None],
                   allowed: Callable[[str, str, str], bool],
-                  readable: Callable[[str], dict[str, set[str]]]) -> None:
+                  readable: Callable[[str], dict[str, set[str]]],
+                  today: Callable[[], date] | None = None) -> None:
+    clock = today or _today_eastern
 
     def run_screen(user_id: str, screen: Screen, access: dict[str, set[str]]):
         granted = sorted(c for c, t in access.items() if "financials" in t)
@@ -116,11 +127,36 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
         return {"as_of": _now(), "total": total, "limit": limit, "offset": offset, "sort": sort,
                 "columns": column_info(compiled.columns), "rows": rows}
 
+    @app.get("/v1/companies/{company_id}/expected-filings", response_model=dict)
+    def expected_filings(
+        user_id: Annotated[str, Depends(current_user)], company_id: CompanyId,
+        periods: Annotated[int, Query(ge=1, le=4)] = 2,
+    ) -> dict:
+        """Estimated next 10-Q/10-K filings. Public metadata: derived only from the SEC filing
+        index and filer category, so no tier is needed (still queried as query_api)."""
+        rows = store.expected_filings(user_id, [company_id], clock(), periods)
+        return {"company_id": company_id, "as_of": clock(), "method": EXPECTED_METHOD,
+                "expected": [_expected(r) for r in rows]}
+
     @app.get("/v1/screener/columns")
     def screener_columns() -> dict:
         return {"columns": column_info(sorted(COLUMNS)),
                 "filer_categories": list(FILER_CATEGORIES),
                 "bands": list(get_args(Band))}
+
+
+def _expected(r: dict) -> dict:
+    return {"form": r["form"], "period_end": r["period_end"],
+            "expected_date": r["expected_date"], "deadline": r["deadline"],
+            "deadline_days": r["deadline_days"], "filer_category": r["filer_category"],
+            "basis": r["basis"], "typical_lag_days": r["typical_lag_days"],
+            "lag_samples": r["lag_samples"], "status": r["status"], "estimate": True,
+            "last_period_end": r["last_period_end"], "last_filed": r["last_filed"]}
+
+
+def _today_eastern() -> date:
+    """EDGAR dates are US Eastern."""
+    return datetime.now(ZoneInfo("America/New_York")).date()
 
 
 def _now() -> str:

@@ -2,6 +2,7 @@
 OpenFGA first (layer 1), then Postgres row-level security (layer 2, in Store)."""
 
 import logging
+from collections.abc import Callable
 from datetime import UTC, date, datetime
 from typing import Annotated, Literal
 
@@ -75,8 +76,10 @@ class FormulaRequest(BaseModel):
 
 
 def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
-               demo_users: frozenset[str] = frozenset()) -> FastAPI:
-    """demo_users: accounts anyone may sign in as without a password (empty disables it)."""
+               demo_users: frozenset[str] = frozenset(),
+               today: Callable[[], date] | None = None) -> FastAPI:
+    """demo_users: accounts anyone may sign in as without a password (empty disables it).
+    today: the current US Eastern date (EDGAR's), injectable for tests."""
     app = FastAPI(title="Tributary Query API", version="1")
     instrument(app)
     bearer = HTTPBearer(auto_error=False)
@@ -125,7 +128,7 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
         return access
 
     add_ui_routes(app, store=store, current_user=current_user, require=require,
-                  allowed=allowed, readable=readable)
+                  allowed=allowed, readable=readable, today=today)
 
     @app.get("/health")
     def health() -> dict:
