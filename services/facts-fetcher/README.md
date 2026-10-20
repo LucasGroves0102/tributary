@@ -3,7 +3,8 @@
 FR2a. XBRL company facts → `bronze.company_facts` → `silver.financial_facts` →
 `gold.quarterly_financials`. Two jobs share the bronze format and the set-based SQL refreshes
 (`silver.refresh_financial_facts(text[])`, `gold.refresh_quarterly_financials(text[])`,
-`db/migrations/011_bulk_financials.sql`). The tracked-company list and CIK mapping come from
+`db/migrations/011_bulk_financials.sql`; gold ties broken deterministically since
+`015_gold_tiebreaks.sql`). The tracked-company list and CIK mapping come from
 [company-loader](../company-loader); the [Query API](../query-api) serves the gold rows.
 
 **`facts-fetcher`**: the companyfacts API for every CIK of every tracked company, one

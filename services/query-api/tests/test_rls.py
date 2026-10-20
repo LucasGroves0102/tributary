@@ -8,7 +8,8 @@ from contextlib import contextmanager
 import pytest
 from fastapi.testclient import TestClient
 
-from query_api.app import DERIVED_METRICS, METRICS, create_app
+from query_api.app import create_app
+from query_api.formula import CATALOG
 from query_api.store import Store
 
 from .conftest import SECRET
@@ -141,11 +142,22 @@ def test_latest_filings_respect_rls(client, token):
     assert client.get("/v1/filings/latest", headers=token("t-free")).json()["filings"] == []
 
 
-def test_metric_list_matches_database():
+def test_metric_list_matches_database(client):
+    served = client.get("/v1/metrics").json()
     with psycopg.connect(DSN) as conn:
-        assert {m for (m,) in conn.execute("SELECT metric FROM silver.metrics")} == set(METRICS)
-        assert {m for (m,) in conn.execute("SELECT metric FROM gold.derived_metrics")} == \
-            set(DERIVED_METRICS)
+        assert [m for (m,) in conn.execute("SELECT metric FROM silver.metrics ORDER BY 1")] \
+            == served["metrics"]
+        assert [m for (m,) in conn.execute("SELECT metric FROM gold.derived_metrics"
+                                           " ORDER BY 1")] == served["derived_metrics"]
+    assert "revenue" in served["metrics"] and "roe" in served["derived_metrics"]
+
+
+def test_formula_catalog_matches_database():
+    with psycopg.connect(DSN) as conn:
+        units = dict(conn.execute("SELECT metric, unit FROM silver.metrics").fetchall())
+        units |= dict(conn.execute("SELECT metric, unit FROM gold.derived_metrics").fetchall())
+    assert set(CATALOG) == set(units)
+    assert {m: unit for m, (unit, _) in CATALOG.items()} == units
 
 
 def test_company_profile_is_public_metadata(client, token):

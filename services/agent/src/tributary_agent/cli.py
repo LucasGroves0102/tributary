@@ -10,7 +10,7 @@ from dataclasses import asdict
 import anthropic
 
 from tributary_agent.agent import Agent
-from tributary_agent.tools import QueryApi
+from tributary_agent.tools import MetricTools, QueryApi
 
 log = logging.getLogger("tributary_agent")
 
@@ -24,13 +24,15 @@ def main() -> None:
     for name in ("httpx", "httpx2"):
         logging.getLogger(name).setLevel(logging.WARNING)
 
+    api = QueryApi(os.environ.get("QUERY_API_URL", "http://localhost:8000"),
+                   os.environ["AGENT_TOKEN"])
     agent = Agent(
         messages=anthropic.Anthropic().messages,
-        api=QueryApi(os.environ.get("QUERY_API_URL", "http://localhost:8000"),
-                     os.environ["AGENT_TOKEN"]),
+        api=api,
         model=os.environ.get("AGENT_MODEL", "claude-haiku-5-5"),
         max_rounds=int(os.environ.get("AGENT_MAX_ROUNDS", "6")),
         effort=os.environ.get("AGENT_EFFORT") or None,
+        tools=MetricTools().get(api),
     )
     answer = agent.ask(args.question)
 

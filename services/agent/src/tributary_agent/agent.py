@@ -103,8 +103,11 @@ class Answer:
 class Agent:
     def __init__(self, messages: MessagesClient, api: ToolRunner, model: str,
                  max_rounds: int = 6, max_tokens: int = 8000,
-                 effort: str | None = None, stream: bool = False) -> None:
+                 effort: str | None = None, stream: bool = False,
+                 tools: list[dict] | None = None) -> None:
+        """tools: TOOLS by default; tools.with_metrics adds the metric names."""
         self._messages = messages
+        self._tools = tools or TOOLS
         self._api = api
         self.model = model
         self._max_rounds = max_rounds
@@ -173,7 +176,7 @@ class Agent:
             "model": self.model,
             "max_tokens": self._max_tokens,
             "system": SYSTEM,
-            "tools": TOOLS,
+            "tools": self._tools,
             "messages": messages,
             "cache_control": {"type": "ephemeral"},
         }

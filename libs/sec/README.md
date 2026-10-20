@@ -9,6 +9,9 @@ rate limiter before every request, so callers can't forget either. The default l
 5 requests/second per process, half of the SEC's 10/second per IP. `RateLimiter` enforces a
 minimum interval between calls and takes an injectable clock and sleep.
 
+`acceptance_time(s)` corrects submissions' `acceptanceDateTime` (data.sec.gov API and
+`submissions.zip`), which is labelled UTC but runs ahead of it by the US Eastern offset.
+
 Every request is counted in `tributary_sec_requests_total{host, status}`, where `status` is
 the final HTTP status or `transport_error`.
 

@@ -5,8 +5,7 @@ from decimal import Decimal
 
 import pytest
 
-from query_api.app import DERIVED_METRICS, METRICS
-from query_api.formula import CATALOG, FormulaError, analyze, compile_formula, parse, to_dict
+from query_api.formula import FormulaError, analyze, compile_formula, parse, to_dict
 from query_api.formula.grammar import MAX_DEPTH, MAX_LENGTH, BinOp, Call, Lag, Neg, Num, Ref
 
 
@@ -14,10 +13,6 @@ def error(src: str, view: str = "quarter") -> FormulaError:
     with pytest.raises(FormulaError) as e:
         analyze(parse(src), view)
     return e.value
-
-
-def test_catalog_matches_metric_lists():
-    assert set(CATALOG) == set(METRICS) | set(DERIVED_METRICS)
 
 
 def test_precedence_and_associativity():

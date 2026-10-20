@@ -1,7 +1,8 @@
 # query-api
 
 FR8, week 2. HTTP API over the gold tables, read-only except for the caller's own watchlist
-(app database); the [agent](../agent) and the [web](../web) app reach data only through it. Every data route is permission-checked twice:
+(app database); the [agent](../agent) and the [web](../web) app reach data only through it.
+Every data route is permission-checked twice:
 
 1. **OpenFGA** (`authorizer.py`): `can_read_financials` / `can_read_filings` on the company,
    before any query. Denied → 403 (same response whether the company exists or not).
@@ -20,7 +21,7 @@ request parameters. Dev tokens: `make token USER=alice`.
 | `POST /v1/demo/token` | `DEMO_USERS` set | an 8-hour token for a demo account |
 | `GET /v1/me` | token | companies the caller can read, with tiers |
 | `GET /v1/companies/search?q=` | token | candidates (public identity) + caller's access |
-| `GET /v1/metrics` | | metric names served by `financials` |
+| `GET /v1/metrics` | | metric names served by `financials`: `silver.metrics` and `gold.derived_metrics`, read once |
 | `GET /v1/companies/{id}/financials?metrics=&quarters=&view=&basis=&format=` | financials | values + citation + freshness; `format=csv`: one row per value with its source filing |
 | `GET /v1/companies/{id}/filings?limit=` | filings | recent filings and their sections |
 | `GET /v1/filings/latest?limit=` | token | newest parsed filings across the companies the caller can read filings for |

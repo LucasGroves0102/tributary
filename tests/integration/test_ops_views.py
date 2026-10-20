@@ -3,6 +3,7 @@ every test is rolled back."""
 
 import json
 import os
+from decimal import Decimal
 
 import pytest
 
@@ -72,7 +73,8 @@ def test_latency_per_live_filing(conn):
 def test_latency_excludes_backfill_and_skips_untracked_stages(conn):
     filing(conn, "test-ops-backfill", VISA, "8-K", "2026-07-28T04:00:00Z",
            source="daily-index")
-    filing(conn, "test-ops-seed", VISA, "10-K", "2025-02-01T21:00:00Z", source=None)
+    filing(conn, "test-ops-seed", VISA, "10-K", "2025-02-01T21:00:00Z", source="seed")
+    filing(conn, "test-ops-legacy", VISA, "10-K", "2025-02-02T21:00:00Z", source=None)
     filing(conn, "test-ops-other", OTHER, "8-K", "2026-07-28T15:00:00Z",
            ingested_at="2026-07-28T15:00:20Z")
 
@@ -80,6 +82,30 @@ def test_latency_excludes_backfill_and_skips_untracked_stages(conn):
         "SELECT accession_no, company_id, bronze_lag_s, queryable_lag_s"
         " FROM ops.filing_latency WHERE accession_no LIKE 'test-ops-%'").fetchall()
     assert rows == [("test-ops-other", None, 20.0, None)]
+
+
+def test_coverage_counts_feed_and_backfill_but_not_seed(conn):
+    filing(conn, "test-ops-feed", VISA, "8-K", "2031-07-28T15:00:00Z")
+    filing(conn, "test-ops-legacy", MSFT, "8-K", "2031-07-28T16:00:00Z", source=None)
+    filing(conn, "test-ops-backfill", OTHER, "8-K", "2031-07-28T04:00:00Z",
+           source="daily-index")
+    filing(conn, "test-ops-seed", VISA, "10-K", "2031-07-28T21:00:00Z", source="seed")
+
+    row = conn.execute(
+        "SELECT total, via_feed, via_backfill, live_coverage_pct"
+        " FROM ops.filings_daily_coverage WHERE day = '2031-07-28'").fetchone()
+    assert row == (3, 2, 1, Decimal("66.7"))
+
+
+def test_silver_filings_trusts_feed_and_seed_acceptance_times(conn):
+    filing(conn, "test-ops-seed", VISA, "10-K", "2031-07-28T21:00:00Z", source="seed")
+    filing(conn, "test-ops-backfill", VISA, "8-K", "2031-07-28T04:00:00Z",
+           source="daily-index")
+    rows = conn.execute(
+        "SELECT accession_no, source, accepted_at IS NOT NULL FROM silver.filings"
+        " WHERE accession_no LIKE 'test-ops-%' ORDER BY 1").fetchall()
+    assert rows == [("test-ops-backfill", "daily-index", False),
+                    ("test-ops-seed", "seed", True)]
 
 
 def test_filings_daily_counts_filings_not_filers(conn):

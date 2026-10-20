@@ -6,10 +6,10 @@ import json
 import re
 from collections.abc import Iterator
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
-from zoneinfo import ZoneInfo
+from datetime import date
 
-EASTERN = ZoneInfo("America/New_York")
+from tributary_sec import acceptance_time
+
 ENTRY = re.compile(r"^CIK(\d{10})(-submissions-\d+)?\.json$")
 
 # bronze.submission_filings columns, in COPY order
@@ -67,20 +67,10 @@ def filing_rows(cik: str, cols: dict[str, list]) -> Iterator[tuple]:
         if not acc or not form or not filed:
             continue
         yield (
-            acc, cik, form, date.fromisoformat(filed), accepted_at(accepted),
+            acc, cik, form, date.fromisoformat(filed), acceptance_time(accepted),
             _date(report), doc or None, desc or None, items or None, file_no or None,
             size if isinstance(size, int) else None, _bool(xbrl), _bool(ixbrl),
         )
-
-
-def accepted_at(s: str | None) -> datetime | None:
-    """acceptanceDateTime is labelled UTC but is ahead of UTC by the US Eastern offset: a filing
-    accepted at 2026-10-16 21:56:48 EDT (01:56:48Z) appears as 2026-10-17T05:56:48.000Z."""
-    if not s:
-        return None
-    shifted = datetime.fromisoformat(s)
-    offset = shifted.astimezone(EASTERN).utcoffset() or timedelta(0)
-    return shifted + offset
 
 
 def _date(s: str | None) -> date | None:

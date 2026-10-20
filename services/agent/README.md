@@ -16,6 +16,9 @@ as tool errors the model must report.
 | `list_filings` | `GET /v1/companies/{id}/filings` |
 | `get_section` | `GET /v1/companies/{id}/sections/{key}` |
 
+`get_financials`' metric names come from `GET /v1/metrics` (`MetricTools`, fetched once; until
+the Query API answers, the tool lists no names and the API rejects unknown ones).
+
 Before an answer is returned, `verify.py` checks every dollar figure against the tool results
 (matched, derived as a sum or difference, or quoted from filing text) and every accession number
 against what the tools returned; the result is part of the answer as `verification`.

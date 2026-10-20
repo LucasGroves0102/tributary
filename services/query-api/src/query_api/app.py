@@ -34,25 +34,6 @@ from query_api.ui import add_ui_routes
 from query_api.watchlist import Watchlists
 from tributary_telemetry.http import instrument
 
-METRICS = [
-    # income statement
-    "revenue", "cost_of_revenue", "gross_profit", "research_and_development", "sga",
-    "operating_income", "interest_expense", "pretax_income", "income_tax", "net_income",
-    "eps_basic", "eps_diluted", "weighted_shares_basic", "weighted_shares_diluted",
-    # balance sheet
-    "cash", "short_term_investments", "receivables", "inventory", "current_assets",
-    "total_assets", "current_liabilities", "long_term_debt_current", "long_term_debt",
-    "total_liabilities", "stockholders_equity", "shares_outstanding",
-    # cash flow
-    "operating_cash_flow", "capex", "depreciation_amortization", "stock_based_compensation",
-    "dividends_paid", "share_buybacks",
-]
-# computed from the metrics above (gold.derived_metrics); eps_growth and roe exist in one view
-DERIVED_METRICS = [
-    "gross_margin", "operating_margin", "net_margin", "free_cash_flow", "fcf_margin",
-    "revenue_growth", "net_income_growth", "eps_growth", "payout_ratio", "debt_to_equity",
-    "net_debt", "current_ratio", "roe",
-]
 FINANCIALS_CSV = ["metric", "view", "period_start", "period_end", "fiscal_period",
                   "calendar_period", "value", "unit", "value_source", "accession_no", "form",
                   "filed", "xbrl_tag", "source_accessions", "filing_url", "ingested_at"]
@@ -175,9 +156,18 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
             for r in store.search(user_id, q)
         ]}
 
+    known: dict[str, list[str]] = {}
+
+    def metric_names() -> dict[str, list[str]]:
+        """Read once from the database: metrics change only with a migration (and a deploy)."""
+        if not known:
+            known.update(store.metric_names())
+        return known
+
     @app.get("/v1/metrics")
     def metrics() -> dict:
-        return {"metrics": METRICS, "derived_metrics": DERIVED_METRICS}
+        """Metric names financials accepts: reported (silver.metrics) and derived."""
+        return metric_names()
 
     @app.get("/v1/companies/{company_id}/financials", response_model=dict)
     def financials(
@@ -193,12 +183,13 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
             alias="format", description="csv: one row per value, with its source filing")]
             = "json",
     ) -> dict | Response:
-        unknown = set(metrics or []) - set(METRICS) - set(DERIVED_METRICS)
+        names = metric_names()
+        every = names["metrics"] + names["derived_metrics"]
+        unknown = set(metrics or []) - set(every)
         if unknown:
             raise HTTPException(422, f"unknown metrics: {sorted(unknown)}")
         require(user_id, "financials", company_id)
-        rows = store.financials(user_id, company_id, metrics or METRICS + DERIVED_METRICS,
-                                quarters, view, basis)
+        rows = store.financials(user_id, company_id, metrics or every, quarters, view, basis)
         meta = {"company_id": company_id, "view": view, "basis": basis, "as_of": _now()}
         if fmt == "csv":
             return csv_response(f"{company_id}-financials-{view}-{basis}.csv", FINANCIALS_CSV, ([

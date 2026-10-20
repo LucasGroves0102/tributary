@@ -17,7 +17,9 @@ import adversarial_harness as h  # noqa: E402
 from citation_cases import CASES  # noqa: E402
 from query_api.auth import mint  # noqa: E402
 from tributary_agent.agent import Agent  # noqa: E402
-from tributary_agent.tools import QueryApi  # noqa: E402
+from tributary_agent.tools import MetricTools, QueryApi  # noqa: E402
+
+METRIC_TOOLS = MetricTools()
 
 
 def cites(v: dict, answer: str, citations: dict) -> bool:
@@ -28,8 +30,9 @@ def cites(v: dict, answer: str, citations: dict) -> bool:
 def run_case(case, client, model, base_url, secret) -> dict:
     cid, user, question = case
     messages = h.RecordingMessages(client.messages)
-    api = h.RecordingApi(QueryApi(base_url, mint(user, secret, 600)), max_chars=None)
-    answer = Agent(messages, api, model).ask(question)
+    query_api = QueryApi(base_url, mint(user, secret, 600))
+    api = h.RecordingApi(query_api, max_chars=None)
+    answer = Agent(messages, api, model, tools=METRIC_TOOLS.get(query_api)).ask(question)
     rec = {"id": cid, "user": user, "prompt": question, "model": model, "answer": answer.text,
            "usage": asdict(answer.usage), "cost_usd": answer.cost_usd,
            "citations": answer.citations, "verification": answer.verification,

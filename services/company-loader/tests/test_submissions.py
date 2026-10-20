@@ -1,7 +1,7 @@
 import json
-from datetime import UTC, date, datetime
+from datetime import date
 
-from company_loader.submissions import accepted_at, content_hash, entry_cik, parse
+from company_loader.submissions import content_hash, entry_cik, parse
 
 APPLE = "0000320193"
 
@@ -10,14 +10,6 @@ def test_entry_cik():
     assert entry_cik("CIK0000320193.json") == (APPLE, False)
     assert entry_cik("CIK0000320193-submissions-001.json") == (APPLE, True)
     assert entry_cik("placeholder.txt") is None
-
-
-def test_acceptance_time_is_shifted_back_to_utc():
-    # filings.raw had this Form 4 at 2026-10-17T01:56:48Z (21:56:48 EDT)
-    assert accepted_at("2026-10-17T05:56:48.000Z") == datetime(2026, 10, 17, 1, 56, 48, tzinfo=UTC)
-    # EST is 5 hours behind: 16:00 EST shows as 02:00Z the next day
-    assert accepted_at("2026-01-15T02:00:00.000Z") == datetime(2026, 1, 14, 21, 0, tzinfo=UTC)
-    assert accepted_at("") is None
 
 
 def test_parse_main_and_pages(bulk_entries):
