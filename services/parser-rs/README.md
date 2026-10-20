@@ -1,6 +1,6 @@
 # parser-rs
 
-FR3, week 4. Rust rewrite of the parser, benchmarked against the Python version and swapped in behind the same Kafka topic.
+FR3, week 4. Rust rewrite of the parser with output identical to the Python version, benchmarked against it on the same filings. Not yet running in the pipeline: the Python service still consumes the topic.
 
 The algorithm is the one specified in `services/parser/src/filing_parser/sections.py`, and the
 output is identical: same sections, keys, titles, text and character offsets. Rule 1 depends on
