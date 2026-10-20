@@ -56,12 +56,15 @@ class FakeStore:
 
     def search(self, user_id, q):
         return [{"company_id": NVDA, "name": "NVIDIA CORP", "matched_on": "ticker",
-                 "matched_alias": "NVDA", "is_current": True},
+                 "matched_alias": "NVDA", "is_current": True, "sic": "3674",
+                 "industry": "Semiconductors & Related Devices", "exchanges": ["Nasdaq"]},
                 {"company_id": TSLA, "name": "Tesla, Inc.", "matched_on": "name",
-                 "matched_alias": "Tesla, Inc.", "is_current": True}]
+                 "matched_alias": "Tesla, Inc.", "is_current": True, "sic": None,
+                 "industry": None, "exchanges": None}]
 
-    def names(self, user_id, ids):
-        return {NVDA: "NVIDIA CORP"}
+    def profiles(self, user_id, ids):
+        return {NVDA: {"name": "NVIDIA CORP", "sic": "3674",
+                       "industry": "Semiconductors & Related Devices", "exchanges": ["Nasdaq"]}}
 
 
 GRANTS = {"alice": {NVDA: {"financials"}}}
@@ -131,7 +134,9 @@ def test_search_shows_access_per_result(client, token):
 def test_me(client, token):
     body = client.get("/v1/me", headers=token("alice")).json()
     assert body == {"user_id": "alice", "companies": [
-        {"company_id": NVDA, "name": "NVIDIA CORP", "tiers": ["financials"]}]}
+        {"company_id": NVDA, "name": "NVIDIA CORP", "sic": "3674",
+         "industry": "Semiconductors & Related Devices", "exchanges": ["Nasdaq"],
+         "tiers": ["financials"]}]}
 
 
 def test_financials_link_to_the_filing(token):
