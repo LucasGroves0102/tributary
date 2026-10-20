@@ -1,0 +1,14 @@
+# Used instead of the root .dockerignore for this Dockerfile (BuildKit)
+.env
+.git
+.venv
+**/node_modules
+**/dist
+**/__pycache__
+**/*.egg-info
+**/target
+.pytest_cache
+.ruff_cache
+CLAUDE.md
+ROADMAP.md
+docs
