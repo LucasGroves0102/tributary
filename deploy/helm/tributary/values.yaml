@@ -55,7 +55,7 @@ resources:
   limits:
     memory: 256Mi
 
-# scratch: size of an emptyDir mounted at /scratch (the root filesystem is read-only).
+# tmpSize: size limit of the /tmp emptyDir (default 64Mi; the root filesystem is read-only).
 # databaseUrlKey: secretName key for DATABASE_URL instead of database-url (e.g. a throwaway DB).
 # uses: postgres, kafka, openfga, sec (SEC_USER_AGENT + HTTPS out), anthropic (API key + HTTPS
 # out), jwt, query-api, demo. Each adds the env vars and network access it needs.
@@ -144,10 +144,22 @@ jobs:
     suspend: true
     timeoutSeconds: 3600
     uses: [postgres, sec]
-    scratch: 2Gi
+    tmpSize: 2Gi
     env:
-      BULK_DIR: /scratch
       BULK_LIMIT: "500"
+  # Filing history and company metadata for every SEC filer from the bulk submissions.zip
+  # (~1.6 GB, downloaded to /tmp; skipped when unchanged since the last finished load). Each run
+  # loads at most --max-ciks changed CIKs, committing as it goes; the first load (~1M CIKs) takes
+  # ~20 runs: kubectl create job --from=cronjob/submissions submissions-1. Set
+  # env.SUBMISSIONS_DBNAME to load a throwaway database on the same server instead.
+  submissions:
+    image: company-loader
+    command: [company-loader-submissions, --max-ciks, "50000"]
+    schedule: "30 5 * * *"
+    suspend: true
+    timeoutSeconds: 7200
+    tmpSize: 3Gi
+    uses: [postgres, sec]
     resources:
       requests:
         cpu: 250m

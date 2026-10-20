@@ -32,3 +32,23 @@ def inputs(tickers, submissions):
         history=curated.ticker_history(),
         tracked=curated.tracked_tickers(),
     )
+
+
+def write_zip(path: Path, entries: dict[str, bytes]) -> Path:
+    import zipfile
+
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
+        for name, data in entries.items():
+            z.writestr(name, data)
+    return path
+
+
+@pytest.fixture
+def bulk_entries() -> dict[str, bytes]:
+    """Trimmed real submissions.zip entries: Apple (with one page), an insider, an empty filer."""
+    return {p.name: p.read_bytes() for p in sorted((FIXTURES / "bulk").glob("CIK*.json"))}
+
+
+@pytest.fixture
+def bulk_zip(tmp_path, bulk_entries) -> Path:
+    return write_zip(tmp_path / "submissions.zip", bulk_entries)

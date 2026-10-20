@@ -109,10 +109,10 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
     @app.get("/v1/me")
     def me(user_id: User) -> dict:
         access = readable(user_id)
-        names = store.names(user_id, sorted(access)) if access else {}
+        profiles = store.profiles(user_id, sorted(access)) if access else {}
         return {
             "user_id": user_id,
-            "companies": [{"company_id": c, "name": names.get(c), "tiers": sorted(t)}
+            "companies": [{"company_id": c, **_PROFILE, **profiles.get(c, {}), "tiers": sorted(t)}
                           for c, t in sorted(access.items())],
         }
 
@@ -202,6 +202,9 @@ def filing_url(cik: str | None, accession_no: str) -> str | None:
     if not cik:
         return None
     return f"{EDGAR}/{int(cik)}/{accession_no.replace('-', '')}/"
+
+
+_PROFILE = {"name": None, "sic": None, "industry": None, "exchanges": None}
 
 
 def _now() -> str:

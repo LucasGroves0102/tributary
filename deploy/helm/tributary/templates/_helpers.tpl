@@ -151,17 +151,8 @@ containers:
     volumeMounts:
       - name: tmp
         mountPath: /tmp
-      {{- with .scratch }}
-      - name: scratch
-        mountPath: /scratch
-      {{- end }}
 volumes:
   - name: tmp
     emptyDir:
-      sizeLimit: 64Mi
-  {{- with .scratch }}
-  - name: scratch
-    emptyDir:
-      sizeLimit: {{ . }}
-  {{- end }}
+      sizeLimit: {{ .tmpSize | default "64Mi" }}
 {{- end }}

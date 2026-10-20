@@ -11,6 +11,7 @@ dependencies = [
 
 [project.scripts]
 company-loader = "company_loader.main:main"
+company-loader-submissions = "company_loader.bulk:main"
 
 [build-system]
 requires = ["setuptools>=68"]

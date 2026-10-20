@@ -33,15 +33,19 @@ class Store:
     def search(self, user_id: str, q: str, limit: int = 5) -> list[dict]:
         with self._session(user_id) as cur:
             cur.execute(
-                "SELECT company_id, name, matched_on, matched_alias, is_current"
-                " FROM silver.resolve_company(%s) LIMIT %s", (q, limit))
+                "SELECT r.company_id, r.name, r.matched_on, r.matched_alias, r.is_current,"
+                "       c.sic, c.sic_description AS industry, c.exchanges"
+                " FROM silver.resolve_company(%s) WITH ORDINALITY r"
+                " JOIN silver.companies c USING (company_id)"
+                " ORDER BY r.ordinality LIMIT %s", (q, limit))
             return cur.fetchall()
 
-    def names(self, user_id: str, company_ids: list[str]) -> dict[str, str]:
+    def profiles(self, user_id: str, company_ids: list[str]) -> dict[str, dict]:
+        """company_id → name, sic, industry, exchanges."""
         with self._session(user_id) as cur:
-            cur.execute("SELECT company_id, name FROM silver.companies"
-                        " WHERE company_id = ANY(%s)", (company_ids,))
-            return {r["company_id"]: r["name"] for r in cur.fetchall()}
+            cur.execute("SELECT company_id, name, sic, sic_description AS industry, exchanges"
+                        " FROM silver.companies WHERE company_id = ANY(%s)", (company_ids,))
+            return {r.pop("company_id"): r for r in cur.fetchall()}
 
     def financials(self, user_id: str, company_id: str, metrics: list[str],
                    quarters: int) -> list[dict]:

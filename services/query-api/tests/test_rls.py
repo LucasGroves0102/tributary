@@ -61,6 +61,8 @@ def client():
                 " parser_version, item, title, text, char_start, char_end)"
                 " VALUES (%s, '1A', 'python', 't', '1A', 'Risk Factors', 'secret risks', 0, 12)",
                 (f"{cid}-26-000002",))
+        conn.execute("UPDATE silver.companies SET sic = '2080', sic_description = 'Beverages',"
+                     " exchanges = '{NYSE}' WHERE company_id = %s", (A,))
         conn.execute("DELETE FROM authz.user_access WHERE user_id LIKE 't-%'")
         conn.execute("INSERT INTO authz.user_access (user_id, company_id, tier) VALUES"
                      " ('t-free', %s, 'financials'), ('t-pro', %s, 'financials'),"
@@ -112,3 +114,13 @@ def test_latest_filings_respect_rls(client, token):
 def test_metric_list_matches_database():
     with psycopg.connect(DSN) as conn:
         assert {m for (m,) in conn.execute("SELECT metric FROM silver.metrics")} == set(METRICS)
+
+
+def test_company_profile_is_public_metadata(client, token):
+    me = client.get("/v1/me", headers=token("t-nobody")).json()
+    assert {c["company_id"]: c["industry"] for c in me["companies"]} == {A: "Beverages", B: None}
+    r = client.get(f"/v1/companies/search?q={A}", headers=token("t-nobody")).json()
+    assert r["results"][0] | {"access": None} == {
+        "company_id": A, "name": f"Test {A}", "matched_on": "cik", "matched_alias": A,
+        "is_current": True, "sic": "2080", "industry": "Beverages", "exchanges": ["NYSE"],
+        "access": None}
