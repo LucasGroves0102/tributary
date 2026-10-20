@@ -25,6 +25,7 @@ from query_api.formula import (
     to_dict,
 )
 from query_api.store import Store
+from query_api.ui import add_ui_routes
 from tributary_telemetry.http import instrument
 
 METRICS = [
@@ -122,6 +123,9 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
             raise HTTPException(503, "authorization unavailable") from None
         PERMISSION_CHECKS.labels("list", "allowed").inc()
         return access
+
+    add_ui_routes(app, store=store, current_user=current_user, require=require,
+                  allowed=allowed, readable=readable)
 
     @app.get("/health")
     def health() -> dict:

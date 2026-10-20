@@ -10,6 +10,7 @@ import psycopg
 from psycopg.rows import dict_row
 
 from query_api.formula import Compiled
+from query_api.screener import Compiled as Screen
 
 
 class Pool(Protocol):
@@ -74,6 +75,12 @@ class Store:
 
     def formula(self, user_id: str, compiled: Compiled) -> list[dict]:
         """Points of a compiled formula (query_api.formula.compile)."""
+        with self._session(user_id) as cur:
+            cur.execute(compiled.sql, compiled.params)  # pyright: ignore[reportArgumentType]
+            return cur.fetchall()
+
+    def screen(self, user_id: str, compiled: Screen) -> list[dict]:
+        """Rows of a compiled screen (query_api.screener)."""
         with self._session(user_id) as cur:
             cur.execute(compiled.sql, compiled.params)  # pyright: ignore[reportArgumentType]
             return cur.fetchall()
