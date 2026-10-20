@@ -9,6 +9,8 @@ from typing import Any, Protocol
 import psycopg
 from psycopg.rows import dict_row
 
+from query_api.formula import Compiled
+
 
 class Pool(Protocol):
     def connection(self) -> Any: ...  # context manager yielding a psycopg.Connection
@@ -46,6 +48,35 @@ class Store:
             cur.execute("SELECT company_id, name, sic, sic_description AS industry, exchanges"
                         " FROM silver.companies WHERE company_id = ANY(%s)", (company_ids,))
             return {r.pop("company_id"): r for r in cur.fetchall()}
+
+    def resolve_tickers(self, user_id: str, tickers: list[str]) -> dict[str, str]:
+        """ticker → company_id, by silver.resolve_company's best ticker match (public identity).
+        Tickers that match nothing are absent."""
+        with self._session(user_id) as cur:
+            cur.execute(
+                "SELECT t.ticker,"
+                "       (SELECT r.company_id FROM silver.resolve_company(t.ticker)"
+                "        WITH ORDINALITY r WHERE r.matched_on = 'ticker'"
+                "        ORDER BY r.ordinality LIMIT 1) AS company_id"
+                " FROM unnest(%s::text[]) t(ticker)", (tickers,))
+            return {r["ticker"]: r["company_id"] for r in cur.fetchall() if r["company_id"]}
+
+    def tickers(self, user_id: str, company_ids: list[str]) -> dict[str, list[str]]:
+        """company_id → its current tickers."""
+        with self._session(user_id) as cur:
+            cur.execute("SELECT company_id, array_agg(DISTINCT upper(alias) ORDER BY upper(alias))"
+                        "  AS tickers"
+                        " FROM silver.company_aliases"
+                        " WHERE alias_type = 'ticker' AND valid_to IS NULL"
+                        "   AND company_id = ANY(%s)"
+                        " GROUP BY company_id", (company_ids,))
+            return {r["company_id"]: r["tickers"] for r in cur.fetchall()}
+
+    def formula(self, user_id: str, compiled: Compiled) -> list[dict]:
+        """Points of a compiled formula (query_api.formula.compile)."""
+        with self._session(user_id) as cur:
+            cur.execute(compiled.sql, compiled.params)  # pyright: ignore[reportArgumentType]
+            return cur.fetchall()
 
     def financials(self, user_id: str, company_id: str, metrics: list[str], quarters: int,
                    view: str = "quarter", basis: str = "fiscal") -> list[dict]:
