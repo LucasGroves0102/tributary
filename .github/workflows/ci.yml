@@ -66,6 +66,19 @@ jobs:
       - run: npm test
       - run: npm run build
 
+  rust:
+    runs-on: ubuntu-latest
+    container: rust:1.99.1-slim-trixie@sha256:4df2ae8cfdfebdfc13a65da7f253b73d68983dc0339f2719bc17a279c913b13d
+    defaults:
+      run:
+        working-directory: services/parser-rs
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - run: rustup component add clippy rustfmt
+      - run: cargo fmt --check
+      - run: cargo clippy --locked --all-targets -- -D warnings
+      - run: cargo test --locked
+
   authz:
     runs-on: ubuntu-latest
     steps:
