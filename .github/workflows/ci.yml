@@ -88,7 +88,9 @@ jobs:
           docker run --rm -v "$PWD:/repo" -w /repo alpine/helm:3.19.0@sha256:aef9b56f64e866207d9591d0abd8f6d767b36aadd12edf68f8a719716d9d29c9
           template tributary deploy/helm/tributary --namespace tributary --set image.tag=ci
           | docker run --rm -i ghcr.io/yannh/kubeconform:v0.7.0@sha256:85dbef6b4b312b99133decc9c6fc9495e9fc5f92293d4ff3b7e1b30f5611823c
-          -strict -summary -kubernetes-version 1.36.0 -
+          -strict -summary -kubernetes-version 1.36.0 -schema-location default
+          -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
+          -
       - name: helm lint (platform)
         run: >-
           docker run --rm -v "$PWD:/repo" -w /repo alpine/helm:3.19.0@sha256:aef9b56f64e866207d9591d0abd8f6d767b36aadd12edf68f8a719716d9d29c9

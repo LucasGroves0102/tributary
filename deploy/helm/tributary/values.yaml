@@ -32,6 +32,16 @@ demo:
 
 logLevel: INFO
 
+# Prometheus (deploy/helm/monitoring) scrapes /metrics from each service through a PodMonitor:
+# on `port` for HTTP services, on `metrics.port` for workers. `metrics: false` opts a service out.
+metrics:
+  enabled: true
+  port: 9100
+  # Only Prometheus pods in this namespace may connect to the metrics port.
+  namespace: monitoring
+  podLabels:
+    app.kubernetes.io/name: prometheus
+
 # CronJob schedules are in this zone (EDGAR's daily index lands late evening ET).
 timeZone: America/New_York
 
@@ -92,6 +102,7 @@ services:
   web:
     port: 8080
     probePath: /
+    metrics: false
     fromNamespaces: [cloudflared]
     resources:
       requests:

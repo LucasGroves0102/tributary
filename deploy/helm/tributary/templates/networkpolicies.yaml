@@ -160,3 +160,30 @@ spec:
 {{- end }}
 {{- end }}
 {{- end }}
+{{- range $name, $svc := .Values.services }}
+{{- with include "tributary.metricsPort" (dict "root" $ "svc" $svc) }}
+---
+# Prometheus may scrape {{ $name }}'s /metrics.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: metrics-{{ $name }}
+  labels:
+    {{- include "tributary.labels" $labels | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "tributary.selector" (dict "root" $ "name" $name) | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $.Values.metrics.namespace }}
+          podSelector:
+            matchLabels:
+              {{- toYaml $.Values.metrics.podLabels | nindent 14 }}
+      ports:
+        - {protocol: TCP, port: {{ . }}}
+{{- end }}
+{{- end }}

@@ -49,5 +49,11 @@ decides its environment variables, which Secret keys it can read, and its networ
 A service with a `port` gets a Service, health probes, and an ingress policy admitting only the
 components in its `from` list and pods in its `fromNamespaces`. Everything else is denied.
 
+Every service also gets a PodMonitor and a policy letting Prometheus (`metrics.podLabels` in
+`metrics.namespace`) reach its `/metrics`: on `port` for HTTP services, and on `metrics.port`
+(passed as `METRICS_PORT`) for workers. `metrics: false` opts a service out (`web`). The
+monitoring chart's Prometheus selects PodMonitors from every namespace and release, so they
+need no `release` label. CronJobs aren't scraped; kube-state-metrics reports their job status.
+
 Every pod runs as non-root with a read-only root filesystem, no capabilities, the
 `RuntimeDefault` seccomp profile and no service account token.

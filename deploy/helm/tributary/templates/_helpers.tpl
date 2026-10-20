@@ -33,6 +33,13 @@ tributary.io/{{ $k }}: {{ $v | quote }}
 {{- end }}
 {{- end }}
 
+{{/* The port a service serves /metrics on, or "" if it isn't scraped. Takes root and svc. */}}
+{{- define "tributary.metricsPort" -}}
+{{- if and .root.Values.metrics.enabled (or (not (hasKey .svc "metrics")) .svc.metrics) -}}
+{{ .svc.port | default .root.Values.metrics.port }}
+{{- end -}}
+{{- end }}
+
 {{- define "tributary.image" -}}
 {{- $tag := required "image.tag is required (the commit SHA built by CI)" .root.Values.image.tag -}}
 {{ .root.Values.image.registry }}/tributary-{{ .image }}:{{ $tag }}
@@ -74,6 +81,10 @@ tributary.io/{{ $k }}: {{ $v | quote }}
 - name: DEMO_USERS
   value: {{ $root.Values.demo.users | quote }}
 {{- end }}
+{{- end }}
+{{- if and .metricsPort (not .port) }}
+- name: METRICS_PORT
+  value: {{ .metricsPort | quote }}
 {{- end }}
 {{- range $k, $v := .env }}
 - name: {{ $k }}
@@ -121,6 +132,11 @@ containers:
         port: http
       periodSeconds: 10
       failureThreshold: 3
+    {{- end }}
+    {{- if and .metricsPort (not .port) }}
+    ports:
+      - name: metrics
+        containerPort: {{ .metricsPort }}
     {{- end }}
     resources:
       {{- toYaml (.resources | default $root.Values.resources) | nindent 6 }}
