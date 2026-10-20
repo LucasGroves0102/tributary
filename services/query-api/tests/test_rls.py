@@ -8,7 +8,7 @@ from contextlib import contextmanager
 import pytest
 from fastapi.testclient import TestClient
 
-from query_api.app import create_app
+from query_api.app import METRICS, create_app
 from query_api.store import Store
 
 from .conftest import SECRET
@@ -107,3 +107,8 @@ def test_latest_filings_respect_rls(client, token):
     r = client.get("/v1/filings/latest", headers=token("t-pro"))
     assert [f["company_id"] for f in r.json()["filings"]] == [A]
     assert client.get("/v1/filings/latest", headers=token("t-free")).json()["filings"] == []
+
+
+def test_metric_list_matches_database():
+    with psycopg.connect(DSN) as conn:
+        assert {m for (m,) in conn.execute("SELECT metric FROM silver.metrics")} == set(METRICS)

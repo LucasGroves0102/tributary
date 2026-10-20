@@ -45,7 +45,7 @@ def ground_truth(conn) -> dict:
             """SELECT company_id, metric, period_end, value FROM (
                    SELECT *, row_number() OVER (PARTITION BY company_id, metric
                                                 ORDER BY period_end DESC) AS n
-                   FROM gold.quarterly_financials WHERE metric <> 'eps_diluted') q
+                   FROM gold.quarterly_financials WHERE unit <> 'USD/shares') q
                WHERE n <= 8 AND company_id = ANY(%s)""", (list(tracked),)):
         values.setdefault(company, []).append(
             {"company_id": company, "alias": h.alias(tracked[company]), "metric": metric,

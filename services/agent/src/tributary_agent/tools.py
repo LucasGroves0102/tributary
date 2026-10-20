@@ -8,8 +8,19 @@ from typing import Any
 import httpx
 
 SECTION_KEY = re.compile(r"(?:[IV]+-)?[0-9]{1,2}[A-C]?(?:\.[0-9]{2})?|EX-99\.[0-9]{1,2}")
-METRICS = ["revenue", "gross_profit", "operating_income", "net_income", "eps_diluted",
-           "operating_cash_flow", "total_assets", "cash"]
+METRICS = [
+    # income statement
+    "revenue", "cost_of_revenue", "gross_profit", "research_and_development", "sga",
+    "operating_income", "interest_expense", "pretax_income", "income_tax", "net_income",
+    "eps_basic", "eps_diluted", "weighted_shares_basic", "weighted_shares_diluted",
+    # balance sheet
+    "cash", "short_term_investments", "receivables", "inventory", "current_assets",
+    "total_assets", "current_liabilities", "long_term_debt_current", "long_term_debt",
+    "total_liabilities", "stockholders_equity", "shares_outstanding",
+    # cash flow
+    "operating_cash_flow", "capex", "depreciation_amortization", "stock_based_compensation",
+    "dividends_paid", "share_buybacks",
+]
 COMPANY_ID = {"type": "string", "pattern": r"^\d{10}$",
               "description": "10-digit canonical company_id from search_companies or whoami"}
 
