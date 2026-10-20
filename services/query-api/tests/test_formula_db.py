@@ -129,7 +129,7 @@ def evaluate(client, token, user, formula, **body):
 
 def values(r):
     assert r.status_code == 200, r.text
-    return {p["period"]: p["value"] for p in r.json()["points"]}
+    return {p["period"]: float(p["value"]) for p in r.json()["points"]}  # exact decimals as strings
 
 
 def test_pep_vs_ko_net_margin_aligned_by_calendar_quarter(conn, token):
