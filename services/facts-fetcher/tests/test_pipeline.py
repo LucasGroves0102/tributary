@@ -38,7 +38,8 @@ def raw(cik: str) -> bytes:
 @pytest.fixture
 def conn():
     with psycopg.connect(DSN) as c, c.transaction(force_rollback=True):
-        c.execute("TRUNCATE gold.quarterly_financials, silver.financial_facts,"
+        c.execute("TRUNCATE gold.quarterly_financials, gold.derived_financials,"
+                  " ops.quality_findings, ops.quality_companies, silver.financial_facts,"
                   " bronze.company_facts, silver.company_aliases, silver.company_ciks,"
                   " silver.companies")
         for company_id, ciks in COMPANIES.items():
@@ -249,3 +250,21 @@ def test_rebuild_reprojects_from_raw_after_metric_tags_change(loaded):
     assert after > 0
     assert loaded.execute("SELECT count(*) FROM silver.financial_facts").fetchone()[0] \
         == before + after
+
+
+def test_ttm_of_a_fiscal_year_matches_the_10k(loaded):
+    def ttm(company_id, end):
+        return loaded.execute(
+            "SELECT period_start, value, calendar_year, calendar_quarter FROM gold.financials"
+            " WHERE company_id = %s AND span = 'ttm' AND metric = 'revenue'"
+            " AND period_end = %s", (company_id, end)).fetchone()
+    assert ttm(NVDA, date(2026, 1, 25))[1] == 215938000000  # FY2026 10-K
+    # Costco's 52-week year with a 16-week Q4, in calendar Q3
+    assert ttm(COST, date(2025, 8, 31)) == (date(2024, 9, 2), 275235000000, 2025, 3)
+    assert loaded.execute("SELECT count(*) FROM ops.quality_findings"
+                          " WHERE check_name = 'annual_sum'").fetchone()[0] == 0
+
+
+def test_every_gold_refresh_is_checked(loaded):
+    checked = loaded.execute("SELECT company_id FROM ops.quality_companies ORDER BY 1")
+    assert [r[0] for r in checked] == sorted(COMPANIES)

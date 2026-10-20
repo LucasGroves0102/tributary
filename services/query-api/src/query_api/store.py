@@ -47,23 +47,28 @@ class Store:
                         " FROM silver.companies WHERE company_id = ANY(%s)", (company_ids,))
             return {r.pop("company_id"): r for r in cur.fetchall()}
 
-    def financials(self, user_id: str, company_id: str, metrics: list[str],
-                   quarters: int) -> list[dict]:
+    def financials(self, user_id: str, company_id: str, metrics: list[str], quarters: int,
+                   view: str = "quarter", basis: str = "fiscal") -> list[dict]:
+        """view: quarter | ttm. basis: fiscal (every fiscal period) | calendar (one row per
+        calendar quarter)."""
         with self._session(user_id) as cur:
             cur.execute(
                 """
-                SELECT metric, period_start, period_end, value, unit, value_source,
-                       source_tag, accession_no, form, filed, source_accessions, ingested_at,
+                SELECT metric, period_start, period_end, fiscal_year, fiscal_quarter,
+                       calendar_year, calendar_quarter, value, unit, value_source,
+                       source_tag, inputs, accession_no, form, filed, source_accessions,
+                       ingested_at,
                        (SELECT f.cik FROM silver.financial_facts f
                         WHERE f.accession_no = q.accession_no LIMIT 1) AS filer_cik
                 FROM (
                     SELECT *, row_number() OVER (PARTITION BY metric ORDER BY period_end DESC)
-                    FROM gold.quarterly_financials
-                    WHERE company_id = %s AND metric = ANY(%s)
+                    FROM gold.financials
+                    WHERE company_id = %s AND span = %s AND metric = ANY(%s)
+                      AND (%s = 'fiscal' OR calendar_primary)
                 ) q
                 WHERE row_number <= %s
                 ORDER BY metric, period_end DESC
-                """, (company_id, metrics, quarters))
+                """, (company_id, view, metrics, basis, quarters))
             return cur.fetchall()
 
     def filings(self, user_id: str, company_id: str, limit: int) -> list[dict]:

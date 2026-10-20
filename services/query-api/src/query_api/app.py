@@ -3,7 +3,7 @@ OpenFGA first (layer 1), then Postgres row-level security (layer 2, in Store).""
 
 import logging
 from datetime import UTC, datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Path, Query
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -27,6 +27,12 @@ METRICS = [
     # cash flow
     "operating_cash_flow", "capex", "depreciation_amortization", "stock_based_compensation",
     "dividends_paid", "share_buybacks",
+]
+# computed from the metrics above (gold.derived_metrics); eps_growth and roe exist in one view
+DERIVED_METRICS = [
+    "gross_margin", "operating_margin", "net_margin", "free_cash_flow", "fcf_margin",
+    "revenue_growth", "net_income_growth", "eps_growth", "payout_ratio", "debt_to_equity",
+    "net_debt", "current_ratio", "roe",
 ]
 EDGAR = "https://www.sec.gov/Archives/edgar/data"
 CompanyId = Annotated[str, Path(pattern=r"^\d{10}$", description="canonical company_id")]
@@ -127,24 +133,35 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
 
     @app.get("/v1/metrics")
     def metrics() -> dict:
-        return {"metrics": METRICS}
+        return {"metrics": METRICS, "derived_metrics": DERIVED_METRICS}
 
     @app.get("/v1/companies/{company_id}/financials")
     def financials(
         user_id: User, company_id: CompanyId,
         metrics: Annotated[list[str] | None, Query(description="default: all")] = None,
         quarters: Annotated[int, Query(ge=1, le=40)] = 4,
+        view: Annotated[Literal["quarter", "ttm"], Query(
+            description="quarter, or trailing twelve months ending each quarter")] = "quarter",
+        basis: Annotated[Literal["fiscal", "calendar"], Query(
+            description="fiscal: every fiscal quarter; calendar: one per calendar quarter")]
+            = "fiscal",
     ) -> dict:
-        unknown = set(metrics or []) - set(METRICS)
+        unknown = set(metrics or []) - set(METRICS) - set(DERIVED_METRICS)
         if unknown:
             raise HTTPException(422, f"unknown metrics: {sorted(unknown)}")
         require(user_id, "financials", company_id)
-        rows = store.financials(user_id, company_id, metrics or METRICS, quarters)
-        return {"company_id": company_id, "as_of": _now(), "rows": [
+        rows = store.financials(user_id, company_id, metrics or METRICS + DERIVED_METRICS,
+                                quarters, view, basis)
+        meta = {"company_id": company_id, "view": view, "basis": basis, "as_of": _now()}
+        return {**meta, "rows": [
             {
                 "metric": r["metric"], "period_start": r["period_start"],
-                "period_end": r["period_end"], "value": r["value"], "unit": r["unit"],
-                "value_source": r["value_source"],
+                "period_end": r["period_end"],
+                "fiscal_period": _period("FY", r.get("fiscal_year"), r.get("fiscal_quarter")),
+                "calendar_period": _period("CY", r.get("calendar_year"),
+                                           r.get("calendar_quarter")),
+                "value": r["value"], "unit": r["unit"], "value_source": r["value_source"],
+                **({"inputs": r["inputs"]} if r.get("inputs") else {}),
                 "citation": {"accession_no": r["accession_no"], "form": r["form"],
                              "filed": r["filed"], "xbrl_tag": r["source_tag"],
                              "source_accessions": r["source_accessions"],
@@ -205,6 +222,11 @@ def filing_url(cik: str | None, accession_no: str) -> str | None:
 
 
 _PROFILE = {"name": None, "sic": None, "industry": None, "exchanges": None}
+
+
+def _period(prefix: str, year: int | None, quarter: int | None) -> str | None:
+    """e.g. FY2026 Q1, CY2025 Q4; None when the fiscal year end is unknown."""
+    return f"{prefix}{year} Q{quarter}" if year and quarter else None
 
 
 def _now() -> str:
