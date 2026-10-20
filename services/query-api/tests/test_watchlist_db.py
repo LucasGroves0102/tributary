@@ -35,7 +35,8 @@ def test_add_list_remove(lists):
     assert lists.add("t-w1", TSLA) is True
     assert lists.add("t-w1", TSLA) is False
     assert lists.add("t-w1", NVDA) is True
-    assert [e["company_id"] for e in lists.list("t-w1")] == [TSLA, NVDA]
+    # one transaction: equal added_at, so the tie falls back to company_id
+    assert [e["company_id"] for e in lists.list("t-w1")] == sorted([TSLA, NVDA])
     assert lists.count("t-w1") == 2
     assert lists.list("t-w2") == []  # per user
     assert lists.remove("t-w1", TSLA) is True
