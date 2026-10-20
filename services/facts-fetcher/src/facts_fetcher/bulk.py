@@ -34,6 +34,7 @@ from facts_fetcher.db import (
 )
 from facts_fetcher.payload import Payload, Tag, digest, prepare
 from tributary_sec import sec_client
+from tributary_telemetry import configure_logging
 
 BULK_URL = "https://www.sec.gov/Archives/edgar/daily-index/xbrl/companyfacts.zip"
 ENTRY_NAME = re.compile(r"CIK(\d{10})\.json")
@@ -257,13 +258,6 @@ def main(argv: Iterable[str] | None = None) -> None:
              "complete" if stats.completed else "limit reached, run again to continue",
              stats.entries, stats.changed, stats.facts, stats.gold_rows,
              time.monotonic() - started)
-
-
-def configure_logging() -> None:
-    logging.basicConfig(
-        level=os.environ.get("LOG_LEVEL", "INFO"),
-        format="%(asctime)s %(levelname)s %(name)s %(message)s",
-    )
 
 
 if __name__ == "__main__":
