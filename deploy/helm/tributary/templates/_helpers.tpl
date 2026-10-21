@@ -64,8 +64,23 @@ tributary.io/{{ $k }}: {{ $v | quote }}
 {{- else if eq . "app-postgres" }}
 {{ include "tributary.secretEnv" (dict "root" $root "env" "APP_DATABASE_URL" "key" "app-database-url") }}
 {{- else if eq . "kafka" }}
+{{- if $root.Values.kafka.sasl.enabled }}
+{{- /* One SCRAM user per client: kafkaUser, default the service/job name. Its ACLs are in
+deploy/helm/platform/files/kafka-acls.yaml; libs/kafka and parser-rs read these variables. */}}
+{{- $user := $.kafkaUser | default $.name }}
+- name: KAFKA_BOOTSTRAP_SERVERS
+  value: {{ $root.Values.kafka.sasl.bootstrap | quote }}
+- name: KAFKA_SECURITY_PROTOCOL
+  value: SASL_PLAINTEXT
+- name: KAFKA_SASL_MECHANISM
+  value: SCRAM-SHA-512
+- name: KAFKA_SASL_USERNAME
+  value: {{ $user | quote }}
+{{ include "tributary.secretEnv" (dict "root" $root "env" "KAFKA_SASL_PASSWORD" "key" (printf "kafka-password-%s" $user)) }}
+{{- else }}
 - name: KAFKA_BOOTSTRAP_SERVERS
   value: {{ $root.Values.kafka.bootstrap | quote }}
+{{- end }}
 {{- else if eq . "openfga" }}
 - name: FGA_API_URL
   value: {{ $root.Values.openfga.url | quote }}
