@@ -12,6 +12,7 @@ dependencies = [
 
 [project.scripts]
 parser = "filing_parser.main:main"
+parser-index = "filing_parser.index:main"
 
 [build-system]
 requires = ["setuptools>=68"]
