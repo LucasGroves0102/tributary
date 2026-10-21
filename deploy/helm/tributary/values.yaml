@@ -58,8 +58,10 @@ resources:
 # tmpSize: size limit of the /tmp emptyDir (default 64Mi; the root filesystem is read-only).
 # databaseUrlKey: secretName key for DATABASE_URL instead of database-url (e.g. a throwaway DB).
 # uses: postgres, app-postgres (APP_DATABASE_URL), kafka, openfga, sec (SEC_USER_AGENT + HTTPS
-# out), anthropic (API key + HTTPS out), jwt, query-api, demo. Each adds the env vars and
-# network access it needs.
+# out, and the shared SEC rate limit in host Postgres), anthropic (API key + HTTPS out), jwt,
+# query-api, demo. Each adds the env vars and network access it needs.
+# secClass: priority in the shared SEC rate limit (SEC_CALLER_CLASS): live, batch or bulk.
+# Defaults: live for services, batch for jobs. Lower classes leave tokens for higher ones.
 # from: components allowed to connect on `port`; fromNamespaces: any pod in these namespaces.
 services:
   poller:
@@ -122,7 +124,8 @@ services:
       limits:
         memory: 64Mi
 
-# Staggered so at most one SEC batch job runs at a time.
+# Every SEC caller shares one token bucket in Postgres (libs/sec, migration 019), so overlapping
+# jobs can't exceed the SEC's 10 req/s; they're still staggered so they don't slow each other.
 jobs:
   backfill:
     image: poller
@@ -186,3 +189,4 @@ jobs:
     schedule: "0 0 1 1 *"
     suspend: true
     uses: [kafka, postgres, sec]
+    secClass: bulk

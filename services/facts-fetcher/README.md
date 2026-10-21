@@ -45,6 +45,8 @@ of 500 with 10 minute pauses; ships suspended).
 Config (env): `DATABASE_URL`, `SEC_USER_AGENT` (both required; the bulk job needs no
 `SEC_USER_AGENT` with `--zip`), `BULK_DIR` (default the system temp dir), `BULK_LIMIT`
 (default 500), `BULK_ROUNDS` (default 1), `BULK_PAUSE_SECONDS` (default 0), `LOG_LEVEL`.
+SEC requests share one rate limit with every other service (`libs/sec`): `SEC_CALLER_CLASS`
+(`batch` for both jobs) and `SEC_LIMITER_DATABASE_URL` (default `DATABASE_URL`).
 
 ## Tests
 

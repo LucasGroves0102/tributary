@@ -1,5 +1,5 @@
 {{- range $name, $job := .Values.jobs }}
-{{- $ctx := merge (dict "root" $ "name" $name "image" ($job.image | default $name) "restartPolicy" "Never") $job }}
+{{- $ctx := merge (dict "root" $ "name" $name "image" ($job.image | default $name) "restartPolicy" "Never" "defaultSecClass" "batch") $job }}
 ---
 apiVersion: batch/v1
 kind: CronJob
