@@ -113,11 +113,7 @@ impl Source for Kafka {
 
     fn commit(&mut self, msg: &Message) -> Result<(), BoxError> {
         let mut offsets = TopicPartitionList::new();
-        offsets.add_partition_offset(
-            &self.topic,
-            msg.partition,
-            Offset::Offset(msg.offset + 1),
-        )?;
+        offsets.add_partition_offset(&self.topic, msg.partition, Offset::Offset(msg.offset + 1))?;
         self.consumer.commit(&offsets, CommitMode::Sync)?;
         Ok(())
     }
@@ -224,7 +220,14 @@ mod tests {
         let stop = AtomicBool::new(true);
         let mut source = FakeSource::new(&[Some(EVENT)], &stop);
         let metrics = Metrics::new().unwrap();
-        consume(&mut source, &mut FakeStore::default(), &metrics, TOPIC, &stop).unwrap();
+        consume(
+            &mut source,
+            &mut FakeStore::default(),
+            &metrics,
+            TOPIC,
+            &stop,
+        )
+        .unwrap();
         assert_eq!(source.messages.len(), 1);
     }
 
