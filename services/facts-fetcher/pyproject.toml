@@ -12,6 +12,7 @@ dependencies = [
 [project.scripts]
 facts-fetcher = "facts_fetcher.main:main"
 facts-fetcher-bulk = "facts_fetcher.bulk:main"
+facts-fetcher-segments = "facts_fetcher.segments:main"
 
 [build-system]
 requires = ["setuptools>=68"]
@@ -19,3 +20,6 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+facts_fetcher = ["data/*.csv"]

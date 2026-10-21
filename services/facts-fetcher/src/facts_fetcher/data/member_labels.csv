@@ -1,0 +1,26 @@
+member,label
+us-gaap:NonUsMember,Non-US
+us-gaap:ProductMember,Products
+us-gaap:ServiceMember,Services
+us-gaap:ServiceOtherMember,Services and other
+us-gaap:CorporateNonSegmentMember,Corporate
+us-gaap:IntersegmentEliminationMember,Intersegment eliminations
+srt:ConsolidationEliminationsMember,Eliminations
+us-gaap:SegmentReconcilingItemsMember,Reconciling items
+us-gaap:MaterialReconcilingItemsMember,Reconciling items
+us-gaap:AllOtherSegmentsMember,All other
+us-gaap:OperatingSegmentsMember,Operating segments
+srt:AmericasMember,Americas
+srt:NorthAmericaMember,North America
+srt:LatinAmericaMember,Latin America
+srt:EuropeMember,Europe
+srt:AsiaPacificMember,Asia Pacific
+srt:AsiaMember,Asia
+us-gaap:EMEAMember,EMEA
+srt:EuropeMiddleEastAndAfricaMember,"Europe, Middle East and Africa"
+aapl:WearablesHomeandAccessoriesMember,"Wearables, Home and Accessories"
+aapl:RestOfAsiaPacificSegmentMember,Rest of Asia Pacific
+ko:A.PacificMember,Asia Pacific
+nvda:AICloudsIndustrialEnterpriseMember,"AI Clouds, Industrial and Enterprise"
+pep:PepsiCoFoodsNorthAmericaMember,PepsiCo Foods North America
+pep:PepsiCoBeveragesNorthAmericaMember,PepsiCo Beverages North America
