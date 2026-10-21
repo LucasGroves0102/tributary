@@ -53,13 +53,91 @@ export interface Answer {
   cost_usd: number | null;
   citations: Citation[];
   verification: Verification | null;
+  /** UI actions the agent proposed and agent-api accepted, in order */
+  actions: UiAction[];
 }
 
 export type AgentEvent =
   | { type: "text"; round: number; text: string }
   | ({ type: "tool"; round: number } & ToolCall)
+  | { type: "action"; round: number; action: UiAction }
   | { type: "done"; answer: Answer }
   | { type: "error"; message: string };
+
+type Transform = "q" | "ttm" | "yoy" | "idx";
+type LayerType = "line" | "bar" | "area";
+
+/** A chart layer as agent-api checked it (services/agent ui.py): its company is one the user
+ * can read financials for. */
+export interface UiLayer {
+  kind: "metric" | "formula";
+  company_id: string | null;
+  company_label: string | null;
+  metric?: string;
+  formula?: string;
+  transform: Transform;
+  type: LayerType;
+  axis: "L" | "R";
+}
+
+/** Screener filters in agent-api's shape: the web app's ScreenFilters (companies/screen.ts). */
+export interface UiScreenFilters {
+  q?: string;
+  industry?: string;
+  sic?: string;
+  band?: "lt100m" | "100m-1b" | "1b-10b" | "10b-100b" | "gte100b";
+  growth?: number;
+  margin?: number;
+  fye?: number;
+  exchange?: string;
+  filer?: "large_accelerated" | "accelerated" | "non_accelerated";
+  mine?: boolean;
+  sort?: string;
+}
+
+/** A change to the screen the agent proposed ("action" event); `label` says what it does. */
+export type UiAction = { label: string } & (
+  | { action: "set_chart_layers"; layers: UiLayer[]; title: string }
+  | { action: "add_chart_layer"; layer: UiLayer }
+  | { action: "remove_chart_layer"; company_id: string | null; metric: string | null }
+  | {
+      action: "set_chart_options";
+      options: {
+        range?: 2 | 3 | 5;
+        align?: "calendar" | "fiscal";
+        transform?: Transform;
+        type?: LayerType;
+        title?: string;
+      };
+    }
+  | { action: "set_screen_filters"; filters: UiScreenFilters; reset: boolean }
+  | { action: "add_watchlist" | "remove_watchlist"; company_id: string; company_label: string }
+);
+
+/** What the screen shows, sent with each question (agent-api ui.UiContext). Untrusted there:
+ * it describes the screen and never identifies the user. */
+export interface UiContext {
+  page: "home" | "companies" | "company" | "filing" | "chart" | "compare" | "ask";
+  company_id?: string;
+  accession_no?: string;
+  chart?: {
+    title: string;
+    range: 2 | 3 | 5;
+    align: "calendar" | "fiscal";
+    layers: {
+      kind: "metric" | "formula";
+      company_id?: string;
+      label?: string;
+      metric?: string;
+      formula?: string;
+      transform: Transform;
+      type: LayerType;
+      axis: "L" | "R";
+      hidden: boolean;
+    }[];
+  };
+  screen?: UiScreenFilters;
+}
 
 export interface HistoryTurn {
   role: "user" | "assistant";

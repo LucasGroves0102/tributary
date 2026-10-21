@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 from tributary_agent.agent import Agent, Answer
 from tributary_agent.telemetry import record_answer, record_error
 from tributary_agent.tools import MetricTools, QueryApi
+from tributary_agent.ui import UiActions, UiContext
 from tributary_telemetry import configure_logging
 from tributary_telemetry.http import forward_request_id, instrument, request_id_headers
 
@@ -36,6 +37,8 @@ class Turn(BaseModel):
 class AskRequest(BaseModel):
     question: str = Field(min_length=1, max_length=2000)
     history: list[Turn] = Field(default=[], max_length=10)
+    # the web app's screen: untrusted, size-capped, never identity (ui.UiContext)
+    context: UiContext | None = None
 
 
 class LimitExceeded(Exception):
@@ -103,7 +106,7 @@ def answer_json(a: Answer) -> dict:
     return {"text": a.text, "stop": a.stop, "model": a.model, "rounds": a.rounds,
             "tool_calls": [asdict(c) for c in a.tool_calls], "usage": asdict(a.usage),
             "cost_usd": a.cost_usd, "citations": list(a.citations.values()),
-            "verification": a.verification}
+            "verification": a.verification, "actions": a.actions}
 
 
 def create_app(make_agent: Callable[[str], Agent], who_is: Callable[[str], str],
@@ -142,7 +145,8 @@ def create_app(make_agent: Callable[[str], Agent], who_is: Callable[[str], str],
 
         def stream() -> Iterator[str]:
             try:
-                for event in agent.events(body.question, [t.model_dump() for t in body.history]):
+                for event in agent.events(body.question, [t.model_dump() for t in body.history],
+                                          body.context):
                     if event["type"] == "done":
                         answer = event["answer"]
                         limits.spend(answer.cost_usd or 0)
@@ -195,7 +199,8 @@ def build_app() -> FastAPI:
     def make_agent(tok: str) -> Agent:
         api = QueryApi(base_url, tok, http=http)
         return Agent(messages, api, model, stream=True,
-                     effort=os.environ.get("AGENT_EFFORT") or None, tools=tools.get(api))
+                     effort=os.environ.get("AGENT_EFFORT") or None, tools=tools.get(api),
+                     ui=UiActions(api))
 
     return create_app(
         make_agent=make_agent,

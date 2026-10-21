@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from tributary_agent.tools import TOOLS
+from tributary_agent.ui import UI_RULES, UI_TOOL, UiContext, context_block
 from tributary_agent.verify import verify
 
 SYSTEM = """\
@@ -57,6 +58,12 @@ class ToolRunner(Protocol):
     def run(self, name: str, args: dict[str, Any]) -> tuple[str, bool]: ...
 
 
+class UiRunner(Protocol):
+    """Checks one propose_ui_action call: ui.UiActions."""
+
+    def run(self, args: dict[str, Any]) -> tuple[str, bool, dict | None]: ...
+
+
 @dataclass
 class Usage:
     input_tokens: int = 0
@@ -94,6 +101,7 @@ class Answer:
     usage: Usage = field(default_factory=Usage)
     citations: dict[str, dict] = field(default_factory=dict)  # accession_no -> filing
     verification: dict | None = None
+    actions: list[dict] = field(default_factory=list)  # UI actions, in order
 
     @property
     def cost_usd(self) -> float | None:
@@ -104,10 +112,14 @@ class Agent:
     def __init__(self, messages: MessagesClient, api: ToolRunner, model: str,
                  max_rounds: int = 6, max_tokens: int = 8000,
                  effort: str | None = None, stream: bool = False,
-                 tools: list[dict] | None = None) -> None:
-        """tools: TOOLS by default; tools.with_metrics adds the metric names."""
+                 tools: list[dict] | None = None, ui: UiRunner | None = None) -> None:
+        """tools: TOOLS by default; tools.with_metrics adds the metric names.
+        ui: the web app's UI actions; adds propose_ui_action and its rules to the prompt
+        (without it, requests are exactly what the recorded suites replay)."""
         self._messages = messages
-        self._tools = tools or TOOLS
+        self._tools = [*(tools or TOOLS), UI_TOOL] if ui else (tools or TOOLS)
+        self._system = SYSTEM + UI_RULES if ui else SYSTEM
+        self._ui = ui
         self._api = api
         self.model = model
         self._max_rounds = max_rounds
@@ -115,17 +127,24 @@ class Agent:
         self._effort = effort
         self._stream = stream
 
-    def ask(self, question: str, history: Sequence[dict] = ()) -> Answer:
-        for event in self.events(question, history):
+    def ask(self, question: str, history: Sequence[dict] = (),
+            context: UiContext | None = None) -> Answer:
+        for event in self.events(question, history, context):
             if event["type"] == "done":
                 return event["answer"]
         raise AssertionError("events() ended without a done event")
 
-    def events(self, question: str, history: Sequence[dict] = ()) -> Iterator[dict]:
+    def events(self, question: str, history: Sequence[dict] = (),
+               context: UiContext | None = None) -> Iterator[dict]:
         """Yields {"type": "text"} deltas (when streaming), one {"type": "tool"} per tool call,
-        then {"type": "done", "answer": Answer}. Rounds count from 0. history: earlier
-        user/assistant text turns."""
-        messages: list[dict] = [*history, {"role": "user", "content": question}]
+        a {"type": "action"} after each accepted UI action, then {"type": "done", "answer":
+        Answer}. Rounds count from 0. history: earlier user/assistant text turns. context: the
+        web app's screen, sent as data ahead of the question (only with ui)."""
+        content: str | list[dict] = question
+        if context is not None and self._ui is not None:
+            content = [{"type": "text", "text": context_block(context)},
+                       {"type": "text", "text": question}]
+        messages: list[dict] = [*history, {"role": "user", "content": content}]
         answer = Answer(text="", stop="max_rounds", model=self.model)
         returned: list[str] = []
         while answer.rounds < self._max_rounds:
@@ -148,15 +167,24 @@ class Agent:
                 if block.type != "tool_use":
                     continue
                 args = dict(block.input or {})
-                content, is_error = self._api.run(block.name, args)
+                action = None
+                ui = self._ui if block.name == UI_TOOL["name"] else None
+                if ui is not None:
+                    content, is_error, action = ui.run(args)
+                else:
+                    content, is_error = self._api.run(block.name, args)
                 answer.tool_calls.append(ToolCall(block.name, args, is_error))
-                if not is_error:
+                # a UI action's result is our own text, not data: nothing to verify or cite
+                if not is_error and ui is None:
                     returned.append(content)
                     _collect_citations(content, answer.citations)
                 results.append({"type": "tool_result", "tool_use_id": block.id,
                                 "content": content, "is_error": is_error})
                 yield {"type": "tool", "round": answer.rounds - 1, "name": block.name,
                        "input": args, "is_error": is_error}
+                if action is not None:
+                    answer.actions.append(action)
+                    yield {"type": "action", "round": answer.rounds - 1, "action": action}
             messages.append({"role": "user", "content": results})
         answer.text = (f"Stopped after {self._max_rounds} rounds of tool calls without a final "
                        "answer. Try a narrower question.")
@@ -175,7 +203,7 @@ class Agent:
         req: dict[str, Any] = {
             "model": self.model,
             "max_tokens": self._max_tokens,
-            "system": SYSTEM,
+            "system": self._system,
             "tools": self._tools,
             "messages": messages,
             "cache_control": {"type": "ephemeral"},

@@ -13,6 +13,7 @@ import type {
   ScreenerColumns,
   SearchResult,
   Section,
+  UiContext,
   Watchlist,
 } from "./types";
 
@@ -224,11 +225,12 @@ export async function ask(
   history: HistoryTurn[],
   onEvent: (e: AgentEvent) => void,
   signal?: AbortSignal,
+  context?: UiContext,
 ): Promise<void> {
   const r = await fetch(`${AGENT}/v1/ask`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ question, history }),
+    body: JSON.stringify(context ? { question, history, context } : { question, history }),
     signal,
   });
   if (!r.ok || !r.body) await json(r);
