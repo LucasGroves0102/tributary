@@ -268,7 +268,7 @@ class Crawler:
     def _fetch(self, target: Target) -> Fetched | Exception:
         try:
             return self.fetch(target)
-        except (httpx.HTTPError, Unusable) as e:
+        except Exception as e:  # noqa: BLE001 - one odd filing must not crash-loop the crawl
             return e
 
     def _failed(self, target: Target, error: Exception) -> None:

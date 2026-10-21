@@ -314,13 +314,15 @@ def test_failures_retry_with_backoff_then_give_up():
             raise Unusable("over 100 MB")
         if t.accession_no.startswith("flaky"):
             raise httpx.ReadTimeout("slow")
+        if t.accession_no == "odd":
+            raise RuntimeError("unexpected page")
         return fetched(t)
 
     queue = FakeQueue([target("gone"), target("huge"), target("flaky", attempts=1),
-                       target("flaky-4th", attempts=3)])
-    crawler(queue, fetch=fetch, batch=4, max_attempts=4).round()
+                       target("flaky-4th", attempts=3), target("odd", attempts=3)])
+    crawler(queue, fetch=fetch, batch=5, max_attempts=4).round()
     assert queue.status == {"gone": "failed", "huge": "skipped", "flaky": "pending",
-                            "flaky-4th": "failed"}
+                            "flaky-4th": "failed", "odd": "failed"}
     assert queue.delays == {"flaky": timedelta(minutes=20)}  # 10 min * 2 ** attempts
     assert "ReadTimeout" in queue.errors["flaky"]
 
