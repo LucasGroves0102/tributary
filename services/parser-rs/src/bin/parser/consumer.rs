@@ -18,6 +18,17 @@ use crate::service::{Failure, accession_no, parse_one};
 pub const TOPIC: &str = "documents.fetched";
 pub const GROUP_ID: &str = "parser-python"; // the Python parser's group: a swap keeps its offsets
 
+/// The topic and group to consume: PARSER_TOPIC and PARSER_GROUP when set (the backfill parser
+/// reads documents.backfill as parser-backfill), else TOPIC and GROUP_ID. Same in Python.
+pub fn topic_and_group(var: impl Fn(&str) -> Option<String>) -> (String, String) {
+    let get = |key: &str, default: &str| {
+        var(key)
+            .filter(|v| !v.is_empty())
+            .unwrap_or_else(|| default.to_string())
+    };
+    (get("PARSER_TOPIC", TOPIC), get("PARSER_GROUP", GROUP_ID))
+}
+
 pub struct Message {
     pub partition: i32,
     pub offset: i64,
@@ -35,17 +46,18 @@ pub fn consume(
     source: &mut impl Source,
     store: &mut impl Store,
     metrics: &Metrics,
+    topic: &str,
     stop: &AtomicBool,
 ) -> Result<(), BoxError> {
     while !stop.load(Ordering::Relaxed) {
         let Some(msg) = source.poll(Duration::from_secs(1))? else {
             continue;
         };
-        metrics.consumed.with_label_values(&[TOPIC]).inc();
+        metrics.consumed.with_label_values(&[topic]).inc();
         match accession_no(msg.payload.as_deref()).and_then(|a| parse_one(store, metrics, &a)) {
             Ok(()) => {}
             Err(Failure::Skip(reason)) => {
-                metrics.skipped.with_label_values(&[TOPIC, "invalid"]).inc();
+                metrics.skipped.with_label_values(&[topic, "invalid"]).inc();
                 log::error(
                     "parser",
                     &format!("skipping {}:{}: {reason}", msg.partition, msg.offset),
@@ -59,24 +71,34 @@ pub fn consume(
     Ok(())
 }
 
-pub struct Kafka(BaseConsumer);
+pub struct Kafka {
+    consumer: BaseConsumer,
+    topic: String,
+}
 
 impl Kafka {
-    pub fn subscribe(bootstrap_servers: &str) -> Result<Kafka, KafkaError> {
+    pub fn subscribe(
+        bootstrap_servers: &str,
+        topic: &str,
+        group: &str,
+    ) -> Result<Kafka, KafkaError> {
         let consumer: BaseConsumer = ClientConfig::new()
             .set("bootstrap.servers", bootstrap_servers)
-            .set("group.id", GROUP_ID)
+            .set("group.id", group)
             .set("enable.auto.commit", "false")
             .set("auto.offset.reset", "earliest")
             .create()?;
-        consumer.subscribe(&[TOPIC])?;
-        Ok(Kafka(consumer))
+        consumer.subscribe(&[topic])?;
+        Ok(Kafka {
+            consumer,
+            topic: topic.to_string(),
+        })
     }
 }
 
 impl Source for Kafka {
     fn poll(&mut self, timeout: Duration) -> Result<Option<Message>, BoxError> {
-        match self.0.poll(timeout) {
+        match self.consumer.poll(timeout) {
             None => Ok(None),
             // the topic is created on first produce, not on subscribe
             Some(Err(e)) if is_unknown_topic(&e) => Ok(None),
@@ -91,8 +113,12 @@ impl Source for Kafka {
 
     fn commit(&mut self, msg: &Message) -> Result<(), BoxError> {
         let mut offsets = TopicPartitionList::new();
-        offsets.add_partition_offset(TOPIC, msg.partition, Offset::Offset(msg.offset + 1))?;
-        self.0.commit(&offsets, CommitMode::Sync)?;
+        offsets.add_partition_offset(
+            &self.topic,
+            msg.partition,
+            Offset::Offset(msg.offset + 1),
+        )?;
+        self.consumer.commit(&offsets, CommitMode::Sync)?;
         Ok(())
     }
 }
@@ -172,7 +198,7 @@ mod tests {
         );
         let mut store = FakeStore::with(&[("a", "8-K", fixture("8-K"))]);
         let metrics = Metrics::new().unwrap();
-        consume(&mut source, &mut store, &metrics, &stop).unwrap();
+        consume(&mut source, &mut store, &metrics, TOPIC, &stop).unwrap();
         assert_eq!(source.committed, [0, 1, 2, 3]);
         assert_eq!(store.writes, 2);
         assert_eq!(metrics.consumed.with_label_values(&[TOPIC]).get(), 4);
@@ -188,7 +214,7 @@ mod tests {
         let mut source = FakeSource::new(&[Some(EVENT), Some(EVENT)], &stop);
         let mut store = FakeStore::with(&[("a", "8-K", b"".to_vec())]);
         let metrics = Metrics::new().unwrap();
-        assert!(consume(&mut source, &mut store, &metrics, &stop).is_err());
+        assert!(consume(&mut source, &mut store, &metrics, TOPIC, &stop).is_err());
         assert!(source.committed.is_empty());
         assert_eq!(source.messages.len(), 1);
     }
@@ -198,8 +224,29 @@ mod tests {
         let stop = AtomicBool::new(true);
         let mut source = FakeSource::new(&[Some(EVENT)], &stop);
         let metrics = Metrics::new().unwrap();
-        consume(&mut source, &mut FakeStore::default(), &metrics, &stop).unwrap();
+        consume(&mut source, &mut FakeStore::default(), &metrics, TOPIC, &stop).unwrap();
         assert_eq!(source.messages.len(), 1);
+    }
+
+    #[test]
+    fn topic_and_group_default_to_the_live_pipeline() {
+        assert_eq!(
+            topic_and_group(|_| None),
+            (TOPIC.to_string(), GROUP_ID.to_string())
+        );
+        let backfill = |key: &str| match key {
+            "PARSER_TOPIC" => Some("documents.backfill".to_string()),
+            "PARSER_GROUP" => Some("parser-backfill".to_string()),
+            _ => None,
+        };
+        assert_eq!(
+            topic_and_group(backfill),
+            (
+                "documents.backfill".to_string(),
+                "parser-backfill".to_string()
+            )
+        );
+        assert_eq!(topic_and_group(|_| Some(String::new())).0, TOPIC);
     }
 
     #[test]

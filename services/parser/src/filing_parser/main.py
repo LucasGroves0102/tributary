@@ -16,6 +16,8 @@ from filing_parser.db import all_accessions, load_document, load_exhibits, write
 from filing_parser.sections import exhibit_section, parse
 from tributary_telemetry import CONSUMED, SKIPPED, configure_logging, serve_metrics
 
+# PARSER_TOPIC / PARSER_GROUP override these: the backfill parser consumes documents.backfill as
+# group parser-backfill, so a crawl's backlog never delays live filings (streaming/topics.md).
 TOPIC = "documents.fetched"
 GROUP_ID = "parser-python"
 
@@ -64,18 +66,19 @@ def main() -> None:
 
 
 def consume(conn: psycopg.Connection) -> None:
+    topic = os.environ.get("PARSER_TOPIC") or TOPIC
     stop = threading.Event()
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
     signal.signal(signal.SIGINT, lambda *_: stop.set())
     consumer = Consumer({
         "bootstrap.servers": os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
-        "group.id": GROUP_ID,
+        "group.id": os.environ.get("PARSER_GROUP") or GROUP_ID,
         "enable.auto.commit": False,
         "auto.offset.reset": "earliest",
     })
-    consumer.subscribe([TOPIC])
+    consumer.subscribe([topic])
     serve_metrics()
-    log.info("consuming %s", TOPIC)
+    log.info("consuming %s", topic)
     try:
         while not stop.is_set():
             msg = consumer.poll(1.0)
@@ -85,12 +88,12 @@ def consume(conn: psycopg.Connection) -> None:
                 if msg.error().code() == KafkaError.UNKNOWN_TOPIC_OR_PART:
                     continue  # topic not created yet: nothing has been produced to it
                 raise KafkaException(msg.error())
-            CONSUMED.labels(TOPIC).inc()
+            CONSUMED.labels(topic).inc()
             try:
                 parse_one(conn, json.loads(msg.value())["accession_no"])
             except (ValueError, KeyError) as e:
                 # TODO: route to a dead-letter topic instead of dropping
-                SKIPPED.labels(TOPIC, "invalid").inc()
+                SKIPPED.labels(topic, "invalid").inc()
                 log.error("skipping %d:%d: %s", msg.partition(), msg.offset(), e)
             consumer.commit(msg, asynchronous=False)
     finally:

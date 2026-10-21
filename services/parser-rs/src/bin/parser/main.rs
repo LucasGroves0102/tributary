@@ -11,7 +11,7 @@ use std::process::ExitCode;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
-use consumer::{Kafka, TOPIC, consume};
+use consumer::{Kafka, consume, topic_and_group};
 use db::Store;
 use metrics::Metrics;
 use service::parse_one;
@@ -70,7 +70,8 @@ fn run(reparse_all: bool) -> Result<(), BoxError> {
     signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&stop))?;
     let bootstrap =
         std::env::var("KAFKA_BOOTSTRAP_SERVERS").unwrap_or_else(|_| "localhost:9092".into());
-    let mut kafka = Kafka::subscribe(&bootstrap)?;
+    let (topic, group) = topic_and_group(|key| std::env::var(key).ok());
+    let mut kafka = Kafka::subscribe(&bootstrap, &topic, &group)?;
     if let Some(port) = std::env::var("METRICS_PORT").ok().filter(|p| !p.is_empty()) {
         metrics::serve(metrics.registry.clone(), port.parse()?)?;
         log::info(
@@ -79,8 +80,8 @@ fn run(reparse_all: bool) -> Result<(), BoxError> {
             &[],
         );
     }
-    log::info("parser", &format!("consuming {TOPIC}"), &[]);
-    let result = consume(&mut kafka, &mut db, &metrics, &stop);
+    log::info("parser", &format!("consuming {topic}"), &[]);
+    let result = consume(&mut kafka, &mut db, &metrics, &topic, &stop);
     drop(kafka); // leaves the group
     result?;
     log::info("parser", "stopped", &[]);
