@@ -220,6 +220,73 @@ export interface ScreenerRow {
   sources: Record<string, ValueSource | null>;
 }
 
+/** /v1/screener/columns: every column key, i.e. every formula metric with each span it has. */
+export interface ScreenerColumns {
+  columns: ColumnInfo[];
+  filer_categories: string[];
+  bands: string[];
+}
+
+/** A formula problem at `pos` (0-based, `length` chars) from /v1/formulas/*. */
+export interface FormulaProblem {
+  code: string;
+  message: string;
+  pos: number;
+  length: number;
+  hint: string | null;
+}
+
+export interface FormulaInput {
+  input: number;
+  ref: string;
+  ticker: string | null;
+  company_id: string | null;
+  metric: string;
+  span: "quarter" | "ttm";
+  lag_quarters: number;
+  unit: string;
+}
+
+export type FormulaValidation =
+  | { valid: true; unit: string; alignment: "fiscal" | "calendar"; inputs: FormulaInput[] }
+  | { valid: false; errors: FormulaProblem[] };
+
+export interface FormulaPoint {
+  /** "FY2027 Q2" or "CY2026 Q3" */
+  period: string;
+  period_key: number;
+  period_end: string;
+  /** exact decimal */
+  value: string;
+  inputs: {
+    input: number;
+    period_start: string | null;
+    period_end: string;
+    value: string;
+    value_source: "reported" | "derived";
+    citation: {
+      accession_no: string;
+      form: string;
+      filed: string;
+      source_accessions: string[] | null;
+      filing_url: string | null;
+    };
+    freshness: { filed: string; ingested_at: string };
+  }[];
+  source_accessions: string[];
+}
+
+export interface FormulaSeries {
+  formula: string;
+  unit: string;
+  basis: "fiscal" | "calendar";
+  view: "quarter" | "ttm";
+  alignment: "fiscal" | "calendar";
+  as_of: string;
+  inputs: FormulaInput[];
+  points: FormulaPoint[];
+}
+
 export interface Screener {
   as_of: string;
   /** null when the page is past the end */

@@ -23,6 +23,15 @@
   --shadow: none;
   --overlay: rgb(0 0 0 / 0.5);
   --popover-shadow: 0 18px 50px rgb(0 0 0 / 0.45);
+  /* chart series, in layer order */
+  --series-0: #7c93ff;
+  --series-1: #4cc47a;
+  --series-2: #f0a43a;
+  --series-3: #ff6b5e;
+  --series-4: #4dd0e1;
+  --series-5: #c084fc;
+  --series-6: #f472b6;
+  --series-7: #aab2be;
   color-scheme: dark;
 }
 
@@ -47,6 +56,15 @@
   --shadow: 0 1px 2px rgb(16 24 40 / 0.06);
   --overlay: rgb(10 12 16 / 0.35);
   --popover-shadow: 0 18px 50px rgb(0 0 0 / 0.25);
+  /* chart series; chart/export.ts mirrors these for deck exports */
+  --series-0: #3b5bdb;
+  --series-1: #2f9e44;
+  --series-2: #e8590c;
+  --series-3: #c92a2a;
+  --series-4: #0c8599;
+  --series-5: #7048e8;
+  --series-6: #d6336c;
+  --series-7: #495057;
   color-scheme: light;
 }
 

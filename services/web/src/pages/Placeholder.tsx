@@ -1,13 +1,6 @@
 import { href } from "../route";
 
 const COPY = {
-  chart: {
-    title: "Chart builder",
-    coming:
-      "Layer any metric or formula across the companies you can read: line or bar, TTM, YoY " +
-      "or indexed, fiscal or calendar quarters, with the source filing behind every point and " +
-      "PNG, SVG and CSV export.",
-  },
   compare: {
     title: "Compare",
     coming:
@@ -32,8 +25,9 @@ export function Placeholder({ view }: { view: keyof typeof COPY }) {
         <div className="card-b placeholder">
           <p>{coming}</p>
           <p className="muted">
-            Today: each <a href={href({ view: "companies" })}>company page</a> charts 12 quarters
-            of its financials with every value linked to its filing, and the assistant (
+            Today: the <a href={href({ view: "companies" })}>screener</a> lines companies up on
+            growth and margins, the <a href={href({ view: "chart" })}>chart builder</a> puts
+            several on one chart, and the assistant (
             <span className="kbd">Ctrl J</span>) answers comparisons with citations.
           </p>
         </div>

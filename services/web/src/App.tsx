@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { demoUsers, login, me as fetchMe, watchlistCsv } from "./api";
 import { AssistantPanel } from "./assistant/AssistantPanel";
+import { companyChart } from "./chart/model";
+import { useChart } from "./chart/useChart";
 import { pageContext } from "./assistant/context";
 import { useAssistant } from "./assistant/useAssistant";
 import { CompanyPage } from "./components/explore/CompanyPage";
@@ -12,6 +14,7 @@ import { TopBar } from "./components/TopBar";
 import { download } from "./download";
 import { lastIngested } from "./home/data";
 import { useWorkspace } from "./home/useWorkspace";
+import { ChartBuilder } from "./pages/ChartBuilder";
 import { Companies } from "./pages/Companies";
 import { Home } from "./pages/Home";
 import { Placeholder } from "./pages/Placeholder";
@@ -41,6 +44,7 @@ export function App() {
   const [theme, toggleTheme] = useTheme(user);
   const assistant = useAssistant(token, user);
   const workspace = useWorkspace(token, user);
+  const [chart, setChart] = useChart(user);
 
   useEffect(() => {
     demoUsers()
@@ -225,6 +229,10 @@ export function App() {
                 screen={route.screen ?? {}}
                 watched={watched}
                 onWatch={(id, on) => (on ? workspace.watch(id) : workspace.unwatch(id))}
+                onChart={(id, name) => {
+                  setChart((s) => companyChart(s, id, name));
+                  go({ view: "chart" });
+                }}
               />
             ) : route.view === "company" ? (
               <CompanyPage
@@ -244,6 +252,8 @@ export function App() {
                 accessionNo={route.accessionNo}
                 sectionKey={route.section}
               />
+            ) : route.view === "chart" ? (
+              <ChartBuilder key={user} token={token} chart={chart} setChart={setChart} />
             ) : route.view === "ask" ? (
               <div className="page ask-page">
                 <div className="row">

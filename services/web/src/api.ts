@@ -3,10 +3,14 @@ import type {
   Calendar,
   Filing,
   FinancialRow,
+  FormulaProblem,
+  FormulaSeries,
+  FormulaValidation,
   HistoryTurn,
   LatestFiling,
   Me,
   Screener,
+  ScreenerColumns,
   SearchResult,
   Section,
   Watchlist,
@@ -145,6 +149,52 @@ export const section = (token: string, companyId: string, key: string, accession
 
 export const latestFilings = (token: string, limit = 20) =>
   get<{ as_of: string; filings: LatestFiling[] }>(token, "/v1/filings/latest", { limit });
+
+export const screenerColumns = (token: string) =>
+  get<ScreenerColumns>(token, "/v1/screener/columns");
+
+/** A formula request (`from`: earliest period end, YYYY-MM-DD). */
+export interface FormulaRequest {
+  formula: string;
+  default_company?: string;
+  basis: "fiscal" | "calendar";
+  view: "quarter" | "ttm";
+  from?: string;
+}
+
+/** The formula API refused a formula: positioned problems (422), or a company the user can't
+ * read (403, the same body whether it exists or not). */
+export class FormulaApiError extends ApiError {
+  constructor(
+    readonly problems: FormulaProblem[],
+    status: number,
+  ) {
+    super(problems.map((p) => p.message).join("; ") || "invalid formula", status);
+  }
+}
+
+async function formulaPost<T>(token: string, path: string, body: FormulaRequest): Promise<T> {
+  const r = await fetch(url(path, {}), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) {
+    const data = await r.json().catch(() => ({}));
+    const errors = data?.detail?.errors;
+    if (Array.isArray(errors)) throw new FormulaApiError(errors as FormulaProblem[], r.status);
+    throw new ApiError(typeof data.detail === "string" ? data.detail : r.statusText, r.status);
+  }
+  return r.json() as Promise<T>;
+}
+
+/** Parse and check a formula (names, units, the user's tickers); reads no data. */
+export const validateFormula = (token: string, body: FormulaRequest) =>
+  formulaPost<FormulaValidation>(token, "/v1/formulas/validate", body);
+
+/** A formula's series, each point with its inputs' source filings. */
+export const evaluateFormula = (token: string, body: FormulaRequest) =>
+  formulaPost<FormulaSeries>(token, "/v1/formulas/evaluate", body);
 
 /** Splits a server-sent event stream into JSON payloads, across arbitrary chunk boundaries. */
 export class SseParser {

@@ -145,12 +145,17 @@ describe("navigation", () => {
   it("routes to every screen, with placeholders for those still coming", async () => {
     await render("#/chart");
     expect($("h1")?.textContent).toBe("Chart builder");
-    expect(container.textContent).toContain("Coming next");
-    expect(container.textContent).not.toMatch(/TODO/i);
+    expect(container.textContent).not.toContain("Coming next");
     expect($('.nav a[aria-current="page"]')?.textContent).toContain("Chart builder");
     window.location.hash = "#/compare";
     await settle();
     expect($("h1")?.textContent).toBe("Compare");
+    expect(container.textContent).toContain("Coming next");
+    expect(container.textContent).not.toMatch(/TODO/i);
+    window.location.hash = "#/companies?margin=20";
+    await settle();
+    expect($("h1")?.textContent).toBe("Companies");
+    expect($('.nav a[aria-current="page"]')?.textContent).toContain("Companies");
     window.location.hash = `#/company/${NVDA}`;
     await settle();
     expect($(".crumb")?.textContent).toBe("Companies/NVIDIA CORP");

@@ -776,6 +776,207 @@ button.link:hover {
   border-top: 1px solid var(--line);
 }
 
+/* Chart builder: layer panel and the SVG chart */
+
+.builder {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-7);
+}
+
+.builder .layers {
+  width: 320px;
+  flex: none;
+}
+
+.layer-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.row.wrap {
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+.layer {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  background: var(--panel);
+}
+
+.layer.off {
+  opacity: 0.55;
+}
+
+.layer b {
+  font-size: 12px;
+}
+
+.layer select,
+.layer .field {
+  border: 1px solid var(--line-2);
+  border-radius: 5px;
+  padding: 3px 6px;
+  background: var(--panel);
+  font-size: 12px;
+  min-width: 0;
+}
+
+.layer .row select {
+  flex: 1;
+}
+
+.err {
+  color: var(--neg);
+  font-size: var(--fs-sm);
+}
+
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.seg button {
+  border: 0;
+  background: var(--panel);
+  padding: 4px 10px;
+  cursor: pointer;
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.seg button + button {
+  border-left: 1px solid var(--line-2);
+}
+
+.seg button.on {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.title-field {
+  max-width: 320px;
+  font-weight: 600;
+}
+
+.chart-card .note {
+  margin: 0;
+  padding: var(--sp-4) var(--sp-6);
+  font-size: var(--fs-sm);
+  color: var(--warn);
+  border-bottom: 1px solid var(--line);
+}
+
+.lchart {
+  position: relative;
+}
+
+.lchart-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.ch-bg {
+  fill: var(--panel);
+}
+
+.ch-title {
+  fill: var(--text);
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.ch-legend text {
+  fill: var(--text-2);
+  font-size: 11.5px;
+}
+
+.ch-grid line {
+  stroke: var(--line);
+}
+
+.ch-grid text,
+.ch-axis text {
+  fill: var(--text-3);
+  font-size: 10.5px;
+}
+
+.ch-foot {
+  fill: var(--text-3);
+  font-size: 10.5px;
+  font-style: italic;
+}
+
+.ch-hover {
+  stroke: var(--text-3);
+  stroke-dasharray: 3 3;
+}
+
+.c0 { color: var(--series-0); }
+.c1 { color: var(--series-1); }
+.c2 { color: var(--series-2); }
+.c3 { color: var(--series-3); }
+.c4 { color: var(--series-4); }
+.c5 { color: var(--series-5); }
+.c6 { color: var(--series-6); }
+.c7 { color: var(--series-7); }
+
+.sw {
+  flex: none;
+}
+
+.tip {
+  position: absolute;
+  top: 48px;
+  pointer-events: none;
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-md);
+  padding: var(--sp-4) var(--sp-5);
+  box-shadow: var(--popover-shadow);
+  font-size: 12px;
+  min-width: 220px;
+  max-width: 360px;
+  z-index: 4;
+}
+
+.tip.at-l {
+  left: 72px;
+}
+
+.tip.at-r {
+  right: 72px;
+}
+
+.tip .h {
+  font-weight: 600;
+  margin-bottom: var(--sp-2);
+}
+
+.tip-r + .tip-r {
+  margin-top: var(--sp-3);
+}
+
+.tip .num {
+  font-variant-numeric: tabular-nums;
+}
+
+.tip-src {
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+  margin-left: 15px;
+}
+
 /* Assistant: drawer on every page, full width on Ask */
 
 .ai {
@@ -1508,12 +1709,14 @@ svg.chart {
     grid-template-columns: 1fr;
   }
 
-  .screener {
+  .screener,
+  .builder {
     flex-direction: column;
     align-items: stretch;
   }
 
-  .filters {
+  .filters,
+  .builder .layers {
     width: 100%;
   }
 

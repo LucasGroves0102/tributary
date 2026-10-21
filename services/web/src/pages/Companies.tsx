@@ -30,7 +30,7 @@ interface Props {
   /** company ids on the user's watchlist (null while it loads or is unavailable) */
   watched: Set<string> | null;
   onWatch: (companyId: string, watch: boolean) => Promise<void>;
-  onChart?: (companyId: string) => void;
+  onChart?: (companyId: string, name: string) => void;
 }
 
 type State =
@@ -295,7 +295,7 @@ function Table({
   onSort: (sort: string) => void;
   onSic: (sic: string) => void;
   onWatch: (companyId: string, watch: boolean) => Promise<void>;
-  onChart?: (companyId: string) => void;
+  onChart?: (companyId: string, name: string) => void;
 }) {
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -383,7 +383,7 @@ function Table({
                   <td className="muted">{r.fye ?? "—"}</td>
                   <td className="n actions" onClick={(e) => e.stopPropagation()}>
                     {r.readable && onChart && (
-                      <button className="btn sm ghost" onClick={() => onChart(r.companyId)}
+                      <button className="btn sm ghost" onClick={() => onChart(r.companyId, r.name)}
                         aria-label={`Chart ${r.name}`}>
                         Chart
                       </button>
