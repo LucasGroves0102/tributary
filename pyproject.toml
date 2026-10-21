@@ -7,14 +7,14 @@ target-version = "py312"
 select = ["E", "F", "I", "B", "UP"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["poller", "bronze_loader", "company_loader", "doc_fetcher", "facts_fetcher", "filing_parser", "authz_sync", "query_api", "tributary_agent", "adversarial_harness", "adversarial_cases", "citation_cases", "tributary_authz", "tributary_sec", "tributary_telemetry"]
+known-first-party = ["poller", "bronze_loader", "company_loader", "doc_fetcher", "facts_fetcher", "filing_parser", "authz_sync", "query_api", "tributary_agent", "adversarial_harness", "adversarial_cases", "citation_cases", "tributary_authz", "tributary_sec", "tributary_telemetry", "tributary_kafka"]
 
 [tool.pytest.ini_options]
 testpaths = ["libs", "services", "tests"]
 addopts = "--import-mode=importlib"
 
 [tool.pyright]
-include = ["libs/sec/src", "libs/authz/src", "libs/telemetry/src", "services/*/src", "deploy/platform-setup"]
+include = ["libs/sec/src", "libs/authz/src", "libs/telemetry/src", "libs/kafka/src", "services/*/src", "deploy/platform-setup"]
 exclude = ["**/node_modules", "services/web"]
 pythonVersion = "3.12"
 typeCheckingMode = "standard"

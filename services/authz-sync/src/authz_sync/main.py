@@ -15,6 +15,7 @@ from prometheus_client import Counter, Gauge, Histogram
 from authz_sync.reconcile import Reconciler
 from authz_sync.state import AppState
 from tributary_authz import FgaClient
+from tributary_kafka import client_config
 from tributary_telemetry import CONSUMED, configure_logging, serve_metrics
 
 TABLES = ("users", "subscriptions", "plan_tiers", "company_grants")
@@ -39,11 +40,10 @@ def main() -> None:
     signal.signal(signal.SIGINT, lambda *_: stop.set())
     serve_metrics()
 
-    consumer = Consumer({
-        "bootstrap.servers": os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
+    consumer = Consumer(client_config({
         "group.id": "authz-sync",  # required by librdkafka; offsets are never committed
         "enable.auto.commit": False,
-    })
+    }))
     partitions = wait_for_topics(consumer, stop)
     if partitions is None:
         return

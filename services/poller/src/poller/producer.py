@@ -6,6 +6,7 @@ import logging
 from confluent_kafka import Producer
 
 from poller.edgar import Filing
+from tributary_kafka import client_config
 from tributary_telemetry import count_delivery
 
 TOPIC = "filings.raw"
@@ -14,13 +15,14 @@ log = logging.getLogger(__name__)
 
 
 class FilingProducer:
-    def __init__(self, bootstrap_servers: str) -> None:
+    def __init__(self) -> None:
         self._producer = Producer(
-            {
-                "bootstrap.servers": bootstrap_servers,
-                "enable.idempotence": True,  # no broker-side duplicates on retry
-                "acks": "all",
-            }
+            client_config(
+                {
+                    "enable.idempotence": True,  # no broker-side duplicates on retry
+                    "acks": "all",
+                }
+            )
         )
 
     def publish(self, filing: Filing) -> None:

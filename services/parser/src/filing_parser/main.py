@@ -14,6 +14,7 @@ from prometheus_client import Counter, Histogram
 
 from filing_parser.db import all_accessions, load_document, load_exhibits, write_sections
 from filing_parser.sections import exhibit_section, parse
+from tributary_kafka import client_config
 from tributary_telemetry import CONSUMED, SKIPPED, configure_logging, serve_metrics
 
 # PARSER_TOPIC / PARSER_GROUP override these: the backfill parser consumes documents.backfill as
@@ -70,12 +71,11 @@ def consume(conn: psycopg.Connection) -> None:
     stop = threading.Event()
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
     signal.signal(signal.SIGINT, lambda *_: stop.set())
-    consumer = Consumer({
-        "bootstrap.servers": os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
+    consumer = Consumer(client_config({
         "group.id": os.environ.get("PARSER_GROUP") or GROUP_ID,
         "enable.auto.commit": False,
         "auto.offset.reset": "earliest",
-    })
+    }))
     consumer.subscribe([topic])
     serve_metrics()
     log.info("consuming %s", topic)
