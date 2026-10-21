@@ -1,5 +1,14 @@
 name: CI
-on: [push, pull_request]
+on:
+  push:
+    paths-ignore: ['**.md']
+  pull_request:
+    paths-ignore: ['**.md']
+
+# A newer push to the same branch cancels the run it supersedes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   secrets:
@@ -273,6 +282,8 @@ jobs:
   images:
     name: image ${{ matrix.service }}
     needs: [secrets, python, propagation, web, rust, authz, chart]
+    # Only main ships images; branch runs stop after the tests to save Actions minutes.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: read
