@@ -1,8 +1,9 @@
 # Build from the repo root: docker build -f services/parser-rs/Dockerfile .
 FROM rust:1.99.1-slim-trixie@sha256:4df2ae8cfdfebdfc13a65da7f253b73d68983dc0339f2719bc17a279c913b13d AS build
 ARG CARGO_BUILD_JOBS=4
-# librdkafka's configure needs make and a C++ compiler
-RUN apt-get update && apt-get install -y --no-install-recommends make g++ \
+# librdkafka's configure needs make and a C++ compiler; native-tls links the system OpenSSL
+# (libssl3 is in the distroless cc runtime image)
+RUN apt-get update && apt-get install -y --no-install-recommends make g++ pkg-config libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
 COPY services/parser-rs/Cargo.toml services/parser-rs/Cargo.lock ./

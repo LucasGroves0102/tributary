@@ -79,7 +79,7 @@ jobs:
         working-directory: services/parser-rs
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-      - run: apt-get update && apt-get install -y --no-install-recommends make g++  # librdkafka
+      - run: apt-get update && apt-get install -y --no-install-recommends make g++ pkg-config libssl-dev  # librdkafka, native-tls
       - run: rustup component add clippy rustfmt
       - run: cargo fmt --check
       - run: cargo clippy --locked --all-targets -- -D warnings
