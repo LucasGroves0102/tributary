@@ -9,4 +9,5 @@ a target exists; they read connection settings from `.env` that way.
 | `create-databases.sh` | `make up`, `make migrate`, CI | creates the `app` and `openfga` databases next to `$DATABASE_URL`'s if missing |
 | `authz-bootstrap.sh` | `make authz` | finds or creates the `tributary` OpenFGA store and writes `authz/model.fga` (uses the compose `fga` tool container) |
 | `register-connector.sh` | `make cdc` | registers or updates the Debezium connector from `streaming/debezium/app-connector.json` on `$CONNECT_URL` (default `http://localhost:8083`) and waits until it runs |
+| `kafka-passwords.sh` | the owner, once (Kafka SASL rollout) | adds a random `kafka-password-<user>` per Kafka principal (+ `admin`) to the SOPS secrets of `platform`, `tributary` and a new `monitoring-kafka-exporter.yaml`, never printing them; needs sops ≥ 3.9 and the age key |
 | `check-secrets-encrypted.py` | CI, pre-commit hook | fails if a file in `deploy/secrets/` has a plaintext value or no SOPS metadata |
