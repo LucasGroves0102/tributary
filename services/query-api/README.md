@@ -98,7 +98,8 @@ quarter end) or `<metric>_q` (latest fiscal quarter) for every metric in the for
 each the latest value with its own `sources[key]` (`period_end`, `accession_no`, `form`,
 `filed`). Filters: `sic` (4-digit, repeatable), `sic_prefix` (1-3 digits), `industry` (SIC
 description contains), `q` (name contains or exact ticker), `exchange`,
-`fiscal_year_end_month`, `filer_category` (`large_accelerated`, `accelerated`,
+`fiscal_year_end_month`, `company_id` (repeatable, at most 21: only these companies, including
+ones without gold financials, for a comps table or a tearsheet), `filer_category` (`large_accelerated`, `accelerated`,
 `non_accelerated`), `revenue_band` / `assets_band` (`lt100m`, `100m-1b`, `1b-10b`, `10b-100b`,
 `gte100b` on `revenue_ttm` / `total_assets_q`) and `where=<column>:<gt|gte|lt|lte>:<number>`
 (ratios as fractions: `operating_margin_ttm:gte:0.2`). `sort` is a column key or `name`, `sic`,

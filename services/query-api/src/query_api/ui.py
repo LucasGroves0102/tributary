@@ -52,6 +52,7 @@ RECAP_FORMS = ("10-K", "10-Q", "10-K/A", "10-Q/A")
 Band = Literal["lt100m", "100m-1b", "1b-10b", "10b-100b", "gte100b"]
 Format = Annotated[Literal["json", "csv"], Query(alias="format")]
 MAX_JSON_ROWS = 500
+MAX_COMPANY_IDS = 21  # a comps table: a target and up to 20 peers
 DEFAULT_PEER_COLUMNS: tuple[str, ...] = ("revenue_ttm", "revenue_growth_ttm", "gross_margin_ttm",
                         "operating_margin_ttm", "net_margin_ttm", "free_cash_flow_ttm",
                         "debt_to_equity_q")
@@ -100,6 +101,9 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
                                               description="SIC description contains")] = None,
         q: Annotated[str | None, Query(min_length=1, max_length=100,
                                        description="name contains, or exact ticker")] = None,
+        company_id: Annotated[list[str] | None, Query(
+            description=f"only these companies (at most {MAX_COMPANY_IDS}), with or without "
+                        "financials: a comps table or a tearsheet")] = None,
         exchange: Annotated[list[str] | None, Query(description="e.g. NYSE, Nasdaq")] = None,
         fiscal_year_end_month: Annotated[list[int] | None, Query()] = None,
         filer_category: Annotated[list[FilerCategory] | None, Query()] = None,
@@ -128,6 +132,10 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
             raise HTTPException(422, "fiscal_year_end_month: 1-12")
         if any(len(e) > 20 for e in exchange or []) or len(where or []) > 10:
             raise HTTPException(422, "too many or too long filters")
+        if company_id is not None and (
+                len(company_id) > MAX_COMPANY_IDS
+                or any(len(c) != 10 or not c.isdigit() for c in company_id)):
+            raise HTTPException(422, f"company_id: at most {MAX_COMPANY_IDS} 10-digit ids")
         try:
             filters = [parse_filter(w) for w in where or []]
             if revenue_band:
@@ -138,6 +146,8 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
             raise HTTPException(422, str(e)) from None
         screen = Screen(
             columns=columns if columns is not None else Screen().columns,
+            company_ids=sorted(set(company_id)) if company_id is not None else None,
+            coverage=company_id is None,
             sic=sic or [], sic_prefix=sic_prefix, industry=industry, q=q,
             exchanges=exchange or [], fye_months=fiscal_year_end_month or [],
             filer_categories=list(filer_category or []), filters=filters,

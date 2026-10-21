@@ -128,6 +128,28 @@ def test_access_financials_restricts_universe(client, token):
     assert "c.company_id = ANY(%(granted)s)" in c.sql and c.params["granted"] == [NVDA]
 
 
+def test_company_ids_restrict_the_universe_but_not_the_masking(client, token):
+    """A comps table asks for its companies by id: those with or without gold financials, and
+    still values only where alice may read them."""
+    r = client.get(f"/v1/screener?company_id={TSLA}&company_id={NVDA}&company_id={NVDA}"
+                   "&columns=revenue_ttm", headers=token("alice"))
+    assert r.status_code == 200, r.text
+    rows = {row["company_id"]: row for row in r.json()["rows"]}
+    assert rows[NVDA]["values"] == {"revenue_ttm": "130497000000"}
+    assert rows[TSLA]["values"] == {"revenue_ttm": None} and rows[TSLA]["sources"] == \
+        {"revenue_ttm": None}
+    c = client.store.compiled[0]
+    assert c.params["ids"] == sorted([NVDA, TSLA]) and c.params["granted"] == [NVDA]
+    assert "financials_coverage" not in c.sql and NVDA not in c.sql
+
+
+@pytest.mark.parametrize("query", ["company_id=123", "company_id=../v1/me",
+                                   "&".join(f"company_id={i:010d}" for i in range(22))])
+def test_bad_company_ids_are_422(client, token, query):
+    assert client.get(f"/v1/screener?{query}", headers=token("bob")).status_code == 422
+    assert client.store.compiled == []
+
+
 def test_unknown_user_gets_metadata_only(client, token):
     rows = client.get("/v1/screener", headers=token("mallory")).json()["rows"]
     assert all(v is None for row in rows for v in row["values"].values())
