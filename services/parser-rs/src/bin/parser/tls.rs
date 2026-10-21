@@ -268,7 +268,10 @@ fn connector(
         Some(Roots::System) => {}
         Some(Roots::File(path)) => {
             let pem = std::fs::read_to_string(path).map_err(|e| {
-                format!("could not read root certificate file \"{}\": {e}", path.display())
+                format!(
+                    "could not read root certificate file \"{}\": {e}",
+                    path.display()
+                )
             })?;
             let blocks = pem_blocks(&pem);
             if blocks.is_empty() {
@@ -333,7 +336,10 @@ mod tests {
     #[test]
     fn url_without_tls_options_is_unchanged() {
         let o = opts("postgresql://u:p@db:5432/tributary?application_name=parser");
-        assert_eq!(o.rest, "postgresql://u:p@db:5432/tributary?application_name=parser");
+        assert_eq!(
+            o.rest,
+            "postgresql://u:p@db:5432/tributary?application_name=parser"
+        );
         assert_eq!((o.sslmode, o.sslrootcert), (None, None));
     }
 
@@ -345,7 +351,10 @@ mod tests {
         assert_eq!(o.rest, "postgres://u:p@db/t?connect_timeout=5");
         assert_eq!(o.sslmode.as_deref(), Some("verify-full"));
         assert_eq!(o.sslrootcert.as_deref(), Some("/etc/ca.pem"));
-        assert_eq!(opts("postgres://db/t?sslmode=require").rest, "postgres://db/t");
+        assert_eq!(
+            opts("postgres://db/t?sslmode=require").rest,
+            "postgres://db/t"
+        );
     }
 
     #[test]
