@@ -9,7 +9,8 @@ in the `platform` namespace; Postgres runs on the host.
   `tributary`, `app` and `openfga` databases and a `query_api` role granted to the login.
 - In the release namespace:
   - Secret `tributary` with keys `database-url`, `app-database-url`, `jwt-secret`,
-    `anthropic-api-key`, `sec-user-agent`, and `openfga-api-token` when `openfga.auth.enabled`.
+    `anthropic-api-key`, `sec-user-agent`, `openfga-api-token` when `openfga.auth.enabled`,
+    and `sec-limiter-database-url` when `secLimiter.dedicatedLogin` (below).
   - Secret `ghcr` (type `kubernetes.io/dockerconfigjson`) with a token that can read packages.
 
 ## Install
@@ -53,7 +54,7 @@ decides its environment variables, which Secret keys it can read, and its networ
 | `app-postgres` | `APP_DATABASE_URL` (query-api: watchlists) | host Postgres |
 | `kafka` | `KAFKA_BOOTSTRAP_SERVERS` | Kafka in `platform` |
 | `openfga` | `FGA_API_URL`, `FGA_API_TOKEN` when `openfga.auth.enabled` | OpenFGA in `platform` |
-| `sec` | `SEC_USER_AGENT`; `SEC_LIMITER_DATABASE_URL` (always `database-url`) and `SEC_CALLER_CLASS` (`secClass`, default `live` for services, `batch` for jobs) for the shared SEC rate limit | HTTPS to public addresses, host Postgres |
+| `sec` | `SEC_USER_AGENT`; `SEC_LIMITER_DATABASE_URL` (main database: `database-url`, or `sec-limiter-database-url` with `secLimiter.dedicatedLogin`) and `SEC_CALLER_CLASS` (`secClass`, default `live` for services, `batch` for jobs) for the shared SEC rate limit | HTTPS to public addresses, host Postgres |
 | `anthropic` | `ANTHROPIC_API_KEY` | HTTPS to public addresses |
 | `jwt` | `QUERY_API_JWT_SECRET` | |
 | `query-api` | `QUERY_API_URL` | |
@@ -70,3 +71,58 @@ need no `release` label. CronJobs aren't scraped; kube-state-metrics reports the
 
 Every pod runs as non-root with a read-only root filesystem, no capabilities, the
 `RuntimeDefault` seccomp profile and no service account token.
+
+## SEC limiter login
+
+Every `uses: sec` pod takes tokens from the shared SEC rate limit in Postgres
+([libs/sec](../../../libs/sec), migration 019). By default it does that with the full
+`database-url` login, which also gives the poller (`kafka`, `sec`) and the `backfill` job
+credentials they otherwise wouldn't have. Migration 022 adds `sec_limiter`, a NOLOGIN group that
+can only `EXECUTE` `ops.sec_take_token` / `ops.sec_report_throttle` (now `SECURITY DEFINER`, with
+`search_path = pg_catalog, pg_temp`, and no longer executable by `PUBLIC`) and read no table
+(`libs/sec/tests/test_sec_limiter_role.py`). With `secLimiter.dedicatedLogin: true`,
+`SEC_LIMITER_DATABASE_URL` comes from the `sec-limiter-database-url` key instead, and pods that
+use `sec` without `postgres` get no `database-url` at all (CI checks both renders with
+`tests/check_sec_limiter.py`).
+
+Owner steps, in this order (each step keeps the current deploy working):
+
+1. Deploy a release that includes migration 022 (the `migrate` hook applies it). Until the flag
+   flips, services still use `database-url`, which owns the functions and keeps `EXECUTE`.
+2. On hermes, create the login in the group (the password never goes in a migration or the
+   repository):
+
+   ```bash
+   sudo -u postgres psql -d tributary <<'SQL'
+   CREATE ROLE tributary_sec LOGIN PASSWORD '<generated password>' IN ROLE sec_limiter
+       CONNECTION LIMIT 20;
+   ALTER ROLE tributary_sec SET statement_timeout = '2s';
+   SQL
+   ```
+
+   Generate the password with `openssl rand -hex 24`; `\password tributary_sec` in psql avoids
+   it landing in shell history.
+3. Let pods reach it: in `/etc/postgresql/16/main/pg_hba.conf`, next to the existing line for
+   the `tributary` login from the k3s pod network, add
+
+   ```
+   hostssl  tributary  tributary_sec  10.42.0.0/16  scram-sha-256
+   ```
+
+   then `sudo -u postgres psql -c "SELECT pg_reload_conf()"`. Check from the host:
+   `psql "postgresql://tributary_sec@<hostAddress>/tributary?sslmode=require" -c "SELECT * FROM
+   ops.sec_take_token('bulk')"` works and `SELECT * FROM ops.sec_rate_limit` is denied.
+4. Add the key with SOPS (never in plaintext): `sops deploy/secrets/tributary.yaml`, under
+   `stringData` add
+   `sec-limiter-database-url: postgresql://tributary_sec:<password>@<hostAddress>:5432/tributary`,
+   save, commit, and wait for Flux to apply the `secrets` Kustomization
+   (`kubectl -n tributary get secret tributary -o jsonpath='{.data}' | grep -c sec-limiter`).
+5. Flip the flag in [deploy/flux/releases/tributary.yaml](../../flux/releases):
+   `secLimiter: {dedicatedLogin: true}`. Verify: `kubectl -n tributary get deploy poller -o
+   jsonpath='{..secretKeyRef.key}'` lists `sec-user-agent sec-limiter-database-url` and no
+   `database-url`; `tributary_sec_limiter_fallback` stays 0 and
+   `tributary_sec_limiter_fallbacks_total` doesn't rise (a failing login drops callers to the
+   local 2 req/s fallback, it doesn't stop them).
+
+Rollback: set the flag back to false. Remove the login only after that rollout
+(`DROP ROLE tributary_sec`).

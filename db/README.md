@@ -46,6 +46,10 @@ comparable earlier filing: offsets and word-diff opcodes, no text), all three un
 `granted_filings`; the checkpoint `ops.section_index` with `ops.section_index_priors` /
 `ops.section_index_pending`, and `ops.section_change_summary` / `ops.section_index_status` (counts
 only) for `ops_reader`. All three gold tables are derived: rebuild them by running the job.
+`022_sec_limiter_role.sql` adds the `sec_limiter` group role: EXECUTE on `ops.sec_take_token` /
+`ops.sec_report_throttle` only (now SECURITY DEFINER with a fixed `search_path`, revoked from
+PUBLIC), no table access. The login is created on the host
+([deploy/helm/tributary](../deploy/helm/tributary/README.md), "SEC limiter login").
 
 ## Migrations
 

@@ -75,8 +75,9 @@ tributary.io/{{ $k }}: {{ $v | quote }}
 {{- else if eq . "sec" }}
 {{ include "tributary.secretEnv" (dict "root" $root "env" "SEC_USER_AGENT" "key" "sec-user-agent") }}
 {{- /* The shared SEC token bucket is per host IP, so always the main database, never
-databaseUrlKey's. */}}
-{{ include "tributary.secretEnv" (dict "root" $root "env" "SEC_LIMITER_DATABASE_URL" "key" "database-url") }}
+databaseUrlKey's. With secLimiter.dedicatedLogin it's a login that can only run the bucket's
+functions (migration 022), and a pod gets database-url only if it also uses postgres. */}}
+{{ include "tributary.secretEnv" (dict "root" $root "env" "SEC_LIMITER_DATABASE_URL" "key" (ternary "sec-limiter-database-url" "database-url" $root.Values.secLimiter.dedicatedLogin)) }}
 - name: SEC_CALLER_CLASS
   value: {{ $.secClass | default $.defaultSecClass | quote }}
 {{- else if eq . "anthropic" }}
