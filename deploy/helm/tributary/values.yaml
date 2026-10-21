@@ -234,3 +234,30 @@ jobs:
     suspend: true
     uses: [kafka, postgres, sec]
     secClass: bulk
+  # Segment and KPI facts (facts-fetcher-segments, migration 018): parses the inline XBRL of the
+  # 10-K/10-Q documents already in bronze.filing_documents (stored by doc-fetcher and the document
+  # crawl), so it makes no SEC requests. A run extracts up to SEGMENTS_LIMIT pending documents in
+  # transactions of SEGMENTS_BATCH, each with its silver and gold rows and the segment quality
+  # check; the per-document extract (content hash + extractor version) is the checkpoint, so a
+  # stopped run resumes where it left off. Documents are decompressed and parsed in 1 MB chunks.
+  # Hourly once enabled, to pick up new filings. Ships suspended; first load (~90k documents
+  # once the crawl is done): kubectl -n tributary create job --from=cronjob/segments segments-1
+  segments:
+    image: facts-fetcher
+    command: [facts-fetcher-segments]
+    schedule: "20 * * * *"
+    suspend: true
+    timeoutSeconds: 14400
+    uses: [postgres]
+    tmpSize: 256Mi
+    resources:
+      requests:
+        cpu: 250m
+        memory: 256Mi
+      limits:
+        memory: 1Gi
+    env:
+      SEGMENTS_LIMIT: "2000"
+      SEGMENTS_BATCH: "25"
+      SEGMENTS_ROUNDS: "40"
+      SEGMENTS_PAUSE_SECONDS: "0"

@@ -1,4 +1,4 @@
-.PHONY: up up-all down logs topics consume migrate seed-app authz authz-test cdc propagation-test token backfill companies financials financials-bulk financials-rebuild seed-documents crawl reparse psql lint test hooks secrets ask adversarial web citations typecheck exhibits
+.PHONY: up up-all down logs topics consume migrate seed-app authz authz-test cdc propagation-test token backfill companies financials financials-bulk financials-rebuild segments segments-rebuild seed-documents crawl reparse psql lint test hooks secrets ask adversarial web citations typecheck exhibits
 
 COMPOSE := $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo docker-compose)
 # use the repo virtualenv when there is one, so `make test` works without activating it
@@ -79,6 +79,12 @@ financials-bulk: ## every filer's XBRL facts from a local companyfacts.zip: make
 financials-rebuild: ## re-derive silver/gold from stored bronze (after changing metric_tags)
 	$(COMPOSE) --profile jobs build facts-fetcher
 	$(COMPOSE) --profile jobs run --rm facts-fetcher facts-fetcher --rebuild
+
+segments: ## segment/KPI facts from stored 10-K/10-Q inline XBRL (no SEC calls): make segments LIMIT=2000
+	@set -a; . ./.env; set +a; $(BIN)facts-fetcher-segments --limit $(or $(LIMIT),2000)
+
+segments-rebuild: ## re-project stored segment extracts and re-derive silver/gold (after changing axes, tags or labels)
+	@set -a; . ./.env; set +a; $(BIN)facts-fetcher-segments --rebuild
 
 seed-documents: ## publish tracked companies' recent 10-K/10-Q/8-K filings to filings.raw
 	$(COMPOSE) --profile app build doc-fetcher

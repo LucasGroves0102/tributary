@@ -76,17 +76,27 @@ DOC = """<html><body>
   decimals="2">2.50</ix:nonFraction>
 <ix:nonFraction name="x:Thing" contextRef="nope" unitRef="usd">1</ix:nonFraction>
 <div style="display:none"><ix:header><ix:resources>
-<xbrli:context id="c1"><xbrli:entity><xbrli:identifier scheme="http://www.sec.gov/CIK">0000000001</xbrli:identifier></xbrli:entity>
-<xbrli:period><xbrli:startDate>2026-01-01</xbrli:startDate><xbrli:endDate>2026-03-31</xbrli:endDate></xbrli:period></xbrli:context>
-<xbrli:context id="c2"><xbrli:entity><xbrli:identifier scheme="http://www.sec.gov/CIK">0000000001</xbrli:identifier>
-<xbrli:segment><xbrldi:explicitMember dimension="srt:ProductOrServiceAxis">x:WidgetsMember</xbrldi:explicitMember></xbrli:segment></xbrli:entity>
-<xbrli:period><xbrli:startDate>2026-01-01</xbrli:startDate><xbrli:endDate>2026-03-31</xbrli:endDate></xbrli:period></xbrli:context>
-<xbrli:context id="c3"><xbrli:entity><xbrli:identifier scheme="http://www.sec.gov/CIK">0000000001</xbrli:identifier>
-<xbrli:segment><xbrldi:typedMember dimension="x:StoreAxis"><x:id> 17 </x:id></xbrldi:typedMember></xbrli:segment></xbrli:entity>
+<xbrli:context id="c1"><xbrli:entity>
+<xbrli:identifier scheme="http://www.sec.gov/CIK">0000000001</xbrli:identifier></xbrli:entity>
+<xbrli:period><xbrli:startDate>2026-01-01</xbrli:startDate>
+<xbrli:endDate>2026-03-31</xbrli:endDate></xbrli:period></xbrli:context>
+<xbrli:context id="c2"><xbrli:entity>
+<xbrli:identifier scheme="http://www.sec.gov/CIK">0000000001</xbrli:identifier>
+<xbrli:segment>
+<xbrldi:explicitMember dimension="srt:ProductOrServiceAxis">x:WidgetsMember</xbrldi:explicitMember>
+</xbrli:segment></xbrli:entity>
+<xbrli:period><xbrli:startDate>2026-01-01</xbrli:startDate>
+<xbrli:endDate>2026-03-31</xbrli:endDate></xbrli:period></xbrli:context>
+<xbrli:context id="c3"><xbrli:entity>
+<xbrli:identifier scheme="http://www.sec.gov/CIK">0000000001</xbrli:identifier>
+<xbrli:segment><xbrldi:typedMember dimension="x:StoreAxis"><x:id> 17 </x:id>
+</xbrldi:typedMember></xbrli:segment></xbrli:entity>
 <xbrli:period><xbrli:instant>2026-03-31</xbrli:instant></xbrli:period></xbrli:context>
 <xbrli:unit id="usd"><xbrli:measure>iso4217:USD</xbrli:measure></xbrli:unit>
-<xbrli:unit id="eps"><xbrli:divide><xbrli:unitNumerator><xbrli:measure>iso4217:USD</xbrli:measure></xbrli:unitNumerator>
-<xbrli:unitDenominator><xbrli:measure>xbrli:shares</xbrli:measure></xbrli:unitDenominator></xbrli:divide></xbrli:unit>
+<xbrli:unit id="eps"><xbrli:divide><xbrli:unitNumerator>
+<xbrli:measure>iso4217:USD</xbrli:measure></xbrli:unitNumerator>
+<xbrli:unitDenominator><xbrli:measure>xbrli:shares</xbrli:measure></xbrli:unitDenominator>
+</xbrli:divide></xbrli:unit>
 </ix:resources></ix:header></div></body></html>"""
 
 
