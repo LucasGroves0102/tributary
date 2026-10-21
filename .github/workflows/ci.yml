@@ -43,8 +43,21 @@ jobs:
       - run: ruff check .
       - run: pyright --pythonpath "$(which python)"
       - run: ./scripts/create-databases.sh
-      - run: ./scripts/migrate.sh db/migrations "$DATABASE_URL"
-      - run: ./scripts/migrate.sh db/app/migrations "$APP_DATABASE_URL"
+      # Migrate as hermes does: a login that owns the databases but is neither superuser nor
+      # CREATEROLE, with the group roles the owner creates on the host already in place.
+      - name: Production-like migration login
+        run: |
+          psql "postgresql://tributary:tributary@localhost:5432/postgres" -v ON_ERROR_STOP=1 -q <<'SQL'
+          CREATE ROLE migrator LOGIN PASSWORD 'migrator' REPLICATION;
+          CREATE ROLE query_api NOLOGIN;
+          CREATE ROLE ops_reader NOLOGIN;
+          CREATE ROLE sec_limiter NOLOGIN;
+          GRANT query_api TO migrator;
+          ALTER DATABASE tributary OWNER TO migrator;
+          ALTER DATABASE app OWNER TO migrator;
+          SQL
+      - run: ./scripts/migrate.sh db/migrations "postgresql://migrator:migrator@localhost:5432/tributary"
+      - run: ./scripts/migrate.sh db/app/migrations "postgresql://migrator:migrator@localhost:5432/app"
       - name: Rust parser service, for the parser equivalence test
         run: |
           rustup toolchain install 1.99.1 --profile minimal
