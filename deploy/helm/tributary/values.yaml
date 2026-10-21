@@ -6,8 +6,17 @@ image:
   pullSecret: ghcr
 
 # Created outside the chart. Keys: database-url, app-database-url, jwt-secret,
-# anthropic-api-key, sec-user-agent, and openfga-api-token when openfga.auth.enabled.
+# anthropic-api-key, sec-user-agent, openfga-api-token when openfga.auth.enabled, and
+# sec-limiter-database-url when secLimiter.dedicatedLogin.
 secretName: tributary
+
+# `uses: sec` pods reach the shared SEC token bucket (libs/sec) through SEC_LIMITER_DATABASE_URL.
+# false: the full database-url login. true: secretName's sec-limiter-database-url, a login in
+# the sec_limiter group (migration 022) that can only run ops.sec_take_token /
+# ops.sec_report_throttle; pods that don't also use postgres then get no database-url at all.
+# Create the login and the key first (README, "SEC limiter login").
+secLimiter:
+  dedicatedLogin: false
 
 # The node as seen from pods (k3s bridge). Postgres runs on the host; kubelet probes come from here.
 hostAddress: 10.42.0.1

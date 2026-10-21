@@ -132,6 +132,16 @@ jobs:
           -strict -summary -kubernetes-version 1.36.0 -schema-location default
           -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
           -
+      - name: SEC limiter login wiring (secLimiter.dedicatedLogin off and on)
+        run: |
+          pip install pyyaml==6.0.3
+          for mode in off on; do
+            flag=false; [ "$mode" = on ] && flag=true
+            docker run --rm -v "$PWD:/repo" -w /repo alpine/helm:3.19.0@sha256:aef9b56f64e866207d9591d0abd8f6d767b36aadd12edf68f8a719716d9d29c9 \
+              template tributary deploy/helm/tributary --namespace tributary --set image.tag=ci \
+              --set secLimiter.dedicatedLogin=$flag \
+              | python3 deploy/helm/tributary/tests/check_sec_limiter.py "$mode"
+          done
       - name: helm lint (platform)
         run: >-
           docker run --rm -v "$PWD:/repo" -w /repo alpine/helm:3.19.0@sha256:aef9b56f64e866207d9591d0abd8f6d767b36aadd12edf68f8a719716d9d29c9

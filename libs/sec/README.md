@@ -42,7 +42,9 @@ requests in any one-second window and 7/s sustained. Tune with
 
 Config (env): `SEC_CALLER_CLASS` (default `batch`; the Helm chart sets `live` for services and
 `batch` for jobs, overridden by `secClass`), `SEC_LIMITER_DATABASE_URL` (default
-`DATABASE_URL`). In Helm, `uses: sec` sets both and opens egress to host Postgres.
+`DATABASE_URL`). In Helm, `uses: sec` sets both and opens egress to host Postgres; with
+`secLimiter.dedicatedLogin` the URL is a login in the `sec_limiter` group (migration 022), which
+can run the two bucket functions and read nothing else.
 
 `ops.sec_rate_limit_status` (granted to `ops_reader`) shows the bucket without taking a token.
 
