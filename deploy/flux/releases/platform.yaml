@@ -23,6 +23,9 @@ spec:
     remediation:
       retries: 3
   values:
+    openfga:
+      auth:
+        enabled: true
     images:
       setup:
         tag: main-107-82ff3786f68c17286033215423e408437682201b # {"$imagepolicy": "flux-system:tributary:tag"}
