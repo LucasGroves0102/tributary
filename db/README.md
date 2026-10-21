@@ -30,6 +30,9 @@ research UI reads: `gold.latest_financials` (security_invoker, RLS applies),
 `gold.financials_coverage` (company ids with financials only; runs as its owner, so public),
 `silver.filings` granted as the public SEC filing index, and the functions
 `gold.expected_filings`, `gold.filing_recap`, `gold.filing_flags`, `gold.peer_candidates`. `010_ops.sql` creates the `ops_reader` group role (SELECT on `ops` views only).
+`020_doc_crawl.sql` adds the document crawl's queue and checkpoint (`ops.doc_crawl_targets`,
+planned by `ops.doc_crawl_plan`), its pause switch (`ops.doc_crawl_control`) and the
+`ops.doc_crawl_progress` / `ops.doc_crawl_status` views for `ops_reader`.
 
 ## Migrations
 

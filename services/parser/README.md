@@ -31,7 +31,10 @@ make reparse    # parser --reparse-all: re-parse every stored document without K
 Use `make reparse` after changing the parsing rules.
 
 Config (env): `DATABASE_URL` (required), `KAFKA_BOOTSTRAP_SERVERS` (default `localhost:9092`),
-`METRICS_PORT`, `LOG_LEVEL`.
+`METRICS_PORT`, `LOG_LEVEL`, `PARSER_TOPIC` / `PARSER_GROUP` (default `documents.fetched` /
+`parser-python`). The chart's `parser-backfill` sets them to `documents.backfill` /
+`parser-backfill` for the [document crawl](../doc-fetcher/README.md#document-crawl), so crawled
+documents are parsed by a separate consumer and never queue ahead of live filings.
 
 ## Tests
 

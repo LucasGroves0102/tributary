@@ -37,6 +37,11 @@ kubectl -n tributary create job --from=cronjob/seed-documents seed-documents-1
 `financials-bulk` (every filer's XBRL facts) and `submissions` (every filer's filing history)
 also ship suspended; their comments in `values.yaml` describe the first run.
 
+The document crawl (`doc-crawler` + `parser-backfill`, see
+[doc-fetcher](../../../services/doc-fetcher/README.md#document-crawl)) ships with `replicas: 0`
+(a service's `replicas` defaults to 1). Start it by setting both to 1 under `values.services` in
+`deploy/flux/releases/tributary.yaml`; `kubectl scale` would be undone by the next Helm upgrade.
+
 ## Components
 
 `services` become Deployments and `jobs` become CronJobs. Each lists what it `uses`; that

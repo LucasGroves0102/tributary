@@ -4,6 +4,7 @@
 |---|---|---|---|---|
 | `filings.raw` | CIK | poller, poller-backfill, doc-fetcher-seed | bronze-loader, doc-fetcher | `{accession_no, cik, company_name, role, form_type, filed_at, url, source}` |
 | `documents.fetched` | CIK | doc-fetcher | parser: Python or parser-rs, group `parser-python` | `{accession_no, cik, form, document_name, url, content_sha256, size_bytes}` |
+| `documents.backfill` | CIK | doc-crawler (document crawl) | parser-backfill: same image as parser, group `parser-backfill` | `documents.fetched`'s shape plus `source: "crawl"` |
 
 `filings.raw` has one event per filer, so a Form 4 produces two events (Reporting + Issuer)
 with the same accession number. Consumers must be idempotent on `(accession_no, cik)`.
@@ -17,6 +18,13 @@ seed events without it were marked `seed` in bronze by `db/migrations/016_seed_s
 
 `documents.fetched` references the document in `bronze.filing_documents` instead of
 embedding it: a 10-K is ~2 MB of HTML, over Kafka's default 1 MB message limit.
+
+`documents.backfill` carries the same reference for documents stored by the document crawl
+(hundreds of thousands of filings over days). It is a separate topic with its own consumer group,
+so the live parser never has crawled documents queued ahead of a new filing, its
+`KafkaConsumerLagGrowing` alert keeps meaning "live parsing is behind", and a document that stops
+a parser stops only the backfill one. Both parsers write the same rows and are idempotent per
+accession, so an event published twice (the crawl republishes unconfirmed ones) is harmless.
 
 ## CDC topics (Debezium, from the `app` database)
 

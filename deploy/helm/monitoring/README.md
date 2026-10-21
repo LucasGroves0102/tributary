@@ -21,12 +21,14 @@ rules are off.
 
 - `templates/rules.yaml`: `KafkaConsumerLagGrowing`, `FilingsNotArriving`,
   `CompanyFactsBehindEdgar`, `PostgresBackupMissing`, `PostgresDown`,
-  `PostgresConnectionsHigh`, `DiskUsageHigh`. Alertmanager sends every alert to Discord
+  `PostgresConnectionsHigh`, `DiskUsageHigh`, `DiskSpaceLow` (under 50 GB free), and for the
+  document crawl `DocCrawlPausedForDisk` and `DocCrawlStalled` (its `tributary_doc_crawl_*`
+  metrics). Alertmanager sends every alert to Discord
   except `info` severity, `Watchdog` and `InfoInhibitor`.
 - `dashboards/*.json`: loaded by the Grafana sidecar (`tributary-freshness.json`, FR11).
 - `templates/ops-database.yaml`: with `opsDatabase.enabled`, a Grafana Postgres datasource
   (uid `tributary`) on the `ops` views, used by the freshness dashboard, and the ops-exporter
-  queries.
+  queries (`tributary_doc_crawl_*{form}`: crawl progress from `ops.doc_crawl_progress`).
 
 ## Prerequisites
 
