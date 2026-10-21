@@ -29,6 +29,79 @@ pub fn topic_and_group(var: impl Fn(&str) -> Option<String>) -> (String, String)
     (get("PARSER_TOPIC", TOPIC), get("PARSER_GROUP", GROUP_ID))
 }
 
+const SASL_VARS: [&str; 3] = [
+    "KAFKA_SASL_MECHANISM",
+    "KAFKA_SASL_USERNAME",
+    "KAFKA_SASL_PASSWORD",
+];
+const MECHANISMS: [&str; 2] = ["SCRAM-SHA-512", "SCRAM-SHA-256"];
+
+/// Connection and auth settings from the environment, as libs/kafka's `client_config` builds
+/// them for the Python services: KAFKA_BOOTSTRAP_SERVERS (default localhost:9092),
+/// KAFKA_SECURITY_PROTOCOL (PLAINTEXT, SASL_PLAINTEXT or SASL_SSL), KAFKA_SASL_MECHANISM
+/// (SCRAM-SHA-512 or SCRAM-SHA-256), KAFKA_SASL_USERNAME and KAFKA_SASL_PASSWORD (required with
+/// SASL, rejected without it, so a half-applied rollout fails loudly), and
+/// KAFKA_SSL_CA_LOCATION (SASL_SSL only).
+pub fn client_config(
+    var: impl Fn(&str) -> Option<String>,
+) -> Result<Vec<(&'static str, String)>, String> {
+    let get = |key: &str| var(key).filter(|v| !v.is_empty());
+    let mut config = vec![(
+        "bootstrap.servers",
+        get("KAFKA_BOOTSTRAP_SERVERS").unwrap_or_else(|| "localhost:9092".to_string()),
+    )];
+    let protocol = get("KAFKA_SECURITY_PROTOCOL")
+        .unwrap_or_else(|| "PLAINTEXT".to_string())
+        .to_uppercase();
+    match protocol.as_str() {
+        "PLAINTEXT" => {
+            let mut set = Vec::new();
+            for key in SASL_VARS {
+                if get(key).is_some() {
+                    set.push(key);
+                }
+            }
+            if !set.is_empty() {
+                return Err(format!(
+                    "{} set but KAFKA_SECURITY_PROTOCOL is PLAINTEXT",
+                    set.join(", ")
+                ));
+            }
+        }
+        "SASL_PLAINTEXT" | "SASL_SSL" => {
+            let mechanism = get("KAFKA_SASL_MECHANISM")
+                .unwrap_or_else(|| "SCRAM-SHA-512".to_string())
+                .to_uppercase();
+            if !MECHANISMS.contains(&mechanism.as_str()) {
+                return Err(format!(
+                    "KAFKA_SASL_MECHANISM={mechanism:?}: expected one of {MECHANISMS:?}"
+                ));
+            }
+            let (Some(username), Some(password)) =
+                (get("KAFKA_SASL_USERNAME"), get("KAFKA_SASL_PASSWORD"))
+            else {
+                return Err(format!(
+                    "{protocol} needs KAFKA_SASL_USERNAME and KAFKA_SASL_PASSWORD"
+                ));
+            };
+            let ca = get("KAFKA_SSL_CA_LOCATION").filter(|_| protocol == "SASL_SSL");
+            config.push(("security.protocol", protocol.clone()));
+            config.push(("sasl.mechanism", mechanism));
+            config.push(("sasl.username", username));
+            config.push(("sasl.password", password));
+            if let Some(ca) = ca {
+                config.push(("ssl.ca.location", ca));
+            }
+        }
+        other => {
+            return Err(format!(
+                "KAFKA_SECURITY_PROTOCOL={other:?}: expected PLAINTEXT, SASL_PLAINTEXT or SASL_SSL"
+            ));
+        }
+    }
+    Ok(config)
+}
+
 pub struct Message {
     pub partition: i32,
     pub offset: i64,
@@ -77,13 +150,17 @@ pub struct Kafka {
 }
 
 impl Kafka {
+    /// `settings` from `client_config`.
     pub fn subscribe(
-        bootstrap_servers: &str,
+        settings: &[(&'static str, String)],
         topic: &str,
         group: &str,
     ) -> Result<Kafka, KafkaError> {
-        let consumer: BaseConsumer = ClientConfig::new()
-            .set("bootstrap.servers", bootstrap_servers)
+        let mut config = ClientConfig::new();
+        for (key, value) in settings {
+            config.set(*key, value);
+        }
+        let consumer: BaseConsumer = config
             .set("group.id", group)
             .set("enable.auto.commit", "false")
             .set("auto.offset.reset", "earliest")
@@ -250,6 +327,91 @@ mod tests {
             )
         );
         assert_eq!(topic_and_group(|_| Some(String::new())).0, TOPIC);
+    }
+
+    fn env(pairs: &[(&str, &str)]) -> impl Fn(&str) -> Option<String> {
+        let pairs: Vec<(String, String)> = pairs
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
+        move |key: &str| {
+            pairs
+                .iter()
+                .find(|(k, _)| k == key)
+                .map(|(_, v)| v.clone())
+        }
+    }
+
+    const SASL: [(&str, &str); 4] = [
+        ("KAFKA_BOOTSTRAP_SERVERS", "kafka.platform.svc.cluster.local:9094"),
+        ("KAFKA_SECURITY_PROTOCOL", "SASL_PLAINTEXT"),
+        ("KAFKA_SASL_USERNAME", "parser"),
+        ("KAFKA_SASL_PASSWORD", "secret"),
+    ];
+
+    fn without(key: &str) -> Vec<(&'static str, &'static str)> {
+        SASL.iter().copied().filter(|(k, _)| *k != key).collect()
+    }
+
+    #[test]
+    fn client_config_defaults_to_the_local_plaintext_stack() {
+        assert_eq!(
+            client_config(|_| None).unwrap(),
+            vec![("bootstrap.servers", "localhost:9092".to_string())]
+        );
+        let plaintext = env(&[
+            ("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092"),
+            ("KAFKA_SECURITY_PROTOCOL", "plaintext"),
+        ]);
+        assert_eq!(
+            client_config(plaintext).unwrap(),
+            vec![("bootstrap.servers", "kafka:9092".to_string())]
+        );
+    }
+
+    #[test]
+    fn client_config_sasl_scram() {
+        assert_eq!(
+            client_config(env(&SASL)).unwrap(),
+            vec![
+                (
+                    "bootstrap.servers",
+                    "kafka.platform.svc.cluster.local:9094".to_string()
+                ),
+                ("security.protocol", "SASL_PLAINTEXT".to_string()),
+                ("sasl.mechanism", "SCRAM-SHA-512".to_string()),
+                ("sasl.username", "parser".to_string()),
+                ("sasl.password", "secret".to_string()),
+            ]
+        );
+        let mut ssl = without("KAFKA_SECURITY_PROTOCOL");
+        ssl.extend([
+            ("KAFKA_SECURITY_PROTOCOL", "SASL_SSL"),
+            ("KAFKA_SASL_MECHANISM", "scram-sha-256"),
+            ("KAFKA_SSL_CA_LOCATION", "/ca.pem"),
+        ]);
+        let config = client_config(env(&ssl)).unwrap();
+        assert!(config.contains(&("sasl.mechanism", "SCRAM-SHA-256".to_string())));
+        assert!(config.contains(&("ssl.ca.location", "/ca.pem".to_string())));
+    }
+
+    #[test]
+    fn client_config_rejects_inconsistent_env() {
+        for missing in ["KAFKA_SASL_USERNAME", "KAFKA_SASL_PASSWORD"] {
+            let err = client_config(env(&without(missing))).unwrap_err();
+            assert!(err.contains("needs KAFKA_SASL_USERNAME and KAFKA_SASL_PASSWORD"), "{err}");
+        }
+        let err = client_config(env(&without("KAFKA_SECURITY_PROTOCOL"))).unwrap_err();
+        assert!(
+            err.contains("KAFKA_SASL_USERNAME, KAFKA_SASL_PASSWORD set"),
+            "{err}"
+        );
+        let mut plain = SASL.to_vec();
+        plain.push(("KAFKA_SASL_MECHANISM", "PLAIN"));
+        assert!(client_config(env(&plain)).is_err());
+        let mut ssl = without("KAFKA_SECURITY_PROTOCOL");
+        ssl.push(("KAFKA_SECURITY_PROTOCOL", "SSL"));
+        assert!(client_config(env(&ssl)).is_err());
     }
 
     #[test]
