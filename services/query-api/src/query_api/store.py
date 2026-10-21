@@ -9,10 +9,19 @@ from decimal import Decimal
 from typing import Any, Protocol
 
 import psycopg
+from psycopg.pq import TransactionStatus
 from psycopg.rows import dict_row
 
 from query_api.formula import Compiled
 from query_api.screener import Compiled as Screen
+
+SEARCH_TIMEOUT = "8s"
+HEADLINE = ("StartSel=«, StopSel=», MaxWords=35, MinWords=15, MaxFragments=2,"
+            " FragmentDelimiter=\" … \"")
+
+
+class SearchTooBroad(Exception):
+    """Ranking every match took longer than SEARCH_TIMEOUT."""
 
 
 class Pool(Protocol):
@@ -32,8 +41,10 @@ class Store:
             try:
                 yield cur
             finally:  # don't leak the role or user into an enclosing transaction
-                cur.execute("RESET ROLE")
-                cur.execute("SELECT set_config('app.user_id', '', true)")
+                # (a failed transaction is rolled back, which undoes both anyway)
+                if conn.info.transaction_status != TransactionStatus.INERROR:
+                    cur.execute("RESET ROLE")
+                    cur.execute("SELECT set_config('app.user_id', '', true)")
 
     def metric_names(self) -> dict[str, list[str]]:
         """{metrics: silver.metrics, derived_metrics: gold.derived_metrics}, by name."""
@@ -293,3 +304,114 @@ class Store:
                 """, (max_chars, company_id, section_key, form, form, accession_no,
                       accession_no, limit))
             return cur.fetchall()
+
+    def section_diffs(self, user_id: str, company_id: str, accession_no: str,
+                      section_key: str | None, basis: str) -> list[dict]:
+        """gold.section_diffs rows of a filing with both section texts. A side whose section
+        was re-parsed after the diff (parser or parsed_at differ) comes back with text NULL."""
+        with self._session(user_id) as cur:
+            cur.execute(
+                """
+                SELECT d.*, doc.period_of_report, doc.url AS document_url,
+                       doc.fetched_at AS ingested_at, s.title, s.text, s.char_start,
+                       pdoc.cik AS prior_cik, pdoc.period_of_report AS prior_period_of_report,
+                       pdoc.url AS prior_document_url, ps.text AS prior_text,
+                       ps.char_start AS prior_char_start
+                FROM gold.section_diffs d
+                JOIN bronze.filing_documents doc ON doc.accession_no = d.accession_no
+                JOIN bronze.filing_documents pdoc ON pdoc.accession_no = d.prior_accession_no
+                LEFT JOIN silver.filing_sections s
+                       ON s.accession_no = d.accession_no AND s.section_key = d.section_key
+                      AND s.parser = d.parser AND s.parsed_at = d.parsed_at
+                LEFT JOIN silver.filing_sections ps
+                       ON ps.accession_no = d.prior_accession_no
+                      AND ps.section_key = d.section_key
+                      AND ps.parser = d.prior_parser AND ps.parsed_at = d.prior_parsed_at
+                WHERE d.company_id = %s AND d.accession_no = %s AND d.basis = %s
+                  AND (%s::text IS NULL OR d.section_key = %s)
+                ORDER BY d.section_key
+                """, (company_id, accession_no, basis, section_key, section_key))
+            return cur.fetchall()
+
+    def section_changes(self, user_id: str, accession_no: str, section_keys: list[str],
+                        basis: str, kind: str | None) -> list[dict]:
+        """gold.section_changes rows in reading order."""
+        with self._session(user_id) as cur:
+            cur.execute(
+                """
+                SELECT section_key, ordinal, kind, similarity, new_spans, prior_spans, words
+                FROM gold.section_changes
+                WHERE accession_no = %s AND section_key = ANY(%s) AND basis = %s
+                  AND (%s::text IS NULL OR kind = %s)
+                ORDER BY section_key, ordinal
+                """, (accession_no, section_keys, basis, kind, kind))
+            return cur.fetchall()
+
+    def has_filing(self, user_id: str, company_id: str, accession_no: str) -> bool:
+        """Whether the caller can read parsed sections of this filing of this company."""
+        with self._session(user_id) as cur:
+            cur.execute("SELECT EXISTS (SELECT 1 FROM gold.filing_sections"
+                        " WHERE company_id = %s AND accession_no = %s) AS found",
+                        (company_id, accession_no))
+            row = cur.fetchone()
+            return bool(row and row["found"])
+
+    def search_sections(self, user_id: str, company_ids: list[str], q: str, form: str | None,
+                        section_key: str | None, start: date | None, end: date | None,
+                        limit: int, offset: int) -> list[dict]:
+        """Best passage per section matching websearch_to_tsquery(q), ranked by ts_rank_cd,
+        with a ts_headline snippet cut from that passage only (never the whole section).
+        Raises SearchTooBroad when ranking the matches takes over SEARCH_TIMEOUT."""
+        try:
+            with self._session(user_id) as cur:
+                cur.execute(f"SET LOCAL statement_timeout = '{SEARCH_TIMEOUT}'")
+                cur.execute(
+                    """
+                    WITH q AS (SELECT websearch_to_tsquery('english', %(q)s) AS q),
+                    matches AS (
+                        SELECT p.*, ts_rank_cd(p.tsv, q.q) AS rank,
+                               count(*) OVER (PARTITION BY p.accession_no, p.section_key)
+                                   AS passages_matched
+                        FROM gold.section_search p, q
+                        WHERE p.tsv @@ q.q AND p.company_id = ANY(%(companies)s)
+                          AND (%(form)s::text IS NULL OR p.form = %(form)s)
+                          AND (%(section)s::text IS NULL OR p.section_key = %(section)s)
+                          AND (%(start)s::date IS NULL OR p.filed >= %(start)s)
+                          AND (%(end)s::date IS NULL OR p.filed <= %(end)s)
+                    ),
+                    best AS (
+                        SELECT DISTINCT ON (accession_no, section_key) *
+                        FROM matches
+                        ORDER BY accession_no, section_key, rank DESC, passage
+                    ),
+                    page AS (
+                        SELECT * FROM best
+                        ORDER BY rank DESC, filed DESC, accession_no, section_key
+                        LIMIT %(limit)s OFFSET %(offset)s
+                    )
+                    SELECT h.company_id, c.name, h.accession_no, h.form, h.filed,
+                           h.section_key, h.rank, h.passages_matched, s.title,
+                           s.char_start + h.start_char AS char_start,
+                           s.char_start + h.end_char AS char_end,
+                           ts_headline('english',
+                                       substr(s.text, h.start_char + 1,
+                                              h.end_char - h.start_char),
+                                       q.q, %(headline)s) AS snippet,
+                           coalesce(e.url, d.url) AS document_url, d.cik,
+                           d.period_of_report, d.fetched_at AS ingested_at
+                    FROM page h
+                    CROSS JOIN q
+                    JOIN silver.filing_sections s
+                      ON s.accession_no = h.accession_no AND s.section_key = h.section_key
+                     AND s.parser = h.parser
+                    JOIN bronze.filing_documents d ON d.accession_no = h.accession_no
+                    LEFT JOIN bronze.filing_exhibits e
+                           ON e.accession_no = h.accession_no AND e.exhibit_type = h.section_key
+                    JOIN silver.companies c ON c.company_id = h.company_id
+                    ORDER BY h.rank DESC, h.filed DESC, h.accession_no, h.section_key
+                    """, {"q": q, "companies": company_ids, "form": form,
+                          "section": section_key, "start": start, "end": end,
+                          "limit": limit, "offset": offset, "headline": HEADLINE})
+                return cur.fetchall()
+        except psycopg.errors.QueryCanceled:
+            raise SearchTooBroad from None

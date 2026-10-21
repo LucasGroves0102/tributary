@@ -27,6 +27,7 @@ from query_api.formula import (
     suggest,
     to_dict,
 )
+from query_api.research import add_research_routes
 from query_api.shapes import filing_url
 from query_api.shapes import period as _period
 from query_api.store import Store
@@ -124,6 +125,8 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
 
     add_ui_routes(app, store=store, current_user=current_user, require=require,
                   allowed=allowed, readable=readable, today=today, watchlists=watchlists)
+    add_research_routes(app, store=store, current_user=current_user, require=require,
+                        readable=readable)
 
     @app.get("/health")
     def health() -> dict:

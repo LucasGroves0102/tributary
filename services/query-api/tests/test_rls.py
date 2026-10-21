@@ -259,3 +259,137 @@ def test_segment_metric_list_matches_database(client, token):
         names = [m for (m,) in conn.execute("SELECT metric FROM silver.segment_metrics")]
     assert {"revenue", "operating_income"} <= set(names)
     assert all(n in r.json()["detail"] for n in names)
+
+
+@pytest.fixture
+def texts(client):
+    """Per company: a prior 10-K whose 1A said 'old risks', search passages for both filings,
+    and the 1A diff (one rewritten paragraph) as parser-index writes it."""
+    conn = client.app_conn
+    for cid in (A, B):
+        new, old = f"{cid}-26-000002", f"{cid}-25-000002"
+        conn.execute(
+            "INSERT INTO bronze.filing_documents (accession_no, cik, form, filed,"
+            " document_name, url, content_gzip, content_sha256, size_bytes)"
+            " VALUES (%s, %s, '10-K', '2025-02-01', 'd.htm', 'u', '\\x00', 'x', 1)", (old, cid))
+        conn.execute(
+            "INSERT INTO silver.filing_sections (accession_no, section_key, parser,"
+            " parser_version, item, title, text, char_start, char_end)"
+            " VALUES (%s, '1A', 'python', 't', '1A', 'Risk Factors', 'old risks', 0, 9)",
+            (old,))
+        conn.execute("SELECT gold.refresh_section_search(ARRAY[%s, %s])", (new, old))
+        conn.execute(
+            "INSERT INTO gold.section_diffs (company_id, accession_no, section_key, basis, form,"
+            " filed, parser, parsed_at, prior_accession_no, prior_form, prior_filed,"
+            " prior_parser, prior_parsed_at, paragraphs, prior_paragraphs, unchanged,"
+            " minor_edits, numbers_only, rewritten, new, removed, algorithm)"
+            " SELECT %s, n.accession_no, '1A', 'prior', '10-K', '2026-02-01', n.parser,"
+            " n.parsed_at, p.accession_no, '10-K', '2025-02-01', p.parser, p.parsed_at,"
+            " 1, 1, 0, 0, 0, 1, 0, 0, 'test'"
+            " FROM silver.filing_sections n, silver.filing_sections p"
+            " WHERE n.accession_no = %s AND p.accession_no = %s", (cid, new, old))
+        conn.execute(
+            "INSERT INTO gold.section_changes (company_id, accession_no, section_key, basis,"
+            " ordinal, kind, similarity, new_spans, prior_spans, words) VALUES"
+            " (%s, %s, '1A', 'prior', 0, 'rewritten', 0.5, '{0,12}', '{0,9}',"
+            " '[[\"r\", 0, 1, 0, 1], [\"e\", 1, 2, 1, 2]]')", (cid, new))
+    return client
+
+
+def changes(client, token, user, company, query=""):
+    return client.get(f"/v1/companies/{company}/filings/{company}-26-000002/changes?{query}",
+                      headers=token(user))
+
+
+def test_section_changes_with_both_citations(texts, token):
+    r = changes(texts, token, "t-pro", A)
+    assert r.status_code == 200
+    [s] = r.json()["sections"]
+    assert s["stale"] is False and s["summary"]["rewritten"] == 1
+    assert s["compared_to"]["accession_no"] == f"{A}-25-000002"
+    [c] = s["changes"]
+    assert (c["kind"], c["text"], c["prior_text"]) == ("rewritten", "secret risks", "old risks")
+    assert c["words"] == [["-", "old"], ["+", "secret"], ["=", "risks"]]
+    assert c["citation"]["char_end"] == 12 and c["prior_citation"]["char_end"] == 9
+
+
+def test_section_changes_hidden_without_filings_grant(texts, token):
+    # layer 1 allows everything here: RLS alone hides B's and the free plan's rows
+    for user, company in (("t-pro", B), ("t-free", A), ("t-nobody", A)):
+        assert changes(texts, token, user, company).status_code == 404
+
+
+def test_section_changes_go_stale_after_a_reparse(texts, token):
+    texts.app_conn.execute("UPDATE silver.filing_sections SET parsed_at = now() + interval '1 s'"
+                           " WHERE accession_no = %s", (f"{A}-25-000002",))
+    [s] = changes(texts, token, "t-pro", A).json()["sections"]
+    assert s["stale"] is True and s["changes"] == []
+
+
+def test_section_change_rows_hidden_without_a_grant(texts):
+    with texts.app_conn.cursor() as cur:
+        cur.execute("SET LOCAL ROLE query_api")
+        cur.execute("SELECT set_config('app.user_id', 't-pro', true)")
+        for table in ("gold.section_diffs", "gold.section_changes", "gold.section_search"):
+            cur.execute(f"SELECT DISTINCT company_id FROM {table}"  # noqa: S608
+                        " WHERE company_id IN (%s, %s)", (A, B))
+            assert cur.fetchall() == [(A,)], table
+        cur.execute("SELECT set_config('app.user_id', 't-free', true)")
+        cur.execute("SELECT count(*) FROM gold.section_search")
+        assert cur.fetchone() == (0,)
+        cur.execute("RESET ROLE")
+
+
+def search(client, token, user, query):
+    r = client.get(f"/v1/search?{query}", headers=token(user))
+    assert r.status_code == 200, r.text
+    return r.json()["results"]
+
+
+def test_search_respects_rls(texts, token):
+    # AllowAll lists A and B as readable; RLS still hides B
+    hits = search(texts, token, "t-pro", "q=secret")
+    assert [(h["company_id"], h["snippet"]) for h in hits] == [(A, "«secret» risks")]
+    assert hits[0]["citation"]["char_end"] == 12
+    assert search(texts, token, "t-pro", f"q=secret&company={B}") == []
+    assert search(texts, token, "t-free", "q=risks") == []
+
+
+def test_search_filters_and_pagination(texts, token):
+    both = search(texts, token, "t-pro", "q=risks")
+    assert [h["citation"]["accession_no"] for h in both] == [f"{A}-26-000002",
+                                                            f"{A}-25-000002"]
+    assert search(texts, token, "t-pro", "q=risks&from=2026-01-01")[0]["citation"][
+        "filed"] == "2026-02-01"
+    assert len(search(texts, token, "t-pro", "q=risks&to=2025-12-31")) == 1
+    assert search(texts, token, "t-pro", "q=risks&form=10-Q") == []
+    assert search(texts, token, "t-pro", "q=risks&section=7") == []
+    r = texts.get("/v1/search?q=risks&limit=1", headers=token("t-pro")).json()
+    assert r["has_more"] is True and len(r["results"]) == 1
+    r = texts.get("/v1/search?q=risks&limit=1&offset=1", headers=token("t-pro")).json()
+    assert r["has_more"] is False
+    assert r["results"][0]["citation"]["accession_no"] == f"{A}-25-000002"
+
+
+def test_search_ranks_denser_matches_first(texts, token):
+    conn = texts.app_conn
+    for acc, text in ((f"{A}-26-000003", "export controls on chips; export controls again"),
+                      (f"{A}-26-000004", "export rules and, much later, some controls")):
+        conn.execute(
+            "INSERT INTO bronze.filing_documents (accession_no, cik, form, filed,"
+            " document_name, url, content_gzip, content_sha256, size_bytes)"
+            " VALUES (%s, %s, '10-Q', '2026-05-01', 'd.htm', 'u', '\\x00', 'x', 1)", (acc, A))
+        conn.execute(
+            "INSERT INTO silver.filing_sections (accession_no, section_key, parser,"
+            " parser_version, item, title, text, char_start, char_end)"
+            " VALUES (%s, 'II-1A', 'python', 't', '1A', 'Risk Factors', %s, 100, 150)",
+            (acc, text))
+        conn.execute("SELECT gold.refresh_section_search(ARRAY[%s])", (acc,))
+    hits = search(texts, token, "t-pro", "q=export+controls")
+    assert [h["citation"]["accession_no"] for h in hits] == [f"{A}-26-000003",
+                                                            f"{A}-26-000004"]
+    assert hits[0]["rank"] > hits[1]["rank"]
+    assert hits[0]["citation"]["char_start"] == 100  # section offset + passage offset
+    # phrase search only matches adjacent words
+    assert [h["citation"]["accession_no"] for h in
+            search(texts, token, "t-pro", 'q="export controls"')] == [f"{A}-26-000003"]
