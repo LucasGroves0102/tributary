@@ -1,5 +1,7 @@
 # Created outside the chart. Keys: postgres-password, openfga-datastore-uri, and when
-# openfga.auth.enabled: openfga-preshared-keys, openfga-api-token.
+# openfga.auth.enabled: openfga-preshared-keys, openfga-api-token; when kafka.sasl.enabled:
+# kafka-password-admin and kafka-password-<principal> for every principal in
+# files/kafka-acls.yaml (scripts/kafka-passwords.sh creates them).
 secretName: platform
 
 # Namespace of kafka-exporter (consumer lag for alerts).
@@ -30,6 +32,22 @@ kafka:
   storage: 10Gi
   heap: 512m
   retentionHours: 168
+  # SASL/SCRAM-SHA-512 per client with ACLs, a second layer behind the NetworkPolicies. Rolled out
+  # in three phases, each a values change (README, "Kafka authentication": order, secrets,
+  # rollback). Off by default, so the chart renders exactly as before.
+  sasl:
+    # Phase A: add the SASL listener on `port` next to PLAINTEXT, turn on the authorizer
+    # (StandardAuthorizer, deny without an ACL; PLAINTEXT clients are unaffected), and create the
+    # users and ACLs of files/kafka-acls.yaml (setup-kafka hook, scram-admin sidecar). Needs the
+    # kafka-password-* keys in secretName first.
+    enabled: false
+    port: 9094
+    # Inter-broker listener, bound to localhost (only the broker and scram-admin use it).
+    internalPort: 9095
+    # Phase B: Kafka Connect and Debezium authenticate as `connect` on `port`.
+    connect: false
+  # Phase C: false removes the PLAINTEXT listener (9092) once every client uses SASL.
+  plaintextListener: true
   resources:
     requests:
       cpu: 100m

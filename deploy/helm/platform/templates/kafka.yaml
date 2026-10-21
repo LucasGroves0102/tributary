@@ -1,5 +1,25 @@
 {{- $ctx := dict "root" $ "name" "kafka" }}
 {{- $fqdn := printf "kafka.%s.svc.cluster.local" .Release.Namespace }}
+{{- $sasl := .Values.kafka.sasl }}
+{{- $plain := .Values.kafka.plaintextListener }}
+{{- if not (or $sasl.enabled $plain) }}{{ fail "kafka.plaintextListener=false needs kafka.sasl.enabled" }}{{ end }}
+{{- /* Listener names: PLAINTEXT (9092, today's), SASL (SASL_PLAINTEXT + SCRAM-SHA-512, port
+kafka.sasl.port), BROKER (inter-broker, localhost only) and CONTROLLER (localhost only). */}}
+{{- $listeners := list }}
+{{- $advertised := list }}
+{{- $protocols := list }}
+{{- if $plain }}
+{{- $listeners = append $listeners "PLAINTEXT://:9092" }}
+{{- $advertised = append $advertised (printf "PLAINTEXT://%s:9092" $fqdn) }}
+{{- $protocols = append $protocols "PLAINTEXT:PLAINTEXT" }}
+{{- end }}
+{{- if $sasl.enabled }}
+{{- $listeners = concat $listeners (list (printf "SASL://:%v" $sasl.port) (printf "BROKER://localhost:%v" $sasl.internalPort)) }}
+{{- $advertised = concat $advertised (list (printf "SASL://%s:%v" $fqdn $sasl.port) (printf "BROKER://localhost:%v" $sasl.internalPort)) }}
+{{- $protocols = concat $protocols (list "SASL:SASL_PLAINTEXT" "BROKER:PLAINTEXT") }}
+{{- end }}
+{{- $listeners = append $listeners "CONTROLLER://localhost:9093" }}
+{{- $protocols = append $protocols "CONTROLLER:PLAINTEXT" }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -10,9 +30,16 @@ spec:
   selector:
     {{- include "platform.selector" $ctx | nindent 4 }}
   ports:
+    {{- if $plain }}
     - name: kafka
       port: 9092
       targetPort: kafka
+    {{- end }}
+    {{- if $sasl.enabled }}
+    - name: kafka-sasl
+      port: {{ $sasl.port }}
+      targetPort: kafka-sasl
+    {{- end }}
 ---
 apiVersion: v1
 kind: Service
@@ -25,8 +52,14 @@ spec:
   selector:
     {{- include "platform.selector" $ctx | nindent 4 }}
   ports:
+    {{- if $plain }}
     - name: kafka
       port: 9092
+    {{- end }}
+    {{- if $sasl.enabled }}
+    - name: kafka-sasl
+      port: {{ $sasl.port }}
+    {{- end }}
 ---
 # One broker in KRaft mode (broker + controller); the controller listens on localhost only.
 apiVersion: apps/v1
@@ -63,12 +96,23 @@ spec:
             - {name: CLUSTER_ID, value: {{ .Values.kafka.clusterId | quote }}}
             - {name: KAFKA_NODE_ID, value: "1"}
             - {name: KAFKA_PROCESS_ROLES, value: "broker,controller"}
-            - {name: KAFKA_LISTENERS, value: "PLAINTEXT://:9092,CONTROLLER://localhost:9093"}
-            - {name: KAFKA_ADVERTISED_LISTENERS, value: "PLAINTEXT://{{ $fqdn }}:9092"}
-            - {name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP, value: "PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT"}
+            - {name: KAFKA_LISTENERS, value: {{ join "," $listeners | quote }}}
+            - {name: KAFKA_ADVERTISED_LISTENERS, value: {{ join "," $advertised | quote }}}
+            - {name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP, value: {{ join "," $protocols | quote }}}
             - {name: KAFKA_CONTROLLER_LISTENER_NAMES, value: CONTROLLER}
             - {name: KAFKA_CONTROLLER_QUORUM_VOTERS, value: "1@localhost:9093"}
-            - {name: KAFKA_INTER_BROKER_LISTENER_NAME, value: PLAINTEXT}
+            - {name: KAFKA_INTER_BROKER_LISTENER_NAME, value: {{ ternary "BROKER" "PLAINTEXT" $sasl.enabled }}}
+            {{- if $sasl.enabled }}
+            - {name: KAFKA_SASL_ENABLED_MECHANISMS, value: SCRAM-SHA-512}
+            # Server side only (the broker is no SASL client), so no username/password.
+            - {name: KAFKA_LISTENER_NAME_SASL_SCRAM___SHA___512_SASL_JAAS_CONFIG, value: "org.apache.kafka.common.security.scram.ScramLoginModule required;"}
+            - {name: KAFKA_AUTHORIZER_CLASS_NAME, value: org.apache.kafka.metadata.authorizer.StandardAuthorizer}
+            - {name: KAFKA_ALLOW_EVERYONE_IF_NO_ACL_FOUND, value: "false"}
+            # ANONYMOUS is any connection without SASL: the localhost-only BROKER and CONTROLLER
+            # listeners (the broker itself, scram-admin) and, until plaintextListener is false,
+            # today's PLAINTEXT clients, which therefore keep working unchanged in phase A.
+            - {name: KAFKA_SUPER_USERS, value: "User:ANONYMOUS;User:admin"}
+            {{- end }}
             - {name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR, value: "1"}
             - {name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR, value: "1"}
             - {name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR, value: "1"}
@@ -78,16 +122,21 @@ spec:
             - {name: KAFKA_LOG_RETENTION_HOURS, value: {{ .Values.kafka.retentionHours | quote }}}
             - {name: KAFKA_HEAP_OPTS, value: "-Xmx{{ .Values.kafka.heap }} -Xms{{ .Values.kafka.heap }}"}
           ports:
+            {{- if $plain }}
             - {name: kafka, containerPort: 9092}
+            {{- end }}
+            {{- if $sasl.enabled }}
+            - {name: kafka-sasl, containerPort: {{ $sasl.port }}}
+            {{- end }}
           startupProbe:
-            tcpSocket: {port: kafka}
+            tcpSocket: {port: {{ ternary "kafka" "kafka-sasl" $plain }}}
             periodSeconds: 5
             failureThreshold: 36
           readinessProbe:
-            tcpSocket: {port: kafka}
+            tcpSocket: {port: {{ ternary "kafka" "kafka-sasl" $plain }}}
             periodSeconds: 10
           livenessProbe:
-            tcpSocket: {port: kafka}
+            tcpSocket: {port: {{ ternary "kafka" "kafka-sasl" $plain }}}
             periodSeconds: 20
             failureThreshold: 3
           resources:
@@ -98,10 +147,35 @@ spec:
             - {name: config, mountPath: /opt/kafka/config}
             - {name: logs, mountPath: /opt/kafka/logs}
             - {name: tmp, mountPath: /tmp}
+        {{- if $sasl.enabled }}
+        # Creates the SCRAM user admin (setup-kafka's login) over the localhost BROKER listener.
+        - name: scram-admin
+          image: {{ .Values.images.kafka }}
+          command: [sh, -c, {{ .Files.Get "files/kafka-admin.sh" | quote }}]
+          env:
+            - {name: BOOTSTRAP, value: "localhost:{{ $sasl.internalPort }}"}
+            - {name: KAFKA_HEAP_OPTS, value: "-Xmx64m -Xms32m"}
+            - {name: LOG_DIR, value: /tmp/logs}
+          resources:
+            requests: {cpu: 10m, memory: 64Mi}
+            limits: {memory: 256Mi}
+          {{- include "platform.containerSecurity" . | nindent 10 }}
+          volumeMounts:
+            - {name: kafka-admin-password, mountPath: /secrets, readOnly: true}
+            - {name: scram-admin-tmp, mountPath: /tmp}
+        {{- end }}
       volumes:
         - {name: config, emptyDir: {sizeLimit: 16Mi}}
         - {name: logs, emptyDir: {sizeLimit: 256Mi}}
         - {name: tmp, emptyDir: {sizeLimit: 64Mi}}
+        {{- if $sasl.enabled }}
+        - name: kafka-admin-password
+          secret:
+            secretName: {{ .Values.secretName }}
+            items:
+              - {key: kafka-password-admin, path: kafka-password-admin}
+        - {name: scram-admin-tmp, emptyDir: {sizeLimit: 16Mi}}
+        {{- end }}
   volumeClaimTemplates:
     - metadata:
         name: data

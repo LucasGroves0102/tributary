@@ -1,5 +1,6 @@
 {{- $labels := dict "root" $ "name" "network" }}
 {{- $host := printf "%s/32" .Values.hostAddress }}
+{{- $sasl := .Values.kafka.sasl }}
 # Nothing in or out unless a policy below allows it.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -56,7 +57,7 @@ spec:
               tributary.io/kafka: "true"
         - podSelector:
             matchExpressions:
-              - {key: app.kubernetes.io/name, operator: In, values: [connect, kafka]}
+              - {key: app.kubernetes.io/name, operator: In, values: {{ ternary "[connect, kafka, setup-kafka]" "[connect, kafka]" $sasl.enabled }}}
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: {{ .Values.monitoringNamespace }}
@@ -64,7 +65,12 @@ spec:
             matchLabels:
               app: prometheus-kafka-exporter
       ports:
+        {{- if .Values.kafka.plaintextListener }}
         - {protocol: TCP, port: 9092}
+        {{- end }}
+        {{- if $sasl.enabled }}
+        - {protocol: TCP, port: {{ $sasl.port }}}
+        {{- end }}
 ---
 # OpenFGA: its clients in the Tributary namespace and the setup Job; the node for probes.
 apiVersion: networking.k8s.io/v1
@@ -128,7 +134,7 @@ spec:
             matchLabels:
               {{- include "platform.selector" (dict "root" $ "name" "kafka") | nindent 14 }}
       ports:
-        - {protocol: TCP, port: 9092}
+        - {protocol: TCP, port: {{ ternary $sasl.port 9092 $sasl.connect }}}
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -184,3 +190,24 @@ spec:
               {{- include "platform.selector" (dict "root" $ "name" "connect") | nindent 14 }}
       ports:
         - {protocol: TCP, port: 8083}
+{{- if $sasl.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: setup-kafka
+  labels:
+    {{- include "platform.labels" $labels | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "platform.selector" (dict "root" $ "name" "setup-kafka") | nindent 6 }}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "platform.selector" (dict "root" $ "name" "kafka") | nindent 14 }}
+      ports:
+        - {protocol: TCP, port: {{ $sasl.port }}}
+{{- end }}

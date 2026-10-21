@@ -1,4 +1,7 @@
 {{- $ctx := dict "root" $ "name" "connect" }}
+{{- $sasl := .Values.kafka.sasl }}
+{{- if and $sasl.connect (not $sasl.enabled) }}{{ fail "kafka.sasl.connect needs kafka.sasl.enabled" }}{{ end }}
+{{- if not (or $sasl.connect .Values.kafka.plaintextListener) }}{{ fail "kafka.plaintextListener=false needs kafka.sasl.connect (Connect would lose Kafka)" }}{{ end }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -44,7 +47,11 @@ spec:
         - name: connect
           image: {{ .Values.images.connect }}
           env:
+            {{- if $sasl.connect }}
+            - {name: BOOTSTRAP_SERVERS, value: "kafka:{{ $sasl.port }}"}
+            {{- else }}
             - {name: BOOTSTRAP_SERVERS, value: "kafka:9092"}
+            {{- end }}
             - {name: GROUP_ID, value: connect}
             - {name: CONFIG_STORAGE_TOPIC, value: connect.configs}
             - {name: OFFSET_STORAGE_TOPIC, value: connect.offsets}
@@ -57,6 +64,17 @@ spec:
             - {name: CONNECT_CONFIG_PROVIDERS, value: env}
             - {name: CONNECT_CONFIG_PROVIDERS_ENV_CLASS, value: org.apache.kafka.common.config.provider.EnvVarConfigProvider}
             {{- include "platform.postgresPassword" . | nindent 12 }}
+            {{- if $sasl.connect }}
+            # SCRAM user connect for the worker's own clients (config, offset and status topics,
+            # and the admin client that creates Debezium's topics) and, via the producer./consumer.
+            # prefixes, the connectors' clients. Kubernetes expands $(SCRAM_PASSWORD).
+            {{- include "platform.secretEnv" (dict "root" $ "env" "SCRAM_PASSWORD" "key" "kafka-password-connect") | nindent 12 }}
+            {{- range $prefix := list "" "PRODUCER_" "CONSUMER_" }}
+            - {name: CONNECT_{{ $prefix }}SECURITY_PROTOCOL, value: SASL_PLAINTEXT}
+            - {name: CONNECT_{{ $prefix }}SASL_MECHANISM, value: SCRAM-SHA-512}
+            - {name: CONNECT_{{ $prefix }}SASL_JAAS_CONFIG, value: 'org.apache.kafka.common.security.scram.ScramLoginModule required username="connect" password="$(SCRAM_PASSWORD)";'}
+            {{- end }}
+            {{- end }}
           ports:
             - {name: http, containerPort: 8083}
           startupProbe:
