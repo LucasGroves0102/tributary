@@ -393,10 +393,12 @@ class Store:
                            h.section_key, h.rank, h.passages_matched, s.title,
                            s.char_start + h.start_char AS char_start,
                            s.char_start + h.end_char AS char_end,
-                           ts_headline('english',
-                                       substr(s.text, h.start_char + 1,
-                                              h.end_char - h.start_char),
-                                       q.q, %(headline)s) AS snippet,
+                           regexp_replace(
+                               ts_headline('english',
+                                           substr(s.text, h.start_char + 1,
+                                                  h.end_char - h.start_char),
+                                           q.q, %(headline)s),
+                               '\\s+', ' ', 'g') AS snippet,
                            coalesce(e.url, d.url) AS document_url, d.cik,
                            d.period_of_report, d.fetched_at AS ingested_at
                     FROM page h
