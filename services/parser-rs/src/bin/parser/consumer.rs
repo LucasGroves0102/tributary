@@ -334,16 +334,14 @@ mod tests {
             .iter()
             .map(|(k, v)| (k.to_string(), v.to_string()))
             .collect();
-        move |key: &str| {
-            pairs
-                .iter()
-                .find(|(k, _)| k == key)
-                .map(|(_, v)| v.clone())
-        }
+        move |key: &str| pairs.iter().find(|(k, _)| k == key).map(|(_, v)| v.clone())
     }
 
     const SASL: [(&str, &str); 4] = [
-        ("KAFKA_BOOTSTRAP_SERVERS", "kafka.platform.svc.cluster.local:9094"),
+        (
+            "KAFKA_BOOTSTRAP_SERVERS",
+            "kafka.platform.svc.cluster.local:9094",
+        ),
         ("KAFKA_SECURITY_PROTOCOL", "SASL_PLAINTEXT"),
         ("KAFKA_SASL_USERNAME", "parser"),
         ("KAFKA_SASL_PASSWORD", "secret"),
@@ -399,7 +397,10 @@ mod tests {
     fn client_config_rejects_inconsistent_env() {
         for missing in ["KAFKA_SASL_USERNAME", "KAFKA_SASL_PASSWORD"] {
             let err = client_config(env(&without(missing))).unwrap_err();
-            assert!(err.contains("needs KAFKA_SASL_USERNAME and KAFKA_SASL_PASSWORD"), "{err}");
+            assert!(
+                err.contains("needs KAFKA_SASL_USERNAME and KAFKA_SASL_PASSWORD"),
+                "{err}"
+            );
         }
         let err = client_config(env(&without("KAFKA_SECURITY_PROTOCOL"))).unwrap_err();
         assert!(
