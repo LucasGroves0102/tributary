@@ -30,4 +30,4 @@ spec:
       parser:
         image: parser-rs
     image:
-      tag: main-78-c088256e11264c322123c7cb592a77d05405b6f3 # {"$imagepolicy": "flux-system:tributary:tag"}
+      tag: main-79-4606670401640c758cff8a1dcab3ea1c30dcae60 # {"$imagepolicy": "flux-system:tributary:tag"}
