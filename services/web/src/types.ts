@@ -3,6 +3,7 @@ export type Tier = "financials" | "filings";
 export interface Company {
   company_id: string;
   name: string | null;
+  industry?: string | null;
   tiers: Tier[];
 }
 
@@ -78,6 +79,8 @@ export interface FinancialRow {
   metric: string;
   period_start: string | null;
   period_end: string;
+  fiscal_period?: string | null;
+  calendar_period?: string | null;
   value: string;
   unit: string;
   value_source: "reported" | "derived";
@@ -120,4 +123,81 @@ export interface Section {
   truncated: boolean;
   total_chars: number;
   citation: { accession_no: string; form: string; filed: string; document_url: string | null };
+}
+
+/** Query API numbers that may be Decimals arrive as strings; never do maths on them unparsed. */
+export type Num = string | number;
+
+export interface ColumnInfo {
+  key: string;
+  metric: string;
+  span: "quarter" | "ttm";
+  unit: string;
+}
+
+/** Where a screener/watchlist value came from: the latest period's filing. */
+export interface ValueSource {
+  period_end: string;
+  accession_no: string;
+  form: string;
+  filed: string;
+}
+
+export interface ExpectedFiling {
+  form: string;
+  period_end: string;
+  expected_date: string | null;
+  deadline: string | null;
+  deadline_days: number | null;
+  filer_category: string | null;
+  basis: string;
+  typical_lag_days: number | null;
+  lag_samples: number | null;
+  status: string; // upcoming | due | overdue
+  estimate: true;
+  last_period_end: string | null;
+  last_filed: string | null;
+}
+
+export interface WatchlistEntry {
+  company_id: string;
+  name: string | null;
+  tickers: string[] | null;
+  exchanges: string[] | null;
+  sic: string | null;
+  industry: string | null;
+  fiscal_year_end: string | null;
+  filer_category: string | null;
+  access: Tier[];
+  /** null unless the caller can read this company's financials */
+  values: Record<string, Num | null>;
+  sources: Record<string, ValueSource | null>;
+  added_at: string | null;
+  last_filing: {
+    accession_no: string;
+    form: string;
+    filing_date: string;
+    period_end: string | null;
+  } | null;
+  next_expected: ExpectedFiling | null;
+}
+
+export interface Watchlist {
+  as_of: string;
+  columns: ColumnInfo[];
+  expected_method: string;
+  companies: WatchlistEntry[];
+}
+
+export interface CalendarEntry extends ExpectedFiling {
+  company_id: string;
+  name: string | null;
+}
+
+export interface Calendar {
+  as_of: string;
+  through: string;
+  scope: "watchlist" | "readable";
+  method: string;
+  filings: CalendarEntry[];
 }

@@ -1,5 +1,6 @@
 import type {
   AgentEvent,
+  Calendar,
   Filing,
   FinancialRow,
   HistoryTurn,
@@ -7,6 +8,7 @@ import type {
   Me,
   SearchResult,
   Section,
+  Watchlist,
 } from "./types";
 
 const QUERY = "/api/query";
@@ -46,22 +48,74 @@ export async function me(token: string): Promise<Me> {
   return json<Me>(await fetch(`${QUERY}/v1/me`, { headers: { Authorization: `Bearer ${token}` } }));
 }
 
-function get<T>(token: string, path: string, params: Record<string, string | number> = {}) {
-  const qs = new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)]));
-  const url = `${QUERY}${path}${qs.size ? `?${qs}` : ""}`;
-  return fetch(url, { headers: { Authorization: `Bearer ${token}` } }).then((r) => json<T>(r));
+type Params = Record<string, string | number | string[]>;
+
+/** Arrays become repeated keys (`columns=a&columns=b`), as FastAPI list queries expect. */
+function url(path: string, params: Params): string {
+  const qs = new URLSearchParams(
+    Object.entries(params).flatMap(([k, v]) =>
+      Array.isArray(v) ? v.map((x) => [k, x]) : [[k, String(v)]],
+    ),
+  );
+  return `${QUERY}${path}${qs.size ? `?${qs}` : ""}`;
+}
+
+function get<T>(token: string, path: string, params: Params = {}) {
+  return fetch(url(path, params), { headers: { Authorization: `Bearer ${token}` } }).then((r) =>
+    json<T>(r),
+  );
+}
+
+function send<T>(token: string, method: "PUT" | "DELETE", path: string) {
+  return fetch(url(path, {}), { method, headers: { Authorization: `Bearer ${token}` } }).then(
+    (r) => json<T>(r),
+  );
 }
 
 export const searchCompanies = (token: string, q: string) =>
   get<{ results: SearchResult[] }>(token, "/v1/companies/search", { q }).then((r) => r.results);
 
-export const financials = (token: string, companyId: string, quarters: number) =>
+export const financials = (
+  token: string,
+  companyId: string,
+  quarters: number,
+  metrics: string[] = [],
+) =>
   get<{ as_of: string; rows: FinancialRow[] }>(
     token,
     `/v1/companies/${companyId}/financials`,
-    { quarters },
+    metrics.length ? { quarters, metrics } : { quarters },
   );
 
+/** Home's watchlist columns: TTM to the latest reported quarter, net debt at its end. */
+export const WATCHLIST_COLUMNS = [
+  "revenue_ttm",
+  "revenue_growth_ttm",
+  "operating_margin_ttm",
+  "free_cash_flow_ttm",
+  "net_debt_q",
+];
+
+export const watchlist = (token: string) =>
+  get<Watchlist>(token, "/v1/watchlist", { columns: WATCHLIST_COLUMNS });
+
+export const watch = (token: string, companyId: string) =>
+  send<{ company_id: string; added: boolean }>(token, "PUT", `/v1/watchlist/${companyId}`);
+
+export const unwatch = (token: string, companyId: string) =>
+  send<{ company_id: string; removed: boolean }>(token, "DELETE", `/v1/watchlist/${companyId}`);
+
+/** The watchlist as the Query API's CSV (sources and expected-date basis included). */
+export async function watchlistCsv(token: string): Promise<Blob> {
+  const r = await fetch(url("/v1/watchlist", { columns: WATCHLIST_COLUMNS, format: "csv" }), {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!r.ok) await json(r);
+  return r.blob();
+}
+
+export const expectedFilings = (token: string, days: number, scope: "watchlist" | "readable") =>
+  get<Calendar>(token, "/v1/calendar/expected-filings", { days, scope });
 export const filings = (token: string, companyId: string) =>
   get<{ filings: Filing[] }>(token, `/v1/companies/${companyId}/filings`, { limit: 20 }).then(
     (r) => r.filings,
@@ -73,8 +127,8 @@ export const section = (token: string, companyId: string, key: string, accession
     max_chars: 50000,
   }).then((r) => r.sections[0] ?? null);
 
-export const latestFilings = (token: string) =>
-  get<{ as_of: string; filings: LatestFiling[] }>(token, "/v1/filings/latest", { limit: 20 });
+export const latestFilings = (token: string, limit = 20) =>
+  get<{ as_of: string; filings: LatestFiling[] }>(token, "/v1/filings/latest", { limit });
 
 /** Splits a server-sent event stream into JSON payloads, across arbitrary chunk boundaries. */
 export class SseParser {
