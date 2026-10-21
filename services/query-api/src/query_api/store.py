@@ -204,6 +204,43 @@ class Store:
                 """, (company_id, view, metrics, basis, quarters))
             return cur.fetchall()
 
+    def segment_metric_names(self) -> list[str]:
+        """silver.segment_metrics, by name."""
+        with self._session("") as cur:
+            cur.execute("SELECT ARRAY(SELECT metric FROM silver.segment_metrics ORDER BY 1)"
+                        " AS metrics")
+            row = cur.fetchone()
+            return list(row["metrics"]) if row else []
+
+    def segments(self, user_id: str, company_id: str, axis: str | None, metric: str | None,
+                 periods: int, view: str = "quarter", basis: str = "fiscal") -> list[dict]:
+        """gold.segments rows of the latest `periods` period ends (calendar basis: calendar
+        quarters, one row each) per axis and metric. view: quarter | ttm."""
+        with self._session(user_id) as cur:
+            cur.execute(
+                """
+                SELECT axis, member, member_label, member_aliases, metric, period_start,
+                       period_end, fiscal_year, fiscal_quarter, calendar_year,
+                       calendar_quarter, value, unit, value_source, source_tag, axis_qname,
+                       accession_no, filer_cik, form, filed, source_accessions, ingested_at
+                FROM (
+                    SELECT *, dense_rank() OVER (
+                        PARTITION BY axis, metric
+                        ORDER BY CASE WHEN %(basis)s = 'calendar'
+                                      THEN make_date(calendar_year, calendar_quarter * 3 - 2, 1)
+                                      ELSE period_end END DESC) AS recency
+                    FROM gold.segments
+                    WHERE company_id = %(company)s AND span = %(view)s
+                      AND (%(axis)s::text IS NULL OR axis = %(axis)s)
+                      AND (%(metric)s::text IS NULL OR metric = %(metric)s)
+                      AND (%(basis)s = 'fiscal' OR calendar_primary)
+                ) s
+                WHERE recency <= %(periods)s
+                ORDER BY axis, metric, member_label, member, period_end DESC
+                """, {"company": company_id, "view": view, "axis": axis, "metric": metric,
+                      "basis": basis, "periods": periods})
+            return cur.fetchall()
+
     def filings(self, user_id: str, company_id: str, limit: int) -> list[dict]:
         """Recent filings with the sections each contains (no text)."""
         with self._session(user_id) as cur:

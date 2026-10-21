@@ -37,6 +37,11 @@ from tributary_telemetry.http import instrument
 FINANCIALS_CSV = ["metric", "view", "period_start", "period_end", "fiscal_period",
                   "calendar_period", "value", "unit", "value_source", "accession_no", "form",
                   "filed", "xbrl_tag", "source_accessions", "filing_url", "ingested_at"]
+SEGMENTS_CSV = ["axis", "member", "member_label", "metric", "view", "period_start", "period_end",
+                "fiscal_period", "calendar_period", "value", "unit", "value_source",
+                "accession_no", "form", "filed", "xbrl_tag", "xbrl_axis", "source_accessions",
+                "filing_url", "ingested_at"]
+SegmentAxis = Literal["business_segment", "geography", "product_service", "reconciliation"]
 CompanyId = Annotated[str, Path(pattern=r"^\d{10}$", description="canonical company_id")]
 
 
@@ -211,6 +216,69 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
                 **({"inputs": r["inputs"]} if r.get("inputs") else {}),
                 "citation": {"accession_no": r["accession_no"], "form": r["form"],
                              "filed": r["filed"], "xbrl_tag": r["source_tag"],
+                             "source_accessions": r["source_accessions"],
+                             "filing_url": filing_url(r.get("filer_cik"), r["accession_no"])},
+                "freshness": {"filed": r["filed"], "ingested_at": r["ingested_at"]},
+            } for r in rows
+        ]}
+
+    segment_known: list[str] = []
+
+    def segment_metric_names() -> list[str]:
+        """Read once from the database (silver.segment_metrics): changed only by migrations."""
+        if not segment_known:
+            segment_known.extend(store.segment_metric_names())
+        return segment_known
+
+    @app.get("/v1/companies/{company_id}/segments", response_model=dict)
+    def segments(
+        user_id: User, company_id: CompanyId,
+        axis: Annotated[SegmentAxis | None, Query(
+            description="business_segment, geography, product_service or reconciliation"
+                        " (corporate, eliminations); default: all")] = None,
+        metric: Annotated[str | None, Query(
+            description="e.g. revenue, operating_income; default: all")] = None,
+        quarters: Annotated[int, Query(ge=1, le=40, description="latest periods")] = 8,
+        view: Annotated[Literal["quarter", "ttm"], Query(
+            description="quarter, or trailing twelve months ending each quarter")] = "quarter",
+        basis: Annotated[Literal["fiscal", "calendar"], Query(
+            description="fiscal: every fiscal quarter; calendar: one per calendar quarter")]
+            = "fiscal",
+        fmt: Annotated[Literal["json", "csv"], Query(
+            alias="format", description="csv: one row per value, with its source filing")]
+            = "json",
+    ) -> dict | Response:
+        """Revenue, operating income and other metrics per segment member, from the filings'
+        XBRL dimensions. Values are exact decimal strings; each cites its filing."""
+        names = segment_metric_names()
+        if metric is not None and metric not in names:
+            raise HTTPException(422, f"unknown segment metric; one of {names}")
+        require(user_id, "financials", company_id)
+        rows = store.segments(user_id, company_id, axis, metric, quarters, view, basis)
+        if fmt == "csv":
+            return csv_response(f"{company_id}-segments-{view}-{basis}.csv", SEGMENTS_CSV, ([
+                r["axis"], r["member"], r["member_label"], r["metric"], view,
+                r["period_start"], r["period_end"],
+                _period("FY", r.get("fiscal_year"), r.get("fiscal_quarter")),
+                _period("CY", r.get("calendar_year"), r.get("calendar_quarter")),
+                r["value"], r["unit"], r["value_source"], r["accession_no"], r["form"],
+                r["filed"], r["source_tag"], r["axis_qname"], r["source_accessions"],
+                filing_url(r.get("filer_cik"), r["accession_no"]), r["ingested_at"],
+            ] for r in rows))
+        return {"company_id": company_id, "view": view, "basis": basis, "as_of": _now(),
+                "axis": axis, "metric": metric, "rows": [
+            {
+                "axis": r["axis"], "member": r["member"], "member_label": r["member_label"],
+                "member_aliases": r.get("member_aliases") or [],
+                "metric": r["metric"], "period_start": r["period_start"],
+                "period_end": r["period_end"],
+                "fiscal_period": _period("FY", r.get("fiscal_year"), r.get("fiscal_quarter")),
+                "calendar_period": _period("CY", r.get("calendar_year"),
+                                           r.get("calendar_quarter")),
+                "value": str(r["value"]), "unit": r["unit"], "value_source": r["value_source"],
+                "citation": {"accession_no": r["accession_no"], "form": r["form"],
+                             "filed": r["filed"], "xbrl_tag": r["source_tag"],
+                             "xbrl_axis": r["axis_qname"], "xbrl_member": r["member"],
                              "source_accessions": r["source_accessions"],
                              "filing_url": filing_url(r.get("filer_cik"), r["accession_no"])},
                 "freshness": {"filed": r["filed"], "ingested_at": r["ingested_at"]},
