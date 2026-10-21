@@ -125,7 +125,27 @@ export function companyChart(s: ChartState, companyId: string, name: string): Ch
   };
 }
 
-export const TEMPLATES: { label: string; metric: string; transform: Transform; title: string }[] = [
+/** Colours the chart tells apart (tokens.css --series-0..7): "Chart these" from Compare draws
+ * at most this many companies. */
+export const MAX_COMPANY_LINES = 8;
+
+/** One line per company for a metric (Compare's "Chart these"), on calendar quarters so
+ * different fiscal years line up. */
+export function companiesChart(
+  s: ChartState,
+  companyIds: string[],
+  metric: string,
+  transform: Transform,
+  title: string,
+): ChartState {
+  let id = s.nextId;
+  const layers = companyIds.slice(0, MAX_COMPANY_LINES).map(
+    (companyId): Layer => ({ id: id++, kind: "metric", companyId, metric, transform, type: "line", axis: "L" }),
+  );
+  return { ...s, title, align: "calendar", layers, nextId: id };
+}
+
+export const TEMPLATES:{ label: string; metric: string; transform: Transform; title: string }[] = [
   { label: "Margins", metric: "operating_margin", transform: "ttm", title: "Operating margin, TTM" },
   { label: "Revenue growth", metric: "revenue", transform: "yoy", title: "Revenue growth, YoY (TTM)" },
   { label: "Free cash flow", metric: "free_cash_flow", transform: "ttm", title: "Free cash flow, TTM" },

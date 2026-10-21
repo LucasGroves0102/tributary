@@ -148,6 +148,21 @@ it("doesn't touch the watchlist for a company already on it, so undo can't remov
   expect(methods("DELETE")).toEqual([]);
 });
 
+it("sets up comps on Compare, keeping its columns, and undo goes back", async () => {
+  await render(`#/compare?target=${AAPL}&cols=roe_ttm`);
+  script = [{
+    action: "set_compare", label: "Comps: NVDA vs AAPL", columns: null,
+    target: { company_id: NVDA, company_label: "NVDA" }, peers: [{ company_id: AAPL, company_label: "AAPL" }],
+  }];
+  await ask("compare nvidia with apple");
+  expect(asked[0]).toMatchObject({ context: { page: "compare", compare: { target: AAPL, peers: [], columns: ["roe_ttm"] } } });
+  expect(window.location.hash).toBe(`#/compare?target=${NVDA}&peers=${AAPL}&cols=roe_ttm`);
+  expect(container.querySelector("h1")?.textContent).toBe("Compare");
+  expect(acts()).toEqual(["✓ Applied: Comps: NVDA vs AAPLUndo"]);
+  await undo(0);
+  expect(window.location.hash).toBe(`#/compare?target=${AAPL}&cols=roe_ttm`);
+});
+
 it("merges screen filters into the current screen", async () => {
   await render("#/companies?band=1b-10b");
   script = [SCREEN];

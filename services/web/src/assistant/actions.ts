@@ -5,6 +5,7 @@
  * widen access. */
 
 import { clean, type ScreenFilters } from "../companies/screen";
+import { cleanCompare, columnsOf, type CompareState } from "../compare/state";
 import { addLayer, MAX_LAYERS, type ChartState, type Layer } from "../chart/model";
 import type { Route } from "../route";
 import type { UiAction, UiContext, UiLayer } from "../types";
@@ -65,6 +66,19 @@ export function applyChartAction(s: ChartState, a: ChartAction): ChartState {
   }
 }
 
+/** Comps after a set_compare action: its target and peers, and its columns or the current
+ * ones. */
+export function compareAfter(
+  current: CompareState,
+  a: Extract<UiAction, { action: "set_compare" }>,
+): CompareState {
+  return cleanCompare({
+    target: a.target.company_id,
+    peers: a.peers.map((p) => p.company_id),
+    cols: a.columns ?? current.cols,
+  });
+}
+
 /** Filters after a set_screen_filters action: merged into the current ones unless reset. */
 export function screenAfter(current: ScreenFilters, filters: ScreenFilters, reset: boolean): ScreenFilters {
   return clean({ ...(reset ? {} : current), ...filters, page: undefined });
@@ -77,6 +91,11 @@ const MAX_CONTEXT = 3800; // agent-api refuses more than 4000 bytes
 export function uiContext(route: Route, chart: ChartState, name: (id: string) => string | null): UiContext {
   const ctx: UiContext = { page: route.view };
   if (route.view === "company" || route.view === "filing") ctx.company_id = route.companyId;
+  if (route.view === "company" && route.tab) ctx.tab = route.tab;
+  if (route.view === "compare" && route.compare) {
+    const c = route.compare;
+    ctx.compare = { ...(c.target ? { target: c.target } : {}), peers: c.peers ?? [], columns: columnsOf(c) };
+  }
   if (route.view === "filing") ctx.accession_no = route.accessionNo;
   if (route.view === "companies" && route.screen) ctx.screen = { ...route.screen, page: undefined } as UiContext["screen"];
   if (route.view === "chart") {

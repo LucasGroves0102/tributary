@@ -29,13 +29,22 @@ SEARCH = {
               "matched_alias": "MSFT", "access": []}],
     TSLA: [{"company_id": TSLA, "name": "Tesla, Inc.", "matched_on": "cik",
             "matched_alias": TSLA, "access": []}],
+    "AAPL": [{"company_id": AAPL, "name": "Apple Inc.", "matched_on": "ticker",
+              "matched_alias": "AAPL", "access": ["financials"]}],
 }
+# NVDA's suggested peers: one alice can read, one she can't
+PEERS = {"company_id": NVDA, "peers": [
+    {"company_id": TSLA, "name": "Tesla, Inc.", "tickers": ["TSLA"], "values": {}},
+    {"company_id": AAPL, "name": "Apple Inc.", "tickers": ["AAPL"], "values": {}},
+]}
 
 
 def query_api_handler(request: httpx.Request) -> httpx.Response:
     path = request.url.path
     if path == "/v1/me":
         return httpx.Response(200, json=ME)
+    if path == f"/v1/companies/{NVDA}/peers":
+        return httpx.Response(200, json=PEERS)
     if path == "/v1/companies/search":
         return httpx.Response(200, json={"results": SEARCH.get(request.url.params["q"], [])})
     if path == "/v1/formulas/validate":
@@ -140,6 +149,55 @@ def test_screen_filters_and_chart_options_are_strict():
     assert run({"action": "set_chart_options", "options": {}})[1]
 
 
+def test_compare_resolves_target_and_peers_to_readable_companies():
+    content, is_error, action = run({"action": "set_compare", "target": "NVDA",
+                                     "peers": ["AAPL", NVDA, AAPL],
+                                     "columns": ["revenue_ttm", "operating_margin_ttm"]})
+    assert not is_error, content
+    assert action == {"action": "set_compare",
+                      "target": {"company_id": NVDA, "company_label": "NVDA"},
+                      "peers": [{"company_id": AAPL, "company_label": "AAPL"}],
+                      "columns": ["revenue_ttm", "operating_margin_ttm"],
+                      "label": "Comps: NVDA vs AAPL"}
+    assert json.loads(content)["applied"] == "Comps: NVDA vs AAPL"
+
+
+@pytest.mark.parametrize("args", [
+    {"target": "NVDA", "peers": ["AAPL", "TSLA"]},
+    {"target": "TSLA", "peers": ["AAPL"]},
+    {"target": TSLA},
+    {"target": "NVDA", "peers": ["ZZZZ"]},
+])
+def test_compare_refuses_ungranted_and_unknown_companies_alike(args):
+    content, is_error, action = run({"action": "set_compare", **args})
+    assert is_error and action is None
+    bad = next(r for r in [args["target"], *args.get("peers", [])] if r not in ("NVDA", "AAPL"))
+    assert content == f"not applied: {bad} isn't one of the companies the user can read " \
+                      "financials for"
+
+
+def test_compare_without_peers_takes_the_readable_suggestions():
+    seen = []
+    content, is_error, action = UiActions(api(seen)).run({"action": "set_compare",
+                                                          "target": "NVDA"})
+    assert not is_error, content
+    assert action["peers"] == [{"company_id": AAPL, "company_label": "AAPL"}]  # TSLA dropped
+    assert action["columns"] is None and action["label"] == "Comps: NVDA vs AAPL"
+    assert all(r.headers["authorization"] == "Bearer alice-token" for r in seen)
+    assert f"/v1/companies/{NVDA}/peers" in {r.url.path for r in seen}
+
+
+def test_compare_input_is_strict():
+    for bad in ({"action": "set_compare"},
+                {"action": "set_compare", "target": "NVDA", "columns": ["salary_ttm"]},
+                {"action": "set_compare", "target": "NVDA", "columns": []},
+                {"action": "set_compare", "target": "NVDA", "peers": ["AAPL"] * 21},
+                {"action": "set_compare", "target": "NVDA", "user_id": "bob"}):
+        content, is_error, _ = run(bad)
+        assert is_error, bad
+        assert content.startswith(("invalid propose_ui_action", "not applied: target")), content
+
+
 def test_actions_read_only_as_the_tokens_user():
     seen = []
     UiActions(api(seen)).run({"action": "add_chart_layer",
@@ -162,11 +220,20 @@ def test_context_is_strict_and_size_capped():
     ok = UiContext.model_validate({"page": "chart", "chart": {"layers": [
         {"kind": "metric", "company_id": NVDA, "label": "NVDA", "metric": "revenue"}]}})
     assert ok.chart.layers[0].metric == "revenue"
+    comps = UiContext.model_validate({"page": "compare", "compare": {
+        "target": NVDA, "peers": [AAPL], "columns": ["revenue_ttm"]}})
+    assert comps.compare.peers == [AAPL]
+    assert UiContext.model_validate({"page": "company", "company_id": NVDA,
+                                     "tab": "statements"}).tab == "statements"
     for bad in ({"page": "chart", "user_id": "bob"},
                 {"page": "admin"},
                 {"page": "company", "company_id": "../v1/me"},
                 {"page": "chart", "chart": {"layers": [{"kind": "metric", "metric": "x;y"}]}},
-                {"page": "chart", "chart": {"layers": [{"kind": "metric"}] * 13}}):
+                {"page": "chart", "chart": {"layers": [{"kind": "metric"}] * 13}},
+                {"page": "company", "tab": "admin"},
+                {"page": "compare", "compare": {"peers": ["NVDA"]}},
+                {"page": "compare", "compare": {"peers": [AAPL] * 21}},
+                {"page": "compare", "compare": {"columns": ["salary_ttm"]}}):
         with pytest.raises(ValidationError):
             UiContext.model_validate(bad)
     big = {"page": "chart", "chart": {"layers": [

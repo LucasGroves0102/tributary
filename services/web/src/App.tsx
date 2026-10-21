@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { demoUsers, login, me as fetchMe, watchlistCsv } from "./api";
 import { AssistantPanel } from "./assistant/AssistantPanel";
-import { companyChart } from "./chart/model";
+import { companiesChart, companyChart } from "./chart/model";
 import { useChart } from "./chart/useChart";
 import { uiContext } from "./assistant/actions";
 import { pageContext } from "./assistant/context";
@@ -19,7 +19,7 @@ import { useWorkspace } from "./home/useWorkspace";
 import { ChartBuilder } from "./pages/ChartBuilder";
 import { Companies } from "./pages/Companies";
 import { Home } from "./pages/Home";
-import { Placeholder } from "./pages/Placeholder";
+import { Compare } from "./pages/Compare";
 import { go, parse, useRoute } from "./route";
 import { useShortcuts } from "./shortcuts";
 import { load, save } from "./storage";
@@ -287,7 +287,15 @@ export function App() {
                 </p>
               </div>
             ) : (
-              <Placeholder view={route.view} />
+              <Compare
+                key={user}
+                token={token}
+                compare={route.compare ?? {}}
+                onChart={(ids, metric, transform, title) => {
+                  setChart((s) => companiesChart(s, ids, metric, transform, title));
+                  go({ view: "chart" });
+                }}
+              />
             )}
           </main>
         </div>

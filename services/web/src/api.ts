@@ -1,6 +1,7 @@
 import type {
   AgentEvent,
   Calendar,
+  ExpectedFilings,
   Filing,
   FinancialRow,
   FormulaProblem,
@@ -9,10 +10,14 @@ import type {
   HistoryTurn,
   LatestFiling,
   Me,
+  Peers,
+  Recap,
   Screener,
   ScreenerColumns,
   SearchResult,
   Section,
+  SectionChanges,
+  SegmentRow,
   UiContext,
   Watchlist,
 } from "./types";
@@ -150,6 +155,45 @@ export const section = (token: string, companyId: string, key: string, accession
 
 export const latestFilings = (token: string, limit = 20) =>
   get<{ as_of: string; filings: LatestFiling[] }>(token, "/v1/filings/latest", { limit });
+
+/** Suggested peers of a company (same SIC, then size), with screener columns. */
+export const peers = (token: string, companyId: string, columns: string[], limit = 10) =>
+  get<Peers>(token, `/v1/companies/${companyId}/peers`, { columns, limit });
+
+/** A 10-Q/10-K's metrics vs the prior quarter and the year-ago quarter. */
+export const recap = (token: string, accessionNo: string) =>
+  get<Recap>(token, `/v1/filings/${accessionNo}/recap`);
+
+export const segments = (token: string, companyId: string, quarters = 8) =>
+  get<{ as_of: string; rows: SegmentRow[] }>(token, `/v1/companies/${companyId}/segments`, { quarters });
+
+/** Paragraphs of Risk Factors and MD&A that changed since the comparable earlier filing. */
+export const sectionChanges = (token: string, companyId: string, accessionNo: string) =>
+  get<SectionChanges>(token, `/v1/companies/${companyId}/filings/${accessionNo}/changes`);
+
+export const expectedFilingsOf = (token: string, companyId: string) =>
+  get<ExpectedFilings>(token, `/v1/companies/${companyId}/expected-filings`, { periods: 1 });
+
+/** The latest section with this key in a form's filings (10-K "1": Business), cut short. */
+export const latestSection = (token: string, companyId: string, key: string, form: string, maxChars: number) =>
+  get<{ sections: Section[] }>(token, `/v1/companies/${companyId}/sections/${encodeURIComponent(key)}`, {
+    form,
+    max_chars: maxChars,
+  }).then((r) => r.sections[0] ?? null);
+
+/** Financials in one view: quarters or TTM ending each quarter. */
+export const financialsView = (
+  token: string,
+  companyId: string,
+  quarters: number,
+  metrics: string[],
+  view: "quarter" | "ttm",
+) =>
+  get<{ as_of: string; rows: FinancialRow[] }>(token, `/v1/companies/${companyId}/financials`, {
+    quarters,
+    metrics,
+    view,
+  });
 
 export const screenerColumns = (token: string) =>
   get<ScreenerColumns>(token, "/v1/screener/columns");

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChartState } from "../chart/model";
 import { go, parse } from "../route";
 import type { UiAction } from "../types";
-import { applyChartAction, isChartAction, screenAfter } from "./actions";
+import { applyChartAction, compareAfter, isChartAction, screenAfter } from "./actions";
 
 /** Applied action, with what Undo needs: the chart and page from just before it, and the
  * watchlist call to reverse (only if it changed anything). */
@@ -67,6 +67,9 @@ export function useUiActions(user: string | null, deps: Deps): UiActions {
       const now = parse(window.location.hash);
       const current = now.view === "companies" ? (now.screen ?? {}) : {};
       go({ view: "companies", screen: screenAfter(current, a.filters, a.reset) });
+    } else if (a.action === "set_compare") {
+      const now = parse(window.location.hash);
+      go({ view: "compare", compare: compareAfter(now.view === "compare" ? (now.compare ?? {}) : {}, a) });
     } else {
       const add = a.action === "add_watchlist";
       if (isWatched(a.company_id) !== add) {

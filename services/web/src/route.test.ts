@@ -12,6 +12,10 @@ it("round-trips every route", () => {
     { view: "compare" },
     { view: "ask" },
     { view: "company", companyId: "0001045810" },
+    { view: "company", companyId: "0001045810", tab: "statements" },
+    { view: "company", companyId: "0001045810", tab: "peers" },
+    { view: "compare", compare: { target: "0001045810", peers: ["0000320193"] } },
+    { view: "compare", compare: { peers: ["0000320193"], cols: ["roe_ttm"] } },
     { view: "filing", companyId: "0001045810", accessionNo: "0001045810-26-000075", section: null },
     { view: "filing", companyId: "0001045810", accessionNo: "0001045810-26-000075", section: "EX-99.1" },
   ];
@@ -28,6 +32,12 @@ it("falls back to Home for anything malformed", () => {
     view: "company",
     companyId: "0001045810",
   });
+});
+
+it("keeps only known company tabs and valid comps", () => {
+  expect(parse("#/company/0001045810/admin")).toEqual({ view: "company", companyId: "0001045810" });
+  expect(parse("#/company/0001045810/overview")).toEqual({ view: "company", companyId: "0001045810" });
+  expect(parse("#/compare?target=NVDA&peers=x&cols=salary")).toEqual({ view: "compare" });
 });
 
 it("sends old explore links to Companies", () => {

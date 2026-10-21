@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { companyChart, emptyChart } from "../chart/model";
 import { NVDA } from "../fixtures";
 import type { UiAction, UiLayer } from "../types";
-import { applyChartAction, isChartAction, screenAfter, uiContext } from "./actions";
+import { applyChartAction, compareAfter, isChartAction, screenAfter, uiContext } from "./actions";
 
 const AAPL = "0000320193";
 const layer = (over: Partial<UiLayer> = {}): UiLayer => ({
@@ -14,6 +14,22 @@ const chartAction = (a: UiAction) => {
   if (!isChartAction(a)) throw new Error("not a chart action");
   return a;
 };
+
+describe("compare actions", () => {
+  const COMPARE = {
+    action: "set_compare" as const, label: "Comps: NVDA vs AAPL",
+    target: { company_id: NVDA, company_label: "NVDA" },
+    peers: [{ company_id: AAPL, company_label: "AAPL" }, { company_id: NVDA, company_label: "NVDA" }],
+  };
+
+  it("set the target and peers, keeping the columns unless given", () => {
+    const current = { target: AAPL, cols: ["roe_ttm"] };
+    expect(compareAfter(current, { ...COMPARE, columns: null })).toEqual({ target: NVDA, peers: [AAPL], cols: ["roe_ttm"] });
+    expect(compareAfter(current, { ...COMPARE, columns: ["revenue_ttm", "salary_ttm"] })).toEqual({
+      target: NVDA, peers: [AAPL], cols: ["revenue_ttm"],
+    });
+  });
+});
 
 describe("chart actions", () => {
   it("replace the layers and title", () => {
@@ -81,6 +97,15 @@ describe("screen context", () => {
     expect(uiContext({ view: "company", companyId: NVDA }, emptyChart(), () => null)).toEqual({
       page: "company", company_id: NVDA,
     });
+  });
+
+  it("sends the company page's tab and the comps", () => {
+    expect(uiContext({ view: "company", companyId: NVDA, tab: "ratios" }, emptyChart(), () => null)).toEqual({
+      page: "company", company_id: NVDA, tab: "ratios",
+    });
+    expect(uiContext({ view: "compare", compare: { target: NVDA, peers: [AAPL], cols: ["roe_ttm"] } }, emptyChart(), () => null))
+      .toEqual({ page: "compare", compare: { target: NVDA, peers: [AAPL], columns: ["roe_ttm"] } });
+    expect(uiContext({ view: "compare" }, emptyChart(), () => null)).toEqual({ page: "compare" });
   });
 
   it("stays under agent-api's size cap", () => {

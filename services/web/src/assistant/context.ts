@@ -1,4 +1,35 @@
-import type { Route } from "../route";
+import { COMPANY_TABS, type CompanyTab, type Route } from "../route";
+
+/** What to ask on each tab of the company page (n: the company's name). */
+const COMPANY_SUGGESTIONS: Record<CompanyTab, (n: string) => string[]> = {
+  overview: (n) => [
+    `Summarize ${n}'s latest quarter.`,
+    `What drove ${n}'s revenue change versus a year ago?`,
+    `What changed in ${n}'s risk factors in its latest 10-K?`,
+  ],
+  statements: (n) => [
+    `How has ${n}'s operating margin moved over the last 8 quarters?`,
+    `Chart ${n}'s revenue and operating income`,
+    `Which of ${n}'s expenses grew fastest over the last year?`,
+  ],
+  segments: (n) => [
+    `Which of ${n}'s segments grew fastest over the last year?`,
+    `How much of ${n}'s revenue comes from its largest segment?`,
+  ],
+  ratios: (n) => [
+    `How has ${n}'s free cash flow margin changed over two years?`,
+    `Chart ${n}'s return on equity`,
+    `Is ${n}'s leverage rising or falling?`,
+  ],
+  filings: (n) => [
+    `What changed in ${n}'s latest 10-Q versus the one before?`,
+    `Summarize ${n}'s most recent 8-K.`,
+  ],
+  peers: (n) => [
+    `Compare ${n} with its peers`,
+    `How does ${n}'s operating margin compare with its peers?`,
+  ],
+};
 
 export interface PageContext {
   /** the chip in the assistant's header */
@@ -44,13 +75,10 @@ export function pageContext(route: Route, name: (companyId: string) => string | 
       };
     case "company": {
       const n = name(route.companyId) ?? `company ${route.companyId}`;
+      const tab = route.tab ?? "overview";
       return {
-        label: `${n} · Company`,
-        suggestions: [
-          `Summarize ${n}'s latest quarter.`,
-          `How has ${n}'s operating margin moved over the last 8 quarters?`,
-          `What changed in ${n}'s risk factors in its latest 10-K?`,
-        ],
+        label: `${n} · ${COMPANY_TABS.find(([t]) => t === tab)![1]}`,
+        suggestions: COMPANY_SUGGESTIONS[tab](n),
       };
     }
     case "filing": {
@@ -72,8 +100,24 @@ export function pageContext(route: Route, name: (companyId: string) => string | 
           "Add Microsoft's revenue",
         ],
       };
-    case "compare":
-      return { label: "Compare", suggestions: [GENERAL[2]!] };
+    case "compare": {
+      const target = route.compare?.target;
+      if (!target) {
+        return {
+          label: "Compare",
+          suggestions: ["Compare Nvidia with its peers", GENERAL[2]!],
+        };
+      }
+      const n = name(target) ?? `company ${target}`;
+      return {
+        label: `Comps · ${n}`,
+        suggestions: [
+          `Which of these companies has the highest free cash flow margin?`,
+          `How does ${n}'s operating margin compare with the peer median?`,
+          "Chart these companies' gross margin",
+        ],
+      };
+    }
     case "ask":
       return { label: "Ask", suggestions: [...GENERAL, ATTACKS[1]!, ATTACKS[2]!] };
   }

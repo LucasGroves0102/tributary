@@ -142,16 +142,16 @@ describe("Home", () => {
 });
 
 describe("navigation", () => {
-  it("routes to every screen, with placeholders for those still coming", async () => {
+  it("routes to every screen", async () => {
     await render("#/chart");
     expect($("h1")?.textContent).toBe("Chart builder");
-    expect(container.textContent).not.toContain("Coming next");
     expect($('.nav a[aria-current="page"]')?.textContent).toContain("Chart builder");
     window.location.hash = "#/compare";
     await settle();
     expect($("h1")?.textContent).toBe("Compare");
-    expect(container.textContent).toContain("Coming next");
-    expect(container.textContent).not.toMatch(/TODO/i);
+    expect($('.nav a[aria-current="page"]')?.textContent).toContain("Compare");
+    expect(container.textContent).toContain("Pick a target company");
+    expect(container.textContent).not.toMatch(/TODO|Coming next/i);
     window.location.hash = "#/companies?margin=20";
     await settle();
     expect($("h1")?.textContent).toBe("Companies");
@@ -222,9 +222,13 @@ describe("assistant drawer", () => {
     expect(chip()).toBe("Home · watchlist");
     window.location.hash = `#/company/${NVDA}`;
     await settle();
-    expect(chip()).toBe("NVIDIA CORP · Company");
-    const prompts = [...container.querySelectorAll(".ai-s button")].map((b) => b.textContent);
-    expect(prompts).toContain("Summarize NVIDIA CORP's latest quarter.");
+    expect(chip()).toBe("NVIDIA CORP · Overview");
+    const prompts = () => [...container.querySelectorAll(".ai-s button")].map((b) => b.textContent);
+    expect(prompts()).toContain("Summarize NVIDIA CORP's latest quarter.");
+    window.location.hash = `#/company/${NVDA}/ratios`;
+    await settle();
+    expect(chip()).toBe("NVIDIA CORP · Ratios");
+    expect(prompts()).toContain("Is NVIDIA CORP's leverage rising or falling?");
   });
 
   it("sends a suggestion to the agent and shows the answer with its citation", async () => {

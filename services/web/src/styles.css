@@ -528,12 +528,6 @@ a.btn:hover {
   padding: var(--sp-6);
 }
 
-.placeholder p {
-  margin: 0 0 var(--sp-4);
-  max-width: 72ch;
-  line-height: 1.55;
-}
-
 .foot {
   font-size: 11px;
   color: var(--text-3);
@@ -1670,6 +1664,200 @@ svg.chart {
 .section-text h2 {
   margin-top: 0;
   font-size: 16px;
+}
+
+/* Compare and the company page */
+
+.t tr.sel td,
+.t tr.sel td.first {
+  background: var(--accent-soft);
+}
+
+.t tr.agg td {
+  background: var(--panel-2);
+  font-weight: 600;
+}
+
+.comps-setup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.comps-setup .row > .faint:first-child {
+  width: 92px;
+  flex: none;
+}
+
+.comps-setup .chk {
+  font-size: var(--fs-sm);
+}
+
+button.chip {
+  border: 0;
+  cursor: pointer;
+}
+
+button.chip:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.co-search {
+  position: relative;
+  width: 220px;
+}
+
+.co-results {
+  position: absolute;
+  z-index: 5;
+  top: 100%;
+  left: 0;
+  right: 0;
+  list-style: none;
+  margin: 2px 0 0;
+  padding: 4px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--popover-shadow);
+  min-width: 280px;
+}
+
+.co-results button {
+  display: flex;
+  gap: var(--sp-4);
+  align-items: baseline;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: none;
+  color: var(--text);
+  padding: 5px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.co-results button:hover,
+.co-results button:focus {
+  background: var(--panel-2);
+}
+
+.field.narrow {
+  width: auto;
+}
+
+.tabs {
+  display: flex;
+  gap: 2px;
+  border-top: 1px solid var(--line);
+  padding: 0 4px;
+  overflow-x: auto;
+}
+
+.tabs a {
+  padding: 8px 12px;
+  color: var(--text-2);
+  font-weight: 500;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+}
+
+.tabs a[aria-current="page"] {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.tabs a:hover {
+  text-decoration: none;
+  color: var(--text);
+}
+
+.co-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-5);
+  align-items: flex-start;
+}
+
+.co-head h1 {
+  margin: 0;
+}
+
+.co-head .meta {
+  margin-top: 3px;
+  color: var(--text-2);
+  line-height: 1.5;
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 1px;
+  background: var(--line);
+  border-top: 1px solid var(--line);
+}
+
+.kv > div {
+  background: var(--panel);
+  padding: 9px 12px;
+}
+
+.kv .k,
+.kv .p {
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.kv .v {
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+.t td.derived {
+  font-style: italic;
+}
+
+.excerpt {
+  line-height: 1.55;
+  white-space: pre-line;
+}
+
+.diff {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.diff p {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  line-height: 1.45;
+}
+
+.diff .new {
+  background: var(--pos-soft);
+}
+
+.diff .removed {
+  background: var(--neg-soft);
+}
+
+.diff .rewritten {
+  background: var(--warn-soft);
+}
+
+.diff ins {
+  background: var(--pos-soft);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.diff del {
+  color: var(--neg);
 }
 
 /* Narrower screens: the drawer floats over the page, then the sidebar goes */

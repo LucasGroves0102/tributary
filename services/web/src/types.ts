@@ -112,13 +112,28 @@ export type UiAction = { label: string } & (
     }
   | { action: "set_screen_filters"; filters: UiScreenFilters; reset: boolean }
   | { action: "add_watchlist" | "remove_watchlist"; company_id: string; company_label: string }
+  | {
+      action: "set_compare";
+      target: UiCompany;
+      peers: UiCompany[];
+      /** Compare column keys (compare/state.ts COMPARE_COLUMNS); null keeps the current ones */
+      columns: string[] | null;
+    }
 );
+
+/** A company agent-api resolved and checked: one the user can read financials for. */
+export interface UiCompany {
+  company_id: string;
+  company_label: string;
+}
 
 /** What the screen shows, sent with each question (agent-api ui.UiContext). Untrusted there:
  * it describes the screen and never identifies the user. */
 export interface UiContext {
   page: "home" | "companies" | "company" | "filing" | "chart" | "compare" | "ask";
   company_id?: string;
+  /** the company page's tab (absent on Overview) */
+  tab?: "overview" | "statements" | "segments" | "ratios" | "filings" | "peers";
   accession_no?: string;
   chart?: {
     title: string;
@@ -137,6 +152,7 @@ export interface UiContext {
     }[];
   };
   screen?: UiScreenFilters;
+  compare?: { target?: string; peers: string[]; columns: string[] };
 }
 
 export interface HistoryTurn {
@@ -374,4 +390,165 @@ export interface Screener {
   sort: string;
   columns: ColumnInfo[];
   rows: ScreenerRow[];
+}
+
+/** /v1/companies/{id}/peers: suggested peers (same SIC first, then size), screener-style rows,
+ * values only where the caller can read financials. */
+export interface Peers {
+  company_id: string;
+  as_of: string;
+  columns: ColumnInfo[];
+  company: ScreenerRow & { revenue_band: string | null };
+  method: string;
+  peers: (ScreenerRow & {
+    match: {
+      sic_level: number;
+      same_filer_category: boolean;
+      revenue_band: string | null;
+      same_revenue_band: boolean;
+    };
+  })[];
+}
+
+export interface RecapValue {
+  value: Num;
+  period_start: string | null;
+  period_end: string;
+  fiscal_period: string | null;
+  calendar_period: string | null;
+  value_source: "reported" | "derived";
+  citation: {
+    accession_no: string;
+    form: string;
+    filed: string;
+    xbrl_tag: string | null;
+    source_accessions: string[] | null;
+    filing_url: string | null;
+  };
+  freshness: { filed: string; ingested_at: string };
+  /** prior_quarter / year_ago only: current minus this (exact), and that over |this| */
+  change?: Num;
+  pct_change?: Num | null;
+}
+
+/** /v1/filings/{accession}/recap: a 10-Q/10-K vs the prior quarter and the year-ago quarter. */
+export interface Recap {
+  accession_no: string;
+  company_id: string;
+  form: string;
+  filed: string;
+  period_end: string | null;
+  as_of: string;
+  note: string;
+  metrics: {
+    metric: string;
+    span: "quarter" | "ttm";
+    unit: string;
+    current: RecapValue | null;
+    prior_quarter: RecapValue | null;
+    year_ago: RecapValue | null;
+  }[];
+  flags:
+    | {
+        flag: string;
+        section_key: string;
+        title: string | null;
+        matches: string[];
+        snippet: string;
+        citation: { accession_no: string; form: string; filed: string; section_key: string };
+      }[]
+    | null;
+  flags_unavailable?: string;
+}
+
+export type SegmentAxis = "business_segment" | "geography" | "product_service" | "reconciliation";
+
+/** One /v1/companies/{id}/segments row: a segment member's value for one period. */
+export interface SegmentRow {
+  axis: SegmentAxis;
+  member: string;
+  member_label: string;
+  member_aliases: string[];
+  metric: string;
+  period_start: string | null;
+  period_end: string;
+  fiscal_period: string | null;
+  calendar_period: string | null;
+  value: string;
+  unit: string;
+  value_source: "reported" | "derived";
+  citation: {
+    accession_no: string;
+    form: string;
+    filed: string;
+    xbrl_tag: string | null;
+    xbrl_axis: string | null;
+    xbrl_member: string;
+    source_accessions: string[] | null;
+    filing_url: string | null;
+  };
+  freshness: { filed: string; ingested_at: string };
+}
+
+export interface ChangeCitation {
+  accession_no: string;
+  form: string;
+  filed: string;
+  period_of_report: string | null;
+  section_key: string;
+  document_url: string | null;
+  char_start: number;
+  char_end: number;
+}
+
+/** /v1/companies/{id}/filings/{accession}/changes: what changed in Risk Factors and MD&A. */
+export interface SectionChanges {
+  company_id: string;
+  accession_no: string;
+  basis: "prior" | "year_ago";
+  as_of: string;
+  note?: string;
+  sections: {
+    section_key: string;
+    title: string | null;
+    basis: string;
+    stale: boolean;
+    compared_to: {
+      accession_no: string;
+      form: string;
+      filed: string;
+      period_of_report: string | null;
+      section_key: string;
+      document_url: string | null;
+      filing_url: string | null;
+    };
+    summary: {
+      paragraphs: number;
+      prior_paragraphs: number;
+      unchanged: number;
+      minor_edits: number;
+      numbers_only: number;
+      new: number;
+      removed: number;
+      rewritten: number;
+    };
+    changes: {
+      kind: "new" | "removed" | "rewritten";
+      similarity: number | null;
+      text: string | null;
+      prior_text: string | null;
+      /** word runs: "=" in both, "-" prior only, "+" this filing only */
+      words: [string, string][] | null;
+      citation: ChangeCitation | null;
+      prior_citation: ChangeCitation | null;
+    }[];
+  }[];
+}
+
+/** /v1/companies/{id}/expected-filings: estimates from the public filing index. */
+export interface ExpectedFilings {
+  company_id: string;
+  as_of: string;
+  method: string;
+  expected: ExpectedFiling[];
 }
