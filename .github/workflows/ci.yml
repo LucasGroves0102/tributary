@@ -50,6 +50,28 @@ jobs:
           rustup toolchain install 1.99.1 --profile minimal
           cargo +1.99.1 build --locked --bin parser --manifest-path services/parser-rs/Cargo.toml
           echo "PARSER_RS_BIN=$PWD/services/parser-rs/target/debug/parser" >> "$GITHUB_ENV"
+      - name: TLS-only Postgres, for the Rust parser's sslmode test (test_rust_tls.py)
+        run: |
+          d="$RUNNER_TEMP/pgtls" && mkdir -p "$d" && cd "$d"
+          openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=tributary-test-ca -keyout ca.key -out ca.pem
+          openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=unrelated-ca -keyout other.key -out other.pem
+          openssl req -newkey rsa:2048 -nodes -subj /CN=localhost -keyout server.key -out server.csr
+          printf 'subjectAltName=DNS:localhost\n' > ext
+          openssl x509 -req -in server.csr -CA ca.pem -CAkey ca.key -CAcreateserial -days 1 -extfile ext -out server.pem
+          sudo chown 999:999 server.key server.pem && sudo chmod 600 server.key  # postgres uid in the image
+          docker run -d --name pgtls -p 5434:5432 -e POSTGRES_PASSWORD=tls \
+            -v "$d:/tls:ro" -v "$GITHUB_WORKSPACE/.github/ci/pg_hba_tls.conf:/etc/pg_hba_tls.conf:ro" \
+            pgvector/pgvector:pg16@sha256:7b822b0aac60967beb1ea5e576b8602c94c300a157d187f385ae3e0da199b90a \
+            -c ssl=on -c ssl_cert_file=/tls/server.pem -c ssl_key_file=/tls/server.key \
+            -c hba_file=/etc/pg_hba_tls.conf
+          for i in $(seq 60); do
+            PGPASSWORD=tls PGSSLMODE=require psql -h localhost -p 5434 -U postgres -c 'select 1' >/dev/null 2>&1 && break
+            [ "$i" = 60 ] && { docker logs pgtls; exit 1; }
+            sleep 1
+          done
+          echo "TLS_TEST_DATABASE_URL=postgresql://postgres:tls@localhost:5434/postgres" >> "$GITHUB_ENV"
+          echo "TLS_TEST_ROOT_CERT=$d/ca.pem" >> "$GITHUB_ENV"
+          echo "TLS_TEST_OTHER_CA=$d/other.pem" >> "$GITHUB_ENV"
       - run: pytest --cov --cov-report=term
       - if: always()
         run: coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY"

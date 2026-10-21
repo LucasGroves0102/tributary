@@ -19,7 +19,12 @@ message, skips and fails on the same inputs, replaces a document's `silver.filin
 with its own (`parser = rust`, `parser_version = rust-N`), supports `--reparse-all`, and emits the
 same metrics on `METRICS_PORT` and the same JSON log lines. Same env: `DATABASE_URL`,
 `KAFKA_BOOTSTRAP_SERVERS`, `METRICS_PORT`, `LOG_LEVEL`, and `PARSER_TOPIC` / `PARSER_GROUP` to
-consume another topic as another group (`parser-backfill` reads `documents.backfill`). `parser-rs` reads JSON lines on stdin,
+consume another topic as another group (`parser-backfill` reads `documents.backfill`). Postgres
+connections use TLS with libpq's `sslmode` semantics, like the Python services (`src/bin/parser/
+tls.rs`, native-tls/OpenSSL): `prefer` by default, and `disable`, `require`, `verify-ca`,
+`verify-full` and `sslrootcert` (a file, or `system`) from the URL or `PGSSLMODE` /
+`PGSSLROOTCERT`. `services/parser/tests/test_rust_tls.py` checks every mode against libpq on a
+TLS-only server (CI). `parser-rs` reads JSON lines on stdin,
 `{"id", "path", "form"}` or `{"id", "path", "exhibit_type", "description"}` (`path` may be
 gzipped), and prints each document's sections (`--bench`: size and parse time).
 

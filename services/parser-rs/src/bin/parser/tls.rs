@@ -4,8 +4,8 @@
 //! | sslmode | TLS | certificate check |
 //! |---|---|---|
 //! | `disable` | never | - |
-//! | `prefer` (default) | if the server offers it, else plaintext | none |
-//! | `require` | always | none (verify-ca if a root certificate is configured, as libpq) |
+//! | `prefer` (default) | if the server offers it, else plaintext | none, or the chain if a root certificate is configured |
+//! | `require` | always | none, or the chain if a root certificate is configured |
 //! | `verify-ca` | always | chain against the root certificate |
 //! | `verify-full` | always | chain and host name |
 //!
@@ -13,7 +13,8 @@
 //! else `PGSSLMODE` / `PGSSLROOTCERT`. The root certificate defaults to
 //! `~/.postgresql/root.crt`; `sslrootcert=system` uses the system's trusted roots. tokio-postgres
 //! only knows disable/prefer/require, so both options are removed from the string before it is
-//! parsed and applied here. TLS 1.2 is the minimum, libpq's default.
+//! parsed and applied here. TLS 1.2 is the minimum, libpq's default. One difference: when
+//! `prefer` verifies a chain and it fails, libpq retries in plaintext; this fails closed.
 
 use std::path::{Path, PathBuf};
 
@@ -213,12 +214,12 @@ pub fn plan(
     };
     Ok(match mode {
         SslMode::Disable => Plan::Plain,
+        // libpq: a root certificate, when there is one, is checked in these modes too.
         SslMode::Prefer => Plan::Tls {
             required: false,
-            roots: None,
+            roots,
             verify_host: false,
         },
-        // libpq: require with a root certificate available behaves like verify-ca.
         SslMode::Require => Plan::Tls {
             required: true,
             roots,
@@ -374,7 +375,7 @@ mod tests {
     }
 
     #[test]
-    fn prefer_by_default_without_verification() {
+    fn prefer_is_the_default() {
         let prefer = Plan::Tls {
             required: false,
             roots: None,
@@ -382,9 +383,16 @@ mod tests {
         };
         assert_eq!(plan_of("postgresql://db/t"), prefer);
         assert_eq!(plan_of("postgresql://db/t?sslmode=prefer"), prefer);
-        // prefer never verifies, even with a root certificate around
+        // with a root certificate, prefer checks the chain (libpq)
         let o = opts("postgresql://db/t?sslrootcert=/ca.pem");
-        assert_eq!(plan(&o, no_env, None).unwrap(), prefer);
+        assert_eq!(
+            plan(&o, no_env, None).unwrap(),
+            Plan::Tls {
+                required: false,
+                roots: Some(Roots::File("/ca.pem".into())),
+                verify_host: false,
+            }
+        );
     }
 
     #[test]
