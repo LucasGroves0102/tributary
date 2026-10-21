@@ -201,3 +201,32 @@ export interface Calendar {
   method: string;
   filings: CalendarEntry[];
 }
+
+/** One /v1/screener row. Metadata is public; `values`/`sources` are null for every column
+ * unless `access` includes financials (the API masks them, and value filters skip the row). */
+export interface ScreenerRow {
+  company_id: string;
+  name: string | null;
+  tickers: string[] | null;
+  exchanges: string[] | null;
+  sic: string | null;
+  industry: string | null;
+  fiscal_year_end: string | null;
+  filer_category: string | null;
+  filer_categories: string[] | null;
+  state_of_incorporation: string | null;
+  access: Tier[];
+  values: Record<string, Num | null>;
+  sources: Record<string, ValueSource | null>;
+}
+
+export interface Screener {
+  as_of: string;
+  /** null when the page is past the end */
+  total: number | null;
+  limit: number;
+  offset: number;
+  sort: string;
+  columns: ColumnInfo[];
+  rows: ScreenerRow[];
+}

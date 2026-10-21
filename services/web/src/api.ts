@@ -6,6 +6,7 @@ import type {
   HistoryTurn,
   LatestFiling,
   Me,
+  Screener,
   SearchResult,
   Section,
   Watchlist,
@@ -48,7 +49,7 @@ export async function me(token: string): Promise<Me> {
   return json<Me>(await fetch(`${QUERY}/v1/me`, { headers: { Authorization: `Bearer ${token}` } }));
 }
 
-type Params = Record<string, string | number | string[]>;
+export type Params = Record<string, string | number | string[]>;
 
 /** Arrays become repeated keys (`columns=a&columns=b`), as FastAPI list queries expect. */
 function url(path: string, params: Params): string {
@@ -105,14 +106,29 @@ export const watch = (token: string, companyId: string) =>
 export const unwatch = (token: string, companyId: string) =>
   send<{ company_id: string; removed: boolean }>(token, "DELETE", `/v1/watchlist/${companyId}`);
 
-/** The watchlist as the Query API's CSV (sources and expected-date basis included). */
-export async function watchlistCsv(token: string): Promise<Blob> {
-  const r = await fetch(url("/v1/watchlist", { columns: WATCHLIST_COLUMNS, format: "csv" }), {
+async function csv(token: string, path: string, params: Params): Promise<Blob> {
+  const r = await fetch(url(path, { ...params, format: "csv" }), {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!r.ok) await json(r);
   return r.blob();
 }
+
+/** The watchlist as the Query API's CSV (sources and expected-date basis included). */
+export const watchlistCsv = (token: string) =>
+  csv(token, "/v1/watchlist", { columns: WATCHLIST_COLUMNS });
+
+/** One page of the screener (params from companies/screen.ts `screenParams`). */
+export const screener = (token: string, params: Params) =>
+  get<Screener>(token, "/v1/screener", params);
+
+/** Rows in one CSV export: the API's cap (JSON pages are capped at 500). */
+export const SCREENER_CSV_ROWS = 5000;
+
+/** The whole screen, every page up to SCREENER_CSV_ROWS, as the Query API's CSV: values stay
+ * exact decimals and ungranted companies stay masked. */
+export const screenerCsv = (token: string, params: Params) =>
+  csv(token, "/v1/screener", { ...params, limit: SCREENER_CSV_ROWS, offset: 0 });
 
 export const expectedFilings = (token: string, days: number, scope: "watchlist" | "readable") =>
   get<Calendar>(token, "/v1/calendar/expected-filings", { days, scope });

@@ -5,7 +5,6 @@ import { AssistantPanel } from "./assistant/AssistantPanel";
 import { pageContext } from "./assistant/context";
 import { useAssistant } from "./assistant/useAssistant";
 import { CompanyPage } from "./components/explore/CompanyPage";
-import { ExploreHome } from "./components/explore/ExploreHome";
 import { FilingReader } from "./components/explore/FilingReader";
 import { Palette, WATCH_PREFIX, type PaletteActions, type PaletteCompany } from "./components/Palette";
 import { Sidebar } from "./components/Sidebar";
@@ -13,6 +12,7 @@ import { TopBar } from "./components/TopBar";
 import { download } from "./download";
 import { lastIngested } from "./home/data";
 import { useWorkspace } from "./home/useWorkspace";
+import { Companies } from "./pages/Companies";
 import { Home } from "./pages/Home";
 import { Placeholder } from "./pages/Placeholder";
 import { go, useRoute } from "./route";
@@ -117,6 +117,13 @@ export function App() {
     for (const c of me?.companies ?? []) if (c.name) out.set(c.company_id, c.name);
     return out;
   }, [me, workspace.rows]);
+  const watched = useMemo(
+    () =>
+      workspace.watchlist.state === "ok"
+        ? new Set(workspace.watchlist.data.companies.map((c) => c.company_id))
+        : null,
+    [workspace.watchlist],
+  );
   const companyName = useCallback((id: string) => names.get(id) ?? null, [names]);
   const context = useMemo(() => pageContext(route, companyName), [route, companyName]);
 
@@ -212,7 +219,13 @@ export function App() {
                 onExport={exportWatchlist}
               />
             ) : route.view === "companies" ? (
-              <ExploreHome token={token} me={me} />
+              <Companies
+                key={user}
+                token={token}
+                screen={route.screen ?? {}}
+                watched={watched}
+                onWatch={(id, on) => (on ? workspace.watch(id) : workspace.unwatch(id))}
+              />
             ) : route.view === "company" ? (
               <CompanyPage
                 key={`${user}-${route.companyId}`}

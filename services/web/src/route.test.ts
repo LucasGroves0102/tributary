@@ -6,6 +6,8 @@ it("round-trips every route", () => {
   const routes: Route[] = [
     { view: "home" },
     { view: "companies" },
+    { view: "companies", screen: { band: "1b-10b", margin: 20, sort: "-operating_margin_ttm" } },
+    { view: "companies", screen: { q: "a&b=c", industry: "beverages", mine: true, page: 2 } },
     { view: "chart" },
     { view: "compare" },
     { view: "ask" },
@@ -30,4 +32,15 @@ it("falls back to Home for anything malformed", () => {
 
 it("sends old explore links to Companies", () => {
   expect(parse("#/explore")).toEqual({ view: "companies" });
+});
+
+it("keeps only valid screener filters", () => {
+  expect(parse("#/companies?band=huge&fye=13&sort=drop_table&sic=12&growth=x")).toEqual({
+    view: "companies",
+  });
+  expect(parse("#/companies?sort=-revenue_ttm&page=0")).toEqual({ view: "companies" });
+  expect(parse("#/companies?fye=9&exchange=NYSE")).toEqual({
+    view: "companies",
+    screen: { fye: 9, exchange: "NYSE" },
+  });
 });

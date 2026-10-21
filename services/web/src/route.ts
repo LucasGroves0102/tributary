@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 
+import { parseScreen, screenQuery, type ScreenFilters } from "./companies/screen";
+
 export type Route =
   | { view: "home" }
-  | { view: "companies" }
+  | { view: "companies"; screen?: ScreenFilters }
   | { view: "company"; companyId: string }
   | { view: "filing"; companyId: string; accessionNo: string; section: string | null }
   | { view: "chart" }
@@ -25,9 +27,15 @@ const CIK = /^\d{10}$/;
 const ACCESSION = /^\d{10}-\d{2}-\d{6}$/;
 const SIMPLE = new Set(["companies", "chart", "compare", "ask"]);
 
-/** "#/company/0001045810" → route; anything unrecognized is Home. */
+/** "#/company/0001045810" → route; anything unrecognized is Home. Companies keeps its
+ * screener filters in a query: "#/companies?band=1b-10b". */
 export function parse(hash: string): Route {
-  const [view, a, b, c] = hash.replace(/^#\/?/, "").split("/").map(decodeURIComponent);
+  const [path, query = ""] = hash.replace(/^#\/?/, "").split("?", 2) as [string, string?];
+  const [view, a, b, c] = path.split("/").map(decodeURIComponent);
+  if (view === "companies") {
+    const screen = parseScreen(query);
+    return Object.keys(screen).length ? { view, screen } : { view };
+  }
   if (view && SIMPLE.has(view)) return { view: view as NavView };
   if (view === "explore") return { view: "companies" }; // links from before the v3 shell
   if (view === "company" && CIK.test(a ?? "")) return { view: "company", companyId: a! };
@@ -41,6 +49,10 @@ export function href(route: Route): string {
   switch (route.view) {
     case "home":
       return "#/";
+    case "companies": {
+      const q = route.screen ? screenQuery(route.screen) : "";
+      return q ? `#/companies?${q}` : "#/companies";
+    }
     case "company":
       return `#/company/${route.companyId}`;
     case "filing":
