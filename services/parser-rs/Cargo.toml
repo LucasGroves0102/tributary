@@ -11,7 +11,9 @@ name = "filing_parser"
 [dependencies]
 encoding_rs = "0.8"
 flate2 = "1"
+native-tls = "0.2"
 postgres = { version = "0.19", default-features = false }
+postgres-native-tls = "0.5"
 prometheus = { version = "0.14", default-features = false, features = ["process"] }
 rdkafka = { version = "0.39", default-features = false, features = ["libz-static"] }
 serde = { version = "1", features = ["derive"] }

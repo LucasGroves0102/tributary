@@ -6,6 +6,7 @@ mod db;
 mod log;
 mod metrics;
 mod service;
+mod tls;
 
 use std::process::ExitCode;
 use std::sync::Arc;
@@ -56,7 +57,7 @@ fn main() -> ExitCode {
 fn run(reparse_all: bool) -> Result<(), BoxError> {
     log::configure()?;
     let url = std::env::var("DATABASE_URL").map_err(|_| "DATABASE_URL is not set")?;
-    let mut db = postgres::Client::connect(&url, postgres::NoTls)?;
+    let mut db = tls::connect(&url)?;
     let metrics = Metrics::new()?;
     if reparse_all {
         for accession_no in db.all_accessions()? {
