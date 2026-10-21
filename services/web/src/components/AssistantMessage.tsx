@@ -3,6 +3,14 @@ import { useMemo, useState } from "react";
 import { renderAnswer } from "../markdown";
 import type { Answer, Citation, ToolCall, Verification } from "../types";
 
+/** A change the assistant made in the UI (chart, screen, watchlist), shown under its message
+ * with Undo. Nothing produces these yet: the agent's UI actions come next. */
+export interface ActionRecord {
+  id: number;
+  label: string;
+  undone: boolean;
+}
+
 export interface AssistantTurn {
   id: number;
   role: "assistant";
@@ -10,6 +18,7 @@ export interface AssistantTurn {
   tools: (ToolCall & { round: number })[];
   answer?: Answer;
   error?: string;
+  action?: ActionRecord;
 }
 
 const TOOL_LABEL: Record<string, string> = {
@@ -20,7 +29,13 @@ const TOOL_LABEL: Record<string, string> = {
   get_section: "Read filing section",
 };
 
-export function AssistantMessage({ turn }: { turn: AssistantTurn }) {
+export function AssistantMessage({
+  turn,
+  onUndo,
+}: {
+  turn: AssistantTurn;
+  onUndo?: (actionId: number) => void;
+}) {
   const finalRound = turn.answer ? turn.answer.rounds - 1 : maxRound(turn);
   const text = turn.answer?.text ?? turn.rounds[finalRound] ?? "";
   const citations = turn.answer?.citations ?? [];
@@ -46,9 +61,25 @@ export function AssistantMessage({ turn }: { turn: AssistantTurn }) {
       ) : (
         <p className="muted thinking">Working…</p>
       )}
+      {turn.action && <Action action={turn.action} onUndo={onUndo} />}
       {turn.answer && <Sources citations={usedCitations(turn.answer)} />}
       {turn.answer && <Meta answer={turn.answer} />}
     </article>
+  );
+}
+
+function Action({ action, onUndo }: { action: ActionRecord; onUndo?: (id: number) => void }) {
+  return (
+    <div className={action.undone ? "act undone" : "act"}>
+      <span className="grow">
+        {action.undone ? "↺ Undone" : "✓ Applied"}: {action.label}
+      </span>
+      {!action.undone && onUndo && (
+        <button className="btn sm" onClick={() => onUndo(action.id)}>
+          Undo
+        </button>
+      )}
+    </div>
   );
 }
 
