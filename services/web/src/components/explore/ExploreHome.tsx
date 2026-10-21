@@ -12,14 +12,16 @@ export function ExploreHome({ token, me }: { token: string; me: Me | null }) {
     <div className="page">
       <header className="page-header">
         <div>
-          <h1>Explore</h1>
+          <h1>Companies</h1>
           <p className="muted">
-            The same data the agent answers from, with the same permissions.
+            Every SEC filer by name, ticker, former name or CIK; values only where your plan
+            covers them. The screener (filters by industry, size, growth and margins, with CSV
+            export) comes next.
           </p>
         </div>
       </header>
       <Search token={token} />
-      <section className="card">
+      <section className="card pad">
         <div className="card-head">
           <h2>Your companies</h2>
         </div>
@@ -74,7 +76,7 @@ function Search({ token }: { token: string }) {
   }, [q, token]);
 
   return (
-    <section className="card">
+    <section className="card pad">
       <label className="search">
         <span className="visually-hidden">Search companies</span>
         <input
@@ -131,7 +133,7 @@ function Feed({ token }: { token: string }) {
   }, [token]);
 
   return (
-    <section className="card">
+    <section className="card pad">
       <div className="card-head">
         <h2>Latest filings</h2>
         <span className="muted small">live · refreshes every 30 s</span>

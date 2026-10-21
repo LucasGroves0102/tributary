@@ -61,9 +61,6 @@ export function CompanyPage({
 
   return (
     <div className="page">
-      <a className="back" href={href({ view: "explore" })}>
-        ← Explore
-      </a>
       <header className="page-header">
         <div>
           <h1>{name}</h1>
@@ -92,7 +89,7 @@ export function CompanyPage({
         </div>
       </header>
 
-      <section className="card">
+      <section className="card pad">
         <div className="card-head">
           <h2>Quarterly financials</h2>
           {fin.state === "ok" && (
@@ -133,7 +130,7 @@ export function CompanyPage({
         )}
       </section>
 
-      <section className="card">
+      <section className="card pad">
         <div className="card-head">
           <h2>Filings</h2>
         </div>

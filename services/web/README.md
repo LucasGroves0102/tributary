@@ -9,10 +9,18 @@ CORS:
 | `/api/query/*` | Query API (`query-api:8000`) |
 | `/api/agent/*` | agent-api (`agent-api:8001`), unbuffered for server-sent events |
 
-Views (hash routes): `#/` chat with streamed answers, tool trace and verified citation links;
-`#/explore` company search and live filings feed; `#/company/<company_id>` 12-quarter chart and
-table, every value linked to its filing; `#/filing/<company_id>/<accession>[/<section>]` parsed
-filing reader. Sign-in is the demo user picker (`/v1/demo/users`, `/v1/demo/token`).
+The shell follows prototype v3: a sidebar (screens with `g`-then-letter shortcuts, watchlist
+with revenue sparklines, next expected filings, freshness), a top bar (breadcrumb, Ctrl/Cmd-K
+command palette, theme, demo user) and the assistant drawer on every page (Ctrl/Cmd-J toggles,
+`/` focuses). Dark is the default theme; the choice is kept per user in localStorage. Design
+tokens (colours for both themes, type scale, spacing) are in `src/tokens.css`.
+
+Views (hash routes): `#/` Home (status strip, watchlist table, new filings since the last
+visit, expected filings); `#/companies` company search and your companies;
+`#/company/<company_id>` 12-quarter chart and table, every value linked to its filing;
+`#/filing/<company_id>/<accession>[/<section>]` parsed filing reader; `#/ask` the assistant full
+width, with streamed answers, tool trace and verified citation links; `#/chart` and `#/compare`
+describe what's coming. Sign-in is the demo user picker (`/v1/demo/users`, `/v1/demo/token`).
 
 ## Run
 
