@@ -8,7 +8,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
-from typing import Any
+from typing import Any, cast
 
 STORE = "tributary"
 MODEL = "authz/model.fga"
@@ -159,17 +159,21 @@ def read_password(directory: str, user: str) -> str:
 
 
 def kafka() -> None:
+    from concurrent.futures import Future
+
     from confluent_kafka import KafkaException
-    from confluent_kafka.admin import (
+    from confluent_kafka.admin import AdminClient
+    from confluent_kafka.admin._acl import (
         AclBinding,
         AclBindingFilter,
         AclOperation,
         AclPermissionType,
-        AdminClient,
-        ResourcePatternType,
-        ResourceType,
+    )
+    from confluent_kafka.admin._resource import ResourcePatternType, ResourceType
+    from confluent_kafka.admin._scram import (
         ScramCredentialInfo,
         ScramMechanism,
+        UserScramCredentialAlteration,
         UserScramCredentialDeletion,
         UserScramCredentialUpsertion,
     )
@@ -204,19 +208,21 @@ def kafka() -> None:
                 sys.exit(f"cannot connect to Kafka as {ADMIN}: {e}")
             time.sleep(5)
 
-    existing = admin.describe_user_scram_credentials().result(timeout=30)
+    existing = cast(Future, admin.describe_user_scram_credentials()).result(timeout=30)
     stale = [UserScramCredentialDeletion(user, info.mechanism)
              for user, desc in existing.items() if user not in passwords and user != ADMIN
              for info in desc.scram_credential_infos]
     upserts = [UserScramCredentialUpsertion(
         user, ScramCredentialInfo(ScramMechanism.SCRAM_SHA_512, ITERATIONS), password.encode())
         for user, password in passwords.items()]
-    for future in admin.alter_user_scram_credentials(stale + upserts).values():
+    alterations: list[UserScramCredentialAlteration] = [*stale, *upserts]
+    for future in admin.alter_user_scram_credentials(alterations).values():
         future.result(timeout=30)
     print(f"SCRAM users: {len(upserts)} set, {len(stale)} stale credentials deleted")
 
-    any_acl = AclBindingFilter(ResourceType.ANY, None, ResourcePatternType.ANY, None, None,
-                               AclOperation.ANY, AclPermissionType.ANY)
+    anything = cast(str, None)  # a filter's None matches any name/principal/host
+    any_acl = AclBindingFilter(ResourceType.ANY, anything, ResourcePatternType.ANY, anything,
+                               anything, AclOperation.ANY, AclPermissionType.ANY)
     current: set[Acl] = set()
     foreign = []  # DENY or host-specific ACLs: never written by this file, deleted as they are
     for b in admin.describe_acls(any_acl).result(timeout=30):
