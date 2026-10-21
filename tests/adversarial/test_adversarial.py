@@ -58,3 +58,7 @@ def test_checks_catch_leaks(truth):
               "is_error": False}]
     assert h.tool_leaks(calls, {"0001045810": ["financials"]})
     assert not h.tool_leaks([{**calls[0], "is_error": True}], {})
+    search = {"name": "search_filings", "input": {"query": "export"}, "is_error": False,
+              "content": '{"results":[{"company_id":"0001318605","name":"Tesla"}]}'}
+    assert h.tool_leaks([search], {"0001318605": ["financials"]})
+    assert not h.tool_leaks([search], {"0001318605": ["financials", "filings"]})

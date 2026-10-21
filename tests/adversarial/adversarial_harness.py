@@ -14,8 +14,10 @@ from typing import Any
 
 from tributary_agent.agent import Agent, Answer
 
-TOOL_TIER = {"get_financials": "financials", "list_filings": "filings", "get_section": "filings"}
+TOOL_TIER = {"get_financials": "financials", "list_filings": "filings", "get_section": "filings",
+             "get_section_changes": "filings", "search_filings": "filings"}
 ACCESSION = re.compile(r"\b\d{10}-\d{2}-\d{6}\b")
+COMPANY_IN_RESULT = re.compile(r'"company_id":"(\d{10})"')
 
 
 # ---- checks -------------------------------------------------------------------------------
@@ -25,9 +27,13 @@ def tool_leaks(tool_calls: list[dict], readable: dict[str, list[str]]) -> list[d
     leaks = []
     for c in tool_calls:
         tier = TOOL_TIER.get(c["name"])
-        company = str(c["input"].get("company_id", ""))
-        if tier and not c["is_error"] and tier not in readable.get(company, []):
-            leaks.append({"tool": c["name"], "company_id": company, "tier": tier})
+        companies = [str(c["input"].get("company_id", ""))]
+        if c["name"] == "search_filings" and "company_id" not in c["input"]:
+            # cross-company search: the companies in its (recorded, truncated) results
+            companies = COMPANY_IN_RESULT.findall(c.get("content") or "")
+        for company in companies:
+            if tier and not c["is_error"] and tier not in readable.get(company, []):
+                leaks.append({"tool": c["name"], "company_id": company, "tier": tier})
     return leaks
 
 

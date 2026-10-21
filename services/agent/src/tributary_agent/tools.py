@@ -9,8 +9,11 @@ from typing import Any
 import httpx
 
 SECTION_KEY = re.compile(r"(?:[IV]+-)?[0-9]{1,2}[A-C]?(?:\.[0-9]{2})?|EX-99\.[0-9]{1,2}")
+ACCESSION = re.compile(r"\d{10}-\d{2}-\d{6}")
+DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 COMPANY_ID = {"type": "string", "pattern": r"^\d{10}$",
               "description": "10-digit canonical company_id from search_companies or whoami"}
+MAX_CHANGES = 50
 
 TOOLS: list[dict] = [
     {
@@ -94,6 +97,57 @@ TOOLS: list[dict] = [
             "additionalProperties": False,
         },
     },
+    {
+        "name": "get_section_changes",
+        "description": "What changed in a 10-K's or 10-Q's Risk Factors and MD&A since the "
+                       "comparable earlier filing: paragraphs that are new, removed or "
+                       "rewritten (with a word diff: \"-\" old words, \"+\" new words), each "
+                       "cited in both filings. Unchanged paragraphs are only counted; changes "
+                       "that only update numbers or years count as unchanged. Get the "
+                       "accession_no from list_filings.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "company_id": COMPANY_ID,
+                "accession_no": {"type": "string", "pattern": r"^\d{10}-\d{2}-\d{6}$",
+                                 "description": "the later filing"},
+                "section_key": {"type": "string",
+                                "description": '10-K "1A" or "7", 10-Q "II-1A" or "I-2";'
+                                               " default: all compared sections"},
+                "basis": {"type": "string", "enum": ["prior", "year_ago"],
+                          "description": "prior (default): previous 10-K / 10-Q; year_ago: "
+                                         "the 10-Q for the same quarter a year earlier"},
+                "kind": {"type": "string", "enum": ["new", "removed", "rewritten"]},
+                "max_changes": {"type": "integer", "minimum": 1, "maximum": MAX_CHANGES,
+                                "description": "default 20"},
+            },
+            "required": ["company_id", "accession_no"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "search_filings",
+        "description": "Full-text search over the filing sections of the companies the user "
+                       "can read filings for: the best passage per section, ranked, with a "
+                       "snippet (matched words between « and ») and a citation. Query syntax: "
+                       'words, "an exact phrase", or, -excluded.',
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string"},
+                "company_id": COMPANY_ID,
+                "form": {"type": "string", "enum": ["10-K", "10-Q", "8-K"]},
+                "section_key": {"type": "string"},
+                "filed_from": {"type": "string", "description": "YYYY-MM-DD"},
+                "filed_to": {"type": "string", "description": "YYYY-MM-DD"},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 20,
+                          "description": "default 10"},
+                "offset": {"type": "integer", "minimum": 0, "maximum": 1000},
+            },
+            "required": ["query"],
+            "additionalProperties": False,
+        },
+    },
 ]
 
 
@@ -149,7 +203,10 @@ class QueryApi:
         except httpx.HTTPError as e:
             return f"Query API unreachable: {type(e).__name__}", True
         if r.status_code == 200:
-            return json.dumps(r.json(), separators=(",", ":"), default=str), False
+            body = r.json()
+            if name == "get_section_changes":
+                body = _first_changes(body, int(args.get("max_changes", 20)))
+            return json.dumps(body, separators=(",", ":"), default=str), False
         detail = _detail(r)
         if r.status_code == 403:
             return f"permission denied: {detail}. The user's plan and grants don't allow " \
@@ -179,15 +236,57 @@ def _route(name: str, a: dict[str, Any]) -> tuple[str, dict]:
     if name == "list_filings":
         return f"/v1/companies/{company()}/filings", {"limit": a.get("limit", 8)}
     if name == "get_section":
-        key = str(a["section_key"])
-        if not SECTION_KEY.fullmatch(key):
-            raise ValueError('section_key looks like "1A", "II-1A", "2.02" or "EX-99.1"')
+        key = section_key(a["section_key"])
         params = {"max_chars": min(int(a.get("max_chars", 8000)), 20_000)}
         for k in ("form", "accession_no"):
             if a.get(k):
                 params[k] = a[k]
         return f"/v1/companies/{company()}/sections/{key}", params
+    if name == "get_section_changes":
+        acc = str(a["accession_no"])
+        if not ACCESSION.fullmatch(acc):
+            raise ValueError("accession_no looks like 0001045810-26-000021")
+        params = {"basis": a.get("basis", "prior")}
+        if a.get("section_key"):
+            params["section"] = section_key(a["section_key"])
+        if a.get("kind"):
+            params["kind"] = a["kind"]
+        return f"/v1/companies/{company()}/filings/{acc}/changes", params
+    if name == "search_filings":
+        params = {"q": str(a["query"]), "limit": min(int(a.get("limit", 10)), 20),
+                  "offset": int(a.get("offset", 0))}
+        if a.get("company_id"):
+            params["company"] = company()
+        if a.get("form"):
+            params["form"] = a["form"]
+        if a.get("section_key"):
+            params["section"] = section_key(a["section_key"])
+        for arg, param in (("filed_from", "from"), ("filed_to", "to")):
+            if a.get(arg):
+                if not DATE.fullmatch(str(a[arg])):
+                    raise ValueError(f"{arg} must be YYYY-MM-DD")
+                params[param] = a[arg]
+        return "/v1/search", params
     raise ValueError(f"unknown tool {name}")
+
+
+def section_key(value: Any) -> str:
+    key = str(value)
+    if not SECTION_KEY.fullmatch(key):
+        raise ValueError('section_key looks like "1A", "II-1A", "2.02" or "EX-99.1"')
+    return key
+
+
+def _first_changes(body: dict, limit: int) -> dict:
+    """Keep the first `limit` changes across sections (reading order), saying how many more
+    there are, so a long MD&A diff doesn't flood the context."""
+    left = max(1, min(limit, MAX_CHANGES))
+    for s in body.get("sections") or []:
+        changes = s.get("changes") or []
+        s["changes"], left = changes[:left], max(0, left - len(changes))
+        if len(changes) > len(s["changes"]):
+            s["changes_omitted"] = len(changes) - len(s["changes"])
+    return body
 
 
 def _detail(r: httpx.Response) -> str:

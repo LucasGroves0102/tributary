@@ -281,3 +281,46 @@ def test_agent_sends_the_tools_it_was_given():
         200, json={"metrics": ["revenue"], "derived_metrics": []}))
     Agent(fake, api, "claude-haiku-5-5", tools=MetricTools().get(api)).ask("hi")
     assert financials_metrics(fake.requests[0]["tools"]) == ["revenue"]
+
+
+def test_section_changes_tool_validates_and_routes():
+    api, seen = query_api(ok)
+    acc = "0001045810-26-000021"
+    for bad in ({"company_id": NVDA, "accession_no": "../me"},
+                {"company_id": NVDA, "accession_no": acc, "section_key": "1A/../x"}):
+        content, is_error = api.run("get_section_changes", bad)
+        assert is_error and content.startswith("invalid call")
+    assert seen == []
+    args = {"company_id": NVDA, "accession_no": acc, "section_key": "II-1A",
+            "basis": "year_ago", "kind": "new"}
+    assert api.run("get_section_changes", args)[1] is False
+    assert seen[0].url.path == f"/v1/companies/{NVDA}/filings/{acc}/changes"
+    assert dict(seen[0].url.params) == {"basis": "year_ago", "section": "II-1A", "kind": "new"}
+
+
+def test_section_changes_tool_keeps_the_first_changes():
+    def changes(request):
+        return httpx.Response(200, json={"sections": [
+            {"section_key": "1A", "changes": [{"kind": "new"}] * 3},
+            {"section_key": "7", "changes": [{"kind": "removed"}] * 2}]})
+
+    api, _ = query_api(changes)
+    content, _ = api.run("get_section_changes", {"company_id": NVDA, "max_changes": 4,
+                                                 "accession_no": "0001045810-26-000021"})
+    a, b = json.loads(content)["sections"]
+    assert (len(a["changes"]), "changes_omitted" in a) == (3, False)
+    assert (len(b["changes"]), b["changes_omitted"]) == (1, 1)
+
+
+def test_search_tool_routes_filters():
+    api, seen = query_api(ok)
+    assert api.run("search_filings", {"query": "export controls"})[1] is False
+    assert dict(seen[0].url.params) == {"q": "export controls", "limit": "10", "offset": "0"}
+    args = {"query": "Groq", "company_id": NVDA, "form": "10-K", "section_key": "1A",
+            "filed_from": "2026-01-01", "filed_to": "2026-12-31", "limit": 50}
+    assert api.run("search_filings", args)[1] is False
+    assert dict(seen[1].url.params) == {"q": "Groq", "limit": "20", "offset": "0",
+                                        "company": NVDA, "form": "10-K", "section": "1A",
+                                        "from": "2026-01-01", "to": "2026-12-31"}
+    content, is_error = api.run("search_filings", {"query": "x", "filed_from": "last year"})
+    assert is_error and len(seen) == 2
