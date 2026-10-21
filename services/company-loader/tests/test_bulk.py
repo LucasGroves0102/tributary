@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, timezone
 
 import httpx
 import pytest
@@ -34,6 +34,19 @@ def test_download_skips_unchanged(tmp_path):
     assert download(client(handler), tmp_path / "submissions.zip", since) is None
     assert seen["since"] == LAST_MODIFIED
     assert not (tmp_path / "submissions.zip").exists()
+
+
+def test_if_modified_since_from_a_non_utc_timestamp(tmp_path):
+    seen = {}
+
+    def handler(req):
+        seen["since"] = req.headers["If-Modified-Since"]
+        return httpx.Response(304)
+
+    # Postgres returns timestamptz in the session's time zone
+    since = datetime(2026, 10, 17, 0, 12, 3, tzinfo=timezone(timedelta(hours=-7)))
+    assert download(client(handler), tmp_path / "submissions.zip", since) is None
+    assert seen["since"] == LAST_MODIFIED
 
 
 def test_truncated_download_keeps_no_file(tmp_path):

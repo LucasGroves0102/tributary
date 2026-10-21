@@ -39,7 +39,8 @@ def download(client: httpx.Client, dest: Path,
     """Stream the zip to dest. Returns its Last-Modified, or None if not modified since."""
     headers = {}
     if if_modified_since:
-        headers["If-Modified-Since"] = format_datetime(if_modified_since, usegmt=True)
+        headers["If-Modified-Since"] = format_datetime(if_modified_since.astimezone(UTC),
+                                                       usegmt=True)
     part = dest.with_name(dest.name + ".part")
     with client.stream("GET", SUBMISSIONS_ZIP_URL, headers=headers) as resp:
         if resp.status_code == 304:
