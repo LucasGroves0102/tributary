@@ -49,14 +49,3 @@ export function ago(iso: string, now = Date.now()): string {
   if (s < 86400) return `${Math.floor(s / 3600)} h ago`;
   return `${Math.floor(s / 86400)} d ago`;
 }
-
-export const METRIC_LABELS: Record<string, string> = {
-  revenue: "Revenue",
-  gross_profit: "Gross profit",
-  operating_income: "Operating income",
-  net_income: "Net income",
-  eps_diluted: "EPS (diluted)",
-  operating_cash_flow: "Operating cash flow",
-  total_assets: "Total assets",
-  cash: "Cash",
-};

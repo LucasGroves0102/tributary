@@ -2,13 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { demoUsers, login, me as fetchMe, watchlistCsv } from "./api";
 import { AssistantPanel } from "./assistant/AssistantPanel";
-import { companiesChart, companyChart } from "./chart/model";
+import { companiesChart, companyChart, type Transform } from "./chart/model";
 import { useChart } from "./chart/useChart";
 import { uiContext } from "./assistant/actions";
 import { pageContext } from "./assistant/context";
 import { useAssistant } from "./assistant/useAssistant";
 import { useUiActions } from "./assistant/useUiActions";
-import { CompanyPage } from "./components/explore/CompanyPage";
 import { FilingReader } from "./components/explore/FilingReader";
 import { Palette, WATCH_PREFIX, type PaletteActions, type PaletteCompany } from "./components/Palette";
 import { Sidebar } from "./components/Sidebar";
@@ -19,6 +18,7 @@ import { useWorkspace } from "./home/useWorkspace";
 import { ChartBuilder } from "./pages/ChartBuilder";
 import { Companies } from "./pages/Companies";
 import { Home } from "./pages/Home";
+import { Company } from "./pages/Company";
 import { Compare } from "./pages/Compare";
 import { go, parse, useRoute } from "./route";
 import { useShortcuts } from "./shortcuts";
@@ -105,6 +105,15 @@ export function App() {
     if (route.view !== "ask") setDrawer(true);
     setFocusTick((n) => n + 1);
   }, [route.view, setDrawer]);
+
+  /** Compare's "Chart these" and the peers tab: one line per company for a metric. */
+  const chartMany = useCallback(
+    (ids: string[], metric: string, transform: Transform, title: string) => {
+      setChart((s) => companiesChart(s, ids, metric, transform, title));
+      go({ view: "chart" });
+    },
+    [setChart],
+  );
 
   const exportWatchlist = useCallback(() => {
     if (!token) return;
@@ -256,10 +265,22 @@ export function App() {
                 }}
               />
             ) : route.view === "company" ? (
-              <CompanyPage
+              <Company
                 key={`${user}-${route.companyId}`}
                 token={token}
                 companyId={route.companyId}
+                tab={route.tab ?? "overview"}
+                watched={watched ? watched.has(route.companyId) : null}
+                onWatch={(on) =>
+                  (on ? workspace.watch(route.companyId) : workspace.unwatch(route.companyId)).catch(() =>
+                    setError("Couldn't update the watchlist. Try again."),
+                  )
+                }
+                onChart={(name) => {
+                  setChart((s) => companyChart(s, route.companyId, name));
+                  go({ view: "chart" });
+                }}
+                onChartMany={chartMany}
                 onAsk={(q) => {
                   assistant.setDraft(q);
                   focusAssistant();
@@ -291,10 +312,7 @@ export function App() {
                 key={user}
                 token={token}
                 compare={route.compare ?? {}}
-                onChart={(ids, metric, transform, title) => {
-                  setChart((s) => companiesChart(s, ids, metric, transform, title));
-                  go({ view: "chart" });
-                }}
+                onChart={chartMany}
               />
             )}
           </main>

@@ -1,7 +1,7 @@
 /** Query API responses for tests, shaped like the real ones (strings for Decimals, dates as
  * ISO strings). Demo data: alice can read NVDA financials and watches TSLA without a grant. */
 
-import type { FinancialRow, LatestFiling, WatchlistEntry } from "./types";
+import type { FinancialRow, LatestFiling, ScreenerRow, WatchlistEntry } from "./types";
 
 export const NVDA = "0001045810";
 export const TSLA = "0001318605";
@@ -77,6 +77,48 @@ export const TESLA = entry({
   },
   next_expected: null,
 });
+
+/** NVDA as one /v1/screener row with the company page's header columns. */
+export function nvdaRow(over: Partial<ScreenerRow> = {}): ScreenerRow {
+  return {
+    ...entry(),
+    filer_categories: ["Large accelerated filer"],
+    state_of_incorporation: "DE",
+    values: {
+      revenue_ttm: "165218000000",
+      revenue_growth_ttm: "0.69",
+      eps_diluted_q: "1.08",
+      cash_q: "11639000000",
+      revenue_q: "46743000000",
+    },
+    sources: { revenue_ttm: SRC, revenue_growth_ttm: SRC, eps_diluted_q: SRC, cash_q: SRC, revenue_q: SRC },
+    ...over,
+  };
+}
+
+/** One financials row of any metric. */
+export function fin(metric: string, end: string, value: string, fiscal: string, over: Partial<FinancialRow> = {}): FinancialRow {
+  return {
+    metric,
+    period_start: null,
+    period_end: end,
+    fiscal_period: fiscal,
+    calendar_period: null,
+    value,
+    unit: metric === "eps_diluted" ? "USD/shares" : metric.endsWith("margin") ? "ratio" : "USD",
+    value_source: "reported",
+    citation: {
+      accession_no: ACC,
+      form: "10-Q",
+      filed: "2026-08-26",
+      xbrl_tag: "Revenues",
+      source_accessions: null,
+      filing_url: "https://www.sec.gov/x/",
+    },
+    freshness: { filed: "2026-08-26", ingested_at: "2026-08-26T21:00:00Z" },
+    ...over,
+  };
+}
 
 export function revenueRow(periodEnd: string, value: string, fiscal: string): FinancialRow {
   return {
