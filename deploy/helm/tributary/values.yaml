@@ -63,6 +63,7 @@ resources:
 # secClass: priority in the shared SEC rate limit (SEC_CALLER_CLASS): live, batch or bulk.
 # Defaults: live for services, batch for jobs. Lower classes leave tokens for higher ones.
 # from: components allowed to connect on `port`; fromNamespaces: any pod in these namespaces.
+# replicas: default 1; 0 ships a service stopped.
 services:
   poller:
     uses: [kafka, sec]
@@ -78,6 +79,49 @@ services:
   parser:
     image: parser
     uses: [kafka, postgres]
+    resources:
+      requests:
+        cpu: 100m
+        memory: 192Mi
+      limits:
+        memory: 768Mi
+  # Document backfill (doc-fetcher's doc-crawler, migration 020): 10-K, 10-Q and 8-K (+ EX-99.x)
+  # of every company with gold financials, last CRAWL_YEARS years, tracked companies first, then
+  # most recent first. SEC class bulk, so it only gets tokens live and batch callers leave. A
+  # long-running worker, not a CronJob: it runs for days, resumes from ops.doc_crawl_targets after
+  # any restart, is scraped continuously for the stall/disk alerts, and once caught up queues new
+  # filings every CRAWL_PLAN_HOURS. Pauses itself while the node has under CRAWL_MIN_FREE_GB free;
+  # pause by hand with UPDATE ops.doc_crawl_control SET paused = true. Shipped stopped: start it and
+  # parser-backfill with replicas: 1 in deploy/flux/releases/tributary.yaml (README).
+  doc-crawler:
+    image: doc-fetcher
+    command: [doc-crawler]
+    replicas: 0
+    uses: [kafka, postgres, sec]
+    secClass: bulk
+    terminationGracePeriodSeconds: 60
+    env:
+      CRAWL_YEARS: "5"
+      CRAWL_8K_ITEMS: "2.02,7.01,8.01"
+      CRAWL_MIN_FREE_GB: "50"
+      CRAWL_WORKERS: "4"
+      CRAWL_BATCH: "32"
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        memory: 512Mi
+  # The parser for the crawl's documents.backfill topic, as its own group: the live parser only
+  # reads documents.fetched, so a backlog of crawled documents (or a document that stops this
+  # consumer) never delays new filings. Same image switch as parser.
+  parser-backfill:
+    image: parser
+    replicas: 0
+    uses: [kafka, postgres]
+    env:
+      PARSER_TOPIC: documents.backfill
+      PARSER_GROUP: parser-backfill
     resources:
       requests:
         cpu: 100m

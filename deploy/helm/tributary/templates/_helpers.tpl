@@ -117,6 +117,9 @@ securityContext:
 {{- with .restartPolicy }}
 restartPolicy: {{ . }}
 {{- end }}
+{{- with .terminationGracePeriodSeconds }}
+terminationGracePeriodSeconds: {{ . }}
+{{- end }}
 containers:
   - name: {{ .name }}
     image: {{ include "tributary.image" (dict "root" $root "image" .image) }}

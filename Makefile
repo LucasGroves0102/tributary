@@ -1,4 +1,4 @@
-.PHONY: up up-all down logs topics consume migrate seed-app authz authz-test cdc propagation-test token backfill companies financials financials-bulk financials-rebuild seed-documents reparse psql lint test hooks secrets ask adversarial web citations typecheck exhibits
+.PHONY: up up-all down logs topics consume migrate seed-app authz authz-test cdc propagation-test token backfill companies financials financials-bulk financials-rebuild seed-documents crawl reparse psql lint test hooks secrets ask adversarial web citations typecheck exhibits
 
 COMPOSE := $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo docker-compose)
 # use the repo virtualenv when there is one, so `make test` works without activating it
@@ -14,7 +14,7 @@ up-all:    ## infra + app services
 	$(COMPOSE) --profile app up -d --build
 
 down:
-	$(COMPOSE) --profile app --profile authz --profile tools --profile jobs down
+	$(COMPOSE) --profile app --profile authz --profile tools --profile jobs --profile crawl down
 
 logs:
 	$(COMPOSE) logs -f
@@ -83,6 +83,9 @@ financials-rebuild: ## re-derive silver/gold from stored bronze (after changing 
 seed-documents: ## publish tracked companies' recent 10-K/10-Q/8-K filings to filings.raw
 	$(COMPOSE) --profile app build doc-fetcher
 	$(COMPOSE) --profile app run --rm -e SEC_CALLER_CLASS=bulk doc-fetcher doc-fetcher-seed
+
+crawl:     ## document backfill for every operating company (doc-crawler + parser-backfill)
+	$(COMPOSE) --profile crawl up -d --build doc-crawler parser-backfill
 
 exhibits:  ## fetch EX-99.x exhibits for stored 8-Ks, then re-parse
 	@set -a; . ./.env; set +a; $(BIN)doc-fetcher-exhibits

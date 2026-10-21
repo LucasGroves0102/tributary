@@ -168,6 +168,41 @@ services:
       postgres:
         condition: service_healthy
 
+  # Document backfill (make crawl): not part of up-all.
+  doc-crawler:
+    build:
+      context: .
+      dockerfile: services/doc-fetcher/Dockerfile
+    profiles: ["crawl"]
+    command: ["doc-crawler"]
+    env_file: .env
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      DATABASE_URL: postgresql://${POSTGRES_USER:-tributary}:${POSTGRES_PASSWORD:-tributary}@postgres:5432/${POSTGRES_DB:-tributary}
+      SEC_CALLER_CLASS: bulk
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+
+  parser-backfill:
+    build:
+      context: .
+      dockerfile: services/parser/Dockerfile
+    profiles: ["crawl"]
+    env_file: .env
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      DATABASE_URL: postgresql://${POSTGRES_USER:-tributary}:${POSTGRES_PASSWORD:-tributary}@postgres:5432/${POSTGRES_DB:-tributary}
+      PARSER_TOPIC: documents.backfill
+      PARSER_GROUP: parser-backfill
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+
   authz-sync:
     build:
       context: .

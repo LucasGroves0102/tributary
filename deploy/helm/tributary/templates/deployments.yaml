@@ -9,7 +9,7 @@ metadata:
   labels:
     {{- include "tributary.labels" $ctx | nindent 4 }}
 spec:
-  replicas: 1
+  replicas: {{ if hasKey $svc "replicas" }}{{ $svc.replicas }}{{ else }}1{{ end }}
   revisionHistoryLimit: 3
   selector:
     matchLabels:
