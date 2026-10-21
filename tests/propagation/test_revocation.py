@@ -3,6 +3,7 @@ Needs the running stack; skipped unless E2E=1."""
 
 import os
 import time
+import uuid
 from collections.abc import Callable
 from functools import partial
 
@@ -14,6 +15,7 @@ pytestmark = pytest.mark.skipif(os.environ.get("E2E") != "1", reason="E2E=1 not 
 
 TARGET_SECONDS = 30
 NVDA = "0001045810"
+APPLE = "0000320193"
 
 
 @pytest.fixture(scope="module")
@@ -70,3 +72,40 @@ def test_plan_downgrade_removes_filings_only(stack):
     wait_until(lambda: filings() == (True, True))
     print(f"\nPro → Free: filings gone everywhere in {downgrade_s:.2f}s")
     assert downgrade_s < TARGET_SECONDS
+
+
+def user_state(fga, analytics, user):
+    """(OpenFGA tuples naming the user, authz.user_access rows, can read Nvidia financials)."""
+    tuples = {t for t in fga.read_all() if t.user == f"user:{user}"}
+    rows = analytics.execute("SELECT count(*) FROM authz.user_access WHERE user_id = %s",
+                             (user,)).fetchone()[0]
+    return tuples, rows, fga.check(f"user:{user}", "can_read_financials", f"company:{NVDA}")
+
+
+def counts(state):
+    tuples, rows, allowed = state
+    return len(tuples), rows, allowed
+
+
+def test_deleted_user_loses_everything(stack):
+    """Deleting a user (cascading to their subscription and grants) removes every tuple and
+    user_access row derived from them. Uses its own user, so the demo users are untouched."""
+    fga, app, analytics = stack
+    user = f"e2e-deleted-{uuid.uuid4().hex[:8]}"
+    state = partial(user_state, fga, analytics, user)
+    app.execute("INSERT INTO users (user_id, email, org_id) VALUES (%s, %s, 'acme')",
+                (user, f"{user}@example.com"))
+    try:
+        app.execute("INSERT INTO subscriptions (user_id, plan_id) VALUES (%s, 'pro')", (user,))
+        app.execute("INSERT INTO company_grants (company_id, user_id) VALUES (%s, %s)",
+                    (APPLE, user))
+        # acme (NVDA, MSFT) + direct AAPL, both tiers: 6 rows; member, 2 x subscriber, viewer
+        wait_until(lambda: counts(state()) == (4, 6, True))
+    finally:
+        app.execute("DELETE FROM users WHERE user_id = %s", (user,))
+    delete_s = wait_until(lambda: state() == (set(), 0, False))
+    print(f"\ndeleted user: gone everywhere in {delete_s:.2f}s")
+    assert delete_s < TARGET_SECONDS
+    # the org's other members keep their access
+    assert access_state(fga, analytics, "dave", "can_read_financials", "financials") \
+        == (True, True)
