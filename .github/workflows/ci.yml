@@ -76,6 +76,70 @@ jobs:
       - if: always()
         run: coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY"
 
+  propagation:
+    # tests/propagation against the full access pipeline: app DB → Debezium → Kafka →
+    # authz-sync → OpenFGA + authz.user_access, with the BRD's < 30 s timing assertions.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      COMPOSE: docker compose -f tests/propagation/compose.ci.yml
+      POSTGRES_USER: tributary
+      POSTGRES_PASSWORD: tributary
+      DATABASE_URL: postgresql://tributary:tributary@localhost:5433/tributary
+      APP_DATABASE_URL: postgresql://tributary:tributary@localhost:5433/app
+      KAFKA_BOOTSTRAP_SERVERS: localhost:9092
+      CONNECT_URL: http://localhost:8083
+      FGA_API_URL: http://localhost:8081
+      METRICS_PORT: "9108"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Pull images and install authz-sync in parallel
+        run: |
+          $COMPOSE --profile tools pull --quiet &
+          pip install pytest -e libs/telemetry -e libs/authz -e services/authz-sync
+          wait $!
+      - name: Kafka and Postgres
+        run: $COMPOSE up -d --wait --wait-timeout 180 kafka postgres
+      - name: Databases, migrations, demo users
+        run: |
+          ./scripts/create-databases.sh
+          ./scripts/migrate.sh db/migrations "$DATABASE_URL"
+          ./scripts/migrate.sh db/app/migrations "$APP_DATABASE_URL"
+          psql "$APP_DATABASE_URL" -v ON_ERROR_STOP=1 -q -f db/app/seed.sql
+      - name: OpenFGA and Kafka Connect
+        run: |
+          $COMPOSE --profile tools run --rm openfga-migrate
+          $COMPOSE up -d --wait --wait-timeout 180 openfga connect
+          for i in $(seq 90); do curl -sf "$FGA_API_URL/healthz" >/dev/null && break; [ "$i" = 90 ] && exit 1; sleep 1; done
+          ./scripts/authz-bootstrap.sh
+      - name: Debezium connector
+        run: ./scripts/register-connector.sh
+      - name: authz-sync, caught up with the demo users
+        run: |
+          nohup authz-sync > "$RUNNER_TEMP/authz-sync.log" 2>&1 &
+          for i in $(seq 180); do
+            curl -sf "localhost:$METRICS_PORT/metrics" | grep -q '^tributary_authz_caught_up 1' \
+              && [ "$(psql "$DATABASE_URL" -qAtc "SELECT count(*) FROM authz.user_access WHERE user_id = 'alice'")" -gt 0 ] \
+              && { echo "caught up after ${i}s"; exit 0; }
+            sleep 1
+          done
+          echo "authz-sync did not catch up" >&2; exit 1
+      - name: Propagation tests (revocation, downgrade, user deletion; < 30 s each)
+        run: E2E=1 pytest -q -s -p no:cacheprovider tests/propagation
+      - name: Logs
+        if: failure()
+        run: |
+          echo "::group::authz-sync"; cat "$RUNNER_TEMP/authz-sync.log" || true; echo "::endgroup::"
+          echo "::group::connector status"; curl -s "$CONNECT_URL/connectors/app/status" || true; echo "::endgroup::"
+          for s in kafka postgres connect openfga; do
+            echo "::group::$s"; $COMPOSE logs --no-color --tail 300 "$s"; echo "::endgroup::"
+          done
+      - if: always()
+        run: $COMPOSE --profile tools down -v
+
   web:
     runs-on: ubuntu-latest
     defaults:
@@ -195,7 +259,7 @@ jobs:
 
   images:
     name: image ${{ matrix.service }}
-    needs: [secrets, python, web, rust, authz, chart]
+    needs: [secrets, python, propagation, web, rust, authz, chart]
     runs-on: ubuntu-latest
     permissions:
       contents: read
