@@ -1,4 +1,4 @@
-.PHONY: up up-all down logs topics consume migrate seed-app authz authz-test cdc propagation-test token backfill companies financials financials-bulk financials-rebuild segments segments-rebuild seed-documents crawl reparse psql lint test hooks secrets ask adversarial web citations typecheck exhibits
+.PHONY: up up-all down logs topics consume migrate seed-app authz authz-test cdc propagation-test token backfill companies financials financials-bulk financials-rebuild segments segments-rebuild seed-documents crawl reparse section-index psql lint test hooks secrets ask adversarial web citations typecheck exhibits
 
 COMPOSE := $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo docker-compose)
 # use the repo virtualenv when there is one, so `make test` works without activating it
@@ -100,6 +100,9 @@ exhibits:  ## fetch EX-99.x exhibits for stored 8-Ks, then re-parse
 reparse:   ## re-parse every stored document (after changing the parser)
 	$(COMPOSE) --profile app build parser
 	$(COMPOSE) --profile app run --rm parser parser --reparse-all
+
+section-index: ## search passages + Risk Factors/MD&A diffs for parsed filings (no SEC calls): make section-index LIMIT=5000
+	@set -a; . ./.env; set +a; $(BIN)parser-index --limit $(or $(LIMIT),5000)
 
 psql:      ## open a psql shell on the Tributary database
 	$(COMPOSE) exec postgres psql -U tributary

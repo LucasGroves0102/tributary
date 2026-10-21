@@ -261,3 +261,28 @@ jobs:
       SEGMENTS_BATCH: "25"
       SEGMENTS_ROUNDS: "40"
       SEGMENTS_PAUSE_SECONDS: "0"
+  # Search passages and section diffs (parser-index, migration 021): indexes parsed sections for
+  # full-text search and compares Risk Factors / MD&A of each 10-K and 10-Q with the comparable
+  # earlier filing. No SEC requests. A run processes up to SECTION_INDEX_LIMIT pending filings in
+  # transactions of SECTION_INDEX_BATCH; ops.section_index is the checkpoint, so a stopped run
+  # resumes where it left off and a filing whose prior arrives later is re-diffed. Hourly once
+  # enabled. Ships suspended; first load after the crawl (~265k filings, about 1 h of
+  # to_tsvector plus ~4 h of diffs): kubectl -n tributary create job
+  # --from=cronjob/section-index section-index-1, repeated until ops.section_index_status
+  # catches up; then REINDEX the GIN index (gold.section_search_tsv), bloated by the bulk load.
+  section-index:
+    image: parser
+    command: [parser-index]
+    schedule: "40 * * * *"
+    suspend: true
+    timeoutSeconds: 14400
+    uses: [postgres]
+    resources:
+      requests:
+        cpu: 250m
+        memory: 256Mi
+      limits:
+        memory: 768Mi
+    env:
+      SECTION_INDEX_LIMIT: "20000"
+      SECTION_INDEX_BATCH: "25"

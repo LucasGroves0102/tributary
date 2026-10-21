@@ -15,7 +15,7 @@ OpenFGA keeps its own `openfga` database, migrated by OpenFGA itself.
 |---|---|---|
 | `bronze` | data as received: `filings` (filings.raw sink), `company_facts` (XBRL payloads), `filing_documents`, `filing_exhibits` (gzip), `filing_xbrl` (facts extracted from the documents' inline XBRL), `submissions`, `submission_filings`, load checkpoints | bronze-loader, facts-fetcher, doc-fetcher, company-loader |
 | `silver` | typed and resolved: `companies`, `company_ciks`, `company_aliases`, `metrics`, `metric_tags`, `financial_facts`, `filing_sections`, `filings` (view), `segment_axes`, `segment_metrics`, `segment_metric_tags`, `segment_facts` | company-loader, facts-fetcher (via SQL functions), parser |
-| `gold` | what the Query API serves, with provenance (FR6): `quarterly_financials`, `filing_sections` (view), `segment_financials` (view `segments`) | `gold.refresh_quarterly_financials`, `gold.refresh_segments` |
+| `gold` | what the Query API serves, with provenance (FR6): `quarterly_financials`, `filing_sections` (view), `segment_financials` (view `segments`), `section_search`, `section_diffs`, `section_changes` | `gold.refresh_quarterly_financials`, `gold.refresh_segments`, `gold.refresh_section_search`, parser-index |
 | `authz` | `user_access`: who can read which company and tier | authz-sync |
 | `ops` | freshness and pipeline-health views for Grafana and the ops exporter | views only |
 
@@ -38,6 +38,14 @@ research UI reads: `gold.latest_financials` (security_invoker, RLS applies),
 `020_doc_crawl.sql` adds the document crawl's queue and checkpoint (`ops.doc_crawl_targets`,
 planned by `ops.doc_crawl_plan`), its pause switch (`ops.doc_crawl_control`) and the
 `ops.doc_crawl_progress` / `ops.doc_crawl_status` views for `ops_reader`.
+`021_section_diffs_search.sql` adds full-text search and "what changed" over parsed sections,
+both built by the parser's `parser-index` job: `gold.section_search` (one row per ~2,000-character
+passage: offsets + tsvector, GIN index, no text; `gold.refresh_section_search`),
+`gold.section_diffs` / `gold.section_changes` (paragraph-level Risk Factors and MD&A diffs vs the
+comparable earlier filing: offsets and word-diff opcodes, no text), all three under RLS
+`granted_filings`; the checkpoint `ops.section_index` with `ops.section_index_priors` /
+`ops.section_index_pending`, and `ops.section_change_summary` / `ops.section_index_status` (counts
+only) for `ops_reader`. All three gold tables are derived: rebuild them by running the job.
 
 ## Migrations
 

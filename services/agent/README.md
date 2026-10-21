@@ -15,6 +15,8 @@ as tool errors the model must report.
 | `get_financials` | `GET /v1/companies/{id}/financials` |
 | `list_filings` | `GET /v1/companies/{id}/filings` |
 | `get_section` | `GET /v1/companies/{id}/sections/{key}` |
+| `get_section_changes` | `GET /v1/companies/{id}/filings/{accession}/changes` (keeps the first `max_changes`, default 20, max 50; says how many it left out) |
+| `search_filings` | `GET /v1/search` |
 
 `get_financials`' metric names come from `GET /v1/metrics` (`MetricTools`, fetched once; until
 the Query API answers, the tool lists no names and the API rejects unknown ones).

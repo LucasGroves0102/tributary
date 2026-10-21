@@ -27,6 +27,8 @@ request parameters. Dev tokens: `make token USER=alice`.
 | `GET /v1/companies/{id}/filings?limit=` | filings | recent filings and their sections |
 | `GET /v1/filings/latest?limit=` | token | newest parsed filings across the companies the caller can read filings for |
 | `GET /v1/companies/{id}/sections/{key}?form=&accession_no=&limit=&max_chars=` | filings | section text + citation |
+| `GET /v1/companies/{id}/filings/{accession}/changes?section=&basis=&kind=` | filings | new / removed / rewritten Risk Factors and MD&A paragraphs vs the comparable earlier filing, word diffs, citations in both filings ([What changed](#what-changed)) |
+| `GET /v1/search?q=&company=&form=&section=&from=&to=&limit=&offset=` | filings (every company searched) | best passage per section, ranked, with snippet and citation ([Search](#search)) |
 | `POST /v1/formulas/validate` | token | AST, unit and inputs, or errors with positions |
 | `POST /v1/formulas/evaluate` | financials, every company in the formula | series; each point cites every input's filing |
 | `GET /v1/screener?columns=&where=&...&format=` | token | companies with financials: public metadata + latest values where permitted ([Screener](#screener)) |
@@ -205,3 +207,44 @@ per segment member, from `gold.segments` (migration 018; built by facts-fetcher'
   (`reported`, `derived` = Q4 from annual minus year-to-date, `ttm`), `citation` (accession,
   form, filed, `xbrl_tag`, `xbrl_axis`, `xbrl_member`, `source_accessions`, `filing_url`) and
   `freshness`. `format=csv`: one row per value with the same fields.
+
+## What changed
+
+`GET /v1/companies/{id}/filings/{accession}/changes`: for a 10-K (Risk Factors `1A`, MD&A `7`)
+or 10-Q (`II-1A`, `I-2`), the paragraphs that are new, removed or rewritten since the
+comparable earlier filing, from `gold.section_diffs` / `gold.section_changes` (migration 021,
+built by the parser's `parser-index`; algorithm in `services/parser/src/filing_parser/diff.py`).
+`require(filings)` first, then `Store` as `query_api` under the `granted_filings` policies.
+
+- `basis=prior` (default): the previous 10-K / 10-Q; `basis=year_ago` (10-Q): the 10-Q for the
+  same quarter a year earlier. `section` (default all compared sections), `kind`
+  (`new`, `removed`, `rewritten`).
+- Per section: `compared_to` (the earlier filing), `summary` counts (`unchanged` includes
+  `minor_edits`; `numbers_only` = unchanged once numbers and years are masked), `changes` in
+  reading order, `stale` and `freshness` (filed, ingested_at, computed_at).
+- Per change: `kind`, `similarity` (rewritten), `text` / `prior_text`, `words` (rewritten:
+  `[op, text]` runs, `=` both, `-` prior only, `+` this filing only), `citation` /
+  `prior_citation` with character offsets into each filing's document text.
+- Gold stores offsets and word-diff opcodes, not text: paragraphs are cut from the section text
+  the diff was computed on (matched by parser and parsed_at). A section re-parsed since then is
+  returned with `stale: true` and no changes until the job recomputes it.
+- An accession that isn't a parsed filing of this company → 404 (the same for another company's
+  filing); a parsed filing with nothing compared yet → 200 with `sections: []` and a `note`.
+
+## Search
+
+`GET /v1/search`: Postgres full-text search over `gold.section_search` (one row per
+~2,000-character passage of every parsed section, `tsvector` with a GIN index; migration 021).
+With `company`, `require(filings)` on it; without, the companies `readable()` lists with the
+filings tier (no OpenFGA list entry → no query). Either way the query runs through `Store` and
+RLS (`granted_filings`) filters again.
+
+- `q`: `websearch_to_tsquery('english', q)`: words, `"a phrase"`, `or`, `-excluded`.
+  Filters: `company`, `form` (`10-K`, `10-Q`, `8-K`, `/A` amendments), `section`, `from` / `to`
+  (filing date). `limit` 1-50 (default 10), `offset` up to 1000, `has_more`.
+- One result per section: its best passage by `ts_rank_cd`, then newest filing first;
+  `passages_matched` counts the section's matching passages. `snippet` is `ts_headline` over that
+  passage only (matches between « and »), cut from `silver.filing_sections` at query time.
+  `citation` has the passage's character offsets into the document text.
+- Ranking runs over every match, so a very common word across thousands of companies can be
+  slow: queries stop after 8 s (`SEARCH_TIMEOUT`) with 422 "search too broad".
