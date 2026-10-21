@@ -67,3 +67,31 @@ spec:
           labels: {severity: warning}
           annotations:
             summary: "Root filesystem is {{`{{ $value | humanizePercentage }}`}} full"
+        - alert: DiskSpaceLow
+          # The document crawl pauses itself under 50 GB free (CRAWL_MIN_FREE_GB); this catches
+          # everything else that fills the disk (WAL held by a slot, backups, the crawl's parser).
+          expr: node_filesystem_avail_bytes{mountpoint="/"} < 50e9
+          for: 10m
+          labels: {severity: critical}
+          annotations:
+            summary: "Only {{`{{ $value | humanize1024 }}`}}B free on the root filesystem"
+        - alert: DocCrawlPausedForDisk
+          # doc-crawler (tributary chart, services.doc-crawler) stops fetching under its threshold.
+          expr: |
+            max(tributary_doc_crawl_disk_free_bytes)
+            < on () max(tributary_doc_crawl_min_free_bytes)
+          for: 5m
+          labels: {severity: warning}
+          annotations:
+            summary: "Document crawl paused by its disk guard: {{`{{ $value | humanize1024 }}`}}B free"
+        - alert: DocCrawlStalled
+          # Work left, not paused (by hand or for disk), and nothing finished for 30 minutes:
+          # SEC errors, everything left in retry backoff, Postgres or a hung fetch.
+          expr: |
+            max(tributary_doc_crawl_remaining_filings) > 0
+            and on () max(tributary_doc_crawl_state{state=~"running|idle|erroring"}) == 1
+            and on () time() - max(tributary_doc_crawl_last_progress_timestamp_seconds) > 1800
+          for: 15m
+          labels: {severity: warning}
+          annotations:
+            summary: "Document crawl has {{`{{ $value | humanize }}`}} filings left and made no progress in 30 minutes"

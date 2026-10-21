@@ -35,3 +35,36 @@ tributary_financials_quality:
     - companies:
         usage: GAUGE
         description: Companies with at least one finding
+tributary_doc_crawl:
+  query: |
+    SELECT form, sum(targets) AS targets, sum(done) AS done, sum(remaining) AS remaining,
+           sum(failed) AS failed, sum(skipped) AS skipped, sum(raw_bytes) AS raw_bytes,
+           sum(stored_bytes) AS stored_bytes
+    FROM ops.doc_crawl_progress
+    GROUP BY form
+  cache_seconds: 300
+  metrics:
+    - form:
+        usage: LABEL
+        description: 10-K, 10-K/A, 10-Q, 10-Q/A or 8-K
+    - targets:
+        usage: GAUGE
+        description: Filings queued by the document crawl (ops.doc_crawl_targets)
+    - done:
+        usage: GAUGE
+        description: Filings stored (or found already stored)
+    - remaining:
+        usage: GAUGE
+        description: Filings pending or claimed
+    - failed:
+        usage: GAUGE
+        description: Filings given up on (SEC 404 or out of retries)
+    - skipped:
+        usage: GAUGE
+        description: Filings skipped as unusable (too large, empty, no primary document)
+    - raw_bytes:
+        usage: GAUGE
+        description: Uncompressed bytes stored
+    - stored_bytes:
+        usage: GAUGE
+        description: Gzip bytes stored
