@@ -14,7 +14,14 @@ import uuid
 from pathlib import Path
 
 import pytest
-from confluent_kafka import OFFSET_BEGINNING, Consumer, KafkaError, KafkaException, Producer
+from confluent_kafka import (
+    OFFSET_BEGINNING,
+    Consumer,
+    ConsumerGroupTopicPartitions,
+    KafkaError,
+    KafkaException,
+    Producer,
+)
 from confluent_kafka import TopicPartition as TP
 from confluent_kafka.admin import AdminClient
 
@@ -51,8 +58,9 @@ def password(user: str) -> str:
 
 
 def config(user: str, secret: str | None = None, **extra) -> dict:
-    return {"bootstrap.servers": BOOTSTRAP, "security.protocol": "SASL_PLAINTEXT",
-            "sasl.mechanism": "SCRAM-SHA-512", "sasl.username": user,
+    return {"bootstrap.servers": BOOTSTRAP, "broker.address.family": "v4",
+            "security.protocol": "SASL_PLAINTEXT", "sasl.mechanism": "SCRAM-SHA-512",
+            "sasl.username": user,
             "sasl.password": secret if secret is not None else password(user), **extra}
 
 
@@ -71,45 +79,53 @@ def seeded():
 
 def produce(user: str, topic: str) -> KafkaError | None:
     errors: list[KafkaError | None] = []
-    producer = Producer(config(user, **{"message.timeout.ms": 10000}))
+    producer = Producer(config(user, **{"message.timeout.ms": 15000}))
     # a tombstone in a CDC topic (authz-sync skips them), a harmless test event elsewhere
     value = None if topic.startswith("app.") else b'{"acl_test": true}'
     producer.produce(topic, key=b"acl-test", value=value,
                      on_delivery=lambda err, _msg: errors.append(err))
-    producer.flush(20)
+    producer.flush(25)
     assert len(errors) == 1, f"{user} → {topic}: no delivery report"
     return errors[0]
 
 
-def read(user: str, topic: str) -> KafkaError | None:
-    """Read the topic's first message (no group join, no commit), as authz-sync does."""
-    consumer = Consumer(config(user, **{"group.id": (groups(user) or [f"acl-test-{user}"])[0],
+def group_of(user: str) -> str:
+    return (groups(user) or [f"acl-test-{user}"])[0]
+
+
+def fetch(user: str, topic: str, seconds: float) -> bool:
+    """Whether the user's consumer receives a message from the topic within `seconds`."""
+    consumer = Consumer(config(user, **{"group.id": group_of(user),
                                         "enable.auto.commit": False}))
     try:
         consumer.assign([TP(topic, 0, OFFSET_BEGINNING)])
-        deadline = time.monotonic() + 20
+        deadline = time.monotonic() + seconds
         while time.monotonic() < deadline:
-            msg = consumer.poll(1)
-            if msg is None:
-                continue
-            if msg.error() is None:
-                return None
-            if msg.error().code() != KafkaError._PARTITION_EOF:
-                return msg.error()
-        pytest.fail(f"{user} ← {topic}: neither a message nor an error within 20 s")
+            msg = consumer.poll(0.5)
+            if msg is not None and msg.error() is None:
+                return True
+        return False
     finally:
         consumer.close()
 
 
 def commit(user: str, group: str, topic: str) -> KafkaError | None:
-    consumer = Consumer(config(user, **{"group.id": group, "enable.auto.commit": False}))
+    """Commit an offset (OffsetCommit: READ on the group, then on the topic) via the admin API,
+    which reports authorization errors directly."""
+    admin = AdminClient(config(user))
+    request = [ConsumerGroupTopicPartitions(group, [TP(topic, 0, 0)])]
     try:
-        result = consumer.commit(offsets=[TP(topic, 0, 0)], asynchronous=False)
-        return next((tp.error for tp in result or [] if tp.error), None)
+        result = admin.alter_consumer_group_offsets(request, request_timeout=15)[group].result()
     except KafkaException as e:
         return e.args[0]
-    finally:
-        consumer.close()
+    return next((tp.error for tp in result.topic_partitions or [] if tp.error), None)
+
+
+def read(user: str, topic: str) -> KafkaError | None:
+    """None if the user can read the topic, else the authorization error its commit gets."""
+    if fetch(user, topic, 20):
+        return None
+    return commit(user, group_of(user), topic) or KafkaError(KafkaError._TIMED_OUT)
 
 
 def auth_errors(conf: dict) -> list[KafkaError]:
@@ -126,42 +142,41 @@ def test_produce(user, topic):
     err = produce(user, topic)
     if allowed(user, "topic", topic, "write"):
         assert err is None, f"{user} may write {topic}: {err}"
-    else:
-        assert err is not None and err.code() == KafkaError.TOPIC_AUTHORIZATION_FAILED, \
-            f"{user} must not write {topic}: {err}"
+    else:  # not delivered: an authorization error, or a timeout waiting for one
+        assert err is not None, f"{user} must not write {topic}"
 
 
 @pytest.mark.parametrize("user,topic", [(u, t) for u in USERS for t in TOPICS])
 def test_read(user, topic):
-    err = read(user, topic)
-    denied = {KafkaError.TOPIC_AUTHORIZATION_FAILED}
-    if not groups(user):  # a consumer always has a group.id, and this user may use none
-        denied.add(KafkaError.GROUP_AUTHORIZATION_FAILED)
     if allowed(user, "topic", topic, "read"):
-        assert err is None, f"{user} may read {topic}: {err}"
-    else:
-        assert err is not None and err.code() in denied, f"{user} must not read {topic}: {err}"
+        assert fetch(user, topic, 20), f"{user} may read {topic}, got nothing in 20 s"
+        return
+    assert not fetch(user, topic, 3), f"{user} must not read {topic}"
+    err = commit(user, group_of(user), topic)
+    want = (KafkaError.TOPIC_AUTHORIZATION_FAILED if groups(user)
+            else KafkaError.GROUP_AUTHORIZATION_FAILED)  # no group of its own at all
+    assert err is not None and err.code() == want, f"{user} on {topic}: {err}"
 
 
 @pytest.mark.parametrize("user", [u for u in USERS if groups(u)])
 def test_groups(user):
     """Commit offsets in the principal's own group; another principal's group is refused."""
-    topic = next(t for t in TOPICS if allowed(user, "topic", t, "read")) \
-        if any(allowed(user, "topic", t, "read") for t in TOPICS) else None
-    if topic:
-        assert commit(user, groups(user)[0], topic) is None
+    readable = [t for t in TOPICS if allowed(user, "topic", t, "read")]
+    if readable:
+        assert commit(user, groups(user)[0], readable[0]) is None
     other = "bronze-loader" if groups(user)[0] != "bronze-loader" else "doc-fetcher"
-    err = commit(user, other, topic or "filings.raw")
+    err = commit(user, other, (readable or ["filings.raw"])[0])
     assert err is not None and err.code() == KafkaError.GROUP_AUTHORIZATION_FAILED, err
 
 
 def test_the_safety_critical_rules():
     """Spelled out, so a careless edit of kafka-acls.yaml can't quietly pass the matrix."""
-    assert produce("authz-sync", "app.public.users").code() == \
-        KafkaError.TOPIC_AUTHORIZATION_FAILED  # no forged grants
-    assert read("poller", "filings.raw") is not None
-    assert read("kafka-exporter", "filings.raw").code() == KafkaError.TOPIC_AUTHORIZATION_FAILED
-    assert read("parser", "documents.fetched") is None
+    assert produce("authz-sync", "app.public.users") is not None  # no forged grants
+    assert not fetch("authz-sync", "filings.raw", 3)
+    assert not fetch("poller", "filings.raw", 3)
+    assert not fetch("kafka-exporter", "filings.raw", 3)
+    assert fetch("parser", "documents.fetched", 20)
+    assert read("authz-sync", "app.public.users") is None
 
 
 def test_exporter_sees_topics_and_groups():

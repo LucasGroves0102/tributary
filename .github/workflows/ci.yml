@@ -39,7 +39,7 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
           python-version: "3.12"
-      - run: pip install ruff pytest pytest-cov pyright -e libs/kafka -e libs/telemetry -e libs/sec -e libs/authz -e services/poller -e services/bronze-loader -e services/company-loader -e services/facts-fetcher -e services/doc-fetcher -e services/parser -e services/authz-sync -e 'services/query-api[test]' -e services/agent
+      - run: pip install ruff pytest pytest-cov pyright pyyaml==6.0.3 -e libs/kafka -e libs/telemetry -e libs/sec -e libs/authz -e services/poller -e services/bronze-loader -e services/company-loader -e services/facts-fetcher -e services/doc-fetcher -e services/parser -e services/authz-sync -e 'services/query-api[test]' -e services/agent
       - run: ruff check .
       - run: pyright --pythonpath "$(which python)"
       - run: ./scripts/create-databases.sh
