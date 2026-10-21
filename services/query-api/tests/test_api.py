@@ -1,6 +1,7 @@
 """Route behavior with fake layers: who gets checked, what's refused, and failing closed."""
 
 from datetime import date
+from decimal import Decimal
 
 import pytest
 from fastapi.testclient import TestClient
@@ -48,6 +49,24 @@ class FakeStore:
                  "value_source": "reported", "source_tag": "us-gaap:Revenues",
                  "accession_no": "0001045810-26-000075", "form": "10-Q",
                  "filed": date(2026, 8, 26), "source_accessions": ["0001045810-26-000075"],
+                 "ingested_at": "2026-10-17T09:56:49Z"}]
+
+    def segment_metric_names(self):
+        return ["operating_income", "revenue"]
+
+    def segments(self, user_id, company_id, axis, metric, periods, view, basis):
+        self.calls.append(("segments", user_id, company_id))
+        self.segments_args = (axis, metric, periods, view, basis)
+        return [{"axis": "product_service", "member": "nvda:DataCenterMember",
+                 "member_label": "Data Center", "member_aliases": [], "metric": "revenue",
+                 "period_start": date(2026, 4, 27), "period_end": date(2026, 7, 26),
+                 "fiscal_year": 2027, "fiscal_quarter": 2, "calendar_year": 2026,
+                 "calendar_quarter": 2, "value": Decimal("89023000000.10"), "unit": "USD",
+                 "value_source": "reported", "source_tag": "us-gaap:Revenues",
+                 "axis_qname": "srt:ProductOrServiceAxis",
+                 "accession_no": "0001045810-26-000075", "filer_cik": "0001045810",
+                 "form": "10-Q", "filed": date(2026, 8, 26),
+                 "source_accessions": ["0001045810-26-000075"],
                  "ingested_at": "2026-10-17T09:56:49Z"}]
 
     def sections(self, *args):
@@ -226,3 +245,33 @@ def test_latest_filings_without_filings_access_skips_the_database(client, token)
 def test_latest_filings_fails_closed_when_openfga_is_down(token):
     client = TestClient(create_app(FakeAuthorizer(GRANTS, down=True), FakeStore(), SECRET))
     assert client.get("/v1/filings/latest", headers=token("alice")).status_code == 503
+
+
+def test_segments_with_exact_values_and_citations(client, token):
+    r = client.get(f"/v1/companies/{NVDA}/segments?axis=product_service&metric=revenue"
+                   "&view=ttm&basis=calendar&quarters=12", headers=token("alice"))
+    assert r.status_code == 200
+    assert client.store.segments_args == ("product_service", "revenue", 12, "ttm", "calendar")
+    row = r.json()["rows"][0]
+    assert (row["member_label"], row["value"]) == ("Data Center", "89023000000.10")
+    assert (row["fiscal_period"], row["calendar_period"]) == ("FY2027 Q2", "CY2026 Q2")
+    assert row["citation"]["xbrl_member"] == "nvda:DataCenterMember"
+    assert row["citation"]["filing_url"] == \
+        "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000075/"
+    assert client.authz.checks == [("alice", "financials", NVDA)]
+
+
+def test_segments_csv(client, token):
+    r = client.get(f"/v1/companies/{NVDA}/segments?format=csv", headers=token("alice"))
+    header, line = r.text.splitlines()
+    assert header.startswith("axis,member,member_label,metric,view")
+    assert "Data Center" in line and "89023000000.10" in line
+
+
+def test_segments_denied_or_invalid_never_reach_the_database(client, token):
+    assert client.get(f"/v1/companies/{TSLA}/segments",
+                      headers=token("alice")).status_code == 403
+    for query in ("metric=salary", "axis=planet", "view=annual", "quarters=0"):
+        assert client.get(f"/v1/companies/{NVDA}/segments?{query}",
+                          headers=token("alice")).status_code == 422
+    assert client.store.calls == []

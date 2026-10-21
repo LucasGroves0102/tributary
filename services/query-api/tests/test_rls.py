@@ -68,6 +68,14 @@ def client():
                 " parser_version, item, title, text, char_start, char_end)"
                 " VALUES (%s, '1A', 'python', 't', '1A', 'Risk Factors', 'secret risks', 0, 12)",
                 (f"{cid}-26-000002",))
+            conn.execute(
+                "INSERT INTO gold.segment_financials (company_id, span, axis, member,"
+                " member_label, metric, period_start, period_end, value, unit, value_source,"
+                " source_tag, axis_qname, accession_no, filer_cik, filed, source_accessions,"
+                " ingested_at) VALUES (%s, 'quarter', 'product_service', 'x:WidgetsMember',"
+                " 'Widgets', 'revenue', '2026-04-01', '2026-06-30', 0.1, 'USD', 'reported',"
+                " 'us-gaap:Revenues', 'srt:ProductOrServiceAxis', %s, %s, '2026-08-01',"
+                " ARRAY[%s], now())", (cid, f"{cid}-26-000001", cid, f"{cid}-26-000001"))
         conn.execute("UPDATE silver.companies SET sic = '2080', sic_description = 'Beverages',"
                      " exchanges = '{NYSE}' WHERE company_id = %s", (A,))
         conn.execute("DELETE FROM authz.user_access WHERE user_id LIKE 't-%'")
@@ -207,3 +215,47 @@ def test_watchlist_values_respect_rls(client, token):
     assert r.status_code == 200, r.text
     assert {row["company_id"]: row["values"] for row in r.json()["companies"]} == {
         A: {"revenue_q": "1"}, B: {"revenue_q": None}}
+
+
+def segments(client, token, user, company, query=""):
+    r = client.get(f"/v1/companies/{company}/segments?{query}", headers=token(user))
+    assert r.status_code == 200, r.text
+    return r.json()["rows"]
+
+
+@pytest.mark.parametrize("query", ["", "axis=product_service&metric=revenue",
+                                   "basis=calendar", "format=csv"])
+def test_segments_respect_rls(client, token, query):
+    if "csv" in query:
+        r = client.get(f"/v1/companies/{A}/segments?{query}", headers=token("t-free"))
+        assert r.text.count("x:WidgetsMember") == 1
+        r = client.get(f"/v1/companies/{B}/segments?{query}", headers=token("t-free"))
+        assert "x:WidgetsMember" not in r.text
+        return
+    rows = segments(client, token, "t-free", A, query)
+    assert [(r["member_label"], r["value"]) for r in rows] == [("Widgets", "0.1")]
+    assert rows[0]["citation"]["filing_url"].endswith(f"/{int(A)}/{A}26000001/")
+    assert segments(client, token, "t-free", B, query) == []
+    assert segments(client, token, "t-nobody", A, query) == []
+
+
+def test_segment_rows_hidden_without_a_grant(client):
+    with client.app_conn.cursor() as cur:
+        cur.execute("SET LOCAL ROLE query_api")
+        cur.execute("SELECT set_config('app.user_id', 't-free', true)")
+        cur.execute("SELECT DISTINCT company_id FROM gold.segment_financials"
+                    " WHERE company_id IN (%s, %s)", (A, B))
+        assert cur.fetchall() == [(A,)]
+        cur.execute("SELECT DISTINCT company_id FROM gold.segments"
+                    " WHERE company_id IN (%s, %s)", (A, B))
+        assert cur.fetchall() == [(A,)]
+        cur.execute("RESET ROLE")
+
+
+def test_segment_metric_list_matches_database(client, token):
+    r = client.get(f"/v1/companies/{A}/segments?metric=salary", headers=token("t-free"))
+    assert r.status_code == 422
+    with psycopg.connect(DSN) as conn:
+        names = [m for (m,) in conn.execute("SELECT metric FROM silver.segment_metrics")]
+    assert {"revenue", "operating_income"} <= set(names)
+    assert all(n in r.json()["detail"] for n in names)
