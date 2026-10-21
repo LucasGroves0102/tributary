@@ -11,7 +11,17 @@ Files installed directly on the server, outside Kubernetes. Postgres 16 runs on 
 
 Settings (env, with defaults): `BACKUP_DIR` (`/var/backups/postgres`), `KEEP_DAYS` (14),
 `DATABASES` (`tributary app openfga`), `TEXTFILE_DIR`
-(`/var/lib/node_exporter/textfile_collector`).
+(`/var/lib/node_exporter/textfile_collector`), `FULL_WEEKDAY` (7, Sunday), `FULL_KEEP` (2),
+`SLIM_EXCLUDE_DATA` (space-separated tables; default in the script).
+
+Nightly dumps are slim: the document crawl adds ~30-40 GB, and 14 full copies would not fit on
+the disk. Tributary's document subtree (`bronze.filing_documents` and every table with a foreign
+key to it, the search/diff/segment tables derived from them, and the crawl/index checkpoints) is
+dumped schema only; the tables are listed in each backup's `tributary.schema-only-tables`. Once a
+week a full dump goes to `$BACKUP_DIR/full`, and the newest `FULL_KEEP` are kept. Restoring a slim
+dump gives every financial, filer and access table, with the document tables empty: restart the
+crawl (`ops.doc_crawl_plan`, then `doc-crawler` + `parser-backfill`), then the `segments` and
+`parser-index` jobs, or restore the latest full dump instead.
 
 ## Install
 
