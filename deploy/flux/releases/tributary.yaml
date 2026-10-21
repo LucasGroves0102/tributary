@@ -32,4 +32,4 @@ spec:
       parser-backfill:
         image: parser-rs
     image:
-      tag: main-94-f5ce50b188577fb7fbeb4df1f0e86be9e91d257b # {"$imagepolicy": "flux-system:tributary:tag"}
+      tag: main-100-390e0bb1b35b66054db315b5ef6e9ccd7ce40105 # {"$imagepolicy": "flux-system:tributary:tag"}
