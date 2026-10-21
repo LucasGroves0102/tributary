@@ -9,6 +9,7 @@ functions defined in the migrations, latest definitions first:
 | `silver.refresh_financial_facts(text[])` | `011_bulk_financials.sql` (first in `003_financials.sql`); metric tags in `012_more_metrics.sql` |
 | `gold.refresh_derived_financials(text[])`, `gold.refresh_financials(text[])` | `014_gold_calendar.sql` |
 | `silver.refresh_company_metadata` | `013_submissions.sql` |
+| `silver.refresh_segment_facts(text[])`, `gold.refresh_segment_financials(text[])`, `gold.refresh_segments(text[])`, `ops.check_segments(text[])`; `ops.check_financials` (keeps segment findings) | `018_segments.sql` |
 | `silver.resolve_company`, `silver.normalize_name` (entity resolution) | `002_companies.sql` |
 
 See [`../migrations/`](../migrations).

@@ -9,3 +9,6 @@ FR8, week 2. Postgres row-level security for the Query API. This folder holds no
 `017_ui_data.sql` grants `gold.latest_financials` (security_invoker, so the policies above
 apply), `gold.financials_coverage` (company ids only, public) and `silver.filings` (the public
 SEC filing index).
+
+`018_segments.sql` adds the `granted_financials` policy on `gold.segment_financials` (and
+grants the security_invoker view `gold.segments`).

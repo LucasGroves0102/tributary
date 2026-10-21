@@ -23,6 +23,7 @@ request parameters. Dev tokens: `make token USER=alice`.
 | `GET /v1/companies/search?q=` | token | candidates (public identity) + caller's access |
 | `GET /v1/metrics` | | metric names served by `financials`: `silver.metrics` and `gold.derived_metrics`, read once |
 | `GET /v1/companies/{id}/financials?metrics=&quarters=&view=&basis=&format=` | financials | values + citation + freshness; `format=csv`: one row per value with its source filing |
+| `GET /v1/companies/{id}/segments?axis=&metric=&quarters=&view=&basis=&format=` | financials | values per segment member (business segment, geography, product/service, reconciliation), exact decimal strings, citation per value ([Segments](#segments)) |
 | `GET /v1/companies/{id}/filings?limit=` | filings | recent filings and their sections |
 | `GET /v1/filings/latest?limit=` | token | newest parsed filings across the companies the caller can read filings for |
 | `GET /v1/companies/{id}/sections/{key}?form=&accession_no=&limit=&max_chars=` | filings | section text + citation |
@@ -185,3 +186,22 @@ over real gold rows (PepsiCo, Coca-Cola, Apple) with both permission layers (nee
 `test_watchlist_db.py` the app-database watchlist (`APP_TEST_DATABASE_URL`); `test_rls.py` wires the API to an authorizer that
 allows everything and checks that row-level security alone still hides ungranted rows (needs
 `TEST_DATABASE_URL`).
+
+## Segments
+
+`GET /v1/companies/{id}/segments`: revenue, operating income and other `silver.segment_metrics`
+per segment member, from `gold.segments` (migration 018; built by facts-fetcher's
+`facts-fetcher-segments` from the filings' inline XBRL). `require(financials)` first, then
+`Store.segments` as `query_api` under the `granted_financials` RLS policy on
+`gold.segment_financials`.
+
+- `axis`: `business_segment`, `geography`, `product_service` or `reconciliation` (corporate,
+  eliminations); default all. `metric`: one of `silver.segment_metrics` (read once per process;
+  unknown → 422 listing them); default all.
+- `quarters` (1-40, default 8): the latest period ends per axis and metric (calendar basis:
+  calendar quarters). `view=quarter|ttm`, `basis=fiscal|calendar` as in `financials`.
+- Each row: `axis`, `member` (QName as last filed), `member_label`, `member_aliases` (earlier
+  QNames merged into it), `metric`, periods, `value` as an exact decimal string, `value_source`
+  (`reported`, `derived` = Q4 from annual minus year-to-date, `ttm`), `citation` (accession,
+  form, filed, `xbrl_tag`, `xbrl_axis`, `xbrl_member`, `source_accessions`, `filing_url`) and
+  `freshness`. `format=csv`: one row per value with the same fields.
