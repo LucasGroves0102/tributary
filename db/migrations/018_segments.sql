@@ -256,7 +256,7 @@ BEGIN
         GROUP BY company_id, axis, canon
     ),
     matches AS (  -- 1b: equal values for the same period, the old member gone before the new
-        SELECT a.company_id, a.axis, a.canon AS old, b.canon AS new, count(*) AS n,
+        SELECT a.company_id, a.axis, a.canon AS old, b.canon AS new, count(*) AS matched,
                max(sb.last_filed) AS new_last_filed
         FROM keyed a
         JOIN keyed b ON b.company_id = a.company_id AND b.axis = a.axis
@@ -273,7 +273,7 @@ BEGIN
     renames AS (
         SELECT DISTINCT ON (company_id, axis, old) company_id, axis, old, new
         FROM matches
-        ORDER BY company_id, axis, old, n DESC, new_last_filed DESC, new
+        ORDER BY company_id, axis, old, matched DESC, new_last_filed DESC, new
     ),
     chain (company_id, axis, old, new, depth) AS (
         SELECT company_id, axis, old, new, 1 FROM renames

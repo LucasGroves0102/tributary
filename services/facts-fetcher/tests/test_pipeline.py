@@ -39,6 +39,7 @@ def raw(cik: str) -> bytes:
 def conn():
     with psycopg.connect(DSN) as c, c.transaction(force_rollback=True):
         c.execute("TRUNCATE gold.quarterly_financials, gold.derived_financials,"
+                  " gold.segment_financials,"
                   " ops.quality_findings, ops.quality_companies, silver.financial_facts,"
                   " bronze.company_facts, silver.company_aliases, silver.company_ciks,"
                   " silver.companies")

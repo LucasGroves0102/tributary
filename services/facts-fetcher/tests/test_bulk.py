@@ -123,6 +123,7 @@ def conn():
     psycopg = pytest.importorskip("psycopg")
     with psycopg.connect(DSN) as c, c.transaction(force_rollback=True):
         c.execute("TRUNCATE gold.quarterly_financials, gold.derived_financials,"
+                  " gold.segment_financials,"
                   " ops.quality_findings, ops.quality_companies, silver.financial_facts,"
                   " bronze.company_facts, bronze.bulk_loads, silver.company_aliases,"
                   " silver.company_ciks, silver.companies")
