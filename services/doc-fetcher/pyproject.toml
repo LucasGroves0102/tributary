@@ -16,6 +16,7 @@ dependencies = [
 doc-fetcher = "doc_fetcher.main:main"
 doc-fetcher-seed = "doc_fetcher.seed:main"
 doc-fetcher-exhibits = "doc_fetcher.exhibits:main"
+doc-crawler = "doc_fetcher.crawl:main"
 
 [build-system]
 requires = ["setuptools>=68"]

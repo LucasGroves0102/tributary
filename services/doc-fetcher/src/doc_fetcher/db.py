@@ -2,6 +2,7 @@
 
 import gzip
 import hashlib
+from dataclasses import dataclass
 
 import psycopg
 
@@ -22,12 +23,24 @@ def already_fetched(conn: psycopg.Connection, accession_no: str) -> bool:
     ).fetchone() is not None
 
 
+@dataclass(frozen=True)
+class Blob:
+    """A fetched file as stored: gzip bytes, plus SHA-256 and size of the uncompressed bytes."""
+    content_gzip: bytes
+    sha256: str
+    size: int
+
+    @classmethod
+    def of(cls, content: bytes) -> "Blob":
+        return cls(gzip.compress(content), hashlib.sha256(content).hexdigest(), len(content))
+
+
 def insert_document(
     conn: psycopg.Connection, accession_no: str, cik: str, form: str,
-    index: FilingIndex, content: bytes,
+    index: FilingIndex, content: bytes | Blob,
 ) -> str:
     """Store the document; returns its SHA-256. A concurrent duplicate is ignored."""
-    digest = hashlib.sha256(content).hexdigest()
+    blob = content if isinstance(content, Blob) else Blob.of(content)
     conn.execute(
         """
         INSERT INTO bronze.filing_documents
@@ -37,13 +50,14 @@ def insert_document(
         ON CONFLICT (accession_no) DO NOTHING
         """,
         (accession_no, cik, form, index.filed, index.period_of_report, index.document_name,
-         index.url, gzip.compress(content), digest, len(content)),
+         index.url, blob.content_gzip, blob.sha256, blob.size),
     )
-    return digest
+    return blob.sha256
 
 
 def insert_exhibit(conn: psycopg.Connection, accession_no: str, exhibit: Exhibit,
-                   content: bytes) -> None:
+                   content: bytes | Blob) -> None:
+    blob = content if isinstance(content, Blob) else Blob.of(content)
     conn.execute(
         """
         INSERT INTO bronze.filing_exhibits
@@ -53,8 +67,7 @@ def insert_exhibit(conn: psycopg.Connection, accession_no: str, exhibit: Exhibit
         ON CONFLICT (accession_no, exhibit_type) DO NOTHING
         """,
         (accession_no, exhibit.exhibit_type, exhibit.description, exhibit.document_name,
-         exhibit.url, gzip.compress(content), hashlib.sha256(content).hexdigest(),
-         len(content)),
+         exhibit.url, blob.content_gzip, blob.sha256, blob.size),
     )
 
 
