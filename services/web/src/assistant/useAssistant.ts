@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ApiError, ask } from "../api";
 import type { AssistantTurn } from "../components/AssistantMessage";
-import type { AgentEvent, HistoryTurn } from "../types";
+import type { AgentEvent, HistoryTurn, UiAction, UiContext } from "../types";
 
 export type Turn = { id: number; role: "user"; text: string } | AssistantTurn;
 
@@ -16,18 +16,28 @@ export interface Assistant {
   clear: () => void;
 }
 
+export interface Screen {
+  /** what the screen shows now, sent with each question */
+  context: () => UiContext;
+  /** applies an action event; returns what the message shows (with Undo) */
+  onAction: (a: UiAction) => { id: number; label: string };
+}
+
 const HISTORY_TURNS = 10;
 let nextId = 1;
 
 /**
  * One conversation with the agent (agent-api /v1/ask, streamed), shared by the drawer and the
- * Ask page. It starts over when the signed-in user changes.
+ * Ask page. It starts over when the signed-in user changes. Each question carries the screen's
+ * context; the agent's UI actions are applied as they arrive.
  */
-export function useAssistant(token: string | null, user: string | null): Assistant {
+export function useAssistant(token: string | null, user: string | null, screen?: Screen): Assistant {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const abort = useRef<AbortController | null>(null);
+  const screenRef = useRef(screen);
+  screenRef.current = screen;
 
   useEffect(() => {
     abort.current?.abort();
@@ -52,7 +62,7 @@ export function useAssistant(token: string | null, user: string | null): Assista
       setTurns((ts) => [
         ...ts,
         { id: nextId++, role: "user", text: question },
-        { id, role: "assistant", rounds: {}, tools: [] },
+        { id, role: "assistant", rounds: {}, tools: [], actions: [] },
       ]);
       setDraft("");
       setBusy(true);
@@ -69,6 +79,11 @@ export function useAssistant(token: string | null, user: string | null): Assista
           case "tool":
             update(id, (t) => ({ ...t, tools: [...t.tools, e] }));
             break;
+          case "action": {
+            const applied = screenRef.current?.onAction(e.action);
+            if (applied) update(id, (t) => ({ ...t, actions: [...t.actions, applied] }));
+            break;
+          }
           case "done":
             update(id, (t) => ({ ...t, answer: e.answer }));
             break;
@@ -78,7 +93,14 @@ export function useAssistant(token: string | null, user: string | null): Assista
       };
 
       try {
-        await ask(token, question, history.slice(-HISTORY_TURNS), onEvent, abort.current.signal);
+        await ask(
+          token,
+          question,
+          history.slice(-HISTORY_TURNS),
+          onEvent,
+          abort.current.signal,
+          screenRef.current?.context(),
+        );
       } catch (err) {
         if (!(err instanceof DOMException && err.name === "AbortError")) {
           const msg = err instanceof ApiError ? err.message : "The agent is unreachable.";

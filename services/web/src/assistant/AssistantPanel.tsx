@@ -6,6 +6,9 @@ import type { Assistant } from "./useAssistant";
 
 interface Props {
   assistant: Assistant;
+  /** undo for the assistant's UI actions, and which are undone */
+  onUndo?: (actionId: number) => void;
+  undone?: ReadonlySet<number>;
   context: PageContext;
   signedIn: boolean;
   /** drawer: the right-hand panel on every page; page: the Ask screen, full width */
@@ -14,7 +17,16 @@ interface Props {
   onClose?: () => void;
 }
 
-export function AssistantPanel({ assistant, context, signedIn, variant, inputRef, onClose }: Props) {
+export function AssistantPanel({
+  assistant,
+  onUndo,
+  undone,
+  context,
+  signedIn,
+  variant,
+  inputRef,
+  onClose,
+}: Props) {
   const { turns, draft, busy, setDraft, submit, stop, clear } = assistant;
   const bottom = useRef<HTMLDivElement>(null);
 
@@ -59,7 +71,7 @@ export function AssistantPanel({ assistant, context, signedIn, variant, inputRef
                 {t.text}
               </article>
             ) : (
-              <AssistantMessage key={t.id} turn={t} />
+              <AssistantMessage key={t.id} turn={t} undone={undone} onUndo={onUndo} />
             ),
           )
         )}

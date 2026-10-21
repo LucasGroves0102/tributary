@@ -3,7 +3,7 @@ import type { Route } from "../route";
 export interface PageContext {
   /** the chip in the assistant's header */
   label: string;
-  /** prompts for this page; each names its company, since the agent sees only the question */
+  /** prompts for this page (the agent also gets the screen as context) */
   suggestions: string[];
 }
 
@@ -20,7 +20,8 @@ const GENERAL = [
 ];
 
 /** What the assistant shows for the page the user is on. `name` resolves a company id to the
- * name the user knows it by (null if unknown). */
+ * name the user knows it by (null if unknown). The agent also gets the screen itself
+ * (actions.ts `uiContext`), so prompts on the chart and screener can say "it" or "this". */
 export function pageContext(route: Route, name: (companyId: string) => string | null): PageContext {
   switch (route.view) {
     case "home":
@@ -36,8 +37,9 @@ export function pageContext(route: Route, name: (companyId: string) => string | 
       return {
         label: "Companies",
         suggestions: [
+          "Only companies with operating margin above 25%",
+          "Semiconductor companies growing faster than 20%",
           "Which of my companies has the highest operating margin?",
-          "Which filings mention export controls?",
         ],
       };
     case "company": {
@@ -62,7 +64,14 @@ export function pageContext(route: Route, name: (companyId: string) => string | 
       };
     }
     case "chart":
-      return { label: "Chart builder", suggestions: GENERAL.slice(0, 2) };
+      return {
+        label: "Chart builder",
+        suggestions: [
+          "Chart Nvidia's revenue and operating margin",
+          "Show it as YoY growth over 5 years",
+          "Add Microsoft's revenue",
+        ],
+      };
     case "compare":
       return { label: "Compare", suggestions: [GENERAL[2]!] };
     case "ask":

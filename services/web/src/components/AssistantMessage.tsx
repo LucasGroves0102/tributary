@@ -4,11 +4,10 @@ import { renderAnswer } from "../markdown";
 import type { Answer, Citation, ToolCall, Verification } from "../types";
 
 /** A change the assistant made in the UI (chart, screen, watchlist), shown under its message
- * with Undo. Nothing produces these yet: the agent's UI actions come next. */
+ * with Undo (assistant/useUiActions). */
 export interface ActionRecord {
   id: number;
   label: string;
-  undone: boolean;
 }
 
 export interface AssistantTurn {
@@ -18,7 +17,7 @@ export interface AssistantTurn {
   tools: (ToolCall & { round: number })[];
   answer?: Answer;
   error?: string;
-  action?: ActionRecord;
+  actions: ActionRecord[];
 }
 
 const TOOL_LABEL: Record<string, string> = {
@@ -27,13 +26,18 @@ const TOOL_LABEL: Record<string, string> = {
   get_financials: "Read financials",
   list_filings: "Listed filings",
   get_section: "Read filing section",
+  get_section_changes: "Compared with the prior filing",
+  search_filings: "Searched filings",
+  propose_ui_action: "Changed the screen",
 };
 
 export function AssistantMessage({
   turn,
+  undone,
   onUndo,
 }: {
   turn: AssistantTurn;
+  undone?: ReadonlySet<number>;
   onUndo?: (actionId: number) => void;
 }) {
   const finalRound = turn.answer ? turn.answer.rounds - 1 : maxRound(turn);
@@ -61,20 +65,30 @@ export function AssistantMessage({
       ) : (
         <p className="muted thinking">Working…</p>
       )}
-      {turn.action && <Action action={turn.action} onUndo={onUndo} />}
+      {turn.actions.map((a) => (
+        <Action key={a.id} action={a} undone={undone?.has(a.id) ?? false} onUndo={onUndo} />
+      ))}
       {turn.answer && <Sources citations={usedCitations(turn.answer)} />}
       {turn.answer && <Meta answer={turn.answer} />}
     </article>
   );
 }
 
-function Action({ action, onUndo }: { action: ActionRecord; onUndo?: (id: number) => void }) {
+function Action({
+  action,
+  undone,
+  onUndo,
+}: {
+  action: ActionRecord;
+  undone: boolean;
+  onUndo?: (id: number) => void;
+}) {
   return (
-    <div className={action.undone ? "act undone" : "act"}>
+    <div className={undone ? "act undone" : "act"}>
       <span className="grow">
-        {action.undone ? "↺ Undone" : "✓ Applied"}: {action.label}
+        {undone ? "↺ Undone" : "✓ Applied"}: {action.label}
       </span>
-      {!action.undone && onUndo && (
+      {!undone && onUndo && (
         <button className="btn sm" onClick={() => onUndo(action.id)}>
           Undo
         </button>

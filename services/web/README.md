@@ -16,11 +16,19 @@ command palette, theme, demo user) and the assistant drawer on every page (Ctrl/
 tokens (colours for both themes, type scale, spacing) are in `src/tokens.css`.
 
 Views (hash routes): `#/` Home (status strip, watchlist table, new filings since the last
-visit, expected filings); `#/companies` company search and your companies;
+visit, expected filings); `#/companies?<filters>` the screener (`/v1/screener`: filters kept in
+the URL, sortable, ungranted companies as metadata only, CSV export through the API);
 `#/company/<company_id>` 12-quarter chart and table, every value linked to its filing;
-`#/filing/<company_id>/<accession>[/<section>]` parsed filing reader; `#/ask` the assistant full
-width, with streamed answers, tool trace and verified citation links; `#/chart` and `#/compare`
-describe what's coming. Sign-in is the demo user picker (`/v1/demo/users`, `/v1/demo/token`).
+`#/filing/<company_id>/<accession>[/<section>]` parsed filing reader; `#/chart` the chart
+builder (each layer a `/v1/formulas/evaluate` request; plain SVG; CSV, SVG and PNG export);
+`#/ask` the assistant full width, with streamed answers, tool trace and verified citation links;
+`#/compare` describes what's coming. Sign-in is the demo user picker (`/v1/demo/users`,
+`/v1/demo/token`).
+
+The assistant sends the screen as `context` with each question (`assistant/actions.ts`) and
+applies the agent's `action` events (chart layers and options, screener filters, watchlist) with
+an Undo per action (`assistant/useUiActions.ts`): undo restores the chart and page from before
+it, reverses watchlist calls, and also undoes every later action.
 
 ## Run
 

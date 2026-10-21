@@ -4,8 +4,10 @@ import { demoUsers, login, me as fetchMe, watchlistCsv } from "./api";
 import { AssistantPanel } from "./assistant/AssistantPanel";
 import { companyChart } from "./chart/model";
 import { useChart } from "./chart/useChart";
+import { uiContext } from "./assistant/actions";
 import { pageContext } from "./assistant/context";
 import { useAssistant } from "./assistant/useAssistant";
+import { useUiActions } from "./assistant/useUiActions";
 import { CompanyPage } from "./components/explore/CompanyPage";
 import { FilingReader } from "./components/explore/FilingReader";
 import { Palette, WATCH_PREFIX, type PaletteActions, type PaletteCompany } from "./components/Palette";
@@ -18,7 +20,7 @@ import { ChartBuilder } from "./pages/ChartBuilder";
 import { Companies } from "./pages/Companies";
 import { Home } from "./pages/Home";
 import { Placeholder } from "./pages/Placeholder";
-import { go, useRoute } from "./route";
+import { go, parse, useRoute } from "./route";
 import { useShortcuts } from "./shortcuts";
 import { load, save } from "./storage";
 import { useTheme } from "./theme";
@@ -42,9 +44,24 @@ export function App() {
   const input = useRef<HTMLTextAreaElement>(null);
   const route = useRoute();
   const [theme, toggleTheme] = useTheme(user);
-  const assistant = useAssistant(token, user);
   const workspace = useWorkspace(token, user);
   const [chart, setChart] = useChart(user);
+  // read when the assistant sends a question or applies an action, so always the latest
+  const chartRef = useRef(chart);
+  chartRef.current = chart;
+  const watchedRef = useRef<Set<string> | null>(null);
+  const nameRef = useRef<(id: string) => string | null>(() => null);
+  const uiActions = useUiActions(user, {
+    setChart,
+    isWatched: (id) => watchedRef.current?.has(id) ?? false,
+    watch: workspace.watch,
+    unwatch: workspace.unwatch,
+    onError: setError,
+  });
+  const assistant = useAssistant(token, user, {
+    context: () => uiContext(parse(window.location.hash), chartRef.current, nameRef.current),
+    onAction: uiActions.apply,
+  });
 
   useEffect(() => {
     demoUsers()
@@ -129,6 +146,8 @@ export function App() {
     [workspace.watchlist],
   );
   const companyName = useCallback((id: string) => names.get(id) ?? null, [names]);
+  watchedRef.current = watched;
+  nameRef.current = companyName;
   const context = useMemo(() => pageContext(route, companyName), [route, companyName]);
 
   const paletteCompanies = useMemo((): PaletteCompany[] => {
@@ -174,6 +193,8 @@ export function App() {
   const ingested = lastIngested(workspace.latest ?? []);
   const panelProps = {
     assistant,
+    onUndo: (id: number) => void uiActions.undo(id),
+    undone: uiActions.undone,
     context,
     signedIn: token !== null,
     inputRef: input,
