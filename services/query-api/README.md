@@ -21,7 +21,7 @@ request parameters. Dev tokens: `make token USER=alice`.
 | `POST /v1/demo/token` | `DEMO_USERS` set | an 8-hour token for a demo account (never a sandbox user) |
 | `GET /v1/demo/sandbox` | `DEMO_SANDBOX_ENABLED` | what "Try the demo" creates: lifetime, plan, tickers, assistant allowance ([Demo sandboxes](#demo-sandboxes)) |
 | `POST /v1/demo/sandbox` | `DEMO_SANDBOX_ENABLED` | 201: a new temporary user and its token (expires with the sandbox); 429 when the per-IP or live-sandbox cap is hit. Takes no input |
-| `POST /v1/demo/agent-quota` | token | agent-api only (nginx hides it): takes one assistant question from a sandbox's daily caps; 429 with the message to show; `{"demo": false}` for other users |
+| `POST /v1/demo/agent-quota` | token | agent-api only (nginx hides it): takes one assistant question (or `{"questions": n}`, 1-5, all or none: a report counts as 3) from a sandbox's daily caps; 429 with the message to show; `{"demo": false}` for other users |
 | `GET /v1/me` | token | companies the caller can read, with tiers; `sandbox` (expiry, plan, assistant allowance) for a demo sandbox user |
 | `GET /v1/companies/search?q=` | token | candidates (public identity) + caller's access |
 | `GET /v1/metrics` | | metric names served by `financials`: `silver.metrics` and `gold.derived_metrics`, read once |
@@ -203,6 +203,41 @@ first) and `PUT /v1/recent/filings` (the reader records what you open; the newes
   `workspaces` (+ a shares table) in Debezium's `table.include.list` with REPLICA IDENTITY FULL,
   the authz-sync mapping to tuples, the setup image redeploying the model, and these routes
   checking `viewer` through OpenFGA before reading (keeping the owner filter for writes).
+
+## Reports
+
+A report is a workspace item of kind `report` (app migration 005, `reports.py`): the research
+note agent-api writes from a workspace's charts, comps and screens (services/agent README,
+"Reports"). `GET /v1/workspaces/{id}` returns one workspace with its items' states (a report's
+only from `/v1/workspace-items/{id}`); `POST /v1/workspaces/{id}/reports` (`{name, state}`)
+and `PUT /v1/workspaces/{id}/reports/{item_id}` (`{state}`, regenerate) store one. Those two
+are for agent-api only: nginx 404s them on the public site, and the generic item routes refuse
+to create a report or write its state (renaming, duplicating, deleting and opening work like
+any item).
+
+- **Validated.** `ReportState` is strict: Markdown (at most 40,000 characters, no control
+  characters) whose `[[embed:item-N]]` lines name exactly the report's items; up to 8 item
+  snapshots (ref, item id, kind, name, state), each state validated against its kind like a
+  saved one; citations (accession, form, filed, company, `https://www.sec.gov/` URL, section
+  keys); the figure verification, whose `ok` is recomputed here; as-of, written-at, model,
+  questions (1-10), stop. At most 120,000 bytes (the table allows 128 KiB for reports, 16 KiB for
+  every other kind); report bodies may be 160,000 bytes, the other saved-work routes keep 32 KiB.
+- **Owner-only and grants nothing**, exactly like other items: the same filters, the same forced
+  row-level security, the same 404 for someone else's. The web app draws each embedded chart from
+  its snapshot, reading the data through the permission-checked routes as the viewer.
+
+## Customizable views
+
+Per-user preferences in the app database (migration 006, `views.py`): Home's card arrangement
+(`home`: cards `status`, `recent`, `watchlist`, `filings`, `expected`, `notes`, each shown or
+hidden, in order; a card left out shows after the listed ones) and the column sets of the
+screener (`screener`, 1-12) and the watchlist (`watchlist`, 1-8), each a list of screener column
+keys from `GET /v1/screener/columns`. `GET /v1/views` returns each view's saved state (null = the
+default), the defaults and the options; `PUT /v1/views/{view}` with `{"state": ...}` saves;
+`DELETE /v1/views/{view}` resets. Owner-only like workspaces (JWT `sub`, filtered statements,
+FORCEd row-level security; `test_views_db.py`), validated against fixed catalogs, not streamed,
+and grants nothing: the pages still read every value through the permission-checked routes, so a
+column added for an ungranted company stays masked.
 
 ## Run
 
