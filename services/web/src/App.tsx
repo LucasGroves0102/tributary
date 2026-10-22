@@ -44,7 +44,7 @@ export function App() {
   const input = useRef<HTMLTextAreaElement>(null);
   const route = useRoute();
   const [theme, toggleTheme] = useTheme(user);
-  const workspace = useWorkspace(token, user);
+  const workspace = useWorkspace(token, user, me?.companies.map((c) => c.company_id));
   const [chart, setChart] = useChart(user);
   // read when the assistant sends a question or applies an action, so always the latest
   const chartRef = useRef(chart);

@@ -36,6 +36,18 @@ const FILINGS = [
   { accession_no: K_ACC, form: "10-K", filed: "2026-02-26", period_of_report: "2026-01-25", document_url: null,
     sections: [{ section_key: "1", title: "Business", chars: 30000 }] },
 ];
+const indexRow = (accession_no: string, form: string, filed: string, sections: number | null, over = {}) => ({
+  accession_no, company_id: NVDA, name: "NVIDIA CORP", form, filed, accepted_at: null, period_of_report: null,
+  filing_url: `https://www.sec.gov/Archives/edgar/data/1045810/${accession_no.replace(/-/g, "")}/`,
+  document_url: null, sections, sections_available: !!sections, ...over,
+});
+const INDEX = [
+  indexRow(EIGHT_K, "8-K", "2026-08-26", 3, { period_of_report: "2026-08-26" }),
+  indexRow(ACC, "10-Q", "2026-08-26", 1, { period_of_report: "2026-07-26" }),
+  indexRow("0001045810-26-000070", "4", "2026-08-20", 0),
+  indexRow(K_ACC, "10-K", "2026-02-26", 1, { period_of_report: "2026-01-25" }),
+];
+let indexReadable = true;
 const CHANGES = {
   company_id: NVDA, accession_no: ACC, basis: "prior", as_of: "",
   sections: [{
@@ -68,6 +80,14 @@ function respond(url: string): Response {
   if (p.includes("/sections/1")) {
     return Response.json({ sections: [{ section_key: "1", title: "Business", text: "NVIDIA pioneered accelerated computing. We sell GPUs.", truncated: true,
       total_chars: 30000, citation: { accession_no: K_ACC, form: "10-K", filed: "2026-02-26", document_url: null } }] });
+  }
+  if (p.endsWith("/filing-index")) {
+    // public metadata: every user gets it; sections only where filings are readable
+    const forms = u.searchParams.getAll("form");
+    const offset = Number(u.searchParams.get("offset") ?? 0);
+    const rows = INDEX.filter((f) => !forms.length || forms.includes(f.form))
+      .map((f) => (indexReadable ? f : { ...f, sections: null, sections_available: false }));
+    return Response.json({ as_of: "", forms, from: null, to: null, limit: 25, offset, has_more: offset === 0 && !forms.length, filings: rows });
   }
   if (ungranted) return Response.json({ detail: "not permitted" }, { status: 403 });
   if (p.endsWith("/financials")) {
@@ -106,6 +126,7 @@ beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   vi.stubGlobal("fetch", vi.fn(async (url: string) => respond(url)));
   rowFor = () => nvdaRow({ access: ["filings", "financials"] });
+  indexReadable = true;
   [onWatch, onChart, onChartMany, onAsk].forEach((f) => f.mockClear());
 });
 
@@ -213,11 +234,20 @@ it("ratios read TTM values; segments say honestly when none are loaded", async (
 it("filings: form filters, 8-K items, the reader, and what changed", async () => {
   await render("filings");
   const rows = () => [...container.querySelectorAll(".grid2 tbody tr")];
-  expect(rows()).toHaveLength(3);
+  expect(rows()).toHaveLength(4);
   expect(rows()[0]!.textContent).toContain("2.02 Results of operations");
   expect(rows()[0]!.textContent).not.toContain("9.01");
   expect(rows()[0]!.querySelector("a")?.getAttribute("href")).toBe(`#/filing/${NVDA}/${EIGHT_K}`);
+  // a Form 4 Tributary hasn't parsed links to EDGAR instead
+  expect(rows()[2]!.textContent).toContain("not parsed");
+  expect(rows()[2]!.querySelector("a")?.getAttribute("href")).toMatch(/^https:\/\/www\.sec\.gov\//);
+  // the form filter and paging run on the server
+  await click(button("Older"));
+  expect(paths().filter((u) => u.pathname.endsWith("/filing-index")).at(-1)!.searchParams.get("offset")).toBe("25");
   await click(button("10-K"));
+  const last = paths().filter((u) => u.pathname.endsWith("/filing-index")).at(-1)!;
+  expect(last.searchParams.getAll("form")).toEqual(["10-K", "10-K/A", "10-KT"]);
+  expect(last.searchParams.get("offset")).toBeNull();
   expect(rows()).toHaveLength(1);
   await click(button("All"));
   await click(rows()[1]!.querySelector("button"));
@@ -230,6 +260,22 @@ it("filings: form filters, 8-K items, the reader, and what changed", async () =>
   expect(diff.querySelector("p.new")?.textContent).toContain("Export controls");
   expect(diff.querySelector("p.rewritten ins")?.textContent).toBe("could ");
   expect(diff.querySelector("p.rewritten del")?.textContent).toBe("may ");
+});
+
+it("filings: a free plan sees the whole index with EDGAR links, no reader", async () => {
+  rowFor = () => nvdaRow({ access: ["financials"] });
+  indexReadable = false;
+  await render("filings");
+  const rows = [...container.querySelectorAll(".grid2 tbody tr")];
+  expect(rows).toHaveLength(4);
+  expect(rows.map((r) => r.querySelector(".tag")?.textContent)).toEqual(["8-K", "10-Q", "4", "10-K"]);
+  expect(container.querySelector('a[href^="#/filing/"]')).toBeNull();
+  expect(rows[1]!.querySelector("a")?.textContent).toBe("EDGAR ↗");
+  expect(rows[1]!.textContent).not.toContain("What changed");
+  expect(rows[0]!.textContent).toContain("index only");
+  expect(container.textContent).toContain("Reading parsed text needs filings access");
+  // no parsed-filings request without filings access
+  expect(paths().some((u) => u.pathname === `/api/query/v1/companies/${NVDA}/filings`)).toBe(false);
 });
 
 it("peers: suggested by SIC and size, into Compare and the chart builder", async () => {

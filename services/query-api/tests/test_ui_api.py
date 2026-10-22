@@ -55,6 +55,19 @@ class UIStore(ScreenStore, FakeStore):
         return {c: {"accession_no": "x", "form": "10-Q", "filing_date": date(2026, 8, 26),
                     "period_end": date(2026, 7, 26)} for c in company_ids}
 
+    def filing_index(self, user_id, company_ids, forms, start, end, limit, offset,
+                     sections_for):
+        """Returns every company's filings with a section count, as if RLS let them all
+        through: the route must still blank the counts of companies it didn't check."""
+        self.calls.append(("filing_index", user_id, tuple(company_ids), tuple(forms), start,
+                           end, limit, offset, tuple(sections_for)))
+        return [{"accession_no": f"{c[-4:]}000000-26-00000{i}", "company_id": c,
+                 "name": "Co", "cik": c, "form": "8-K", "filed": date(2026, 8, 20 - i),
+                 "accepted_at": None, "period_of_report": None,
+                 "primary_document": "doc 1.htm",
+                 "sections": 3 if c in sections_for else None}
+                for c in company_ids for i in range(min(limit, 3))]
+
     def expected_filings(self, user_id, company_ids, as_of, periods):
         self.calls.append(("expected_filings", user_id, tuple(company_ids), as_of, periods))
         return [{**EXPECTED, "company_id": c} for c in company_ids]
@@ -341,3 +354,70 @@ def test_csv_neutralizes_formulas():
     assert cell("=HYPERLINK(1)") == "'=HYPERLINK(1)"
     assert cell(Decimal("-5")) == "-5" and cell(None) == "" and cell(["NYSE", "Nasdaq"]) == \
         "NYSE Nasdaq"
+
+
+def test_filing_index_is_public_metadata_with_sections_only_when_readable(client, token):
+    """alice (free) can't read NVDA's filings: she gets the index, no section counts; the
+    count is only asked for companies layer 1 allowed."""
+    r = client.get(f"/v1/companies/{NVDA}/filing-index?form=8-K&form=10-K&limit=2"
+                   "&from=2026-01-01", headers=token("alice"))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["has_more"] is True and len(body["filings"]) == 2
+    f = body["filings"][0]
+    assert f["sections"] is None and f["sections_available"] is False
+    assert f["filing_url"] == "https://www.sec.gov/Archives/edgar/data/1045810/" \
+                              "581000000026000000/"
+    assert f["document_url"].endswith("/doc%201.htm")
+    assert client.store.calls[-1] == ("filing_index", "alice", (NVDA,), ("10-K", "8-K"),
+                                      date(2026, 1, 1), None, 3, 0, ())
+
+
+def test_filing_index_marks_parsed_filings_for_filings_readers(token):
+    store = UIStore()
+    c = TestClient(create_app(FakeAuthorizer({"bob": {NVDA: {"financials", "filings"}}}), store,
+                              SECRET, today=lambda: TODAY))
+    f = c.get(f"/v1/companies/{NVDA}/filing-index", headers=token("bob")).json()["filings"][0]
+    assert f["sections"] == 3 and f["sections_available"] is True
+    assert store.calls[-1][-1] == (NVDA,)
+
+
+def test_filing_index_across_companies(client, token):
+    r = client.get(f"/v1/filing-index?company_id={TSLA}&company_id={NVDA}&limit=10",
+                   headers=token("alice"))
+    assert r.status_code == 200
+    assert {f["company_id"] for f in r.json()["filings"]} == {TSLA, NVDA}
+    assert client.store.calls[-1][2] == (NVDA, TSLA) and client.store.calls[-1][-1] == ()
+    # default: the caller's readable companies
+    client.get("/v1/filing-index", headers=token("alice"))
+    assert client.store.calls[-1][2] == (NVDA,)
+
+
+def test_filing_index_without_companies_skips_the_database(client, token):
+    r = client.get("/v1/filing-index", headers=token("carol"))
+    assert r.json()["filings"] == [] and r.json()["has_more"] is False
+    assert client.store.calls == []
+
+
+@pytest.mark.parametrize("query", ["form=10-K%3BDROP", "form=" + "X" * 21,
+                                   "&".join(f"form=F{i}" for i in range(21)),
+                                   "limit=101", "offset=-1"])
+def test_filing_index_rejects_bad_filters(client, token, query):
+    r = client.get(f"/v1/companies/{NVDA}/filing-index?{query}", headers=token("alice"))
+    assert r.status_code == 422
+
+
+def test_filing_index_rejects_too_many_companies(client, token):
+    ids = "&".join(f"company_id={i:010d}" for i in range(51))
+    assert client.get(f"/v1/filing-index?{ids}", headers=token("alice")).status_code == 422
+    assert client.get("/v1/filing-index?company_id=123", headers=token("alice")).status_code \
+        == 422
+
+
+def test_filing_index_needs_a_token_and_fails_closed(token):
+    store = UIStore()
+    c = TestClient(create_app(FakeAuthorizer({}, down=True), store, SECRET))
+    assert c.get(f"/v1/companies/{NVDA}/filing-index").status_code == 401
+    assert c.get(f"/v1/companies/{NVDA}/filing-index", headers=token("bob")).status_code == 503
+    assert c.get("/v1/filing-index", headers=token("bob")).status_code == 503
+    assert store.calls == []

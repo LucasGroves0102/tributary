@@ -3,14 +3,16 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ApiError,
   expectedFilings,
+  filingIndexOf,
   financials,
   latestFilings,
   unwatch as apiUnwatch,
   watch as apiWatch,
   watchlist as fetchWatchlist,
 } from "../api";
-import type { CalendarEntry, FinancialRow, LatestFiling, Watchlist } from "../types";
+import type { CalendarEntry, FinancialRow, IndexedFiling, LatestFiling, Watchlist } from "../types";
 import {
+  addDays,
   expectedItems,
   recentFilings,
   watchRows,
@@ -24,6 +26,11 @@ export const EXPECTED_DAYS = 45;
 export const RECENT_DAYS = 90;
 const SPARK_QUARTERS = 12;
 const FEED_LIMIT = 50;
+/** Forms the Home feed follows from the public index (insider and other forms stay on each
+ * company's Filings tab). */
+export const FEED_FORMS = ["10-K", "10-K/A", "10-KT", "10-Q", "10-Q/A", "10-QT", "8-K", "8-K/A"];
+/** The filing index route takes at most this many companies. */
+const INDEX_COMPANIES = 50;
 
 /** unavailable: the Query API has no app database for watchlists (503). */
 export type WatchlistState =
@@ -46,10 +53,12 @@ export interface Workspace {
 const today = () => new Date().toISOString().slice(0, 10);
 
 /** The signed-in user's watchlist, recent filings and expected filings: Home and the sidebar
- * share it, so the watchlist is fetched once. */
-export function useWorkspace(token: string | null, user: string | null): Workspace {
+ * share it, so the watchlist is fetched once. companyIds: the companies the user can read
+ * (/v1/me); Home follows their filing index along with the watchlist's. */
+export function useWorkspace(token: string | null, user: string | null, companyIds: string[] = []): Workspace {
   const [list, setList] = useState<WatchlistState>({ state: "loading" });
   const [latest, setLatest] = useState<LatestFiling[] | null>(null);
+  const [index, setIndex] = useState<IndexedFiling[] | null>(null);
   const [calendars, setCalendars] = useState<{
     watched: CalendarEntry[];
     readable: CalendarEntry[];
@@ -61,6 +70,7 @@ export function useWorkspace(token: string | null, user: string | null): Workspa
   useEffect(() => {
     setList({ state: "loading" });
     setLatest(null);
+    setIndex(null);
     setCalendars(null);
     setRevenue({});
   }, [token]);
@@ -118,9 +128,36 @@ export function useWorkspace(token: string | null, user: string | null): Workspa
   const entries = useMemo(() => (list.state === "ok" ? list.data.companies : []), [list]);
   const since = visit?.since ?? new Date().toISOString();
 
+  // the public filing index of watched companies first, then readable ones (the route's cap)
+  const listLoaded = list.state !== "loading";
+  const indexKey = [...new Set([...entries.map((e) => e.company_id), ...companyIds])]
+    .slice(0, INDEX_COMPANIES)
+    .join(",");
+  useEffect(() => {
+    if (!token || !listLoaded) return;
+    if (!indexKey) {
+      setIndex([]);
+      return;
+    }
+    let live = true;
+    filingIndexOf(token, indexKey.split(","), {
+      forms: FEED_FORMS,
+      from: addDays(today(), -RECENT_DAYS),
+      limit: FEED_LIMIT,
+    })
+      .then((r) => live && setIndex(r.filings))
+      .catch(() => live && setIndex([]));
+    return () => {
+      live = false;
+    };
+  }, [token, indexKey, listLoaded, version]);
+
   const filings = useMemo(
-    () => (latest === null ? null : recentFilings(latest, entries, since, today(), RECENT_DAYS)),
-    [latest, entries, since],
+    () =>
+      latest === null || index === null
+        ? null
+        : recentFilings(latest, entries, since, today(), RECENT_DAYS, index),
+    [latest, index, entries, since],
   );
   const rows = useMemo(() => {
     const fresh = new Set((filings ?? []).filter((f) => f.isNew).map((f) => f.companyId));

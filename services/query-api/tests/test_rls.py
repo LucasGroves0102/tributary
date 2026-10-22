@@ -144,6 +144,34 @@ def test_filings_index_respects_rls(client, token):
     assert r.json()["filings"] == []
 
 
+def test_filing_index_is_public_but_section_counts_respect_rls(client, token):
+    """Layer 1 allows everything here: both companies' index rows are public metadata, but
+    the parsed-section count comes back only where RLS lets the caller read sections."""
+    conn = client.app_conn
+    for cid in (A, B):
+        conn.execute("INSERT INTO bronze.submission_filings (accession_no, cik, form,"
+                     " filing_date, report_date, primary_document) VALUES"
+                     " (%s, %s, '10-K', '2026-02-01', '2025-12-31', 'd.htm'),"
+                     " (%s, %s, '8-K', '2026-03-01', NULL, 'e.htm')",
+                     (f"{cid}-26-000002", cid, f"{cid}-26-000009", cid))
+
+    def index(user, company, query=""):
+        r = client.get(f"/v1/companies/{company}/filing-index?{query}", headers=token(user))
+        assert r.status_code == 200, r.text
+        return [(f["accession_no"], f["form"], f["sections"]) for f in r.json()["filings"]]
+
+    assert index("t-pro", A) == [(f"{A}-26-000009", "8-K", 0), (f"{A}-26-000002", "10-K", 1)]
+    assert index("t-pro", B) == [(f"{B}-26-000009", "8-K", 0), (f"{B}-26-000002", "10-K", 0)]
+    assert index("t-free", A) == [(f"{A}-26-000009", "8-K", 0), (f"{A}-26-000002", "10-K", 0)]
+    assert index("t-pro", A, "form=10-K") == [(f"{A}-26-000002", "10-K", 1)]
+    assert index("t-pro", A, "to=2026-02-15") == [(f"{A}-26-000002", "10-K", 1)]
+    assert index("t-pro", A, "limit=1&offset=1") == [(f"{A}-26-000002", "10-K", 1)]
+    r = client.get(f"/v1/filing-index?company_id={A}&company_id={B}", headers=token("t-pro"))
+    rows = r.json()["filings"]
+    assert {f["company_id"] for f in rows} == {A, B}
+    assert rows[-1]["period_of_report"] == "2025-12-31" and rows[0]["name"].startswith("Test")
+
+
 def test_latest_filings_respect_rls(client, token):
     r = client.get("/v1/filings/latest", headers=token("t-pro"))
     assert [f["company_id"] for f in r.json()["filings"]] == [A]

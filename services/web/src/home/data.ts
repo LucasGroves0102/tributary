@@ -6,6 +6,7 @@ import type {
   CalendarEntry,
   ExpectedFiling,
   FinancialRow,
+  IndexedFiling,
   LatestFiling,
   Num,
   ValueSource,
@@ -156,9 +157,10 @@ export function addDays(isoDate: string, days: number): string {
 }
 
 /**
- * Filings for the caller's companies in the last `days` days, newest first: parsed filings
- * from the feed (companies with filings access) plus each watched company's latest 10-K/10-Q
- * from the public index. `since` is the last visit; anything filed after it is new.
+ * Filings for the caller's companies in the last `days` days, newest first: the public SEC
+ * index of watched and readable companies (every form, so free plans see 8-Ks too; readable
+ * where the reader can open parsed sections), parsed filings from the feed, and each watched
+ * company's latest 10-K/10-Q. `since` is the last visit; anything filed after it is new.
  */
 export function recentFilings(
   latest: LatestFiling[],
@@ -166,10 +168,23 @@ export function recentFilings(
   since: string,
   today: string,
   days = 90,
+  index: IndexedFiling[] = [],
 ): FilingItem[] {
   const from = addDays(today, -days);
   const sinceDay = since.slice(0, 10);
   const out = new Map<string, FilingItem>();
+  for (const f of index) {
+    out.set(f.accession_no, {
+      companyId: f.company_id,
+      name: f.name ?? f.company_id,
+      accessionNo: f.accession_no,
+      form: f.form,
+      filed: f.filed,
+      periodEnd: f.period_of_report,
+      readable: f.sections_available,
+      isNew: f.filed > sinceDay,
+    });
+  }
   for (const f of latest) {
     out.set(f.accession_no, {
       companyId: f.company_id,

@@ -440,8 +440,27 @@ export function eightKItems(sectionKeys: string[]): string[] {
     .map((k) => `${k} ${EIGHT_K_ITEMS[k] ?? "Item"}`);
 }
 
-export type FormFilter = "all" | "10-K" | "10-Q" | "8-K";
+export type FormFilter = "all" | "10-K" | "10-Q" | "8-K" | "proxy" | "insider";
+
+/** The filing index's form chips: each is a list of exact SEC form types (sent to the API). */
+export const FORM_FILTERS: [FormFilter, string, string[]][] = [
+  ["all", "All", []],
+  ["10-K", "10-K", ["10-K", "10-K/A", "10-KT"]],
+  ["10-Q", "10-Q", ["10-Q", "10-Q/A", "10-QT"]],
+  ["8-K", "8-K", ["8-K", "8-K/A"]],
+  ["proxy", "Proxy", ["DEF 14A", "DEFA14A", "DEFM14A", "PRE 14A"]],
+  ["insider", "Insider", ["3", "4", "5", "3/A", "4/A", "5/A"]],
+];
+
+export function formsOf(f: FormFilter): string[] {
+  return FORM_FILTERS.find(([k]) => k === f)?.[2] ?? [];
+}
 
 export function formMatches(form: string, f: FormFilter): boolean {
-  return f === "all" || form === f || form === `${f}/A`;
+  return f === "all" || formsOf(f).includes(form);
+}
+
+/** The tag class a form gets in tables: k (annual), q (quarterly) or none. */
+export function formTag(form: string): string {
+  return form.startsWith("10-K") ? "k" : form.startsWith("10-Q") ? "q" : "";
 }

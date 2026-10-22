@@ -71,6 +71,23 @@ describe("recentFilings", () => {
       [false, false],
     ]);
   });
+
+  it("adds the public index, so a free plan sees 8-Ks it can't read", () => {
+    const index = [{
+      accession_no: "0001318605-26-000099", company_id: TSLA, name: "Tesla, Inc.", form: "8-K",
+      filed: "2026-10-20", accepted_at: null, period_of_report: null, filing_url: null,
+      document_url: null, sections: null, sections_available: false,
+    }, {
+      // a parsed filing the feed also has: the feed's entry wins (readable)
+      accession_no: ACC, company_id: NVDA, name: null, form: "10-Q", filed: "2026-08-26",
+      accepted_at: null, period_of_report: null, filing_url: null, document_url: null,
+      sections: null, sections_available: false,
+    }];
+    const merged = recentFilings(latest, [entry(), TESLA], "2026-10-01T09:00:00Z", "2026-10-21", 90, index);
+    expect(merged[0]).toMatchObject({ accessionNo: "0001318605-26-000099", form: "8-K", readable: false, isNew: true, name: "Tesla, Inc." });
+    expect(merged.find((f) => f.accessionNo === ACC)).toMatchObject({ readable: true, name: "NVIDIA CORP" });
+    expect(merged).toHaveLength(4);
+  });
 });
 
 it("merges calendars without duplicates and marks watched companies", () => {

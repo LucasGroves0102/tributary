@@ -3,6 +3,7 @@ import type {
   Calendar,
   ExpectedFilings,
   Filing,
+  FilingIndex,
   FinancialRow,
   FormulaProblem,
   FormulaSeries,
@@ -146,6 +147,39 @@ export const filings = (token: string, companyId: string) =>
   get<{ filings: Filing[] }>(token, `/v1/companies/${companyId}/filings`, { limit: 20 }).then(
     (r) => r.filings,
   );
+
+/** One parsed filing with its section outline (no text); null when the user can't open it. */
+export const parsedFiling = (token: string, companyId: string, accessionNo: string) =>
+  get<{ filings: Filing[] }>(token, `/v1/companies/${companyId}/filings`, { accession_no: accessionNo, limit: 1 }).then(
+    (r) => r.filings[0] ?? null,
+  );
+
+/** Filters of the public filing index: exact SEC form types, filing dates (YYYY-MM-DD). */
+export interface IndexQuery {
+  forms?: string[];
+  from?: string;
+  to?: string;
+  limit?: number;
+  offset?: number;
+}
+
+function indexParams(q: IndexQuery): Params {
+  const p: Params = {};
+  if (q.forms?.length) p.form = q.forms;
+  if (q.from) p.from = q.from;
+  if (q.to) p.to = q.to;
+  if (q.limit !== undefined) p.limit = q.limit;
+  if (q.offset) p.offset = q.offset;
+  return p;
+}
+
+/** A company's filings from the SEC index (public metadata), newest first. */
+export const filingIndex = (token: string, companyId: string, q: IndexQuery = {}) =>
+  get<FilingIndex>(token, `/v1/companies/${companyId}/filing-index`, indexParams(q));
+
+/** The SEC filing index across these companies (at most 50), newest first. */
+export const filingIndexOf = (token: string, companyIds: string[], q: IndexQuery = {}) =>
+  get<FilingIndex>(token, "/v1/filing-index", { ...indexParams(q), company_id: companyIds });
 
 export const section = (token: string, companyId: string, key: string, accessionNo: string) =>
   get<{ sections: Section[] }>(token, `/v1/companies/${companyId}/sections/${encodeURIComponent(key)}`, {

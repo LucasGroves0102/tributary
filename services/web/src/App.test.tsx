@@ -36,6 +36,11 @@ function respond(url: string, init?: RequestInit): Response {
   if (path.endsWith("/v1/filings/latest")) {
     return Response.json({ as_of: "", filings: [feedFiling({ ingested_at: new Date().toISOString() })] });
   }
+  if (path.endsWith("/v1/filing-index")) {
+    return Response.json({ as_of: "", forms: [], from: null, to: null, limit: 50, offset: 0, has_more: false, filings: [{
+      accession_no: "0001318605-26-000099", company_id: TSLA, name: "Tesla, Inc.", form: "8-K", filed: new Date().toISOString().slice(0, 10),
+      accepted_at: null, period_of_report: null, filing_url: null, document_url: null, sections: null, sections_available: false }] });
+  }
   if (path.endsWith("/v1/calendar/expected-filings")) {
     return Response.json({ filings: [{ ...entry().next_expected, company_id: NVDA, name: "NVIDIA CORP" }] });
   }
@@ -123,7 +128,15 @@ describe("Home", () => {
     expect(strip).toContain("+69.0%");
     expect(strip).toContain("Live");
     expect($(".feed")?.textContent).toContain("NVIDIA CORP");
-    expect($(".feed a")?.getAttribute("href")).toBe(`#/filing/${NVDA}/${ACC}`);
+    const feed = [...container.querySelectorAll(".feed li")];
+    // Tesla's 8-K from the public index: listed, opened on its Filings tab (no grant to read it)
+    expect(feed[0]!.textContent).toContain("Tesla, Inc.");
+    expect(feed[0]!.querySelector("a")?.getAttribute("href")).toBe(`#/company/${TSLA}/filings`);
+    expect(feed[1]!.querySelector("a")?.getAttribute("href")).toBe(`#/filing/${NVDA}/${ACC}`);
+    const index = vi.mocked(fetch).mock.calls.map(([u]) => new URL(String(u), "http://x"))
+      .find((u) => u.pathname === "/api/query/v1/filing-index")!;
+    expect(index.searchParams.getAll("company_id")).toEqual([NVDA, TSLA]);
+    expect(index.searchParams.getAll("form")).toContain("8-K");
     expect(container.textContent).toContain("Expected filings");
     const side = [...container.querySelectorAll(".side .wl a")];
     expect(side.map((a) => a.querySelector("b")?.textContent)).toEqual(["NVDA", "TSLA"]);

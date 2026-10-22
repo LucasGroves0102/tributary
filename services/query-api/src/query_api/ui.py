@@ -7,6 +7,7 @@ dates, period of report) and what is derived only from them (expected filing dat
 values need `financials` on that company, section text `filings`.
 """
 
+import re
 from collections.abc import Callable
 from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation, localcontext
@@ -31,7 +32,7 @@ from query_api.screener import (
     parse_filter,
     shape,
 )
-from query_api.shapes import filing_url, period
+from query_api.shapes import document_url, filing_url, period
 from query_api.store import Store
 from query_api.watchlist import MAX_ENTRIES, UnknownUser, Watchlists
 
@@ -58,6 +59,9 @@ DEFAULT_PEER_COLUMNS: tuple[str, ...] = ("revenue_ttm", "revenue_growth_ttm", "g
                         "debt_to_equity_q")
 WATCHLIST_COLUMNS: tuple[str, ...] = ("revenue_ttm", "revenue_growth_q", "operating_margin_ttm",
                      "free_cash_flow_ttm")
+FORM_TYPE = r"^[A-Z0-9][A-Z0-9 ./-]{0,19}$"  # SEC form types: 10-K, 8-K/A, SC 13G, DEF 14A
+MAX_FORMS = 20
+MAX_INDEX_COMPANIES = 50
 META_CSV = ["company_id", "name", "tickers", "exchanges", "sic", "industry", "fiscal_year_end",
             "filer_category", "state_of_incorporation"]
 
@@ -170,6 +174,63 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
         rows = store.expected_filings(user_id, [company_id], clock(), periods)
         return {"company_id": company_id, "as_of": clock(), "method": EXPECTED_METHOD,
                 "expected": [_expected(r) for r in rows]}
+
+    def filing_index(user_id: str, ids: list[str], sections_for: list[str],
+                     forms: list[str] | None, start: date | None, end: date | None,
+                     limit: int, offset: int) -> dict:
+        forms = sorted(set(forms or []))
+        if len(forms) > MAX_FORMS or any(not re.match(FORM_TYPE, f) for f in forms):
+            raise HTTPException(422, f"form: at most {MAX_FORMS} SEC form types such as 10-K")
+        rows = store.filing_index(user_id, ids, forms, start, end, limit + 1, offset,
+                                  sections_for) if ids else []
+        return {"as_of": _now(), "forms": forms, "from": start, "to": end, "limit": limit,
+                "offset": offset, "has_more": len(rows) > limit,
+                "filings": [_index_row(r) for r in rows[:limit]]}
+
+    @app.get("/v1/companies/{company_id}/filing-index", response_model=dict)
+    def company_filing_index(
+        user_id: Annotated[str, Depends(current_user)], company_id: CompanyId,
+        form: Annotated[list[str] | None, Query(
+            description="SEC form types, exact (10-K, 10-K/A, 8-K, DEF 14A, 4); default: all")]
+            = None,
+        start: Annotated[date | None, Query(alias="from", description="filed on or after")]
+            = None,
+        end: Annotated[date | None, Query(alias="to", description="filed on or before")] = None,
+        limit: Annotated[int, Query(ge=1, le=100)] = 25,
+        offset: Annotated[int, Query(ge=0, le=100_000)] = 0,
+    ) -> dict:
+        """Every filing of a company in the SEC filing index, newest first: public metadata
+        (form, dates, period, EDGAR links), so no tier is needed. `sections` (parsed sections
+        the reader can open) is filled only when the caller can read this company's filings
+        (OpenFGA check here, RLS again in the count); never any text."""
+        sections_for = [company_id] if allowed(user_id, "filings", company_id) else []
+        return {"company_id": company_id,
+                **filing_index(user_id, [company_id], sections_for, form, start, end, limit,
+                               offset)}
+
+    @app.get("/v1/filing-index", response_model=dict)
+    def filing_index_many(
+        user_id: Annotated[str, Depends(current_user)],
+        company_id: Annotated[list[str] | None, Query(
+            description=f"at most {MAX_INDEX_COMPANIES} company ids (e.g. your watchlist); "
+                        "default: the companies you can read")] = None,
+        form: Annotated[list[str] | None, Query(description="SEC form types, exact")] = None,
+        start: Annotated[date | None, Query(alias="from", description="filed on or after")]
+            = None,
+        end: Annotated[date | None, Query(alias="to", description="filed on or before")] = None,
+        limit: Annotated[int, Query(ge=1, le=100)] = 25,
+        offset: Annotated[int, Query(ge=0, le=100_000)] = 0,
+    ) -> dict:
+        """The SEC filing index across companies, newest first (public metadata). `sections`
+        only for companies whose filings the caller can read (OpenFGA list, then RLS)."""
+        if company_id is not None and (
+                len(company_id) > MAX_INDEX_COMPANIES
+                or any(len(c) != 10 or not c.isdigit() for c in company_id)):
+            raise HTTPException(422, f"company_id: at most {MAX_INDEX_COMPANIES} 10-digit ids")
+        access = readable(user_id)
+        ids = sorted(set(company_id) if company_id is not None else access)
+        sections_for = sorted(c for c in ids if "filings" in access.get(c, set()))
+        return filing_index(user_id, ids, sections_for, form, start, end, limit, offset)
 
     @app.get("/v1/watchlist", response_model=dict)
     def watchlist(
@@ -394,6 +455,16 @@ def _flag(f: dict, accession_no: str) -> dict:
             "citation": {"accession_no": accession_no, "form": f["form"], "filed": f["filed"],
                          "section_key": f["section_key"], "char_start": f["char_start"],
                          "document_url": f["document_url"]}}
+
+
+def _index_row(r: dict) -> dict:
+    sections = r["sections"]
+    return {"accession_no": r["accession_no"], "company_id": r["company_id"], "name": r["name"],
+            "form": r["form"], "filed": r["filed"], "accepted_at": r["accepted_at"],
+            "period_of_report": r["period_of_report"],
+            "filing_url": filing_url(r["cik"], r["accession_no"]),
+            "document_url": document_url(r["cik"], r["accession_no"], r["primary_document"]),
+            "sections": sections, "sections_available": bool(sections)}
 
 
 def _pick(d: dict | None, *keys: str) -> list:

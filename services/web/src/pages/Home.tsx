@@ -343,7 +343,7 @@ function FilingFeed({ filings }: { filings: FilingItem[] | null }) {
             ) : (
               <a
                 className="btn sm ghost"
-                href={href({ view: "company", companyId: f.companyId })}
+                href={href({ view: "company", companyId: f.companyId, tab: "filings" })}
                 title="Reading filing text needs the pro plan and a grant for this company"
               >
                 Open

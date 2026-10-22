@@ -198,6 +198,35 @@ export interface Filing {
   sections: { section_key: string; title: string | null; chars: number }[];
 }
 
+/** A row of the public SEC filing index (/v1/companies/{id}/filing-index, /v1/filing-index).
+ * `sections` (parsed sections the reader can open) is null unless the user can read this
+ * company's filings; there is never any text here. */
+export interface IndexedFiling {
+  accession_no: string;
+  company_id: string;
+  name: string | null;
+  form: string;
+  filed: string;
+  accepted_at: string | null;
+  period_of_report: string | null;
+  filing_url: string | null;
+  document_url: string | null;
+  sections: number | null;
+  sections_available: boolean;
+}
+
+export interface FilingIndex {
+  company_id?: string;
+  as_of: string;
+  forms: string[];
+  from: string | null;
+  to: string | null;
+  limit: number;
+  offset: number;
+  has_more: boolean;
+  filings: IndexedFiling[];
+}
+
 export interface LatestFiling {
   company_id: string;
   name: string;
