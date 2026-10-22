@@ -28,7 +28,7 @@ tributary_financials_quality:
         description: Data-quality check on gold financials (ops.check_financials)
     - severity:
         usage: LABEL
-        description: error or warning
+        description: error, warning or info (restatement)
     - findings:
         usage: GAUGE
         description: Findings of the check in each company's latest run

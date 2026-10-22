@@ -29,6 +29,7 @@ from query_api.formula import (
     suggest,
     to_dict,
 )
+from query_api.notes import add_notes_routes
 from query_api.research import add_research_routes
 from query_api.sandbox import SandboxConfig, Sandboxes, is_sandbox_user
 from query_api.shapes import filing_url
@@ -146,6 +147,8 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
                   allowed=allowed, readable=readable, today=today, watchlists=watchlists)
     add_research_routes(app, store=store, current_user=current_user, require=require,
                         readable=readable)
+    add_notes_routes(app, store=store, current_user=current_user, require=require,
+                     readable=readable)
 
     add_workspace_routes(app, store=store, workspaces=workspaces, current_user=current_user)
 

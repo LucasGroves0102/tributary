@@ -12,3 +12,6 @@ SEC filing index).
 
 `018_segments.sql` adds the `granted_financials` policy on `gold.segment_financials` (and
 grants the security_invoker view `gold.segments`).
+
+`023_data_notes.sql` grants `ops.quality_findings` and `ops.quality_companies` (data notes) under
+the same `granted_financials` policy; query_api gets USAGE on `ops` for them.
