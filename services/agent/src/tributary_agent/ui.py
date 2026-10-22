@@ -43,7 +43,7 @@ CompareColumn = Literal["revenue_ttm", "revenue_growth_ttm", "gross_margin_ttm",
 COMPARE_COLUMNS: tuple[str, ...] = CompareColumn.__args__
 MAX_PEERS = 20
 SUGGESTED_PEERS = 5
-CompanyTab = Literal["overview", "statements", "segments", "ratios", "filings", "peers"]
+CompanyTab = Literal["overview", "statements", "segments", "ratios", "filings", "notes", "peers"]
 SavedKind = Literal["chart", "comps", "screen"]
 # the Query API's saved-work limits (query_api/workspaces.py)
 WORKSPACE_NAME, ITEM_NAME = 100, 120

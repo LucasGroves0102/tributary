@@ -1,5 +1,6 @@
 import { expectedFilingsOf, screener } from "../api";
 import { header, HEADER_COLUMNS } from "../company/data";
+import { DataNotes } from "../company/DataNotes";
 import { Filings } from "../company/Filings";
 import { Overview } from "../company/Overview";
 import { Peers } from "../company/Peers";
@@ -120,6 +121,7 @@ export function Company({ token, companyId, tab, watched, onWatch, onChart, onCh
       {tab === "segments" && <Segments token={token} companyId={companyId} name={h.name} />}
       {tab === "ratios" && <Ratios token={token} companyId={companyId} name={h.name} ticker={ticker} industry={h.industry} />}
       {tab === "filings" && <Filings token={token} companyId={companyId} name={h.name} canRead={row.access.includes("filings")} />}
+      {tab === "notes" && <DataNotes token={token} companyId={companyId} name={h.name} canReadFilings={row.access.includes("filings")} />}
       {tab === "peers" && <Peers token={token} companyId={companyId} name={h.name} onChart={onChartMany} />}
     </div>
   );

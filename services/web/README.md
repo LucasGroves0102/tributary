@@ -62,6 +62,13 @@ reader. Filing markers put each company's 10-Ks and 10-Qs (public index) and 8-K
 2.02, from parsed filings) on the time axis. "View as table" shows the plotted values with their
 sources as a data table.
 
+Data notes (`src/company/notes.ts`, Query API `/v1/companies/{id}/data-notes`, `/v1/data-notes`):
+the tearsheet's Data notes tab groups what the automated checks found (freshness, restated
+figures, gaps and overlapping periods, values to double-check, derived quarters) in plain
+language, each with links to its filings (the reader for 10-K/10-Q text the user can read,
+else EDGAR); Home lists the newest notes across the user's companies. They need financials
+access, like the values they describe.
+
 States and accessibility: every data panel loads with a skeleton (`components/States.tsx`),
 errors offer a retry, empty states say what to do next. The screener, watchlist and comps rows
 are a roving tab stop (arrows, Page Up/Down, Home/End, Enter opens: `components/tableNav.ts`).

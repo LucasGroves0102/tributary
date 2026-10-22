@@ -41,6 +41,12 @@ function respond(url: string, init?: RequestInit): Response {
       accession_no: "0001318605-26-000099", company_id: TSLA, name: "Tesla", form: "8-K", filed: new Date().toISOString().slice(0, 10),
       accepted_at: null, period_of_report: null, filing_url: null, document_url: null, sections: null, sections_available: false }] });
   }
+  if (path.endsWith("/v1/data-notes")) {
+    return Response.json({ as_of: "", checked_at: null, companies: 1, notes: [{
+      company_id: NVDA, kind: "restatement", severity: "info", metric: "revenue", period_end: "2025-04-27", date: "2026-02-26",
+      detail: { original_filed: "2025-05-28", restated_filed: "2026-02-26", change: 0.0123 }, checked_at: null,
+      filings: [{ role: "restated", accession_no: ACC, form: "10-K", filed: "2026-02-26", filing_url: EDGAR }] }] });
+  }
   if (path.endsWith("/v1/calendar/expected-filings")) {
     return Response.json({ filings: [{ ...entry().next_expected, company_id: NVDA, name: "Nvidia" }] });
   }
@@ -146,6 +152,15 @@ describe("Home", () => {
     expect(side.map((a) => a.querySelector("b")?.textContent)).toEqual(["NVDA", "TSLA"]);
     expect(side[0]!.querySelector("svg.spark")).not.toBeNull();
     expect(side[1]!.querySelector("svg.spark")).toBeNull();
+  });
+
+  it("lists recent data notes for companies with financials, linked to their Data notes tab", async () => {
+    await render();
+    const card = [...container.querySelectorAll("section.card")].find((c) => c.querySelector("h2")?.textContent === "Recent data notes for your companies")!;
+    expect(card.querySelector(".note")?.textContent).toContain("Nvidia · Revenue restated · Feb 26, 2026");
+    expect(card.querySelector(".note a")?.getAttribute("href")).toBe(`#/company/${NVDA}/notes`);
+    // alice reads NVDA's financials, not its filings: the filing opens on EDGAR
+    expect(card.querySelector(".note-f a")?.getAttribute("href")).toBe(EDGAR);
   });
 
   it("removes a company from the watchlist through the Query API", async () => {

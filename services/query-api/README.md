@@ -34,6 +34,8 @@ request parameters. Dev tokens: `make token USER=alice`.
 | `GET /v1/companies/{id}/sections/{key}?form=&accession_no=&limit=&max_chars=` | filings | section text + citation |
 | `GET /v1/companies/{id}/filings/{accession}/changes?section=&basis=&kind=` | filings | new / removed / rewritten Risk Factors and MD&A paragraphs vs the comparable earlier filing, word diffs, citations in both filings ([What changed](#what-changed)) |
 | `GET /v1/search?q=&company=&form=&section=&from=&to=&limit=&offset=` | filings (every company searched) | best passage per section, ranked, with snippet and citation ([Search](#search)) |
+| `GET /v1/companies/{id}/data-notes` | financials | data-quality and freshness notes: gaps, overlapping quarters, restatements, derived quarters, filings companyfacts doesn't carry yet, each with its filings ([Data notes](#data-notes)) |
+| `GET /v1/data-notes?limit=` | financials (every company covered) | the newest notes across the caller's companies, without derived-quarters notes ([Data notes](#data-notes)) |
 | `POST /v1/formulas/validate` | token | AST, unit and inputs, or errors with positions |
 | `POST /v1/formulas/evaluate` | financials, every company in the formula | series; each point cites every input's filing |
 | `GET /v1/screener?columns=&where=&...&format=` | token | companies with financials: public metadata + latest values where permitted ([Screener](#screener)) |
@@ -276,6 +278,25 @@ per segment member, from `gold.segments` (migration 018; built by facts-fetcher'
   (`reported`, `derived` = Q4 from annual minus year-to-date, `ttm`), `citation` (accession,
   form, filed, `xbrl_tag`, `xbrl_axis`, `xbrl_member`, `source_accessions`, `filing_url`) and
   `freshness`. `format=csv`: one row per value with the same fields.
+
+## Data notes
+
+`query_api/notes.py` (migration 023). Findings are about values, so they are not public
+metadata: the company route calls `require(financials)`; `/v1/data-notes` takes the companies
+from `readable()` (financials) and passes them into the SQL; RLS (`granted_financials` on
+`ops.quality_findings`, `ops.quality_companies`, `gold.quarterly_financials`) filters again.
+
+- Findings from `ops.check_financials` / `ops.check_segments` (`kind` = check name: `series_gap`,
+  `overlapping_quarters`, `calendar_collision`, `annual_sum`, `impossible_value`, `sign_flip`,
+  `outlier`, `segment_sum_*`, `restatement`), with `severity` error / warning / info and
+  `detail` as the check wrote it (dates, filings, relative sizes; never values).
+- `derived_quarters` (company route only): per metric, how many quarters are derived from
+  year-to-date differences, the period range and the latest one's filing.
+- `companyfacts_behind`: 10-K/10-Q filings in the public index (`silver.filings`), filed on or
+  after the latest filing in the company's gold rows, that no XBRL fact cites yet.
+- Every note has `date` (restating or missing filing, else the period end; newest first) and
+  `filings` (`role`, accession, form, filed, EDGAR `filing_url` from the public index). The
+  plain-language wording is the web app's (`services/web/src/company/notes.ts`).
 
 ## What changed
 

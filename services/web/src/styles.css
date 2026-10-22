@@ -2493,3 +2493,77 @@ button.link.num {
     max-width: none;
   }
 }
+
+/* Data notes (tearsheet tab, Home) */
+
+.notes-group {
+  padding: var(--sp-5) var(--sp-6) var(--sp-4);
+  border-bottom: 1px solid var(--line);
+}
+
+.notes-group h3 {
+  margin: 0 0 var(--sp-3);
+  font-size: var(--fs-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-2);
+}
+
+.notes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.note {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: var(--sp-4);
+  padding: var(--sp-4) var(--sp-6);
+  border-bottom: 1px solid var(--line);
+}
+
+.notes-group .note {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.note:last-child {
+  border-bottom: 0;
+}
+
+.note > .tag {
+  justify-self: start;
+  align-self: start;
+}
+
+.note p {
+  margin: var(--sp-1) 0 var(--sp-3);
+  color: var(--text-2);
+  line-height: 1.5;
+}
+
+.note-f {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  align-items: center;
+}
+
+.tag.sev-error {
+  background: var(--neg-soft);
+  color: var(--neg);
+  border-color: transparent;
+}
+
+.tag.sev-warning {
+  background: var(--warn-soft);
+  color: var(--warn);
+  border-color: transparent;
+}
+
+.tag.sev-info {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: transparent;
+}

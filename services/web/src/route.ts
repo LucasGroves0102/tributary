@@ -11,6 +11,7 @@ export const COMPANY_TABS = [
   ["segments", "Segments"],
   ["ratios", "Ratios"],
   ["filings", "Filings"],
+  ["notes", "Data notes"],
   ["peers", "Peers"],
 ] as const;
 export type CompanyTab = (typeof COMPANY_TABS)[number][0];

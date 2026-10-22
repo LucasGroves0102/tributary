@@ -211,7 +211,7 @@ export interface UiContext {
   query?: string;
   company_id?: string;
   /** the company page's tab (absent on Overview) */
-  tab?: "overview" | "statements" | "segments" | "ratios" | "filings" | "peers";
+  tab?: "overview" | "statements" | "segments" | "ratios" | "filings" | "notes" | "peers";
   accession_no?: string;
   /** the filing reader's open section */
   section_key?: string;
@@ -695,4 +695,38 @@ export interface ExpectedFilings {
   as_of: string;
   method: string;
   expected: ExpectedFiling[];
+}
+
+/** A filing a data note names; role says how (restated, original, missing, source...). */
+export interface NoteFiling {
+  role: "source" | "annual" | "quarter" | "original" | "restated" | "missing" | "total";
+  accession_no: string;
+  form: string | null;
+  filed: string | null;
+  filing_url: string | null;
+}
+
+/** One data note (Query API query_api/notes.py): a quality finding from the ops checks, a
+ * metric's derived quarters, or 10-K/10-Q filings the SEC's XBRL API doesn't carry yet.
+ * detail holds dates, filings and relative sizes, never values. */
+export interface DataNote {
+  company_id: string;
+  kind: string;
+  severity: "error" | "warning" | "info";
+  metric: string | null;
+  period_end: string | null;
+  /** what the note is dated by (restating or missing filing, else the period end) */
+  date: string | null;
+  detail: Record<string, unknown>;
+  checked_at: string | null;
+  filings: NoteFiling[];
+}
+
+/** /v1/companies/{id}/data-notes and /v1/data-notes. */
+export interface DataNotes {
+  company_id?: string;
+  as_of: string;
+  checked_at: string | null;
+  companies?: number;
+  notes: DataNote[];
 }

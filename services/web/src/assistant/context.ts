@@ -25,6 +25,10 @@ const COMPANY_SUGGESTIONS: Record<CompanyTab, (n: string) => string[]> = {
     `What changed in ${n}'s latest 10-Q versus the one before?`,
     `Summarize ${n}'s most recent 8-K.`,
   ],
+  notes: (n) => [
+    `What is ${n}'s latest 10-Q or 10-K, and when was it filed?`,
+    `How is ${n}'s fiscal Q4 derived when the 10-K reports only the year?`,
+  ],
   peers: (n) => [
     `Compare ${n} with its peers`,
     `How does ${n}'s operating margin compare with its peers?`,

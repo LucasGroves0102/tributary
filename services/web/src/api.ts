@@ -2,6 +2,7 @@ import { displayNames } from "./format";
 import type {
   AgentEvent,
   Calendar,
+  DataNotes,
   ExpectedFilings,
   Filing,
   FilingIndex,
@@ -211,6 +212,13 @@ export const SCREENER_CSV_ROWS = 5000;
  * exact decimals and ungranted companies stay masked. */
 export const screenerCsv = (token: string, params: Params) =>
   csv(token, "/v1/screener", { ...params, limit: SCREENER_CSV_ROWS, offset: 0 });
+
+/** A company's data-quality and freshness notes (needs financials: they're about values). */
+export const dataNotes = (token: string, companyId: string) =>
+  get<DataNotes>(token, `/v1/companies/${companyId}/data-notes`);
+
+/** The newest notes across the companies whose financials the user can read. */
+export const recentDataNotes = (token: string, limit = 8) => get<DataNotes>(token, "/v1/data-notes", { limit });
 
 export const expectedFilings = (token: string, days: number, scope: "watchlist" | "readable") =>
   get<Calendar>(token, "/v1/calendar/expected-filings", { days, scope });

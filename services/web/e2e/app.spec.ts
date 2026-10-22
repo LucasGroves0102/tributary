@@ -153,3 +153,16 @@ test("narrow screens: the sidebar is a drawer behind Menu", async ({ page }) => 
   await expect(side).toBeHidden();
   await expect(page.locator("table.screen tbody tr")).toHaveCount(4);
 });
+
+test("data notes: recent ones on Home, the full list on the company's tab", async ({ page }) => {
+  await mockApi(page);
+  await startDemo(page);
+  const card = page.locator("section.card", { has: page.getByRole("heading", { name: "Recent data notes for your companies" }) });
+  await expect(card.locator(".note")).toContainText("Revenue restated");
+  await card.locator(".note-t a").first().click();
+  await expect(page).toHaveURL(new RegExp(`#/company/${PEP}/notes`));
+  await expect(page.locator('.tabs a[aria-current="page"]')).toHaveText("Data notes");
+  await expect(page.locator(".notes-group h3")).toHaveText(["Restated figures (1)"]);
+  await expect(page.locator(".note p")).toContainText("first reported in the 10-Q filed Jul 10, 2025 and changed by −1.2%");
+  await expect(page.locator(".note-f a").first()).toHaveAttribute("title", /10-Q 0000077476-25-000020/);
+});

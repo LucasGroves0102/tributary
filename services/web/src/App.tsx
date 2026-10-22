@@ -15,6 +15,7 @@ import { Sidebar } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
 import { download } from "./download";
 import { lastIngested } from "./home/data";
+import { RecentNotes } from "./home/RecentNotes";
 import { useWorkspace } from "./home/useWorkspace";
 import { ChartBuilder } from "./pages/ChartBuilder";
 import { Companies } from "./pages/Companies";
@@ -269,6 +270,10 @@ export function App(props: Props = {}) {
     [workspace.watchlist],
   );
   const companyName = useCallback((id: string) => names.get(id) ?? null, [names]);
+  const filingsFor = useMemo(
+    () => new Set((me?.companies ?? []).filter((c) => c.tiers.includes("filings")).map((c) => c.company_id)),
+    [me],
+  );
   watchedRef.current = watched;
   nameRef.current = companyName;
   const context = useMemo(() => pageContext(route, companyName), [route, companyName]);
@@ -415,6 +420,7 @@ export function App(props: Props = {}) {
                 onAdd={() => setPalette(WATCH_PREFIX)}
                 onExport={exportWatchlist}
                 recent={saved.list.state === "unavailable" ? null : <Recent recent={saved.recent} onOpen={openSaved} />}
+                notes={<RecentNotes token={token} name={companyName} filingsFor={filingsFor} />}
               />
             ) : route.view === "companies" ? (
               <Companies

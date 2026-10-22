@@ -160,6 +160,19 @@ export async function mockApi(page: Page): Promise<Fake> {
       return json({ as_of: "", forms: [], from: null, to: null, limit: 25, offset: 0, has_more: false, filings: [] });
     }
     if (/^\/v1\/companies\/\d{10}\/financials$/.test(path)) return json({ as_of: "", rows: [] });
+    m = path.match(/^\/v1\/companies\/(\d{10})\/data-notes$/);
+    if (m || path === "/v1/data-notes") {
+      const id = m?.[1] ?? PEP;
+      return json({ as_of: "", checked_at: "2026-10-21T06:00:00Z", companies: COMPANIES.length, notes: [{
+        company_id: id, kind: "restatement", severity: "info", metric: "revenue", period_end: "2025-06-14", date: "2026-02-03",
+        detail: { original_filed: "2025-07-10", restated_filed: "2026-02-03", change: -0.012 }, checked_at: "2026-10-21T06:00:00Z",
+        filings: [
+          { role: "original", accession_no: `${id}-25-000020`, form: "10-Q", filed: "2025-07-10", filing_url: null },
+          { role: "restated", accession_no: `${id}-26-000010`, form: "10-K", filed: "2026-02-03",
+            filing_url: `https://www.sec.gov/Archives/edgar/data/${Number(id)}/${id}26000010/` },
+        ],
+      }] });
+    }
     if (path === "/v1/companies/search") {
       const s = (q.get("q") ?? "").toUpperCase();
       return json({ results: COMPANIES.filter((c) => c.ticker.startsWith(s) || c.name.includes(s)).map((c) => ({

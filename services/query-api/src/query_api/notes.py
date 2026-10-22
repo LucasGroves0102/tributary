@@ -32,7 +32,8 @@ DERIVED, BEHIND = "derived_quarters", "companyfacts_behind"
 
 # detail keys that name a filing, and the role the UI shows for each
 FILING_KEYS = {"accession_no": "source", "annual_accession": "annual",
-               "original_accession": "original", "restated_accession": "restated"}
+               "original_accession": "original", "restated_accession": "restated",
+               "total_accession": "total"}
 FILING_LIST_KEYS = {"quarter_accessions": "quarter"}
 
 
