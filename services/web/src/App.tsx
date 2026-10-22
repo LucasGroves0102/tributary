@@ -21,6 +21,7 @@ import { ChartBuilder } from "./pages/ChartBuilder";
 import { Companies } from "./pages/Companies";
 import { Home } from "./pages/Home";
 import { Company } from "./pages/Company";
+import { About } from "./pages/About";
 import { Compare } from "./pages/Compare";
 import { Search } from "./pages/Search";
 import { readableCount, Welcome } from "./pages/Welcome";
@@ -497,6 +498,8 @@ export function App(props: Props = {}) {
                   number.
                 </p>
               </div>
+            ) : route.view === "about" ? (
+              <About />
             ) : (
               <Compare
                 key={user}

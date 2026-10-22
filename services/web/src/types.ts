@@ -206,7 +206,7 @@ export interface UiCompany {
 /** What the screen shows, sent with each question (agent-api ui.UiContext). Untrusted there:
  * it describes the screen and never identifies the user. */
 export interface UiContext {
-  page: "home" | "companies" | "company" | "filing" | "chart" | "compare" | "search" | "ask";
+  page: "home" | "companies" | "company" | "filing" | "chart" | "compare" | "search" | "ask" | "about";
   /** the full-text search page's words */
   query?: string;
   company_id?: string;

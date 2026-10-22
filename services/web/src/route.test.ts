@@ -14,6 +14,8 @@ it("round-trips every route", () => {
     { view: "company", companyId: "0001045810" },
     { view: "company", companyId: "0001045810", tab: "statements" },
     { view: "company", companyId: "0001045810", tab: "peers" },
+    { view: "company", companyId: "0001045810", tab: "notes" },
+    { view: "about" },
     { view: "compare", compare: { target: "0001045810", peers: ["0000320193"] } },
     { view: "compare", compare: { peers: ["0000320193"], cols: ["roe_ttm"] } },
     { view: "search" },

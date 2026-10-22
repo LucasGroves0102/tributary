@@ -150,6 +150,9 @@ export function Sidebar({ route, me, workspace, lastIngested, onAdd, onExport, w
           </>
         )}
       </div>
+      <a className="cover-link" href={href({ view: "about" })} aria-current={route.view === "about" ? "page" : undefined}>
+        What Tributary covers <span className="faint">· no prices, consensus or transcripts</span>
+      </a>
           <div className="credit">
         Built by{" "}
         <a href="https://github.com/LucasGroves0102" target="_blank" rel="noreferrer">Lucas Groves</a>

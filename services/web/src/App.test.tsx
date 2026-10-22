@@ -331,6 +331,21 @@ describe("assistant drawer", () => {
   });
 });
 
+it("says what Tributary covers, from the sidebar footer and the assistant's empty state", async () => {
+  await render();
+  expect($(".side .cover-link")?.getAttribute("href")).toBe("#/about");
+  expect([...container.querySelectorAll(".ai-m .empty a")].map((a) => a.getAttribute("href"))).toContain("#/about");
+  expect($(".ai-m .empty")?.textContent).toContain("consensus estimates");
+  window.location.hash = "#/about";
+  await settle();
+  expect($("h1")?.textContent).toBe("What Tributary covers");
+  expect($(".crumb")?.textContent).toBe("What Tributary covers");
+  const text = $(".about")!.textContent!;
+  for (const limit of ["No stock prices or market data", "No consensus estimates", "No earnings-call transcripts",
+    "Expected filing dates are estimates", "n/a (bank)", "5:30 pm ET"]) expect(text).toContain(limit);
+  expect($(".side .cover-link")?.getAttribute("aria-current")).toBe("page");
+});
+
 it("switches theme and remembers it per user", async () => {
   await render();
   expect(document.documentElement.dataset.theme).toBe("dark");

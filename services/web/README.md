@@ -22,7 +22,9 @@ the URL, sortable, ungranted companies as metadata only, CSV export through the 
 `#/filing/<company_id>/<accession>[/<section>]` parsed filing reader; `#/chart` the chart
 builder (each layer a `/v1/formulas/evaluate` request; plain SVG; CSV, SVG and PNG export);
 `#/ask` the assistant full width, with streamed answers, tool trace and verified citation links;
-`#/compare` describes what's coming.
+`#/compare` the comps table; `#/about` says what Tributary covers and doesn't (no prices, consensus or
+transcripts; estimated dates; banks; EDGAR timing), linked from the sidebar footer and the
+assistant's empty state.
 
 Sign-in (`src/session.ts`): the front door is "Try the demo" (`pages/Welcome.tsx`). It calls
 `POST /v1/demo/sandbox`, which creates a temporary real user (plan pro, 20 companies, a seeded
