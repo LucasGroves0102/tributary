@@ -18,8 +18,11 @@ request parameters. Dev tokens: `make token USER=alice`.
 |---|---|---|
 | `GET /health` | | `{"status": "ok"}` |
 | `GET /v1/demo/users` | `DEMO_USERS` set | demo accounts (404 when disabled) |
-| `POST /v1/demo/token` | `DEMO_USERS` set | an 8-hour token for a demo account |
-| `GET /v1/me` | token | companies the caller can read, with tiers |
+| `POST /v1/demo/token` | `DEMO_USERS` set | an 8-hour token for a demo account (never a sandbox user) |
+| `GET /v1/demo/sandbox` | `DEMO_SANDBOX_ENABLED` | what "Try the demo" creates: lifetime, plan, tickers, assistant allowance ([Demo sandboxes](#demo-sandboxes)) |
+| `POST /v1/demo/sandbox` | `DEMO_SANDBOX_ENABLED` | 201: a new temporary user and its token (expires with the sandbox); 429 when the per-IP or live-sandbox cap is hit. Takes no input |
+| `POST /v1/demo/agent-quota` | token | agent-api only (nginx hides it): takes one assistant question from a sandbox's daily caps; 429 with the message to show; `{"demo": false}` for other users |
+| `GET /v1/me` | token | companies the caller can read, with tiers; `sandbox` (expiry, plan, assistant allowance) for a demo sandbox user |
 | `GET /v1/companies/search?q=` | token | candidates (public identity) + caller's access |
 | `GET /v1/metrics` | | metric names served by `financials`: `silver.metrics` and `gold.derived_metrics`, read once |
 | `GET /v1/companies/{id}/financials?metrics=&quarters=&view=&basis=&format=` | financials | values + citation + freshness; `format=csv`: one row per value with its source filing |
@@ -177,7 +180,36 @@ Config (env): `DATABASE_URL`, `FGA_API_URL`, `QUERY_API_JWT_SECRET` (all require
 must be at least 32 bytes), `APP_DATABASE_URL` (the app database, for watchlists; unset makes
 the watchlist routes answer 503), `FGA_API_TOKEN` (OpenFGA preshared key, when enabled),
 `DEMO_USERS` (comma-separated accounts allowed to sign in without a password; unset disables
-the demo routes), `PORT` (default 8000), `LOG_LEVEL`.
+the demo routes), the demo sandbox settings below, `PORT` (default 8000), `LOG_LEVEL`.
+
+## Demo sandboxes
+
+"Try the demo" (`sandbox.py`, `demo.py`, app migration 003) creates a temporary REAL user so a
+visitor exercises the whole access path instead of sharing an account: one app-DB transaction
+writes `users`, `subscriptions` (plan pro), `company_grants` for the 20 companies in
+`sandbox.py` `DEMO_TICKERS` (the only list; resolved through `silver.resolve_company`, never
+CIK = company), a watchlist (`DEMO_WATCHLIST`: PEP, KO, MSFT, NVDA, COST, JPM) and
+`demo_sandboxes` (expiry). The Query API writes no tuples: Debezium → Kafka → authz-sync turns
+those rows into OpenFGA tuples and `authz.user_access` like any user's, so the web app polls
+`/v1/me` until all 20 companies are readable. The response's token is an ordinary JWT, `sub` =
+the new user (`demo-` + 16 hex), `exp` = the sandbox's expiry; nothing can extend it, and the
+creation route takes no input, so it can't pick a plan, companies or lifetime.
+`query-api-demo-cleanup` (Helm CronJob `demo-cleanup`, hourly) deletes expired sandbox users
+(only users with a `demo_sandboxes` row); revocation then travels through CDC like any user
+deletion, and their watchlist and usage rows cascade.
+
+| Env | Default | |
+|---|---|---|
+| `DEMO_SANDBOX_ENABLED` | false | needs `APP_DATABASE_URL` |
+| `DEMO_SANDBOX_TTL_HOURS` | 24 | 1-168 |
+| `DEMO_SANDBOX_PER_IP_PER_HOUR` | 3 | creations per client address (`X-Client-IP` from nginx, stored as an HMAC keyed by the JWT secret) |
+| `DEMO_SANDBOX_MAX_LIVE` | 200 | unexpired sandboxes at once; then "The demo is full right now" |
+| `DEMO_AGENT_ENABLED` | true | false: the assistant refuses sandbox users (429 with a clear message) |
+| `DEMO_AGENT_QUESTIONS_PER_USER_PER_DAY` | 10 | per sandbox per UTC day |
+| `DEMO_AGENT_QUESTIONS_PER_DAY` | 200 | across all sandboxes per UTC day |
+
+Creation runs under a transaction-level advisory lock so the caps can't be raced. In the Helm
+chart these come from `demo.sandbox` in values.yaml (chart README, "Demo sandboxes").
 
 ## Tests
 

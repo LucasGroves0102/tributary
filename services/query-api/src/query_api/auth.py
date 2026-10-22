@@ -31,8 +31,9 @@ def verify(token: str, secret: str) -> str:
     return claims["sub"]
 
 
-def mint(user_id: str, secret: str, ttl_seconds: int = 3600) -> str:
-    now = int(time.time())
+def mint(user_id: str, secret: str, ttl_seconds: int = 3600, now: int | None = None) -> str:
+    """A token for user_id, valid ttl_seconds from `now` (default: the current time)."""
+    now = int(time.time()) if now is None else now
     return jwt.encode({"sub": user_id, "iat": now, "exp": now + ttl_seconds}, secret,
                       algorithm=ALGORITHM)
 

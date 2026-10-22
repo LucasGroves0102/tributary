@@ -8,6 +8,8 @@ gone from OpenFGA **and** `authz.user_access` in under 30 seconds. Cases: a revo
 (alice), a Pro → Free downgrade (bob: filings only), and a deleted user (a throwaway user in
 acme with a direct grant; the delete cascades to their subscription and grants, and every tuple
 naming them and every `user_access` row must go). It restores what it changes.
+`test_sandbox.py` does the same for a demo sandbox: `AppSandboxes.create` (Query API) must be
+granted everywhere, and the cleanup job's `delete_expired` must revoke it, each under 30 s.
 
 CI runs them on every push (`.github/workflows/ci.yml`, job `propagation`) against
 `compose.ci.yml`: the same Kafka (KRaft), Kafka Connect + Debezium and OpenFGA images as hermes,
