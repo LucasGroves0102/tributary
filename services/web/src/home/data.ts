@@ -2,8 +2,10 @@
  * periods, sources, what counts as new) is tested without rendering. */
 
 import { BANK_NA, bankTitle, change, day, money, pct, notForBanks } from "../format";
+import { columnSpec, formatColumn } from "../views/model";
 import type {
   CalendarEntry,
+  ColumnInfo,
   ExpectedFiling,
   FinancialRow,
   IndexedFiling,
@@ -26,11 +28,15 @@ export interface WatchColumn {
   /** shown in the header: the period every value in the column covers */
   period: string;
   format: (v: number) => string;
+  /** for hover titles (default: LONG_LABEL) */
+  long?: string;
+  /** colours the value by its sign */
+  signed?: boolean;
 }
 
 export const WATCH_COLUMNS: WatchColumn[] = [
   { key: "revenue_ttm", label: "Revenue", period: "TTM", format: (v) => money(v, "USD") },
-  { key: "revenue_growth_ttm", label: "YoY", period: "TTM", format: change },
+  { key: "revenue_growth_ttm", label: "YoY", period: "TTM", format: change, signed: true },
   { key: "operating_margin_ttm", label: "Op margin", period: "TTM", format: (v) => pct(v) },
   { key: "free_cash_flow_ttm", label: "FCF", period: "TTM", format: (v) => money(v, "USD") },
   { key: "net_debt_q", label: "Net debt", period: "qtr end", format: (v) => money(v, "USD") },
@@ -43,6 +49,21 @@ const LONG_LABEL: Record<string, string> = {
   free_cash_flow_ttm: "Free cash flow",
   net_debt_q: "Net debt",
 };
+
+/** The status strip reads revenue growth whatever columns are shown. */
+export const GROWTH_COLUMN = WATCH_COLUMNS[1]!;
+
+/** Watchlist columns for these keys: the defaults' own labels, the rest from the API's
+ * catalog (views/model.ts columnSpec). */
+export function watchColumns(keys: string[], options: ColumnInfo[] | null): WatchColumn[] {
+  const byKey = new Map((options ?? []).map((o) => [o.key, o]));
+  return keys.map((k) => {
+    const known = WATCH_COLUMNS.find((c) => c.key === k);
+    if (known) return known;
+    const s = columnSpec(k, byKey.get(k));
+    return { key: k, label: s.label, long: s.long, period: s.period, signed: s.kind === "growth", format: (v: number) => formatColumn(s.kind, v) };
+  });
+}
 
 export interface WatchRow {
   companyId: string;
@@ -71,8 +92,8 @@ export function num(v: Num | null | undefined): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-export function sourceTitle(key: string, src: ValueSource | null): string {
-  const label = LONG_LABEL[key] ?? key;
+export function sourceTitle(key: string, src: ValueSource | null, long?: string): string {
+  const label = long ?? LONG_LABEL[key] ?? key;
   if (!src) return label;
   const span = key.endsWith("_ttm")
     ? `trailing twelve months to ${day(src.period_end, true)}`
@@ -89,13 +110,14 @@ function cell(e: WatchlistEntry, col: WatchColumn, readable: boolean): Cell {
     };
   }
   const value = num(e.values[col.key]);
+  const long = col.long ?? LONG_LABEL[col.key] ?? col.label;
   if (value === null && notForBanks(e.industry, col.key)) {
-    return { value, text: BANK_NA, title: bankTitle(LONG_LABEL[col.key] ?? col.label) };
+    return { value, text: BANK_NA, title: bankTitle(long) };
   }
   if (value === null) {
-    return { value, text: "—", title: `${LONG_LABEL[col.key]}: not reported for the latest quarter` };
+    return { value, text: "—", title: `${long}: not reported for the latest quarter` };
   }
-  return { value, text: col.format(value), title: sourceTitle(col.key, e.sources[col.key] ?? null) };
+  return { value, text: col.format(value), title: sourceTitle(col.key, e.sources[col.key] ?? null, long) };
 }
 
 /** Quarterly revenue rows → values oldest first, and period end → fiscal label. */
@@ -115,7 +137,9 @@ export function watchRows(
   entries: WatchlistEntry[],
   revenue: Record<string, FinancialRow[]>,
   newCompanies: Set<string>,
+  columns: WatchColumn[] = WATCH_COLUMNS,
 ): WatchRow[] {
+  const all = columns.some((c) => c.key === GROWTH_COLUMN.key) ? columns : [...columns, GROWTH_COLUMN];
   return entries.map((e) => {
     const readable = e.access.includes("financials");
     const series = revenueSeries(revenue[e.company_id] ?? []);
@@ -133,7 +157,7 @@ export function watchRows(
         fiscalPeriod: (lf.period_end && series.fiscal.get(lf.period_end)) || null,
         accessionNo: lf.accession_no,
       },
-      cells: Object.fromEntries(WATCH_COLUMNS.map((c) => [c.key, cell(e, c, readable)])),
+      cells: Object.fromEntries(all.map((c) => [c.key, cell(e, c, readable)])),
       next: e.next_expected,
       revenue: series.values,
       isNew: newCompanies.has(e.company_id),

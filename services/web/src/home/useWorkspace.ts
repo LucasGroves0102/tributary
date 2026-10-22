@@ -14,8 +14,11 @@ import type { CalendarEntry, FinancialRow, IndexedFiling, LatestFiling, Watchlis
 import {
   addDays,
   expectedItems,
+  GROWTH_COLUMN,
   recentFilings,
+  WATCH_COLUMNS,
   watchRows,
+  type WatchColumn,
   type ExpectedItem,
   type FilingItem,
   type WatchRow,
@@ -52,6 +55,8 @@ export interface Workspace {
   readableCount: number;
   /** asks again for the watchlist, feed and calendars (after an error) */
   reload?: () => void;
+  /** the watchlist's value columns, as chosen (views) */
+  columns: WatchColumn[];
 }
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -59,7 +64,12 @@ const today = () => new Date().toISOString().slice(0, 10);
 /** The signed-in user's watchlist, recent filings and expected filings: Home and the sidebar
  * share it, so the watchlist is fetched once. companyIds: the companies the user can read
  * (/v1/me); Home follows their filing index along with the watchlist's. */
-export function useWorkspace(token: string | null, user: string | null, companyIds: string[] = []): Workspace {
+export function useWorkspace(
+  token: string | null,
+  user: string | null,
+  companyIds: string[] = [],
+  columns: WatchColumn[] = WATCH_COLUMNS,
+): Workspace {
   const [list, setList] = useState<WatchlistState>({ state: "loading" });
   const [latest, setLatest] = useState<LatestFiling[] | null>(null);
   const [index, setIndex] = useState<IndexedFiling[] | null>(null);
@@ -79,10 +89,13 @@ export function useWorkspace(token: string | null, user: string | null, companyI
     setRevenue({});
   }, [token]);
 
+  // the chosen columns, and growth for the status strip
+  const fetchKeys = [...new Set([...columns.map((c) => c.key), GROWTH_COLUMN.key])];
+  const fetchKey = fetchKeys.join(",");
   useEffect(() => {
     if (!token) return;
     let live = true;
-    fetchWatchlist(token)
+    fetchWatchlist(token, fetchKey.split(","))
       .then((data) => live && setList({ state: "ok", data }))
       .catch(
         (e) =>
@@ -96,6 +109,14 @@ export function useWorkspace(token: string | null, user: string | null, companyI
                 },
           ),
       );
+    return () => {
+      live = false;
+    };
+  }, [token, version, fetchKey]);
+
+  useEffect(() => {
+    if (!token) return;
+    let live = true;
     latestFilings(token, FEED_LIMIT)
       .then((r) => live && setLatest(r.filings))
       .catch(() => live && setLatest([]));
@@ -165,8 +186,8 @@ export function useWorkspace(token: string | null, user: string | null, companyI
   );
   const rows = useMemo(() => {
     const fresh = new Set((filings ?? []).filter((f) => f.isNew).map((f) => f.companyId));
-    return watchRows(entries, revenue, fresh);
-  }, [entries, revenue, filings]);
+    return watchRows(entries, revenue, fresh, columns);
+  }, [entries, revenue, filings, columns]);
   const expected = useMemo(
     () =>
       calendars &&
@@ -206,6 +227,7 @@ export function useWorkspace(token: string | null, user: string | null, companyI
     watch,
     unwatch,
     readableCount: companyIds.length,
+    columns,
     reload: () => {
       setList({ state: "loading" });
       setVersion((v) => v + 1);

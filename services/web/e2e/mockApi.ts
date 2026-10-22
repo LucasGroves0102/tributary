@@ -92,10 +92,33 @@ export interface Fake {
   workspaces: { workspace_id: string; name: string; created_at: string; updated_at: string }[];
   items: Map<string, Record<string, unknown>>;
   asked: string[];
+  /** saved view preferences (/v1/views), by view */
+  views: Record<string, unknown>;
+  /** bodies of POST /api/agent/v1/reports */
+  reports: Record<string, unknown>[];
+}
+
+/** The report the mocked agent writes: every saved item embedded, one figure it can't verify. */
+function reportState(workspaceId: string, items: Record<string, unknown>[]) {
+  const refs = items.map((i, n) => ({ ref: `item-${n + 1}`, item_id: i.item_id, kind: i.kind, name: i.name, state: i.state }));
+  const acc = `${PEP}-26-000040`;
+  const markdown = [
+    "# Beverages: margins hold",
+    "## Summary",
+    `PepsiCo's revenue was $91.9B over the last twelve months (10-Q filed 2026-07-30, ${acc}, Revenues). Next year it may reach $99.9B.`,
+    ...refs.flatMap((r) => [`## ${r.name}`, `[[embed:${r.ref}]]`, "What it shows, cited above."]),
+    "Sources and freshness: latest filing 2026-07-30, as of 2026-10-21.",
+  ].join("\n\n");
+  return {
+    workspace_id: workspaceId, markdown, items: refs,
+    citations: [{ accession_no: acc, form: "10-Q", filed: "2026-07-30", company_id: PEP, url: "https://www.sec.gov/Archives/edgar/data/77476/x.htm", sections: [] }],
+    verification: { ok: false, figures: [{ text: "$91.9B", status: "verified" }, { text: "$99.9B", status: "unverified" }], unverified_accessions: [], used_data: true, freshness: true },
+    as_of: "2026-10-21T08:00:00+00:00", written_at: "2026-10-21T12:00:00+00:00", model: "mock", questions: 3, stop: "end_turn",
+  };
 }
 
 export async function mockApi(page: Page): Promise<Fake> {
-  const fake: Fake = { watched: new Set([NVDA, PEP]), calls: [], workspaces: [], items: new Map(), asked: [] };
+  const fake: Fake = { watched: new Set([NVDA, PEP]), calls: [], workspaces: [], items: new Map(), asked: [], views: {}, reports: [] };
   let seq = 0;
   const now = () => new Date(Date.UTC(2026, 9, 21, 12, 0, seq++)).toISOString();
 
@@ -124,8 +147,62 @@ export async function mockApi(page: Page): Promise<Fake> {
       });
     }
 
+    if (u.pathname === "/api/agent/v1/reports") {
+      fake.reports.push(body);
+      const saved = [...fake.items.values()].filter((i) => i.workspace_id === body.workspace_id && i.kind !== "report");
+      const id = body.report_id ?? `r${++seq}`;
+      fake.items.set(id, {
+        item_id: id, workspace_id: body.workspace_id, kind: "report", name: "Report: Beverages", created_at: now(), updated_at: now(),
+        opened_at: null, state: reportState(body.workspace_id, saved),
+      });
+      const events = [
+        { type: "tool", round: 0, name: "get_financials", input: { company_id: PEP }, is_error: false },
+        { type: "text", round: 1, text: "# Beverages: margins hold" },
+        { type: "report", item: { item_id: id, workspace_id: body.workspace_id, name: "Report: Beverages" }, verification: { ok: false, unverified: 1 } },
+        { type: "done", answer: {
+          text: "", stop: "end_turn", model: "mock", rounds: 2, tool_calls: [],
+          usage: { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
+          cost_usd: null, citations: [], verification: null, actions: [],
+        } },
+      ];
+      return route.fulfill({
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+        body: events.map((e) => `data: ${JSON.stringify(e)}\n\n`).join(""),
+      });
+    }
+
     const path = u.pathname.replace(/^\/api\/query/, "");
     const q = u.searchParams;
+
+    if (path === "/v1/views" && method === "GET") {
+      return json({
+        views: { home: null, screener: null, watchlist: null, ...fake.views },
+        options: {
+          home_cards: ["status", "recent", "watchlist", "filings", "expected", "notes"],
+          columns: [
+            { key: "revenue_ttm", metric: "revenue", span: "ttm", unit: "USD" },
+            { key: "revenue_growth_ttm", metric: "revenue_growth", span: "ttm", unit: "ratio" },
+            { key: "gross_margin_ttm", metric: "gross_margin", span: "ttm", unit: "ratio" },
+            { key: "operating_margin_ttm", metric: "operating_margin", span: "ttm", unit: "ratio" },
+            { key: "net_margin_ttm", metric: "net_margin", span: "ttm", unit: "ratio" },
+            { key: "free_cash_flow_ttm", metric: "free_cash_flow", span: "ttm", unit: "USD" },
+            { key: "net_debt_q", metric: "net_debt", span: "quarter", unit: "USD" },
+            { key: "debt_to_equity_q", metric: "debt_to_equity", span: "quarter", unit: "ratio" },
+          ],
+          max_columns: { screener: 12, watchlist: 8 },
+        },
+      });
+    }
+    const v = path.match(/^\/v1\/views\/(home|screener|watchlist)$/);
+    if (v && method === "PUT") {
+      fake.views[v[1]!] = body.state;
+      return json({ view: v[1], state: body.state });
+    }
+    if (v && method === "DELETE") {
+      delete fake.views[v[1]!];
+      return json({ view: v[1], reset: true });
+    }
 
     if (path === "/v1/demo/sandbox" && method === "POST") {
       return json({
@@ -232,6 +309,14 @@ export async function mockApi(page: Page): Promise<Fake> {
       const w = { workspace_id: `w${++seq}`, name: body.name, created_at: now(), updated_at: now() };
       fake.workspaces.push(w);
       return json({ ...w, items: [] }, 201);
+    }
+    m = path.match(/^\/v1\/workspaces\/([^/]+)$/);
+    if (m && method === "GET") {
+      const w = fake.workspaces.find((x) => x.workspace_id === m![1]);
+      if (!w) return json({ detail: "workspace not found" }, 404);
+      const items = [...fake.items.values()].filter((i) => i.workspace_id === w.workspace_id)
+        .map((i) => ({ ...summary(i), state: i.kind === "report" ? null : i.state }));
+      return json({ ...w, items });
     }
     m = path.match(/^\/v1\/workspaces\/([^/]+)\/items$/);
     if (m && method === "POST") {

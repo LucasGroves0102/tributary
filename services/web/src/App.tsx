@@ -15,18 +15,33 @@ import { Sidebar } from "./components/Sidebar";
 import { Skeleton } from "./components/States";
 import { TopBar } from "./components/TopBar";
 import { download } from "./download";
-import { lastIngested } from "./home/data";
+import { lastIngested, watchColumns } from "./home/data";
 import { RecentNotes } from "./home/RecentNotes";
 import { useWorkspace } from "./home/useWorkspace";
 import { Home } from "./pages/Home";
-import { About, ChartBuilder, Companies, Company, Compare, FilingReader, prefetchScreens, Search } from "./pages/lazy";
+import {
+  About,
+  ChartBuilder,
+  Companies,
+  Company,
+  Compare,
+  FilingReader,
+  prefetchScreens,
+  ReportView,
+  Search,
+  WorkspacePage,
+} from "./pages/lazy";
 import { readableCount, Welcome } from "./pages/Welcome";
 import { go, parse, useRoute } from "./route";
 import { resolveTicker } from "./palette/commands";
 import { useShortcuts } from "./shortcuts";
 import { clearSession, loadSession, pickerEnabled, resetsIn, type Session } from "./session";
 import { load, save } from "./storage";
+import { useReportWriter } from "./reports/useReportWriter";
 import { useTheme } from "./theme";
+import { ColumnPicker, HomeLayoutEditor } from "./views/Editors";
+import { columnSpecs, DEFAULT_SCREENER_COLUMNS, DEFAULT_WATCHLIST_COLUMNS } from "./views/model";
+import { useViews } from "./views/useViews";
 import type { Me } from "./types";
 import { itemRoute, restoreChartState, type Current } from "./workspaces/model";
 import { Recent } from "./workspaces/Recent";
@@ -81,8 +96,22 @@ export function App(props: Props = {}) {
     return () => window.removeEventListener("keydown", onKey);
   }, [navOpen]);
   const [theme, toggleTheme] = useTheme(user);
-  const workspace = useWorkspace(token, user, me?.companies.map((c) => c.company_id));
+  const views = useViews(token, user);
+  const [customizing, setCustomizing] = useState(false);
+  const watchCols = useMemo(() => watchColumns(views.watchlistColumns, views.options), [views.watchlistColumns, views.options]);
+  const screenCols = useMemo(() => columnSpecs(views.screenerColumns, views.options), [views.screenerColumns, views.options]);
+  const workspace = useWorkspace(token, user, me?.companies.map((c) => c.company_id), watchCols);
   const saved = useSaved(token, user);
+  const reload = saved.reload;
+  // a report saved: refresh the lists, and show it if its workspace is still on screen
+  const writer = useReportWriter(token, user, useCallback((itemId: string, workspaceId: string) => {
+    reload();
+    const r = parse(window.location.hash);
+    if (r.view === "workspace" && r.workspaceId === workspaceId) go({ view: "report", itemId });
+  }, [reload]));
+  useEffect(() => {
+    if (views.error) setError(views.error);
+  }, [views.error]);
   const [chart, setChart] = useChart(user);
   // read when the assistant sends a question or applies an action, so always the latest
   const chartRef = useRef(chart);
@@ -225,6 +254,7 @@ export function App(props: Props = {}) {
       saved
         .openItem(itemId)
         .then((item) => {
+          if (item.kind === "report") return go({ view: "report", itemId: item.item_id });
           if (item.kind === "chart") setChart(() => restoreChartState(item.state));
           go(itemRoute(item.kind, item.state));
         })
@@ -235,10 +265,10 @@ export function App(props: Props = {}) {
 
   const exportWatchlist = useCallback(() => {
     if (!token) return;
-    watchlistCsv(token)
+    watchlistCsv(token, views.watchlistColumns)
       .then((blob) => download("watchlist.csv", blob))
       .catch(() => setError("Couldn't export the watchlist. Try again."));
-  }, [token]);
+  }, [token, views.watchlistColumns]);
 
   useShortcuts((s) => {
     switch (s.type) {
@@ -278,6 +308,10 @@ export function App(props: Props = {}) {
   const companyName = useCallback((id: string) => names.get(id) ?? null, [names]);
   const filingsFor = useMemo(
     () => new Set((me?.companies ?? []).filter((c) => c.tiers.includes("filings")).map((c) => c.company_id)),
+    [me],
+  );
+  const financialsFor = useMemo(
+    () => new Set((me?.companies ?? []).filter((c) => c.tiers.includes("financials")).map((c) => c.company_id)),
     [me],
   );
   watchedRef.current = watched;
@@ -429,6 +463,27 @@ export function App(props: Props = {}) {
                 onExport={exportWatchlist}
                 recent={saved.list.state === "unavailable" ? null : <Recent recent={saved.recent} onOpen={openSaved} />}
                 notes={<RecentNotes token={token} name={companyName} filingsFor={filingsFor} />}
+                layout={views.home}
+                onCustomize={views.editable ? () => setCustomizing((c) => !c) : undefined}
+                editor={customizing && views.editable ? (
+                  <HomeLayoutEditor
+                    cards={views.home}
+                    onChange={views.setHome}
+                    onReset={() => views.reset("home")}
+                    onClose={() => setCustomizing(false)}
+                  />
+                ) : null}
+                columnPicker={views.editable ? (
+                  <ColumnPicker
+                    table="watchlist"
+                    columns={views.watchlistColumns}
+                    options={views.options}
+                    defaults={DEFAULT_WATCHLIST_COLUMNS}
+                    max={views.max.watchlist}
+                    onChange={(c) => views.setColumns("watchlist", c)}
+                    onReset={() => views.reset("watchlist")}
+                  />
+                ) : null}
               />
             ) : route.view === "companies" ? (
               <Companies
@@ -443,6 +498,18 @@ export function App(props: Props = {}) {
                   go({ view: "chart" });
                 }}
                 saveBar={saveBar({ kind: "screen", screen: route.screen ?? {} })}
+                columns={screenCols}
+                columnPicker={views.editable ? (
+                  <ColumnPicker
+                    table="screener"
+                    columns={views.screenerColumns}
+                    options={views.options}
+                    defaults={DEFAULT_SCREENER_COLUMNS}
+                    max={views.max.screener}
+                    onChange={(c) => views.setColumns("screener", c)}
+                    onReset={() => views.reset("screener")}
+                  />
+                ) : null}
               />
             ) : route.view === "company" ? (
               <Company
@@ -507,6 +574,29 @@ export function App(props: Props = {}) {
               </div>
             ) : route.view === "about" ? (
               <About />
+            ) : route.view === "workspace" ? (
+              <WorkspacePage
+                key={`${user}-${route.workspaceId}`}
+                token={token}
+                workspaceId={route.workspaceId}
+                writer={writer}
+                onOpen={openSaved}
+                version={saved.version}
+              />
+            ) : route.view === "report" ? (
+              <ReportView
+                key={`${user}-${route.itemId}`}
+                token={token}
+                itemId={route.itemId}
+                writer={writer}
+                label={(id) => companyName(id) ?? id}
+                readable={financialsFor}
+                onOpenChart={(s) => {
+                  setChart(() => s);
+                  saved.close("chart");
+                  go({ view: "chart" });
+                }}
+              />
             ) : (
               <Compare
                 key={user}

@@ -32,6 +32,10 @@ export const GOOD_TO_KNOW: { title: string; text: string }[] = [
     text: "EDGAR accepts filings until 10 pm ET, but most accepted after 5:30 pm ET reach its feed the next business morning. The SEC's XBRL data can lag a filing by a day or two; each company's Data notes say when.",
   },
   {
+    title: "A report counts as 3 assistant questions",
+    text: "\"Write a report\" on a workspace has the assistant read every saved chart, comps table and screen (up to 8) and write a cited note, so it uses 3 of your hourly questions, or of a demo sandbox's daily ones. Figures it can't trace to the data are flagged in the report.",
+  },
+  {
     title: "Derived and restated figures",
     text: "When a filing reports only the year, fiscal Q4 is the year minus the first nine months, and marked derived. Restated figures show the latest filing's value; Data notes list what changed.",
   },

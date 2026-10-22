@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 
 import { ApiError, screener, screenerCsv, SCREENER_CSV_ROWS } from "../api";
-import { MASKED_TITLE, screenRow } from "../companies/rows";
+import { DEFAULT_SPECS, MASKED_TITLE, screenRow } from "../companies/rows";
 import {
   BAND_LABELS,
   BANDS,
@@ -14,8 +14,8 @@ import {
   isEmpty,
   MONTHS,
   PAGE_SIZE,
-  SCREEN_COLUMNS,
   screenParams,
+  sortable,
   type Band,
   type FilerCategory,
   type ScreenFilters,
@@ -25,6 +25,7 @@ import { navRow, onTableKey } from "../components/tableNav";
 import { download } from "../download";
 import { go, href } from "../route";
 import type { Screener } from "../types";
+import type { ColumnSpec } from "../views/model";
 
 interface Props {
   token: string;
@@ -35,6 +36,10 @@ interface Props {
   onChart?: (companyId: string, name: string) => void;
   /** Save / Save as (workspaces/SaveBar) */
   saveBar?: ReactNode;
+  /** the value columns, as the user chose them (views); default: SCREEN_COLUMNS */
+  columns?: ColumnSpec[];
+  /** "Columns" (views/Editors ColumnPicker) */
+  columnPicker?: ReactNode;
 }
 
 type State =
@@ -44,12 +49,13 @@ type State =
 
 /** Companies: the screener over /v1/screener. Filters live in the URL, so a screen can be
  * bookmarked, shared and undone with Back. */
-export function Companies({ token, screen, watched, onWatch, onChart, saveBar }: Props) {
+export function Companies({ token, screen, watched, onWatch, onChart, saveBar, columns = DEFAULT_SPECS, columnPicker }: Props) {
   const [result, setResult] = useState<State>({ state: "loading" });
   const [exporting, setExporting] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
-  const params = useMemo(() => screenParams(screen), [screen]);
+  const columnKeys = columns.map((c) => c.key).join(",");
+  const params = useMemo(() => screenParams(screen, columnKeys.split(",")), [screen, columnKeys]);
   const key = JSON.stringify(params);
 
   useEffect(() => {
@@ -84,7 +90,7 @@ export function Companies({ token, screen, watched, onWatch, onChart, saveBar }:
   };
 
   const data = result.state === "ok" ? result.data : null;
-  const rows = useMemo(() => (data ? data.rows.map(screenRow) : []), [data]);
+  const rows = useMemo(() => (data ? data.rows.map((r) => screenRow(r, columns)) : []), [data, columns]);
   const masked = rows.filter((r) => !r.readable).length;
   const total = data?.total ?? null;
 
@@ -105,6 +111,7 @@ export function Companies({ token, screen, watched, onWatch, onChart, saveBar }:
         >
           {exporting ? "Exporting…" : "Export CSV"}
         </button>
+        {columnPicker}
         {saveBar}
       </div>
       {note && <p className="empty error">{note}</p>}
@@ -141,6 +148,7 @@ export function Companies({ token, screen, watched, onWatch, onChart, saveBar }:
           ) : (
             <Table
               rows={rows}
+              columns={columns}
               sort={screen.sort ?? DEFAULT_SORT}
               watched={watched}
               onSort={(sort) => set({ sort })}
@@ -293,6 +301,7 @@ function FilterRail({ screen, set }: { screen: ScreenFilters; set: (p: Partial<S
 
 function Table({
   rows,
+  columns,
   sort,
   watched,
   onSort,
@@ -301,6 +310,7 @@ function Table({
   onChart,
 }: {
   rows: ReturnType<typeof screenRow>[];
+  columns: ColumnSpec[];
   sort: string;
   watched: Set<string> | null;
   onSort: (sort: string) => void;
@@ -338,12 +348,18 @@ function Table({
             <tr>
               <th className="first sort" {...th("name", false)}>Company{arrow("name")}</th>
               <th className="sort" {...th("sic", false)}>Industry (SIC){arrow("sic")}</th>
-              {SCREEN_COLUMNS.map((c) => (
-                <th key={c.key} className="n sort" {...th(c.key, true)}>
-                  {c.label} <span className="unit">{c.period}</span>
-                  {arrow(c.key)}
-                </th>
-              ))}
+              {columns.map((c) =>
+                sortable(c.key) ? (
+                  <th key={c.key} className="n sort" {...th(c.key, true)}>
+                    {c.label} <span className="unit">{c.period}</span>
+                    {arrow(c.key)}
+                  </th>
+                ) : (
+                  <th key={c.key} className="n" title={c.long}>
+                    {c.label} <span className="unit">{c.period}</span>
+                  </th>
+                ),
+              )}
               <th className="sort" {...th("fiscal_year_end", false)}>FYE{arrow("fiscal_year_end")}</th>
               <th>
                 <span className="visually-hidden">Actions</span>
@@ -378,7 +394,7 @@ function Table({
                       </button>
                     )}
                   </td>
-                  {SCREEN_COLUMNS.map((c) => {
+                  {columns.map((c) => {
                     const cell = r.cells[c.key]!;
                     const tone = cell.value === null
                       ? "faint"

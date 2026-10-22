@@ -54,6 +54,30 @@ recently opened items and filings read in the reader, newest first. Saved items 
 the pages read data through the Query API as usual, so a chart for a company you lost shows the
 same "isn't one of your companies" state as anywhere else.
 
+Reports (`src/reports/`, agent-api `/v1/reports`): a workspace's page (`#/workspace/{id}`, ▤ beside
+the folder in the sidebar) lists its items and reports and has "Write a report". The assistant
+writes a research note from the saved items and saves it as an item of kind `report`; progress
+streams while it works, and the app stays usable (the run lives with the app, `useReportWriter`).
+The report page (`#/report/{id}`) renders its Markdown through `markdown.ts` (DOMPurify; accession
+numbers link to EDGAR only when a tool returned them) and draws each embedded item from the state
+saved with the report, reading the data through the Query API as the viewer: charts with
+LayerChart, comps as small multiples (an ungranted peer says "no access"), screens as their
+filters with a link. Figures the verification couldn't trace are highlighted, and listed in the
+note itself. Download Markdown (`reportMarkdown`: embeds become a line naming the item,
+unverified figures are marked `[unverified]`, sources listed) and Print / PDF (`@media print` in
+`styles.css`: the page alone, in the light deck palette whatever the theme; `tokens.test.ts`
+keeps it equal to the light tokens). "Write again" regenerates it over the same item. A report
+counts as 3 assistant questions; the API's refusal (hourly or demo cap) is shown as is.
+
+Customizable views (`src/views/`, Query API `/v1/views`): Home's "Customize" shows, hides and
+reorders its cards; the watchlist and the screener have "Columns" to choose and order their value
+columns from what `/v1/screener/columns` offers (up to 8 and 12), with Reset. Each change is saved
+to the user's account at once (optimistic; a failed save restores the last saved state and says
+so). Saved preferences are cleaned like any untrusted input (`views/model.ts`: unknown cards and
+columns dropped, missing ones default) and grant nothing: values are still read through the
+permission-checked routes, masked for ungranted companies. Without the app database the defaults
+show and the controls are hidden.
+
 Chart builder (`src/chart/`): layers can be renamed (legend), recoloured (colours stay with a
 layer when it moves), moved up or down, hidden; types line, bar, area, stacked bar and stacked
 area (layers of the same stacked type and axis stack, negatives downward); transforms quarterly,
@@ -119,7 +143,9 @@ The end-to-end flows (`e2e/app.spec.ts`: try the demo → Home, screener filter/
 two-layer chart with a formula exported as CSV, comps, saving a chart to a workspace and
 reopening it, the assistant drawer with a streamed answer, the narrow-screen menu, formula
 autocomplete with annual frequency and deck output, Compare's side-by-side charts, the shortcut
-sheet and Ctrl+arrow table jumps, the limits page, data notes on Home and the tearsheet) run
+sheet and Ctrl+arrow table jumps, the limits page, data notes on Home and the tearsheet, writing
+a report from a workspace with a mocked SSE stream (embedded charts, the flagged figure, Markdown
+download, print styles), and customizing Home and the watchlist and screener columns) run
 against `vite preview` with every `/api/*` call answered by `e2e/mockApi.ts` (route
 interception), so no backend runs. One worker and one headless chromium
 (`npx playwright install chromium` once). CI runs them in the `e2e` job.
@@ -132,7 +158,7 @@ React.lazy); once signed in and idle the app prefetches them, so switching scree
 
 | Route | JS | CSS |
 |---|---|---|
-| Shell + Home (`#/`), first load | 330.1 kB (105.4 kB) | 34.9 kB (7.6 kB) |
+| Shell + Home (`#/`), first load | 342.3 kB (109.0 kB) | 37.2 kB (8.1 kB) |
 | + Chart builder (`#/chart`) | + ChartBuilder 23.7 kB (8.9 kB), LayerChart 11.4 kB (4.8 kB), cache 0.2 kB | |
 | + Company tearsheet (`#/company/…`) | + Company 12.5 kB (4.0 kB), Filings 6.5 kB (2.3 kB), LayerChart | |
 | + Compare (`#/compare`) | + Compare 13.6 kB (4.9 kB), LayerChart, cache | |
@@ -140,6 +166,7 @@ React.lazy); once signed in and idle the app prefetches them, so switching scree
 | + Filing reader (`#/filing/…`) | + FilingReader 10.8 kB (3.7 kB), text 2.1 kB (1.1 kB) | |
 | + Search, About | + 5.2 kB (1.9 kB), 3.6 kB (1.4 kB) | |
 | + first assistant answer (marked, DOMPurify) | + AssistantMessage 68.1 kB (23.2 kB) | |
+| + Workspace (`#/workspace/…`), Report (`#/report/…`) | + 8.3 kB (3.4 kB) each, Report + markdown, LayerChart, SmallMultiples 2.4 kB | |
 
 Before splitting, everything was one 493.6 kB (156.3 kB gzip) script; the first screen now
 loads a third less. Most of what remains is React DOM. Chart data is cached in memory per

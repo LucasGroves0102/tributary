@@ -145,5 +145,9 @@ export function pageContext(route: Route, name: (companyId: string) => string | 
       return { label: "Ask", suggestions: [...GENERAL, ATTACKS[1]!, ATTACKS[2]!] };
     case "about":
       return { label: "What Tributary covers", suggestions: ["What is Nvidia's P/E ratio?", "Did Nvidia beat consensus last quarter?"] };
+    case "workspace":
+      return { label: "Workspace", suggestions: ["What did my companies file recently?", GENERAL[0]!] };
+    case "report":
+      return { label: "Report", suggestions: ["What changed in my companies' latest 10-Q risk factors?", GENERAL[0]!] };
   }
 }

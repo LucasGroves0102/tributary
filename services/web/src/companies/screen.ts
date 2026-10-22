@@ -137,13 +137,16 @@ export function fraction(percent: number): string {
 
 type Params = Record<string, string | number | string[]>;
 
-/** /v1/screener query parameters for a screen. */
-export function screenParams(f: ScreenFilters): Params {
+/** Whether the screener sorts on this key (saved screens and URLs take only these). */
+export const sortable = (key: string) => SORTS.has(key);
+
+/** /v1/screener query parameters for a screen, reading these value columns. */
+export function screenParams(f: ScreenFilters, columns: string[] = SCREEN_COLUMNS.map((c) => c.key)): Params {
   const where: string[] = [];
   if (f.growth !== undefined) where.push(`revenue_growth_ttm:gte:${fraction(f.growth)}`);
   if (f.margin !== undefined) where.push(`operating_margin_ttm:gte:${fraction(f.margin)}`);
   const p: Params = {
-    columns: SCREEN_COLUMNS.map((c) => c.key),
+    columns,
     sort: f.sort ?? DEFAULT_SORT,
     limit: PAGE_SIZE,
     offset: (f.page ?? 0) * PAGE_SIZE,

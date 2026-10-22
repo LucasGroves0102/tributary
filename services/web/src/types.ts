@@ -94,7 +94,9 @@ export type AgentEvent =
   | ({ type: "tool"; round: number } & ToolCall)
   | { type: "action"; round: number; action: UiAction }
   | { type: "done"; answer: Answer }
-  | { type: "error"; message: string };
+  | { type: "error"; message: string }
+  /** /v1/reports: the report was saved (before "done") */
+  | { type: "report"; item: { item_id: string; workspace_id: string; name: string }; verification: { ok: boolean; unverified: number } };
 
 type Transform = "q" | "ttm" | "yoy" | "idx";
 type LayerType = "line" | "bar" | "area";
@@ -155,13 +157,15 @@ export type UiAction = { label: string } & (
   | { action: "save_to_workspace"; item: SavedKind; name: string; workspace: string }
 );
 
-/** Saved work (Query API /v1/workspaces, workspace_api.py). */
+/** Saved work (Query API /v1/workspaces, workspace_api.py): what users save. */
 export type SavedKind = "chart" | "comps" | "screen";
+/** Every item kind: reports are written by the assistant (agent-api /v1/reports). */
+export type ItemKind = SavedKind | "report";
 
 export interface SavedItem {
   item_id: string;
   workspace_id: string;
-  kind: SavedKind;
+  kind: ItemKind;
   name: string;
   created_at: string;
   updated_at: string;
@@ -180,6 +184,29 @@ export interface SavedWorkspace {
   created_at: string;
   updated_at: string;
   items: SavedItem[];
+}
+
+/** /v1/workspaces/{id}: items with their states (a report's state is null there). */
+export interface SavedWorkspaceFull extends Omit<SavedWorkspace, "items"> {
+  items: (SavedItem & { state: Record<string, unknown> | null })[];
+}
+
+/** /v1/views (query_api/views.py): per-user view preferences; null = the default. */
+export interface HomeCardPref {
+  id: string;
+  hidden: boolean;
+}
+export interface ViewPrefs {
+  views: {
+    home: { cards: HomeCardPref[] } | null;
+    screener: { columns: string[] } | null;
+    watchlist: { columns: string[] } | null;
+  };
+  options: {
+    home_cards: string[];
+    columns: ColumnInfo[];
+    max_columns: { screener: number; watchlist: number };
+  };
 }
 
 /** /v1/recent: recently opened items and recently read filings, newest first. */
@@ -206,7 +233,7 @@ export interface UiCompany {
 /** What the screen shows, sent with each question (agent-api ui.UiContext). Untrusted there:
  * it describes the screen and never identifies the user. */
 export interface UiContext {
-  page: "home" | "companies" | "company" | "filing" | "chart" | "compare" | "search" | "ask" | "about";
+  page: "home" | "companies" | "company" | "filing" | "chart" | "compare" | "search" | "ask" | "about" | "workspace" | "report";
   /** the full-text search page's words */
   query?: string;
   company_id?: string;

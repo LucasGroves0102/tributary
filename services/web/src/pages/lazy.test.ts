@@ -14,7 +14,7 @@ it("prefetches the other screens when the browser is idle", async () => {
   expect(idle).toHaveBeenCalledWith(expect.any(Function), { timeout: 4000 });
   idle.mock.calls[0]![0](); // runs every import; none may throw
   const modules = await loadScreens();
-  const names = ["ChartBuilder", "Companies", "Company", "Compare", "Search", "About", "FilingReader", "AssistantMessage"];
+  const names = ["ChartBuilder", "Companies", "Company", "Compare", "Search", "About", "FilingReader", "AssistantMessage", "WorkspacePage", "ReportView"];
   expect(modules.map((m, i) => typeof (m as Record<string, unknown>)[names[i]!])).toEqual(names.map(() => "function"));
 });
 

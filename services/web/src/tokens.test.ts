@@ -40,6 +40,19 @@ describe.each([
   });
 });
 
+it("prints in the light palette (a report's Print / PDF)", () => {
+  const styles = readFileSync(`${process.cwd()}/src/styles.css`, "utf8");
+  const at = styles.indexOf("@media print");
+  const body = styles.slice(styles.indexOf("{", styles.indexOf(":root", at)) + 1, styles.indexOf("}", at));
+  const print = Object.fromEntries([...body.matchAll(/--([\w-]+):\s*(#[0-9a-f]{6})/gi)].map((m) => [m[1]!, m[2]!]));
+  const light = theme(':root[data-theme="light"]');
+  expect(Object.keys(print).length).toBeGreaterThan(20);
+  for (const [k, v] of Object.entries(print)) {
+    if (k === "bg") expect(v).toBe("#ffffff");
+    else expect(v, k).toBe(light[k]);
+  }
+});
+
 it("computes WCAG contrast ratios", () => {
   expect(contrast("#000000", "#ffffff")).toBeCloseTo(21, 5);
   expect(contrast("#777777", "#ffffff")).toBeCloseTo(4.48, 2);

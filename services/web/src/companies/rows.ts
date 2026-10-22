@@ -1,10 +1,14 @@
 /** Screener rows → table cells: units, the period behind each value, its source filing, and an
  * honest note where the API masked a company's values. Pure, tested without rendering. */
 
-import { BANK_NA, bankTitle, change, day, money, notForBanks, pct } from "../format";
+import { BANK_NA, bankTitle, day, notForBanks } from "../format";
 import { num, type Cell } from "../home/data";
 import type { ScreenerRow, ValueSource } from "../types";
+import { columnSpec, formatColumn, type ColumnSpec } from "../views/model";
 import { fyeMonth, SCREEN_COLUMNS } from "./screen";
+
+/** The default columns as specs (their labels and kinds as companies/screen.ts has them). */
+export const DEFAULT_SPECS: ColumnSpec[] = SCREEN_COLUMNS.map((c) => ({ ...columnSpec(c.key), label: c.label, period: c.period, kind: c.kind }));
 
 export const MASKED_TITLE =
   "Your plan doesn't cover this company's financials, so the API returns its public metadata " +
@@ -32,21 +36,8 @@ export interface ScreenRow {
   cells: Record<string, Cell>;
 }
 
-function format(kind: (typeof SCREEN_COLUMNS)[number]["kind"], v: number): string {
-  switch (kind) {
-    case "usd":
-      return money(v, "USD");
-    case "pct":
-      return pct(v);
-    case "growth":
-      return change(v);
-    case "x":
-      return `${v.toFixed(2)}x`;
-  }
-}
-
-function title(key: string, src: ValueSource | null): string {
-  const label = LONG[key] ?? key;
+function title(key: string, src: ValueSource | null, long?: string): string {
+  const label = long ?? LONG[key] ?? key;
   if (!src) return label;
   const span = key.endsWith("_ttm")
     ? `trailing twelve months to ${day(src.period_end, true)}`
@@ -54,18 +45,19 @@ function title(key: string, src: ValueSource | null): string {
   return `${label}, ${span}. Source: ${src.form} filed ${day(src.filed, true)}, ${src.accession_no}`;
 }
 
-export function screenRow(r: ScreenerRow): ScreenRow {
+export function screenRow(r: ScreenerRow, columns: ColumnSpec[] = DEFAULT_SPECS): ScreenRow {
   const readable = r.access.includes("financials");
   const cells: Record<string, Cell> = {};
-  for (const c of SCREEN_COLUMNS) {
+  for (const c of columns) {
+    const long = LONG[c.key] ?? c.long;
     const value = readable ? num(r.values[c.key]) : null;
     cells[c.key] = !readable
       ? { value, text: "—", title: MASKED_TITLE }
       : value === null && notForBanks(r.industry, c.key)
-        ? { value, text: BANK_NA, title: bankTitle(LONG[c.key] ?? c.label) }
+        ? { value, text: BANK_NA, title: bankTitle(long) }
         : value === null
-        ? { value, text: "—", title: `${LONG[c.key]}: not reported for the latest period` }
-        : { value, text: format(c.kind, value), title: title(c.key, r.sources[c.key] ?? null) };
+        ? { value, text: "—", title: `${long}: not reported for the latest period` }
+        : { value, text: formatColumn(c.kind, value), title: title(c.key, r.sources[c.key] ?? null, long) };
   }
   return {
     companyId: r.company_id,

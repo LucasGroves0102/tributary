@@ -49,6 +49,15 @@ it("keeps only known company tabs and valid comps", () => {
   expect(parse("#/compare?target=NVDA&peers=x&cols=salary")).toEqual({ view: "compare" });
 });
 
+it("round-trips workspace and report routes and refuses odd ids", () => {
+  const id = "3f2b8c1e-5d4a-4f6b-9c2d-1a2b3c4d5e6f";
+  const routes: Route[] = [{ view: "workspace", workspaceId: id }, { view: "report", itemId: id }];
+  for (const r of routes) expect(parse(href(r))).toEqual(r);
+  expect(parse("#/workspace/..%2F..%2Fadmin")).toEqual({ view: "home" });
+  expect(parse("#/report/<script>")).toEqual({ view: "home" });
+  expect(parse("#/report/")).toEqual({ view: "home" });
+});
+
 it("sends old explore links to Companies", () => {
   expect(parse("#/explore")).toEqual({ view: "companies" });
 });

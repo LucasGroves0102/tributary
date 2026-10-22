@@ -36,7 +36,11 @@ export type Route =
   | { view: "search"; search?: SearchState }
   | { view: "ask" }
   /** what Tributary covers and doesn't (prices, consensus, transcripts) */
-  | { view: "about" };
+  | { view: "about" }
+  /** one saved workspace: its items and reports, "Write a report" */
+  | { view: "workspace"; workspaceId: string }
+  /** a report the assistant wrote (a workspace item of kind report) */
+  | { view: "report"; itemId: string };
 
 /** Screens in the left nav: routes without parameters. */
 export type NavView = "home" | "companies" | "chart" | "compare" | "ask";
@@ -51,6 +55,8 @@ export const NAV: { view: NavView; label: string; key: string }[] = [
 ];
 
 const CIK = /^\d{10}$/;
+/** saved-work ids (UUIDs from the Query API); anything else goes Home */
+const ID = /^[A-Za-z0-9-]{1,64}$/;
 const ACCESSION = /^\d{10}-\d{2}-\d{6}$/;
 /** Section keys as the Query API takes them: 10-K "1A", 10-Q "II-1A", 8-K "2.02", "EX-99.1". */
 export const SECTION = /^[A-Z0-9.?-]{1,8}$/;
@@ -77,6 +83,9 @@ export function parse(hash: string): Route {
   }
   if (view && SIMPLE.has(view)) return { view: view as "chart" | "ask" | "about" };
   if (view === "explore") return { view: "companies" }; // links from before the v3 shell
+  if ((view === "workspace" || view === "report") && ID.test(a ?? "")) {
+    return view === "workspace" ? { view, workspaceId: a! } : { view, itemId: a! };
+  }
   if (view === "company" && CIK.test(a ?? "")) {
     return b && b !== "overview" && TABS.has(b)
       ? { view: "company", companyId: a!, tab: b as CompanyTab }
@@ -112,6 +121,10 @@ export function href(route: Route): string {
     }
     case "search":
       return route.search ? `#/search?${searchQuery(route.search)}` : "#/search";
+    case "workspace":
+      return `#/workspace/${encodeURIComponent(route.workspaceId)}`;
+    case "report":
+      return `#/report/${encodeURIComponent(route.itemId)}`;
     case "company":
       return `#/company/${route.companyId}` + (route.tab && route.tab !== "overview" ? `/${route.tab}` : "");
     case "filing": {
