@@ -14,8 +14,6 @@ sandbox with 20 companies (PepsiCo, Coca-Cola, Apple, Microsoft, Nvidia, JPMorga
 | **989,666** | SEC filers indexed; 6,024 operating companies with quarterly financials from XBRL |
 | **26M + 26M** | filing records and XBRL facts, kept current by nightly batch loads on one self-managed server |
 
-![Tributary research workspace](.github/assets/chat.png)
-
 ## Architecture
 
 ```mermaid
