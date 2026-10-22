@@ -168,6 +168,40 @@ filer category, revenue closeness and name. Each peer has screener-style metadat
 where permitted and `match` (`sic_level`, `same_filer_category`, `revenue_band`,
 `same_revenue_band`).
 
+## Workspaces (saved work)
+
+Workspaces are named folders of saved items in the app database (`workspace_api.py`,
+`workspaces.py`, app migration 004): a chart builder state (`chart`: title, range, alignment,
+up to 12 layers), a comps set (`comps`: target, up to 20 peers, columns) or a screener screen
+(`screen`: filters and sort). `GET/POST /v1/workspaces`, `PATCH/DELETE /v1/workspaces/{id}`,
+`POST /v1/workspaces/{id}/duplicate`, `POST /v1/workspaces/{id}/items`,
+`GET/PUT/DELETE /v1/workspace-items/{id}`, `POST /v1/workspace-items/{id}/open` (returns the
+state and records it for Home), `POST /v1/workspace-items/{id}/duplicate` (same or another of
+your workspaces), `GET /v1/recent` (recently opened items and recently read filings, newest
+first) and `PUT /v1/recent/filings` (the reader records what you open; the newest 20 are kept).
+
+- **Owner-only.** The user is the JWT `sub`; no route takes a user id (a `user_id` in a body is
+  a 422). Another user's workspace or item and a missing one get the same 404. Ids are random
+  UUIDs; anything else is a 422. The tables' row-level security is FORCEd, so even a statement
+  that forgot its `WHERE user_id` sees only the transaction's `app.user_id`
+  (`test_workspaces_db.py` proves it as the table owner).
+- **Validated.** Each kind's state has a strict schema (unknown fields refused) mirroring the web
+  app's state; names are 1-100 (workspace) / 1-120 (item) characters without control
+  characters; a state is at most 16,000 bytes of JSON; bodies over 32 KiB (or without a
+  Content-Length) are refused before they are read. Caps: 50 workspaces, 100 items per
+  workspace, 500 items per user (409 beyond).
+- **Grants nothing.** An item holds company ids and settings. Opening it reads no data: the web
+  app reads through the permission-checked routes as usual, so a chart saved for a company you
+  have since lost shows the same "no access" state as anywhere else.
+- **Demo sandboxes** start with the workspace "PepsiCo vs Coca-Cola" (`sandbox.py`
+  `sandbox_workspaces`: a margins chart for PEP vs KO, comps for PEP vs KO, KDP, MNST), written
+  in the sandbox's creation transaction; it is deleted with the sandbox user (ON DELETE CASCADE).
+- **Not streamed, no OpenFGA type yet.** Sharing (read-only by link, the roadmap's owner/viewer)
+  is the next step: a `workspace` type in `authz/model.fga` (`owner`, `viewer`) with model tests,
+  `workspaces` (+ a shares table) in Debezium's `table.include.list` with REPLICA IDENTITY FULL,
+  the authz-sync mapping to tuples, the setup image redeploying the model, and these routes
+  checking `viewer` through OpenFGA before reading (keeping the owner filter for writes).
+
 ## Run
 
 ```bash
@@ -177,8 +211,8 @@ make token USER=alice                             # query-api-token: dev JWT for
 ```
 
 Config (env): `DATABASE_URL`, `FGA_API_URL`, `QUERY_API_JWT_SECRET` (all required; the secret
-must be at least 32 bytes), `APP_DATABASE_URL` (the app database, for watchlists; unset makes
-the watchlist routes answer 503), `FGA_API_TOKEN` (OpenFGA preshared key, when enabled),
+must be at least 32 bytes), `APP_DATABASE_URL` (the app database, for watchlists and workspaces;
+unset makes those routes answer 503), `FGA_API_TOKEN` (OpenFGA preshared key, when enabled),
 `DEMO_USERS` (comma-separated accounts allowed to sign in without a password; unset disables
 the demo routes), the demo sandbox settings below, `PORT` (default 8000), `LOG_LEVEL`.
 

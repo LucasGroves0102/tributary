@@ -52,7 +52,7 @@ decides its environment variables, which Secret keys it can read, and its networ
 | uses | Env | Network |
 |---|---|---|
 | `postgres` | `DATABASE_URL` | host Postgres |
-| `app-postgres` | `APP_DATABASE_URL` (query-api: watchlists, demo sandboxes; demo-cleanup) | host Postgres |
+| `app-postgres` | `APP_DATABASE_URL` (query-api: watchlists, workspaces, demo sandboxes; demo-cleanup) | host Postgres |
 | `kafka` | `KAFKA_BOOTSTRAP_SERVERS`; with `kafka.sasl.enabled` also `KAFKA_SECURITY_PROTOCOL`, `KAFKA_SASL_MECHANISM`, `KAFKA_SASL_USERNAME` (`kafkaUser`, default the service/job name) and `KAFKA_SASL_PASSWORD` (`kafka-password-<user>`) | Kafka in `platform` (9092, or the SASL listener 9094) |
 | `openfga` | `FGA_API_URL`, `FGA_API_TOKEN` when `openfga.auth.enabled` | OpenFGA in `platform` |
 | `sec` | `SEC_USER_AGENT`; `SEC_LIMITER_DATABASE_URL` (main database: `database-url`, or `sec-limiter-database-url` with `secLimiter.dedicatedLogin`) and `SEC_CALLER_CLASS` (`secClass`, default `live` for services, `batch` for jobs) for the shared SEC rate limit | HTTPS to public addresses, host Postgres |
