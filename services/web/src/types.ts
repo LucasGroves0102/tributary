@@ -18,6 +18,8 @@ export interface Citation {
   filed: string | null;
   company_id: string | null;
   url: string | null;
+  /** sections a tool returned from this filing (section text, search, What changed) */
+  sections?: string[];
 }
 
 export interface ToolCall {
@@ -135,6 +137,8 @@ export interface UiContext {
   /** the company page's tab (absent on Overview) */
   tab?: "overview" | "statements" | "segments" | "ratios" | "filings" | "peers";
   accession_no?: string;
+  /** the filing reader's open section */
+  section_key?: string;
   chart?: {
     title: string;
     range: 2 | 3 | 5;
@@ -245,7 +249,40 @@ export interface Section {
   text: string;
   truncated: boolean;
   total_chars: number;
-  citation: { accession_no: string; form: string; filed: string; document_url: string | null };
+  citation: {
+    accession_no: string;
+    form: string;
+    filed: string;
+    document_url: string | null;
+    period_of_report?: string | null;
+    section_key?: string;
+    /** where the section starts and ends in the document */
+    char_start?: number;
+    char_end?: number;
+  };
+}
+
+/** One /v1/search result: the best-matching passage of a section, with a snippet (matches
+ * between « and ») and a citation to that passage. */
+export interface SectionHit {
+  company_id: string;
+  name: string;
+  section_key: string;
+  title: string | null;
+  rank: number;
+  snippet: string;
+  passages_matched: number;
+  citation: ChangeCitation & { filing_url: string | null };
+  freshness: { filed: string; ingested_at: string };
+}
+
+export interface SectionSearch {
+  query: string;
+  as_of: string;
+  limit: number;
+  offset: number;
+  has_more: boolean;
+  results: SectionHit[];
 }
 
 /** Query API numbers that may be Decimals arrive as strings; never do maths on them unparsed. */

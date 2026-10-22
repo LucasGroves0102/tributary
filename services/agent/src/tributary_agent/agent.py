@@ -5,7 +5,7 @@ from collections.abc import Generator, Iterator, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-from tributary_agent.tools import TOOLS
+from tributary_agent.tools import SECTION_KEY, TOOLS
 from tributary_agent.ui import UI_RULES, UI_TOOL, UiContext, context_block
 from tributary_agent.verify import verify
 
@@ -234,12 +234,16 @@ def _collect_citations(content: str, into: dict[str, dict]) -> None:
                 acc = node["accession_no"]
                 url = node.get("filing_url") or node.get("document_url")
                 prev = into.get(acc, {})
+                sections = list(prev.get("sections", []))
+                key = node.get("section_key")
+                if isinstance(key, str) and SECTION_KEY.fullmatch(key) and key not in sections:
+                    sections.append(key)
                 into[acc] = {"accession_no": acc, "form": node["form"],
                              "filed": node.get("filed"), "company_id": company_id,
-                             "url": url or prev.get("url")}
+                             "url": url or prev.get("url"), "sections": sections}
             for acc in node.get("source_accessions") or []:
                 into.setdefault(acc, {"accession_no": acc, "form": None, "filed": None,
-                                      "company_id": company_id, "url": None})
+                                      "company_id": company_id, "url": None, "sections": []})
             for value in node.values():
                 walk(value, company_id)
 

@@ -293,6 +293,13 @@ export function App() {
                 companyId={route.companyId}
                 accessionNo={route.accessionNo}
                 sectionKey={route.section}
+                at={route.at}
+                q={route.q}
+                name={companyName(route.companyId)}
+                onAsk={(q) => {
+                  assistant.setDraft(q);
+                  focusAssistant();
+                }}
               />
             ) : route.view === "chart" ? (
               <ChartBuilder key={user} token={token} chart={chart} setChart={setChart} />

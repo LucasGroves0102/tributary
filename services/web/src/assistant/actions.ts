@@ -96,7 +96,10 @@ export function uiContext(route: Route, chart: ChartState, name: (id: string) =>
     const c = route.compare;
     ctx.compare = { ...(c.target ? { target: c.target } : {}), peers: c.peers ?? [], columns: columnsOf(c) };
   }
-  if (route.view === "filing") ctx.accession_no = route.accessionNo;
+  if (route.view === "filing") {
+    ctx.accession_no = route.accessionNo;
+    if (route.section) ctx.section_key = route.section;
+  }
   if (route.view === "companies" && route.screen) ctx.screen = { ...route.screen, page: undefined } as UiContext["screen"];
   if (route.view === "chart") {
     const layers = chart.layers.map((l) => ({

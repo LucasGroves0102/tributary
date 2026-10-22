@@ -83,6 +83,16 @@ export function pageContext(route: Route, name: (companyId: string) => string | 
     }
     case "filing": {
       const n = name(route.companyId) ?? `company ${route.companyId}`;
+      if (route.section) {
+        return {
+          label: `${n} · Filing ${route.accessionNo} · ${route.section}`,
+          suggestions: [
+            `Summarize section ${route.section} of ${n}'s filing ${route.accessionNo}.`,
+            `What changed in section ${route.section} versus ${n}'s previous filing?`,
+            `What are the key risks or numbers in section ${route.section}?`,
+          ],
+        };
+      }
       return {
         label: `${n} · Filing ${route.accessionNo}`,
         suggestions: [

@@ -99,6 +99,14 @@ describe("screen context", () => {
     });
   });
 
+  it("sends the reader's filing and open section, never its search words", () => {
+    const acc = "0001045810-26-000075";
+    expect(uiContext({ view: "filing", companyId: NVDA, accessionNo: acc, section: "II-1A", at: 120, q: "export" }, emptyChart(), () => null))
+      .toEqual({ page: "filing", company_id: NVDA, accession_no: acc, section_key: "II-1A" });
+    expect(uiContext({ view: "filing", companyId: NVDA, accessionNo: acc, section: null }, emptyChart(), () => null))
+      .toEqual({ page: "filing", company_id: NVDA, accession_no: acc });
+  });
+
   it("sends the company page's tab and the comps", () => {
     expect(uiContext({ view: "company", companyId: NVDA, tab: "ratios" }, emptyChart(), () => null)).toEqual({
       page: "company", company_id: NVDA, tab: "ratios",

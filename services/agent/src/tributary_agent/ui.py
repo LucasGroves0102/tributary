@@ -95,6 +95,8 @@ class UiContext(_Strict):
     company_id: str | None = Field(default=None, pattern=CIK)
     tab: CompanyTab | None = None
     accession_no: str | None = Field(default=None, pattern=r"^\d{10}-\d{2}-\d{6}$")
+    section_key: str | None = Field(default=None, pattern=r"^[A-Z0-9.?-]{1,8}$",
+                                    description="the filing reader's open section")
     chart: ChartContext | None = None
     screen: ScreenFilters | None = None
     compare: CompareContext | None = None

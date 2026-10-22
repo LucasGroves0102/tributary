@@ -19,7 +19,7 @@ const ANSWER = {
   tool_calls: [],
   usage: { input_tokens: 1, output_tokens: 1, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
   cost_usd: null,
-  citations: [{ accession_no: ACC, form: "10-Q", filed: "2026-08-26", company_id: NVDA, url: EDGAR }],
+  citations: [{ accession_no: ACC, form: "10-Q", filed: "2026-08-26", company_id: NVDA, url: EDGAR, sections: ["I-2", "../x"] }],
   verification: null,
 };
 
@@ -253,6 +253,9 @@ describe("assistant drawer", () => {
     const link = container.querySelector<HTMLAnchorElement>(".ai-m .answer a.accession");
     expect(link?.href).toBe(EDGAR);
     expect($(".ai-m .sources")?.textContent).toContain(ACC);
+    // a section the tools returned opens the reader there; anything else is dropped
+    const reader = [...container.querySelectorAll<HTMLAnchorElement>(".ai-m .sources a.reader-link")];
+    expect(reader.map((a) => a.getAttribute("href"))).toEqual([`#/filing/${NVDA}/${ACC}/I-2`]);
   });
 });
 

@@ -19,7 +19,16 @@ export type Route =
   | { view: "home" }
   | { view: "companies"; screen?: ScreenFilters }
   | { view: "company"; companyId: string; tab?: CompanyTab }
-  | { view: "filing"; companyId: string; accessionNo: string; section: string | null }
+  | {
+      view: "filing";
+      companyId: string;
+      accessionNo: string;
+      section: string | null;
+      /** a passage to scroll to: a document character offset (a citation's char_start) */
+      at?: number;
+      /** words to highlight (a search) */
+      q?: string;
+    }
   | { view: "chart" }
   | { view: "compare"; compare?: CompareState }
   | { view: "ask" };
@@ -38,6 +47,9 @@ export const NAV: { view: NavView; label: string; key: string }[] = [
 
 const CIK = /^\d{10}$/;
 const ACCESSION = /^\d{10}-\d{2}-\d{6}$/;
+/** Section keys as the Query API takes them: 10-K "1A", 10-Q "II-1A", 8-K "2.02", "EX-99.1". */
+export const SECTION = /^[A-Z0-9.?-]{1,8}$/;
+const MAX_Q = 200;
 const SIMPLE = new Set(["chart", "ask"]);
 
 /** "#/company/0001045810" → route; anything unrecognized is Home. Companies keeps its
@@ -62,7 +74,17 @@ export function parse(hash: string): Route {
       : { view: "company", companyId: a! };
   }
   if (view === "filing" && CIK.test(a ?? "") && ACCESSION.test(b ?? "")) {
-    return { view: "filing", companyId: a!, accessionNo: b!, section: c || null };
+    const params = new URLSearchParams(query);
+    const at = params.get("at");
+    const q = params.get("q")?.slice(0, MAX_Q);
+    return {
+      view: "filing",
+      companyId: a!,
+      accessionNo: b!,
+      section: c && SECTION.test(c) ? c : null,
+      ...(at && /^\d{1,9}$/.test(at) ? { at: Number(at) } : {}),
+      ...(q ? { q } : {}),
+    };
   }
   return { view: "home" };
 }
@@ -81,9 +103,14 @@ export function href(route: Route): string {
     }
     case "company":
       return `#/company/${route.companyId}` + (route.tab && route.tab !== "overview" ? `/${route.tab}` : "");
-    case "filing":
+    case "filing": {
+      const params = new URLSearchParams();
+      if (route.at !== undefined) params.set("at", String(route.at));
+      if (route.q) params.set("q", route.q);
       return `#/filing/${route.companyId}/${route.accessionNo}` +
-        (route.section ? `/${encodeURIComponent(route.section)}` : "");
+        (route.section ? `/${encodeURIComponent(route.section)}` : "") +
+        (params.size ? `?${params}` : "");
+    }
     default:
       return `#/${route.view}`;
   }

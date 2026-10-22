@@ -215,7 +215,7 @@ function ChangeList({ data, companyId }: { data: SectionChanges; companyId: stri
                 {c.citation && (
                   <>
                     {" "}
-                    <a href={href({ view: "filing", companyId, accessionNo: c.citation.accession_no, section: c.citation.section_key })}>
+                    <a href={href({ view: "filing", companyId, accessionNo: c.citation.accession_no, section: c.citation.section_key, at: c.citation.char_start })}>
                       {c.citation.section_key}
                     </a>
                   </>

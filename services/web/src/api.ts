@@ -18,6 +18,7 @@ import type {
   SearchResult,
   Section,
   SectionChanges,
+  SectionSearch,
   SegmentRow,
   UiContext,
   Watchlist,
@@ -180,6 +181,26 @@ export const filingIndex = (token: string, companyId: string, q: IndexQuery = {}
 /** The SEC filing index across these companies (at most 50), newest first. */
 export const filingIndexOf = (token: string, companyIds: string[], q: IndexQuery = {}) =>
   get<FilingIndex>(token, "/v1/filing-index", { ...indexParams(q), company_id: companyIds });
+
+/** /v1/search filters: `company` a company_id, `form` 10-K/10-Q/8-K (or /A), filing dates. */
+export interface SearchQuery {
+  q: string;
+  company?: string;
+  form?: string;
+  section?: string;
+  from?: string;
+  to?: string;
+  limit?: number;
+  offset?: number;
+}
+
+/** Full-text search over the parsed sections of companies whose filings the user can read. */
+export const searchFilings = (token: string, query: SearchQuery) =>
+  get<SectionSearch>(
+    token,
+    "/v1/search",
+    Object.fromEntries(Object.entries(query).filter(([, v]) => v !== undefined && v !== "")) as Params,
+  );
 
 export const section = (token: string, companyId: string, key: string, accessionNo: string) =>
   get<{ sections: Section[] }>(token, `/v1/companies/${companyId}/sections/${encodeURIComponent(key)}`, {

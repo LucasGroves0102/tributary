@@ -18,6 +18,8 @@ it("round-trips every route", () => {
     { view: "compare", compare: { peers: ["0000320193"], cols: ["roe_ttm"] } },
     { view: "filing", companyId: "0001045810", accessionNo: "0001045810-26-000075", section: null },
     { view: "filing", companyId: "0001045810", accessionNo: "0001045810-26-000075", section: "EX-99.1" },
+    { view: "filing", companyId: "0001045810", accessionNo: "0001045810-26-000075", section: "II-1A", at: 1234, q: "export \"controls\" & more?" },
+    { view: "filing", companyId: "0001045810", accessionNo: "0001045810-26-000075", section: null, q: "chips" },
   ];
   for (const r of routes) expect(parse(href(r))).toEqual(r);
 });
@@ -28,6 +30,9 @@ it("falls back to Home for anything malformed", () => {
   expect(parse("#/nope")).toEqual({ view: "home" });
   expect(parse("#/company/NVDA")).toEqual({ view: "home" });
   expect(parse("#/filing/0001045810/not-an-accession")).toEqual({ view: "home" });
+  expect(parse("#/filing/0001045810/0001045810-26-000075/..%2Fadmin?at=-1&q=")).toEqual({
+    view: "filing", companyId: "0001045810", accessionNo: "0001045810-26-000075", section: null,
+  });
   expect(parse("#/company/0001045810/../../etc")).toEqual({
     view: "company",
     companyId: "0001045810",
