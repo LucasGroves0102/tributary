@@ -51,14 +51,14 @@ decides its environment variables, which Secret keys it can read, and its networ
 | uses | Env | Network |
 |---|---|---|
 | `postgres` | `DATABASE_URL` | host Postgres |
-| `app-postgres` | `APP_DATABASE_URL` (query-api: watchlists) | host Postgres |
+| `app-postgres` | `APP_DATABASE_URL` (query-api: watchlists, demo sandboxes; demo-cleanup) | host Postgres |
 | `kafka` | `KAFKA_BOOTSTRAP_SERVERS` | Kafka in `platform` |
 | `openfga` | `FGA_API_URL`, `FGA_API_TOKEN` when `openfga.auth.enabled` | OpenFGA in `platform` |
 | `sec` | `SEC_USER_AGENT`; `SEC_LIMITER_DATABASE_URL` (main database: `database-url`, or `sec-limiter-database-url` with `secLimiter.dedicatedLogin`) and `SEC_CALLER_CLASS` (`secClass`, default `live` for services, `batch` for jobs) for the shared SEC rate limit | HTTPS to public addresses, host Postgres |
 | `anthropic` | `ANTHROPIC_API_KEY` | HTTPS to public addresses |
 | `jwt` | `QUERY_API_JWT_SECRET` | |
 | `query-api` | `QUERY_API_URL` | |
-| `demo` | `DEMO_USERS` when `demo.enabled` | |
+| `demo` | `DEMO_USERS` when `demo.enabled`; `DEMO_SANDBOX_*`, `DEMO_AGENT_*` when `demo.sandbox.enabled` | |
 
 A service with a `port` gets a Service, health probes, and an ingress policy admitting only the
 components in its `from` list and pods in its `fromNamespaces`. Everything else is denied.
@@ -71,6 +71,32 @@ need no `release` label. CronJobs aren't scraped; kube-state-metrics reports the
 
 Every pod runs as non-root with a read-only root filesystem, no capabilities, the
 `RuntimeDefault` seccomp profile and no service account token.
+
+## Demo sandboxes
+
+"Try the demo" on the web app calls the Query API's `POST /v1/demo/sandbox`, which creates a
+temporary real user in the app database (plan pro, grants on the 20 companies in
+`services/query-api/src/query_api/sandbox.py` `DEMO_TICKERS`, a seeded watchlist) and returns a
+JWT for it that expires with the sandbox. Access then propagates like any user's: Debezium →
+Kafka → authz-sync → OpenFGA + `authz.user_access`. The `demo-cleanup` CronJob (hourly, at :15)
+deletes expired sandbox users, which revokes their access the same way.
+
+Knobs, all under `demo.sandbox` (set them in `deploy/flux/releases/tributary.yaml` values):
+
+| Value | Default | Effect |
+|---|---|---|
+| `enabled` | `true` | `false`: no "Try the demo" (the route answers 404) |
+| `ttlHours` | `24` | sandbox lifetime (1-168) |
+| `createPerIpPerHour` | `3` | sandboxes one client address may start per hour (stored as an HMAC, not the address) |
+| `maxLive` | `200` | unexpired sandboxes at once; above it visitors are told the demo is full |
+| `agent.enabled` | `true` | `false`: the assistant tells demo sandboxes it's off; the rest of the app works |
+| `agent.questionsPerUserPerDay` | `10` | assistant questions per sandbox per UTC day |
+| `agent.questionsPerDay` | `200` | assistant questions across all sandboxes per UTC day |
+
+The question counts live in the app database, so they hold across agent-api restarts.
+agent-api's own `AGENT_RATE_PER_HOUR`, `AGENT_IP_RATE_PER_HOUR` and `AGENT_DAILY_BUDGET_USD`
+(in-process, all users) still apply on top. To change a cap, edit the value in the Flux release
+and let Flux upgrade; to stop demo spend at once, set `demo.sandbox.agent.enabled: false`.
 
 ## SEC limiter login
 
