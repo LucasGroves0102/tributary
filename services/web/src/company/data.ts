@@ -114,6 +114,8 @@ export function recapAccession(row: ScreenerRow): string | null {
 // --- statements and ratios -------------------------------------------------------------------
 
 export type Period = "q" | "a" | "ttm";
+/** Fiscal: every fiscal quarter, labelled FY; calendar: one per calendar quarter, labelled CY. */
+export type Basis = "fiscal" | "calendar";
 export type Statement = "is" | "bs" | "cf";
 
 export const STATEMENTS: Record<Statement, { label: string; rows: [string, string, Fmt][] }> = {
@@ -209,13 +211,19 @@ function cellTitle(label: string, r: FinancialRow): string {
 
 /** Rows (one metric per row, its values by period) for the metrics given; metrics without any
  * value are left out. Columns newest last, as statements read. */
-export function metricTable(rows: FinancialRow[], metrics: [string, string, Fmt][], period: Period): MetricTable {
-  const kept = period === "a" ? rows.filter((r) => r.fiscal_period?.endsWith("Q4")) : rows;
+export function metricTable(
+  rows: FinancialRow[],
+  metrics: [string, string, Fmt][],
+  period: Period,
+  basis: Basis = "fiscal",
+): MetricTable {
+  const periodOf = (r: FinancialRow) => (basis === "calendar" ? r.calendar_period : r.fiscal_period) ?? null;
+  const kept = period === "a" ? rows.filter((r) => periodOf(r)?.endsWith("Q4")) : rows;
   let ends = [...new Set(kept.map((r) => r.period_end))].sort();
   ends = ends.slice(-(period === "a" ? ANNUAL_YEARS : 8));
   const label = (end: string) => {
-    const fp = kept.find((r) => r.period_end === end && r.fiscal_period)?.fiscal_period ?? null;
-    if (period === "a") return fp ? fp.replace(/ Q4$/, "") : `FY ending ${end.slice(0, 7)}`;
+    const fp = kept.map(periodOf).find((p, i) => p && kept[i]!.period_end === end) ?? null;
+    if (period === "a") return fp ? fp.replace(/ Q4$/, "") : `${basis === "calendar" ? "CY" : "FY"} ending ${end.slice(0, 7)}`;
     if (period === "ttm") return `TTM ${fp ?? calendarLabel(end)}`;
     return fp ?? calendarLabel(end);
   };

@@ -66,6 +66,16 @@ describe("statements", () => {
     expect(metricTable(rows, STATEMENTS.is.rows, "ttm").columns[0]!.label).toBe("TTM FY2026 Q4");
   });
 
+  it("labels calendar columns CY, and annual calendar columns are the calendar Q4s", () => {
+    const cal = [
+      fin("revenue", "2025-10-26", "35082000000", "FY2026 Q3", { calendar_period: "CY2025 Q4" }),
+      fin("revenue", "2026-01-25", "39331000000", "FY2026 Q4", { calendar_period: "CY2026 Q1" }),
+    ];
+    expect(metricTable(cal, STATEMENTS.is.rows, "q", "calendar").columns.map((c) => c.label)).toEqual(["CY2025 Q4", "CY2026 Q1"]);
+    expect(metricTable(cal, STATEMENTS.is.rows, "a", "calendar").columns.map((c) => c.label)).toEqual(["CY2025"]);
+    expect(metricTable(cal, STATEMENTS.is.rows, "a").columns.map((c) => c.label)).toEqual(["FY2026"]);
+  });
+
   it("exports the table's values with their sources", () => {
     const t = metricTable(rows, STATEMENTS.is.rows, "q");
     const csv = financialsCsv(rows, t, "quarter").split("\r\n");

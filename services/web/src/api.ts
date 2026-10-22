@@ -243,11 +243,13 @@ export const financialsView = (
   quarters: number,
   metrics: string[],
   view: "quarter" | "ttm",
+  basis: "fiscal" | "calendar" = "fiscal",
 ) =>
   get<{ as_of: string; rows: FinancialRow[] }>(token, `/v1/companies/${companyId}/financials`, {
     quarters,
     metrics,
     view,
+    ...(basis === "calendar" ? { basis } : {}),
   });
 
 export const screenerColumns = (token: string) =>

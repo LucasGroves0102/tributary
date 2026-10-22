@@ -10,6 +10,7 @@ import {
   segmentTables,
   statementRequest,
   STATEMENTS,
+  type Basis,
   type MetricTable,
   type Period,
   type Statement,
@@ -21,6 +22,11 @@ const PERIODS: [Period, string][] = [
   ["q", "Quarterly"],
   ["a", "Annual"],
   ["ttm", "TTM"],
+];
+
+const BASES: [Basis, string][] = [
+  ["fiscal", "Fiscal"],
+  ["calendar", "Calendar"],
 ];
 
 function Seg<T extends string>({ value, options, set, label }: { value: T; options: [T, string][]; set: (v: T) => void; label: string }) {
@@ -91,15 +97,16 @@ export function Gate({ load, name, what, children }: { load: Load<unknown> | nul
 export function Statements({ token, companyId, name, ticker }: { token: string; companyId: string; name: string; ticker: string }) {
   const [kind, setKind] = useState<Statement>("is");
   const [period, setPeriod] = useState<Period>("q");
+  const [basis, setBasis] = useState<Basis>("fiscal");
   const req = statementRequest(period);
   const metrics = STATEMENTS[kind].rows;
-  const load = useLoad(`${companyId}|${kind}|${period}`, () =>
-    financialsView(token, companyId, req.quarters, metrics.map(([m]) => m), req.view),
+  const load = useLoad(`${companyId}|${kind}|${period}|${basis}`, () =>
+    financialsView(token, companyId, req.quarters, metrics.map(([m]) => m), req.view, basis),
   );
-  const table = load?.state === "ok" ? metricTable(load.data.rows, metrics, period) : null;
+  const table = load?.state === "ok" ? metricTable(load.data.rows, metrics, period, basis) : null;
   const exportCsv = () =>
     load?.state === "ok" && table &&
-    download(`${ticker.toLowerCase()}-${kind}-${period}.csv`, new Blob([financialsCsv(load.data.rows, table, req.view)], { type: "text/csv" }));
+    download(`${ticker.toLowerCase()}-${kind}-${period}${basis === "calendar" ? "-calendar" : ""}.csv`, new Blob([financialsCsv(load.data.rows, table, req.view)], { type: "text/csv" }));
 
   return (
     <section className="card">
@@ -107,7 +114,8 @@ export function Statements({ token, companyId, name, ticker }: { token: string; 
         <Seg label="Statement" value={kind} set={setKind}
           options={(Object.keys(STATEMENTS) as Statement[]).map((k) => [k, STATEMENTS[k].label])} />
         <Seg label="Period" value={period} set={setPeriod} options={PERIODS} />
-        <span className="sub">fiscal periods · USD · hover a value for its filing</span>
+        <Seg label="Basis" value={basis} set={setBasis} options={BASES} />
+        <span className="sub">{basis === "calendar" ? "calendar quarters" : "fiscal periods"} · USD · hover a value for its filing</span>
         <span className="grow" />
         <button className="btn sm" onClick={exportCsv} disabled={!table?.rows.length}>Export CSV</button>
       </div>
@@ -122,7 +130,9 @@ export function Statements({ token, companyId, name, ticker }: { token: string; 
       </Gate>
       <div className="foot">
         {period === "a"
-          ? "Annual = the fiscal year: four quarters to each fiscal Q4, balances at the year end. "
+          ? basis === "calendar"
+            ? "Annual = the calendar year: the four quarters ending nearest each calendar Q4, balances at its end. "
+            : "Annual = the fiscal year: four quarters to each fiscal Q4, balances at the year end. "
           : period === "ttm"
             ? "TTM = trailing twelve months to each quarter end; balances at the quarter end. "
             : ""}

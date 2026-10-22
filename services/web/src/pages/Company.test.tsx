@@ -225,6 +225,16 @@ it("statements: quarterly, annual and TTM, each value cited, CSV export", async 
   expect([...container.querySelectorAll("thead th")].map((t) => t.firstChild?.textContent)).toEqual(["Income statement", "FY2026"]);
   await click(button("Export CSV"));
   expect(vi.mocked(download).mock.calls.at(-1)![0]).toBe("nvda-is-a.csv");
+  // calendar basis: asked of the API, said in the header, named in the export
+  expect(paths().filter((u) => u.pathname.endsWith("/financials")).every((u) => !u.searchParams.has("basis"))).toBe(true);
+  await click(button("Calendar"));
+  for (let i = 0; i < 2; i++) await act(async () => {});
+  expect(paths().filter((u) => u.pathname.endsWith("/financials")).at(-1)!.searchParams.get("basis")).toBe("calendar");
+  expect(container.textContent).toContain("calendar quarters");
+  await click(button("Quarterly"));
+  for (let i = 0; i < 2; i++) await act(async () => {});
+  await click(button("Export CSV"));
+  expect(vi.mocked(download).mock.calls.at(-1)![0]).toBe("nvda-is-q-calendar.csv");
 });
 
 it("ratios read TTM values; segments say honestly when none are loaded", async () => {
