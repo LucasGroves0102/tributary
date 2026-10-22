@@ -2709,3 +2709,99 @@ button.link.num {
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
 }
+
+/* Compare: side-by-side small multiples */
+
+.multiples {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  gap: var(--sp-6);
+  padding: var(--sp-6);
+}
+
+.multiple {
+  margin: 0;
+  padding: var(--sp-4);
+  min-width: 0;
+}
+
+@media (max-width: 600px) {
+  .multiples {
+    grid-template-columns: minmax(0, 1fr);
+    padding: var(--sp-4);
+  }
+}
+
+/* Keyboard shortcut sheet ("?") and table cell focus */
+
+.sheet-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 8vh 16px 16px;
+  background: var(--overlay);
+}
+
+.sheet {
+  width: min(760px, 100%);
+  max-height: 84vh;
+  overflow-y: auto;
+  box-shadow: var(--popover-shadow);
+}
+
+.sheet-b {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: var(--sp-6) var(--sp-8);
+  padding: var(--sp-6);
+}
+
+.sheet-b h3 {
+  margin: 0 0 var(--sp-3);
+  font-size: var(--fs-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-2);
+}
+
+.sheet-b dl {
+  margin: 0;
+}
+
+.sheet-b dl > div {
+  display: grid;
+  grid-template-columns: 128px minmax(0, 1fr);
+  gap: var(--sp-4);
+  padding: 3px 0;
+  align-items: baseline;
+}
+
+.sheet-b dt {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+.sheet-b dd {
+  margin: 0;
+  color: var(--text-2);
+}
+
+.side .cover-link.link {
+  padding: 2px 6px 0;
+  text-align: left;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+}
+
+.t tbody td:focus-visible,
+.t tbody th:focus-visible {
+  outline-offset: -2px;
+  background: var(--accent-soft);
+}

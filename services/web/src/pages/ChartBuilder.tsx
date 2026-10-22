@@ -159,19 +159,26 @@ export function ChartBuilder({ token, chart, setChart, saveBar }: Props) {
   const wanted = requests.flatMap(({ req }) => (req ? [keyOf(req)] : []));
   const wantedKey = wanted.join("\n");
 
+  // answers are keyed by request: one that arrives after the layers changed is still kept (a
+  // dropped one would stay "loading" when the layer comes back)
+  const mounted = useRef(true);
+  useEffect(() => () => {
+    mounted.current = false;
+  }, []);
   useEffect(() => {
-    let live = true;
+    mounted.current = true;
+    const live = () => mounted.current;
     for (const k of new Set(wanted)) {
       if ((results[k] && results[k].state !== "error") || cached(token, k)) continue;
       setResults((r) => ({ ...r, [k]: { state: "loading" } }));
       evaluateFormula(token, JSON.parse(k) as FormulaRequest)
         .then((data) => {
           remember(token, k, data);
-          if (live) setResults((r) => ({ ...r, [k]: { state: "ok", data } }));
+          if (live()) setResults((r) => ({ ...r, [k]: { state: "ok", data } }));
         })
         .catch(
           (e) =>
-            live &&
+            live() &&
             setResults((r) => ({
               ...r,
               [k]: {
@@ -186,9 +193,6 @@ export function ChartBuilder({ token, chart, setChart, saveBar }: Props) {
             })),
         );
     }
-    return () => {
-      live = false;
-    };
     // results is read only to skip requests already made; retry re-asks failed ones
   }, [token, wantedKey, retry]);
 

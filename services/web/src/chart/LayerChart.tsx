@@ -20,7 +20,12 @@ interface Props {
   subtitle?: string;
   /** deck output: the light palette on screen too, as the exports draw it */
   deck?: boolean;
+  /** a small multiple: a narrower, shorter viewBox (same text size, so it stays legible) */
+  compact?: boolean;
 }
+
+const COMPACT_WIDTH = 460;
+const COMPACT_PLOT_H = 200;
 
 /** The newest filing behind a point: the one a click opens. */
 export function newestSource(p: Point | undefined): Source | null {
@@ -31,10 +36,14 @@ export function newestSource(p: Point | undefined): Source | null {
  * legend and source footnote inside the SVG for deck exports. Hover (or the arrow keys) shows
  * every layer's value, period and source filing; a click or Enter opens the filing in the
  * reader. "View as table" shows the same values as a data table. */
-export function LayerChart({ series, title, footnote, svgRef, markers = [], onOpen, subtitle = "", deck = false }: Props) {
+export function LayerChart({ series, title, footnote, svgRef, markers = [], onOpen, subtitle = "", deck = false, compact = false }: Props) {
   const lay = useMemo(
-    () => layout(series, Boolean(title), markers, { subtitle: Boolean(subtitle), footLines: footnote.length }),
-    [series, title, markers, subtitle, footnote.length],
+    () => layout(series, Boolean(title), markers, {
+      subtitle: Boolean(subtitle),
+      footLines: footnote.length,
+      ...(compact ? { width: COMPACT_WIDTH, plotHeight: COMPACT_PLOT_H } : {}),
+    }),
+    [series, title, markers, subtitle, footnote.length, compact],
   );
   const [hover, setHover] = useState<number | null>(null);
   const [sel, setSel] = useState(0);
@@ -97,7 +106,7 @@ export function LayerChart({ series, title, footnote, svgRef, markers = [], onOp
     onOpen?.({ form: m.kind, filed: m.filed, accessionNo: m.accessionNo, url: null, periodEnd: m.filed, companyId: m.companyId });
 
   return (
-    <div className={deck ? "lchart deck" : "lchart"}>
+    <div className={["lchart", deck && "deck", compact && "compact"].filter(Boolean).join(" ")}>
       <div className="lchart-bar">
         <span className="faint small" id={help}>
           {onOpen ? "Click a point to open its filing. " : ""}Focus the chart for arrow keys

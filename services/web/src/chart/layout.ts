@@ -90,6 +90,10 @@ export interface LayoutOptions {
   subtitle?: boolean;
   /** footnote lines to leave room for (default 2) */
   footLines?: number;
+  /** viewBox width (default WIDTH); small multiples draw narrower so their text stays legible */
+  width?: number;
+  /** plot height (default PLOT_H) */
+  plotHeight?: number;
 }
 
 const stacked = (t: Series["type"]) => t === "sbar" || t === "sarea";
@@ -157,7 +161,8 @@ export function layout(series: Series[], title: boolean, markers: Marker[] = [],
   const ticks = xAxis(series);
   const hasRight = series.some((s) => s.axis === "R");
   const l = PAD.l;
-  const r = WIDTH - (hasRight ? PAD.rAxis : PAD.r);
+  const W = opts.width ?? WIDTH;
+  const r = W - (hasRight ? PAD.rAxis : PAD.r);
 
   // title, then the legend wrapped to the width
   let y = title ? (opts.subtitle ? 52 : 34) : opts.subtitle ? 32 : 14;
@@ -166,7 +171,7 @@ export function layout(series: Series[], title: boolean, markers: Marker[] = [],
   for (const s of series) {
     const name = s.name + (s.axis === "R" ? " (right axis)" : "");
     const w = 18 + name.length * CHAR_W + 16;
-    if (x + w > WIDTH - PAD.r && x > l) {
+    if (x + w > W - PAD.r && x > l) {
       x = l;
       y += LEGEND_LINE;
     }
@@ -175,7 +180,7 @@ export function layout(series: Series[], title: boolean, markers: Marker[] = [],
   }
   const top = (series.length ? y : y - LEGEND_LINE) + 14;
   const t = top + PAD.t;
-  const b = t + PLOT_H - PAD.t - PAD.b;
+  const b = t + (opts.plotHeight ?? PLOT_H) - PAD.t - PAD.b;
 
   const sp = spans(series, ticks);
   const on = (axis: "L" | "R") => series.flatMap((s, i) => (s.axis === axis ? [i] : []));
@@ -193,7 +198,8 @@ export function layout(series: Series[], title: boolean, markers: Marker[] = [],
     }
     return out;
   };
-  const every = Math.ceil(n / 10);
+  // ten labels across the full width, fewer on the narrower small multiples
+  const every = Math.ceil(n / Math.max(2, Math.min(10, Math.floor(W / 90))));
   const xLabels = ticks.flatMap((tk, i) =>
     i % every === 0 || i === n - 1 ? [{ x: xs[i]!, label: tk.period }] : [],
   );
@@ -260,7 +266,7 @@ export function layout(series: Series[], title: boolean, markers: Marker[] = [],
   const extraFoot = Math.max(0, (opts.footLines ?? 2) - 2) * 14;
 
   return {
-    width: WIDTH,
+    width: W,
     height: b + PAD.b + 46 + band + extraFoot,
     top,
     plot: { l, r, t, b },
