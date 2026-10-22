@@ -1,3 +1,4 @@
+import { Skeleton } from "../components/States";
 import { ago, day } from "../format";
 import { href } from "../route";
 import type { RecentWork } from "../types";
@@ -20,7 +21,7 @@ export function recentRows(recent: RecentWork, limit = ROWS): Row[] {
 
 /** Home's "Continue where you left off". */
 export function Recent({ recent, onOpen }: { recent: RecentWork | null; onOpen: (itemId: string) => void }) {
-  if (recent === null) return <p className="empty">Loading your recent work…</p>;
+  if (recent === null) return <Skeleton lines={3} label="Loading your recent work" />;
   const rows = recentRows(recent);
   if (!rows.length) {
     return (

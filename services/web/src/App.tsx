@@ -66,6 +66,16 @@ export function App(props: Props = {}) {
   const [focusTick, setFocusTick] = useState(0);
   const input = useRef<HTMLTextAreaElement>(null);
   const route = useRoute();
+  // narrow screens: the sidebar is a drawer behind the Menu button (styles.css), closed on
+  // every navigation and on Escape
+  const [navOpen, setNavOpen] = useState(false);
+  useEffect(() => setNavOpen(false), [route]);
+  useEffect(() => {
+    if (!navOpen) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setNavOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [navOpen]);
   const [theme, toggleTheme] = useTheme(user);
   const workspace = useWorkspace(token, user, me?.companies.map((c) => c.company_id));
   const saved = useSaved(token, user);
@@ -355,6 +365,7 @@ export function App(props: Props = {}) {
     <>
       <div className={showDrawer ? "app with-ai" : "app"}>
         <Sidebar
+          open={navOpen}
           route={route}
           me={me}
           workspace={workspace}
@@ -363,8 +374,11 @@ export function App(props: Props = {}) {
           onExport={exportWatchlist}
           workspaces={token ? <WorkspaceTree saved={saved} onOpen={openSaved} onError={setError} /> : null}
         />
+        {navOpen && <div className="scrim" aria-hidden="true" onClick={() => setNavOpen(false)} />}
         <div className="main">
           <TopBar
+            menuOpen={navOpen}
+            onMenu={() => setNavOpen((o) => !o)}
             route={route}
             companyName={companyName}
             users={users}

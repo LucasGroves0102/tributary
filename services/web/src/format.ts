@@ -94,3 +94,10 @@ export function notForBanks(industry: string | null | undefined, metric: string)
   return !!industry && /\bbank|savings institution|bancorp/i.test(industry)
     && /operating_margin|free_cash_flow|fcf|net_debt/.test(metric);
 }
+
+/** What a bank's inapplicable metric shows instead of a dash, and why (its hover). */
+export const BANK_NA = "n/a (bank)";
+export function bankTitle(label: string): string {
+  return `${label} doesn't describe a bank: deposits are its debt and lending is its operations, ` +
+    "so the SEC data has no comparable figure.";
+}

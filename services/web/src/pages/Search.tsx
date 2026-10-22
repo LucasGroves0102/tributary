@@ -3,6 +3,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { searchFilings } from "../api";
 import { formTag } from "../company/data";
 import { useLoad } from "../company/useLoad";
+import { Skeleton } from "../components/States";
 import { day } from "../format";
 import { snippetRuns } from "../reader/text";
 import { go, href } from "../route";
@@ -102,7 +103,7 @@ export function Search({ token, search, companies }: Props) {
           Every company's filing index is still on its Filings tab.
         </p>
       ) : !load || load.state === "loading" ? (
-        <p className="empty">Searching…</p>
+        <Skeleton lines={5} label="Searching" />
       ) : load.state === "denied" ? (
         <p className="empty locked">That company's filings aren't included in your access.</p>
       ) : load.state === "error" ? (

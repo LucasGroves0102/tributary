@@ -50,6 +50,8 @@ export interface Workspace {
   unwatch: (companyId: string) => Promise<void>;
   /** how many companies the user can read (Home's filing feed covers them all) */
   readableCount: number;
+  /** asks again for the watchlist, feed and calendars (after an error) */
+  reload?: () => void;
 }
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -204,5 +206,9 @@ export function useWorkspace(token: string | null, user: string | null, companyI
     watch,
     unwatch,
     readableCount: companyIds.length,
+    reload: () => {
+      setList({ state: "loading" });
+      setVersion((v) => v + 1);
+    },
   };
 }

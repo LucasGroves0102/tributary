@@ -1,5 +1,7 @@
 import { useState, type ReactNode } from "react";
 
+import { ErrorPanel, Skeleton } from "../components/States";
+import { navRow, onTableKey } from "../components/tableNav";
 import { ago, change, day } from "../format";
 import { status, WATCH_COLUMNS, type ExpectedItem, type FilingItem, type WatchRow } from "../home/data";
 import { EXPECTED_DAYS, RECENT_DAYS, type Workspace } from "../home/useWorkspace";
@@ -195,7 +197,7 @@ function WatchTable({ workspace, onAdd }: { workspace: Workspace; onAdd: () => v
   const [removing, setRemoving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  if (watchlist.state === "loading") return <p className="empty">Loading your watchlist…</p>;
+  if (watchlist.state === "loading") return <Skeleton lines={4} label="Loading your watchlist" />;
   if (watchlist.state === "unavailable") {
     return (
       <p className="empty">
@@ -205,7 +207,7 @@ function WatchTable({ workspace, onAdd }: { workspace: Workspace; onAdd: () => v
     );
   }
   if (watchlist.state === "error") {
-    return <p className="empty error">Couldn't load the watchlist ({watchlist.message}). Reload to try again.</p>;
+    return <ErrorPanel what="your watchlist" detail={`The Query API said: ${watchlist.message}.`} onRetry={workspace.reload} />;
   }
   if (rows.length === 0) {
     return (
@@ -249,9 +251,9 @@ function WatchTable({ workspace, onAdd }: { workspace: Workspace; onAdd: () => v
               </th>
             </tr>
           </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.companyId} className="clk" onClick={() => go({ view: "company", companyId: r.companyId })}>
+          <tbody onKeyDown={onTableKey}>
+            {rows.map((r, i) => (
+              <tr key={r.companyId} className="clk" {...navRow(i, r.name)} onClick={() => go({ view: "company", companyId: r.companyId })}>
                 <td className="first">
                   <a className="co" href={href({ view: "company", companyId: r.companyId })} onClick={(e) => e.stopPropagation()}>
                     <b>{r.name}</b>
@@ -329,7 +331,7 @@ function FormTag({ form }: { form: string }) {
 }
 
 function FilingFeed({ filings }: { filings: FilingItem[] | null }) {
-  if (filings === null) return <p className="empty">Loading recent filings…</p>;
+  if (filings === null) return <Skeleton lines={5} label="Loading recent filings" />;
   if (filings.length === 0) {
     return (
       <p className="empty">
@@ -373,7 +375,7 @@ function FilingFeed({ filings }: { filings: FilingItem[] | null }) {
 }
 
 function ExpectedTable({ expected }: { expected: ExpectedItem[] | null }) {
-  if (expected === null) return <p className="empty">Loading expected filings…</p>;
+  if (expected === null) return <Skeleton lines={4} label="Loading expected filings" />;
   if (expected.length === 0) {
     return (
       <p className="empty">

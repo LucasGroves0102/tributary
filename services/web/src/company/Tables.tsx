@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react";
 
 import { financialsView, segments as fetchSegments } from "../api";
 import { download } from "../download";
-import { change, pct } from "../format";
+import { BANK_NA, bankTitle, change, pct } from "../format";
 import {
   financialsCsv,
   metricTable,
@@ -16,6 +16,7 @@ import {
   type Statement,
   type TableCell,
 } from "./data";
+import { ErrorPanel, Skeleton } from "../components/States";
 import { useLoad, type Load } from "./useLoad";
 
 const PERIODS: [Period, string][] = [
@@ -41,7 +42,8 @@ function Seg<T extends string>({ value, options, set, label }: { value: T; optio
   );
 }
 
-function Cell({ cell }: { cell: TableCell | null }) {
+function Cell({ cell, bank, label = "" }: { cell: TableCell | null; bank?: boolean; label?: string }) {
+  if (!cell && bank) return <td className="n faint" title={bankTitle(label)}>{BANK_NA}</td>;
   if (!cell) return <td className="n faint">—</td>;
   return (
     <td className={cell.derived ? "n derived" : "n"} title={cell.title}>
@@ -77,7 +79,7 @@ export function MetricTableView({ table, first }: { table: MetricTable; first: s
             <tr key={r.metric}>
               <td className="first">{r.label}</td>
               {r.cells.map((c, i) => (
-                <Cell key={table.columns[i]!.periodEnd} cell={c} />
+                <Cell key={table.columns[i]!.periodEnd} cell={c} bank={r.bank} label={r.label} />
               ))}
             </tr>
           ))}
@@ -88,13 +90,22 @@ export function MetricTableView({ table, first }: { table: MetricTable; first: s
 }
 
 export function Gate({ load, name, what, children }: { load: Load<unknown> | null; name: string; what: string; children: () => ReactNode }) {
-  if (!load || load.state === "loading") return <p className="empty">Loading…</p>;
+  if (!load || load.state === "loading") return <Skeleton lines={5} label={`Loading ${what.toLowerCase()}`} />;
   if (load.state === "denied") return <p className="empty locked">{what} for {name} aren't included in your access.</p>;
-  if (load.state === "error") return <p className="empty error">Couldn't load {what.toLowerCase()} ({load.message}).</p>;
+  if (load.state === "error") return <ErrorPanel what={what.toLowerCase()} detail={`The Query API said: ${load.message}.`} onRetry={load.retry} />;
   return <>{children()}</>;
 }
 
-export function Statements({ token, companyId, name, ticker }: { token: string; companyId: string; name: string; ticker: string }) {
+interface TableProps {
+  token: string;
+  companyId: string;
+  name: string;
+  ticker: string;
+  /** SIC description: a bank's operating margin / FCF / net debt rows read n/a */
+  industry?: string | null;
+}
+
+export function Statements({ token, companyId, name, ticker, industry = null }: TableProps) {
   const [kind, setKind] = useState<Statement>("is");
   const [period, setPeriod] = useState<Period>("q");
   const [basis, setBasis] = useState<Basis>("fiscal");
@@ -103,7 +114,7 @@ export function Statements({ token, companyId, name, ticker }: { token: string; 
   const load = useLoad(`${companyId}|${kind}|${period}|${basis}`, () =>
     financialsView(token, companyId, req.quarters, metrics.map(([m]) => m), req.view, basis),
   );
-  const table = load?.state === "ok" ? metricTable(load.data.rows, metrics, period, basis) : null;
+  const table = load?.state === "ok" ? metricTable(load.data.rows, metrics, period, basis, industry) : null;
   const exportCsv = () =>
     load?.state === "ok" && table &&
     download(`${ticker.toLowerCase()}-${kind}-${period}${basis === "calendar" ? "-calendar" : ""}.csv`, new Blob([financialsCsv(load.data.rows, table, req.view)], { type: "text/csv" }));
@@ -124,7 +135,10 @@ export function Statements({ token, companyId, name, ticker }: { token: string; 
           table!.rows.length ? (
             <MetricTableView table={table!} first={STATEMENTS[kind].label} />
           ) : (
-            <p className="empty">No {STATEMENTS[kind].label.toLowerCase()} values for these periods.</p>
+            <p className="empty">
+              No {STATEMENTS[kind].label.toLowerCase()} values for these periods. Try{" "}
+              {period === "a" ? "Quarterly" : "Annual"} or another statement.
+            </p>
           )
         }
       </Gate>
@@ -143,9 +157,9 @@ export function Statements({ token, companyId, name, ticker }: { token: string; 
   );
 }
 
-export function Ratios({ token, companyId, name, ticker }: { token: string; companyId: string; name: string; ticker: string }) {
+export function Ratios({ token, companyId, name, ticker, industry = null }: TableProps) {
   const load = useLoad(companyId, () => financialsView(token, companyId, 8, RATIOS.map(([m]) => m), "ttm"));
-  const table = load?.state === "ok" ? metricTable(load.data.rows, RATIOS, "ttm") : null;
+  const table = load?.state === "ok" ? metricTable(load.data.rows, RATIOS, "ttm", "fiscal", industry) : null;
   return (
     <section className="card">
       <div className="card-h">
@@ -162,7 +176,7 @@ export function Ratios({ token, companyId, name, ticker }: { token: string; comp
         </button>
       </div>
       <Gate load={load} name={name} what="Financials">
-        {() => (table!.rows.length ? <MetricTableView table={table!} first="Ratio" /> : <p className="empty">No ratios for these periods.</p>)}
+        {() => (table!.rows.length ? <MetricTableView table={table!} first="Ratio" /> : <p className="empty">No ratios for these periods yet: they come from 10-Q and 10-K XBRL values. Statements shows what {name} reports.</p>)}
       </Gate>
     </section>
   );

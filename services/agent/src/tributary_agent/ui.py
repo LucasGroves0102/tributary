@@ -21,6 +21,11 @@ MAX_LAYERS = 12
 CIK = r"^\d{10}$"
 Transform = Literal["q", "ttm", "yoy", "idx"]
 LayerType = Literal["line", "bar", "area"]
+# what the chart builder can show (wider than the actions above: the model reads them in the
+# context but proposes only Transform / LayerType / ranges 2, 3, 5)
+ShownTransform = Literal["q", "ttm", "yoy", "qoq", "idx", "ps"]
+ShownLayerType = Literal["line", "bar", "area", "sbar", "sarea"]
+ShownRange = Literal[1, 2, 3, 5, 10, "max"]
 Axis = Literal["L", "R"]
 Band = Literal["lt100m", "100m-1b", "1b-10b", "10b-100b", "gte100b"]
 FilerCategory = Literal["large_accelerated", "accelerated", "non_accelerated"]
@@ -59,15 +64,15 @@ class LayerContext(_Strict):
     label: str | None = Field(default=None, max_length=40)
     metric: Metric | None = None
     formula: str | None = Field(default=None, max_length=500)
-    transform: Transform = "ttm"
-    type: LayerType = "line"
+    transform: ShownTransform = "ttm"
+    type: ShownLayerType = "line"
     axis: Axis = "L"
     hidden: bool = False
 
 
 class ChartContext(_Strict):
     title: str = Field(default="", max_length=200)
-    range: Literal[2, 3, 5] = 3
+    range: ShownRange = 3
     align: Literal["calendar", "fiscal"] = "calendar"
     layers: list[LayerContext] = Field(default=[], max_length=MAX_LAYERS)
 

@@ -95,3 +95,19 @@ describe("screener rows", () => {
     expect(r.cells.revenue_ttm).toEqual({ value: null, text: "—", title: MASKED_TITLE });
   });
 });
+
+describe("bank rows", () => {
+  it("say n/a (bank) where operating margin, FCF and net debt don't apply", () => {
+    const bank = entry({
+      company_id: "0000019617", name: "JPMorgan Chase", industry: "National Commercial Banks",
+      values: { revenue_ttm: "180000000000", operating_margin_ttm: null, free_cash_flow_ttm: null, net_debt_q: null },
+    });
+    const r = screenRow({ ...bank, filer_categories: null, state_of_incorporation: null });
+    for (const k of ["operating_margin_ttm", "free_cash_flow_ttm", "net_debt_q"]) {
+      expect(r.cells[k]?.text).toBe("n/a (bank)");
+      expect(r.cells[k]?.title).toContain("doesn't describe a bank");
+    }
+    expect(r.cells.gross_margin_ttm?.text).toBe("—");
+    expect(r.cells.revenue_ttm?.text).toBe("$180.00B");
+  });
+});

@@ -11,12 +11,15 @@ import {
   companiesOf,
   MASKED_TITLE,
   MAX_PEERS,
+  medianTitle,
   peerStats,
   short,
   statText,
   type CompareState,
 } from "../compare/state";
 import { CompanySearch } from "../components/CompanySearch";
+import { ErrorPanel, Skeleton } from "../components/States";
+import { navRow, onTableKey } from "../components/tableNav";
 import { download } from "../download";
 import { day } from "../format";
 import { go, href } from "../route";
@@ -45,6 +48,7 @@ export function Compare({ token, compare, onChart, saveBar }: Props) {
   const key = JSON.stringify(params);
   const [table, setTable] = useState<Load<Screener> | null>(null);
   const [suggested, setSuggested] = useState<Load<Peers> | null>(null);
+  const [attempt, setAttempt] = useState(0);
   const [chosen, setChartKey] = useState(cols[0]!);
   const chartKey = cols.includes(chosen) ? chosen : cols[0]!;
 
@@ -66,7 +70,7 @@ export function Compare({ token, compare, onChart, saveBar }: Props) {
       live = false;
     };
     // params is keyed by its JSON so an equal comps set doesn't refetch
-  }, [token, key]);
+  }, [token, key, attempt]);
 
   useEffect(() => {
     if (!compare.target) {
@@ -95,6 +99,9 @@ export function Compare({ token, compare, onChart, saveBar }: Props) {
     [table, compare],
   );
   const stats = useMemo(() => peerStats(rows, cols), [rows, cols]);
+  const bankCols = cols
+    .filter((k) => rows.some((r) => r.cells[k]?.bank))
+    .map((k) => COMPARE_COLUMNS.find((c) => c.key === k)!.long.toLowerCase());
   const target = rows.find((r) => r.isTarget);
   const names = new Map(rows.map((r) => [r.companyId, r.ticker ?? r.name]));
   const masked = rows.filter((r) => !r.readable);
@@ -218,9 +225,13 @@ export function Compare({ token, compare, onChart, saveBar }: Props) {
             similar size). Or open a company and choose Compare.
           </p>
         ) : table?.state === "error" ? (
-          <p className="empty error">Couldn't load the comps ({table.message}).</p>
+          <ErrorPanel what="the comps" detail={`The Query API said: ${table.message}.`}
+            onRetry={() => {
+              setTable({ state: "loading" });
+              setAttempt((n) => n + 1);
+            }} />
         ) : !table || table.state === "loading" ? (
-          <p className="empty">Loading the comps…</p>
+          <Skeleton lines={Math.min(ids.length, 8) + 2} label="Loading the comps" />
         ) : (
           <div className="tw">
             <table className="t comps">
@@ -239,9 +250,10 @@ export function Compare({ token, compare, onChart, saveBar }: Props) {
                   <th><span className="visually-hidden">Actions</span></th>
                 </tr>
               </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr key={r.companyId} className={[r.isTarget ? "sel" : "", r.readable ? "" : "masked"].join(" ").trim() || undefined}>
+              <tbody onKeyDown={onTableKey}>
+                {rows.map((r, i) => (
+                  <tr key={r.companyId} className={[r.isTarget ? "sel" : "", r.readable ? "" : "masked"].join(" ").trim() || undefined}
+                    {...navRow(i, r.name)}>
                     <td className="first">
                       <a className="co" href={href({ view: "company", companyId: r.companyId })}>
                         <b>{r.name}</b>
@@ -289,8 +301,9 @@ export function Compare({ token, compare, onChart, saveBar }: Props) {
                   <td className="first">Peer median</td>
                   <td className="faint">{rows.filter((r) => !r.isTarget && r.readable).length} readable peers</td>
                   {cols.map((k) => (
-                    <td key={k} className="n" title={`Median of ${stats[k]!.n} peers' values; the target is excluded`}>
+                    <td key={k} className="n" title={medianTitle(stats[k]!)}>
                       {statText(k, stats[k]!.median)}
+                      {stats[k]!.banks > 0 && <span className="unit"> excl. banks</span>}
                     </td>
                   ))}
                   <td />
@@ -312,8 +325,10 @@ export function Compare({ token, compare, onChart, saveBar }: Props) {
         <div className="foot">
           USD. No valuation multiples: Tributary has no market prices. Each company's own latest
           quarter, labelled by calendar quarter (fiscal in brackets); hover a value for its
-          period and source filing.
-          {fyes.length > 1 && ` Fiscal years end in different months (${fyes.join(", ")}); TTM figures compare regardless.`}
+          period and source filing. Keyboard: ↑ ↓ move between rows, Enter opens the company.
+          {bankCols.length > 0 &&
+            ` Banks show n/a for ${bankCols.join(", ")} (deposits are a bank's debt and lending its operations) and are left out of ${bankCols.length === 1 ? "that column's" : "those columns'"} median.`}
+          {fyes.length > 1 &&` Fiscal years end in different months (${fyes.join(", ")}); TTM figures compare regardless.`}
           {masked.length > 0 &&
             ` ${masked.length} ${masked.length === 1 ? "company shows" : "companies show"} metadata only: your plan doesn't cover ${masked.length === 1 ? "its" : "their"} financials, so ${masked.length === 1 ? "it is" : "they are"} left out of the median and charts.`}
         </div>

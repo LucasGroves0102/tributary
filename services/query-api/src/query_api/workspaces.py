@@ -23,7 +23,7 @@ from typing import Annotated, Any, Literal, Protocol
 import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 MAX_WORKSPACES = 50
 MAX_ITEMS_PER_WORKSPACE = 100
@@ -65,10 +65,17 @@ class ChartLayer(_Strict):
     metric: str | None = Field(default=None, pattern=r"^[a-z_]{1,64}$")
     formula: str | None = Field(default=None, max_length=500)
     defaultCompany: str | None = Field(default=None, pattern=CIK)
-    transform: Literal["q", "ttm", "yoy", "idx"] = "ttm"
-    type: Literal["line", "bar", "area"] = "line"
+    transform: Literal["q", "ttm", "yoy", "qoq", "idx", "ps"] = "ttm"
+    type: Literal["line", "bar", "area", "sbar", "sarea"] = "line"
     axis: Literal["L", "R"] = "L"
     hidden: bool = False
+    name: str | None = Field(default=None, max_length=80)  # legend name
+    color: int | None = Field(default=None, ge=0, le=7)    # tokens.css --series-N
+
+    @field_validator("name")
+    @classmethod
+    def _name(cls, v: str | None) -> str | None:
+        return None if v is None or not v.strip() else clean_name(v, 80)
 
     @model_validator(mode="after")
     def _complete(self) -> ChartLayer:
@@ -83,9 +90,10 @@ class ChartLayer(_Strict):
 class ChartState(_Strict):
     """chart/model.ts ChartState, without nextId."""
     title: str = Field(default="", max_length=200)
-    range: Literal[2, 3, 5] = 3
+    range: Literal[1, 2, 3, 5, 10, "max"] = 3
     align: Literal["calendar", "fiscal"] = "calendar"
     layers: list[ChartLayer] = Field(min_length=1, max_length=12)
+    markers: bool = False  # filing markers on the time axis
 
 
 CompareColumn = Literal["revenue_ttm", "revenue_growth_ttm", "gross_margin_ttm",

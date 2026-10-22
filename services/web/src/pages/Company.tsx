@@ -5,6 +5,7 @@ import { Overview } from "../company/Overview";
 import { Peers } from "../company/Peers";
 import { Ratios, Segments, Statements } from "../company/Tables";
 import { useLoad } from "../company/useLoad";
+import { ErrorPanel, Skeleton } from "../components/States";
 import { day } from "../format";
 import { COMPANY_TABS, go, href, type CompanyTab } from "../route";
 
@@ -30,11 +31,21 @@ export function Company({ token, companyId, tab, watched, onWatch, onChart, onCh
   );
   const expected = useLoad(companyId, () => expectedFilingsOf(token, companyId));
 
-  if (!meta || meta.state === "loading") return <div className="page"><p className="muted">Loading…</p></div>;
+  if (!meta || meta.state === "loading") return <div className="page"><Skeleton lines={6} label="Loading the company" /></div>;
+  if (meta.state === "error") {
+    return (
+      <div className="page">
+        <ErrorPanel what="this company" detail={`The Query API said: ${meta.message}.`} onRetry={meta.retry} />
+      </div>
+    );
+  }
   if (meta.state !== "ok" || meta.data === null) {
     return (
       <div className="page">
-        <p className="empty error">{meta.state === "ok" ? `No company ${companyId}.` : "Couldn't load this company."}</p>
+        <p className="empty">
+          No company with CIK {companyId} has financials or filings here. Find it under{" "}
+          <a href={href({ view: "companies" })}>Companies</a>, or search with Ctrl K.
+        </p>
       </div>
     );
   }
@@ -105,9 +116,9 @@ export function Company({ token, companyId, tab, watched, onWatch, onChart, onCh
       </section>
 
       {tab === "overview" && <Overview token={token} companyId={companyId} name={h.name} row={row} access={row.access} />}
-      {tab === "statements" && <Statements token={token} companyId={companyId} name={h.name} ticker={ticker} />}
+      {tab === "statements" && <Statements token={token} companyId={companyId} name={h.name} ticker={ticker} industry={h.industry} />}
       {tab === "segments" && <Segments token={token} companyId={companyId} name={h.name} />}
-      {tab === "ratios" && <Ratios token={token} companyId={companyId} name={h.name} ticker={ticker} />}
+      {tab === "ratios" && <Ratios token={token} companyId={companyId} name={h.name} ticker={ticker} industry={h.industry} />}
       {tab === "filings" && <Filings token={token} companyId={companyId} name={h.name} canRead={row.access.includes("filings")} />}
       {tab === "peers" && <Peers token={token} companyId={companyId} name={h.name} onChart={onChartMany} />}
     </div>

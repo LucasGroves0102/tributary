@@ -15,5 +15,6 @@ export default defineConfig({
       "/api/agent": { target: AGENT_API, rewrite: (p) => p.replace(/^\/api\/agent/, "") },
     },
   },
-  test: { environment: "jsdom" },
+  // e2e/ is Playwright (npm run e2e), not vitest
+  test: { environment: "jsdom", include: ["src/**/*.test.{ts,tsx}"] },
 });

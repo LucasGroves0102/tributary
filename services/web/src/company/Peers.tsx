@@ -45,7 +45,10 @@ export function Peers({
       <Gate load={load} name={name} what="Peers">
         {() =>
           !peerIds.length ? (
-            <p className="empty">No companies share {name}'s SIC code or group.</p>
+            <p className="empty">
+              No companies share {name}'s SIC code or group. Add peers by hand in{" "}
+              <a href={href({ view: "compare", compare: { target: companyId } })}>Compare</a>.
+            </p>
           ) : (
             <div className="tw">
               <table className="t">

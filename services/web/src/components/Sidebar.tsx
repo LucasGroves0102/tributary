@@ -6,6 +6,7 @@ import type { Workspace } from "../home/useWorkspace";
 import { href, NAV, type Route } from "../route";
 import type { Me } from "../types";
 import { Spark } from "./Spark";
+import { Skeleton } from "./States";
 
 const NEXT_FILINGS = 4;
 
@@ -18,6 +19,8 @@ interface Props {
   onExport: () => void;
   /** the Workspaces section (workspaces/WorkspaceTree) */
   workspaces?: ReactNode;
+  /** narrow screens: shown as a drawer over the page */
+  open?: boolean;
 }
 
 /** Which nav entry a route belongs to: a company or filing is under Companies. */
@@ -25,7 +28,7 @@ function section(route: Route): Route["view"] {
   return route.view === "company" || route.view === "filing" ? "companies" : route.view;
 }
 
-export function Sidebar({ route, me, workspace, lastIngested, onAdd, onExport, workspaces }: Props) {
+export function Sidebar({ route, me, workspace, lastIngested, onAdd, onExport, workspaces, open = false }: Props) {
   const { rows, filings, watchlist } = workspace;
   const active = section(route);
   const newCount = (filings ?? []).filter((f) => f.isNew).length;
@@ -35,7 +38,7 @@ export function Sidebar({ route, me, workspace, lastIngested, onAdd, onExport, w
     .slice(0, NEXT_FILINGS);
 
   return (
-    <aside className="side">
+    <aside id="side-nav" className={open ? "side open" : "side"} aria-label="Navigation">
       <div className="brand">
         <img src="/favicon.svg" alt="" width={18} height={18} />
         Tributary
@@ -78,7 +81,7 @@ export function Sidebar({ route, me, workspace, lastIngested, onAdd, onExport, w
         </button>
       </div>
       <div className="wl">
-        {watchlist.state === "loading" && <p className="side-note">Loading watchlist…</p>}
+        {watchlist.state === "loading" && <Skeleton lines={3} label="Loading watchlist" />}
         {watchlist.state === "unavailable" && (
           <p className="side-note">Watchlists are offline; your companies are under Companies.</p>
         )}

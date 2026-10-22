@@ -157,3 +157,24 @@ it("toggles columns and starts empty with a hint", async () => {
   await click(roe.querySelector("input"));
   expect(window.location.hash).toContain("cols=revenue_ttm,revenue_growth_ttm,gross_margin_ttm,operating_margin_ttm,free_cash_flow_ttm,fcf_margin_ttm,net_debt_q,debt_to_equity_q,roe_ttm");
 });
+
+it("shows a bank's operating margin as n/a and leaves it out of the median, with a note", async () => {
+  const JPM = "0000019617";
+  const bank = row(entry({ company_id: JPM, name: "JPMORGAN CHASE & CO", tickers: ["JPM"], industry: "National Commercial Banks",
+    values: { revenue_ttm: "180000000000", operating_margin_ttm: null } }));
+  vi.mocked(fetch).mockImplementation(async (url) => new URL(String(url), "http://x").pathname.endsWith("/peers")
+    ? Response.json(PEERS)
+    : Response.json({ as_of: "", total: 3, limit: 3, offset: 0, sort: "name", columns: [], rows: [row(entry()), APPLE, bank] }));
+  await render({ target: NVDA, peers: [AAPL, JPM], cols: ["revenue_ttm", "operating_margin_ttm"] });
+  const jpm = rows().find((r) => r.textContent?.includes("JPM"))!;
+  const cell = [...jpm.querySelectorAll("td.n")][1]!;
+  expect(cell.textContent).toBe("n/a (bank)");
+  expect(cell.getAttribute("title")).toContain("doesn't describe a bank");
+  const median = rows().find((r) => r.textContent?.startsWith("Peer median"))!;
+  const m = [...median.querySelectorAll("td.n")][1]!;
+  expect(m.textContent).toBe("30.0% excl. banks");
+  expect(m.getAttribute("title")).toContain("1 bank left out");
+  expect($(".foot")?.textContent).toContain("Banks show n/a for operating margin");
+  // company rows are a keyboard-navigable list; the median rows aren't
+  expect(container.querySelectorAll("table.comps tbody tr[data-nav]")).toHaveLength(3);
+});

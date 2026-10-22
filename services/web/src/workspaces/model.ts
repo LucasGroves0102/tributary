@@ -46,8 +46,11 @@ export function stateOf(c: Current): Record<string, unknown> {
             if (l.defaultCompany) out.defaultCompany = l.defaultCompany;
           }
           if (l.hidden) out.hidden = true;
+          if (l.name) out.name = l.name;
+          if (l.color !== undefined) out.color = l.color;
           return out;
         }),
+        ...(c.chart.markers ? { markers: true } : {}),
       };
     case "comps":
       return { ...cleanCompare(c.compare) };

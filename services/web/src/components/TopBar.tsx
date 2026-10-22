@@ -13,12 +13,21 @@ interface Props {
   onSearch: () => void;
   onTheme: () => void;
   onAssistant: () => void;
+  /** narrow screens: open or close the sidebar drawer */
+  onMenu?: () => void;
+  menuOpen?: boolean;
 }
 
 export function TopBar(props: Props) {
   const { route, users, user, busy, theme, assistantOpen } = props;
   return (
     <header className="top">
+      {props.onMenu && (
+        <button className="btn ghost sm menu-btn" aria-label="Menu" aria-expanded={!!props.menuOpen}
+          aria-controls="side-nav" onClick={props.onMenu}>
+          ☰
+        </button>
+      )}
       <Breadcrumb route={route} companyName={props.companyName} />
       <button className="search-box" onClick={props.onSearch} aria-label="Search (Ctrl K)">
         <span>Search companies, filings, pages, actions</span>

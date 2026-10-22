@@ -23,3 +23,5 @@ deploy/helm/monitoring/charts/
 *.tfstate
 *.tfstate.*
 crash.log
+test-results/
+playwright-report/

@@ -226,7 +226,16 @@ def test_context_is_strict_and_size_capped():
     ok = UiContext.model_validate({"page": "chart", "chart": {"layers": [
         {"kind": "metric", "company_id": NVDA, "label": "NVDA", "metric": "revenue"}]}})
     assert ok.chart.layers[0].metric == "revenue"
-    comps = UiContext.model_validate({"page": "compare", "compare": {
+    # everything the chart builder can show, even what the model can't propose
+    shown = UiContext.model_validate({"page": "chart", "chart": {"range": "max", "layers": [
+        {"kind": "metric", "company_id": NVDA, "metric": "revenue", "transform": "qoq",
+         "type": "sbar"},
+        {"kind": "metric", "company_id": NVDA, "metric": "revenue", "transform": "ps",
+         "type": "sarea"}]}})
+    assert shown.chart.range == "max" and shown.chart.layers[1].transform == "ps"
+    with pytest.raises(ValidationError):
+        UiContext.model_validate({"page": "chart", "chart": {"range": 7}})
+    comps =UiContext.model_validate({"page": "compare", "compare": {
         "target": NVDA, "peers": [AAPL], "columns": ["revenue_ttm"]}})
     assert comps.compare.peers == [AAPL]
     assert UiContext.model_validate({"page": "company", "company_id": NVDA,
