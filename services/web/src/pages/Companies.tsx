@@ -20,6 +20,8 @@ import {
   type FilerCategory,
   type ScreenFilters,
 } from "../companies/screen";
+import { ErrorPanel, Skeleton } from "../components/States";
+import { navRow, onTableKey } from "../components/tableNav";
 import { download } from "../download";
 import { go, href } from "../route";
 import type { Screener } from "../types";
@@ -46,6 +48,7 @@ export function Companies({ token, screen, watched, onWatch, onChart, saveBar }:
   const [result, setResult] = useState<State>({ state: "loading" });
   const [exporting, setExporting] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
   const params = useMemo(() => screenParams(screen), [screen]);
   const key = JSON.stringify(params);
 
@@ -66,7 +69,7 @@ export function Companies({ token, screen, watched, onWatch, onChart, saveBar }:
       live = false;
     };
     // params is keyed by its JSON so a new but equal screen doesn't refetch
-  }, [token, key]);
+  }, [token, key, attempt]);
 
   const set = (patch: Partial<ScreenFilters>) =>
     go({ view: "companies", screen: { ...screen, page: undefined, ...patch } });
@@ -121,9 +124,13 @@ export function Companies({ token, screen, watched, onWatch, onChart, saveBar }:
             )}
           </div>
           {result.state === "error" ? (
-            <p className="empty error">Couldn't run this screen ({result.message}).</p>
+            <ErrorPanel what="this screen" detail={`The Query API said: ${result.message}.`}
+              onRetry={() => {
+                setResult({ state: "loading" });
+                setAttempt((n) => n + 1);
+              }} />
           ) : result.state === "loading" ? (
-            <p className="empty">Running the screen…</p>
+            <Skeleton lines={8} label="Running the screen" />
           ) : rows.length === 0 ? (
             <p className="empty">
               No companies match.{" "}
@@ -153,6 +160,7 @@ export function Companies({ token, screen, watched, onWatch, onChart, saveBar }:
           <div className="foot">
             USD. TTM = trailing twelve months to each company's latest reported quarter; net debt
             and debt/equity at that quarter's end. Hover a value for its period and source filing.
+            Keyboard: ↑ ↓ move between rows, Home/End jump, Enter opens the company.
             {masked > 0 && (
               <>
                 {" "}
@@ -342,11 +350,11 @@ function Table({
               </th>
             </tr>
           </thead>
-          <tbody>
-            {rows.map((r) => {
+          <tbody onKeyDown={onTableKey}>
+            {rows.map((r, i) => {
               const isWatched = watched?.has(r.companyId) ?? false;
               return (
-                <tr key={r.companyId} className={r.readable ? "clk" : "clk masked"}
+                <tr key={r.companyId} className={r.readable ? "clk" : "clk masked"} {...navRow(i, r.name)}
                   onClick={() => go({ view: "company", companyId: r.companyId })}>
                   <td className="first">
                     <a className="co" href={href({ view: "company", companyId: r.companyId })}

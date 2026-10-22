@@ -10,9 +10,9 @@ const EXPORT_CSS = [
   ".ch-title{fill:#14171c;font-size:15px;font-weight:650}",
   ".ch-legend text{fill:#4a525e;font-size:11.5px}",
   ".ch-grid line{stroke:#e3e6eb}",
-  ".ch-axis text,.ch-grid text{fill:#7a8390;font-size:10.5px}",
+  ".ch-axis text,.ch-grid text{fill:#5f6874;font-size:10.5px}",
   ".ch-zero{stroke:#d3d8df}",
-  ".ch-foot{fill:#7a8390;font-size:10.5px;font-style:italic}",
+  ".ch-foot{fill:#5f6874;font-size:10.5px;font-style:italic}",
   ".ch-mk text{fill:currentColor;font-size:10.5px;font-weight:700}",
   ...SERIES.map((c, i) => `.c${i}{color:${c}}`),
 ].join("");

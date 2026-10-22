@@ -10,6 +10,7 @@ import {
 import { edgarLink } from "../../company/Filings";
 import { formTag } from "../../company/data";
 import { useLoad, type Load } from "../../company/useLoad";
+import { ErrorPanel, Skeleton } from "../States";
 import { day } from "../../format";
 import {
   comparableForm,
@@ -92,7 +93,7 @@ export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q,
       ← {name ?? "Company"} filings
     </a>
   );
-  if (!filing || filing.state === "loading") return <div className="page">{back}<p className="muted">Loading…</p></div>;
+  if (!filing || filing.state === "loading") return <div className="page">{back}<Skeleton lines={8} label="Loading the filing" /></div>;
   if (filing.state === "denied") {
     return (
       <div className="page">
@@ -108,9 +109,14 @@ export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q,
     return (
       <div className="page">
         {back}
-        <p className="empty error">
-          {filing.state === "error" ? `Couldn't load this filing (${filing.message}).` : `Filing ${accessionNo} hasn't been parsed into sections yet.`}
-        </p>
+        {filing.state === "error" ? (
+          <ErrorPanel what="this filing" detail={`The Query API said: ${filing.message}.`} onRetry={filing.retry} />
+        ) : (
+          <p className="empty">
+            Filing {accessionNo} hasn't been parsed into sections yet. The company's Filings tab
+            links it on EDGAR in the meantime.
+          </p>
+        )}
       </div>
     );
   }
@@ -252,9 +258,11 @@ function SectionBody({ load, terms, at }: { load: Load<Awaited<ReturnType<typeof
     ref.current?.querySelector(".hit")?.scrollIntoView?.({ block: "center" });
   }, [section, target]);
 
-  if (!load || load.state === "loading") return <p className="muted">Loading…</p>;
+  if (!load || load.state === "loading") return <Skeleton lines={6} label="Loading the section" />;
   if (load.state === "denied") return <p className="empty locked">This section isn't included in your access.</p>;
-  if (load.state === "error" || !section) return <p className="empty error">Couldn't load this section.</p>;
+  if (load.state === "error" || !section) {
+    return <ErrorPanel what="this section" onRetry={load.state === "error" ? load.retry : undefined} />;
+  }
   return (
     <div ref={ref}>
       {ps.map((p, i) => (

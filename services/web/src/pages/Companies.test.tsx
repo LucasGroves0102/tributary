@@ -135,3 +135,45 @@ it("exports the whole screen as the API's CSV", async () => {
   expect(csv.searchParams.get("access")).toBe("financials");
   expect(vi.mocked(download).mock.calls[0]?.[0]).toBe("screener.csv");
 });
+
+it("moves through rows with the keyboard and opens one with Enter", async () => {
+  await render();
+  const rows = [...container.querySelectorAll<HTMLTableRowElement>("table.screen tbody tr")];
+  expect(rows.map((r) => r.tabIndex)).toEqual([0, -1]); // one tab stop for the table
+  rows[0]!.focus();
+  const key = (el: Element, k: string) => act(async () => el.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true })));
+  await key(rows[0]!, "ArrowDown");
+  expect(document.activeElement).toBe(rows[1]);
+  expect(rows.map((r) => r.tabIndex)).toEqual([-1, 0]);
+  await key(rows[1]!, "Home");
+  expect(document.activeElement).toBe(rows[0]);
+  await key(rows[0]!, "End");
+  expect(document.activeElement).toBe(rows[1]);
+  await key(rows[1]!, "Enter");
+  await act(async () => new Promise((r) => setTimeout(r, 10)));
+  expect(window.location.hash).toBe(`#/company/${TSLA}`);
+  // keys typed on a button inside the row are left alone
+  const watch = rows[1]!.querySelector("button")!;
+  await key(watch, "ArrowUp");
+  expect(document.activeElement).toBe(rows[1]);
+});
+
+it("shows a skeleton while the screen runs and a retry when it fails", async () => {
+  let fail = true;
+  vi.mocked(fetch).mockImplementation(async () =>
+    fail ? Response.json({ detail: "database is restarting" }, { status: 503 }) : Response.json(SCREEN));
+  container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  act(() => root.render(<Companies token="t" screen={{}} watched={null} onWatch={onWatch} />));
+  expect(container.querySelector(".skel[role=status]")?.textContent).toContain("Running the screen");
+  await act(async () => {});
+  await act(async () => {});
+  const panel = container.querySelector(".errpanel")!;
+  expect(panel.textContent).toContain("Couldn't load this screen");
+  expect(panel.textContent).toContain("database is restarting");
+  fail = false;
+  await act(async () => panel.querySelector("button")!.click());
+  await act(async () => {});
+  expect(container.querySelectorAll("table.screen tbody tr")).toHaveLength(2);
+});

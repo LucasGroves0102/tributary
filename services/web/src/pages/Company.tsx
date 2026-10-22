@@ -5,6 +5,7 @@ import { Overview } from "../company/Overview";
 import { Peers } from "../company/Peers";
 import { Ratios, Segments, Statements } from "../company/Tables";
 import { useLoad } from "../company/useLoad";
+import { ErrorPanel, Skeleton } from "../components/States";
 import { day } from "../format";
 import { COMPANY_TABS, go, href, type CompanyTab } from "../route";
 
@@ -30,11 +31,21 @@ export function Company({ token, companyId, tab, watched, onWatch, onChart, onCh
   );
   const expected = useLoad(companyId, () => expectedFilingsOf(token, companyId));
 
-  if (!meta || meta.state === "loading") return <div className="page"><p className="muted">Loading…</p></div>;
+  if (!meta || meta.state === "loading") return <div className="page"><Skeleton lines={6} label="Loading the company" /></div>;
+  if (meta.state === "error") {
+    return (
+      <div className="page">
+        <ErrorPanel what="this company" detail={`The Query API said: ${meta.message}.`} onRetry={meta.retry} />
+      </div>
+    );
+  }
   if (meta.state !== "ok" || meta.data === null) {
     return (
       <div className="page">
-        <p className="empty error">{meta.state === "ok" ? `No company ${companyId}.` : "Couldn't load this company."}</p>
+        <p className="empty">
+          No company with CIK {companyId} has financials or filings here. Find it under{" "}
+          <a href={href({ view: "companies" })}>Companies</a>, or search with Ctrl K.
+        </p>
       </div>
     );
   }

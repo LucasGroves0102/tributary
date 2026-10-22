@@ -7,6 +7,7 @@ import { day } from "../format";
 import { go, href } from "../route";
 import type { ScreenerRow, Tier } from "../types";
 import { keyStats, recapAccession, recapRows } from "./data";
+import { ErrorPanel, Skeleton } from "../components/States";
 import { Gate } from "./Tables";
 import { useLoad } from "./useLoad";
 
@@ -76,7 +77,7 @@ function Recap({ token, companyId, name, accession, canFin }: { token: string; c
       {!canFin ? (
         <p className="empty locked">The recap needs financials for {name}.</p>
       ) : !accession ? (
-        <p className="empty">No 10-Q or 10-K values for {name} yet.</p>
+        <p className="empty">No 10-Q or 10-K values for {name} yet. Its Filings tab lists what it has filed.</p>
       ) : (
         <Gate load={load} name={name} what="Financials">
           {() => (
@@ -165,7 +166,7 @@ function Business({ token, companyId, name, canRead }: { token: string; companyI
                 </a>
               </div>
             ) : (
-              <p className="empty">No parsed 10-K Item 1 for {name} yet.</p>
+              <p className="empty">No parsed 10-K Item 1 for {name} yet. Its latest 10-K is on the Filings tab.</p>
             )
           }
         </Gate>
@@ -199,7 +200,13 @@ function Revenue({ token, companyId }: { token: string; companyId: string }) {
             onOpen={(src) => go({ view: "filing", companyId, accessionNo: src.accessionNo, section: null })} />
         </div>
       ) : (
-        <p className="empty">{!load || load.state === "loading" ? "Loading…" : "No revenue to chart."}</p>
+        !load || load.state === "loading" ? (
+          <Skeleton chart label="Loading revenue" />
+        ) : load.state === "error" ? (
+          <ErrorPanel what="revenue" onRetry={load.retry} />
+        ) : (
+          <p className="empty">No quarterly revenue to chart. Statements shows what this company reports.</p>
+        )
       )}
     </>
   );

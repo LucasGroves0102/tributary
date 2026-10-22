@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 
 import { ApiError } from "../api";
+import { Skeleton } from "../components/States";
 import type { SavedItem, SavedWorkspace } from "../types";
 import { ITEM_NAME_MAX, KIND_LABELS, KIND_PAGES, nameProblem, WORKSPACE_NAME_MAX } from "./model";
 import type { Saved } from "./useSaved";
@@ -55,7 +56,7 @@ export function WorkspaceTree({ saved, onOpen, onError }: Props) {
             onSubmit={(name) => run("create the workspace", saved.createWorkspace(name))}
           />
         )}
-        {list.state === "loading" && <p className="side-note">Loading workspaces…</p>}
+        {list.state === "loading" && <Skeleton lines={2} label="Loading workspaces" />}
         {(list.state === "unavailable" || list.state === "error") && (
           <p className="side-note">Saved work is unavailable right now.</p>
         )}

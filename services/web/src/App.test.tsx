@@ -324,3 +324,34 @@ it("switches theme and remembers it per user", async () => {
   expect(document.documentElement.dataset.theme).toBe("light");
   expect(window.localStorage.getItem("tributary.theme.alice")).toBe("light");
 });
+
+describe("narrow screens", () => {
+  it("open the sidebar as a drawer from Menu; Escape, the scrim or a link close it", async () => {
+    await render();
+    const menu = $('button[aria-label="Menu"]')!;
+    expect(menu.getAttribute("aria-controls")).toBe("side-nav");
+    expect($("#side-nav")?.className).toBe("side");
+    await act(async () => menu.click());
+    expect($("#side-nav")?.className).toBe("side open");
+    expect(menu.getAttribute("aria-expanded")).toBe("true");
+    await key("Escape");
+    expect($("#side-nav")?.className).toBe("side");
+    await act(async () => menu.click());
+    await act(async () => $(".scrim")!.click());
+    expect($(".scrim")).toBeNull();
+    await act(async () => menu.click());
+    window.location.hash = "#/companies";
+    await settle();
+    expect($("#side-nav")?.className).toBe("side");
+  });
+
+  it("keys through the watchlist rows and opens one with Enter", async () => {
+    await render();
+    const rows = [...container.querySelectorAll<HTMLTableRowElement>("table.watchlist tbody tr")];
+    rows[0]!.focus();
+    await key("ArrowDown", {}, rows[0]!);
+    expect(document.activeElement).toBe(rows[1]);
+    await key("Enter", {}, rows[1]!);
+    expect($(".crumb")?.textContent).toContain("Tesla");
+  });
+});

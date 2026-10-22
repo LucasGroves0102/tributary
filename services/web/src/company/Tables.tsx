@@ -16,6 +16,7 @@ import {
   type Statement,
   type TableCell,
 } from "./data";
+import { ErrorPanel, Skeleton } from "../components/States";
 import { useLoad, type Load } from "./useLoad";
 
 const PERIODS: [Period, string][] = [
@@ -89,9 +90,9 @@ export function MetricTableView({ table, first }: { table: MetricTable; first: s
 }
 
 export function Gate({ load, name, what, children }: { load: Load<unknown> | null; name: string; what: string; children: () => ReactNode }) {
-  if (!load || load.state === "loading") return <p className="empty">Loading…</p>;
+  if (!load || load.state === "loading") return <Skeleton lines={5} label={`Loading ${what.toLowerCase()}`} />;
   if (load.state === "denied") return <p className="empty locked">{what} for {name} aren't included in your access.</p>;
-  if (load.state === "error") return <p className="empty error">Couldn't load {what.toLowerCase()} ({load.message}).</p>;
+  if (load.state === "error") return <ErrorPanel what={what.toLowerCase()} detail={`The Query API said: ${load.message}.`} onRetry={load.retry} />;
   return <>{children()}</>;
 }
 
@@ -134,7 +135,10 @@ export function Statements({ token, companyId, name, ticker, industry = null }: 
           table!.rows.length ? (
             <MetricTableView table={table!} first={STATEMENTS[kind].label} />
           ) : (
-            <p className="empty">No {STATEMENTS[kind].label.toLowerCase()} values for these periods.</p>
+            <p className="empty">
+              No {STATEMENTS[kind].label.toLowerCase()} values for these periods. Try{" "}
+              {period === "a" ? "Quarterly" : "Annual"} or another statement.
+            </p>
           )
         }
       </Gate>
@@ -172,7 +176,7 @@ export function Ratios({ token, companyId, name, ticker, industry = null }: Tabl
         </button>
       </div>
       <Gate load={load} name={name} what="Financials">
-        {() => (table!.rows.length ? <MetricTableView table={table!} first="Ratio" /> : <p className="empty">No ratios for these periods.</p>)}
+        {() => (table!.rows.length ? <MetricTableView table={table!} first="Ratio" /> : <p className="empty">No ratios for these periods yet: they come from 10-Q and 10-K XBRL values. Statements shows what {name} reports.</p>)}
       </Gate>
     </section>
   );
