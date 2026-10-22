@@ -101,11 +101,12 @@ services:
     uses: [kafka, postgres]
   doc-fetcher:
     uses: [kafka, postgres, sec]
-  # image: parser (Python) or parser-rs (Rust). Both consume documents.fetched as group
-  # parser-python, write the same silver.filing_sections rows (parser = python | rust) and
-  # expose the same metrics and logs, so switching or rolling back is this one value.
+  # image: parser-rs (Rust, live since 2026-10-20) or parser (the Python reference). Both consume
+  # documents.fetched as group parser-python, write the same silver.filing_sections rows
+  # (parser = rust | python) and expose the same metrics and logs, so rolling back is this one
+  # value.
   parser:
-    image: parser
+    image: parser-rs
     uses: [kafka, postgres]
     resources:
       requests:
@@ -144,7 +145,7 @@ services:
   # reads documents.fetched, so a backlog of crawled documents (or a document that stops this
   # consumer) never delays new filings. Same image switch as parser.
   parser-backfill:
-    image: parser
+    image: parser-rs
     replicas: 0
     uses: [kafka, postgres]
     env:
@@ -307,7 +308,7 @@ jobs:
   # --from=cronjob/section-index section-index-1, repeated until ops.section_index_status
   # catches up; then REINDEX the GIN index (gold.section_search_tsv), bloated by the bulk load.
   section-index:
-    image: parser
+    image: parser  # Python: the indexing job (filing_parser/index.py), not the document parser
     command: [parser-index]
     schedule: "40 * * * *"
     suspend: true
