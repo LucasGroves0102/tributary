@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ago, money, quarter } from "./format";
+import { ago, change, day, money, pct, quarter } from "./format";
 
 describe("money", () => {
   it("scales USD", () => {
@@ -14,6 +14,14 @@ describe("money", () => {
     expect(money(1.05, "USD/shares")).toBe("$1.05");
     expect(money(-0.4, "USD/shares")).toBe("-$0.40");
   });
+});
+
+it("formats ratios, growth and dates", () => {
+  expect(pct(0.21345)).toBe("21.3%");
+  expect(change(0.123)).toBe("+12.3%");
+  expect(change(-0.04)).toBe("-4.0%");
+  expect(day("2026-10-28")).toBe("Oct 28");
+  expect(day("2026-01-05", true)).toBe("Jan 5, 2026");
 });
 
 it("labels quarters by their end month", () => {

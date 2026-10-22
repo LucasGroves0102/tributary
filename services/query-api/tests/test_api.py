@@ -75,6 +75,7 @@ class FakeStore:
 
     def filings(self, *args):
         self.calls.append(("filings",) + args[:2])
+        self.filings_args = args[2:]
         return []
 
     def latest_filings(self, user_id, company_ids, limit):
@@ -125,6 +126,17 @@ def test_denied_never_reaches_the_database(client, token):
                  f"/v1/companies/{NVDA}/sections/1A"):
         assert client.get(path, headers=token("alice")).status_code == 403
     assert client.store.calls == []
+
+
+def test_filings_of_one_accession_for_the_reader(token):
+    store = FakeStore()
+    c = TestClient(create_app(FakeAuthorizer({"bob": {NVDA: {"filings"}}}), store, SECRET))
+    r = c.get(f"/v1/companies/{NVDA}/filings?accession_no=0001045810-24-000001",
+              headers=token("bob"))
+    assert r.status_code == 200
+    assert store.filings_args == (8, "0001045810-24-000001")
+    assert c.get(f"/v1/companies/{NVDA}/filings?accession_no=x",
+                 headers=token("bob")).status_code == 422
 
 
 def test_user_comes_from_token_not_parameters(client, token):

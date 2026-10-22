@@ -9,10 +9,26 @@ CORS:
 | `/api/query/*` | Query API (`query-api:8000`) |
 | `/api/agent/*` | agent-api (`agent-api:8001`), unbuffered for server-sent events |
 
-Views (hash routes): `#/` chat with streamed answers, tool trace and verified citation links;
-`#/explore` company search and live filings feed; `#/company/<company_id>` 12-quarter chart and
-table, every value linked to its filing; `#/filing/<company_id>/<accession>[/<section>]` parsed
-filing reader. Sign-in is the demo user picker (`/v1/demo/users`, `/v1/demo/token`).
+The shell follows prototype v3: a sidebar (screens with `g`-then-letter shortcuts, watchlist
+with revenue sparklines, next expected filings, freshness), a top bar (breadcrumb, Ctrl/Cmd-K
+command palette, theme, demo user) and the assistant drawer on every page (Ctrl/Cmd-J toggles,
+`/` focuses). Dark is the default theme; the choice is kept per user in localStorage. Design
+tokens (colours for both themes, type scale, spacing) are in `src/tokens.css`.
+
+Views (hash routes): `#/` Home (status strip, watchlist table, new filings since the last
+visit, expected filings); `#/companies?<filters>` the screener (`/v1/screener`: filters kept in
+the URL, sortable, ungranted companies as metadata only, CSV export through the API);
+`#/company/<company_id>` 12-quarter chart and table, every value linked to its filing;
+`#/filing/<company_id>/<accession>[/<section>]` parsed filing reader; `#/chart` the chart
+builder (each layer a `/v1/formulas/evaluate` request; plain SVG; CSV, SVG and PNG export);
+`#/ask` the assistant full width, with streamed answers, tool trace and verified citation links;
+`#/compare` describes what's coming. Sign-in is the demo user picker (`/v1/demo/users`,
+`/v1/demo/token`).
+
+The assistant sends the screen as `context` with each question (`assistant/actions.ts`) and
+applies the agent's `action` events (chart layers and options, screener filters, watchlist) with
+an Undo per action (`assistant/useUiActions.ts`): undo restores the chart and page from before
+it, reverses watchlist calls, and also undoes every later action.
 
 ## Run
 

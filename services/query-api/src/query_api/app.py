@@ -290,10 +290,15 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
 
     @app.get("/v1/companies/{company_id}/filings")
     def filings(user_id: User, company_id: CompanyId,
-                limit: Annotated[int, Query(ge=1, le=20)] = 8) -> dict:
+                limit: Annotated[int, Query(ge=1, le=20)] = 8,
+                accession_no: Annotated[str | None, Query(
+                    pattern=r"^\d{10}-\d{2}-\d{6}$",
+                    description="only this filing (any age): the reader's outline")] = None,
+                ) -> dict:
+        """Parsed filings, newest first, with their sections (titles and sizes, no text)."""
         require(user_id, "filings", company_id)
         return {"company_id": company_id, "as_of": _now(),
-                "filings": store.filings(user_id, company_id, limit)}
+                "filings": store.filings(user_id, company_id, limit, accession_no)}
 
     @app.get("/v1/filings/latest")
     def latest_filings(user_id: User,

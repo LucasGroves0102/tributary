@@ -221,11 +221,32 @@ def test_collects_citations_from_tool_results():
     assert answer.citations == {
         "0001045810-26-000075": {
             "accession_no": "0001045810-26-000075", "form": "10-Q", "filed": "2026-08-26",
-            "company_id": NVDA, "url": "https://www.sec.gov/Archives/edgar/data/1045810/x/"},
+            "company_id": NVDA, "url": "https://www.sec.gov/Archives/edgar/data/1045810/x/",
+            "sections": []},
         "0001045810-26-000052": {
             "accession_no": "0001045810-26-000052", "form": None, "filed": None,
-            "company_id": NVDA, "url": None},
+            "company_id": NVDA, "url": None, "sections": []},
     }
+
+
+def test_citations_keep_the_sections_a_tool_returned():
+    """A section or search result cites its section, so the app can open the reader there;
+    anything that isn't a section key is dropped."""
+    def search(request):
+        cite = {"accession_no": "0001045810-26-000075", "form": "10-Q", "filed": "2026-08-26",
+                "document_url": "https://www.sec.gov/Archives/edgar/data/1045810/x/d.htm"}
+        return httpx.Response(200, json={"results": [
+            {"company_id": NVDA, "citation": {**cite, "section_key": "II-1A"}},
+            {"company_id": NVDA, "citation": {**cite, "section_key": "I-2"}},
+            {"company_id": NVDA, "citation": {**cite, "section_key": "II-1A"}},
+            {"company_id": NVDA, "citation": {**cite, "section_key": "../../v1/me"}}]})
+
+    fake = FakeMessages(
+        response("tool_use", tool_use("t1", "search_filings", {"query": "export controls"})),
+        response("end_turn", text("See 0001045810-26-000075.")),
+    )
+    answer = Agent(fake, query_api(search)[0], "claude-haiku-5-5").ask("export controls?")
+    assert answer.citations["0001045810-26-000075"]["sections"] == ["II-1A", "I-2"]
 
 
 def test_denied_results_add_no_citations():

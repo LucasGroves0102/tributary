@@ -1,30 +1,70 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { ApiError, ask, demoUsers, login, me as fetchMe } from "./api";
-import { AssistantMessage, type AssistantTurn } from "./components/AssistantMessage";
-import { CompanyPage } from "./components/explore/CompanyPage";
-import { ExploreHome } from "./components/explore/ExploreHome";
+import { demoUsers, login, me as fetchMe, watchlistCsv } from "./api";
+import { AssistantPanel } from "./assistant/AssistantPanel";
+import { metricLabel } from "./chart/metrics";
+import { companiesChart, companyChart, type Transform } from "./chart/model";
+import { useChart } from "./chart/useChart";
+import { uiContext } from "./assistant/actions";
+import { pageContext } from "./assistant/context";
+import { useAssistant } from "./assistant/useAssistant";
+import { useUiActions } from "./assistant/useUiActions";
 import { FilingReader } from "./components/explore/FilingReader";
-import { SUGGESTIONS, Sidebar } from "./components/Sidebar";
-import { href, useRoute } from "./route";
-import type { AgentEvent, HistoryTurn, Me } from "./types";
+import { Palette, WATCH_PREFIX, type PaletteActions, type PaletteCompany } from "./components/Palette";
+import { Sidebar } from "./components/Sidebar";
+import { TopBar } from "./components/TopBar";
+import { download } from "./download";
+import { lastIngested } from "./home/data";
+import { useWorkspace } from "./home/useWorkspace";
+import { ChartBuilder } from "./pages/ChartBuilder";
+import { Companies } from "./pages/Companies";
+import { Home } from "./pages/Home";
+import { Company } from "./pages/Company";
+import { Compare } from "./pages/Compare";
+import { Search } from "./pages/Search";
+import { go, parse, useRoute } from "./route";
+import { resolveTicker } from "./palette/commands";
+import { useShortcuts } from "./shortcuts";
+import { load, save } from "./storage";
+import { useTheme } from "./theme";
+import type { Me } from "./types";
 
-type Turn = { id: number; role: "user"; text: string } | AssistantTurn;
-
-let nextId = 1;
+const DRAWER_KEY = "tributary.assistant";
+const DRAWER_FITS_PX = 1200;
 
 export function App() {
   const [users, setUsers] = useState<string[]>([]);
   const [user, setUser] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [me, setMe] = useState<Me | null>(null);
-  const [turns, setTurns] = useState<Turn[]>([]);
-  const [draft, setDraft] = useState("");
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const abort = useRef<AbortController | null>(null);
-  const bottom = useRef<HTMLDivElement>(null);
+  // open by default where it fits beside the page; below that it floats over it (styles.css)
+  const [drawerOpen, setDrawerOpen] = useState(
+    () => (load(DRAWER_KEY) ?? (window.innerWidth > DRAWER_FITS_PX ? "open" : "closed")) === "open",
+  );
+  const [palette, setPalette] = useState<string | null>(null);
+  const [focusTick, setFocusTick] = useState(0);
+  const input = useRef<HTMLTextAreaElement>(null);
   const route = useRoute();
+  const [theme, toggleTheme] = useTheme(user);
+  const workspace = useWorkspace(token, user, me?.companies.map((c) => c.company_id));
+  const [chart, setChart] = useChart(user);
+  // read when the assistant sends a question or applies an action, so always the latest
+  const chartRef = useRef(chart);
+  chartRef.current = chart;
+  const watchedRef = useRef<Set<string> | null>(null);
+  const nameRef = useRef<(id: string) => string | null>(() => null);
+  const uiActions = useUiActions(user, {
+    setChart,
+    isWatched: (id) => watchedRef.current?.has(id) ?? false,
+    watch: workspace.watch,
+    unwatch: workspace.unwatch,
+    onError: setError,
+  });
+  const assistant = useAssistant(token, user, {
+    context: () => uiContext(parse(window.location.hash), chartRef.current, nameRef.current),
+    onAction: uiActions.apply,
+  });
 
   useEffect(() => {
     demoUsers()
@@ -38,7 +78,7 @@ export function App() {
   useEffect(() => {
     if (!user) return;
     setMe(null);
-    setTurns([]);
+    setToken(null);
     let cancelled = false;
     login(user)
       .then(async (t) => {
@@ -55,176 +95,280 @@ export function App() {
   }, [user]);
 
   useEffect(() => {
-    bottom.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [turns]);
+    if (focusTick) input.current?.focus();
+  }, [focusTick]);
 
-  const update = useCallback((id: number, f: (t: AssistantTurn) => AssistantTurn) => {
-    setTurns((ts) => ts.map((t) => (t.id === id && t.role === "assistant" ? f(t) : t)));
+  const setDrawer = useCallback((open: boolean) => {
+    setDrawerOpen(open);
+    save(DRAWER_KEY, open ? "open" : "closed");
   }, []);
 
-  const submit = useCallback(
-    async (question: string) => {
-      if (!token || busy || !question.trim()) return;
-      const history: HistoryTurn[] = turns.flatMap((t): HistoryTurn[] =>
-        t.role === "user"
-          ? [{ role: "user", content: t.text }]
-          : t.answer
-            ? [{ role: "assistant", content: t.answer.text }]
-            : [],
-      );
-      const id = nextId++;
-      setTurns((ts) => [
-        ...ts,
-        { id: nextId++, role: "user", text: question },
-        { id, role: "assistant", rounds: {}, tools: [] },
-      ]);
-      setDraft("");
-      setBusy(true);
-      abort.current = new AbortController();
+  /** Open the drawer (except on Ask, which is the assistant) and put the cursor in it. */
+  const focusAssistant = useCallback(() => {
+    if (route.view !== "ask") setDrawer(true);
+    setFocusTick((n) => n + 1);
+  }, [route.view, setDrawer]);
 
-      const onEvent = (e: AgentEvent) => {
-        switch (e.type) {
-          case "text":
-            update(id, (t) => ({
-              ...t,
-              rounds: { ...t.rounds, [e.round]: (t.rounds[e.round] ?? "") + e.text },
-            }));
-            break;
-          case "tool":
-            update(id, (t) => ({ ...t, tools: [...t.tools, e] }));
-            break;
-          case "done":
-            update(id, (t) => ({ ...t, answer: e.answer }));
-            break;
-          case "error":
-            update(id, (t) => ({ ...t, error: e.message }));
-        }
-      };
-
-      try {
-        await ask(token, question, history.slice(-10), onEvent, abort.current.signal);
-      } catch (err) {
-        if (!(err instanceof DOMException && err.name === "AbortError")) {
-          const msg = err instanceof ApiError ? err.message : "The agent is unreachable.";
-          update(id, (t) => ({ ...t, error: msg }));
-        }
-      } finally {
-        setBusy(false);
-      }
+  /** Compare's "Chart these" and the peers tab: one line per company for a metric. */
+  const chartMany = useCallback(
+    (ids: string[], metric: string, transform: Transform, title: string) => {
+      setChart((s) => companiesChart(s, ids, metric, transform, title));
+      go({ view: "chart" });
     },
-    [token, busy, turns, update],
+    [setChart],
   );
 
+  const exportWatchlist = useCallback(() => {
+    if (!token) return;
+    watchlistCsv(token)
+      .then((blob) => download("watchlist.csv", blob))
+      .catch(() => setError("Couldn't export the watchlist. Try again."));
+  }, [token]);
+
+  useShortcuts((s) => {
+    switch (s.type) {
+      case "palette":
+        setPalette((p) => (p === null ? "" : null));
+        break;
+      case "assistant":
+        if (route.view === "ask") focusAssistant();
+        else if (drawerOpen) setDrawer(false);
+        else focusAssistant();
+        break;
+      case "focus-assistant":
+        focusAssistant();
+        break;
+      case "go":
+        setPalette(null);
+        go({ view: s.view });
+    }
+  });
+
+  const names = useMemo(() => {
+    const out = new Map<string, string>();
+    for (const r of workspace.rows) out.set(r.companyId, r.name);
+    for (const c of me?.companies ?? []) if (c.name) out.set(c.company_id, c.name);
+    return out;
+  }, [me, workspace.rows]);
+  const watched = useMemo(
+    () =>
+      workspace.watchlist.state === "ok"
+        ? new Set(workspace.watchlist.data.companies.map((c) => c.company_id))
+        : null,
+    [workspace.watchlist],
+  );
+  const companyName = useCallback((id: string) => names.get(id) ?? null, [names]);
+  watchedRef.current = watched;
+  nameRef.current = companyName;
+  const context = useMemo(() => pageContext(route, companyName), [route, companyName]);
+
+  const paletteCompanies = useMemo((): PaletteCompany[] => {
+    const out = new Map<string, PaletteCompany>();
+    for (const r of workspace.rows) {
+      out.set(r.companyId, {
+        companyId: r.companyId,
+        name: r.name,
+        sub: [r.ticker, "watchlist"].filter(Boolean).join(" · "),
+      });
+    }
+    for (const c of me?.companies ?? []) {
+      if (!out.has(c.company_id)) {
+        out.set(c.company_id, {
+          companyId: c.company_id,
+          name: c.name ?? c.company_id,
+          sub: `company · ${c.tiers.join(", ")}`,
+        });
+      }
+    }
+    return [...out.values()];
+  }, [me, workspace.rows]);
+
+  const actions = useMemo(
+    (): PaletteActions => ({
+      go: (view) => go({ view }),
+      company: (companyId) => go({ view: "company", companyId }),
+      watch: (companyId) => {
+        workspace.watch(companyId).catch(() => setError("Couldn't add that company. Try again."));
+      },
+      ask: (q) => {
+        focusAssistant();
+        void assistant.submit(q);
+      },
+      toggleTheme,
+      exportWatchlist,
+      openAssistant: focusAssistant,
+      searchFilings: (q) => go({ view: "search", search: { q } }),
+      compareTickers: (tickers) => {
+        if (!token) return;
+        Promise.all(tickers.map((t) => resolveTicker(token, t)))
+          .then((found) => {
+            const missing = tickers.filter((_, i) => !found[i]);
+            if (missing.length) return setError(`No company with the ticker ${missing.join(", ")}.`);
+            const [target, ...peers] = found.map((f) => f!.companyId);
+            go({ view: "compare", compare: { target, peers } });
+          })
+          .catch(() => setError("Couldn't look those tickers up. Try again."));
+      },
+      chartTicker: (ticker, metric) => {
+        if (!token) return;
+        resolveTicker(token, ticker)
+          .then((found) => {
+            if (!found) return setError(`No company with the ticker ${ticker}.`);
+            chartMany([found.companyId], metric, "ttm", `${ticker} ${metricLabel(metric).toLowerCase()}`);
+          })
+          .catch(() => setError("Couldn't look that ticker up. Try again."));
+      },
+    }),
+    [workspace, focusAssistant, assistant, toggleTheme, exportWatchlist, token, chartMany],
+  );
+
+  const showDrawer = drawerOpen && route.view !== "ask";
+  const ingested = lastIngested(workspace.latest ?? []);
+  const panelProps = {
+    assistant,
+    onUndo: (id: number) => void uiActions.undo(id),
+    undone: uiActions.undone,
+    context,
+    signedIn: token !== null,
+    inputRef: input,
+  };
+
   return (
-    <div className="layout">
-      <Sidebar
-        users={users}
-        user={user}
-        me={me}
-        busy={busy}
-        route={route}
-        onUser={setUser}
-        onPrompt={(p) => {
-          window.location.hash = href({ view: "ask" });
-          void submit(p);
-        }}
-      />
-      {route.view !== "ask" && (
-        <main className="explore">
-          {error && <div className="banner">{error}</div>}
-          {!token ? (
-            <p className="muted page">Signing in…</p>
-          ) : route.view === "explore" ? (
-            <ExploreHome token={token} me={me} />
-          ) : route.view === "company" ? (
-            <CompanyPage
-              key={`${user}-${route.companyId}`}
-              token={token}
-              companyId={route.companyId}
-              onAsk={(q) => {
-                setDraft(q);
-                window.location.hash = href({ view: "ask" });
-              }}
-            />
-          ) : (
-            <FilingReader
-              key={user}
-              token={token}
-              companyId={route.companyId}
-              accessionNo={route.accessionNo}
-              sectionKey={route.section}
-            />
-          )}
-        </main>
-      )}
-      <main className="chat" hidden={route.view !== "ask"}>
-        {error && <div className="banner">{error}</div>}
-        <div className="thread">
-          {turns.length === 0 ? (
-            <Empty user={user} onPrompt={(p) => void submit(p)} />
-          ) : (
-            turns.map((t) =>
-              t.role === "user" ? (
-                <article key={t.id} className="message user">
-                  {t.text}
-                </article>
-              ) : (
-                <AssistantMessage key={t.id} turn={t} />
-              ),
-            )
-          )}
-          <div ref={bottom} />
-        </div>
-        <form
-          className="composer"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void submit(draft);
-          }}
-        >
-          <textarea
-            value={draft}
-            placeholder={user ? `Ask about SEC filings as ${user}…` : "Ask about SEC filings…"}
-            rows={1}
-            maxLength={2000}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                void submit(draft);
-              }
-            }}
+    <>
+      <div className={showDrawer ? "app with-ai" : "app"}>
+        <Sidebar
+          route={route}
+          me={me}
+          workspace={workspace}
+          lastIngested={ingested}
+          onAdd={() => setPalette(WATCH_PREFIX)}
+          onExport={exportWatchlist}
+        />
+        <div className="main">
+          <TopBar
+            route={route}
+            companyName={companyName}
+            users={users}
+            user={user}
+            busy={assistant.busy}
+            theme={theme}
+            assistantOpen={showDrawer}
+            onUser={setUser}
+            onSearch={() => setPalette("")}
+            onTheme={toggleTheme}
+            onAssistant={() => (drawerOpen ? setDrawer(false) : focusAssistant())}
           />
-          {busy ? (
-            <button type="button" onClick={() => abort.current?.abort()}>
-              Stop
-            </button>
-          ) : (
-            <button type="submit" disabled={!token || !draft.trim()}>
-              Ask
-            </button>
+          {error && (
+            <div className="banner" role="alert">
+              {error}
+              <button className="btn sm ghost" onClick={() => setError(null)}>
+                Dismiss
+              </button>
+            </div>
           )}
-        </form>
-      </main>
-    </div>
-  );
-}
-
-function Empty({ user, onPrompt }: { user: string | null; onPrompt: (p: string) => void }) {
-  return (
-    <div className="empty">
-      <h1>Ask about public companies' SEC filings</h1>
-      <p className="muted">
-        Answers come only from data {user ?? "you"} can read, with the filing behind every
-        number.
-      </p>
-      <div className="prompts center">
-        {[SUGGESTIONS.ask[0], SUGGESTIONS.attack[0]].map((p) => (
-          <button key={p} className="prompt" onClick={() => onPrompt(p)}>
-            {p}
-          </button>
-        ))}
+          <main className="content">
+            {!token ? (
+              <p className="page muted">Signing in…</p>
+            ) : route.view === "home" ? (
+              <Home
+                workspace={workspace}
+                lastIngested={ingested}
+                onAdd={() => setPalette(WATCH_PREFIX)}
+                onExport={exportWatchlist}
+              />
+            ) : route.view === "companies" ? (
+              <Companies
+                key={user}
+                token={token}
+                screen={route.screen ?? {}}
+                watched={watched}
+                onWatch={(id, on) => (on ? workspace.watch(id) : workspace.unwatch(id))}
+                onChart={(id, name) => {
+                  setChart((s) => companyChart(s, id, name));
+                  go({ view: "chart" });
+                }}
+              />
+            ) : route.view === "company" ? (
+              <Company
+                key={`${user}-${route.companyId}`}
+                token={token}
+                companyId={route.companyId}
+                tab={route.tab ?? "overview"}
+                watched={watched ? watched.has(route.companyId) : null}
+                onWatch={(on) =>
+                  (on ? workspace.watch(route.companyId) : workspace.unwatch(route.companyId)).catch(() =>
+                    setError("Couldn't update the watchlist. Try again."),
+                  )
+                }
+                onChart={(name) => {
+                  setChart((s) => companyChart(s, route.companyId, name));
+                  go({ view: "chart" });
+                }}
+                onChartMany={chartMany}
+                onAsk={(q) => {
+                  assistant.setDraft(q);
+                  focusAssistant();
+                }}
+              />
+            ) : route.view === "filing" ? (
+              <FilingReader
+                key={user}
+                token={token}
+                companyId={route.companyId}
+                accessionNo={route.accessionNo}
+                sectionKey={route.section}
+                at={route.at}
+                q={route.q}
+                name={companyName(route.companyId)}
+                onAsk={(q) => {
+                  assistant.setDraft(q);
+                  focusAssistant();
+                }}
+              />
+            ) : route.view === "search" ? (
+              <Search key={user} token={token} search={route.search} companies={me?.companies ?? []} />
+            ) : route.view === "chart" ? (
+              <ChartBuilder key={user} token={token} chart={chart} setChart={setChart} />
+            ) : route.view === "ask" ? (
+              <div className="page ask-page">
+                <div className="row">
+                  <h1 className="grow">Ask</h1>
+                </div>
+                <AssistantPanel variant="page" {...panelProps} />
+                <p className="faint small">
+                  The same assistant as the side panel, full width. It answers only from data{" "}
+                  {user ?? "you"} can read, with the filing behind every number.
+                </p>
+              </div>
+            ) : (
+              <Compare
+                key={user}
+                token={token}
+                compare={route.compare ?? {}}
+                onChart={chartMany}
+              />
+            )}
+          </main>
+        </div>
+        {showDrawer && (
+          <AssistantPanel variant="drawer" {...panelProps} onClose={() => setDrawer(false)} />
+        )}
       </div>
-    </div>
+      {!showDrawer && route.view !== "ask" && (
+        <button className="btn primary fab" onClick={focusAssistant}>
+          ✦ Ask the assistant
+        </button>
+      )}
+      {palette !== null && (
+        <Palette
+          key={palette}
+          token={token}
+          initial={palette}
+          companies={paletteCompanies}
+          actions={actions}
+          onClose={() => setPalette(null)}
+        />
+      )}
+    </>
   );
 }

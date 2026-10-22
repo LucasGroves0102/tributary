@@ -24,7 +24,9 @@ request parameters. Dev tokens: `make token USER=alice`.
 | `GET /v1/metrics` | | metric names served by `financials`: `silver.metrics` and `gold.derived_metrics`, read once |
 | `GET /v1/companies/{id}/financials?metrics=&quarters=&view=&basis=&format=` | financials | values + citation + freshness; `format=csv`: one row per value with its source filing |
 | `GET /v1/companies/{id}/segments?axis=&metric=&quarters=&view=&basis=&format=` | financials | values per segment member (business segment, geography, product/service, reconciliation), exact decimal strings, citation per value ([Segments](#segments)) |
-| `GET /v1/companies/{id}/filings?limit=` | filings | recent filings and their sections |
+| `GET /v1/companies/{id}/filings?limit=&accession_no=` | filings | recent parsed filings (or one) and their section outline, no text |
+| `GET /v1/companies/{id}/filing-index?form=&from=&to=&limit=&offset=` | token | every filing in the SEC index (public metadata), newest first; `sections` count only where the caller can read filings (OpenFGA check, then RLS) |
+| `GET /v1/filing-index?company_id=&form=&from=&to=&limit=&offset=` | token | the same across up to 50 companies (default: the caller's readable companies) |
 | `GET /v1/filings/latest?limit=` | token | newest parsed filings across the companies the caller can read filings for |
 | `GET /v1/companies/{id}/sections/{key}?form=&accession_no=&limit=&max_chars=` | filings | section text + citation |
 | `GET /v1/companies/{id}/filings/{accession}/changes?section=&basis=&kind=` | filings | new / removed / rewritten Risk Factors and MD&A paragraphs vs the comparable earlier filing, word diffs, citations in both filings ([What changed](#what-changed)) |
@@ -98,7 +100,8 @@ quarter end) or `<metric>_q` (latest fiscal quarter) for every metric in the for
 each the latest value with its own `sources[key]` (`period_end`, `accession_no`, `form`,
 `filed`). Filters: `sic` (4-digit, repeatable), `sic_prefix` (1-3 digits), `industry` (SIC
 description contains), `q` (name contains or exact ticker), `exchange`,
-`fiscal_year_end_month`, `filer_category` (`large_accelerated`, `accelerated`,
+`fiscal_year_end_month`, `company_id` (repeatable, at most 21: only these companies, including
+ones without gold financials, for a comps table or a tearsheet), `filer_category` (`large_accelerated`, `accelerated`,
 `non_accelerated`), `revenue_band` / `assets_band` (`lt100m`, `100m-1b`, `1b-10b`, `10b-100b`,
 `gte100b` on `revenue_ttm` / `total_assets_q`) and `where=<column>:<gt|gte|lt|lte>:<number>`
 (ratios as fractions: `operating_margin_ttm:gte:0.2`). `sort` is a column key or `name`, `sic`,

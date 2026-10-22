@@ -16,6 +16,24 @@ export function money(value: number, unit: string): string {
   return `${sign}$${abs.toFixed(0)}`;
 }
 
+/** Ratios as percentages: 0.2134 → "21.3%". */
+export function pct(ratio: number, digits = 1): string {
+  return `${(ratio * 100).toFixed(digits)}%`;
+}
+
+/** Growth with its sign: 0.123 → "+12.3%", -0.04 → "-4.0%". */
+export function change(ratio: number): string {
+  return `${ratio >= 0 ? "+" : ""}${pct(ratio)}`;
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** "2026-10-28" → "Oct 28"; with the year, "Oct 28, 2026". */
+export function day(isoDate: string, withYear = false): string {
+  const [y, m, d] = isoDate.slice(0, 10).split("-").map(Number);
+  return `${MONTHS[m! - 1]} ${d}${withYear ? `, ${y}` : ""}`;
+}
+
 /** Quarter label from its end date: "2026-07-26" → "Jul '26". */
 export function quarter(periodEnd: string): string {
   const d = new Date(`${periodEnd}T00:00:00Z`);
@@ -31,14 +49,3 @@ export function ago(iso: string, now = Date.now()): string {
   if (s < 86400) return `${Math.floor(s / 3600)} h ago`;
   return `${Math.floor(s / 86400)} d ago`;
 }
-
-export const METRIC_LABELS: Record<string, string> = {
-  revenue: "Revenue",
-  gross_profit: "Gross profit",
-  operating_income: "Operating income",
-  net_income: "Net income",
-  eps_diluted: "EPS (diluted)",
-  operating_cash_flow: "Operating cash flow",
-  total_assets: "Total assets",
-  cash: "Cash",
-};

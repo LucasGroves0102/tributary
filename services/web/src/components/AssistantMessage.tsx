@@ -1,7 +1,15 @@
 import { useMemo, useState } from "react";
 
 import { renderAnswer } from "../markdown";
+import { href, SECTION } from "../route";
 import type { Answer, Citation, ToolCall, Verification } from "../types";
+
+/** A change the assistant made in the UI (chart, screen, watchlist), shown under its message
+ * with Undo (assistant/useUiActions). */
+export interface ActionRecord {
+  id: number;
+  label: string;
+}
 
 export interface AssistantTurn {
   id: number;
@@ -10,6 +18,7 @@ export interface AssistantTurn {
   tools: (ToolCall & { round: number })[];
   answer?: Answer;
   error?: string;
+  actions: ActionRecord[];
 }
 
 const TOOL_LABEL: Record<string, string> = {
@@ -18,9 +27,20 @@ const TOOL_LABEL: Record<string, string> = {
   get_financials: "Read financials",
   list_filings: "Listed filings",
   get_section: "Read filing section",
+  get_section_changes: "Compared with the prior filing",
+  search_filings: "Searched filings",
+  propose_ui_action: "Changed the screen",
 };
 
-export function AssistantMessage({ turn }: { turn: AssistantTurn }) {
+export function AssistantMessage({
+  turn,
+  undone,
+  onUndo,
+}: {
+  turn: AssistantTurn;
+  undone?: ReadonlySet<number>;
+  onUndo?: (actionId: number) => void;
+}) {
   const finalRound = turn.answer ? turn.answer.rounds - 1 : maxRound(turn);
   const text = turn.answer?.text ?? turn.rounds[finalRound] ?? "";
   const citations = turn.answer?.citations ?? [];
@@ -46,9 +66,35 @@ export function AssistantMessage({ turn }: { turn: AssistantTurn }) {
       ) : (
         <p className="muted thinking">Working…</p>
       )}
+      {turn.actions.map((a) => (
+        <Action key={a.id} action={a} undone={undone?.has(a.id) ?? false} onUndo={onUndo} />
+      ))}
       {turn.answer && <Sources citations={usedCitations(turn.answer)} />}
       {turn.answer && <Meta answer={turn.answer} />}
     </article>
+  );
+}
+
+function Action({
+  action,
+  undone,
+  onUndo,
+}: {
+  action: ActionRecord;
+  undone: boolean;
+  onUndo?: (id: number) => void;
+}) {
+  return (
+    <div className={undone ? "act undone" : "act"}>
+      <span className="grow">
+        {undone ? "↺ Undone" : "✓ Applied"}: {action.label}
+      </span>
+      {!undone && onUndo && (
+        <button className="btn sm" onClick={() => onUndo(action.id)}>
+          Undo
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -103,6 +149,24 @@ function usedCitations(answer: Answer): Citation[] {
     .sort((a, b) => (b.filed ?? "").localeCompare(a.filed ?? ""));
 }
 
+const CIK = /^\d{10}$/;
+const ACCESSION = /^\d{10}-\d{2}-\d{6}$/;
+
+/** Links that open the filing reader at each section a tool returned for this filing (the
+ * agent collects them from Query API results, so the user could read them when it asked). */
+function readerLinks(c: Citation) {
+  if (!c.company_id || !CIK.test(c.company_id) || !ACCESSION.test(c.accession_no)) return null;
+  return (c.sections ?? [])
+    .filter((s) => SECTION.test(s))
+    .slice(0, 6)
+    .map((s) => (
+      <a key={s} className="reader-link" href={href({ view: "filing", companyId: c.company_id!, accessionNo: c.accession_no, section: s })}
+        title={`Open ${s} in the filing reader`}>
+        § {s}
+      </a>
+    ));
+}
+
 function Sources({ citations }: { citations: Citation[] }) {
   if (!citations.length) return null;
   return (
@@ -120,6 +184,7 @@ function Sources({ citations }: { citations: Citation[] }) {
             ) : (
               <span className="accession">{c.accession_no}</span>
             )}
+            {readerLinks(c)}
           </li>
         ))}
       </ul>

@@ -192,6 +192,16 @@ class QueryApi:
         except (httpx.HTTPError, ValueError, KeyError, TypeError):
             return None
 
+    def call(self, method: str, path: str, *, params: dict | None = None,
+             json_body: dict | None = None) -> httpx.Response | None:
+        """One request as the token's user (ui.UiActions' checks); None if unreachable.
+        Callers pass fixed paths only."""
+        try:
+            return self._http.request(method, path, params=params, json=json_body,
+                                      headers=self._headers)
+        except httpx.HTTPError:
+            return None
+
     def run(self, name: str, args: dict[str, Any]) -> tuple[str, bool]:
         """(tool_result content, is_error). Never raises for API errors: the model is told."""
         try:

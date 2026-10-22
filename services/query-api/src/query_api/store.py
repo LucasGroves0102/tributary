@@ -252,21 +252,63 @@ class Store:
                       "basis": basis, "periods": periods})
             return cur.fetchall()
 
-    def filings(self, user_id: str, company_id: str, limit: int) -> list[dict]:
-        """Recent filings with the sections each contains (no text)."""
+    def filings(self, user_id: str, company_id: str, limit: int,
+                accession_no: str | None = None) -> list[dict]:
+        """Recent filings (or one filing) with the sections each contains (no text)."""
         with self._session(user_id) as cur:
             cur.execute(
                 """
-                SELECT accession_no, form, filed, period_of_report, document_url,
+                SELECT accession_no, form, filed, period_of_report,
+                       (array_agg(document_url ORDER BY section_key LIKE 'EX-%%', char_start))[1]
+                           AS document_url,
                        json_agg(json_build_object('section_key', section_key, 'title', title,
                                                   'chars', length(text))
-                                ORDER BY char_start) AS sections
+                                ORDER BY section_key LIKE 'EX-%%', char_start) AS sections
                 FROM gold.filing_sections
-                WHERE company_id = %s
-                GROUP BY accession_no, form, filed, period_of_report, document_url
+                WHERE company_id = %s AND (%s::text IS NULL OR accession_no = %s)
+                GROUP BY accession_no, form, filed, period_of_report
                 ORDER BY filed DESC
                 LIMIT %s
-                """, (company_id, limit))
+                """, (company_id, accession_no, accession_no, limit))
+            return cur.fetchall()
+
+    def filing_index(self, user_id: str, company_ids: list[str], forms: list[str],
+                     start: date | None, end: date | None, limit: int, offset: int,
+                     sections_for: list[str]) -> list[dict]:
+        """The public SEC filing index (silver.filings) of these companies, newest first, one
+        row per accession. `sections` counts parsed sections only for companies in
+        `sections_for` (layer 1 said the caller may read their filings); RLS on
+        silver.filing_sections filters that count again. NULL for every other company."""
+        with self._session(user_id) as cur:
+            cur.execute(
+                """
+                WITH f AS (
+                    SELECT DISTINCT ON (f.accession_no)
+                           f.accession_no, f.company_id, f.cik, f.form, f.filing_date,
+                           f.accepted_at, f.report_date, f.primary_document
+                    FROM silver.filings f
+                    WHERE f.company_id = ANY(%(companies)s)
+                      AND (cardinality(%(forms)s::text[]) = 0 OR f.form = ANY(%(forms)s))
+                      AND (%(start)s::date IS NULL OR f.filing_date >= %(start)s)
+                      AND (%(end)s::date IS NULL OR f.filing_date <= %(end)s)
+                    ORDER BY f.accession_no, f.report_date IS NULL, f.cik
+                ),
+                page AS (
+                    SELECT * FROM f
+                    ORDER BY filing_date DESC, accepted_at DESC NULLS LAST, accession_no DESC
+                    LIMIT %(limit)s OFFSET %(offset)s
+                )
+                SELECT p.accession_no, p.company_id, c.name, p.cik, p.form,
+                       p.filing_date AS filed, p.accepted_at, p.report_date AS period_of_report,
+                       p.primary_document,
+                       CASE WHEN p.company_id = ANY(%(sections_for)s) THEN (
+                           SELECT count(DISTINCT s.section_key) FROM silver.filing_sections s
+                           WHERE s.accession_no = p.accession_no) END AS sections
+                FROM page p
+                LEFT JOIN silver.companies c ON c.company_id = p.company_id
+                ORDER BY p.filing_date DESC, p.accepted_at DESC NULLS LAST, p.accession_no DESC
+                """, {"companies": company_ids, "forms": forms, "start": start, "end": end,
+                      "limit": limit, "offset": offset, "sections_for": sections_for})
             return cur.fetchall()
 
     def latest_filings(self, user_id: str, company_ids: list[str], limit: int) -> list[dict]:

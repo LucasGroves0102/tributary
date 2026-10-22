@@ -28,10 +28,22 @@ against what the tools returned; the result is part of the answer as `verificati
 ## agent-api
 
 `POST /v1/ask` with `{"question": ..., "history": [...]}` and the user's bearer token streams
-server-sent events: text deltas, tool calls and a final `done` event with the answer, citations,
-verification, token usage and estimated cost. `GET /health`; `/metrics` for Prometheus
+server-sent events: text deltas, tool calls and a final `done` event with the answer, citations
+(each filing a tool returned, with the section keys it returned from it, so the web app can open
+its reader there), verification, token usage and estimated cost. `GET /health`; `/metrics` for Prometheus
 (`tributary_agent_questions_total`, `_tokens_total`, `_cost_usd_total`, `_tool_calls_total`,
 `_rounds`).
+
+The web app also sends `context` (its page, company, the reader's filing and section, chart
+layers, screener filters;
+`ui.UiContext`: strict fields, at most 4 KB). It reaches the model as a block of data marked
+untrusted and never decides who the user is: that is still only the token. agent-api adds a
+`propose_ui_action` tool (set/add/remove chart layers, chart options, screener filters, add or
+remove a watchlist company). Each proposal is checked as the user through the Query API
+(`/v1/me`, `/v1/companies/search`, `/v1/formulas/validate`): chart companies must be readable,
+unknown and ungranted ones get the same refusal. Accepted ones stream as `action` events (also in
+`answer.actions`) for the app to apply with Undo; the app reads any data itself, through the
+Query API. Without the web app (CLI, recorded suites) requests are unchanged.
 
 Limits: questions per hour per user and per client IP (`X-Client-IP`, set by the web proxy from
 Cloudflare's `CF-Connecting-IP`), and a daily model budget across all users. Over a limit → 429.
