@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { searchCompanies } from "../api";
+import { metricLabel } from "../chart/metrics";
+import { parseCommand } from "../palette/commands";
 import { NAV, type NavView } from "../route";
 import type { SearchResult } from "../types";
 
@@ -8,7 +10,7 @@ export const WATCH_PREFIX = "watch:";
 const MAX_ITEMS = 9;
 const SEARCH_DELAY_MS = 200;
 /** Items that match any text: full-text search and the assistant. */
-const FIXED = new Set(["search", "ask"]);
+const FIXED = new Set(["cmd", "search", "ask"]);
 
 export interface PaletteCompany {
   companyId: string;
@@ -23,6 +25,10 @@ export interface PaletteActions {
   ask: (question: string) => void;
   /** the full-text search page for these words */
   searchFilings: (q: string) => void;
+  /** "compare KO PEP": the first ticker is the target */
+  compareTickers: (tickers: string[]) => void;
+  /** "chart NVDA revenue" */
+  chartTicker: (ticker: string, metric: string) => void;
   toggleTheme: () => void;
   exportWatchlist: () => void;
   openAssistant: () => void;
@@ -114,7 +120,13 @@ export function Palette({ token, initial, companies, actions, onClose }: Props) 
       text.length >= 2
         ? [{ key: "search", label: `Search filings for “${text}”`, sub: "full text · your companies", run: () => actions.searchFilings(text) }]
         : [];
-    return [...companyItems, ...pages, ...commands, ...searchItem, ...askItem];
+    const command = parseCommand(text);
+    const commandItem: Item[] = !command
+      ? []
+      : command.kind === "compare"
+        ? [{ key: "cmd", label: `Compare ${command.tickers.join(", ")}`, sub: `action · ${command.tickers[0]} vs peers`, run: () => actions.compareTickers(command.tickers) }]
+        : [{ key: "cmd", label: `Chart ${command.ticker} ${metricLabel(command.metric).toLowerCase()}`, sub: "action · chart builder", run: () => actions.chartTicker(command.ticker, command.metric) }];
+    return [...commandItem, ...companyItems, ...pages, ...commands, ...searchItem, ...askItem];
   }, [companies, remote, watchMode, text, actions]);
 
   const shown = useMemo(() => {
@@ -124,9 +136,10 @@ export function Palette({ token, initial, companies, actions, onClose }: Props) 
     );
     // keep "Search filings" and "Ask the assistant" reachable even when other matches fill the
     // list; with nothing else matching, Enter searches the filings
-    const fixed = match.filter((i) => FIXED.has(i.key));
-    const rest = match.filter((i) => !FIXED.has(i.key)).slice(0, MAX_ITEMS - fixed.length);
-    return [...rest, ...fixed];
+    const cmd = match.filter((i) => i.key === "cmd");
+    const fixed = match.filter((i) => FIXED.has(i.key) && i.key !== "cmd");
+    const rest = match.filter((i) => !FIXED.has(i.key)).slice(0, MAX_ITEMS - fixed.length - cmd.length);
+    return [...cmd, ...rest, ...fixed];
   }, [items, text]);
 
   useEffect(() => setActive(0), [q]);

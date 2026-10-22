@@ -47,7 +47,11 @@ function respond(url: string, init?: RequestInit): Response {
   if (path.endsWith("/financials")) {
     return Response.json({ as_of: "", rows: [revenueRow("2026-04-26", "44062000000", "FY2027 Q1"), revenueRow("2026-07-26", "46743000000", "FY2027 Q2")] });
   }
-  if (path.endsWith("/v1/companies/search")) return Response.json({ results: [] });
+  if (path.endsWith("/v1/companies/search")) {
+    const q = new URL(url, "http://x").searchParams.get("q");
+    const ids: Record<string, string> = { NVDA, TSLA };
+    return Response.json({ results: q && ids[q] ? [{ company_id: ids[q], name: q, matched_on: "ticker", matched_alias: q, is_current: true, access: [] }] : [] });
+  }
   if (path.endsWith("/api/agent/v1/ask")) {
     asked.push(JSON.parse(String(init?.body)));
     return new Response(`data: ${JSON.stringify({ type: "done", answer: ANSWER })}\n\n`, {
@@ -209,6 +213,38 @@ describe("navigation", () => {
     expect($(".pal")).not.toBeNull();
     await key("Escape", {}, $('.pal input')!);
     expect($(".pal")).toBeNull();
+  });
+
+  it("runs typed commands: compare tickers, chart a ticker's metric, and says when a ticker is unknown", async () => {
+    await render();
+    const type = async (text: string) => {
+      await key("k", { ctrlKey: true });
+      const input = $('.pal input') as HTMLInputElement;
+      await act(async () => {
+        const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+        set.call(input, text);
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      return input;
+    };
+    let input = await type("compare nvda tsla");
+    expect(container.querySelector(".pal .it")?.textContent).toContain("Compare NVDA, TSLA");
+    await key("Enter", {}, input);
+    await settle();
+    expect(window.location.hash).toBe(`#/compare?target=${NVDA}&peers=${TSLA}`);
+
+    input = await type("chart NVDA operating margin");
+    expect(container.querySelector(".pal .it")?.textContent).toContain("Chart NVDA operating margin");
+    await key("Enter", {}, input);
+    await settle();
+    expect(window.location.hash).toBe("#/chart");
+    const saved = JSON.parse(window.localStorage.getItem("tributary.chart.alice") ?? "{}");
+    expect(saved.layers?.[0]).toMatchObject({ companyId: NVDA, metric: "operating_margin", transform: "ttm" });
+
+    input = await type("compare NVDA ZZZZ");
+    await key("Enter", {}, input);
+    await settle();
+    expect(container.textContent).toContain("No company with the ticker ZZZZ.");
   });
 
   it("searches filings from the palette: Enter when nothing else matches", async () => {

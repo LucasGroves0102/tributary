@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { demoUsers, login, me as fetchMe, watchlistCsv } from "./api";
 import { AssistantPanel } from "./assistant/AssistantPanel";
+import { metricLabel } from "./chart/metrics";
 import { companiesChart, companyChart, type Transform } from "./chart/model";
 import { useChart } from "./chart/useChart";
 import { uiContext } from "./assistant/actions";
@@ -22,6 +23,7 @@ import { Company } from "./pages/Company";
 import { Compare } from "./pages/Compare";
 import { Search } from "./pages/Search";
 import { go, parse, useRoute } from "./route";
+import { resolveTicker } from "./palette/commands";
 import { useShortcuts } from "./shortcuts";
 import { load, save } from "./storage";
 import { useTheme } from "./theme";
@@ -196,8 +198,28 @@ export function App() {
       exportWatchlist,
       openAssistant: focusAssistant,
       searchFilings: (q) => go({ view: "search", search: { q } }),
+      compareTickers: (tickers) => {
+        if (!token) return;
+        Promise.all(tickers.map((t) => resolveTicker(token, t)))
+          .then((found) => {
+            const missing = tickers.filter((_, i) => !found[i]);
+            if (missing.length) return setError(`No company with the ticker ${missing.join(", ")}.`);
+            const [target, ...peers] = found.map((f) => f!.companyId);
+            go({ view: "compare", compare: { target, peers } });
+          })
+          .catch(() => setError("Couldn't look those tickers up. Try again."));
+      },
+      chartTicker: (ticker, metric) => {
+        if (!token) return;
+        resolveTicker(token, ticker)
+          .then((found) => {
+            if (!found) return setError(`No company with the ticker ${ticker}.`);
+            chartMany([found.companyId], metric, "ttm", `${ticker} ${metricLabel(metric).toLowerCase()}`);
+          })
+          .catch(() => setError("Couldn't look that ticker up. Try again."));
+      },
     }),
-    [workspace, focusAssistant, assistant, toggleTheme, exportWatchlist],
+    [workspace, focusAssistant, assistant, toggleTheme, exportWatchlist, token, chartMany],
   );
 
   const showDrawer = drawerOpen && route.view !== "ask";
