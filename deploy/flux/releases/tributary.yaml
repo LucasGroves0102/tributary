@@ -35,4 +35,4 @@ spec:
       doc-crawler:
         replicas: 1
     image:
-      tag: main-122-8c769893369fcbe9baf14e55697c7de1d201f7cb # {"$imagepolicy": "flux-system:tributary:tag"}
+      tag: main-123-4dc925682514e6f835dae0f645f0573104fa042f # {"$imagepolicy": "flux-system:tributary:tag"}
