@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from query_api.auth import Unauthenticated, mint, verify
 from query_api.authorizer import Authorizer, AuthzUnavailable
 from query_api.csv_export import csv_response
+from query_api.demo import add_sandbox_routes
 from query_api.formula import (
     CATALOG,
     Analysis,
@@ -28,6 +29,7 @@ from query_api.formula import (
     to_dict,
 )
 from query_api.research import add_research_routes
+from query_api.sandbox import SandboxConfig, Sandboxes, is_sandbox_user
 from query_api.shapes import filing_url
 from query_api.shapes import period as _period
 from query_api.store import Store
@@ -47,6 +49,7 @@ CompanyId = Annotated[str, Path(pattern=r"^\d{10}$", description="canonical comp
 
 
 DEMO_TOKEN_TTL = 8 * 3600
+SANDBOX_OFF = SandboxConfig()
 
 PERMISSION_CHECKS = Counter("tributary_permission_checks_total",
                             "OpenFGA checks by tier (list: readable companies) and result "
@@ -72,10 +75,15 @@ class FormulaRequest(BaseModel):
 def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
                demo_users: frozenset[str] = frozenset(),
                today: Callable[[], date] | None = None,
-               watchlists: Watchlists | None = None) -> FastAPI:
+               watchlists: Watchlists | None = None,
+               sandboxes: Sandboxes | None = None,
+               sandbox_config: SandboxConfig = SANDBOX_OFF,
+               clock: Callable[[], datetime] | None = None) -> FastAPI:
     """demo_users: accounts anyone may sign in as without a password (empty disables it).
     today: the current US Eastern date (EDGAR's), injectable for tests.
-    watchlists: the app database's watchlists (None: watchlist routes answer 503)."""
+    watchlists: the app database's watchlists (None: watchlist routes answer 503).
+    sandboxes, sandbox_config: "Try the demo" sandboxes (query_api.sandbox); off unless
+    sandbox_config.enabled and sandboxes are given. clock: the current UTC time."""
     app = FastAPI(title="Tributary Query API", version="1")
     instrument(app)
     bearer = HTTPBearer(auto_error=False)
@@ -128,6 +136,10 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
     add_research_routes(app, store=store, current_user=current_user, require=require,
                         readable=readable)
 
+    sandbox_info = add_sandbox_routes(
+        app, store=store, sandboxes=sandboxes, config=sandbox_config, jwt_secret=jwt_secret,
+        current_user=current_user, clock=clock or (lambda: datetime.now(UTC)))
+
     @app.get("/health")
     def health() -> dict:
         return {"status": "ok"}
@@ -140,7 +152,8 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
 
     @app.post("/v1/demo/token")
     def demo_token(body: DemoLogin) -> dict:
-        if body.user_id not in demo_users:
+        # a sandbox user's only token is the one its creation returned (it can't be renewed)
+        if body.user_id not in demo_users or is_sandbox_user(body.user_id):
             raise HTTPException(404)
         return {"token": mint(body.user_id, jwt_secret, DEMO_TOKEN_TTL),
                 "expires_in": DEMO_TOKEN_TTL}
@@ -149,10 +162,12 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
     def me(user_id: User) -> dict:
         access = readable(user_id)
         profiles = store.profiles(user_id, sorted(access)) if access else {}
+        sandbox = sandbox_info(user_id)
         return {
             "user_id": user_id,
             "companies": [{"company_id": c, **_PROFILE, **profiles.get(c, {}), "tiers": sorted(t)}
                           for c, t in sorted(access.items())],
+            **({"sandbox": sandbox} if sandbox else {}),
         }
 
     @app.get("/v1/companies/search")

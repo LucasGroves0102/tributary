@@ -7,9 +7,39 @@ export interface Company {
   tiers: Tier[];
 }
 
+/** /v1/me's `sandbox`: present only for a "Try the demo" user. */
+export interface SandboxInfo {
+  expires_at: string;
+  plan: string;
+  companies: number;
+  agent: boolean;
+  agent_questions_per_day: number;
+}
+
+/** GET /v1/demo/sandbox: what "Try the demo" creates (404 when it's off). */
+export interface SandboxOffer {
+  ttl_hours: number;
+  plan: string;
+  tickers: string[];
+  agent: boolean;
+  agent_questions_per_day: number;
+}
+
+/** POST /v1/demo/sandbox */
+export interface SandboxCreated {
+  user_id: string;
+  token: string;
+  expires_in: number;
+  expires_at: string;
+  plan: string;
+  companies: { company_id: string; ticker: string | null }[];
+  watchlist: string[];
+}
+
 export interface Me {
   user_id: string;
   companies: Company[];
+  sandbox?: SandboxInfo;
 }
 
 export interface Citation {

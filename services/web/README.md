@@ -22,8 +22,19 @@ the URL, sortable, ungranted companies as metadata only, CSV export through the 
 `#/filing/<company_id>/<accession>[/<section>]` parsed filing reader; `#/chart` the chart
 builder (each layer a `/v1/formulas/evaluate` request; plain SVG; CSV, SVG and PNG export);
 `#/ask` the assistant full width, with streamed answers, tool trace and verified citation links;
-`#/compare` describes what's coming. Sign-in is the demo user picker (`/v1/demo/users`,
-`/v1/demo/token`).
+`#/compare` describes what's coming.
+
+Sign-in (`src/session.ts`): the front door is "Try the demo" (`pages/Welcome.tsx`). It calls
+`POST /v1/demo/sandbox`, which creates a temporary real user (plan pro, 20 companies, a seeded
+watchlist; see the Query API README) and returns its JWT; the page then polls `/v1/me` until all
+20 companies are readable, showing how many have arrived (access travels app DB → Debezium →
+Kafka → authz-sync → OpenFGA; the BRD target is under 30 s; after that it offers "Continue
+anyway"), and lands on Home. The session is kept in localStorage until the sandbox expires;
+a banner shows "Demo sandbox: 20 companies · resets in Xh", and an expired or rejected token
+returns to the front door. The named demo users (alice, bob, carol, dave: `/v1/demo/users`,
+`/v1/demo/token`) are behind a dev flag: build with `VITE_DEMO_PICKER=1`, or run
+`localStorage.setItem("tributary.picker", "1")` in the browser and reload. Real sign-in (OAuth)
+will be another way to produce the same `Session`.
 
 The assistant sends the screen as `context` with each question (`assistant/actions.ts`) and
 applies the agent's `action` events (chart layers and options, screener filters, watchlist) with

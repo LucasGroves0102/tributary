@@ -121,7 +121,8 @@ jobs:
       - name: Pull images and install authz-sync in parallel
         run: |
           $COMPOSE --profile tools pull --quiet &
-          pip install pytest -e libs/telemetry -e libs/authz -e services/authz-sync
+          pip install pytest -e libs/telemetry -e libs/authz -e services/authz-sync \
+            -e services/query-api  # tests/propagation/test_sandbox.py: AppSandboxes
           wait $!
       - name: Kafka and Postgres
         run: $COMPOSE up -d --wait --wait-timeout 180 kafka postgres

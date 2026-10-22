@@ -62,7 +62,7 @@ async function render(hash: string) {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  await act(async () => root.render(<App />));
+  await act(async () => root.render(<App picker />));
   await settle();
 }
 

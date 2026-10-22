@@ -245,6 +245,65 @@ a.btn:hover {
   padding: var(--sp-4) var(--sp-8);
 }
 
+/* Demo sandbox: a thin strip above the page, and the front door */
+
+.sandbox-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  padding: var(--sp-2) var(--sp-8);
+  border-bottom: 1px solid var(--line);
+}
+
+.welcome {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-8) 16px;
+  background: var(--bg);
+}
+
+.welcome-card {
+  width: 100%;
+  max-width: 560px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+
+.welcome-card p {
+  margin: 0;
+}
+
+.welcome-notice {
+  background: var(--warn-soft);
+  color: var(--warn);
+  border-radius: var(--radius);
+  padding: var(--sp-3) var(--sp-4);
+}
+
+.welcome-error {
+  background: var(--neg-soft);
+  color: var(--neg);
+  border-radius: var(--radius);
+  padding: var(--sp-3) var(--sp-4);
+}
+
+.welcome-progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.welcome-progress progress {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
 /* Sidebar */
 
 .side {

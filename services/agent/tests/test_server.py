@@ -3,12 +3,13 @@
 import json
 from types import SimpleNamespace as NS
 
+import httpx
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from tributary_agent.agent import Agent
-from tributary_agent.server import LimitExceeded, Limits, create_app
+from tributary_agent.server import LimitExceeded, Limits, create_app, query_api_quota
 
 
 class Clock:
@@ -89,7 +90,7 @@ def test_rate_limit_per_user():
     clock = Clock()
     c, _ = client(Limits(per_hour=2, per_ip_per_hour=100, daily_budget_usd=100, clock=clock))
     assert [ask(c, ip=f"203.0.113.{i}").status_code for i in range(3)] == [200, 200, 429]
-    assert "Demo user alice" in ask(c, ip="203.0.113.9").json()["detail"]
+    assert "limit of 2 questions per hour" in ask(c, ip="203.0.113.9").json()["detail"]
     clock.t += 3601
     assert ask(c, ip="203.0.113.1").status_code == 200
 
@@ -149,3 +150,62 @@ def test_daily_budget():
         limits.acquire("alice", "203.0.113.1")
     clock.t += 86400
     limits.acquire("alice", "203.0.113.1")
+
+
+def test_demo_quota_is_taken_after_the_in_process_limits():
+    taken = []
+
+    def take_quota(tok):
+        taken.append(tok)
+        if len(taken) > 1:
+            raise HTTPException(429, "This demo sandbox has used its 1 assistant questions.")
+
+    messages = ScriptedMessages()
+    app = create_app(lambda tok: Agent(messages, NoTools(), "claude-haiku-5-5"), who_is,
+                     Limits(per_hour=10, per_ip_per_hour=10, daily_budget_usd=5),
+                     take_quota=take_quota)
+    c = TestClient(app)
+    assert ask(c).status_code == 200
+    r = ask(c)
+    assert r.status_code == 429 and "demo sandbox has used" in r.json()["detail"]
+    assert len(messages.requests) == 1  # no model call once the quota says no
+    assert ask(c, token="forged").status_code == 401
+    assert len(taken) == 2  # an invalid token never reaches the quota
+
+
+def quota_with(status, body=None):
+    seen = []
+
+    def handler(request):
+        seen.append(request)
+        return httpx.Response(status, json=body if body is not None else {})
+
+    http = httpx.Client(transport=httpx.MockTransport(handler))
+    return query_api_quota("http://query-api:8000", http=http), seen
+
+
+def test_query_api_quota_passes_the_token_and_accepts_200():
+    take, seen = quota_with(200, {"demo": False})
+    take("tok")
+    assert seen[0].url.path == "/v1/demo/agent-quota" and seen[0].method == "POST"
+    assert seen[0].headers["Authorization"] == "Bearer tok"
+
+
+@pytest.mark.parametrize("status, expected", [(429, 429), (401, 401), (500, 503)])
+def test_query_api_quota_refusals(status, expected):
+    take, _ = quota_with(status, {"detail": "The assistant is turned off for demo sandboxes."})
+    with pytest.raises(HTTPException) as e:
+        take("tok")
+    assert e.value.status_code == expected
+    if status == 429:
+        assert e.value.detail == "The assistant is turned off for demo sandboxes."
+
+
+def test_query_api_quota_unreachable_fails_closed():
+    def handler(request):
+        raise httpx.ConnectError("down")
+
+    take = query_api_quota("http://q", http=httpx.Client(transport=httpx.MockTransport(handler)))
+    with pytest.raises(HTTPException) as e:
+        take("tok")
+    assert e.value.status_code == 503

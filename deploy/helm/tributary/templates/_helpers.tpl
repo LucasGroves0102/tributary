@@ -87,9 +87,29 @@ functions (migration 022), and a pod gets database-url only if it also uses post
 {{- else if eq . "query-api" }}
 - name: QUERY_API_URL
   value: http://query-api:{{ index $root.Values.services "query-api" "port" }}
-{{- else if and (eq . "demo") $root.Values.demo.enabled }}
+{{- else if eq . "demo" }}
+{{- if $root.Values.demo.enabled }}
 - name: DEMO_USERS
   value: {{ $root.Values.demo.users | quote }}
+{{- end }}
+{{- with $root.Values.demo.sandbox }}
+{{- if .enabled }}
+- name: DEMO_SANDBOX_ENABLED
+  value: "true"
+- name: DEMO_SANDBOX_TTL_HOURS
+  value: {{ .ttlHours | quote }}
+- name: DEMO_SANDBOX_PER_IP_PER_HOUR
+  value: {{ .createPerIpPerHour | quote }}
+- name: DEMO_SANDBOX_MAX_LIVE
+  value: {{ .maxLive | quote }}
+- name: DEMO_AGENT_ENABLED
+  value: {{ .agent.enabled | quote }}
+- name: DEMO_AGENT_QUESTIONS_PER_USER_PER_DAY
+  value: {{ .agent.questionsPerUserPerDay | quote }}
+- name: DEMO_AGENT_QUESTIONS_PER_DAY
+  value: {{ .agent.questionsPerDay | quote }}
+{{- end }}
+{{- end }}
 {{- end }}
 {{- end }}
 {{- if and .metricsPort (not .port) }}

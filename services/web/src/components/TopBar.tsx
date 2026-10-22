@@ -26,21 +26,29 @@ export function TopBar(props: Props) {
         <kbd>Ctrl K</kbd>
       </button>
       <span className="grow" />
-      <label className="who">
-        <span className="faint">Signed in as</span>
-        <select
-          value={user ?? ""}
-          disabled={busy || users.length === 0}
-          aria-label="Demo user"
-          onChange={(e) => props.onUser(e.target.value)}
-        >
-          {users.map((u) => (
-            <option key={u} value={u}>
-              {u}
-            </option>
-          ))}
-        </select>
-      </label>
+      {users.length > 0 ? (
+        <label className="who">
+          <span className="faint">Signed in as</span>
+          <select
+            value={user ?? ""}
+            disabled={busy}
+            aria-label="Demo user"
+            onChange={(e) => props.onUser(e.target.value)}
+          >
+            {users.map((u) => (
+              <option key={u} value={u}>
+                {u}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : (
+        user && (
+          <span className="who">
+            <span className="faint">Signed in to</span> {user}
+          </span>
+        )
+      )}
       <button className="btn ghost sm" onClick={props.onTheme}>
         {theme === "dark" ? "Light" : "Dark"}
       </button>

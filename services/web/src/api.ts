@@ -13,6 +13,8 @@ import type {
   Me,
   Peers,
   Recap,
+  SandboxCreated,
+  SandboxOffer,
   Screener,
   ScreenerColumns,
   SearchResult,
@@ -55,6 +57,15 @@ export async function login(userId: string): Promise<string> {
     body: JSON.stringify({ user_id: userId }),
   });
   return (await json<{ token: string }>(r)).token;
+}
+
+export async function sandboxOffer(): Promise<SandboxOffer> {
+  return json<SandboxOffer>(await fetch(`${QUERY}/v1/demo/sandbox`));
+}
+
+/** "Try the demo": a new temporary user (plan, companies and lifetime are the server's). */
+export async function createSandbox(): Promise<SandboxCreated> {
+  return json<SandboxCreated>(await fetch(`${QUERY}/v1/demo/sandbox`, { method: "POST" }));
 }
 
 export async function me(token: string): Promise<Me> {

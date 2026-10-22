@@ -91,9 +91,8 @@ class Limits:
                 raise LimitExceeded(f"Limit of {self._per_ip} questions per hour reached. "
                                     "Try again later.")
             if len(by_user) >= self._per_hour:
-                raise LimitExceeded(f"Demo user {user_id} has reached its limit of "
-                                    f"{self._per_hour} questions per hour. "
-                                    "Try another demo user.")
+                raise LimitExceeded(f"You've reached the limit of {self._per_hour} questions "
+                                    "per hour. Try again later.")
             by_ip.append(now)
             by_user.append(now)
 
@@ -110,10 +109,13 @@ def answer_json(a: Answer) -> dict:
 
 
 def create_app(make_agent: Callable[[str], Agent], who_is: Callable[[str], str],
-               limits: Limits, client_ip_header: str = "X-Client-IP") -> FastAPI:
+               limits: Limits, client_ip_header: str = "X-Client-IP",
+               take_quota: Callable[[str], None] = lambda tok: None) -> FastAPI:
     """make_agent(token) builds an agent reading as the token's user; who_is(token) returns
     that user's id or raises HTTPException. The client IP is read from client_ip_header, set
-    by the web proxy, else the connection's peer address."""
+    by the web proxy, else the connection's peer address. take_quota(token) takes one of the
+    user's persistent question allowances (demo sandboxes, Query API) or raises
+    HTTPException (429 with the message to show)."""
     app = FastAPI(title="Tributary Agent", version="1")
     instrument(app)
     bearer = HTTPBearer(auto_error=False)
@@ -141,6 +143,7 @@ def create_app(make_agent: Callable[[str], Agent], who_is: Callable[[str], str],
             limits.acquire(user_id, ip)
         except LimitExceeded as e:
             raise HTTPException(429, str(e)) from None
+        take_quota(tok)
         agent = make_agent(tok)
 
         def stream() -> Iterator[str]:
@@ -188,6 +191,32 @@ def query_api_who_is(base_url: str) -> Callable[[str], str]:
     return who_is
 
 
+def query_api_quota(base_url: str, http: httpx.Client | None = None) -> Callable[[str], None]:
+    """Demo sandboxes' daily question caps live in the Query API (app database), so they hold
+    across restarts and replicas; other users aren't limited there."""
+    post = http.post if http else httpx.post
+
+    def take_quota(tok: str) -> None:
+        try:
+            r = post(f"{base_url}/v1/demo/agent-quota",
+                           headers={"Authorization": f"Bearer {tok}", **request_id_headers()},
+                           timeout=10)
+        except httpx.HTTPError:
+            raise HTTPException(503, "query api unavailable") from None
+        if r.status_code == 200:
+            return
+        if r.status_code in (401, 429):
+            detail = r.json().get("detail") if r.headers.get("content-type", "").startswith(
+                "application/json") else None
+            raise HTTPException(r.status_code, detail if isinstance(detail, str) else
+                                "Question limit reached.")
+        if r.status_code == 404:  # an older Query API without demo sandboxes
+            return
+        raise HTTPException(503, "query api unavailable")
+
+    return take_quota
+
+
 def build_app() -> FastAPI:
     base_url = os.environ.get("QUERY_API_URL", "http://localhost:8000")
     messages = anthropic.Anthropic().messages
@@ -208,6 +237,7 @@ def build_app() -> FastAPI:
         limits=Limits(int(os.environ.get("AGENT_RATE_PER_HOUR", "30")),
                       int(os.environ.get("AGENT_IP_RATE_PER_HOUR", "10")),
                       float(os.environ.get("AGENT_DAILY_BUDGET_USD", "2"))),
+        take_quota=query_api_quota(base_url),
     )
 
 

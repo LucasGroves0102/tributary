@@ -19,6 +19,7 @@ test = ["httpx>=0.27"]
 [project.scripts]
 query-api = "query_api.main:main"
 query-api-token = "query_api.auth:mint_cli"
+query-api-demo-cleanup = "query_api.sandbox:cleanup_main"
 
 [build-system]
 requires = ["setuptools>=68"]
