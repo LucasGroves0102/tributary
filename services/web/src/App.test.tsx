@@ -1,7 +1,8 @@
 import { clearChartCache } from "./chart/cache";
+import { loadScreens } from "./pages/lazy";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "./App";
 import { ACC, entry, feedFiling, NVDA, revenueRow, TESLA, TSLA } from "./fixtures";
@@ -95,6 +96,9 @@ async function key(k: string, opts: KeyboardEventInit = {}, target: EventTarget 
 const $ = (sel: string) => container.querySelector<HTMLElement>(sel);
 const drawer = () => $("aside.ai-drawer");
 const chip = () => $(".ai .chip")?.textContent;
+
+// the lazily loaded screens (pages/lazy.ts), ready before the first render
+beforeAll(() => loadScreens());
 
 beforeEach(() => {
   clearChartCache();

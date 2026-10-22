@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ApiError, demoUsers, login, me as fetchMe, watchlistCsv } from "./api";
 import { AssistantPanel } from "./assistant/AssistantPanel";
@@ -9,22 +9,17 @@ import { uiContext } from "./assistant/actions";
 import { pageContext } from "./assistant/context";
 import { useAssistant } from "./assistant/useAssistant";
 import { useUiActions } from "./assistant/useUiActions";
-import { FilingReader } from "./components/explore/FilingReader";
 import { Palette, WATCH_PREFIX, type PaletteActions, type PaletteCompany } from "./components/Palette";
 import { ShortcutSheet } from "./components/ShortcutSheet";
 import { Sidebar } from "./components/Sidebar";
+import { Skeleton } from "./components/States";
 import { TopBar } from "./components/TopBar";
 import { download } from "./download";
 import { lastIngested } from "./home/data";
 import { RecentNotes } from "./home/RecentNotes";
 import { useWorkspace } from "./home/useWorkspace";
-import { ChartBuilder } from "./pages/ChartBuilder";
-import { Companies } from "./pages/Companies";
 import { Home } from "./pages/Home";
-import { Company } from "./pages/Company";
-import { About } from "./pages/About";
-import { Compare } from "./pages/Compare";
-import { Search } from "./pages/Search";
+import { About, ChartBuilder, Companies, Company, Compare, FilingReader, prefetchScreens, Search } from "./pages/lazy";
 import { readableCount, Welcome } from "./pages/Welcome";
 import { go, parse, useRoute } from "./route";
 import { resolveTicker } from "./palette/commands";
@@ -74,6 +69,11 @@ export function App(props: Props = {}) {
   // every navigation and on Escape
   const [navOpen, setNavOpen] = useState(false);
   useEffect(() => setNavOpen(false), [route]);
+  // the other screens' code, once signed in and idle (pages/lazy.ts)
+  const signedIn = token !== null;
+  useEffect(() => {
+    if (signedIn) prefetchScreens();
+  }, [signedIn]);
   useEffect(() => {
     if (!navOpen) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setNavOpen(false);
@@ -418,6 +418,7 @@ export function App(props: Props = {}) {
             </div>
           )}
           <main className="content">
+            <Suspense fallback={<div className="page"><Skeleton lines={6} label="Loading the page" /></div>}>
             {!token ? (
               <p className="page muted">Signing in…</p>
             ) : route.view === "home" ? (
@@ -515,6 +516,7 @@ export function App(props: Props = {}) {
                 saveBar={saveBar({ kind: "comps", compare: route.compare ?? {} })}
               />
             )}
+            </Suspense>
           </main>
         </div>
         {showDrawer && (

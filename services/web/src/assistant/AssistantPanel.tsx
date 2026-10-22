@@ -1,9 +1,13 @@
-import { useEffect, useRef, type RefObject } from "react";
+import { lazy, Suspense, useEffect, useRef, type RefObject } from "react";
 
-import { AssistantMessage } from "../components/AssistantMessage";
 import type { PageContext } from "./context";
 import { href } from "../route";
 import type { Assistant } from "./useAssistant";
+
+// answers render through marked + DOMPurify (markdown.ts): loaded with the first answer, or
+// in the background once idle (pages/lazy.ts), not with the first screen
+const loadAnswers = () => import("../components/AssistantMessage");
+const AssistantMessage = lazy(() => loadAnswers().then((m) => ({ default: m.AssistantMessage })));
 
 interface Props {
   assistant: Assistant;
@@ -77,7 +81,9 @@ export function AssistantPanel({
                 {t.text}
               </article>
             ) : (
-              <AssistantMessage key={t.id} turn={t} undone={undone} onUndo={onUndo} />
+              <Suspense key={t.id} fallback={<article className="message">…</article>}>
+                <AssistantMessage turn={t} undone={undone} onUndo={onUndo} />
+              </Suspense>
             ),
           )
         )}

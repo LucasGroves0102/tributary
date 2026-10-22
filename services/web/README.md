@@ -117,10 +117,34 @@ npm run e2e       # Playwright flows in e2e/ against dist/ (build first)
 
 The end-to-end flows (`e2e/app.spec.ts`: try the demo → Home, screener filter/sort/watch, a
 two-layer chart with a formula exported as CSV, comps, saving a chart to a workspace and
-reopening it, the assistant drawer with a streamed answer, the narrow-screen menu) run against
-`vite preview` with every `/api/*` call answered by `e2e/mockApi.ts` (route interception), so
-no backend runs. One worker and one headless chromium (`npx playwright install chromium` once).
-CI runs them in the `e2e` job.
+reopening it, the assistant drawer with a streamed answer, the narrow-screen menu, formula
+autocomplete with annual frequency and deck output, Compare's side-by-side charts, the shortcut
+sheet and Ctrl+arrow table jumps, the limits page, data notes on Home and the tearsheet) run
+against `vite preview` with every `/api/*` call answered by `e2e/mockApi.ts` (route
+interception), so no backend runs. One worker and one headless chromium
+(`npx playwright install chromium` once). CI runs them in the `e2e` job.
+
+## Performance
+
+Production build (`npm run build`, Vite 6, 2026-10-21), per route: what a first visit to that
+screen downloads, minified (gzip). Every screen but Home is its own chunk (`src/pages/lazy.ts`,
+React.lazy); once signed in and idle the app prefetches them, so switching screens doesn't wait.
+
+| Route | JS | CSS |
+|---|---|---|
+| Shell + Home (`#/`), first load | 330.1 kB (105.4 kB) | 34.9 kB (7.6 kB) |
+| + Chart builder (`#/chart`) | + ChartBuilder 23.7 kB (8.9 kB), LayerChart 11.4 kB (4.8 kB), cache 0.2 kB | |
+| + Company tearsheet (`#/company/…`) | + Company 12.5 kB (4.0 kB), Filings 6.5 kB (2.3 kB), LayerChart | |
+| + Compare (`#/compare`) | + Compare 13.6 kB (4.9 kB), LayerChart, cache | |
+| + Companies (`#/companies`) | + 11.1 kB (4.1 kB) | |
+| + Filing reader (`#/filing/…`) | + FilingReader 10.8 kB (3.7 kB), text 2.1 kB (1.1 kB) | |
+| + Search, About | + 5.2 kB (1.9 kB), 3.6 kB (1.4 kB) | |
+| + first assistant answer (marked, DOMPurify) | + AssistantMessage 68.1 kB (23.2 kB) | |
+
+Before splitting, everything was one 493.6 kB (156.3 kB gzip) script; the first screen now
+loads a third less. Most of what remains is React DOM. Chart data is cached in memory per
+(token, request) for the session (`src/chart/cache.ts`). Lighthouse CI isn't run: `@lhci/cli`
+plus a Chrome download didn't fit the CI and laptop budget; these sizes are the tracked number.
 
 ## Production
 
