@@ -261,7 +261,15 @@ def test_duplicate_workspace_and_item(world, token):
     assert r.json()["name"] == "Rev (copy)" and r.json()["workspace_id"] == wid
 
 
-@pytest.mark.parametrize("kind, state", [("chart", CHART), ("comps", COMPS),
+CHART_V2 = {"title": "Capital return", "range": "max", "align": "fiscal", "markers": True,
+            "layers": [
+                {"kind": "metric", "companyId": NVDA, "metric": "dividends_paid", "transform": "ps",
+                 "type": "sbar", "axis": "L", "name": "Dividends / share", "color": 3},
+                {"kind": "metric", "companyId": NVDA, "metric": "revenue", "transform": "qoq",
+                 "type": "sarea", "axis": "R"}]}
+
+
+@pytest.mark.parametrize("kind, state", [("chart", CHART), ("chart", CHART_V2), ("comps", COMPS),
                                          ("screen", SCREEN)])
 def test_each_kind_round_trips(world, token, kind, state):
     client, *_ = world
@@ -350,6 +358,12 @@ BAD_STATES = [
     ("chart", {"layers": []}),  # nothing to save
     ("chart", {**CHART, "layers": CHART["layers"] * 13}),
     ("chart", {**CHART, "range": 7}),
+    ("chart", {**CHART, "range": "all"}),
+    ("chart", {**CHART, "layers": [{**CHART["layers"][0], "color": 8}]}),
+    ("chart", {**CHART, "layers": [{**CHART["layers"][0], "name": "a\x00b"}]}),
+    ("chart", {**CHART, "layers": [{**CHART["layers"][0], "name": "x" * 81}]}),
+    ("chart", {**CHART, "layers": [{**CHART["layers"][0], "type": "pie"}]}),
+    ("chart", {**CHART, "layers": [{**CHART["layers"][0], "transform": "log"}]}),
     ("chart", {**CHART, "title": "x" * 201}),
     ("chart", {**CHART, "extra": 1}),
     ("chart", {**CHART, "layers": [{"kind": "metric", "companyId": "NVDA",

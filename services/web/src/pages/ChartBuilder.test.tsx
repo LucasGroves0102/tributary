@@ -22,7 +22,7 @@ const COLUMNS = {
 
 function point(key: number, period: string, value: string) {
   return {
-    period, period_key: key, period_end: "2026-07-26", value, source_accessions: [],
+    period, period_key: key, period_end: period.endsWith("Q1") ? "2026-04-26" : "2026-07-26", value, source_accessions: [],
     inputs: [{
       input: 0, period_start: null, period_end: "2026-07-26", value, value_source: "reported",
       citation: { accession_no: "0001045810-26-000075", form: "10-Q", filed: "2026-08-26", source_accessions: null, filing_url: null },
@@ -39,6 +39,16 @@ function respond(url: string, init?: RequestInit): Response {
   if (path.endsWith("/v1/screener")) {
     return Response.json({ total: 1, rows: [{ ...entry(), filer_categories: null, state_of_incorporation: null }] });
   }
+  if (path.endsWith("/filing-index")) {
+    return Response.json({ filings: [
+      { accession_no: "0001045810-26-000060", company_id: NVDA, name: "Nvidia", form: "10-Q", filed: "2026-05-28", accepted_at: null,
+        period_of_report: "2026-04-26", filing_url: null, document_url: null, sections: null, sections_available: false },
+    ] });
+  }
+  if (/\/v1\/companies\/\d+\/filings$/.test(path)) {
+    return Response.json({ filings: [{ accession_no: "0001045810-26-000061", form: "8-K", filed: "2026-05-28", period_of_report: null,
+      document_url: null, sections: [{ section_key: "2.02", title: "Results", chars: 10 }] }] });
+  }
   const body = JSON.parse(String(init?.body ?? "{}"));
   bodies.push({ path, body });
   if (path.endsWith("/v1/formulas/validate")) {
@@ -53,7 +63,8 @@ function respond(url: string, init?: RequestInit): Response {
     const margin = body.formula === "operating_margin";
     return Response.json({
       formula: body.formula, unit: margin ? "ratio" : "USD", basis: body.basis, view: body.view,
-      alignment: body.basis, as_of: "", inputs: [],
+      alignment: body.basis, as_of: "",
+      inputs: [{ input: 0, ref: body.formula, ticker: null, company_id: body.default_company ?? null, metric: "revenue", span: "quarter", lag_quarters: 0, unit: "USD" }],
       points: margin
         ? [point(8100, "FY2027 Q1", "0.61"), point(8101, "FY2027 Q2", "0.62")]
         : [point(8100, "FY2027 Q1", "44062000000"), point(8101, "FY2027 Q2", "46743000000")],
@@ -179,4 +190,91 @@ it("exports the plotted data as CSV with exact values and sources", async () => 
     r.readAsText(blob as Blob);
   });
   expect(text).toContain("FY2027 Q2,46743000000,0001045810-26-000075,0.62,0001045810-26-000075");
+});
+
+const select = async (label: string, value: string, i = 0) => {
+  const el = container.querySelectorAll<HTMLSelectElement>(`select[aria-label="${label}"]`)[i]!;
+  await act(async () => {
+    el.value = value;
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await act(async () => {});
+};
+
+it("renames, recolours and reorders layers from the keyboard-reachable controls", async () => {
+  await render(companyChart(emptyChart(), NVDA, "Nvidia"));
+  const name = container.querySelector<HTMLInputElement>('input[aria-label="Layer name (legend)"]')!;
+  expect(name.placeholder).toBe("NVDA revenue");
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(name, "Quarterly sales");
+    name.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => name.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
+  expect(latest.layers[0]!.name).toBe("Quarterly sales");
+  expect([...container.querySelectorAll(".ch-legend text")][0]!.textContent).toBe("Quarterly sales");
+
+  await select("Colour", "5");
+  expect(latest.layers[0]!.color).toBe(5);
+  expect(container.querySelector(".ch-legend g")!.getAttribute("class")).toBe("c5");
+
+  const down = container.querySelector<HTMLButtonElement>('button[aria-label="Move Quarterly sales down"]')!;
+  expect(container.querySelector<HTMLButtonElement>('button[aria-label="Move Quarterly sales up"]')!.disabled).toBe(true);
+  await act(async () => down.click());
+  expect(latest.layers.map((l) => l.metric)).toEqual(["operating_margin", "revenue"]);
+  expect(latest.layers.map((l) => l.color)).toEqual([1, 5]); // colours stay with their layers
+});
+
+it("offers stacked types, QoQ and per share, and every range", async () => {
+  await render(companyChart(emptyChart(), NVDA, "Nvidia"));
+  const types = [...container.querySelector<HTMLSelectElement>('select[aria-label="Type"]')!.options].map((o) => o.value);
+  expect(types).toEqual(["line", "bar", "area", "sbar", "sarea"]);
+  await select("Transform", "qoq");
+  expect(bodies.at(-1)?.body).toMatchObject({ formula: "(revenue) / (revenue)[-1q] - 1", view: "quarter" });
+  // per share needs a diluted share count in the catalog, which this one lacks
+  expect(container.textContent).toContain("Per share isn't available");
+  expect([...container.querySelector<HTMLSelectElement>('select[aria-label="Transform"]')!.options].map((o) => o.value)).not.toContain("ps");
+  expect([...container.querySelectorAll('[aria-label="Range"] button')].map((b) => b.textContent)).toEqual(["1y", "3y", "5y", "10y", "Max"]);
+  await act(async () => button("Max").click());
+  await act(async () => {});
+  expect(latest.range).toBe("max");
+  expect(bodies.at(-1)?.body).not.toHaveProperty("from");
+});
+
+it("opens the clicked point's filing in the reader, and shows the values as a table", async () => {
+  await render(companyChart(emptyChart(), NVDA, "Nvidia"));
+  const svg = $(".lchart-svg")!;
+  svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 900, height: 400 }) as DOMRect;
+  await act(async () => svg.dispatchEvent(new MouseEvent("click", { clientX: 880, clientY: 300, bubbles: true })));
+  expect(window.location.hash).toBe(`#/filing/${NVDA}/0001045810-26-000075`);
+
+  // keyboard: focus, move, Enter
+  window.location.hash = "";
+  await act(async () => svg.dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true })));
+  expect($(".tip")?.textContent).toContain("FY2027 Q1");
+  await act(async () => svg.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+  expect(window.location.hash).toBe(`#/filing/${NVDA}/0001045810-26-000075`);
+
+  await act(async () => button("View as table").click());
+  const table = container.querySelector("table")!;
+  expect(table.querySelector("caption")?.textContent).toContain("values by quarter");
+  expect([...table.querySelectorAll("thead th")].map((t) => t.textContent)).toEqual([
+    "Period", "NVDA revenue USD", "NVDA operating margin (TTM) %",
+  ]);
+  expect(table.querySelector("tbody tr")!.textContent).toContain("FY2027 Q2$46.74B62.0%");
+  expect(table.querySelector("tbody td")!.getAttribute("title")).toContain("10-Q filed Aug 26, 2026");
+  expect(container.querySelector(".lchart-svg")!.closest("[hidden]")).not.toBeNull();
+});
+
+it("draws 10-K/10-Q and 8-K results markers when turned on", async () => {
+  await render(companyChart(emptyChart(), NVDA, "Nvidia"));
+  expect(container.querySelector(".ch-mk")).toBeNull();
+  const box = [...container.querySelectorAll<HTMLInputElement>("input[type=checkbox]")].find((c) => c.parentElement?.textContent?.includes("Filing markers"))!;
+  await act(async () => box.click());
+  for (let i = 0; i < 3; i++) await act(async () => {});
+  expect(latest.markers).toBe(true);
+  const marks = [...container.querySelectorAll(".ch-mk")];
+  expect(marks.map((m) => m.querySelector("text")!.textContent)).toEqual(["Q", "8"]);
+  expect(marks[0]!.querySelector("title")!.textContent).toContain("NVDA 10-Q filed May 28, 2026");
+  await act(async () => (marks[1] as unknown as SVGElement).dispatchEvent(new MouseEvent("click", { bubbles: true })));
+  expect(window.location.hash).toBe(`#/filing/${NVDA}/0001045810-26-000061`);
 });

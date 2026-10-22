@@ -2252,3 +2252,54 @@ mark {
   color: var(--accent);
   border-color: transparent;
 }
+
+/* Chart builder: table view toggle, clickable points, filing markers, layer order buttons */
+.lchart-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-2) var(--sp-6) 0;
+}
+
+.lchart-svg.clickable {
+  cursor: pointer;
+}
+
+.lchart-svg:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.ch-dot {
+  fill: currentColor;
+  stroke: var(--panel);
+  stroke-width: 2;
+}
+
+.ch-mk text {
+  fill: currentColor;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.ch-mk[role="link"] {
+  cursor: pointer;
+}
+
+.ch-mk:focus-visible {
+  outline: 2px solid var(--accent);
+}
+
+.tip-r.sel .grow {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.btn.icon {
+  padding-left: 6px;
+  padding-right: 6px;
+}
+
+button.link.num {
+  font-variant-numeric: tabular-nums;
+}

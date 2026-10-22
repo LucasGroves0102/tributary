@@ -215,9 +215,11 @@ export interface UiContext {
   accession_no?: string;
   /** the filing reader's open section */
   section_key?: string;
+  /** the chart builder as shown (agent ui.py ChartContext: wider than the actions it can
+   * propose, which use the narrower Transform / LayerType above) */
   chart?: {
     title: string;
-    range: 2 | 3 | 5;
+    range: 1 | 2 | 3 | 5 | 10 | "max";
     align: "calendar" | "fiscal";
     layers: {
       kind: "metric" | "formula";
@@ -225,8 +227,8 @@ export interface UiContext {
       label?: string;
       metric?: string;
       formula?: string;
-      transform: Transform;
-      type: LayerType;
+      transform: Transform | "qoq" | "ps";
+      type: LayerType | "sbar" | "sarea";
       axis: "L" | "R";
       hidden: boolean;
     }[];

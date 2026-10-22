@@ -3,6 +3,8 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ApiError,
   evaluateFormula,
+  filingIndex,
+  filings as fetchFilings,
   FormulaApiError,
   screener,
   screenerColumns,
@@ -10,16 +12,26 @@ import {
   type FormulaRequest,
 } from "../api";
 import { LayerChart } from "../chart/LayerChart";
+import { filingMarkers, MARKER_FORMS, type Marker } from "../chart/markers";
 import { catalog, metricLabel, type MetricInfo } from "../chart/metrics";
 import {
   addLayer,
   applyTemplate,
+  autoName,
   basis,
+  COLOR_NAMES,
+  fromDate,
+  LAYER_TYPES,
+  layerColor,
   layerName,
+  MAX_LAYER_NAME,
   MAX_LAYERS,
+  moveLayer,
   RANGES,
+  rangeLabel,
   removeLayer,
   request,
+  SHARES_METRIC,
   TEMPLATES,
   TRANSFORMS,
   updateLayer,
@@ -27,10 +39,12 @@ import {
   type Layer,
 } from "../chart/model";
 import { pngBlob, slug, svgText } from "../chart/export";
-import { chartCsv, latestSource, toSeries, type Series } from "../chart/series";
+import { chartCsv, latestSource, toSeries, type Series, type Source } from "../chart/series";
+import { ErrorPanel, Skeleton } from "../components/States";
 import { download } from "../download";
 import { day } from "../format";
-import type { FormulaProblem, FormulaSeries } from "../types";
+import { go } from "../route";
+import type { Filing, FormulaProblem, FormulaSeries, IndexedFiling } from "../types";
 
 export interface ChartCompany {
   companyId: string;
@@ -84,12 +98,40 @@ function useMetrics(token: string): MetricInfo[] | null {
   return out;
 }
 
+type Filings = { index: IndexedFiling[]; parsed: Filing[] };
+
+/** Each company's 10-K/10-Q index (public) and parsed filings (8-K items; filings tier, empty
+ * without it), fetched only while markers are on. */
+function useFilings(token: string, companyIds: string[], from: string | null, on: boolean): Record<string, Filings> {
+  const [out, setOut] = useState<Record<string, Filings>>({});
+  const want = on ? companyIds.map((c) => `${c}|${from ?? ""}`) : [];
+  const wantKey = want.join(",");
+  useEffect(() => {
+    let live = true;
+    for (const k of want) {
+      if (out[k]) continue;
+      const [companyId] = k.split("|") as [string];
+      setOut((o) => ({ ...o, [k]: { index: [], parsed: [] } }));
+      Promise.all([
+        filingIndex(token, companyId, { forms: MARKER_FORMS, from: from ?? undefined, limit: 100 }).then((r) => r.filings).catch(() => []),
+        fetchFilings(token, companyId).catch(() => [] as Filing[]),
+      ]).then(([index, parsed]) => live && setOut((o) => ({ ...o, [k]: { index, parsed } })));
+    }
+    return () => {
+      live = false;
+    };
+    // out is read only to skip companies already fetched
+  }, [token, wantKey]);
+  return Object.fromEntries(want.flatMap((k) => (out[k] ? [[k.split("|")[0]!, out[k]!]] : [])));
+}
+
 /** Chart builder: layers of company × metric or formula over /v1/formulas/evaluate. */
 export function ChartBuilder({ token, chart, setChart, saveBar }: Props) {
   const companies = useChartCompanies(token);
   const metrics = useMetrics(token);
   const [results, setResults] = useState<Record<string, Result>>({});
   const [note, setNote] = useState<string | null>(null);
+  const [retry, setRetry] = useState(0);
   const svg = useRef<SVGSVGElement>(null);
 
   const byId = useMemo(() => new Map((companies ?? []).map((c) => [c.companyId, c])), [companies]);
@@ -98,6 +140,8 @@ export function ChartBuilder({ token, chart, setChart, saveBar }: Props) {
     const m = new Map((metrics ?? []).map((x) => [x.name, x.ttm]));
     return (name: string) => m.get(name) ?? true;
   }, [metrics]);
+  // per share needs a diluted share count in the catalog; while it loads, assume it's there
+  const hasShares = metrics === null || metrics.some((m) => m.name === SHARES_METRIC);
 
   const visible = chart.layers.filter((l) => !l.hidden);
   const requests = visible.map((l) => ({ layer: l, req: request(l, chart, ttm) }));
@@ -108,7 +152,7 @@ export function ChartBuilder({ token, chart, setChart, saveBar }: Props) {
   useEffect(() => {
     let live = true;
     for (const k of new Set(wanted)) {
-      if (results[k]) continue;
+      if (results[k] && results[k].state !== "error") continue;
       setResults((r) => ({ ...r, [k]: { state: "loading" } }));
       evaluateFormula(token, JSON.parse(k) as FormulaRequest)
         .then((data) => live && setResults((r) => ({ ...r, [k]: { state: "ok", data } })))
@@ -132,31 +176,58 @@ export function ChartBuilder({ token, chart, setChart, saveBar }: Props) {
     return () => {
       live = false;
     };
-    // results is read only to skip requests already made
-  }, [token, wantedKey]);
+    // results is read only to skip requests already made; retry re-asks failed ones
+  }, [token, wantedKey, retry]);
 
+  const colorOf = (l: Layer) => layerColor(l, chart.layers.findIndex((x) => x.id === l.id));
   const series: Series[] = requests.flatMap(({ layer, req }) => {
     const r = req ? results[keyOf(req)] : undefined;
     if (r?.state !== "ok") return [];
-    const color = chart.layers.findIndex((l) => l.id === layer.id);
-    return [toSeries(r.data, layer, layerName(layer, short, metricLabel), color)];
+    return [toSeries(r.data, layer, layerName(layer, short, metricLabel), colorOf(layer))];
   });
   const status = (l: Layer): Result | undefined => {
     const req = request(l, chart, ttm);
     return req ? results[keyOf(req)] : undefined;
   };
   const loading = requests.some(({ req }) => req && results[keyOf(req)]?.state === "loading");
+  const failed = requests.filter(({ req }) => req && results[keyOf(req)]?.state === "error").length;
 
   const effective = basis(chart);
   const latest = latestSource(series);
+  const transforms = new Set(visible.map((l) => l.transform));
   const footnote = [
-    `Source: SEC filings (10-Q, 10-K XBRL) via Tributary. ${effective === "fiscal" ? "Fiscal" : "Calendar"} quarters; TTM = trailing four quarters; YoY over TTM.`,
+    `Source: SEC filings (10-Q, 10-K XBRL) via Tributary. ${effective === "fiscal" ? "Fiscal" : "Calendar"} quarters; TTM = trailing four quarters` +
+      `${transforms.has("yoy") ? "; YoY over TTM" : ""}${transforms.has("qoq") ? "; QoQ over quarters" : ""}` +
+      `${transforms.has("ps") ? "; per share = TTM USD / diluted weighted shares of the quarter" : ""}.`,
     latest ? `Latest filing used: ${latest.form} filed ${latest.filed} (${latest.accessionNo}).` : "",
   ].filter(Boolean);
+
+  // filing markers: each company a visible metric layer (or formula's default company) reads
+  const chartCompanies = [...new Set(visible.flatMap((l) => {
+    const c = l.kind === "metric" ? l.companyId : l.defaultCompany;
+    return c ? [c] : [];
+  }))].slice(0, 8);
+  const from = fromDate(chart.range);
+  const filingsBy = useFilings(token, chartCompanies, from, !!chart.markers);
+  const markers: Marker[] = chart.markers
+    ? chartCompanies.flatMap((c) => {
+        const f = filingsBy[c];
+        const layer = visible.find((l) => (l.kind === "metric" ? l.companyId : l.defaultCompany) === c);
+        return f ? filingMarkers(c, short(c), layer ? colorOf(layer) : 0, f.index, f.parsed, from) : [];
+      })
+    : [];
 
   const fallback = (companies ?? []).slice(0, 2).map((c) => c.companyId);
   const firstCompany = chart.layers.find((l) => l.companyId)?.companyId ?? fallback[0];
   const name = chart.title || "chart";
+
+  const openSource = (src: Source) => {
+    if (!src.companyId) {
+      setNote(`That value comes from ${src.form} ${src.accessionNo}; the chart doesn't know its company, so open it from the company's Filings tab.`);
+      return;
+    }
+    go({ view: "filing", companyId: src.companyId, accessionNo: src.accessionNo, section: null });
+  };
 
   const exportCsv = () => series.length && download(`${slug(name)}.csv`, new Blob([chartCsv(series)], { type: "text/csv" }));
   const exportSvg = () => {
@@ -174,7 +245,7 @@ export function ChartBuilder({ token, chart, setChart, saveBar }: Props) {
 
   return (
     <div className="page">
-      <div className="row">
+      <div className="row wrap">
         <h1 className="grow">Chart builder</h1>
         <button className="btn" onClick={exportCsv} disabled={!series.length}
           title="Exact values from the API with each point's source accessions">
@@ -188,7 +259,7 @@ export function ChartBuilder({ token, chart, setChart, saveBar }: Props) {
         </button>
         {saveBar}
       </div>
-      {note && <p className="empty error">{note}</p>}
+      {note && <p className="empty error" role="alert">{note}</p>}
 
       <div className="builder">
         <section className="card layers" aria-label="Layers">
@@ -218,9 +289,11 @@ export function ChartBuilder({ token, chart, setChart, saveBar }: Props) {
             </button>
           </div>
           <div className="card-b layer-list">
+            {companies === null && <Skeleton lines={3} label="Loading your companies" />}
             {companies !== null && companies.length === 0 && (
               <p className="faint small">
-                Your plan covers no company's financials, so there's nothing to chart yet.
+                Your plan covers no company's financials yet, so there's nothing to chart. Ask
+                for a financials grant, or try the demo for a sandbox with 20 companies.
               </p>
             )}
             {chart.layers.map((l, i) => (
@@ -228,20 +301,32 @@ export function ChartBuilder({ token, chart, setChart, saveBar }: Props) {
                 key={l.id}
                 token={token}
                 layer={l}
-                color={i}
+                index={i}
+                count={chart.layers.length}
+                color={colorOf(l)}
+                auto={autoName(l, short, metricLabel)}
                 companies={companies ?? []}
                 metrics={metrics ?? []}
+                hasShares={hasShares}
                 basis={effective}
                 status={status(l)}
                 set={(patch) => setChart((s) => updateLayer(s, l.id, patch))}
+                move={(by) => setChart((s) => moveLayer(s, l.id, by))}
                 remove={() => setChart((s) => removeLayer(s, l.id))}
               />
             ))}
+            {!hasShares && (
+              <p className="faint small">
+                Per share isn't available: the metric catalog has no diluted share count. QoQ,
+                YoY and indexed still are.
+              </p>
+            )}
             <div>
               <div className="faint small">Templates</div>
               <div className="row wrap">
                 {TEMPLATES.map((t) => (
                   <button key={t.label} className="btn sm" disabled={!fallback.length && !chart.layers.length}
+                    title={t.hint + (t.per === "one" ? " (the chart's first company)" : "")}
                     onClick={() => setChart((s) => applyTemplate(s, t, fallback))}>
                     {t.label}
                   </button>
@@ -252,7 +337,7 @@ export function ChartBuilder({ token, chart, setChart, saveBar }: Props) {
         </section>
 
         <section className="card grow chart-card">
-          <div className="card-h">
+          <div className="card-h wrap">
             <input
               className="field title-field"
               value={chart.title}
@@ -267,8 +352,9 @@ export function ChartBuilder({ token, chart, setChart, saveBar }: Props) {
             <span className="seg" role="group" aria-label="Range">
               {RANGES.map((r) => (
                 <button key={r} className={chart.range === r ? "on" : undefined} aria-pressed={chart.range === r}
+                  title={r === "max" ? "Every quarter the API has" : `The last ${r} year${r === 1 ? "" : "s"}`}
                   onClick={() => setChart((s) => ({ ...s, range: r }))}>
-                  {r}y
+                  {rangeLabel(r)}
                 </button>
               ))}
             </span>
@@ -280,6 +366,14 @@ export function ChartBuilder({ token, chart, setChart, saveBar }: Props) {
                 </button>
               ))}
             </span>
+            <label className="chk" title="10-K (K), 10-Q (Q) and 8-K results (8, item 2.02, where parsed) on the time axis">
+              <input type="checkbox" checked={!!chart.markers}
+                onChange={(e) => {
+                  const markers = e.target.checked;
+                  setChart((s) => ({ ...s, markers: markers || undefined }));
+                }} />
+              Filing markers
+            </label>
             <span className="sub">{loading ? "Loading…" : "hover for values and source filings"}</span>
           </div>
           {chart.align === "fiscal" && effective === "calendar" && (
@@ -289,20 +383,27 @@ export function ChartBuilder({ token, chart, setChart, saveBar }: Props) {
             </p>
           )}
           {series.length ? (
-            <LayerChart series={series} title={chart.title} footnote={footnote} svgRef={svg} />
+            <LayerChart series={series} title={chart.title} footnote={footnote} svgRef={svg}
+              markers={markers} onOpen={openSource} />
+          ) : visible.length && loading ? (
+            <Skeleton chart label="Loading the series" />
+          ) : visible.length && failed ? (
+            <ErrorPanel what="these layers" detail="Each layer below says what went wrong."
+              onRetry={() => setRetry((n) => n + 1)} />
           ) : (
             <p className="empty">
               {visible.length
-                ? loading
-                  ? "Loading the series…"
-                  : "No data for these layers in this range. Check the layers' messages."
-                : "Add a metric or a formula layer, or start from a template."}
+                ? "No values for these layers in this range. Try a longer range (10y or Max), or another metric."
+                : chart.layers.length
+                  ? "Every layer is hidden. Show one, or add a metric or formula layer."
+                  : "Start with + Metric (a company and a metric), + Formula (e.g. net_income / revenue), or one of the templates."}
             </p>
           )}
           {latest && (
             <div className="foot">
-              Every point comes from a filing: hover for each layer's value, period and accession.
-              Latest: {latest.form} filed {day(latest.filed, true)}.
+              Every point comes from a filing: hover for each layer's value, period and accession;
+              click to open it in the reader. Latest: {latest.form} filed {day(latest.filed, true)}.
+              {chart.markers && " Markers: K = 10-K, Q = 10-Q, 8 = 8-K results (item 2.02; only where the filing is parsed and your plan covers filings)."}
             </div>
           )}
         </section>
@@ -314,44 +415,82 @@ export function ChartBuilder({ token, chart, setChart, saveBar }: Props) {
 function LayerEditor({
   token,
   layer,
+  index,
+  count,
   color,
+  auto,
   companies,
   metrics,
+  hasShares,
   basis,
   status,
   set,
+  move,
   remove,
 }: {
   token: string;
   layer: Layer;
+  index: number;
+  count: number;
   color: number;
+  /** the automatic legend name (the placeholder of the name field) */
+  auto: string;
   companies: { companyId: string; name: string; ticker: string | null }[];
   metrics: MetricInfo[];
+  hasShares: boolean;
   basis: "fiscal" | "calendar";
   status: Result | undefined;
   set: (patch: Partial<Layer>) => void;
+  move: (by: -1 | 1) => void;
   remove: () => void;
 }) {
   const metric = metrics.find((m) => m.name === layer.metric);
+  const [name, setName] = useState(layer.name ?? "");
+  const label = layer.name?.trim() || auto;
   const companyOptions = companies.map((c) => (
     <option key={c.companyId} value={c.companyId}>
       {c.ticker ? `${c.ticker} · ${c.name}` : c.name}
     </option>
   ));
+  // per share divides dollars by shares: only for USD metrics (formulas are checked by the API)
+  const perShareOk = hasShares && (layer.kind === "formula" || !metric || metric.unit === "USD");
+  const commitName = () => {
+    const n = name.trim().slice(0, MAX_LAYER_NAME);
+    if (n !== (layer.name ?? "")) set({ name: n || undefined });
+  };
 
   return (
-    <div className={layer.hidden ? "layer off" : "layer"}>
+    <div className={layer.hidden ? "layer off" : "layer"} role="group" aria-label={`Layer ${index + 1}: ${label}`}>
       <div className="row">
-        <svg className={`sw c${color % 8}`} width="9" height="9" aria-hidden="true">
+        <svg className={`sw c${color}`} width="9" height="9" aria-hidden="true">
           <rect width="9" height="9" rx="2" fill="currentColor" />
         </svg>
         <b className="grow">{layer.kind === "formula" ? "Formula" : "Metric"}</b>
-        <button className="btn sm ghost" onClick={() => set({ hidden: !layer.hidden })}>
+        <button className="btn sm ghost icon" onClick={() => move(-1)} disabled={index === 0}
+          aria-label={`Move ${label} up`} title="Move up">
+          ↑
+        </button>
+        <button className="btn sm ghost icon" onClick={() => move(1)} disabled={index === count - 1}
+          aria-label={`Move ${label} down`} title="Move down">
+          ↓
+        </button>
+        <button className="btn sm ghost" onClick={() => set({ hidden: !layer.hidden })} aria-pressed={!!layer.hidden}
+          aria-label={`${layer.hidden ? "Show" : "Hide"} ${label}`}>
           {layer.hidden ? "Show" : "Hide"}
         </button>
-        <button className="btn sm ghost" onClick={remove} aria-label="Remove layer">
+        <button className="btn sm ghost" onClick={remove} aria-label={`Remove ${label}`}>
           ✕
         </button>
+      </div>
+      <div className="row">
+        <input className="field grow" value={name} maxLength={MAX_LAYER_NAME} placeholder={auto}
+          aria-label="Layer name (legend)" onChange={(e) => setName(e.target.value)} onBlur={commitName}
+          onKeyDown={(e) => e.key === "Enter" && commitName()} />
+        <select aria-label="Colour" value={color} onChange={(e) => set({ color: Number(e.target.value) })}>
+          {COLOR_NAMES.map((c, i) => (
+            <option key={c} value={i}>{c}</option>
+          ))}
+        </select>
       </div>
       {layer.kind === "metric" ? (
         <div className="row">
@@ -375,25 +514,26 @@ function LayerEditor({
       )}
       <div className="row">
         <select aria-label="Transform" value={layer.transform} onChange={(e) => set({ transform: e.target.value as Layer["transform"] })}>
-          {TRANSFORMS.map(([v, label]) => (
-            <option key={v} value={v} disabled={v === "ttm" && metric !== undefined && !metric.ttm}>
+          {TRANSFORMS.filter(([v]) => v !== "ps" || hasShares || layer.transform === "ps").map(([v, label]) => (
+            <option key={v} value={v}
+              disabled={(v === "ttm" && metric !== undefined && !metric.ttm) || (v === "ps" && !perShareOk)}>
               {label}
             </option>
           ))}
         </select>
         <select aria-label="Type" value={layer.type} onChange={(e) => set({ type: e.target.value as Layer["type"] })}>
-          <option value="line">line</option>
-          <option value="bar">bar</option>
-          <option value="area">area</option>
+          {LAYER_TYPES.map(([v, label]) => (
+            <option key={v} value={v}>{label}</option>
+          ))}
         </select>
         <select aria-label="Axis" value={layer.axis} onChange={(e) => set({ axis: e.target.value as Layer["axis"] })}>
           <option value="L">Left axis</option>
           <option value="R">Right axis</option>
         </select>
       </div>
-      {status?.state === "error" && <div className="err">{status.message}</div>}
+      {status?.state === "error" && <div className="err" role="alert">{status.message}</div>}
       {status?.state === "ok" && status.data.points.length === 0 && (
-        <div className="faint small">No values in this range.</div>
+        <div className="faint small">No values in this range: try 10y or Max.</div>
       )}
     </div>
   );
@@ -425,7 +565,7 @@ function FormulaInput({
     }
     let live = true;
     const t = setTimeout(() => {
-      const body: FormulaRequest = { formula, basis, view: layer.transform === "q" ? "quarter" : "ttm" };
+      const body: FormulaRequest = { formula, basis, view: layer.transform === "q" || layer.transform === "qoq" ? "quarter" : "ttm" };
       if (layer.defaultCompany) body.default_company = layer.defaultCompany;
       validateFormula(token, body)
         .then((v) => live && setCheck(v.valid ? { ok: true, unit: v.unit } : { ok: false, problems: v.errors }))

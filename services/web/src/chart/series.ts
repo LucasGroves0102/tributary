@@ -10,6 +10,8 @@ export interface Source {
   accessionNo: string;
   url: string | null;
   periodEnd: string;
+  /** the company that filed it, when known (opens the filing in the reader) */
+  companyId?: string;
 }
 
 export interface Point {
@@ -46,12 +48,14 @@ export function toSeries(
     const y = Number(p.value);
     const seen = new Map<string, Source>();
     for (const x of p.inputs) {
+      const companyId = data.inputs.find((i) => i.input === x.input)?.company_id ?? undefined;
       seen.set(x.citation.accession_no, {
         form: x.citation.form,
         filed: x.citation.filed,
         accessionNo: x.citation.accession_no,
         url: x.citation.filing_url,
         periodEnd: x.period_end,
+        ...(companyId ? { companyId } : {}),
       });
     }
     return {
@@ -63,7 +67,7 @@ export function toSeries(
       sources: [...seen.values()],
     };
   });
-  let unit = layer.transform === "yoy" ? "pct" : data.unit;
+  let unit = layer.transform === "yoy" || layer.transform === "qoq" ? "pct" : data.unit;
   if (layer.transform === "idx") {
     // index to the first value in range; meaningless from zero or a negative base
     const base = points.find((p) => p.y !== null)?.y ?? null;
@@ -144,6 +148,7 @@ export function financialSeries(
   rows: FinancialRow[],
   metric: string,
   layer: { id: number; name: string; color: number; type: LayerType; axis: Axis },
+  companyId?: string,
 ): Series {
   const points: Point[] = rows
     .filter((r) => r.metric === metric)
@@ -163,6 +168,7 @@ export function financialSeries(
           accessionNo: r.citation.accession_no,
           url: r.citation.filing_url,
           periodEnd: r.period_end,
+          ...(companyId ? { companyId } : {}),
         }],
       }];
     })
