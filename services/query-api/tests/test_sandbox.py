@@ -15,12 +15,14 @@ from query_api.sandbox import (
     DEMO_PLAN,
     DEMO_TICKERS,
     DEMO_WATCHLIST,
+    DEMO_WORKSPACE,
     NewSandbox,
     QuotaExceeded,
     Refused,
     SandboxConfig,
     SandboxGone,
     ip_key,
+    sandbox_workspaces,
 )
 
 from .conftest import SECRET
@@ -365,3 +367,22 @@ def test_demo_tables_are_not_streamed():
     connector = json.loads((Path(__file__).parents[3] / "streaming/debezium/app-connector.json")
                            .read_text())
     assert "demo_" not in connector["table.include.list"]
+
+
+def test_sandbox_starts_with_the_pepsico_vs_coca_cola_workspace(world):
+    client, sandboxes, _, _ = world
+    body = create(client).json()
+    assert body["workspaces"] == [DEMO_WORKSPACE] == ["PepsiCo vs Coca-Cola"]
+    (ws,) = sandboxes.sandboxes[body["user_id"]].workspaces
+    chart, comps = ws["items"]
+    assert chart[0] == "chart"
+    assert {(x["companyId"], x["metric"]) for x in chart[2]["layers"]} == {
+        (IDS[t], m) for t in ("PEP", "KO") for m in ("gross_margin", "operating_margin")}
+    assert comps == ("comps", "PEP vs KO, KDP, MNST",
+                     {"target": IDS["PEP"], "peers": [IDS["KO"], IDS["KDP"], IDS["MNST"]]})
+
+
+def test_starter_workspace_skips_what_does_not_resolve():
+    assert sandbox_workspaces({"KO": IDS["KO"]}) == []
+    (ws,) = sandbox_workspaces({t: IDS[t] for t in ("PEP", "KO", "MNST")})
+    assert ws["items"][1][1] == "PEP vs KO, MNST"

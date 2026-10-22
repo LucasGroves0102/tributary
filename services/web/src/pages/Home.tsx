@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 import { ago, change, day } from "../format";
 import { status, WATCH_COLUMNS, type ExpectedItem, type FilingItem, type WatchRow } from "../home/data";
@@ -12,9 +12,11 @@ interface Props {
   lastIngested: string | null;
   onAdd: () => void;
   onExport: () => void;
+  /** "Continue where you left off" (workspaces/Recent) */
+  recent?: ReactNode;
 }
 
-export function Home({ workspace, lastIngested, onAdd, onExport }: Props) {
+export function Home({ workspace, lastIngested, onAdd, onExport, recent }: Props) {
   const { watchlist, rows, filings, expected, since, firstVisit } = workspace;
   const newLabel = firstVisit
     ? "new in the last 7 days in bold"
@@ -37,6 +39,16 @@ export function Home({ workspace, lastIngested, onAdd, onExport }: Props) {
 
       {watchlist.state === "ok" && (
         <StatusStrip rows={rows} filings={filings ?? []} since={since} firstVisit={firstVisit} lastIngested={lastIngested} />
+      )}
+
+      {recent && (
+        <section className="card">
+          <div className="card-h">
+            <h2>Continue where you left off</h2>
+            <span className="sub">saved work you opened and filings you read, newest first</span>
+          </div>
+          {recent}
+        </section>
       )}
 
       <section className="card">

@@ -13,6 +13,7 @@ from query_api.sandbox import (
     QuotaExceeded,
     Refused,
     SandboxGone,
+    sandbox_workspaces,
 )
 
 psycopg = pytest.importorskip("psycopg")
@@ -138,3 +139,19 @@ def test_delete_expired_removes_only_expired_sandbox_users_and_their_rows(db):
     s.delete_expired(NOW + timedelta(days=2))
     assert rows(conn, "SELECT 1 FROM demo_creations") == []
 
+
+
+def test_starter_workspace_is_created_and_deleted_with_the_sandbox(db):
+    s, conn = db
+    ids = {"PEP": PEP, "KO": KO, "KDP": "0001418135", "MNST": "0000865752"}
+    starter = sandbox("demo-ws", hours=1)
+    s.create(NewSandbox(**{**starter.__dict__, "workspaces": tuple(sandbox_workspaces(ids))}),
+             "ip1", 5, 5)
+    assert rows(conn, "SELECT name FROM workspaces WHERE user_id = 'demo-ws'") == [
+        ("PepsiCo vs Coca-Cola",)]
+    assert rows(conn, "SELECT kind, name FROM workspace_items WHERE user_id = 'demo-ws'"
+                      " ORDER BY created_at") == [("chart", "Margins: PEP vs KO"),
+                                                 ("comps", "PEP vs KO, KDP, MNST")]
+    s.delete_expired(NOW + timedelta(hours=2))
+    for table in ("workspaces", "workspace_items"):
+        assert rows(conn, f"SELECT 1 FROM {table} WHERE user_id = 'demo-ws'") == []  # noqa: S608

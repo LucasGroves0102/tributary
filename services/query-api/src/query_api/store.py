@@ -144,6 +144,19 @@ class Store:
                 """, (accession_no,))
             return cur.fetchone()
 
+    def filings_meta(self, user_id: str, accession_nos: list[str]) -> dict[str, dict]:
+        """accession_no → form, filed, period_end from the public filing index."""
+        with self._session(user_id) as cur:
+            cur.execute(
+                """
+                SELECT DISTINCT ON (accession_no) accession_no, form, filing_date AS filed,
+                       report_date AS period_end
+                FROM silver.filings
+                WHERE accession_no = ANY(%s)
+                ORDER BY accession_no, report_date IS NULL, cik
+                """, (accession_nos,))
+            return {r.pop("accession_no"): r for r in cur.fetchall()}
+
     def recap(self, user_id: str, company_id: str, accession_no: str, period_end: date | None,
               metrics: list[str]) -> list[dict]:
         """gold.filing_recap rows. Without a period of report, the latest period this filing

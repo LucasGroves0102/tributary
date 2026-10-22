@@ -23,6 +23,10 @@ import type {
   SectionChanges,
   SectionSearch,
   SegmentRow,
+  RecentWork,
+  SavedItemFull,
+  SavedKind,
+  SavedWorkspace,
   UiContext,
   Watchlist,
 } from "./types";
@@ -96,6 +100,60 @@ function send<T>(token: string, method: "PUT" | "DELETE", path: string) {
     (r) => json<T>(r),
   );
 }
+
+/** A request with a JSON body (saved work). */
+function sendJson<T>(token: string, method: "POST" | "PUT" | "PATCH" | "DELETE", path: string, body?: unknown) {
+  return fetch(url(path, {}), {
+    method,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+    },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  }).then((r) => json<T>(r));
+}
+
+const enc = encodeURIComponent;
+
+export const workspaces = (token: string) =>
+  get<{ workspaces: SavedWorkspace[] }>(token, "/v1/workspaces").then((r) => r.workspaces);
+
+export const createWorkspace = (token: string, name: string) =>
+  sendJson<SavedWorkspace>(token, "POST", "/v1/workspaces", { name });
+
+export const renameWorkspace = (token: string, id: string, name: string) =>
+  sendJson<SavedWorkspace>(token, "PATCH", `/v1/workspaces/${enc(id)}`, { name });
+
+export const deleteWorkspace = (token: string, id: string) =>
+  sendJson<{ deleted: boolean }>(token, "DELETE", `/v1/workspaces/${enc(id)}`);
+
+export const duplicateWorkspace = (token: string, id: string) =>
+  sendJson<SavedWorkspace>(token, "POST", `/v1/workspaces/${enc(id)}/duplicate`, {});
+
+export const addItem = (token: string, workspaceId: string, kind: SavedKind, name: string, state: object) =>
+  sendJson<SavedItemFull>(token, "POST", `/v1/workspaces/${enc(workspaceId)}/items`, { kind, name, state });
+
+/** The item with its state; the API records it as opened (Home's "Continue where you left off"). */
+export const openItem = (token: string, id: string) =>
+  sendJson<SavedItemFull>(token, "POST", `/v1/workspace-items/${enc(id)}/open`);
+
+export const updateItem = (token: string, id: string, patch: { name?: string; state?: object }) =>
+  sendJson<SavedItemFull>(token, "PUT", `/v1/workspace-items/${enc(id)}`, patch);
+
+export const duplicateItem = (token: string, id: string) =>
+  sendJson<SavedItemFull>(token, "POST", `/v1/workspace-items/${enc(id)}/duplicate`, {});
+
+export const deleteItem = (token: string, id: string) =>
+  sendJson<{ deleted: boolean }>(token, "DELETE", `/v1/workspace-items/${enc(id)}`);
+
+export const recentWork = (token: string, limit = 8) => get<RecentWork>(token, "/v1/recent", { limit });
+
+export const readFiling = (token: string, companyId: string, accessionNo: string, sectionKey: string | null) =>
+  sendJson<{ recorded: boolean }>(token, "PUT", "/v1/recent/filings", {
+    company_id: companyId,
+    accession_no: accessionNo,
+    ...(sectionKey ? { section_key: sectionKey } : {}),
+  });
 
 export const searchCompanies = (token: string, q: string) =>
   get<{ results: SearchResult[] }>(token, "/v1/companies/search", { q }).then((r) => r.results);

@@ -43,7 +43,12 @@ remove a watchlist company). Each proposal is checked as the user through the Qu
 (`/v1/me`, `/v1/companies/search`, `/v1/formulas/validate`): chart companies must be readable,
 unknown and ungranted ones get the same refusal. Accepted ones stream as `action` events (also in
 `answer.actions`) for the app to apply with Undo; the app reads any data itself, through the
-Query API. Without the web app (CLI, recorded suites) requests are unchanged.
+Query API. `save_to_workspace` (item `chart`, `comps` or `screen`, a name, a workspace name)
+saves what the screen shows: it is accepted only if the context showed that item or an accepted
+action in the same answer built it, and names are trimmed, capped and free of control
+characters. The app then saves it through the Query API (which validates the state again, for
+this user only) and Undo deletes the saved item. Without the web app (CLI, recorded suites)
+requests are unchanged.
 
 Limits: questions per hour per user and per client IP (`X-Client-IP`, set by the web proxy from
 Cloudflare's `CF-Connecting-IP`), and a daily model budget across all users. Over a limit → 429.

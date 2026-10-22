@@ -142,6 +142,9 @@ class Agent:
         web app's screen, sent as data ahead of the question (only with ui)."""
         content: str | list[dict] = question
         if context is not None and self._ui is not None:
+            observe = getattr(self._ui, "observe", None)
+            if observe is not None:  # what's on screen (save_to_workspace saves only that)
+                observe(context)
             content = [{"type": "text", "text": context_block(context)},
                        {"type": "text", "text": question}]
         messages: list[dict] = [*history, {"role": "user", "content": content}]

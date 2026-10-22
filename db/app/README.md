@@ -1,7 +1,8 @@
 # app database
 
 FR7, week 2. The application's own database (`app`), separate from the analytics database
-(`tributary`): users, organizations, plans, subscriptions, company grants and watchlists.
+(`tributary`): users, organizations, plans, subscriptions, company grants, watchlists and saved
+work (workspaces).
 In production this would belong to a different service, so other components learn about
 changes through Debezium CDC ([streaming/debezium](../../streaming/debezium)), never by querying
 it directly. [authz-sync](../../services/authz-sync) turns those changes into OpenFGA tuples and
@@ -11,6 +12,7 @@ it directly. [authz-sync](../../services/authz-sync) turns those changes into Op
 |---|---|
 | `users` (with optional `org_id`), `subscriptions` (user → plan), `plan_tiers` (plan → tier), `company_grants` (company → user or organization) | yes |
 | `organizations`, `plans`, `watchlists` | no |
+| `workspaces`, `workspace_items` (saved charts, comps sets, screens), `recent_filings` (migration 004; owner-only, forced RLS on `app.user_id`) | no: they grant nothing |
 | `demo_sandboxes` (sandbox user → expiry), `demo_creations` (creation rate limit, HMAC of the client address), `demo_agent_usage` / `demo_agent_daily` (assistant question caps) | no: they grant nothing |
 
 Watchlists are preferences only and never grant access.

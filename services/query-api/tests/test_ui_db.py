@@ -272,3 +272,10 @@ def test_peers_without_access_rank_by_public_metadata_only(peer_conn, token):
     assert body["company"]["revenue_band"] is None
     assert [p["company_id"] for p in body["peers"]] == [P4, P2, P3]  # SIC level, then name
     assert all(p["values"]["revenue_ttm"] is None for p in body["peers"])
+
+
+def test_filings_meta_reads_the_public_index_as_query_api(conn):
+    """Recent filings on Home: form and dates from silver.filings for any accession."""
+    meta = Store(OneConnection(conn)).filings_meta("t-nobody", [f"{C}-00-000001", "nope"])
+    assert meta == {f"{C}-00-000001": {"form": "10-Q", "filed": date(2025, 4, 30),
+                                       "period_end": date(2025, 3, 31)}}

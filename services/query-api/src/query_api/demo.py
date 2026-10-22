@@ -1,8 +1,9 @@
 """Demo sandbox routes (query_api.sandbox): create one, and the agent's per-question quota.
 
-POST /v1/demo/sandbox takes no input at all: plan, companies, watchlist and lifetime come from
-sandbox.py and SandboxConfig, so the route can't be used to pick any of them. Identity is still
-only ever the JWT `sub` (the agent-quota route uses current_user like every other route)."""
+POST /v1/demo/sandbox takes no input at all: plan, companies, watchlist, starter workspace and
+lifetime come from sandbox.py and SandboxConfig, so the route can't be used to pick any of them.
+Identity is still only ever the JWT `sub` (the agent-quota route uses current_user like every
+other route)."""
 
 import logging
 import secrets
@@ -27,6 +28,7 @@ from query_api.sandbox import (
     SandboxGone,
     ip_key,
     is_sandbox_user,
+    sandbox_workspaces,
 )
 from query_api.store import Store
 
@@ -97,7 +99,8 @@ def add_sandbox_routes(app: FastAPI, *, store: Store, sandboxes: Sandboxes | Non
         now = clock().replace(microsecond=0)
         sandbox = NewSandbox(user_id=USER_PREFIX + secrets.token_hex(8), company_ids=companies,
                              watchlist=watch, created_at=now,
-                             expires_at=now + timedelta(hours=config.ttl_hours))
+                             expires_at=now + timedelta(hours=config.ttl_hours),
+                             workspaces=tuple(sandbox_workspaces(ids)))
         try:
             sandboxes.create(sandbox, ip_key(jwt_secret, client_ip(request)),
                              config.creations_per_ip_per_hour, config.max_live)
@@ -117,6 +120,7 @@ def add_sandbox_routes(app: FastAPI, *, store: Store, sandboxes: Sandboxes | Non
             "plan": DEMO_PLAN,
             "companies": [{"company_id": c, "ticker": tickers.get(c)} for c in companies],
             "watchlist": watch,
+            "workspaces": [w["name"] for w in sandbox.workspaces],
         }
 
     @app.post("/v1/demo/agent-quota")

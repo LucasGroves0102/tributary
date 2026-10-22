@@ -6,10 +6,11 @@ reader-and-writer of authorization state.
 
 What a visitor gets is fixed here, never taken from the request: plan DEMO_PLAN, grants on
 DEMO_TICKERS (resolved through silver.resolve_company, never CIK = company), a watchlist of
-DEMO_WATCHLIST, for `ttl_hours`. The session is a normal JWT whose `sub` is the new user and
-whose `exp` is the sandbox's expiry; nothing can extend it. The hourly `query-api-demo-cleanup`
+DEMO_WATCHLIST, a starter workspace (DEMO_WORKSPACE), for `ttl_hours`. The session is a
+normal JWT whose `sub` is the new user and whose `exp` is the sandbox's expiry; nothing can
+extend it. The hourly `query-api-demo-cleanup`
 job deletes expired sandbox users, which revokes their access through CDC like any user
-deletion; watchlists and usage go with them (ON DELETE CASCADE).
+deletion; watchlists, workspaces and usage go with them (ON DELETE CASCADE).
 
 Real sign-in (OAuth) is a second way to get the same kind of JWT: find or create the user, mint
 the token; nothing downstream knows how the user signed in."""
@@ -25,6 +26,8 @@ from typing import Any, Protocol
 
 import psycopg
 
+from query_api.workspaces import seed, starter
+
 # The demo's companies, by ticker. The one list: the API resolves it, the web app shows what
 # the API returns, and tests import it.
 DEMO_TICKERS: tuple[str, ...] = (
@@ -34,6 +37,8 @@ DEMO_TICKERS: tuple[str, ...] = (
 # Seeded on the new user's watchlist (a subset of DEMO_TICKERS; watchlists never grant access).
 DEMO_WATCHLIST: tuple[str, ...] = ("PEP", "KO", "MSFT", "NVDA", "COST", "JPM")
 DEMO_PLAN = "pro"
+# The starter workspace every sandbox gets (sandbox_workspaces); it goes with the user.
+DEMO_WORKSPACE = "PepsiCo vs Coca-Cola"
 # Sandbox user ids start with this; nothing else in the app database does (named demo users
 # are alice/bob/carol/dave, real sign-in will use its own ids).
 USER_PREFIX = "demo-"
@@ -103,6 +108,25 @@ def ip_key(secret: str, ip: str) -> str:
     return hmac.new(secret.encode(), b"demo-ip:" + ip.encode(), hashlib.sha256).hexdigest()[:32]
 
 
+def sandbox_workspaces(ids: Mapping[str, str]) -> list[dict]:
+    """DEMO_WORKSPACE from ticker → company_id: a margins chart for PEP vs KO and comps for PEP
+    vs KO, KDP, MNST (whichever resolve). Validated like any saved item. None without PEP+KO."""
+    pep, ko = ids.get("PEP"), ids.get("KO")
+    if not pep or not ko:
+        return []
+    layers = [{"kind": "metric", "companyId": c, "metric": m, "transform": "ttm",
+               "type": "line", "axis": "L"}
+              for m in ("gross_margin", "operating_margin") for c in (pep, ko)]
+    peers = [t for t in ("KO", "KDP", "MNST") if ids.get(t)]
+    return [starter(DEMO_WORKSPACE, [
+        ("chart", "Margins: PEP vs KO",
+         {"title": "Gross and operating margin, TTM: PepsiCo vs Coca-Cola", "range": 5,
+          "align": "calendar", "layers": layers}),
+        ("comps", f"PEP vs {', '.join(peers)}",
+         {"target": pep, "peers": [ids[t] for t in peers]}),
+    ])]
+
+
 class Refused(Exception):
     """Sandbox not created: `reason` is "ip" (too many from this client) or "full"."""
 
@@ -130,6 +154,8 @@ class NewSandbox:
     watchlist: list[str]
     created_at: datetime
     expires_at: datetime
+    # starter workspaces (sandbox_workspaces); deleted with the user (ON DELETE CASCADE)
+    workspaces: tuple[dict, ...] = ()
 
 
 class Sandboxes(Protocol):
@@ -147,7 +173,8 @@ class Pool(Protocol):
 
 class AppSandboxes:
     """Sandboxes in the app database. Creation writes the user, subscription, grants,
-    watchlist and sandbox row in ONE transaction, so authz-sync never sees half a sandbox."""
+    watchlist, starter workspaces and sandbox row in ONE transaction, so authz-sync never sees
+    half a sandbox."""
 
     def __init__(self, pool: Pool) -> None:
         self._pool = pool
@@ -179,6 +206,7 @@ class AppSandboxes:
                         " SELECT %s, c, %s + make_interval(secs => o::float8 / 1000)"
                         " FROM unnest(%s::text[]) WITH ORDINALITY w(c, o)",
                         (s.user_id, s.created_at, s.watchlist))
+            seed(cur, s.user_id, list(s.workspaces))
             cur.execute("INSERT INTO demo_creations (ip_key, created_at) VALUES (%s, %s)",
                         (ip_key, s.created_at))
 

@@ -151,7 +151,51 @@ export type UiAction = { label: string } & (
       /** Compare column keys (compare/state.ts COMPARE_COLUMNS); null keeps the current ones */
       columns: string[] | null;
     }
+  /** saves what the screen shows; Undo deletes the saved item */
+  | { action: "save_to_workspace"; item: SavedKind; name: string; workspace: string }
 );
+
+/** Saved work (Query API /v1/workspaces, workspace_api.py). */
+export type SavedKind = "chart" | "comps" | "screen";
+
+export interface SavedItem {
+  item_id: string;
+  workspace_id: string;
+  kind: SavedKind;
+  name: string;
+  created_at: string;
+  updated_at: string;
+  opened_at: string | null;
+}
+
+/** An item with its state: the web app's own chart/comps/screen state, validated by the API. */
+export interface SavedItemFull extends SavedItem {
+  state: Record<string, unknown>;
+  workspace_name?: string;
+}
+
+export interface SavedWorkspace {
+  workspace_id: string;
+  name: string;
+  created_at: string;
+  updated_at: string;
+  items: SavedItem[];
+}
+
+/** /v1/recent: recently opened items and recently read filings, newest first. */
+export interface RecentWork {
+  items: (SavedItem & { workspace_name: string })[];
+  filings: {
+    company_id: string;
+    accession_no: string;
+    section_key: string | null;
+    read_at: string;
+    name: string | null;
+    form: string | null;
+    filed: string | null;
+    period_end: string | null;
+  }[];
+}
 
 /** A company agent-api resolved and checked: one the user can read financials for. */
 export interface UiCompany {
