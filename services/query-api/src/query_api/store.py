@@ -15,6 +15,9 @@ from psycopg.rows import dict_row
 from query_api.formula import Compiled
 from query_api.screener import Compiled as Screen
 
+# Every query: SET LOCAL ROLE doesn't apply the role's own settings (those apply at login), so
+# a timeout on query_api would never reach these sessions. Search sets its own, longer one.
+QUERY_TIMEOUT = "5s"
 SEARCH_TIMEOUT = "8s"
 HEADLINE = ("StartSel=«, StopSel=», MaxWords=35, MinWords=15, MaxFragments=2,"
             " FragmentDelimiter=\" … \"")
@@ -37,6 +40,7 @@ class Store:
         with self._pool.connection() as conn, conn.transaction(), \
                 conn.cursor(row_factory=dict_row) as cur:
             cur.execute("SET LOCAL ROLE query_api")
+            cur.execute(f"SET LOCAL statement_timeout = '{QUERY_TIMEOUT}'")
             cur.execute("SELECT set_config('app.user_id', %s, true)", (user_id,))
             try:
                 yield cur

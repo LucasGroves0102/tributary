@@ -6,8 +6,9 @@ from collections.abc import Callable
 from datetime import UTC, date, datetime
 from typing import Annotated, Literal
 
+import psycopg
 from fastapi import Depends, FastAPI, HTTPException, Path, Query
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from prometheus_client import Counter
 from pydantic import BaseModel, Field
@@ -32,7 +33,7 @@ from query_api.research import add_research_routes
 from query_api.sandbox import SandboxConfig, Sandboxes, is_sandbox_user
 from query_api.shapes import filing_url
 from query_api.shapes import period as _period
-from query_api.store import Store
+from query_api.store import QUERY_TIMEOUT, Store
 from query_api.ui import add_ui_routes
 from query_api.watchlist import Watchlists
 from tributary_telemetry.http import instrument
@@ -86,6 +87,12 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
     sandbox_config.enabled and sandboxes are given. clock: the current UTC time."""
     app = FastAPI(title="Tributary Query API", version="1")
     instrument(app)
+
+    @app.exception_handler(psycopg.errors.QueryCanceled)
+    def too_slow(_request, _exc) -> JSONResponse:
+        """Store's statement_timeout tripped: the request asked for too much at once."""
+        return JSONResponse({"detail": f"query took longer than {QUERY_TIMEOUT}; narrow it "
+                                       "(fewer companies, columns or periods)"}, status_code=503)
     bearer = HTTPBearer(auto_error=False)
 
     def current_user(

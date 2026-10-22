@@ -421,3 +421,16 @@ def test_search_ranks_denser_matches_first(texts, token):
     # phrase search only matches adjacent words
     assert [h["citation"]["accession_no"] for h in
             search(texts, token, "t-pro", 'q="export controls"')] == [f"{A}-26-000003"]
+
+
+def test_every_session_has_a_statement_timeout(client):
+    """SET LOCAL ROLE skips role settings, so Store must set the timeout itself."""
+    import psycopg
+
+    store = Store(OneConnection(client.app_conn))
+    with store._session("t-free") as cur:
+        cur.execute("SHOW statement_timeout")
+        assert cur.fetchone()["statement_timeout"] == "5s"
+    with pytest.raises(psycopg.errors.QueryCanceled), store._session("t-free") as cur:
+        cur.execute("SELECT pg_sleep(6)")
+
