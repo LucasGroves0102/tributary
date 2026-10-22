@@ -10,7 +10,7 @@ import type { SavedItemFull, SavedWorkspace, UiAction } from "../types";
 const AAPL = "0000320193";
 const ME = {
   user_id: "alice",
-  companies: [{ company_id: NVDA, name: "NVIDIA CORP", industry: null, tiers: ["financials"] }],
+  companies: [{ company_id: NVDA, name: "Nvidia", industry: null, tiers: ["financials"] }],
 };
 const COLUMNS = {
   columns: [{ key: "revenue_ttm", metric: "revenue", span: "ttm", unit: "USD" }],
@@ -234,7 +234,7 @@ it("saves comps into a new workspace with Save as", async () => {
   await click(buttons("Save…")[0]!);
   const form = $(".save-form")!;
   const [name] = form.querySelectorAll<HTMLInputElement>("input");
-  expect(name!.value).toBe("NVIDIA CORP comps");
+  expect(name!.value).toBe("Nvidia comps");
   await type(name!, "Chips comps");
   const select = form.querySelector<HTMLSelectElement>("select")!;
   await act(async () => {
@@ -298,7 +298,7 @@ it("Home continues where you left off, newest first", async () => {
   await click(sidebarItem("NVDA revenue"));
   db.recentFilings = [{
     company_id: NVDA, accession_no: "0001045810-26-000075", section_key: "II-1A", read_at: "2026-10-21T11:00:00Z",
-    name: "NVIDIA CORP", form: "10-Q", filed: "2026-08-26", period_end: "2026-07-26",
+    name: "Nvidia", form: "10-Q", filed: "2026-08-26", period_end: "2026-07-26",
   }];
   window.location.hash = "#/";
   await settle();
@@ -309,7 +309,7 @@ it("Home continues where you left off, newest first", async () => {
   const rows = [...container.querySelectorAll(".t.recent tr")].map((r) => r.textContent);
   expect(rows[0]).toContain("NVDA comps");
   expect(rows[1]).toContain("NVDA revenue");
-  expect(rows[2]).toContain("NVIDIA CORP 10-Q");
+  expect(rows[2]).toContain("Nvidia 10-Q");
   expect(container.querySelector<HTMLAnchorElement>(".t.recent a")?.getAttribute("href")).toBe(
     `#/filing/${NVDA}/0001045810-26-000075/II-1A`,
   );
