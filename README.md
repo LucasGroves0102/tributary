@@ -10,7 +10,7 @@ sandbox with 20 companies (PepsiCo, Coca-Cola, Apple, Microsoft, Nvidia, JPMorga
 | **0 of 59** | permission attacks leaked data ([adversarial suite](tests/adversarial/report.md)) |
 | **128 of 128** | figures in the agent's answers traced to a filing or XBRL fact ([citation suite](tests/citations/report.md)) |
 | **< 1 s** | to revoke access everywhere after a grant changes (0.50–0.97 s in CI, target 30 s) |
-| **44 s / 2.9 min** | p50 / p95 from EDGAR acceptance to Postgres (5,873 filings, last 7 days) |
+| **43 s / 1.8 min** | p50 / p95 from EDGAR acceptance to Postgres during EDGAR business hours (5,312 filings, last 7 days; target 2 min). Overall p95 is 2.9 min: filings accepted after 5:30 pm ET mostly reach EDGAR's feed the next morning |
 | **989,666** | SEC filers indexed; 6,024 operating companies with quarterly financials from XBRL |
 | **26M + 26M** | filing records and XBRL facts, kept current by nightly batch loads on one self-managed server |
 
@@ -89,7 +89,8 @@ Cloudflare edge). GitHub Actions runs every test and builds the images; Flux dep
 - **One SEC rate limit across every pod.** A token bucket in Postgres (one locked row) keeps all
   services together under the SEC's 10 requests/s, with live traffic ahead of bulk crawls.
 - **Rust where it pays.** The document parser was rewritten in Rust against a written spec and
-  swapped in after producing identical sections to the Python reference on every test filing.
+  swapped in after producing identical sections to the Python reference on every test filing;
+  it has parsed every filing since, including the 5-year crawl ([benchmarks](benchmarks)).
 - **Batch, don't flood.** Bulk loads are capped batches with checkpoints and content hashes, so a
   re-run only touches what changed and a crash resumes where it stopped.
 
@@ -189,5 +190,4 @@ CI replays the recordings.
 | `authz/` | OpenFGA authorization model and its tests (`make authz-test`) |
 | `tests/` | Adversarial, citation, integration and propagation tests |
 | `deploy/` | Helm charts (services, platform, monitoring), Flux, SOPS secrets, Terraform, host backup scripts |
-| `observability/` | Placeholder; monitoring lives in `deploy/helm/monitoring` |
 | `benchmarks/` | Python vs Rust parser |
