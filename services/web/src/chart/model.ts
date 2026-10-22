@@ -16,8 +16,11 @@ export type Transform = "q" | "ttm" | "yoy" | "qoq" | "idx" | "ps";
 export type LayerType = "line" | "bar" | "area" | "sbar" | "sarea";
 export type Axis = "L" | "R";
 export type Align = "calendar" | "fiscal";
-/** years back, or "max" for everything the API has; 2 is kept for charts saved before 1/10/max */
-export type Range = 1 | 2 | 3 | 5 | 10 | "max";
+/** years back, "max" for everything the API has, or "custom" (ChartState start / end); 2 is
+ * kept for charts saved before 1/10/max */
+export type Range = 1 | 2 | 3 | 5 | 10 | "max" | "custom";
+/** quarterly: every quarter; annual: one point per year (see `request` and series.ts). */
+export type Frequency = "quarterly" | "annual";
 
 export interface Layer {
   id: number;
@@ -45,6 +48,15 @@ export interface ChartState {
   align: Align;
   /** 10-K / 10-Q / 8-K results markers on the time axis */
   markers?: boolean;
+  /** range "custom": earliest and latest period end (ISO dates; either may be open) */
+  start?: string;
+  end?: string;
+  /** unset: quarterly */
+  frequency?: Frequency;
+  /** deck output: light background, subtitle, units, source footnote */
+  deck?: boolean;
+  /** deck output's second line; unset: automatic (frequency, periods, units) */
+  subtitle?: string;
   nextId: number;
 }
 
@@ -64,13 +76,14 @@ export const LAYER_TYPES: [LayerType, string][] = [
   ["sarea", "Stacked area"],
 ];
 export const RANGES: Range[] = [1, 3, 5, 10, "max"];
-const VALID_RANGES: Range[] = [1, 2, 3, 5, 10, "max"];
+const VALID_RANGES: Range[] = [1, 2, 3, 5, 10, "max", "custom"];
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 export const MAX_LAYERS = 12;
 export const COLOR_NAMES = ["Blue", "Green", "Orange", "Red", "Teal", "Violet", "Pink", "Grey"];
 /** The diluted share count per-share layers divide by. */
 export const SHARES_METRIC = "weighted_shares_diluted";
 
-export const rangeLabel = (r: Range) => (r === "max" ? "Max" : `${r}y`);
+export const rangeLabel = (r: Range) => (r === "max" ? "Max" : r === "custom" ? "Custom" : `${r}y`);
 
 export function emptyChart(): ChartState {
   return { title: "", layers: [], range: 3, align: "calendar", nextId: 1 };
@@ -99,12 +112,26 @@ export function basis(s: ChartState): Align {
 /** Earliest period end in range: `years` back from today, plus a quarter so the oldest
  * quarter of the range is included; null for "max". */
 export function fromDate(range: Range, today: Date = new Date()): string | null {
-  if (range === "max") return null;
+  if (range === "max" || range === "custom") return null;
   const d = new Date(Date.UTC(today.getUTCFullYear() - range, today.getUTCMonth() - 3, today.getUTCDate()));
   return d.toISOString().slice(0, 10);
 }
 
-/** The evaluate request for a layer, or null if it isn't complete yet. */
+/** The period ends a chart asks for: its range back from today, or the custom start / end. */
+export function rangeDates(s: Pick<ChartState, "range" | "start" | "end">, today?: Date): { from: string | null; to: string | null } {
+  if (s.range === "custom") return { from: s.start ?? null, to: s.end ?? null };
+  return { from: fromDate(s.range, today), to: null };
+}
+
+export const frequencyOf = (s: Pick<ChartState, "frequency">): Frequency => s.frequency ?? "quarterly";
+
+/** The evaluate request for a layer, or null if it isn't complete yet.
+ *
+ * Annual frequency keeps one point per year: the value at each year's fourth quarter (fiscal
+ * years on fiscal quarters, calendar years on calendar quarters; series.ts `annualPoints`). So
+ * flows are asked for as TTM (the TTM at Q4 is the year's total), balances (no TTM values)
+ * as the quarter (the year-end value), ratios as TTM (the full-year ratio); QoQ becomes YoY
+ * (year over year); the other transforms apply to those annual values. */
 export function request(l: Layer, s: ChartState, hasTtm: TtmCatalog, today?: Date): FormulaRequest | null {
   let formula: string;
   let ttm: boolean;
@@ -117,17 +144,20 @@ export function request(l: Layer, s: ChartState, hasTtm: TtmCatalog, today?: Dat
     formula = l.formula.trim();
     ttm = true;
   }
-  let view: "quarter" | "ttm" = l.transform === "q" || l.transform === "qoq" || !ttm ? "quarter" : "ttm";
-  if (l.transform === "yoy") formula = `(${formula}) / (${formula})[-4q] - 1`;
-  if (l.transform === "qoq") formula = `(${formula}) / (${formula})[-1q] - 1`;
-  if (l.transform === "ps") {
+  const annual = frequencyOf(s) === "annual";
+  const transform = annual && l.transform === "qoq" ? "yoy" : l.transform;
+  let view: "quarter" | "ttm" = (transform === "q" && !annual) || transform === "qoq" || !ttm ? "quarter" : "ttm";
+  if (transform === "yoy") formula = `(${formula}) / (${formula})[-4q] - 1`;
+  if (transform === "qoq") formula = `(${formula}) / (${formula})[-1q] - 1`;
+  if (transform === "ps") {
     // the share count has quarterly values only, so the quarter view with the dollars as TTM
     formula = `${ttm ? `ttm(${formula})` : `(${formula})`} / ${SHARES_METRIC}`;
     view = "quarter";
   }
   const req: FormulaRequest = { formula, basis: basis(s), view };
-  const from = fromDate(s.range, today);
+  const { from, to } = rangeDates(s, today);
   if (from) req.from = from;
+  if (to) req.to = to;
   const company = l.kind === "metric" ? l.companyId : l.defaultCompany;
   if (company) req.default_company = company;
   return req;
@@ -135,17 +165,19 @@ export function request(l: Layer, s: ChartState, hasTtm: TtmCatalog, today?: Dat
 
 /** A layer's legend name: its own name, or `short` (a company's ticker or name) and the
  * metric or formula with the transform. */
-export function layerName(l: Layer, short: (companyId: string) => string, label: (metric: string) => string): string {
+export function layerName(l: Layer, short: (companyId: string) => string, label: (metric: string) => string, frequency: Frequency = "quarterly"): string {
   if (l.name?.trim()) return l.name.trim();
-  return autoName(l, short, label);
+  return autoName(l, short, label, frequency);
 }
 
-export function autoName(l: Layer, short: (companyId: string) => string, label: (metric: string) => string): string {
+export function autoName(l: Layer, short: (companyId: string) => string, label: (metric: string) => string, frequency: Frequency = "quarterly"): string {
   const base =
     l.kind === "metric"
       ? `${l.companyId ? short(l.companyId) : "?"} ${l.metric ? label(l.metric).toLowerCase() : "?"}`
       : (l.formula ?? "").trim() || "formula";
-  const suffix = { q: "", ttm: " (TTM)", yoy: " YoY", qoq: " QoQ", idx: " (indexed)", ps: " per share" }[l.transform];
+  const suffix = frequency === "annual"
+    ? { q: "", ttm: "", yoy: " YoY", qoq: " YoY", idx: " (indexed)", ps: " per share" }[l.transform]
+    : { q: "", ttm: " (TTM)", yoy: " YoY", qoq: " QoQ", idx: " (indexed)", ps: " per share" }[l.transform];
   return base + suffix;
 }
 
@@ -319,12 +351,21 @@ export function restoreChart(raw: unknown): ChartState {
       id++;
     }
   }
+  const iso = (v: unknown) => (typeof v === "string" && ISO_DATE.test(v) ? v : undefined);
+  const start = iso(o.start);
+  const end = iso(o.end);
+  const subtitle = typeof o.subtitle === "string" ? o.subtitle.replace(/[\x00-\x1f\x7f]/g, "").trim().slice(0, 200) : "";
   return {
     title: typeof o.title === "string" ? o.title.slice(0, 200) : "",
     layers,
     range: VALID_RANGES.includes(o.range as Range) ? (o.range as Range) : base.range,
     align: o.align === "fiscal" ? "fiscal" : "calendar",
     ...(o.markers === true ? { markers: true } : {}),
+    ...(start ? { start } : {}),
+    ...(end ? { end } : {}),
+    ...(o.frequency === "annual" ? { frequency: "annual" as const } : {}),
+    ...(o.deck === true ? { deck: true } : {}),
+    ...(subtitle ? { subtitle } : {}),
     nextId: id,
   };
 }

@@ -1,3 +1,4 @@
+import { clearChartCache } from "../chart/cache";
 import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -63,7 +64,7 @@ function respond(url: string, init?: RequestInit): Response {
     const margin = body.formula === "operating_margin";
     return Response.json({
       formula: body.formula, unit: margin ? "ratio" : "USD", basis: body.basis, view: body.view,
-      alignment: body.basis, as_of: "",
+      alignment: body.basis, as_of: "2026-10-21T12:00:00Z",
       inputs: [{ input: 0, ref: body.formula, ticker: null, company_id: body.default_company ?? null, metric: "revenue", span: "quarter", lag_quarters: 0, unit: "USD" }],
       points: margin
         ? [point(8100, "FY2027 Q1", "0.61"), point(8101, "FY2027 Q2", "0.62")]
@@ -84,6 +85,7 @@ function Harness({ initial }: { initial: ChartState }) {
 }
 
 beforeEach(() => {
+  clearChartCache();
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => respond(url, init)));
   bodies.length = 0;
@@ -233,7 +235,7 @@ it("offers stacked types, QoQ and per share, and every range", async () => {
   // per share needs a diluted share count in the catalog, which this one lacks
   expect(container.textContent).toContain("Per share isn't available");
   expect([...container.querySelector<HTMLSelectElement>('select[aria-label="Transform"]')!.options].map((o) => o.value)).not.toContain("ps");
-  expect([...container.querySelectorAll('[aria-label="Range"] button')].map((b) => b.textContent)).toEqual(["1y", "3y", "5y", "10y", "Max"]);
+  expect([...container.querySelectorAll('[aria-label="Range"] button')].map((b) => b.textContent)).toEqual(["1y", "3y", "5y", "10y", "Max", "Custom"]);
   await act(async () => button("Max").click());
   await act(async () => {});
   expect(latest.range).toBe("max");
@@ -277,4 +279,99 @@ it("draws 10-K/10-Q and 8-K results markers when turned on", async () => {
   expect(marks[0]!.querySelector("title")!.textContent).toContain("NVDA 10-Q filed May 28, 2026");
   await act(async () => (marks[1] as unknown as SVGElement).dispatchEvent(new MouseEvent("click", { bubbles: true })));
   expect(window.location.hash).toBe(`#/filing/${NVDA}/0001045810-26-000061`);
+});
+
+const type = async (input: HTMLInputElement, text: string) => {
+  await act(async () => {
+    const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+    set.call(input, text);
+    if (input.type === "text") input.setSelectionRange(text.length, text.length);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+};
+const key = (el: Element, k: string) => act(async () => {
+  el.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true }));
+});
+
+it("autocompletes metrics, tickers and operators in formulas", async () => {
+  await render({ ...emptyChart(), layers: [{ id: 1, kind: "formula", formula: "", defaultCompany: NVDA, transform: "ttm", type: "line", axis: "R" }], nextId: 2 });
+  const input = container.querySelector<HTMLInputElement>('input[aria-label="Formula"]')!;
+  const options = () => [...container.querySelectorAll('[role="option"]')].map((o) => o.querySelector("b")!.textContent);
+  await type(input, "oper");
+  expect(input.getAttribute("aria-expanded")).toBe("true");
+  expect(options()).toEqual(["operating_margin"]);
+  await key(input, "Tab");
+  expect(input.value).toBe("operating_margin");
+  await type(input, "operating_margin ");
+  expect(options()).toContain("÷");
+  await type(input, "operating_margin / NV");
+  expect(options()).toEqual(["NVDA."]);
+  await key(input, "ArrowDown");
+  expect(input.getAttribute("aria-activedescendant")).toMatch(/-0$/);
+  await key(input, "Enter"); // moved to it: Enter takes it
+  expect(input.value).toBe("operating_margin / NVDA.");
+  expect(options()).toEqual(["eps_diluted", "operating_margin", "revenue"]);
+  await key(input, "Escape");
+  expect(input.getAttribute("aria-expanded")).toBe("false");
+  // Enter without moving applies the formula, as before
+  await type(input, "operating_margin / NVDA.revenue");
+  await key(input, "Enter");
+  await act(async () => {});
+  expect(latest.layers[0]!.formula).toBe("operating_margin / NVDA.revenue");
+});
+
+it("custom range and annual frequency change what is asked", async () => {
+  await render(companyChart(emptyChart(), NVDA, "Nvidia"));
+  await act(async () => button("Custom").click());
+  const first = container.querySelector<HTMLInputElement>('input[aria-label="First period end"]')!;
+  const last = container.querySelector<HTMLInputElement>('input[aria-label="Last period end"]')!;
+  await type(first, "2020-01-01");
+  await type(last, "2025-12-31");
+  await act(async () => {});
+  expect(latest).toMatchObject({ range: "custom", start: "2020-01-01", end: "2025-12-31" });
+  const revenue = () => bodies.filter((b) => b.path.endsWith("/evaluate") && b.body.formula === "revenue").at(-1)!.body;
+  expect(revenue()).toMatchObject({ from: "2020-01-01", to: "2025-12-31", view: "quarter" });
+  await act(async () => button("Annual").click());
+  await act(async () => {});
+  expect(latest.frequency).toBe("annual");
+  // quarterly revenue becomes the year's total: the TTM at each Q4
+  expect(revenue()).toMatchObject({ view: "ttm", from: "2020-01-01" });
+  expect([...container.querySelector<HTMLSelectElement>('select[aria-label="Transform"]')!.options].find((o) => o.value === "qoq")!.disabled).toBe(true);
+  // the mock has no fourth quarters, so there is no full year to draw
+  expect(container.textContent).toContain("No full years for these layers in this range");
+});
+
+it("deck output: light chart with subtitle, units and the source footnote", async () => {
+  await render(companyChart(emptyChart(), NVDA, "Nvidia"));
+  expect(container.querySelector(".lchart.deck")).toBeNull();
+  expect([...container.querySelectorAll(".ch-unit")].map((t) => t.textContent)).toEqual(["USD", "%"]);
+  const box = [...container.querySelectorAll<HTMLInputElement>("input[type=checkbox]")].find((c) => c.parentElement?.textContent?.includes("Deck output"))!;
+  await act(async () => box.click());
+  expect(latest.deck).toBe(true);
+  expect(container.querySelector(".lchart.deck")).not.toBeNull();
+  expect($(".ch-sub")?.textContent).toBe("Fiscal quarters, FY2027 Q1–FY2027 Q2 · USD (left), % (right)");
+  const foot = [...container.querySelectorAll(".ch-foot")].map((t) => t.textContent);
+  expect(foot[0]).toBe("Source: SEC filings via Tributary; 10-Q for NVDA; latest NVDA 10-Q filed Aug 26, 2026; as of Oct 21, 2026.");
+  expect(foot[1]).toContain("Fiscal quarters; TTM = trailing four quarters");
+  await type(container.querySelector<HTMLInputElement>('input[aria-label="Subtitle"]')!, "USD billions, fiscal quarters");
+  expect($(".ch-sub")?.textContent).toBe("USD billions, fiscal quarters");
+  await act(async () => button("Export SVG").click());
+  const svg = await new Promise<string>((resolve) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result));
+    r.readAsText(vi.mocked(download).mock.calls.at(-1)![1] as Blob);
+  });
+  expect(svg).toContain("USD billions, fiscal quarters");
+  expect(svg).toContain("Source: SEC filings via Tributary");
+  expect(svg).toContain(".ch-bg{fill:#fff}");
+});
+
+it("keeps chart data in memory: coming back asks the API nothing", async () => {
+  await render(companyChart(emptyChart(), NVDA, "Nvidia"));
+  const evals = () => bodies.filter((b) => b.path.endsWith("/evaluate")).length;
+  expect(evals()).toBe(2);
+  act(() => root.unmount());
+  await render(companyChart(emptyChart(), NVDA, "Nvidia"));
+  expect(evals()).toBe(2);
+  expect(container.querySelectorAll(".ch-legend text")).toHaveLength(2);
 });

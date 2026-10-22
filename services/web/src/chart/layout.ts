@@ -3,7 +3,7 @@
  * LayerChart only turns it into SVG elements. */
 
 import type { Marker } from "./markers";
-import { formatValue } from "./metrics";
+import { formatValue, unitLabel } from "./metrics";
 import { pointAt, xAxis, type Series, type Tick } from "./series";
 
 export const WIDTH = 900;
@@ -79,8 +79,17 @@ export interface Layout {
   legend: LegendItem[];
   drawn: Drawn[];
   markers: PlacedMarker[];
-  /** y of the footnote's first line (a second one sits 14 below) */
+  /** y of the footnote's first line (each next one sits 14 below) */
   foot: number;
+  /** axis unit captions above the plot ("USD", "%"), null without that axis */
+  units: { left: string | null; right: string | null };
+}
+
+export interface LayoutOptions {
+  /** a subtitle line under the title (deck output) */
+  subtitle?: boolean;
+  /** footnote lines to leave room for (default 2) */
+  footLines?: number;
 }
 
 const stacked = (t: Series["type"]) => t === "sbar" || t === "sarea";
@@ -144,14 +153,14 @@ function scaleFor(series: Series[], sp: ([number, number] | null)[][]): Scale | 
   return ys.length && series.length ? niceScale(Math.min(...ys), Math.max(...ys), series[0]!.unit) : null;
 }
 
-export function layout(series: Series[], title: boolean, markers: Marker[] = []): Layout {
+export function layout(series: Series[], title: boolean, markers: Marker[] = [], opts: LayoutOptions = {}): Layout {
   const ticks = xAxis(series);
   const hasRight = series.some((s) => s.axis === "R");
   const l = PAD.l;
   const r = WIDTH - (hasRight ? PAD.rAxis : PAD.r);
 
   // title, then the legend wrapped to the width
-  let y = title ? 34 : 14;
+  let y = title ? (opts.subtitle ? 52 : 34) : opts.subtitle ? 32 : 14;
   let x = l;
   const legend: LegendItem[] = [];
   for (const s of series) {
@@ -248,10 +257,11 @@ export function layout(series: Series[], title: boolean, markers: Marker[] = [])
     }
   }
   const band = markers.length ? MARKER_BAND : 0;
+  const extraFoot = Math.max(0, (opts.footLines ?? 2) - 2) * 14;
 
   return {
     width: WIDTH,
-    height: b + PAD.b + 46 + band,
+    height: b + PAD.b + 46 + band + extraFoot,
     top,
     plot: { l, r, t, b },
     ticks,
@@ -265,6 +275,7 @@ export function layout(series: Series[], title: boolean, markers: Marker[] = [])
     drawn,
     markers: placed,
     foot: b + PAD.b + 18 + band,
+    units: { left: left ? unitLabel(left.unit) : null, right: right ? unitLabel(right.unit) : null },
   };
 }
 

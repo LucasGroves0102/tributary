@@ -1,3 +1,4 @@
+import { clearChartCache } from "../chart/cache";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -86,6 +87,7 @@ const methods = (m: string) =>
   vi.mocked(fetch).mock.calls.filter(([, init]) => init?.method === m).map(([u]) => String(u));
 
 beforeEach(() => {
+  clearChartCache();
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => respond(url, init)));
   window.localStorage.clear();

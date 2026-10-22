@@ -38,11 +38,20 @@ export interface Series {
 
 export const COLORS = 8;
 
+/** Annual frequency: the fourth quarter of each year, labelled by the year ("FY2025 Q4" →
+ * "FY2025"). With the TTM view that is the year's total for flows and the full-year ratio for
+ * ratios; with the quarter view (balances) the year-end value. Years whose Q4 isn't in range
+ * are left out rather than made up from fewer quarters. */
+export function annualPoints(points: Point[]): Point[] {
+  return points.filter((p) => / Q4$/.test(p.period)).map((p) => ({ ...p, period: p.period.replace(/ Q4$/, "") }));
+}
+
 export function toSeries(
   data: FormulaSeries,
   layer: { id: number; transform: Transform; type: LayerType; axis: Axis },
   name: string,
   color: number,
+  frequency: "quarterly" | "annual" = "quarterly",
 ): Series {
   let points: Point[] = data.points.map((p) => {
     const y = Number(p.value);
@@ -67,6 +76,7 @@ export function toSeries(
       sources: [...seen.values()],
     };
   });
+  if (frequency === "annual") points = annualPoints(points);
   let unit = layer.transform === "yoy" || layer.transform === "qoq" ? "pct" : data.unit;
   if (layer.transform === "idx") {
     // index to the first value in range; meaningless from zero or a negative base

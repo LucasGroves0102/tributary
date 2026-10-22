@@ -41,6 +41,11 @@ export function catalog(columns: ColumnInfo[]): MetricInfo[] {
   return [...out.values()].sort((a, b) => a.label.localeCompare(b.label));
 }
 
+/** A unit as a caption: axis titles, table headers. */
+export function unitLabel(unit: string): string {
+  return ({ USD: "USD", ratio: "%", pct: "% change", index: "index = 100", "USD/shares": "USD per share", shares: "shares" } as Record<string, string>)[unit] ?? unit;
+}
+
 /** Axis and tooltip text for a value in a series' unit ("pct" for YoY, "index" for indexed). */
 export function formatValue(v: number, unit: string, compact = false): string {
   switch (unit) {

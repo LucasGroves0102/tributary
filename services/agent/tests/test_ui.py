@@ -233,6 +233,11 @@ def test_context_is_strict_and_size_capped():
         {"kind": "metric", "company_id": NVDA, "metric": "revenue", "transform": "ps",
          "type": "sarea"}]}})
     assert shown.chart.range == "max" and shown.chart.layers[1].transform == "ps"
+    custom = UiContext.model_validate({"page": "chart", "chart": {"range": "custom",
+                                                                  "frequency": "annual"}})
+    assert (custom.chart.range, custom.chart.frequency) == ("custom", "annual")
+    with pytest.raises(ValidationError):
+        UiContext.model_validate({"page": "chart", "chart": {"frequency": "monthly"}})
     with pytest.raises(ValidationError):
         UiContext.model_validate({"page": "chart", "chart": {"range": 7}})
     comps =UiContext.model_validate({"page": "compare", "compare": {

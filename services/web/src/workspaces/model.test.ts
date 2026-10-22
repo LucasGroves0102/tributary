@@ -39,6 +39,17 @@ describe("saved states", () => {
     });
   });
 
+  it("saves a custom range, annual frequency and deck output", () => {
+    const s: ChartState = { ...chart(), range: "custom", start: "2020-01-01", frequency: "annual", deck: true, subtitle: "USD" };
+    const saved = stateOf({ kind: "chart", chart: s });
+    expect(saved).toMatchObject({ range: "custom", start: "2020-01-01", frequency: "annual", deck: true, subtitle: "USD" });
+    expect(saved).not.toHaveProperty("end");
+    // a start left over from an earlier custom range isn't saved with a preset one
+    expect(stateOf({ kind: "chart", chart: { ...s, range: 5 } })).not.toHaveProperty("start");
+    const fromApi = { ...JSON.parse(JSON.stringify(saved)), markers: false };
+    expect(fingerprint("chart", fromApi)).toBe(currentFingerprint({ kind: "chart", chart: s }));
+  });
+
   it("saves comps and screens as their URL cleaners keep them (no page)", () => {
     expect(stateOf({ kind: "comps", compare: { target: NVDA, peers: [AAPL, NVDA, "x"] } })).toEqual({ target: NVDA, peers: [AAPL] });
     expect(stateOf({ kind: "screen", screen: { margin: 20, page: 3, sort: "-revenue_ttm" } })).toEqual({ margin: 20 });

@@ -340,6 +340,7 @@ export interface FormulaRequest {
   basis: "fiscal" | "calendar";
   view: "quarter" | "ttm";
   from?: string;
+  to?: string;
 }
 
 /** The formula API refused a formula: positioned problems (422), or a company the user can't

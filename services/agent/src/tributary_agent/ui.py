@@ -25,7 +25,7 @@ LayerType = Literal["line", "bar", "area"]
 # context but proposes only Transform / LayerType / ranges 2, 3, 5)
 ShownTransform = Literal["q", "ttm", "yoy", "qoq", "idx", "ps"]
 ShownLayerType = Literal["line", "bar", "area", "sbar", "sarea"]
-ShownRange = Literal[1, 2, 3, 5, 10, "max"]
+ShownRange = Literal[1, 2, 3, 5, 10, "max", "custom"]
 Axis = Literal["L", "R"]
 Band = Literal["lt100m", "100m-1b", "1b-10b", "10b-100b", "gte100b"]
 FilerCategory = Literal["large_accelerated", "accelerated", "non_accelerated"]
@@ -73,6 +73,7 @@ class LayerContext(_Strict):
 class ChartContext(_Strict):
     title: str = Field(default="", max_length=200)
     range: ShownRange = 3
+    frequency: Literal["quarterly", "annual"] = "quarterly"
     align: Literal["calendar", "fiscal"] = "calendar"
     layers: list[LayerContext] = Field(default=[], max_length=MAX_LAYERS)
 

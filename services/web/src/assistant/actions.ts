@@ -119,7 +119,7 @@ export function uiContext(route: Route, chart: ChartState, name: (id: string) =>
       axis: l.axis,
       hidden: l.hidden ?? false,
     }));
-    ctx.chart = { title: chart.title.slice(0, 200), range: chart.range, align: chart.align, layers };
+    ctx.chart = { title: chart.title.slice(0, 200), range: chart.range, frequency: chart.frequency ?? "quarterly", align: chart.align, layers };
     while (JSON.stringify(ctx).length > MAX_CONTEXT && ctx.chart.layers.length) ctx.chart.layers.pop();
   }
   return JSON.parse(JSON.stringify(ctx)) as UiContext; // drops undefined fields

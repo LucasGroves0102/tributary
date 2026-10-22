@@ -58,7 +58,16 @@ Chart builder (`src/chart/`): layers can be renamed (legend), recoloured (colour
 layer when it moves), moved up or down, hidden; types line, bar, area, stacked bar and stacked
 area (layers of the same stacked type and axis stack, negatives downward); transforms quarterly,
 TTM, YoY, QoQ, indexed and per share (`ttm(f) / weighted_shares_diluted` in the quarter view,
-offered only when the catalog has the share count); ranges 1y/3y/5y/10y/max. Clicking a point
+offered only when the catalog has the share count); ranges 1y/3y/5y/10y/max or a custom first and last period end; quarterly or annual frequency
+(annual = each year's fourth quarter: flows as TTM there, i.e. the fiscal- or calendar-year total,
+balances as the year-end value, ratios full-year; QoQ becomes YoY). Formulas autocomplete metric
+names (the catalog), your companies' tickers (`TICKER.`), `ttm()` / `abs()`, operators and lags
+(`chart/autocomplete.ts`; Tab completes, arrows then Enter pick), and the API still checks them
+inline. Deck output draws the chart in the light palette with a subtitle (periods and units,
+editable), axis unit captions and a source footnote ("Source: SEC filings via Tributary; forms
+for companies; latest filing; as of"), which SVG and PNG exports keep. Evaluate answers are kept
+in memory per (token, request) for the session (`chart/cache.ts`), so coming back to a chart
+asks the API nothing. Clicking a point
 (or Enter on it; arrows move between quarters and layers) opens its newest source filing in the
 reader. Filing markers put each company's 10-Ks and 10-Qs (public index) and 8-K results (item
 2.02, from parsed filings) on the time axis. "View as table" shows the plotted values with their

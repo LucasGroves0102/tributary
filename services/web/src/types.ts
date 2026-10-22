@@ -219,7 +219,8 @@ export interface UiContext {
    * propose, which use the narrower Transform / LayerType above) */
   chart?: {
     title: string;
-    range: 1 | 2 | 3 | 5 | 10 | "max";
+    range: 1 | 2 | 3 | 5 | 10 | "max" | "custom";
+    frequency?: "quarterly" | "annual";
     align: "calendar" | "fiscal";
     layers: {
       kind: "metric" | "formula";

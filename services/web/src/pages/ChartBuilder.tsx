@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 
 import {
   ApiError,
@@ -11,6 +11,9 @@ import {
   validateFormula,
   type FormulaRequest,
 } from "../api";
+import { apply as applyCompletion, complete, type Suggestion, type Vocabulary } from "../chart/autocomplete";
+import { cached, remember } from "../chart/cache";
+import { autoSubtitle, methodNote, sourceFootnote } from "../chart/deck";
 import { LayerChart } from "../chart/LayerChart";
 import { filingMarkers, MARKER_FORMS, type Marker } from "../chart/markers";
 import { catalog, metricLabel, type MetricInfo } from "../chart/metrics";
@@ -20,7 +23,7 @@ import {
   autoName,
   basis,
   COLOR_NAMES,
-  fromDate,
+  frequencyOf,
   LAYER_TYPES,
   layerColor,
   layerName,
@@ -28,6 +31,7 @@ import {
   MAX_LAYERS,
   moveLayer,
   RANGES,
+  rangeDates,
   rangeLabel,
   removeLayer,
   request,
@@ -143,19 +147,28 @@ export function ChartBuilder({ token, chart, setChart, saveBar }: Props) {
   // per share needs a diluted share count in the catalog; while it loads, assume it's there
   const hasShares = metrics === null || metrics.some((m) => m.name === SHARES_METRIC);
 
+  const frequency = frequencyOf(chart);
   const visible = chart.layers.filter((l) => !l.hidden);
   const requests = visible.map((l) => ({ layer: l, req: request(l, chart, ttm) }));
   const keyOf = (req: FormulaRequest) => JSON.stringify(req);
+  // answers already fetched this session (chart/cache.ts) show at once, e.g. back from another page
+  const resultOf = (k: string): Result | undefined => {
+    const hit = cached(token, k);
+    return results[k] ?? (hit ? { state: "ok", data: hit } : undefined);
+  };
   const wanted = requests.flatMap(({ req }) => (req ? [keyOf(req)] : []));
   const wantedKey = wanted.join("\n");
 
   useEffect(() => {
     let live = true;
     for (const k of new Set(wanted)) {
-      if (results[k] && results[k].state !== "error") continue;
+      if ((results[k] && results[k].state !== "error") || cached(token, k)) continue;
       setResults((r) => ({ ...r, [k]: { state: "loading" } }));
       evaluateFormula(token, JSON.parse(k) as FormulaRequest)
-        .then((data) => live && setResults((r) => ({ ...r, [k]: { state: "ok", data } })))
+        .then((data) => {
+          remember(token, k, data);
+          if (live) setResults((r) => ({ ...r, [k]: { state: "ok", data } }));
+        })
         .catch(
           (e) =>
             live &&
@@ -181,33 +194,40 @@ export function ChartBuilder({ token, chart, setChart, saveBar }: Props) {
 
   const colorOf = (l: Layer) => layerColor(l, chart.layers.findIndex((x) => x.id === l.id));
   const series: Series[] = requests.flatMap(({ layer, req }) => {
-    const r = req ? results[keyOf(req)] : undefined;
+    const r = req ? resultOf(keyOf(req)) : undefined;
     if (r?.state !== "ok") return [];
-    return [toSeries(r.data, layer, layerName(layer, short, metricLabel), colorOf(layer))];
+    return [toSeries(r.data, layer, layerName(layer, short, metricLabel, frequency), colorOf(layer), frequency)];
   });
   const status = (l: Layer): Result | undefined => {
     const req = request(l, chart, ttm);
-    return req ? results[keyOf(req)] : undefined;
+    return req ? resultOf(keyOf(req)) : undefined;
   };
-  const loading = requests.some(({ req }) => req && results[keyOf(req)]?.state === "loading");
-  const failed = requests.filter(({ req }) => req && results[keyOf(req)]?.state === "error").length;
+  const loading = requests.some(({ req }) => req && resultOf(keyOf(req))?.state === "loading");
+  const failed = requests.filter(({ req }) => req && resultOf(keyOf(req))?.state === "error").length;
+  const asOf = requests.reduce<string | null>((a, { req }) => {
+    const r = req ? resultOf(keyOf(req)) : undefined;
+    return r?.state === "ok" && (!a || r.data.as_of > a) ? r.data.as_of : a;
+  }, null);
 
   const effective = basis(chart);
   const latest = latestSource(series);
-  const transforms = new Set(visible.map((l) => l.transform));
-  const footnote = [
-    `Source: SEC filings (10-Q, 10-K XBRL) via Tributary. ${effective === "fiscal" ? "Fiscal" : "Calendar"} quarters; TTM = trailing four quarters` +
-      `${transforms.has("yoy") ? "; YoY over TTM" : ""}${transforms.has("qoq") ? "; QoQ over quarters" : ""}` +
-      `${transforms.has("ps") ? "; per share = TTM USD / diluted weighted shares of the quarter" : ""}.`,
-    latest ? `Latest filing used: ${latest.form} filed ${latest.filed} (${latest.accessionNo}).` : "",
-  ].filter(Boolean);
+  const transforms = new Set<string>(visible.map((l) => l.transform));
+  const method = methodNote(effective, frequency, transforms);
+  // deck output: the source line slides need (forms, companies, latest filing, as of)
+  const footnote = chart.deck
+    ? [sourceFootnote(series, short, asOf), method]
+    : [
+        `Source: SEC filings (10-Q, 10-K XBRL) via Tributary. ${method}`,
+        latest ? `Latest filing used: ${latest.form} filed ${latest.filed} (${latest.accessionNo}).` : "",
+      ].filter(Boolean);
+  const subtitle = chart.deck ? chart.subtitle?.trim() || autoSubtitle(series, frequency, effective) : "";
 
   // filing markers: each company a visible metric layer (or formula's default company) reads
   const chartCompanies = [...new Set(visible.flatMap((l) => {
     const c = l.kind === "metric" ? l.companyId : l.defaultCompany;
     return c ? [c] : [];
   }))].slice(0, 8);
-  const from = fromDate(chart.range);
+  const { from } = rangeDates(chart);
   const filingsBy = useFilings(token, chartCompanies, from, !!chart.markers);
   const markers: Marker[] = chart.markers
     ? chartCompanies.flatMap((c) => {
@@ -217,6 +237,10 @@ export function ChartBuilder({ token, chart, setChart, saveBar }: Props) {
       })
     : [];
 
+  const vocab = useMemo((): Vocabulary => ({
+    metrics: metrics ?? [],
+    tickers: (companies ?? []).flatMap((c) => (c.ticker ? [{ ticker: c.ticker, name: c.name }] : [])),
+  }), [metrics, companies]);
   const fallback = (companies ?? []).slice(0, 2).map((c) => c.companyId);
   const firstCompany = chart.layers.find((l) => l.companyId)?.companyId ?? fallback[0];
   const name = chart.title || "chart";
@@ -304,7 +328,9 @@ export function ChartBuilder({ token, chart, setChart, saveBar }: Props) {
                 index={i}
                 count={chart.layers.length}
                 color={colorOf(l)}
-                auto={autoName(l, short, metricLabel)}
+                auto={autoName(l, short, metricLabel, frequency)}
+                annual={frequency === "annual"}
+                vocab={vocab}
                 companies={companies ?? []}
                 metrics={metrics ?? []}
                 hasShares={hasShares}
@@ -350,11 +376,35 @@ export function ChartBuilder({ token, chart, setChart, saveBar }: Props) {
               }}
             />
             <span className="seg" role="group" aria-label="Range">
-              {RANGES.map((r) => (
+              {[...RANGES, "custom" as const].map((r) => (
                 <button key={r} className={chart.range === r ? "on" : undefined} aria-pressed={chart.range === r}
-                  title={r === "max" ? "Every quarter the API has" : `The last ${r} year${r === 1 ? "" : "s"}`}
+                  title={r === "max" ? "Every quarter the API has" : r === "custom" ? "Choose the first and last period end" : `The last ${r} year${r === 1 ? "" : "s"}`}
                   onClick={() => setChart((s) => ({ ...s, range: r }))}>
                   {rangeLabel(r)}
+                </button>
+              ))}
+            </span>
+            {chart.range === "custom" && (
+              <span className="row">
+                <input type="date" className="field narrow" aria-label="First period end" value={chart.start ?? ""}
+                  max={chart.end} onChange={(e) => {
+                    const start = e.target.value || undefined;
+                    setChart((s) => ({ ...s, start }));
+                  }} />
+                <span className="faint">to</span>
+                <input type="date" className="field narrow" aria-label="Last period end" value={chart.end ?? ""}
+                  min={chart.start} onChange={(e) => {
+                    const end = e.target.value || undefined;
+                    setChart((s) => ({ ...s, end }));
+                  }} />
+              </span>
+            )}
+            <span className="seg" role="group" aria-label="Frequency">
+              {(["quarterly", "annual"] as const).map((f) => (
+                <button key={f} className={frequency === f ? "on" : undefined} aria-pressed={frequency === f}
+                  title={f === "annual" ? "One point per year: flows are year totals (TTM at Q4), balances year-end values" : "Every quarter"}
+                  onClick={() => setChart((s) => ({ ...s, frequency: f === "annual" ? "annual" : undefined }))}>
+                  {f === "annual" ? "Annual" : "Quarterly"}
                 </button>
               ))}
             </span>
@@ -374,17 +424,37 @@ export function ChartBuilder({ token, chart, setChart, saveBar }: Props) {
                 }} />
               Filing markers
             </label>
+            <label className="chk" title="For slides: light background, a subtitle with periods and units, and a source footnote naming forms, companies and the as-of date; Export SVG / PNG keep it">
+              <input type="checkbox" checked={!!chart.deck}
+                onChange={(e) => {
+                  const deck = e.target.checked;
+                  setChart((s) => ({ ...s, deck: deck || undefined }));
+                }} />
+              Deck output
+            </label>
             <span className="sub">{loading ? "Loading…" : "hover for values and source filings"}</span>
           </div>
+          {chart.deck && (
+            <div className="card-h deck-h">
+              <input className="field grow" value={chart.subtitle ?? ""} maxLength={200}
+                placeholder={series.length ? autoSubtitle(series, frequency, effective) : "Subtitle (automatic: periods and units)"}
+                aria-label="Subtitle"
+                onChange={(e) => {
+                  const subtitle = e.target.value;
+                  setChart((s) => ({ ...s, subtitle: subtitle || undefined }));
+                }} />
+              <span className="sub">deck output: light background · source footnote added automatically</span>
+            </div>
+          )}
           {chart.align === "fiscal" && effective === "calendar" && (
             <p className="note">
               Fiscal quarters only line up within one company, so this chart of several companies
               uses calendar quarters.
             </p>
           )}
-          {series.length ? (
+          {series.some((s) => s.points.length > 0) ? (
             <LayerChart series={series} title={chart.title} footnote={footnote} svgRef={svg}
-              markers={markers} onOpen={openSource} />
+              markers={markers} onOpen={openSource} subtitle={subtitle} deck={!!chart.deck} />
           ) : visible.length && loading ? (
             <Skeleton chart label="Loading the series" />
           ) : visible.length && failed ? (
@@ -393,7 +463,9 @@ export function ChartBuilder({ token, chart, setChart, saveBar }: Props) {
           ) : (
             <p className="empty">
               {visible.length
-                ? "No values for these layers in this range. Try a longer range (10y or Max), or another metric."
+                ? frequency === "annual"
+                  ? "No full years for these layers in this range. Try a longer range, or Quarterly."
+                  : "No values for these layers in this range. Try a longer range (10y or Max), or another metric."
                 : chart.layers.length
                   ? "Every layer is hidden. Show one, or add a metric or formula layer."
                   : "Start with + Metric (a company and a metric), + Formula (e.g. net_income / revenue), or one of the templates."}
@@ -419,6 +491,8 @@ function LayerEditor({
   count,
   color,
   auto,
+  annual,
+  vocab,
   companies,
   metrics,
   hasShares,
@@ -435,6 +509,9 @@ function LayerEditor({
   color: number;
   /** the automatic legend name (the placeholder of the name field) */
   auto: string;
+  /** annual frequency: QoQ means nothing there (it charts as YoY) */
+  annual: boolean;
+  vocab: Vocabulary;
   companies: { companyId: string; name: string; ticker: string | null }[];
   metrics: MetricInfo[];
   hasShares: boolean;
@@ -510,14 +587,14 @@ function LayerEditor({
           </select>
         </div>
       ) : (
-        <FormulaInput token={token} layer={layer} basis={basis} companyOptions={companyOptions} set={set} />
+        <FormulaInput token={token} layer={layer} basis={basis} companyOptions={companyOptions} vocab={vocab} set={set} />
       )}
       <div className="row">
         <select aria-label="Transform" value={layer.transform} onChange={(e) => set({ transform: e.target.value as Layer["transform"] })}>
           {TRANSFORMS.filter(([v]) => v !== "ps" || hasShares || layer.transform === "ps").map(([v, label]) => (
             <option key={v} value={v}
-              disabled={(v === "ttm" && metric !== undefined && !metric.ttm) || (v === "ps" && !perShareOk)}>
-              {label}
+              disabled={(v === "ttm" && metric !== undefined && !metric.ttm) || (v === "ps" && !perShareOk) || (v === "qoq" && annual)}>
+              {annual && v === "qoq" ? `${label} (quarterly only)` : label}
             </option>
           ))}
         </select>
@@ -539,22 +616,82 @@ function LayerEditor({
   );
 }
 
-/** A formula with inline checks (/v1/formulas/validate) as you type; applied on Enter or
- * when the field loses focus. */
+const KIND_LABEL: Record<Suggestion["kind"], string> = {
+  metric: "metric", ticker: "company", function: "function", operator: "operator", lag: "lag",
+};
+
+/** A formula with autocomplete (chart/autocomplete.ts: metrics, your companies' tickers,
+ * functions, operators) and inline checks (/v1/formulas/validate) as you type; applied on
+ * Enter or when the field loses focus. Tab takes the highlighted suggestion; ↑ ↓ move, and
+ * Enter takes one once you've moved to it; Escape closes the list. */
 function FormulaInput({
   token,
   layer,
   basis,
   companyOptions,
+  vocab,
   set,
 }: {
   token: string;
   layer: Layer;
   basis: "fiscal" | "calendar";
   companyOptions: ReactNode;
+  vocab: Vocabulary;
   set: (patch: Partial<Layer>) => void;
 }) {
   const [draft, setDraft] = useState(layer.formula ?? "");
+  // the cursor while suggesting (null: list closed), the highlighted row, and whether the user
+  // moved to it (only then does Enter take it instead of applying the formula)
+  const [cursor, setCursor] = useState<number | null>(null);
+  const [active, setActive] = useState(0);
+  const [moved, setMoved] = useState(false);
+  const input = useRef<HTMLInputElement>(null);
+  const pending = useRef<number | null>(null);
+  const listId = useId();
+  const comp = cursor === null ? null : complete(draft, cursor, vocab);
+  const open = !!comp && comp.items.length > 0;
+
+  useEffect(() => {
+    if (pending.current !== null && input.current) {
+      input.current.setSelectionRange(pending.current, pending.current);
+      pending.current = null;
+    }
+  }, [draft]);
+
+  const choose = (item: Suggestion) => {
+    if (!comp) return;
+    const r = applyCompletion(draft, comp, item);
+    pending.current = r.cursor;
+    setDraft(r.text);
+    setCursor(r.cursor);
+    setActive(0);
+    setMoved(false);
+  };
+  const onKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (open && comp) {
+      const n = comp.items.length;
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        setActive((a) => (a + (e.key === "ArrowDown" ? 1 : n - 1)) % n);
+        setMoved(true);
+        return;
+      }
+      if (e.key === "Tab" || (e.key === "Enter" && moved)) {
+        e.preventDefault();
+        choose(comp.items[Math.min(active, n - 1)]!);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setCursor(null);
+        return;
+      }
+    }
+    if (e.key === "Enter") {
+      setCursor(null);
+      commit();
+    }
+  };
   const [check, setCheck] = useState<{ ok: true; unit: string } | { ok: false; problems: FormulaProblem[] } | null>(null);
 
   useEffect(() => {
@@ -583,17 +720,49 @@ function FormulaInput({
 
   return (
     <>
-      <input
-        className="field mono"
-        value={draft}
-        maxLength={500}
-        placeholder="e.g. net_income / revenue or NVDA.revenue / MSFT.revenue"
-        aria-label="Formula"
-        aria-invalid={check?.ok === false}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={commit}
-        onKeyDown={(e) => e.key === "Enter" && commit()}
-      />
+      <div className="ac">
+        <input
+          ref={input}
+          className="field mono"
+          value={draft}
+          maxLength={500}
+          placeholder="e.g. net_income / revenue or NVDA.revenue / MSFT.revenue"
+          aria-label="Formula"
+          aria-invalid={check?.ok === false}
+          role="combobox"
+          aria-autocomplete="list"
+          aria-expanded={open}
+          aria-controls={listId}
+          aria-activedescendant={open ? `${listId}-${active}` : undefined}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            setCursor(e.target.selectionStart ?? e.target.value.length);
+            setActive(0);
+            setMoved(false);
+          }}
+          onBlur={() => {
+            setCursor(null);
+            commit();
+          }}
+          onKeyDown={onKey}
+        />
+        {open && comp && (
+          <ul className="ac-list" id={listId} role="listbox" aria-label="Formula suggestions">
+            {comp.items.map((item, i) => (
+              <li key={`${item.kind}-${item.label}`} id={`${listId}-${i}`} role="option" aria-selected={i === active}
+                className={i === active ? "on" : undefined}
+                onMouseDown={(e) => {
+                  e.preventDefault(); // keep focus in the field
+                  choose(item);
+                }}>
+                <span className={`ac-k ${item.kind}`}>{KIND_LABEL[item.kind]}</span>
+                <b className="mono">{item.label}</b>
+                {item.detail && <span className="faint">{item.detail}</span>}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
       <div className="row">
         <span className="faint small">Default company</span>
         <select aria-label="Default company" className="grow" value={layer.defaultCompany ?? ""}
@@ -616,7 +785,7 @@ function FormulaInput({
         <div className="faint small">
           {check?.ok ? `Valid · ${check.unit}. ` : ""}
           Metrics by name; TICKER.metric for another company; ttm(), abs(), lags like revenue[-4q];
-          + − × ÷ and ( ).
+          + − × ÷ and ( ). Suggestions as you type: Tab completes.
         </div>
       )}
     </>

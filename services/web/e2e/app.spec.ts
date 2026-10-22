@@ -80,6 +80,37 @@ test("chart builder: two metric layers and a formula, exported as CSV", async ({
   await expect(page.locator(".lchart table tbody tr")).toHaveCount(4);
 });
 
+test("chart builder: formula autocomplete, annual frequency and deck output", async ({ page }) => {
+  await mockApi(page);
+  await startDemo(page);
+  await page.goto("/#/chart");
+  await page.getByRole("button", { name: "+ Metric" }).click();
+  await page.getByRole("button", { name: "+ Formula" }).click();
+  const formula = page.getByLabel("Formula", { exact: true });
+  await formula.click();
+  await formula.pressSequentially("net_inc");
+  const suggestions = page.getByRole("listbox", { name: "Formula suggestions" });
+  await expect(suggestions.getByRole("option").first()).toContainText("net_income");
+  await formula.press("Tab");
+  await expect(formula).toHaveValue("net_income");
+  await formula.pressSequentially(" ");
+  await suggestions.getByRole("option", { name: /÷/ }).click();
+  await formula.pressSequentially("revenue");
+  await formula.press("Enter");
+  await expect(page.locator(".ch-legend text")).toHaveCount(2);
+
+  await page.getByRole("button", { name: "Annual" }).click();
+  await expect(page.locator(".ch-axis text")).toHaveText(["CY2025"]); // the mock's one full calendar year
+  await page.getByLabel("Deck output").check();
+  await expect(page.locator(".lchart.deck")).toBeVisible();
+  await expect(page.locator(".ch-sub")).toHaveText(/^Calendar years, CY2025 · USD \(left\), % \(right\)$/);
+  await expect(page.locator(".ch-foot").first()).toContainText("Source: SEC filings via Tributary; 10-Q for KO; latest KO 10-Q filed Jul 30, 2026; as of Oct 21, 2026.");
+  const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Export SVG" }).click()]);
+  const svg = readFileSync((await download.path())!, "utf8");
+  expect(svg).toContain("Source: SEC filings via Tributary");
+  expect(svg).toContain("Calendar years, CY2025");
+});
+
 test("comps: target and peers with the peer median, exported as CSV", async ({ page }) => {
   await mockApi(page);
   await startDemo(page);
