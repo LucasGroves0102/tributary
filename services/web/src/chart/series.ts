@@ -1,7 +1,7 @@
 /** Evaluate responses → plotted series on one shared quarter axis, and the CSV export. Exact
  * decimals stay strings (`raw`) for the CSV; `y` is the parsed number for drawing. */
 
-import type { FormulaSeries } from "../types";
+import type { FinancialRow, FormulaSeries } from "../types";
 import type { Axis, LayerType, Transform } from "./model";
 
 export interface Source {
@@ -130,4 +130,43 @@ export function chartCsv(series: Series[]): string {
     }),
   ]);
   return [header, ...rows].map((r) => r.map(csvCell).join(",")).join("\r\n") + "\r\n";
+}
+
+/** "FY2027 Q2" → the formula API's period_key (year * 4 + quarter - 1); null if unlabelled. */
+export function periodKey(period: string | null | undefined): number | null {
+  const m = /^(?:FY|CY)(\d{4}) Q([1-4])$/.exec(period ?? "");
+  return m ? Number(m[1]) * 4 + Number(m[2]) - 1 : null;
+}
+
+/** One metric's /financials rows as a series on fiscal quarters (rows without a fiscal period
+ * are left out), each point citing its filing. */
+export function financialSeries(
+  rows: FinancialRow[],
+  metric: string,
+  layer: { id: number; name: string; color: number; type: LayerType; axis: Axis },
+): Series {
+  const points: Point[] = rows
+    .filter((r) => r.metric === metric)
+    .flatMap((r) => {
+      const key = periodKey(r.fiscal_period);
+      if (key === null) return [];
+      const y = Number(r.value);
+      return [{
+        key,
+        period: r.fiscal_period!,
+        periodEnd: r.period_end,
+        y: Number.isFinite(y) ? y : null,
+        raw: r.value,
+        sources: [{
+          form: r.citation.form,
+          filed: r.citation.filed,
+          accessionNo: r.citation.accession_no,
+          url: r.citation.filing_url,
+          periodEnd: r.period_end,
+        }],
+      }];
+    })
+    .sort((a, b) => a.key - b.key);
+  const unit = rows.find((r) => r.metric === metric)?.unit ?? "";
+  return { ...layer, color: layer.color % COLORS, unit, points };
 }

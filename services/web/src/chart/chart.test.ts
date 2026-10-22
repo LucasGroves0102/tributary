@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { NVDA } from "../fixtures";
+import { fin, NVDA } from "../fixtures";
 import type { FormulaSeries } from "../types";
 import { svgText } from "./export";
 import { layout, nearest, niceScale } from "./layout";
@@ -18,7 +18,7 @@ import {
   type ChartState,
   type Layer,
 } from "./model";
-import { chartCsv, csvCell, latestSource, toSeries, xAxis } from "./series";
+import { chartCsv, csvCell, financialSeries, latestSource, periodKey, toSeries, xAxis } from "./series";
 
 const MSFT = "0000789019";
 const TODAY = new Date("2026-10-21T12:00:00Z");
@@ -218,4 +218,22 @@ it("exports a standalone SVG without hover marks, with the light palette embedde
   expect(text).toContain(".c0{color:#3b5bdb}");
   expect(text).not.toContain("hover-only");
   expect(text).not.toContain("var(--");
+});
+
+it("turns /financials rows into a fiscal-quarter series with each value's filing", () => {
+  expect(periodKey("FY2027 Q2")).toBe(2027 * 4 + 1);
+  expect(periodKey("CY2026 Q4")).toBe(2026 * 4 + 3);
+  expect(periodKey(null)).toBeNull();
+  const rows = [
+    fin("revenue", "2026-07-26", "46743000000", "FY2027 Q2"),
+    fin("revenue", "2026-04-26", "44062000000", "FY2027 Q1"),
+    fin("revenue", "2026-01-25", "1", "", { fiscal_period: null }),
+    fin("operating_margin", "2026-07-26", "0.6", "FY2027 Q2"),
+  ];
+  const s = financialSeries(rows, "revenue", { id: 1, name: "Revenue", color: 9, type: "bar", axis: "L" });
+  expect(s.points.map((p) => [p.period, p.y])).toEqual([["FY2027 Q1", 44062000000], ["FY2027 Q2", 46743000000]]);
+  expect(s.unit).toBe("USD");
+  expect(s.color).toBe(1);
+  expect(s.points[0]!.sources[0]).toMatchObject({ form: "10-Q", url: "https://www.sec.gov/x/", periodEnd: "2026-04-26" });
+  expect(financialSeries(rows, "operating_margin", { id: 2, name: "m", color: 1, type: "line", axis: "R" }).unit).toBe("ratio");
 });

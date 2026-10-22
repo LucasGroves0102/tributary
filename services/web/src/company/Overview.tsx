@@ -1,5 +1,8 @@
+import { useRef } from "react";
+
 import { financials, latestSection, recap as fetchRecap } from "../api";
-import { Chart } from "../components/explore/Chart";
+import { LayerChart } from "../chart/LayerChart";
+import { financialSeries } from "../chart/series";
 import { day } from "../format";
 import { href } from "../route";
 import type { ScreenerRow, Tier } from "../types";
@@ -171,20 +174,31 @@ function Business({ token, companyId, name, canRead }: { token: string; companyI
   );
 }
 
+/** Quarterly revenue (bars) and operating margin (line, right axis) on fiscal quarters, in the
+ * chart builder's chart: hover shows each value's filing. */
 function Revenue({ token, companyId }: { token: string; companyId: string }) {
-  const load = useLoad(companyId, () => financials(token, companyId, 12, ["revenue"]));
+  const svg = useRef<SVGSVGElement>(null);
+  const load = useLoad(companyId, () => financials(token, companyId, 12, ["revenue", "operating_margin"]));
+  const series = load?.state === "ok"
+    ? [
+        financialSeries(load.data.rows, "revenue", { id: 1, name: "Revenue", color: 0, type: "bar", axis: "L" }),
+        financialSeries(load.data.rows, "operating_margin", { id: 2, name: "Operating margin", color: 1, type: "line", axis: "R" }),
+      ].filter((s) => s.points.length)
+    : [];
   return (
     <>
       <div className="card-h">
-        <h2>Revenue</h2>
-        <span className="sub">quarterly, last 12 · hover or click a bar for its filing</span>
+        <h2>Revenue and operating margin</h2>
+        <span className="sub">fiscal quarters, last 12 · hover for each value's filing</span>
+        <span className="grow" />
+        <a className="btn sm ghost" href={href({ view: "company", companyId, tab: "statements" })}>Statements</a>
       </div>
-      {load?.state === "ok" ? (
+      {series.length ? (
         <div className="card-b">
-          <Chart rows={load.data.rows} label="Revenue" />
+          <LayerChart series={series} title="" footnote={[]} svgRef={svg} />
         </div>
       ) : (
-        <p className="empty">{load?.state === "loading" ? "Loading…" : "No revenue to chart."}</p>
+        <p className="empty">{!load || load.state === "loading" ? "Loading…" : "No revenue to chart."}</p>
       )}
     </>
   );

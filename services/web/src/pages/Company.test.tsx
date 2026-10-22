@@ -188,6 +188,13 @@ it("overview: key stats with periods, the latest quarter recap with flags, and I
   expect($(".flags a")?.getAttribute("href")).toBe(`#/filing/${NVDA}/${ACC}/I-2`);
   expect($(".excerpt")?.textContent).toBe("NVIDIA pioneered accelerated computing. We sell GPUs.");
   expect([...container.querySelectorAll("a")].find((a) => a.textContent === "Read Item 1")?.getAttribute("href")).toBe(`#/filing/${NVDA}/${K_ACC}/1`);
+  // revenue bars and operating margin on the right axis, fiscal quarters
+  const chart = $(".lchart svg")!;
+  expect([...chart.querySelectorAll(".ch-legend text")].map((t) => t.textContent)).toEqual(["Revenue", "Operating margin (right axis)"]);
+  expect(chart.querySelectorAll("rect[fill='currentColor']").length).toBe(2);
+  expect(chart.querySelector(".ch-axis")?.textContent).toContain("FY2027 Q2");
+  const fin = paths().find((u) => u.pathname.endsWith("/financials") && u.searchParams.getAll("metrics").includes("operating_margin"))!;
+  expect(fin.searchParams.getAll("metrics")).toEqual(["revenue", "operating_margin"]);
 });
 
 it("an ungranted company shows its metadata and says what its plan doesn't cover", async () => {
