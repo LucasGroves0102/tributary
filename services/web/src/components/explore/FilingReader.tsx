@@ -38,6 +38,9 @@ interface Props {
   /** the company's name, when known */
   name?: string | null;
   onAsk?: (question: string) => void;
+  /** called once the filing's text is readable, and again for each section opened (Home's
+   * "Continue where you left off") */
+  onRead?: (sectionKey: string | null) => void;
 }
 
 const SEARCH_FORMS = /^(10-K|10-Q|8-K)(\/A)?$/;
@@ -45,10 +48,16 @@ const SEARCH_FORMS = /^(10-K|10-Q|8-K)(\/A)?$/;
 /** A parsed filing: its outline on the left (grouped by Part, with search matches), the selected
  * section on the right, highlighted and scrolled to a cited passage. A 10-K or 10-Q also links
  * to the same section of the previous one and shows What changed side by side. */
-export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q, name, onAsk }: Props) {
+export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q, name, onAsk, onRead }: Props) {
   const filing = useLoad(`${companyId}|${accessionNo}`, () => parsedFiling(token, companyId, accessionNo));
   const f = filing?.state === "ok" ? filing.data : null;
   const active = f ? (f.sections.find((s) => s.section_key === sectionKey) ?? f.sections[0] ?? null) : null;
+  const readRef = useRef(onRead);
+  readRef.current = onRead;
+  const readKey = f ? `${accessionNo}|${active?.section_key ?? ""}` : null;
+  useEffect(() => {
+    if (readKey) readRef.current?.(readKey.split("|")[1] || null);
+  }, [readKey]);
   const text = useLoad(active ? `${accessionNo}|${active.section_key}` : null, () =>
     fetchSection(token, companyId, active!.section_key, accessionNo),
   );

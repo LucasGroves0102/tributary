@@ -91,7 +91,7 @@ afterEach(() => {
   window.location.hash = "";
 });
 
-async function render(sectionKey: string | null, extra: { at?: number; q?: string } = {}) {
+async function render(sectionKey: string | null, extra: { at?: number; q?: string; onRead?: (s: string | null) => void } = {}) {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -174,4 +174,15 @@ it("falls back to the first section for an unknown key, and explains a denial", 
   await render(null);
   expect($(".locked")?.textContent).toContain("needs filings access");
   expect(paths().filter((u) => u.pathname.includes("/sections/"))).toHaveLength(0);
+});
+
+it("reports what was read (for Home's recent work) only once the filing is readable", async () => {
+  const onRead = vi.fn();
+  await render("II-1A", { onRead });
+  expect(onRead.mock.calls).toEqual([["II-1A"]]);
+  act(() => root.unmount());
+  denied = true;
+  onRead.mockClear();
+  await render(null, { onRead });
+  expect(onRead).not.toHaveBeenCalled();
 });

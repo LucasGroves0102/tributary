@@ -30,6 +30,11 @@ import { clearSession, loadSession, pickerEnabled, resetsIn, type Session } from
 import { load, save } from "./storage";
 import { useTheme } from "./theme";
 import type { Me } from "./types";
+import { itemRoute, restoreChartState, type Current } from "./workspaces/model";
+import { Recent } from "./workspaces/Recent";
+import { SaveBar } from "./workspaces/SaveBar";
+import { useSaved } from "./workspaces/useSaved";
+import { WorkspaceTree } from "./workspaces/WorkspaceTree";
 
 const DRAWER_KEY = "tributary.assistant";
 const DRAWER_FITS_PX = 1200;
@@ -63,6 +68,7 @@ export function App(props: Props = {}) {
   const route = useRoute();
   const [theme, toggleTheme] = useTheme(user);
   const workspace = useWorkspace(token, user, me?.companies.map((c) => c.company_id));
+  const saved = useSaved(token, user);
   const [chart, setChart] = useChart(user);
   // read when the assistant sends a question or applies an action, so always the latest
   const chartRef = useRef(chart);
@@ -71,6 +77,9 @@ export function App(props: Props = {}) {
   const nameRef = useRef<(id: string) => string | null>(() => null);
   const uiActions = useUiActions(user, {
     setChart,
+    chart: () => chartRef.current,
+    saveTo: (current, name, ws) => saved.saveAs(current, name, { newWorkspace: ws }).then((i) => i.item_id),
+    deleteSaved: saved.deleteItem,
     isWatched: (id) => watchedRef.current?.has(id) ?? false,
     watch: workspace.watch,
     unwatch: workspace.unwatch,
@@ -190,9 +199,24 @@ export function App(props: Props = {}) {
   const chartMany = useCallback(
     (ids: string[], metric: string, transform: Transform, title: string) => {
       setChart((s) => companiesChart(s, ids, metric, transform, title));
+      saved.close("chart"); // a new chart, not an edit of the saved one
       go({ view: "chart" });
     },
-    [setChart],
+    [setChart, saved],
+  );
+
+  /** Opens a saved item: its state on its page (the page then reads data as usual). */
+  const openSaved = useCallback(
+    (itemId: string) => {
+      saved
+        .openItem(itemId)
+        .then((item) => {
+          if (item.kind === "chart") setChart(() => restoreChartState(item.state));
+          go(itemRoute(item.kind, item.state));
+        })
+        .catch(() => setError("Couldn't open that item. It may have been deleted; the list is refreshed."));
+    },
+    [saved, setChart],
   );
 
   const exportWatchlist = useCallback(() => {
@@ -299,6 +323,11 @@ export function App(props: Props = {}) {
     [workspace, focusAssistant, assistant, toggleTheme, exportWatchlist, token, chartMany],
   );
 
+  const saveBar = (current: Current) =>
+    saved.list.state === "unavailable" ? null : (
+      <SaveBar current={current} saved={saved} label={(id) => companyName(id) ?? id} />
+    );
+
   const showDrawer = drawerOpen && route.view !== "ask";
   const ingested = lastIngested(workspace.latest ?? []);
   const panelProps = {
@@ -332,6 +361,7 @@ export function App(props: Props = {}) {
           lastIngested={ingested}
           onAdd={() => setPalette(WATCH_PREFIX)}
           onExport={exportWatchlist}
+          workspaces={token ? <WorkspaceTree saved={saved} onOpen={openSaved} onError={setError} /> : null}
         />
         <div className="main">
           <TopBar
@@ -370,6 +400,7 @@ export function App(props: Props = {}) {
                 lastIngested={ingested}
                 onAdd={() => setPalette(WATCH_PREFIX)}
                 onExport={exportWatchlist}
+                recent={saved.list.state === "unavailable" ? null : <Recent recent={saved.recent} onOpen={openSaved} />}
               />
             ) : route.view === "companies" ? (
               <Companies
@@ -380,8 +411,10 @@ export function App(props: Props = {}) {
                 onWatch={(id, on) => (on ? workspace.watch(id) : workspace.unwatch(id))}
                 onChart={(id, name) => {
                   setChart((s) => companyChart(s, id, name));
+                  saved.close("chart");
                   go({ view: "chart" });
                 }}
+                saveBar={saveBar({ kind: "screen", screen: route.screen ?? {} })}
               />
             ) : route.view === "company" ? (
               <Company
@@ -397,6 +430,7 @@ export function App(props: Props = {}) {
                 }
                 onChart={(name) => {
                   setChart((s) => companyChart(s, route.companyId, name));
+                  saved.close("chart");
                   go({ view: "chart" });
                 }}
                 onChartMany={chartMany}
@@ -419,11 +453,18 @@ export function App(props: Props = {}) {
                   assistant.setDraft(q);
                   focusAssistant();
                 }}
+                onRead={(section) => saved.recordFiling(route.companyId, route.accessionNo, section)}
               />
             ) : route.view === "search" ? (
               <Search key={user} token={token} search={route.search} companies={me?.companies ?? []} />
             ) : route.view === "chart" ? (
-              <ChartBuilder key={user} token={token} chart={chart} setChart={setChart} />
+              <ChartBuilder
+                key={user}
+                token={token}
+                chart={chart}
+                setChart={setChart}
+                saveBar={saveBar({ kind: "chart", chart })}
+              />
             ) : route.view === "ask" ? (
               <div className="page ask-page">
                 <div className="row">
@@ -442,6 +483,7 @@ export function App(props: Props = {}) {
                 token={token}
                 compare={route.compare ?? {}}
                 onChart={chartMany}
+                saveBar={saveBar({ kind: "comps", compare: route.compare ?? {} })}
               />
             )}
           </main>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { ApiError, peers as fetchPeers, screener } from "../api";
 import {
@@ -27,6 +27,8 @@ interface Props {
   compare: CompareState;
   /** "Chart these": one line per company for a metric */
   onChart: (companyIds: string[], metric: string, transform: "ttm" | "q" | "yoy", title: string) => void;
+  /** Save / Save as (workspaces/SaveBar) */
+  saveBar?: ReactNode;
 }
 
 type Load<T> = { state: "loading" } | { state: "ok"; data: T } | { state: "error"; message: string };
@@ -36,7 +38,7 @@ const SUGGESTIONS = 10;
 /** Compare: a comps table of a target and its peers over /v1/screener (`company_id`), each
  * value with its period and source, the peer median, suggestions from /v1/companies/{id}/peers.
  * The comps live in the URL, so a table can be bookmarked, shared and undone with Back. */
-export function Compare({ token, compare, onChart }: Props) {
+export function Compare({ token, compare, onChart, saveBar }: Props) {
   const ids = companiesOf(compare);
   const cols = columnsOf(compare);
   const params = useMemo(() => compareParams(compare), [compare]);
@@ -120,6 +122,7 @@ export function Compare({ token, compare, onChart }: Props) {
           title="Exact values with each one's period end and source filing, plus the peer median">
           Export CSV
         </button>
+        {saveBar}
       </div>
 
       <section className="card">

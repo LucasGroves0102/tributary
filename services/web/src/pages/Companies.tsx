@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 
 import { ApiError, screener, screenerCsv, SCREENER_CSV_ROWS } from "../api";
 import { MASKED_TITLE, screenRow } from "../companies/rows";
@@ -31,6 +31,8 @@ interface Props {
   watched: Set<string> | null;
   onWatch: (companyId: string, watch: boolean) => Promise<void>;
   onChart?: (companyId: string, name: string) => void;
+  /** Save / Save as (workspaces/SaveBar) */
+  saveBar?: ReactNode;
 }
 
 type State =
@@ -40,7 +42,7 @@ type State =
 
 /** Companies: the screener over /v1/screener. Filters live in the URL, so a screen can be
  * bookmarked, shared and undone with Back. */
-export function Companies({ token, screen, watched, onWatch, onChart }: Props) {
+export function Companies({ token, screen, watched, onWatch, onChart, saveBar }: Props) {
   const [result, setResult] = useState<State>({ state: "loading" });
   const [exporting, setExporting] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -100,6 +102,7 @@ export function Companies({ token, screen, watched, onWatch, onChart }: Props) {
         >
           {exporting ? "Exporting…" : "Export CSV"}
         </button>
+        {saveBar}
       </div>
       {note && <p className="empty error">{note}</p>}
 

@@ -47,6 +47,8 @@ interface Props {
   token: string;
   chart: ChartState;
   setChart: (f: (s: ChartState) => ChartState) => void;
+  /** Save / Save as (workspaces/SaveBar) */
+  saveBar?: ReactNode;
 }
 
 /** Companies the user can chart: the screener restricted to companies whose financials they
@@ -83,7 +85,7 @@ function useMetrics(token: string): MetricInfo[] | null {
 }
 
 /** Chart builder: layers of company × metric or formula over /v1/formulas/evaluate. */
-export function ChartBuilder({ token, chart, setChart }: Props) {
+export function ChartBuilder({ token, chart, setChart, saveBar }: Props) {
   const companies = useChartCompanies(token);
   const metrics = useMetrics(token);
   const [results, setResults] = useState<Record<string, Result>>({});
@@ -184,6 +186,7 @@ export function ChartBuilder({ token, chart, setChart }: Props) {
         <button className="btn" onClick={exportPng} disabled={!series.length}>
           Export PNG
         </button>
+        {saveBar}
       </div>
       {note && <p className="empty error">{note}</p>}
 

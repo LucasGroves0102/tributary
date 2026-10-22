@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import { ago, day } from "../format";
 import type { WatchRow } from "../home/data";
 import type { Workspace } from "../home/useWorkspace";
@@ -14,6 +16,8 @@ interface Props {
   lastIngested: string | null;
   onAdd: () => void;
   onExport: () => void;
+  /** the Workspaces section (workspaces/WorkspaceTree) */
+  workspaces?: ReactNode;
 }
 
 /** Which nav entry a route belongs to: a company or filing is under Companies. */
@@ -21,7 +25,7 @@ function section(route: Route): Route["view"] {
   return route.view === "company" || route.view === "filing" ? "companies" : route.view;
 }
 
-export function Sidebar({ route, me, workspace, lastIngested, onAdd, onExport }: Props) {
+export function Sidebar({ route, me, workspace, lastIngested, onAdd, onExport, workspaces }: Props) {
   const { rows, filings, watchlist } = workspace;
   const active = section(route);
   const newCount = (filings ?? []).filter((f) => f.isNew).length;
@@ -109,10 +113,7 @@ export function Sidebar({ route, me, workspace, lastIngested, onAdd, onExport }:
         </>
       )}
 
-      <div className="sect">
-        <span className="grow">Workspaces</span>
-      </div>
-      <p className="side-note">Charts and comps you save will be listed here.</p>
+      {workspaces}
 
       <div className="grow" />
       <div className="fresh">

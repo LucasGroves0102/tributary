@@ -39,7 +39,18 @@ will be another way to produce the same `Session`.
 The assistant sends the screen as `context` with each question (`assistant/actions.ts`) and
 applies the agent's `action` events (chart layers and options, screener filters, watchlist) with
 an Undo per action (`assistant/useUiActions.ts`): undo restores the chart and page from before
-it, reverses watchlist calls, and also undoes every later action.
+it, reverses watchlist calls, deletes an item the assistant saved (`save_to_workspace`), and
+also undoes every later action.
+
+Saved work (`src/workspaces/`, Query API `/v1/workspaces`): the sidebar's Workspaces are folders
+of saved charts, comps sets and screens (rename, duplicate, delete beside each row); clicking an
+item opens its page with the saved state (`model.ts` restores it through the same cleaners as a
+URL, so a saved item is trusted no more than a link). The Chart builder, Compare and Companies
+have Save / Save as… with the open item's workspace and an "unsaved changes" mark; the open item
+per page is remembered per user in localStorage. Home's "Continue where you left off" lists
+recently opened items and filings read in the reader, newest first. Saved items grant nothing:
+the pages read data through the Query API as usual, so a chart for a company you lost shows the
+same "isn't one of your companies" state as anywhere else.
 
 ## Run
 
