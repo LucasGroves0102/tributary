@@ -64,12 +64,12 @@ function respond(url: string, init?: RequestInit): Response {
 let root: Root;
 let container: HTMLDivElement;
 
-async function render(hash = "") {
+async function render(hash = "", picker = true) {
   window.location.hash = hash;
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  await act(async () => root.render(<App />));
+  await act(async () => root.render(<App picker={picker} />));
   await settle();
 }
 

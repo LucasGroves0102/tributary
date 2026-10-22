@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { demoUsers, login, me as fetchMe, watchlistCsv } from "./api";
+import { ApiError, demoUsers, login, me as fetchMe, watchlistCsv } from "./api";
 import { AssistantPanel } from "./assistant/AssistantPanel";
 import { metricLabel } from "./chart/metrics";
 import { companiesChart, companyChart, type Transform } from "./chart/model";
@@ -22,9 +22,11 @@ import { Home } from "./pages/Home";
 import { Company } from "./pages/Company";
 import { Compare } from "./pages/Compare";
 import { Search } from "./pages/Search";
+import { readableCount, Welcome } from "./pages/Welcome";
 import { go, parse, useRoute } from "./route";
 import { resolveTicker } from "./palette/commands";
 import { useShortcuts } from "./shortcuts";
+import { clearSession, loadSession, pickerEnabled, resetsIn, type Session } from "./session";
 import { load, save } from "./storage";
 import { useTheme } from "./theme";
 import type { Me } from "./types";
@@ -32,12 +34,25 @@ import type { Me } from "./types";
 const DRAWER_KEY = "tributary.assistant";
 const DRAWER_FITS_PX = 1200;
 
-export function App() {
+const SANDBOX_EXPIRED = "Your demo sandbox expired and was reset. Start a new one.";
+
+interface Props {
+  /** The named demo-user picker (alice, bob, …) instead of "Try the demo". Default: the dev
+   * flag (session.ts `pickerEnabled`). */
+  picker?: boolean;
+}
+
+export function App(props: Props = {}) {
+  const [picker] = useState(() => props.picker ?? pickerEnabled());
   const [users, setUsers] = useState<string[]>([]);
   const [user, setUser] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [me, setMe] = useState<Me | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // "Try the demo": the sandbox signed in, or the front door (with an optional notice)
+  const [session, setSession] = useState<Session | null>(null);
+  const [frontDoor, setFrontDoor] = useState<{ notice: string | null } | null>(null);
+  const [clock, setClock] = useState(() => Date.now());
   // open by default where it fits beside the page; below that it floats over it (styles.css)
   const [drawerOpen, setDrawerOpen] = useState(
     () => (load(DRAWER_KEY) ?? (window.innerWidth > DRAWER_FITS_PX ? "open" : "closed")) === "open",
@@ -67,16 +82,78 @@ export function App() {
   });
 
   useEffect(() => {
+    if (!picker) return;
     demoUsers()
       .then((u) => {
         setUsers(u);
         setUser(u[0] ?? null);
       })
       .catch(() => setError("Can't reach the Query API."));
+  }, [picker]);
+
+  const signIn = useCallback((s: Session, m: Me | null) => {
+    setSession(s);
+    setUser(s.userId);
+    setToken(s.token);
+    setMe(m);
+    setFrontDoor(null);
+    setClock(Date.now());
   }, []);
 
+  const signOut = useCallback((notice: string | null) => {
+    clearSession();
+    setSession(null);
+    setUser(null);
+    setToken(null);
+    setMe(null);
+    setFrontDoor({ notice });
+  }, []);
+
+  // resume a sandbox from an earlier visit, else the front door
   useEffect(() => {
-    if (!user) return;
+    if (picker) return;
+    const stored = loadSession();
+    if (!stored) {
+      setFrontDoor({ notice: null });
+      return;
+    }
+    let cancelled = false;
+    fetchMe(stored.token)
+      .then((m) => !cancelled && signIn(stored, m))
+      .catch((e) => {
+        if (cancelled) return;
+        if (e instanceof ApiError && e.status === 401) signOut(SANDBOX_EXPIRED);
+        else signIn(stored, null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [picker, signIn, signOut]);
+
+  // the sandbox's clock: the banner's countdown, and back to the front door when it expires
+  useEffect(() => {
+    if (!session) return;
+    const id = window.setInterval(() => setClock(Date.now()), 60_000);
+    return () => window.clearInterval(id);
+  }, [session]);
+  useEffect(() => {
+    if (session && Date.parse(session.expiresAt) <= clock) signOut(SANDBOX_EXPIRED);
+  }, [session, clock, signOut]);
+
+  // continued before every grant had propagated (or /v1/me failed): refresh until they have
+  useEffect(() => {
+    if (!session) return;
+    if (me && readableCount(me, new Set(session.companies)) >= session.companies.length) return;
+    const id = window.setTimeout(() => {
+      fetchMe(session.token)
+        .then(setMe)
+        .catch(() => undefined);
+    }, 3000);
+    return () => window.clearTimeout(id);
+  }, [session, me]);
+
+  useEffect(() => {
+    if (!user || !picker) return;
     setMe(null);
     setToken(null);
     let cancelled = false;
@@ -92,7 +169,7 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [user, picker]);
 
   useEffect(() => {
     if (focusTick) input.current?.focus();
@@ -233,6 +310,18 @@ export function App() {
     inputRef: input,
   };
 
+  if (!picker && !token && frontDoor) {
+    return (
+      <Welcome
+        notice={frontDoor.notice}
+        onReady={(s, m) => {
+          signIn(s, m);
+          go({ view: "home" });
+        }}
+      />
+    );
+  }
+
   return (
     <>
       <div className={showDrawer ? "app with-ai" : "app"}>
@@ -249,7 +338,7 @@ export function App() {
             route={route}
             companyName={companyName}
             users={users}
-            user={user}
+            user={session ? "demo sandbox" : user}
             busy={assistant.busy}
             theme={theme}
             assistantOpen={showDrawer}
@@ -258,6 +347,12 @@ export function App() {
             onTheme={toggleTheme}
             onAssistant={() => (drawerOpen ? setDrawer(false) : focusAssistant())}
           />
+          {session && (
+            <div className="sandbox-banner" role="note">
+              Demo sandbox: {session.companies.length} companies · resets in{" "}
+              {resetsIn(session.expiresAt, clock)}
+            </div>
+          )}
           {error && (
             <div className="banner" role="alert">
               {error}
@@ -337,7 +432,8 @@ export function App() {
                 <AssistantPanel variant="page" {...panelProps} />
                 <p className="faint small">
                   The same assistant as the side panel, full width. It answers only from data{" "}
-                  {user ?? "you"} can read, with the filing behind every number.
+                  {session ? "your sandbox" : (user ?? "you")} can read, with the filing behind every
+                  number.
                 </p>
               </div>
             ) : (

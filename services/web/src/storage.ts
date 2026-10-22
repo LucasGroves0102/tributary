@@ -17,3 +17,11 @@ export function save(key: string, value: string): void {
     // ignore: the preference just won't survive a reload
   }
 }
+
+export function remove(key: string): void {
+  try {
+    window.localStorage.removeItem(key);
+  } catch {
+    // ignore
+  }
+}
