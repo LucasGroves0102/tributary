@@ -68,7 +68,7 @@ it("runs the screen from the URL's filters and shows values with sources", async
   expect(q.searchParams.getAll("where")).toEqual(["operating_margin_ttm:gte:0.2"]);
   expect(q.searchParams.get("revenue_band")).toBe("1b-10b");
   const nvda = container.querySelectorAll("table.screen tbody tr")[0]!;
-  expect(nvda.textContent).toContain("NVIDIA CORP");
+  expect(nvda.textContent).toContain("Nvidia");
   const revenue = [...nvda.querySelectorAll("td.n")].find((td) => td.textContent === "$130.50B");
   expect(revenue?.getAttribute("title")).toContain("10-Q filed Aug 26, 2026");
   expect($(".card-h .sub")?.textContent).toBe("revenue $1B to $10B, operating margin ≥ 20%");
@@ -78,7 +78,7 @@ it("shows ungranted companies honestly: metadata only, with the reason", async (
   await render();
   const tsla = container.querySelectorAll("table.screen tbody tr")[1]!;
   expect(tsla.className).toContain("masked");
-  expect(tsla.textContent).toContain("Tesla, Inc.");
+  expect(tsla.textContent).toContain("Tesla");
   expect(tsla.textContent).toContain("metadata only");
   expect(tsla.textContent).not.toMatch(/\$\d/);
   expect(tsla.querySelector("td.n")?.getAttribute("title")).toContain("doesn't cover");
@@ -116,12 +116,12 @@ it("applies a filter from the rail to the URL", async () => {
 
 it("watches, unwatches and charts from a row", async () => {
   await render();
-  await act(async () => $(`button[aria-label="Add NVIDIA CORP to watchlist"]`)!.click());
+  await act(async () => $(`button[aria-label="Add Nvidia to watchlist"]`)!.click());
   expect(onWatch).toHaveBeenCalledWith(NVDA, true);
-  await act(async () => $(`button[aria-label="Remove Tesla, Inc. from watchlist"]`)!.click());
+  await act(async () => $(`button[aria-label="Remove Tesla from watchlist"]`)!.click());
   expect(onWatch).toHaveBeenCalledWith(TSLA, false);
-  await act(async () => $(`button[aria-label="Chart NVIDIA CORP"]`)!.click());
-  expect(onChart).toHaveBeenCalledWith(NVDA, "NVIDIA CORP");
+  await act(async () => $(`button[aria-label="Chart Nvidia"]`)!.click());
+  expect(onChart).toHaveBeenCalledWith(NVDA, "Nvidia");
 });
 
 it("exports the whole screen as the API's CSV", async () => {

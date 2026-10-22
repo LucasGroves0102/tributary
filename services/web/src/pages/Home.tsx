@@ -59,7 +59,11 @@ export function Home({ workspace, lastIngested, onAdd, onExport }: Props) {
       <div className="grid2">
         <section className="card">
           <div className="card-h">
-            <h2>New filings for your companies</h2>
+            <h2>
+              New filings for {workspace.readableCount
+                ? `the ${workspace.readableCount} companies you can read`
+                : "your watchlist"}
+            </h2>
             <span className="sub">
               last {RECENT_DAYS} days · {newLabel}
             </span>

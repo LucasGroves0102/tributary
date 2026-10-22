@@ -16,15 +16,15 @@ const hit = (company_id: string, name: string, accession_no: string, section_key
   freshness: { filed: "2026-08-26", ingested_at: "" },
 });
 const HITS = [
-  hit(NVDA, "NVIDIA CORP", ACC, "II-1A"),
-  hit(MSFT, "MICROSOFT CORP", "0000789019-26-000010", "1A", "10-K"),
-  hit(NVDA, "NVIDIA CORP", K_ACC, "1A", "10-K"),
-  hit(NVDA, "NVIDIA CORP", ACC, "I-2"),
+  hit(NVDA, "Nvidia", ACC, "II-1A"),
+  hit(MSFT, "Microsoft", "0000789019-26-000010", "1A", "10-K"),
+  hit(NVDA, "Nvidia", K_ACC, "1A", "10-K"),
+  hit(NVDA, "Nvidia", ACC, "I-2"),
 ];
 const COMPANIES: Company[] = [
-  { company_id: NVDA, name: "NVIDIA CORP", tiers: ["financials", "filings"] },
-  { company_id: MSFT, name: "MICROSOFT CORP", tiers: ["financials", "filings"] },
-  { company_id: "0000320193", name: "Apple Inc.", tiers: ["financials"] },
+  { company_id: NVDA, name: "Nvidia", tiers: ["financials", "filings"] },
+  { company_id: MSFT, name: "Microsoft", tiers: ["financials", "filings"] },
+  { company_id: "0000320193", name: "Apple", tiers: ["financials"] },
 ];
 
 const OK = () => Response.json({ query: "", as_of: "2026-10-21T10:00:00Z", limit: 20, offset: 0, has_more: true, results: HITS });
@@ -61,7 +61,7 @@ it("groups ranked passages by company and filing, each opening the reader at the
   const u = calls()[0]!;
   expect(u.pathname).toBe("/api/query/v1/search");
   expect(Object.fromEntries(u.searchParams)).toEqual({ q: "export controls", form: "10-Q", from: "2026-01-01", limit: "20", offset: "20" });
-  expect([...container.querySelectorAll(".result-co h2")].map((h) => h.textContent)).toEqual(["NVIDIA CORP", "MICROSOFT CORP"]);
+  expect([...container.querySelectorAll(".result-co h2")].map((h) => h.textContent)).toEqual(["Nvidia", "Microsoft"]);
   const nvda = container.querySelector(".result-co")!;
   const filings = [...nvda.querySelectorAll(".result-filing")];
   expect(filings).toHaveLength(2);
@@ -78,7 +78,7 @@ it("submits the form into the address and offers only companies with filings acc
   await render();
   expect(calls()).toHaveLength(0);
   expect([...container.querySelectorAll('select[aria-label="Company"] option')].map((o) => o.textContent))
-    .toEqual(["All you can read", "NVIDIA CORP", "MICROSOFT CORP"]);
+    .toEqual(["All you can read", "Nvidia", "Microsoft"]);
   const input = container.querySelector<HTMLInputElement>('input[aria-label="Search words"]')!;
   await act(async () => {
     const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
@@ -117,7 +117,7 @@ it("keeps only valid search state in the address", () => {
   expect(parseSearch("q=%20%20")).toBeNull();
   expect(parseSearch("page=99&q=x")).toEqual({ q: "x" });
   expect(groupHits(HITS).map((c) => [c.name, c.filings.map((f) => f.hits.length)])).toEqual([
-    ["NVIDIA CORP", [2, 1]],
-    ["MICROSOFT CORP", [1]],
+    ["Nvidia", [2, 1]],
+    ["Microsoft", [1]],
   ]);
 });

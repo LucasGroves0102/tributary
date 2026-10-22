@@ -27,7 +27,7 @@ const row = (e: ReturnType<typeof entry>, values: Record<string, string | null> 
 });
 const SRC = (end: string) => ({ period_end: end, accession_no: "0000320193-26-000010", form: "10-Q", filed: "2026-08-01" });
 const APPLE = (margin: string): ScreenerRow => ({
-  ...row(entry({ company_id: AAPL, name: "Apple Inc.", tickers: ["AAPL"], fiscal_year_end: "0927" })),
+  ...row(entry({ company_id: AAPL, name: "Apple", tickers: ["AAPL"], fiscal_year_end: "0927" })),
   values: { revenue_ttm: "400000000000", operating_margin_ttm: margin, revenue_q: "94000000000" },
   sources: { revenue_ttm: SRC("2026-06-27"), operating_margin_ttm: SRC("2026-06-27"), revenue_q: SRC("2026-06-27") },
 });
@@ -91,7 +91,7 @@ describe("the table", () => {
   });
 
   it("shows ungranted companies with metadata only and leaves them out of the median", () => {
-    expect(rows[1]).toMatchObject({ readable: false, latest: null, name: "Tesla, Inc." });
+    expect(rows[1]).toMatchObject({ readable: false, latest: null, name: "Tesla" });
     expect(rows[1]!.cells.revenue_ttm).toMatchObject({ value: null, text: "—" });
     expect(rows[1]!.cells.revenue_ttm!.title).toContain("doesn't cover");
     const stats = peerStats(rows, s.cols);
@@ -112,8 +112,8 @@ describe("the table", () => {
         "revenue_ttm,revenue_ttm_period_end,revenue_ttm_source_accession," +
         "operating_margin_ttm,operating_margin_ttm_period_end,operating_margin_ttm_source_accession",
     );
-    expect(csv[1]).toContain(`target,${NVDA},NVDA,NVIDIA CORP,financials,CY2026 Q2,FY2027 Q2,2026-07-26,130497000000,2026-07-26,`);
-    expect(csv[2]).toBe(`peer,${TSLA},TSLA,"Tesla, Inc.",metadata only,,,,,,,,,`);
+    expect(csv[1]).toContain(`target,${NVDA},NVDA,Nvidia,financials,CY2026 Q2,FY2027 Q2,2026-07-26,130497000000,2026-07-26,`);
+    expect(csv[2]).toBe(`peer,${TSLA},TSLA,Tesla,metadata only,,,,,,,,,`);
     expect(csv[4]).toBe("peer median (excludes target),,,,,,,,400000000000,,1 peers,0.3,,1 peers");
   });
 

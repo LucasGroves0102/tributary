@@ -376,6 +376,12 @@ a.btn:hover {
   font-size: 10px;
   border: 0;
   padding: 0;
+  visibility: hidden;
+}
+
+.nav a:hover kbd,
+.nav a:focus-visible kbd {
+  visibility: visible;
 }
 
 .side .sect {
@@ -472,6 +478,17 @@ a.btn:hover {
 
 .side .up b {
   color: var(--text);
+}
+
+.live.quiet {
+  background: var(--text-3);
+  box-shadow: none;
+}
+
+.side .credit {
+  padding: 6px 6px 2px;
+  font-size: 11px;
+  color: var(--text-3);
 }
 
 .side .fresh {

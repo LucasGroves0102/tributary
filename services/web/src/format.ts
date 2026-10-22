@@ -49,3 +49,48 @@ export function ago(iso: string, now = Date.now()): string {
   if (s < 86400) return `${Math.floor(s / 3600)} h ago`;
   return `${Math.floor(s / 86400)} d ago`;
 }
+
+// SEC conformed names are upper case with legal suffixes and state tags ("COSTCO WHOLESALE CORP
+// /NEW"). Display names drop those and fix casing; CSV exports keep the SEC name.
+const NAME_CASE: Record<string, string> = {
+  "COCA COLA": "Coca-Cola", JPMORGAN: "JPMorgan", PEPSICO: "PepsiCo", MCDONALDS: "McDonald's",
+  "MCDONALD'S": "McDonald's", NVIDIA: "Nvidia", UNITEDHEALTH: "UnitedHealth", "AMAZON COM": "Amazon",
+  "EXXON MOBIL": "Exxon Mobil", "KEURIG DR PEPPER": "Keurig Dr Pepper",
+};
+const SUFFIX = /[\s,]+(&\s*CO|INC|INCORPORATED|CORP|CORPORATION|CO|COMPANY|LTD|LIMITED|PLC|LLC|L\.?P|N\.?V|S\.?A|AG|SE)\.?$/i;
+
+export function companyName(raw: string): string {
+  let s = raw.replace(/[’`]/g, "'").replace(/\s*\/[A-Z]{2,3}\/?\s*$/i, "").replace(/\s*\/NEW\s*$/i, "").trim();
+  s = s.replace(/^THE\s+/i, "");
+  for (let i = 0; i < 3 && SUFFIX.test(s); i++) s = s.replace(SUFFIX, "").trim();
+  s = s.replace(/[,\s]+$/, "");
+  const key = s.toUpperCase();
+  for (const [k, v] of Object.entries(NAME_CASE)) {
+    if (key === k) return v;
+    if (key.startsWith(k + " ")) return v + titleCase(s.slice(k.length));
+  }
+  return /[a-z]/.test(s) ? s : titleCase(s);
+}
+
+function titleCase(s: string): string {
+  return s.replace(/[A-Za-z][A-Za-z'.]*/g, (w) =>
+    /^[A-Z]{1,3}$/.test(w) && !/[AEIOU]/.test(w) ? w : w[0]!.toUpperCase() + w.slice(1).toLowerCase());
+}
+
+/** Deep-copies API JSON with display names on every object that has a company_id. */
+export function displayNames<T>(data: T): T {
+  if (Array.isArray(data)) return data.map(displayNames) as T;
+  if (data && typeof data === "object") {
+    const o = Object.fromEntries(Object.entries(data).map(([k, v]) => [k, displayNames(v)])) as Record<string, unknown>;
+    if (typeof o.company_id === "string" && typeof o.name === "string") o.name = companyName(o.name);
+    return o as T;
+  }
+  return data;
+}
+
+/** Operating margin, FCF and net debt don't describe a bank (deposits are its debt, lending its
+ * operations), so a missing value there is "n/a", not missing data. */
+export function notForBanks(industry: string | null | undefined, metric: string): boolean {
+  return !!industry && /\bbank|savings institution|bancorp/i.test(industry)
+    && /operating_margin|free_cash_flow|fcf|net_debt/.test(metric);
+}

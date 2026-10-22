@@ -74,7 +74,7 @@ describe("recentFilings", () => {
 
   it("adds the public index, so a free plan sees 8-Ks it can't read", () => {
     const index = [{
-      accession_no: "0001318605-26-000099", company_id: TSLA, name: "Tesla, Inc.", form: "8-K",
+      accession_no: "0001318605-26-000099", company_id: TSLA, name: "Tesla", form: "8-K",
       filed: "2026-10-20", accepted_at: null, period_of_report: null, filing_url: null,
       document_url: null, sections: null, sections_available: false,
     }, {
@@ -84,8 +84,8 @@ describe("recentFilings", () => {
       sections: null, sections_available: false,
     }];
     const merged = recentFilings(latest, [entry(), TESLA], "2026-10-01T09:00:00Z", "2026-10-21", 90, index);
-    expect(merged[0]).toMatchObject({ accessionNo: "0001318605-26-000099", form: "8-K", readable: false, isNew: true, name: "Tesla, Inc." });
-    expect(merged.find((f) => f.accessionNo === ACC)).toMatchObject({ readable: true, name: "NVIDIA CORP" });
+    expect(merged[0]).toMatchObject({ accessionNo: "0001318605-26-000099", form: "8-K", readable: false, isNew: true, name: "Tesla" });
+    expect(merged.find((f) => f.accessionNo === ACC)).toMatchObject({ readable: true, name: "Nvidia" });
     expect(merged).toHaveLength(4);
   });
 });
@@ -99,13 +99,13 @@ it("merges calendars without duplicates and marks watched companies", () => {
     expected_date: date,
   });
   const items = expectedItems(
-    [cal(TSLA, "Tesla, Inc.", "2026-10-30")],
-    [cal(NVDA, "NVIDIA CORP", "2026-11-19"), cal(TSLA, "Tesla, Inc.", "2026-10-30")],
+    [cal(TSLA, "Tesla", "2026-10-30")],
+    [cal(NVDA, "Nvidia", "2026-11-19"), cal(TSLA, "Tesla", "2026-10-30")],
     new Set([TSLA]),
   );
   expect(items.map((i) => [i.name, i.watched])).toEqual([
-    ["Tesla, Inc.", true],
-    ["NVIDIA CORP", false],
+    ["Tesla", true],
+    ["Nvidia", false],
   ]);
 });
 
@@ -113,7 +113,7 @@ it("summarizes the watchlist for the status strip", () => {
   const rows = watchRows(
     [
       entry(),
-      entry({ company_id: "0000789019", name: "MICROSOFT CORP", tickers: ["MSFT"], values: { ...entry().values, revenue_growth_ttm: "0.15" } }),
+      entry({ company_id: "0000789019", name: "Microsoft", tickers: ["MSFT"], values: { ...entry().values, revenue_growth_ttm: "0.15" } }),
       TESLA,
     ],
     {},

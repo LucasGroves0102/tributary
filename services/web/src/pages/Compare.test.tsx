@@ -13,7 +13,7 @@ const AAPL = "0000320193";
 const KO = "0000021344";
 const row = (e: typeof TESLA) => ({ ...e, filer_categories: null, state_of_incorporation: null });
 const APPLE = row(entry({
-  company_id: AAPL, name: "Apple Inc.", tickers: ["AAPL"], fiscal_year_end: "0927",
+  company_id: AAPL, name: "Apple", tickers: ["AAPL"], fiscal_year_end: "0927",
   values: { revenue_ttm: "400000000000", operating_margin_ttm: "0.3", revenue_growth_ttm: "-0.02" },
 }));
 const PEERS = {
@@ -106,9 +106,9 @@ it("suggests peers from the peers endpoint and edits the comps in the URL", asyn
   expect(chips.map((c) => c.textContent)).toEqual(["+ KO (metadata only)"]); // AAPL is already in
   await click(chips[0]);
   expect(window.location.hash).toBe(`#/compare?target=${NVDA}&peers=${TSLA},${AAPL},${KO}&cols=revenue_ttm,operating_margin_ttm,revenue_growth_ttm`);
-  await click($(`button[aria-label="Remove Tesla, Inc."]`));
+  await click($(`button[aria-label="Remove Tesla"]`));
   expect(window.location.hash).toBe(`#/compare?target=${NVDA}&peers=${AAPL}&cols=revenue_ttm,operating_margin_ttm,revenue_growth_ttm`);
-  await click($(`button[aria-label="Make Apple Inc. the target"]`));
+  await click($(`button[aria-label="Make Apple the target"]`));
   expect(window.location.hash).toBe(`#/compare?target=${AAPL}&peers=${NVDA},${TSLA}&cols=revenue_ttm,operating_margin_ttm,revenue_growth_ttm`);
 });
 
@@ -138,7 +138,7 @@ it("exports the table as CSV and charts the readable companies", async () => {
     r.onload = () => resolve(String(r.result));
     r.readAsText(blob as Blob);
   });
-  expect(text).toContain(`target,${NVDA},NVDA,NVIDIA CORP,financials`);
+  expect(text).toContain(`target,${NVDA},NVDA,Nvidia,financials`);
   expect(text).toContain("peer median (excludes target)");
   const select = $('select[aria-label="Metric to chart"]') as HTMLSelectElement;
   await act(async () => {

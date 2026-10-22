@@ -10,7 +10,7 @@ import type { UiAction } from "../types";
 const AAPL = "0000320193";
 const ME = {
   user_id: "alice",
-  companies: [{ company_id: NVDA, name: "NVIDIA CORP", industry: null, tiers: ["financials"] }],
+  companies: [{ company_id: NVDA, name: "Nvidia", industry: null, tiers: ["financials"] }],
 };
 const answer = (actions: UiAction[]) => ({
   text: "Done.", stop: "end_turn", model: "claude-test", rounds: 2, tool_calls: [],

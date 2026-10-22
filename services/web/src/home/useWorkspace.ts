@@ -48,6 +48,8 @@ export interface Workspace {
   firstVisit: boolean;
   watch: (companyId: string) => Promise<void>;
   unwatch: (companyId: string) => Promise<void>;
+  /** how many companies the user can read (Home's filing feed covers them all) */
+  readableCount: number;
 }
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -201,5 +203,6 @@ export function useWorkspace(token: string | null, user: string | null, companyI
     firstVisit: visit?.first ?? false,
     watch,
     unwatch,
+    readableCount: companyIds.length,
   };
 }

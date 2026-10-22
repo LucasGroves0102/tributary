@@ -31,7 +31,7 @@ describe("header and key stats", () => {
 
   it("names the company from public metadata", () => {
     expect(header(nvdaRow())).toEqual({
-      name: "NVIDIA CORP", tickers: ["NVDA"], exchanges: ["Nasdaq"], industry: "Semiconductors & Related Devices",
+      name: "Nvidia", tickers: ["NVDA"], exchanges: ["Nasdaq"], industry: "Semiconductors & Related Devices",
       sic: "3674", fye: "January", filer: "Large accelerated", state: "DE",
     });
   });

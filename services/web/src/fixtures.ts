@@ -12,7 +12,7 @@ const SRC = { period_end: "2026-07-26", accession_no: ACC, form: "10-Q", filed: 
 export function entry(over: Partial<WatchlistEntry> = {}): WatchlistEntry {
   return {
     company_id: NVDA,
-    name: "NVIDIA CORP",
+    name: "Nvidia",
     tickers: ["NVDA"],
     exchanges: ["Nasdaq"],
     sic: "3674",
@@ -57,7 +57,7 @@ export function entry(over: Partial<WatchlistEntry> = {}): WatchlistEntry {
 
 export const TESLA = entry({
   company_id: TSLA,
-  name: "Tesla, Inc.",
+  name: "Tesla",
   tickers: ["TSLA"],
   industry: "Motor Vehicles & Passenger Car Bodies",
   access: [],
@@ -144,7 +144,7 @@ export function revenueRow(periodEnd: string, value: string, fiscal: string): Fi
 export function feedFiling(over: Partial<LatestFiling> = {}): LatestFiling {
   return {
     company_id: NVDA,
-    name: "NVIDIA CORP",
+    name: "Nvidia",
     accession_no: ACC,
     form: "10-Q",
     filed: "2026-08-26",

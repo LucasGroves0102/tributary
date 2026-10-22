@@ -33,7 +33,7 @@ describe("compare actions", () => {
 
 describe("chart actions", () => {
   it("replace the layers and title", () => {
-    const s = applyChartAction(companyChart(emptyChart(), NVDA, "NVIDIA CORP"), chartAction({
+    const s = applyChartAction(companyChart(emptyChart(), NVDA, "Nvidia"), chartAction({
       action: "set_chart_layers", title: "", label: "Chart: NVDA revenue, AAPL revenue",
       layers: [layer(), layer({ company_id: AAPL, company_label: "AAPL", transform: "yoy" })],
     }));
@@ -54,7 +54,7 @@ describe("chart actions", () => {
   });
 
   it("remove by company, metric or both", () => {
-    const base = companyChart(emptyChart(), NVDA, "NVIDIA CORP");
+    const base = companyChart(emptyChart(), NVDA, "Nvidia");
     const rm = (company_id: string | null, metric: string | null) =>
       applyChartAction(base, chartAction({ action: "remove_chart_layer", label: "x", company_id, metric })).layers;
     expect(rm(NVDA, null)).toEqual([]);
@@ -63,7 +63,7 @@ describe("chart actions", () => {
   });
 
   it("set options on the chart and every layer", () => {
-    const s = applyChartAction(companyChart(emptyChart(), NVDA, "NVIDIA CORP"), chartAction({
+    const s = applyChartAction(companyChart(emptyChart(), NVDA, "Nvidia"), chartAction({
       action: "set_chart_options", label: "x", options: { range: 5, transform: "yoy", type: "bar" },
     }));
     expect(s.range).toBe(5);
@@ -79,13 +79,13 @@ it("merges screen filters unless reset", () => {
 
 describe("screen context", () => {
   it("describes the chart page with labelled layers", () => {
-    const ctx = uiContext({ view: "chart" }, companyChart(emptyChart(), NVDA, "NVIDIA CORP"), (id) =>
-      id === NVDA ? "NVIDIA CORP" : null,
+    const ctx = uiContext({ view: "chart" }, companyChart(emptyChart(), NVDA, "Nvidia"), (id) =>
+      id === NVDA ? "Nvidia" : null,
     );
     expect(ctx.page).toBe("chart");
     expect(ctx.chart?.align).toBe("fiscal");
     expect(ctx.chart?.layers[0]).toEqual({
-      kind: "metric", company_id: NVDA, label: "NVIDIA CORP", metric: "revenue",
+      kind: "metric", company_id: NVDA, label: "Nvidia", metric: "revenue",
       transform: "q", type: "bar", axis: "L", hidden: false,
     });
   });

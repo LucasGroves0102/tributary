@@ -19,7 +19,7 @@ const FILING = {
   ],
 };
 const indexRow = (accession_no: string, filed: string, over = {}) => ({
-  accession_no, company_id: NVDA, name: "NVIDIA CORP", form: "10-Q", filed, accepted_at: null, period_of_report: null,
+  accession_no, company_id: NVDA, name: "Nvidia", form: "10-Q", filed, accepted_at: null, period_of_report: null,
   filing_url: null, document_url: null, sections: 2, sections_available: true, ...over,
 });
 const cite = (section_key: string, char_start: number, accession_no = ACC) => ({
@@ -63,10 +63,10 @@ function respond(url: string): Response {
   }
   if (p === "/api/query/v1/search") {
     return Response.json({ query: u.searchParams.get("q"), as_of: "", limit: 50, offset: 0, has_more: false, results: [
-      { company_id: NVDA, name: "NVIDIA CORP", section_key: "II-1A", title: "Risk Factors", rank: 0.5, snippet: "«Export» «controls» on our data center", passages_matched: 2,
+      { company_id: NVDA, name: "Nvidia", section_key: "II-1A", title: "Risk Factors", rank: 0.5, snippet: "«Export» «controls» on our data center", passages_matched: 2,
         citation: cite("II-1A", START + 33), freshness: { filed: "", ingested_at: "" } },
       // a same-day filing of the company: not this one, so not listed
-      { company_id: NVDA, name: "NVIDIA CORP", section_key: "1A", title: "Risk Factors", rank: 0.4, snippet: "«export»", passages_matched: 1,
+      { company_id: NVDA, name: "Nvidia", section_key: "1A", title: "Risk Factors", rank: 0.4, snippet: "«export»", passages_matched: 1,
         citation: cite("1A", 10, "0001045810-26-000076"), freshness: { filed: "", ingested_at: "" } },
     ] });
   }
@@ -96,7 +96,7 @@ async function render(sectionKey: string | null, extra: { at?: number; q?: strin
   document.body.append(container);
   root = createRoot(container);
   await act(async () =>
-    root.render(<FilingReader token="t" companyId={NVDA} accessionNo={ACC} sectionKey={sectionKey} name="NVIDIA CORP" onAsk={onAsk} {...extra} />),
+    root.render(<FilingReader token="t" companyId={NVDA} accessionNo={ACC} sectionKey={sectionKey} name="Nvidia" onAsk={onAsk} {...extra} />),
   );
   for (let i = 0; i < 4; i++) await act(async () => {});
 }

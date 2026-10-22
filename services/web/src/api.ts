@@ -1,3 +1,4 @@
+import { displayNames } from "./format";
 import type {
   AgentEvent,
   Calendar,
@@ -43,7 +44,7 @@ async function json<T>(r: Response): Promise<T> {
     const body = await r.json().catch(() => ({}));
     throw new ApiError(typeof body.detail === "string" ? body.detail : r.statusText, r.status);
   }
-  return r.json() as Promise<T>;
+  return displayNames(await r.json()) as T;
 }
 
 export async function demoUsers(): Promise<string[]> {
@@ -298,7 +299,7 @@ async function formulaPost<T>(token: string, path: string, body: FormulaRequest)
     if (Array.isArray(errors)) throw new FormulaApiError(errors as FormulaProblem[], r.status);
     throw new ApiError(typeof data.detail === "string" ? data.detail : r.statusText, r.status);
   }
-  return r.json() as Promise<T>;
+  return displayNames(await r.json()) as T;
 }
 
 /** Parse and check a formula (names, units, the user's tickers); reads no data. */

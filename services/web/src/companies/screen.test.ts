@@ -91,7 +91,7 @@ describe("screener rows", () => {
   it("shows ungranted companies as metadata only, even if a value slipped through", () => {
     const r = screenRow({ ...row(TESLA), values: { revenue_ttm: "97690000000" } });
     expect(r.readable).toBe(false);
-    expect(r.name).toBe("Tesla, Inc.");
+    expect(r.name).toBe("Tesla");
     expect(r.cells.revenue_ttm).toEqual({ value: null, text: "—", title: MASKED_TITLE });
   });
 });

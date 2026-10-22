@@ -21,7 +21,7 @@ it("resolves a ticker only from an exact ticker match", async () => {
     { company_id: "0000021344", name: "COCA COLA CO", matched_on: "name", matched_alias: "KO Holdings", is_current: true, access: [] },
     { company_id: "0000021345", name: "COCA COLA CO", matched_on: "ticker", matched_alias: "KO", is_current: true, access: [] },
   ] })));
-  expect(await resolveTicker("t", "ko")).toEqual({ companyId: "0000021345", name: "COCA COLA CO" });
+  expect(await resolveTicker("t", "ko")).toEqual({ companyId: "0000021345", name: "Coca-Cola" });
   expect(new URL(String(vi.mocked(fetch).mock.calls[0]![0]), "http://x").searchParams.get("q")).toBe("ko");
   vi.stubGlobal("fetch", vi.fn(async () => Response.json({ results: [] })));
   expect(await resolveTicker("t", "ZZZ")).toBeNull();

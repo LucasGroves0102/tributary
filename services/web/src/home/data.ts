@@ -1,7 +1,7 @@
 /** Query API responses → what Home and the sidebar show. Pure functions, so the mapping (units,
  * periods, sources, what counts as new) is tested without rendering. */
 
-import { change, day, money, pct } from "../format";
+import { change, day, money, pct, notForBanks } from "../format";
 import type {
   CalendarEntry,
   ExpectedFiling,
@@ -89,6 +89,9 @@ function cell(e: WatchlistEntry, col: WatchColumn, readable: boolean): Cell {
     };
   }
   const value = num(e.values[col.key]);
+  if (value === null && notForBanks(e.industry, col.key)) {
+    return { value, text: "n/a (bank)", title: `${LONG_LABEL[col.key]} doesn't describe a bank: deposits are its debt and lending is its operations, so the SEC data has no comparable figure.` };
+  }
   if (value === null) {
     return { value, text: "—", title: `${LONG_LABEL[col.key]}: not reported for the latest quarter` };
   }

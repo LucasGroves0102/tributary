@@ -37,7 +37,7 @@ const FILINGS = [
     sections: [{ section_key: "1", title: "Business", chars: 30000 }] },
 ];
 const indexRow = (accession_no: string, form: string, filed: string, sections: number | null, over = {}) => ({
-  accession_no, company_id: NVDA, name: "NVIDIA CORP", form, filed, accepted_at: null, period_of_report: null,
+  accession_no, company_id: NVDA, name: "Nvidia", form, filed, accepted_at: null, period_of_report: null,
   filing_url: `https://www.sec.gov/Archives/edgar/data/1045810/${accession_no.replace(/-/g, "")}/`,
   document_url: null, sections, sections_available: !!sections, ...over,
 });
@@ -107,7 +107,7 @@ function respond(url: string): Response {
     return Response.json({ company_id: NVDA, as_of: "", columns: [], method: "Same 4-digit SIC first.",
       company: { ...nvdaRow(), revenue_band: ">=$100B" },
       peers: [
-        { ...nvdaRow({ ...entry({ company_id: AAPL, name: "Apple Inc.", tickers: ["AAPL"] }), filer_categories: null, state_of_incorporation: null }),
+        { ...nvdaRow({ ...entry({ company_id: AAPL, name: "Apple", tickers: ["AAPL"] }), filer_categories: null, state_of_incorporation: null }),
           match: { sic_level: 3, same_filer_category: true, revenue_band: ">=$100B", same_revenue_band: true } },
         { ...tesla, match: { sic_level: 2, same_filer_category: false, revenue_band: null, same_revenue_band: false } },
       ] });
@@ -157,7 +157,7 @@ it("heads the page with public metadata, the next expected filing and the tabs",
   await render();
   const screen = paths().find((u) => u.pathname === "/api/query/v1/screener")!;
   expect(screen.searchParams.getAll("company_id")).toEqual([NVDA]);
-  expect($("h1")?.textContent).toBe("NVIDIA CORP");
+  expect($("h1")?.textContent).toBe("Nvidia");
   const head = $(".co-head")!.textContent!;
   expect(head).toContain("NVDA · Nasdaq");
   expect(head).toContain("Semiconductors & Related Devices (SIC 3674) · fiscal year ends January · large accelerated filer · incorporated in DE");
@@ -172,7 +172,7 @@ it("heads the page with public metadata, the next expected filing and the tabs",
   await click(button("Compare"));
   expect(window.location.hash).toBe(`#/compare?target=${NVDA}`);
   await click(button("Chart"));
-  expect(onChart).toHaveBeenCalledWith("NVIDIA CORP");
+  expect(onChart).toHaveBeenCalledWith("Nvidia");
 });
 
 it("overview: key stats with periods, the latest quarter recap with flags, and Item 1", async () => {
@@ -200,11 +200,11 @@ it("overview: key stats with periods, the latest quarter recap with flags, and I
 it("an ungranted company shows its metadata and says what its plan doesn't cover", async () => {
   rowFor = () => tesla;
   await render("overview", TSLA);
-  expect($("h1")?.textContent).toBe("Tesla, Inc.");
+  expect($("h1")?.textContent).toBe("Tesla");
   expect($(".tier.none")?.textContent).toBe("metadata only");
-  expect(container.textContent).toContain("Financials for Tesla, Inc. aren't included in your access");
-  expect(container.textContent).toContain("The recap needs financials for Tesla, Inc.");
-  expect(container.textContent).toContain("needs the pro plan and a grant for Tesla, Inc.");
+  expect(container.textContent).toContain("Financials for Tesla aren't included in your access");
+  expect(container.textContent).toContain("The recap needs financials for Tesla");
+  expect(container.textContent).toContain("needs the pro plan and a grant for Tesla");
   // no value or text requests for it at all
   expect(paths().some((u) => /recap|financials|sections/.test(u.pathname))).toBe(false);
   expect([...container.querySelectorAll("button")].some((b) => b.textContent === "Chart")).toBe(false);
@@ -245,7 +245,7 @@ it("ratios read TTM values; segments say honestly when none are loaded", async (
   expect(container.textContent).toContain("60.0%");
   act(() => root.unmount());
   await render("segments");
-  expect(container.textContent).toContain("No segment data for NVIDIA CORP yet");
+  expect(container.textContent).toContain("No segment data for Nvidia yet");
 });
 
 it("filings: form filters, 8-K items, the reader, and what changed", async () => {
@@ -298,7 +298,7 @@ it("filings: a free plan sees the whole index with EDGAR links, no reader", asyn
 it("peers: suggested by SIC and size, into Compare and the chart builder", async () => {
   await render("peers");
   const body = [...container.querySelectorAll("tbody tr")];
-  expect(body.map((r) => r.querySelector(".co b")?.textContent)).toEqual(["NVIDIA CORP", "Apple Inc.", "Tesla, Inc."]);
+  expect(body.map((r) => r.querySelector(".co b")?.textContent)).toEqual(["Nvidia", "Apple", "Tesla"]);
   expect(body[1]!.textContent).toContain("same 3-digit SIC group, same size band, same filer category");
   expect(body[2]!.className).toBe("masked");
   await click(button("Chart margins"));

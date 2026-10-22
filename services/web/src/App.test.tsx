@@ -8,7 +8,7 @@ import { forgetVisits } from "./home/lastVisit";
 
 const ME = {
   user_id: "alice",
-  companies: [{ company_id: NVDA, name: "NVIDIA CORP", industry: null, tiers: ["financials"] }],
+  companies: [{ company_id: NVDA, name: "Nvidia", industry: null, tiers: ["financials"] }],
 };
 const EDGAR = "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000075/";
 const ANSWER = {
@@ -38,11 +38,11 @@ function respond(url: string, init?: RequestInit): Response {
   }
   if (path.endsWith("/v1/filing-index")) {
     return Response.json({ as_of: "", forms: [], from: null, to: null, limit: 50, offset: 0, has_more: false, filings: [{
-      accession_no: "0001318605-26-000099", company_id: TSLA, name: "Tesla, Inc.", form: "8-K", filed: new Date().toISOString().slice(0, 10),
+      accession_no: "0001318605-26-000099", company_id: TSLA, name: "Tesla", form: "8-K", filed: new Date().toISOString().slice(0, 10),
       accepted_at: null, period_of_report: null, filing_url: null, document_url: null, sections: null, sections_available: false }] });
   }
   if (path.endsWith("/v1/calendar/expected-filings")) {
-    return Response.json({ filings: [{ ...entry().next_expected, company_id: NVDA, name: "NVIDIA CORP" }] });
+    return Response.json({ filings: [{ ...entry().next_expected, company_id: NVDA, name: "Nvidia" }] });
   }
   if (path.endsWith("/financials")) {
     return Response.json({ as_of: "", rows: [revenueRow("2026-04-26", "44062000000", "FY2027 Q1"), revenueRow("2026-07-26", "46743000000", "FY2027 Q2")] });
@@ -113,7 +113,7 @@ describe("Home", () => {
     const rows = [...container.querySelectorAll("table.watchlist tbody tr")];
     expect(rows).toHaveLength(2);
     const nvda = rows[0]!;
-    expect(nvda.textContent).toContain("NVIDIA CORP");
+    expect(nvda.textContent).toContain("Nvidia");
     expect(nvda.textContent).toContain("FY2027 Q2");
     const revenue = [...nvda.querySelectorAll("td.n")].find((td) => td.textContent === "$130.50B");
     expect(revenue?.getAttribute("title")).toContain(`10-Q filed Aug 26, 2026, ${ACC}`);
@@ -131,10 +131,10 @@ describe("Home", () => {
     expect(strip).toContain("NVDA 10-Q ~Nov 19");
     expect(strip).toContain("+69.0%");
     expect(strip).toContain("Live");
-    expect($(".feed")?.textContent).toContain("NVIDIA CORP");
+    expect($(".feed")?.textContent).toContain("Nvidia");
     const feed = [...container.querySelectorAll(".feed li")];
     // Tesla's 8-K from the public index: listed, opened on its Filings tab (no grant to read it)
-    expect(feed[0]!.textContent).toContain("Tesla, Inc.");
+    expect(feed[0]!.textContent).toContain("Tesla");
     expect(feed[0]!.querySelector("a")?.getAttribute("href")).toBe(`#/company/${TSLA}/filings`);
     expect(feed[1]!.querySelector("a")?.getAttribute("href")).toBe(`#/filing/${NVDA}/${ACC}`);
     const index = vi.mocked(fetch).mock.calls.map(([u]) => new URL(String(u), "http://x"))
@@ -150,7 +150,7 @@ describe("Home", () => {
 
   it("removes a company from the watchlist through the Query API", async () => {
     await render();
-    const remove = container.querySelector<HTMLButtonElement>(`button[aria-label="Remove Tesla, Inc. from watchlist"]`)!;
+    const remove = container.querySelector<HTMLButtonElement>(`button[aria-label="Remove Tesla from watchlist"]`)!;
     await act(async () => remove.click());
     await settle();
     const calls = vi.mocked(fetch).mock.calls.filter(([, init]) => init?.method === "DELETE");
@@ -175,7 +175,7 @@ describe("navigation", () => {
     expect($('.nav a[aria-current="page"]')?.textContent).toContain("Companies");
     window.location.hash = `#/company/${NVDA}`;
     await settle();
-    expect($(".crumb")?.textContent).toBe("Companies/NVIDIA CORP");
+    expect($(".crumb")?.textContent).toBe("Companies/Nvidia");
     expect($('.nav a[aria-current="page"]')?.textContent).toContain("Companies");
   });
 
@@ -203,7 +203,7 @@ describe("navigation", () => {
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });
     const items = [...container.querySelectorAll(".pal .it")].map((i) => i.textContent);
-    expect(items[0]).toContain("NVIDIA CORP");
+    expect(items[0]).toContain("Nvidia");
     expect(items.at(-1)).toContain("Ask the assistant: “nvidia”");
     await key("Enter", {}, input);
     expect($(".pal")).toBeNull();
@@ -292,13 +292,13 @@ describe("assistant drawer", () => {
     expect(chip()).toBe("Home · watchlist");
     window.location.hash = `#/company/${NVDA}`;
     await settle();
-    expect(chip()).toBe("NVIDIA CORP · Overview");
+    expect(chip()).toBe("Nvidia · Overview");
     const prompts = () => [...container.querySelectorAll(".ai-s button")].map((b) => b.textContent);
-    expect(prompts()).toContain("Summarize NVIDIA CORP's latest quarter.");
+    expect(prompts()).toContain("Summarize Nvidia's latest quarter.");
     window.location.hash = `#/company/${NVDA}/ratios`;
     await settle();
-    expect(chip()).toBe("NVIDIA CORP · Ratios");
-    expect(prompts()).toContain("Is NVIDIA CORP's leverage rising or falling?");
+    expect(chip()).toBe("Nvidia · Ratios");
+    expect(prompts()).toContain("Is Nvidia's leverage rising or falling?");
   });
 
   it("sends a suggestion to the agent and shows the answer with its citation", async () => {

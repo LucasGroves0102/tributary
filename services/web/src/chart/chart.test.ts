@@ -95,8 +95,8 @@ describe("chart state", () => {
   });
 
   it("builds a company's revenue and margin chart, and templates across its companies", () => {
-    const s = companyChart(emptyChart(), NVDA, "NVIDIA CORP");
-    expect(s.title).toBe("NVIDIA CORP: revenue and operating margin");
+    const s = companyChart(emptyChart(), NVDA, "Nvidia");
+    expect(s.title).toBe("Nvidia: revenue and operating margin");
     expect(s.align).toBe("fiscal");
     expect(s.layers.map((l) => [l.metric, l.transform, l.type, l.axis])).toEqual([
       ["revenue", "q", "bar", "L"],

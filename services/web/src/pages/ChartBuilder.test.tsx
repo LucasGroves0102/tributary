@@ -98,12 +98,12 @@ const $ = (sel: string) => container.querySelector<HTMLElement>(sel);
 const button = (text: string) => [...container.querySelectorAll("button")].find((b) => b.textContent === text)!;
 
 it("evaluates each layer through the formula API and draws them", async () => {
-  await render(companyChart(emptyChart(), NVDA, "NVIDIA CORP"));
+  await render(companyChart(emptyChart(), NVDA, "Nvidia"));
   const evals = bodies.filter((b) => b.path.endsWith("/evaluate")).map((b) => b.body);
   expect(evals).toHaveLength(2);
   expect(evals[0]).toMatchObject({ formula: "revenue", default_company: NVDA, basis: "fiscal", view: "quarter" });
   expect(evals[1]).toMatchObject({ formula: "operating_margin", view: "ttm" });
-  expect($(".ch-title")?.textContent).toBe("NVIDIA CORP: revenue and operating margin");
+  expect($(".ch-title")?.textContent).toBe("Nvidia: revenue and operating margin");
   expect([...container.querySelectorAll(".ch-legend text")].map((t) => t.textContent)).toEqual([
     "NVDA revenue",
     "NVDA operating margin (TTM) (right axis)",
@@ -114,7 +114,7 @@ it("evaluates each layer through the formula API and draws them", async () => {
 });
 
 it("shows each layer's value, period and source filing on hover", async () => {
-  await render(companyChart(emptyChart(), NVDA, "NVIDIA CORP"));
+  await render(companyChart(emptyChart(), NVDA, "Nvidia"));
   const svg = $(".lchart-svg")!;
   svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 900, height: 400 }) as DOMRect;
   await act(async () => svg.dispatchEvent(new MouseEvent("mousemove", { clientX: 880, bubbles: true })));
@@ -126,7 +126,7 @@ it("shows each layer's value, period and source filing on hover", async () => {
 });
 
 it("switches transform and hides layers", async () => {
-  await render(companyChart(emptyChart(), NVDA, "NVIDIA CORP"));
+  await render(companyChart(emptyChart(), NVDA, "Nvidia"));
   const transform = container.querySelector<HTMLSelectElement>('select[aria-label="Transform"]')!;
   await act(async () => {
     transform.value = "yoy";
@@ -140,7 +140,7 @@ it("switches transform and hides layers", async () => {
 });
 
 it("calendar alignment when the fiscal toggle can't apply", async () => {
-  const s = companyChart(emptyChart(), NVDA, "NVIDIA CORP");
+  const s = companyChart(emptyChart(), NVDA, "Nvidia");
   s.layers.push({ id: 9, kind: "metric", companyId: "0000789019", metric: "revenue", transform: "q", type: "line", axis: "L" });
   await render(s);
   expect(container.textContent).toContain("uses calendar quarters");
@@ -169,10 +169,10 @@ it("checks formulas inline and reports a company the user can't read", async () 
 });
 
 it("exports the plotted data as CSV with exact values and sources", async () => {
-  await render(companyChart(emptyChart(), NVDA, "NVIDIA CORP"));
+  await render(companyChart(emptyChart(), NVDA, "Nvidia"));
   await act(async () => button("Export CSV").click());
   const [name, blob] = vi.mocked(download).mock.calls[0]!;
-  expect(name).toBe("nvidia-corp-revenue-and-operating-margin.csv");
+  expect(name).toBe("nvidia-revenue-and-operating-margin.csv");
   const text = await new Promise<string>((resolve) => {
     const r = new FileReader();
     r.onload = () => resolve(String(r.result));

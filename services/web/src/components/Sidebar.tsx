@@ -117,10 +117,17 @@ export function Sidebar({ route, me, workspace, lastIngested, onAdd, onExport }:
       <div className="grow" />
       <div className="fresh">
         {lastIngested ? (
-          <>
-            <span className="live" />
-            Filing feed live · last filing ingested {ago(lastIngested)}
-          </>
+          edgarOpen() ? (
+            <>
+              <span className="live" />
+              Filing feed live · last filing ingested {ago(lastIngested)}
+            </>
+          ) : (
+            <span title="EDGAR accepts filings 6 am–10 pm ET, but filings accepted after 5:30 pm ET mostly reach its feed the next business morning.">
+              <span className="live quiet" />
+              EDGAR's feed is quiet after 5:30 pm ET and on weekends · last filing {ago(lastIngested)}
+            </span>
+          )
         ) : (
           "Filing feed: nothing you can read yet"
         )}
@@ -138,6 +145,16 @@ export function Sidebar({ route, me, workspace, lastIngested, onAdd, onExport }:
             {me.companies.length === 1 ? "company" : "companies"}
           </>
         )}
+      </div>
+          <div className="credit">
+        Built by{" "}
+        <a href="https://github.com/LucasGroves0102" target="_blank" rel="noreferrer">Lucas Groves</a>
+        {" · "}
+        <a href="https://github.com/LucasGroves0102/tributary#architecture" target="_blank" rel="noreferrer">
+          How it works
+        </a>
+        {" · "}
+        <a href="https://github.com/LucasGroves0102/tributary" target="_blank" rel="noreferrer">GitHub</a>
       </div>
     </aside>
   );
@@ -160,4 +177,15 @@ function WatchLink({ row, current }: { row: WatchRow; current: Route }) {
       </span>
     </a>
   );
+}
+
+/** EDGAR business hours (6:00 am-5:30 pm ET, weekdays), when filings reach its feed within
+ * minutes; after them the feed goes quiet until the next morning. */
+export function edgarOpen(now = new Date()): boolean {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York", weekday: "short", hour: "numeric", minute: "numeric", hourCycle: "h23",
+  }).formatToParts(now);
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+  const minutes = Number(get("hour")) * 60 + Number(get("minute"));
+  return !["Sat", "Sun"].includes(get("weekday")) && minutes >= 6 * 60 && minutes < 17 * 60 + 30;
 }
