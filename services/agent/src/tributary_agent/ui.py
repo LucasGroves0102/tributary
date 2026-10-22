@@ -91,7 +91,9 @@ class CompareContext(_Strict):
 
 
 class UiContext(_Strict):
-    page: Literal["home", "companies", "company", "filing", "chart", "compare", "ask"]
+    page: Literal["home", "companies", "company", "filing", "chart", "compare", "search", "ask"]
+    query: str | None = Field(default=None, max_length=200,
+                              description="the full-text search page's words")
     company_id: str | None = Field(default=None, pattern=CIK)
     tab: CompanyTab | None = None
     accession_no: str | None = Field(default=None, pattern=r"^\d{10}-\d{2}-\d{6}$")

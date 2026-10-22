@@ -1910,6 +1910,42 @@ mark {
   color: var(--neg);
 }
 
+/* Full-text search */
+
+.search-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.search-form p {
+  margin: 0;
+}
+
+.results .result-co {
+  padding: var(--sp-5) var(--sp-6);
+  border-bottom: 1px solid var(--line);
+}
+
+.results .result-co h2 {
+  margin: 0 0 var(--sp-3);
+  font-size: var(--fs-lg);
+}
+
+.result-filing {
+  margin-bottom: var(--sp-4);
+}
+
+.result-filing ul {
+  list-style: none;
+  margin: var(--sp-3) 0 0;
+  padding: 0 0 0 var(--sp-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  font-size: var(--fs-base);
+}
+
 /* Narrower screens: the drawer floats over the page, then the sidebar goes */
 
 @media (max-width: 1200px) {

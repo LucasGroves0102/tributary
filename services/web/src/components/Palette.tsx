@@ -7,6 +7,8 @@ import type { SearchResult } from "../types";
 export const WATCH_PREFIX = "watch:";
 const MAX_ITEMS = 9;
 const SEARCH_DELAY_MS = 200;
+/** Items that match any text: full-text search and the assistant. */
+const FIXED = new Set(["search", "ask"]);
 
 export interface PaletteCompany {
   companyId: string;
@@ -19,6 +21,8 @@ export interface PaletteActions {
   company: (companyId: string) => void;
   watch: (companyId: string) => void;
   ask: (question: string) => void;
+  /** the full-text search page for these words */
+  searchFilings: (q: string) => void;
   toggleTheme: () => void;
   exportWatchlist: () => void;
   openAssistant: () => void;
@@ -106,18 +110,23 @@ export function Palette({ token, initial, companies, actions, onClose }: Props) 
       text.length > 3
         ? [{ key: "ask", label: `Ask the assistant: “${text}”`, sub: "assistant", run: () => actions.ask(text) }]
         : [];
-    return [...companyItems, ...pages, ...commands, ...askItem];
+    const searchItem: Item[] =
+      text.length >= 2
+        ? [{ key: "search", label: `Search filings for “${text}”`, sub: "full text · your companies", run: () => actions.searchFilings(text) }]
+        : [];
+    return [...companyItems, ...pages, ...commands, ...searchItem, ...askItem];
   }, [companies, remote, watchMode, text, actions]);
 
   const shown = useMemo(() => {
     const needle = text.toLowerCase();
     const match = items.filter(
-      (i) => i.key === "ask" || `${i.label} ${i.sub}`.toLowerCase().includes(needle),
+      (i) => FIXED.has(i.key) || `${i.label} ${i.sub}`.toLowerCase().includes(needle),
     );
-    // keep "Ask the assistant" reachable even when other matches fill the list
-    const ask = match.find((i) => i.key === "ask");
-    const rest = match.filter((i) => i.key !== "ask").slice(0, ask ? MAX_ITEMS - 1 : MAX_ITEMS);
-    return ask ? [...rest, ask] : rest;
+    // keep "Search filings" and "Ask the assistant" reachable even when other matches fill the
+    // list; with nothing else matching, Enter searches the filings
+    const fixed = match.filter((i) => FIXED.has(i.key));
+    const rest = match.filter((i) => !FIXED.has(i.key)).slice(0, MAX_ITEMS - fixed.length);
+    return [...rest, ...fixed];
   }, [items, text]);
 
   useEffect(() => setActive(0), [q]);
@@ -140,7 +149,7 @@ export function Palette({ token, initial, companies, actions, onClose }: Props) 
         <input
           ref={input}
           value={q}
-          placeholder="Search companies, pages, actions… (watch: to add to your watchlist)"
+          placeholder="Search companies, filings, pages, actions… (watch: to add to your watchlist)"
           aria-label="Command"
           autoComplete="off"
           onChange={(e) => setQ(e.target.value)}

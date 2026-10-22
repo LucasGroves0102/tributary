@@ -210,6 +210,27 @@ describe("navigation", () => {
     await key("Escape", {}, $('.pal input')!);
     expect($(".pal")).toBeNull();
   });
+
+  it("searches filings from the palette: Enter when nothing else matches", async () => {
+    await render();
+    await act(async () => container.querySelector<HTMLButtonElement>(".search-box")!.click());
+    const input = $('.pal input') as HTMLInputElement;
+    await act(async () => {
+      const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+      set.call(input, "export controls");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const items = [...container.querySelectorAll(".pal .it")].map((i) => i.textContent);
+    expect(items[0]).toContain("Search filings for “export controls”");
+    expect(items[1]).toContain("Ask the assistant");
+    await key("Enter", {}, input);
+    await settle();
+    expect(window.location.hash).toBe("#/search?q=export+controls");
+    expect($(".crumb")?.textContent).toBe("Search filings: “export controls”");
+    // alice has no filings access anywhere: the page says so instead of searching
+    expect(container.textContent).toContain("Searching filing text needs filings access");
+    expect(vi.mocked(fetch).mock.calls.some(([u]) => String(u).includes("/v1/search"))).toBe(false);
+  });
 });
 
 describe("assistant drawer", () => {

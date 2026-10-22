@@ -128,6 +128,15 @@ export function pageContext(route: Route, name: (companyId: string) => string | 
         ],
       };
     }
+    case "search": {
+      const q = route.search?.q;
+      return {
+        label: q ? `Search · “${q}”` : "Search filings",
+        suggestions: q
+          ? [`Which of my companies discuss “${q}” most in their filings?`, `What do the latest filings say about ${q}?`]
+          : ["Which of my companies mention export controls in their risk factors?"],
+      };
+    }
     case "ask":
       return { label: "Ask", suggestions: [...GENERAL, ATTACKS[1]!, ATTACKS[2]!] };
   }

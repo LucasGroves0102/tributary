@@ -21,7 +21,7 @@ export function TopBar(props: Props) {
     <header className="top">
       <Breadcrumb route={route} companyName={props.companyName} />
       <button className="search-box" onClick={props.onSearch} aria-label="Search (Ctrl K)">
-        <span>Search companies, pages, actions</span>
+        <span>Search companies, filings, pages, actions</span>
         <span className="grow" />
         <kbd>Ctrl K</kbd>
       </button>
@@ -79,6 +79,13 @@ function Breadcrumb({
             <span aria-current="page">Filing {route.accessionNo}</span>
           </>
         )}
+      </nav>
+    );
+  }
+  if (route.view === "search") {
+    return (
+      <nav className="crumb" aria-label="Breadcrumb">
+        <span aria-current="page">Search filings{route.search ? `: “${route.search.q}”` : ""}</span>
       </nav>
     );
   }

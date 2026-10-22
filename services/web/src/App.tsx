@@ -20,6 +20,7 @@ import { Companies } from "./pages/Companies";
 import { Home } from "./pages/Home";
 import { Company } from "./pages/Company";
 import { Compare } from "./pages/Compare";
+import { Search } from "./pages/Search";
 import { go, parse, useRoute } from "./route";
 import { useShortcuts } from "./shortcuts";
 import { load, save } from "./storage";
@@ -194,6 +195,7 @@ export function App() {
       toggleTheme,
       exportWatchlist,
       openAssistant: focusAssistant,
+      searchFilings: (q) => go({ view: "search", search: { q } }),
     }),
     [workspace, focusAssistant, assistant, toggleTheme, exportWatchlist],
   );
@@ -301,6 +303,8 @@ export function App() {
                   focusAssistant();
                 }}
               />
+            ) : route.view === "search" ? (
+              <Search key={user} token={token} search={route.search} companies={me?.companies ?? []} />
             ) : route.view === "chart" ? (
               <ChartBuilder key={user} token={token} chart={chart} setChart={setChart} />
             ) : route.view === "ask" ? (

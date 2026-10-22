@@ -96,6 +96,10 @@ export function uiContext(route: Route, chart: ChartState, name: (id: string) =>
     const c = route.compare;
     ctx.compare = { ...(c.target ? { target: c.target } : {}), peers: c.peers ?? [], columns: columnsOf(c) };
   }
+  if (route.view === "search" && route.search) {
+    ctx.query = route.search.q;
+    if (route.search.company) ctx.company_id = route.search.company;
+  }
   if (route.view === "filing") {
     ctx.accession_no = route.accessionNo;
     if (route.section) ctx.section_key = route.section;

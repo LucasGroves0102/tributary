@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { parseScreen, screenQuery, type ScreenFilters } from "./companies/screen";
 import { compareQuery, parseCompare, type CompareState } from "./compare/state";
+import { parseSearch, searchQuery, type SearchState } from "./search/state";
 
 /** The company page's tabs, in order, with their labels. */
 export const COMPANY_TABS = [
@@ -31,6 +32,7 @@ export type Route =
     }
   | { view: "chart" }
   | { view: "compare"; compare?: CompareState }
+  | { view: "search"; search?: SearchState }
   | { view: "ask" };
 
 /** Screens in the left nav: routes without parameters. */
@@ -65,6 +67,10 @@ export function parse(hash: string): Route {
   if (view === "compare") {
     const compare = parseCompare(query);
     return Object.keys(compare).length ? { view, compare } : { view };
+  }
+  if (view === "search") {
+    const search = parseSearch(query);
+    return search ? { view, search } : { view };
   }
   if (view && SIMPLE.has(view)) return { view: view as NavView };
   if (view === "explore") return { view: "companies" }; // links from before the v3 shell
@@ -101,6 +107,8 @@ export function href(route: Route): string {
       const q = route.compare ? compareQuery(route.compare) : "";
       return q ? `#/compare?${q}` : "#/compare";
     }
+    case "search":
+      return route.search ? `#/search?${searchQuery(route.search)}` : "#/search";
     case "company":
       return `#/company/${route.companyId}` + (route.tab && route.tab !== "overview" ? `/${route.tab}` : "");
     case "filing": {

@@ -16,6 +16,8 @@ it("round-trips every route", () => {
     { view: "company", companyId: "0001045810", tab: "peers" },
     { view: "compare", compare: { target: "0001045810", peers: ["0000320193"] } },
     { view: "compare", compare: { peers: ["0000320193"], cols: ["roe_ttm"] } },
+    { view: "search" },
+    { view: "search", search: { q: "export \"controls\" -china", form: "8-K", company: "0001045810", page: 2 } },
     { view: "filing", companyId: "0001045810", accessionNo: "0001045810-26-000075", section: null },
     { view: "filing", companyId: "0001045810", accessionNo: "0001045810-26-000075", section: "EX-99.1" },
     { view: "filing", companyId: "0001045810", accessionNo: "0001045810-26-000075", section: "II-1A", at: 1234, q: "export \"controls\" & more?" },
