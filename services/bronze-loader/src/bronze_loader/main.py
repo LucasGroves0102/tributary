@@ -11,6 +11,7 @@ from prometheus_client import Counter
 
 from bronze_loader.db import insert_filings
 from bronze_loader.rows import FilingRow, to_row
+from tributary_kafka import client_config
 from tributary_telemetry import CONSUMED, SKIPPED, configure_logging, serve_metrics
 
 TOPIC = "filings.raw"
@@ -52,7 +53,6 @@ def to_rows(msgs: list[Message]) -> list[FilingRow]:
 def main() -> None:
     configure_logging()
     dsn = os.environ["DATABASE_URL"]
-    bootstrap = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
     batch_size = int(os.environ.get("BATCH_SIZE", "500"))
 
     stop = threading.Event()
@@ -60,12 +60,13 @@ def main() -> None:
     signal.signal(signal.SIGINT, lambda *_: stop.set())
 
     consumer = Consumer(
-        {
-            "bootstrap.servers": bootstrap,
-            "group.id": GROUP_ID,
-            "enable.auto.commit": False,
-            "auto.offset.reset": "earliest",  # a new group starts from the beginning
-        }
+        client_config(
+            {
+                "group.id": GROUP_ID,
+                "enable.auto.commit": False,
+                "auto.offset.reset": "earliest",  # a new group starts from the beginning
+            }
+        )
     )
     consumer.subscribe([TOPIC])
     serve_metrics()

@@ -9,6 +9,7 @@ import psycopg
 from confluent_kafka import Producer
 
 from doc_fetcher.db import tracked_ciks
+from tributary_kafka import client_config
 from tributary_sec import acceptance_time, sec_client
 from tributary_telemetry import configure_logging
 
@@ -53,10 +54,7 @@ def select_filings(cik: str, submissions: dict, today: date) -> list[dict]:
 
 def main() -> None:
     configure_logging()
-    producer = Producer({
-        "bootstrap.servers": os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
-        "enable.idempotence": True,
-    })
+    producer = Producer(client_config({"enable.idempotence": True}))
     with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
         ciks = sorted(tracked_ciks(conn))
     with sec_client(os.environ["SEC_USER_AGENT"]) as client:

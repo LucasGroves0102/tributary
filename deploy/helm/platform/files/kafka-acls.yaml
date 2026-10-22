@@ -1,0 +1,61 @@
+# Kafka principals (SASL/SCRAM-SHA-512 users) and the only things each may do. With
+# kafka.sasl.enabled, the setup-kafka hook (deploy/platform-setup/setup.py kafka) makes the broker
+# match this file exactly: it creates or updates every user below from the platform secret's
+# kafka-password-<name>, deletes SCRAM users not listed here (except admin), and adds and deletes
+# ACLs until they are the ones below. The broker denies anything without an ACL
+# (allow.everyone.if.no.acl.found=false); `admin` (setup-kafka) is a super user, not listed.
+#
+#   produce: topics it writes: WRITE (implies DESCRIBE) + CREATE (topics are auto-created on
+#            first produce)
+#   consume: topics it reads: READ (implies DESCRIBE)
+#   groups:  consumer groups it uses: READ
+#   acls:    anything else: {resource: topic|group|cluster, name, pattern: literal (default) |
+#            prefixed, operations: [read, write, create, describe, describe_configs, ...]}
+#
+# A new Kafka client needs an entry here (named as its kafkaUser, default the service/job name in
+# deploy/helm/tributary/values.yaml), a kafka-password-<name> key in the platform secret and in
+# its own namespace's secret, and a row in streaming/topics.md. CI checks the chart's clients
+# against this file (deploy/helm/tributary/tests/check_kafka_auth.py) and that each principal
+# can do only this (tests/kafka_acls).
+principals:
+  poller:
+    produce: [filings.raw]
+  poller-backfill:        # jobs.backfill
+    produce: [filings.raw]
+  doc-fetcher-seed:       # jobs.seed-documents
+    produce: [filings.raw]
+  bronze-loader:
+    consume: [filings.raw]
+    groups: [bronze-loader]
+  doc-fetcher:
+    consume: [filings.raw]
+    groups: [doc-fetcher]
+    produce: [documents.fetched]
+  doc-crawler:
+    produce: [documents.backfill]
+  parser:
+    consume: [documents.fetched]
+    groups: [parser-python]
+  parser-backfill:
+    consume: [documents.backfill]
+    groups: [parser-backfill]
+  # Reads the CDC topics only; it must never be able to write them (a forged grant).
+  authz-sync:
+    consume: [app.public.users, app.public.subscriptions, app.public.company_grants,
+              app.public.plan_tiers]
+    groups: [authz-sync]
+  # Kafka Connect: its worker topics and group, and Debezium's topics (created by Connect from
+  # the connector's topic.creation settings).
+  connect:
+    groups: [connect]
+    acls:
+      - {resource: topic, name: connect., pattern: prefixed,
+         operations: [read, write, create, describe, describe_configs]}
+      - {resource: topic, name: app., pattern: prefixed, operations: [write, create, describe]}
+      - {resource: topic, name: __debezium-heartbeat.app, operations: [write, create, describe]}
+  # Lag and offsets for alerts: describe everything, read nothing.
+  kafka-exporter:
+    acls:
+      - {resource: topic, name: "*", operations: [describe]}
+      - {resource: group, name: "*", operations: [describe]}
+      - {resource: cluster, name: kafka-cluster, operations: [describe]}

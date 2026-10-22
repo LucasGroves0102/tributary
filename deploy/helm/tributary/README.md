@@ -10,7 +10,8 @@ in the `platform` namespace; Postgres runs on the host.
 - In the release namespace:
   - Secret `tributary` with keys `database-url`, `app-database-url`, `jwt-secret`,
     `anthropic-api-key`, `sec-user-agent`, `openfga-api-token` when `openfga.auth.enabled`,
-    and `sec-limiter-database-url` when `secLimiter.dedicatedLogin` (below).
+    `sec-limiter-database-url` when `secLimiter.dedicatedLogin` (below), and
+    `kafka-password-<user>` for every Kafka client when `kafka.sasl.enabled` (below).
   - Secret `ghcr` (type `kubernetes.io/dockerconfigjson`) with a token that can read packages.
 
 ## Install
@@ -52,7 +53,7 @@ decides its environment variables, which Secret keys it can read, and its networ
 |---|---|---|
 | `postgres` | `DATABASE_URL` | host Postgres |
 | `app-postgres` | `APP_DATABASE_URL` (query-api: watchlists, demo sandboxes; demo-cleanup) | host Postgres |
-| `kafka` | `KAFKA_BOOTSTRAP_SERVERS` | Kafka in `platform` |
+| `kafka` | `KAFKA_BOOTSTRAP_SERVERS`; with `kafka.sasl.enabled` also `KAFKA_SECURITY_PROTOCOL`, `KAFKA_SASL_MECHANISM`, `KAFKA_SASL_USERNAME` (`kafkaUser`, default the service/job name) and `KAFKA_SASL_PASSWORD` (`kafka-password-<user>`) | Kafka in `platform` (9092, or the SASL listener 9094) |
 | `openfga` | `FGA_API_URL`, `FGA_API_TOKEN` when `openfga.auth.enabled` | OpenFGA in `platform` |
 | `sec` | `SEC_USER_AGENT`; `SEC_LIMITER_DATABASE_URL` (main database: `database-url`, or `sec-limiter-database-url` with `secLimiter.dedicatedLogin`) and `SEC_CALLER_CLASS` (`secClass`, default `live` for services, `batch` for jobs) for the shared SEC rate limit | HTTPS to public addresses, host Postgres |
 | `anthropic` | `ANTHROPIC_API_KEY` | HTTPS to public addresses |
@@ -97,6 +98,19 @@ The question counts live in the app database, so they hold across agent-api rest
 agent-api's own `AGENT_RATE_PER_HOUR`, `AGENT_IP_RATE_PER_HOUR` and `AGENT_DAILY_BUDGET_USD`
 (in-process, all users) still apply on top. To change a cap, edit the value in the Flux release
 and let Flux upgrade; to stop demo spend at once, set `demo.sandbox.agent.enabled: false`.
+
+## Kafka authentication
+
+`kafka.sasl.enabled` (default false) is phase B of the Kafka SASL/SCRAM rollout, described with
+its secrets, order and rollback in the
+[platform chart's README](../platform/README.md#kafka-authentication-saslscram). On, every
+`uses: kafka` pod connects to `kafka.sasl.bootstrap` (port 9094) over SASL_PLAINTEXT with
+SCRAM-SHA-512 as its own user: `kafkaUser`, default the service or job name (`backfill` is
+`poller-backfill`, `seed-documents` is `doc-fetcher-seed`), with the password from
+`kafka-password-<user>` in `secretName`. The allowed topics and groups per user are in
+`deploy/helm/platform/files/kafka-acls.yaml`; `tests/check_kafka_auth.py` (CI) checks both
+renders and that every client's user is listed there. Python services build their client config
+with [libs/kafka](../../../libs/kafka), the Rust parser with the same variables.
 
 ## SEC limiter login
 

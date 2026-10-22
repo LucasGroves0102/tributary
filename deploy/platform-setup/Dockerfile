@@ -1,8 +1,10 @@
 # Build from the repo root: docker build -f deploy/platform-setup/Dockerfile .
 FROM openfga/cli:v0.6.3@sha256:4f3bf5ec0e79e20eb6e400f98431d23eda259faf71dfaf72b2f196d7823a3ef9 AS fga
 
-FROM python:3.12-alpine
+# slim, not alpine: confluent-kafka (setup.py kafka) has no musl wheels
+FROM python:3.12-slim
 COPY --from=fga /fga /usr/local/bin/fga
+RUN pip install --no-cache-dir confluent-kafka==2.16.0
 WORKDIR /app
 COPY authz/model.fga authz/
 COPY streaming/debezium/app-connector.json streaming/debezium/

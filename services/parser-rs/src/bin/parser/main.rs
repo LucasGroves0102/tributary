@@ -12,7 +12,7 @@ use std::process::ExitCode;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
-use consumer::{Kafka, consume, topic_and_group};
+use consumer::{Kafka, client_config, consume, topic_and_group};
 use db::Store;
 use metrics::Metrics;
 use service::parse_one;
@@ -69,10 +69,9 @@ fn run(reparse_all: bool) -> Result<(), BoxError> {
     let stop = Arc::new(AtomicBool::new(false));
     signal_hook::flag::register(signal_hook::consts::SIGTERM, Arc::clone(&stop))?;
     signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&stop))?;
-    let bootstrap =
-        std::env::var("KAFKA_BOOTSTRAP_SERVERS").unwrap_or_else(|_| "localhost:9092".into());
+    let kafka_config = client_config(|key| std::env::var(key).ok())?;
     let (topic, group) = topic_and_group(|key| std::env::var(key).ok());
-    let mut kafka = Kafka::subscribe(&bootstrap, &topic, &group)?;
+    let mut kafka = Kafka::subscribe(&kafka_config, &topic, &group)?;
     if let Some(port) = std::env::var("METRICS_PORT").ok().filter(|p| !p.is_empty()) {
         metrics::serve(metrics.registry.clone(), port.parse()?)?;
         log::info(

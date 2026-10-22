@@ -1,0 +1,69 @@
+{{- /* Kafka SASL/SCRAM users and ACLs (kafka.sasl.enabled; README, "Kafka authentication"). */}}
+{{- if .Values.kafka.sasl.enabled }}
+{{- $spec := .Files.Get "files/kafka-acls.yaml" | fromYaml }}
+{{- $ctx := dict "root" $ "name" "setup-kafka" }}
+# files/kafka-acls.yaml as JSON for setup-kafka (the setup image has no YAML parser).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kafka-acls
+  labels:
+    {{- include "platform.labels" (dict "root" $ "name" "kafka") | nindent 4 }}
+data:
+  kafka-acls.json: {{ $spec | toJson | quote }}
+---
+# Makes the broker's SCRAM users and ACLs match files/kafka-acls.yaml after each release, as the
+# super user admin (created by the Kafka pod's scram-admin container). Runs before
+# setup-connector.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: setup-kafka
+  labels:
+    {{- include "platform.labels" $ctx | nindent 4 }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "-5"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 900
+  template:
+    metadata:
+      labels:
+        {{- include "platform.podLabels" $ctx | nindent 8 }}
+    spec:
+      {{- include "platform.podSecurity" (dict "uid" 10001) | nindent 6 }}
+      restartPolicy: Never
+      {{- with .Values.images.pullSecret }}
+      imagePullSecrets:
+        - name: {{ . }}
+      {{- end }}
+      containers:
+        - name: setup
+          image: {{ include "platform.setupImage" . }}
+          args: [kafka]
+          env:
+            - {name: KAFKA_BOOTSTRAP_SERVERS, value: "kafka:{{ .Values.kafka.sasl.port }}"}
+            - {name: KAFKA_ACLS, value: /config/kafka-acls.json}
+            - {name: KAFKA_PASSWORDS_DIR, value: /secrets}
+          resources:
+            requests: {cpu: 10m, memory: 64Mi}
+            limits: {memory: 128Mi}
+          {{- include "platform.containerSecurity" . | nindent 10 }}
+          volumeMounts:
+            - {name: acls, mountPath: /config, readOnly: true}
+            - {name: passwords, mountPath: /secrets, readOnly: true}
+      volumes:
+        - name: acls
+          configMap:
+            name: kafka-acls
+        - name: passwords
+          secret:
+            secretName: {{ .Values.secretName }}
+            items:
+              - {key: kafka-password-admin, path: kafka-password-admin}
+              {{- range $name, $_ := $spec.principals }}
+              - {key: kafka-password-{{ $name }}, path: kafka-password-{{ $name }}}
+              {{- end }}
+{{- end }}

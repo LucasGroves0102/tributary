@@ -10,7 +10,7 @@ umbrella chart over upstream charts (versions pinned in `Chart.yaml` / `Chart.lo
 | Alloy | `alloy` | ships every pod's logs, Kubernetes events and the host journal (Postgres, k3s, sshd, ufw, pg-backup) to Loki |
 | postgres-exporter | `prometheus-postgres-exporter` | host Postgres health (login `monitoring`, role `pg_monitor`) |
 | ops-exporter | `prometheus-postgres-exporter` (alias) | metrics from the `ops` views (`files/ops-exporter-queries.yaml`); only with `opsDatabase.enabled` |
-| kafka-exporter | `prometheus-kafka-exporter` | topic offsets and consumer-group lag |
+| kafka-exporter | `prometheus-kafka-exporter` | topic offsets and consumer-group lag (SCRAM user `kafka-exporter`, describe-only, once Kafka SASL is on) |
 
 Prometheus selects PodMonitors, ServiceMonitors and rules from every namespace and release, so
 the tributary chart's PodMonitors are scraped without a `release` label. k3s runs etcd, the
@@ -34,8 +34,12 @@ rules are off.
 
 Secrets in `monitoring`, created from [deploy/secrets](../../secrets): `grafana-admin`
 (`admin-user`, `admin-password`), `alertmanager-discord` (`webhook-url`), `postgres-exporter`
-(`password`), and with `opsDatabase.enabled` `grafana-postgres` (`password` of the
-`grafana_reader` login, which also needs the `ops_reader` role and a `pg_hba` line on the host).
+(`password`), with `opsDatabase.enabled` `grafana-postgres` (`password` of the
+`grafana_reader` login, which also needs the `ops_reader` role and a `pg_hba` line on the host),
+and for kafka-exporter over SASL `kafka-exporter-kafka` (`username`, `password`; phase B of
+the [Kafka authentication rollout](../platform/README.md#kafka-authentication-saslscram): set
+`prometheus-kafka-exporter.kafkaServer` to port 9094 and `sasl.enabled` + `sasl.scram.enabled`
+in the release values).
 `PostgresBackupMissing` reads the textfile metric written by
 [deploy/host/pg-backup.sh](../../host).
 

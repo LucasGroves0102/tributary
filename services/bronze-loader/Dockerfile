@@ -1,8 +1,9 @@
 # Build from the repo root: docker build -f services/bronze-loader/Dockerfile .
 FROM python:3.12-slim
 WORKDIR /app
+COPY libs/kafka /libs/kafka
 COPY libs/telemetry /libs/telemetry
-RUN pip install --no-cache-dir /libs/telemetry
+RUN pip install --no-cache-dir /libs/kafka /libs/telemetry
 COPY services/bronze-loader/pyproject.toml .
 COPY services/bronze-loader/src ./src
 RUN pip install --no-cache-dir .

@@ -292,8 +292,18 @@ ops-exporter:
     limits: {memory: 128Mi}
 
 prometheus-kafka-exporter:
+  # Kafka SASL rollout, phase B (README, "Kafka authentication"): kafkaServer
+  # kafka.platform.svc.cluster.local:9094 and sasl.enabled + sasl.scram.enabled true, logging in
+  # as kafka-exporter (describe-only ACLs) from the Secret kafka-exporter-kafka (keys username,
+  # password; deploy/secrets/monitoring-kafka-exporter.yaml).
   kafkaServer:
     - kafka.platform.svc.cluster.local:9092
+  sasl:
+    enabled: false
+    scram:
+      enabled: false
+      mechanism: scram-sha512
+      secretName: kafka-exporter-kafka
   prometheus:
     serviceMonitor:
       enabled: true

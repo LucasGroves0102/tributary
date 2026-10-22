@@ -34,6 +34,7 @@ from prometheus_client import Counter, Gauge
 
 from doc_fetcher import crawl_db
 from doc_fetcher.crawl_fetch import Fetched, Target, Unusable, fetch_target
+from tributary_kafka import client_config
 from tributary_sec import sec_client
 from tributary_telemetry import configure_logging, count_delivery, serve_metrics
 
@@ -324,10 +325,7 @@ def main() -> None:
     stop = threading.Event()
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
     signal.signal(signal.SIGINT, lambda *_: stop.set())
-    producer = Producer({
-        "bootstrap.servers": os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
-        "enable.idempotence": True,
-    })
+    producer = Producer(client_config({"enable.idempotence": True}))
     user_agent = os.environ["SEC_USER_AGENT"]
     local = threading.local()
 

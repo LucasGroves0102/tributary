@@ -14,6 +14,7 @@ from prometheus_client import Counter, Gauge
 
 from poller.edgar import Filing, fetch_feed, parse_feed
 from poller.producer import FilingProducer
+from tributary_kafka import bootstrap_servers
 from tributary_sec import sec_client
 from tributary_telemetry import configure_logging, serve_metrics
 
@@ -57,14 +58,14 @@ def new_filings(filings: Iterable[Filing], seen: SeenSet) -> list[Filing]:
 def main() -> None:
     configure_logging()
     user_agent = os.environ["SEC_USER_AGENT"]
-    bootstrap = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
+    bootstrap = bootstrap_servers()
     interval = float(os.environ.get("POLL_INTERVAL_SECONDS", "30"))
 
     stop = threading.Event()
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
     signal.signal(signal.SIGINT, lambda *_: stop.set())
 
-    producer = FilingProducer(bootstrap)
+    producer = FilingProducer()
     seen = SeenSet()
 
     serve_metrics()

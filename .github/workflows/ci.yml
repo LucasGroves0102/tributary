@@ -48,7 +48,7 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
           python-version: "3.12"
-      - run: pip install ruff pytest pytest-cov pyright -e libs/telemetry -e libs/sec -e libs/authz -e services/poller -e services/bronze-loader -e services/company-loader -e services/facts-fetcher -e services/doc-fetcher -e services/parser -e services/authz-sync -e 'services/query-api[test]' -e services/agent
+      - run: pip install ruff pytest pytest-cov pyright pyyaml==6.0.3 -e libs/kafka -e libs/telemetry -e libs/sec -e libs/authz -e services/poller -e services/bronze-loader -e services/company-loader -e services/facts-fetcher -e services/doc-fetcher -e services/parser -e services/authz-sync -e 'services/query-api[test]' -e services/agent
       - run: ruff check .
       - run: pyright --pythonpath "$(which python)"
       - run: ./scripts/create-databases.sh
@@ -100,9 +100,11 @@ jobs:
 
   propagation:
     # tests/propagation against the full access pipeline: app DB → Debezium → Kafka →
-    # authz-sync → OpenFGA + authz.user_access, with the BRD's < 30 s timing assertions.
+    # authz-sync → OpenFGA + authz.user_access, with the BRD's < 30 s timing assertions. Kafka
+    # runs with SASL/SCRAM + ACLs as on hermes with every kafka.sasl flag on, so Connect and
+    # authz-sync use their own logins; tests/kafka_acls then checks every principal's ACLs.
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     env:
       COMPOSE: docker compose -f tests/propagation/compose.ci.yml
       POSTGRES_USER: tributary
@@ -118,14 +120,28 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
           python-version: "3.12"
+      - name: Kafka passwords (throwaway; one per principal in kafka-acls.yaml, plus admin)
+        run: |
+          d="$RUNNER_TEMP/kafka-passwords" && mkdir -p "$d"
+          for u in admin $(sed -n 's/^  \([a-z-]*\):.*/\1/p' deploy/helm/platform/files/kafka-acls.yaml); do
+            openssl rand -hex 32 > "$d/kafka-password-$u"
+          done
+          chmod 755 "$d" && chmod 644 "$d"/*  # read by the Kafka image's uid
+          echo "KAFKA_PASSWORDS_DIR=$d" >> "$GITHUB_ENV"
+          echo "KAFKA_PASSWORD_CONNECT=$(cat "$d/kafka-password-connect")" >> "$GITHUB_ENV"
+          ls "$d"
       - name: Pull images and install authz-sync in parallel
         run: |
           $COMPOSE --profile tools pull --quiet &
-          pip install pytest -e libs/telemetry -e libs/authz -e services/authz-sync \
-            -e services/query-api  # tests/propagation/test_sandbox.py: AppSandboxes
+          pip install pytest pyyaml==6.0.3 -e libs/kafka -e libs/telemetry -e libs/authz \
+            -e services/authz-sync -e services/query-api  # test_sandbox.py: AppSandboxes
           wait $!
       - name: Kafka and Postgres
-        run: $COMPOSE up -d --wait --wait-timeout 180 kafka postgres
+        run: $COMPOSE up -d --wait --wait-timeout 180 kafka kafka-scram-admin postgres
+      - name: Kafka users and ACLs (setup.py kafka, as the setup-kafka hook)
+        run: >-
+          KAFKA_ACLS=deploy/helm/platform/files/kafka-acls.yaml
+          timeout 300 python deploy/platform-setup/setup.py kafka
       - name: Databases, migrations, demo users
         run: |
           ./scripts/create-databases.sh
@@ -141,8 +157,12 @@ jobs:
       - name: Debezium connector
         run: ./scripts/register-connector.sh
       - name: authz-sync, caught up with the demo users
+        env:
+          KAFKA_SECURITY_PROTOCOL: SASL_PLAINTEXT
+          KAFKA_SASL_USERNAME: authz-sync
         run: |
-          nohup authz-sync > "$RUNNER_TEMP/authz-sync.log" 2>&1 &
+          KAFKA_SASL_PASSWORD="$(cat "$KAFKA_PASSWORDS_DIR/kafka-password-authz-sync")" \
+            nohup authz-sync > "$RUNNER_TEMP/authz-sync.log" 2>&1 &
           for i in $(seq 180); do
             curl -sf "localhost:$METRICS_PORT/metrics" | grep -q '^tributary_authz_caught_up 1' \
               && [ "$(psql "$DATABASE_URL" -qAtc "SELECT count(*) FROM authz.user_access WHERE user_id = 'alice'")" -gt 0 ] \
@@ -152,12 +172,14 @@ jobs:
           echo "authz-sync did not catch up" >&2; exit 1
       - name: Propagation tests (revocation, downgrade, user deletion; < 30 s each)
         run: E2E=1 pytest -q -s -p no:cacheprovider tests/propagation
+      - name: Kafka ACLs (each principal only its own topics and groups; bad logins rejected)
+        run: E2E=1 pytest -q -p no:cacheprovider --durations=5 tests/kafka_acls
       - name: Logs
         if: failure()
         run: |
           echo "::group::authz-sync"; cat "$RUNNER_TEMP/authz-sync.log" || true; echo "::endgroup::"
           echo "::group::connector status"; curl -s "$CONNECT_URL/connectors/app/status" || true; echo "::endgroup::"
-          for s in kafka postgres connect openfga; do
+          for s in kafka kafka-scram-admin postgres connect openfga; do
             echo "::group::$s"; $COMPOSE logs --no-color --tail 300 "$s"; echo "::endgroup::"
           done
       - if: always()
@@ -229,6 +251,20 @@ jobs:
               --set secLimiter.dedicatedLogin=$flag \
               | python3 deploy/helm/tributary/tests/check_sec_limiter.py "$mode"
           done
+      - name: Kafka SASL wiring (kafka.sasl.enabled off and on), kubeconform with it on
+        run: |
+          for mode in off on; do
+            flag=false; [ "$mode" = on ] && flag=true
+            docker run --rm -v "$PWD:/repo" -w /repo alpine/helm:3.19.0@sha256:aef9b56f64e866207d9591d0abd8f6d767b36aadd12edf68f8a719716d9d29c9 \
+              template tributary deploy/helm/tributary --namespace tributary --set image.tag=ci \
+              --set kafka.sasl.enabled=$flag > "tributary-sasl-$mode.yaml"
+            python3 deploy/helm/tributary/tests/check_kafka_auth.py "$mode" < "tributary-sasl-$mode.yaml"
+          done
+          docker run --rm -v "$PWD:/repo" -w /repo alpine/helm:3.19.0@sha256:aef9b56f64e866207d9591d0abd8f6d767b36aadd12edf68f8a719716d9d29c9 lint --strict deploy/helm/tributary --set image.tag=ci --set kafka.sasl.enabled=true
+          docker run --rm -i ghcr.io/yannh/kubeconform:v0.7.0@sha256:85dbef6b4b312b99133decc9c6fc9495e9fc5f92293d4ff3b7e1b30f5611823c \
+            -strict -summary -kubernetes-version 1.36.0 -schema-location default \
+            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+            - < tributary-sasl-on.yaml
       - name: helm lint (platform)
         run: >-
           docker run --rm -v "$PWD:/repo" -w /repo alpine/helm:3.19.0@sha256:aef9b56f64e866207d9591d0abd8f6d767b36aadd12edf68f8a719716d9d29c9
@@ -239,6 +275,23 @@ jobs:
           template platform deploy/helm/platform --namespace platform --set images.setup.tag=ci
           | docker run --rm -i ghcr.io/yannh/kubeconform:v0.7.0@sha256:85dbef6b4b312b99133decc9c6fc9495e9fc5f92293d4ff3b7e1b30f5611823c
           -strict -summary -kubernetes-version 1.36.0 -
+      - name: platform with the Kafka SASL phases (A, A+B, A+B+C)
+        run: |
+          for phase in "kafka.sasl.enabled=true" \
+                       "kafka.sasl.enabled=true,kafka.sasl.connect=true" \
+                       "kafka.sasl.enabled=true,kafka.sasl.connect=true,kafka.plaintextListener=false"; do
+            echo "== $phase"
+            docker run --rm -v "$PWD:/repo" -w /repo alpine/helm:3.19.0@sha256:aef9b56f64e866207d9591d0abd8f6d767b36aadd12edf68f8a719716d9d29c9 lint --strict deploy/helm/platform --set images.setup.tag=ci --set "$phase"
+            docker run --rm -v "$PWD:/repo" -w /repo alpine/helm:3.19.0@sha256:aef9b56f64e866207d9591d0abd8f6d767b36aadd12edf68f8a719716d9d29c9 template platform deploy/helm/platform --namespace platform --set images.setup.tag=ci --set "$phase" \
+              | docker run --rm -i ghcr.io/yannh/kubeconform:v0.7.0@sha256:85dbef6b4b312b99133decc9c6fc9495e9fc5f92293d4ff3b7e1b30f5611823c -strict -summary -kubernetes-version 1.36.0 -
+          done
+          # invalid combinations must fail to render
+          for bad in "kafka.plaintextListener=false" "kafka.sasl.connect=true" \
+                     "kafka.sasl.enabled=true,kafka.plaintextListener=false"; do
+            if docker run --rm -v "$PWD:/repo" -w /repo alpine/helm:3.19.0@sha256:aef9b56f64e866207d9591d0abd8f6d767b36aadd12edf68f8a719716d9d29c9 template platform deploy/helm/platform --set images.setup.tag=ci --set "$bad" >/dev/null 2>&1; then
+              echo "rendered with $bad" >&2; exit 1
+            fi
+          done
 
       - name: helm lint (monitoring)
         run: >-
@@ -247,13 +300,19 @@ jobs:
           && helm repo add grafana https://grafana.github.io/helm-charts >/dev/null
           && helm dependency build deploy/helm/monitoring
           && helm lint --strict deploy/helm/monitoring
-          && helm template monitoring deploy/helm/monitoring --namespace monitoring > monitoring.yaml"
-      - name: kubeconform (monitoring)
+          && helm template monitoring deploy/helm/monitoring --namespace monitoring > monitoring.yaml
+          && helm template monitoring deploy/helm/monitoring --namespace monitoring
+          --set prometheus-kafka-exporter.sasl.enabled=true --set prometheus-kafka-exporter.sasl.scram.enabled=true
+          --set 'prometheus-kafka-exporter.kafkaServer[0]=kafka.platform.svc.cluster.local:9094'
+          > monitoring-sasl.yaml
+          && grep -q -- --sasl.mechanism=scram-sha512 monitoring-sasl.yaml"
+      - name: kubeconform (monitoring, kafka-exporter SASL off and on)
         run: >-
+          cat monitoring.yaml monitoring-sasl.yaml |
           docker run --rm -i ghcr.io/yannh/kubeconform:v0.7.0@sha256:85dbef6b4b312b99133decc9c6fc9495e9fc5f92293d4ff3b7e1b30f5611823c
           -strict -summary -kubernetes-version 1.36.0 -schema-location default
           -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
-          - < monitoring.yaml
+          -
 
       - name: kubeconform (flux)
         run: >-

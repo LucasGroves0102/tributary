@@ -10,4 +10,7 @@ Kafka topic contracts and CDC configuration.
 Locally, `make up` starts Kafka (host port 9092; topics are auto-created on first produce),
 Kafka Connect (8083) and kafka-ui (http://localhost:8080). `make topics` lists topics and
 `make consume` tails `filings.raw`. On k3s, Kafka and Connect run in the `platform` namespace
-([deploy/helm/platform](../deploy/helm/platform)).
+([deploy/helm/platform](../deploy/helm/platform)), where each client can log in with its own
+SCRAM user limited by ACLs to the topics and groups below
+([kafka-acls.yaml](../deploy/helm/platform/files/kafka-acls.yaml)). The local stack stays
+PLAINTEXT with no ACLs.

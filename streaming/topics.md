@@ -26,6 +26,11 @@ so the live parser never has crawled documents queued ahead of a new filing, its
 a parser stops only the backfill one. Both parsers write the same rows and are idempotent per
 accession, so an event published twice (the crawl republishes unconfirmed ones) is harmless.
 
+Each producer and consumer above is a Kafka principal with ACLs for exactly these topics and its
+group once Kafka SASL is on (`deploy/helm/platform/files/kafka-acls.yaml`: `poller`,
+`poller-backfill`, `doc-fetcher-seed`, `bronze-loader`, `doc-fetcher`, `doc-crawler`, `parser`,
+`parser-backfill`). A new producer or consumer of a topic needs its ACL there in the same change.
+
 ## CDC topics (Debezium, from the `app` database)
 
 | Topic | Key | Producer | Consumers |
@@ -36,6 +41,9 @@ accession, so an event published twice (the crawl republishes unconfirmed ones) 
 | `app.public.plan_tiers` | `{plan_id, tier}` | Debezium | authz-sync |
 | `app.public.debezium_heartbeat` | `{id}` | Debezium (its own heartbeat query, every 10 s) | none |
 | `__debezium-heartbeat.app` | `{serverName}` | Debezium heartbeat | none |
+
+Only `connect` may write these topics and only `authz-sync` may read the four access tables
+(ACLs in `kafka-acls.yaml`), so no other client can forge or read a grant.
 
 Values are Debezium envelopes `{before, after, op, source, ...}` (JSON, no schemas). Topics
 are compacted, and each delete is followed by a tombstone. See `streaming/debezium/`.

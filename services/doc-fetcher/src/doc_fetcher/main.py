@@ -14,6 +14,7 @@ from prometheus_client import Counter
 
 from doc_fetcher.db import already_fetched, insert_document, insert_exhibit, tracked_ciks
 from doc_fetcher.index import parse_exhibits, parse_index
+from tributary_kafka import client_config
 from tributary_sec import sec_client
 from tributary_telemetry import CONSUMED, SKIPPED, configure_logging, count_delivery, serve_metrics
 
@@ -32,20 +33,18 @@ DOCUMENTS = Counter("tributary_documents_fetched_total",
 def main() -> None:
     configure_logging()
     dsn = os.environ["DATABASE_URL"]
-    bootstrap = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
 
     stop = threading.Event()
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
     signal.signal(signal.SIGINT, lambda *_: stop.set())
 
-    consumer = Consumer({
-        "bootstrap.servers": bootstrap,
+    consumer = Consumer(client_config({
         "group.id": GROUP_ID,
         "enable.auto.commit": False,
         "auto.offset.reset": "earliest",
-    })
+    }))
     consumer.subscribe([IN_TOPIC])
-    producer = Producer({"bootstrap.servers": bootstrap, "enable.idempotence": True})
+    producer = Producer(client_config({"enable.idempotence": True}))
     serve_metrics()
 
     with psycopg.connect(dsn, autocommit=True) as conn, \

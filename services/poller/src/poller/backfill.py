@@ -39,7 +39,7 @@ def main() -> None:
     start = args.start or end - timedelta(days=args.days - 1)
     wanted = days_in_range(start, end)
 
-    producer = FilingProducer(os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"))
+    producer = FilingProducer()
     total = 0
     with sec_client(os.environ["SEC_USER_AGENT"]) as client:
         available = set().union(*(available_days(client, y, q) for y, q in quarters(wanted)))
