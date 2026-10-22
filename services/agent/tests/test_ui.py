@@ -13,7 +13,13 @@ from pydantic import ValidationError
 from tributary_agent.agent import SYSTEM, Agent
 from tributary_agent.server import Limits, create_app
 from tributary_agent.tools import TOOLS, QueryApi
-from tributary_agent.ui import MAX_CONTEXT_BYTES, UI_TOOL, UiActions, UiContext
+from tributary_agent.ui import (
+    DEFAULT_WORKSPACE,
+    MAX_CONTEXT_BYTES,
+    UI_TOOL,
+    UiActions,
+    UiContext,
+)
 
 NVDA, AAPL, TSLA, MSFT = "0001045810", "0000320193", "0001318605", "0000789019"
 ME = {"user_id": "alice", "companies": [
@@ -317,6 +323,85 @@ def test_accepted_actions_are_events_and_refused_ones_are_tool_errors():
     assert answer.citations == {}  # a UI result is not data
     results = fake.requests[1]["messages"][-1]["content"]
     assert results[1]["is_error"] and "isn't one of the companies" in results[1]["content"]
+
+
+# --- saving to a workspace ----------------------------------------------------------------
+
+def showing(ctx: dict) -> UiActions:
+    ui = UiActions(api())
+    ui.observe(UiContext.model_validate(ctx))
+    return ui
+
+
+CHART_CTX = {"page": "chart", "chart": {"layers": [
+    {"kind": "metric", "company_id": NVDA, "metric": "revenue"}]}}
+
+
+def test_save_what_the_screen_shows():
+    content, is_error, action = showing(CHART_CTX).run(
+        {"action": "save_to_workspace", "item": "chart", "name": "  NVDA revenue ",
+         "workspace": "Semis"})
+    assert not is_error, content
+    assert action == {"action": "save_to_workspace", "item": "chart", "name": "NVDA revenue",
+                      "workspace": "Semis",
+                      "label": "Saved chart \u201cNVDA revenue\u201d to \u201cSemis\u201d"}
+    _, is_error, action = showing({"page": "compare", "compare": {"target": NVDA}}).run(
+        {"action": "save_to_workspace", "item": "comps", "name": "NVDA comps"})
+    assert not is_error and action["workspace"] == DEFAULT_WORKSPACE
+    _, is_error, action = showing({"page": "companies"}).run(
+        {"action": "save_to_workspace", "item": "screen", "name": "Software"})
+    assert not is_error and action["label"].startswith("Saved screen")
+
+
+def test_save_after_building_it_in_the_same_answer():
+    ui = UiActions(api())
+    _, is_error, _ = ui.run({"action": "save_to_workspace", "item": "chart", "name": "x"})
+    assert is_error  # nothing on screen yet
+    assert not ui.run({"action": "set_chart_layers",
+                       "layers": [{"company": "NVDA", "metric": "revenue"}]})[1]
+    assert not ui.run({"action": "save_to_workspace", "item": "chart", "name": "x"})[1]
+    assert ui.run({"action": "save_to_workspace", "item": "comps", "name": "x"})[1]
+    # a refused chart action doesn't count as something to save
+    other = UiActions(api())
+    assert other.run({"action": "set_chart_layers",
+                      "layers": [{"company": "TSLA", "metric": "revenue"}]})[1]
+    assert other.run({"action": "save_to_workspace", "item": "chart", "name": "x"})[1]
+
+
+@pytest.mark.parametrize("args, message", [
+    ({"name": "x"}, "not applied: item: chart, comps or screen"),
+    ({"item": "chart"}, "not applied: name: required"),
+    ({"item": "chart", "name": "   "}, "not applied: name: required"),
+    ({"item": "chart", "name": "x" * 121}, "not applied: name: at most 120"),
+    ({"item": "chart", "name": "a\nb"}, "not applied: name: at most 120"),
+    ({"item": "chart", "name": "x", "workspace": " "}, "not applied: workspace: required"),
+    ({"item": "chart", "name": "x", "workspace": "w" * 101}, "not applied: workspace: at most"),
+    ({"item": "comps", "name": "x"}, "not applied: the screen shows no comps table"),
+    ({"item": "screen", "name": "x"}, "not applied: the screen shows no screen"),
+    ({"item": "notes", "name": "x"}, "invalid propose_ui_action"),
+    ({"item": "chart", "name": "x" * 10_000}, "invalid propose_ui_action"),
+    ({"item": "chart", "name": "x", "user_id": "bob"}, "invalid propose_ui_action"),
+    ({"item": "chart", "name": "x", "workspace_id": "0000"}, "invalid propose_ui_action"),
+])
+def test_save_refusals(args, message):
+    content, is_error, action = showing(CHART_CTX).run({"action": "save_to_workspace", **args})
+    assert is_error and action is None
+    assert content.startswith(message), content
+
+
+def test_agent_tells_the_ui_runner_what_the_screen_shows():
+    fake = FakeMessages(
+        response("tool_use", tool_use("t1", "propose_ui_action",
+                                      {"action": "save_to_workspace", "item": "chart",
+                                       "name": "Rev"})),
+        response("end_turn", text("Saved.")),
+    )
+    q = api()
+    events = list(Agent(fake, q, "claude-haiku-5-5", ui=UiActions(q)).events(
+        "save this chart", context=UiContext.model_validate(CHART_CTX)))
+    assert [e["type"] for e in events] == ["tool", "action", "done"]
+    assert events[1]["action"]["item"] == "chart"
+    assert "save_to_workspace" in UI_TOOL["input_schema"]["properties"]["action"]["enum"]
 
 
 # --- over HTTP ----------------------------------------------------------------------------
