@@ -7,12 +7,13 @@ and [age](https://github.com/FiloSottile/age). Flux's `secrets` Kustomization
 
 | File | Secret | Namespace | Used by |
 |---|---|---|---|
-| `tributary.yaml` | `tributary` | tributary | the tributary chart (database URLs, JWT secret, Anthropic key, SEC User-Agent) |
+| `tributary.yaml` | `tributary` | tributary | the tributary chart (database URLs, JWT secret, Anthropic key, SEC User-Agent, OpenFGA key, Kafka SCRAM passwords) |
 | `ghcr-tributary.yaml`, `ghcr-platform.yaml`, `flux-ghcr.yaml` | `ghcr` | tributary, platform, flux-system | pulling images from GHCR; Flux image scanning |
-| `platform.yaml` | `platform` | platform | the platform chart (Postgres password, OpenFGA datastore URI) |
+| `platform.yaml` | `platform` | platform | the platform chart (Postgres password, OpenFGA datastore URI and keys, Kafka SCRAM passwords) |
 | `monitoring-grafana.yaml` | `grafana-admin` | monitoring | Grafana admin login |
 | `monitoring-discord.yaml` | `alertmanager-discord` | monitoring | Alertmanager webhook |
 | `monitoring-postgres.yaml` | `postgres-exporter` | monitoring | postgres-exporter login |
+| `monitoring-kafka-exporter.yaml` | `kafka-exporter-kafka` | monitoring | kafka-exporter's SCRAM login (Kafka SASL) |
 | `flux-discord.yaml` | `discord-webhook` | flux-system | Flux deploy notifications |
 | `cloudflared.yaml` | `tunnel-token` | cloudflared | Cloudflare Tunnel connector |
 | `monitoring-kafka-exporter.yaml` (not yet created) | `kafka-exporter-kafka` | monitoring | kafka-exporter's Kafka SCRAM login (`scripts/kafka-passwords.sh`) |
