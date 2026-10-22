@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ApiError, demoUsers, login, me as fetchMe, watchlistCsv } from "./api";
 import { AssistantPanel } from "./assistant/AssistantPanel";
@@ -9,19 +9,17 @@ import { uiContext } from "./assistant/actions";
 import { pageContext } from "./assistant/context";
 import { useAssistant } from "./assistant/useAssistant";
 import { useUiActions } from "./assistant/useUiActions";
-import { FilingReader } from "./components/explore/FilingReader";
 import { Palette, WATCH_PREFIX, type PaletteActions, type PaletteCompany } from "./components/Palette";
+import { ShortcutSheet } from "./components/ShortcutSheet";
 import { Sidebar } from "./components/Sidebar";
+import { Skeleton } from "./components/States";
 import { TopBar } from "./components/TopBar";
 import { download } from "./download";
 import { lastIngested } from "./home/data";
+import { RecentNotes } from "./home/RecentNotes";
 import { useWorkspace } from "./home/useWorkspace";
-import { ChartBuilder } from "./pages/ChartBuilder";
-import { Companies } from "./pages/Companies";
 import { Home } from "./pages/Home";
-import { Company } from "./pages/Company";
-import { Compare } from "./pages/Compare";
-import { Search } from "./pages/Search";
+import { About, ChartBuilder, Companies, Company, Compare, FilingReader, prefetchScreens, Search } from "./pages/lazy";
 import { readableCount, Welcome } from "./pages/Welcome";
 import { go, parse, useRoute } from "./route";
 import { resolveTicker } from "./palette/commands";
@@ -63,6 +61,7 @@ export function App(props: Props = {}) {
     () => (load(DRAWER_KEY) ?? (window.innerWidth > DRAWER_FITS_PX ? "open" : "closed")) === "open",
   );
   const [palette, setPalette] = useState<string | null>(null);
+  const [help, setHelp] = useState(false);
   const [focusTick, setFocusTick] = useState(0);
   const input = useRef<HTMLTextAreaElement>(null);
   const route = useRoute();
@@ -70,6 +69,11 @@ export function App(props: Props = {}) {
   // every navigation and on Escape
   const [navOpen, setNavOpen] = useState(false);
   useEffect(() => setNavOpen(false), [route]);
+  // the other screens' code, once signed in and idle (pages/lazy.ts)
+  const signedIn = token !== null;
+  useEffect(() => {
+    if (signedIn) prefetchScreens();
+  }, [signedIn]);
   useEffect(() => {
     if (!navOpen) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setNavOpen(false);
@@ -241,6 +245,9 @@ export function App(props: Props = {}) {
       case "palette":
         setPalette((p) => (p === null ? "" : null));
         break;
+      case "help":
+        setHelp((h) => !h);
+        break;
       case "assistant":
         if (route.view === "ask") focusAssistant();
         else if (drawerOpen) setDrawer(false);
@@ -269,6 +276,10 @@ export function App(props: Props = {}) {
     [workspace.watchlist],
   );
   const companyName = useCallback((id: string) => names.get(id) ?? null, [names]);
+  const filingsFor = useMemo(
+    () => new Set((me?.companies ?? []).filter((c) => c.tiers.includes("filings")).map((c) => c.company_id)),
+    [me],
+  );
   watchedRef.current = watched;
   nameRef.current = companyName;
   const context = useMemo(() => pageContext(route, companyName), [route, companyName]);
@@ -372,6 +383,7 @@ export function App(props: Props = {}) {
           lastIngested={ingested}
           onAdd={() => setPalette(WATCH_PREFIX)}
           onExport={exportWatchlist}
+          onShortcuts={() => setHelp(true)}
           workspaces={token ? <WorkspaceTree saved={saved} onOpen={openSaved} onError={setError} /> : null}
         />
         {navOpen && <div className="scrim" aria-hidden="true" onClick={() => setNavOpen(false)} />}
@@ -406,6 +418,7 @@ export function App(props: Props = {}) {
             </div>
           )}
           <main className="content">
+            <Suspense fallback={<div className="page"><Skeleton lines={6} label="Loading the page" /></div>}>
             {!token ? (
               <p className="page muted">Signing in…</p>
             ) : route.view === "home" ? (
@@ -415,6 +428,7 @@ export function App(props: Props = {}) {
                 onAdd={() => setPalette(WATCH_PREFIX)}
                 onExport={exportWatchlist}
                 recent={saved.list.state === "unavailable" ? null : <Recent recent={saved.recent} onOpen={openSaved} />}
+                notes={<RecentNotes token={token} name={companyName} filingsFor={filingsFor} />}
               />
             ) : route.view === "companies" ? (
               <Companies
@@ -491,6 +505,8 @@ export function App(props: Props = {}) {
                   number.
                 </p>
               </div>
+            ) : route.view === "about" ? (
+              <About />
             ) : (
               <Compare
                 key={user}
@@ -500,6 +516,7 @@ export function App(props: Props = {}) {
                 saveBar={saveBar({ kind: "comps", compare: route.compare ?? {} })}
               />
             )}
+            </Suspense>
           </main>
         </div>
         {showDrawer && (
@@ -511,6 +528,7 @@ export function App(props: Props = {}) {
           ✦ Ask the assistant
         </button>
       )}
+      {help && <ShortcutSheet onClose={() => setHelp(false)} />}
       {palette !== null && (
         <Palette
           key={palette}

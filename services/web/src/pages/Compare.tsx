@@ -17,6 +17,8 @@ import {
   statText,
   type CompareState,
 } from "../compare/state";
+import { MAX_COMPANY_LINES } from "../chart/model";
+import { SmallMultiples } from "../compare/SmallMultiples";
 import { CompanySearch } from "../components/CompanySearch";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { navRow, onTableKey } from "../components/tableNav";
@@ -50,6 +52,7 @@ export function Compare({ token, compare, onChart, saveBar }: Props) {
   const [suggested, setSuggested] = useState<Load<Peers> | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [chosen, setChartKey] = useState(cols[0]!);
+  const [multiples, setMultiples] = useState(false);
   const chartKey = cols.includes(chosen) ? chosen : cols[0]!;
 
   useEffect(() => {
@@ -333,6 +336,32 @@ export function Compare({ token, compare, onChart, saveBar }: Props) {
             ` ${masked.length} ${masked.length === 1 ? "company shows" : "companies show"} metadata only: your plan doesn't cover ${masked.length === 1 ? "its" : "their"} financials, so ${masked.length === 1 ? "it is" : "they are"} left out of the median and charts.`}
         </div>
       </section>
+
+      {rows.length > 0 && (
+        <section className="card">
+          <div className="card-h wrap">
+            <h2>Side by side</h2>
+            <span className="sub">
+              one chart per column · every company you can read a line, in the same colour on each · calendar quarters, last 3 years
+              {readableIds.length > MAX_COMPANY_LINES ? ` · first ${MAX_COMPANY_LINES} companies` : ""}
+            </span>
+            <span className="grow" />
+            <button className="btn sm" aria-expanded={multiples} onClick={() => setMultiples((m) => !m)}
+              disabled={!readableIds.length}>
+              {multiples ? "Hide charts" : `Show ${cols.length} chart${cols.length === 1 ? "" : "s"}`}
+            </button>
+          </div>
+          {multiples ? (
+            <SmallMultiples token={token} companyIds={readableIds} cols={cols} label={(id) => names.get(id) ?? id} />
+          ) : (
+            <p className="empty">
+              {readableIds.length
+                ? "Show the selected columns as small charts over time, one line per company; hover for values and sources, click to open the filing."
+                : "Charts need financials access to at least one of these companies."}
+            </p>
+          )}
+        </section>
+      )}
     </div>
   );
 }

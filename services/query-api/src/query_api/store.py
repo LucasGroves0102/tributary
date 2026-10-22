@@ -476,3 +476,80 @@ class Store:
                 return cur.fetchall()
         except psycopg.errors.QueryCanceled:
             raise SearchTooBroad from None
+
+    def data_notes(self, user_id: str, company_ids: list[str], derived: bool,
+                   limit: int) -> dict[str, Any]:
+        """Raw data notes (query_api.notes): the newest `limit` quality findings, quarters
+        derived from year-to-date values per metric (when `derived`), 10-K/10-Q filings on
+        EDGAR since the latest one in gold that companyfacts doesn't carry yet, and when the
+        companies were last checked. RLS filters findings and gold rows."""
+        with self._session(user_id) as cur:
+            cur.execute(
+                """
+                SELECT f.company_id, f.check_name, f.severity, f.metric, f.period_end,
+                       f.detail, q.checked_at
+                FROM ops.quality_findings f
+                LEFT JOIN ops.quality_companies q ON q.company_id = f.company_id
+                WHERE f.company_id = ANY(%(c)s)
+                ORDER BY coalesce((f.detail->>'restated_filed')::date, f.period_end) DESC,
+                         f.company_id, f.check_name, f.metric
+                LIMIT %(limit)s
+                """, {"c": company_ids, "limit": limit})
+            findings = cur.fetchall()
+            rows: list[dict] = []
+            if derived:
+                cur.execute(
+                    """
+                    SELECT company_id, metric, count(*) AS quarters,
+                           min(period_end) AS first_period_end,
+                           max(period_end) AS latest_period_end,
+                           (array_agg(accession_no ORDER BY period_end DESC))[1]
+                               AS latest_accession
+                    FROM gold.quarterly_financials
+                    WHERE company_id = ANY(%s) AND value_source = 'derived'
+                    GROUP BY company_id, metric
+                    ORDER BY company_id, metric
+                    """, (company_ids,))
+                rows = cur.fetchall()
+            cur.execute(
+                """
+                WITH latest AS (
+                    SELECT company_id, max(filed) AS facts_filed
+                    FROM gold.quarterly_financials
+                    WHERE company_id = ANY(%s)
+                    GROUP BY company_id
+                )
+                SELECT DISTINCT ON (f.accession_no)
+                       l.company_id, l.facts_filed, f.accession_no, f.form, f.filing_date,
+                       f.cik
+                FROM latest l
+                JOIN silver.filings f ON f.company_id = l.company_id
+                WHERE f.form IN ('10-K', '10-Q') AND f.filing_date >= l.facts_filed
+                  AND NOT EXISTS (SELECT 1 FROM silver.financial_facts x
+                                  WHERE x.accession_no = f.accession_no)
+                ORDER BY f.accession_no, f.filing_date DESC
+                """, (company_ids,))
+            behind = cur.fetchall()
+            cur.execute("SELECT max(checked_at) AS checked_at FROM ops.quality_companies"
+                        " WHERE company_id = ANY(%s)", (company_ids,))
+            checked = (cur.fetchone() or {}).get("checked_at")
+            return {"findings": findings, "derived": rows, "behind": behind,
+                    "checked_at": checked}
+
+    def filing_refs(self, user_id: str, accessions: list[str]) -> dict[str, dict]:
+        """accession_no → form, filed, cik (the filer, for EDGAR links), from the public filing
+        index; the facts' filer CIK when the index doesn't have it."""
+        with self._session(user_id) as cur:
+            cur.execute(
+                """
+                SELECT a.accession_no, i.form, i.filing_date AS filed,
+                       coalesce(i.cik, (SELECT x.cik FROM silver.financial_facts x
+                                        WHERE x.accession_no = a.accession_no LIMIT 1)) AS cik
+                FROM unnest(%s::text[]) a(accession_no)
+                LEFT JOIN LATERAL (
+                    SELECT f.form, f.filing_date, f.cik FROM silver.filings f
+                    WHERE f.accession_no = a.accession_no
+                    ORDER BY f.filing_date LIMIT 1
+                ) i ON true
+                """, (accessions,))
+            return {r.pop("accession_no"): r for r in cur.fetchall()}

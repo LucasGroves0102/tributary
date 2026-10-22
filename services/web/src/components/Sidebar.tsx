@@ -17,6 +17,8 @@ interface Props {
   lastIngested: string | null;
   onAdd: () => void;
   onExport: () => void;
+  /** opens the keyboard shortcut sheet */
+  onShortcuts?: () => void;
   /** the Workspaces section (workspaces/WorkspaceTree) */
   workspaces?: ReactNode;
   /** narrow screens: shown as a drawer over the page */
@@ -28,7 +30,7 @@ function section(route: Route): Route["view"] {
   return route.view === "company" || route.view === "filing" ? "companies" : route.view;
 }
 
-export function Sidebar({ route, me, workspace, lastIngested, onAdd, onExport, workspaces, open = false }: Props) {
+export function Sidebar({ route, me, workspace, lastIngested, onAdd, onExport, onShortcuts, workspaces, open = false }: Props) {
   const { rows, filings, watchlist } = workspace;
   const active = section(route);
   const newCount = (filings ?? []).filter((f) => f.isNew).length;
@@ -150,6 +152,14 @@ export function Sidebar({ route, me, workspace, lastIngested, onAdd, onExport, w
           </>
         )}
       </div>
+      <a className="cover-link" href={href({ view: "about" })} aria-current={route.view === "about" ? "page" : undefined}>
+        What Tributary covers <span className="faint">· no prices, consensus or transcripts</span>
+      </a>
+      {onShortcuts && (
+        <button className="link cover-link" onClick={onShortcuts}>
+          Keyboard shortcuts <span className="kbd">?</span>
+        </button>
+      )}
           <div className="credit">
         Built by{" "}
         <a href="https://github.com/LucasGroves0102" target="_blank" rel="noreferrer">Lucas Groves</a>

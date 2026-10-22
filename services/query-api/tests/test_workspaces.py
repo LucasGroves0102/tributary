@@ -446,10 +446,25 @@ def test_oversized_and_unsized_bodies_are_refused_before_reading(world, token):
 
 def test_state_size_cap():
     many = {**CHART, "layers": [{"kind": "formula", "formula": "x" * 500}] * 12,
-            "title": "t" * 200}
+            "title": "t" * 200, "subtitle": "s" * 200, "range": "custom",
+            "start": "2016-01-01", "end": "2026-06-30", "frequency": "annual", "deck": True,
+            "markers": True}
     validate_state("chart", many)  # the largest valid chart fits
     with pytest.raises(StateError):
         validate_state("notes", {})
+
+
+def test_chart_range_frequency_and_deck_settings():
+    saved = validate_state("chart", {**CHART, "range": "custom", "start": "2020-01-01",
+                                     "frequency": "annual", "deck": True,
+                                     "subtitle": " USD, fiscal years "})
+    assert (saved["range"], saved["start"], saved["frequency"], saved["deck"]) == (
+        "custom", "2020-01-01", "annual", True)
+    assert saved["subtitle"] == "USD, fiscal years" and "end" not in saved
+    for bad in ({"start": "2020-1-1"}, {"end": "yesterday"}, {"frequency": "monthly"},
+                {"range": 7}, {"subtitle": "x" * 201}, {"from": "2020-01-01"}):
+        with pytest.raises(StateError):
+            validate_state("chart", {**CHART, **bad})
 
 
 def test_limits(world, token):

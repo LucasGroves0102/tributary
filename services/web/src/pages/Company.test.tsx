@@ -64,6 +64,27 @@ const CHANGES = {
   }],
 };
 
+const note = (kind: string, severity: string, over = {}) => ({
+  company_id: NVDA, kind, severity, metric: "revenue", period_end: "2025-04-27", date: "2025-04-27", detail: {}, checked_at: null, filings: [], ...over,
+});
+const NOTES = {
+  company_id: NVDA, as_of: "", checked_at: new Date(Date.now() - 3 * 3600_000).toISOString(),
+  notes: [
+    note("companyfacts_behind", "warning", { metric: null, period_end: null, date: "2026-08-27",
+      detail: { missing_filings: 1, missing_filed: "2026-08-27", facts_latest_filed: "2026-05-28" },
+      filings: [{ role: "missing", accession_no: "0001045810-26-000099", form: "10-Q", filed: "2026-08-27",
+        filing_url: "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000099/" }] }),
+    note("restatement", "info", { date: "2026-02-26",
+      detail: { original_accession: "0001045810-25-000050", original_filed: "2025-05-28", restated_accession: K_ACC, restated_filed: "2026-02-26", change: 0.0123 },
+      filings: [
+        { role: "original", accession_no: "0001045810-25-000050", form: "10-Q", filed: "2025-05-28", filing_url: "https://www.sec.gov/Archives/edgar/data/1045810/000104581025000050/" },
+        { role: "restated", accession_no: K_ACC, form: "10-K", filed: "2026-02-26", filing_url: null },
+      ] }),
+    note("derived_quarters", "info", { period_end: "2026-01-25", detail: { quarters: 9, first_period_end: "2017-01-29", latest_period_end: "2026-01-25" } }),
+    note("series_gap", "warning", { metric: "capex", period_end: "2019-07-28", detail: { missing_from: "2019-01-28", missing_to: "2019-04-28" } }),
+  ],
+};
+
 let rowFor: (id: string) => ScreenerRow = () => nvdaRow();
 
 function respond(url: string): Response {
@@ -101,6 +122,7 @@ function respond(url: string): Response {
     ].filter((r) => metrics.includes(r.metric)) });
   }
   if (p.endsWith("/segments")) return Response.json({ as_of: "", rows: [] });
+  if (p.endsWith("/data-notes")) return Response.json(NOTES);
   if (p.endsWith("/changes")) return Response.json(CHANGES);
   if (p.endsWith("/filings")) return Response.json({ filings: FILINGS });
   if (p.endsWith("/peers")) {
@@ -164,7 +186,8 @@ it("heads the page with public metadata, the next expected filing and the tabs",
   expect(head).toContain("next 10-Q for the period ending Oct 25, 2026 expected ~Nov 19, 2026");
   expect([...container.querySelectorAll(".tabs a")].map((a) => [a.textContent, a.getAttribute("href")])).toEqual([
     ["Overview", `#/company/${NVDA}`], ["Statements", `#/company/${NVDA}/statements`], ["Segments", `#/company/${NVDA}/segments`],
-    ["Ratios", `#/company/${NVDA}/ratios`], ["Filings", `#/company/${NVDA}/filings`], ["Peers", `#/company/${NVDA}/peers`],
+    ["Ratios", `#/company/${NVDA}/ratios`], ["Filings", `#/company/${NVDA}/filings`], ["Data notes", `#/company/${NVDA}/notes`],
+    ["Peers", `#/company/${NVDA}/peers`],
   ]);
   expect($('.tabs a[aria-current="page"]')?.textContent).toBe("Overview");
   await click(button("+ Watch"));
@@ -305,6 +328,31 @@ it("peers: suggested by SIC and size, into Compare and the chart builder", async
   expect(onChartMany).toHaveBeenCalledWith([NVDA, AAPL], "operating_margin", "ttm", "Operating margin, TTM");
   await click(button("Open in Compare"));
   expect(window.location.hash).toBe(`#/compare?target=${NVDA}&peers=${AAPL},${TSLA}`);
+});
+
+it("data notes: plain-language notes by group, each with its filings", async () => {
+  await render("notes");
+  expect(paths().some((u) => u.pathname === `/api/query/v1/companies/${NVDA}/data-notes`)).toBe(true);
+  expect([...container.querySelectorAll(".notes-group h3")].map((h) => h.textContent)).toEqual([
+    "Freshness (1)", "Restated figures (1)", "Gaps and overlapping periods (1)", "Derived quarters (1)",
+  ]);
+  const text = container.textContent!;
+  expect(text).toContain("EDGAR has a 10-Q filed Aug 27, 2026 that the SEC's XBRL data (companyfacts) doesn't include yet");
+  expect(text).toContain("Revenue for the period ending Apr 27, 2025 was first reported in the 10-Q filed May 28, 2025 and changed by +1.2% in the 10-K filed Feb 26, 2026");
+  expect(text).toContain("No quarterly capex is reported or derivable from Jan 28, 2019 to Apr 28, 2019");
+  expect(text).toContain("Checked 3 h ago");
+  const links = [...container.querySelectorAll(".note-f a")].map((a) => [a.textContent, a.getAttribute("href"), a.getAttribute("title")]);
+  expect(links).toEqual([
+    ["on EDGAR: 10-Q Aug 27, 2026 ↗", "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000099/", "10-Q 0001045810-26-000099, filed Aug 27, 2026"],
+    ["original: 10-Q May 28, 2025", `#/filing/${NVDA}/0001045810-25-000050`, "10-Q 0001045810-25-000050, filed May 28, 2025"],
+    ["restated in: 10-K Feb 26, 2026", `#/filing/${NVDA}/${K_ACC}`, `10-K ${K_ACC}, filed Feb 26, 2026`],
+  ]);
+});
+
+it("data notes: denied without financials, like every value tab", async () => {
+  rowFor = () => tesla;
+  await render("notes", TSLA);
+  expect(container.textContent).toContain("Data notes for Tesla aren't included in your access");
 });
 
 it("cuts the business description at a sentence", () => {

@@ -53,3 +53,10 @@ it("leaves / and g alone while typing", () => {
   read(key("g", {}, input));
   expect(read(key("h"))).toBeNull();
 });
+
+it("? opens the shortcut sheet, except while typing", () => {
+  const read = shortcutReader();
+  expect(read(key("?"))).toEqual({ type: "help" });
+  expect(read(key("?", {}, document.createElement("input")))).toBeNull();
+  expect(read(key("?", { ctrlKey: true }))).toBeNull();
+});

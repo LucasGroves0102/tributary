@@ -11,6 +11,7 @@ export const COMPANY_TABS = [
   ["segments", "Segments"],
   ["ratios", "Ratios"],
   ["filings", "Filings"],
+  ["notes", "Data notes"],
   ["peers", "Peers"],
 ] as const;
 export type CompanyTab = (typeof COMPANY_TABS)[number][0];
@@ -33,7 +34,9 @@ export type Route =
   | { view: "chart" }
   | { view: "compare"; compare?: CompareState }
   | { view: "search"; search?: SearchState }
-  | { view: "ask" };
+  | { view: "ask" }
+  /** what Tributary covers and doesn't (prices, consensus, transcripts) */
+  | { view: "about" };
 
 /** Screens in the left nav: routes without parameters. */
 export type NavView = "home" | "companies" | "chart" | "compare" | "ask";
@@ -52,7 +55,7 @@ const ACCESSION = /^\d{10}-\d{2}-\d{6}$/;
 /** Section keys as the Query API takes them: 10-K "1A", 10-Q "II-1A", 8-K "2.02", "EX-99.1". */
 export const SECTION = /^[A-Z0-9.?-]{1,8}$/;
 const MAX_Q = 200;
-const SIMPLE = new Set(["chart", "ask"]);
+const SIMPLE = new Set(["chart", "ask", "about"]);
 
 /** "#/company/0001045810" → route; anything unrecognized is Home. Companies keeps its
  * screener filters in a query ("#/companies?band=1b-10b"), Compare its comps
@@ -72,7 +75,7 @@ export function parse(hash: string): Route {
     const search = parseSearch(query);
     return search ? { view, search } : { view };
   }
-  if (view && SIMPLE.has(view)) return { view: view as NavView };
+  if (view && SIMPLE.has(view)) return { view: view as "chart" | "ask" | "about" };
   if (view === "explore") return { view: "companies" }; // links from before the v3 shell
   if (view === "company" && CIK.test(a ?? "")) {
     return b && b !== "overview" && TABS.has(b)

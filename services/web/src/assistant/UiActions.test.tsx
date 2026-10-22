@@ -1,6 +1,8 @@
+import { clearChartCache } from "../chart/cache";
+import { loadScreens } from "../pages/lazy";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
 
 import { App } from "../App";
 import { entry, NVDA } from "../fixtures";
@@ -85,7 +87,11 @@ const undo = async (n: number) => {
 const methods = (m: string) =>
   vi.mocked(fetch).mock.calls.filter(([, init]) => init?.method === m).map(([u]) => String(u));
 
+// the lazily loaded screens (pages/lazy.ts), ready before the first render
+beforeAll(() => loadScreens());
+
 beforeEach(() => {
+  clearChartCache();
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => respond(url, init)));
   window.localStorage.clear();

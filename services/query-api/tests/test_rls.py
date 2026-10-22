@@ -178,6 +178,48 @@ def test_latest_filings_respect_rls(client, token):
     assert client.get("/v1/filings/latest", headers=token("t-free")).json()["filings"] == []
 
 
+def test_data_notes_respect_rls(client, token):
+    """Findings, derived quarters and "companyfacts behind EDGAR" for both companies; layer 1
+    allows everything, RLS leaves only A to t-free (financials) and nothing to the others."""
+    conn = client.app_conn
+    run = conn.execute("INSERT INTO ops.quality_runs (companies) VALUES (2)"
+                       " RETURNING run_id").fetchone()[0]
+    for cid in (A, B):
+        conn.execute(
+            "INSERT INTO ops.quality_findings (company_id, check_name, metric, period_end,"
+            " severity, detail, run_id) VALUES (%s, 'restatement', 'revenue', '2026-06-30',"
+            " 'info', %s, %s)",
+            (cid, f'{{"original_accession": "{cid}-26-000000", "original_filed": "2026-07-01",'
+                  f' "restated_accession": "{cid}-26-000001", "restated_filed": "2026-08-01",'
+                  ' "change": 0.02}', run))
+        conn.execute("INSERT INTO ops.quality_companies (company_id, run_id, checked_at, errors,"
+                     " warnings) VALUES (%s, %s, now(), 0, 0)", (cid, run))
+        conn.execute(
+            "INSERT INTO gold.quarterly_financials (company_id, metric, period_start, period_end,"
+            " value, unit, value_source, source_tag, accession_no, filed, source_accessions,"
+            " ingested_at) VALUES (%s, 'revenue', '2026-01-01', '2026-03-31', 1, 'USD',"
+            " 'derived', 'us-gaap:Revenues', %s, '2026-05-01', ARRAY[%s], now())",
+            (cid, f"{cid}-26-000003", f"{cid}-26-000003"))
+        conn.execute("INSERT INTO bronze.submission_filings (accession_no, cik, form,"
+                     " filing_date, report_date) VALUES (%s, %s, '10-Q', '2026-09-01',"
+                     " '2026-07-31')", (f"{cid}-26-000010", cid))
+
+    def notes(user, company):
+        r = client.get(f"/v1/companies/{company}/data-notes", headers=token(user))
+        assert r.status_code == 200, r.text
+        return sorted((n["kind"], n["filings"][0]["accession_no"]) for n in r.json()["notes"])
+
+    assert notes("t-free", A) == [("companyfacts_behind", f"{A}-26-000010"),
+                                  ("derived_quarters", f"{A}-26-000003"),
+                                  ("restatement", f"{A}-26-000000")]
+    assert notes("t-free", B) == []
+    assert notes("t-nobody", A) == []
+    r = client.get("/v1/data-notes", headers=token("t-free"))
+    assert {n["company_id"] for n in r.json()["notes"]} == {A}
+    assert "derived_quarters" not in {n["kind"] for n in r.json()["notes"]}
+    assert client.get("/v1/data-notes", headers=token("t-nobody")).json()["notes"] == []
+
+
 def test_metric_list_matches_database(client):
     served = client.get("/v1/metrics").json()
     with psycopg.connect(DSN) as conn:

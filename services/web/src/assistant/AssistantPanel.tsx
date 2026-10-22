@@ -1,8 +1,13 @@
-import { useEffect, useRef, type RefObject } from "react";
+import { lazy, Suspense, useEffect, useRef, type RefObject } from "react";
 
-import { AssistantMessage } from "../components/AssistantMessage";
 import type { PageContext } from "./context";
+import { href } from "../route";
 import type { Assistant } from "./useAssistant";
+
+// answers render through marked + DOMPurify (markdown.ts): loaded with the first answer, or
+// in the background once idle (pages/lazy.ts), not with the first screen
+const loadAnswers = () => import("../components/AssistantMessage");
+const AssistantMessage = lazy(() => loadAnswers().then((m) => ({ default: m.AssistantMessage })));
 
 interface Props {
   assistant: Assistant;
@@ -63,6 +68,11 @@ export function AssistantPanel({
             Ask about any company you can read: revenue, margins, cash flow, what a filing says
             or what changed since the last one. Every answer cites its filing and section, and I
             only see the companies your plan covers.
+            <p className="faint">
+              I can't give stock prices, valuation multiples, consensus estimates or call
+              transcripts: Tributary has SEC filings and XBRL only.{" "}
+              <a href={href({ view: "about" })}>What Tributary covers</a>
+            </p>
           </div>
         ) : (
           turns.map((t) =>
@@ -71,7 +81,9 @@ export function AssistantPanel({
                 {t.text}
               </article>
             ) : (
-              <AssistantMessage key={t.id} turn={t} undone={undone} onUndo={onUndo} />
+              <Suspense key={t.id} fallback={<article className="message">…</article>}>
+                <AssistantMessage turn={t} undone={undone} onUndo={onUndo} />
+              </Suspense>
             ),
           )
         )}

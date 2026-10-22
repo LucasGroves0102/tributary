@@ -80,6 +80,37 @@ test("chart builder: two metric layers and a formula, exported as CSV", async ({
   await expect(page.locator(".lchart table tbody tr")).toHaveCount(4);
 });
 
+test("chart builder: formula autocomplete, annual frequency and deck output", async ({ page }) => {
+  await mockApi(page);
+  await startDemo(page);
+  await page.goto("/#/chart");
+  await page.getByRole("button", { name: "+ Metric" }).click();
+  await page.getByRole("button", { name: "+ Formula" }).click();
+  const formula = page.getByLabel("Formula", { exact: true });
+  await formula.click();
+  await formula.pressSequentially("net_inc");
+  const suggestions = page.getByRole("listbox", { name: "Formula suggestions" });
+  await expect(suggestions.getByRole("option").first()).toContainText("net_income");
+  await formula.press("Tab");
+  await expect(formula).toHaveValue("net_income");
+  await formula.pressSequentially(" ");
+  await suggestions.getByRole("option", { name: /÷/ }).click();
+  await formula.pressSequentially("revenue");
+  await formula.press("Enter");
+  await expect(page.locator(".ch-legend text")).toHaveCount(2);
+
+  await page.getByRole("button", { name: "Annual" }).click();
+  await expect(page.locator(".ch-axis text")).toHaveText(["CY2025"]); // the mock's one full calendar year
+  await page.getByLabel("Deck output").check();
+  await expect(page.locator(".lchart.deck")).toBeVisible();
+  await expect(page.locator(".ch-sub")).toHaveText(/^Calendar years, CY2025 · USD \(left\), % \(right\)$/);
+  await expect(page.locator(".ch-foot").first()).toContainText("Source: SEC filings via Tributary; 10-Q for KO; latest KO 10-Q filed Jul 30, 2026; as of Oct 21, 2026.");
+  const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Export SVG" }).click()]);
+  const svg = readFileSync((await download.path())!, "utf8");
+  expect(svg).toContain("Source: SEC filings via Tributary");
+  expect(svg).toContain("Calendar years, CY2025");
+});
+
 test("comps: target and peers with the peer median, exported as CSV", async ({ page }) => {
   await mockApi(page);
   await startDemo(page);
@@ -95,6 +126,13 @@ test("comps: target and peers with the peer median, exported as CSV", async ({ p
   const csv = readFileSync((await download.path())!, "utf8");
   expect(csv).toContain(`target,${PEP},PEP,PepsiCo,financials`);
   expect(csv).toContain("peer median (excludes target)");
+
+  // side by side: a small chart per column, each company a line
+  await page.getByRole("button", { name: /^Show \d+ charts$/ }).click();
+  const multiples = page.locator(".multiple");
+  await expect(multiples).toHaveCount(8);
+  await expect(multiples.first().locator(".ch-title")).toHaveText("Revenue, TTM");
+  await expect(multiples.first().locator(".ch-legend text")).toHaveText(["PEP", "KO", "NVDA"]);
 });
 
 test("save a chart to a new workspace and reopen it", async ({ page }) => {
@@ -152,4 +190,45 @@ test("narrow screens: the sidebar is a drawer behind Menu", async ({ page }) => 
   await side.getByRole("link", { name: /Companies/ }).click();
   await expect(side).toBeHidden();
   await expect(page.locator("table.screen tbody tr")).toHaveCount(4);
+});
+
+test("keyboard: ? lists the shortcuts, Ctrl+arrows jump in tables; the limits page", async ({ page }) => {
+  await mockApi(page);
+  await startDemo(page);
+  await page.goto("/#/companies");
+  const rows = page.locator("table.screen tbody tr");
+  await expect(rows).toHaveCount(4);
+  await rows.first().focus();
+  await page.keyboard.press("Control+ArrowDown");
+  await expect(rows.last()).toBeFocused();
+  await page.keyboard.press("Control+ArrowRight");
+  await expect(rows.last().locator("> td, > th").last()).toBeFocused();
+  await page.keyboard.press("Control+ArrowUp");
+  await expect(rows.first().locator("> td, > th").last()).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(rows.first()).toBeFocused();
+
+  await page.keyboard.press("?");
+  const sheet = page.getByRole("dialog", { name: "Keyboard shortcuts" });
+  await expect(sheet).toBeVisible();
+  await expect(sheet).toContainText("First or last column");
+  await page.keyboard.press("Escape");
+  await expect(sheet).toBeHidden();
+
+  await page.locator(".side a.cover-link").click();
+  await expect(page.getByRole("heading", { name: "What Tributary covers" })).toBeVisible();
+  await expect(page.locator(".about")).toContainText("No consensus estimates");
+});
+
+test("data notes: recent ones on Home, the full list on the company's tab", async ({ page }) => {
+  await mockApi(page);
+  await startDemo(page);
+  const card = page.locator("section.card", { has: page.getByRole("heading", { name: "Recent data notes for your companies" }) });
+  await expect(card.locator(".note")).toContainText("Revenue restated");
+  await card.locator(".note-t a").first().click();
+  await expect(page).toHaveURL(new RegExp(`#/company/${PEP}/notes`));
+  await expect(page.locator('.tabs a[aria-current="page"]')).toHaveText("Data notes");
+  await expect(page.locator(".notes-group h3")).toHaveText(["Restated figures (1)"]);
+  await expect(page.locator(".note p")).toContainText("first reported in the 10-Q filed Jul 10, 2025 and changed by −1.2%");
+  await expect(page.locator(".note-f a").first()).toHaveAttribute("title", /10-Q 0000077476-25-000020/);
 });

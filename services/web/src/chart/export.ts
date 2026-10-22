@@ -13,6 +13,8 @@ const EXPORT_CSS = [
   ".ch-axis text,.ch-grid text{fill:#5f6874;font-size:10.5px}",
   ".ch-zero{stroke:#d3d8df}",
   ".ch-foot{fill:#5f6874;font-size:10.5px;font-style:italic}",
+  ".ch-sub{fill:#4a525e;font-size:12px}",
+  ".ch-unit{fill:#5f6874;font-size:10px;font-weight:600}",
   ".ch-mk text{fill:currentColor;font-size:10.5px;font-weight:700}",
   ...SERIES.map((c, i) => `.c${i}{color:${c}}`),
 ].join("");

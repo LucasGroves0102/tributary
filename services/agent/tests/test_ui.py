@@ -233,6 +233,11 @@ def test_context_is_strict_and_size_capped():
         {"kind": "metric", "company_id": NVDA, "metric": "revenue", "transform": "ps",
          "type": "sarea"}]}})
     assert shown.chart.range == "max" and shown.chart.layers[1].transform == "ps"
+    custom = UiContext.model_validate({"page": "chart", "chart": {"range": "custom",
+                                                                  "frequency": "annual"}})
+    assert (custom.chart.range, custom.chart.frequency) == ("custom", "annual")
+    with pytest.raises(ValidationError):
+        UiContext.model_validate({"page": "chart", "chart": {"frequency": "monthly"}})
     with pytest.raises(ValidationError):
         UiContext.model_validate({"page": "chart", "chart": {"range": 7}})
     comps =UiContext.model_validate({"page": "compare", "compare": {
@@ -240,6 +245,9 @@ def test_context_is_strict_and_size_capped():
     assert comps.compare.peers == [AAPL]
     assert UiContext.model_validate({"page": "company", "company_id": NVDA,
                                      "tab": "statements"}).tab == "statements"
+    assert UiContext.model_validate({"page": "company", "company_id": NVDA,
+                                     "tab": "notes"}).tab == "notes"
+    assert UiContext.model_validate({"page": "about"}).page == "about"
     reader = UiContext.model_validate({"page": "filing", "company_id": NVDA,
                                        "accession_no": "0001045810-26-000075",
                                        "section_key": "II-1A"})
@@ -308,6 +316,19 @@ def test_context_reaches_the_model_as_data_and_the_tool_only_with_ui():
     Agent(plain, q, "claude-haiku-5-5").ask("chart it", context=ctx)
     assert plain.requests[0]["messages"] == [{"role": "user", "content": "chart it"}]
     assert plain.requests[0]["tools"] == TOOLS and plain.requests[0]["system"] == SYSTEM
+
+
+def test_web_ui_prompt_refuses_prices_consensus_and_transcripts():
+    """The web app's assistant says what Tributary doesn't have instead of estimating it
+    (the What Tributary covers page says the same); the replayed plain prompt is unchanged."""
+    fake = FakeMessages(response("end_turn", text("Tributary has no prices.")))
+    q = api()
+    Agent(fake, q, "claude-haiku-5-5", ui=UiActions(q)).ask("What is Nvidia's P/E?")
+    system = fake.requests[0]["system"]
+    for phrase in ("no stock prices", "no consensus estimates", "no earnings-call transcripts",
+                   "P/E", "beat or miss", "never estimate it"):
+        assert phrase in system
+    assert "consensus" not in SYSTEM  # replays (tests/adversarial, tests/citations) use SYSTEM
 
 
 def test_accepted_actions_are_events_and_refused_ones_are_tool_errors():

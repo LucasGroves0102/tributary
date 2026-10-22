@@ -1,6 +1,8 @@
+import { clearChartCache } from "./chart/cache";
+import { loadScreens } from "./pages/lazy";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "./App";
 import { ACC, entry, feedFiling, NVDA, revenueRow, TESLA, TSLA } from "./fixtures";
@@ -40,6 +42,12 @@ function respond(url: string, init?: RequestInit): Response {
     return Response.json({ as_of: "", forms: [], from: null, to: null, limit: 50, offset: 0, has_more: false, filings: [{
       accession_no: "0001318605-26-000099", company_id: TSLA, name: "Tesla", form: "8-K", filed: new Date().toISOString().slice(0, 10),
       accepted_at: null, period_of_report: null, filing_url: null, document_url: null, sections: null, sections_available: false }] });
+  }
+  if (path.endsWith("/v1/data-notes")) {
+    return Response.json({ as_of: "", checked_at: null, companies: 1, notes: [{
+      company_id: NVDA, kind: "restatement", severity: "info", metric: "revenue", period_end: "2025-04-27", date: "2026-02-26",
+      detail: { original_filed: "2025-05-28", restated_filed: "2026-02-26", change: 0.0123 }, checked_at: null,
+      filings: [{ role: "restated", accession_no: ACC, form: "10-K", filed: "2026-02-26", filing_url: EDGAR }] }] });
   }
   if (path.endsWith("/v1/calendar/expected-filings")) {
     return Response.json({ filings: [{ ...entry().next_expected, company_id: NVDA, name: "Nvidia" }] });
@@ -89,7 +97,11 @@ const $ = (sel: string) => container.querySelector<HTMLElement>(sel);
 const drawer = () => $("aside.ai-drawer");
 const chip = () => $(".ai .chip")?.textContent;
 
+// the lazily loaded screens (pages/lazy.ts), ready before the first render
+beforeAll(() => loadScreens());
+
 beforeEach(() => {
+  clearChartCache();
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => respond(url, init)));
   window.localStorage.clear();
@@ -148,6 +160,15 @@ describe("Home", () => {
     expect(side[1]!.querySelector("svg.spark")).toBeNull();
   });
 
+  it("lists recent data notes for companies with financials, linked to their Data notes tab", async () => {
+    await render();
+    const card = [...container.querySelectorAll("section.card")].find((c) => c.querySelector("h2")?.textContent === "Recent data notes for your companies")!;
+    expect(card.querySelector(".note")?.textContent).toContain("Nvidia · Revenue restated · Feb 26, 2026");
+    expect(card.querySelector(".note a")?.getAttribute("href")).toBe(`#/company/${NVDA}/notes`);
+    // alice reads NVDA's financials, not its filings: the filing opens on EDGAR
+    expect(card.querySelector(".note-f a")?.getAttribute("href")).toBe(EDGAR);
+  });
+
   it("removes a company from the watchlist through the Query API", async () => {
     await render();
     const remove = container.querySelector<HTMLButtonElement>(`button[aria-label="Remove Tesla from watchlist"]`)!;
@@ -177,6 +198,27 @@ describe("navigation", () => {
     await settle();
     expect($(".crumb")?.textContent).toBe("Companies/Nvidia");
     expect($('.nav a[aria-current="page"]')?.textContent).toContain("Companies");
+  });
+
+  it("? shows the keyboard shortcut sheet; Escape closes it and focus returns", async () => {
+    await render();
+    const before = document.activeElement;
+    await key("?");
+    const sheet = $('[role="dialog"]')!;
+    expect(sheet.getAttribute("aria-modal")).toBe("true");
+    expect(sheet.textContent).toContain("Keyboard shortcuts");
+    expect(sheet.textContent).toContain("First or last column");
+    expect(sheet.textContent).toContain("Go to Chart builder");
+    expect(document.activeElement?.getAttribute("aria-label")).toBe("Close keyboard shortcuts");
+    await key("Escape", {}, document.activeElement!);
+    expect($('[role="dialog"]')).toBeNull();
+    expect(document.activeElement).toBe(before);
+    // also from the sidebar footer
+    const button = [...container.querySelectorAll(".side button")].find((b) => b.textContent?.startsWith("Keyboard shortcuts"))!;
+    await act(async () => (button as HTMLElement).click());
+    expect($('[role="dialog"]')).not.toBeNull();
+    await act(async () => ($(".sheet-overlay") as HTMLElement).click());
+    expect($('[role="dialog"]')).toBeNull();
   });
 
   it("switches screens with g then a letter", async () => {
@@ -314,6 +356,21 @@ describe("assistant drawer", () => {
     const reader = [...container.querySelectorAll<HTMLAnchorElement>(".ai-m .sources a.reader-link")];
     expect(reader.map((a) => a.getAttribute("href"))).toEqual([`#/filing/${NVDA}/${ACC}/I-2`]);
   });
+});
+
+it("says what Tributary covers, from the sidebar footer and the assistant's empty state", async () => {
+  await render();
+  expect($(".side .cover-link")?.getAttribute("href")).toBe("#/about");
+  expect([...container.querySelectorAll(".ai-m .empty a")].map((a) => a.getAttribute("href"))).toContain("#/about");
+  expect($(".ai-m .empty")?.textContent).toContain("consensus estimates");
+  window.location.hash = "#/about";
+  await settle();
+  expect($("h1")?.textContent).toBe("What Tributary covers");
+  expect($(".crumb")?.textContent).toBe("What Tributary covers");
+  const text = $(".about")!.textContent!;
+  for (const limit of ["No stock prices or market data", "No consensus estimates", "No earnings-call transcripts",
+    "Expected filing dates are estimates", "n/a (bank)", "5:30 pm ET"]) expect(text).toContain(limit);
+  expect($(".side .cover-link")?.getAttribute("aria-current")).toBe("page");
 });
 
 it("switches theme and remembers it per user", async () => {

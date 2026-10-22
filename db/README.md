@@ -50,6 +50,9 @@ only) for `ops_reader`. All three gold tables are derived: rebuild them by runni
 `ops.sec_report_throttle` only (now SECURITY DEFINER with a fixed `search_path`, revoked from
 PUBLIC), no table access. The login is created on the host
 ([deploy/helm/tributary](../deploy/helm/tributary/README.md), "SEC limiter login").
+`023_data_notes.sql` adds the `restatement` check (severity `info`) to `ops.check_financials` and
+`ops.quality_summary`, and lets the Query API read `ops.quality_findings` / `ops.quality_companies`
+(USAGE on `ops`, RLS `granted_financials`) for the product's data notes.
 
 ## Migrations
 

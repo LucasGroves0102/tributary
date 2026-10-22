@@ -3,7 +3,7 @@ import { useId, useMemo, useState, type KeyboardEvent, type MouseEvent, type Ref
 import { day } from "../format";
 import { layout, nearest, nearestSeries } from "./layout";
 import type { Marker } from "./markers";
-import { formatValue } from "./metrics";
+import { formatValue, unitLabel } from "./metrics";
 import { pointAt, type Point, type Series, type Source } from "./series";
 
 interface Props {
@@ -16,7 +16,16 @@ interface Props {
   markers?: Marker[];
   /** clicking a point (or Enter on it, or a marker) opens its source filing */
   onOpen?: (source: Source) => void;
+  /** a second line under the title (deck output) */
+  subtitle?: string;
+  /** deck output: the light palette on screen too, as the exports draw it */
+  deck?: boolean;
+  /** a small multiple: a narrower, shorter viewBox (same text size, so it stays legible) */
+  compact?: boolean;
 }
+
+const COMPACT_WIDTH = 460;
+const COMPACT_PLOT_H = 200;
 
 /** The newest filing behind a point: the one a click opens. */
 export function newestSource(p: Point | undefined): Source | null {
@@ -27,8 +36,15 @@ export function newestSource(p: Point | undefined): Source | null {
  * legend and source footnote inside the SVG for deck exports. Hover (or the arrow keys) shows
  * every layer's value, period and source filing; a click or Enter opens the filing in the
  * reader. "View as table" shows the same values as a data table. */
-export function LayerChart({ series, title, footnote, svgRef, markers = [], onOpen }: Props) {
-  const lay = useMemo(() => layout(series, Boolean(title), markers), [series, title, markers]);
+export function LayerChart({ series, title, footnote, svgRef, markers = [], onOpen, subtitle = "", deck = false, compact = false }: Props) {
+  const lay = useMemo(
+    () => layout(series, Boolean(title), markers, {
+      subtitle: Boolean(subtitle),
+      footLines: footnote.length,
+      ...(compact ? { width: COMPACT_WIDTH, plotHeight: COMPACT_PLOT_H } : {}),
+    }),
+    [series, title, markers, subtitle, footnote.length, compact],
+  );
   const [hover, setHover] = useState<number | null>(null);
   const [sel, setSel] = useState(0);
   const [table, setTable] = useState(false);
@@ -90,7 +106,7 @@ export function LayerChart({ series, title, footnote, svgRef, markers = [], onOp
     onOpen?.({ form: m.kind, filed: m.filed, accessionNo: m.accessionNo, url: null, periodEnd: m.filed, companyId: m.companyId });
 
   return (
-    <div className="lchart">
+    <div className={["lchart", deck && "deck", compact && "compact"].filter(Boolean).join(" ")}>
       <div className="lchart-bar">
         <span className="faint small" id={help}>
           {onOpen ? "Click a point to open its filing. " : ""}Focus the chart for arrow keys
@@ -121,6 +137,21 @@ export function LayerChart({ series, title, footnote, svgRef, markers = [], onOp
           {title && (
             <text className="ch-title" x={plot.l} y={20}>
               {title}
+            </text>
+          )}
+          {subtitle && (
+            <text className="ch-sub" x={plot.l} y={title ? 38 : 18}>
+              {subtitle}
+            </text>
+          )}
+          {lay.units.left && (
+            <text className="ch-unit" x={plot.l - 6} y={plot.t - 6} textAnchor="end">
+              {lay.units.left}
+            </text>
+          )}
+          {lay.units.right && (
+            <text className="ch-unit" x={plot.r + 6} y={plot.t - 6}>
+              {lay.units.right}
             </text>
           )}
           <g className="ch-legend">
@@ -291,6 +322,3 @@ export function DataTable({ series, title, onOpen }: { series: Series[]; title: 
   );
 }
 
-function unitLabel(unit: string): string {
-  return ({ USD: "USD", ratio: "%", pct: "% change", index: "index = 100", "USD/shares": "USD per share", shares: "shares" } as Record<string, string>)[unit] ?? unit;
-}

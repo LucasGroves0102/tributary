@@ -37,6 +37,7 @@ KINDS = ("chart", "comps", "screen")
 Kind = Literal["chart", "comps", "screen"]
 
 CIK = r"^\d{10}$"
+ISO_DATE = r"^\d{4}-\d{2}-\d{2}$"
 _CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 
 
@@ -90,10 +91,21 @@ class ChartLayer(_Strict):
 class ChartState(_Strict):
     """chart/model.ts ChartState, without nextId."""
     title: str = Field(default="", max_length=200)
-    range: Literal[1, 2, 3, 5, 10, "max"] = 3
+    subtitle: str | None = Field(default=None, max_length=200)  # deck output
+    range: Literal[1, 2, 3, 5, 10, "max", "custom"] = 3
+    # range "custom": earliest and latest period end (either may be open)
+    start: str | None = Field(default=None, pattern=ISO_DATE)
+    end: str | None = Field(default=None, pattern=ISO_DATE)
+    frequency: Literal["quarterly", "annual"] | None = None  # unset: quarterly
     align: Literal["calendar", "fiscal"] = "calendar"
     layers: list[ChartLayer] = Field(min_length=1, max_length=12)
     markers: bool = False  # filing markers on the time axis
+    deck: bool = False  # deck output: light background, subtitle, source footnote
+
+    @field_validator("subtitle")
+    @classmethod
+    def _subtitle(cls, v: str | None) -> str | None:
+        return None if v is None or not v.strip() else clean_name(v, 200)
 
 
 CompareColumn = Literal["revenue_ttm", "revenue_growth_ttm", "gross_margin_ttm",

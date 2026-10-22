@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { CompareState } from "../compare/state";
 import { download } from "../download";
 import { entry, NVDA, TESLA, TSLA } from "../fixtures";
+import { clearChartCache } from "../chart/cache";
 import { Compare } from "./Compare";
 
 vi.mock("../download", () => ({ download: vi.fn() }));
@@ -28,6 +29,25 @@ const PEERS = {
   ],
 };
 
+const evaluated: Record<string, string>[] = [];
+/** Two calendar quarters per request, each citing a filing of its company. */
+function series(body: Record<string, string>) {
+  evaluated.push(body);
+  const company = body.default_company!;
+  const point = (key: number, period: string, end: string, value: string) => ({
+    period, period_key: key, period_end: end, value, source_accessions: [],
+    inputs: [{ input: 0, period_start: null, period_end: end, value, value_source: "reported",
+      citation: { accession_no: `${company}-26-000075`, form: "10-Q", filed: "2026-08-26", source_accessions: null, filing_url: null },
+      freshness: { filed: "2026-08-26", ingested_at: "" } }],
+  });
+  return {
+    formula: body.formula, unit: body.formula.includes("margin") ? "ratio" : "USD", basis: body.basis, view: body.view,
+    alignment: body.basis, as_of: "2026-10-21T00:00:00Z",
+    inputs: [{ input: 0, ref: body.formula, ticker: null, company_id: company, metric: body.formula, span: body.view, lag_quarters: 0, unit: "USD" }],
+    points: [point(8104, "CY2026 Q1", "2026-03-31", "1"), point(8105, "CY2026 Q2", "2026-06-30", "2")],
+  };
+}
+
 let root: Root;
 let container: HTMLDivElement;
 const onChart = vi.fn();
@@ -36,8 +56,9 @@ beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   vi.stubGlobal(
     "fetch",
-    vi.fn(async (url: string) => {
+    vi.fn(async (url: string, init?: RequestInit) => {
       const u = new URL(url, "http://x");
+      if (u.pathname.endsWith("/v1/formulas/evaluate")) return Response.json(series(JSON.parse(String(init?.body))));
       if (u.pathname.endsWith("/peers")) return Response.json(PEERS);
       if (u.pathname.endsWith("/v1/companies/search")) {
         return Response.json({ results: [{ company_id: KO, name: "COCA COLA CO", matched_on: "ticker", matched_alias: "KO", is_current: true, access: [] }] });
@@ -49,6 +70,8 @@ beforeEach(() => {
   );
   onChart.mockClear();
   vi.mocked(download).mockClear();
+  evaluated.length = 0;
+  clearChartCache();
 });
 
 afterEach(() => {
@@ -177,4 +200,28 @@ it("shows a bank's operating margin as n/a and leaves it out of the median, with
   expect($(".foot")?.textContent).toContain("Banks show n/a for operating margin");
   // company rows are a keyboard-navigable list; the median rows aren't
   expect(container.querySelectorAll("table.comps tbody tr[data-nav]")).toHaveLength(3);
+});
+
+it("side by side: one small chart per column, a line per readable company, on demand", async () => {
+  await render(COMPS);
+  expect(evaluated).toHaveLength(0); // nothing asked until the charts are shown
+  const show = [...container.querySelectorAll("button")].find((b) => b.textContent === "Show 3 charts")!;
+  await click(show);
+  for (let i = 0; i < 3; i++) await act(async () => {});
+  // NVDA and AAPL (TSLA is metadata only), three columns: six lines, calendar quarters, 3 years
+  expect(evaluated).toHaveLength(6);
+  expect(new Set(evaluated.map((b) => b.default_company))).toEqual(new Set([NVDA, AAPL]));
+  expect(evaluated.every((b) => b.basis === "calendar" && b.from)).toBe(true);
+  expect(evaluated.find((b) => b.formula.includes("[-4q]"))).toMatchObject({ formula: "(revenue) / (revenue)[-4q] - 1", view: "ttm" });
+  const charts = [...container.querySelectorAll(".multiple")];
+  expect(charts.map((c) => c.querySelector(".ch-title")?.textContent)).toEqual([
+    "Revenue, TTM", "Operating margin, TTM", "Revenue growth, year over year, TTM",
+  ]);
+  // every company in the same colour on each chart
+  for (const c of charts) {
+    expect([...c.querySelectorAll(".ch-legend g")].map((g) => [g.getAttribute("class"), g.textContent])).toEqual([["c0", "NVDA"], ["c1", "AAPL"]]);
+  }
+  expect(charts[0]!.querySelector("svg")!.getAttribute("viewBox")).toBe("0 0 460 294"); // narrow and short: the text stays legible
+  await click([...container.querySelectorAll("button")].find((b) => b.textContent === "Hide charts"));
+  expect(container.querySelector(".multiple")).toBeNull();
 });

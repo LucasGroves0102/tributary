@@ -16,9 +16,11 @@ interface Props {
   onExport: () => void;
   /** "Continue where you left off" (workspaces/Recent) */
   recent?: ReactNode;
+  /** "Recent data notes for your companies" (home/RecentNotes) */
+  notes?: ReactNode;
 }
 
-export function Home({ workspace, lastIngested, onAdd, onExport, recent }: Props) {
+export function Home({ workspace, lastIngested, onAdd, onExport, recent, notes }: Props) {
   const { watchlist, rows, filings, expected, since, firstVisit } = workspace;
   const newLabel = firstVisit
     ? "new in the last 7 days in bold"
@@ -96,6 +98,8 @@ export function Home({ workspace, lastIngested, onAdd, onExport, recent }: Props
           </div>
         </section>
       </div>
+
+      {notes}
     </div>
   );
 }

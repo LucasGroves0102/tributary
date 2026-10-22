@@ -51,6 +51,11 @@ export function stateOf(c: Current): Record<string, unknown> {
           return out;
         }),
         ...(c.chart.markers ? { markers: true } : {}),
+        ...(c.chart.range === "custom" && c.chart.start ? { start: c.chart.start } : {}),
+        ...(c.chart.range === "custom" && c.chart.end ? { end: c.chart.end } : {}),
+        ...(c.chart.frequency === "annual" ? { frequency: "annual" } : {}),
+        ...(c.chart.deck ? { deck: true } : {}),
+        ...(c.chart.subtitle ? { subtitle: c.chart.subtitle } : {}),
       };
     case "comps":
       return { ...cleanCompare(c.compare) };

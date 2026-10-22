@@ -22,7 +22,9 @@ the URL, sortable, ungranted companies as metadata only, CSV export through the 
 `#/filing/<company_id>/<accession>[/<section>]` parsed filing reader; `#/chart` the chart
 builder (each layer a `/v1/formulas/evaluate` request; plain SVG; CSV, SVG and PNG export);
 `#/ask` the assistant full width, with streamed answers, tool trace and verified citation links;
-`#/compare` describes what's coming.
+`#/compare` the comps table; `#/about` says what Tributary covers and doesn't (no prices, consensus or
+transcripts; estimated dates; banks; EDGAR timing), linked from the sidebar footer and the
+assistant's empty state.
 
 Sign-in (`src/session.ts`): the front door is "Try the demo" (`pages/Welcome.tsx`). It calls
 `POST /v1/demo/sandbox`, which creates a temporary real user (plan pro, 20 companies, a seeded
@@ -56,15 +58,40 @@ Chart builder (`src/chart/`): layers can be renamed (legend), recoloured (colour
 layer when it moves), moved up or down, hidden; types line, bar, area, stacked bar and stacked
 area (layers of the same stacked type and axis stack, negatives downward); transforms quarterly,
 TTM, YoY, QoQ, indexed and per share (`ttm(f) / weighted_shares_diluted` in the quarter view,
-offered only when the catalog has the share count); ranges 1y/3y/5y/10y/max. Clicking a point
+offered only when the catalog has the share count); ranges 1y/3y/5y/10y/max or a custom first and last period end; quarterly or annual frequency
+(annual = each year's fourth quarter: flows as TTM there, i.e. the fiscal- or calendar-year total,
+balances as the year-end value, ratios full-year; QoQ becomes YoY). Formulas autocomplete metric
+names (the catalog), your companies' tickers (`TICKER.`), `ttm()` / `abs()`, operators and lags
+(`chart/autocomplete.ts`; Tab completes, arrows then Enter pick), and the API still checks them
+inline. Deck output draws the chart in the light palette with a subtitle (periods and units,
+editable), axis unit captions and a source footnote ("Source: SEC filings via Tributary; forms
+for companies; latest filing; as of"), which SVG and PNG exports keep. Evaluate answers are kept
+in memory per (token, request) for the session (`chart/cache.ts`), so coming back to a chart
+asks the API nothing. Clicking a point
 (or Enter on it; arrows move between quarters and layers) opens its newest source filing in the
 reader. Filing markers put each company's 10-Ks and 10-Qs (public index) and 8-K results (item
 2.02, from parsed filings) on the time axis. "View as table" shows the plotted values with their
 sources as a data table.
 
+Data notes (`src/company/notes.ts`, Query API `/v1/companies/{id}/data-notes`, `/v1/data-notes`):
+the tearsheet's Data notes tab groups what the automated checks found (freshness, restated
+figures, gaps and overlapping periods, values to double-check, derived quarters) in plain
+language, each with links to its filings (the reader for 10-K/10-Q text the user can read,
+else EDGAR); Home lists the newest notes across the user's companies. They need financials
+access, like the values they describe.
+
+Compare's "Side by side" draws the selected columns as small multiples (`compare/SmallMultiples.tsx`):
+one compact LayerChart per column, every readable company a line in the same colour on each
+(at most 8), calendar quarters over 3 years, each line one `/v1/formulas/evaluate` request built
+by the chart builder's rules and shared with its session cache; nothing is asked until the
+charts are shown.
+
 States and accessibility: every data panel loads with a skeleton (`components/States.tsx`),
 errors offer a retry, empty states say what to do next. The screener, watchlist and comps rows
-are a roving tab stop (arrows, Page Up/Down, Home/End, Enter opens: `components/tableNav.ts`).
+are a roving tab stop (arrows, Page Up/Down, Home/End, Ctrl/Cmd + Up/Down the first and last
+row, Right or Ctrl/Cmd + Left/Right into the cells, then the first and last column; Enter opens:
+`components/tableNav.ts`). `?` opens the keyboard shortcut sheet (`components/ShortcutSheet.tsx`,
+also from the sidebar footer).
 `src/tokens.test.ts` checks every text, state and series token against WCAG AA in both themes.
 Under 900px the sidebar becomes a drawer behind Menu; under 600px the assistant drawer is full
 screen. Banks show "n/a (bank)" for operating margin, FCF and net debt (`format.ts`
@@ -90,10 +117,34 @@ npm run e2e       # Playwright flows in e2e/ against dist/ (build first)
 
 The end-to-end flows (`e2e/app.spec.ts`: try the demo → Home, screener filter/sort/watch, a
 two-layer chart with a formula exported as CSV, comps, saving a chart to a workspace and
-reopening it, the assistant drawer with a streamed answer, the narrow-screen menu) run against
-`vite preview` with every `/api/*` call answered by `e2e/mockApi.ts` (route interception), so
-no backend runs. One worker and one headless chromium (`npx playwright install chromium` once).
-CI runs them in the `e2e` job.
+reopening it, the assistant drawer with a streamed answer, the narrow-screen menu, formula
+autocomplete with annual frequency and deck output, Compare's side-by-side charts, the shortcut
+sheet and Ctrl+arrow table jumps, the limits page, data notes on Home and the tearsheet) run
+against `vite preview` with every `/api/*` call answered by `e2e/mockApi.ts` (route
+interception), so no backend runs. One worker and one headless chromium
+(`npx playwright install chromium` once). CI runs them in the `e2e` job.
+
+## Performance
+
+Production build (`npm run build`, Vite 6, 2026-10-21), per route: what a first visit to that
+screen downloads, minified (gzip). Every screen but Home is its own chunk (`src/pages/lazy.ts`,
+React.lazy); once signed in and idle the app prefetches them, so switching screens doesn't wait.
+
+| Route | JS | CSS |
+|---|---|---|
+| Shell + Home (`#/`), first load | 330.1 kB (105.4 kB) | 34.9 kB (7.6 kB) |
+| + Chart builder (`#/chart`) | + ChartBuilder 23.7 kB (8.9 kB), LayerChart 11.4 kB (4.8 kB), cache 0.2 kB | |
+| + Company tearsheet (`#/company/…`) | + Company 12.5 kB (4.0 kB), Filings 6.5 kB (2.3 kB), LayerChart | |
+| + Compare (`#/compare`) | + Compare 13.6 kB (4.9 kB), LayerChart, cache | |
+| + Companies (`#/companies`) | + 11.1 kB (4.1 kB) | |
+| + Filing reader (`#/filing/…`) | + FilingReader 10.8 kB (3.7 kB), text 2.1 kB (1.1 kB) | |
+| + Search, About | + 5.2 kB (1.9 kB), 3.6 kB (1.4 kB) | |
+| + first assistant answer (marked, DOMPurify) | + AssistantMessage 68.1 kB (23.2 kB) | |
+
+Before splitting, everything was one 493.6 kB (156.3 kB gzip) script; the first screen now
+loads a third less. Most of what remains is React DOM. Chart data is cached in memory per
+(token, request) for the session (`src/chart/cache.ts`). Lighthouse CI isn't run: `@lhci/cli`
+plus a Chrome download didn't fit the CI and laptop budget; these sizes are the tracked number.
 
 ## Production
 
