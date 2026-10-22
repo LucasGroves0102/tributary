@@ -232,3 +232,95 @@ test("data notes: recent ones on Home, the full list on the company's tab", asyn
   await expect(page.locator(".note p")).toContainText("first reported in the 10-Q filed Jul 10, 2025 and changed by −1.2%");
   await expect(page.locator(".note-f a").first()).toHaveAttribute("title", /10-Q 0000077476-25-000020/);
 });
+
+test("reports: write one from a workspace, read it with its charts, download and print", async ({ page }) => {
+  const fake = await mockApi(page);
+  await startDemo(page);
+  fake.workspaces.push({ workspace_id: "w-bev", name: "Beverages", created_at: "2026-10-20T00:00:00Z", updated_at: "2026-10-20T00:00:00Z" });
+  fake.items.set("i-chart", {
+    item_id: "i-chart", workspace_id: "w-bev", kind: "chart", name: "PEP margins", created_at: "2026-10-20T00:00:00Z",
+    updated_at: "2026-10-20T00:00:00Z", opened_at: null,
+    state: { title: "PEP operating margin", range: 3, align: "calendar", layers: [{ kind: "metric", companyId: PEP, metric: "operating_margin", transform: "ttm", type: "line", axis: "L", hidden: false }] },
+  });
+  fake.items.set("i-comps", {
+    item_id: "i-comps", workspace_id: "w-bev", kind: "comps", name: "PEP vs KO", created_at: "2026-10-20T00:00:01Z",
+    updated_at: "2026-10-20T00:00:01Z", opened_at: null, state: { target: PEP, peers: [KO], cols: ["revenue_ttm", "operating_margin_ttm"] },
+  });
+  await page.goto("/#/workspace/w-bev");
+  await expect(page.getByRole("heading", { name: "Beverages" })).toBeVisible();
+  await expect(page.locator(".page")).toContainText("counts as 3 assistant questions");
+  await page.getByRole("button", { name: "Write a report" }).click();
+
+  await expect(page).toHaveURL(/#\/report\/r\d+$/);
+  expect(fake.reports).toEqual([{ workspace_id: "w-bev" }]);
+  const report = page.locator(".report-doc");
+  await expect(report.getByRole("heading", { level: 1 })).toHaveText("Beverages: margins hold");
+  // each saved item drawn in place, from its saved state, with live data
+  await expect(report.locator(".report-embed")).toHaveCount(2);
+  await expect(report.locator('.report-embed[aria-label="PEP margins"] .ch-legend text')).not.toHaveCount(0);
+  await expect(report.locator('.report-embed[aria-label="PEP vs KO"] .multiple')).toHaveCount(2);
+  // the unverified figure is flagged; the cited filing links to EDGAR
+  await expect(report.locator(".figure.unverified")).toHaveText("$99.9B");
+  await expect(report.locator(".report-meta")).toContainText("1 of 2 figures unverified");
+  await expect(report.locator(`a.accession[href^="https://www.sec.gov/"]`).first()).toBeVisible();
+
+  const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Download Markdown" }).click()]);
+  expect(download.suggestedFilename()).toBe("report-beverages.md");
+  const md = readFileSync((await download.path())!, "utf8");
+  expect(md).toContain("$99.9B [unverified]");
+  expect(md).toContain("> **PEP margins**: Chart");
+
+  // print: the report alone, light palette whatever the theme
+  await page.emulateMedia({ media: "print" });
+  await expect(page.locator("#side-nav")).toBeHidden();
+  await expect(page.getByRole("button", { name: "Write again" })).toBeHidden();
+  const bg = await report.locator(".report-embed").first().evaluate((e) => getComputedStyle(e).backgroundColor);
+  expect(bg).toBe("rgb(255, 255, 255)");
+  await page.emulateMedia({ media: "screen" });
+
+  // the report is listed in its workspace and the sidebar
+  await page.goto("/#/workspace/w-bev");
+  await expect(page.locator(".ws-list").first()).toContainText("Report: Beverages");
+});
+
+test("customizable views: Home arrangement and table columns, saved and reset", async ({ page }) => {
+  const fake = await mockApi(page);
+  await startDemo(page);
+  const titles = page.locator(".page section.card h2");
+  await expect(titles.first()).toHaveText("Continue where you left off");
+  await page.getByRole("button", { name: "Customize Home" }).click();
+  const editor = page.getByRole("region", { name: "Customize Home" });
+  await editor.getByRole("checkbox", { name: "Status strip" }).uncheck();
+  await editor.getByRole("button", { name: "Move Watchlist up" }).click();
+  await page.getByRole("button", { name: "Done" }).click();
+  await expect(page.locator(".status-strip")).toHaveCount(0);
+  await expect(titles.first()).toHaveText("Watchlist");
+  expect((fake.views.home as { cards: unknown[] }).cards.slice(0, 2)).toEqual([{ id: "status", hidden: true }, { id: "watchlist", hidden: false }]);
+
+  // watchlist columns
+  const watch = page.locator("section.card", { has: page.getByRole("heading", { name: "Watchlist" }) });
+  await watch.getByRole("button", { name: "Columns" }).click();
+  await page.getByLabel("Add a watchlist column").selectOption({ label: "Gross margin (TTM)" });
+  await page.getByRole("button", { name: "Remove Net debt (qtr end)" }).click();
+  await expect(page.locator("table.watchlist thead")).toContainText("Gross mgn");
+  await expect(page.locator("table.watchlist thead")).not.toContainText("Net debt");
+
+  // it's all there after a reload
+  await page.reload();
+  await expect(page.locator(".sandbox-banner")).toBeVisible();
+  await expect(titles.first()).toHaveText("Watchlist");
+  await expect(page.locator("table.watchlist thead")).toContainText("Gross mgn");
+  expect(fake.calls.some((c) => c.startsWith("GET /api/query/v1/watchlist?") && c.includes("columns=gross_margin_ttm"))).toBe(true);
+
+  // screener columns, then reset
+  await page.goto("/#/companies");
+  await page.getByRole("button", { name: "Columns" }).click();
+  await page.getByLabel("Add a screener column").selectOption({ label: "Net margin (TTM)" });
+  await expect(page.locator("table.screen thead")).toContainText("Net margin");
+  expect(fake.views.screener).toEqual({ columns: [
+    "revenue_ttm", "revenue_growth_ttm", "gross_margin_ttm", "operating_margin_ttm", "free_cash_flow_ttm", "net_debt_q", "debt_to_equity_q", "net_margin_ttm",
+  ] });
+  await page.getByRole("button", { name: "Reset" }).click();
+  await expect(page.locator("table.screen thead")).not.toContainText("Net margin");
+  expect(fake.views.screener).toBeUndefined();
+});

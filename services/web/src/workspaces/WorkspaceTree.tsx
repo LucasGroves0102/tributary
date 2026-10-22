@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 
 import { ApiError } from "../api";
 import { Skeleton } from "../components/States";
+import { href } from "../route";
 import type { SavedItem, SavedWorkspace } from "../types";
 import { ITEM_NAME_MAX, KIND_LABELS, KIND_PAGES, nameProblem, WORKSPACE_NAME_MAX } from "./model";
 import type { Saved } from "./useSaved";
@@ -22,8 +23,9 @@ interface Props {
 
 const why = (e: unknown) => (e instanceof ApiError ? e.message : "the Query API didn't answer");
 
-/** The sidebar's Workspaces: folders of saved charts, comps and screens. Click an item to open
- * it; rename, duplicate and delete from the small buttons beside each row. */
+/** The sidebar's Workspaces: folders of saved charts, comps, screens and reports. Click an item
+ * to open it; ▤ opens the workspace page (its reports, "Write a report"); rename, duplicate and
+ * delete from the small buttons beside each row. */
 export function WorkspaceTree({ saved, onOpen, onError }: Props) {
   const [editing, setEditing] = useState<Editing>(null);
   const [closed, setClosed] = useState<ReadonlySet<string>>(new Set());
@@ -129,6 +131,9 @@ function Folder({
             <span className="faint">{w.items.length}</span>
           </button>
           <span className="acts">
+            <a href={href({ view: "workspace", workspaceId: w.workspace_id })} aria-label={`Open workspace ${w.name}: items and reports`} title="Open: items and reports">
+              ▤
+            </a>
             <button onClick={() => setEditing({ type: "rename-ws", id: w.workspace_id, name: w.name })} aria-label={`Rename workspace ${w.name}`} title="Rename">
               ✎
             </button>

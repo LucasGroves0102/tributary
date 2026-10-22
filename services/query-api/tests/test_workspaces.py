@@ -128,6 +128,23 @@ class FakeWorkspaces:
         self.items[i["item_id"]] = i
         return {**self._summary(i), "state": i["state"]}
 
+    def get(self, user_id, workspace_id):
+        w = self._ws(user_id, workspace_id)
+        if not w:
+            return None
+        return self._public(w, [{**self._summary(i),
+                                 "state": None if i["kind"] == "report" else i["state"]}
+                                for i in self.items.values()
+                                if i["workspace_id"] == workspace_id])
+
+    def update_report(self, user_id, workspace_id, item_id, state):
+        i = self._it(user_id, item_id)
+        if not i or i["kind"] != "report" or i["workspace_id"] != workspace_id:
+            return None
+        i["state"] = state
+        i["updated_at"] = self._now()
+        return {**self._summary(i), "state": i["state"]}
+
     def item(self, user_id, item_id):
         i = self._it(user_id, item_id)
         if not i:

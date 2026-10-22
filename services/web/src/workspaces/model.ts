@@ -10,13 +10,14 @@ import { emptyChart, restoreChart, type ChartState } from "../chart/model";
 import { parseScreen, screenQuery, type ScreenFilters } from "../companies/screen";
 import { cleanCompare, compareQuery, parseCompare, type CompareState } from "../compare/state";
 import type { Route } from "../route";
-import type { SavedKind } from "../types";
+import type { ItemKind, SavedKind } from "../types";
 
-export const KIND_LABELS: Record<SavedKind, string> = { chart: "Chart", comps: "Comps", screen: "Screen" };
-export const KIND_PAGES: Record<SavedKind, string> = {
+export const KIND_LABELS: Record<ItemKind, string> = { chart: "Chart", comps: "Comps", screen: "Screen", report: "Report" };
+export const KIND_PAGES: Record<ItemKind, string> = {
   chart: "Chart builder",
   comps: "Compare",
   screen: "Companies",
+  report: "the report view",
 };
 export const WORKSPACE_NAME_MAX = 100;
 export const ITEM_NAME_MAX = 120;

@@ -28,6 +28,8 @@ import type {
   SavedItemFull,
   SavedKind,
   SavedWorkspace,
+  SavedWorkspaceFull,
+  ViewPrefs,
   UiContext,
   Watchlist,
 } from "./types";
@@ -119,6 +121,10 @@ const enc = encodeURIComponent;
 export const workspaces = (token: string) =>
   get<{ workspaces: SavedWorkspace[] }>(token, "/v1/workspaces").then((r) => r.workspaces);
 
+/** One workspace with its items' states (a report's comes from openItem). */
+export const workspace = (token: string, id: string) =>
+  get<SavedWorkspaceFull>(token, `/v1/workspaces/${enc(id)}`);
+
 export const createWorkspace = (token: string, name: string) =>
   sendJson<SavedWorkspace>(token, "POST", "/v1/workspaces", { name });
 
@@ -180,8 +186,8 @@ export const WATCHLIST_COLUMNS = [
   "net_debt_q",
 ];
 
-export const watchlist = (token: string) =>
-  get<Watchlist>(token, "/v1/watchlist", { columns: WATCHLIST_COLUMNS });
+export const watchlist = (token: string, columns: string[] = WATCHLIST_COLUMNS) =>
+  get<Watchlist>(token, "/v1/watchlist", { columns });
 
 export const watch = (token: string, companyId: string) =>
   send<{ company_id: string; added: boolean }>(token, "PUT", `/v1/watchlist/${companyId}`);
@@ -198,8 +204,19 @@ async function csv(token: string, path: string, params: Params): Promise<Blob> {
 }
 
 /** The watchlist as the Query API's CSV (sources and expected-date basis included). */
-export const watchlistCsv = (token: string) =>
-  csv(token, "/v1/watchlist", { columns: WATCHLIST_COLUMNS });
+export const watchlistCsv = (token: string, columns: string[] = WATCHLIST_COLUMNS) =>
+  csv(token, "/v1/watchlist", { columns });
+
+export type ViewName = "home" | "screener" | "watchlist";
+
+/** Per-user view preferences (Home arrangement, screener and watchlist columns). */
+export const viewPrefs = (token: string) => get<ViewPrefs>(token, "/v1/views");
+
+export const saveViewPref = (token: string, view: ViewName, state: object) =>
+  sendJson<{ view: string; state: object }>(token, "PUT", `/v1/views/${view}`, { state });
+
+export const resetViewPref = (token: string, view: ViewName) =>
+  sendJson<{ view: string; reset: boolean }>(token, "DELETE", `/v1/views/${view}`);
 
 /** One page of the screener (params from companies/screen.ts `screenParams`). */
 export const screener = (token: string, params: Params) =>
@@ -399,6 +416,36 @@ export class SseParser {
   }
 }
 
+/** Reads a server-sent event stream to its end. */
+async function stream(r: Response, onEvent: (e: AgentEvent) => void): Promise<void> {
+  if (!r.ok || !r.body) await json(r);
+  const reader = r.body!.pipeThrough(new TextDecoderStream()).getReader();
+  const parser = new SseParser();
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    parser.push(value).forEach(onEvent);
+  }
+}
+
+/** The assistant writes a report from a workspace (or again, over `reportId`) and saves it
+ * there; events as `ask`'s, plus "report" once saved. Counts as several questions. */
+export async function writeReport(
+  token: string,
+  workspaceId: string,
+  reportId: string | null,
+  onEvent: (e: AgentEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const r = await fetch(`${AGENT}/v1/reports`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify(reportId ? { workspace_id: workspaceId, report_id: reportId } : { workspace_id: workspaceId }),
+    signal,
+  });
+  await stream(r, onEvent);
+}
+
 export async function ask(
   token: string,
   question: string,
@@ -413,12 +460,5 @@ export async function ask(
     body: JSON.stringify(context ? { question, history, context } : { question, history }),
     signal,
   });
-  if (!r.ok || !r.body) await json(r);
-  const reader = r.body!.pipeThrough(new TextDecoderStream()).getReader();
-  const parser = new SseParser();
-  for (;;) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    parser.push(value).forEach(onEvent);
-  }
+  await stream(r, onEvent);
 }

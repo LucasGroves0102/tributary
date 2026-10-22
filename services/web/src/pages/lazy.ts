@@ -14,6 +14,8 @@ const screens = {
   about: () => import("./About"),
   reader: () => import("../components/explore/FilingReader"),
   answers: () => import("../components/AssistantMessage"),
+  workspace: () => import("../reports/WorkspacePage"),
+  report: () => import("../reports/ReportView"),
 };
 
 export const ChartBuilder = lazy(() => screens.chart().then((m) => ({ default: m.ChartBuilder })));
@@ -22,6 +24,8 @@ export const Company = lazy(() => screens.company().then((m) => ({ default: m.Co
 export const Compare = lazy(() => screens.compare().then((m) => ({ default: m.Compare })));
 export const Search = lazy(() => screens.search().then((m) => ({ default: m.Search })));
 export const About = lazy(() => screens.about().then((m) => ({ default: m.About })));
+export const WorkspacePage = lazy(() => screens.workspace().then((m) => ({ default: m.WorkspacePage })));
+export const ReportView = lazy(() => screens.report().then((m) => ({ default: m.ReportView })));
 export const FilingReader = lazy(() => screens.reader().then((m) => ({ default: m.FilingReader })));
 
 /** Every screen's module, loaded (tests render lazy screens without waiting on imports). */

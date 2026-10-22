@@ -136,11 +136,13 @@ class Refused(Exception):
 
 
 class QuotaExceeded(Exception):
-    """No assistant question left: `scope` is "user" or "day" (all sandboxes)."""
+    """Not enough assistant questions left: `scope` is "user" or "day" (all sandboxes);
+    `left` is how many that scope still has today."""
 
-    def __init__(self, scope: str) -> None:
+    def __init__(self, scope: str, left: int = 0) -> None:
         super().__init__(scope)
         self.scope = scope
+        self.left = max(0, left)
 
 
 class SandboxGone(Exception):
@@ -162,8 +164,8 @@ class Sandboxes(Protocol):
     def create(self, sandbox: NewSandbox, ip_key: str, per_ip_per_hour: int,
                max_live: int) -> None: ...  # raises Refused
     def expires_at(self, user_id: str) -> datetime | None: ...
-    def take_question(self, user_id: str, now: datetime, per_user: int,
-                      per_day: int) -> int: ...  # questions left today; raises QuotaExceeded
+    def take_question(self, user_id: str, now: datetime, per_user: int, per_day: int,
+                      questions: int = 1) -> int: ...  # left today; raises QuotaExceeded
     def delete_expired(self, now: datetime) -> dict[str, int]: ...
 
 
@@ -216,7 +218,9 @@ class AppSandboxes:
             row = cur.fetchone()
             return row[0] if row else None
 
-    def take_question(self, user_id: str, now: datetime, per_user: int, per_day: int) -> int:
+    def take_question(self, user_id: str, now: datetime, per_user: int, per_day: int,
+                      questions: int = 1) -> int:
+        """Takes `questions` (a report counts as several) or none: all or nothing."""
         day = now.astimezone(UTC).date()
         with self._pool.connection() as conn, conn.transaction(), conn.cursor() as cur:
             cur.execute("SELECT expires_at FROM demo_sandboxes WHERE user_id = %s", (user_id,))
@@ -233,17 +237,18 @@ class AppSandboxes:
                         (user_id, day))
             mine = _count(cur)
             # the user's own cap first, so one sandbox can't spend more than its share of the day
-            if mine >= per_user:
-                raise QuotaExceeded("user")
-            if total >= per_day:
-                raise QuotaExceeded("day")
-            cur.execute("INSERT INTO demo_agent_usage (user_id, day, questions) VALUES (%s, %s, 1)"
-                        " ON CONFLICT (user_id, day)"
-                        " DO UPDATE SET questions = demo_agent_usage.questions + 1",
-                        (user_id, day))
-            cur.execute("UPDATE demo_agent_daily SET questions = questions + 1 WHERE day = %s",
-                        (day,))
-            return min(per_user - mine, per_day - total) - 1
+            if mine + questions > per_user:
+                raise QuotaExceeded("user", per_user - mine)
+            if total + questions > per_day:
+                raise QuotaExceeded("day", per_day - total)
+            cur.execute("INSERT INTO demo_agent_usage (user_id, day, questions)"
+                        " VALUES (%s, %s, %s) ON CONFLICT (user_id, day)"
+                        " DO UPDATE SET questions"
+                        "     = demo_agent_usage.questions + EXCLUDED.questions",
+                        (user_id, day, questions))
+            cur.execute("UPDATE demo_agent_daily SET questions = questions + %s WHERE day = %s",
+                        (questions, day))
+            return min(per_user - mine, per_day - total) - questions
 
     def delete_expired(self, now: datetime) -> dict[str, int]:
         """Deletes expired sandbox users (only users with a sandbox row: never anyone else) and

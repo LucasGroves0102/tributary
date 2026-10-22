@@ -6,6 +6,7 @@ item's state is validated against its kind's schema and size cap before it is st
 These routes read and write only the caller's own saved settings, never data: opening an item
 means the web app reads the data through the permission-checked routes as usual."""
 
+import re
 from collections.abc import Callable
 from typing import Annotated, Any
 from uuid import UUID
@@ -14,10 +15,12 @@ from fastapi import Depends, FastAPI, HTTPException, Path, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 
+from query_api.reports import MAX_REPORT_BODY, validate_report
 from query_api.store import Store
 from query_api.workspaces import (
     ITEM_NAME,
     MAX_BODY_BYTES,
+    REPORT,
     WORKSPACE_NAME,
     Kind,
     LimitReached,
@@ -28,7 +31,8 @@ from query_api.workspaces import (
     validate_state,
 )
 
-PREFIXES = ("/v1/workspaces", "/v1/workspace-items", "/v1/recent")
+PREFIXES = ("/v1/workspaces", "/v1/workspace-items", "/v1/recent", "/v1/views")
+REPORT_PATH = re.compile(r"^/v1/workspaces/[^/]+/reports(/|$)")
 NOT_FOUND = "workspace not found"
 ITEM_NOT_FOUND = "item not found"
 
@@ -72,6 +76,15 @@ class CopyItem(_Strict):
     name: ItemName | None = None
 
 
+class NewReport(_Strict):
+    name: ItemName
+    state: dict[str, Any]
+
+
+class ReportUpdate(_Strict):
+    state: dict[str, Any]
+
+
 class FilingRead(_Strict):
     company_id: str = Field(pattern=r"^\d{10}$")
     accession_no: str = Field(pattern=r"^\d{10}-\d{2}-\d{6}$")
@@ -87,12 +100,13 @@ def add_workspace_routes(app: FastAPI, *, store: Store, workspaces: Workspaces |
         """Bodies of the saved-work routes are small JSON: refuse a large or unsized one before
         reading it."""
         if request.method in ("POST", "PUT", "PATCH") and request.url.path.startswith(PREFIXES):
+            cap = MAX_REPORT_BODY if REPORT_PATH.match(request.url.path) else MAX_BODY_BYTES
             size = request.headers.get("content-length")
             if size is None or not size.isdigit():
                 if request.headers.get("transfer-encoding"):
                     return JSONResponse({"detail": "send a Content-Length"}, status_code=411)
-            elif int(size) > MAX_BODY_BYTES:
-                return JSONResponse({"detail": f"body larger than {MAX_BODY_BYTES} bytes"},
+            elif int(size) > cap:
+                return JSONResponse({"detail": f"body larger than {cap} bytes"},
                                     status_code=413)
         return await call_next(request)
 
@@ -153,6 +167,35 @@ def add_workspace_routes(app: FastAPI, *, store: Store, workspaces: Workspaces |
         return found(write(lambda: ws().add_item(user_id, str(workspace_id), body.kind,
                                                  body.name, state)))
 
+    @app.get("/v1/workspaces/{workspace_id}", response_model=dict)
+    def get_workspace(user_id: User, workspace_id: WorkspaceId) -> dict:
+        """One workspace with its items in order, each with its saved state (a report's
+        state only from /v1/workspace-items/{id})."""
+        return found(ws().get(user_id, str(workspace_id)))
+
+    def report_of(raw: Any) -> dict:
+        try:
+            return validate_report(raw)
+        except StateError as e:
+            raise HTTPException(422, f"invalid report: {e}") from None
+
+    @app.post("/v1/workspaces/{workspace_id}/reports", status_code=201, response_model=dict)
+    def add_report(user_id: User, workspace_id: WorkspaceId, body: NewReport) -> dict:
+        """Saves a report the assistant wrote (agent-api calls this with the user's token;
+        nginx keeps it off the public site). Validated like any item, against
+        query_api.reports."""
+        state = report_of(body.state)
+        return found(write(lambda: ws().add_item(user_id, str(workspace_id), REPORT, body.name,
+                                                 state)))
+
+    @app.put("/v1/workspaces/{workspace_id}/reports/{item_id}", response_model=dict)
+    def update_report(user_id: User, workspace_id: WorkspaceId, item_id: ItemId,
+                      body: ReportUpdate) -> dict:
+        """A regenerated report over the old one (it must be a report in that workspace)."""
+        state = report_of(body.state)
+        return found(ws().update_report(user_id, str(workspace_id), str(item_id), state),
+                     ITEM_NOT_FOUND)
+
     @app.get("/v1/workspace-items/{item_id}", response_model=dict)
     def get_item(user_id: User, item_id: ItemId) -> dict:
         return found(ws().item(user_id, str(item_id)), ITEM_NOT_FOUND)
@@ -170,6 +213,9 @@ def add_workspace_routes(app: FastAPI, *, store: Store, workspaces: Workspaces |
         if body.name is None and body.state is None:
             raise HTTPException(422, "nothing to change: give name, state or both")
         current = found(ws().item(user_id, str(item_id)), ITEM_NOT_FOUND)
+        if current["kind"] == REPORT and body.state is not None:
+            raise HTTPException(422, "a report is written by the assistant: regenerate it, or "
+                                     "rename it")
         state = state_of(current["kind"], body.state) if body.state is not None else None
         return found(ws().update_item(user_id, str(item_id), body.name, state), ITEM_NOT_FOUND)
 

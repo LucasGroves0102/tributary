@@ -36,6 +36,7 @@ from query_api.shapes import filing_url
 from query_api.shapes import period as _period
 from query_api.store import QUERY_TIMEOUT, Store
 from query_api.ui import add_ui_routes
+from query_api.views import Views, add_view_routes
 from query_api.watchlist import Watchlists
 from query_api.workspace_api import add_workspace_routes
 from query_api.workspaces import Workspaces
@@ -83,13 +84,15 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
                sandboxes: Sandboxes | None = None,
                sandbox_config: SandboxConfig = SANDBOX_OFF,
                clock: Callable[[], datetime] | None = None,
-               workspaces: Workspaces | None = None) -> FastAPI:
+               workspaces: Workspaces | None = None,
+               views: Views | None = None) -> FastAPI:
     """demo_users: accounts anyone may sign in as without a password (empty disables it).
     today: the current US Eastern date (EDGAR's), injectable for tests.
     watchlists: the app database's watchlists (None: watchlist routes answer 503).
     sandboxes, sandbox_config: "Try the demo" sandboxes (query_api.sandbox); off unless
     sandbox_config.enabled and sandboxes are given. clock: the current UTC time.
-    workspaces: saved work in the app database (None: those routes answer 503)."""
+    workspaces: saved work in the app database (None: those routes answer 503).
+    views: per-user view preferences in the app database (None: those routes answer 503)."""
     app = FastAPI(title="Tributary Query API", version="1")
     instrument(app)
 
@@ -151,6 +154,7 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
                      readable=readable)
 
     add_workspace_routes(app, store=store, workspaces=workspaces, current_user=current_user)
+    add_view_routes(app, views=views, current_user=current_user)
 
     sandbox_info = add_sandbox_routes(
         app, store=store, sandboxes=sandboxes, config=sandbox_config, jwt_secret=jwt_secret,

@@ -2805,3 +2805,204 @@ button.link.num {
   outline-offset: -2px;
   background: var(--accent-soft);
 }
+
+/* Reports: the note the assistant writes from a workspace (reports/) */
+
+.tag.report {
+  background: var(--pos-soft);
+  color: var(--pos);
+  border-color: transparent;
+}
+
+.ws-list {
+  list-style: none;
+  margin: 0;
+  padding: var(--sp-4) var(--sp-6);
+  display: grid;
+  gap: var(--sp-3);
+}
+
+.side .ws-row .acts a {
+  color: var(--text-3);
+  text-decoration: none;
+  padding: 0 var(--sp-1);
+}
+
+.side .ws-row .acts a:hover {
+  color: var(--text);
+}
+
+.report-status {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  padding: var(--sp-4) var(--sp-6);
+  margin-bottom: var(--sp-6);
+}
+
+.report-status.error {
+  border-color: var(--neg);
+  color: var(--neg);
+}
+
+.report-preview {
+  margin: var(--sp-3) 0 0;
+  max-height: 8em;
+  overflow: hidden;
+  white-space: pre-wrap;
+  font-size: var(--fs-xs);
+}
+
+.report-doc {
+  max-width: 920px;
+  margin: 0 auto;
+  display: grid;
+  gap: var(--sp-6);
+}
+
+.report-meta {
+  margin: 0;
+  font-size: var(--fs-sm);
+}
+
+.report-text h1 {
+  font-size: 24px;
+  margin: 0 0 var(--sp-4);
+}
+
+.report-text h2 {
+  font-size: 17px;
+  margin: var(--sp-6) 0 var(--sp-3);
+}
+
+.report-embed {
+  margin: 0;
+  padding: var(--sp-4);
+  break-inside: avoid;
+}
+
+.embed-h {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-3);
+}
+
+.embed-screen {
+  margin: 0;
+}
+
+/* Customizable views: Home's arrangement, table columns (views/) */
+
+.view-editor {
+  margin-bottom: var(--sp-6);
+}
+
+.view-list {
+  margin: 0;
+  padding: var(--sp-3) var(--sp-6);
+  display: grid;
+  gap: var(--sp-2);
+}
+
+.view-list li {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.col-picker {
+  position: relative;
+}
+
+.col-pop {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 30;
+  width: 340px;
+  max-width: 90vw;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--popover-shadow);
+  padding-bottom: var(--sp-3);
+}
+
+.col-pop .row {
+  padding: 0 var(--sp-6);
+  gap: var(--sp-2);
+}
+
+.col-pop select {
+  max-width: 180px;
+}
+
+/* Print (a report's "Print / PDF"): the page alone, in the light deck palette (tokens.css light
+   values; chart/export.ts mirrors them), whatever the app theme. */
+@media print {
+  :root,
+  :root[data-theme="dark"],
+  :root[data-theme="light"] {
+    --bg: #ffffff;
+    --panel: #ffffff;
+    --panel-2: #f1f3f6;
+    --line: #e3e6eb;
+    --line-2: #d3d8df;
+    --text: #14171c;
+    --text-2: #4a525e;
+    --text-3: #5f6874;
+    --accent: #3b5bdb;
+    --accent-soft: #e8edff;
+    --pos: #147a3d;
+    --neg: #c0352b;
+    --warn: #a15c00;
+    --pos-soft: #e5f5eb;
+    --neg-soft: #fbe9e7;
+    --warn-soft: #fff3df;
+    --shadow: none;
+    --series-0: #3b5bdb;
+    --series-1: #2f9e44;
+    --series-2: #e8590c;
+    --series-3: #c92a2a;
+    --series-4: #0c8599;
+    --series-5: #7048e8;
+    --series-6: #d6336c;
+    --series-7: #495057;
+    color-scheme: light;
+  }
+
+  body {
+    background: #ffffff;
+  }
+
+  .side,
+  .top,
+  .ai,
+  .fab,
+  .banner,
+  .sandbox-banner,
+  .scrim,
+  .no-print,
+  .lchart-bar {
+    display: none !important;
+  }
+
+  .app,
+  .app.with-ai {
+    display: block;
+  }
+
+  .report-doc {
+    max-width: none;
+  }
+
+  .report-embed {
+    border: 1px solid var(--line);
+    box-shadow: none;
+  }
+
+  a {
+    color: inherit;
+  }
+}

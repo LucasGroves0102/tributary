@@ -1,11 +1,12 @@
-import { useState, type ReactNode } from "react";
+import { Fragment, useState, type ReactNode } from "react";
 
 import { ErrorPanel, Skeleton } from "../components/States";
 import { navRow, onTableKey } from "../components/tableNav";
 import { ago, change, day } from "../format";
-import { status, WATCH_COLUMNS, type ExpectedItem, type FilingItem, type WatchRow } from "../home/data";
+import { status, type ExpectedItem, type FilingItem, type WatchRow } from "../home/data";
 import { EXPECTED_DAYS, RECENT_DAYS, type Workspace } from "../home/useWorkspace";
 import { go, href } from "../route";
+import { defaultHome, type HomeCard, type HomeCardId } from "../views/model";
 
 const FEED_ROWS = 10;
 
@@ -18,18 +19,124 @@ interface Props {
   recent?: ReactNode;
   /** "Recent data notes for your companies" (home/RecentNotes) */
   notes?: ReactNode;
+  /** the user's arrangement (views): cards in order, some hidden; default: all in order */
+  layout?: HomeCard[];
+  /** "Customize": opens the editor (views/Editors HomeLayoutEditor), shown above the cards */
+  onCustomize?: () => void;
+  editor?: ReactNode;
+  /** the watchlist's "Columns" (views/Editors ColumnPicker) */
+  columnPicker?: ReactNode;
 }
 
-export function Home({ workspace, lastIngested, onAdd, onExport, recent, notes }: Props) {
+/** Cards shown side by side when next to each other. */
+const HALF = new Set<HomeCardId>(["filings", "expected"]);
+
+export function Home({ workspace, lastIngested, onAdd, onExport, recent, notes, layout, onCustomize, editor, columnPicker }: Props) {
   const { watchlist, rows, filings, expected, since, firstVisit } = workspace;
   const newLabel = firstVisit
     ? "new in the last 7 days in bold"
     : `new since your last visit (${day(since)}) in bold`;
 
+  const card = (id: HomeCardId): ReactNode => {
+    switch (id) {
+      case "status":
+        return watchlist.state === "ok" ? (
+          <StatusStrip rows={rows} filings={filings ?? []} since={since} firstVisit={firstVisit} lastIngested={lastIngested} />
+        ) : null;
+      case "recent":
+        return recent ? (
+          <section className="card">
+            <div className="card-h">
+              <h2>Continue where you left off</h2>
+              <span className="sub">saved work you opened and filings you read, newest first</span>
+            </div>
+            {recent}
+          </section>
+        ) : null;
+      case "watchlist":
+        return (
+          <section className="card">
+            <div className="card-h">
+              <h2>Watchlist</h2>
+              <span className="sub">
+                USD · TTM to each company's latest reported quarter unless noted · ~ = expected
+              </span>
+              <span className="grow" />
+              {columnPicker}
+              <button className="btn sm" onClick={onAdd}>
+                + Add
+              </button>
+              <button className="btn sm" onClick={onExport} disabled={watchlist.state !== "ok"}>
+                Export CSV
+              </button>
+            </div>
+            <WatchTable workspace={workspace} onAdd={onAdd} />
+          </section>
+        );
+      case "filings":
+        return (
+          <section className="card">
+            <div className="card-h">
+              <h2>
+                New filings for {workspace.readableCount
+                  ? `the ${workspace.readableCount} companies you can read`
+                  : "your watchlist"}
+              </h2>
+              <span className="sub">
+                last {RECENT_DAYS} days · {newLabel}
+              </span>
+            </div>
+            <FilingFeed filings={filings} />
+          </section>
+        );
+      case "expected":
+        return (
+          <section className="card">
+            <div className="card-h">
+              <h2>Expected filings</h2>
+              <span className="sub">next {EXPECTED_DAYS} days · estimated from each company's history</span>
+            </div>
+            <ExpectedTable expected={expected} />
+            <div className="foot">
+              Estimates, not filings: each company's median filing lag over its recent reports,
+              capped at the SEC deadline. Watchlist companies in bold.
+            </div>
+          </section>
+        );
+      case "notes":
+        return notes ?? null;
+    }
+  };
+
+  // visible cards in order; two half cards next to each other share a row
+  const shown = (layout ?? defaultHome()).filter((c) => !c.hidden).map((c) => c.id);
+  const blocks: ReactNode[] = [];
+  for (let i = 0; i < shown.length; i++) {
+    const id = shown[i]!;
+    const next = shown[i + 1];
+    if (HALF.has(id) && next && HALF.has(next)) {
+      blocks.push(
+        <div className="grid2" key={`${id}-${next}`}>
+          {card(id)}
+          {card(next)}
+        </div>,
+      );
+      i++;
+    } else {
+      const el = card(id);
+      if (el) blocks.push(<Fragment key={id}>{el}</Fragment>);
+    }
+  }
+
   return (
     <div className="page">
       <div className="row">
         <h1 className="grow">Home</h1>
+        {onCustomize && (
+          <button className="btn ghost" onClick={onCustomize} aria-label="Customize Home">
+            Customize
+          </button>
+        )}
         <button className="btn" onClick={() => go({ view: "companies" })}>
           Screen companies
         </button>
@@ -41,65 +148,8 @@ export function Home({ workspace, lastIngested, onAdd, onExport, recent, notes }
         </button>
       </div>
 
-      {watchlist.state === "ok" && (
-        <StatusStrip rows={rows} filings={filings ?? []} since={since} firstVisit={firstVisit} lastIngested={lastIngested} />
-      )}
-
-      {recent && (
-        <section className="card">
-          <div className="card-h">
-            <h2>Continue where you left off</h2>
-            <span className="sub">saved work you opened and filings you read, newest first</span>
-          </div>
-          {recent}
-        </section>
-      )}
-
-      <section className="card">
-        <div className="card-h">
-          <h2>Watchlist</h2>
-          <span className="sub">
-            USD · TTM to each company's latest reported quarter unless noted · ~ = expected
-          </span>
-          <span className="grow" />
-          <button className="btn sm" onClick={onAdd}>
-            + Add
-          </button>
-          <button className="btn sm" onClick={onExport} disabled={watchlist.state !== "ok"}>
-            Export CSV
-          </button>
-        </div>
-        <WatchTable workspace={workspace} onAdd={onAdd} />
-      </section>
-
-      <div className="grid2">
-        <section className="card">
-          <div className="card-h">
-            <h2>
-              New filings for {workspace.readableCount
-                ? `the ${workspace.readableCount} companies you can read`
-                : "your watchlist"}
-            </h2>
-            <span className="sub">
-              last {RECENT_DAYS} days · {newLabel}
-            </span>
-          </div>
-          <FilingFeed filings={filings} />
-        </section>
-        <section className="card">
-          <div className="card-h">
-            <h2>Expected filings</h2>
-            <span className="sub">next {EXPECTED_DAYS} days · estimated from each company's history</span>
-          </div>
-          <ExpectedTable expected={expected} />
-          <div className="foot">
-            Estimates, not filings: each company's median filing lag over its recent reports,
-            capped at the SEC deadline. Watchlist companies in bold.
-          </div>
-        </section>
-      </div>
-
-      {notes}
+      {editor}
+      {blocks}
     </div>
   );
 }
@@ -244,7 +294,7 @@ function WatchTable({ workspace, onAdd }: { workspace: Workspace; onAdd: () => v
               <th className="first">Company</th>
               <th>Last filing</th>
               <th>Period</th>
-              {WATCH_COLUMNS.map((c) => (
+              {workspace.columns.map((c) => (
                 <th key={c.key} className="n">
                   {c.label} <span className="unit">{c.period}</span>
                 </th>
@@ -283,10 +333,10 @@ function WatchTable({ workspace, onAdd }: { workspace: Workspace; onAdd: () => v
                     "—"
                   )}
                 </td>
-                {WATCH_COLUMNS.map((c) => {
+                {workspace.columns.map((c) => {
                   const cell = r.cells[c.key]!;
                   const tone =
-                    c.key === "revenue_growth_ttm" && cell.value !== null
+                    c.signed && cell.value !== null
                       ? cell.value >= 0
                         ? "pos"
                         : "neg"

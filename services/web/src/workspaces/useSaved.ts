@@ -57,6 +57,10 @@ export interface Saved {
   /** the page no longer edits a saved item (a new chart, other comps) */
   close: (kind: SavedKind) => void;
   recordFiling: (companyId: string, accessionNo: string, sectionKey: string | null) => void;
+  /** reads the list and recent work again (a report was saved elsewhere) */
+  reload: () => void;
+  /** bumps whenever the list is read again */
+  version: number;
 }
 
 const key = (user: string) => `tributary.open.${user}`;
@@ -221,16 +225,20 @@ export function useSaved(token: string | null, user: string | null): Saved {
         }
         throw e;
       }
-      setOpenItems((o) => ({
-        ...o,
-        [item.kind]: {
-          itemId: item.item_id,
-          workspaceId: item.workspace_id,
-          workspaceName: item.workspace_name ?? "",
-          name: item.name,
-          saved: fingerprint(item.kind, item.state),
-        },
-      }));
+      const kind = item.kind;
+      // a report isn't edited on a page: nothing to keep open
+      if (kind !== "report") {
+        setOpenItems((o) => ({
+          ...o,
+          [kind]: {
+            itemId: item.item_id,
+            workspaceId: item.workspace_id,
+            workspaceName: item.workspace_name ?? "",
+            name: item.name,
+            saved: fingerprint(kind, item.state),
+          },
+        }));
+      }
       refresh();
       return item;
     },
@@ -317,5 +325,7 @@ export function useSaved(token: string | null, user: string | null): Saved {
     openItem: openOne,
     close,
     recordFiling,
+    reload: refresh,
+    version,
   };
 }

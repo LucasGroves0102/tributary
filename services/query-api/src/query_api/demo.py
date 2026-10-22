@@ -13,6 +13,7 @@ from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from prometheus_client import Counter
+from pydantic import BaseModel, ConfigDict, Field
 
 from query_api.auth import mint
 from query_api.sandbox import (
@@ -39,6 +40,16 @@ DEMO_QUESTIONS = Counter("tributary_demo_agent_questions_total",
                          "user_limit, day_limit, expired)", ["result"])
 
 log = logging.getLogger("query_api.demo")
+
+# the most one request may take: a report (services/agent report.py REPORT_QUESTIONS) counts as
+# several questions
+MAX_QUESTIONS_AT_ONCE = 5
+
+
+class QuotaRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    questions: int = Field(default=1, ge=1, le=MAX_QUESTIONS_AT_ONCE)
+
 
 REFUSED = {
     "ip": "Too many demo sandboxes were started from your network in the last hour. "
@@ -124,10 +135,12 @@ def add_sandbox_routes(app: FastAPI, *, store: Store, sandboxes: Sandboxes | Non
         }
 
     @app.post("/v1/demo/agent-quota")
-    def agent_quota(user_id: User) -> dict:
+    def agent_quota(user_id: User, body: QuotaRequest | None = None) -> dict:
         """Called by agent-api before each question (nginx keeps it off the public site).
-        Takes one of the caller's assistant questions if they are a demo sandbox; other users
-        aren't limited here. 429 with a message the assistant shows when a cap is hit."""
+        Takes one of the caller's assistant questions (or `questions` of them, all or none:
+        a report counts as several) if they are a demo sandbox; other users aren't limited
+        here. 429 with a message the assistant shows when a cap is hit."""
+        n = body.questions if body else 1
         if not is_sandbox_user(user_id):
             return {"demo": False}
         if not enabled or sandboxes is None:
@@ -140,13 +153,18 @@ def add_sandbox_routes(app: FastAPI, *, store: Store, sandboxes: Sandboxes | Non
         try:
             left = sandboxes.take_question(user_id, clock(),
                                            config.agent_questions_per_user_per_day,
-                                           config.agent_questions_per_day)
+                                           config.agent_questions_per_day, n)
         except SandboxGone:
             DEMO_QUESTIONS.labels("expired").inc()
             raise HTTPException(401, "demo sandbox expired") from None
         except QuotaExceeded as e:
             if e.scope == "user":
                 DEMO_QUESTIONS.labels("user_limit").inc()
+                if n > 1 and e.left > 0:
+                    raise HTTPException(429, (
+                        f"A report counts as {n} assistant questions and this demo sandbox has "
+                        f"{e.left} left today. Ask a question instead, or come back after "
+                        "midnight UTC.")) from None
                 raise HTTPException(429, (
                     f"This demo sandbox has used its {config.agent_questions_per_user_per_day} "
                     "assistant questions for today. The rest of the app keeps working; the "
