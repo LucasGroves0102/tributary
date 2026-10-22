@@ -155,7 +155,7 @@ def test_daily_budget():
 def test_demo_quota_is_taken_after_the_in_process_limits():
     taken = []
 
-    def take_quota(tok):
+    def take_quota(tok, questions=1):
         taken.append(tok)
         if len(taken) > 1:
             raise HTTPException(429, "This demo sandbox has used its 1 assistant questions.")
@@ -199,6 +199,28 @@ def test_query_api_quota_refusals(status, expected):
     assert e.value.status_code == expected
     if status == 429:
         assert e.value.detail == "The assistant is turned off for demo sandboxes."
+
+
+def test_query_api_quota_asks_for_several_questions_at_once():
+    take, seen = quota_with(200, {"demo": True, "remaining_today": 4})
+    take("tok", 3)
+    assert json.loads(seen[0].content) == {"questions": 3}
+    take("tok")
+    assert seen[1].content == b""  # one question: the body older Query APIs expect
+
+
+def test_a_report_takes_several_questions_or_none():
+    clock = Clock()
+    limits = Limits(per_hour=4, per_ip_per_hour=10, daily_budget_usd=5, clock=clock)
+    limits.acquire("alice", "203.0.113.1", 3)
+    with pytest.raises(LimitExceeded, match="A report counts as 3 questions. You have 1 of 4"):
+        limits.acquire("alice", "203.0.113.1", 3)
+    limits.acquire("alice", "203.0.113.1")  # the refused report took nothing
+    with pytest.raises(LimitExceeded, match="reached the limit of 4"):
+        limits.acquire("alice", "203.0.113.1", 3)
+    ip_limits = Limits(per_hour=10, per_ip_per_hour=2, daily_budget_usd=5, clock=clock)
+    with pytest.raises(LimitExceeded, match="A report counts as 3 questions. Limit of 2"):
+        ip_limits.acquire("bob", "203.0.113.2", 3)
 
 
 def test_query_api_quota_unreachable_fails_closed():

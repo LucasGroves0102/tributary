@@ -112,13 +112,15 @@ class Agent:
     def __init__(self, messages: MessagesClient, api: ToolRunner, model: str,
                  max_rounds: int = 6, max_tokens: int = 8000,
                  effort: str | None = None, stream: bool = False,
-                 tools: list[dict] | None = None, ui: UiRunner | None = None) -> None:
+                 tools: list[dict] | None = None, ui: UiRunner | None = None,
+                 rules: str = "") -> None:
         """tools: TOOLS by default; tools.with_metrics adds the metric names.
         ui: the web app's UI actions; adds propose_ui_action and its rules to the prompt
-        (without it, requests are exactly what the recorded suites replay)."""
+        (without it, requests are exactly what the recorded suites replay).
+        rules: more rules after SYSTEM's (report.REPORT_RULES); SYSTEM itself always applies."""
         self._messages = messages
         self._tools = [*(tools or TOOLS), UI_TOOL] if ui else (tools or TOOLS)
-        self._system = SYSTEM + UI_RULES if ui else SYSTEM
+        self._system = (SYSTEM + UI_RULES if ui else SYSTEM) + rules
         self._ui = ui
         self._api = api
         self.model = model
@@ -135,11 +137,12 @@ class Agent:
         raise AssertionError("events() ended without a done event")
 
     def events(self, question: str, history: Sequence[dict] = (),
-               context: UiContext | None = None) -> Iterator[dict]:
+               context: UiContext | None = None, blocks: Sequence[str] = ()) -> Iterator[dict]:
         """Yields {"type": "text"} deltas (when streaming), one {"type": "tool"} per tool call,
         a {"type": "action"} after each accepted UI action, then {"type": "done", "answer":
         Answer}. Rounds count from 0. history: earlier user/assistant text turns. context: the
-        web app's screen, sent as data ahead of the question (only with ui)."""
+        web app's screen, sent as data ahead of the question (only with ui). blocks: more data
+        ahead of the question (a report's <workspace>)."""
         content: str | list[dict] = question
         if context is not None and self._ui is not None:
             observe = getattr(self._ui, "observe", None)
@@ -147,6 +150,10 @@ class Agent:
                 observe(context)
             content = [{"type": "text", "text": context_block(context)},
                        {"type": "text", "text": question}]
+        if blocks:
+            content = [*({"type": "text", "text": b} for b in blocks),
+                       *(content if isinstance(content, list)
+                         else [{"type": "text", "text": content}])]
         messages: list[dict] = [*history, {"role": "user", "content": content}]
         answer = Answer(text="", stop="max_rounds", model=self.model)
         returned: list[str] = []

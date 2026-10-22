@@ -106,6 +106,19 @@ def test_take_question_caps(db):
     assert s.take_question("demo-a", NOW + timedelta(hours=10), 2, 3) == 1
 
 
+def test_take_several_questions_all_or_none(db):
+    s, conn = db
+    s.create(sandbox("demo-a"), "ip1", 5, 5)
+    assert s.take_question("demo-a", NOW, 4, 10, 3) == 1
+    with pytest.raises(QuotaExceeded) as e:
+        s.take_question("demo-a", NOW, 4, 10, 3)
+    assert e.value.scope == "user" and e.value.left == 1
+    assert rows(conn, "SELECT questions FROM demo_agent_usage WHERE user_id = 'demo-a'") == [(3,)]
+    assert rows(conn, "SELECT questions FROM demo_agent_daily WHERE day = %s",
+                NOW.date()) == [(3,)]
+    assert s.take_question("demo-a", NOW, 4, 10) == 0
+
+
 def test_take_question_for_expired_or_unknown_sandbox(db):
     s, _ = db
     s.create(sandbox("demo-a", hours=1), "ip1", 5, 5)

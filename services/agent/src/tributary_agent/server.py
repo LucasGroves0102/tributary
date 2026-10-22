@@ -1,4 +1,5 @@
-"""Agent HTTP API: POST /v1/ask streams the agent's events as server-sent events."""
+"""Agent HTTP API: POST /v1/ask streams the agent's events as server-sent events; POST
+/v1/reports writes a research note from one of the user's workspaces (report.py)."""
 
 import json
 import logging
@@ -10,6 +11,7 @@ from collections.abc import Callable, Iterator
 from dataclasses import asdict
 from datetime import UTC, datetime
 from typing import Annotated, Literal
+from uuid import UUID
 
 import anthropic
 import httpx
@@ -17,9 +19,16 @@ import uvicorn
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from tributary_agent.agent import Agent, Answer
+from tributary_agent.report import (
+    REPORT_QUESTIONS,
+    REPORT_ROUNDS,
+    REPORT_RULES,
+    Reporter,
+    ReportError,
+)
 from tributary_agent.telemetry import record_answer, record_error
 from tributary_agent.tools import MetricTools, QueryApi
 from tributary_agent.ui import UiActions, UiContext
@@ -39,6 +48,14 @@ class AskRequest(BaseModel):
     history: list[Turn] = Field(default=[], max_length=10)
     # the web app's screen: untrusted, size-capped, never identity (ui.UiContext)
     context: UiContext | None = None
+
+
+class ReportRequest(BaseModel):
+    """Write a report from this workspace (the user's own: the Query API checks), or write
+    the report `report_id` in it again."""
+    model_config = ConfigDict(extra="forbid")
+    workspace_id: UUID
+    report_id: UUID | None = None
 
 
 class LimitExceeded(Exception):
@@ -79,7 +96,9 @@ class Limits:
             for key in [k for k, v in windows.items() if not self._recent(v, now)]:
                 del windows[key]
 
-    def acquire(self, user_id: str, client_ip: str) -> None:
+    def acquire(self, user_id: str, client_ip: str, questions: int = 1) -> None:
+        """Takes `questions` from the hour's allowances (a report counts as several), or none
+        of them."""
         now = self._clock()
         with self._lock:
             if self._spent[self._today()] >= self._budget:
@@ -87,14 +106,19 @@ class Limits:
             self._sweep(now)
             by_ip = self._recent(self._by_ip[client_ip], now)
             by_user = self._recent(self._by_user[user_id], now)
-            if len(by_ip) >= self._per_ip:
-                raise LimitExceeded(f"Limit of {self._per_ip} questions per hour reached. "
-                                    "Try again later.")
-            if len(by_user) >= self._per_hour:
+            report = f"A report counts as {questions} questions. " if questions > 1 else ""
+            if len(by_ip) + questions > self._per_ip:
+                raise LimitExceeded(f"{report}Limit of {self._per_ip} questions per hour "
+                                    "reached. Try again later.")
+            if len(by_user) + questions > self._per_hour:
+                left = self._per_hour - len(by_user)
+                if report and left > 0:
+                    raise LimitExceeded(f"{report}You have {left} of {self._per_hour} left this "
+                                        "hour. Ask a question instead, or try again later.")
                 raise LimitExceeded(f"You've reached the limit of {self._per_hour} questions "
                                     "per hour. Try again later.")
-            by_ip.append(now)
-            by_user.append(now)
+            by_ip.extend([now] * questions)
+            by_user.extend([now] * questions)
 
     def spend(self, usd: float) -> None:
         with self._lock:
@@ -108,14 +132,20 @@ def answer_json(a: Answer) -> dict:
             "verification": a.verification, "actions": a.actions}
 
 
+def _no_quota(tok: str, questions: int = 1) -> None:
+    return None
+
+
 def create_app(make_agent: Callable[[str], Agent], who_is: Callable[[str], str],
                limits: Limits, client_ip_header: str = "X-Client-IP",
-               take_quota: Callable[[str], None] = lambda tok: None) -> FastAPI:
+               take_quota: Callable[[str, int], None] = _no_quota,
+               make_reporter: Callable[[str], Reporter] | None = None) -> FastAPI:
     """make_agent(token) builds an agent reading as the token's user; who_is(token) returns
     that user's id or raises HTTPException. The client IP is read from client_ip_header, set
-    by the web proxy, else the connection's peer address. take_quota(token) takes one of the
+    by the web proxy, else the connection's peer address. take_quota(token, n) takes n of the
     user's persistent question allowances (demo sandboxes, Query API) or raises
-    HTTPException (429 with the message to show)."""
+    HTTPException (429 with the message to show). make_reporter(token): reports as the
+    token's user (report.py); None leaves /v1/reports out."""
     app = FastAPI(title="Tributary Agent", version="1")
     instrument(app)
     bearer = HTTPBearer(auto_error=False)
@@ -131,33 +161,19 @@ def create_app(make_agent: Callable[[str], Agent], who_is: Callable[[str], str],
             return ip
         return request.client.host if request.client else "unknown"
 
-    @app.get("/health")
-    def health() -> dict:
-        return {"status": "ok"}
-
-    @app.post("/v1/ask")
-    def ask(body: AskRequest, tok: Annotated[str, Depends(token)],
-            ip: Annotated[str, Depends(client_ip)]) -> StreamingResponse:
-        user_id = who_is(tok)
-        try:
-            limits.acquire(user_id, ip)
-        except LimitExceeded as e:
-            raise HTTPException(429, str(e)) from None
-        take_quota(tok)
-        agent = make_agent(tok)
-
+    def sse(events: Iterator[dict], user_id: str, kind: str) -> StreamingResponse:
         def stream() -> Iterator[str]:
             try:
-                for event in agent.events(body.question, [t.model_dump() for t in body.history],
-                                          body.context):
+                for event in events:
                     if event["type"] == "done":
                         answer = event["answer"]
                         limits.spend(answer.cost_usd or 0)
                         record_answer(answer)
-                        log.info("user=%s rounds=%d cost=%.4f stop=%s", user_id, answer.rounds,
-                                 answer.cost_usd or 0, answer.stop,
-                                 extra={"user_id": user_id, "rounds": answer.rounds,
-                                        "stop": answer.stop, "cost_usd": answer.cost_usd,
+                        log.info("user=%s %s rounds=%d cost=%.4f stop=%s", user_id, kind,
+                                 answer.rounds, answer.cost_usd or 0, answer.stop,
+                                 extra={"user_id": user_id, "kind": kind,
+                                        "rounds": answer.rounds, "stop": answer.stop,
+                                        "cost_usd": answer.cost_usd,
                                         "input_tokens": answer.usage.input_tokens,
                                         "output_tokens": answer.usage.output_tokens,
                                         "tool_calls": len(answer.tool_calls)})
@@ -170,6 +186,47 @@ def create_app(make_agent: Callable[[str], Agent], who_is: Callable[[str], str],
 
         return StreamingResponse(stream(), media_type="text/event-stream",
                                  headers={"Cache-Control": "no-cache"})
+
+    @app.get("/health")
+    def health() -> dict:
+        return {"status": "ok"}
+
+    @app.post("/v1/ask")
+    def ask(body: AskRequest, tok: Annotated[str, Depends(token)],
+            ip: Annotated[str, Depends(client_ip)]) -> StreamingResponse:
+        user_id = who_is(tok)
+        try:
+            limits.acquire(user_id, ip)
+        except LimitExceeded as e:
+            raise HTTPException(429, str(e)) from None
+        take_quota(tok, 1)
+        agent = make_agent(tok)
+        return sse(agent.events(body.question, [t.model_dump() for t in body.history],
+                                body.context), user_id, "answer")
+
+    if make_reporter is not None:
+        reporter_for = make_reporter
+
+        @app.post("/v1/reports")
+        def report(body: ReportRequest, tok: Annotated[str, Depends(token)],
+                   ip: Annotated[str, Depends(client_ip)]) -> StreamingResponse:
+            """Writes a research note from one of the user's workspaces and saves it there
+            (report.py). Streams the agent's events, a "report" event once saved (or an
+            "error"), then "done". Counts as REPORT_QUESTIONS questions against every limit,
+            taken only once the workspace is the user's and has something to report on."""
+            user_id = who_is(tok)
+            reporter = reporter_for(tok)
+            try:
+                job = reporter.prepare(str(body.workspace_id),
+                                       str(body.report_id) if body.report_id else None)
+            except ReportError as e:
+                raise HTTPException(e.status, e.message) from None
+            try:
+                limits.acquire(user_id, ip, REPORT_QUESTIONS)
+            except LimitExceeded as e:
+                raise HTTPException(429, str(e)) from None
+            take_quota(tok, REPORT_QUESTIONS)
+            return sse(reporter.events(job), user_id, "report")
 
     return app
 
@@ -191,16 +248,19 @@ def query_api_who_is(base_url: str) -> Callable[[str], str]:
     return who_is
 
 
-def query_api_quota(base_url: str, http: httpx.Client | None = None) -> Callable[[str], None]:
+def query_api_quota(base_url: str,
+                    http: httpx.Client | None = None) -> Callable[[str, int], None]:
     """Demo sandboxes' daily question caps live in the Query API (app database), so they hold
-    across restarts and replicas; other users aren't limited there."""
+    across restarts and replicas; other users aren't limited there. A report takes several
+    questions at once (all or none)."""
     post = http.post if http else httpx.post
 
-    def take_quota(tok: str) -> None:
+    def take_quota(tok: str, questions: int = 1) -> None:
+        body = {"questions": questions} if questions > 1 else None
         try:
             r = post(f"{base_url}/v1/demo/agent-quota",
-                           headers={"Authorization": f"Bearer {tok}", **request_id_headers()},
-                           timeout=10)
+                     headers={"Authorization": f"Bearer {tok}", **request_id_headers()},
+                     timeout=10, json=body)
         except httpx.HTTPError:
             raise HTTPException(503, "query api unavailable") from None
         if r.status_code == 200:
@@ -221,15 +281,21 @@ def build_app() -> FastAPI:
     base_url = os.environ.get("QUERY_API_URL", "http://localhost:8000")
     messages = anthropic.Anthropic().messages
     model = os.environ.get("AGENT_MODEL", "claude-haiku-5-5")
+    effort = os.environ.get("AGENT_EFFORT") or None
     http = httpx.Client(base_url=base_url, timeout=30,
                         event_hooks={"request": [forward_request_id]})
     tools = MetricTools()
 
     def make_agent(tok: str) -> Agent:
         api = QueryApi(base_url, tok, http=http)
-        return Agent(messages, api, model, stream=True,
-                     effort=os.environ.get("AGENT_EFFORT") or None, tools=tools.get(api),
+        return Agent(messages, api, model, stream=True, effort=effort, tools=tools.get(api),
                      ui=UiActions(api))
+
+    def make_reporter(tok: str) -> Reporter:
+        api = QueryApi(base_url, tok, http=http)
+        return Reporter(api, lambda scoped: Agent(
+            messages, scoped, model, stream=True, effort=effort, tools=tools.get(api),
+            rules=REPORT_RULES, max_rounds=REPORT_ROUNDS))
 
     return create_app(
         make_agent=make_agent,
@@ -238,6 +304,7 @@ def build_app() -> FastAPI:
                       int(os.environ.get("AGENT_IP_RATE_PER_HOUR", "10")),
                       float(os.environ.get("AGENT_DAILY_BUDGET_USD", "2"))),
         take_quota=query_api_quota(base_url),
+        make_reporter=make_reporter,
     )
 
 

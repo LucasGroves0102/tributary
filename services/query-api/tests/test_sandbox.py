@@ -78,19 +78,19 @@ class FakeSandboxes:
         s = self.sandboxes.get(user_id)
         return s.expires_at if s else None
 
-    def take_question(self, user_id, now, per_user, per_day):
+    def take_question(self, user_id, now, per_user, per_day, questions=1):
         s = self.sandboxes.get(user_id)
         if s is None or s.expires_at <= now:
             raise SandboxGone(user_id)
         day = now.date()
         mine, total = self.usage.get((user_id, day), 0), self.daily.get(day, 0)
-        if mine >= per_user:
-            raise QuotaExceeded("user")
-        if total >= per_day:
-            raise QuotaExceeded("day")
-        self.usage[(user_id, day)] = mine + 1
-        self.daily[day] = total + 1
-        return min(per_user - mine, per_day - total) - 1
+        if mine + questions > per_user:
+            raise QuotaExceeded("user", per_user - mine)
+        if total + questions > per_day:
+            raise QuotaExceeded("day", per_day - total)
+        self.usage[(user_id, day)] = mine + questions
+        self.daily[day] = total + questions
+        return min(per_user - mine, per_day - total) - questions
 
     def delete_expired(self, now):
         raise NotImplementedError
@@ -317,6 +317,30 @@ def test_agent_quota_per_user_and_per_day(world):
     assert client.post("/v1/demo/agent-quota", headers=bearer(b)).status_code == 200
     r = client.post("/v1/demo/agent-quota", headers=bearer(b))  # 4th today: global cap is 3
     assert r.status_code == 429 and "all the demo questions" in r.json()["detail"]
+
+
+def test_a_report_takes_several_questions_or_none(world):
+    client, sandboxes, *_ = world
+    a = create(client).json()["token"]
+    assert client.post("/v1/demo/agent-quota", headers=bearer(a)).status_code == 200
+    # one question left (per user 2): a 2-question report is refused, all or nothing
+    r = client.post("/v1/demo/agent-quota", headers=bearer(a), json={"questions": 2})
+    assert r.status_code == 429
+    assert "A report counts as 2 assistant questions" in r.json()["detail"]
+    assert "1 left today" in r.json()["detail"]
+    assert sum(sandboxes.usage.values()) == 1
+    assert client.post("/v1/demo/agent-quota", headers=bearer(a)).status_code == 200
+    b = create(client).json()["token"]
+    r = client.post("/v1/demo/agent-quota", headers=bearer(b), json={"questions": 2})
+    assert r.status_code == 429 and "all the demo questions" in r.json()["detail"]
+
+
+@pytest.mark.parametrize("body", [{"questions": 0}, {"questions": 6}, {"questions": "x"},
+                                  {"questions": 1, "user_id": "bob"}])
+def test_agent_quota_body_is_strict(world, body):
+    client, *_ = world
+    a = create(client).json()["token"]
+    assert client.post("/v1/demo/agent-quota", headers=bearer(a), json=body).status_code == 422
 
 
 def test_agent_quota_does_not_limit_other_users(world):

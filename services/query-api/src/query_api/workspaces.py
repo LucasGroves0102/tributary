@@ -33,8 +33,9 @@ MAX_STATE_BYTES = 16_000  # an item's state as compact JSON (the table allows 16
 MAX_BODY_BYTES = 32_768  # request bodies of the saved-work routes
 WORKSPACE_NAME = 100
 ITEM_NAME = 120
-KINDS = ("chart", "comps", "screen")
+KINDS = ("chart", "comps", "screen")  # what users save; reports (005) only the agent writes
 Kind = Literal["chart", "comps", "screen"]
+REPORT = "report"
 
 CIK = r"^\d{10}$"
 ISO_DATE = r"^\d{4}-\d{2}-\d{2}$"
@@ -196,7 +197,10 @@ class Workspaces(Protocol):
     def duplicate(self, user_id: str, workspace_id: str, name: str | None) -> dict | None: ...
     def add_item(self, user_id: str, workspace_id: str, kind: str, name: str,
                  state: dict) -> dict | None: ...
+    def get(self, user_id: str, workspace_id: str) -> dict | None: ...
     def item(self, user_id: str, item_id: str) -> dict | None: ...
+    def update_report(self, user_id: str, workspace_id: str, item_id: str,
+                      state: dict) -> dict | None: ...
     def update_item(self, user_id: str, item_id: str, name: str | None,
                     state: dict | None) -> dict | None: ...
     def duplicate_item(self, user_id: str, item_id: str, workspace_id: str | None,
@@ -315,6 +319,33 @@ class AppWorkspaces:
                 return None
             self._room(cur, user_id, items=1, workspace_id=workspace_id)
             return self._insert_item(cur, user_id, workspace_id, kind, name, state)
+
+    def get(self, user_id: str, workspace_id: str) -> dict | None:
+        """One workspace with its items in order, each with its state except reports' (large;
+        fetched one at a time)."""
+        with self._tx(user_id) as cur:
+            cur.execute(f"SELECT {WORKSPACE_COLUMNS} FROM workspaces w"
+                        " WHERE w.workspace_id = %s AND w.user_id = %s", (workspace_id, user_id))
+            ws = cur.fetchone()
+            if ws is None:
+                return None
+            cur.execute(f"SELECT {ITEM_SUMMARY},"
+                        " CASE WHEN i.kind = 'report' THEN NULL ELSE i.state END AS state"
+                        " FROM workspace_items i WHERE i.workspace_id = %s AND i.user_id = %s"
+                        " ORDER BY i.created_at, i.item_id", (workspace_id, user_id))
+            return {**ws, "items": cur.fetchall()}
+
+    def update_report(self, user_id: str, workspace_id: str, item_id: str,
+                      state: dict) -> dict | None:
+        """Writes over a report (regenerated); None unless it is a report in that workspace."""
+        with self._tx(user_id) as cur:
+            cur.execute("UPDATE workspace_items i SET state = %s,"
+                        " updated_at = statement_timestamp()"
+                        " WHERE i.item_id = %s AND i.user_id = %s AND i.workspace_id = %s"
+                        " AND i.kind = 'report'"
+                        f" RETURNING {ITEM_SUMMARY}, i.state",
+                        (_jsonb(state), item_id, user_id, workspace_id))
+            return cur.fetchone()
 
     def item(self, user_id: str, item_id: str) -> dict | None:
         with self._tx(user_id) as cur:

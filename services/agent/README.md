@@ -52,6 +52,37 @@ requests are unchanged.
 
 Limits: questions per hour per user and per client IP (`X-Client-IP`, set by the web proxy from
 Cloudflare's `CF-Connecting-IP`), and a daily model budget across all users. Over a limit → 429.
+A report counts as 3 questions ([Reports](#reports)).
+
+## Reports
+
+`POST /v1/reports` with `{"workspace_id": ...}` (and `"report_id"` to write an existing report
+again) writes a research note from one of the user's workspaces and saves it there as an item of
+kind `report` (`report.py`; Query API README, "Reports"). Streams the same events as `/v1/ask`,
+plus a `report` event (the saved item and whether every figure verified) or an `error` event if
+it couldn't be saved, before `done`.
+
+- **The user's own workspace, read as the user.** The workspace comes from the Query API with
+  the user's token (`GET /v1/workspaces/{id}`): someone else's is the same 404 as a missing one,
+  and nothing is spent. Its first 8 charts, comps sets and screens are the report's items; the
+  model gets them as a `<workspace>` data block (names are labels, `<`/`>` escaped so a name
+  can't close the block) with what the user can read of each company (`/v1/me`).
+- **Only the workspace's companies.** The tools are the chat tools as the user, but limited to the
+  companies the items name (chart layers and formula tickers, comps target and peers, each saved
+  screen's top 8 rows from the screener run as the user); anything else is refused before any
+  request. Ungranted companies get the Query API's permission denied, as in chat.
+- **Structure.** Title, summary, one section per item with its embed marker
+  (`[[embed:item-N]]`, where the web app draws the saved chart or table from its saved state),
+  then risks and what changed when the user can read filings. Markers for unknown items are
+  dropped; an item the model skipped still gets its own section.
+- **Every number cited, every unverified figure flagged.** The answer goes through the same
+  `verify.py` check as chat; any figure or accession number it can't trace to a tool result is
+  listed in an "Unverified" section of the report (and highlighted inline by the web app), never
+  silently kept. Citations, the newest `as_of` the tools returned and the writing time are stored
+  with it.
+- **Counts as 3 questions** (`REPORT_QUESTIONS`) against every limit: per user and per IP per
+  hour, the daily budget, and a demo sandbox's daily caps (taken all at once, or refused with a
+  message saying how many are left). Up to 12 tool rounds.
 
 ## Run
 
