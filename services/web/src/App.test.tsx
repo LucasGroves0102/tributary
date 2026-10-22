@@ -196,6 +196,27 @@ describe("navigation", () => {
     expect($('.nav a[aria-current="page"]')?.textContent).toContain("Companies");
   });
 
+  it("? shows the keyboard shortcut sheet; Escape closes it and focus returns", async () => {
+    await render();
+    const before = document.activeElement;
+    await key("?");
+    const sheet = $('[role="dialog"]')!;
+    expect(sheet.getAttribute("aria-modal")).toBe("true");
+    expect(sheet.textContent).toContain("Keyboard shortcuts");
+    expect(sheet.textContent).toContain("First or last column");
+    expect(sheet.textContent).toContain("Go to Chart builder");
+    expect(document.activeElement?.getAttribute("aria-label")).toBe("Close keyboard shortcuts");
+    await key("Escape", {}, document.activeElement!);
+    expect($('[role="dialog"]')).toBeNull();
+    expect(document.activeElement).toBe(before);
+    // also from the sidebar footer
+    const button = [...container.querySelectorAll(".side button")].find((b) => b.textContent?.startsWith("Keyboard shortcuts"))!;
+    await act(async () => (button as HTMLElement).click());
+    expect($('[role="dialog"]')).not.toBeNull();
+    await act(async () => ($(".sheet-overlay") as HTMLElement).click());
+    expect($('[role="dialog"]')).toBeNull();
+  });
+
   it("switches screens with g then a letter", async () => {
     await render();
     await key("g");

@@ -80,9 +80,18 @@ language, each with links to its filings (the reader for 10-K/10-Q text the user
 else EDGAR); Home lists the newest notes across the user's companies. They need financials
 access, like the values they describe.
 
+Compare's "Side by side" draws the selected columns as small multiples (`compare/SmallMultiples.tsx`):
+one compact LayerChart per column, every readable company a line in the same colour on each
+(at most 8), calendar quarters over 3 years, each line one `/v1/formulas/evaluate` request built
+by the chart builder's rules and shared with its session cache; nothing is asked until the
+charts are shown.
+
 States and accessibility: every data panel loads with a skeleton (`components/States.tsx`),
 errors offer a retry, empty states say what to do next. The screener, watchlist and comps rows
-are a roving tab stop (arrows, Page Up/Down, Home/End, Enter opens: `components/tableNav.ts`).
+are a roving tab stop (arrows, Page Up/Down, Home/End, Ctrl/Cmd + Up/Down the first and last
+row, Right or Ctrl/Cmd + Left/Right into the cells, then the first and last column; Enter opens:
+`components/tableNav.ts`). `?` opens the keyboard shortcut sheet (`components/ShortcutSheet.tsx`,
+also from the sidebar footer).
 `src/tokens.test.ts` checks every text, state and series token against WCAG AA in both themes.
 Under 900px the sidebar becomes a drawer behind Menu; under 600px the assistant drawer is full
 screen. Banks show "n/a (bank)" for operating margin, FCF and net debt (`format.ts`

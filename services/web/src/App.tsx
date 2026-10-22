@@ -11,6 +11,7 @@ import { useAssistant } from "./assistant/useAssistant";
 import { useUiActions } from "./assistant/useUiActions";
 import { FilingReader } from "./components/explore/FilingReader";
 import { Palette, WATCH_PREFIX, type PaletteActions, type PaletteCompany } from "./components/Palette";
+import { ShortcutSheet } from "./components/ShortcutSheet";
 import { Sidebar } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
 import { download } from "./download";
@@ -65,6 +66,7 @@ export function App(props: Props = {}) {
     () => (load(DRAWER_KEY) ?? (window.innerWidth > DRAWER_FITS_PX ? "open" : "closed")) === "open",
   );
   const [palette, setPalette] = useState<string | null>(null);
+  const [help, setHelp] = useState(false);
   const [focusTick, setFocusTick] = useState(0);
   const input = useRef<HTMLTextAreaElement>(null);
   const route = useRoute();
@@ -243,6 +245,9 @@ export function App(props: Props = {}) {
       case "palette":
         setPalette((p) => (p === null ? "" : null));
         break;
+      case "help":
+        setHelp((h) => !h);
+        break;
       case "assistant":
         if (route.view === "ask") focusAssistant();
         else if (drawerOpen) setDrawer(false);
@@ -378,6 +383,7 @@ export function App(props: Props = {}) {
           lastIngested={ingested}
           onAdd={() => setPalette(WATCH_PREFIX)}
           onExport={exportWatchlist}
+          onShortcuts={() => setHelp(true)}
           workspaces={token ? <WorkspaceTree saved={saved} onOpen={openSaved} onError={setError} /> : null}
         />
         {navOpen && <div className="scrim" aria-hidden="true" onClick={() => setNavOpen(false)} />}
@@ -520,6 +526,7 @@ export function App(props: Props = {}) {
           ✦ Ask the assistant
         </button>
       )}
+      {help && <ShortcutSheet onClose={() => setHelp(false)} />}
       {palette !== null && (
         <Palette
           key={palette}

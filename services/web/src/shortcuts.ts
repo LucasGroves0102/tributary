@@ -6,6 +6,7 @@ export type Shortcut =
   | { type: "palette" }
   | { type: "assistant" }
   | { type: "focus-assistant" }
+  | { type: "help" }
   | { type: "go"; view: NavView };
 
 /** How long after "g" the second key still counts (prototype v3: 900 ms). */
@@ -21,8 +22,8 @@ function typing(target: EventTarget | null): boolean {
 }
 
 /**
- * Ctrl/Cmd-K palette and Ctrl/Cmd-J assistant work everywhere; "/" (focus the assistant) and
- * g-then-letter (switch screens) only when not typing. Returns a function that maps one key
+ * Ctrl/Cmd-K palette and Ctrl/Cmd-J assistant work everywhere; "/" (focus the assistant), "?"
+ * (the shortcut sheet) and g-then-letter (switch screens) only when not typing. Returns a function that maps one key
  * event to a shortcut, keeping the pending "g" between calls.
  */
 export function shortcutReader(now: () => number = Date.now) {
@@ -34,6 +35,7 @@ export function shortcutReader(now: () => number = Date.now) {
     if (mod && !e.altKey && key === "j") return { type: "assistant" };
     if (mod || e.altKey || typing(e.target)) return null;
     if (e.key === "/") return { type: "focus-assistant" };
+    if (e.key === "?") return { type: "help" };
     if (key === "g") {
       gAt = now();
       return null;

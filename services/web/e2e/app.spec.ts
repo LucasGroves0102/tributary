@@ -126,6 +126,13 @@ test("comps: target and peers with the peer median, exported as CSV", async ({ p
   const csv = readFileSync((await download.path())!, "utf8");
   expect(csv).toContain(`target,${PEP},PEP,PepsiCo,financials`);
   expect(csv).toContain("peer median (excludes target)");
+
+  // side by side: a small chart per column, each company a line
+  await page.getByRole("button", { name: /^Show \d+ charts$/ }).click();
+  const multiples = page.locator(".multiple");
+  await expect(multiples).toHaveCount(8);
+  await expect(multiples.first().locator(".ch-title")).toHaveText("Revenue, TTM");
+  await expect(multiples.first().locator(".ch-legend text")).toHaveText(["PEP", "KO", "NVDA"]);
 });
 
 test("save a chart to a new workspace and reopen it", async ({ page }) => {
@@ -183,6 +190,34 @@ test("narrow screens: the sidebar is a drawer behind Menu", async ({ page }) => 
   await side.getByRole("link", { name: /Companies/ }).click();
   await expect(side).toBeHidden();
   await expect(page.locator("table.screen tbody tr")).toHaveCount(4);
+});
+
+test("keyboard: ? lists the shortcuts, Ctrl+arrows jump in tables; the limits page", async ({ page }) => {
+  await mockApi(page);
+  await startDemo(page);
+  await page.goto("/#/companies");
+  const rows = page.locator("table.screen tbody tr");
+  await expect(rows).toHaveCount(4);
+  await rows.first().focus();
+  await page.keyboard.press("Control+ArrowDown");
+  await expect(rows.last()).toBeFocused();
+  await page.keyboard.press("Control+ArrowRight");
+  await expect(rows.last().locator("> td, > th").last()).toBeFocused();
+  await page.keyboard.press("Control+ArrowUp");
+  await expect(rows.first().locator("> td, > th").last()).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(rows.first()).toBeFocused();
+
+  await page.keyboard.press("?");
+  const sheet = page.getByRole("dialog", { name: "Keyboard shortcuts" });
+  await expect(sheet).toBeVisible();
+  await expect(sheet).toContainText("First or last column");
+  await page.keyboard.press("Escape");
+  await expect(sheet).toBeHidden();
+
+  await page.locator(".side a.cover-link").click();
+  await expect(page.getByRole("heading", { name: "What Tributary covers" })).toBeVisible();
+  await expect(page.locator(".about")).toContainText("No consensus estimates");
 });
 
 test("data notes: recent ones on Home, the full list on the company's tab", async ({ page }) => {
