@@ -131,7 +131,8 @@ app DB ─(Debezium CDC)─▶ Kafka ─▶ authz-sync ─┬─▶ OpenFGA (che
 ### Query API
 
 Every data request is checked twice: OpenFGA before any query, then Postgres row-level
-security on the rows themselves (`services/query-api`). Docs at http://localhost:8000/docs.
+security on the rows themselves (`services/query-api`). Running locally, the interactive API docs
+are at `localhost:8000/docs`.
 
 ```bash
 curl -H "Authorization: Bearer $(make -s token USER=alice)" \
