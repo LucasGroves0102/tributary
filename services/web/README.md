@@ -52,6 +52,24 @@ recently opened items and filings read in the reader, newest first. Saved items 
 the pages read data through the Query API as usual, so a chart for a company you lost shows the
 same "isn't one of your companies" state as anywhere else.
 
+Chart builder (`src/chart/`): layers can be renamed (legend), recoloured (colours stay with a
+layer when it moves), moved up or down, hidden; types line, bar, area, stacked bar and stacked
+area (layers of the same stacked type and axis stack, negatives downward); transforms quarterly,
+TTM, YoY, QoQ, indexed and per share (`ttm(f) / weighted_shares_diluted` in the quarter view,
+offered only when the catalog has the share count); ranges 1y/3y/5y/10y/max. Clicking a point
+(or Enter on it; arrows move between quarters and layers) opens its newest source filing in the
+reader. Filing markers put each company's 10-Ks and 10-Qs (public index) and 8-K results (item
+2.02, from parsed filings) on the time axis. "View as table" shows the plotted values with their
+sources as a data table.
+
+States and accessibility: every data panel loads with a skeleton (`components/States.tsx`),
+errors offer a retry, empty states say what to do next. The screener, watchlist and comps rows
+are a roving tab stop (arrows, Page Up/Down, Home/End, Enter opens: `components/tableNav.ts`).
+`src/tokens.test.ts` checks every text, state and series token against WCAG AA in both themes.
+Under 900px the sidebar becomes a drawer behind Menu; under 600px the assistant drawer is full
+screen. Banks show "n/a (bank)" for operating margin, FCF and net debt (`format.ts`
+`notForBanks`), and Compare leaves them out of those columns' peer median.
+
 ## Run
 
 ```bash
@@ -67,7 +85,15 @@ cd services/web
 npm run typecheck
 npm test          # vitest
 npm run build     # tsc + vite build into dist/
+npm run e2e       # Playwright flows in e2e/ against dist/ (build first)
 ```
+
+The end-to-end flows (`e2e/app.spec.ts`: try the demo → Home, screener filter/sort/watch, a
+two-layer chart with a formula exported as CSV, comps, saving a chart to a workspace and
+reopening it, the assistant drawer with a streamed answer, the narrow-screen menu) run against
+`vite preview` with every `/api/*` call answered by `e2e/mockApi.ts` (route interception), so
+no backend runs. One worker and one headless chromium (`npx playwright install chromium` once).
+CI runs them in the `e2e` job.
 
 ## Production
 
