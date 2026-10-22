@@ -105,9 +105,9 @@ export function Company({ token, companyId, tab, watched, onWatch, onChart, onCh
       </section>
 
       {tab === "overview" && <Overview token={token} companyId={companyId} name={h.name} row={row} access={row.access} />}
-      {tab === "statements" && <Statements token={token} companyId={companyId} name={h.name} ticker={ticker} />}
+      {tab === "statements" && <Statements token={token} companyId={companyId} name={h.name} ticker={ticker} industry={h.industry} />}
       {tab === "segments" && <Segments token={token} companyId={companyId} name={h.name} />}
-      {tab === "ratios" && <Ratios token={token} companyId={companyId} name={h.name} ticker={ticker} />}
+      {tab === "ratios" && <Ratios token={token} companyId={companyId} name={h.name} ticker={ticker} industry={h.industry} />}
       {tab === "filings" && <Filings token={token} companyId={companyId} name={h.name} canRead={row.access.includes("filings")} />}
       {tab === "peers" && <Peers token={token} companyId={companyId} name={h.name} onChart={onChartMany} />}
     </div>

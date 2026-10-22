@@ -5,7 +5,7 @@
 import { csvCell } from "../chart/series";
 import { calendarLabel } from "../compare/state";
 import { FILER_LABELS, fyeMonth, type FilerCategory } from "../companies/screen";
-import { change, day, money, pct } from "../format";
+import { BANK_NA, bankTitle, change, day, money, notForBanks, pct } from "../format";
 import { num } from "../home/data";
 import type { FinancialRow, Recap, RecapValue, ScreenerRow, SegmentRow, ValueSource } from "../types";
 
@@ -69,6 +69,9 @@ export function keyStats(row: ScreenerRow): KeyStat[] {
   return KEY_STATS.map(({ key, label, kind }) => {
     const v = num(row.values[key]);
     const src = row.sources[key] ?? null;
+    if ((v === null || !src) && notForBanks(row.industry, key)) {
+      return { label, text: BANK_NA, period: "not applicable", title: bankTitle(label) };
+    }
     if (v === null || !src) return { label, text: "—", period: "not reported", title: `${label}: not reported for the latest period` };
     const period = periodText(key, src);
     return {
@@ -198,7 +201,8 @@ export interface TableCell {
 
 export interface MetricTable {
   columns: { periodEnd: string; label: string; sub: string }[];
-  rows: { metric: string; label: string; cells: (TableCell | null)[] }[];
+  /** bank: the metric doesn't describe this company (a bank), so empty cells read n/a */
+  rows: { metric: string; label: string; cells: (TableCell | null)[]; bank?: boolean }[];
 }
 
 function cellTitle(label: string, r: FinancialRow): string {
@@ -216,6 +220,8 @@ export function metricTable(
   metrics: [string, string, Fmt][],
   period: Period,
   basis: Basis = "fiscal",
+  /** the company's SIC description: a bank's empty operating margin / FCF / net debt reads n/a */
+  industry: string | null = null,
 ): MetricTable {
   const periodOf = (r: FinancialRow) => (basis === "calendar" ? r.calendar_period : r.fiscal_period) ?? null;
   const kept = period === "a" ? rows.filter((r) => periodOf(r)?.endsWith("Q4")) : rows;
@@ -247,8 +253,10 @@ export function metricTable(
             url: r.citation.filing_url,
           };
         }),
+        bank: notForBanks(industry, metric) || undefined,
       }))
-      .filter((r) => r.cells.some(Boolean)),
+      // a bank's operating margin / FCF / net debt stays, as n/a, so its absence is explained
+      .filter((r) => r.cells.some(Boolean) || (r.bank && ends.length > 0)),
   };
 }
 

@@ -13,6 +13,7 @@ import {
   DEFAULT_COLUMNS,
   fiscalLabel,
   median,
+  medianTitle,
   parseCompare,
   peerStats,
 } from "./state";
@@ -96,7 +97,7 @@ describe("the table", () => {
     expect(rows[1]!.cells.revenue_ttm!.title).toContain("doesn't cover");
     const stats = peerStats(rows, s.cols);
     // peers: TSLA (no values) and AAPL; NVDA is the target and doesn't count
-    expect(stats.operating_margin_ttm).toEqual({ median: 0.3, n: 1, high: 0.3, low: 0.3 });
+    expect(stats.operating_margin_ttm).toEqual({ median: 0.3, n: 1, high: 0.3, low: 0.3, banks: 0 });
   });
 
   it("medians of even and odd counts", () => {
@@ -128,4 +129,31 @@ it("charts a column as its metric in the chart builder", () => {
   expect(chartMetric("net_debt_q")).toEqual({ metric: "net_debt", transform: "q", title: "Net debt, quarter end" });
   expect(chartMetric("revenue_growth_ttm")).toMatchObject({ metric: "revenue", transform: "yoy" });
   expect(chartMetric("salary_ttm")).toBeNull();
+});
+
+describe("banks", () => {
+  const JPM = "0000019617";
+  const BANK = (over: Record<string, string | null>): ScreenerRow => ({
+    ...row(entry({ company_id: JPM, name: "JPMorgan Chase", tickers: ["JPM"], industry: "National Commercial Banks" })),
+    values: { revenue_ttm: "180000000000", operating_margin_ttm: null, net_debt_q: null, ...over },
+  });
+  const s = { target: NVDA, peers: [AAPL, JPM], cols: ["revenue_ttm", "operating_margin_ttm", "net_debt_q"] };
+
+  it("show n/a for operating margin and net debt, and stay out of those medians", () => {
+    const rows = compareRows(s, [row(entry()), APPLE("0.3"), BANK({})]);
+    const jpm = rows.find((r) => r.companyId === JPM)!;
+    expect(jpm.cells.operating_margin_ttm).toMatchObject({ text: "n/a (bank)", bank: true });
+    expect(jpm.cells.operating_margin_ttm!.title).toContain("doesn't describe a bank");
+    expect(jpm.cells.revenue_ttm!.bank).toBeUndefined();
+    const stats = peerStats(rows, s.cols);
+    expect(stats.operating_margin_ttm).toMatchObject({ median: 0.3, n: 1, banks: 1 });
+    expect(stats.revenue_ttm).toMatchObject({ n: 2, banks: 0 });
+    expect(medianTitle(stats.operating_margin_ttm!)).toContain("1 bank left out");
+  });
+
+  it("leave a bank's value out of the median even when the API has one", () => {
+    const rows = compareRows(s, [row(entry()), APPLE("0.3"), BANK({ operating_margin_ttm: "0.9" })]);
+    expect(rows[2]!.cells.operating_margin_ttm).toMatchObject({ text: "90.0%", bank: true });
+    expect(peerStats(rows, s.cols).operating_margin_ttm!.median).toBe(0.3);
+  });
 });

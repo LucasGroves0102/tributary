@@ -3,7 +3,7 @@
  * table built from the answer: cells with units, the period behind each value and its source,
  * the peer median (target excluded), and the CSV. Pure, tested without rendering. */
 
-import { change, day, money, pct } from "../format";
+import { BANK_NA, bankTitle, change, day, money, notForBanks, pct } from "../format";
 import { num } from "../home/data";
 import type { ScreenerRow, ValueSource } from "../types";
 import { csvCell } from "../chart/series";
@@ -135,6 +135,8 @@ export interface CompareCell {
   text: string;
   title: string;
   source: ValueSource | null;
+  /** a bank's operating margin / FCF / net debt: shown as n/a, never in the peer median */
+  bank?: true;
 }
 
 export interface CompareRow {
@@ -207,8 +209,13 @@ export function compareRows(s: CompareState, rows: ScreenerRow[]): CompareRow[] 
       const raw = readable ? r.values[key] : null;
       const value = num(raw);
       const source = readable ? (r.sources[key] ?? null) : null;
+      const bank = notForBanks(r.industry, key);
       cells[key] = !readable
         ? { value: null, raw: null, text: "—", title: MASKED_TITLE, source: null }
+        : bank && value === null
+          ? { value, raw: null, text: BANK_NA, title: `${bankTitle(c.long)} Left out of the peer median.`, source, bank }
+        : bank
+          ? { value, raw: String(raw), text: formatValue(c.kind, value!), title: `${sourceTitle(key, source)}. A bank: left out of the peer median.`, source, bank }
         : value === null
           ? { value, raw: null, text: "—", title: `${c.long}: not reported for the latest period`, source }
           : { value, raw: String(raw), text: formatValue(c.kind, value), title: sourceTitle(key, source), source };
@@ -235,14 +242,32 @@ export function median(values: number[]): number | null {
   return v.length % 2 ? v[m]! : (v[m - 1]! + v[m]!) / 2;
 }
 
-/** Per column: the peers' median, its count, and the high and low (the target excluded). */
+export interface PeerStat {
+  median: number | null;
+  n: number;
+  high: number | null;
+  low: number | null;
+  /** readable bank peers left out of this column (the metric doesn't describe a bank) */
+  banks: number;
+}
+
+/** Per column: the peers' median, its count, and the high and low (the target and, for
+ * operating margin / FCF / net debt, banks excluded). */
 export function peerStats(rows: CompareRow[], cols: string[]) {
-  const out: Record<string, { median: number | null; n: number; high: number | null; low: number | null }> = {};
+  const out: Record<string, PeerStat> = {};
   for (const key of cols) {
-    const v = rows.filter((r) => !r.isTarget).map((r) => r.cells[key]?.value).filter((x): x is number => x != null);
-    out[key] = { median: median(v), n: v.length, high: v.length ? Math.max(...v) : null, low: v.length ? Math.min(...v) : null };
+    const peers = rows.filter((r) => !r.isTarget);
+    const v = peers.filter((r) => !r.cells[key]?.bank).map((r) => r.cells[key]?.value).filter((x): x is number => x != null);
+    const banks = peers.filter((r) => r.cells[key]?.bank).length;
+    out[key] = { median: median(v), n: v.length, high: v.length ? Math.max(...v) : null, low: v.length ? Math.min(...v) : null, banks };
   }
   return out;
+}
+
+/** The peer-median cell's hover. */
+export function medianTitle(s: PeerStat): string {
+  const banks = s.banks ? `; ${s.banks} ${s.banks === 1 ? "bank" : "banks"} left out (the metric doesn't describe a bank)` : "";
+  return `Median of ${s.n} peers' values; the target is excluded${banks}`;
 }
 
 export function statText(key: string, v: number | null): string {

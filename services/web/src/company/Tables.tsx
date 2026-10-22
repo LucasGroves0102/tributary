@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react";
 
 import { financialsView, segments as fetchSegments } from "../api";
 import { download } from "../download";
-import { change, pct } from "../format";
+import { BANK_NA, bankTitle, change, pct } from "../format";
 import {
   financialsCsv,
   metricTable,
@@ -41,7 +41,8 @@ function Seg<T extends string>({ value, options, set, label }: { value: T; optio
   );
 }
 
-function Cell({ cell }: { cell: TableCell | null }) {
+function Cell({ cell, bank, label = "" }: { cell: TableCell | null; bank?: boolean; label?: string }) {
+  if (!cell && bank) return <td className="n faint" title={bankTitle(label)}>{BANK_NA}</td>;
   if (!cell) return <td className="n faint">—</td>;
   return (
     <td className={cell.derived ? "n derived" : "n"} title={cell.title}>
@@ -77,7 +78,7 @@ export function MetricTableView({ table, first }: { table: MetricTable; first: s
             <tr key={r.metric}>
               <td className="first">{r.label}</td>
               {r.cells.map((c, i) => (
-                <Cell key={table.columns[i]!.periodEnd} cell={c} />
+                <Cell key={table.columns[i]!.periodEnd} cell={c} bank={r.bank} label={r.label} />
               ))}
             </tr>
           ))}
@@ -94,7 +95,16 @@ export function Gate({ load, name, what, children }: { load: Load<unknown> | nul
   return <>{children()}</>;
 }
 
-export function Statements({ token, companyId, name, ticker }: { token: string; companyId: string; name: string; ticker: string }) {
+interface TableProps {
+  token: string;
+  companyId: string;
+  name: string;
+  ticker: string;
+  /** SIC description: a bank's operating margin / FCF / net debt rows read n/a */
+  industry?: string | null;
+}
+
+export function Statements({ token, companyId, name, ticker, industry = null }: TableProps) {
   const [kind, setKind] = useState<Statement>("is");
   const [period, setPeriod] = useState<Period>("q");
   const [basis, setBasis] = useState<Basis>("fiscal");
@@ -103,7 +113,7 @@ export function Statements({ token, companyId, name, ticker }: { token: string; 
   const load = useLoad(`${companyId}|${kind}|${period}|${basis}`, () =>
     financialsView(token, companyId, req.quarters, metrics.map(([m]) => m), req.view, basis),
   );
-  const table = load?.state === "ok" ? metricTable(load.data.rows, metrics, period, basis) : null;
+  const table = load?.state === "ok" ? metricTable(load.data.rows, metrics, period, basis, industry) : null;
   const exportCsv = () =>
     load?.state === "ok" && table &&
     download(`${ticker.toLowerCase()}-${kind}-${period}${basis === "calendar" ? "-calendar" : ""}.csv`, new Blob([financialsCsv(load.data.rows, table, req.view)], { type: "text/csv" }));
@@ -143,9 +153,9 @@ export function Statements({ token, companyId, name, ticker }: { token: string; 
   );
 }
 
-export function Ratios({ token, companyId, name, ticker }: { token: string; companyId: string; name: string; ticker: string }) {
+export function Ratios({ token, companyId, name, ticker, industry = null }: TableProps) {
   const load = useLoad(companyId, () => financialsView(token, companyId, 8, RATIOS.map(([m]) => m), "ttm"));
-  const table = load?.state === "ok" ? metricTable(load.data.rows, RATIOS, "ttm") : null;
+  const table = load?.state === "ok" ? metricTable(load.data.rows, RATIOS, "ttm", "fiscal", industry) : null;
   return (
     <section className="card">
       <div className="card-h">

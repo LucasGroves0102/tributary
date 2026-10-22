@@ -11,6 +11,7 @@ import {
   companiesOf,
   MASKED_TITLE,
   MAX_PEERS,
+  medianTitle,
   peerStats,
   short,
   statText,
@@ -95,6 +96,9 @@ export function Compare({ token, compare, onChart, saveBar }: Props) {
     [table, compare],
   );
   const stats = useMemo(() => peerStats(rows, cols), [rows, cols]);
+  const bankCols = cols
+    .filter((k) => rows.some((r) => r.cells[k]?.bank))
+    .map((k) => COMPARE_COLUMNS.find((c) => c.key === k)!.long.toLowerCase());
   const target = rows.find((r) => r.isTarget);
   const names = new Map(rows.map((r) => [r.companyId, r.ticker ?? r.name]));
   const masked = rows.filter((r) => !r.readable);
@@ -289,8 +293,9 @@ export function Compare({ token, compare, onChart, saveBar }: Props) {
                   <td className="first">Peer median</td>
                   <td className="faint">{rows.filter((r) => !r.isTarget && r.readable).length} readable peers</td>
                   {cols.map((k) => (
-                    <td key={k} className="n" title={`Median of ${stats[k]!.n} peers' values; the target is excluded`}>
+                    <td key={k} className="n" title={medianTitle(stats[k]!)}>
                       {statText(k, stats[k]!.median)}
+                      {stats[k]!.banks > 0 && <span className="unit"> excl. banks</span>}
                     </td>
                   ))}
                   <td />
@@ -313,7 +318,9 @@ export function Compare({ token, compare, onChart, saveBar }: Props) {
           USD. No valuation multiples: Tributary has no market prices. Each company's own latest
           quarter, labelled by calendar quarter (fiscal in brackets); hover a value for its
           period and source filing.
-          {fyes.length > 1 && ` Fiscal years end in different months (${fyes.join(", ")}); TTM figures compare regardless.`}
+          {bankCols.length > 0 &&
+            ` Banks show n/a for ${bankCols.join(", ")} (deposits are a bank's debt and lending its operations) and are left out of ${bankCols.length === 1 ? "that column's" : "those columns'"} median.`}
+          {fyes.length > 1 &&` Fiscal years end in different months (${fyes.join(", ")}); TTM figures compare regardless.`}
           {masked.length > 0 &&
             ` ${masked.length} ${masked.length === 1 ? "company shows" : "companies show"} metadata only: your plan doesn't cover ${masked.length === 1 ? "its" : "their"} financials, so ${masked.length === 1 ? "it is" : "they are"} left out of the median and charts.`}
         </div>

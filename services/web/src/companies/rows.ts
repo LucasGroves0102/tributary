@@ -1,7 +1,7 @@
 /** Screener rows → table cells: units, the period behind each value, its source filing, and an
  * honest note where the API masked a company's values. Pure, tested without rendering. */
 
-import { change, day, money, pct } from "../format";
+import { BANK_NA, bankTitle, change, day, money, notForBanks, pct } from "../format";
 import { num, type Cell } from "../home/data";
 import type { ScreenerRow, ValueSource } from "../types";
 import { fyeMonth, SCREEN_COLUMNS } from "./screen";
@@ -61,7 +61,9 @@ export function screenRow(r: ScreenerRow): ScreenRow {
     const value = readable ? num(r.values[c.key]) : null;
     cells[c.key] = !readable
       ? { value, text: "—", title: MASKED_TITLE }
-      : value === null
+      : value === null && notForBanks(r.industry, c.key)
+        ? { value, text: BANK_NA, title: bankTitle(LONG[c.key] ?? c.label) }
+        : value === null
         ? { value, text: "—", title: `${LONG[c.key]}: not reported for the latest period` }
         : { value, text: format(c.kind, value), title: title(c.key, r.sources[c.key] ?? null) };
   }

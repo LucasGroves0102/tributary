@@ -9,6 +9,7 @@ import {
   header,
   keyStats,
   metricTable,
+  RATIOS,
   recapAccession,
   recapRows,
   segmentTables,
@@ -150,4 +151,20 @@ it("labels 8-K items and filters forms", () => {
   expect(formMatches("10-K/A", "10-K")).toBe(true);
   expect(formMatches("10-Q", "10-K")).toBe(false);
   expect(formMatches("8-K", "all")).toBe(true);
+});
+
+describe("banks on the tearsheet", () => {
+  it("key stats and ratio rows read n/a where the metric doesn't describe a bank", () => {
+    const bank = nvdaRow({ industry: "National Commercial Banks", values: { revenue_ttm: "180000000000" } });
+    const stats = keyStats(bank);
+    expect(stats.find((s) => s.label === "Operating margin")).toMatchObject({ text: "n/a (bank)", period: "not applicable" });
+    expect(stats.find((s) => s.label === "Net debt")!.title).toContain("doesn't describe a bank");
+    expect(stats.find((s) => s.label === "Gross margin")).toMatchObject({ text: "—" });
+    const rows = [fin("roe", "2026-07-26", "0.17", "FY2026 Q2")];
+    const t = metricTable(rows, RATIOS, "ttm", "fiscal", "National Commercial Banks");
+    expect(t.rows.map((r) => r.metric)).toEqual(["operating_margin", "fcf_margin", "roe"]);
+    expect(t.rows[0]).toMatchObject({ bank: true, cells: [null] });
+    // not a bank: empty rows are dropped as before
+    expect(metricTable(rows, RATIOS, "ttm").rows.map((r) => r.metric)).toEqual(["roe"]);
+  });
 });
