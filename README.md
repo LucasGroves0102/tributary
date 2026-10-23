@@ -12,6 +12,7 @@ sandbox with 20 companies (PepsiCo, Coca-Cola, Apple, Microsoft, Nvidia, JPMorga
 | **< 1 s** | to revoke access everywhere after a grant changes (0.50–0.97 s in CI, target 30 s) |
 | **43 s / 1.8 min** | p50 / p95 from EDGAR acceptance to Postgres during EDGAR business hours (5,312 filings, last 7 days; target 2 min). Overall p95 is 2.9 min: filings accepted after 5:30 pm ET mostly reach EDGAR's feed the next morning |
 | **989,666** | SEC filers indexed; 6,024 operating companies with quarterly financials from XBRL |
+| **265,625** | 10-K, 10-Q and 8-K filings from 5,342 companies over 5 years, crawled in 27 h at the SEC's 10 requests/s with 0 failures and parsed into 1.78M sections; 272 GB of HTML stored as 17.9 GB |
 | **26M + 26M** | filing records and XBRL facts, kept current by nightly batch loads on one self-managed server |
 
 ## Architecture

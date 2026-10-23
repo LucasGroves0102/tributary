@@ -12,8 +12,9 @@ documents (with exhibits): every section key, title, offset and text hash matche
 
 **In production.** Rust has been the live parser since 2026-10-20 (`image: parser-rs` in
 [deploy/helm/tributary/values.yaml](../deploy/helm/tributary/values.yaml); the Python image
-stays one value away for rollback). During the 5-year document crawl it parsed ~10,000 filings
-an hour, 367,383 sections in 24 hours, with the crawl, not the parser, setting the pace.
+stays one value away for rollback). It parsed the whole 5-year document crawl as it arrived:
+265,467 filings into 1.78M sections over 27 hours (~10,000 filings an hour), with the crawl, at
+the SEC's 10 requests/s, not the parser, setting the pace.
 
 Check on the server which parser wrote recent sections:
 
