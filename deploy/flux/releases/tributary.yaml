@@ -29,10 +29,12 @@ spec:
     openfga:
       auth:
         enabled: true
-    services:
-      parser-backfill:
-        replicas: 1
-      doc-crawler:
-        replicas: 1
+    # The document crawl finished 2026-10-22 (265,625 filings); doc-crawler and parser-backfill
+    # are back at the chart default of 0. The jobs that read the crawled documents run hourly.
+    jobs:
+      segments:
+        suspend: false
+      section-index:
+        suspend: false
     image:
       tag: main-140-27536cfa00a76415ce35791a7ba301794822d815 # {"$imagepolicy": "flux-system:tributary:tag"}
