@@ -27,7 +27,9 @@ from query_api.sandbox import (
 
 from .conftest import SECRET
 
-NOW = datetime(2026, 10, 21, 15, 0, tzinfo=UTC)
+# The sandbox's JWTs expire at NOW + 24 h and the app verifies exp against the real clock, so
+# NOW must be the real hour, not a fixed date (a fixed one failed every run a day later).
+NOW = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
 # fictional ids: ticker → company_id, as silver.resolve_company would answer
 IDS = {t: f"{i + 1:010d}" for i, t in enumerate(DEMO_TICKERS)}
 TSLA = "0001318605"  # not a demo company
