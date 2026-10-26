@@ -147,6 +147,9 @@ let container: HTMLDivElement;
 
 async function settle() {
   for (let i = 0; i < 6; i++) await act(async () => new Promise((r) => setTimeout(r, 0)));
+  // lazy pages (pages/lazy.ts): a slow runner can still be loading the chunk after the ticks
+  await act(async () => { await vi.dynamicImportSettled(); });
+  for (let i = 0; i < 6; i++) await act(async () => new Promise((r) => setTimeout(r, 0)));
 }
 
 async function render(hash: string) {
