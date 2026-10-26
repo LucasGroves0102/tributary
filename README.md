@@ -9,7 +9,7 @@ sandbox with 20 companies (PepsiCo, Coca-Cola, Apple, Microsoft, Nvidia, JPMorga
 |---|---|
 | **0 of 59** | permission attacks leaked data ([adversarial suite](tests/adversarial/report.md)) |
 | **128 of 128** | figures in the agent's answers traced to a filing or XBRL fact ([citation suite](tests/citations/report.md)) |
-| **< 1 s** | to revoke access everywhere after a grant changes (0.50–0.97 s in CI, target 30 s) |
+| **~1 s** | to revoke access everywhere after a grant changes, measured on every CI run (0.90–1.01 s in [this run](https://github.com/LucasGroves0102/tributary/actions/runs/40396206878/job/121829811550); the test enforces the 30 s target) |
 | **43 s / 1.8 min** | p50 / p95 from EDGAR acceptance to Postgres during EDGAR business hours (5,312 filings, last 7 days; target 2 min). Overall p95 is 2.9 min: filings accepted after 5:30 pm ET mostly reach EDGAR's feed the next morning |
 | **989,666** | SEC filers indexed; 6,024 operating companies with quarterly financials from XBRL |
 | **265,625** | 10-K, 10-Q and 8-K filings from 5,342 companies over 5 years, crawled in 27 h at the SEC's 10 requests/s with 0 failures and parsed into 1.78M sections; 272 GB of HTML stored as 17.9 GB |
@@ -122,7 +122,7 @@ make consume           # watch filings arrive (or open the Kafka UI at http://lo
 ## Access control
 
 Revoke a grant in the app database and it's gone from OpenFGA and `authz.user_access` in
-about half a second (`make propagation-test`; target under 30 s):
+about a second (`make propagation-test`, run in CI on every push; target under 30 s):
 
 ```
 app DB ─(Debezium CDC)─▶ Kafka ─▶ authz-sync ─┬─▶ OpenFGA (checked by the Query API)
