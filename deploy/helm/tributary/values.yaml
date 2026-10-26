@@ -130,7 +130,9 @@ services:
   # any restart, is scraped continuously for the stall/disk alerts, and once caught up queues new
   # filings every CRAWL_PLAN_HOURS. Pauses itself while the node has under CRAWL_MIN_FREE_GB free;
   # pause by hand with UPDATE ops.doc_crawl_control SET paused = true. Shipped stopped: start it and
-  # parser-backfill with replicas: 1 in deploy/flux/releases/tributary.yaml (README).
+  # parser-backfill with replicas: 1 in deploy/flux/releases/tributary.yaml (README), and keep both
+  # running after the backfill: doc-fetcher only covers tracked companies, so this is what keeps
+  # every other company's documents current.
   doc-crawler:
     image: doc-fetcher
     command: [doc-crawler]

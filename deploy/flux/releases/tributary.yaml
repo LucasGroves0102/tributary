@@ -29,8 +29,15 @@ spec:
     openfga:
       auth:
         enabled: true
-    # The document crawl finished 2026-10-22 (265,625 filings); doc-crawler and parser-backfill
-    # are back at the chart default of 0. The jobs that read the crawled documents run hourly.
+    # doc-crawler stays on after the 5-year crawl (finished 2026-10-22): every CRAWL_PLAN_HOURS it
+    # queues new 10-K/10-Q/8-K filings of every operating company, while the live doc-fetcher only
+    # covers tracked companies. Scaling it to 0 stops documents for everyone else.
+    services:
+      parser-backfill:
+        replicas: 1
+      doc-crawler:
+        replicas: 1
+    # The jobs that read the crawled documents run hourly.
     jobs:
       segments:
         suspend: false
