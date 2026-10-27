@@ -27,6 +27,7 @@ spec:
       sasl:
         enabled: true
         connect: true
+      plaintextListener: false
     openfga:
       auth:
         enabled: true
