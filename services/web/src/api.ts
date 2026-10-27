@@ -162,8 +162,12 @@ export const readFiling = (token: string, companyId: string, accessionNo: string
     ...(sectionKey ? { section_key: sectionKey } : {}),
   });
 
-export const searchCompanies = (token: string, q: string) =>
-  get<{ results: SearchResult[] }>(token, "/v1/companies/search", { q }).then((r) => r.results);
+/** readableOnly: only companies the user can read (a demo sandbox lists nothing else). */
+export const searchCompanies = (token: string, q: string, readableOnly = false) =>
+  get<{ results: SearchResult[] }>(token, "/v1/companies/search", {
+    q,
+    ...(readableOnly ? { access: "financials" } : {}),
+  }).then((r) => r.results);
 
 export const financials = (
   token: string,
@@ -306,9 +310,14 @@ export const section = (token: string, companyId: string, key: string, accession
 export const latestFilings = (token: string, limit = 20) =>
   get<{ as_of: string; filings: LatestFiling[] }>(token, "/v1/filings/latest", { limit });
 
-/** Suggested peers of a company (same SIC, then size), with screener columns. */
-export const peers = (token: string, companyId: string, columns: string[], limit = 10) =>
-  get<Peers>(token, `/v1/companies/${companyId}/peers`, { columns, limit });
+/** Suggested peers of a company (same SIC, then size), with screener columns. readableOnly:
+ * only companies the user can read (a demo sandbox). */
+export const peers = (token: string, companyId: string, columns: string[], limit = 10, readableOnly = false) =>
+  get<Peers>(token, `/v1/companies/${companyId}/peers`, {
+    columns,
+    limit,
+    ...(readableOnly ? { access: "financials" } : {}),
+  });
 
 /** A 10-Q/10-K's metrics vs the prior quarter and the year-ago quarter. */
 export const recap = (token: string, accessionNo: string) =>
