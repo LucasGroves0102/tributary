@@ -13,6 +13,7 @@
   "publication.autocreate.mode": "filtered",
   "snapshot.mode": "initial",
   "heartbeat.interval.ms": "10000",
+  "poll.interval.ms": "50",
   "heartbeat.action.query": "UPDATE public.debezium_heartbeat SET ts = now() WHERE id = 1",
 
   "key.converter": "org.apache.kafka.connect.json.JsonConverter",

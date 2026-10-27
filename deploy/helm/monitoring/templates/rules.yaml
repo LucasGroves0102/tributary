@@ -42,6 +42,22 @@ spec:
           labels: {severity: critical}
           annotations:
             summary: No successful Postgres backup in the last 26 hours
+        # deploy/host/pg-restore-test.sh, weekly: the latest full backup restored into a throwaway
+        # Postgres instance and every table's row count checked against the dump's
+        - alert: PostgresRestoreTestFailed
+          expr: pg_restore_test_last_result == 0
+          for: 5m
+          labels: {severity: critical}
+          annotations:
+            summary: The weekly restore test of the latest Postgres backup failed (journalctl -u pg-restore-test)
+        - alert: PostgresRestoreTestMissing
+          expr: |
+            time() - pg_restore_test_last_success_timestamp_seconds > 8 * 86400
+            or absent(pg_restore_test_last_success_timestamp_seconds)
+          for: 1h
+          labels: {severity: critical}
+          annotations:
+            summary: No passing Postgres restore test in the last 8 days
         - alert: PostgresDown
           expr: pg_up == 0
           for: 2m

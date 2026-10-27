@@ -170,8 +170,28 @@ jobs:
             sleep 1
           done
           echo "authz-sync did not catch up" >&2; exit 1
-      - name: Propagation tests (revocation, downgrade, user deletion; < 30 s each)
+      - name: Propagation tests (revocation, downgrade, user deletion; < 30 s each, guard 3 s)
+        env:
+          PROPAGATION_REPEATS: "5"
+          PROPAGATION_RESULTS: ${{ runner.temp }}/propagation.json
         run: E2E=1 pytest -q -s -p no:cacheprovider tests/propagation
+      - name: Propagation timings in the job summary
+        if: always()
+        env:
+          PROPAGATION_RESULTS: ${{ runner.temp }}/propagation.json
+        run: |
+          [ -f "$PROPAGATION_RESULTS" ] || exit 0
+          python - >> "$GITHUB_STEP_SUMMARY" <<'PY'
+          import json, os, statistics
+          results = json.load(open(os.environ["PROPAGATION_RESULTS"]))
+          print("### Propagation (app DB commit → OpenFGA and authz.user_access)\n")
+          print("| Scenario | Runs | Median s | Max s | All s |")
+          print("|---|---|---|---|---|")
+          for name, xs in results.items():
+              print(f"| {name} | {len(xs)} | {statistics.median(xs):.3f} | {max(xs):.3f} | "
+                    + ", ".join(f"{x:.3f}" for x in xs) + " |")
+          print("\n```json\n" + json.dumps(results) + "\n```")
+          PY
       - name: Kafka ACLs (each principal only its own topics and groups; bad logins rejected)
         run: E2E=1 pytest -q -p no:cacheprovider --durations=5 tests/kafka_acls
       - name: Logs

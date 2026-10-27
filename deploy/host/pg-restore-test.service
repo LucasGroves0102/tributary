@@ -1,0 +1,19 @@
+[Unit]
+Description=Postgres restore test (latest full backup into a throwaway instance)
+After=postgresql.service
+
+[Service]
+Type=oneshot
+User=postgres
+Group=postgres
+ExecStart=/usr/local/bin/pg-restore-test
+# A full restore takes hours; past this, systemd stops it and the script stops and deletes the
+# throwaway instance and records a failure.
+TimeoutStartSec=8h
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+# The throwaway instance (initdb, its data and socket) lives under RESTORE_TEST_DIR, on the same
+# disk as the live data; create it once (deploy/host/README.md). Backups are only read.
+ReadWritePaths=/var/lib/postgresql/restore-test -/var/lib/node_exporter/textfile_collector

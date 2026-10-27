@@ -1,5 +1,6 @@
 """bronze → silver → gold against a real Postgres with migrations applied, using trimmed real
-SEC payloads. Skipped unless TEST_DATABASE_URL is set; every test is rolled back."""
+SEC payloads. Skipped unless TEST_DATABASE_URL is set; every test is rolled back. The `conn`
+and `loaded` fixtures (five companies, fixtures/) are in conftest.py."""
 
 import gzip
 import json
@@ -27,39 +28,10 @@ FIXTURES = Path(__file__).parent / "fixtures"
 NVDA, COST, JPM = "0001045810", "0000909832", "0000019617"
 XOM, XOM_HOLDINGS = "0000034088", "0002115436"
 HD = "0000354950"
-# company_id → CIKs; Exxon's holdings CIK belongs to the original company
-COMPANIES = {NVDA: [NVDA], COST: [COST], JPM: [JPM], XOM: [XOM, XOM_HOLDINGS], HD: [HD]}
 
 
 def raw(cik: str) -> bytes:
     return (FIXTURES / f"CIK{cik}.json").read_bytes()
-
-
-@pytest.fixture
-def conn():
-    with psycopg.connect(DSN) as c, c.transaction(force_rollback=True):
-        c.execute("TRUNCATE gold.quarterly_financials, gold.derived_financials,"
-                  " gold.segment_financials,"
-                  " ops.quality_findings, ops.quality_companies, silver.financial_facts,"
-                  " bronze.company_facts, silver.company_aliases, silver.company_ciks,"
-                  " silver.companies")
-        for company_id, ciks in COMPANIES.items():
-            c.execute("INSERT INTO silver.companies (company_id, name, current_cik, tracked)"
-                      " VALUES (%s, %s, %s, true)", (company_id, company_id, ciks[-1]))
-            for cik in ciks:
-                c.execute("INSERT INTO silver.company_ciks (cik, company_id) VALUES (%s, %s)",
-                          (cik, company_id))
-        yield c
-
-
-@pytest.fixture
-def loaded(conn):
-    for ciks in COMPANIES.values():
-        for cik in ciks:
-            store_payload(conn, cik, raw(cik))
-        refresh_silver(conn, ciks)
-    refresh_gold(conn, list(COMPANIES))
-    return conn
 
 
 def quarters(conn, company_id, metric):
@@ -182,13 +154,13 @@ def test_every_gold_row_has_provenance(loaded):
     assert missing == 0
 
 
-def test_set_based_refresh_matches_one_company_at_a_time(loaded):
+def test_set_based_refresh_matches_one_company_at_a_time(loaded, companies):
     def snapshot():
         return loaded.execute(
             "SELECT company_id, metric, period_end, value, value_source, source_accessions"
             " FROM gold.quarterly_financials ORDER BY 1, 2, 3").fetchall()
     together = snapshot()
-    for company_id in COMPANIES:
+    for company_id in companies:
         loaded.execute("SELECT gold.refresh_quarterly_financials(%s::text)", (company_id,))
     assert snapshot() == together
 
@@ -266,9 +238,9 @@ def test_ttm_of_a_fiscal_year_matches_the_10k(loaded):
                           " WHERE check_name = 'annual_sum'").fetchone()[0] == 0
 
 
-def test_every_gold_refresh_is_checked(loaded):
+def test_every_gold_refresh_is_checked(loaded, companies):
     checked = loaded.execute("SELECT company_id FROM ops.quality_companies ORDER BY 1")
-    assert [r[0] for r in checked] == sorted(COMPANIES)
+    assert [r[0] for r in checked] == sorted(companies)
 
 
 def gold_rows(conn):
@@ -283,9 +255,9 @@ def gold_rows(conn):
     return quarterly, derived
 
 
-def test_repeated_refreshes_produce_identical_rows(loaded):
+def test_repeated_refreshes_produce_identical_rows(loaded, companies):
     first = gold_rows(loaded)
-    refresh_gold(loaded, list(COMPANIES))
+    refresh_gold(loaded, list(companies))
     assert gold_rows(loaded) == first
 
 
@@ -315,3 +287,21 @@ def test_tied_candidates_resolve_the_same_way_in_any_order(conn):
     assert all(r == results[0] for r in results)
     assert quarters(conn, HD, "revenue") == [
         (date(2025, 9, 30), 300, "derived", "us-gaap:Revenues", ["tie-b", "tie-c"])]
+
+
+def test_proxy_statement_figures_never_reach_gold(loaded):
+    # a DEF 14A's pay-versus-performance table repeats fiscal-year net income, rounded, weeks
+    # after the 10-K; as the latest filing it used to replace the 10-K's figure (migration 024)
+    q4 = date(2026, 1, 25)
+    before = next(r for r in quarters(loaded, NVDA, "net_income") if r[0] == q4)
+    loaded.execute(
+        "INSERT INTO silver.financial_facts (cik, metric, tag, unit, period_start, period_end,"
+        " value, accession_no, form, filed)"
+        " VALUES (%s, 'net_income', 'NetIncomeLoss', 'USD', '2025-01-27', '2026-01-25',"
+        " 120100000000, 'proxy-1', 'DEF 14A', '2026-05-01')", (NVDA,))
+    refresh_gold(loaded, [NVDA])
+    after = next(r for r in quarters(loaded, NVDA, "net_income") if r[0] == q4)
+    assert after == before and "proxy-1" not in after[4]
+    assert not loaded.execute(
+        "SELECT count(*) FROM gold.derived_financials WHERE 'proxy-1' = ANY(source_accessions)"
+    ).fetchone()[0]

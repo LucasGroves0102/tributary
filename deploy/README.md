@@ -13,7 +13,7 @@ the host and the public site behind a Cloudflare Tunnel. Local development uses
 | [`flux/`](flux) | GitOps: Flux applies the charts, secrets and image updates from `main` |
 | [`secrets/`](secrets) | Kubernetes Secrets, encrypted with SOPS + age |
 | [`terraform/`](terraform) | Flux bootstrap on a fresh cluster; Cloudflare tunnel, DNS, HTTPS and rate limiting |
-| [`host/`](host) | systemd units and scripts on the server itself: nightly Postgres backup and restore test |
+| [`host/`](host) | systemd units and scripts on the server itself: nightly Postgres backup and weekly restore test |
 
 ```
 push to main → CI (lint, tests, images to GHCR, tag main-<run>-<sha>)

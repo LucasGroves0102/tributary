@@ -1,41 +1,184 @@
 #!/usr/bin/env bash
-# Restore the latest backup of each database into a scratch database, compare tables and row
-# counts with the live database, then drop the scratch copies. Runs as the postgres user.
+# Restore test, weekly via pg-restore-test.timer: restore the latest full backup into a
+# throwaway Postgres instance (initdb in a temp directory, unix socket only, wal_level=minimal),
+# check every database holds exactly the tables and row counts that pg-backup.sh counted in the
+# dump's own snapshot (<db>.rowcounts), then stop the instance and delete it. The live cluster
+# is never written to, so none of the restore's WAL passes through its replication slots.
+# With --slim (or RESTORE_FROM=slim) it tests the latest nightly instead; tables listed in its
+# <db>.schema-only-tables must then be empty. Runs as the postgres user. Writes the
+# pg_restore_test_* metrics for node-exporter's textfile collector, pass or fail.
 set -euo pipefail
 cd /
 export PGOPTIONS="-c client_min_messages=warning"
 
 dir="${BACKUP_DIR:-/var/backups/postgres}"
 read -ra databases <<<"${DATABASES:-tributary app openfga}"
-latest="$(find "$dir" -mindepth 1 -maxdepth 1 -type d -name '*Z' | sort | tail -1)"
-[[ -n "$latest" ]] || { echo "no backups in $dir" >&2; exit 1; }
-echo "restoring $latest"
+from="${RESTORE_FROM:-full}"
+[[ "${1:-}" == --slim ]] && from=slim
+free_factor="${FREE_SPACE_FACTOR:-2}"  # free space where the instance lives, x the backup's size
+jobs="${RESTORE_JOBS:-2}"
+textfile="${TEXTFILE_DIR:-/var/lib/node_exporter/textfile_collector}"
+# the newest installed Postgres unless PG_BIN says otherwise
+pg_bin="${PG_BIN:-$(find /usr/lib/postgresql -mindepth 2 -maxdepth 2 -type d -name bin \
+    2>/dev/null | sort -V | tail -1)}"
+parent="${RESTORE_TEST_DIR:-/var/lib/postgresql/restore-test}"  # same disk as the data
+port="${RESTORE_TEST_PORT:-54329}"
+started="$(date +%s)"
+latest=""
+rows_total=0
+instance=""
+running=false
 
+# Same query as pg-backup.sh's count_rows: "schema.table rows" for every table.
 counts() {
-    psql -d "$1" -qAt -F ' ' -c "
+    psql -X -qAt -F ' ' -v ON_ERROR_STOP=1 -d "$1" -c "
         SELECT n.nspname || '.' || c.relname,
                (xpath('/row/n/text()', query_to_xml(
                    format('SELECT count(*) AS n FROM %I.%I', n.nspname, c.relname),
                    false, true, '')))[1]::text::bigint
         FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
         WHERE c.relkind = 'r' AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+          AND n.nspname NOT LIKE 'pg_temp%'
         ORDER BY 1"
 }
 
+# shellcheck disable=SC2329  # invoked by finish
+write_metrics() {
+    local ok=$1 prom="$textfile/pg_restore_test.prom" last_success=0 backup_ts=0 name
+    [[ -d "$textfile" && -w "$textfile" ]] || return 0
+    if [[ "$ok" == 1 ]]; then
+        last_success="$(date +%s)"
+    elif [[ -f "$prom" ]]; then
+        last_success="$(awk '$1 == "pg_restore_test_last_success_timestamp_seconds" {print $2}' \
+            "$prom")"
+    fi
+    if [[ -n "$latest" ]]; then  # backup directories are named by their UTC start time
+        name="$(basename "$latest")"
+        backup_ts="$(date -u -d "${name:0:4}-${name:4:2}-${name:6:2} ${name:9:2}:${name:11:2}:${name:13:2}" +%s)"
+    fi
+    {
+        echo "# HELP pg_restore_test_last_result 1 if the last restore test passed, 0 if it failed."
+        echo "# TYPE pg_restore_test_last_result gauge"
+        echo "pg_restore_test_last_result $ok"
+        echo "# HELP pg_restore_test_last_run_timestamp_seconds Unix time the last restore test finished."
+        echo "# TYPE pg_restore_test_last_run_timestamp_seconds gauge"
+        echo "pg_restore_test_last_run_timestamp_seconds $(date +%s)"
+        echo "# HELP pg_restore_test_last_success_timestamp_seconds Unix time of the last passing restore test."
+        echo "# TYPE pg_restore_test_last_success_timestamp_seconds gauge"
+        echo "pg_restore_test_last_success_timestamp_seconds ${last_success:-0}"
+        echo "# HELP pg_restore_test_backup_timestamp_seconds Start time of the backup the last test restored."
+        echo "# TYPE pg_restore_test_backup_timestamp_seconds gauge"
+        echo "pg_restore_test_backup_timestamp_seconds $backup_ts"
+        echo "# HELP pg_restore_test_duration_seconds How long the last restore test took."
+        echo "# TYPE pg_restore_test_duration_seconds gauge"
+        echo "pg_restore_test_duration_seconds $(($(date +%s) - started))"
+        echo "# HELP pg_restore_test_rows Rows restored and checked by the last restore test."
+        echo "# TYPE pg_restore_test_rows gauge"
+        echo "pg_restore_test_rows $rows_total"
+    } >"$prom.tmp"
+    chmod 0644 "$prom.tmp"
+    mv "$prom.tmp" "$prom"
+}
+
+# Always stop and delete the throwaway instance and record the result, however the script ends.
+# shellcheck disable=SC2329  # invoked by the EXIT trap
+finish() {
+    local status=$?
+    trap - EXIT
+    if $running; then
+        pg_ctl -D "$instance/data" -m immediate -w stop >/dev/null 2>&1 || status=1
+    fi
+    if [[ -n "$instance" ]]; then rm -rf "$instance" || status=1; fi
+    write_metrics "$([[ $status == 0 ]] && echo 1 || echo 0)" || true
+    exit "$status"
+}
+trap finish EXIT
+trap 'exit 130' INT TERM
+
+case "$from" in
+    full) search="$dir/full" ;;
+    slim) search="$dir" ;;
+    *) echo "RESTORE_FROM=$from: expected full or slim" >&2; exit 2 ;;
+esac
+latest="$(find "$search" -mindepth 1 -maxdepth 1 -type d -name '*Z' 2>/dev/null | sort | tail -1)"
+[[ -n "$latest" ]] || { echo "no $from backups in $search" >&2; exit 1; }
+
+if [[ ! -x "$pg_bin/initdb" || ! -x "$pg_bin/pg_ctl" ]]; then
+    echo "no Postgres server binaries in '$pg_bin' (set PG_BIN)" >&2
+    exit 1
+fi
+export PATH="$pg_bin:$PATH"  # clients of the same version as the instance
+
+mkdir -p "$parent"
+free="$(df -B1 --output=avail "$parent" | tail -1 | tr -d ' ')"
+size="$(du -sb "$latest" | cut -f1)"
+if ((free < free_factor * size)); then
+    echo "only $free bytes free in $parent; the restore needs ${free_factor}x the backup" \
+        "($size bytes)" >&2
+    exit 1
+fi
+
+# The throwaway instance: reachable only through a socket in its own directory, and tuned for
+# a bulk load that nobody needs to survive a crash.
+instance="$(mktemp -d "$parent/run.XXXXXX")"
+initdb -D "$instance/data" -U postgres --auth=trust --encoding=UTF8 --no-locale \
+    >"$instance/initdb.log"
+cat >>"$instance/data/postgresql.conf" <<CONF
+listen_addresses = ''
+unix_socket_directories = '$instance'
+port = $port
+wal_level = minimal
+max_wal_senders = 0
+archive_mode = off
+fsync = off
+synchronous_commit = off
+full_page_writes = off
+autovacuum = off
+max_wal_size = 8GB
+shared_buffers = 256MB
+maintenance_work_mem = 512MB
+CONF
+pg_ctl -D "$instance/data" -l "$instance/server.log" -w -t 120 start >/dev/null
+running=true
+# every client below talks to the throwaway instance, never the live cluster
+export PGHOST="$instance" PGPORT="$port" PGUSER=postgres PGDATABASE=postgres
+echo "restoring $latest ($size bytes) into a throwaway instance in $instance ($free bytes free)"
+
+# Roles first: the dumps' owners and grants need them. The bootstrap superuser (postgres)
+# already exists, so some statements fail; they are counted, not fatal.
+if [[ -f "$latest/globals.sql" ]]; then
+    errors="$(psql -X -q -f "$latest/globals.sql" 2>&1 >/dev/null | grep -c ERROR || true)"
+    echo "globals.sql: restored, $errors statements failed (CREATE ROLE postgres is expected)"
+fi
+
 failed=0
 for db in "${databases[@]}"; do
-    scratch="restore_test_$db"
-    dropdb --if-exists "$scratch"
-    createdb "$scratch"
-    pg_restore --exit-on-error --dbname="$scratch" "$latest/$db.dump"
-    restored="$(counts "$scratch")"
-    live="$(counts "$db")"
-    dropdb "$scratch"
-    if [[ "$(cut -d' ' -f1 <<<"$restored")" != "$(cut -d' ' -f1 <<<"$live")" ]]; then
-        echo "$db: restored tables differ from live" >&2
+    expected="$latest/$db.rowcounts"
+    if [[ ! -f "$expected" ]]; then
+        echo "$db: no $db.rowcounts in $latest (made before pg-backup recorded them)" >&2
+        failed=1
+        continue
+    fi
+    # tables dumped as schema only (slim backups) must come back empty
+    empty="$latest/$db.schema-only-tables"
+    [[ -f "$empty" ]] || empty=/dev/null
+    # byte order on both sides: the instance's collation (C) may differ from the live one's
+    want="$(awk 'FILENAME == ARGV[1] {skip[$1] = 1; next}
+                 {print $1, ($1 in skip ? 0 : $2)}' "$empty" "$expected" | LC_ALL=C sort)"
+
+    createdb -T template0 "$db"
+    pg_restore --exit-on-error --jobs="$jobs" --dbname="$db" "$latest/$db.dump"
+    got="$(counts "$db" | LC_ALL=C sort)"
+    dropdb "$db"  # frees its space before the next database
+
+    rows="$(awk '{s += $2} END {print s + 0}' <<<"$got")"
+    rows_total=$((rows_total + rows))
+    if [[ "$got" == "$want" ]]; then
+        echo "$db: $(wc -l <<<"$got") tables, $rows rows: every table and row count matches the dump"
+    else
+        echo "$db: restored tables or row counts differ from the dump (< dump, > restored):" >&2
+        diff <(echo "$want") <(echo "$got") | head -40 >&2 || true
         failed=1
     fi
-    rows="$(awk '{s += $2} END {print s + 0}' <<<"$restored")"
-    echo "$db: $(wc -l <<<"$restored") tables, $rows rows restored"
 done
 exit "$failed"

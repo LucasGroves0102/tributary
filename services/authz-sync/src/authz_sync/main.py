@@ -32,6 +32,13 @@ PROPAGATION = Histogram("tributary_authz_propagation_seconds",
 CAUGHT_UP = Gauge("tributary_authz_caught_up",
                   "1 once the startup replay of the CDC topics has been reconciled")
 
+POLL_SECONDS = 0.5  # idle wake-up (stop checks); a message ends the wait at once
+LINGER_SECONDS = 0.05  # after the first message, for the rest of its transaction
+BATCH = 500
+# How long the broker holds an empty fetch. Data ends a fetch at once either way; this only
+# bounds how stale an idle connection's view can get (librdkafka default 500 ms).
+FETCH_WAIT_MAX_MS = 100
+
 
 def main() -> None:
     configure_logging()
@@ -43,6 +50,7 @@ def main() -> None:
     consumer = Consumer(client_config({
         "group.id": "authz-sync",  # required by librdkafka; offsets are never committed
         "enable.auto.commit": False,
+        "fetch.wait.max.ms": FETCH_WAIT_MAX_MS,
     }))
     partitions = wait_for_topics(consumer, stop)
     if partitions is None:
@@ -63,7 +71,7 @@ def main() -> None:
             reconcile(state, reconciler, "startup (empty topics)")
         try:
             while not stop.is_set():
-                msgs = consumer.consume(num_messages=500, timeout=0.5)
+                msgs = next_batch(consumer)
                 oldest_commit_ms = None
                 for m in msgs:
                     if m.error():
@@ -91,6 +99,19 @@ def main() -> None:
         finally:
             consumer.close()
     log.info("stopped")
+
+
+def next_batch(consumer: Consumer, timeout: float = POLL_SECONDS,
+               linger: float = LINGER_SECONDS, limit: int = BATCH) -> list:
+    """Wait up to `timeout` for one message, then up to `linger` for the rest of its burst.
+    consume(n, timeout) alone blocks until n messages or the whole timeout, so a single
+    revocation used to wait 0.5 s here. The linger keeps one app transaction's events (Debezium
+    produces them together) in one reconcile, as the 0.5 s window did; neither is a guarantee,
+    and the next event's reconcile converges either way."""
+    first = consumer.poll(timeout)
+    if first is None:
+        return []
+    return [first, *consumer.consume(num_messages=limit - 1, timeout=linger)]
 
 
 def reconcile(state: AppState, reconciler: Reconciler, why: str,

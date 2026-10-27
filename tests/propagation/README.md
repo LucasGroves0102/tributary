@@ -10,6 +10,11 @@ acme with a direct grant; the delete cascades to their subscription and grants, 
 naming them and every `user_access` row must go). It restores what it changes.
 `test_sandbox.py` does the same for a demo sandbox: `AppSandboxes.create` (Query API) must be
 granted everywhere, and the cleanup job's `delete_expired` must revoke it, each under 30 s.
+Besides the 30 s target, every measurement must stay under a 3 s regression guard (the
+pipeline takes well under a second; measured numbers in [report.md](report.md)).
+`PROPAGATION_REPEATS=n` runs each revocation scenario n times, and `PROPAGATION_RESULTS=<file>`
+writes every measurement there as JSON (`conftest.py`); CI does both (5 runs) and prints the
+numbers in the job summary.
 
 CI runs them on every push (`.github/workflows/ci.yml`, job `propagation`) against
 `compose.ci.yml`: the same Kafka (KRaft), Kafka Connect + Debezium and OpenFGA images as hermes,

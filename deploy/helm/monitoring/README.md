@@ -20,7 +20,8 @@ rules are off.
 ## Tributary additions
 
 - `templates/rules.yaml`: `KafkaConsumerLagGrowing`, `FilingsNotArriving`,
-  `CompanyFactsBehindEdgar`, `PostgresBackupMissing`, `PostgresDown`,
+  `CompanyFactsBehindEdgar`, `PostgresBackupMissing`, `PostgresRestoreTestFailed`,
+  `PostgresRestoreTestMissing` (no passing weekly restore test in 8 days), `PostgresDown`,
   `PostgresConnectionsHigh`, `DiskUsageHigh`, `DiskSpaceLow` (under 50 GB free), and for the
   document crawl `DocCrawlPausedForDisk` and `DocCrawlStalled` (its `tributary_doc_crawl_*`
   metrics). Alertmanager sends every alert to Discord
@@ -40,8 +41,8 @@ and for kafka-exporter over SASL `kafka-exporter-kafka` (`username`, `password`;
 the [Kafka authentication rollout](../platform/README.md#kafka-authentication-saslscram): set
 `prometheus-kafka-exporter.kafkaServer` to port 9094 and `sasl.enabled` + `sasl.scram.enabled`
 in the release values).
-`PostgresBackupMissing` reads the textfile metric written by
-[deploy/host/pg-backup.sh](../../host).
+`PostgresBackupMissing` and the two restore-test alerts read the textfile metrics written by
+[deploy/host/pg-backup.sh and pg-restore-test.sh](../../host).
 
 ## Install
 
