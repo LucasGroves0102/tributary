@@ -26,6 +26,9 @@ spec:
     remediation:
       retries: 3
   values:
+    kafka:
+      sasl:
+        enabled: true
     openfga:
       auth:
         enabled: true
