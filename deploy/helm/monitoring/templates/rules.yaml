@@ -42,8 +42,8 @@ spec:
           labels: {severity: critical}
           annotations:
             summary: No successful Postgres backup in the last 26 hours
-        # deploy/host/pg-restore-test.sh, weekly: the latest full backup restored into scratch
-        # databases with every table's row count as dumped
+        # deploy/host/pg-restore-test.sh, weekly: the latest full backup restored into a throwaway
+        # Postgres instance and every table's row count checked against the dump's
         - alert: PostgresRestoreTestFailed
           expr: pg_restore_test_last_result == 0
           for: 5m
