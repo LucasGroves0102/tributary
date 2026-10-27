@@ -17,6 +17,7 @@ sandbox = pytest.importorskip("query_api.sandbox")
 pytestmark = pytest.mark.skipif(os.environ.get("E2E") != "1", reason="E2E=1 not set")
 
 TARGET_SECONDS = 30
+GUARD_SECONDS = 3  # regression guard, as in test_revocation.py
 NVDA, APPLE, MSFT = "0001045810", "0000320193", "0000789019"
 TSLA = "0001318605"  # never granted to the sandbox
 
@@ -39,7 +40,7 @@ def wait_until(condition, timeout=TARGET_SECONDS):
     pytest.fail(f"not propagated within {timeout}s")
 
 
-def test_sandbox_is_granted_then_revoked_by_cleanup():
+def test_sandbox_is_granted_then_revoked_by_cleanup(record):
     fga = tributary_authz.FgaClient.from_env()
     companies = [NVDA, APPLE, MSFT]
     user = f"demo-e2e{uuid.uuid4().hex[:8]}"
@@ -68,4 +69,7 @@ def test_sandbox_is_granted_then_revoked_by_cleanup():
         assert counts["users"] >= 1
         revoke_s = wait_until(lambda: state() == (set(), 0))
     print(f"\nsandbox: granted in {grant_s:.2f}s, revoked by cleanup in {revoke_s:.2f}s")
+    record("sandbox_grant", grant_s)
+    record("sandbox_revoke", revoke_s)
     assert grant_s < TARGET_SECONDS and revoke_s < TARGET_SECONDS
+    assert grant_s < GUARD_SECONDS and revoke_s < GUARD_SECONDS

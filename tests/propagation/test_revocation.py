@@ -1,5 +1,10 @@
 """Revoke access in the app database and time until every derived store reflects it.
-Needs the running stack; skipped unless E2E=1."""
+Needs the running stack; skipped unless E2E=1.
+
+TARGET_SECONDS is the BRD target (under 30 s). GUARD_SECONDS is a regression guard: the
+pipeline takes well under a second (report.md), so a measurement above it means a slow path
+came back. PROPAGATION_REPEATS runs each scenario that many times (CI: 5); every measurement
+goes to PROPAGATION_RESULTS when set (conftest.py)."""
 
 import os
 import time
@@ -14,6 +19,8 @@ tributary_authz = pytest.importorskip("tributary_authz")
 pytestmark = pytest.mark.skipif(os.environ.get("E2E") != "1", reason="E2E=1 not set")
 
 TARGET_SECONDS = 30
+GUARD_SECONDS = 3
+REPEATS = range(max(1, int(os.environ.get("PROPAGATION_REPEATS", "1"))))
 NVDA = "0001045810"
 APPLE = "0000320193"
 
@@ -43,7 +50,12 @@ def access_state(fga, analytics, user, relation, tier, company=NVDA):
     return allowed, row
 
 
-def test_revoked_grant(stack):
+def within_targets(seconds: float) -> bool:
+    return seconds < TARGET_SECONDS and seconds < GUARD_SECONDS
+
+
+@pytest.mark.parametrize("run", REPEATS)
+def test_revoked_grant(stack, record, run):
     fga, app, analytics = stack
     state = partial(access_state, fga, analytics, "alice", "can_read_financials", "financials")
     assert state() == (True, True), "precondition: alice can read Nvidia financials"
@@ -55,10 +67,13 @@ def test_revoked_grant(stack):
                     " ON CONFLICT DO NOTHING", (NVDA,))
     grant_s = wait_until(lambda: state() == (True, True))
     print(f"\nrevoked grant: gone everywhere in {revoke_s:.2f}s; re-grant in {grant_s:.2f}s")
-    assert revoke_s < TARGET_SECONDS
+    record("revoked_grant", revoke_s)
+    record("regrant", grant_s)
+    assert within_targets(revoke_s)
 
 
-def test_plan_downgrade_removes_filings_only(stack):
+@pytest.mark.parametrize("run", REPEATS)
+def test_plan_downgrade_removes_filings_only(stack, record, run):
     fga, app, analytics = stack
     filings = partial(access_state, fga, analytics, "bob", "can_read_filings", "filings")
     financials = partial(access_state, fga, analytics, "bob", "can_read_financials", "financials")
@@ -71,7 +86,8 @@ def test_plan_downgrade_removes_filings_only(stack):
         app.execute("UPDATE subscriptions SET plan_id = 'pro' WHERE user_id = 'bob'")
     wait_until(lambda: filings() == (True, True))
     print(f"\nPro → Free: filings gone everywhere in {downgrade_s:.2f}s")
-    assert downgrade_s < TARGET_SECONDS
+    record("pro_to_free", downgrade_s)
+    assert within_targets(downgrade_s)
 
 
 def user_state(fga, analytics, user):
@@ -87,7 +103,8 @@ def counts(state):
     return len(tuples), rows, allowed
 
 
-def test_deleted_user_loses_everything(stack):
+@pytest.mark.parametrize("run", REPEATS)
+def test_deleted_user_loses_everything(stack, record, run):
     """Deleting a user (cascading to their subscription and grants) removes every tuple and
     user_access row derived from them. Uses its own user, so the demo users are untouched."""
     fga, app, analytics = stack
@@ -105,7 +122,8 @@ def test_deleted_user_loses_everything(stack):
         app.execute("DELETE FROM users WHERE user_id = %s", (user,))
     delete_s = wait_until(lambda: state() == (set(), 0, False))
     print(f"\ndeleted user: gone everywhere in {delete_s:.2f}s")
-    assert delete_s < TARGET_SECONDS
+    record("deleted_user", delete_s)
+    assert within_targets(delete_s)
     # the org's other members keep their access
     assert access_state(fga, analytics, "dave", "can_read_financials", "financials") \
         == (True, True)
