@@ -23,7 +23,7 @@ request parameters. Dev tokens: `make token USER=alice`.
 | `POST /v1/demo/sandbox` | `DEMO_SANDBOX_ENABLED` | 201: a new temporary user and its token (expires with the sandbox); 429 when the per-IP or live-sandbox cap is hit. Takes no input |
 | `POST /v1/demo/agent-quota` | token | agent-api only (nginx hides it): takes one assistant question (or `{"questions": n}`, 1-5, all or none: a report counts as 3) from a sandbox's daily caps; 429 with the message to show; `{"demo": false}` for other users |
 | `GET /v1/me` | token | companies the caller can read, with tiers; `sandbox` (expiry, plan, assistant allowance) for a demo sandbox user |
-| `GET /v1/companies/search?q=` | token | candidates (public identity) + caller's access |
+| `GET /v1/companies/search?q=&access=` | token | candidates (public identity) + caller's access; `access=financials`: only companies you can read |
 | `GET /v1/metrics` | | metric names served by `financials`: `silver.metrics` and `gold.derived_metrics`, read once |
 | `GET /v1/companies/{id}/financials?metrics=&quarters=&view=&basis=&format=` | financials | values + citation + freshness; `format=csv`: one row per value with its source filing |
 | `GET /v1/companies/{id}/segments?axis=&metric=&quarters=&view=&basis=&format=` | financials | values per segment member (business segment, geography, product/service, reconciliation), exact decimal strings, citation per value ([Segments](#segments)) |
@@ -45,7 +45,7 @@ request parameters. Dev tokens: `make token USER=alice`.
 | `GET /v1/calendar/expected-filings?days=&scope=&format=` | token | expected 10-Q/10-K filings in the next N days (watchlist or readable companies) |
 | `GET /v1/companies/{id}/expected-filings?periods=` | token | estimated next 10-Q/10-K dates with their basis |
 | `GET /v1/filings/{accession}/recap?metrics=` | financials (flags: filings) | metrics vs prior quarter and year-ago, cited; one-time-item flags |
-| `GET /v1/companies/{id}/peers?limit=&columns=` | token | suggested peers (SIC, size band, filer category), values where permitted |
+| `GET /v1/companies/{id}/peers?limit=&columns=&access=` | token | suggested peers (SIC, size band, filer category), values where permitted |
 
 `{id}` is the canonical 10-digit `company_id`. Prometheus metrics are on `/metrics` (including
 `tributary_permission_checks_total{tier,result}`); the web proxy blocks it and `/docs` from the
@@ -168,7 +168,8 @@ without it `flags` is null.
 companies you can read, and only if you can read the company's own revenue), then the same
 filer category, revenue closeness and name. Each peer has screener-style metadata, `values`
 where permitted and `match` (`sic_level`, `same_filer_category`, `revenue_band`,
-`same_revenue_band`).
+`same_revenue_band`). `access=financials` ranks only companies you can read (the web app asks
+for that in a demo sandbox, which lists nothing else); the default ranks every company.
 
 ## Workspaces (saved work)
 

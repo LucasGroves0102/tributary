@@ -25,6 +25,7 @@ import { navRow, onTableKey } from "../components/tableNav";
 import { download } from "../download";
 import { day } from "../format";
 import { go, href } from "../route";
+import { inScope, useScope } from "../scope";
 import type { Peers, Screener } from "../types";
 
 interface Props {
@@ -43,7 +44,23 @@ const SUGGESTIONS = 10;
 /** Compare: a comps table of a target and its peers over /v1/screener (`company_id`), each
  * value with its period and source, the peer median, suggestions from /v1/companies/{id}/peers.
  * The comps live in the URL, so a table can be bookmarked, shared and undone with Back. */
-export function Compare({ token, compare, onChart, saveBar }: Props) {
+export function Compare({ token, compare: asked, onChart, saveBar }: Props) {
+  // a demo sandbox suggests, finds and shows only its own companies (scope.ts); a link with
+  // others (an old or shared one) drops them, with a note
+  const scope = useScope();
+  const scoped = scope !== null;
+  const compare = useMemo(
+    (): CompareState =>
+      scope
+        ? {
+            ...asked,
+            target: asked.target && inScope(scope, asked.target) ? asked.target : undefined,
+            peers: asked.peers?.filter((p) => inScope(scope, p)),
+          }
+        : asked,
+    [scope, asked],
+  );
+  const leftOut = companiesOf(asked).length - companiesOf(compare).length;
   const ids = companiesOf(compare);
   const cols = columnsOf(compare);
   const params = useMemo(() => compareParams(compare), [compare]);
@@ -82,13 +99,13 @@ export function Compare({ token, compare, onChart, saveBar }: Props) {
     }
     let live = true;
     setSuggested({ state: "loading" });
-    fetchPeers(token, compare.target, ["revenue_ttm"], SUGGESTIONS)
+    fetchPeers(token, compare.target, ["revenue_ttm"], SUGGESTIONS, scoped)
       .then((data) => live && setSuggested({ state: "ok", data }))
       .catch(() => live && setSuggested({ state: "error", message: "no suggestions" }));
     return () => {
       live = false;
     };
-  }, [token, compare.target]);
+  }, [token, compare.target, scoped]);
 
   const set = (patch: Partial<CompareState>) => go({ view: "compare", compare: { ...compare, ...patch } });
   const peerIds = compare.peers ?? [];
@@ -168,7 +185,9 @@ export function Compare({ token, compare, onChart, saveBar }: Props) {
               {suggested?.state === "loading" && <span className="faint">…</span>}
               {suggested?.state === "error" && <span className="faint">no suggestions right now</span>}
               {suggested?.state === "ok" && candidates.length === 0 && (
-                <span className="faint">no more peers with the same SIC</span>
+                <span className="faint">
+                  {scoped ? "no more companies in your demo share its industry" : "no more peers with the same SIC"}
+                </span>
               )}
               {candidates.map((p) => (
                 <button key={p.company_id} className="chip" onClick={() => addPeer(p.company_id)}
@@ -184,6 +203,12 @@ export function Compare({ token, compare, onChart, saveBar }: Props) {
                 <span className="faint small" title={suggested.data.method}>same SIC, then size</span>
               )}
             </div>
+          )}
+          {leftOut > 0 && (
+            <p className="faint small">
+              {leftOut === 1 ? "One company" : `${leftOut} companies`} from this link{" "}
+              {leftOut === 1 ? "isn't" : "aren't"} in this demo, so {leftOut === 1 ? "it's" : "they're"} left out.
+            </p>
           )}
           <div className="row wrap">
             <span className="faint">Columns</span>

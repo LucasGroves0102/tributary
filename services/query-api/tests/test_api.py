@@ -82,7 +82,8 @@ class FakeStore:
         self.calls.append(("latest_filings", user_id, tuple(company_ids)))
         return []
 
-    def search(self, user_id, q):
+    def search(self, user_id, q, only=None):
+        self.calls.append(("search", q, None if only is None else tuple(only)))
         return [{"company_id": NVDA, "name": "NVIDIA CORP", "matched_on": "ticker",
                  "matched_alias": "NVDA", "is_current": True, "sic": "3674",
                  "industry": "Semiconductors & Related Devices", "exchanges": ["Nasdaq"]},
@@ -205,6 +206,17 @@ def test_derived_metrics_are_still_permission_checked(client, token):
 def test_search_shows_access_per_result(client, token):
     results = client.get("/v1/companies/search?q=n", headers=token("alice")).json()["results"]
     assert {r["company_id"]: r["access"] for r in results} == {NVDA: ["financials"], TSLA: []}
+
+
+def test_search_can_list_only_readable_companies(client, token):
+    """A demo sandbox's pickers ask for its companies only; the filter is the caller's grants."""
+    r = client.get("/v1/companies/search?q=n&access=financials", headers=token("alice"))
+    assert r.status_code == 200, r.text
+    assert ("search", "n", (NVDA,)) in client.store.calls
+    client.get("/v1/companies/search?q=n", headers=token("alice"))
+    assert client.store.calls[-1] == ("search", "n", None)
+    assert client.get("/v1/companies/search?q=n&access=mine",
+                      headers=token("alice")).status_code == 422
 
 
 def test_me(client, token):

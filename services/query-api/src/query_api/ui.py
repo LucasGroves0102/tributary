@@ -359,6 +359,9 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
         user_id: Annotated[str, Depends(current_user)], company_id: CompanyId,
         limit: Annotated[int, Query(ge=1, le=50)] = 10,
         columns: Annotated[list[str] | None, Query(description="screener column keys")] = None,
+        access_filter: Annotated[Literal["all", "financials"], Query(
+            alias="access", description="all: any company; financials: only companies you can "
+                                        "read (a demo sandbox lists nothing else)")] = "all",
     ) -> dict:
         """Suggested peers: same SIC (then 3- and 2-digit groups), then the same revenue size
         band, then the same filer category. Metadata is public; metric values and size bands
@@ -377,7 +380,8 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
                                                    company_ids=[company_id], coverage=False,
                                                    sort="name", limit=1), access)
             revenue = own[0]["values"]["revenue_ttm"] if own else None
-        ranked = store.peers(user_id, company_id, granted, revenue, limit)
+        ranked = store.peers(user_id, company_id, granted, revenue, limit,
+                             granted_only=access_filter == "financials")
         ids = [p["company_id"] for p in ranked]
         compiled, rows, _ = run_screen(user_id, Screen(columns=cols, company_ids=ids,
                                                        coverage=False, sort="company_id",

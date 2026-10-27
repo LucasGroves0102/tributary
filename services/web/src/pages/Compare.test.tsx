@@ -6,6 +6,7 @@ import type { CompareState } from "../compare/state";
 import { download } from "../download";
 import { entry, NVDA, TESLA, TSLA } from "../fixtures";
 import { clearChartCache } from "../chart/cache";
+import { ScopeContext, type Scope } from "../scope";
 import { Compare } from "./Compare";
 
 vi.mock("../download", () => ({ download: vi.fn() }));
@@ -82,11 +83,17 @@ afterEach(() => {
   window.location.hash = "";
 });
 
-async function render(compare: CompareState) {
+async function render(compare: CompareState, scope: Scope | null = null) {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  await act(async () => root.render(<Compare token="t" compare={compare} onChart={onChart} />));
+  await act(async () =>
+    root.render(
+      <ScopeContext.Provider value={scope}>
+        <Compare token="t" compare={compare} onChart={onChart} />
+      </ScopeContext.Provider>,
+    ),
+  );
   await act(async () => {});
 }
 
@@ -224,4 +231,33 @@ it("side by side: one small chart per column, a line per readable company, on de
   expect(charts[0]!.querySelector("svg")!.getAttribute("viewBox")).toBe("0 0 460 294"); // narrow and short: the text stays legible
   await click([...container.querySelectorAll("button")].find((b) => b.textContent === "Hide charts"));
   expect(container.querySelector(".multiple")).toBeNull();
+});
+
+it("a demo sandbox compares, suggests and finds only its own companies", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  await render(COMPS, { ids: new Set([NVDA, AAPL, KO]) });
+  // TSLA (from the link) isn't in the demo: left out of the table, with a note
+  const q = calls().find((u) => u.pathname === "/api/query/v1/screener")!;
+  expect(q.searchParams.getAll("company_id")).toEqual([NVDA, AAPL]);
+  expect(rows().some((r) => r.textContent?.includes("Tesla"))).toBe(false);
+  expect(container.textContent).toContain("One company from this link isn't in this demo, so it's left out.");
+  const peers = calls().find((u) => u.pathname === `/api/query/v1/companies/${NVDA}/peers`)!;
+  expect(peers.searchParams.get("access")).toBe("financials");
+  const input = $('input[aria-label="Add peer"]') as HTMLInputElement;
+  await act(async () => {
+    const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+    set.call(input, "KO");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => vi.advanceTimersByTime(250));
+  await act(async () => {});
+  const search = calls().find((u) => u.pathname.endsWith("/v1/companies/search"))!;
+  expect(search.searchParams.get("access")).toBe("financials");
+});
+
+it("without a demo scope, every company can be compared and searched", async () => {
+  await render(COMPS);
+  expect(container.textContent).not.toContain("in this demo");
+  const peers = calls().find((u) => u.pathname === `/api/query/v1/companies/${NVDA}/peers`)!;
+  expect(peers.searchParams.get("access")).toBeNull();
 });

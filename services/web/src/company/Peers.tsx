@@ -1,6 +1,7 @@
 import { peers as fetchPeers } from "../api";
 import { COMPARE_COLUMNS, compareRows, MASKED_TITLE } from "../compare/state";
 import { go, href } from "../route";
+import { useScope } from "../scope";
 import { Gate } from "./Tables";
 import { useLoad } from "./useLoad";
 
@@ -19,7 +20,9 @@ export function Peers({
   name: string;
   onChart: (ids: string[], metric: string, transform: "ttm", title: string) => void;
 }) {
-  const load = useLoad(companyId, () => fetchPeers(token, companyId, PEER_COLUMNS, 10));
+  // a demo sandbox ranks only its own companies (scope.ts)
+  const scoped = useScope() !== null;
+  const load = useLoad(companyId, () => fetchPeers(token, companyId, PEER_COLUMNS, 10, scoped));
   const data = load?.state === "ok" ? load.data : null;
   const peerIds = data?.peers.map((p) => p.company_id) ?? [];
   const match = new Map(data?.peers.map((p) => [p.company_id, p.match]) ?? []);
@@ -44,7 +47,12 @@ export function Peers({
       </div>
       <Gate load={load} name={name} what="Peers">
         {() =>
-          !peerIds.length ? (
+          !peerIds.length && scoped ? (
+            <p className="empty">
+              None of the other companies in your demo share {name}'s industry. Compare it with
+              any of them in <a href={href({ view: "compare", compare: { target: companyId } })}>Compare</a>.
+            </p>
+          ) : !peerIds.length ? (
             <p className="empty">
               No companies share {name}'s SIC code or group. Add peers by hand in{" "}
               <a href={href({ view: "compare", compare: { target: companyId } })}>Compare</a>.

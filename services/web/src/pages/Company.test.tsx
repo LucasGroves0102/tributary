@@ -6,6 +6,7 @@ import { excerpt } from "../company/Overview";
 import { download } from "../download";
 import { ACC, entry, fin, NVDA, nvdaRow, TESLA, TSLA } from "../fixtures";
 import type { CompanyTab } from "../route";
+import { ScopeContext, type Scope } from "../scope";
 import type { ScreenerRow } from "../types";
 import { Company } from "./Company";
 
@@ -159,13 +160,17 @@ afterEach(() => {
   window.location.hash = "";
 });
 
-async function render(tab: CompanyTab = "overview", companyId = NVDA) {
+async function render(tab: CompanyTab = "overview", companyId = NVDA, scope: Scope | null = null) {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
   await act(async () =>
-    root.render(<Company token="t" companyId={companyId} tab={tab} watched={false} onWatch={onWatch}
-      onChart={onChart} onChartMany={onChartMany} onAsk={onAsk} />),
+    root.render(
+      <ScopeContext.Provider value={scope}>
+        <Company token="t" companyId={companyId} tab={tab} watched={false} onWatch={onWatch}
+          onChart={onChart} onChartMany={onChartMany} onAsk={onAsk} />
+      </ScopeContext.Provider>,
+    ),
   );
   for (let i = 0; i < 3; i++) await act(async () => {});
 }
@@ -328,6 +333,25 @@ it("peers: suggested by SIC and size, into Compare and the chart builder", async
   expect(onChartMany).toHaveBeenCalledWith([NVDA, AAPL], "operating_margin", "ttm", "Operating margin, TTM");
   await click(button("Open in Compare"));
   expect(window.location.hash).toBe(`#/compare?target=${NVDA}&peers=${AAPL},${TSLA}`);
+});
+
+it("peers: a named user's ranking covers every company", async () => {
+  await render("peers");
+  const q = paths().find((u) => u.pathname.endsWith("/peers"))!;
+  expect(q.searchParams.get("access")).toBeNull();
+});
+
+it("peers: a demo sandbox ranks only its companies, and says so kindly when none match", async () => {
+  vi.mocked(fetch).mockImplementation(async (url) => {
+    const r = respond(String(url));
+    if (!new URL(String(url), "http://x").pathname.endsWith("/peers")) return r;
+    return Response.json({ ...(await r.json()), peers: [] });
+  });
+  await render("peers", NVDA, { ids: new Set([NVDA, AAPL]) });
+  const q = paths().find((u) => u.pathname.endsWith("/peers"))!;
+  expect(q.searchParams.get("access")).toBe("financials");
+  expect($(".empty")?.textContent).toContain("None of the other companies in your demo share Nvidia's industry.");
+  expect($(".empty a")?.getAttribute("href")).toBe(`#/compare?target=${NVDA}`);
 });
 
 it("data notes: plain-language notes by group, each with its filings", async () => {

@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 
 import { searchCompanies } from "../api";
+import { useScope } from "../scope";
 import type { SearchResult } from "../types";
 
 /** Type a name or ticker, pick a company. Identity is public, so every company is listed;
- * ones without a financials grant say so (picking them shows metadata only). */
+ * ones without a financials grant say so (picking them shows metadata only). In a demo
+ * sandbox (scope.ts) only its companies are. */
 export function CompanySearch({
   token,
   label,
@@ -20,6 +22,7 @@ export function CompanySearch({
 }) {
   const [q, setQ] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
+  const scoped = useScope() !== null;
 
   useEffect(() => {
     const text = q.trim();
@@ -29,7 +32,7 @@ export function CompanySearch({
     }
     let live = true;
     const t = setTimeout(() => {
-      searchCompanies(token, text)
+      searchCompanies(token, text, scoped)
         .then((r) => live && setResults(r))
         .catch(() => live && setResults([]));
     }, 200);
@@ -37,7 +40,7 @@ export function CompanySearch({
       live = false;
       clearTimeout(t);
     };
-  }, [token, q]);
+  }, [token, q, scoped]);
 
   const shown = results.filter((r) => !exclude.includes(r.company_id)).slice(0, 8);
   return (

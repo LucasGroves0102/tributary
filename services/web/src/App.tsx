@@ -9,6 +9,7 @@ import { uiContext } from "./assistant/actions";
 import { pageContext } from "./assistant/context";
 import { useAssistant } from "./assistant/useAssistant";
 import { useUiActions } from "./assistant/useUiActions";
+import { NotInDemo } from "./components/NotInDemo";
 import { Palette, WATCH_PREFIX, type PaletteActions, type PaletteCompany } from "./components/Palette";
 import { ShortcutSheet } from "./components/ShortcutSheet";
 import { Sidebar } from "./components/Sidebar";
@@ -35,6 +36,7 @@ import { readableCount, Welcome } from "./pages/Welcome";
 import { go, parse, useRoute } from "./route";
 import { resolveTicker } from "./palette/commands";
 import { useShortcuts } from "./shortcuts";
+import { inScope, ScopeContext, scopeOf } from "./scope";
 import { clearSession, loadSession, pickerEnabled, resetsIn, type Session } from "./session";
 import { load, save } from "./storage";
 import { useReportWriter } from "./reports/useReportWriter";
@@ -71,6 +73,8 @@ export function App(props: Props = {}) {
   const [session, setSession] = useState<Session | null>(null);
   const [frontDoor, setFrontDoor] = useState<{ notice: string | null } | null>(null);
   const [clock, setClock] = useState(() => Date.now());
+  // a demo sandbox lists only its own companies everywhere (scope.ts); others see the index
+  const scope = useMemo(() => scopeOf(session), [session]);
   // open by default where it fits beside the page; below that it floats over it (styles.css)
   const [drawerOpen, setDrawerOpen] = useState(
     () => (load(DRAWER_KEY) ?? (window.innerWidth > DRAWER_FITS_PX ? "open" : "closed")) === "open",
@@ -316,11 +320,15 @@ export function App(props: Props = {}) {
   );
   watchedRef.current = watched;
   nameRef.current = companyName;
-  const context = useMemo(() => pageContext(route, companyName), [route, companyName]);
+  const context = useMemo(
+    () => pageContext(route, companyName, (id) => inScope(scope, id)),
+    [route, companyName, scope],
+  );
 
   const paletteCompanies = useMemo((): PaletteCompany[] => {
     const out = new Map<string, PaletteCompany>();
     for (const r of workspace.rows) {
+      if (!inScope(scope, r.companyId)) continue;
       out.set(r.companyId, {
         companyId: r.companyId,
         name: r.name,
@@ -337,7 +345,7 @@ export function App(props: Props = {}) {
       }
     }
     return [...out.values()];
-  }, [me, workspace.rows]);
+  }, [me, workspace.rows, scope]);
 
   const actions = useMemo(
     (): PaletteActions => ({
@@ -356,10 +364,10 @@ export function App(props: Props = {}) {
       searchFilings: (q) => go({ view: "search", search: { q } }),
       compareTickers: (tickers) => {
         if (!token) return;
-        Promise.all(tickers.map((t) => resolveTicker(token, t)))
+        Promise.all(tickers.map((t) => resolveTicker(token, t, scope !== null)))
           .then((found) => {
             const missing = tickers.filter((_, i) => !found[i]);
-            if (missing.length) return setError(`No company with the ticker ${missing.join(", ")}.`);
+            if (missing.length) return setError(noTicker(missing, scope !== null));
             const [target, ...peers] = found.map((f) => f!.companyId);
             go({ view: "compare", compare: { target, peers } });
           })
@@ -367,15 +375,15 @@ export function App(props: Props = {}) {
       },
       chartTicker: (ticker, metric) => {
         if (!token) return;
-        resolveTicker(token, ticker)
+        resolveTicker(token, ticker, scope !== null)
           .then((found) => {
-            if (!found) return setError(`No company with the ticker ${ticker}.`);
+            if (!found) return setError(noTicker([ticker], scope !== null));
             chartMany([found.companyId], metric, "ttm", `${ticker} ${metricLabel(metric).toLowerCase()}`);
           })
           .catch(() => setError("Couldn't look that ticker up. Try again."));
       },
     }),
-    [workspace, focusAssistant, assistant, toggleTheme, exportWatchlist, token, chartMany],
+    [workspace, focusAssistant, assistant, toggleTheme, exportWatchlist, token, chartMany, scope],
   );
 
   const saveBar = (current: Current) =>
@@ -407,7 +415,7 @@ export function App(props: Props = {}) {
   }
 
   return (
-    <>
+    <ScopeContext.Provider value={scope}>
       <div className={showDrawer ? "app with-ai" : "app"}>
         <Sidebar
           open={navOpen}
@@ -511,6 +519,9 @@ export function App(props: Props = {}) {
                   />
                 ) : null}
               />
+            ) : (route.view === "company" || route.view === "filing") && scope &&
+              !inScope(scope, route.companyId) ? (
+              <NotInDemo key={route.companyId} token={token} companyId={route.companyId} scope={scope} />
             ) : route.view === "company" ? (
               <Company
                 key={`${user}-${route.companyId}`}
@@ -629,6 +640,14 @@ export function App(props: Props = {}) {
           onClose={() => setPalette(null)}
         />
       )}
-    </>
+    </ScopeContext.Provider>
   );
+}
+
+/** A palette command's tickers that resolved to nothing (in a sandbox: to none of its own). */
+function noTicker(tickers: string[], sandbox: boolean): string {
+  const t = tickers.join(", ");
+  return sandbox
+    ? `${t} ${tickers.length === 1 ? "isn't one of the companies" : "aren't among the companies"} in this demo.`
+    : `No company with the ticker ${t}.`;
 }

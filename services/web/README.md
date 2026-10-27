@@ -38,6 +38,21 @@ returns to the front door. The named demo users (alice, bob, carol, dave: `/v1/d
 `localStorage.setItem("tributary.picker", "1")` in the browser and reload. Real sign-in (OAuth)
 will be another way to produce the same `Session`.
 
+A sandbox lists only its own 20 companies (`src/scope.ts`, a React context set from the
+session; display only, the API's OpenFGA check and RLS stay the boundary). Companies screens
+with `access=financials`, without the "Only companies I can read" box, and counts "N companies
+in your demo"; the palette (and so the watchlist's "+ Add"), Compare's target/peer pickers and the palette's `compare`/`chart`
+commands search with `/v1/companies/search?access=financials`; Compare's suggestions and the
+company Peers tab ask `/v1/companies/{id}/peers?access=financials` (no readable peers: a short
+note pointing to Compare); a Compare link with other companies leaves them out, with a note;
+a company or filing URL outside the demo shows one page, "<Name> isn't one of the 20 companies
+in this demo.", instead of locked tabs, and the assistant suggests nothing about it. The Ask
+page's deliberate permission tests are labelled "Try to break it:". Already scoped by the API
+for everyone: the chart builder's companies (`access=financials`), Home's feed and expected
+filings (`/v1/filings/latest`, `scope=readable`/`watchlist`), the Search page's company filter
+(`/v1/me`). Named demo users and future signed-in users keep the full public index, with
+ungranted companies as metadata only.
+
 The assistant sends the screen as `context` with each question (`assistant/actions.ts`) and
 applies the agent's `action` events (chart layers and options, screener filters, watchlist) with
 an Undo per action (`assistant/useUiActions.ts`): undo restores the chart and page from before

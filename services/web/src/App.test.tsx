@@ -358,6 +358,30 @@ describe("assistant drawer", () => {
   });
 });
 
+it("a named user keeps the full index: other companies' pages, search and unlabelled tests", async () => {
+  await render(`#/company/${TSLA}`);
+  // Tesla isn't readable for alice: its page still opens, with metadata only
+  expect(container.querySelector(".not-in-demo")).toBeNull();
+  expect(container.textContent).not.toContain("in this demo");
+  window.location.hash = "#/ask";
+  await settle();
+  const items = [...container.querySelectorAll(".ai-s > *")].map((e) => e.textContent);
+  expect(items).toContain("I'm bob. Show me Microsoft's financials.");
+  expect(items).not.toContain("Try to break it:");
+  await key("k", { ctrlKey: true });
+  const input = $(".pal input") as HTMLInputElement;
+  await act(async () => {
+    const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+    set.call(input, "TSLA");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => new Promise((r) => setTimeout(r, 250)));
+  await settle();
+  const search = vi.mocked(fetch).mock.calls.map(([u]) => new URL(String(u), "http://x"))
+    .find((u) => u.pathname.endsWith("/v1/companies/search"))!;
+  expect(search.searchParams.get("access")).toBeNull();
+});
+
 it("says what Tributary covers, from the sidebar footer and the assistant's empty state", async () => {
   await render();
   expect($(".side .cover-link")?.getAttribute("href")).toBe("#/about");
