@@ -287,3 +287,21 @@ def test_tied_candidates_resolve_the_same_way_in_any_order(conn):
     assert all(r == results[0] for r in results)
     assert quarters(conn, HD, "revenue") == [
         (date(2025, 9, 30), 300, "derived", "us-gaap:Revenues", ["tie-b", "tie-c"])]
+
+
+def test_proxy_statement_figures_never_reach_gold(loaded):
+    # a DEF 14A's pay-versus-performance table repeats fiscal-year net income, rounded, weeks
+    # after the 10-K; as the latest filing it used to replace the 10-K's figure (migration 024)
+    q4 = date(2026, 1, 25)
+    before = next(r for r in quarters(loaded, NVDA, "net_income") if r[0] == q4)
+    loaded.execute(
+        "INSERT INTO silver.financial_facts (cik, metric, tag, unit, period_start, period_end,"
+        " value, accession_no, form, filed)"
+        " VALUES (%s, 'net_income', 'NetIncomeLoss', 'USD', '2025-01-27', '2026-01-25',"
+        " 120100000000, 'proxy-1', 'DEF 14A', '2026-05-01')", (NVDA,))
+    refresh_gold(loaded, [NVDA])
+    after = next(r for r in quarters(loaded, NVDA, "net_income") if r[0] == q4)
+    assert after == before and "proxy-1" not in after[4]
+    assert not loaded.execute(
+        "SELECT count(*) FROM gold.derived_financials WHERE 'proxy-1' = ANY(source_accessions)"
+    ).fetchone()[0]

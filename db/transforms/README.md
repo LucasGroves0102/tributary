@@ -5,8 +5,8 @@ functions defined in the migrations, latest definitions first:
 
 | Function | Defined in |
 |---|---|
-| `gold.refresh_quarterly_financials(text[])` | `015_gold_tiebreaks.sql` (deterministic tie-breaks; before: `011_bulk_financials.sql`, `003_financials.sql`) |
-| `silver.refresh_financial_facts(text[])` | `011_bulk_financials.sql` (first in `003_financials.sql`); metric tags in `012_more_metrics.sql` |
+| `gold.refresh_quarterly_financials(text[])` | `024_gold_ignores_proxy_statements.sql` (skips proxy-statement facts; before: `015_gold_tiebreaks.sql` deterministic tie-breaks, `011_bulk_financials.sql`, `003_financials.sql`) |
+| `silver.refresh_financial_facts(text[])` | `011_bulk_financials.sql` (first in `003_financials.sql`); metric tags in `012_more_metrics.sql` (+ one in `024`) |
 | `gold.refresh_derived_financials(text[])`, `gold.refresh_financials(text[])` | `014_gold_calendar.sql` |
 | `silver.refresh_company_metadata` | `013_submissions.sql` |
 | `silver.refresh_segment_facts(text[])`, `gold.refresh_segment_financials(text[])`, `gold.refresh_segments(text[])`, `ops.check_segments(text[])` | `018_segments.sql` |
