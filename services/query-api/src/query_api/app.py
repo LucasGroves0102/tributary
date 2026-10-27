@@ -191,12 +191,19 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
         }
 
     @app.get("/v1/companies/search")
-    def search(user_id: User, q: Annotated[str, Query(min_length=1, max_length=100)]) -> dict:
+    def search(
+        user_id: User, q: Annotated[str, Query(min_length=1, max_length=100)],
+        access_filter: Annotated[Literal["all", "financials"], Query(
+            alias="access", description="all: every company; financials: only companies you "
+                                        "can read (a demo sandbox lists nothing else)")] = "all",
+    ) -> dict:
         """Company identity is public metadata; `access` says what the caller can read."""
         access = readable(user_id)
+        only = (sorted(c for c, t in access.items() if "financials" in t)
+                if access_filter == "financials" else None)
         return {"results": [
             {**r, "access": sorted(access.get(r["company_id"], set()))}
-            for r in store.search(user_id, q)
+            for r in store.search(user_id, q, only=only)
         ]}
 
     known: dict[str, list[str]] = {}

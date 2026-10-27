@@ -274,6 +274,18 @@ def test_peers_without_access_rank_by_public_metadata_only(peer_conn, token):
     assert all(p["values"]["revenue_ttm"] is None for p in body["peers"])
 
 
+def test_peers_and_search_can_be_only_granted_companies(peer_conn):
+    """A demo sandbox lists only its companies: the SQL filter, not just the client."""
+    store = Store(OneConnection(peer_conn))
+    ranked = store.peers("t-free", P1, [P1, P3], None, 10, granted_only=True)
+    assert [p["company_id"] for p in ranked] == [P3]
+    assert {p["company_id"] for p in store.peers("t-free", P1, [P1, P3], None, 10)} \
+        == {P2, P3, P4}
+    assert [r["company_id"] for r in store.search("t-free", P2)] == [P2]
+    assert store.search("t-free", P2, only=[P1, P3]) == []
+    assert [r["company_id"] for r in store.search("t-free", P3, only=[P3])] == [P3]
+
+
 def test_filings_meta_reads_the_public_index_as_query_api(conn):
     """Recent filings on Home: form and dates from silver.filings for any accession."""
     meta = Store(OneConnection(conn)).filings_meta("t-nobody", [f"{C}-00-000001", "nope"])

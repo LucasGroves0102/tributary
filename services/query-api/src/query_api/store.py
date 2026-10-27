@@ -61,14 +61,18 @@ class Store:
                 "           AS derived_metrics")
             return dict(cur.fetchone() or {})
 
-    def search(self, user_id: str, q: str, limit: int = 5) -> list[dict]:
+    def search(self, user_id: str, q: str, limit: int = 5,
+               only: list[str] | None = None) -> list[dict]:
+        """Best matches for a name, ticker or CIK. only: just these companies (the caller's
+        readable ones, for a demo that lists nothing else); None: every company."""
         with self._session(user_id) as cur:
             cur.execute(
                 "SELECT r.company_id, r.name, r.matched_on, r.matched_alias, r.is_current,"
                 "       c.sic, c.sic_description AS industry, c.exchanges"
-                " FROM silver.resolve_company(%s) WITH ORDINALITY r"
+                " FROM silver.resolve_company(%(q)s) WITH ORDINALITY r"
                 " JOIN silver.companies c USING (company_id)"
-                " ORDER BY r.ordinality LIMIT %s", (q, limit))
+                " WHERE %(only)s::text[] IS NULL OR r.company_id = ANY(%(only)s::text[])"
+                " ORDER BY r.ordinality LIMIT %(limit)s", {"q": q, "only": only, "limit": limit})
             return cur.fetchall()
 
     def profiles(self, user_id: str, company_ids: list[str]) -> dict[str, dict]:
@@ -184,10 +188,11 @@ class Store:
             return cur.fetchall()
 
     def peers(self, user_id: str, company_id: str, granted: list[str], revenue: Decimal | None,
-              limit: int) -> list[dict]:
+              limit: int, granted_only: bool = False) -> list[dict]:
         """Ranked peer candidates (gold.peer_candidates): SIC level, then the same revenue size
         band as `revenue` (only companies in `granted` have one; RLS applies too), then the
-        same filer category, then revenue closeness, then name."""
+        same filer category, then revenue closeness, then name. granted_only: only candidates
+        in `granted`."""
         with self._session(user_id) as cur:
             cur.execute(
                 """
@@ -198,6 +203,7 @@ class Store:
                 LEFT JOIN gold.latest_financials r
                        ON r.company_id = p.company_id AND r.company_id = ANY(%(granted)s)
                       AND r.span = 'ttm' AND r.metric = 'revenue'
+                WHERE NOT %(granted_only)s OR p.company_id = ANY(%(granted)s)
                 ORDER BY p.sic_level DESC,
                          coalesce(gold.revenue_band(r.value)
                                   = gold.revenue_band(%(revenue)s::numeric), false) DESC,
@@ -207,7 +213,7 @@ class Store:
                          c.name, p.company_id
                 LIMIT %(limit)s
                 """, {"company": company_id, "granted": granted, "revenue": revenue,
-                      "limit": limit})
+                      "limit": limit, "granted_only": granted_only})
             return cur.fetchall()
 
     def financials(self, user_id: str, company_id: str, metrics: list[str], quarters: int,

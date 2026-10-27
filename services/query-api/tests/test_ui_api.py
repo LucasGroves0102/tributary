@@ -283,8 +283,9 @@ AAPL = "0000320193"
 
 
 class PeerStore(UIStore):
-    def peers(self, user_id, company_id, granted, revenue, limit):
-        self.calls.append(("peers", company_id, tuple(granted), revenue, limit))
+    def peers(self, user_id, company_id, granted, revenue, limit, granted_only=False):
+        self.calls.append(("peers", company_id, tuple(granted), revenue, limit)
+                          + (("granted_only",) if granted_only else ()))
         return [{"company_id": NVDA, "sic_level": 4, "same_filer_category": True,
                  "revenue_band": 4 if NVDA in granted else None},
                 {"company_id": TSLA, "sic_level": 2, "same_filer_category": True,
@@ -319,6 +320,13 @@ def test_peers_of_an_ungranted_company_ignore_its_revenue(token):
     assert body["company"]["revenue_band"] is None
     assert ("peers", TSLA, (), None, 10) in c.store.calls
     assert all(v is None for p in body["peers"] for v in p["values"].values())
+
+
+def test_peers_can_be_only_readable_companies(token):
+    c = peer_client({"alice": {NVDA: {"financials"}}})
+    r = c.get(f"/v1/companies/{NVDA}/peers?access=financials", headers=token("alice"))
+    assert r.status_code == 200, r.text
+    assert ("peers", NVDA, (NVDA,), Decimal("130497000000"), 10, "granted_only") in c.store.calls
 
 
 def test_peers_of_unknown_company(token):
