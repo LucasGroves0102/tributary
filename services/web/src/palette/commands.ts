@@ -29,9 +29,14 @@ export function parseCommand(text: string): Command | null {
   return null;
 }
 
-/** Ticker → company_id from an exact ticker match in company search; null when none. */
-export async function resolveTicker(token: string, ticker: string): Promise<{ companyId: string; name: string } | null> {
-  const results = await searchCompanies(token, ticker);
+/** Ticker → company_id from an exact ticker match in company search; null when none.
+ * readableOnly: among the user's readable companies only (a demo sandbox). */
+export async function resolveTicker(
+  token: string,
+  ticker: string,
+  readableOnly = false,
+): Promise<{ companyId: string; name: string } | null> {
+  const results = await searchCompanies(token, ticker, readableOnly);
   const hit = results.find((r) => r.matched_on === "ticker" && r.matched_alias.toUpperCase() === ticker.toUpperCase());
   return hit ? { companyId: hit.company_id, name: hit.name } : null;
 }

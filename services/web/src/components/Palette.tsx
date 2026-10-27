@@ -4,6 +4,7 @@ import { searchCompanies } from "../api";
 import { metricLabel } from "../chart/metrics";
 import { parseCommand } from "../palette/commands";
 import { NAV, type NavView } from "../route";
+import { useScope } from "../scope";
 import type { SearchResult } from "../types";
 
 export const WATCH_PREFIX = "watch:";
@@ -57,6 +58,8 @@ export function Palette({ token, initial, companies, actions, onClose }: Props) 
   const [active, setActive] = useState(0);
   const [remote, setRemote] = useState<SearchResult[]>([]);
   const input = useRef<HTMLInputElement>(null);
+  // a demo sandbox finds only its own companies (scope.ts)
+  const scoped = useScope() !== null;
 
   const watchMode = q.startsWith(WATCH_PREFIX);
   const text = (watchMode ? q.slice(WATCH_PREFIX.length) : q).trim();
@@ -71,7 +74,7 @@ export function Palette({ token, initial, companies, actions, onClose }: Props) 
     }
     let live = true;
     const t = setTimeout(() => {
-      searchCompanies(token, text)
+      searchCompanies(token, text, scoped)
         .then((r) => live && setRemote(r))
         .catch(() => live && setRemote([]));
     }, SEARCH_DELAY_MS);
@@ -79,7 +82,7 @@ export function Palette({ token, initial, companies, actions, onClose }: Props) 
       live = false;
       clearTimeout(t);
     };
-  }, [token, text]);
+  }, [token, text, scoped]);
 
   const items = useMemo(() => {
     const known = new Set(companies.map((c) => c.companyId));

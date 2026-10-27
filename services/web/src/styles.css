@@ -1135,6 +1135,12 @@ button.link:hover {
   border-top: 1px solid var(--line);
 }
 
+.ai-s-label {
+  align-self: center;
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+
 .ai-s .btn {
   font-size: var(--fs-sm);
   font-weight: 400;
