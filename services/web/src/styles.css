@@ -534,8 +534,16 @@ a.btn:hover {
   color: var(--text-3);
 }
 
+/* a long crumb (a filing's accession number) gives way before the search box does */
+.crumb > :last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .search-box {
-  flex: 1;
+  flex: 1 1 220px;
+  min-width: 180px;
   max-width: 520px;
   display: flex;
   align-items: center;
@@ -547,6 +555,17 @@ a.btn:hover {
   color: var(--text-3);
   cursor: text;
   text-align: left;
+}
+
+.search-box > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.search-box kbd {
+  white-space: nowrap;
 }
 
 .who {

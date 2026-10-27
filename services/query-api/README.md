@@ -328,7 +328,8 @@ from `readable()` (financials) and passes them into the SQL; RLS (`granted_finan
 - `derived_quarters` (company route only): per metric, how many quarters are derived from
   year-to-date differences, the period range and the latest one's filing.
 - `companyfacts_behind`: 10-K/10-Q filings in the public index (`silver.filings`), filed on or
-  after the latest filing in the company's gold rows, that no XBRL fact cites yet.
+  after the latest filing in the company's gold rows and within the last 120 days
+  (`store.BEHIND_DAYS`; companyfacts lags by days, not months), that no XBRL fact cites yet.
 - Every note has `date` (restating or missing filing, else the period end; newest first) and
   `filings` (`role`, accession, form, filed, EDGAR `filing_url` from the public index). The
   plain-language wording is the web app's (`services/web/src/company/notes.ts`).

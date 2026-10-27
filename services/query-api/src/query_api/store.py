@@ -19,6 +19,8 @@ from query_api.screener import Compiled as Screen
 # a timeout on query_api would never reach these sessions. Search sets its own, longer one.
 QUERY_TIMEOUT = "5s"
 SEARCH_TIMEOUT = "8s"
+# Data notes: a 10-K/10-Q filed in the last BEHIND_DAYS whose XBRL isn't in companyfacts yet.
+BEHIND_DAYS = 120
 HEADLINE = ("StartSel=«, StopSel=», MaxWords=35, MinWords=15, MaxFragments=2,"
             " FragmentDelimiter=\" … \"")
 
@@ -511,24 +513,33 @@ class Store:
                     ORDER BY company_id, metric
                     """, (company_ids,))
                 rows = cur.fetchall()
+            # silver.filings gets company_id from a join inside each UNION branch, so a filter on
+            # it can't reach the 27M-row bronze.submission_filings index: filter on the CIKs
+            # (a base column) as literal values instead (5.4 s → 0.07 s for 20 companies).
+            # Companyfacts lags by days, so only the last BEHIND_DAYS count as "behind".
+            cur.execute("SELECT array_agg(cik) AS ciks FROM silver.company_ciks"
+                        " WHERE company_id = ANY(%s)", (company_ids,))
+            ciks = (cur.fetchone() or {}).get("ciks") or []
             cur.execute(
                 """
                 WITH latest AS (
                     SELECT company_id, max(filed) AS facts_filed
                     FROM gold.quarterly_financials
-                    WHERE company_id = ANY(%s)
+                    WHERE company_id = ANY(%(c)s)
                     GROUP BY company_id
                 )
                 SELECT DISTINCT ON (f.accession_no)
                        l.company_id, l.facts_filed, f.accession_no, f.form, f.filing_date,
                        f.cik
-                FROM latest l
-                JOIN silver.filings f ON f.company_id = l.company_id
-                WHERE f.form IN ('10-K', '10-Q') AND f.filing_date >= l.facts_filed
+                FROM silver.filings f
+                JOIN latest l ON l.company_id = f.company_id
+                WHERE f.cik = ANY(%(ciks)s) AND f.form IN ('10-K', '10-Q')
+                  AND f.filing_date >= l.facts_filed
+                  AND f.filing_date >= current_date - %(days)s
                   AND NOT EXISTS (SELECT 1 FROM silver.financial_facts x
                                   WHERE x.accession_no = f.accession_no)
                 ORDER BY f.accession_no, f.filing_date DESC
-                """, (company_ids,))
+                """, {"c": company_ids, "ciks": ciks, "days": BEHIND_DAYS})
             behind = cur.fetchall()
             cur.execute("SELECT max(checked_at) AS checked_at FROM ops.quality_companies"
                         " WHERE company_id = ANY(%s)", (company_ids,))
