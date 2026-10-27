@@ -24,3 +24,12 @@ spec:
     cleanupOnFail: true
     remediation:
       retries: 3
+  values:
+    # Kafka SASL phase B: logs in as kafka-exporter on 9094 (deploy/helm/platform README)
+    prometheus-kafka-exporter:
+      kafkaServer:
+        - kafka.platform.svc.cluster.local:9094
+      sasl:
+        enabled: true
+        scram:
+          enabled: true

@@ -26,9 +26,11 @@ spec:
     kafka:
       sasl:
         enabled: true
+        connect: true
+      plaintextListener: false
     openfga:
       auth:
         enabled: true
     images:
       setup:
-        tag: main-140-27536cfa00a76415ce35791a7ba301794822d815 # {"$imagepolicy": "flux-system:tributary:tag"}
+        tag: main-152-6b8fdf84802222c68ad52f17b744333fb860f6ba # {"$imagepolicy": "flux-system:tributary:tag"}
