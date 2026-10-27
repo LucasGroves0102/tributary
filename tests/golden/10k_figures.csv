@@ -1,5 +1,5 @@
 company,ticker,cik,fiscal_year,period_end,metric,value,unit,printed_unit,statement,line_label,check,accession_no,verified_by,notes
-NVIDIA,NVDA,0001045810,2026,2026-01-25,revenue,215938000000,USD,1000000,income,Revenue,annual,0001045810-26-000021,,
+NVIDIA,NVDA,0001045810,2026,2026-01-25,revenue,215938000000,USD,1000000,income,Revenue,annual,0001045810-26-000021,"Lucas Groves, 2026-10-27",
 NVIDIA,NVDA,0001045810,2026,2026-01-25,cost_of_revenue,62475000000,USD,1000000,income,Cost of revenue,annual,0001045810-26-000021,,
 NVIDIA,NVDA,0001045810,2026,2026-01-25,gross_profit,153463000000,USD,1000000,income,Gross profit,annual,0001045810-26-000021,,
 NVIDIA,NVDA,0001045810,2026,2026-01-25,research_and_development,18497000000,USD,1000000,income,Research and development,annual,0001045810-26-000021,,
@@ -10,11 +10,11 @@ NVIDIA,NVDA,0001045810,2026,2026-01-25,pretax_income,141450000000,USD,1000000,in
 NVIDIA,NVDA,0001045810,2026,2026-01-25,income_tax,21383000000,USD,1000000,income,Income tax expense,annual,0001045810-26-000021,,
 NVIDIA,NVDA,0001045810,2026,2026-01-25,net_income,120067000000,USD,1000000,income,Net income,annual,0001045810-26-000021,,
 NVIDIA,NVDA,0001045810,2026,2026-01-25,eps_basic,4.93,USD/shares,0.01,income,Basic,annual_silver,0001045810-26-000021,,
-NVIDIA,NVDA,0001045810,2026,2026-01-25,eps_diluted,4.90,USD/shares,0.01,income,Diluted,annual_silver,0001045810-26-000021,,
+NVIDIA,NVDA,0001045810,2026,2026-01-25,eps_diluted,4.90,USD/shares,0.01,income,Diluted,annual_silver,0001045810-26-000021,"Lucas Groves, 2026-10-27",
 NVIDIA,NVDA,0001045810,2026,2026-01-25,weighted_shares_basic,24359000000,shares,1000000,income,Basic,annual_silver,0001045810-26-000021,,
 NVIDIA,NVDA,0001045810,2026,2026-01-25,weighted_shares_diluted,24514000000,shares,1000000,income,Diluted,annual_silver,0001045810-26-000021,,
 NVIDIA,NVDA,0001045810,2026,2026-01-25,cash,10605000000,USD,1000000,balance,Cash and cash equivalents,annual,0001045810-26-000021,,
-NVIDIA,NVDA,0001045810,2026,2026-01-25,short_term_investments,51951000000,USD,1000000,balance,Marketable securities,absent,0001045810-26-000021,,"FY2026 10-K tags this line with Nvidia's own extension (nvda:MarketableSecuritiesAndEquitySecuritiesFVNI); gold maps us-gaap tags only, so there is no value and net_debt treats it as 0"
+NVIDIA,NVDA,0001045810,2026,2026-01-25,short_term_investments,51951000000,USD,1000000,balance,Marketable securities,absent,0001045810-26-000021,"Lucas Groves, 2026-10-27","FY2026 10-K tags this line with Nvidia's own extension (nvda:MarketableSecuritiesAndEquitySecuritiesFVNI); gold maps us-gaap tags only, so there is no value and net_debt treats it as 0"
 NVIDIA,NVDA,0001045810,2026,2026-01-25,receivables,38466000000,USD,1000000,balance,"Accounts receivable, net",annual,0001045810-26-000021,,
 NVIDIA,NVDA,0001045810,2026,2026-01-25,inventory,21403000000,USD,1000000,balance,Inventories,annual,0001045810-26-000021,,
 NVIDIA,NVDA,0001045810,2026,2026-01-25,current_assets,125605000000,USD,1000000,balance,Total current assets,annual,0001045810-26-000021,,
@@ -26,7 +26,7 @@ NVIDIA,NVDA,0001045810,2026,2026-01-25,total_liabilities,49510000000,USD,1000000
 NVIDIA,NVDA,0001045810,2026,2026-01-25,stockholders_equity,157293000000,USD,1000000,balance,Total shareholders' equity,annual,0001045810-26-000021,,
 NVIDIA,NVDA,0001045810,2026,2026-01-25,shares_outstanding,24304000000,shares,1000000,balance,"Common stock, $0.001 par value; 80,000 shares authorized; 24,304 shares issued and outstanding as of January 25, 2026; 24,477 shares issued and outstanding as of January 26, 2025",annual,0001045810-26-000021,,"balance-sheet caption, in millions of shares"
 NVIDIA,NVDA,0001045810,2026,2026-01-25,operating_cash_flow,102718000000,USD,1000000,cash_flow,Net cash provided by operating activities,annual,0001045810-26-000021,,
-NVIDIA,NVDA,0001045810,2026,2026-01-25,capex,6042000000,USD,1000000,cash_flow,Purchases related to property and equipment and intangible assets,annual,0001045810-26-000021,,includes intangible assets (PaymentsToAcquireProductiveAssets)
+NVIDIA,NVDA,0001045810,2026,2026-01-25,capex,6042000000,USD,1000000,cash_flow,Purchases related to property and equipment and intangible assets,annual,0001045810-26-000021,"Lucas Groves, 2026-10-27",includes intangible assets (PaymentsToAcquireProductiveAssets)
 NVIDIA,NVDA,0001045810,2026,2026-01-25,depreciation_amortization,2843000000,USD,1000000,cash_flow,Depreciation and amortization,annual,0001045810-26-000021,,
 NVIDIA,NVDA,0001045810,2026,2026-01-25,stock_based_compensation,6386000000,USD,1000000,cash_flow,Stock-based compensation expense,annual,0001045810-26-000021,,
 NVIDIA,NVDA,0001045810,2026,2026-01-25,dividends_paid,974000000,USD,1000000,cash_flow,Dividends paid,annual,0001045810-26-000021,,
@@ -34,18 +34,18 @@ NVIDIA,NVDA,0001045810,2026,2026-01-25,share_buybacks,40086000000,USD,1000000,ca
 NVIDIA,NVDA,0001045810,2025,2025-01-26,revenue,130497000000,USD,1000000,income,Revenue,annual,0001045810-26-000021,,prior-year comparative in this 10-K: year-ago input of growth and ROE
 NVIDIA,NVDA,0001045810,2025,2025-01-26,net_income,72880000000,USD,1000000,income,Net income,annual,0001045810-26-000021,,prior-year comparative in this 10-K: year-ago input of growth and ROE
 NVIDIA,NVDA,0001045810,2025,2025-01-26,stockholders_equity,79327000000,USD,1000000,balance,Total shareholders' equity,annual,0001045810-26-000021,,prior-year comparative in this 10-K: year-ago input of growth and ROE
-Costco,COST,0000909832,2026,2026-08-30,revenue,303154000000,USD,1000000,income,Total revenue,annual,0000909832-26-000093,,net sales plus membership fees
+Costco,COST,0000909832,2026,2026-08-30,revenue,303154000000,USD,1000000,income,Total revenue,annual,0000909832-26-000093,"Lucas Groves, 2026-10-27",net sales plus membership fees
 Costco,COST,0000909832,2026,2026-08-30,cost_of_revenue,264279000000,USD,1000000,income,Merchandise costs,annual,0000909832-26-000093,,
 Costco,COST,0000909832,2026,2026-08-30,sga,27190000000,USD,1000000,income,"Selling, general and administrative",annual,0000909832-26-000093,,
 Costco,COST,0000909832,2026,2026-08-30,operating_income,11685000000,USD,1000000,income,Operating income,annual,0000909832-26-000093,,
 Costco,COST,0000909832,2026,2026-08-30,interest_expense,145000000,USD,1000000,income,Interest expense,annual,0000909832-26-000093,,printed as a negative under other income (expense)
-Costco,COST,0000909832,2026,2026-08-30,pretax_income,12251000000,USD,1000000,income,INCOME BEFORE INCOME TAXES,annual,0000909832-26-000093,,
+Costco,COST,0000909832,2026,2026-08-30,pretax_income,12251000000,USD,1000000,income,INCOME BEFORE INCOME TAXES,annual,0000909832-26-000093,"Lucas Groves, 2026-10-27",
 Costco,COST,0000909832,2026,2026-08-30,income_tax,3025000000,USD,1000000,income,Provision for income taxes,annual,0000909832-26-000093,,
 Costco,COST,0000909832,2026,2026-08-30,net_income,9226000000,USD,1000000,income,NET INCOME,annual,0000909832-26-000093,,
 Costco,COST,0000909832,2026,2026-08-30,eps_basic,20.78,USD/shares,0.01,income,Basic,annual_silver,0000909832-26-000093,,
 Costco,COST,0000909832,2026,2026-08-30,eps_diluted,20.76,USD/shares,0.01,income,Diluted,annual_silver,0000909832-26-000093,,
 Costco,COST,0000909832,2026,2026-08-30,weighted_shares_basic,443953000,shares,1000,income,Basic,annual_silver,0000909832-26-000093,,printed in thousands (000's)
-Costco,COST,0000909832,2026,2026-08-30,weighted_shares_diluted,444427000,shares,1000,income,Diluted,annual_silver,0000909832-26-000093,,printed in thousands (000's)
+Costco,COST,0000909832,2026,2026-08-30,weighted_shares_diluted,444427000,shares,1000,income,Diluted,annual_silver,0000909832-26-000093,"Lucas Groves, 2026-10-27",printed in thousands (000's)
 Costco,COST,0000909832,2026,2026-08-30,cash,20207000000,USD,1000000,balance,Cash and cash equivalents,annual,0000909832-26-000093,,
 Costco,COST,0000909832,2026,2026-08-30,short_term_investments,1094000000,USD,1000000,balance,Short-term investments,annual,0000909832-26-000093,,
 Costco,COST,0000909832,2026,2026-08-30,receivables,3959000000,USD,1000000,balance,"Receivables, net",annual,0000909832-26-000093,,
@@ -54,7 +54,7 @@ Costco,COST,0000909832,2026,2026-08-30,current_assets,46582000000,USD,1000000,ba
 Costco,COST,0000909832,2026,2026-08-30,total_assets,89045000000,USD,1000000,balance,TOTAL ASSETS,annual,0000909832-26-000093,,
 Costco,COST,0000909832,2026,2026-08-30,current_liabilities,43952000000,USD,1000000,balance,Total current liabilities,annual,0000909832-26-000093,,
 Costco,COST,0000909832,2026,2026-08-30,long_term_debt,3914000000,USD,1000000,balance,"Long-term debt, excluding current portion",annual,0000909832-26-000093,,
-Costco,COST,0000909832,2026,2026-08-30,long_term_debt_current,2248000000,USD,1000000,balance,Current portion of long-term debt,annual,0000909832-26-000093,,
+Costco,COST,0000909832,2026,2026-08-30,long_term_debt_current,2248000000,USD,1000000,balance,Current portion of long-term debt,annual,0000909832-26-000093,"Lucas Groves, 2026-10-27",
 Costco,COST,0000909832,2026,2026-08-30,total_liabilities,53242000000,USD,1000000,balance,TOTAL LIABILITIES,annual,0000909832-26-000093,,
 Costco,COST,0000909832,2026,2026-08-30,stockholders_equity,35803000000,USD,1000000,balance,TOTAL EQUITY,annual,0000909832-26-000093,,"no noncontrolling interests at this date, so total equity = Costco stockholders' equity"
 Costco,COST,0000909832,2026,2026-08-30,shares_outstanding,443266000,shares,1,balance,"Common stock $0.005 par value; 900,000,000 shares authorized; 443,266,000 and 443,237,000 shares issued and outstanding",annual,0000909832-26-000093,,balance-sheet caption
@@ -62,16 +62,16 @@ Costco,COST,0000909832,2026,2026-08-30,operating_cash_flow,15817000000,USD,10000
 Costco,COST,0000909832,2026,2026-08-30,capex,6435000000,USD,1000000,cash_flow,Additions to property and equipment,annual,0000909832-26-000093,,
 Costco,COST,0000909832,2026,2026-08-30,depreciation_amortization,2674000000,USD,1000000,cash_flow,Depreciation and amortization,annual,0000909832-26-000093,,
 Costco,COST,0000909832,2026,2026-08-30,stock_based_compensation,924000000,USD,1000000,cash_flow,Stock-based compensation,annual,0000909832-26-000093,,
-Costco,COST,0000909832,2026,2026-08-30,dividends_paid,2458000000,USD,1000000,cash_flow,Cash dividend payments,annual,0000909832-26-000093,,
+Costco,COST,0000909832,2026,2026-08-30,dividends_paid,2458000000,USD,1000000,cash_flow,Cash dividend payments,annual,0000909832-26-000093,"Lucas Groves, 2026-10-27",
 Costco,COST,0000909832,2026,2026-08-30,share_buybacks,848000000,USD,1000000,cash_flow,Repurchases of common stock,annual,0000909832-26-000093,,
 Costco,COST,0000909832,2025,2025-08-31,revenue,275235000000,USD,1000000,income,Total revenue,annual,0000909832-26-000093,,prior-year comparative in this 10-K: year-ago input of growth and ROE
 Costco,COST,0000909832,2025,2025-08-31,net_income,8099000000,USD,1000000,income,NET INCOME,annual,0000909832-26-000093,,prior-year comparative in this 10-K: year-ago input of growth and ROE
 Costco,COST,0000909832,2025,2025-08-31,stockholders_equity,29164000000,USD,1000000,balance,TOTAL EQUITY,annual,0000909832-26-000093,,prior-year comparative in this 10-K: year-ago input of growth and ROE
-JPMorgan Chase,JPM,0000019617,2025,2025-12-31,revenue,182447000000,USD,1000000,income,Total net revenue,annual,0001628280-26-008131,,bank revenue net of interest expense (RevenuesNetOfInterestExpense)
+JPMorgan Chase,JPM,0000019617,2025,2025-12-31,revenue,182447000000,USD,1000000,income,Total net revenue,annual,0001628280-26-008131,"Lucas Groves, 2026-10-27",bank revenue net of interest expense (RevenuesNetOfInterestExpense)
 JPMorgan Chase,JPM,0000019617,2025,2025-12-31,interest_expense,97898000000,USD,1000000,income,Interest expense,annual,0001628280-26-008131,,"bank interest expense, mostly on deposits (InterestExpenseOperating)"
 JPMorgan Chase,JPM,0000019617,2025,2025-12-31,pretax_income,72595000000,USD,1000000,income,Income before income tax expense,annual,0001628280-26-008131,,
 JPMorgan Chase,JPM,0000019617,2025,2025-12-31,income_tax,15547000000,USD,1000000,income,Income tax expense,annual,0001628280-26-008131,,
-JPMorgan Chase,JPM,0000019617,2025,2025-12-31,net_income,57048000000,USD,1000000,income,Net income,annual,0001628280-26-008131,,
+JPMorgan Chase,JPM,0000019617,2025,2025-12-31,net_income,57048000000,USD,1000000,income,Net income,annual,0001628280-26-008131,"Lucas Groves, 2026-10-27",
 JPMorgan Chase,JPM,0000019617,2025,2025-12-31,eps_basic,20.05,USD/shares,0.01,income,Basic earnings per share,annual_silver,0001628280-26-008131,,
 JPMorgan Chase,JPM,0000019617,2025,2025-12-31,eps_diluted,20.02,USD/shares,0.01,income,Diluted earnings per share,annual_silver,0001628280-26-008131,,
 JPMorgan Chase,JPM,0000019617,2025,2025-12-31,weighted_shares_basic,2776500000,shares,100000,income,Weighted-average basic shares,annual_silver,0001628280-26-008131,,printed in millions with one decimal
@@ -79,9 +79,9 @@ JPMorgan Chase,JPM,0000019617,2025,2025-12-31,weighted_shares_diluted,2781500000
 JPMorgan Chase,JPM,0000019617,2025,2025-12-31,total_assets,4424900000000,USD,1000000,balance,Total assets(a),annual,0001628280-26-008131,,
 JPMorgan Chase,JPM,0000019617,2025,2025-12-31,long_term_debt,435206000000,USD,1000000,balance,"Long-term debt (included $134,559 and $100,780 at fair value)",absent,0001628280-26-008131,,"unclassified bank balance sheet: no noncurrent debt tag, so gold has no long_term_debt for JPM by design (012); debt ratios are not computed"
 JPMorgan Chase,JPM,0000019617,2025,2025-12-31,total_liabilities,4062462000000,USD,1000000,balance,Total liabilities(a),annual,0001628280-26-008131,,
-JPMorgan Chase,JPM,0000019617,2025,2025-12-31,stockholders_equity,362438000000,USD,1000000,balance,Total stockholders’ equity,annual,0001628280-26-008131,,
+JPMorgan Chase,JPM,0000019617,2025,2025-12-31,stockholders_equity,362438000000,USD,1000000,balance,Total stockholders’ equity,annual,0001628280-26-008131,"Lucas Groves, 2026-10-27",
 JPMorgan Chase,JPM,0000019617,2025,2025-12-31,shares_outstanding,2696200000,shares,100000,note,"Outstanding at December 31 2,696.2",annual,0001628280-26-008131,,"common stock note, millions with one decimal (issued 4,104.9 less treasury 1,408.7)"
-JPMorgan Chase,JPM,0000019617,2025,2025-12-31,cash,343338000000,USD,1000000,cash_flow,Cash and due from banks and deposits with banks at the end of the period,annual,0001628280-26-008131,,"gold's cash for JPM is cash and due from banks plus deposits with banks (the restricted-cash total); the balance sheet prints them as two lines, Cash and due from banks 21,742 and Deposits with banks 321,596"
+JPMorgan Chase,JPM,0000019617,2025,2025-12-31,cash,343338000000,USD,1000000,cash_flow,Cash and due from banks and deposits with banks at the end of the period,annual,0001628280-26-008131,"Lucas Groves, 2026-10-27","gold's cash for JPM is cash and due from banks plus deposits with banks (the restricted-cash total); the balance sheet prints them as two lines, Cash and due from banks 21,742 and Deposits with banks 321,596"
 JPMorgan Chase,JPM,0000019617,2025,2025-12-31,operating_cash_flow,-147782000000,USD,1000000,cash_flow,Net cash (used in)/provided by operating activities,annual,0001628280-26-008131,,
 JPMorgan Chase,JPM,0000019617,2025,2025-12-31,depreciation_amortization,8821000000,USD,1000000,cash_flow,Depreciation and amortization,annual,0001628280-26-008131,,
 JPMorgan Chase,JPM,0000019617,2025,2025-12-31,dividends_paid,16625000000,USD,1000000,cash_flow,Dividends paid,annual,0001628280-26-008131,,common and preferred dividends (PaymentsOfDividends)
@@ -89,12 +89,12 @@ JPMorgan Chase,JPM,0000019617,2025,2025-12-31,share_buybacks,31591000000,USD,100
 JPMorgan Chase,JPM,0000019617,2024,2024-12-31,revenue,177556000000,USD,1000000,income,Total net revenue,annual,0001628280-26-008131,,prior-year comparative in this 10-K: year-ago input of growth and ROE
 JPMorgan Chase,JPM,0000019617,2024,2024-12-31,net_income,58471000000,USD,1000000,income,Net income,annual,0001628280-26-008131,,prior-year comparative in this 10-K: year-ago input of growth and ROE
 JPMorgan Chase,JPM,0000019617,2024,2024-12-31,stockholders_equity,344758000000,USD,1000000,balance,Total stockholders’ equity,annual,0001628280-26-008131,,prior-year comparative in this 10-K: year-ago input of growth and ROE
-Exxon Mobil,XOM,0000034088,2025,2025-12-31,revenue,332238000000,USD,1000000,income,Total revenues and other income,annual,0000034088-26-000045,,"the Revenues tag is total revenues and other income (includes income from equity affiliates and other income); sales and other operating revenue is 323,905"
+Exxon Mobil,XOM,0000034088,2025,2025-12-31,revenue,332238000000,USD,1000000,income,Total revenues and other income,annual,0000034088-26-000045,"Lucas Groves, 2026-10-27","the Revenues tag is total revenues and other income (includes income from equity affiliates and other income); sales and other operating revenue is 323,905"
 Exxon Mobil,XOM,0000034088,2025,2025-12-31,sga,11128000000,USD,1000000,income,"Selling, general and administrative expenses",annual,0000034088-26-000045,,
 Exxon Mobil,XOM,0000034088,2025,2025-12-31,interest_expense,603000000,USD,1000000,income,Interest expense,annual,0000034088-26-000045,,
 Exxon Mobil,XOM,0000034088,2025,2025-12-31,pretax_income,41268000000,USD,1000000,income,Income (loss) before income taxes,annual,0000034088-26-000045,,
 Exxon Mobil,XOM,0000034088,2025,2025-12-31,income_tax,11504000000,USD,1000000,income,Income tax expense (benefit),annual,0000034088-26-000045,,
-Exxon Mobil,XOM,0000034088,2025,2025-12-31,net_income,28844000000,USD,1000000,income,Net income (loss) attributable to ExxonMobil,annual,0000034088-26-000045,,
+Exxon Mobil,XOM,0000034088,2025,2025-12-31,net_income,28844000000,USD,1000000,income,Net income (loss) attributable to ExxonMobil,annual,0000034088-26-000045,"Lucas Groves, 2026-10-27",
 Exxon Mobil,XOM,0000034088,2025,2025-12-31,eps_basic,6.70,USD/shares,0.01,income,Earnings (loss) per common share (dollars),annual_silver,0000034088-26-000045,,
 Exxon Mobil,XOM,0000034088,2025,2025-12-31,eps_diluted,6.70,USD/shares,0.01,income,Earnings (loss) per common share - assuming dilution (dollars),annual_silver,0000034088-26-000045,,
 Exxon Mobil,XOM,0000034088,2025,2025-12-31,cash,10681000000,USD,1000000,balance,Cash and cash equivalents,annual,0000034088-26-000045,,
@@ -103,12 +103,12 @@ Exxon Mobil,XOM,0000034088,2025,2025-12-31,current_assets,83382000000,USD,100000
 Exxon Mobil,XOM,0000034088,2025,2025-12-31,total_assets,448980000000,USD,1000000,balance,Total Assets,annual,0000034088-26-000045,,
 Exxon Mobil,XOM,0000034088,2025,2025-12-31,current_liabilities,72330000000,USD,1000000,balance,Total current liabilities,annual,0000034088-26-000045,,
 Exxon Mobil,XOM,0000034088,2025,2025-12-31,long_term_debt,34241000000,USD,1000000,balance,Long-term debt,annual,0000034088-26-000045,,
-Exxon Mobil,XOM,0000034088,2025,2025-12-31,long_term_debt_current,6200000000,USD,100000000,note,"portion of long-term debt, totaling $ 6.2 billion, which matures within one year",annual,0000034088-26-000045,,not a balance-sheet line (inside notes and loans payable); printed in the long-term debt note as $6.2 billion
+Exxon Mobil,XOM,0000034088,2025,2025-12-31,long_term_debt_current,6200000000,USD,100000000,note,"portion of long-term debt, totaling $ 6.2 billion, which matures within one year",annual,0000034088-26-000045,"Lucas Groves, 2026-10-27",not a balance-sheet line (inside notes and loans payable); printed in the long-term debt note as $6.2 billion
 Exxon Mobil,XOM,0000034088,2025,2025-12-31,total_liabilities,182354000000,USD,1000000,balance,Total Liabilities,annual,0000034088-26-000045,,
 Exxon Mobil,XOM,0000034088,2025,2025-12-31,stockholders_equity,259386000000,USD,1000000,balance,ExxonMobil share of equity,annual,0000034088-26-000045,,"excludes noncontrolling interests (total equity 266,626)"
 Exxon Mobil,XOM,0000034088,2025,2025-12-31,shares_outstanding,4179000000,shares,1000000,balance,"Common stock without par value(9,000 million shares authorized, 8,019 million shares issued) | Common stock held in treasury(3,840 million shares in 2025 and 3,666 million shares in 2024)",annual,0000034088-26-000045,,"balance-sheet captions: 8,019 million issued less 3,840 million in treasury"
 Exxon Mobil,XOM,0000034088,2025,2025-12-31,operating_cash_flow,51970000000,USD,1000000,cash_flow,Net cash provided by operating activities,annual,0000034088-26-000045,,
-Exxon Mobil,XOM,0000034088,2025,2025-12-31,capex,28358000000,USD,1000000,cash_flow,"Additions to property, plant, and equipment",annual,0000034088-26-000045,,
+Exxon Mobil,XOM,0000034088,2025,2025-12-31,capex,28358000000,USD,1000000,cash_flow,"Additions to property, plant, and equipment",annual,0000034088-26-000045,"Lucas Groves, 2026-10-27",
 Exxon Mobil,XOM,0000034088,2025,2025-12-31,depreciation_amortization,25993000000,USD,1000000,cash_flow,Depreciation and depletion (includes impairments),annual,0000034088-26-000045,,includes impairments
 Exxon Mobil,XOM,0000034088,2025,2025-12-31,dividends_paid,17231000000,USD,1000000,cash_flow,Cash dividends to ExxonMobil shareholders,annual,0000034088-26-000045,,
 Exxon Mobil,XOM,0000034088,2025,2025-12-31,share_buybacks,20273000000,USD,1000000,cash_flow,Common stock acquired,annual,0000034088-26-000045,,
@@ -123,7 +123,7 @@ Home Depot,HD,0000354950,2025,2026-02-01,operating_income,20890000000,USD,100000
 Home Depot,HD,0000354950,2025,2026-02-01,interest_expense,2412000000,USD,1000000,income,Interest expense,annual,0001628280-26-019436,,
 Home Depot,HD,0000354950,2025,2026-02-01,pretax_income,18602000000,USD,1000000,income,Earnings before provision for income taxes,annual,0001628280-26-019436,,
 Home Depot,HD,0000354950,2025,2026-02-01,income_tax,4446000000,USD,1000000,income,Provision for income taxes,annual,0001628280-26-019436,,
-Home Depot,HD,0000354950,2025,2026-02-01,net_income,14156000000,USD,1000000,income,Net earnings,annual,0001628280-26-019436,,
+Home Depot,HD,0000354950,2025,2026-02-01,net_income,14156000000,USD,1000000,income,Net earnings,annual,0001628280-26-019436,"Lucas Groves, 2026-10-27",
 Home Depot,HD,0000354950,2025,2026-02-01,eps_basic,14.26,USD/shares,0.01,income,Basic earnings per share,annual_silver,0001628280-26-019436,,
 Home Depot,HD,0000354950,2025,2026-02-01,eps_diluted,14.23,USD/shares,0.01,income,Diluted earnings per share,annual_silver,0001628280-26-019436,,
 Home Depot,HD,0000354950,2025,2026-02-01,weighted_shares_basic,993000000,shares,1000000,income,Basic weighted average common shares,annual_silver,0001628280-26-019436,,
@@ -134,14 +134,14 @@ Home Depot,HD,0000354950,2025,2026-02-01,inventory,25817000000,USD,1000000,balan
 Home Depot,HD,0000354950,2025,2026-02-01,current_assets,34391000000,USD,1000000,balance,Total current assets,annual,0001628280-26-019436,,
 Home Depot,HD,0000354950,2025,2026-02-01,total_assets,105095000000,USD,1000000,balance,Total assets,annual,0001628280-26-019436,,
 Home Depot,HD,0000354950,2025,2026-02-01,current_liabilities,32424000000,USD,1000000,balance,Total current liabilities,annual,0001628280-26-019436,,
-Home Depot,HD,0000354950,2025,2026-02-01,long_term_debt,46341000000,USD,1000000,balance,"Long-term debt, excluding current installments",annual,0001628280-26-019436,,
+Home Depot,HD,0000354950,2025,2026-02-01,long_term_debt,46341000000,USD,1000000,balance,"Long-term debt, excluding current installments",annual,0001628280-26-019436,"Lucas Groves, 2026-10-27",
 Home Depot,HD,0000354950,2025,2026-02-01,long_term_debt_current,4967000000,USD,1000000,balance,Current installments of long-term debt,annual,0001628280-26-019436,,
 Home Depot,HD,0000354950,2025,2026-02-01,total_liabilities,92282000000,USD,1000000,balance,Total liabilities,annual,0001628280-26-019436,,
 Home Depot,HD,0000354950,2025,2026-02-01,stockholders_equity,12813000000,USD,1000000,balance,Total stockholders’ equity,annual,0001628280-26-019436,,
-Home Depot,HD,0000354950,2025,2026-02-01,shares_outstanding,996000000,shares,1000000,balance,"Common stock, par value $0.05; authorized: 10,000 shares; issued: 1,802 shares at February 1, 2026 and 1,800 shares at February 2, 2025; outstanding: 996 shares at February 1, 2026 and 994 shares at February 2, 2025",annual,0001628280-26-019436,,"balance-sheet caption, in millions of shares"
+Home Depot,HD,0000354950,2025,2026-02-01,shares_outstanding,996000000,shares,1000000,balance,"Common stock, par value $0.05; authorized: 10,000 shares; issued: 1,802 shares at February 1, 2026 and 1,800 shares at February 2, 2025; outstanding: 996 shares at February 1, 2026 and 994 shares at February 2, 2025",annual,0001628280-26-019436,"Lucas Groves, 2026-10-27","balance-sheet caption, in millions of shares"
 Home Depot,HD,0000354950,2025,2026-02-01,operating_cash_flow,16325000000,USD,1000000,cash_flow,Net cash provided by operating activities,annual,0001628280-26-019436,,
 Home Depot,HD,0000354950,2025,2026-02-01,capex,3679000000,USD,1000000,cash_flow,Capital expenditures,annual,0001628280-26-019436,,
-Home Depot,HD,0000354950,2025,2026-02-01,depreciation_amortization,3514000000,USD,1000000,cash_flow,"Depreciation and amortization, excluding amortization of intangible assets",annual,0001628280-26-019436,,"the cash-flow line (DepreciationDepletionAndAmortization); the income statement's Depreciation and amortization (3,273) excludes depreciation in cost of sales, and intangible amortization (607) is a separate line"
+Home Depot,HD,0000354950,2025,2026-02-01,depreciation_amortization,3514000000,USD,1000000,cash_flow,"Depreciation and amortization, excluding amortization of intangible assets",annual,0001628280-26-019436,"Lucas Groves, 2026-10-27","the cash-flow line (DepreciationDepletionAndAmortization); the income statement's Depreciation and amortization (3,273) excludes depreciation in cost of sales, and intangible amortization (607) is a separate line"
 Home Depot,HD,0000354950,2025,2026-02-01,stock_based_compensation,522000000,USD,1000000,cash_flow,Stock-based compensation expense,annual,0001628280-26-019436,,
 Home Depot,HD,0000354950,2025,2026-02-01,dividends_paid,9152000000,USD,1000000,cash_flow,Cash dividends,annual,0001628280-26-019436,,
 Home Depot,HD,0000354950,2025,2026-02-01,share_buybacks,0,USD,1000000,cash_flow,Repurchases of common stock,annual,0001628280-26-019436,,printed as a dash: no repurchases in fiscal 2025

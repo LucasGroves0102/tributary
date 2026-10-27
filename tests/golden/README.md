@@ -103,9 +103,9 @@ Production needs `facts-fetcher --rebuild` (`make financials-rebuild`) once 024 
 
 ## Hand check
 
-Please verify these against the filing (open the link, find the statement, compare the line),
-then put your initials in `verified_by` for the row in the CSV. Values are as printed (millions
-of dollars unless noted).
+These 21 figures were hand-checked against the filings by the owner (Lucas Groves) on
+2026-10-27, and all matched; their CSV rows have `verified_by` = "Lucas Groves, 2026-10-27".
+Values are as printed (millions of dollars unless noted).
 
 | # | Company | Statement | Line | Printed | Filing |
 |---|---|---|---|---|---|
@@ -131,5 +131,4 @@ of dollars unless noted).
 | 20 | Home Depot | Balance sheet | Common stock caption: outstanding shares at February 1, 2026 | 996 (millions) | [hd-20260201.htm](https://www.sec.gov/Archives/edgar/data/354950/000162828026019436/hd-20260201.htm) |
 | 21 | Home Depot | Cash flows | Depreciation and amortization, excluding amortization of intangible assets | 3,514 | [hd-20260201.htm](https://www.sec.gov/Archives/edgar/data/354950/000162828026019436/hd-20260201.htm) |
 
-`verified_by` is empty until then: the figures are machine-extracted and reviewed, not yet
-hand-checked by the owner.
+The other 128 rows have an empty `verified_by`: machine-extracted and reviewed, not hand-checked.
