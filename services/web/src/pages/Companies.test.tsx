@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ScreenFilters } from "../companies/screen";
 import { download } from "../download";
 import { entry, NVDA, TESLA, TSLA } from "../fixtures";
+import { ScopeContext, type Scope } from "../scope";
 import { Companies } from "./Companies";
 
 vi.mock("../download", () => ({ download: vi.fn() }));
@@ -46,13 +47,15 @@ afterEach(() => {
   window.location.hash = "";
 });
 
-async function render(screen: ScreenFilters = {}) {
+async function render(screen: ScreenFilters = {}, scope: Scope | null = null) {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
   await act(async () =>
     root.render(
-      <Companies token="t" screen={screen} watched={new Set([TSLA])} onWatch={onWatch} onChart={onChart} />,
+      <ScopeContext.Provider value={scope}>
+        <Companies token="t" screen={screen} watched={new Set([TSLA])} onWatch={onWatch} onChart={onChart} />
+      </ScopeContext.Provider>,
     ),
   );
   await act(async () => {});
@@ -176,4 +179,27 @@ it("shows a skeleton while the screen runs and a retry when it fails", async () 
   await act(async () => panel.querySelector("button")!.click());
   await act(async () => {});
   expect(container.querySelectorAll("table.screen tbody tr")).toHaveLength(2);
+});
+
+it("a demo sandbox screens only its companies, with no 'only mine' box and a demo count", async () => {
+  const scope = { ids: new Set([NVDA]) };
+  vi.mocked(fetch).mockImplementation(async () => Response.json({ ...SCREEN, total: 1, rows: [row(entry())] }));
+  await render({}, scope);
+  expect(calls()[0]!.searchParams.get("access")).toBe("financials");
+  expect(container.textContent).not.toContain("Only companies I can read");
+  expect($(".page > .row .muted")?.textContent).toBe("1 company in your demo");
+  expect($(".card-h .sub")?.textContent).toBe("no filters");
+  expect(container.textContent).not.toContain("metadata only");
+  act(() => root.unmount());
+  await render({ margin: 20, mine: true }, scope);
+  expect(calls().at(-1)!.searchParams.get("access")).toBe("financials");
+  expect($(".page > .row .muted")?.textContent).toBe("1 of the 1 companies in your demo");
+  expect($(".card-h .sub")?.textContent).toBe("operating margin ≥ 20%");
+});
+
+it("a named user keeps the full index and the 'only mine' box", async () => {
+  await render();
+  expect(calls()[0]!.searchParams.get("access")).toBeNull();
+  expect(container.textContent).toContain("Only companies I can read");
+  expect($(".page > .row .muted")?.textContent).toBe("2 companies with financials");
 });

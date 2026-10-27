@@ -24,6 +24,7 @@ import { ErrorPanel, Skeleton } from "../components/States";
 import { navRow, onTableKey } from "../components/tableNav";
 import { download } from "../download";
 import { go, href } from "../route";
+import { useScope } from "../scope";
 import type { Screener } from "../types";
 import type { ColumnSpec } from "../views/model";
 
@@ -48,14 +49,22 @@ type State =
   | { state: "error"; message: string };
 
 /** Companies: the screener over /v1/screener. Filters live in the URL, so a screen can be
- * bookmarked, shared and undone with Back. */
-export function Companies({ token, screen, watched, onWatch, onChart, saveBar, columns = DEFAULT_SPECS, columnPicker }: Props) {
+ * bookmarked, shared and undone with Back. In a demo sandbox (scope.ts) it screens only the
+ * demo's companies (`access=financials`, the API's own filter), so "only companies I can
+ * read" is always on and not offered. */
+export function Companies({ token, screen: asked, watched, onWatch, onChart, saveBar, columns = DEFAULT_SPECS, columnPicker }: Props) {
+  const scope = useScope();
+  // in a sandbox the filters shown never include "mine": it is implied
+  const screen = useMemo(() => (scope ? { ...asked, mine: undefined } : asked), [scope, asked]);
   const [result, setResult] = useState<State>({ state: "loading" });
   const [exporting, setExporting] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const columnKeys = columns.map((c) => c.key).join(",");
-  const params = useMemo(() => screenParams(screen, columnKeys.split(",")), [screen, columnKeys]);
+  const params = useMemo(
+    () => screenParams(scope ? { ...screen, mine: true } : screen, columnKeys.split(",")),
+    [scope, screen, columnKeys],
+  );
   const key = JSON.stringify(params);
 
   useEffect(() => {
@@ -100,7 +109,11 @@ export function Companies({ token, screen, watched, onWatch, onChart, saveBar, c
         <h1 className="grow">Companies</h1>
         {total !== null && (
           <span className="muted">
-            {total.toLocaleString()} {total === 1 ? "company" : "companies"} with financials
+            {scope
+              ? isEmpty(screen)
+                ? `${total} ${total === 1 ? "company" : "companies"} in your demo`
+                : `${total} of the ${scope.ids.size} companies in your demo`
+              : `${total.toLocaleString()} ${total === 1 ? "company" : "companies"} with financials`}
           </span>
         )}
         <button
@@ -117,7 +130,7 @@ export function Companies({ token, screen, watched, onWatch, onChart, saveBar, c
       {note && <p className="empty error">{note}</p>}
 
       <div className="screener">
-        <FilterRail key={JSON.stringify(screen)} screen={screen} set={set} />
+        <FilterRail key={JSON.stringify(screen)} screen={screen} set={set} scoped={scope !== null} />
 
         <section className="card grow">
           <div className="card-h">
@@ -140,8 +153,8 @@ export function Companies({ token, screen, watched, onWatch, onChart, saveBar, c
             <Skeleton lines={8} label="Running the screen" />
           ) : rows.length === 0 ? (
             <p className="empty">
-              No companies match.{" "}
-              {hasValueFilter(screen)
+              {scope ? "None of the companies in your demo match." : "No companies match."}{" "}
+              {hasValueFilter(screen) && !scope
                 ? "Value filters only match companies your plan covers; loosen a filter or clear it."
                 : "Loosen a filter."}
             </p>
@@ -179,7 +192,7 @@ export function Companies({ token, screen, watched, onWatch, onChart, saveBar, c
                 </span>
               </>
             )}
-            {hasValueFilter(screen) &&
+            {hasValueFilter(screen) && !scope &&
               " Value filters and size bands only match companies whose financials you can read."}
           </div>
         </section>
@@ -188,7 +201,12 @@ export function Companies({ token, screen, watched, onWatch, onChart, saveBar, c
   );
 }
 
-function FilterRail({ screen, set }: { screen: ScreenFilters; set: (p: Partial<ScreenFilters>) => void }) {
+function FilterRail({ screen, set, scoped }: {
+  screen: ScreenFilters;
+  set: (p: Partial<ScreenFilters>) => void;
+  /** a demo sandbox: only its companies, so no "Only companies I can read" */
+  scoped: boolean;
+}) {
   // text and number inputs apply on Enter or when they lose focus; selects apply at once
   const [q, setQ] = useState(screen.q ?? "");
   const [industry, setIndustry] = useState(screen.industry ?? "");
@@ -289,11 +307,13 @@ function FilterRail({ screen, set }: { screen: ScreenFilters; set: (p: Partial<S
           ))}
         </select>
       </div>
-      <label className="chk">
-        <input type="checkbox" checked={screen.mine ?? false}
-          onChange={(e) => apply({ mine: e.target.checked || undefined })} />
-        Only companies I can read
-      </label>
+      {!scoped && (
+        <label className="chk">
+          <input type="checkbox" checked={screen.mine ?? false}
+            onChange={(e) => apply({ mine: e.target.checked || undefined })} />
+          Only companies I can read
+        </label>
+      )}
       <button type="submit" className="visually-hidden">Apply</button>
     </form>
   );
