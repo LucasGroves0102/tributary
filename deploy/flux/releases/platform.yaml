@@ -26,6 +26,7 @@ spec:
     kafka:
       sasl:
         enabled: true
+        connect: true
     openfga:
       auth:
         enabled: true
