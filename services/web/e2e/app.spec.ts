@@ -28,6 +28,10 @@ test("screener: filter, sort and watch", async ({ page }) => {
   const rows = page.locator("table.screen tbody tr");
   await expect(rows).toHaveCount(4);
   await expect(rows.first()).toContainText("Microsoft"); // largest revenue first
+  // a demo sandbox screens only its own companies
+  await expect(page.getByText("4 companies in your demo")).toBeVisible();
+  await expect(page.getByText("Only companies I can read")).toHaveCount(0);
+  expect(fake.calls.find((c) => c.includes("/v1/screener?"))).toContain("access=financials");
 
   await page.getByRole("columnheader", { name: /Op mgn/ }).click();
   await expect(page).toHaveURL(/sort=-operating_margin_ttm/);
