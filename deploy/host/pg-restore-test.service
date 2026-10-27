@@ -1,0 +1,18 @@
+[Unit]
+Description=Postgres restore test (latest full backup into scratch databases)
+After=postgresql.service
+
+[Service]
+Type=oneshot
+User=postgres
+Group=postgres
+ExecStart=/usr/local/bin/pg-restore-test
+# A full restore takes hours; past this, systemd stops it and the script drops the scratch
+# databases and records a failure.
+TimeoutStartSec=8h
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+# Only the metrics file is written here; the restore itself is done by the Postgres server.
+ReadWritePaths=-/var/lib/node_exporter/textfile_collector
