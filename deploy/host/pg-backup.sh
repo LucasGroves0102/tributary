@@ -6,7 +6,8 @@
 # them, the tables derived from them, and the crawl/index checkpoints) is dumped as schema only.
 # All of it is rebuilt from the SEC by re-running the crawl, and excluding the whole subtree keeps
 # the restore's foreign keys valid. On FULL_WEEKDAY a full dump goes to $dir/full instead, and the
-# newest FULL_KEEP of those are kept.
+# newest FULL_KEEP of those are kept. Each dump comes with <db>.rowcounts, every table's row
+# count in the dump's own snapshot, which pg-restore-test.sh checks the restore against.
 set -euo pipefail
 cd /
 
@@ -25,6 +26,47 @@ full=false
 [[ "$(date +%u)" == "$full_weekday" ]] && full=true
 if $full; then dir="$dir/full"; fi
 
+# "schema.table rows" for every table, ordered; pg-restore-test.sh runs the same query.
+count_rows="SELECT n.nspname || '.' || c.relname,
+       (xpath('/row/n/text()', query_to_xml(
+           format('SELECT count(*) AS n FROM %I.%I', n.nspname, c.relname),
+           false, true, '')))[1]::text::bigint
+FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE c.relkind = 'r' AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+  AND n.nspname NOT LIKE 'pg_temp%'
+ORDER BY 1"
+
+# Dump one database, and write <db>.rowcounts as of exactly the dumped data: a held
+# REPEATABLE READ transaction exports its snapshot, counts every table in it, and pg_dump
+# --snapshot dumps that same snapshot while the transaction stays open. The session reads its
+# SQL from a FIFO; \g writes results to files, and the last one appearing means the rest are
+# complete.
+dump() {
+    local db=$1 dest=$2 held
+    shift 2
+    local fifo="$dest/.$db.session" snapshot="$dest/.$db.snapshot" ready="$dest/.$db.ready"
+    mkfifo "$fifo"
+    psql -X -q -At -F ' ' -v ON_ERROR_STOP=1 -d "$db" <"$fifo" >/dev/null &
+    local session=$!
+    exec {held}>"$fifo"
+    printf '%s\n' "BEGIN ISOLATION LEVEL REPEATABLE READ, READ ONLY;" \
+        "SELECT pg_export_snapshot() \\g '$snapshot'" \
+        "$count_rows \\g '$dest/$db.rowcounts'" \
+        "SELECT 1 \\g '$ready'" >&"$held"
+    until [[ -e "$ready" ]]; do
+        if ! kill -0 "$session" 2>/dev/null; then
+            echo "$db: snapshot session failed" >&2
+            return 1
+        fi
+        sleep 1
+    done
+    pg_dump --format=custom --snapshot="$(<"$snapshot")" "$@" --file="$dest/$db.dump" "$db"
+    echo "COMMIT;" >&"$held"
+    exec {held}>&-
+    wait "$session"
+    rm -f "$fifo" "$snapshot" "$ready"
+}
+
 umask 077
 out="$dir/$(date -u +%Y%m%dT%H%M%SZ)"
 mkdir -p "$out.partial"
@@ -35,7 +77,7 @@ for db in "${databases[@]}"; do
         for table in "${slim_exclude[@]}"; do args+=(--exclude-table-data="$table"); done
         printf '%s\n' "${slim_exclude[@]}" >"$out.partial/$db.schema-only-tables"
     fi
-    pg_dump --format=custom "${args[@]}" --file="$out.partial/$db.dump" "$db"
+    dump "$db" "$out.partial" "${args[@]}"
     pg_restore --list "$out.partial/$db.dump" >/dev/null
 done
 mv "$out.partial" "$out"
