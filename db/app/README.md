@@ -15,6 +15,7 @@ it directly. [authz-sync](../../services/authz-sync) turns those changes into Op
 | `workspaces`, `workspace_items` (saved charts, comps sets, screens; reports the agent writes, migration 005), `recent_filings` (migration 004; owner-only, forced RLS on `app.user_id`) | no: they grant nothing |
 | `user_views` (per-user layout of Home, the screener and the watchlist; migration 006; owner-only, forced RLS) | no: it grants nothing |
 | `demo_sandboxes` (sandbox user → expiry), `demo_creations` (creation rate limit, HMAC of the client address), `demo_agent_usage` / `demo_agent_daily` (assistant question caps) | no: they grant nothing |
+| `github_accounts` (migration 007: GitHub id → `gh-<id>` user, login, first/last sign-in) | no: identity, not access |
 
 Watchlists are preferences only and never grant access.
 
@@ -26,6 +27,13 @@ Demo sandboxes (migration 003, Query API README): "Try the demo" users are ordin
 `users`, `subscriptions` and `company_grants`, so CDC grants and revokes their access like
 anyone's; the hourly `demo-cleanup` job deletes them when they expire, and the `demo_*` rows
 cascade.
+
+GitHub sign-in (migration 007, Query API README "GitHub sign-in"): the first sign-in writes the
+same `users` / `subscriptions` / `company_grants` / `watchlists` / workspace rows as a sandbox,
+plus `github_accounts`, in one transaction; CDC grants the access. These users have no
+`demo_sandboxes` row, so `demo-cleanup` never deletes them, but their assistant questions count
+in `demo_agent_usage` / `demo_agent_daily` (rows older than 90 days are pruned). No GitHub
+access token or email address is stored; `users.email` is GitHub's no-reply form.
 
 `company_id` values refer to `silver.companies` in the `tributary` database; there is no
 cross-database foreign key. Tests: `tests/integration/test_app_schema.py` (needs

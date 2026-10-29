@@ -1,8 +1,8 @@
-/** Which companies the UI lists. A demo sandbox can read 20 companies and nothing else, so its
- * pages, pickers and suggestions list only those; everyone else (the named demo users, real
- * sign-in later) sees the full public index with "metadata only" rows. This is display only:
- * the Query API's OpenFGA check and RLS decide what anyone can read, and the client never
- * sends a user or a company list for that. */
+/** Which companies the UI lists. A demo sandbox, or a GitHub sign-in (which gets the same 20),
+ * can read 20 companies and nothing else, so its pages, pickers and suggestions list only those;
+ * everyone else (the named demo users) sees the full public index with "metadata only" rows.
+ * This is display only: the Query API's OpenFGA check and RLS decide what anyone can read, and
+ * the client never sends a user or a company list for that. */
 
 import { createContext, useContext } from "react";
 
@@ -20,9 +20,9 @@ export function useScope(): Scope | null {
   return useContext(ScopeContext);
 }
 
-/** The scope for a session: a sandbox's companies, else none. */
+/** The scope for a session: a sandbox's (or GitHub account's) companies, else none. */
 export function scopeOf(session: Session | null): Scope | null {
-  return session?.kind === "sandbox" ? { ids: new Set(session.companies) } : null;
+  return session ? { ids: new Set(session.companies) } : null;
 }
 
 /** Whether a page may list this company (always, without a scope). */

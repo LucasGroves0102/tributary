@@ -10,8 +10,9 @@ in the `platform` namespace; Postgres runs on the host.
 - In the release namespace:
   - Secret `tributary` with keys `database-url`, `app-database-url`, `jwt-secret`,
     `anthropic-api-key`, `sec-user-agent`, `openfga-api-token` when `openfga.auth.enabled`,
-    `sec-limiter-database-url` when `secLimiter.dedicatedLogin` (below), and
-    `kafka-password-<user>` for every Kafka client when `kafka.sasl.enabled` (below).
+    `sec-limiter-database-url` when `secLimiter.dedicatedLogin` (below),
+    `kafka-password-<user>` for every Kafka client when `kafka.sasl.enabled` (below), and
+    optionally `github-client-id` + `github-client-secret` for GitHub sign-in (below).
   - Secret `ghcr` (type `kubernetes.io/dockerconfigjson`) with a token that can read packages.
 
 ## Install
@@ -62,6 +63,7 @@ decides its environment variables, which Secret keys it can read, and its networ
 | `openfga` | `FGA_API_URL`, `FGA_API_TOKEN` when `openfga.auth.enabled` | OpenFGA in `platform` |
 | `sec` | `SEC_USER_AGENT`; `SEC_LIMITER_DATABASE_URL` (main database: `database-url`, or `sec-limiter-database-url` with `secLimiter.dedicatedLogin`) and `SEC_CALLER_CLASS` (`secClass`, default `live` for services, `batch` for jobs) for the shared SEC rate limit | HTTPS to public addresses, host Postgres |
 | `anthropic` | `ANTHROPIC_API_KEY` | HTTPS to public addresses |
+| `github` | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` (`github-client-id` / `github-client-secret`, both `optional: true`), `GITHUB_REDIRECT_URI` (`github.redirectUri`) | HTTPS to public addresses |
 | `jwt` | `QUERY_API_JWT_SECRET` | |
 | `query-api` | `QUERY_API_URL` | |
 | `demo` | `DEMO_USERS` when `demo.enabled`; `DEMO_SANDBOX_*`, `DEMO_AGENT_*` when `demo.sandbox.enabled` | |
@@ -103,6 +105,31 @@ The question counts live in the app database, so they hold across agent-api rest
 agent-api's own `AGENT_RATE_PER_HOUR`, `AGENT_IP_RATE_PER_HOUR` and `AGENT_DAILY_BUDGET_USD`
 (in-process, all users) still apply on top. To change a cap, edit the value in the Flux release
 and let Flux upgrade; to stop demo spend at once, set `demo.sandbox.agent.enabled: false`.
+
+## GitHub sign-in
+
+"Sign in with GitHub" (Query API README, "GitHub sign-in") gives a visitor a permanent account
+with a sandbox's access (plan pro, the same 20 companies) and the same assistant caps
+(`demo.sandbox.agent.*`, which apply to GitHub accounts even with sandboxes off). query-api
+`uses: github`:
+
+- Secret keys `github-client-id` and `github-client-secret` (the OAuth app's client id and a
+  client secret), read with `optional: true`: until both are in the SOPS secret the pod starts
+  without them and the GitHub routes answer 404 (the web app hides the button).
+- `github.redirectUri` → `GITHUB_REDIRECT_URI`, which must equal the OAuth app's
+  "Authorization callback URL" (`https://<host>/api/query/v1/auth/github/callback`). Empty:
+  not sent, and GitHub uses the app's registered URL.
+- Egress: query-api calls only `github.com` (token exchange) and `api.github.com` (`GET /user`)
+  over HTTPS, but a NetworkPolicy can't match hostnames, so `github` gets the same rule as
+  `sec` and `anthropic`: TCP 443 to any public address, private ranges excluded
+  (`allow-internet`). Narrowing it to GitHub's published ranges (api.github.com/meta) would need
+  an IP list kept up to date or an egress proxy.
+
+Owner steps: create a GitHub OAuth app (Settings → Developer settings → OAuth Apps), homepage
+`https://<host>`, callback `https://<host>/api/query/v1/auth/github/callback`, Device Flow off;
+generate a client secret; `sops deploy/secrets/tributary.yaml` and add `github-client-id` and
+`github-client-secret` under `stringData`; commit, and Flux applies it (restart query-api if
+the secret changed after the pod started: env from a Secret is read at start).
 
 ## Kafka authentication
 

@@ -37,7 +37,16 @@ import { go, parse, useRoute } from "./route";
 import { resolveTicker } from "./palette/commands";
 import { useShortcuts } from "./shortcuts";
 import { inScope, ScopeContext, scopeOf } from "./scope";
-import { clearSession, loadSession, pickerEnabled, resetsIn, type Session } from "./session";
+import {
+  clearFragment,
+  clearSession,
+  loadSession,
+  pickerEnabled,
+  readSignedIn,
+  resetsIn,
+  signInError,
+  type Session,
+} from "./session";
 import { load, save } from "./storage";
 import { useReportWriter } from "./reports/useReportWriter";
 import { useTheme } from "./theme";
@@ -55,6 +64,8 @@ const DRAWER_KEY = "tributary.assistant";
 const DRAWER_FITS_PX = 1200;
 
 const SANDBOX_EXPIRED = "Your demo sandbox expired and was reset. Start a new one.";
+const GITHUB_EXPIRED = "Your sign-in expired. Sign in with GitHub again.";
+const expired = (s: Session) => (s.kind === "github" ? GITHUB_EXPIRED : SANDBOX_EXPIRED);
 
 interface Props {
   /** The named demo-user picker (alice, bob, …) instead of "Try the demo". Default: the dev
@@ -71,7 +82,11 @@ export function App(props: Props = {}) {
   const [error, setError] = useState<string | null>(null);
   // "Try the demo": the sandbox signed in, or the front door (with an optional notice)
   const [session, setSession] = useState<Session | null>(null);
-  const [frontDoor, setFrontDoor] = useState<{ notice: string | null } | null>(null);
+  const [frontDoor, setFrontDoor] = useState<{
+    notice: string | null;
+    /** back from GitHub with a token: Welcome finishes signing in */
+    github?: { token: string; expiresIn: number };
+  } | null>(null);
   const [clock, setClock] = useState(() => Date.now());
   // a demo sandbox lists only its own companies everywhere (scope.ts); others see the index
   const scope = useMemo(() => scopeOf(session), [session]);
@@ -165,9 +180,21 @@ export function App(props: Props = {}) {
     setFrontDoor({ notice });
   }, []);
 
-  // resume a sandbox from an earlier visit, else the front door
+  // back from "Sign in with GitHub" (#/signed-in?token=… or ?error=…), else resume a sandbox or
+  // GitHub session from an earlier visit, else the front door
   useEffect(() => {
     if (picker) return;
+    const back = readSignedIn(window.location.hash);
+    if (back) {
+      clearFragment(); // the token leaves the address bar and history at once
+      if ("error" in back) {
+        setFrontDoor({ notice: signInError(back.error) });
+      } else {
+        clearSession();
+        setFrontDoor({ notice: null, github: back });
+      }
+      return;
+    }
     const stored = loadSession();
     if (!stored) {
       setFrontDoor({ notice: null });
@@ -178,7 +205,7 @@ export function App(props: Props = {}) {
       .then((m) => !cancelled && signIn(stored, m))
       .catch((e) => {
         if (cancelled) return;
-        if (e instanceof ApiError && e.status === 401) signOut(SANDBOX_EXPIRED);
+        if (e instanceof ApiError && e.status === 401) signOut(expired(stored));
         else signIn(stored, null);
       });
     return () => {
@@ -193,7 +220,7 @@ export function App(props: Props = {}) {
     return () => window.clearInterval(id);
   }, [session]);
   useEffect(() => {
-    if (session && Date.parse(session.expiresAt) <= clock) signOut(SANDBOX_EXPIRED);
+    if (session && Date.parse(session.expiresAt) <= clock) signOut(expired(session));
   }, [session, clock, signOut]);
 
   // continued before every grant had propagated (or /v1/me failed): refresh until they have
@@ -406,6 +433,7 @@ export function App(props: Props = {}) {
     return (
       <Welcome
         notice={frontDoor.notice}
+        github={frontDoor.github}
         onReady={(s, m) => {
           signIn(s, m);
           go({ view: "home" });
@@ -436,7 +464,10 @@ export function App(props: Props = {}) {
             route={route}
             companyName={companyName}
             users={users}
-            user={session ? "demo sandbox" : user}
+            user={session?.kind === "sandbox" ? "demo sandbox" : user}
+            account={session?.kind === "github" && session.login
+              ? { login: session.login, onSignOut: () => signOut(null) }
+              : undefined}
             busy={assistant.busy}
             theme={theme}
             assistantOpen={showDrawer}
@@ -445,7 +476,7 @@ export function App(props: Props = {}) {
             onTheme={toggleTheme}
             onAssistant={() => (drawerOpen ? setDrawer(false) : focusAssistant())}
           />
-          {session && (
+          {session?.kind === "sandbox" && (
             <div className="sandbox-banner" role="note">
               Demo sandbox: {session.companies.length} companies · resets in{" "}
               {resetsIn(session.expiresAt, clock)}
@@ -579,7 +610,8 @@ export function App(props: Props = {}) {
                 <AssistantPanel variant="page" {...panelProps} />
                 <p className="faint small">
                   The same assistant as the side panel, full width. It answers only from data{" "}
-                  {session ? "your sandbox" : (user ?? "you")} can read, with the filing behind every
+                  {session?.kind === "sandbox" ? "your sandbox" : session ? "your account" : (user ?? "you")} can read,
+                  with the filing behind every
                   number.
                 </p>
               </div>

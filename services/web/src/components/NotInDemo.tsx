@@ -21,7 +21,7 @@ export function NotInDemo({ token, companyId, scope }: { token: string; companyI
       <section className="card card-b not-in-demo" role="status">
         <h1>{name} isn't one of the {demoCount(scope)} in this demo.</h1>
         <p className="muted">
-          The demo sandbox can read {demoCount(scope)}, with their financials and filings.{" "}
+          The demo can read {demoCount(scope)}, with their financials and filings.{" "}
           <a href={href({ view: "companies" })}>See them on the Companies page</a>.
         </p>
       </section>

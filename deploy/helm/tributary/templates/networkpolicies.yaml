@@ -87,7 +87,9 @@ spec:
       ports:
         - {protocol: TCP, port: {{ .Values.openfga.port }}}
 ---
-# HTTPS to the internet (SEC, Anthropic); private networks stay unreachable.
+# HTTPS to the internet (SEC, Anthropic, GitHub); private networks stay unreachable.
+# NetworkPolicy can't match hostnames, so `uses: github` (github.com and api.github.com only,
+# by code) gets the same 443-to-public-addresses rule as `sec` and `anthropic`.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

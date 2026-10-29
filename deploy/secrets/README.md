@@ -7,7 +7,7 @@ and [age](https://github.com/FiloSottile/age). Flux's `secrets` Kustomization
 
 | File | Secret | Namespace | Used by |
 |---|---|---|---|
-| `tributary.yaml` | `tributary` | tributary | the tributary chart (database URLs, JWT secret, Anthropic key, SEC User-Agent, OpenFGA key, Kafka SCRAM passwords) |
+| `tributary.yaml` | `tributary` | tributary | the tributary chart (database URLs, JWT secret, Anthropic key, SEC User-Agent, OpenFGA key, Kafka SCRAM passwords, GitHub OAuth app) |
 | `ghcr-tributary.yaml`, `ghcr-platform.yaml`, `flux-ghcr.yaml` | `ghcr` | tributary, platform, flux-system | pulling images from GHCR; Flux image scanning |
 | `platform.yaml` | `platform` | platform | the platform chart (Postgres password, OpenFGA datastore URI and keys, Kafka SCRAM passwords) |
 | `monitoring-grafana.yaml` | `grafana-admin` | monitoring | Grafana admin login |
@@ -20,6 +20,13 @@ and [age](https://github.com/FiloSottile/age). Flux's `secrets` Kustomization
 Kafka SASL uses `kafka-password-*` keys in `platform.yaml` and `tributary.yaml`; which ones, and
 how they were rolled out, are in the
 [platform chart's README](../helm/platform/README.md#kafka-authentication-saslscram).
+
+GitHub sign-in adds two optional keys to `tributary.yaml`: `github-client-id` and
+`github-client-secret` (a GitHub OAuth app's client id and client secret; query-api reads them
+with `optional: true`, so the release works before they exist, with the sign-in off). Add both,
+in one edit: `sops deploy/secrets/tributary.yaml`. The OAuth app's callback URL is in the
+[tributary chart's README](../helm/tributary/README.md#github-sign-in); query-api's egress to
+GitHub is HTTPS to public addresses (`uses: github`).
 
 The keys each chart expects are listed in its README and `values.yaml`.
 
