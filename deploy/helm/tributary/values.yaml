@@ -7,6 +7,7 @@ image:
 
 # Created outside the chart. Keys: database-url, app-database-url, jwt-secret,
 # anthropic-api-key, sec-user-agent, openfga-api-token when openfga.auth.enabled,
+# github-client-id and github-client-secret (optional: without both, no GitHub sign-in),
 # sec-limiter-database-url when secLimiter.dedicatedLogin, and when kafka.sasl.enabled
 # kafka-password-<user> for each `uses: kafka` service and job (scripts/kafka-passwords.sh).
 secretName: tributary
@@ -69,6 +70,13 @@ demo:
       questionsPerUserPerDay: 10
       questionsPerDay: 200
 
+# "Sign in with GitHub" (query-api, `uses: github`; README, "GitHub sign-in"): a permanent
+# account with the demo sandbox's access. On only once secretName has github-client-id and
+# github-client-secret (an OAuth app's; both optional keys). redirectUri must be the OAuth
+# app's "Authorization callback URL"; empty: GitHub uses the one registered on the app.
+github:
+  redirectUri: https://tributary.lucasgroves.dev/api/query/v1/auth/github/callback
+
 logLevel: INFO
 
 # Prometheus (deploy/helm/monitoring) scrapes /metrics from each service through a PodMonitor:
@@ -94,8 +102,9 @@ resources:
 # tmpSize: size limit of the /tmp emptyDir (default 64Mi; the root filesystem is read-only).
 # databaseUrlKey: secretName key for DATABASE_URL instead of database-url (e.g. a throwaway DB).
 # uses: postgres, app-postgres (APP_DATABASE_URL), kafka, openfga, sec (SEC_USER_AGENT + HTTPS
-# out, and the shared SEC rate limit in host Postgres), anthropic (API key + HTTPS out), jwt,
-# query-api, demo. Each adds the env vars and network access it needs.
+# out, and the shared SEC rate limit in host Postgres), anthropic (API key + HTTPS out), github
+# (GitHub OAuth app keys, optional, + HTTPS out), jwt, query-api, demo. Each adds the env vars
+# and network access it needs.
 # kafkaUser: the Kafka SCRAM user with kafka.sasl.enabled (default: the service/job name).
 # secClass: priority in the shared SEC rate limit (SEC_CALLER_CLASS): live, batch or bulk.
 # Defaults: live for services, batch for jobs. Lower classes leave tokens for higher ones.
@@ -172,7 +181,7 @@ services:
     uses: [kafka, postgres, openfga]
   query-api:
     port: 8000
-    uses: [postgres, app-postgres, openfga, jwt, demo]
+    uses: [postgres, app-postgres, openfga, jwt, demo, github]
     from: [web, agent-api]
     resources:
       requests:

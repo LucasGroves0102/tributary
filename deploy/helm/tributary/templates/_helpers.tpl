@@ -25,6 +25,7 @@ app.kubernetes.io/instance: {{ .root.Release.Name }}
 {{- range .uses }}
 {{- if eq . "sec" }}{{ $_ := set $labels "internet" "true" }}{{ $_ := set $labels "postgres" "true" }}
 {{- else if eq . "anthropic" }}{{ $_ := set $labels "internet" "true" }}
+{{- else if eq . "github" }}{{ $_ := set $labels "internet" "true" }}
 {{- else if eq . "app-postgres" }}{{ $_ := set $labels "postgres" "true" }}
 {{- else if has . (list "postgres" "kafka" "openfga") }}{{ $_ := set $labels . "true" }}
 {{- end }}
@@ -97,6 +98,21 @@ functions (migration 022), and a pod gets database-url only if it also uses post
   value: {{ $.secClass | default $.defaultSecClass | quote }}
 {{- else if eq . "anthropic" }}
 {{ include "tributary.secretEnv" (dict "root" $root "env" "ANTHROPIC_API_KEY" "key" "anthropic-api-key") }}
+{{- else if eq . "github" }}
+{{- /* Sign in with GitHub (query_api/github.py). Optional keys: until the owner adds both to
+the SOPS secret the pod starts without them and the GitHub routes 404. */}}
+{{- range $env, $key := dict "GITHUB_CLIENT_ID" "github-client-id" "GITHUB_CLIENT_SECRET" "github-client-secret" }}
+- name: {{ $env }}
+  valueFrom:
+    secretKeyRef:
+      name: {{ $root.Values.secretName }}
+      key: {{ $key }}
+      optional: true
+{{- end }}
+{{- with $root.Values.github.redirectUri }}
+- name: GITHUB_REDIRECT_URI
+  value: {{ . | quote }}
+{{- end }}
 {{- else if eq . "jwt" }}
 {{ include "tributary.secretEnv" (dict "root" $root "env" "QUERY_API_JWT_SECRET" "key" "jwt-secret") }}
 {{- else if eq . "query-api" }}
