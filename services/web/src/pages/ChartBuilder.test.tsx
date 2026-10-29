@@ -375,3 +375,19 @@ it("keeps chart data in memory: coming back asks the API nothing", async () => {
   expect(evals()).toBe(2);
   expect(container.querySelectorAll(".ch-legend text")).toHaveLength(2);
 });
+
+it("the box next to the title charts a typed company's revenue as a new layer", async () => {
+  await render(emptyChart());
+  const input = container.querySelector<HTMLInputElement>('input[aria-label="Chart a company"]')!;
+  const options = () => [...container.querySelectorAll('[aria-label="Chart a company results"] [role="option"]')].map((o) => o.textContent);
+  await type(input, "nvid");
+  expect(options()).toEqual(["NvidiaNVDA"]);
+  await type(input, "zzz");
+  expect(options()).toEqual([]);
+  await type(input, "NVDA");
+  await key(input, "Enter");
+  for (let i = 0; i < 3; i++) await act(async () => {});
+  expect(input.value).toBe("");
+  expect(latest.layers).toMatchObject([{ kind: "metric", companyId: NVDA, metric: "revenue", transform: "ttm" }]);
+  expect(bodies.some((b) => b.path.endsWith("/evaluate") && b.body.default_company === NVDA)).toBe(true);
+});

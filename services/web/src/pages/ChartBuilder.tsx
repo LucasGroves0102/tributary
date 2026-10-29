@@ -274,7 +274,12 @@ export function ChartBuilder({ token, chart, setChart, saveBar }: Props) {
   return (
     <div className="page">
       <div className="row wrap">
-        <h1 className="grow">Chart builder</h1>
+        <h1>Chart builder</h1>
+        {companies !== null && companies.length > 0 && (
+          <ChartCompanyBox companies={companies} disabled={chart.layers.length >= MAX_LAYERS}
+            onPick={(id) => setChart((s) => addLayer(s, { kind: "metric", companyId: id, metric: "revenue", transform: "ttm", type: "line", axis: "L" }))} />
+        )}
+        <span className="grow" />
         <button className="btn" onClick={exportCsv} disabled={!series.length}
           title="Exact values from the API with each point's source accessions">
           Export CSV
@@ -630,6 +635,50 @@ function LayerEditor({
       {status?.state === "error" && <div className="err" role="alert">{status.message}</div>}
       {status?.state === "ok" && status.data.points.length === 0 && (
         <div className="faint small">No values in this range: try 10y or Max.</div>
+      )}
+    </div>
+  );
+}
+
+/** Next to the title: type a company's name or ticker to chart its revenue as a new layer.
+ * Lists only the companies the chart can read (useChartCompanies). */
+function ChartCompanyBox({ companies, disabled, onPick }: {
+  companies: ChartCompany[];
+  disabled: boolean;
+  onPick: (companyId: string) => void;
+}) {
+  const [q, setQ] = useState("");
+  const text = q.trim().toLowerCase();
+  const shown = text
+    ? companies
+        .filter((c) => c.ticker?.toLowerCase().startsWith(text) || c.name.toLowerCase().includes(text))
+        .sort((a, b) => Number(b.ticker?.toLowerCase() === text) - Number(a.ticker?.toLowerCase() === text))
+        .slice(0, 8)
+    : [];
+  const pick = (c: ChartCompany) => {
+    onPick(c.companyId);
+    setQ("");
+  };
+  return (
+    <div className="co-search chart-co">
+      <input className="field" type="search" aria-label="Chart a company" value={q} maxLength={100}
+        placeholder={disabled ? "Layer limit reached" : "Chart a company, e.g. AMZN"} disabled={disabled}
+        onChange={(e) => setQ(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && shown[0]) pick(shown[0]);
+          if (e.key === "Escape") setQ("");
+        }} />
+      {shown.length > 0 && (
+        <ul className="co-results" role="listbox" aria-label="Chart a company results">
+          {shown.map((c) => (
+            <li key={c.companyId}>
+              <button type="button" role="option" aria-selected={false} onClick={() => pick(c)}>
+                <b>{c.name}</b>
+                {c.ticker && <span className="mono faint">{c.ticker}</span>}
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );

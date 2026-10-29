@@ -3045,3 +3045,9 @@ button.link.num {
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+
+/* chart builder: the company box next to the title */
+.chart-co {
+  width: 260px;
+  margin-left: var(--sp-3);
+}
