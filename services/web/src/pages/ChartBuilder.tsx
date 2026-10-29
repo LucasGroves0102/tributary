@@ -528,6 +528,8 @@ function LayerEditor({
   const metric = metrics.find((m) => m.name === layer.metric);
   const [name, setName] = useState(layer.name ?? "");
   const label = layer.name?.trim() || auto;
+  const companyId = layer.kind === "metric" ? layer.companyId : layer.defaultCompany;
+  const company = companies.find((c) => c.companyId === companyId);
   const companyOptions = companies.map((c) => (
     <option key={c.companyId} value={c.companyId}>
       {c.ticker ? `${c.ticker} · ${c.name}` : c.name}
@@ -546,7 +548,10 @@ function LayerEditor({
         <svg className={`sw c${color}`} width="9" height="9" aria-hidden="true">
           <rect width="9" height="9" rx="2" fill="currentColor" />
         </svg>
-        <b className="grow">{layer.kind === "formula" ? "Formula" : "Metric"}</b>
+        <b className="grow" title={company?.name}>
+          {layer.kind === "formula" ? "Formula" : "Metric"}
+          {company && <span className="faint"> · {company.ticker ?? company.name}</span>}
+        </b>
         <button className="btn sm ghost icon" onClick={() => move(-1)} disabled={index === 0}
           aria-label={`Move ${label} up`} title="Move up">
           ↑
@@ -563,24 +568,24 @@ function LayerEditor({
           ✕
         </button>
       </div>
-      <div className="row">
-        <input className="field grow" value={name} maxLength={MAX_LAYER_NAME} placeholder={auto}
-          aria-label="Layer name (legend)" onChange={(e) => setName(e.target.value)} onBlur={commitName}
-          onKeyDown={(e) => e.key === "Enter" && commitName()} />
-        <select aria-label="Colour" value={color} onChange={(e) => set({ color: Number(e.target.value) })}>
-          {COLOR_NAMES.map((c, i) => (
-            <option key={c} value={i}>{c}</option>
-          ))}
-        </select>
-      </div>
-      {layer.kind === "metric" ? (
-        <div className="row">
-          <select aria-label="Company" value={layer.companyId ?? ""} onChange={(e) => set({ companyId: e.target.value })}>
-            {!companies.some((c) => c.companyId === layer.companyId) && (
-              <option value={layer.companyId ?? ""}>{layer.companyId ?? "Company"}</option>
-            )}
+      <label className="row layer-company">
+        <span className="small">Company</span>
+        {layer.kind === "metric" ? (
+          <select className="grow" aria-label="Company" value={layer.companyId ?? ""} onChange={(e) => set({ companyId: e.target.value })}>
+            {!company && <option value={layer.companyId ?? ""}>{layer.companyId ?? "Choose a company"}</option>}
             {companyOptions}
           </select>
+        ) : (
+          <select className="grow" aria-label="Default company" value={layer.defaultCompany ?? ""}
+            title="The company for metrics written without a ticker; TICKER.metric reads another company"
+            onChange={(e) => set({ defaultCompany: e.target.value || undefined })}>
+            <option value="">None (tickers only)</option>
+            {companyOptions}
+          </select>
+        )}
+      </label>
+      {layer.kind === "metric" ? (
+        <div className="row">
           <select className="grow" aria-label="Metric" value={layer.metric ?? ""} onChange={(e) => set({ metric: e.target.value })}>
             {!metric && <option value={layer.metric ?? ""}>{layer.metric ? metricLabel(layer.metric) : "Metric"}</option>}
             {metrics.map((m) => (
@@ -591,8 +596,18 @@ function LayerEditor({
           </select>
         </div>
       ) : (
-        <FormulaInput token={token} layer={layer} basis={basis} companyOptions={companyOptions} vocab={vocab} set={set} />
+        <FormulaInput token={token} layer={layer} basis={basis} vocab={vocab} set={set} />
       )}
+      <div className="row">
+        <input className="field grow" value={name} maxLength={MAX_LAYER_NAME} placeholder={auto}
+          aria-label="Layer name (legend)" onChange={(e) => setName(e.target.value)} onBlur={commitName}
+          onKeyDown={(e) => e.key === "Enter" && commitName()} />
+        <select aria-label="Colour" value={color} onChange={(e) => set({ color: Number(e.target.value) })}>
+          {COLOR_NAMES.map((c, i) => (
+            <option key={c} value={i}>{c}</option>
+          ))}
+        </select>
+      </div>
       <div className="row">
         <select aria-label="Transform" value={layer.transform} onChange={(e) => set({ transform: e.target.value as Layer["transform"] })}>
           {TRANSFORMS.filter(([v]) => v !== "ps" || hasShares || layer.transform === "ps").map(([v, label]) => (
@@ -632,14 +647,12 @@ function FormulaInput({
   token,
   layer,
   basis,
-  companyOptions,
   vocab,
   set,
 }: {
   token: string;
   layer: Layer;
   basis: "fiscal" | "calendar";
-  companyOptions: ReactNode;
   vocab: Vocabulary;
   set: (patch: Partial<Layer>) => void;
 }) {
@@ -767,14 +780,6 @@ function FormulaInput({
           </ul>
         )}
       </div>
-      <div className="row">
-        <span className="faint small">Default company</span>
-        <select aria-label="Default company" className="grow" value={layer.defaultCompany ?? ""}
-          onChange={(e) => set({ defaultCompany: e.target.value || undefined })}>
-          <option value="">None</option>
-          {companyOptions}
-        </select>
-      </div>
       {check?.ok === false ? (
         check.problems.map((p, i) => (
           <div key={i} className="err">
@@ -788,7 +793,7 @@ function FormulaInput({
       ) : (
         <div className="faint small">
           {check?.ok ? `Valid · ${check.unit}. ` : ""}
-          Metrics by name; TICKER.metric for another company; ttm(), abs(), lags like revenue[-4q];
+          Metrics by name read the company above; TICKER.metric reads another; ttm(), abs(), lags like revenue[-4q];
           + − × ÷ and ( ). Suggestions as you type: Tab completes.
         </div>
       )}

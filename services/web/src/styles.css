@@ -3031,3 +3031,17 @@ button.link.num {
     color: inherit;
   }
 }
+
+/* chart builder: the layer's company, labelled, first in its card */
+.layer-company > span {
+  flex: none;
+  width: 58px;
+  color: var(--text-3);
+}
+
+.layer > .row > b.grow {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
