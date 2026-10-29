@@ -47,4 +47,4 @@ spec:
       section-index:
         suspend: false
     image:
-      tag: main-161-0f6817a937354d3b4a0b267e0d6a134c8bec33d1 # {"$imagepolicy": "flux-system:tributary:tag"}
+      tag: main-162-143d72d92e0da110ab1ae5755fd8650010e4a625 # {"$imagepolicy": "flux-system:tributary:tag"}
