@@ -24,7 +24,7 @@ set -a; . ./.env; set +a; .venv/bin/bronze-loader   # locally
 ```
 
 Config (env): `DATABASE_URL` (required), `KAFKA_BOOTSTRAP_SERVERS` (default `localhost:9092`),
-`BATCH_SIZE` (default 500), `METRICS_PORT`, `LOG_LEVEL`.
+`BATCH_SIZE` (default 500), `METRICS_PORT`, `LOG_LEVEL`, and the Kafka authentication variables of [libs/kafka](../../libs/kafka) (SASL/SCRAM on k3s).
 
 ## Tests
 

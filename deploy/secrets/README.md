@@ -13,13 +13,12 @@ and [age](https://github.com/FiloSottile/age). Flux's `secrets` Kustomization
 | `monitoring-grafana.yaml` | `grafana-admin` | monitoring | Grafana admin login |
 | `monitoring-discord.yaml` | `alertmanager-discord` | monitoring | Alertmanager webhook |
 | `monitoring-postgres.yaml` | `postgres-exporter` | monitoring | postgres-exporter login |
-| `monitoring-kafka-exporter.yaml` | `kafka-exporter-kafka` | monitoring | kafka-exporter's SCRAM login (Kafka SASL) |
+| `monitoring-kafka-exporter.yaml` | `kafka-exporter-kafka` | monitoring | kafka-exporter's SCRAM login (Kafka SASL; `scripts/kafka-passwords.sh`) |
 | `flux-discord.yaml` | `discord-webhook` | flux-system | Flux deploy notifications |
 | `cloudflared.yaml` | `tunnel-token` | cloudflared | Cloudflare Tunnel connector |
-| `monitoring-kafka-exporter.yaml` (not yet created) | `kafka-exporter-kafka` | monitoring | kafka-exporter's Kafka SCRAM login (`scripts/kafka-passwords.sh`) |
 
-Kafka SASL adds `kafka-password-*` keys to `platform.yaml` and `tributary.yaml`; which ones, and
-the order to switch them on, are in the
+Kafka SASL uses `kafka-password-*` keys in `platform.yaml` and `tributary.yaml`; which ones, and
+how they were rolled out, are in the
 [platform chart's README](../helm/platform/README.md#kafka-authentication-saslscram).
 
 The keys each chart expects are listed in its README and `values.yaml`.

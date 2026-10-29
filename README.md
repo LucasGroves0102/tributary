@@ -66,9 +66,9 @@ flowchart LR
 ```
 
 Everything runs on one server ("hermes"): k3s, Helm charts deployed by Flux (GitOps) from this
-repo, secrets encrypted with SOPS/age, Prometheus + Grafana + Loki with alerts, nightly backups
-with a restore check, and a Cloudflare Tunnel in front (Terraform-managed GitOps bootstrap and
-Cloudflare edge). GitHub Actions runs every test and builds the images; Flux deploys them.
+repo, secrets encrypted with SOPS/age, Prometheus + Grafana + Loki with alerts, an outside
+uptime check from GitHub Actions, nightly backups with a restore check, and a Cloudflare Tunnel
+in front (Terraform-managed GitOps bootstrap and Cloudflare edge). GitHub Actions runs every test and builds the images; Flux deploys them.
 
 ## Design decisions
 
@@ -187,10 +187,10 @@ CI replays the recordings.
 | Path | What |
 |---|---|
 | `services/` | One folder per deployable service or job (poller, bronze-loader, company-loader, facts-fetcher, doc-fetcher, parser, parser-rs, authz-sync, query-api, agent, web) |
-| `libs/` | Shared Python packages (`sec`: SEC client with User-Agent and rate limiting; `authz`: OpenFGA client; `telemetry`: JSON logs and Prometheus metrics) |
+| `libs/` | Shared Python packages (`sec`: SEC client with User-Agent and rate limiting; `authz`: OpenFGA client; `kafka`: Kafka client config from the environment, SASL/SCRAM included; `telemetry`: JSON logs and Prometheus metrics) |
 | `db/` | Analytics migrations (`db/migrations`) and the app database (`db/app`) |
 | `streaming/` | Debezium configs and Kafka topic docs |
 | `authz/` | OpenFGA authorization model and its tests (`make authz-test`) |
-| `tests/` | Adversarial, citation, integration and propagation tests |
+| `tests/` | Adversarial, citation, integration, propagation, Kafka ACL and golden 10-K figure tests |
 | `deploy/` | Helm charts (services, platform, monitoring), Flux, SOPS secrets, Terraform, host backup scripts |
 | `benchmarks/` | Python vs Rust parser |

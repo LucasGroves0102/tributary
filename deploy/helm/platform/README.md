@@ -41,7 +41,7 @@ pod, so it is never stored in Kafka.
 
 | | Kind | Port | Reachable from |
 |---|---|---|---|
-| Kafka | StatefulSet, 10Gi volume | 9092 (PLAINTEXT), 9094 (SASL, `kafka.sasl.enabled`) | Tributary pods labelled `tributary.io/kafka`, Connect, kafka-exporter in `monitoring`, `setup-kafka` |
+| Kafka | StatefulSet, 10Gi volume | 9092 (PLAINTEXT, closed by `kafka.plaintextListener: false`), 9094 (SASL, `kafka.sasl.enabled`; on hermes: 9094 only) | Tributary pods labelled `tributary.io/kafka`, Connect, kafka-exporter in `monitoring`, `setup-kafka` |
 | Kafka Connect | Deployment | 8083 | `setup-connector` |
 | OpenFGA | Deployment | 8080 | Tributary pods labelled `tributary.io/openfga`, `setup-openfga` |
 
@@ -52,7 +52,8 @@ capabilities and the `RuntimeDefault` seccomp profile. Everything not listed abo
 ## Kafka authentication (SASL/SCRAM)
 
 Off by default (`kafka.sasl.*`, `kafka.plaintextListener`), so the chart renders exactly as
-before until each phase below is switched on. With it on, every Kafka client logs in as its own
+before until each phase below is switched on. On hermes all three phases are on
+(`deploy/flux/releases/`): only the SASL listener on 9094 is reachable. With it on, every Kafka client logs in as its own
 SCRAM user and may use only its own topics and groups: a second layer behind the NetworkPolicies,
 so a pod that gets Kafka network access (a policy mistake, a compromised service) still can't
 read the CDC topics or forge a grant.
@@ -118,7 +119,7 @@ then `sops deploy/secrets/<file>.yaml`.
 |---|---|---|
 | `deploy/secrets/platform.yaml` | `platform` (platform) | `kafka-password-admin` and `kafka-password-<principal>` for all 11 principals above |
 | `deploy/secrets/tributary.yaml` | `tributary` (tributary) | `kafka-password-` + `poller`, `poller-backfill`, `doc-fetcher-seed`, `bronze-loader`, `doc-fetcher`, `doc-crawler`, `parser`, `parser-backfill`, `authz-sync` |
-| `deploy/secrets/monitoring-kafka-exporter.yaml` (new) | `kafka-exporter-kafka` (monitoring) | `username: kafka-exporter`, `password` |
+| `deploy/secrets/monitoring-kafka-exporter.yaml` | `kafka-exporter-kafka` (monitoring) | `username: kafka-exporter`, `password` |
 
 ### Rollout
 

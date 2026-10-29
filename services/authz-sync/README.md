@@ -16,6 +16,11 @@ arriving before its plan's tiers) and safe to replay.
 It doesn't reconcile until it has caught up to the end of every topic at startup, so a
 restart never briefly revokes access that a later event would restore.
 
+It reconciles as soon as a CDC event arrives: it polls for the first message (waking every
+0.5 s when idle), then lingers 50 ms for the rest of that app transaction's events, and fetches
+with `fetch.wait.max.ms` 100. Revocations reach OpenFGA and `authz.user_access` in 0.11–0.17 s
+in CI ([report](../../tests/propagation/report.md)).
+
 Logs the delay from the app database commit to applied permissions for each change.
 
 Upstream: the [app database](../../db/app) streamed by [Debezium](../../streaming/debezium).
@@ -41,7 +46,7 @@ make propagation-test                             # revoke live and time propaga
 
 Config (env): `DATABASE_URL`, `FGA_API_URL` (both required), `FGA_API_TOKEN` (OpenFGA
 preshared key, when enabled), `KAFKA_BOOTSTRAP_SERVERS` (default `localhost:9092`),
-`METRICS_PORT`, `LOG_LEVEL`.
+`METRICS_PORT`, `LOG_LEVEL`, and the Kafka authentication variables of [libs/kafka](../../libs/kafka) (SASL/SCRAM on k3s).
 
 ## Tests
 

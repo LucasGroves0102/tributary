@@ -52,7 +52,7 @@ live filings. The SEC's `acceptanceDateTime` is labelled UTC but runs ahead of i
 Eastern offset; `accepted_at` stores the corrected time (`tributary_sec.acceptance_time`).
 
 Each run downloads the zip through `libs/sec` to `--download-dir` (default `/tmp`;
-If-Modified-Since the last finished load; a 304 ends the run), then loads at most `--max-ciks`
+If-Modified-Since the last finished load, sent in UTC; a 304 ends the run), then loads at most `--max-ciks`
 CIKs whose content changed (default 500), 100 CIKs per
 transaction, with `bronze.submissions_loads` recording progress per zip snapshot. A rerun skips
 what earlier runs loaded, so the first load is many short runs and a crash loses one batch.

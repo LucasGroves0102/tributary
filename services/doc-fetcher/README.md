@@ -29,7 +29,7 @@ On k3s, `seed-documents` is a suspended CronJob for filling a new database
 (`kubectl -n tributary create job --from=cronjob/seed-documents seed-1`).
 
 Config (env): `SEC_USER_AGENT`, `DATABASE_URL` (both required), `KAFKA_BOOTSTRAP_SERVERS`
-(default `localhost:9092`), `METRICS_PORT`, `LOG_LEVEL`.
+(default `localhost:9092`), `METRICS_PORT`, `LOG_LEVEL`, and the Kafka authentication variables of [libs/kafka](../../libs/kafka) (SASL/SCRAM on k3s).
 SEC requests share one rate limit with every other service (`libs/sec`): `SEC_CALLER_CLASS`
 (`live` for the consumer, `bulk` for the seed job, default `batch`) and
 `SEC_LIMITER_DATABASE_URL` (default `DATABASE_URL`).
@@ -53,11 +53,13 @@ results, Reg FD and other events, where the press releases are; `all` for every 
 
 How it runs:
 
-- **A Deployment, not a CronJob** (`services.doc-crawler`, shipped with `replicas: 0`): the crawl
+- **A Deployment, not a CronJob** (`services.doc-crawler`, shipped with `replicas: 0`; on hermes it
+  and `parser-backfill` run at 1 and stay on after the 5-year crawl): the crawl
   takes days, Kubernetes restarts it after a crash or node reboot, Prometheus scrapes it the whole
   time (CronJobs here aren't scraped), and `Recreate` keeps it to one pod. When the queue is
   empty it idles and re-plans every `CRAWL_PLAN_HOURS` (6), so it keeps fetching new filings of
-  untracked operating companies after the nightly `submissions` load.
+  untracked operating companies after the nightly `submissions` load. The live doc-fetcher only
+  covers tracked companies, so scaling the crawler to 0 stops new documents for everyone else.
 - **Queue and checkpoint** in `ops.doc_crawl_targets`, one row per filing. A round claims
   `CRAWL_BATCH` targets (tracked companies first, then most recent first) with a 30-minute lease,
   fetches them with `CRAWL_WORKERS` threads, and stores each filing's documents together with its

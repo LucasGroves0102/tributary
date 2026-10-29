@@ -31,7 +31,8 @@ make reparse    # parser --reparse-all: re-parse every stored document without K
 Use `make reparse` after changing the parsing rules.
 
 Config (env): `DATABASE_URL` (required), `KAFKA_BOOTSTRAP_SERVERS` (default `localhost:9092`),
-`METRICS_PORT`, `LOG_LEVEL`, `PARSER_TOPIC` / `PARSER_GROUP` (default `documents.fetched` /
+`METRICS_PORT`, `LOG_LEVEL`, the Kafka authentication variables of [libs/kafka](../../libs/kafka)
+(SASL/SCRAM on k3s), `PARSER_TOPIC` / `PARSER_GROUP` (default `documents.fetched` /
 `parser-python`). The chart's `parser-backfill` sets them to `documents.backfill` /
 `parser-backfill` for the [document crawl](../doc-fetcher/README.md#document-crawl), so crawled
 documents are parsed by a separate consumer and never queue ahead of live filings.
@@ -65,7 +66,7 @@ make section-index LIMIT=5000   # parser-index --limit 5000 [--batch 25]
 ```
 
 Config: `DATABASE_URL`, `SECTION_INDEX_LIMIT` (default 5000), `SECTION_INDEX_BATCH` (25). Helm:
-CronJob `section-index` (hourly, ships suspended). Progress: `ops.section_index_status`;
+CronJob `section-index` (hourly; ships suspended, running on hermes since the crawl finished). Progress: `ops.section_index_status`;
 counts per compared section: `ops.section_change_summary`.
 
 Cost on a sample of 78 real filings (10 companies, 12.8 MB of section text): 3 s of
@@ -80,3 +81,7 @@ GIN index grows to ~0.5-0.7x under incremental inserts, so REINDEX it after a bu
 `TEST_DATABASE_URL`. `test_diff.py` runs the diff rules on real NVIDIA sections (fiscal 2026 vs
 2025 10-K; Q2 FY2027 10-Q vs Q1 and vs Q2 FY2026); `test_index_db.py` runs `parser-index` on
 them in Postgres (incremental runs, late priors, re-parses, algorithm bumps).
+`test_rust_service.py` runs both parser services on the same stored documents and expects
+identical rows (`PARSER_RS_BIN`, `TEST_DATABASE_URL`); `test_rust_tls.py` checks that the Rust
+parser connects or fails for every `sslmode` exactly where libpq does, against a TLS-only server
+(CI).

@@ -106,7 +106,7 @@ make segments-rebuild                              # facts-fetcher-segments --re
 ```
 
 On k3s: `financials` CronJob nightly (04:00 New York) and `financials-bulk` (05:00, 12 rounds
-of 500 with 10 minute pauses; ships suspended); `segments` hourly at :20 (ships suspended;
+of 500 with 10 minute pauses; ships suspended); `segments` hourly at :20 (ships suspended, running on hermes;
 1 Gi memory limit, no SEC access).
 
 Config (env): `DATABASE_URL`, `SEC_USER_AGENT` (both required; the bulk job needs no
@@ -122,5 +122,8 @@ full 10-K/10-Q (the parser's fixtures) and trimmed Apple, Coca-Cola and PepsiCo 
 `tests/fixtures/ixbrl/` (made with `tests/trim_ixbrl.py`, which streams a filing and keeps only
 the segment metric facts and their contexts); `test_segments_db.py` (loader, renames, Q4, TTM,
 quality check, rebuild) with `TEST_DATABASE_URL`. Also the full bronze → silver → gold path against trimmed real
-companyfacts payloads in `tests/fixtures/`, and the bulk loader on small zips. Database tests
+companyfacts payloads in `tests/fixtures/` (`test_pipeline.py`; shared `conn` / `loaded`
+fixtures in `conftest.py`), and the bulk loader on small zips. `test_golden_10k.py` checks gold
+against 149 figures printed in five companies' 10-Ks, loading their companyfacts from
+`tests/fixtures/golden/` ([tests/golden](../../tests/golden/README.md)). Database tests
 need `TEST_DATABASE_URL`.

@@ -37,12 +37,17 @@ kubectl -n tributary create job --from=cronjob/seed-documents seed-documents-1
 ```
 
 `financials-bulk` (every filer's XBRL facts) and `submissions` (every filer's filing history)
-also ship suspended; their comments in `values.yaml` describe the first run.
+also ship suspended; their comments in `values.yaml` describe the first run. So do `segments`
+and `section-index`, which read the crawled documents; on hermes both run hourly
+(`suspend: false` in the Flux release) since the crawl finished.
 
 The document crawl (`doc-crawler` + `parser-backfill`, see
 [doc-fetcher](../../../services/doc-fetcher/README.md#document-crawl)) ships with `replicas: 0`
 (a service's `replicas` defaults to 1). Start it by setting both to 1 under `values.services` in
 `deploy/flux/releases/tributary.yaml`; `kubectl scale` would be undone by the next Helm upgrade.
+On hermes both run at 1 and stay on after the backfill: the crawler re-plans every
+`CRAWL_PLAN_HOURS` and is what fetches new filings of untracked companies, which doc-fetcher
+doesn't cover.
 
 ## Components
 
@@ -101,7 +106,7 @@ and let Flux upgrade; to stop demo spend at once, set `demo.sandbox.agent.enable
 
 ## Kafka authentication
 
-`kafka.sasl.enabled` (default false) is phase B of the Kafka SASL/SCRAM rollout, described with
+`kafka.sasl.enabled` (default false; on in hermes' Flux release) is phase B of the Kafka SASL/SCRAM rollout, described with
 its secrets, order and rollback in the
 [platform chart's README](../platform/README.md#kafka-authentication-saslscram). On, every
 `uses: kafka` pod connects to `kafka.sasl.bootstrap` (port 9094) over SASL_PLAINTEXT with

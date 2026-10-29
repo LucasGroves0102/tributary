@@ -53,6 +53,18 @@ PUBLIC), no table access. The login is created on the host
 `023_data_notes.sql` adds the `restatement` check (severity `info`) to `ops.check_financials` and
 `ops.quality_summary`, and lets the Query API read `ops.quality_findings` / `ops.quality_companies`
 (USAGE on `ops`, RLS `granted_financials`) for the product's data notes.
+`024_gold_ignores_proxy_statements.sql` (found by the [golden 10-K figures](../tests/golden/README.md)):
+`gold.refresh_quarterly_financials` skips facts from proxy and information statements (forms
+starting DEF or PRE; silver keeps them), and adds Costco's 10-Q pre-tax tag
+(`IncomeLossAttributableToParent`, third `pretax_income` tag). Existing data changes on
+`make financials-rebuild`.
+`025_filing_sections_company_pushdown.sql` puts `company_id` first in `gold.filing_sections`'
+DISTINCT ON key (same rows), so a company filter reaches the base tables' indexes instead of
+de-duplicating every section first.
+`026_feed_status.sql` adds `ops.feed_status()`: when the newest filing was accepted by EDGAR and
+when it reached bronze, two timestamps and nothing else. It is SECURITY DEFINER (query_api still
+can't read `bronze.filings`) and backs the Query API's public `/v1/status`, which the
+[outside uptime check](../deploy/uptime/README.md) reads.
 
 ## Migrations
 

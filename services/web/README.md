@@ -93,7 +93,10 @@ columns dropped, missing ones default) and grant nothing: values are still read 
 permission-checked routes, masked for ungranted companies. Without the app database the defaults
 show and the controls are hidden.
 
-Chart builder (`src/chart/`): layers can be renamed (legend), recoloured (colours stay with a
+Chart builder (`src/chart/`): a "Chart a company" box next to the title lists the companies the
+chart can read (by name or ticker) and adds the picked one's revenue (TTM) as a new line layer.
+Each layer card starts with a labelled Company row (full width) and its header shows the
+ticker. Layers can be renamed (legend), recoloured (colours stay with a
 layer when it moves), moved up or down, hidden; types line, bar, area, stacked bar and stacked
 area (layers of the same stacked type and axis stack, negatives downward); transforms quarterly,
 TTM, YoY, QoQ, indexed and per share (`ttm(f) / weighted_shares_diluted` in the quarter view,

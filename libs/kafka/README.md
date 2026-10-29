@@ -13,7 +13,7 @@ authentication from the environment, plus the client's own settings (`group.id`,
 | `KAFKA_SASL_USERNAME`, `KAFKA_SASL_PASSWORD` | | required with SASL, rejected without it |
 | `KAFKA_SSL_CA_LOCATION` | system store | `SASL_SSL` only |
 
-The Helm chart's `uses: kafka` sets them (per-client SCRAM user when `kafka.sasl.enabled`; see
+The Helm chart's `uses: kafka` sets them (per-client SCRAM user when `kafka.sasl.enabled`, as on hermes; see
 [deploy/helm/tributary](../../deploy/helm/tributary/README.md)). The Rust parser reads the same
 variables. Local runs (`make up`, PLAINTEXT) need none of them.
 

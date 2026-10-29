@@ -27,7 +27,7 @@ a parser stops only the backfill one. Both parsers write the same rows and are i
 accession, so an event published twice (the crawl republishes unconfirmed ones) is harmless.
 
 Each producer and consumer above is a Kafka principal with ACLs for exactly these topics and its
-group once Kafka SASL is on (`deploy/helm/platform/files/kafka-acls.yaml`: `poller`,
+group (Kafka SASL is on in production; `deploy/helm/platform/files/kafka-acls.yaml`: `poller`,
 `poller-backfill`, `doc-fetcher-seed`, `bronze-loader`, `doc-fetcher`, `doc-crawler`, `parser`,
 `parser-backfill`). A new producer or consumer of a topic needs its ACL there in the same change.
 

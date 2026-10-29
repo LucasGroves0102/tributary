@@ -17,6 +17,7 @@ request parameters. Dev tokens: `make token USER=alice`.
 | Route | Needs | Returns |
 |---|---|---|
 | `GET /health` | | `{"status": "ok"}` |
+| `GET /v1/status` | | pipeline freshness for outside uptime checks: `last_accepted_at` (EDGAR acceptance of the newest filing) and `last_ingested_at`, from `ops.feed_status()` (migration 026); no filing or company |
 | `GET /v1/demo/users` | `DEMO_USERS` set | demo accounts (404 when disabled) |
 | `POST /v1/demo/token` | `DEMO_USERS` set | an 8-hour token for a demo account (never a sandbox user) |
 | `GET /v1/demo/sandbox` | `DEMO_SANDBOX_ENABLED` | what "Try the demo" creates: lifetime, plan, tickers, assistant allowance ([Demo sandboxes](#demo-sandboxes)) |
@@ -75,7 +76,9 @@ company_id of metrics written without a ticker.
   fiscal quarter; otherwise (basis `calendar`, or several companies) the calendar quarter of
   migration 014's rule, using `calendar_primary` rows. A lag of n moves an input's rows n keys
   later. A point exists where the expression is not NULL: a missing input or a division by zero
-  is a gap. `view` picks quarter or TTM inputs; `ttm(...)` forces TTM inside it.
+  is a gap. `view` picks quarter or TTM inputs; `ttm(...)` forces TTM inside it. The rows are
+  also filtered on the input companies' ids as a bound array: `gold.financials` is a UNION
+  view, and a company filter that arrives only through a join can't reach its indexes.
 - **Errors**: `{"code", "message", "pos", "length", "hint"}`. `validate` returns them with
   200 and `valid: false`; `evaluate` returns 422 (formula) or 403 (company) with
   `{"detail": {"errors": [...]}}`.
@@ -331,6 +334,7 @@ from `readable()` (financials) and passes them into the SQL; RLS (`granted_finan
 - `companyfacts_behind`: 10-K/10-Q filings in the public index (`silver.filings`), filed on or
   after the latest filing in the company's gold rows and within the last 120 days
   (`store.BEHIND_DAYS`; companyfacts lags by days, not months), that no XBRL fact cites yet.
+  The companies' CIKs are looked up first and `silver.filings` is filtered on that array.
 - Every note has `date` (restating or missing filing, else the period end; newest first) and
   `filings` (`role`, accession, form, filed, EDGAR `filing_url` from the public index). The
   plain-language wording is the web app's (`services/web/src/company/notes.ts`).
