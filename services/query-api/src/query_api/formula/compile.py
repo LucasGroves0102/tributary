@@ -9,7 +9,8 @@ over calendar_primary rows only. If two rows of an input share a key, the latest
 A lag of n quarters moves an input's rows to key + n. A point exists for each key where the
 expression is not NULL: a missing input or a division by zero (NULLIF) gives no point.
 The SQL text is built only from fixed fragments and input indexes; companies, metrics, spans,
-lags, constants and dates are all bind parameters.
+lags, constants and dates are all bind parameters. The keyed rows also filter on the input
+companies as a literal array so the filter reaches gold.financials' base tables.
 """
 
 from dataclasses import dataclass
@@ -62,7 +63,7 @@ keyed AS (
                                     THEN f.fiscal_year * 4 + f.fiscal_quarter - 1
                                     ELSE f.calendar_year * 4 + f.calendar_quarter - 1
                                END AS k) key
-    WHERE %s OR f.calendar_primary
+    WHERE f.company_id = ANY(%s::text[]) AND (%s OR f.calendar_primary)
     ORDER BY l.i, k, f.period_end DESC
 ),
 points AS (
@@ -86,7 +87,11 @@ WHERE value IS NOT NULL
   AND (%s::date IS NULL OR period_end <= %s::date)
 ORDER BY k
 """
-    params += [fiscal, fiscal, *expr_params, start, start, end, end]
+    # The company filter repeats input's ids as a literal array: gold.financials is a UNION
+    # view, and a filter that arrives only through the join can't reach its indexes (12 s →
+    # 0.02 s for one company on hermes).
+    ids = sorted({companies[inp.ticker] for inp in a.inputs})
+    params += [fiscal, ids, fiscal, *expr_params, start, start, end, end]
     return Compiled(sql, params, align)
 
 

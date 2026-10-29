@@ -188,7 +188,15 @@ def test_alignment_rule(basis, companies, expected):
     assert compile_formula(ast, analyze(ast), companies, basis).alignment == expected
     fiscal = expected == "fiscal"
     c = compile_formula(ast, analyze(ast), companies, basis)
-    assert c.params[10:12] == [fiscal, fiscal]
+    assert c.params[10:13] == [fiscal, sorted(set(companies.values())), fiscal]
+
+
+def test_companies_filter_is_a_bound_array():
+    # Repeated as a literal array so the filter reaches gold.financials' base tables.
+    ast = parse("(KO.revenue + PEP.revenue) / revenue")
+    c = compile_formula(ast, analyze(ast), {None: "1", "KO": "2", "PEP": "2"}, "calendar")
+    assert "f.company_id = ANY(%s::text[])" in c.sql
+    assert ["1", "2"] in c.params
 
 
 def test_date_range_is_bound():
