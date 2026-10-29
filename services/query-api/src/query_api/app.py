@@ -164,6 +164,12 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
     def health() -> dict:
         return {"status": "ok"}
 
+    @app.get("/v1/status")
+    def status() -> dict:
+        """Public pipeline status for outside uptime checks: when the newest filing was
+        accepted by EDGAR and when it was ingested. Two timestamps, no filing or company."""
+        return {"status": "ok", "as_of": _now(), **store.feed_status()}
+
     @app.get("/v1/demo/users")
     def demo_user_list() -> dict:
         if not demo_users:

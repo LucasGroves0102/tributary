@@ -240,6 +240,13 @@ class Store:
                 """, (company_id, view, metrics, basis, quarters))
             return cur.fetchall()
 
+    def feed_status(self) -> dict:
+        """When the newest filing was accepted by EDGAR and reached bronze (ops.feed_status,
+        migration 026): public, no user."""
+        with self._session("") as cur:
+            cur.execute("SELECT * FROM ops.feed_status()")
+            return cur.fetchone() or {"last_accepted_at": None, "last_ingested_at": None}
+
     def segment_metric_names(self) -> list[str]:
         """silver.segment_metrics, by name."""
         with self._session("") as cur:

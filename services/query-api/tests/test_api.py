@@ -54,6 +54,10 @@ class FakeStore:
     def segment_metric_names(self):
         return ["operating_income", "revenue"]
 
+    def feed_status(self):
+        return {"last_accepted_at": "2026-10-28T21:12:49Z",
+                "last_ingested_at": "2026-10-28T21:13:20Z"}
+
     def segments(self, user_id, company_id, axis, metric, periods, view, basis):
         self.calls.append(("segments", user_id, company_id))
         self.segments_args = (axis, metric, periods, view, basis)
@@ -299,3 +303,10 @@ def test_segments_denied_or_invalid_never_reach_the_database(client, token):
         assert client.get(f"/v1/companies/{NVDA}/segments?{query}",
                           headers=token("alice")).status_code == 422
     assert client.store.calls == []
+
+
+def test_status_is_public_and_only_timestamps(client):
+    r = client.get("/v1/status")  # no token: outside uptime checks call it
+    assert r.status_code == 200
+    assert set(r.json()) == {"status", "as_of", "last_accepted_at", "last_ingested_at"}
+    assert r.json()["last_accepted_at"] == "2026-10-28T21:12:49Z"

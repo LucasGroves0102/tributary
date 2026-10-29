@@ -291,3 +291,16 @@ def test_filings_meta_reads_the_public_index_as_query_api(conn):
     meta = Store(OneConnection(conn)).filings_meta("t-nobody", [f"{C}-00-000001", "nope"])
     assert meta == {f"{C}-00-000001": {"form": "10-Q", "filed": date(2025, 4, 30),
                                        "period_end": date(2025, 3, 31)}}
+
+
+def test_feed_status_runs_as_query_api_without_bronze_access(conn):
+    conn.execute("INSERT INTO bronze.filings (accession_no, cik, form_type, filed_at, payload,"
+                 " kafka_partition, kafka_offset) VALUES ('9100000001-26-000001', %s, '8-K',"
+                 " '2999-01-01T15:00:00Z', '{}', 0, 0)", (C,))
+    rows = as_query_api(conn, "SELECT last_accepted_at::date::text FROM ops.feed_status()")
+    assert rows == [("2999-01-01",)]
+    r = client(conn).get("/v1/status")
+    assert r.status_code == 200 and r.json()["last_accepted_at"].startswith("2999-01-01")
+    with pytest.raises(psycopg.errors.InsufficientPrivilege):
+        with conn.transaction():
+            as_query_api(conn, "SELECT 1 FROM bronze.filings LIMIT 1")
