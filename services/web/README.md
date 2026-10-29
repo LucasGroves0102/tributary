@@ -35,10 +35,22 @@ anyway"), and lands on Home. The session is kept in localStorage until the sandb
 a banner shows "Demo sandbox: 20 companies · resets in Xh", and an expired or rejected token
 returns to the front door. The named demo users (alice, bob, carol, dave: `/v1/demo/users`,
 `/v1/demo/token`) are behind a dev flag: build with `VITE_DEMO_PICKER=1`, or run
-`localStorage.setItem("tributary.picker", "1")` in the browser and reload. Real sign-in (OAuth)
-will be another way to produce the same `Session`.
+`localStorage.setItem("tributary.picker", "1")` in the browser and reload.
 
-A sandbox lists only its own 20 companies (`src/scope.ts`, a React context set from the
+"Sign in with GitHub" sits next to "Try the demo" when `GET /v1/auth/providers` says
+`{"github": true}`. It is a plain link to `/api/query/v1/auth/github/start` (a full-page
+navigation, not a fetch; the Query API does the OAuth flow, see its README). GitHub's callback
+lands on `#/signed-in?token=…&expires_in=…` (or `?error=<code>`, shown as a plain sentence:
+`session.ts` `signInError`). The app reads the token from the fragment (`readSignedIn`; the
+token still comes only from the API), drops the fragment from the address bar and history
+(`history.replaceState`), reads `/v1/me` (its `github` block: login and the demo's company
+ids), stores a `kind: "github"` `Session` the same way as a sandbox's, shows the same
+propagation progress for a new account, and lands on Home. The top bar shows "Signed in as
+<login>" with "Sign out", which forgets the token (the JWT is stateless and lasts 7 days; an
+expired one returns to the front door with "Your sign-in expired"). A GitHub account is not a
+sandbox: no "resets in" banner, but it has the same 20 companies, so the scope below applies.
+
+A sandbox (or a GitHub sign-in) lists only its own 20 companies (`src/scope.ts`, a React context set from the
 session; display only, the API's OpenFGA check and RLS stay the boundary). Companies screens
 with `access=financials`, without the "Only companies I can read" box, and counts "N companies
 in your demo"; the palette (and so the watchlist's "+ Add"), Compare's target/peer pickers and the palette's `compare`/`chart`

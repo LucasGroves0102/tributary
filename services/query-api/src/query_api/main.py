@@ -2,12 +2,14 @@
 
 import os
 
+import httpx
 import uvicorn
 from psycopg_pool import ConnectionPool
 
 from query_api.app import create_app
 from query_api.auth import check_secret
 from query_api.authorizer import FgaAuthorizer
+from query_api.github import AppAccounts, GitHubConfig, HttpGitHub
 from query_api.sandbox import AppSandboxes, SandboxConfig
 from query_api.store import Store
 from query_api.views import AppViews
@@ -24,6 +26,9 @@ def build_app():
     sandbox_config = SandboxConfig.from_env()
     if sandbox_config.enabled and app_pool is None:
         raise RuntimeError("DEMO_SANDBOX_ENABLED needs APP_DATABASE_URL")
+    github_config = GitHubConfig.from_env(os.environ)  # None unless both GITHUB_CLIENT_* set
+    if github_config and app_pool is None:
+        raise RuntimeError("GITHUB_CLIENT_ID needs APP_DATABASE_URL")
     return create_app(
         authorizer=FgaAuthorizer(FgaClient.from_env()),
         store=Store(pool),
@@ -34,6 +39,10 @@ def build_app():
         sandbox_config=sandbox_config,
         workspaces=AppWorkspaces(app_pool) if app_pool else None,
         views=AppViews(app_pool) if app_pool else None,
+        github_config=github_config,
+        github=HttpGitHub(github_config, httpx.Client(
+            timeout=10, headers={"User-Agent": "Tributary"})) if github_config else None,
+        github_accounts=AppAccounts(app_pool) if github_config and app_pool else None,
     )
 
 

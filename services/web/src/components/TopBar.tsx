@@ -10,6 +10,8 @@ interface Props {
   theme: Theme;
   assistantOpen: boolean;
   onUser: (u: string) => void;
+  /** A GitHub sign-in: shown by login, with Sign out (which forgets the token). */
+  account?: { login: string; onSignOut: () => void };
   onSearch: () => void;
   onTheme: () => void;
   onAssistant: () => void;
@@ -35,7 +37,14 @@ export function TopBar(props: Props) {
         <kbd>Ctrl K</kbd>
       </button>
       <span className="grow" />
-      {users.length > 0 ? (
+      {props.account ? (
+        <span className="who">
+          <span className="faint">Signed in as</span> {props.account.login}
+          <button className="btn ghost sm" onClick={props.account.onSignOut}>
+            Sign out
+          </button>
+        </span>
+      ) : users.length > 0 ? (
         <label className="who">
           <span className="faint">Signed in as</span>
           <select

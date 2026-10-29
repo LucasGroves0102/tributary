@@ -151,7 +151,8 @@ ratios, filings, peers), a chart builder with formula layers, comps tables, a fi
 with "what changed" diffs, and full-text search. The assistant sits on every screen, sees what
 you're looking at, and can build charts, screens and comps for you, with Undo. Model output is
 sanitized and served under a strict Content-Security-Policy. `make web` runs the dev server on
-:5173.
+:5173. Besides *Try the demo*, you can *Sign in with GitHub* (no scopes, public profile only) for
+a permanent account with the same 20 companies that keeps your saved work.
 
 ### Agent
 

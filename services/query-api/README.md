@@ -22,8 +22,11 @@ request parameters. Dev tokens: `make token USER=alice`.
 | `POST /v1/demo/token` | `DEMO_USERS` set | an 8-hour token for a demo account (never a sandbox user) |
 | `GET /v1/demo/sandbox` | `DEMO_SANDBOX_ENABLED` | what "Try the demo" creates: lifetime, plan, tickers, assistant allowance ([Demo sandboxes](#demo-sandboxes)) |
 | `POST /v1/demo/sandbox` | `DEMO_SANDBOX_ENABLED` | 201: a new temporary user and its token (expires with the sandbox); 429 when the per-IP or live-sandbox cap is hit. Takes no input |
-| `POST /v1/demo/agent-quota` | token | agent-api only (nginx hides it): takes one assistant question (or `{"questions": n}`, 1-5, all or none: a report counts as 3) from a sandbox's daily caps; 429 with the message to show; `{"demo": false}` for other users |
-| `GET /v1/me` | token | companies the caller can read, with tiers; `sandbox` (expiry, plan, assistant allowance) for a demo sandbox user |
+| `POST /v1/demo/agent-quota` | token | agent-api only (nginx hides it): takes one assistant question (or `{"questions": n}`, 1-5, all or none: a report counts as 3) from a sandbox's or GitHub account's daily caps; 429 with the message to show; `{"demo": false}` for other users |
+| `GET /v1/auth/providers` | | `{"github": true\|false}`: which sign-in buttons the web app shows |
+| `GET /v1/auth/github/start` | `GITHUB_CLIENT_ID` + `GITHUB_CLIENT_SECRET` | 302 to GitHub's authorize page (no scopes) with a signed `state`, and the state's nonce in a short-lived cookie (404 when not configured; [GitHub sign-in](#github-sign-in)) |
+| `GET /v1/auth/github/callback?code=&state=` | `GITHUB_CLIENT_ID` + `GITHUB_CLIENT_SECRET` | GitHub's redirect back: 302 to `/#/signed-in?token=…&expires_in=…` (a 7-day JWT, in the URL fragment), or `/#/signed-in?error=<code>` |
+| `GET /v1/me` | token | companies the caller can read, with tiers; `sandbox` (expiry, plan, assistant allowance) for a demo sandbox user; `github` (login, plan, the demo's company ids, assistant allowance) for a GitHub sign-in |
 | `GET /v1/companies/search?q=&access=` | token | candidates (public identity) + caller's access; `access=financials`: only companies you can read |
 | `GET /v1/metrics` | | metric names served by `financials`: `silver.metrics` and `gold.derived_metrics`, read once |
 | `GET /v1/companies/{id}/financials?metrics=&quarters=&view=&basis=&format=` | financials | values + citation + freshness; `format=csv`: one row per value with its source filing |
@@ -255,7 +258,8 @@ Config (env): `DATABASE_URL`, `FGA_API_URL`, `QUERY_API_JWT_SECRET` (all require
 must be at least 32 bytes), `APP_DATABASE_URL` (the app database, for watchlists and workspaces;
 unset makes those routes answer 503), `FGA_API_TOKEN` (OpenFGA preshared key, when enabled),
 `DEMO_USERS` (comma-separated accounts allowed to sign in without a password; unset disables
-the demo routes), the demo sandbox settings below, `PORT` (default 8000), `LOG_LEVEL`.
+the demo routes), the demo sandbox settings below, `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` /
+`GITHUB_REDIRECT_URI` ([GitHub sign-in](#github-sign-in)), `PORT` (default 8000), `LOG_LEVEL`.
 
 ## Demo sandboxes
 
@@ -286,6 +290,56 @@ deletion, and their watchlist and usage rows cascade.
 Creation runs under a transaction-level advisory lock so the caps can't be raced. In the Helm
 chart these come from `demo.sandbox` in values.yaml (chart README, "Demo sandboxes").
 
+## GitHub sign-in
+
+"Sign in with GitHub" (`github.py`, app migration 007) gives a visitor a permanent account with
+the same access as a demo sandbox. Off unless both `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET`
+(a GitHub OAuth app's) are set: then `/v1/auth/providers` says `{"github": true}` and the two
+routes below exist; otherwise they 404. It needs `APP_DATABASE_URL`.
+
+1. `GET /v1/auth/github/start` redirects to `https://github.com/login/oauth/authorize` with the
+   client id, `GITHUB_REDIRECT_URI` (if set; else GitHub uses the app's registered callback),
+   an empty `scope` and a `state` = `nonce.expiry.HMAC-SHA256` (key derived from
+   `QUERY_API_JWT_SECRET`, 10 minutes). It sets the nonce in a cookie `tributary_gh_nonce`:
+   HttpOnly, Secure, SameSite=Lax, `Path=/api/query/v1/auth/`, 10 minutes.
+2. `GET /v1/auth/github/callback` checks the state's signature and expiry and that its nonce
+   equals the cookie's (so a state only works in the browser that started it: no login CSRF,
+   no replay elsewhere), and clears the cookie. It POSTs the code to
+   `https://github.com/login/oauth/access_token` with the client secret (server-side), GETs
+   `https://api.github.com/user` once with the access token, and discards the token. Then it
+   finds or creates the user and mints the app's ordinary JWT (`sub` = `gh-<GitHub id>`, 7 days),
+   and redirects to `/#/signed-in?token=…&expires_in=604800`. The token is in the URL fragment,
+   which browsers never send to a server, so it isn't in any access log; the web app moves it
+   to its session storage and clears the address bar. Every failure redirects to
+   `/#/signed-in?error=<code>` with no detail: `state` (bad, expired or from another browser),
+   `denied` (consent refused), `github` (GitHub refused the code or didn't answer),
+   `unavailable` (app database down, or no demo company resolves).
+
+A first sign-in writes, in ONE app-DB transaction, `users` (`user_id` `gh-<id>`, `email`
+GitHub's no-reply form `<id>+<login>@users.noreply.github.com`), `github_accounts` (id, login,
+first and last sign-in) and exactly what a sandbox gets (`sandbox.grant_demo_access`): plan pro,
+`company_grants` on the 20 `DEMO_TICKERS`, the `DEMO_WATCHLIST` and the starter workspace. The
+Query API writes no tuples: CDC → authz-sync grants the access, and the web app shows the same
+propagation progress as for a sandbox. A returning sign-in changes no access and keeps the
+user's workspaces and watchlist; only `github_accounts.login` and `last_sign_in_at` are
+updated. The account never expires: there is no `demo_sandboxes` row, so `demo-cleanup`
+never deletes it. Its assistant questions count against the same caps as a sandbox's
+(`DEMO_AGENT_QUESTIONS_PER_USER_PER_DAY` per account, and the shared
+`DEMO_AGENT_QUESTIONS_PER_DAY`), even with `DEMO_SANDBOX_ENABLED` off. `/v1/demo/token` never
+mints a `gh-` user's token.
+
+Privacy: no OAuth scopes are requested, so GitHub shares only the public profile; the API keeps
+the numeric id and login, never an email address, name or the access token (stored nowhere,
+never logged). The app's JWT is stateless: "Sign out" in the web app forgets it, and it expires
+after 7 days.
+
+| Env | |
+|---|---|
+| `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | the OAuth app's; both, or sign-in is off |
+| `GITHUB_REDIRECT_URI` | the OAuth app's "Authorization callback URL", e.g. `https://<host>/api/query/v1/auth/github/callback` |
+
+Outbound: only `github.com` and `api.github.com` over HTTPS (Helm `uses: github`).
+
 ## Tests
 
 `pytest services/query-api` (install with `pip install -e 'services/query-api[test]'`).
@@ -294,6 +348,10 @@ covers the formula grammar, checks and compiled SQL; `test_formula_db.py` evalua
 over real gold rows (PepsiCo, Coca-Cola, Apple) with both permission layers (needs
 `TEST_DATABASE_URL`); `test_screener.py` and `test_ui_api.py` cover the UI routes with fakes
 (including stores that return values for every company, to prove layer 1 nulls them);
+`test_github.py` covers GitHub sign-in with a fake GitHub (state tampering, expiry, the
+cookie nonce, error redirects, the fragment token, the caps) and `HttpGitHub` over
+GitHub-shaped responses (never GitHub itself); `test_github_db.py` runs it on the real app
+schema (`APP_TEST_DATABASE_URL`);
 `test_ui_db.py` runs expected dates, recaps, flags and peers on real Postgres and
 `test_watchlist_db.py` the app-database watchlist (`APP_TEST_DATABASE_URL`); `test_rls.py` wires the API to an authorizer that
 allows everything and checks that row-level security alone still hides ungranted rows (needs

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-import { ApiError, createSandbox, me as fetchMe, sandboxOffer } from "../api";
+import { ApiError, authProviders, createSandbox, GITHUB_SIGN_IN, me as fetchMe, sandboxOffer } from "../api";
 import { saveSession, type Session } from "../session";
 import type { Me, SandboxOffer } from "../types";
 
@@ -9,7 +9,7 @@ const TARGET_MS = 30_000;
 
 type Phase =
   | { kind: "idle" }
-  | { kind: "creating" }
+  | { kind: "creating"; github: boolean }
   | { kind: "propagating"; visible: number; total: number; elapsedMs: number }
   | { kind: "error"; message: string };
 
@@ -18,6 +18,8 @@ interface Props {
   onReady: (session: Session, me: Me | null) => void;
   /** e.g. "Your demo sandbox expired." */
   notice?: string | null;
+  /** Back from GitHub with a token (session.ts `readSignedIn`): finish signing in. */
+  github?: { token: string; expiresIn: number } | null;
   pollMs?: number;
   now?: () => number;
 }
@@ -30,12 +32,14 @@ export function readableCount(me: Me, companies: Set<string>): number {
   ).length;
 }
 
-/** The public front door: "Try the demo" creates a temporary real user, then waits, showing
- * progress, until its grants have propagated (app DB → Debezium → Kafka → authz-sync →
- * OpenFGA) and /v1/me lists every company. */
-export function Welcome({ onReady, notice, pollMs = 1000, now = Date.now }: Props) {
+/** The public front door: "Try the demo" creates a temporary real user, and "Sign in with
+ * GitHub" (when the API has it configured) a permanent one with the same access; either way it
+ * then waits, showing progress, until the grants have propagated (app DB → Debezium → Kafka →
+ * authz-sync → OpenFGA) and /v1/me lists every company. */
+export function Welcome({ onReady, notice, github, pollMs = 1000, now = Date.now }: Props) {
   const [offer, setOffer] = useState<SandboxOffer | "off" | null>(null);
-  const [phase, setPhase] = useState<Phase>({ kind: "idle" });
+  const [githubOn, setGithubOn] = useState(false);
+  const [phase, setPhase] = useState<Phase>(() => (github ? { kind: "creating", github: true } : { kind: "idle" }));
   const alive = useRef(true);
   const latest = useRef<{ session: Session; me: Me | null } | null>(null);
 
@@ -44,13 +48,49 @@ export function Welcome({ onReady, notice, pollMs = 1000, now = Date.now }: Prop
     sandboxOffer()
       .then((o) => alive.current && setOffer(o))
       .catch(() => alive.current && setOffer("off"));
+    authProviders()
+      .then((p) => alive.current && setGithubOn(p.github === true))
+      .catch(() => undefined);
     return () => {
       alive.current = false;
     };
   }, []);
 
+  // once, for the token the page was opened with (a ref: StrictMode runs effects twice in dev)
+  const finishing = useRef(false);
+  useEffect(() => {
+    if (!github || finishing.current) return;
+    finishing.current = true;
+    void finishGithub(github.token, github.expiresIn);
+  }, [github]);
+
+  async function finishGithub(token: string, expiresIn: number) {
+    let m: Me;
+    try {
+      m = await fetchMe(token);
+    } catch {
+      if (alive.current) setPhase({ kind: "error", message: "Couldn't sign in with GitHub. Try again." });
+      return;
+    }
+    if (!alive.current) return;
+    if (!m.github) {
+      setPhase({ kind: "error", message: "Couldn't sign in with GitHub. Try again." });
+      return;
+    }
+    const session: Session = {
+      kind: "github",
+      token,
+      userId: m.user_id,
+      login: m.github.login,
+      expiresAt: new Date(now() + expiresIn * 1000).toISOString(),
+      companies: m.github.company_ids,
+    };
+    saveSession(session);
+    await waitForAccess(session, m);
+  }
+
   async function start() {
-    setPhase({ kind: "creating" });
+    setPhase({ kind: "creating", github: false });
     let session: Session;
     try {
       const created = await createSandbox();
@@ -69,17 +109,24 @@ export function Welcome({ onReady, notice, pollMs = 1000, now = Date.now }: Prop
       return;
     }
     saveSession(session);
-    latest.current = { session, me: null };
+    await waitForAccess(session, null);
+  }
+
+  /** Polls /v1/me until every company of the session is readable (or "Continue anyway"). */
+  async function waitForAccess(session: Session, first: Me | null) {
+    latest.current = { session, me: first };
     const ids = new Set(session.companies);
     const started = now();
+    let m: Me | null = first;
     while (alive.current) {
-      let m: Me | null = null;
-      try {
-        m = await fetchMe(session.token);
-      } catch {
-        // transient: keep polling
+      if (!m) {
+        try {
+          m = await fetchMe(session.token);
+        } catch {
+          // transient: keep polling
+        }
+        if (!alive.current) return;
       }
-      if (!alive.current) return;
       if (m) latest.current = { session, me: m };
       const visible = m ? readableCount(m, ids) : 0;
       if (m && visible >= ids.size) {
@@ -88,6 +135,7 @@ export function Welcome({ onReady, notice, pollMs = 1000, now = Date.now }: Prop
       }
       setPhase({ kind: "propagating", visible, total: ids.size, elapsedMs: now() - started });
       await new Promise((r) => setTimeout(r, pollMs));
+      m = null;
     }
   }
 
@@ -121,6 +169,11 @@ export function Welcome({ onReady, notice, pollMs = 1000, now = Date.now }: Prop
           >
             Try the demo
           </button>
+          {githubOn && !busy && (
+            <a className="btn" href={GITHUB_SIGN_IN}>
+              Sign in with GitHub
+            </a>
+          )}
         </div>
         {offer === "off" ? (
           <p className="small muted">The demo isn't available right now.</p>
@@ -135,6 +188,12 @@ export function Welcome({ onReady, notice, pollMs = 1000, now = Date.now }: Prop
               . No sign-up. It's deleted when it expires.
             </p>
           )
+        )}
+        {githubOn && (
+          <p className="small faint">
+            Signing in with GitHub gives you the same companies in an account that stays, with your
+            saved work. It reads only your public GitHub profile.
+          </p>
         )}
         <Progress phase={phase} onContinue={continueAnyway} />
       </section>
@@ -154,7 +213,7 @@ function Progress({ phase, onContinue }: { phase: Phase; onContinue: () => void 
   if (phase.kind === "creating") {
     return (
       <p className="small" role="status">
-        Creating your user…
+        {phase.github ? "Signing you in…" : "Creating your user…"}
       </p>
     );
   }

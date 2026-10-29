@@ -1,6 +1,7 @@
 import { displayNames } from "./format";
 import type {
   AgentEvent,
+  AuthProviders,
   Calendar,
   DataNotes,
   ExpectedFilings,
@@ -75,6 +76,15 @@ export async function sandboxOffer(): Promise<SandboxOffer> {
 export async function createSandbox(): Promise<SandboxCreated> {
   return json<SandboxCreated>(await fetch(`${QUERY}/v1/demo/sandbox`, { method: "POST" }));
 }
+
+/** Sign-in providers the Query API has configured. */
+export async function authProviders(): Promise<AuthProviders> {
+  return json<AuthProviders>(await fetch(`${QUERY}/v1/auth/providers`));
+}
+
+/** "Sign in with GitHub" is a full-page navigation here (the API redirects to GitHub and back to
+ * `#/signed-in`), never a fetch: the token arrives in the URL fragment. */
+export const GITHUB_SIGN_IN = `${QUERY}/v1/auth/github/start`;
 
 export async function me(token: string): Promise<Me> {
   return json<Me>(await fetch(`${QUERY}/v1/me`, { headers: { Authorization: `Bearer ${token}` } }));

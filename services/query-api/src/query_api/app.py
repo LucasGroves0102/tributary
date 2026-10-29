@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 from query_api.auth import Unauthenticated, mint, verify
 from query_api.authorizer import Authorizer, AuthzUnavailable
 from query_api.csv_export import csv_response
-from query_api.demo import add_sandbox_routes
+from query_api.demo import add_sandbox_routes, demo_company_resolver
 from query_api.formula import (
     CATALOG,
     Analysis,
@@ -29,9 +29,16 @@ from query_api.formula import (
     suggest,
     to_dict,
 )
+from query_api.github import Accounts, GitHub, GitHubConfig, add_github_routes, is_github_user
 from query_api.notes import add_notes_routes
 from query_api.research import add_research_routes
-from query_api.sandbox import SandboxConfig, Sandboxes, is_sandbox_user
+from query_api.sandbox import (
+    DEMO_PLAN,
+    SandboxConfig,
+    Sandboxes,
+    is_sandbox_user,
+    sandbox_workspaces,
+)
 from query_api.shapes import filing_url
 from query_api.shapes import period as _period
 from query_api.store import QUERY_TIMEOUT, Store
@@ -85,14 +92,19 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
                sandbox_config: SandboxConfig = SANDBOX_OFF,
                clock: Callable[[], datetime] | None = None,
                workspaces: Workspaces | None = None,
-               views: Views | None = None) -> FastAPI:
+               views: Views | None = None,
+               github_config: GitHubConfig | None = None,
+               github: GitHub | None = None,
+               github_accounts: Accounts | None = None) -> FastAPI:
     """demo_users: accounts anyone may sign in as without a password (empty disables it).
     today: the current US Eastern date (EDGAR's), injectable for tests.
     watchlists: the app database's watchlists (None: watchlist routes answer 503).
     sandboxes, sandbox_config: "Try the demo" sandboxes (query_api.sandbox); off unless
     sandbox_config.enabled and sandboxes are given. clock: the current UTC time.
     workspaces: saved work in the app database (None: those routes answer 503).
-    views: per-user view preferences in the app database (None: those routes answer 503)."""
+    views: per-user view preferences in the app database (None: those routes answer 503).
+    github_config, github, github_accounts: "Sign in with GitHub" (query_api.github); its
+    routes 404 unless all three are given."""
     app = FastAPI(title="Tributary Query API", version="1")
     instrument(app)
 
@@ -156,9 +168,28 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
     add_workspace_routes(app, store=store, workspaces=workspaces, current_user=current_user)
     add_view_routes(app, views=views, current_user=current_user)
 
+    now = clock or (lambda: datetime.now(UTC))
+    demo_companies = demo_company_resolver(store)
     sandbox_info = add_sandbox_routes(
         app, store=store, sandboxes=sandboxes, config=sandbox_config, jwt_secret=jwt_secret,
-        current_user=current_user, clock=clock or (lambda: datetime.now(UTC)))
+        current_user=current_user, clock=now, demo_companies=demo_companies)
+    github_login = add_github_routes(
+        app, config=github_config, github=github, accounts=github_accounts,
+        jwt_secret=jwt_secret, demo_companies=demo_companies, workspaces=sandbox_workspaces,
+        clock=now)
+
+    def github_info(user_id: str) -> dict | None:
+        """/v1/me's `github` for a GitHub sign-in: the login, and the demo's companies and
+        assistant allowance (the web app's scope and propagation progress)."""
+        login = github_login(user_id)
+        if login is None:
+            return None
+        ids = demo_companies()
+        return {"login": login, "plan": DEMO_PLAN,
+                "company_ids": sorted(set(ids.values())),
+                "agent": sandbox_config.agent_enabled,
+                "agent_questions_per_day": sandbox_config.agent_questions_per_user_per_day
+                if sandbox_config.agent_enabled else 0}
 
     @app.get("/health")
     def health() -> dict:
@@ -178,8 +209,10 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
 
     @app.post("/v1/demo/token")
     def demo_token(body: DemoLogin) -> dict:
-        # a sandbox user's only token is the one its creation returned (it can't be renewed)
-        if body.user_id not in demo_users or is_sandbox_user(body.user_id):
+        # a sandbox user's only token is the one its creation returned (it can't be renewed);
+        # a GitHub user's come only from signing in with GitHub
+        if (body.user_id not in demo_users or is_sandbox_user(body.user_id)
+                or is_github_user(body.user_id)):
             raise HTTPException(404)
         return {"token": mint(body.user_id, jwt_secret, DEMO_TOKEN_TTL),
                 "expires_in": DEMO_TOKEN_TTL}
@@ -189,11 +222,13 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
         access = readable(user_id)
         profiles = store.profiles(user_id, sorted(access)) if access else {}
         sandbox = sandbox_info(user_id)
+        github_account = github_info(user_id)
         return {
             "user_id": user_id,
             "companies": [{"company_id": c, **_PROFILE, **profiles.get(c, {}), "tiers": sorted(t)}
                           for c, t in sorted(access.items())],
             **({"sandbox": sandbox} if sandbox else {}),
+            **({"github": github_account} if github_account else {}),
         }
 
     @app.get("/v1/companies/search")

@@ -36,10 +36,26 @@ export interface SandboxCreated {
   watchlist: string[];
 }
 
+/** /v1/me's `github`: present only for a "Sign in with GitHub" user (the demo's access, kept). */
+export interface GitHubInfo {
+  login: string;
+  plan: string;
+  /** the demo companies the account was granted (scope.ts, propagation progress) */
+  company_ids: string[];
+  agent: boolean;
+  agent_questions_per_day: number;
+}
+
+/** GET /v1/auth/providers: which sign-in buttons to show. */
+export interface AuthProviders {
+  github: boolean;
+}
+
 export interface Me {
   user_id: string;
   companies: Company[];
   sandbox?: SandboxInfo;
+  github?: GitHubInfo;
 }
 
 export interface Citation {

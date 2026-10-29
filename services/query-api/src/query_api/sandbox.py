@@ -12,14 +12,16 @@ extend it. The hourly `query-api-demo-cleanup`
 job deletes expired sandbox users, which revokes their access through CDC like any user
 deletion; watchlists, workspaces and usage go with them (ON DELETE CASCADE).
 
-Real sign-in (OAuth) is a second way to get the same kind of JWT: find or create the user, mint
-the token; nothing downstream knows how the user signed in."""
+GitHub sign-in (query_api.github) is a second way to get the same kind of JWT: it finds or
+creates a permanent user with the same access (grant_demo_access) and the same assistant caps
+(take_question), but no demo_sandboxes row, so demo-cleanup never deletes it; nothing
+downstream knows how the user signed in."""
 
 import hashlib
 import hmac
 import logging
 import os
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from typing import Any, Protocol
@@ -40,7 +42,7 @@ DEMO_PLAN = "pro"
 # The starter workspace every sandbox gets (sandbox_workspaces); it goes with the user.
 DEMO_WORKSPACE = "PepsiCo vs Coca-Cola"
 # Sandbox user ids start with this; nothing else in the app database does (named demo users
-# are alice/bob/carol/dave, real sign-in will use its own ids).
+# are alice/bob/carol/dave, GitHub sign-in uses "gh-<id>", query_api.github).
 USER_PREFIX = "demo-"
 # Serializes sandbox creation, so the per-IP and live-sandbox caps can't be raced past.
 LOCK_KEY = 0x7472_6962_6465_6D6F  # "tribdemo"
@@ -173,6 +175,24 @@ class Pool(Protocol):
     def connection(self) -> Any: ...
 
 
+def grant_demo_access(cur: Any, user_id: str, at: datetime, company_ids: Sequence[str],
+                      watchlist: Sequence[str], workspaces: Sequence[dict]) -> None:
+    """What a demo account is given, inside the caller's transaction, after its `users` row:
+    DEMO_PLAN, grants on `company_ids`, the watchlist (in order) and starter workspaces. Plain
+    app-DB rows: authz-sync turns subscriptions and grants into access through CDC. Shared by
+    sandboxes and GitHub sign-in (query_api.github), so both get the same."""
+    cur.execute("INSERT INTO subscriptions (user_id, plan_id, started_at)"
+                " VALUES (%s, %s, %s)", (user_id, DEMO_PLAN, at))
+    cur.execute("INSERT INTO company_grants (company_id, user_id, granted_at)"
+                " SELECT c, %s, %s FROM unnest(%s::text[]) c",
+                (user_id, at, list(company_ids)))
+    cur.execute("INSERT INTO watchlists (user_id, company_id, added_at)"
+                " SELECT %s, c, %s + make_interval(secs => o::float8 / 1000)"
+                " FROM unnest(%s::text[]) WITH ORDINALITY w(c, o)",
+                (user_id, at, list(watchlist)))
+    seed(cur, user_id, list(workspaces))
+
+
 class AppSandboxes:
     """Sandboxes in the app database. Creation writes the user, subscription, grants,
     watchlist, starter workspaces and sandbox row in ONE transaction, so authz-sync never sees
@@ -199,16 +219,8 @@ class AppSandboxes:
                         (s.user_id, f"{s.user_id}@sandbox.invalid", s.created_at))
             cur.execute("INSERT INTO demo_sandboxes (user_id, created_at, expires_at)"
                         " VALUES (%s, %s, %s)", (s.user_id, s.created_at, s.expires_at))
-            cur.execute("INSERT INTO subscriptions (user_id, plan_id, started_at)"
-                        " VALUES (%s, %s, %s)", (s.user_id, DEMO_PLAN, s.created_at))
-            cur.execute("INSERT INTO company_grants (company_id, user_id, granted_at)"
-                        " SELECT c, %s, %s FROM unnest(%s::text[]) c",
-                        (s.user_id, s.created_at, s.company_ids))
-            cur.execute("INSERT INTO watchlists (user_id, company_id, added_at)"
-                        " SELECT %s, c, %s + make_interval(secs => o::float8 / 1000)"
-                        " FROM unnest(%s::text[]) WITH ORDINALITY w(c, o)",
-                        (s.user_id, s.created_at, s.watchlist))
-            seed(cur, s.user_id, list(s.workspaces))
+            grant_demo_access(cur, s.user_id, s.created_at, s.company_ids, s.watchlist,
+                              s.workspaces)
             cur.execute("INSERT INTO demo_creations (ip_key, created_at) VALUES (%s, %s)",
                         (ip_key, s.created_at))
 
@@ -220,12 +232,16 @@ class AppSandboxes:
 
     def take_question(self, user_id: str, now: datetime, per_user: int, per_day: int,
                       questions: int = 1) -> int:
-        """Takes `questions` (a report counts as several) or none: all or nothing."""
+        """Takes `questions` (a report counts as several) or none: all or nothing. For a demo
+        sandbox or a GitHub account (query_api.github); anyone else is SandboxGone."""
         day = now.astimezone(UTC).date()
         with self._pool.connection() as conn, conn.transaction(), conn.cursor() as cur:
-            cur.execute("SELECT expires_at FROM demo_sandboxes WHERE user_id = %s", (user_id,))
+            # a live sandbox, or a GitHub account (app migration 007: same caps, no expiry)
+            cur.execute("SELECT expires_at > %s FROM demo_sandboxes WHERE user_id = %s"
+                        " UNION ALL SELECT true FROM github_accounts WHERE user_id = %s",
+                        (now, user_id, user_id))
             row = cur.fetchone()
-            if row is None or row[0] <= now:
+            if row is None or not row[0]:
                 raise SandboxGone(user_id)
             cur.execute("INSERT INTO demo_agent_daily (day, questions) VALUES (%s, 0)"
                         " ON CONFLICT DO NOTHING", (day,))
@@ -251,7 +267,8 @@ class AppSandboxes:
             return min(per_user - mine, per_day - total) - questions
 
     def delete_expired(self, now: datetime) -> dict[str, int]:
-        """Deletes expired sandbox users (only users with a sandbox row: never anyone else) and
+        """Deletes expired sandbox users (only users with a sandbox row: never anyone else, so
+        never a GitHub account) and
         everything that cascades from them; prunes old rate-limit and usage rows."""
         with self._pool.connection() as conn, conn.transaction(), conn.cursor() as cur:
             cur.execute("DELETE FROM users WHERE user_id IN"
@@ -260,9 +277,14 @@ class AppSandboxes:
             cur.execute("DELETE FROM demo_creations WHERE created_at < %s",
                         (now - timedelta(days=1),))
             creations = cur.rowcount
+            # GitHub accounts' usage rows don't go with a user; nothing reads past days
+            cur.execute("DELETE FROM demo_agent_usage WHERE day < %s",
+                        (_day(now) - timedelta(days=90),))
+            usage = cur.rowcount
             cur.execute("DELETE FROM demo_agent_daily WHERE day < %s",
                         (_day(now) - timedelta(days=90),))
-            return {"users": users, "creations": creations, "days": cur.rowcount}
+            return {"users": users, "creations": creations, "usage": usage,
+                    "days": cur.rowcount}
 
 
 def _count(cur: Any) -> int:
