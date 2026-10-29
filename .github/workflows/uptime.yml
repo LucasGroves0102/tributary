@@ -1,0 +1,61 @@
+# Outside uptime check: every ~5 minutes GitHub runs deploy/uptime/check.py against the live
+# site (web app, both APIs, pipeline freshness from /v1/status). Down or stale opens one issue
+# labelled `outage` (GitHub emails the owner); the first passing run after that comments with
+# the outage length and closes it, so closed `outage` issues are the outage history.
+# GitHub may delay scheduled runs by several minutes and pauses them after 60 days without a
+# commit to the repository.
+name: Uptime
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: uptime
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          sparse-checkout: deploy/uptime
+          persist-credentials: false
+      - id: check
+        run: python3 deploy/uptime/check.py --report "$RUNNER_TEMP/report.md"
+      - name: Open, or close on recovery, the outage issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          DOWN: ${{ steps.check.outputs.down }}
+          TITLE: ${{ steps.check.outputs.title }}
+          OWNER: ${{ github.repository_owner }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          report="$RUNNER_TEMP/report.md"
+          open=$(gh issue list --label outage --state open --limit 1 --json number,createdAt \
+            --jq '.[0] | select(.) | "\(.number) \(.createdAt)"')
+          if [ "$DOWN" = "true" ]; then
+            if [ -z "$open" ]; then
+              gh label create outage --color B60205 --description "Uptime check failures" --force
+              printf '@%s the uptime check failed.\n\n' "$OWNER" > "$RUNNER_TEMP/body.md"
+              cat "$report" >> "$RUNNER_TEMP/body.md"
+              printf '\n[Run](%s)\n' "$RUN_URL" >> "$RUNNER_TEMP/body.md"
+              gh issue create --title "$TITLE" --label outage --body-file "$RUNNER_TEMP/body.md"
+            fi
+          elif [ -n "$open" ]; then
+            read -r number created <<< "$open"
+            minutes=$(( ( $(date -u +%s) - $(date -u -d "$created" +%s) ) / 60 ))
+            printf 'Recovered: every check passes again (down for about %s min).\n\n' "$minutes" \
+              > "$RUNNER_TEMP/body.md"
+            cat "$report" >> "$RUNNER_TEMP/body.md"
+            gh issue comment "$number" --body-file "$RUNNER_TEMP/body.md"
+            gh issue close "$number"
+          fi
