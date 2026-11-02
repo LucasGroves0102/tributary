@@ -50,8 +50,17 @@ propagation progress for a new account, and lands on Home. The top bar shows "Si
 expired one returns to the front door with "Your sign-in expired"). A GitHub account is not a
 sandbox: no "resets in" banner, but it has the same 20 companies, so the scope below applies.
 
-A sandbox (or a GitHub sign-in) lists only its own 20 companies (`src/scope.ts`, a React context set from the
-session; display only, the API's OpenFGA check and RLS stay the boundary). Companies screens
+**Open access.** `/v1/me` says whether the public catalog is open (`catalog.public`, with its
+tiers; then `companies` lists only private grants). `src/access.ts` turns that into what the
+pages show: `readableFor(me, tier)` (every company while the catalog is open with that tier),
+`readableTotal(me)` (the sidebar's count) and `catalogOpen`. With the catalog open nothing below
+is scoped: a sandbox or GitHub session sees every company like anyone else, the banner says
+"Demo sandbox: every company · resets in Xh", the Welcome page waits for no grant (none is
+written), and Search covers every company's filings. Display only: the API decides.
+
+While the catalog is closed, a sandbox (or a GitHub sign-in) lists only its own 20 companies
+(`src/scope.ts`, a React context set from the session, and only while `/v1/me` says the catalog
+is closed; display only, the API's OpenFGA check and RLS stay the boundary). Companies screens
 with `access=financials`, without the "Only companies I can read" box, and counts "N companies
 in your demo"; the palette (and so the watchlist's "+ Add"), Compare's target/peer pickers and the palette's `compare`/`chart`
 commands search with `/v1/companies/search?access=financials`; Compare's suggestions and the

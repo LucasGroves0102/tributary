@@ -192,6 +192,22 @@ def test_writes_a_report_from_the_workspace():
     assert {r.headers["authorization"] for r in fake.seen} == {"Bearer alice-token"}
 
 
+def test_with_the_catalog_open_every_company_in_scope_has_the_catalogs_tiers():
+    class OpenApi(FakeQueryApi):
+        def __call__(self, request):
+            if request.url.path == "/v1/me":
+                self.seen.append(request)
+                return httpx.Response(200, json={
+                    "user_id": "alice", "companies": [],
+                    "catalog": {"public": True, "tiers": ["financials", "filings"],
+                                "companies": 6012}})
+            return super().__call__(request)
+
+    _, _, job = run(OpenApi(), response("end_turn", text(NOTE)))
+    assert set(job.companies) == {NVDA, TSLA, MSFT, AAPL}
+    assert all(c["access"] == ["filings", "financials"] for c in job.companies.values())
+
+
 def test_unverified_figures_are_flagged_never_kept_silently():
     fake = FakeQueryApi()
     events, *_ = run(

@@ -1,3 +1,4 @@
+import type { Readable } from "../access";
 import { recentDataNotes } from "../api";
 import { NoteItem } from "../company/DataNotes";
 import { useLoad } from "../company/useLoad";
@@ -13,7 +14,7 @@ export function RecentNotes({ token, name, filingsFor }: {
   token: string;
   name: (companyId: string) => string | null;
   /** company ids whose filings the user can read (links open the reader there) */
-  filingsFor: Set<string>;
+  filingsFor: Readable;
 }) {
   const load = useLoad(token, () => recentDataNotes(token, HOME_NOTES));
   return (

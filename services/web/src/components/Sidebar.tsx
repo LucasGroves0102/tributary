@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { readableTotal } from "../access";
 import { ago, day } from "../format";
 import type { WatchRow } from "../home/data";
 import type { Workspace } from "../home/useWorkspace";
@@ -65,7 +66,7 @@ export function Sidebar({ route, me, workspace, lastIngested, onAdd, onExport, o
             )}
             {n.view === "companies" && me && (
               <span className="cnt" title="Companies you can read">
-                {me.companies.length}
+                {readableTotal(me)}
               </span>
             )}
             <kbd>g{n.key}</kbd>
@@ -147,8 +148,8 @@ export function Sidebar({ route, me, workspace, lastIngested, onAdd, onExport, o
         {me && (
           <>
             <br />
-            Signed in as {me.user_id} · {me.companies.length} readable{" "}
-            {me.companies.length === 1 ? "company" : "companies"}
+            Signed in as {me.user_id} · {readableTotal(me)} readable{" "}
+            {readableTotal(me) === 1 ? "company" : "companies"}
           </>
         )}
       </div>

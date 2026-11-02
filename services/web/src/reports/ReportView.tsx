@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
+import type { Readable } from "../access";
 import { ApiError, openItem, screenerColumns } from "../api";
 import { slug } from "../chart/export";
 import { catalog } from "../chart/metrics";
@@ -22,7 +23,7 @@ interface Props {
   /** company id → ticker or name */
   label: (companyId: string) => string;
   /** companies whose financials the viewer can read (comps embeds) */
-  readable: ReadonlySet<string>;
+  readable: Readable;
   onOpenChart: (s: ChartState) => void;
 }
 
@@ -123,7 +124,7 @@ export function ReportBody({ report, name, label, token, readable, hasTtm, onOpe
   name: string;
   label: (companyId: string) => string;
   token: string;
-  readable: ReadonlySet<string>;
+  readable: Readable;
   hasTtm: (metric: string) => boolean;
   onOpenChart: (s: ChartState) => void;
 }) {

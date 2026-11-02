@@ -312,6 +312,9 @@ class UiActions:
     def __init__(self, api: Http) -> None:
         self._api = api
         self._readable: dict[str, str] | None = None  # company_id → name, financials only
+        # /v1/me's public catalog is open with financials: every company is readable, and
+        # _readable holds only the private grants beyond it
+        self._open = False
         self._showing: set[str] = set()  # what save_to_workspace can save: chart, comps, screen
 
     def observe(self, ctx: UiContext) -> None:
@@ -441,9 +444,10 @@ class UiActions:
         out: list[tuple[str, str]] = []
         for p in _json(r).get("peers", []):
             pid = p.get("company_id") if isinstance(p, dict) else None
-            if isinstance(pid, str) and pid in readable and pid != company_id:
+            if isinstance(pid, str) and (pid in readable or self._open) and pid != company_id:
                 tickers = p.get("tickers") or []
-                out.append((pid, str(tickers[0]) if tickers else readable[pid]))
+                out.append((pid, str(tickers[0]) if tickers
+                            else readable.get(pid) or str(p.get("name") or pid)))
         return out[:SUGGESTED_PEERS]
 
     def _layer(self, spec: LayerSpec) -> dict:
@@ -486,8 +490,12 @@ class UiActions:
             r = self._api.call("GET", "/v1/me")
             if r is None or r.status_code != 200:
                 raise ActionError("couldn't check the user's companies")
+            me = _json(r)
+            catalog = me.get("catalog") if isinstance(me.get("catalog"), dict) else {}
+            self._open = bool(catalog.get("public")) and "financials" in (
+                catalog.get("tiers") or [])
             self._readable = {c["company_id"]: c.get("name") or c["company_id"]
-                              for c in _json(r).get("companies", [])
+                              for c in me.get("companies", [])
                               if "financials" in c.get("tiers", [])}
         return self._readable
 
@@ -496,7 +504,7 @@ class UiActions:
         ungranted companies get the same message."""
         readable = self._readable_companies()
         found = self._resolve(ref, readable)
-        if found is None or found[0] not in readable:
+        if found is None or (found[0] not in readable and not self._open):
             raise ActionError(f"{ref} isn't one of the companies the user can read "
                               "financials for")
         return found

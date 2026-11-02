@@ -51,8 +51,19 @@ export interface AuthProviders {
   github: boolean;
 }
 
+/** /v1/me `catalog`: while public, every company in the public catalog is readable with
+ * `tiers`, and `Me.companies` lists only the private grants beyond it (access.ts). */
+export interface CatalogInfo {
+  public: boolean;
+  tiers: Tier[];
+  /** how many companies the catalog holds (0 while closed) */
+  companies: number;
+}
+
 export interface Me {
   user_id: string;
+  /** absent from older APIs: treat as closed */
+  catalog?: CatalogInfo;
   companies: Company[];
   sandbox?: SandboxInfo;
   github?: GitHubInfo;

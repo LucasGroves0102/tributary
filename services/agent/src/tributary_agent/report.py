@@ -187,6 +187,11 @@ def build_scope(api: Http, job: Job) -> None:
         raise ReportError(503, "couldn't check the user's companies")
     readable = {c["company_id"]: c for c in me.get("companies") or []
                 if isinstance(c, dict) and isinstance(c.get("company_id"), str)}
+    # with the public catalog open, every company is readable with its tiers and `companies`
+    # lists only private grants beyond it
+    catalog = me.get("catalog") if isinstance(me.get("catalog"), dict) else {}
+    everyone = {t for t in catalog.get("tiers") or [] if t in ("financials", "filings")} \
+        if catalog.get("public") else set()
     names: dict[str, str | None] = {cid: c.get("name") for cid, c in readable.items()}
     for item in job.items:
         ids: list[str] = []
@@ -209,8 +214,9 @@ def build_scope(api: Http, job: Job) -> None:
             if cid not in job.companies and len(job.companies) < MAX_SCOPE:
                 c = readable.get(cid) or {}
                 job.companies[cid] = {"name": names.get(cid),
-                                      "access": sorted(t for t in c.get("tiers") or []
-                                                       if t in ("financials", "filings"))}
+                                      "access": sorted(everyone | {
+                                          t for t in c.get("tiers") or []
+                                          if t in ("financials", "filings")})}
 
 
 def _formula_companies(api: Http, formula: str, names: dict[str, str | None]) -> list[str]:
