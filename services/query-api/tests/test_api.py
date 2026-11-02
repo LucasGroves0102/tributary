@@ -7,7 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from query_api.app import create_app
-from query_api.authorizer import AuthzUnavailable
+from query_api.authorizer import Access, AuthzUnavailable
 
 from .conftest import SECRET
 
@@ -23,6 +23,9 @@ class FakeAuthorizer:
         if self.down:
             raise AuthzUnavailable("down")
         return tier in self.grants.get(user_id, {}).get(company_id, set())
+
+    def access(self, user_id):
+        return Access(frozenset(), self.readable(user_id))
 
     def readable(self, user_id):
         if self.down:
@@ -225,10 +228,84 @@ def test_search_can_list_only_readable_companies(client, token):
 
 def test_me(client, token):
     body = client.get("/v1/me", headers=token("alice")).json()
-    assert body == {"user_id": "alice", "companies": [
+    assert body == {"user_id": "alice",
+                    "catalog": {"public": False, "tiers": [], "companies": 0},
+                    "companies": [
         {"company_id": NVDA, "name": "NVIDIA CORP", "sic": "3674",
          "industry": "Semiconductors & Related Devices", "exchanges": ["Nasdaq"],
          "tiers": ["financials"]}]}
+
+
+# Open access: the public catalog ------------------------------------------------------------
+
+AMD = "0000002488"
+
+
+class OpenAuthorizer(FakeAuthorizer):
+    """catalog:sec public: every user reads the catalog with their tiers; `grants` are the
+    private grants (listed individually)."""
+
+    def __init__(self, tiers: dict[str, set[str]], grants):
+        super().__init__(grants)
+        self.tiers, self.accesses = tiers, 0
+
+    def access(self, user_id):
+        self.accesses += 1
+        tiers = frozenset(self.tiers.get(user_id, set()))
+        return Access(tiers, self.readable(user_id) if tiers else {})
+
+
+class CatalogStore(FakeStore):
+    def __init__(self, ids=frozenset({NVDA, TSLA})):
+        super().__init__()
+        self.ids, self.catalog_reads = ids, 0
+
+    def catalog_companies(self, user_id):
+        self.catalog_reads += 1
+        return self.ids
+
+
+def open_client(clock=None):
+    store = CatalogStore()
+    authz = OpenAuthorizer({"carol": {"financials", "filings"}, "dave": {"financials"}},
+                           {"carol": {AMD: {"financials", "filings"}}})
+    c = TestClient(create_app(authz, store, SECRET, monotonic=clock or (lambda: 0.0)))
+    c.store, c.authz = store, authz
+    return c
+
+
+def test_me_with_the_catalog_public_lists_only_private_grants(token):
+    c = open_client()
+    body = c.get("/v1/me", headers=token("carol")).json()
+    assert body["catalog"] == {"public": True, "tiers": ["filings", "financials"],
+                               "companies": 2}
+    assert [x["company_id"] for x in body["companies"]] == [AMD]
+    dave = c.get("/v1/me", headers=token("dave")).json()
+    assert dave["catalog"]["tiers"] == ["financials"] and dave["companies"] == []
+    nobody = c.get("/v1/me", headers=token("erin")).json()  # no tiers: nothing public
+    assert nobody["catalog"] == {"public": False, "tiers": [], "companies": 0}
+
+
+def test_readable_with_the_catalog_public_is_the_catalog_plus_private_grants(token):
+    c = open_client()
+    c.get("/v1/filings/latest", headers=token("carol"))
+    assert c.store.calls[-1] == ("latest_filings", "carol", (AMD, NVDA, TSLA))
+    c.get("/v1/filings/latest", headers=token("dave"))  # financials only: no filings
+    assert ("latest_filings", "dave", ()) not in c.store.calls
+    r = c.get("/v1/companies/search?q=n&access=financials", headers=token("dave")).json()
+    assert {x["company_id"]: x["access"] for x in r["results"]} == {
+        NVDA: ["financials"], TSLA: ["financials"]}
+
+
+def test_catalog_list_is_cached_briefly(token):
+    now = [0.0]
+    c = open_client(lambda: now[0])
+    for _ in range(3):
+        c.get("/v1/filings/latest", headers=token("carol"))
+    assert c.store.catalog_reads == 1 and c.authz.accesses == 3  # OpenFGA every time
+    now[0] += 61
+    c.get("/v1/filings/latest", headers=token("carol"))
+    assert c.store.catalog_reads == 2
 
 
 def test_financials_link_to_the_filing(token):

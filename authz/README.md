@@ -9,7 +9,11 @@ FR8. OpenFGA authorization model for Tributary, as code.
     (`company:<id>#catalog@catalog:sec`), and `catalog:sec#reader@user:*` makes the catalog
     readable by every user. That one tuple is the switch: it exists only while the app
     database's `public_catalogs` row for `sec` is public;
-  - a **private grant**: the company granted to the user, or to their organization.
+  - a **private grant**: the company granted to the user, or to their organization. Each grant
+    is written twice, as a direct `viewer` tuple and as `granted`; `granted` never includes the
+    catalog, so the Query API lists a user's private grants with ListObjects on it without
+    enumerating ~6,000 catalog companies. (A later change can drop the direct `viewer` types
+    once authz-sync stops writing them: pure deletes, never a gap.)
 - `model.fga.yaml`: model tests (`make authz-test`; CI runs them with the OpenFGA CLI): closed
   catalog, public catalog (`user:*`), a company outside the catalog, private grants, tiers.
 

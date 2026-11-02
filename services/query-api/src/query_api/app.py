@@ -2,9 +2,10 @@
 OpenFGA first (layer 1), then Postgres row-level security (layer 2, in Store)."""
 
 import logging
+import time
 from collections.abc import Callable
 from datetime import UTC, date, datetime
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 import psycopg
 from fastapi import Depends, FastAPI, HTTPException, Path, Query
@@ -14,7 +15,7 @@ from prometheus_client import Counter
 from pydantic import BaseModel, Field
 
 from query_api.auth import Unauthenticated, mint, verify
-from query_api.authorizer import Authorizer, AuthzUnavailable
+from query_api.authorizer import Access, Authorizer, AuthzUnavailable
 from query_api.csv_export import csv_response
 from query_api.demo import add_sandbox_routes, demo_company_resolver
 from query_api.formula import (
@@ -61,6 +62,9 @@ CompanyId = Annotated[str, Path(pattern=r"^\d{10}$", description="canonical comp
 
 
 DEMO_TOKEN_TTL = 8 * 3600
+# The public catalog's company ids are the same for every user and change only when authz-sync
+# adds a company (every ~10 min) or the catalog opens or closes: read once a minute at most.
+CATALOG_TTL_SECONDS = 60.0
 SANDBOX_OFF = SandboxConfig()
 
 PERMISSION_CHECKS = Counter("tributary_permission_checks_total",
@@ -95,7 +99,8 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
                views: Views | None = None,
                github_config: GitHubConfig | None = None,
                github: GitHub | None = None,
-               github_accounts: Accounts | None = None) -> FastAPI:
+               github_accounts: Accounts | None = None,
+               monotonic: Callable[[], float] = time.monotonic) -> FastAPI:
     """demo_users: accounts anyone may sign in as without a password (empty disables it).
     today: the current US Eastern date (EDGAR's), injectable for tests.
     watchlists: the app database's watchlists (None: watchlist routes answer 503).
@@ -148,15 +153,38 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
         if not allowed(user_id, tier, company_id):
             raise HTTPException(403, f"not permitted to read {tier} for this company")
 
-    def readable(user_id: str) -> dict[str, set[str]]:
+    def access_of(user_id: str) -> Access:
+        """Layer 1 for cross-company routes: the public catalog's tiers plus the companies
+        listed individually (authorizer.Access); OpenFGA unreachable → 503."""
         try:
-            access = authorizer.readable(user_id)
+            access = authorizer.access(user_id)
         except AuthzUnavailable as e:
             PERMISSION_CHECKS.labels("list", "error").inc()
             log.warning("authorization unavailable: %s", e, extra={"user_id": user_id})
             raise HTTPException(503, "authorization unavailable") from None
         PERMISSION_CHECKS.labels("list", "allowed").inc()
         return access
+
+    catalog_cache: dict[str, Any] = {"until": float("-inf"), "ids": frozenset()}
+
+    def catalog(user_id: str) -> frozenset[str]:
+        """The public catalog's company ids, from Postgres, cached CATALOG_TTL_SECONDS."""
+        now = monotonic()
+        if catalog_cache["until"] <= now:
+            catalog_cache["ids"] = store.catalog_companies(user_id)
+            catalog_cache["until"] = now + CATALOG_TTL_SECONDS
+        return catalog_cache["ids"]
+
+    def readable(user_id: str) -> dict[str, set[str]]:
+        """company_id → tiers, for every company the user can read: with the catalog public,
+        every catalog company (one Check, then the cached list) plus their private grants."""
+        access = access_of(user_id)
+        if not access.public:
+            return access.listed
+        out = {c: set(access.public) for c in catalog(user_id)}
+        for c, tiers in access.listed.items():
+            out.setdefault(c, set()).update(tiers)
+        return out
 
     add_ui_routes(app, store=store, current_user=current_user, require=require,
                   allowed=allowed, readable=readable, today=today, watchlists=watchlists)
@@ -219,14 +247,21 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
 
     @app.get("/v1/me")
     def me(user_id: User) -> dict:
-        access = readable(user_id)
-        profiles = store.profiles(user_id, sorted(access)) if access else {}
+        """Who the caller is and what they can read. `catalog.public`: every company in the
+        public catalog is readable with `catalog.tiers`, and `companies` lists only what the
+        caller reads beyond it (private grants); otherwise `companies` is everything."""
+        access = access_of(user_id)
+        listed = access.listed
+        profiles = store.profiles(user_id, sorted(listed)) if listed else {}
         sandbox = sandbox_info(user_id)
         github_account = github_info(user_id)
         return {
             "user_id": user_id,
+            "catalog": ({"public": True, "tiers": sorted(access.public),
+                         "companies": len(catalog(user_id))} if access.public
+                        else {"public": False, "tiers": [], "companies": 0}),
             "companies": [{"company_id": c, **_PROFILE, **profiles.get(c, {}), "tiers": sorted(t)}
-                          for c, t in sorted(access.items())],
+                          for c, t in sorted(listed.items())],
             **({"sandbox": sandbox} if sandbox else {}),
             **({"github": github_account} if github_account else {}),
         }

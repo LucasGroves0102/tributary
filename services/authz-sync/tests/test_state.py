@@ -36,6 +36,8 @@ def test_seed_tuples():
     t = seeded().desired_tuples()
     assert Tuple("user:alice", "viewer", "company:nvda") in t
     assert Tuple("organization:acme#member", "viewer", "company:msft") in t
+    assert Tuple("organization:acme#member", "granted", "company:msft") in t
+    assert Tuple("user:alice", "granted", "company:nvda") in t
     assert Tuple("user:bob", "member", "organization:acme") in t
     assert Tuple("user:bob", "subscriber", "tier:filings") in t
     assert Tuple("user:alice", "subscriber", "tier:filings") not in t
@@ -47,6 +49,7 @@ def test_revoking_a_grant():
     s.apply("company_grants", ev("d", before={
         "grant_id": 1, "company_id": "nvda", "user_id": "alice", "org_id": None}))
     assert Tuple("user:alice", "viewer", "company:nvda") not in s.desired_tuples()
+    assert Tuple("user:alice", "granted", "company:nvda") not in s.desired_tuples()
     assert ("alice", "nvda", "financials") not in s.desired_access()
     assert ("alice", "aapl", "financials") in s.desired_access()
 
@@ -152,8 +155,9 @@ def test_a_public_catalog_writes_no_per_user_rows():
     s = seeded()
     switch(s, True)
     assert s.desired_access() == seeded().desired_access()  # still only private grants
-    viewers = {t for t in s.desired_tuples(CATALOG) if t.relation == "viewer"}
-    assert viewers == {t for t in seeded().desired_tuples() if t.relation == "viewer"}
+    for relation in ("viewer", "granted"):
+        mine = {t for t in s.desired_tuples(CATALOG) if t.relation == relation}
+        assert mine == {t for t in seeded().desired_tuples() if t.relation == relation}
 
 
 def test_accept_catalog_refuses_a_collapse():

@@ -29,7 +29,12 @@ type catalog
 type company
   relations
     define catalog: [catalog]
-    define viewer: [user, organization#member] or reader from catalog
+    # Private grants only (never the catalog), so the Query API can list a user's grants with
+    # ListObjects without enumerating the whole catalog. authz-sync writes every grant both
+    # here and as a direct viewer tuple; a later change can drop the direct viewer types once
+    # no viewer tuples remain (pure deletes, never a gap in access).
+    define granted: [user, organization#member]
+    define viewer: [user, organization#member] or granted or reader from catalog
     # each company points at the tier objects that gate its datasets
     define financials_tier: [tier]
     define filings_tier: [tier]

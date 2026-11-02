@@ -97,6 +97,8 @@ class AppState:
             company = f"company:{g.company_id}"
             grantee = f"user:{g.user_id}" if g.user_id else f"organization:{g.org_id}#member"
             tuples.add(Tuple(grantee, "viewer", company))
+            # the same grant under `granted`, which the Query API lists (never the catalog)
+            tuples.add(Tuple(grantee, "granted", company))
             for tier in TIERS:  # point every granted company at its tier objects
                 tuples.add(Tuple(f"tier:{tier}", f"{tier}_tier", company))
         return tuples

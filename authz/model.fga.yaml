@@ -14,16 +14,20 @@ tuples:
   - {user: catalog:sec, relation: catalog, object: company:nvda}
   - {user: catalog:sec, relation: catalog, object: company:tsla}
 
+  # private grants: authz-sync writes each one as viewer AND granted
   # alice: financials tier only, granted Nvidia and the private fund directly
   - {user: user:alice, relation: subscriber, object: tier:financials}
   - {user: user:alice, relation: viewer, object: company:nvda}
+  - {user: user:alice, relation: granted, object: company:nvda}
   - {user: user:alice, relation: viewer, object: company:fund}
+  - {user: user:alice, relation: granted, object: company:fund}
 
   # bob: both tiers, member of acme, which is granted Nvidia
   - {user: user:bob, relation: subscriber, object: tier:financials}
   - {user: user:bob, relation: subscriber, object: tier:filings}
   - {user: user:bob, relation: member, object: organization:acme}
   - {user: organization:acme#member, relation: viewer, object: company:nvda}
+  - {user: organization:acme#member, relation: granted, object: company:nvda}
 
   # carol: both tiers, no grants at all
   - {user: user:carol, relation: subscriber, object: tier:financials}
@@ -125,3 +129,28 @@ tests:
         type: catalog
         assertions:
           reader: [catalog:sec]
+
+  - name: granted lists private grants only, never the catalog (the Query API's readable())
+    tuples:
+      - {user: "user:*", relation: reader, object: catalog:sec}
+    list_objects:
+      - user: user:carol
+        type: company
+        assertions:
+          granted: []
+      - user: user:alice
+        type: company
+        assertions:
+          granted: [company:fund, company:nvda]
+      - user: user:bob
+        type: company
+        assertions:
+          granted: [company:nvda]
+
+  - name: A grant written only as granted is enough to view
+    tuples:
+      - {user: user:carol, relation: granted, object: company:fund}
+    check:
+      - user: user:carol
+        object: company:fund
+        assertions: {viewer: true, can_read_financials: true, can_read_filings: true}

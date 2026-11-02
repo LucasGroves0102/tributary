@@ -14,6 +14,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from query_api.app import create_app
+from query_api.authorizer import Access
 from query_api.github import NONCE_COOKIE, AppAccounts, GitHubUser
 from query_api.sandbox import (
     DEMO_PLAN,
@@ -56,6 +57,9 @@ class Clock:
 
 
 class NoAuthz:
+    def access(self, user_id):
+        return Access(frozenset(), self.readable(user_id))
+
     def readable(self, user_id):
         return {}
 

@@ -9,6 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from query_api.app import create_app
+from query_api.authorizer import Access
 from query_api.formula import CATALOG
 from query_api.store import Store
 
@@ -24,6 +25,9 @@ A, B = "9000000001", "9000000002"  # test companies
 class AllowAll:
     def can(self, *_):
         return True
+
+    def access(self, user_id):
+        return Access(frozenset(), self.readable(user_id))
 
     def readable(self, _):
         return {A: {"financials", "filings"}, B: {"financials", "filings"}}
@@ -566,4 +570,12 @@ def test_closing_the_catalog_hides_it_again(client, token):
     assert len(financials(client, token, "t-reader", B)) == 1
     client.app_conn.execute("DELETE FROM authz.public_access")
     assert financials(client, token, "t-reader", B) == []
+
+
+def test_store_reads_the_catalog_list_under_rls(client):
+    store = Store(OneConnection(client.app_conn))
+    assert store.catalog_companies("t-reader") == frozenset()  # closed
+    open_catalog(client.app_conn, B)
+    assert store.catalog_companies("t-reader") == {B}
+    assert store.catalog_companies("") == frozenset()  # no user, no catalog
 

@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 
 from query_api.app import create_app
 from query_api.auth import mint
+from query_api.authorizer import Access
 from query_api.sandbox import (
     DEMO_PLAN,
     DEMO_TICKERS,
@@ -103,6 +104,9 @@ class SyncedAuthorizer:
 
     def __init__(self, sandboxes: FakeSandboxes):
         self.sandboxes = sandboxes
+
+    def access(self, user_id):
+        return Access(frozenset(), self.readable(user_id))
 
     def readable(self, user_id):
         s = self.sandboxes.sandboxes.get(user_id)
