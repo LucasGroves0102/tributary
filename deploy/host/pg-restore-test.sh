@@ -4,8 +4,9 @@
 # check every database holds exactly the tables and row counts that pg-backup.sh counted in the
 # dump's own snapshot (<db>.rowcounts), then stop the instance and delete it. The live cluster
 # is never written to, so none of the restore's WAL passes through its replication slots.
-# With --slim (or RESTORE_FROM=slim) it tests the latest nightly instead; tables listed in its
-# <db>.schema-only-tables must then be empty. Runs as the postgres user. Writes the
+# With --slim (or RESTORE_FROM=slim) it tests the latest nightly instead. Tables a backup lists
+# in <db>.schema-only-tables (slim: the document subtree; full: the section-index tables) must
+# come back empty. Runs as the postgres user. Writes the
 # pg_restore_test_* metrics for node-exporter's textfile collector, pass or fail.
 set -euo pipefail
 cd /
@@ -159,7 +160,7 @@ for db in "${databases[@]}"; do
         failed=1
         continue
     fi
-    # tables dumped as schema only (slim backups) must come back empty
+    # tables dumped as schema only (<db>.schema-only-tables) must come back empty
     empty="$latest/$db.schema-only-tables"
     [[ -f "$empty" ]] || empty=/dev/null
     # byte order on both sides: the instance's collation (C) may differ from the live one's

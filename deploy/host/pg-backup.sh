@@ -6,8 +6,14 @@
 # them, the tables derived from them, and the crawl/index checkpoints) is dumped as schema only.
 # All of it is rebuilt from the SEC by re-running the crawl, and excluding the whole subtree keeps
 # the restore's foreign keys valid. On FULL_WEEKDAY a full dump goes to $dir/full instead, and the
-# newest FULL_KEEP of those are kept. Each dump comes with <db>.rowcounts, every table's row
-# count in the dump's own snapshot, which pg-restore-test.sh checks the restore against.
+# newest FULL_KEEP of those are kept (the old one is deleted only after the new one is
+# published). Full dumps still leave out the data of what the section-index job derives from
+# the parsed sections (search passages, diffs and its checkpoint, ~35 GB): the restored
+# checkpoint is empty, so the job re-indexes everything. Each dump lists its schema-only tables
+# in <db>.schema-only-tables and comes with <db>.rowcounts, every table's row count in the dump's
+# own snapshot, which pg-restore-test.sh checks the restore against. Dumps are compressed with
+# COMPRESS (zstd:1): document bodies are already gzip, and pg_dump's default gzip spent most of
+# a full dump's ~70 minutes recompressing them on one core.
 set -euo pipefail
 cd /
 
@@ -15,12 +21,15 @@ dir="${BACKUP_DIR:-/var/backups/postgres}"
 keep_days="${KEEP_DAYS:-14}"
 read -ra databases <<<"${DATABASES:-tributary app openfga}"
 full_weekday="${FULL_WEEKDAY:-7}"  # date +%u: 1 = Monday ... 7 = Sunday
-full_keep="${FULL_KEEP:-2}"
+full_keep="${FULL_KEEP:-1}"
+compress="${COMPRESS:-zstd:1}"
 slim_exclude=(bronze.filing_documents bronze.filing_exhibits bronze.filing_xbrl
               silver.filing_sections silver.segment_facts gold.segment_financials
               gold.section_search gold.section_diffs gold.section_changes ops.section_index
               ops.doc_crawl_targets)
 if [[ -n "${SLIM_EXCLUDE_DATA:-}" ]]; then read -ra slim_exclude <<<"$SLIM_EXCLUDE_DATA"; fi
+full_exclude=(gold.section_search gold.section_diffs gold.section_changes ops.section_index)
+if [[ -n "${FULL_EXCLUDE_DATA:-}" ]]; then read -ra full_exclude <<<"$FULL_EXCLUDE_DATA"; fi
 
 full=false
 [[ "$(date +%u)" == "$full_weekday" ]] && full=true
@@ -60,7 +69,7 @@ dump() {
         fi
         sleep 1
     done
-    pg_dump --format=custom --snapshot="$(<"$snapshot")" "$@" --file="$dest/$db.dump" "$db"
+    pg_dump --format=custom --compress="$compress" --snapshot="$(<"$snapshot")" "$@" --file="$dest/$db.dump" "$db"
     echo "COMMIT;" >&"$held"
     exec {held}>&-
     wait "$session"
@@ -73,9 +82,10 @@ mkdir -p "$out.partial"
 pg_dumpall --globals-only --file="$out.partial/globals.sql"
 for db in "${databases[@]}"; do
     args=()
-    if ! $full && [[ "$db" == tributary ]]; then
-        for table in "${slim_exclude[@]}"; do args+=(--exclude-table-data="$table"); done
-        printf '%s\n' "${slim_exclude[@]}" >"$out.partial/$db.schema-only-tables"
+    if [[ "$db" == tributary ]]; then
+        if $full; then exclude=("${full_exclude[@]}"); else exclude=("${slim_exclude[@]}"); fi
+        for table in "${exclude[@]}"; do args+=(--exclude-table-data="$table"); done
+        printf '%s\n' "${exclude[@]}" >"$out.partial/$db.schema-only-tables"
     fi
     dump "$db" "$out.partial" "${args[@]}"
     pg_restore --list "$out.partial/$db.dump" >/dev/null

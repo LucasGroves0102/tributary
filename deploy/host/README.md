@@ -12,8 +12,9 @@ Files installed directly on the server, outside Kubernetes. Postgres 16 runs on 
 
 Settings (env, with defaults): `BACKUP_DIR` (`/var/backups/postgres`), `KEEP_DAYS` (14),
 `DATABASES` (`tributary app openfga`), `TEXTFILE_DIR`
-(`/var/lib/node_exporter/textfile_collector`), `FULL_WEEKDAY` (7, Sunday), `FULL_KEEP` (2),
-`SLIM_EXCLUDE_DATA` (space-separated tables; default in the script). The restore test also reads
+(`/var/lib/node_exporter/textfile_collector`), `FULL_WEEKDAY` (7, Sunday), `FULL_KEEP` (1),
+`SLIM_EXCLUDE_DATA` and `FULL_EXCLUDE_DATA` (space-separated tables; defaults in the script),
+`COMPRESS` (`zstd:1`, `pg_dump --compress`). The restore test also reads
 `RESTORE_FROM` (`full`), `FREE_SPACE_FACTOR` (2), `RESTORE_JOBS` (2, `pg_restore --jobs`),
 `RESTORE_TEST_DIR` (`/var/lib/postgresql/restore-test`; the systemd unit's `ReadWritePaths` must
 match), `RESTORE_TEST_PORT` (54329) and `PG_BIN` (the highest `/usr/lib/postgresql/*/bin`).
@@ -22,10 +23,23 @@ Nightly dumps are slim: the document crawl adds ~30-40 GB, and 14 full copies wo
 the disk. Tributary's document subtree (`bronze.filing_documents` and every table with a foreign
 key to it, the search/diff/segment tables derived from them, and the crawl/index checkpoints) is
 dumped schema only; the tables are listed in each backup's `tributary.schema-only-tables`. Once a
-week a full dump goes to `$BACKUP_DIR/full`, and the newest `FULL_KEEP` are kept. Restoring a slim
-dump gives every financial, filer and access table, with the document tables empty: restart the
-crawl (`ops.doc_crawl_plan`, then `doc-crawler` + `parser-backfill`), then the `segments` and
-`parser-index` jobs, or restore the latest full dump instead.
+week a full dump goes to `$BACKUP_DIR/full`, and the newest `FULL_KEEP` (1) are kept; the old
+one is deleted only after the new one is published, so there is always a full dump. Restoring a
+slim dump gives every financial, filer and access table, with the document tables empty: restart
+the crawl (`ops.doc_crawl_plan`, then `doc-crawler` + `parser-backfill`), then the `segments` and
+`section-index` jobs, or restore the latest full dump instead.
+
+Full dumps hold every table's data except what the `section-index` job derives from the parsed
+sections: `gold.section_search`, `gold.section_diffs`, `gold.section_changes` and its checkpoint
+`ops.section_index` (~35 GB, listed in `tributary.schema-only-tables`). After restoring one, run
+the `section-index` job until `ops.section_index_status` has caught up (about 1 h of indexing and
+~4 h of diffs for ~265k filings; see the job's comment in the chart's `values.yaml`), then
+`REINDEX` `gold.section_search_tsv`. Search and "What changed" are empty until then; every other
+screen works at once.
+
+Dumps use `zstd:1` compression (Postgres 16). Most of the document bodies are already gzip, and
+`pg_dump`'s default gzip recompressing them on one core took most of the first full dump's ~70
+minutes (38 GB, 2026-11-02). Older gzip dumps restore the same way.
 
 ## Install
 
