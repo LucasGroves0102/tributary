@@ -142,3 +142,99 @@ def test_edgar_envelope_and_title_are_dropped():
            b"<TEXT>\n<HTML><HEAD><TITLE>pr</TITLE></HEAD><BODY><P>Results</P></BODY></HTML>\n"
            b"</TEXT>\n</DOCUMENT>")
     assert html_to_text(raw) == "Results"
+
+
+# rule 9: filings whose items are titled but not numbered (real Q3 2026 10-Qs)
+
+def _titled(name: str) -> tuple[str, list]:
+    raw = gzip.decompress((FIXTURES / f"{name}-10-Q.htm.gz").read_bytes())
+    return html_to_text(raw), parse(raw, "10-Q")
+
+
+def _check_offsets(text: str, sections: list) -> None:
+    for s in sections:
+        assert text[s.char_start:s.char_end].strip() == s.text
+
+
+def test_titles_with_part_headings():
+    # Molina: "PART I—FINANCIAL INFORMATION", then "RISK FACTORS"; no Item 1 or 6 title
+    text, sections = _titled("moh")
+    assert [s.key for s in sections] == ["I-2", "I-3", "I-4", "II-1", "II-1A", "II-2", "II-5"]
+    mdna = next(s for s in sections if s.key == "I-2")
+    assert mdna.title.startswith("MANAGEMENT’S DISCUSSION AND ANALYSIS")  # (“MD&A”) suffix
+    assert mdna.part == "I" and len(mdna.text) > 50_000
+    risk = next(s for s in sections if s.key == "II-1A")
+    assert risk.text.startswith("RISK FACTORS\nCertain risks may have a material adverse")
+    # the "Legal Proceedings" note in Part I's financial statements is not Part II, Item 1
+    legal = next(s for s in sections if s.key == "II-1")
+    assert legal.text.startswith("LEGAL PROCEEDINGS\nFor information regarding legal")
+    _check_offsets(text, sections)
+
+
+def test_titles_without_part_headings():
+    # Edison: titles only, in the body and in a table of contents with "Part I, Item 2" lines
+    text, sections = _titled("eix")
+    assert [s.key for s in sections] == ["I-2", "I-3", "I-1", "I-4", "II-1", "II-2", "II-5",
+                                         "II-6"]
+    mdna = next(s for s in sections if s.key == "I-2")
+    assert mdna.text.startswith("MANAGEMENT'S DISCUSSION AND ANALYSIS OF FINANCIAL CONDITION AND"
+                                " RESULTS OF OPERATIONS\nMANAGEMENT OVERVIEW\nHighlights")
+    assert len(mdna.text) > 50_000
+    _check_offsets(text, sections)
+
+
+def test_titles_with_cross_reference_index():
+    # TriNet: index lines "Part I, Item 2. 7" are not Part headings; running page headers
+    text, sections = _titled("tnet")
+    assert [s.key for s in sections] == ["I-2", "I-3", "I-4", "II-1", "II-1A", "II-2", "II-3",
+                                         "II-4", "II-5", "II-6"]
+    mdna = next(s for s in sections if s.key == "I-2")
+    assert mdna.text.startswith("Management’s Discussion and Analysis of Financial Condition and"
+                                " Results of Operations\nExecutive Summary")
+    risk = next(s for s in sections if s.key == "II-1A")
+    assert risk.text.startswith("Risk Factors\nThere have been no material changes")
+    _check_offsets(text, sections)
+
+
+def test_titles_ignored_when_items_are_numbered():
+    text = "\n".join(["Item 1A. Risk Factors", "Risky. " * 30,
+                      "LEGAL PROCEEDINGS", "None. " * 30])
+    assert [s.key for s in find_sections(text, "10-K")] == ["1A"]
+    with pytest.raises(ValueError):  # rule 9 is for 10-K and 10-Q only
+        find_sections(text.replace("Item 1A. ", ""), "8-K")
+
+
+def test_title_core_and_part():
+    text = "\n".join([
+        "Management’s Discussion and Analysis of Financial Condition and Results of Operations",
+        "Part II, Item 2. 7",  # contents; a cross-reference, not a Part heading
+        "PART I",
+        "Management's Discussion and Analysis of Results of Operations and Financial Condition"
+        " (MD&A):",
+        "Revenue grew. " * 30,
+        "Legal proceedings",  # Part II title inside Part I: skipped
+        "More revenue. " * 30,
+        "PART II",
+        "Risk Factors.", "Risky. " * 30,
+        "RISK FACTORS",  # repeat of the current section: running header
+        "Still risky. " * 30,
+        "Exhibits (a list of more than twenty characters)",  # not a title
+    ])
+    sections = find_sections(text, "10-Q")
+    assert [(s.key, s.part) for s in sections] == [("I-2", "I"), ("II-1A", "II")]
+    assert "More revenue." in sections[0].text
+    assert "Still risky." in sections[1].text
+    assert sections[0].title.endswith("(MD&A):")
+
+
+def test_titles_10k():
+    text = "\n".join(["BUSINESS", "We make chips. " * 30, "ITEM-LESS RISK FACTORS",
+                      "Risk factors", "Risky. " * 30, "Form 10-K Summary", "None."])
+    sections = find_sections(text, "10-K")
+    assert [(s.key, s.part) for s in sections] == [("1", "I"), ("1A", "I"), ("16", "IV")]
+
+
+def test_no_titles_keeps_previous_result():
+    assert find_sections("PART I\nNothing numbered or titled here.", "10-Q") == []
+    with pytest.raises(ValueError):
+        find_sections("No headings at all.", "10-Q")

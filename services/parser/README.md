@@ -19,7 +19,14 @@ accession replaces its rows from either parser, so a document always has one par
 The algorithm is specified in the docstring of `src/filing_parser/sections.py` so the Rust
 rewrite ([parser-rs](../parser-rs), week 4) can produce identical output for benchmarking. It
 handles tables of contents, running page headers, 10-Qs without a "Part I" heading, MD&A
-incorporated by reference (JPMorgan, Exxon: rule 7) and SGML exhibit envelopes.
+incorporated by reference (JPMorgan, Exxon: rule 7), SGML exhibit envelopes, and 10-K/10-Qs
+that title their items without numbering them (rule 9: Molina, Edison International, TriNet
+write "RISK FACTORS", never "Item 1A"). Rule 9 only runs when a 10-K or 10-Q has no "Item N"
+heading at all, so every filing with numbered items parses exactly as before; it matches whole
+lines against the official Form 10-K / 10-Q item titles (`TITLES_10K`, `TITLES_10Q`), takes the
+item and Part from the title, and skips a title outside its Part ("Legal Proceedings" inside
+Part I's financial statements). About 150 of 94,000 stored 10-K/10-Q documents had no sections
+before it.
 
 ## Run
 
@@ -29,6 +36,41 @@ make reparse    # parser --reparse-all: re-parse every stored document without K
 ```
 
 Use `make reparse` after changing the parsing rules.
+
+### Re-parsing only some documents (production)
+
+`--reparse-all` reads every stored document. When a rule change only affects documents that
+currently have no sections (rule 9), re-queue just those through the document crawl's outbox
+instead: `doc-crawler` publishes `documents.backfill` for every `done` target whose
+`published_at` is NULL, 500 per round (every 15 minutes even when idle), and `parser-backfill`
+re-parses them. After the new parser image is deployed (both `parser` and `parser-backfill`):
+
+```sql
+-- 1. what will be re-parsed: 10-K/10-Q documents without sections (incl. ones that errored)
+SELECT d.form, count(*), count(t.accession_no) AS in_crawl_queue
+FROM bronze.filing_documents d
+LEFT JOIN ops.doc_crawl_targets t ON t.accession_no = d.accession_no AND t.status = 'done'
+WHERE d.form ~ '^10-[KQ]'
+  AND NOT EXISTS (SELECT 1 FROM silver.filing_sections s WHERE s.accession_no = d.accession_no)
+GROUP BY d.form;
+
+-- 2. republish them (the crawler sends them on its next round)
+UPDATE ops.doc_crawl_targets t SET published_at = NULL
+FROM bronze.filing_documents d
+WHERE d.accession_no = t.accession_no AND t.status = 'done' AND d.form ~ '^10-[KQ]'
+  AND NOT EXISTS (SELECT 1 FROM silver.filing_sections s WHERE s.accession_no = d.accession_no);
+
+-- 3. progress: unpublished goes to 0, then the parser-backfill lag drains
+SELECT unpublished FROM ops.doc_crawl_status;
+SELECT parser_version, count(DISTINCT accession_no) FROM silver.filing_sections
+WHERE parser_version IN ('python-4', 'rust-4') GROUP BY 1;
+```
+
+Re-running step 1 afterwards lists the documents rule 9 could not split (no Item headings and no
+standard titles). Documents outside the crawl queue (`in_crawl_queue` lower than `count`:
+stored by the live doc-fetcher outside the crawl's plan) are only reached by `--reparse-all`.
+The hourly `section-index` job picks the new sections up by itself (`ops.section_index_pending`
+sees re-parsed filings). Nothing here calls the SEC.
 
 Config (env): `DATABASE_URL` (required), `KAFKA_BOOTSTRAP_SERVERS` (default `localhost:9092`),
 `METRICS_PORT`, `LOG_LEVEL`, the Kafka authentication variables of [libs/kafka](../../libs/kafka)
@@ -77,7 +119,10 @@ GIN index grows to ~0.5-0.7x under incremental inserts, so REINDEX it after a bu
 ## Tests
 
 `pytest services/parser`: `test_sections.py` parses real NVIDIA 10-K, 10-Q and 8-K documents
-(`tests/fixtures/*.htm.gz`) plus small synthetic cases for the quirks above; `test_db.py` needs
+(`tests/fixtures/*.htm.gz`), three real Q3 2026 10-Qs with titled but unnumbered items for rule 9
+(`moh-`, `eix-`, `tnet-10-Q.htm.gz`: Molina, Edison International, TriNet; the hidden inline-XBRL
+header is emptied to save space, the extracted text is unchanged), plus small synthetic cases for
+the quirks above; `test_db.py` needs
 `TEST_DATABASE_URL`. `test_diff.py` runs the diff rules on real NVIDIA sections (fiscal 2026 vs
 2025 10-K; Q2 FY2027 10-Q vs Q1 and vs Q2 FY2026); `test_index_db.py` runs `parser-index` on
 them in Postgres (incremental runs, late priors, re-parses, algorithm bumps).
