@@ -24,7 +24,14 @@ builder (each layer a `/v1/formulas/evaluate` request; plain SVG; CSV, SVG and P
 `#/ask` the assistant full width, with streamed answers, tool trace and verified citation links;
 `#/compare` the comps table; `#/about` says what Tributary covers and doesn't (no prices, consensus or
 transcripts; estimated dates; banks; EDGAR timing), linked from the sidebar footer and the
-assistant's empty state.
+assistant's empty state; `#/status` the data status page (`pages/Status.tsx`, `GET
+/v1/status/data`): feed freshness, EDGAR-to-database latency, live-feed share, completeness
+against EDGAR's daily indexes, coverage counts, data-quality check totals and the last recorded
+runs of the adversarial, citation and golden-figure suites (linked to their reports on GitHub at
+the commit they were recorded in). It is public: signed out, `#/status` renders it without the
+app shell (and without calling `/v1/me`), linked from the front door; signed in, from the
+sidebar footer. Every figure comes from the API; the page hard-codes none. The agent's page
+context reports it as `about` (agent-api has no `status` page).
 
 Sign-in (`src/session.ts`): the front door is "Try the demo" (`pages/Welcome.tsx`). It calls
 `POST /v1/demo/sandbox`, which creates a temporary real user (plan pro, 20 companies, a seeded
@@ -195,6 +202,7 @@ React.lazy); once signed in and idle the app prefetches them, so switching scree
 | + Companies (`#/companies`) | + 11.1 kB (4.1 kB) | |
 | + Filing reader (`#/filing/…`) | + FilingReader 10.8 kB (3.7 kB), text 2.1 kB (1.1 kB) | |
 | + Search, About | + 5.2 kB (1.9 kB), 3.6 kB (1.4 kB) | |
+| + Data status (`#/status`) | + Status 10.2 kB (3.4 kB) | |
 | + first assistant answer (marked, DOMPurify) | + AssistantMessage 68.1 kB (23.2 kB) | |
 | + Workspace (`#/workspace/…`), Report (`#/report/…`) | + 8.3 kB (3.4 kB) each, Report + markdown, LayerChart, SmallMultiples 2.4 kB | |
 

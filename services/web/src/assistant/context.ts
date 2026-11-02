@@ -166,6 +166,8 @@ export function pageContext(
       return { label: "Ask", suggestions: [...GENERAL, ATTACKS[1]!, ATTACKS[2]!] };
     case "about":
       return { label: "What Tributary covers", suggestions: ["What is Nvidia's P/E ratio?", "Did Nvidia beat consensus last quarter?"] };
+    case "status":
+      return { label: "Data status", suggestions: [GENERAL[0]!, GENERAL[1]!] };
     case "workspace":
       return { label: "Workspace", suggestions: ["What did my companies file recently?", GENERAL[0]!] };
     case "report":

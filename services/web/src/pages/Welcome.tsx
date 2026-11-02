@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { ApiError, authProviders, createSandbox, GITHUB_SIGN_IN, me as fetchMe, sandboxOffer } from "../api";
+import { href } from "../route";
 import { saveSession, type Session } from "../session";
 import type { Me, SandboxOffer } from "../types";
 
@@ -196,6 +197,10 @@ export function Welcome({ onReady, notice, github, pollMs = 1000, now = Date.now
           </p>
         )}
         <Progress phase={phase} onContinue={continueAnyway} />
+        <p className="small faint">
+          <a href={href({ view: "status" })}>Data status</a>: how fresh, complete and checked the data is,
+          live.
+        </p>
       </section>
     </main>
   );

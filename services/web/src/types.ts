@@ -774,3 +774,87 @@ export interface DataNotes {
   companies?: number;
   notes: DataNote[];
 }
+
+/** GET /v1/status/data (public, no token): the status page. Aggregate counts and timestamps
+ * only, from the production database (cached up to `max_age_seconds`), plus the last recorded
+ * runs of the test suites. */
+export interface DataStatus {
+  as_of: string;
+  max_age_seconds: number;
+  freshness: { last_accepted_at: string | null; last_ingested_at: string | null };
+  ingest: {
+    window_days: number;
+    window_start: string | null;
+    /** distinct filings accepted in the window, any source */
+    filings: number;
+    /** of those, caught by the live feed poller */
+    via_feed: number;
+    live_pct: number | null;
+    /** EDGAR acceptance → Postgres (bronze), live-feed filings only */
+    p50_seconds: number | null;
+    p95_seconds: number | null;
+  };
+  completeness: {
+    window_days: number;
+    window_start: string | null;
+    /** 0 until the first nightly check */
+    days_checked: number;
+    indexed: number | null;
+    /** absent from the database at each day's latest check (then republished) */
+    missing: number | null;
+    republished: number | null;
+    days_with_missing: number | null;
+    last_checked_at: string | null;
+  };
+  coverage: {
+    companies_with_financials: number | null;
+    documents: number | null;
+    indexed_filings: number | null;
+    sections: number | null;
+    last_indexed_at: string | null;
+  };
+  quality: {
+    companies_checked: number;
+    last_checked_at: string | null;
+    checks: { check: string; severity: "error" | "warning" | "info"; findings: number; companies: number }[];
+  };
+  recorded: {
+    adversarial: RecordedRun & {
+      attacks: number;
+      categories: number;
+      leaks: number;
+      controls: number;
+      controls_answered: number;
+      report: string;
+    };
+    citations: RecordedRun & {
+      questions: number;
+      verified_answers: number;
+      data_answers: number;
+      data_answers_citing: number;
+      figures: number;
+      figures_traced: number;
+      untraced_accessions: number;
+      report: string;
+    };
+    golden: {
+      figures: number;
+      companies: number;
+      filings: number;
+      checks: Record<string, number>;
+      hand_checked: number;
+      readme: string;
+      commit: string;
+      committed: string;
+    };
+  };
+}
+
+/** A suite run recorded in the repository (tests/adversarial, tests/citations). */
+export interface RecordedRun {
+  recorded_at: string;
+  models: string[];
+  /** the commit that last changed the recordings */
+  commit: string;
+  committed: string;
+}
