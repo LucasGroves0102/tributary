@@ -195,3 +195,9 @@ CI replays the recordings.
 | `tests/` | Adversarial, citation, integration, propagation, Kafka ACL and golden 10-K figure tests |
 | `deploy/` | Helm charts (services, platform, monitoring), Flux, SOPS secrets, Terraform, host backup scripts |
 | `benchmarks/` | Python vs Rust parser |
+
+## License
+
+Copyright © 2026 Lucas Groves. All rights reserved. The source is published to be read and
+reviewed; it may not be copied, modified, deployed or reused without written permission (see
+[LICENSE](LICENSE)). SEC data comes from EDGAR and is not covered by the notice.

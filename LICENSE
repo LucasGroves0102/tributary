@@ -1,0 +1,15 @@
+Copyright (c) 2026 Lucas Groves. All rights reserved.
+
+The source code in this repository is published so it can be read and reviewed. No license is
+granted to copy, modify, distribute, sublicense, deploy or use it, in whole or in part, for any
+purpose, commercial or otherwise, without the copyright holder's prior written permission.
+
+Viewing the code on GitHub and forking it through GitHub's interface as permitted by GitHub's
+Terms of Service are allowed; nothing else is.
+
+SEC filing data that the software processes comes from the U.S. Securities and Exchange
+Commission's EDGAR system and is not covered by this notice.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED. IN NO EVENT
+SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY ARISING FROM THE
+SOFTWARE OR ITS USE.
