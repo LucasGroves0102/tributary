@@ -7,7 +7,13 @@ End-to-end tests against the running stack (`make up`, `make cdc`, `make seed-ap
 gone from OpenFGA **and** `authz.user_access` in under 30 seconds. Cases: a revoked grant
 (alice), a Pro → Free downgrade (bob: filings only), and a deleted user (a throwaway user in
 acme with a direct grant; the delete cascades to their subscription and grants, and every tuple
-naming them and every `user_access` row must go). It restores what it changes.
+naming them and every `user_access` / `user_tiers` row must go), and the open-access switch:
+`UPDATE public_catalogs SET public = true` must let carol (Pro, no grants) read a catalog
+company in OpenFGA and `authz.public_access`, and setting it back to false must take that away
+again, both timed (the throwaway catalog company `9000000099` gets a stored document so
+`authz.catalog_companies()` includes it; CI runs authz-sync with `CATALOG_REFRESH_SECONDS=1`,
+locally the fixture waits up to 120 s, so set it low there too). It restores what it changes,
+except that company, which it leaves in place (harmless; reruns reuse it).
 `test_sandbox.py` does the same for a demo sandbox: `AppSandboxes.create` (Query API) must be
 granted everywhere, and the cleanup job's `delete_expired` must revoke it, each under 30 s.
 Besides the 30 s target, every measurement must stay under a 3 s regression guard (the
