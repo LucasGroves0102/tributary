@@ -18,6 +18,7 @@ request parameters. Dev tokens: `make token USER=alice`.
 |---|---|---|
 | `GET /health` | | `{"status": "ok"}` |
 | `GET /v1/status` | | pipeline freshness for outside uptime checks: `last_accepted_at` (EDGAR acceptance of the newest filing) and `last_ingested_at`, from `ops.feed_status()` (migration 026); no filing or company |
+| `GET /v1/status/data` | | the public status page: freshness, ingest latency, completeness against EDGAR, coverage counts, data-quality totals and the last recorded suite runs; aggregate counts and timestamps only, cached 60 s ([Status page](#status-page)) |
 | `GET /v1/demo/users` | `DEMO_USERS` set | demo accounts (404 when disabled) |
 | `POST /v1/demo/token` | `DEMO_USERS` set | an 8-hour token for a demo account (never a sandbox user) |
 | `GET /v1/demo/sandbox` | `DEMO_SANDBOX_ENABLED` | what "Try the demo" creates: lifetime, plan, tickers, assistant allowance ([Demo sandboxes](#demo-sandboxes)) |
@@ -246,6 +247,39 @@ FORCEd row-level security; `test_views_db.py`), validated against fixed catalogs
 and grants nothing: the pages still read every value through the permission-checked routes, so a
 column added for an ungranted company stays masked.
 
+## Status page
+
+`GET /v1/status/data` (`status.py`) backs the web app's public `#/status` page. No token: it
+returns only aggregate counts and timestamps, never a company, ticker, accession number, value
+or text. query_api can't read the bronze and ops tables behind it, so each part comes from a
+SECURITY DEFINER function of migration 028 (search_path pinned, EXECUTE only for query_api), and
+`status.shape` copies named fields only, so a function that returned more couldn't reach the
+route. The result is cached per process for 60 s (`max_age_seconds`).
+
+| Field | Source |
+|---|---|
+| `freshness` | `ops.feed_status()` (026): newest EDGAR acceptance and ingest time in `bronze.filings` |
+| `ingest` | `ops.public_ingest()`: filings accepted in the last 7 days, how many the live feed caught (`live_pct`), and p50/p95 seconds from EDGAR acceptance to bronze for those (feed rows only, as `ops.filing_latency`) |
+| `completeness` | `ops.public_completeness()`: the nightly completeness check (`ops.filing_completeness`, 027) over the last 30 days: days checked, accessions in EDGAR's daily indexes, missing at each day's latest check (then republished), rows republished. `days_checked` is 0 until the first run |
+| `coverage` | `ops.public_coverage()`: companies with `gold.quarterly_financials` rows, `bronze.filing_documents` rows, search-indexed filings and their sections (`ops.section_index`) |
+| `quality` | `ops.public_quality()`: `ops.quality_summary` (findings and companies per check, companies checked, last run) |
+| `recorded` | `query_api/data/recorded_results.json`: the last recorded adversarial and citation runs and the golden 10-K figures, with the commit that last changed each; written by `make status-results` ([tests/status](../../tests/status)) |
+
+```json
+{"as_of": "2026-11-02T15:00:00+00:00", "max_age_seconds": 60,
+ "freshness": {"last_accepted_at": "…", "last_ingested_at": "…"},
+ "ingest": {"window_days": 7, "window_start": "…", "filings": 0, "via_feed": 0, "live_pct": null,
+            "p50_seconds": null, "p95_seconds": null},
+ "completeness": {"window_days": 30, "window_start": "2026-10-03", "days_checked": 0, "indexed": null,
+                  "missing": null, "republished": null, "days_with_missing": 0, "last_checked_at": null},
+ "coverage": {"companies_with_financials": 0, "documents": 0, "indexed_filings": 0, "sections": 0,
+              "last_indexed_at": null},
+ "quality": {"companies_checked": 0, "last_checked_at": null,
+             "checks": [{"check": "impossible_value", "severity": "error", "findings": 0, "companies": 0}]},
+ "recorded": {"adversarial": {"recorded_at": "2026-10-18T20:51:00Z", "attacks": 59, "leaks": 0, "…": "…"},
+              "citations": {"…": "…"}, "golden": {"…": "…"}}}
+```
+
 ## Run
 
 ```bash
@@ -352,7 +386,8 @@ over real gold rows (PepsiCo, Coca-Cola, Apple) with both permission layers (nee
 cookie nonce, error redirects, the fragment token, the caps) and `HttpGitHub` over
 GitHub-shaped responses (never GitHub itself); `test_github_db.py` runs it on the real app
 schema (`APP_TEST_DATABASE_URL`);
-`test_ui_db.py` runs expected dates, recaps, flags and peers on real Postgres and
+`test_ui_db.py` runs expected dates, recaps, flags and peers on real Postgres (and the status
+functions of 026 and 028 as query_api, which still can't read the tables behind them) and
 `test_watchlist_db.py` the app-database watchlist (`APP_TEST_DATABASE_URL`); `test_rls.py` wires the API to an authorizer that
 allows everything and checks that row-level security alone still hides ungranted rows (needs
 `TEST_DATABASE_URL`).

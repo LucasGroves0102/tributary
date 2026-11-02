@@ -1,4 +1,4 @@
-.PHONY: up up-all down logs topics consume migrate seed-app authz authz-test cdc propagation-test token backfill companies financials financials-bulk financials-rebuild segments segments-rebuild seed-documents crawl reparse section-index psql lint test hooks secrets ask adversarial web citations typecheck exhibits
+.PHONY: up up-all down logs topics consume migrate seed-app authz authz-test cdc propagation-test token backfill companies financials financials-bulk financials-rebuild segments segments-rebuild seed-documents crawl reparse section-index psql lint test hooks secrets ask adversarial web citations typecheck exhibits status-results
 
 COMPOSE := $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo docker-compose)
 # use the repo virtualenv when there is one, so `make test` works without activating it
@@ -54,6 +54,9 @@ web:       ## chat UI dev server on http://localhost:5173 (needs query-api and a
 
 adversarial: ## FR10 live attack suite (~$0.10 on Haiku; needs query-api); CI replays it
 	@set -a; . ./.env; set +a; $(BIN)python tests/adversarial/run.py $(CASES)
+
+status-results: ## status page's recorded-suite figures from the committed recordings (after committing a new run)
+	$(BIN)python tests/status/recorded_results.py
 
 authz:     ## create the OpenFGA store if missing and write authz/model.fga
 	COMPOSE="$(COMPOSE)" ./scripts/authz-bootstrap.sh

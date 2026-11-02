@@ -25,6 +25,9 @@ make adversarial CASES="plan-01"       # selected cases; report.md is not rewrit
 pytest tests/adversarial               # replay only, no network
 ```
 
+After committing a full run, `make status-results` updates the status page's summary
+([`../status`](../status)); CI fails until it matches the recordings.
+
 The live run needs the Query API on `QUERY_API_URL` and the env from `.env`: `DATABASE_URL`
 (ground truth), `QUERY_API_JWT_SECRET` (mints user tokens), `ANTHROPIC_API_KEY`, `AGENT_MODEL`.
 It costs a few cents on Haiku and exits non-zero on any leak.

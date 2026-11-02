@@ -58,6 +58,25 @@ class FakeStore:
         return {"last_accepted_at": "2026-10-28T21:12:49Z",
                 "last_ingested_at": "2026-10-28T21:13:20Z"}
 
+    def data_status(self):
+        self.calls.append(("data_status",))
+        # extra columns stand for a SQL function that started returning more than it should
+        return {
+            "freshness": {**self.feed_status(), "accession_no": "0001045810-26-000075"},
+            "ingest": {"window_start": "2026-10-26T15:00:00Z", "filings": 40000,
+                       "via_feed": 39000, "p50_seconds": 41.23, "p95_seconds": 170.0,
+                       "company_id": NVDA},
+            "completeness": {"window_start": date(2026, 10, 3), "days": 0, "indexed": None,
+                             "missing": None, "republished": None, "days_with_missing": 0,
+                             "last_checked_at": None},
+            "coverage": {"companies_with_financials": 6025, "documents": 265625,
+                         "indexed_filings": 265000, "sections": 1780000,
+                         "last_indexed_at": "2026-11-02T10:00:00Z", "ticker": "NVDA"},
+            "quality": [{"check_name": "impossible_value", "severity": "error", "findings": 3,
+                         "companies": 2, "companies_checked": 6024,
+                         "last_checked_at": "2026-11-02T08:00:00Z", "company_id": NVDA}],
+        }
+
     def segments(self, user_id, company_id, axis, metric, periods, view, basis):
         self.calls.append(("segments", user_id, company_id))
         self.segments_args = (axis, metric, periods, view, basis)
@@ -310,3 +329,46 @@ def test_status_is_public_and_only_timestamps(client):
     assert r.status_code == 200
     assert set(r.json()) == {"status", "as_of", "last_accepted_at", "last_ingested_at"}
     assert r.json()["last_accepted_at"] == "2026-10-28T21:12:49Z"
+
+
+def test_status_data_is_public_and_aggregate_only(client):
+    r = client.get("/v1/status/data")  # no token: the public status page
+    assert r.status_code == 200
+    body = r.json()
+    assert set(body) == {"as_of", "max_age_seconds", "freshness", "ingest", "completeness",
+                         "coverage", "quality", "recorded"}
+    assert body["ingest"] == {"window_days": 7, "window_start": "2026-10-26T15:00:00Z",
+                              "filings": 40000, "via_feed": 39000, "live_pct": 97.5,
+                              "p50_seconds": 41.2, "p95_seconds": 170.0}
+    assert body["coverage"]["companies_with_financials"] == 6025
+    assert body["quality"] == {"companies_checked": 6024,
+                               "last_checked_at": "2026-11-02T08:00:00Z",
+                               "checks": [{"check": "impossible_value", "severity": "error",
+                                           "findings": 3, "companies": 2}]}
+    # nothing the store returned beyond the named fields reaches the public route
+    text = r.text
+    assert NVDA not in text and "0001045810-26-000075" not in text and "NVDA" not in text
+    assert set(body["recorded"]) == {"adversarial", "citations", "golden"}
+    assert body["recorded"]["adversarial"]["leaks"] == 0
+
+
+def test_status_data_before_the_first_completeness_check(client):
+    c = client.get("/v1/status/data").json()["completeness"]
+    assert c == {"window_days": 30, "window_start": "2026-10-03", "days_checked": 0,
+                 "indexed": None, "missing": None, "republished": None,
+                 "days_with_missing": 0, "last_checked_at": None}
+
+
+def test_status_data_is_cached_for_a_minute():
+    from datetime import UTC, datetime, timedelta
+
+    t = [datetime(2026, 11, 2, 12, 0, tzinfo=UTC)]
+    store = FakeStore()
+    c = TestClient(create_app(FakeAuthorizer(GRANTS), store, SECRET, clock=lambda: t[0]))
+    first = c.get("/v1/status/data").json()
+    t[0] += timedelta(seconds=59)
+    assert c.get("/v1/status/data").json()["as_of"] == first["as_of"]
+    assert store.calls == [("data_status",)]
+    t[0] += timedelta(seconds=1)
+    assert c.get("/v1/status/data").json()["as_of"] == "2026-11-02T12:01:00+00:00"
+    assert store.calls == [("data_status",)] * 2

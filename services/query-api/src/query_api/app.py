@@ -41,6 +41,7 @@ from query_api.sandbox import (
 )
 from query_api.shapes import filing_url
 from query_api.shapes import period as _period
+from query_api.status import add_status_routes
 from query_api.store import QUERY_TIMEOUT, Store
 from query_api.ui import add_ui_routes
 from query_api.views import Views, add_view_routes
@@ -169,6 +170,7 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
     add_view_routes(app, views=views, current_user=current_user)
 
     now = clock or (lambda: datetime.now(UTC))
+    add_status_routes(app, store=store, clock=now)
     demo_companies = demo_company_resolver(store)
     sandbox_info = add_sandbox_routes(
         app, store=store, sandboxes=sandboxes, config=sandbox_config, jwt_secret=jwt_secret,
