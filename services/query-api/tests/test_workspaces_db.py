@@ -72,8 +72,12 @@ def test_create_list_items_rename_delete(db):
     assert count(conn, "workspace_items", "t-ws1") == 0  # items go with their workspace
 
 
-def test_another_users_work_is_out_of_reach(db):
+@pytest.mark.parametrize("catalog_public", [False, True])
+def test_another_users_work_is_out_of_reach(db, catalog_public):
     s, conn = db
+    # open access (app migration 008) opens SEC data only, never anyone's saved work
+    conn.execute("UPDATE public_catalogs SET public = %s WHERE catalog_id = 'sec'",
+                 (catalog_public,))
     ws = s.create("t-ws1", "Mine")
     item = s.add_item("t-ws1", ws["workspace_id"], "chart", "Rev", CHART)
     wid, iid = ws["workspace_id"], item["item_id"]

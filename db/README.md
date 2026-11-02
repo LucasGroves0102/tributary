@@ -16,7 +16,7 @@ OpenFGA keeps its own `openfga` database, migrated by OpenFGA itself.
 | `bronze` | data as received: `filings` (filings.raw sink), `company_facts` (XBRL payloads), `filing_documents`, `filing_exhibits` (gzip), `filing_xbrl` (facts extracted from the documents' inline XBRL), `submissions`, `submission_filings`, load checkpoints | bronze-loader, facts-fetcher, doc-fetcher, company-loader |
 | `silver` | typed and resolved: `companies`, `company_ciks`, `company_aliases`, `metrics`, `metric_tags`, `financial_facts`, `filing_sections`, `filings` (view), `segment_axes`, `segment_metrics`, `segment_metric_tags`, `segment_facts` | company-loader, facts-fetcher (via SQL functions), parser |
 | `gold` | what the Query API serves, with provenance (FR6): `quarterly_financials`, `filing_sections` (view), `segment_financials` (view `segments`), `section_search`, `section_diffs`, `section_changes` | `gold.refresh_quarterly_financials`, `gold.refresh_segments`, `gold.refresh_section_search`, parser-index |
-| `authz` | `user_access`: who can read which company and tier | authz-sync |
+| `authz` | `user_access` (private grants: user, company, tier), `user_tiers` (each user's plan tiers), `public_access` (public catalog: company, tier); `readable_companies(tier)`, the read rule every policy uses | authz-sync |
 | `ops` | freshness and pipeline-health views for Grafana and the ops exporter | views only |
 
 Transforms are SQL functions (`silver.refresh_financial_facts`, `gold.refresh_quarterly_financials`,
@@ -25,7 +25,10 @@ lookup: `SELECT * FROM silver.resolve_company('FB');`.
 
 Row-level security: `007_query_api_rls.sql` creates the `query_api` role and policies on
 `gold.quarterly_financials` and `silver.filing_sections` (behind `gold.filing_sections`) that
-return only rows granted in `authz.user_access` for the transaction's `app.user_id`. `017_ui_data.sql` adds what the
+return only rows the transaction's `app.user_id` may read; since `030_public_access.sql` that is
+`authz.readable_companies(tier)`: private grants (`authz.user_access`) plus the public catalog
+(`authz.public_access`, within the user's `authz.user_tiers`). No `app.user_id`, no rows
+([rls/](rls/README.md)). `017_ui_data.sql` adds what the
 research UI reads: `gold.latest_financials` (security_invoker, RLS applies),
 `gold.financials_coverage` (company ids with financials only; runs as its owner, so public),
 `silver.filings` granted as the public SEC filing index, and the functions
@@ -75,6 +78,12 @@ dates) no longer become extra quarter rows (1,838 rows on hermes), and a derived
 comes out negative for a metric that can't be (revenue, costs, capex, D&A, SBC, buybacks,
 dividends) is left missing instead of published (11,320 rows; e.g. Cytek's Q4 2022 revenue at
 -$112.7M after a later 10-K re-tagged the year). Needs `make financials-rebuild`.
+`030_public_access.sql` (open access, layer 2): `authz.public_access` and `authz.user_tiers`
+(written by authz-sync), the read rule `authz.readable_companies(tier)` / `authz.can_read`,
+`authz.catalog_companies()` (catalog membership: companies with gold financials or a stored
+document, read by authz-sync) and the nine `granted_*` policies re-pointed at the rule. Ships
+with `public_access` empty: no one's access changes until the catalog is opened
+([app/README.md](app/README.md), "Open access").
 
 ## Migrations
 
