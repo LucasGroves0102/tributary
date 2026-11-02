@@ -305,3 +305,35 @@ def test_proxy_statement_figures_never_reach_gold(loaded):
     assert not loaded.execute(
         "SELECT count(*) FROM gold.derived_financials WHERE 'proxy-1' = ANY(source_accessions)"
     ).fetchone()[0]
+
+
+def insert_facts(conn, metric, tag, facts):
+    conn.execute("DELETE FROM silver.financial_facts")
+    for start, end, value, accession, filed in facts:
+        conn.execute(
+            "INSERT INTO silver.financial_facts (cik, metric, tag, unit, period_start,"
+            " period_end, value, accession_no, form, filed, ingested_at)"
+            " VALUES (%s, %s, %s, 'USD', %s, %s, %s, %s, '10-K', %s, '2025-11-02')",
+            (HD, metric, tag, start, end, value, accession, filed))
+    refresh_gold(conn, [HD])
+
+
+def test_flow_metrics_tagged_at_an_instant_are_not_quarters(conn):
+    # UnitedHealth tags each dividend payment at its payment date (migration 029)
+    insert_facts(conn, "dividends_paid", "PaymentsOfDividendsCommonStock", [
+        ("2024-01-01", "2024-09-30", 5800, "q3", "2024-11-01"),
+        ("2024-01-01", "2024-12-31", 7737, "fy", "2025-02-28"),
+        (None, "2024-12-17", 1932, "fy", "2025-02-28"),
+    ])
+    assert quarters(conn, HD, "dividends_paid") == [
+        (date(2024, 12, 31), 1937, "derived", "us-gaap:PaymentsOfDividendsCommonStock",
+         ["q3", "fy"])]
+
+
+def test_impossible_derived_quarter_is_left_out(conn):
+    # Cytek: a later 10-K re-tagged the fiscal year as 2,963,000, so Q4 = FY - 9M < 0 (029)
+    insert_facts(conn, "revenue", "Revenues", [
+        ("2022-01-01", "2022-09-30", 115700000, "q3", "2022-11-01"),
+        ("2022-01-01", "2022-12-31", 2963000, "fy", "2024-03-13"),
+    ])
+    assert quarters(conn, HD, "revenue") == []
