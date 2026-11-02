@@ -1,9 +1,9 @@
-# Outside uptime check: every ~5 minutes GitHub runs deploy/uptime/check.py against the live
-# site (web app, both APIs, pipeline freshness from /v1/status). Down or stale opens one issue
-# labelled `outage` (GitHub emails the owner); the first passing run after that comments with
-# the outage length and closes it, so closed `outage` issues are the outage history.
-# GitHub may delay scheduled runs by several minutes and pauses them after 60 days without a
-# commit to the repository.
+# Outside uptime check: GitHub runs deploy/uptime/check.py against the live site (web app, both
+# APIs, pipeline freshness from /v1/status). Down or stale opens one issue labelled `outage`
+# (GitHub emails the owner); the first passing run after that comments with the outage length
+# and closes it, so closed `outage` issues are the outage history.
+# The cron asks for every 5 minutes, but GitHub runs it only a few times a day in practice
+# (deploy/uptime/README.md, Limits), and pauses it after 60 days without a commit.
 name: Uptime
 
 on:
@@ -39,6 +39,16 @@ jobs:
           OWNER: ${{ github.repository_owner }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
+          # GitHub's API sometimes fails one call (HTTP 499/5xx) while the site is fine; retry
+          # each gh call so that doesn't turn the run red.
+          gh() {
+            local i
+            for i in 1 2 3; do
+              command gh "$@" && return 0
+              [ "$i" = 3 ] || sleep $(( i * 10 ))
+            done
+            return 1
+          }
           report="$RUNNER_TEMP/report.md"
           open=$(gh issue list --label outage --state open --limit 1 --json number,createdAt \
             --jq '.[0] | select(.) | "\(.number) \(.createdAt)"')

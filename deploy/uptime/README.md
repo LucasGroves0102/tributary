@@ -3,8 +3,8 @@
 An outside check of the live site, so an outage is noticed even when hermes itself is down
 (Prometheus and Alertmanager run on hermes and can't report their own server going away).
 
-`.github/workflows/uptime.yml` runs `check.py` on GitHub Actions about every 5 minutes. It
-checks:
+`.github/workflows/uptime.yml` runs `check.py` on GitHub Actions. Its schedule asks for every 5
+minutes, but GitHub runs it far less often (see Limits). It checks:
 
 | Check | Passes when |
 |---|---|
@@ -21,10 +21,14 @@ timestamps, when the newest filing was accepted by EDGAR and when it was ingeste
 When something fails, the workflow opens one issue labelled `outage` that @-mentions the repo
 owner (GitHub emails them). While it stays down nothing more is posted. The first passing run
 comments with how long it was down and closes the issue, so the closed `outage` issues are the
-outage history.
+outage history. Each `gh` call in that step is tried up to three times, so a failed GitHub API
+call (an HTTP 499 on 2026-10-29) doesn't turn a passing check red.
 
-Limits: GitHub may delay scheduled runs by several minutes, and it pauses scheduled workflows
-after 60 days without a commit (it emails first; any commit or a manual run re-enables it).
+Limits: GitHub treats `schedule` as best effort and drops most runs of a small repository's
+5-minute cron: from 2026-10-29 to 2026-11-02 it ran about 5 times a day, 3-7 hours apart, so an
+outage can go unnoticed for hours. Manual runs (`workflow_dispatch`) aren't throttled. GitHub
+also pauses scheduled workflows after 60 days without a commit (it emails first; any commit or a
+manual run re-enables it).
 The check uses no accounts or secrets beyond the workflow's own token.
 
 ```bash

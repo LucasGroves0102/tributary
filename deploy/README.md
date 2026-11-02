@@ -14,7 +14,7 @@ the host and the public site behind a Cloudflare Tunnel. Local development uses
 | [`secrets/`](secrets) | Kubernetes Secrets, encrypted with SOPS + age |
 | [`terraform/`](terraform) | Flux bootstrap on a fresh cluster; Cloudflare tunnel, DNS, HTTPS and rate limiting |
 | [`host/`](host) | systemd units and scripts on the server itself: nightly Postgres backup and weekly restore test into a throwaway Postgres instance |
-| [`uptime/`](uptime) | outside uptime check run by GitHub Actions every ~5 min: site, APIs and pipeline freshness; opens and closes `outage` issues |
+| [`uptime/`](uptime) | outside uptime check run by GitHub Actions (scheduled every 5 min; GitHub runs it a few times a day): site, APIs and pipeline freshness; opens and closes `outage` issues |
 
 ```
 push to main → CI (lint, tests, images to GHCR, tag main-<run>-<sha>)
