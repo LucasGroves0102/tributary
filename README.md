@@ -3,7 +3,8 @@
 **A real-time SEC filings research platform where an AI analyst answers with citations, and only from the data you're allowed to see.**
 
 **[Live demo → tributary.lucasgroves.dev](https://tributary.lucasgroves.dev)** · click *Try the demo* for your own
-sandbox with 20 companies (PepsiCo, Coca-Cola, Apple, Microsoft, Nvidia, JPMorgan, ...).
+sandbox: every company's financials and filings, with a starter watchlist (PepsiCo, Coca-Cola,
+Microsoft, Nvidia, Costco, JPMorgan) and workspace.
 
 | | |
 |---|---|
@@ -45,7 +46,7 @@ flowchart LR
     appdb[(app DB: users, plans, grants)]
     sync[authz-sync]
     fga[OpenFGA]
-    rls[(authz.user_access + RLS)]
+    rls[(authz tables + RLS)]
   end
   api[Query API]
   agent["Claude agent (tools = Query API)"]
@@ -74,8 +75,10 @@ in front (Terraform-managed GitOps bootstrap and Cloudflare edge). GitHub Action
 
 - **Two permission layers, not one.** The Query API asks OpenFGA before every query, then runs
   the query as a restricted Postgres role with the user's id set, so row-level security filters
-  again. A bug in either layer alone can't leak data. Watching a company never grants access;
-  that trap is in the adversarial suite.
+  again. A bug in either layer alone can't leak data. SEC data is open to every signed-in user
+  through a public catalog, but it goes through the same two layers: one row in the app database
+  opens or closes it, and per-company grants and plan tiers still apply to anything outside it.
+  Watching a company never grants access; that trap is in the adversarial suite.
 - **Permissions are data, streamed.** Grants live in the app database; Debezium streams them to
   Kafka, and `authz-sync` is the only writer of OpenFGA tuples and RLS rows. It replays the
   compacted topics from the beginning and applies diffs, deletes first, so revocation is never
@@ -121,13 +124,27 @@ make consume           # watch filings arrive (or open the Kafka UI at http://lo
 
 ## Access control
 
-Revoke a grant in the app database and it's gone from OpenFGA and `authz.user_access` in
-under 0.2 s (0.11–0.17 s in CI, [report](tests/propagation/report.md); `make propagation-test`,
-run in CI on every push, which fails above 3 s; target under 30 s):
+Every signed-in user (a demo sandbox, a GitHub account, the named test users) reads every
+company's financials and filings, within their plan's tiers: the **public catalog** `catalog:sec`
+holds every company with gold financials or a stored filing, and while it is public OpenFGA lets
+every user read it (`catalog:sec#reader@user:*`) and row-level security accepts its companies
+(`authz.public_access`). A request without a user reads nothing. Per-company grants (to a user
+or an organization) still work for anything outside the catalog, and saved work (workspaces,
+reports, views) stays owner-only. The switch is one app-database row, streamed like any grant:
+
+```sql
+UPDATE public_catalogs SET public = true  WHERE catalog_id = 'sec';  -- open (db/app README)
+UPDATE public_catalogs SET public = false WHERE catalog_id = 'sec';  -- close again
+```
+
+Change a grant, a plan or the switch in the app database and OpenFGA and the RLS tables follow
+in under 0.2 s (0.11–0.17 s for revocations in CI, [report](tests/propagation/report.md);
+`make propagation-test`, run in CI on every push, which fails above 3 s; target under 30 s):
 
 ```
 app DB ─(Debezium CDC)─▶ Kafka ─▶ authz-sync ─┬─▶ OpenFGA (checked by the Query API)
-                                              └─▶ authz.user_access (row-level security)
+                                              └─▶ authz.user_access, user_tiers, public_access
+                                                  (row-level security)
 ```
 
 ### Query API
@@ -139,8 +156,7 @@ are at `localhost:8000/docs`.
 ```bash
 curl -H "Authorization: Bearer $(make -s token USER=alice)" \
   "localhost:8000/v1/companies/0001045810/financials?metrics=revenue"   # 200, cited
-curl -H "Authorization: Bearer $(make -s token USER=alice)" \
-  "localhost:8000/v1/companies/0001045810/sections/1A"                  # 403: Free plan
+curl "localhost:8000/v1/companies/0001045810/financials?metrics=revenue" # 401: no user, no data
 ```
 
 ### Web app
@@ -152,7 +168,7 @@ with "what changed" diffs, and full-text search. The assistant sits on every scr
 you're looking at, and can build charts, screens and comps for you, with Undo. Model output is
 sanitized and served under a strict Content-Security-Policy. `make web` runs the dev server on
 :5173. Besides *Try the demo*, you can *Sign in with GitHub* (no scopes, public profile only) for
-a permanent account with the same 20 companies that keeps your saved work.
+a permanent account that keeps your saved work.
 
 ### Agent
 
@@ -164,7 +180,7 @@ read, and it cites the filing, section or XBRL tag, and freshness for every figu
 
 ```bash
 make ask USER=alice Q="How has Nvidia's revenue changed over the last 4 quarters?"
-make ask USER=alice Q="What are Nvidia's main risk factors?"   # free plan: no filings access
+make ask USER=alice Q="What are Nvidia's main risk factors?"
 ```
 
 ### Citation accuracy
@@ -180,8 +196,10 @@ the result, and flags any figure it couldn't trace. On 32 questions across the d
 
 59 attacks (plan bypass, impersonation, fake system messages, watchlist tricks, indirect
 leaks, tool-argument injection, ...) plus controls, run as the demo users against the live
-stack: **0 leaks** ([report](tests/adversarial/report.md)). `make adversarial` runs it live;
-CI replays the recordings.
+stack with the catalog closed (per-company grants only): **0 leaks**
+([report](tests/adversarial/report.md)). `make adversarial` runs it live; CI replays the
+recordings. With the catalog open its targets move to what stays private (other users' saved
+work, prompt injection in filings); see its [README](tests/adversarial/README.md).
 
 ## Layout
 

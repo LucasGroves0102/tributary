@@ -27,12 +27,14 @@ transcripts; estimated dates; banks; EDGAR timing), linked from the sidebar foot
 assistant's empty state.
 
 Sign-in (`src/session.ts`): the front door is "Try the demo" (`pages/Welcome.tsx`). It calls
-`POST /v1/demo/sandbox`, which creates a temporary real user (plan pro, 20 companies, a seeded
-watchlist; see the Query API README) and returns its JWT; the page then polls `/v1/me` until all
-20 companies are readable, showing how many have arrived (access travels app DB → Debezium →
-Kafka → authz-sync → OpenFGA; the BRD target is under 30 s; after that it offers "Continue
-anyway"), and lands on Home. The session is kept in localStorage until the sandbox expires;
-a banner shows "Demo sandbox: 20 companies · resets in Xh", and an expired or rejected token
+`POST /v1/demo/sandbox`, which creates a temporary real user (plan pro, a seeded watchlist and
+workspace; see the Query API README) and returns its JWT, then lands on Home. With the public
+catalog open the user reads every company at once (`/v1/me` says so). While it is closed the
+sandbox gets grants on 20 companies instead, and the page polls `/v1/me` until all 20 are
+readable, showing how many have arrived (access travels app DB → Debezium → Kafka → authz-sync →
+OpenFGA; the BRD target is under 30 s; after that it offers "Continue anyway"). The session is
+kept in localStorage until the sandbox expires; a banner shows "Demo sandbox: every company ·
+resets in Xh" ("20 companies" while the catalog is closed), and an expired or rejected token
 returns to the front door. The named demo users (alice, bob, carol, dave: `/v1/demo/users`,
 `/v1/demo/token`) are behind a dev flag: build with `VITE_DEMO_PICKER=1`, or run
 `localStorage.setItem("tributary.picker", "1")` in the browser and reload.
@@ -48,7 +50,8 @@ ids), stores a `kind: "github"` `Session` the same way as a sandbox's, shows the
 propagation progress for a new account, and lands on Home. The top bar shows "Signed in as
 <login>" with "Sign out", which forgets the token (the JWT is stateless and lasts 7 days; an
 expired one returns to the front door with "Your sign-in expired"). A GitHub account is not a
-sandbox: no "resets in" banner, but it has the same 20 companies, so the scope below applies.
+sandbox: no "resets in" banner, but it has the same access, so the scope below applies while
+the catalog is closed.
 
 **Open access.** `/v1/me` says whether the public catalog is open (`catalog.public`, with its
 tiers; then `companies` lists only private grants). `src/access.ts` turns that into what the

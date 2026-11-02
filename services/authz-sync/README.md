@@ -19,7 +19,7 @@ What it writes:
 | From | OpenFGA | Postgres (`authz.*`, read by RLS) |
 |---|---|---|
 | users, organizations, plans | `member`, `subscriber` tuples | `user_tiers (user, tier)` |
-| `company_grants` (private grants) | `viewer` tuples (+ the company's tier pointers) | `user_access (user, company, tier)` |
+| `company_grants` (private grants) | `viewer` and `granted` tuples (+ the company's tier pointers) | `user_access (user, company, tier)` |
 | catalog membership: `authz.catalog_companies()`, companies with gold financials or a stored document | `company:<id>#catalog@catalog:sec` + tier pointers, whether or not the catalog is public | - |
 | `public_catalogs` `('sec', true)` (the open-access switch) | `catalog:sec#reader@user:*` | `public_access (company, tier)`: every catalog company x both tiers |
 

@@ -282,12 +282,13 @@ the demo routes), the demo sandbox settings below, `GITHUB_CLIENT_ID` / `GITHUB_
 "Try the demo" (`sandbox.py`, `demo.py`, app migration 003) creates a temporary REAL user so a
 visitor exercises the whole access path instead of sharing an account: one app-DB transaction
 writes `users`, `subscriptions` (plan pro), `company_grants` for the 20 companies in
-`sandbox.py` `DEMO_TICKERS` (only while the public catalog is closed: with it open the sandbox
-reads every company through it, so `grant_demo_access` writes no grant) (the only list; resolved through `silver.resolve_company`, never
-CIK = company), a watchlist (`DEMO_WATCHLIST`: PEP, KO, MSFT, NVDA, COST, JPM) and
+`sandbox.py` `DEMO_TICKERS` (the only list; resolved through `silver.resolve_company`, never
+CIK = company; written only while the public catalog is closed: with it open the sandbox reads
+every company through it, so `grant_demo_access` writes no grant), a watchlist (`DEMO_WATCHLIST`: PEP, KO, MSFT, NVDA, COST, JPM) and
 `demo_sandboxes` (expiry). The Query API writes no tuples: Debezium → Kafka → authz-sync turns
 those rows into OpenFGA tuples and `authz.user_access` like any user's, so the web app polls
-`/v1/me` until all 20 companies are readable. The response's token is an ordinary JWT, `sub` =
+`/v1/me` until all 20 companies are readable (with the catalog open there is nothing to wait
+for: `/v1/me` says every company is readable). The response's token is an ordinary JWT, `sub` =
 the new user (`demo-` + 16 hex), `exp` = the sandbox's expiry; nothing can extend it, and the
 creation route takes no input, so it can't pick a plan, companies or lifetime.
 `query-api-demo-cleanup` (Helm CronJob `demo-cleanup`, hourly) deletes expired sandbox users

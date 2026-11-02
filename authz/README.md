@@ -18,7 +18,8 @@ FR8. OpenFGA authorization model for Tributary, as code.
   catalog, public catalog (`user:*`), a company outside the catalog, private grants, tiers.
 
 Tiers: `financials` gates gold financials (`gold.quarterly_financials` and friends); `filings`
-gates parsed filing text (`gold.filing_sections` and friends). Every plan has both. Watchlists are
+gates parsed filing text (`gold.filing_sections` and friends). Every plan has both once the catalog
+is opened (the flip also gives the free plan `filings`: db/app README, "Open access"). Watchlists are
 preferences only and never grant access.
 
 Tuples are written only by [authz-sync](../services/authz-sync), from the app database (plus the
