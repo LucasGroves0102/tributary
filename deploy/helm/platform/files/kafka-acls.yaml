@@ -42,7 +42,7 @@ principals:
   # Reads the CDC topics only; it must never be able to write them (a forged grant).
   authz-sync:
     consume: [app.public.users, app.public.subscriptions, app.public.company_grants,
-              app.public.plan_tiers]
+              app.public.plan_tiers, app.public.public_catalogs]
     groups: [authz-sync]
   # Kafka Connect: its worker topics and group, and Debezium's topics (created by Connect from
   # the connector's topic.creation settings).

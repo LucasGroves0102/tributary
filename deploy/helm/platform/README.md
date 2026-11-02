@@ -98,7 +98,7 @@ them, both idempotent:
 | `doc-crawler` | doc-crawler | write + create `documents.backfill` | |
 | `parser` | parser (Python or Rust) | read `documents.fetched` | `parser-python` |
 | `parser-backfill` | parser-backfill | read `documents.backfill` | `parser-backfill` |
-| `authz-sync` | authz-sync | read `app.public.{users,subscriptions,company_grants,plan_tiers}` | `authz-sync` |
+| `authz-sync` | authz-sync | read `app.public.{users,subscriptions,company_grants,plan_tiers,public_catalogs}` | `authz-sync` |
 | `connect` | Kafka Connect + Debezium | `connect.*`: read, write, create, describe, describe-configs; `app.*`, `__debezium-heartbeat.app`: write, create, describe | `connect` |
 | `kafka-exporter` | kafka-exporter (`monitoring`) | describe `*` (+ describe groups `*`, cluster) | |
 | `admin` | setup-kafka | super user | |

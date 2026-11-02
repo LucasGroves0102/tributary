@@ -7,7 +7,7 @@
   "database.password": "${POSTGRES_PASSWORD}",
   "database.dbname": "app",
   "topic.prefix": "app",
-  "table.include.list": "public.users,public.subscriptions,public.company_grants,public.plan_tiers,public.debezium_heartbeat",
+  "table.include.list": "public.users,public.subscriptions,public.company_grants,public.plan_tiers,public.public_catalogs,public.debezium_heartbeat",
   "slot.name": "app_debezium",
   "publication.name": "app_debezium",
   "publication.autocreate.mode": "filtered",

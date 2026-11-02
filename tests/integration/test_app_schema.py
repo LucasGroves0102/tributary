@@ -9,7 +9,7 @@ psycopg = pytest.importorskip("psycopg")
 DSN = os.environ.get("APP_TEST_DATABASE_URL")
 pytestmark = pytest.mark.skipif(not DSN, reason="APP_TEST_DATABASE_URL not set")
 
-CDC_TABLES = ["users", "subscriptions", "company_grants", "plan_tiers"]
+CDC_TABLES = ["users", "subscriptions", "company_grants", "plan_tiers", "public_catalogs"]
 
 
 @pytest.fixture
@@ -54,3 +54,9 @@ def test_plans_grant_expected_tiers(conn):
         "SELECT plan_id, array_agg(tier ORDER BY tier) FROM plan_tiers GROUP BY plan_id"
     ).fetchall())
     assert tiers == {"free": ["financials"], "pro": ["filings", "financials"]}
+
+
+def test_public_catalog_ships_closed(conn):
+    # app migration 008: deploying open access changes nothing until the row is flipped
+    assert conn.execute("SELECT catalog_id, public FROM public_catalogs").fetchall() == [
+        ("sec", False)]
