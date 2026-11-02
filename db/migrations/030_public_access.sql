@@ -85,7 +85,7 @@ $$;
 
 -- Catalog membership for authz-sync: every company with gold financials or a stored filing
 -- document (catalog:sec). Company ids only; authz-sync runs it every few minutes.
-CREATE FUNCTION authz.catalog_companies() RETURNS SETOF text
+CREATE FUNCTION authz.catalog_companies() RETURNS TABLE (company_id text)
 LANGUAGE sql STABLE AS $$
     SELECT company_id FROM gold.financials_coverage
     UNION
