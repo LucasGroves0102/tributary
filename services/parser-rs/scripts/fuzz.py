@@ -44,7 +44,14 @@ TEXT = ["Item 7.", "Item 1A", "ITEM 2.02 Results", "PART II", "Part I", "Item 8.
         "Management’s discussion and analysis " + "y" * 100, "\u212aey", "ıtem 4", "ſ",
         "<ix:header>Item 9</ix:header>", "<title>Item 5</title>", "\x85", "\ufeff",
         "http-equiv content charset=koi8-r ", "<!-- HTTP-EQUIV CONTENT CHARSET=iso-8859-2 -->",
-        "y" * 3000]
+        "y" * 3000,
+        # rule 9: item titles without numbers, their core (punctuation, parenthetical) and fold
+        "\nRISK FACTORS\n", "\nLegal Proceedings.\n", "\nExhibits:\n", "\nBusiness\n",
+        "\nControls and Procedures (Unaudited)\n", "\nOther Information ()\n",
+        "\nMANAGEMENT’S DISCUSSION AND ANALYSIS OF FINANCIAL CONDITION AND RESULTS OF"
+        " OPERATIONS (“MD&A”)\n", "\nPart I, Item 2\n", "\nPART II—OTHER INFORMATION\n",
+        "\nRİSK FACTORS\n", "\nFORM 10-K SUMMARY\n", "\nUnregistered Sales of Equity Securities"
+        " and Use of Proceeds (a list longer than twenty)\n", "\nExhibits (a))\n", "Risk Factors"]
 BYTES = [b"\xff", b"\x80", b"\xe2\x80", b"\xc3\xa9"]
 RARE = [b"\x0c", b"\x01", b"&#12;", b"&#xFFFE;", b"\xef\xbf\xbe"]  # lxml rejects them in tails
 PREFIXES = [b"", b"<?xml version='1.0' encoding='ASCII'?>", b"<html>", b"<!DOCTYPE html>",

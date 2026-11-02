@@ -60,6 +60,14 @@ only (no I/O or gunzip), best of 3 runs per document.
 | 8-K | 99 | 4.4 | 31.5 | 229.3 | 1.4 / 2.3 | 0.2 / 0.3 |
 | exhibits | 61 | 19.0 | 33.3 | 283.6 | 2.1 / 20.9 | 0.3 / 2.6 |
 
+Rule 9 (title headings, 2026-11-02, `rust-4` / `python-4`): `TITLES_10K` / `TITLES_10Q` are
+copied into `src/sections.rs`, folded with the same `fold_letter` as the Item regex. Checked with
+the repo fixtures (NVIDIA plus the Molina, Edison and TriNet 10-Qs that need rule 9), each parsed
+as 10-K, 10-Q and 8-K: 27 parses, zero differences; and `fuzz.py`, whose tokens now include item
+titles, their punctuation and parenthetical variants and "Part I, Item 2" cross-references (rule 9
+decides ~2,500 of each 20,000 documents per form): 20,000 documents (`--tokens 60`) and 3,000
+(`--tokens 2000`), four parses each, zero differences.
+
 Known gap: documents declaring a legacy encoding other than UTF-8/16, ISO-8859-x, windows-1252
 or ASCII are decoded with encoding_rs, whose Shift_JIS, GB2312 and Mac Roman tables differ from
 the libiconv lxml uses. Every stored document is ASCII.

@@ -1,4 +1,4 @@
-//! Rules 2-8 of the spec in services/parser/src/filing_parser/sections.py. Offsets and lengths
+//! Rules 2-9 of the spec in services/parser/src/filing_parser/sections.py. Offsets and lengths
 //! count characters, as Python's str does.
 
 use std::collections::HashMap;
@@ -11,7 +11,8 @@ use crate::pystr::{
     CharIndex, char_len, fold_letter, is_decimal, is_space, is_word, py_strip, upper,
 };
 
-pub const PARSER_VERSION: &str = "rust-3"; // 3: MD&A by reference, exhibits, SGML envelope
+pub const PARSER_VERSION: &str = "rust-4"; // 4: title headings (rule 9); 3: MD&A by
+// reference, exhibits, SGML envelope
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Section {
@@ -60,14 +61,36 @@ struct Heading {
     inline_title: String,
     key: String,
     span: usize,
+    title_part: Option<&'static str>, // rule 9 title heading: the Part its title belongs to
+    xref: bool, // Part heading followed by ",": "Part I, Item 2" (rule 9 ignores it)
 }
 
 pub fn find_sections(text: &str, form: &str) -> Result<Vec<Section>, Error> {
     let headings = headings(text);
-    let mut body = body(headings, form);
+    if (form.starts_with("10-K") || form.starts_with("10-Q"))
+        && headings.iter().all(|h| h.item.is_none())
+    {
+        // rule 9
+        let titles = title_headings(text, form);
+        if !titles.is_empty() {
+            let mut merged: Vec<Heading> = headings.iter().filter(|h| !h.xref).cloned().collect();
+            merged.extend(titles);
+            merged.sort_by_key(|h| h.start);
+            let body = body(merged, form);
+            if body.iter().any(|h| h.item.is_some()) {
+                return Ok(sections(text, body, form));
+            }
+        }
+    }
+    let body = body(headings, form);
     if body.is_empty() {
         return Err(Error::NoHeadings);
     }
+    Ok(sections(text, body, form))
+}
+
+/// Rules 5-7 on the body's headings.
+fn sections(text: &str, mut body: Vec<Heading>, form: &str) -> Vec<Section> {
     let total = char_len(text);
     for i in 0..body.len() {
         let next = body.get(i + 1).map_or(total, |h| h.cstart);
@@ -118,7 +141,7 @@ pub fn find_sections(text: &str, form: &str) -> Result<Vec<Section>, Error> {
             }
         }
     }
-    Ok(sections)
+    sections
 }
 
 /// Rule 7.
@@ -231,6 +254,8 @@ fn headings(text: &str) -> Vec<Heading> {
                 inline_title: String::new(),
                 key: String::new(),
                 span: 0,
+                title_part: None,
+                xref: m.rest.starts_with(','),
             },
             Number::Item(item) => {
                 let inline = py_strip(m.rest).to_string();
@@ -253,6 +278,8 @@ fn headings(text: &str) -> Vec<Heading> {
                     inline_title: inline,
                     key: String::new(),
                     span: 0,
+                    title_part: None,
+                    xref: false,
                 }
             }
         };
@@ -402,7 +429,12 @@ fn body(mut headings: Vec<Heading>, form: &str) -> Vec<Heading> {
             part = h.part.clone();
             continue;
         };
-        let key = key(form, part.as_deref(), item);
+        if let (Some(tp), Some(p)) = (h.title_part, &part)
+            && tp != p
+        {
+            continue;
+        }
+        let key = key(form, h.title_part.or(part.as_deref()), item);
         if seen.contains(&key) {
             start = i;
             if i > 0 && headings[i - 1].item.is_none() && h.cstart - headings[i - 1].cstart <= 50 {
@@ -427,7 +459,14 @@ fn body(mut headings: Vec<Heading>, form: &str) -> Vec<Heading> {
             body.push(h);
             continue;
         };
-        h.part = part.clone().or_else(|| ten_q.then(|| "I".to_string()));
+        if let Some(tp) = h.title_part {
+            if part.as_deref().is_some_and(|p| p != tp) {
+                continue;
+            }
+            h.part = Some(tp.to_string());
+        } else {
+            h.part = part.clone().or_else(|| ten_q.then(|| "I".to_string()));
+        }
         h.key = key(form, h.part.as_deref(), &item);
         if let Some((key, inline)) = &current
             && h.key == *key
@@ -440,6 +479,161 @@ fn body(mut headings: Vec<Heading>, form: &str) -> Vec<Heading> {
     }
     body
 }
+
+/// Rule 9: lines that are a standard item title.
+fn title_headings(text: &str, form: &str) -> Vec<Heading> {
+    let titles = if form.starts_with("10-Q") {
+        TITLES_10Q
+    } else {
+        TITLES_10K
+    };
+    let mut out = Vec::new();
+    let mut idx = CharIndex::new(text);
+    for start in line_starts(text) {
+        let line = &text[start..];
+        let line = &line[..line.find('\n').unwrap_or(line.len())];
+        if char_len(line) > 120 {
+            continue;
+        }
+        let folded: String = title_core(line).chars().map(fold_title).collect();
+        let Some(&(_, part, item)) = titles.iter().find(|(t, _, _)| *t == folded) else {
+            continue;
+        };
+        out.push(Heading {
+            start,
+            cstart: idx.at(start),
+            part: None,
+            item: Some(item.to_string()),
+            title: line.to_string(),
+            inline_title: String::new(),
+            key: String::new(),
+            span: 0,
+            title_part: Some(part),
+            xref: false,
+        });
+    }
+    out
+}
+
+/// Rule 9's core of a line: without one trailing "." or ":", then without a final
+/// parenthetical of 1-20 characters and one space before it.
+fn title_core(line: &str) -> &str {
+    let line = line
+        .strip_suffix('.')
+        .or_else(|| line.strip_suffix(':'))
+        .unwrap_or(line);
+    if let Some(inner) = line.strip_suffix(')')
+        && let Some(i) = inner.rfind('(')
+    {
+        let between = &inner[i + 1..];
+        if (1..=20).contains(&char_len(between)) && !between.contains(')') {
+            let head = &line[..i];
+            return head.strip_suffix(' ').unwrap_or(head);
+        }
+    }
+    line
+}
+
+/// Rule 9's fold: `_FOLD` in sections.py.
+fn fold_title(c: char) -> char {
+    if c == '\u{2019}' {
+        return '\'';
+    }
+    fold_letter(c).unwrap_or(c)
+}
+
+const MDNA_1: &str =
+    "management's discussion and analysis of financial condition and results of operations";
+const MDNA_2: &str =
+    "management's discussion and analysis of results of operations and financial condition";
+const MARKET_RISK_1: &str = "quantitative and qualitative disclosures about market risk";
+const MARKET_RISK_2: &str = "quantitative and qualitative disclosure about market risk";
+
+/// Rule 9: `TITLES_10K` in sections.py, folded title -> (Part, item).
+const TITLES_10K: &[(&str, &str, &str)] = &[
+    ("business", "I", "1"),
+    ("risk factors", "I", "1A"),
+    ("unresolved staff comments", "I", "1B"),
+    ("cybersecurity", "I", "1C"),
+    ("properties", "I", "2"),
+    ("legal proceedings", "I", "3"),
+    ("mine safety disclosures", "I", "4"),
+    (
+        "market for registrant's common equity, related stockholder matters and issuer \
+         purchases of equity securities",
+        "II",
+        "5",
+    ),
+    ("selected financial data", "II", "6"),
+    (MDNA_1, "II", "7"),
+    (MDNA_2, "II", "7"),
+    (MARKET_RISK_1, "II", "7A"),
+    (MARKET_RISK_2, "II", "7A"),
+    ("financial statements and supplementary data", "II", "8"),
+    (
+        "changes in and disagreements with accountants on accounting and financial disclosure",
+        "II",
+        "9",
+    ),
+    ("controls and procedures", "II", "9A"),
+    ("other information", "II", "9B"),
+    (
+        "disclosure regarding foreign jurisdictions that prevent inspections",
+        "II",
+        "9C",
+    ),
+    (
+        "directors, executive officers and corporate governance",
+        "III",
+        "10",
+    ),
+    ("executive compensation", "III", "11"),
+    (
+        "security ownership of certain beneficial owners and management and related \
+         stockholder matters",
+        "III",
+        "12",
+    ),
+    (
+        "certain relationships and related transactions, and director independence",
+        "III",
+        "13",
+    ),
+    ("principal accountant fees and services", "III", "14"),
+    ("exhibits and financial statement schedules", "IV", "15"),
+    ("exhibit and financial statement schedules", "IV", "15"),
+    ("exhibits, financial statement schedules", "IV", "15"),
+    ("form 10-k summary", "IV", "16"),
+];
+
+/// Rule 9: `TITLES_10Q` in sections.py.
+const TITLES_10Q: &[(&str, &str, &str)] = &[
+    ("financial statements", "I", "1"),
+    ("consolidated financial statements", "I", "1"),
+    ("condensed consolidated financial statements", "I", "1"),
+    (
+        "unaudited condensed consolidated financial statements",
+        "I",
+        "1",
+    ),
+    ("unaudited consolidated financial statements", "I", "1"),
+    (MDNA_1, "I", "2"),
+    (MDNA_2, "I", "2"),
+    (MARKET_RISK_1, "I", "3"),
+    (MARKET_RISK_2, "I", "3"),
+    ("controls and procedures", "I", "4"),
+    ("legal proceedings", "II", "1"),
+    ("risk factors", "II", "1A"),
+    (
+        "unregistered sales of equity securities and use of proceeds",
+        "II",
+        "2",
+    ),
+    ("defaults upon senior securities", "II", "3"),
+    ("mine safety disclosures", "II", "4"),
+    ("other information", "II", "5"),
+    ("exhibits", "II", "6"),
+];
 
 fn key(form: &str, part: Option<&str>, item: &str) -> String {
     // 10-Q item numbers restart in each Part; 10-K and 8-K item numbers are unique

@@ -29,6 +29,26 @@ The algorithm is specified precisely so the Rust rewrite (week 4) can match it e
 8. Exhibits (8-K EX-99.x) are parsed on their own: one section per exhibit, key the exhibit
    type ("EX-99.1"), item its number, title the index description or "Exhibit 99.1", text
    html_to_text of the exhibit, offsets into that text.
+9. Title headings, for filings that title their items without numbering them ("RISK
+   FACTORS"): only when the form starts with "10-K" or "10-Q" and rule 2 finds no Item
+   heading. A title heading is a line (the text split at "\n"; it starts at the line's first
+   character) of at most 120 characters whose core, folded, is a key of TITLES_10K or
+   TITLES_10Q (by form). Core: drop one trailing "." or ":"; then, if what is left ends with
+   ")", drop its last "(" through the end when 1-20 characters lie between the two and none
+   is ")", plus one space before the "(" if there is one ("... OF OPERATIONS (“MD&A”)").
+   Fold: A-Z to a-z, U+0130 and U+0131 to "i", U+017F to "s", U+212A to "k", U+2019 to "'";
+   nothing else changes. The title gives the item and its Part (10-Q titles are unique across
+   Parts: "Legal Proceedings" is always Part II, item 1).
+   Headings: the rule 2 Part headings, except cross-references (the text after the numeral
+   and any of " .:-–—" starts with ",", as in "Part I, Item 2"), plus the title headings, in
+   text order. Rules 3-6 then apply with these changes for title headings. In rules 3 and 4,
+   a title heading whose Part differs from the current Part, when one is set, is skipped: in
+   rule 3 it is neither seen nor a repeat, in rule 4 it is not kept (a "Legal Proceedings"
+   note inside Part I). Otherwise its key is _key(form, title's Part, item) and its part the
+   title's Part, whatever the current Part; its same-line title is empty, so rule 4 skips it
+   when its key is the current section's. Its title is the line as written. Rule 7 applies.
+   If no title heading is kept in rule 4, the result of rules 2-6 without rule 9 stands
+   (no sections, or the error of a text without Part or Item headings).
 """
 
 import re
@@ -36,7 +56,7 @@ from dataclasses import dataclass
 
 from lxml import html
 
-PARSER_VERSION = "python-3"  # 3: MD&A by reference, exhibits, SGML envelope
+PARSER_VERSION = "python-4"  # 4: title headings (rule 9); 3: MD&A by reference, exhibits, SGML
 
 _BLOCK = {"p", "div", "br", "tr", "li", "h1", "h2", "h3", "h4", "h5", "h6", "table", "section"}
 _CELL = {"td", "th"}
@@ -57,6 +77,68 @@ _HEADING = re.compile(
     r"[ .:\-–—]*(?P<rest>.*)$",
     re.IGNORECASE | re.MULTILINE,
 )
+
+
+_MDNA_TITLES = (
+    "management's discussion and analysis of financial condition and results of operations",
+    "management's discussion and analysis of results of operations and financial condition",
+)
+_MARKET_RISK = (
+    "quantitative and qualitative disclosures about market risk",
+    "quantitative and qualitative disclosure about market risk",
+)
+# rule 9: folded title -> (Part, item). Official Form 10-K / 10-Q item titles plus a few
+# common spellings.
+TITLES_10K = {
+    "business": ("I", "1"),
+    "risk factors": ("I", "1A"),
+    "unresolved staff comments": ("I", "1B"),
+    "cybersecurity": ("I", "1C"),
+    "properties": ("I", "2"),
+    "legal proceedings": ("I", "3"),
+    "mine safety disclosures": ("I", "4"),
+    "market for registrant's common equity, related stockholder matters and issuer purchases"
+    " of equity securities": ("II", "5"),
+    "selected financial data": ("II", "6"),
+    **dict.fromkeys(_MDNA_TITLES, ("II", "7")),
+    **dict.fromkeys(_MARKET_RISK, ("II", "7A")),
+    "financial statements and supplementary data": ("II", "8"),
+    "changes in and disagreements with accountants on accounting and financial disclosure":
+        ("II", "9"),
+    "controls and procedures": ("II", "9A"),
+    "other information": ("II", "9B"),
+    "disclosure regarding foreign jurisdictions that prevent inspections": ("II", "9C"),
+    "directors, executive officers and corporate governance": ("III", "10"),
+    "executive compensation": ("III", "11"),
+    "security ownership of certain beneficial owners and management and related stockholder"
+    " matters": ("III", "12"),
+    "certain relationships and related transactions, and director independence": ("III", "13"),
+    "principal accountant fees and services": ("III", "14"),
+    "exhibits and financial statement schedules": ("IV", "15"),
+    "exhibit and financial statement schedules": ("IV", "15"),
+    "exhibits, financial statement schedules": ("IV", "15"),
+    "form 10-k summary": ("IV", "16"),
+}
+TITLES_10Q = {
+    "financial statements": ("I", "1"),
+    "consolidated financial statements": ("I", "1"),
+    "condensed consolidated financial statements": ("I", "1"),
+    "unaudited condensed consolidated financial statements": ("I", "1"),
+    "unaudited consolidated financial statements": ("I", "1"),
+    **dict.fromkeys(_MDNA_TITLES, ("I", "2")),
+    **dict.fromkeys(_MARKET_RISK, ("I", "3")),
+    "controls and procedures": ("I", "4"),
+    "legal proceedings": ("II", "1"),
+    "risk factors": ("II", "1A"),
+    "unregistered sales of equity securities and use of proceeds": ("II", "2"),
+    "defaults upon senior securities": ("II", "3"),
+    "mine safety disclosures": ("II", "4"),
+    "other information": ("II", "5"),
+    "exhibits": ("II", "6"),
+}
+_FOLD = str.maketrans({**{chr(c): chr(c + 32) for c in range(ord("A"), ord("Z") + 1)},
+                       "\u0130": "i", "\u0131": "i", "\u017f": "s", "\u212a": "k",
+                       "\u2019": "'"})
 
 
 @dataclass(frozen=True)
@@ -95,11 +177,24 @@ class _Heading:
     inline_title: str = ""  # text after the item number on the heading's own line
     key: str = ""
     span: int = 0
+    title_part: str | None = None  # rule 9 title heading: the Part its title belongs to
+    xref: bool = False  # Part heading followed by ",": "Part I, Item 2" (rule 9 ignores it)
 
 
 def find_sections(text: str, form: str) -> list[Section]:
     headings = list(_headings(text))
-    body = _body(headings, form)
+    if form.startswith(("10-K", "10-Q")) and all(h.item is None for h in headings):
+        titles = list(_title_headings(text, form))  # rule 9
+        if titles:
+            merged = sorted([h for h in headings if not h.xref] + titles, key=lambda h: h.start)
+            body = _body(merged, form)
+            if any(h.item is not None for h in body):
+                return _sections(text, body, form)
+    return _sections(text, _body(headings, form), form)
+
+
+def _sections(text: str, body: list[_Heading], form: str) -> list[Section]:
+    """Rules 5-7 on the body's headings."""
     for h, nxt in zip(body, body[1:] + [None], strict=True):
         h.span = (nxt.start if nxt else len(text)) - h.start
 
@@ -153,13 +248,34 @@ def exhibit_section(exhibit_type: str, description: str | None, raw: bytes) -> S
 def _headings(text: str):
     for m in _HEADING.finditer(text):
         if m.group("part"):
-            yield _Heading(m.start(), m.group("part").upper(), None, "")
+            yield _Heading(m.start(), m.group("part").upper(), None, "",
+                           xref=m.group("rest").startswith(","))
             continue
         inline = title = m.group("rest").strip()
         if not title:  # title on the next line, as in many tables of contents
             nxt = text.find("\n", m.end() + 1)
             title = text[m.end() + 1 : nxt if nxt != -1 else len(text)].strip()
         yield _Heading(m.start(), None, m.group("item").upper(), title[:200], inline)
+
+
+def _title_headings(text: str, form: str):
+    """Rule 9: lines that are a standard item title."""
+    titles = TITLES_10Q if form.startswith("10-Q") else TITLES_10K
+    pos = 0
+    for line in text.split("\n"):
+        if len(line) <= 120 and (hit := titles.get(_title_core(line).translate(_FOLD))):
+            yield _Heading(pos, None, hit[1], line, title_part=hit[0])
+        pos += len(line) + 1
+
+
+def _title_core(line: str) -> str:
+    if line.endswith((".", ":")):
+        line = line[:-1]
+    if line.endswith(")"):
+        i = line.rfind("(")
+        if i != -1 and 1 <= len(line) - i - 2 <= 20 and ")" not in line[i + 1:-1]:
+            line = line[:i].removesuffix(" ")
+    return line
 
 
 def _body(headings: list[_Heading], form: str) -> list[_Heading]:
@@ -170,7 +286,9 @@ def _body(headings: list[_Heading], form: str) -> list[_Heading]:
         if h.item is None:
             part = h.part
             continue
-        key = _key(form, part, h.item)
+        if h.title_part and part and part != h.title_part:
+            continue
+        key = _key(form, h.title_part or part, h.item)
         if key in seen:
             start = i
             if i > 0 and headings[i - 1].item is None and h.start - headings[i - 1].start <= 50:
@@ -188,7 +306,12 @@ def _body(headings: list[_Heading], form: str) -> list[_Heading]:
             part = h.part
             body.append(h)
             continue
-        h.part = part or ("I" if form.startswith("10-Q") else None)
+        if h.title_part:
+            if part and part != h.title_part:
+                continue
+            h.part = h.title_part
+        else:
+            h.part = part or ("I" if form.startswith("10-Q") else None)
         h.key = _key(form, h.part, h.item)
         if current and h.key == current.key and h.inline_title in ("", current.inline_title):
             continue
