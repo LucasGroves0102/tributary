@@ -69,6 +69,12 @@ can't read `bronze.filings`) and backs the Query API's public `/v1/status`, whic
 accessions indexed, accessions missing from bronze at the last check, rows republished), written
 by the nightly completeness check ([poller-backfill](../services/poller/README.md#backfill-fr1b)),
 and `ops.filing_completeness_status` for ops_reader. Counts only.
+`029_gold_quality_fixes.sql` fixes two causes of the quality checks' errors in
+`gold.quarterly_financials`: flow metrics tagged at an instant (UnitedHealth's dividend payment
+dates) no longer become extra quarter rows (1,838 rows on hermes), and a derived quarter that
+comes out negative for a metric that can't be (revenue, costs, capex, D&A, SBC, buybacks,
+dividends) is left missing instead of published (11,320 rows; e.g. Cytek's Q4 2022 revenue at
+-$112.7M after a later 10-K re-tagged the year). Needs `make financials-rebuild`.
 
 ## Migrations
 
