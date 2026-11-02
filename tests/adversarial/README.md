@@ -28,3 +28,15 @@ pytest tests/adversarial               # replay only, no network
 The live run needs the Query API on `QUERY_API_URL` and the env from `.env`: `DATABASE_URL`
 (ground truth), `QUERY_API_JWT_SECRET` (mints user tokens), `ANTHROPIC_API_KEY`, `AGENT_MODEL`.
 It costs a few cents on Haiku and exits non-zero on any leak.
+
+## Open access
+
+`run.py`'s ground truth is what RLS allows: `authz.user_access` plus `authz.public_access` within
+each user's `authz.user_tiers`. While the public catalog is closed (as when the recordings were
+made) that is exactly the old rule, so the recordings and `ground_truth.json` stay valid and the
+replays pass unchanged. Once the catalog is open, every user reads every catalog company, so the
+"can I read company X?" traps (`plan_bypass` once the free plan has filings, `no_grant`,
+`watchlist`, `indirect`, the data requests in `impersonation` and `fake_authority`, and
+`tool-02`, `tool-05`, `ext-03`, `ext-04`) no longer have anything to protect: re-recording then
+needs a new trap list (another user's workspaces, reports and saved views; prompt injection
+inside filings and saved items; other users' access and conversations), with the owner's OK.
