@@ -114,6 +114,17 @@ def test_first_sign_in_writes_an_ordinary_user_with_the_demo_access(world):
     assert rows(conn, "SELECT 1 FROM demo_sandboxes WHERE user_id = %s", USER) == []
 
 
+def test_with_the_catalog_public_sign_in_writes_no_company_grants(world):
+    client, conn, _, _ = world
+    conn.execute("UPDATE public_catalogs SET public = true WHERE catalog_id = 'sec'")
+    sign_in(client)
+    assert rows(conn, "SELECT 1 FROM company_grants WHERE user_id = %s", USER) == []
+    assert rows(conn, "SELECT plan_id FROM subscriptions WHERE user_id = %s", USER) == [
+        (DEMO_PLAN,)]
+    assert len(rows(conn, "SELECT 1 FROM watchlists WHERE user_id = %s", USER)) == len(
+        DEMO_WATCHLIST)
+
+
 def test_the_access_token_is_stored_nowhere(world):
     client, conn, _, _ = world
     sign_in(client)
