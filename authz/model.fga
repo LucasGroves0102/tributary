@@ -9,17 +9,27 @@ type organization
   relations
     define member: [user]
 
-# Data tiers, granted by plans: tier:financials (Free and Pro), tier:filings (Pro only).
+# Data tiers, granted by plans: tier:financials, tier:filings (app plan_tiers).
 type tier
   relations
     define subscriber: [user]
 
+# A set of companies that can be opened to every user at once. catalog:sec holds every company
+# with data; catalog:sec#reader@user:* (present only while the app database's public_catalogs
+# row says the catalog is public) makes it readable by every user. Removing that one tuple
+# closes it again.
+type catalog
+  relations
+    define reader: [user, user:*]
+
 # company:<company_id>, the canonical ID from silver.companies.
-# Reading a company's data needs BOTH a grant for the company AND the tier for that data.
+# Reading a company's data needs BOTH access to the company (a grant to the user or their
+# organization, or a public catalog it belongs to) AND the tier for that data.
 # Watchlists are preferences and never appear here.
 type company
   relations
-    define viewer: [user, organization#member]
+    define catalog: [catalog]
+    define viewer: [user, organization#member] or reader from catalog
     # each company points at the tier objects that gate its datasets
     define financials_tier: [tier]
     define filings_tier: [tier]
