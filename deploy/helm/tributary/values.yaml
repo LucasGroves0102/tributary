@@ -220,11 +220,14 @@ services:
 # Every SEC caller shares one token bucket in Postgres (libs/sec, migration 019), so overlapping
 # jobs can't exceed the SEC's 10 req/s; they're still staggered so they don't slow each other.
 jobs:
+  # Completeness check (poller-backfill, migration 027): compares the last 30 days of EDGAR's daily
+  # master indexes with bronze, republishes only the missing filings to filings.raw and records
+  # each day in ops.filing_completeness. postgres = the lookup and the record.
   backfill:
     image: poller
-    command: [poller-backfill, --days, "2"]
+    command: [poller-backfill, --days, "30"]
     schedule: "0 2 * * *"
-    uses: [kafka, sec]
+    uses: [kafka, sec, postgres]
     kafkaUser: poller-backfill
   companies:
     image: company-loader

@@ -1,8 +1,12 @@
-"""Publish every filing from EDGAR's daily master indexes to filings.raw.
+"""Publish filings from EDGAR's daily master indexes to filings.raw.
 
-Catches what the live poller missed: downtime, or bursts of more than 100 filings between
-polls. Consumers are idempotent on (accession_no, cik), so re-publishing is harmless and
-rows the poller already wrote keep their exact acceptance time.
+Catches what the live poller missed (downtime, bursts of more than 100 filings between polls)
+and what the bulk history lacks (submissions.zip can carry a stale copy of a company). Without
+DATABASE_URL every filing of each day is published; consumers are idempotent on
+(accession_no, cik), so re-publishing is harmless and rows the poller already wrote keep their
+exact acceptance time. With DATABASE_URL (the nightly job) only the filings missing from bronze
+are published, and each day's check is recorded in ops.filing_completeness (completeness.py),
+so a rolling window of days can be rechecked every night.
 """
 
 import argparse
@@ -10,6 +14,9 @@ import logging
 import os
 from datetime import date, timedelta
 
+import psycopg
+
+from poller import completeness
 from poller.daily_index import available_days, fetch_master, parse_master
 from poller.producer import FilingProducer
 from tributary_sec import sec_client
@@ -39,6 +46,8 @@ def main() -> None:
     start = args.start or end - timedelta(days=args.days - 1)
     wanted = days_in_range(start, end)
 
+    db_url = os.environ.get("DATABASE_URL")
+    conn = psycopg.connect(db_url, autocommit=True) if db_url else None
     producer = FilingProducer()
     total = 0
     with sec_client(os.environ["SEC_USER_AGENT"]) as client:
@@ -48,11 +57,19 @@ def main() -> None:
                 log.info("%s: no index (weekend, holiday, or not published yet)", day)
                 continue
             filings = parse_master(fetch_master(client, day))
-            for f in filings:
+            publish = completeness.missing(conn, filings) if conn else filings
+            for f in publish:
                 producer.publish(f)
             producer.flush()
-            total += len(filings)
-            log.info("%s: published %d filings", day, len(filings))
+            total += len(publish)
+            if conn:
+                completeness.record(conn, day, filings, publish)
+                log.info("%s: %d accessions indexed, %d filer rows missing, republished",
+                         day, len({f.accession_no for f in filings}), len(publish))
+            else:
+                log.info("%s: published %d filings", day, len(publish))
+    if conn:
+        conn.close()
     log.info("done: %d filings over %s..%s", total, start, end)
 
 

@@ -148,8 +148,8 @@ with [libs/kafka](../../../libs/kafka), the Rust parser with the same variables.
 
 Every `uses: sec` pod takes tokens from the shared SEC rate limit in Postgres
 ([libs/sec](../../../libs/sec), migration 019). By default it does that with the full
-`database-url` login, which also gives the poller (`kafka`, `sec`) and the `backfill` job
-credentials they otherwise wouldn't have. Migration 022 adds `sec_limiter`, a NOLOGIN group that
+`database-url` login, which also gives the poller (`kafka`, `sec`) credentials it otherwise
+wouldn't have (the `backfill` job uses `postgres` anyway, for the completeness check). Migration 022 adds `sec_limiter`, a NOLOGIN group that
 can only `EXECUTE` `ops.sec_take_token` / `ops.sec_report_throttle` (now `SECURITY DEFINER`, with
 `search_path = pg_catalog, pg_temp`, and no longer executable by `PUBLIC`) and read no table
 (`libs/sec/tests/test_sec_limiter_role.py`). With `secLimiter.dedicatedLogin: true`,

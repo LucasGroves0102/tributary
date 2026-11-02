@@ -114,7 +114,7 @@ make seed-documents    # load recent 10-K/10-Q/8-K history (fetched and parsed b
 make exhibits          # 8-K press releases (EX-99.x) for 8-Ks already stored
 make up-all            # + poller, bronze-loader, doc-fetcher, parser, authz-sync, query-api,
                        #   agent-api, and the chat UI on http://localhost:3000
-make backfill DAYS=7   # fill in filings the live poller missed (EDGAR daily indexes)
+make backfill DAYS=7   # fill in filings missing vs EDGAR's daily indexes
 make psql              # query it: SELECT * FROM bronze.filings ORDER BY filed_at DESC LIMIT 10;
 make consume           # watch filings arrive (or open the Kafka UI at http://localhost:8080)
 ```

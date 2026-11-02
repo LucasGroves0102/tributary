@@ -65,6 +65,10 @@ de-duplicating every section first.
 when it reached bronze, two timestamps and nothing else. It is SECURITY DEFINER (query_api still
 can't read `bronze.filings`) and backs the Query API's public `/v1/status`, which the
 [outside uptime check](../deploy/uptime/README.md) reads.
+`027_filing_completeness.sql` adds `ops.filing_completeness` (per day of EDGAR's daily index:
+accessions indexed, accessions missing from bronze at the last check, rows republished), written
+by the nightly completeness check ([poller-backfill](../services/poller/README.md#backfill-fr1b)),
+and `ops.filing_completeness_status` for ops_reader. Counts only.
 
 ## Migrations
 

@@ -35,19 +35,32 @@ SEC requests share one rate limit with every other service (`libs/sec`): `SEC_CA
 ## Backfill (FR1b)
 
 `poller-backfill --days 7` (or `--start/--end`, `YYYY-MM-DD`; `--end` defaults to yesterday)
-publishes every filing from EDGAR's daily master indexes to `filings.raw` with
-`source: daily-index`. It catches what the live poller missed: downtime, or more than 100
-filings between polls. Downstream consumers are idempotent, so filings the poller already caught
-keep their exact acceptance time. `bronze.filings_daily_coverage` shows, per day, how much the
-live poller caught.
+publishes filings from EDGAR's daily master indexes to `filings.raw` with
+`source: daily-index`. It catches what the live poller missed (downtime, or more than 100
+filings between polls) and what the bulk history lacks: `submissions.zip` can carry a stale copy
+of a company (on 2026-11-02 it still lacked Dentsply Sirona's 8-K of 2026-10-09, which the SEC's
+per-company page had), and a company is only reloaded when its copy changes. Downstream
+consumers are idempotent, so filings the poller already caught keep their exact acceptance time.
+`bronze.filings_daily_coverage` shows, per day, how much the live poller caught.
+
+Without `DATABASE_URL` it publishes every filing of each day. With it (the nightly job) it is a
+completeness check: each day's `(accession, filer)` rows are looked up in `bronze.filings` and
+`bronze.submission_filings` (what `silver.filings` unions), only the missing ones are published,
+and the day is recorded in `ops.filing_completeness` (migration 027: accessions indexed, missing
+at that check, rows republished; ops_reader reads `ops.filing_completeness_status`). The lookup
+takes a few seconds per day.
 
 ```bash
 make backfill DAYS=7
 ```
 
-On k3s it runs nightly as the `backfill` CronJob (`--days 2`, 02:00 New York).
+On k3s it runs nightly as the `backfill` CronJob over a rolling 30 days (`--days 30`, 02:00 New
+York), so a day keeps being rechecked for a month and `missing` drops to 0 after a republish.
+Filings it republishes have no 8-K items (the index doesn't carry them), so the document crawl's
+8-K item filter won't fetch their documents.
 
 ## Tests
 
 `pytest services/poller`: feed and daily-index parsing against saved responses in
-`tests/fixtures/`, and the poll loop with a fake publisher and clock.
+`tests/fixtures/`, and the poll loop with a fake publisher and clock. `test_completeness_db.py`
+(needs `TEST_DATABASE_URL`) checks the missing-filing lookup and the per-day record.
