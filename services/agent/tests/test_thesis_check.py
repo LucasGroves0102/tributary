@@ -583,3 +583,18 @@ def test_text_hash_matches_the_web_app():
 def test_the_web_app_can_say_it_is_on_a_thesis_or_model_page():
     from tributary_agent.ui import UiContext
     assert UiContext(page="thesis").page == "thesis" and UiContext(page="model").page == "model"
+
+
+def test_a_model_with_scenarios_is_checked_on_its_base_case(monkeypatch):
+    """Bear / base / bull (Analysis tab): `assumptions` is the base case and the only one the
+    check reads; the bear and bull cases never reach the data or the flags."""
+    monkeypatch.setitem(globals(), "MODEL", {**MODEL, "scenarios": {
+        "bear": [{"growth": -50, "margin": -20}, {"growth": -40, "margin": -10}],
+        "bull": [{"growth": 300, "margin": 90}, {"growth": 200, "margin": 90}]}})
+    fake = FakeQueryApi()
+    events, messages, job = run(fake, *script())
+    model = validate_check(fake.saved[0]["result"])["assumptions"][0]
+    assert [(y["growth"], y["margin"]) for y in model["years"]] == [(25, 30), (12, 12)]
+    data = json.loads(messages.requests[0]["messages"][0]["content"][1]["text"].split("\n")[2])
+    assert [(f["growth_pct"], f["margin_pct"]) for f in data["models"][0]["forecast"]] == [
+        (25, 30), (12, 12)]

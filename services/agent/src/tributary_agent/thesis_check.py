@@ -9,6 +9,8 @@ POST /v1/thesis-checks (server.py) with a thesis's item id:
    For each model it reads the company's history as the user
    (`get_financials`, TTM, 40 quarters: what the web app's model page reads) and computes the
    statistics and flags in Python (`model_stats.py`, the web app's `models/model.ts` port).
+   A model with bear / base / bull scenarios is checked on its BASE case (`assumptions`;
+   `model_stats.scenario_assumptions`), so models saved before scenarios check the same.
    The scope: the thesis's company, the models' companies, and companies the thesis names by
    ticker that the user can read (`/v1/me`), at most MAX_SCOPE. Nothing is spent before this
    succeeds.
@@ -49,6 +51,7 @@ from tributary_agent.model_stats import (
     MAX_HISTORY,
     annual_history,
     check_assumptions,
+    scenario_assumptions,
 )
 from tributary_agent.report import (
     ACCESSION,
@@ -287,12 +290,7 @@ def _models(api: Api, job: Job) -> None:
     for n, item in enumerate(found[:MAX_MODELS], 1):
         s = item["state"]
         cid = s.get("companyId")
-        raw = s.get("assumptions") if isinstance(s.get("assumptions"), list) else []
-        assumptions = [{"growth": float(a["growth"]), "margin": float(a["margin"]),
-                        **({"note": str(a["note"])[:500]} if a.get("note") else {})}
-                       for a in raw[:10] if isinstance(a, dict)
-                       and isinstance(a.get("growth"), int | float)
-                       and isinstance(a.get("margin"), int | float)]
+        assumptions = scenario_assumptions(s, "base") or []  # the base case only
         if not (isinstance(cid, str) and CIK.fullmatch(cid)) or not assumptions:
             continue
         job.models.append(Model(ref=f"model-{n}", item_id=item["item_id"],
