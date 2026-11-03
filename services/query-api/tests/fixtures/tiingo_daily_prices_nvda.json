@@ -1,0 +1,7 @@
+[
+{"date": "2026-10-26T00:00:00.000Z", "close": 181.16, "high": 183.5, "low": 179.9, "open": 180.2, "volume": 151200000, "adjClose": 181.16, "adjHigh": 183.5, "adjLow": 179.9, "adjOpen": 180.2, "adjVolume": 151200000, "divCash": 0.0, "splitFactor": 1.0},
+{"date": "2026-10-27T00:00:00.000Z", "close": 186.26, "high": 187.0, "low": 181.4, "open": 182.1, "volume": 170400000, "adjClose": 186.26, "adjHigh": 187.0, "adjLow": 181.4, "adjOpen": 182.1, "adjVolume": 170400000, "divCash": 0.0, "splitFactor": 1.0},
+{"date": "2026-10-28T00:00:00.000Z", "close": 191.49, "high": 193.2, "low": 186.0, "open": 186.5, "volume": 210300000, "adjClose": 191.40, "adjHigh": 193.2, "adjLow": 186.0, "adjOpen": 186.5, "adjVolume": 210300000, "divCash": 0.01, "splitFactor": 1.0},
+{"date": "2026-10-29T00:00:00.000Z", "close": 207.04, "high": 208.1, "low": 192.0, "open": 192.9, "volume": 300100000, "adjClose": 207.04, "adjHigh": 208.1, "adjLow": 192.0, "adjOpen": 192.9, "adjVolume": 300100000, "divCash": 0.0, "splitFactor": 1.0},
+{"date": "2026-10-30T00:00:00.000Z", "close": 202.89, "high": 206.0, "low": 201.1, "open": 205.0, "volume": 190000000, "adjClose": 202.89, "adjHigh": 206.0, "adjLow": 201.1, "adjOpen": 205.0, "adjVolume": 190000000, "divCash": 0.0, "splitFactor": 1.0}
+]

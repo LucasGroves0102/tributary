@@ -415,6 +415,12 @@ BAD_STATES = [
     ("chart", {**CHART, "layers": [{**SEGMENT, "formula": "revenue"}]}),
     ("chart", {**CHART, "layers": [{**CHART["layers"][0], "transform": "contrib"}]}),
     ("chart", {**CHART, "layers": [{**CHART["layers"][0], "members": ["x:A"]}]}),
+    # price layers ("Connect your data"): a company only, never values, q/yoy/idx
+    ("chart", {**CHART, "layers": [{"kind": "price"}]}),
+    ("chart", {**CHART, "layers": [{"kind": "price", "companyId": NVDA, "metric": "close"}]}),
+    ("chart", {**CHART, "layers": [{"kind": "price", "companyId": NVDA, "formula": "x"}]}),
+    ("chart", {**CHART, "layers": [{"kind": "price", "companyId": NVDA, "transform": "ttm"}]}),
+    ("chart", {**CHART, "layers": [{"kind": "price", "companyId": NVDA, "prices": [1, 2]}]}),
     ("comps", {"peers": [AAPL]}),  # no target
     ("comps", {"target": NVDA, "peers": [AAPL] * 2}),
     ("comps", {"target": NVDA, "peers": [NVDA]}),
@@ -526,6 +532,15 @@ def test_segment_layers():
                   "members": ["country:US", "srt:AsiaMember", "nvda:AllOtherCountriesMember"]}]})
     assert saved["layers"][0]["members"] == ["nvda:ComputeAndNetworkingSegmentMember"]
     assert saved["layers"][1]["transform"] == "contrib"
+
+
+def test_price_layers():
+    """A price layer names a company only: the viewer's own prices are read when drawn."""
+    saved = validate_state("chart", {**CHART, "layers": [
+        {"kind": "price", "companyId": NVDA, "transform": "q"},
+        {"kind": "price", "companyId": NVDA, "transform": "idx", "axis": "R"}]})
+    assert [(x["kind"], x["transform"]) for x in saved["layers"]] == [("price", "q"),
+                                                                       ("price", "idx")]
 
 
 def test_chart_range_frequency_and_deck_settings():

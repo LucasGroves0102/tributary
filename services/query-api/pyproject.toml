@@ -7,7 +7,8 @@ dependencies = [
     "uvicorn>=0.30",
     "psycopg[binary,pool]>=3.2",
     "pyjwt>=2.9",
-    "httpx>=0.27",  # GitHub sign-in (query_api.github)
+    "httpx>=0.27",  # GitHub sign-in (query_api.github), market-data providers
+    "cryptography>=43",  # market-data keys at rest (query_api.keybox, AES-GCM)
     "tributary-authz",
     "prometheus-client>=0.20",
     "tributary-telemetry",

@@ -8,6 +8,7 @@ image:
 # Created outside the chart. Keys: database-url, app-database-url, jwt-secret,
 # anthropic-api-key, sec-user-agent, openfga-api-token when openfga.auth.enabled,
 # github-client-id and github-client-secret (optional: without both, no GitHub sign-in),
+# data-connections-key (optional: without it, no "Connect your data"; README),
 # sec-limiter-database-url when secLimiter.dedicatedLogin, and when kafka.sasl.enabled
 # kafka-password-<user> for each `uses: kafka` service and job (scripts/kafka-passwords.sh).
 secretName: tributary
@@ -103,7 +104,8 @@ resources:
 # databaseUrlKey: secretName key for DATABASE_URL instead of database-url (e.g. a throwaway DB).
 # uses: postgres, app-postgres (APP_DATABASE_URL), kafka, openfga, sec (SEC_USER_AGENT + HTTPS
 # out, and the shared SEC rate limit in host Postgres), anthropic (API key + HTTPS out), github
-# (GitHub OAuth app keys, optional, + HTTPS out), jwt, query-api, demo. Each adds the env vars
+# (GitHub OAuth app keys, optional, + HTTPS out), market-data (data-connections-key, optional,
+# + HTTPS out to users' market-data providers), jwt, query-api, demo. Each adds the env vars
 # and network access it needs.
 # kafkaUser: the Kafka SCRAM user with kafka.sasl.enabled (default: the service/job name).
 # secClass: priority in the shared SEC rate limit (SEC_CALLER_CLASS): live, batch or bulk.
@@ -181,7 +183,7 @@ services:
     uses: [kafka, postgres, openfga]
   query-api:
     port: 8000
-    uses: [postgres, app-postgres, openfga, jwt, demo, github]
+    uses: [postgres, app-postgres, openfga, jwt, demo, github, market-data]
     from: [web, agent-api]
     resources:
       requests:

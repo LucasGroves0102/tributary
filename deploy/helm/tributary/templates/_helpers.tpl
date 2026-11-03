@@ -26,6 +26,7 @@ app.kubernetes.io/instance: {{ .root.Release.Name }}
 {{- if eq . "sec" }}{{ $_ := set $labels "internet" "true" }}{{ $_ := set $labels "postgres" "true" }}
 {{- else if eq . "anthropic" }}{{ $_ := set $labels "internet" "true" }}
 {{- else if eq . "github" }}{{ $_ := set $labels "internet" "true" }}
+{{- else if eq . "market-data" }}{{ $_ := set $labels "internet" "true" }}
 {{- else if eq . "app-postgres" }}{{ $_ := set $labels "postgres" "true" }}
 {{- else if has . (list "postgres" "kafka" "openfga") }}{{ $_ := set $labels . "true" }}
 {{- end }}
@@ -113,6 +114,16 @@ the SOPS secret the pod starts without them and the GitHub routes 404. */}}
 - name: GITHUB_REDIRECT_URI
   value: {{ . | quote }}
 {{- end }}
+{{- else if eq . "market-data" }}
+{{- /* Connect your data (query_api/connections.py): the master key that wraps users' market-data
+API keys. Optional: until the owner adds it to the SOPS secret the pod starts without it and the
+feature is off (its routes 404, the web app hides it). */}}
+- name: DATA_CONNECTIONS_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ $root.Values.secretName }}
+      key: data-connections-key
+      optional: true
 {{- else if eq . "jwt" }}
 {{ include "tributary.secretEnv" (dict "root" $root "env" "QUERY_API_JWT_SECRET" "key" "jwt-secret") }}
 {{- else if eq . "query-api" }}

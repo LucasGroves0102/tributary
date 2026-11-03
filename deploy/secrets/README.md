@@ -7,7 +7,7 @@ and [age](https://github.com/FiloSottile/age). Flux's `secrets` Kustomization
 
 | File | Secret | Namespace | Used by |
 |---|---|---|---|
-| `tributary.yaml` | `tributary` | tributary | the tributary chart (database URLs, JWT secret, Anthropic key, SEC User-Agent, OpenFGA key, Kafka SCRAM passwords, GitHub OAuth app) |
+| `tributary.yaml` | `tributary` | tributary | the tributary chart (database URLs, JWT secret, Anthropic key, SEC User-Agent, OpenFGA key, Kafka SCRAM passwords, GitHub OAuth app, optional data-connections master key) |
 | `ghcr-tributary.yaml`, `ghcr-platform.yaml`, `flux-ghcr.yaml` | `ghcr` | tributary, platform, flux-system | pulling images from GHCR; Flux image scanning |
 | `platform.yaml` | `platform` | platform | the platform chart (Postgres password, OpenFGA datastore URI and keys, Kafka SCRAM passwords) |
 | `monitoring-grafana.yaml` | `grafana-admin` | monitoring | Grafana admin login |
@@ -27,6 +27,14 @@ with `optional: true`, so the release works before they exist, with the sign-in 
 in one edit: `sops deploy/secrets/tributary.yaml`. The OAuth app's callback URL is in the
 [tributary chart's README](../helm/tributary/README.md#github-sign-in); query-api's egress to
 GitHub is HTTPS to public addresses (`uses: github`).
+
+"Connect your data" adds one optional key to `tributary.yaml`: `data-connections-key`, the master
+key (`k1:<base64 of 32 random bytes>`) that encrypts users' own market-data API keys. query-api
+reads it with `optional: true`, so the release works before it exists, with the feature off.
+Generate it on the server without printing it (`sops set` with an `openssl rand` value) and
+restart query-api: the exact commands are in the
+[tributary chart's README](../helm/tributary/README.md#connect-your-data). Losing it makes the
+stored keys unreadable (users reconnect), so it is backed up like the age key.
 
 The keys each chart expects are listed in its README and `values.yaml`.
 

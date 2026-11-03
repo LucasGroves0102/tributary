@@ -12,7 +12,8 @@ in the `platform` namespace; Postgres runs on the host.
     `anthropic-api-key`, `sec-user-agent`, `openfga-api-token` when `openfga.auth.enabled`,
     `sec-limiter-database-url` when `secLimiter.dedicatedLogin` (below),
     `kafka-password-<user>` for every Kafka client when `kafka.sasl.enabled` (below), and
-    optionally `github-client-id` + `github-client-secret` for GitHub sign-in (below).
+    optionally `github-client-id` + `github-client-secret` for GitHub sign-in (below) and
+    `data-connections-key` for "Connect your data" (below).
   - Secret `ghcr` (type `kubernetes.io/dockerconfigjson`) with a token that can read packages.
 
 ## Install
@@ -64,6 +65,7 @@ decides its environment variables, which Secret keys it can read, and its networ
 | `sec` | `SEC_USER_AGENT`; `SEC_LIMITER_DATABASE_URL` (main database: `database-url`, or `sec-limiter-database-url` with `secLimiter.dedicatedLogin`) and `SEC_CALLER_CLASS` (`secClass`, default `live` for services, `batch` for jobs) for the shared SEC rate limit | HTTPS to public addresses, host Postgres |
 | `anthropic` | `ANTHROPIC_API_KEY` | HTTPS to public addresses |
 | `github` | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` (`github-client-id` / `github-client-secret`, both `optional: true`), `GITHUB_REDIRECT_URI` (`github.redirectUri`) | HTTPS to public addresses |
+| `market-data` | `DATA_CONNECTIONS_KEY` (`data-connections-key`, `optional: true`) | HTTPS to public addresses |
 | `jwt` | `QUERY_API_JWT_SECRET` | |
 | `query-api` | `QUERY_API_URL` | |
 | `demo` | `DEMO_USERS` when `demo.enabled` (off on hermes: the named users are test personas); `DEMO_SANDBOX_*`, `DEMO_AGENT_*` when `demo.sandbox.enabled` | |
@@ -132,6 +134,42 @@ Owner steps: create a GitHub OAuth app (Settings → Developer settings → OAut
 generate a client secret; `sops deploy/secrets/tributary.yaml` and add `github-client-id` and
 `github-client-secret` under `stringData`; commit, and Flux applies it (restart query-api if
 the secret changed after the pod started: env from a Secret is read at start).
+
+## Connect your data
+
+"Connect your data" (Query API README, "Connect your data") lets each user add their own
+market-data API key; query-api fetches prices with it and keeps them for that user only.
+query-api `uses: market-data`:
+
+- Secret key `data-connections-key` → `DATA_CONNECTIONS_KEY`, read with `optional: true`: the
+  master key that encrypts users' API keys (envelope AES-256-GCM; the database holds only
+  ciphertext). Until it is in the SOPS secret the pod starts without it and the feature is off:
+  its routes answer 404 and the web app hides it. A malformed value stops query-api at start.
+  Format: `k1:<base64 of 32 random bytes>`; to rotate, prepend a new key
+  (`k2:<new>,k1:<old>`) and keep the old one until no row uses it.
+- Egress: query-api calls only the provider adapters' hosts (today `api.tiingo.com`) over
+  HTTPS, but a NetworkPolicy can't match hostnames, so `market-data` gets the same rule as
+  `github`, `sec` and `anthropic`: TCP 443 to any public address, private ranges excluded
+  (`allow-internet`). query-api already had it through `uses: github`; `market-data` keeps it
+  independent of GitHub sign-in.
+
+Owner steps (on hermes, in the repo checkout where sops can decrypt; the value is generated
+inside the command and never printed, the same way `scripts/kafka-passwords.sh` writes keys):
+
+```bash
+sops set deploy/secrets/tributary.yaml '["stringData"]["data-connections-key"]' \
+  "\"k1:$(openssl rand -base64 32)\""
+git diff --stat deploy/secrets/tributary.yaml   # one key added, value encrypted
+git commit -m "Add data-connections-key" deploy/secrets/tributary.yaml && git push
+# after Flux applies the secret (flux get kustomizations): env is read at start
+kubectl -n tributary rollout restart deployment/query-api
+```
+
+Then `GET /api/query/v1/connections` with a token answers 200 instead of 404, and Settings →
+Connections appears in the web app. Keep the master key backed up with the age key: losing it
+makes every stored API key unreadable (users would reconnect; their prices can be refetched).
+To turn the feature off again, remove the key (`sops deploy/secrets/tributary.yaml`) and
+restart query-api; stored connections stay encrypted in the app DB until users disconnect.
 
 ## Kafka authentication
 

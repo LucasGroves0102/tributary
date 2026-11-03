@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 
 from query_api.auth import Unauthenticated, mint, verify
 from query_api.authorizer import Access, Authorizer, AuthzUnavailable
+from query_api.connections import MarketData, add_connection_routes
 from query_api.csv_export import csv_response
 from query_api.demo import add_sandbox_routes, demo_company_resolver
 from query_api.formula import (
@@ -103,6 +104,7 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
                github: GitHub | None = None,
                github_accounts: Accounts | None = None,
                thesis_checks: ThesisChecks | None = None,
+               market_data: MarketData | None = None,
                monotonic: Callable[[], float] = time.monotonic) -> FastAPI:
     """demo_users: accounts anyone may sign in as without a password (empty disables it).
     today: the current US Eastern date (EDGAR's), injectable for tests.
@@ -114,7 +116,9 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
     github_config, github, github_accounts: "Sign in with GitHub" (query_api.github); its
     routes 404 unless all three are given.
     thesis_checks: "Check my thesis" history in the app database (None: those routes answer
-    503)."""
+    503).
+    market_data: "Connect your data" (query_api.connections); None (no DATA_CONNECTIONS_KEY):
+    its routes don't exist."""
     app = FastAPI(title="Tributary Query API", version="1")
     instrument(app)
 
@@ -201,6 +205,8 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
     add_workspace_routes(app, store=store, workspaces=workspaces, current_user=current_user)
     add_thesis_check_routes(app, checks=thesis_checks, current_user=current_user)
     add_view_routes(app, views=views, current_user=current_user)
+    add_connection_routes(app, market=market_data, store=store, current_user=current_user,
+                          require=require)
 
     now = clock or (lambda: datetime.now(UTC))
     add_status_routes(app, store=store, clock=now)
