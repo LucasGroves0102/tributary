@@ -106,6 +106,19 @@ describe("screen context", () => {
     expect(uiContext({ view: "status" }, emptyChart(), () => null)).toEqual({ page: "about" });
   });
 
+  it("leaves segment layers out and reports the Revenue tab as segments (agent-api knows neither)", () => {
+    const chart = companyChart(emptyChart(), NVDA, "Nvidia");
+    const withSegment = {
+      ...chart,
+      layers: [...chart.layers, { id: 9, kind: "segment" as const, companyId: NVDA, metric: "revenue", segmentAxis: "geography" as const, members: ["country:US"], transform: "contrib" as const, type: "sbar" as const, axis: "L" as const }],
+    };
+    const ctx = uiContext({ view: "chart" }, withSegment, () => null);
+    expect(ctx.chart!.layers.map((l) => l.kind)).toEqual(["metric", "metric"]);
+    expect(uiContext({ view: "company", companyId: NVDA, tab: "revenue" }, emptyChart(), () => null)).toEqual({
+      page: "company", company_id: NVDA, tab: "segments",
+    });
+  });
+
   it("sends the reader's filing and open section, never its search words", () => {
     const acc = "0001045810-26-000075";
     expect(uiContext({ view: "filing", companyId: NVDA, accessionNo: acc, section: "II-1A", at: 120, q: "export" }, emptyChart(), () => null))

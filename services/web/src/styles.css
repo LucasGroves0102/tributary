@@ -2266,6 +2266,42 @@ mark {
   color: var(--text-3);
 }
 
+/* the company Revenue view (company/Revenue.tsx) */
+.save-chart .save-form {
+  left: 0;
+  right: auto;
+}
+
+.rev-axis {
+  display: grid;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  border-top: 1px solid var(--line);
+}
+
+.rev-axis h3 {
+  margin: 0;
+}
+
+.chart-actions {
+  gap: var(--sp-2);
+}
+
+.t td.warn {
+  color: var(--warn);
+}
+
+.t tr.flagged td.flag {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.t tr.total td,
+.t tr.coverage td,
+.t tr.unattributed td {
+  border-top: 1px solid var(--line-2);
+}
+
 .t.recent td.kind {
   width: 70px;
 }

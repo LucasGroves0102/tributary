@@ -1,11 +1,24 @@
 /** Query API responses for tests, shaped like the real ones (strings for Decimals, dates as
  * ISO strings). Demo data: alice can read NVDA financials and watches TSLA without a grant. */
 
-import type { FinancialRow, LatestFiling, ScreenerRow, WatchlistEntry } from "./types";
+import type { FinancialRow, LatestFiling, ScreenerRow, SegmentRow, WatchlistEntry } from "./types";
 
 export const NVDA = "0001045810";
 export const TSLA = "0001318605";
 export const ACC = "0001045810-26-000075";
+
+/** One /segments row (revenue, business segment unless `over` says otherwise); its filing's
+ * accession ends with the period end's month. */
+export function seg(member: string, fiscal: string, end: string, value: string, over: Partial<SegmentRow> = {}): SegmentRow {
+  return {
+    axis: "business_segment", member, member_label: member.slice(member.indexOf(":") + 1).replace(/(Segment)?Member$/, ""),
+    member_aliases: [], metric: "revenue", period_start: null, period_end: end, fiscal_period: fiscal, calendar_period: null,
+    value, unit: "USD", value_source: "reported",
+    citation: { accession_no: `0001045810-26-0000${end.slice(5, 7)}`, form: "10-Q", filed: end, xbrl_tag: "Revenues", xbrl_axis: "us-gaap:StatementBusinessSegmentsAxis", xbrl_member: member, source_accessions: null, filing_url: null },
+    freshness: { filed: end, ingested_at: "" },
+    ...over,
+  };
+}
 
 const SRC = { period_end: "2026-07-26", accession_no: ACC, form: "10-Q", filed: "2026-08-26" };
 

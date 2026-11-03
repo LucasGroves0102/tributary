@@ -14,6 +14,7 @@ it("round-trips every route", () => {
     { view: "company", companyId: "0001045810" },
     { view: "company", companyId: "0001045810", tab: "statements" },
     { view: "company", companyId: "0001045810", tab: "peers" },
+    { view: "company", companyId: "0001045810", tab: "revenue" },
     { view: "company", companyId: "0001045810", tab: "notes" },
     { view: "about" },
     { view: "status" },

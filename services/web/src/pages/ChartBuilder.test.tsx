@@ -3,9 +3,10 @@ import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
+import { clearShared } from "../chart/fetch";
 import { companyChart, emptyChart, type ChartState } from "../chart/model";
 import { download } from "../download";
-import { entry, NVDA } from "../fixtures";
+import { entry, NVDA, seg } from "../fixtures";
 import { ChartBuilder } from "./ChartBuilder";
 
 vi.mock("../download", () => ({ download: vi.fn() }));
@@ -124,6 +125,26 @@ it("evaluates each layer through the formula API and draws them", async () => {
   expect(container.querySelectorAll(".lchart-svg rect[fill='currentColor']")).toHaveLength(2);
   expect($(".ch-foot")?.textContent).toContain("Fiscal quarters");
   expect(container.textContent).toContain("Latest filing used: 10-Q filed 2026-08-26 (0001045810-26-000075)");
+});
+
+it("draws a segment layer (saved from the Revenue view) from /segments, with its own transforms", async () => {
+  clearShared();
+  const segRows = [seg("x:CloudMember", "FY2027 Q1", "2026-04-26", "30"), seg("x:CloudMember", "FY2027 Q2", "2026-07-26", "40")];
+  vi.mocked(fetch).mockImplementation(async (url: string | URL | Request, init?: RequestInit) =>
+    String(url).includes("/segments") ? Response.json({ as_of: "2026-11-02T00:00:00Z", rows: segRows }) : respond(String(url), init));
+  await render({
+    ...emptyChart(), title: "Cloud", align: "fiscal", range: "max", nextId: 2,
+    layers: [{ id: 1, kind: "segment", companyId: NVDA, metric: "revenue", segmentAxis: "business_segment", members: ["x:CloudMember"], transform: "q", type: "sbar", axis: "L", name: "Cloud" }],
+  });
+  const asked = vi.mocked(fetch).mock.calls.map(([u]) => new URL(String(u), "http://x")).filter((u) => u.pathname.endsWith("/segments"));
+  expect(asked.map((u) => [u.searchParams.get("axis"), u.searchParams.get("view")])).toEqual([["business_segment", "quarter"]]);
+  expect(bodies.filter((b) => b.path.endsWith("/evaluate"))).toEqual([]); // not the formula API
+  expect([...container.querySelectorAll(".ch-legend text")].map((t) => t.textContent)).toEqual(["Cloud"]);
+  const card = $(".layer")!;
+  expect(card.textContent).toContain("Segments");
+  expect(card.textContent).toContain("Revenue by business segment: Cloud");
+  const transforms = [...card.querySelectorAll<HTMLOptionElement>('select[aria-label="Transform"] option')].map((o) => o.value);
+  expect(transforms).toEqual(["q", "ttm", "yoy", "contrib"]);
 });
 
 it("shows each layer's value, period and source filing on hover", async () => {

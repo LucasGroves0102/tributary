@@ -165,8 +165,8 @@ curl "localhost:8000/v1/companies/0001045810/financials?metrics=revenue" # 401: 
 ### Web app
 
 `services/web` (React, TypeScript, Vite): a research workspace with Home (watchlist, new and
-expected filings), a screener over every company, company tearsheets (statements, segments,
-ratios, filings, peers), a chart builder with formula layers, comps tables, a filing reader
+expected filings), a screener over every company, company tearsheets (statements, revenue,
+segments, ratios, filings, peers), a chart builder with formula layers, comps tables, a filing reader
 with "what changed" diffs, and full-text search. The assistant sits on every screen, sees what
 you're looking at, and can build charts, screens and comps for you, with Undo. Model output is
 sanitized and served under a strict Content-Security-Policy. `make web` runs the dev server on
@@ -177,6 +177,12 @@ a permanent account that keeps your saved work.
 
 Research ends in your own argument, so a workspace holds what you write next to what you chart:
 
+- **Revenue view** (a company's Revenue tab): revenue by business segment, geography and
+  product over time from the filings' XBRL (members missing a period shown as gaps, never zeros;
+  bars stack only when the members add up to reported revenue), each segment's contribution to
+  revenue growth in percentage points, and receivables against revenue (DSO, flagged when
+  receivables grow more than 10 points faster than revenue). Each chart saves to a workspace so
+  a thesis can embed it.
 - **Model**: a revenue-first forecast for one company. Its fiscal-year revenue and operating
   income come live from the filings (as you, through the permission-checked API); you type
   growth and operating margin for each forecast year (1-10 years) with a note on why, each shown

@@ -198,7 +198,9 @@ for that in a demo sandbox, which lists nothing else); the default ranks every c
 
 Workspaces are named folders of saved items in the app database (`workspace_api.py`,
 `workspaces.py`, app migrations 004 and 009): a chart builder state (`chart`: title, range,
-alignment, up to 12 layers), a comps set (`comps`: target, up to 20 peers, columns), a screener
+alignment, up to 12 layers: `metric`, `formula`, or `segment` (company, segment metric,
+`segmentAxis`, 1-20 `members` as XBRL QNames, transforms q / ttm / yoy / contrib; the web app's
+Revenue view saves these, and reads their values from `/segments`)), a comps set (`comps`: target, up to 20 peers, columns), a screener
 screen (`screen`: filters and sort), a thesis (`thesis`) or a model (`model`; both below).
 `GET/POST /v1/workspaces`, `PATCH/DELETE /v1/workspaces/{id}`,
 `POST /v1/workspaces/{id}/duplicate`, `POST /v1/workspaces/{id}/items`,

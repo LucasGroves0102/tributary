@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { Readable } from "../access";
-import { ApiError, evaluateFormula, FormulaApiError, type FormulaRequest } from "../api";
+import { ApiError, FormulaApiError } from "../api";
 import { cached, remember } from "../chart/cache";
+import { fetchLayer } from "../chart/fetch";
 import { autoSubtitle, methodNote, sourceFootnote } from "../chart/deck";
 import { LayerChart } from "../chart/LayerChart";
 import { metricLabel } from "../chart/metrics";
-import { basis, frequencyOf, layerColor, layerName, request, type ChartState, type TtmCatalog } from "../chart/model";
+import { basis, frequencyOf, layerColor, layerKey, layerName, type ChartState, type TtmCatalog } from "../chart/model";
 import { toSeries, type Series, type Source } from "../chart/series";
 import { BAND_LABELS, FILER_LABELS } from "../companies/screen";
 import { SmallMultiples } from "../compare/SmallMultiples";
@@ -79,10 +80,22 @@ export function Embed(props: Common & { readable: Readable; hasTtm: TtmCatalog; 
 
 function EmbeddedChart({ token, item, label, hasTtm }: Common & { hasTtm: TtmCatalog }) {
   const chart = useMemo(() => restoreChartState(item.state), [item.state]);
+  return <ChartView token={token} chart={chart} name={item.name} label={label} hasTtm={hasTtm} />;
+}
+
+/** A chart state drawn read-only (embeds, the company Revenue view): each layer's data read
+ * now as the viewer (chart/fetch.ts), drawn by LayerChart with its source footnote. */
+export function ChartView({ token, chart, name, label, hasTtm }: {
+  token: string;
+  chart: ChartState;
+  name: string;
+  label: (companyId: string) => string;
+  hasTtm: TtmCatalog;
+}) {
   const visible = chart.layers.filter((l) => !l.hidden);
   const requests = visible.flatMap((layer) => {
-    const req = request(layer, chart, hasTtm);
-    return req ? [{ layer, req, key: JSON.stringify(req) }] : [];
+    const key = layerKey(layer, chart, hasTtm);
+    return key ? [{ layer, key }] : [];
   });
   const keys = requests.map((r) => r.key).join("\n");
   const [results, setResults] = useState<Record<string, Result>>({});
@@ -95,7 +108,7 @@ function EmbeddedChart({ token, item, label, hasTtm }: Common & { hasTtm: TtmCat
     for (const { key } of requests) {
       if (results[key] || cached(token, key)) continue;
       setResults((r) => ({ ...r, [key]: { state: "loading" } }));
-      evaluateFormula(token, JSON.parse(key) as FormulaRequest)
+      fetchLayer(token, key)
         .then((data) => {
           remember(token, key, data);
           if (live.current) setResults((r) => ({ ...r, [key]: { state: "ok", data } }));
@@ -134,7 +147,7 @@ function EmbeddedChart({ token, item, label, hasTtm }: Common & { hasTtm: TtmCat
   };
 
   if (!series.some((s) => s.points.length)) {
-    if (loading) return <Skeleton chart label={`Loading ${item.name}`} />;
+    if (loading) return <Skeleton chart label={`Loading ${name}`} />;
     return (
       <p className="empty">
         {errors.length ? `This chart couldn't be drawn: ${[...new Set(errors)].join("; ")}.` : "No values in the saved range."}

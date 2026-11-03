@@ -220,6 +220,42 @@ reader. Filing markers put each company's 10-Ks and 10-Qs (public index) and 8-K
 2.02, from parsed filings) on the time axis. "View as table" shows the plotted values with their
 sources as a data table.
 
+Revenue view (the company page's Revenue tab, `src/company/Revenue.tsx`; rules in
+`company/revenue.ts`'s docstring): three sections, each chart an ordinary chart state, so "Save
+to workspace" (`workspaces/SaveChart.tsx`: name and workspace, through the same item route and
+state cleaner as the chart builder's Save as, without becoming the chart builder's open item)
+makes it a chart item a thesis there can embed, and "Open in Chart builder" opens it there.
+Values need financials access, like Statements.
+
+- **Revenue by segment and geography** (TTM or Quarterly, fiscal periods; `/v1/companies/{id}/
+  segments?metric=revenue`): per axis (business segment, geography, product/service) a chart and
+  a members × periods table (last 8 periods), each value's hover naming its filing. A member
+  missing a period shows "—", never zero; one reported in part of the window says "from FY2024
+  Q1" / "until FY2023 Q4". The 6 largest members (by the latest period) are named, the rest folded
+  into "Other (n members)" (the sum of those reporting each period). A "Sum vs reported revenue"
+  row compares the members with `/financials` revenue: bars stack only when every period is within
+  2% of 100%, otherwise each member is a line and the table says the breakdown is partial or
+  overlapping (a few named countries, two breakdowns on one axis).
+- **Growth decomposition** (TTM, year over year): each member's contribution in percentage points
+  = its TTM change over four quarters / company TTM revenue four quarters earlier (members
+  reporting both periods), "Not attributed" = revenue growth minus their sum, and revenue
+  growth; chart: contributions as stacked bars (negatives down) with revenue growth (TTM YoY) as
+  a line.
+- **Revenue quality**: per quarter, TTM revenue, quarter-end receivables, DSO (receivables / TTM
+  revenue × 365), both YoY rates and their gap. A quarter is **flagged when receivables grew more
+  than 10 percentage points faster than TTM revenue** over the same four quarters (`QUALITY_FLAG_
+  POINTS`); the chart is two formula-API lines (`revenue` YoY over TTM, `receivables /
+  receivables[-4q] - 1`).
+
+Segment layers (`chart/segments.ts`, `chart/fetch.ts`): the Revenue view's segment charts are
+chart builder layers of kind `segment` (company, segment metric, axis, 1-20 members), read from
+`/segments` instead of `/v1/formulas/evaluate` (one request per company, axis, metric and view,
+shared by the chart's layers), with transforms Quarterly, TTM, YoY and Contribution to growth.
+They render, save, embed and restore like any layer (`model.ts` `layerKey`/`segmentRequest`,
+`restoreChart`); the chart builder shows them as "Segments" cards (members fixed: they come from
+the Revenue view). The assistant's page context leaves them out and reports the Revenue tab as
+`segments` (agent-api's context knows neither).
+
 Data notes (`src/company/notes.ts`, Query API `/v1/companies/{id}/data-notes`, `/v1/data-notes`):
 the tearsheet's Data notes tab groups what the automated checks found (freshness, restated
 figures, gaps and overlapping periods, values to double-check, derived quarters) in plain
@@ -293,6 +329,7 @@ React.lazy); once signed in and idle the app prefetches them, so switching scree
 | + Workspace (`#/workspace/…`), Report (`#/report/…`) | + 8.3 kB (3.4 kB) each, Report + markdown, LayerChart, SmallMultiples 2.4 kB | |
 | + Thesis (`#/thesis/…`), Model (`#/model/…`) (2026-11-02) | + ThesisPage 9.6 kB (4.0 kB) + markdown, Embeds 5.0 kB, ModelView 3.1 kB; ModelPage 7.3 kB (2.8 kB) + LayerChart; NewWork 3.5 kB (1.6 kB) with Company or Workspace | |
 | + Check my thesis (2026-11-02) | ThesisPage 21.7 kB (8.1 kB) with the check panel | |
+| + Revenue tab, Revisit (2026-11-02) | Company 30.0 kB (9.5 kB) with the Revenue view and its chart renderer; ThesisPage 22.8 kB (8.1 kB) | |
 
 Before splitting, everything was one 493.6 kB (156.3 kB gzip) script; the first screen now
 loads a third less. Most of what remains is React DOM. Chart data is cached in memory per

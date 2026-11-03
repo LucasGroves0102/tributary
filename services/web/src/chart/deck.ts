@@ -60,6 +60,7 @@ export function methodNote(basis: Align, frequency: Frequency, transforms: Set<s
     (transforms.has("yoy") || (annual && transforms.has("qoq")) ? (annual ? "; YoY over years" : "; YoY over TTM") : "") +
     (!annual && transforms.has("qoq") ? "; QoQ over quarters" : "") +
     (transforms.has("ps") ? "; per share = TTM USD / diluted weighted shares of the quarter" : "") +
+    (transforms.has("contrib") ? "; contribution = a segment's TTM change over a year / the company's TTM total a year earlier" : "") +
     "."
   );
 }

@@ -7,11 +7,18 @@
  * by the first one in range, times 100 (done here, since it depends on the range); per share =
  * ttm(f) / weighted_shares_diluted in the quarter view (TTM dollars over the quarter's diluted
  * share count). Metrics without TTM values (EPS, weighted shares) use quarters for YoY, indexed
- * and per share. */
+ * and per share.
+ *
+ * Segment layers (kind "segment", made by the company Revenue view) are the exception: they
+ * read /v1/companies/{id}/segments instead (`segmentRequest`; rules in chart/segments.ts), with
+ * their own transforms (quarterly, TTM, YoY, contribution to growth). `layerKey` gives either
+ * request as the key chart/fetch.ts `fetchLayer` answers. */
 
 import type { FormulaRequest } from "../api";
+import { MAX_MEMBERS, MEMBER, memberName, SEGMENT_AXES, SEGMENT_TRANSFORMS, type SegmentAxisKind, type SegmentRequest } from "./segments";
 
-export type Transform = "q" | "ttm" | "yoy" | "qoq" | "idx" | "ps";
+/** contrib: segment layers only (chart/segments.ts) */
+export type Transform = "q" | "ttm" | "yoy" | "qoq" | "idx" | "ps" | "contrib";
 /** sbar / sarea stack on the other layers of the same type and axis */
 export type LayerType = "line" | "bar" | "area" | "sbar" | "sarea";
 export type Axis = "L" | "R";
@@ -24,13 +31,17 @@ export type Frequency = "quarterly" | "annual";
 
 export interface Layer {
   id: number;
-  kind: "metric" | "formula";
-  /** metric layers: the company and metric */
+  /** segment: members of one segment axis from /segments (chart/segments.ts) */
+  kind: "metric" | "formula" | "segment";
+  /** metric and segment layers: the company and metric (a segment metric for segment layers) */
   companyId?: string;
   metric?: string;
   /** formula layers: the expression and the company of metrics written without a ticker */
   formula?: string;
   defaultCompany?: string;
+  /** segment layers: the axis and the members summed (QNames as last filed) */
+  segmentAxis?: SegmentAxisKind;
+  members?: string[];
   transform: Transform;
   type: LayerType;
   axis: Axis;
@@ -94,7 +105,7 @@ export type TtmCatalog = (metric: string) => boolean;
 
 /** Companies a layer reads: its company or default company, plus any TICKER.metric. */
 export function layerCompanies(l: Layer): string[] {
-  if (l.kind === "metric") return l.companyId ? [l.companyId] : [];
+  if (l.kind === "metric" || l.kind === "segment") return l.companyId ? [l.companyId] : [];
   const tickers = [...(l.formula ?? "").matchAll(/\b([A-Za-z][A-Za-z0-9]{0,9})\.[a-z_]/g)].map(
     (m) => `ticker:${m[1]!.toUpperCase()}`,
   );
@@ -135,6 +146,7 @@ export const frequencyOf = (s: Pick<ChartState, "frequency">): Frequency => s.fr
 export function request(l: Layer, s: ChartState, hasTtm: TtmCatalog, today?: Date): FormulaRequest | null {
   let formula: string;
   let ttm: boolean;
+  if (l.kind === "segment") return null; // segmentRequest
   if (l.kind === "metric") {
     if (!l.companyId || !l.metric) return null;
     formula = l.metric;
@@ -163,6 +175,36 @@ export function request(l: Layer, s: ChartState, hasTtm: TtmCatalog, today?: Dat
   return req;
 }
 
+/** A segment layer's request (chart/segments.ts), or null if it isn't complete. Quarterly
+ * values with quarterly frequency, else TTM (annual = the TTM at each Q4; YoY and contribution
+ * over TTM values). */
+export function segmentRequest(l: Layer, s: ChartState, today?: Date): SegmentRequest | null {
+  if (l.kind !== "segment" || !l.companyId || !l.metric || !l.segmentAxis || !l.members?.length) return null;
+  const transform = SEGMENT_TRANSFORM_SET.has(l.transform) ? (l.transform as SegmentRequest["segment"]["transform"]) : "ttm";
+  const view = transform === "q" && frequencyOf(s) === "quarterly" ? "quarter" : "ttm";
+  const { from, to } = rangeDates(s, today);
+  return {
+    segment: {
+      company: l.companyId,
+      axis: l.segmentAxis,
+      metric: l.metric,
+      members: l.members,
+      view,
+      basis: basis(s),
+      transform,
+      ...(from ? { from } : {}),
+      ...(to ? { to } : {}),
+    },
+  };
+}
+
+/** What a layer's answer is cached under: its evaluate request or its segment request, as
+ * JSON (chart/fetch.ts `fetchLayer` takes it back). */
+export function layerKey(l: Layer, s: ChartState, hasTtm: TtmCatalog, today?: Date): string | null {
+  const req = l.kind === "segment" ? segmentRequest(l, s, today) : request(l, s, hasTtm, today);
+  return req ? JSON.stringify(req) : null;
+}
+
 /** A layer's legend name: its own name, or `short` (a company's ticker or name) and the
  * metric or formula with the transform. */
 export function layerName(l: Layer, short: (companyId: string) => string, label: (metric: string) => string, frequency: Frequency = "quarterly"): string {
@@ -174,10 +216,12 @@ export function autoName(l: Layer, short: (companyId: string) => string, label: 
   const base =
     l.kind === "metric"
       ? `${l.companyId ? short(l.companyId) : "?"} ${l.metric ? label(l.metric).toLowerCase() : "?"}`
-      : (l.formula ?? "").trim() || "formula";
+      : l.kind === "segment"
+        ? `${l.companyId ? short(l.companyId) : "?"} ${l.members?.length === 1 ? memberName(l.members[0]!) : `${l.members?.length ?? 0} segments`}`
+        : (l.formula ?? "").trim() || "formula";
   const suffix = frequency === "annual"
-    ? { q: "", ttm: "", yoy: " YoY", qoq: " YoY", idx: " (indexed)", ps: " per share" }[l.transform]
-    : { q: "", ttm: " (TTM)", yoy: " YoY", qoq: " QoQ", idx: " (indexed)", ps: " per share" }[l.transform];
+    ? { q: "", ttm: "", yoy: " YoY", qoq: " YoY", idx: " (indexed)", ps: " per share", contrib: " contribution" }[l.transform]
+    : { q: "", ttm: " (TTM)", yoy: " YoY", qoq: " QoQ", idx: " (indexed)", ps: " per share", contrib: " contribution" }[l.transform];
   return base + suffix;
 }
 
@@ -311,7 +355,8 @@ export function moveLayer(s: ChartState, id: number, by: -1 | 1): ChartState {
   return { ...s, layers };
 }
 
-const TRANSFORM_SET = new Set(TRANSFORMS.map(([t]) => t));
+const TRANSFORM_SET = new Set<Transform>(TRANSFORMS.map(([t]) => t));
+const SEGMENT_TRANSFORM_SET = new Set<Transform>(SEGMENT_TRANSFORMS.map(([t]) => t));
 const TYPE_SET = new Set(LAYER_TYPES.map(([t]) => t));
 const CIK = /^\d{10}$/;
 export const MAX_LAYER_NAME = 80;
@@ -327,9 +372,10 @@ export function restoreChart(raw: unknown): ChartState {
     if (!x || typeof x !== "object") continue;
     const l = x as Record<string, unknown>;
     const name = typeof l.name === "string" ? l.name.replace(/[\x00-\x1f\x7f]/g, "").trim().slice(0, MAX_LAYER_NAME) : "";
+    const transforms = l.kind === "segment" ? SEGMENT_TRANSFORM_SET : TRANSFORM_SET;
     const common = {
       id,
-      transform: TRANSFORM_SET.has(l.transform as Transform) ? (l.transform as Transform) : "ttm",
+      transform: transforms.has(l.transform as Transform) ? (l.transform as Transform) : ("ttm" as Transform),
       type: TYPE_SET.has(l.type as LayerType) ? (l.type as LayerType) : "line",
       axis: l.axis === "R" ? ("R" as const) : ("L" as const),
       ...(l.hidden === true ? { hidden: true } : {}),
@@ -340,6 +386,20 @@ export function restoreChart(raw: unknown): ChartState {
     };
     if (l.kind === "metric" && CIK.test(String(l.companyId)) && /^[a-z_]{1,64}$/.test(String(l.metric))) {
       layers.push({ ...common, kind: "metric", companyId: String(l.companyId), metric: String(l.metric) });
+      id++;
+    } else if (
+      l.kind === "segment" && CIK.test(String(l.companyId)) && /^[a-z_]{1,64}$/.test(String(l.metric))
+      && SEGMENT_AXES.includes(l.segmentAxis as SegmentAxisKind) && Array.isArray(l.members)
+      && l.members.length >= 1 && l.members.length <= MAX_MEMBERS && l.members.every((m) => typeof m === "string" && MEMBER.test(m))
+    ) {
+      layers.push({
+        ...common,
+        kind: "segment",
+        companyId: String(l.companyId),
+        metric: String(l.metric),
+        segmentAxis: l.segmentAxis as SegmentAxisKind,
+        members: [...new Set(l.members as string[])],
+      });
       id++;
     } else if (l.kind === "formula" && typeof l.formula === "string" && l.formula.length <= 500) {
       layers.push({

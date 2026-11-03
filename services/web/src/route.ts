@@ -8,6 +8,7 @@ import { parseSearch, searchQuery, type SearchState } from "./search/state";
 export const COMPANY_TABS = [
   ["overview", "Overview"],
   ["statements", "Statements"],
+  ["revenue", "Revenue"],
   ["segments", "Segments"],
   ["ratios", "Ratios"],
   ["filings", "Filings"],

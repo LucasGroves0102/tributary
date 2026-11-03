@@ -69,14 +69,24 @@ def clean_name(value: str, limit: int) -> str:
 
 # --- item states: the web app's own state shapes, so it restores them as they are ---------
 
+SEGMENT_MEMBER = r"^[A-Za-z0-9_.:-]{1,200}$"  # an XBRL member QName (chart/segments.ts MEMBER)
+MAX_SEGMENT_MEMBERS = 20
+SEGMENT_TRANSFORMS = ("q", "ttm", "yoy", "contrib")
+
+
 class ChartLayer(_Strict):
-    """chart/model.ts Layer, without its id."""
-    kind: Literal["metric", "formula"]
+    """chart/model.ts Layer, without its id. A segment layer (the Revenue view's charts) sums
+    members of one axis of /v1/companies/{id}/segments; it holds ids and names only, like every
+    layer, and the web app reads its values through the permission-checked route."""
+    kind: Literal["metric", "formula", "segment"]
     companyId: str | None = Field(default=None, pattern=CIK)
     metric: str | None = Field(default=None, pattern=r"^[a-z_]{1,64}$")
     formula: str | None = Field(default=None, max_length=500)
     defaultCompany: str | None = Field(default=None, pattern=CIK)
-    transform: Literal["q", "ttm", "yoy", "qoq", "idx", "ps"] = "ttm"
+    segmentAxis: Literal["business_segment", "geography", "product_service"] | None = None
+    members: list[Annotated[str, Field(pattern=SEGMENT_MEMBER)]] | None = Field(
+        default=None, min_length=1, max_length=MAX_SEGMENT_MEMBERS)
+    transform: Literal["q", "ttm", "yoy", "qoq", "idx", "ps", "contrib"] = "ttm"
     type: Literal["line", "bar", "area", "sbar", "sarea"] = "line"
     axis: Literal["L", "R"] = "L"
     hidden: bool = False
@@ -90,6 +100,18 @@ class ChartLayer(_Strict):
 
     @model_validator(mode="after")
     def _complete(self) -> ChartLayer:
+        if self.kind == "segment":
+            if (not self.companyId or not self.metric or not self.segmentAxis or not self.members
+                    or self.formula is not None or self.defaultCompany is not None):
+                raise ValueError("a segment layer has companyId, metric, segmentAxis and "
+                                 "members, and no formula")
+            if self.transform not in SEGMENT_TRANSFORMS:
+                raise ValueError(f"a segment layer's transform is one of {SEGMENT_TRANSFORMS}")
+            if len(set(self.members)) != len(self.members):
+                raise ValueError("a segment layer lists a member twice")
+            return self
+        if self.segmentAxis is not None or self.members is not None or self.transform == "contrib":
+            raise ValueError("segmentAxis, members and contrib are for segment layers")
         if self.kind == "metric":
             if not self.companyId or not self.metric or self.formula is not None:
                 raise ValueError("a metric layer has companyId and metric, and no formula")
