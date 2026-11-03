@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "../App";
 import type { DataStatus } from "../types";
-import { duration, Status } from "./Status";
+import { duration, share, Status } from "./Status";
 
 const NOW = Date.parse("2026-11-02T15:00:00Z");
 
@@ -174,5 +174,14 @@ describe("Status without signing in", () => {
     expect(container.querySelector("h1")?.textContent).toBe("Tributary");
     const link = [...container.querySelectorAll("a")].find((a) => a.textContent === "Data status");
     expect(link?.getAttribute("href")).toBe("#/status");
+  });
+});
+
+describe("share", () => {
+  it("is the percentage of companies checked, never 0% for a real finding", () => {
+    expect(share(834, 7058)).toBe("11.8%");
+    expect(share(2, 6024)).toBe("<0.1%");
+    expect(share(0, 6024)).toBe("0.0%");
+    expect(share(5, 0)).toBe("–");
   });
 });

@@ -218,6 +218,13 @@ function Completeness({ data, when }: { data: DataStatus; when: (iso: string | n
   );
 }
 
+/** "12.3%" of the companies checked, or "–" before the first run. */
+export function share(part: number, total: number): string {
+  if (!total) return "–";
+  const pct = (100 * part) / total;
+  return `${pct < 0.1 && part > 0 ? "<0.1" : pct.toFixed(1)}%`;
+}
+
 function Quality({ data, when }: { data: DataStatus; when: (iso: string | null) => string }) {
   const q = data.quality;
   return (
@@ -236,8 +243,9 @@ function Quality({ data, when }: { data: DataStatus; when: (iso: string | null) 
             <tr>
               <th>Check</th>
               <th>Severity</th>
+              <th className="n">Companies affected</th>
+              <th className="n">Share</th>
               <th className="n">Findings</th>
-              <th className="n">Companies</th>
             </tr>
           </thead>
           <tbody>
@@ -247,16 +255,20 @@ function Quality({ data, when }: { data: DataStatus; when: (iso: string | null) 
                 <td>
                   <span className={`tag sev-${c.severity}`}>{c.severity}</span>
                 </td>
-                <td className="n">{count(c.findings)}</td>
                 <td className="n">{count(c.companies)}</td>
+                <td className="n">{share(c.companies, q.companies_checked)}</td>
+                <td className="n">{count(c.findings)}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
       <p className="foot">
-        Run on every company's financials after each refresh. Findings are shown to readers as Data notes
-        on the company; errors and warnings flag figures to double-check, restatements are informational.
+        Run on every company's financials after each refresh. A finding is one company, metric and quarter;
+        one bad source figure can raise several. SEC data is messy: companies mis-tag figures and restate
+        them, and these checks are how we find it. Findings are shown to readers as Data notes on the
+        company. Errors and warnings flag figures to double-check (a derived quarter that comes out impossible
+        is left out, not shown); restatements are informational.
       </p>
     </section>
   );
