@@ -107,7 +107,7 @@ function respond(url: string, init?: RequestInit): Response {
   if (p === "/api/agent/v1/thesis-checks" && method === "POST") {
     asked.push(body);
     const hash = stored[0]?.text_hash ?? "0".repeat(64);
-    const result = recheck ? recheck(hash) : checkResult(hash);
+    const result: ReturnType<typeof checkResult> & { filings?: unknown[] } = recheck ? recheck(hash) : checkResult(hash);
     const fresh = { ...summary(hash, "77777777-7777-4777-8777-777777777777"), company_id: NVDA, checked_at: result.checked_at, filings: result.filings ?? [] };
     return sse([{ type: "tool", round: 0, name: "get_financials", input: {}, is_error: false }, { type: "check", check: fresh, result }, { type: "done", answer: {} }]);
   }
