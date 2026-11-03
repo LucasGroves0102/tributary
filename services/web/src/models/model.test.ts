@@ -4,6 +4,7 @@ import type { FinancialRow } from "../types";
 import {
   annualHistory,
   baseYear,
+  caseOf,
   checkAssumptions,
   GROWTH_FLAG_POINTS,
   defaultAssumptions,
@@ -16,6 +17,10 @@ import {
   project,
   resizeAssumptions,
   restoreModel,
+  SCENARIO_SHIFT,
+  SCENARIOS,
+  scenarioAssumptions,
+  shiftedCase,
   statLabel,
   type HistoryYear,
 } from "./model";
@@ -273,5 +278,57 @@ describe("checkAssumptions matches the agent's Python port (stats-fixture.json)"
       [2027, "below", null],
       [2028, null, "above"],
     ]);
+  });
+});
+
+describe("scenarios (bear / base / bull)", () => {
+  for (const c of fixture.scenario_cases) {
+    it(`picks the same assumptions as the agent's port: ${c.name}`, () => {
+      for (const s of SCENARIOS) expect(scenarioAssumptions(c.state, s)).toEqual(c.expected[s]);
+    });
+  }
+
+  const base = [{ growth: 25, margin: 30, note: "ramp" }, { growth: 10, margin: 28 }];
+  const bear = [{ growth: 5, margin: 20 }, { growth: -2.5, margin: 18, note: "cuts" }];
+
+  it("restores and saves bear and bull beside the base case; a base-only model saves as before", () => {
+    const m = restoreModel({ companyId: NVDA, historyYears: 8, assumptions: base, scenarios: { bear, bull: [{ growth: 1, margin: 2 }] } })!;
+    expect(m.assumptions).toEqual(base);
+    expect(m.scenarios).toEqual({ bear }); // a bull case with other years doesn't count
+    expect(modelState(m)).toEqual({ companyId: NVDA, historyYears: 8, assumptions: base, scenarios: { bear } });
+    const old = restoreModel({ companyId: NVDA, historyYears: 8, assumptions: base })!;
+    expect(old.scenarios).toBeUndefined();
+    expect(modelState(old)).toEqual({ companyId: NVDA, historyYears: 8, assumptions: base });
+    expect(caseOf(m, "bear")).toEqual(bear);
+    expect(caseOf(m, "bull")).toEqual(base); // no bull case: the base one
+  });
+
+  it("starts a new case from the base one, shifted and without notes", () => {
+    expect(shiftedCase(base, "bear")).toEqual([
+      { growth: 25 - SCENARIO_SHIFT.growth, margin: 30 - SCENARIO_SHIFT.margin },
+      { growth: 10 - SCENARIO_SHIFT.growth, margin: 28 - SCENARIO_SHIFT.margin },
+    ]);
+    expect(shiftedCase([{ growth: 999, margin: 99 }], "bull")).toEqual([{ growth: 1000, margin: 100 }]); // clamped
+  });
+
+  it("draws bear and bull lighter beside the dashed base forecast", () => {
+    const history = [year(2024, 100, 20), year(2025, 110, 22)];
+    const series = modelSeries(history, project(history, base), { bear: project(history, bear), bull: project(history, base) });
+    expect(series.map((s) => [s.name, !!s.dashed, !!s.faint])).toEqual([
+      ["Revenue", false, false],
+      ["Revenue (base)", true, false],
+      ["Revenue (bear)", true, true],
+      ["Revenue (bull)", true, true],
+      ["Operating income", false, false],
+      ["Operating income (base)", true, false],
+      ["Operating income (bear)", true, true],
+      ["Operating income (bull)", true, true],
+    ]);
+    // every forecast starts at the base year, so the lines join the history
+    expect(series[2]!.points[0]).toMatchObject({ key: 2025, y: 110 });
+    expect(series[2]!.points[1]!.y).toBeCloseTo(110 * 1.05);
+    expect(new Set(series.map((s) => s.id)).size).toBe(series.length);
+    expect(modelSeries(history, project(history, base)).map((s) => s.name)).toEqual([
+      "Revenue", "Revenue (forecast)", "Operating income", "Operating income (forecast)"]);
   });
 });

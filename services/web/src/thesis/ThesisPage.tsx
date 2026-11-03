@@ -1,6 +1,8 @@
-import { useEffect, useId, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type ChangeEvent, type MutableRefObject } from "react";
 
 import type { Readable } from "../access";
+import { draftKey, restoreDraft, type StoredDraft, type ThesisHandle, type ThesisStatus } from "../analysis/bridge";
+import { appendToSection, hasOwnText } from "../analysis/project";
 import { ApiError, openItem, screenerColumns, workspace as fetchWorkspace } from "../api";
 import { slug } from "../chart/export";
 import { catalog } from "../chart/metrics";
@@ -12,7 +14,7 @@ import { day } from "../format";
 import { renderMarkdown } from "../markdown";
 import { Embed } from "../reports/Embeds";
 import { href } from "../route";
-import { load, save as store } from "../storage";
+import { load, remove, save as store } from "../storage";
 import type { SavedItemFull } from "../types";
 import { ITEM_NAME_MAX, KIND_LABELS, nameProblem } from "../workspaces/model";
 import { useEditorKeys } from "../workspaces/useEditor";
@@ -34,7 +36,7 @@ import {
   type Thesis,
 } from "./model";
 import { useNewerFiling } from "./useRevisit";
-import { useThesisCheck } from "./useThesisCheck";
+import { useThesisCheck, type ThesisChecks } from "./useThesisCheck";
 
 interface Props {
   token: string;
@@ -45,6 +47,20 @@ interface Props {
   /** companies whose financials the viewer can read (comps embeds) */
   readable: Readable;
   onOpenChart: (s: ChartState) => void;
+  /** whose browser drafts these are (unsaved changes are kept per user and thesis) */
+  user?: string | null;
+  /** inside an analysis project: no "← workspace" link, no company picker (the project's) */
+  embedded?: boolean;
+  /** the visible editor: only it answers Ctrl+S (a project keeps hidden steps mounted) */
+  active?: boolean;
+  /** the project's handle on this editor (pins, quotes) */
+  bridge?: MutableRefObject<ThesisHandle | null>;
+  /** unsaved changes and the saved text, for the project's step markers */
+  onStatus?: (s: ThesisStatus) => void;
+  /** bumps when the workspace's items changed (a chart pinned): what can be embedded is read again */
+  itemsVersion?: number;
+  /** the project's checks of this thesis (shared with its Monitor step) */
+  checks?: ThesisChecks;
 }
 
 type Loaded =
@@ -76,9 +92,22 @@ const today = () => {
  * Save (Ctrl+S); Import and Export .md; Check my thesis (the assistant checks the saved text,
  * results beside it, with a history of checks). Owner-only like every saved item. */
 export function ThesisPage(props: Props) {
-  const { token, itemId } = props;
+  const { token, itemId, itemsVersion = 0 } = props;
   const [loaded, setLoaded] = useState<Loaded>({ state: "loading" });
   const [retry, setRetry] = useState(0);
+
+  // the workspace's items again (a chart pinned from another step): the editor keeps its text
+  useEffect(() => {
+    if (!itemsVersion || loaded.state !== "ok") return;
+    let live = true;
+    fetchWorkspace(token, loaded.item.workspace_id)
+      .then((ws) => live && setLoaded((l) => (l.state === "ok" ? { ...l, items: embeddable(ws.items) } : l)))
+      .catch(() => undefined); // the embeds already shown stay
+    return () => {
+      live = false;
+    };
+    // loaded is read for the workspace id only
+  }, [token, itemsVersion]);
 
   useEffect(() => {
     let live = true;
@@ -87,10 +116,7 @@ export function ThesisPage(props: Props) {
         if (item.kind !== "thesis") throw new Error("not a thesis");
         // the workspace's other items, with their states: what the thesis can embed
         const ws = await fetchWorkspace(token, item.workspace_id);
-        const items = ws.items.flatMap((i) =>
-          EMBEDDABLE.has(i.kind) && i.state ? [{ item_id: i.item_id, kind: i.kind, name: i.name, state: i.state }] : [],
-        );
-        if (live) setLoaded({ state: "ok", item, thesis: restoreThesis(item.state), items });
+        if (live) setLoaded({ state: "ok", item, thesis: restoreThesis(item.state), items: embeddable(ws.items) });
       })
       .catch((e) => live && setLoaded({
         state: "error",
@@ -102,10 +128,11 @@ export function ThesisPage(props: Props) {
     };
   }, [token, itemId, retry]);
 
-  if (loaded.state === "loading") return <div className="page"><Skeleton lines={8} label="Loading the thesis" /></div>;
+  const wrap = props.embedded ? "thesis-page embedded" : "page";
+  if (loaded.state === "loading") return <div className={wrap}><Skeleton lines={8} label="Loading the thesis" /></div>;
   if (loaded.state === "error") {
     return (
-      <div className="page">
+      <div className={wrap}>
         {loaded.notFound ? (
           <p className="empty">This thesis doesn't exist, or isn't yours. Theses are visible only to their owner.</p>
         ) : (
@@ -117,18 +144,37 @@ export function ThesisPage(props: Props) {
   return <ThesisEditor key={loaded.item.item_id} {...props} item={loaded.item} initial={loaded.thesis} items={loaded.items} />;
 }
 
-function ThesisEditor({ token, item, initial, items, saved, label, readable, onOpenChart }: Props & {
+/** The workspace's items a thesis can embed, with their states. */
+function embeddable(items: { item_id: string; kind: EmbedItem["kind"]; name: string; state: Record<string, unknown> | null }[]): EmbedItem[] {
+  return items.flatMap((i) => (EMBEDDABLE.has(i.kind) && i.state ? [{ item_id: i.item_id, kind: i.kind, name: i.name, state: i.state }] : []));
+}
+
+const savedPrint = (name: string, t: Thesis) => JSON.stringify({ name, state: thesisState(t) });
+
+function ThesisEditor({ token, item, initial, items, saved, label, readable, onOpenChart, user = null, embedded = false, active = true, bridge, onStatus, checks: shared }: Props & {
   item: SavedItemFull;
   initial: Thesis;
   items: EmbedItem[];
 }) {
   const id = useId();
-  const [name, setName] = useState(item.name);
-  const [companyId, setCompanyId] = useState(initial.companyId);
+  const key = user ? draftKey(user, item.item_id) : null;
+  // unsaved changes kept in this browser (StoredDraft): restored as they were when they were
+  // made on top of the version saved now; offered otherwise
+  const [draft] = useState<StoredDraft | null>(() => {
+    const d = key ? restoreDraft(load(key)) : null;
+    if (!d) return null;
+    const r = restoreThesis({ companyId: d.companyId, markdown: d.markdown });
+    return savedPrint(d.name.trim(), r) === savedPrint(item.name, initial) ? null : { ...d, markdown: r.markdown, companyId: r.companyId };
+  });
+  const savedFirst = savedPrint(item.name, initial);
+  const resume = draft !== null && draft.base === savedFirst;
+  const [name, setName] = useState(resume ? draft.name : item.name);
+  const [companyId, setCompanyId] = useState(resume ? draft.companyId : initial.companyId);
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
-  const [markdown, setMarkdown] = useState(initial.markdown);
-  const [savedAs, setSavedAs] = useState(() => JSON.stringify({ name: item.name, state: thesisState(initial) }));
+  const [markdown, setMarkdown] = useState(resume ? draft.markdown : initial.markdown);
+  const [savedAs, setSavedAs] = useState(savedFirst);
+  const [offered, setOffered] = useState<{ draft: StoredDraft; resumed: boolean } | null>(draft ? { draft, resumed: resume } : null);
   const [mode, setModeState] = useState<Mode>(storedMode);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ text: string; undo?: string; error?: boolean } | null>(null);
@@ -136,14 +182,67 @@ function ThesisEditor({ token, item, initial, items, saved, label, readable, onO
   const file = useRef<HTMLInputElement>(null);
   const cursor = useRef<number | null>(null);
   const hasTtm = useHasTtm(token);
-  const checks = useThesisCheck(token, item.item_id);
+  const own = useThesisCheck(token, shared ? null : item.item_id);
+  const checks = shared ?? own;
   // Revisit: the company's newest 10-K/10-Q vs the last check (thesis/revisit.ts)
   const newer = useNewerFiling(token, checks.history[0], companyId);
   const [hash, setHash] = useState<string | null>(null);
   const [highlight, setHighlight] = useState<{ quote: string; n: number } | null>(null);
 
   const thesis: Thesis = { companyId, markdown };
-  const dirty = JSON.stringify({ name: name.trim(), state: thesisState(thesis) }) !== savedAs;
+  const dirty = savedPrint(name.trim(), thesis) !== savedAs;
+  const written = hasOwnText(markdown);
+
+  // the draft follows the text: kept while there are unsaved changes, dropped once saved
+  useEffect(() => {
+    if (!key) return;
+    if (!dirty) {
+      remove(key);
+      return;
+    }
+    const t = window.setTimeout(() => {
+      const d: StoredDraft = { name, markdown, companyId, base: savedAs, at: new Date().toISOString() };
+      store(key, JSON.stringify(d));
+    }, 400);
+    return () => window.clearTimeout(t);
+  }, [key, dirty, name, markdown, companyId, savedAs]);
+
+  const savedMarkdown = useMemo(() => {
+    try {
+      return String((JSON.parse(savedAs) as { state: { markdown?: string } }).state.markdown ?? "");
+    } catch {
+      return "";
+    }
+  }, [savedAs]);
+  useEffect(() => {
+    onStatus?.({ itemId: item.item_id, dirty, saved: savedMarkdown });
+  }, [dirty, savedMarkdown]);
+
+  // the project's handle: pins go into the text being edited (latest values through refs)
+  const latest = useRef({ markdown, dirty, name, companyId });
+  latest.current = { markdown, dirty, name, companyId };
+  useEffect(() => {
+    if (!bridge) return;
+    const handle: ThesisHandle = {
+      itemId: item.item_id,
+      pin: async (section, block) => {
+        const cur = latest.current;
+        const next = appendToSection(cur.markdown, section, block);
+        if (next.length > MAX_MARKDOWN) throw new Error(`A thesis holds up to ${MAX_MARKDOWN.toLocaleString("en-US")} characters.`);
+        setMarkdown(next);
+        if (cur.dirty) return "draft";
+        const saving = { companyId: cur.companyId, markdown: next };
+        const res = await saved.update(item.item_id, { state: thesisState(saving) });
+        setSavedAs(savedPrint(res.name, restoreThesis(res.state)));
+        return "saved";
+      },
+      showQuote: (q) => showQuoteRef.current(q),
+    };
+    bridge.current = handle;
+    return () => {
+      if (bridge.current === handle) bridge.current = null;
+    };
+  }, [bridge, item.item_id, saved]);
   const nameError = nameProblem(name, ITEM_NAME_MAX);
   const company = companyId ? (companyName ?? label(companyId)) : null;
   const missing = useMemo(() => {
@@ -166,6 +265,7 @@ function ThesisEditor({ token, item, initial, items, saved, label, readable, onO
   const showChecks = checks.history.length > 0 || checks.run.status !== "idle";
 
   /** A claim's quote: highlighted in the preview when it shows, else selected in the editor. */
+  const showQuoteRef = useRef<(q: string) => void>(() => undefined);
   const showQuote = (quote: string) => {
     if (mode !== "write") {
       setHighlight((h) => ({ quote, n: (h?.n ?? 0) + 1 }));
@@ -173,6 +273,7 @@ function ThesisEditor({ token, item, initial, items, saved, label, readable, onO
     }
     selectQuote(quote);
   };
+  showQuoteRef.current = showQuote;
   const selectQuote = (quote: string) => {
     const at = findQuote(markdown, quote);
     if (!at || !text.current) return;
@@ -191,15 +292,30 @@ function ThesisEditor({ token, item, initial, items, saved, label, readable, onO
     try {
       const next = await saved.update(item.item_id, { name, state: thesisState(thesis) });
       setName(next.name);
-      setSavedAs(JSON.stringify({ name: next.name, state: thesisState(restoreThesis(next.state)) }));
+      setSavedAs(savedPrint(next.name, restoreThesis(next.state)));
       setNotice(null);
+      setOffered(null);
     } catch (e) {
       setNotice({ text: `Couldn't save: ${e instanceof ApiError ? e.message : "the Query API didn't answer"}.`, error: true });
     } finally {
       setBusy(false);
     }
   };
-  useEditorKeys(dirty, () => void save());
+  useEditorKeys(dirty, () => void save(), active);
+
+  const discardDraft = () => {
+    setName(item.name);
+    setCompanyId(initial.companyId);
+    setMarkdown(initial.markdown);
+    setOffered(null);
+    if (key) remove(key);
+  };
+  const restoreOffered = (d: StoredDraft) => {
+    setName(d.name);
+    setCompanyId(d.companyId);
+    setMarkdown(d.markdown);
+    setOffered({ draft: d, resumed: true });
+  };
 
   // after an insert, put the cursor after the marker
   useEffect(() => {
@@ -295,11 +411,13 @@ function ThesisEditor({ token, item, initial, items, saved, label, readable, onO
   );
 
   return (
-    <div className="page thesis-page">
+    <div className={embedded ? "thesis-page embedded" : "page thesis-page"}>
       <div className="row wrap editor-bar no-print">
-        <a className="btn sm ghost" href={href({ view: "workspace", workspaceId: item.workspace_id })}>
-          ← {item.workspace_name ?? "Workspace"}
-        </a>
+        {!embedded && (
+          <a className="btn sm ghost" href={href({ view: "workspace", workspaceId: item.workspace_id })}>
+            ← {item.workspace_name ?? "Workspace"}
+          </a>
+        )}
         <span className="grow" />
         <span className={dirty ? "dirty small" : "faint small"} role="status">{dirty ? "● unsaved changes" : "saved"}</span>
         <input ref={file} type="file" hidden accept=".md,.markdown,.txt,text/markdown,text/plain" onChange={(e) => void onFile(e)} />
@@ -309,8 +427,8 @@ function ThesisEditor({ token, item, initial, items, saved, label, readable, onO
         <button className="btn sm" onClick={exportMd} title="Download as Markdown; embeds become a line naming the item">
           Export .md
         </button>
-        <button className="btn sm" onClick={checks.start} disabled={dirty || checking || !markdown.trim()}
-          title={dirty ? "Save first: the check reads the saved thesis" : !markdown.trim() ? "Write the thesis first"
+        <button className="btn sm" onClick={checks.start} disabled={dirty || checking || !written}
+          title={dirty ? "Save first: the check reads the saved thesis" : !written ? "Write the thesis first: headings and guidance alone have nothing to check"
             : "The assistant checks each factual claim and your models' assumptions against the filings (counts as 4 questions)"}>
           {checking ? "Checking…" : "Check my thesis"}
         </button>
@@ -332,6 +450,20 @@ function ThesisEditor({ token, item, initial, items, saved, label, readable, onO
           <button className="btn sm ghost" onClick={() => setNotice(null)}>Dismiss</button>
         </div>
       )}
+      {offered && (
+        <div className="report-status draft-status no-print" role="status">
+          {offered.resumed
+            ? `Restored your unsaved changes from ${when(offered.draft.at)}. `
+            : `You have unsaved changes from ${when(offered.draft.at)}, made before this thesis was last saved. `}
+          {!offered.resumed && (
+            <button className="btn sm" onClick={() => restoreOffered(offered.draft)}>Restore them</button>
+          )}{" "}
+          <button className="btn sm ghost" onClick={discardDraft}>{offered.resumed ? "Discard them" : "Discard"}</button>
+          {offered.resumed && (
+            <button className="btn sm ghost" onClick={() => setOffered(null)}>Keep editing</button>
+          )}
+        </div>
+      )}
       {newer && !checking && (
         <div className="report-status revisit no-print" role="status">
           New {newer.form} filed {day(newer.filed, true)} since your last check — re-check?{" "}
@@ -346,7 +478,7 @@ function ThesisEditor({ token, item, initial, items, saved, label, readable, onO
         <input id={`${id}-name`} className="field title-input" value={name} maxLength={ITEM_NAME_MAX} aria-invalid={!!nameError}
           onChange={(e) => setName(e.target.value)} />
         {nameError && <p className="err small" role="alert">{nameError}</p>}
-        <div className="row wrap small">
+        {!embedded && <div className="row wrap small">
           <span className="muted">Company:</span>
           {companyId && !picking ? (
             <>
@@ -369,7 +501,7 @@ function ThesisEditor({ token, item, initial, items, saved, label, readable, onO
               {picking && <button className="btn sm ghost" onClick={() => setPicking(false)}>Cancel</button>}
             </>
           ) : null}
-        </div>
+        </div>}
       </div>
       <div className="seg no-print" role="group" aria-label="View">
         {MODES.map(([m, l]) => (
@@ -434,6 +566,12 @@ export function ThesisBody({ markdown, items, label, token, readable, hasTtm, on
 function Markdown({ markdown }: { markdown: string }) {
   const html = useMemo(() => renderMarkdown(markdown), [markdown]);
   return <div className="answer report-text" dangerouslySetInnerHTML={{ __html: html }} />;
+}
+
+/** "3 Nov, 14:05" for a draft's time. */
+function when(iso: string): string {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "earlier" : d.toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 
 /** A picked file's text, read in the browser as UTF-8 (nothing is uploaded). */

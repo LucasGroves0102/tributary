@@ -36,6 +36,8 @@ export interface Series {
   points: Point[];
   /** drawn dashed whatever its axis (a model's forecast); unset: dashed on the right axis */
   dashed?: boolean;
+  /** drawn lighter and thinner: a model's bear / bull case beside its base case */
+  faint?: boolean;
 }
 
 export const COLORS = 8;

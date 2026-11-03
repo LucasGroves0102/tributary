@@ -3,6 +3,13 @@ import { useEffect, useState } from "react";
 import { parseScreen, screenQuery, type ScreenFilters } from "./companies/screen";
 import { compareQuery, parseCompare, type CompareState } from "./compare/state";
 import { parseSearch, searchQuery, type SearchState } from "./search/state";
+import type { ProjectStep } from "./types";
+
+/** An analysis project's guided steps, in order (analysis/project.ts STEPS has their labels). */
+export const PROJECT_STEPS: readonly ProjectStep[] = ["business", "numbers", "changes", "peers", "model", "thesis", "monitor"];
+const STEP_SET = new Set<string>(PROJECT_STEPS);
+/** steps whose saved item can be named in the route (#/analysis/{id}/model/{item}) */
+const ITEM_STEPS = new Set<string>(["model", "thesis"]);
 
 /** The company page's tabs, in order, with their labels. */
 export const COMPANY_TABS = [
@@ -51,14 +58,18 @@ export type Route =
   /** a thesis the user writes (Markdown with embedded items; workspace item of kind thesis) */
   | { view: "thesis"; itemId: string }
   /** a revenue model: history + the user's assumptions → forecast (item of kind model) */
-  | { view: "model"; itemId: string };
+  | { view: "model"; itemId: string }
+  /** the Analysis tab: your projects (no projectId), or one project at a guided step (a model
+   * or thesis step may name which of the project's items) */
+  | { view: "analysis"; projectId?: string; step?: ProjectStep; itemId?: string };
 
 /** Screens in the left nav: routes without parameters. */
-export type NavView = "home" | "companies" | "chart" | "compare" | "ask";
+export type NavView = "home" | "analysis" | "companies" | "chart" | "compare" | "ask";
 
 /** The left nav: label and the key after "g" that opens it. */
 export const NAV: { view: NavView; label: string; key: string }[] = [
   { view: "home", label: "Home", key: "h" },
+  { view: "analysis", label: "Analysis", key: "p" },
   { view: "companies", label: "Companies", key: "c" },
   { view: "chart", label: "Chart builder", key: "b" },
   { view: "compare", label: "Compare", key: "x" },
@@ -94,6 +105,12 @@ export function parse(hash: string): Route {
   }
   if (view && SIMPLE.has(view)) return { view: view as "chart" | "ask" | "about" | "status" | "settings" };
   if (view === "explore") return { view: "companies" }; // links from before the v3 shell
+  if (view === "analysis") {
+    if (!a || !ID.test(a)) return { view: "analysis" };
+    if (!b || !STEP_SET.has(b)) return { view: "analysis", projectId: a };
+    const step = b as ProjectStep;
+    return c && ITEM_STEPS.has(step) && ID.test(c) ? { view, projectId: a, step, itemId: c } : { view, projectId: a, step };
+  }
   if ((view === "workspace" || view === "report" || view === "thesis" || view === "model") && ID.test(a ?? "")) {
     return view === "workspace" ? { view, workspaceId: a! } : { view, itemId: a! };
   }
@@ -134,6 +151,11 @@ export function href(route: Route): string {
       return route.search ? `#/search?${searchQuery(route.search)}` : "#/search";
     case "workspace":
       return `#/workspace/${encodeURIComponent(route.workspaceId)}`;
+    case "analysis":
+      if (!route.projectId) return "#/analysis";
+      return `#/analysis/${encodeURIComponent(route.projectId)}` +
+        (route.step ? `/${route.step}` : "") +
+        (route.step && route.itemId && ITEM_STEPS.has(route.step) ? `/${encodeURIComponent(route.itemId)}` : "");
     case "report":
     case "thesis":
     case "model":

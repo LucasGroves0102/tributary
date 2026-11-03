@@ -207,6 +207,15 @@ alignment, up to 12 layers: `metric`, `formula`, or `segment` (company, segment 
 `segmentAxis`, 1-20 `members` as XBRL QNames, transforms q / ttm / yoy / contrib; the web app's
 Revenue view saves these, and reads their values from `/segments`)), a comps set (`comps`: target, up to 20 peers, columns), a screener
 screen (`screen`: filters and sort), a thesis (`thesis`) or a model (`model`; both below).
+A workspace can also be an **analysis project** (app migration 012, the web app's Analysis
+tab): its `project` is `{companyId, peers (up to 20), notes (up to 4,000 characters, "How it
+makes money"), done (guided steps marked done: business, numbers, changes, peers, model,
+thesis, monitor)}`, validated strictly (`ProjectState`: unknown fields, a peer twice or the
+company among its peers refused); every other workspace has `project: null` and works as
+before. `POST /v1/workspaces` takes `{name, project?}`; `PATCH /v1/workspaces/{id}` takes
+`{name?, project?}` (a project for a plain workspace is a 422: folders stay folders). A project's
+charts, models and thesis are ordinary items in it, so everything below applies unchanged;
+duplicating a project copies its `project` too.
 `GET/POST /v1/workspaces`, `PATCH/DELETE /v1/workspaces/{id}`,
 `POST /v1/workspaces/{id}/duplicate`, `POST /v1/workspaces/{id}/items`,
 `GET/PUT/DELETE /v1/workspace-items/{id}`, `POST /v1/workspace-items/{id}/open` (returns the
@@ -252,16 +261,19 @@ rename), owner-only and validated like every item:
   report's); `/v1/workspace-items/{id}` returns it.
 - **`model`** (`ModelState`): `{companyId, historyYears (3-10, default 8), assumptions: [{growth,
   margin, note?}] (1-10)}`, growth -100..1000 and operating margin -1000..100, in percent; notes
-  up to 500 characters (blank ones dropped). Only the assumptions are stored: the web app reads
+  up to 500 characters (blank ones dropped). Optional `scenarios: {bear?, bull?}`, each a list
+  of the same per-year assumptions for exactly as many years as `assumptions`, which is the
+  **base** case (a model saved before scenarios is base only and validates unchanged); the
+  thesis check reads the base case only. Only the assumptions are stored: the web app reads
   the history from `/v1/companies/{id}/financials?view=ttm` as the viewer, so a model of a
   company you can't read draws nothing (the financials route answers 403 as always).
 
 Both grant nothing (a company id, the user's text and numbers). A thesis can be checked by the
 assistant ([Thesis checks](#thesis-checks)). Reports never include them:
 `ReportItem` still accepts only charts, comps and screens, and agent-api's report writer skips
-them. Tests: `test_workspaces.py` (states, sizes, bodies, another user's thesis or model is a
-404 for every route), `test_workspaces_db.py` (forced RLS as the table owner, the 128 KiB
-check for theses only).
+them. Tests: `test_workspaces.py` (states, sizes, bodies, scenarios, projects, another user's
+thesis, model or project is a 404 for every route), `test_workspaces_db.py` (forced RLS as the
+table owner, the 128 KiB check for theses only, projects and their 16 KiB check).
 
 ## Reports
 

@@ -91,7 +91,13 @@ const MAX_CONTEXT = 3800; // agent-api refuses more than 4000 bytes
 export function uiContext(route: Route, chart: ChartState, name: (id: string) => string | null): UiContext {
   // the status page is an information page like About (agent-api's pages have no "status")
   // (and Settings: agent-api's pages have no "settings"; the assistant has no price tool)
-  const ctx: UiContext = { page: route.view === "status" || route.view === "settings" ? "about" : route.view };
+  // an analysis project is a workspace to agent-api (its pages have no "analysis"): its thesis
+  // and model steps are those pages
+  const ctx: UiContext = {
+    page: route.view === "status" || route.view === "settings" ? "about"
+      : route.view === "analysis" ? (route.step === "thesis" || route.step === "model" ? route.step : "workspace")
+      : route.view,
+  };
   if (route.view === "company" || route.view === "filing") ctx.company_id = route.companyId;
   // agent-api's tabs predate Revenue: it is reported as the segments tab (same data family);
   // the Price tab ("Connect your data") as the overview (the agent can't read prices)

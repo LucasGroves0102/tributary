@@ -128,12 +128,19 @@ function Folder({
         <div className="ws-row fd">
           <button className="ws-open" onClick={onToggle} aria-expanded={!collapsed} title={w.name}>
             <span aria-hidden="true">{collapsed ? "▸" : "▾"}</span> <span className="ws-name">{w.name}</span>{" "}
+            {w.project && <span className="tag analysis" title="An analysis project">A</span>}{" "}
             <span className="faint">{w.items.length}</span>
           </button>
           <span className="acts">
-            <a href={href({ view: "workspace", workspaceId: w.workspace_id })} aria-label={`Open workspace ${w.name}: items and reports`} title="Open: items and reports">
-              ▤
-            </a>
+            {w.project ? (
+              <a href={href({ view: "analysis", projectId: w.workspace_id })} aria-label={`Open the analysis ${w.name}`} title="Open the analysis">
+                ◆
+              </a>
+            ) : (
+              <a href={href({ view: "workspace", workspaceId: w.workspace_id })} aria-label={`Open workspace ${w.name}: items and reports`} title="Open: items and reports">
+                ▤
+              </a>
+            )}
             <button onClick={() => setEditing({ type: "rename-ws", id: w.workspace_id, name: w.name })} aria-label={`Rename workspace ${w.name}`} title="Rename">
               ✎
             </button>

@@ -17,7 +17,9 @@ export interface ThesisChecks {
   show: (checkId: string) => void;
 }
 
-export function useThesisCheck(token: string, itemId: string): ThesisChecks {
+/** `itemId` null: nothing is read or run (a page that was handed its checks by an analysis
+ * project, which shares one instance between its Thesis and Monitor steps). */
+export function useThesisCheck(token: string, itemId: string | null): ThesisChecks {
   const [history, setHistory] = useState<ThesisCheckSummary[]>([]);
   const [shown, setShown] = useState<ThesisCheck | null>(null);
   const [run, setRun] = useState<ThesisChecks["run"]>({ status: "idle" });
@@ -29,6 +31,10 @@ export function useThesisCheck(token: string, itemId: string): ThesisChecks {
 
   useEffect(() => {
     live.current = true;
+    if (!itemId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     thesisChecks(token, itemId)
       .then(async (r) => {
@@ -50,7 +56,7 @@ export function useThesisCheck(token: string, itemId: string): ThesisChecks {
 
   const show = useCallback(
     (checkId: string) => {
-      if (shown?.check_id === checkId) return;
+      if (!itemId || shown?.check_id === checkId) return;
       thesisCheck(token, itemId, checkId)
         .then((c) => live.current && setShown(c))
         .catch((e) => live.current && setRun({ status: "error", message: e instanceof ApiError ? e.message : "the Query API didn't answer" }));
@@ -59,7 +65,7 @@ export function useThesisCheck(token: string, itemId: string): ThesisChecks {
   );
 
   const start = useCallback(() => {
-    if (run.status === "running") return;
+    if (!itemId || run.status === "running") return;
     const ctl = new AbortController();
     abort.current = ctl;
     setRun({ status: "running", tools: 0 });
@@ -95,7 +101,7 @@ export function useThesisCheck(token: string, itemId: string): ThesisChecks {
   const beforeId = at >= 0 ? history[at + 1]?.check_id : undefined;
   useEffect(() => {
     if (shown) read.current.set(shown.check_id, shown);
-    if (!beforeId) {
+    if (!beforeId || !itemId) {
       setPrevious(null);
       return;
     }

@@ -111,6 +111,11 @@ result) or an `error` event if it couldn't be saved or the model never submitted
   outside the 5-year [min, max]** (`GROWTH_FLAG_POINTS`). The numbers go to the model as data;
   it only writes the commentary. `services/web/src/models/stats-fixture.json` holds the same
   inputs and expected numbers for both test suites.
+- **The base case.** A model with bear / base / bull scenarios (the Analysis tab) is checked on
+  its **base** case only: `assumptions` in the saved state, which is all a model saved before
+  scenarios holds (`model_stats.scenario_assumptions`, ported from `models/model.ts`
+  `scenarioAssumptions`; the fixture's `scenario_cases` pin which assumptions each case uses).
+  The bear and bull cases never reach the data or the flags; the result's shape is unchanged.
 - **The thesis is data.** The first 30,000 characters (`MAX_THESIS_CHARS`; the result says
   when the rest wasn't checked) go in a `<thesis>` block as a JSON string with `<`/`>` escaped,
   so nothing in it can close the block; Tributary's numbers in a `<check_data>` block. The chat
@@ -182,5 +187,5 @@ Config (env):
 `pytest services/agent`: the tool loop runs against a scripted fake model and a mocked Query API transport;
 no API key needed. `test_thesis_check.py` includes the adversarial cases (injection in the
 thesis, another user's thesis, forged citations and figures); `test_model_stats.py` checks the
-shared fixture. The live suites are [tests/adversarial](../../tests/adversarial) (leaks)
+shared fixture (statistics, flags and which assumptions each scenario uses). The live suites are [tests/adversarial](../../tests/adversarial) (leaks)
 and [tests/citations](../../tests/citations) (citation accuracy); CI replays their recordings.

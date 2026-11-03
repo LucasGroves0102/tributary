@@ -96,6 +96,12 @@ export function WorkspacePage({ token, workspaceId, writer, onOpen, version, sav
         can't verify is flagged. A report counts as {REPORT_QUESTIONS} assistant questions
         {items.length > MAX_REPORT_ITEMS ? ` and covers the first ${MAX_REPORT_ITEMS} items` : ""}.
       </p>
+      {ws.project && (
+        <p className="report-status" role="note">
+          This workspace is an analysis project: its guided steps, thesis and model open in the project.{" "}
+          <a className="btn sm" href={href({ view: "analysis", projectId: workspaceId })}>Open the analysis</a>
+        </p>
+      )}
       {here && <WritingStatus writer={writer} />}
 
       <section className="card">

@@ -83,3 +83,24 @@ it("keeps only valid screener filters", () => {
     screen: { fye: 9, exchange: "NYSE" },
   });
 });
+
+it("round-trips analysis routes and refuses odd ids and steps", () => {
+  const id = "3f2b8c1e-5d4a-4f6b-9c2d-1a2b3c4d5e6f";
+  const item = "9e2b8c1e-5d4a-4f6b-9c2d-1a2b3c4d5e6f";
+  const routes: Route[] = [
+    { view: "analysis" },
+    { view: "analysis", projectId: id },
+    { view: "analysis", projectId: id, step: "business" },
+    { view: "analysis", projectId: id, step: "changes" },
+    { view: "analysis", projectId: id, step: "model", itemId: item },
+    { view: "analysis", projectId: id, step: "thesis", itemId: item },
+    { view: "analysis", projectId: id, step: "monitor" },
+  ];
+  for (const r of routes) expect(parse(href(r))).toEqual(r);
+  expect(href({ view: "analysis", projectId: id, step: "numbers" })).toBe(`#/analysis/${id}/numbers`);
+  expect(parse(`#/analysis/${id}/admin`)).toEqual({ view: "analysis", projectId: id });
+  expect(parse(`#/analysis/${id}/numbers/${item}`)).toEqual({ view: "analysis", projectId: id, step: "numbers" });
+  expect(parse(`#/analysis/${id}/model/<img>`)).toEqual({ view: "analysis", projectId: id, step: "model" });
+  expect(parse("#/analysis/..%2F..%2Fadmin")).toEqual({ view: "analysis" });
+  expect(href({ view: "analysis", projectId: id, step: "numbers", itemId: item })).toBe(`#/analysis/${id}/numbers`);
+});

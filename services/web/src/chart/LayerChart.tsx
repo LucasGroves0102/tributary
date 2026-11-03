@@ -24,6 +24,8 @@ interface Props {
   compact?: boolean;
 }
 
+/** stroke opacity of a faint series (a model's bear / bull case): an SVG attribute, not a style */
+const FAINT = 0.5;
 const COMPACT_WIDTH = 460;
 const COMPACT_PLOT_H = 200;
 
@@ -158,7 +160,8 @@ export function LayerChart({ series, title, footnote, svgRef, markers = [], onOp
             {lay.legend.map((g) => (
               <g key={g.id} className={`c${g.color}`}>
                 <line x1={g.x} x2={g.x + 14} y1={g.y - 4} y2={g.y - 4} stroke="currentColor"
-                  strokeWidth={g.dashed ? 2 : 4} strokeDasharray={g.dashed ? "4 2" : undefined} />
+                  strokeWidth={g.dashed ? 2 : 4} strokeDasharray={g.dashed ? "4 2" : undefined}
+                  strokeOpacity={g.faint ? FAINT : undefined} />
                 <text x={g.x + 18} y={g.y}>
                   {g.name}
                 </text>
@@ -191,8 +194,8 @@ export function LayerChart({ series, title, footnote, svgRef, markers = [], onOp
             <g key={d.id} className={`c${d.color}`}>
               {d.area && <path d={d.area} fill="currentColor" fillOpacity={d.type === "sarea" ? 0.35 : 0.15} />}
               {d.path && (
-                <path d={d.path} fill="none" stroke="currentColor" strokeWidth={2}
-                  strokeDasharray={d.dashed ? "5 3" : undefined} />
+                <path d={d.path} fill="none" stroke="currentColor" strokeWidth={d.faint ? 1.5 : 2}
+                  strokeDasharray={d.dashed ? "5 3" : undefined} strokeOpacity={d.faint ? FAINT : undefined} />
               )}
               {d.bars?.map((b, i) => (
                 <rect key={i} x={b.x} y={b.y} width={Math.max(1, b.w)} height={b.h} fill="currentColor" fillOpacity={0.85} />

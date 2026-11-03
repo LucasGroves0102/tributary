@@ -22,7 +22,7 @@ the URL, sortable, ungranted companies as metadata only, CSV export through the 
 `#/filing/<company_id>/<accession>[/<section>]` parsed filing reader; `#/chart` the chart
 builder (each layer a `/v1/formulas/evaluate` request; plain SVG; CSV, SVG and PNG export);
 `#/ask` the assistant full width, with streamed answers, tool trace and verified citation links;
-`#/compare` the comps table; `#/about` says what Tributary covers and doesn't (no prices, consensus or
+`#/compare` the comps table; `#/analysis` the Analysis tab (guided research projects, below); `#/about` says what Tributary covers and doesn't (no prices, consensus or
 transcripts; estimated dates; banks; EDGAR timing), linked from the sidebar footer and the
 assistant's empty state; `#/status` the data status page (`pages/Status.tsx`, `GET
 /v1/status/data`): feed freshness, EDGAR-to-database latency, live-feed share, completeness
@@ -188,10 +188,82 @@ sidebar with the other items (rename, duplicate, delete as usual).
   starts every year at the company's own CAGR and average margin; "Reset to history" does so
   again. Only the assumptions are saved, never the history. A model embeds in a thesis like a
   chart (its chart and table from the saved assumptions and the live history). Per-segment
-  growth isn't there yet. `checkAssumptions` / `marginRange` hold the thesis check's flag rule
+  growth isn't there yet. **Bear / base / bull**: a Scenario switch above the assumptions picks
+  the case being edited; "Add bear and bull cases" starts them from the base case minus / plus
+  5 points of growth and 3 of margin (`SCENARIO_SHIFT`), for the same forecast years (changing
+  the number of years changes every case). The chart draws the base forecast dashed and the bear
+  and bull ones lighter (a series' `faint`: thinner, `stroke-opacity`, an SVG attribute, not a
+  style); the table shows the selected case. Saved as `scenarios: {bear, bull}` beside
+  `assumptions`, which stays the base case: a model saved before scenarios is base only and
+  saves exactly as before, and Check my thesis checks the base case (`scenarioAssumptions`,
+  ported to agent-api; the fixture's `scenario_cases`). An embedded model draws all three.
+  `checkAssumptions` / `marginRange` hold the thesis check's flag rule
   (growth more than 10 points from the CAGR, a margin outside the 5-year [min, max]);
   `models/stats-fixture.json` is shared with agent-api's Python port (`model_stats.py`), and
   both test suites check the same numbers.
+
+Analysis (`src/analysis/`, `#/analysis`, sidebar "Analysis", `g p`): a guided research project
+per company, from its filings to a thesis that's checked after every filing. Rules are in
+`analysis/project.ts`'s docstring.
+
+- **A project is a workspace** with `project = {companyId, peers, notes, done}` (app DB 012,
+  Query API README "Workspaces"); its charts, comps, models and thesis are ordinary items in it,
+  so the item routes, embeds, checks and Revisit work unchanged, and it shows in the sidebar's
+  Workspaces with an `A` tag (◆ opens the project). A plain workspace has `project: null` and
+  is untouched. `#/thesis/{id}` or `#/model/{id}` of a project's item is replaced by
+  `#/analysis/{project}/thesis|model/{id}` (App.tsx), so it opens inside the project.
+- **Home** (`#/analysis`, `AnalysisHome.tsx`): your projects, newest edit first: company,
+  project name, last edited, the thesis's last check (supported / contradicted / can't verify,
+  one checks-list request per thesis, first 20) and Revisit's "new 10-Q" flag. **New
+  analysis**: a company search that lists only companies you can read (`readableFor`;
+  `access=financials` on the API too), suggested peers from `/peers` (readable ones, the first
+  3 ticked), a name; it creates the workspace with its project and opens step 1.
+- **A project** (`#/analysis/{id}[/{step}[/{item}]]`, `ProjectPage.tsx`): a header with the
+  company (public identity), "n of 7 steps done" and tabs **Company · Charts · Model · Thesis ·
+  Monitor**, which group the steps (Company = Business, What changed, Peers) and reopen the last
+  one visited; a rail of the 7 steps with a done marker each (done = marked by hand, or its work
+  exists: notes, a chart, a peer, a model, the Core thesis written, a check; What changed by
+  hand only). Without a step in the URL it opens at the first step not done. Each step is a pane
+  that stays mounted once visited (hidden, not unmounted), so switching is instant and keeps
+  everything typed; editors take `active` so only the visible one answers Ctrl+S.
+- **Steps**, each reusing a screen scoped to the company: 1 **Business**: "How it makes money"
+  notes (saved in the project after a pause), the latest 10-K's Item 1 in paragraphs, and the
+  company page's Segments tables; 2 **Numbers**: five chart builder states (`charts.ts`: revenue
+  and YoY growth, gross and operating margin, free cash flow = operating cash flow − capex, ten
+  fiscal years annually; the Revenue tab's receivables vs revenue; long-term debt with debt to
+  equity), each drawn by `ChartView`, with Open in Chart builder, Save to project and Add to
+  thesis; 3 **What changed**: the filing page's `Changes` for the latest 10-Q and 10-K;
+  4 **Peers**: Compare with the target fixed and the peers saved in the project (`embedded`:
+  changes come back instead of going to the URL), Save to project / Add to thesis for the comps;
+  5 **Model**: the project's models (ModelPage embedded, bear/base/bull), "Create the model"
+  from the company's history; 6 **Thesis**: ThesisPage embedded (no back link, no company
+  picker); 7 **Monitor**: Check my thesis (disabled while the thesis has unsaved changes or only
+  template text), Revisit's new-filing notice, the check panel (a quote opens the Thesis step
+  and marks it), and a "coming next" card for KPIs and red lines.
+- **Thesis template**: a project's thesis starts from `thesisTemplate`: `# Company: thesis`, then
+  Core thesis, Variant perception, Pillars (with `### Pillar 1`), Catalysts (prefilled with the
+  next expected 10-Q/10-K dates, `/expected-filings?periods=4`, labelled estimated), Risks and
+  mitigants, What would prove me wrong, KPIs to watch, each with its guidance as an HTML comment
+  (invisible in the preview; DOMPurify drops comments). Theses outside projects are unchanged.
+- **Add to thesis** (`Pin.tsx`, a pushpin button with a menu of the thesis's sections, Pillars
+  first and focused; arrows, Escape): a chart or comps set is saved as an item of the project,
+  then its `[[embed:<id>]]` line goes at the end of the chosen section (`appendToSection`; a
+  missing section is added); a filing passage (Item 1, a what-changed paragraph; removed ones
+  quote the earlier filing) goes in as a blockquote, escaped so it renders as written, with a
+  citation line: form, filed date, section, and the accession linked to EDGAR
+  (`edgarFilingUrl`, built only from the company id and accession number the API returned). The
+  project's thesis editor stays mounted and registers a handle (`bridge.ts`), so a pin lands in
+  the text being edited: saved at once when there were no unsaved changes, else left as an
+  unsaved change. With no thesis yet, a pin creates it from the template with the pin in it.
+  Everything goes through the owner-only item routes.
+- **Drafts** (`bridge.ts`, ThesisPage, every thesis, not only in projects): unsaved changes are
+  kept in localStorage per user and thesis (`tributary.thesis-draft.<user>.<item>`) and dropped
+  on save. Opening the thesis again restores them when they were made on the version saved now
+  ("Restored your unsaved changes … Discard them"), else offers them ("Restore them" /
+  "Discard").
+- Grants nothing: every step reads through the permission-checked routes as the viewer. The
+  assistant's page context reports a project as `workspace` (its thesis and model steps as
+  `thesis` / `model`): agent-api's pages have no `analysis`.
 
 Customizable views (`src/views/`, Query API `/v1/views`): Home's "Customize" shows, hides and
 reorders its cards; the watchlist and the screener have "Columns" to choose and order their value
@@ -359,6 +431,7 @@ React.lazy); once signed in and idle the app prefetches them, so switching scree
 | + Check my thesis (2026-11-02) | ThesisPage 21.7 kB (8.1 kB) with the check panel | |
 | + Revenue tab, Revisit (2026-11-02) | Company 30.0 kB (9.5 kB) with the Revenue view and its chart renderer; ThesisPage 22.8 kB (8.1 kB) | |
 | + Price tab, Settings (`#/settings`) (2026-11-02, Connect your data) | Company 37.1 kB (11.7 kB) with the Price tab; Settings 3.1 kB (1.4 kB); shell 358.7 kB (114.3 kB) | |
+| + Analysis (`#/analysis…`) (2026-11-02) | AnalysisPage 35.7 kB (12.0 kB) + ThesisPage 32.3 kB (11.8 kB), ModelPage 9.9 kB (3.8 kB), Compare 10.8 kB (4.0 kB), Company chunks; shell 361.0 kB (114.9 kB) | 48.6 kB (10.3 kB) |
 
 Before splitting, everything was one 493.6 kB (156.3 kB gzip) script; the first screen now
 loads a third less. Most of what remains is React DOM. Chart data is cached in memory per

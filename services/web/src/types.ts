@@ -361,7 +361,21 @@ export interface SavedWorkspace {
   name: string;
   created_at: string;
   updated_at: string;
+  /** an analysis project (app DB 012); null (or absent from an older API) for a plain folder */
+  project?: ProjectState | null;
   items: SavedItem[];
+}
+
+/** The guided steps of an analysis project, in order (query_api.workspaces STEPS). */
+export type ProjectStep = "business" | "numbers" | "changes" | "peers" | "model" | "thesis" | "monitor";
+
+/** workspaces.project (query_api.workspaces ProjectState): the company the project studies,
+ * its peers, the user's "How it makes money" notes and the steps they marked done. */
+export interface ProjectState {
+  companyId: string;
+  peers: string[];
+  notes: string;
+  done: ProjectStep[];
 }
 
 /** /v1/workspaces/{id}: items with their states (a report's or thesis's state is null there). */

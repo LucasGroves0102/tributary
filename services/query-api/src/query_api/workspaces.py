@@ -1,7 +1,7 @@
-"""Saved work in the app database (db/app migrations 004, 005, 009): workspaces (named folders)
-of saved items (a chart builder state, a comps set, a screener screen, a thesis the user writes,
-a revenue model; reports the agent writes), and the filings a user last opened, for Home's
-"Continue where you left off".
+"""Saved work in the app database (db/app migrations 004, 005, 009, 012): workspaces (named
+folders, or analysis projects bound to one company) of saved items (a chart builder state, a
+comps set, a screener screen, a thesis the user writes, a revenue model; reports the agent
+writes), and the filings a user last opened, for Home's "Continue where you left off".
 
 Owner-only: every statement is filtered on the JWT `sub` the route passes in, and the tables'
 row-level security (FORCEd, keyed on `app.user_id`, set per transaction here) admits only that
@@ -37,6 +37,12 @@ MAX_THESIS_MARKDOWN = 100_000  # characters
 MAX_THESIS_BYTES = 120_000  # a thesis state as compact UTF-8 JSON (the table allows 131072)
 MAX_MODEL_YEARS = 10
 MAX_NOTE = 500
+MAX_PROJECT_PEERS = 20  # like a comps set (CompsState.peers)
+MAX_PROJECT_NOTES = 4_000  # "How it makes money", characters
+MAX_PROJECT_BYTES = 16_000  # a project as compact JSON (the column allows 16384)
+# the guided steps of an analysis project, in order (web analysis/project.ts STEPS)
+STEPS = ("business", "numbers", "changes", "peers", "model", "thesis", "monitor")
+Step = Literal["business", "numbers", "changes", "peers", "model", "thesis", "monitor"]
 WORKSPACE_NAME = 100
 ITEM_NAME = 120
 # what users save (009 adds thesis and model); reports (005) only the agent writes
@@ -228,13 +234,59 @@ class ModelYear(_Strict):
         return None if v is None or not v.strip() else clean_text(v.strip(), "note")
 
 
+class Scenarios(_Strict):
+    """The bear and bull cases beside the base one: the same forecast years, other numbers."""
+    bear: list[ModelYear] | None = Field(default=None, min_length=1, max_length=MAX_MODEL_YEARS)
+    bull: list[ModelYear] | None = Field(default=None, min_length=1, max_length=MAX_MODEL_YEARS)
+
+
 class ModelState(_Strict):
     """models/model.ts ModelState: a company, how many fiscal years of history to show, and one
     set of assumptions per forecast year (the first is the year after the latest reported one).
-    The history itself is never stored: the web app reads it through the Query API."""
+    The history itself is never stored: the web app reads it through the Query API.
+
+    `assumptions` is the BASE scenario (a model saved before scenarios is base only, unchanged);
+    `scenarios` optionally adds bear and bull assumptions for the same years. The thesis check
+    reads the base case (agent-api model_stats.scenario_assumptions)."""
     companyId: str = Field(pattern=CIK)
     historyYears: int = Field(default=8, ge=3, le=10)
     assumptions: list[ModelYear] = Field(min_length=1, max_length=MAX_MODEL_YEARS)
+    scenarios: Scenarios | None = None
+
+    @model_validator(mode="after")
+    def _same_years(self) -> ModelState:
+        if self.scenarios is None:
+            return self
+        for case in (self.scenarios.bear, self.scenarios.bull):
+            if case is not None and len(case) != len(self.assumptions):
+                raise ValueError("bear and bull have as many forecast years as the base case")
+        if self.scenarios.bear is None and self.scenarios.bull is None:
+            self.scenarios = None
+        return self
+
+
+class ProjectState(_Strict):
+    """An analysis project (app DB 012, `workspaces.project`; web analysis/project.ts): the
+    company it studies, its peers, the user's "How it makes money" notes and the guided steps
+    marked done. Company ids and the user's own text only: it grants nothing."""
+    companyId: str = Field(pattern=CIK)
+    peers: list[Annotated[str, Field(pattern=CIK)]] = Field(default=[],
+                                                            max_length=MAX_PROJECT_PEERS)
+    notes: str = Field(default="", max_length=MAX_PROJECT_NOTES)
+    done: list[Step] = Field(default=[], max_length=len(STEPS))
+
+    @field_validator("notes")
+    @classmethod
+    def _notes(cls, v: str) -> str:
+        return clean_text(v, "notes")
+
+    @model_validator(mode="after")
+    def _distinct(self) -> ProjectState:
+        if len(set(self.peers)) != len(self.peers) or self.companyId in self.peers:
+            raise ValueError("peers repeat, or include the company")
+        if len(set(self.done)) != len(self.done):
+            raise ValueError("a step is listed twice")
+        return self
 
 
 STATES: dict[str, type[BaseModel]] = {"chart": ChartState, "comps": CompsState,
@@ -261,6 +313,18 @@ def validate_state(kind: str, raw: Any) -> dict:
     return state
 
 
+def validate_project(raw: Any) -> dict:
+    """An analysis project as stored (ProjectState), or StateError."""
+    try:
+        project = ProjectState.model_validate(raw).model_dump()
+    except ValueError as e:  # pydantic's ValidationError is a ValueError
+        raise StateError(str(e)) from None
+    if len(json.dumps(project, separators=(",", ":"), ensure_ascii=False).encode()) \
+            > MAX_PROJECT_BYTES:
+        raise StateError(f"project is larger than {MAX_PROJECT_BYTES} bytes")
+    return project
+
+
 def starter(name: str, items: list[tuple[str, str, dict]]) -> dict:
     """A workspace to seed (demo sandboxes): {name, items: [(kind, name, state)]}, each item
     validated like any saved one."""
@@ -278,10 +342,16 @@ class LimitReached(Exception):
     """A per-user or per-workspace cap; the message says which."""
 
 
+class NotAProject(Exception):
+    """A project was sent for a plain workspace (a folder doesn't become a project)."""
+
+
 class Workspaces(Protocol):
     def list(self, user_id: str) -> list[dict]: ...
-    def create(self, user_id: str, name: str) -> dict: ...
+    def create(self, user_id: str, name: str, project: dict | None = None) -> dict: ...
     def rename(self, user_id: str, workspace_id: str, name: str) -> dict | None: ...
+    def update(self, user_id: str, workspace_id: str, name: str | None,
+               project: dict | None) -> dict | None: ...
     def delete(self, user_id: str, workspace_id: str) -> bool: ...
     def duplicate(self, user_id: str, workspace_id: str, name: str | None) -> dict | None: ...
     def add_item(self, user_id: str, workspace_id: str, kind: str, name: str,
@@ -308,7 +378,7 @@ class Pool(Protocol):
 
 ITEM_SUMMARY = ("i.item_id::text, i.workspace_id::text, i.kind, i.name, i.created_at,"
                 " i.updated_at, i.opened_at")
-WORKSPACE_COLUMNS = "w.workspace_id::text, w.name, w.created_at, w.updated_at"
+WORKSPACE_COLUMNS = "w.workspace_id::text, w.name, w.created_at, w.updated_at, w.project"
 
 
 def copy_name(name: str, limit: int) -> str:
@@ -346,24 +416,43 @@ class AppWorkspaces:
                     by_id[item["workspace_id"]]["items"].append(item)
             return out
 
-    def create(self, user_id: str, name: str) -> dict:
+    def create(self, user_id: str, name: str, project: dict | None = None) -> dict:
+        """A workspace; with `project` (validated), an analysis project."""
         try:
             with self._tx(user_id, lock=True) as cur:
                 self._room(cur, user_id, workspaces=1)
-                cur.execute("INSERT INTO workspaces (user_id, name, created_at, updated_at)"
-                            " VALUES (%s, %s, statement_timestamp(), statement_timestamp())"
+                cur.execute("INSERT INTO workspaces (user_id, name, project, created_at,"
+                            "                        updated_at)"
+                            " VALUES (%s, %s, %s, statement_timestamp(), statement_timestamp())"
                             f" RETURNING {WORKSPACE_COLUMNS.replace('w.', '')}",
-                            (user_id, name))
+                            (user_id, name, _jsonb(project) if project is not None else None))
                 return {**_one(cur), "items": []}
         except psycopg.errors.ForeignKeyViolation:
             raise UnknownUser(user_id) from None
 
     def rename(self, user_id: str, workspace_id: str, name: str) -> dict | None:
+        return self.update(user_id, workspace_id, name, None)
+
+    def update(self, user_id: str, workspace_id: str, name: str | None,
+               project: dict | None) -> dict | None:
+        """Renames and/or replaces a project's state (None: unchanged). NotAProject when a
+        project is sent for a plain workspace: folders stay folders."""
         with self._tx(user_id) as cur:
-            cur.execute("UPDATE workspaces SET name = %s, updated_at = statement_timestamp()"
+            if project is not None:
+                cur.execute("SELECT project IS NOT NULL AS is_project FROM workspaces"
+                            " WHERE workspace_id = %s AND user_id = %s",
+                            (workspace_id, user_id))
+                row = cur.fetchone()
+                if row is None:
+                    return None
+                if not row["is_project"]:
+                    raise NotAProject(workspace_id)
+            cur.execute("UPDATE workspaces SET name = coalesce(%s, name),"
+                        " project = coalesce(%s, project), updated_at = statement_timestamp()"
                         " WHERE workspace_id = %s AND user_id = %s"
                         f" RETURNING {WORKSPACE_COLUMNS.replace('w.', '')}",
-                        (name, workspace_id, user_id))
+                        (name, _jsonb(project) if project is not None else None,
+                         workspace_id, user_id))
             return cur.fetchone()
 
     def delete(self, user_id: str, workspace_id: str) -> bool:
@@ -374,18 +463,20 @@ class AppWorkspaces:
 
     def duplicate(self, user_id: str, workspace_id: str, name: str | None) -> dict | None:
         with self._tx(user_id, lock=True) as cur:
-            cur.execute("SELECT name FROM workspaces WHERE workspace_id = %s AND user_id = %s",
-                        (workspace_id, user_id))
+            cur.execute("SELECT name, project FROM workspaces"
+                        " WHERE workspace_id = %s AND user_id = %s", (workspace_id, user_id))
             src = cur.fetchone()
             if src is None:
                 return None
             cur.execute("SELECT count(*) AS n FROM workspace_items"
                         " WHERE workspace_id = %s AND user_id = %s", (workspace_id, user_id))
             self._room(cur, user_id, workspaces=1, items=_one(cur)["n"])
-            cur.execute("INSERT INTO workspaces (user_id, name, created_at, updated_at)"
-                        " VALUES (%s, %s, statement_timestamp(), statement_timestamp())"
+            cur.execute("INSERT INTO workspaces (user_id, name, project, created_at,"
+                        "                        updated_at)"
+                        " VALUES (%s, %s, %s, statement_timestamp(), statement_timestamp())"
                         f" RETURNING {WORKSPACE_COLUMNS.replace('w.', '')}",
-                        (user_id, name or copy_name(src["name"], WORKSPACE_NAME)))
+                        (user_id, name or copy_name(src["name"], WORKSPACE_NAME),
+                         _jsonb(src["project"]) if src["project"] is not None else None))
             new = _one(cur)
             # copies keep their order: the statement's time plus 1 µs per item
             cur.execute("INSERT INTO workspace_items (workspace_id, user_id, kind, name, state,"

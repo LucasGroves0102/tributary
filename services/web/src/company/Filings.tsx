@@ -1,9 +1,14 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 import { filingIndex, filings as fetchFilings, sectionChanges } from "../api";
 import { day } from "../format";
 import { href } from "../route";
 import type { IndexedFiling, SectionChanges } from "../types";
+
+export type ChangedSection = SectionChanges["sections"][number];
+export type Change = ChangedSection["changes"][number];
+/** "📌 Add to thesis" beside each changed paragraph (the Analysis tab's What changed step) */
+export type PinChange = (change: Change, section: ChangedSection) => ReactNode;
 import { eightKItems, FORM_FILTERS, formsOf, formTag, type FormFilter } from "./data";
 import { Gate } from "./Tables";
 import { useLoad } from "./useLoad";
@@ -173,9 +178,11 @@ export function Filings({ token, companyId, name, canRead, initialDiff }: {
   );
 }
 
-function Changes({ token, companyId, accessionNo, name }: { token: string; companyId: string; accessionNo: string; name: string }) {
+/** What changed in one 10-K/10-Q's Risk Factors and MD&A (the Query API's /changes). `pin`
+ * renders an action beside each changed paragraph. */
+export function Changes({ token, companyId, accessionNo, name, pin }: { token: string; companyId: string; accessionNo: string; name: string; pin?: PinChange }) {
   const load = useLoad(accessionNo, () => sectionChanges(token, companyId, accessionNo));
-  if (load?.state === "ok") return <ChangeList data={load.data} companyId={companyId} />;
+  if (load?.state === "ok") return <ChangeList data={load.data} companyId={companyId} pin={pin} />;
   return (
     <Gate load={load} name={name} what="Filings">
       {() => null}
@@ -183,7 +190,7 @@ function Changes({ token, companyId, accessionNo, name }: { token: string; compa
   );
 }
 
-function ChangeList({ data, companyId }: { data: SectionChanges; companyId: string }) {
+function ChangeList({ data, companyId, pin }: { data: SectionChanges; companyId: string; pin?: PinChange }) {
   if (!data.sections.length) return <p className="empty">{data.note ?? "No comparable earlier filing is indexed yet."}</p>;
   return (
     <div className="card-b diff">
@@ -220,6 +227,7 @@ function ChangeList({ data, companyId }: { data: SectionChanges; companyId: stri
                     </a>
                   </>
                 )}
+                {pin && <> {pin(c, s)}</>}
               </p>
             ))
           )}

@@ -1,5 +1,5 @@
 {
- "note": "Generated from services/agent model_stats.py; the web app's model.test.ts and services/agent tests/test_model_stats.py both check these numbers.",
+ "note": "Generated from services/agent model_stats.py; the web app's model.test.ts and services/agent tests/test_model_stats.py both check these numbers (cases: history stats and flags; scenario_cases: which assumptions each scenario uses).",
  "cases": [
   {
    "name": "10% a year, margins 10-22%",
@@ -965,6 +965,286 @@
       "margin_flag": null
      }
     ]
+   }
+  }
+ ],
+ "scenario_cases": [
+  {
+   "name": "saved before scenarios: base only",
+   "state": {
+    "companyId": "0001045810",
+    "historyYears": 8,
+    "assumptions": [
+     {
+      "growth": 25,
+      "margin": 30,
+      "note": " ramp "
+     },
+     {
+      "growth": 10,
+      "margin": 28
+     }
+    ]
+   },
+   "expected": {
+    "bear": null,
+    "base": [
+     {
+      "growth": 25.0,
+      "margin": 30.0,
+      "note": "ramp"
+     },
+     {
+      "growth": 10.0,
+      "margin": 28.0
+     }
+    ],
+    "bull": null
+   }
+  },
+  {
+   "name": "bear, base and bull",
+   "state": {
+    "companyId": "0001045810",
+    "historyYears": 8,
+    "assumptions": [
+     {
+      "growth": 25,
+      "margin": 30,
+      "note": " ramp "
+     },
+     {
+      "growth": 10,
+      "margin": 28
+     }
+    ],
+    "scenarios": {
+     "bear": [
+      {
+       "growth": 5,
+       "margin": 20
+      },
+      {
+       "growth": -2.5,
+       "margin": 18,
+       "note": "cuts"
+      }
+     ],
+     "bull": [
+      {
+       "growth": 40,
+       "margin": 35
+      },
+      {
+       "growth": 20,
+       "margin": 33
+      }
+     ]
+    }
+   },
+   "expected": {
+    "bear": [
+     {
+      "growth": 5.0,
+      "margin": 20.0
+     },
+     {
+      "growth": -2.5,
+      "margin": 18.0,
+      "note": "cuts"
+     }
+    ],
+    "base": [
+     {
+      "growth": 25.0,
+      "margin": 30.0,
+      "note": "ramp"
+     },
+     {
+      "growth": 10.0,
+      "margin": 28.0
+     }
+    ],
+    "bull": [
+     {
+      "growth": 40.0,
+      "margin": 35.0
+     },
+     {
+      "growth": 20.0,
+      "margin": 33.0
+     }
+    ]
+   }
+  },
+  {
+   "name": "bull only",
+   "state": {
+    "companyId": "0001045810",
+    "assumptions": [
+     {
+      "growth": 25,
+      "margin": 30,
+      "note": " ramp "
+     },
+     {
+      "growth": 10,
+      "margin": 28
+     }
+    ],
+    "scenarios": {
+     "bull": [
+      {
+       "growth": 40,
+       "margin": 35
+      },
+      {
+       "growth": 20,
+       "margin": 33
+      }
+     ]
+    }
+   },
+   "expected": {
+    "bear": null,
+    "base": [
+     {
+      "growth": 25.0,
+      "margin": 30.0,
+      "note": "ramp"
+     },
+     {
+      "growth": 10.0,
+      "margin": 28.0
+     }
+    ],
+    "bull": [
+     {
+      "growth": 40.0,
+      "margin": 35.0
+     },
+     {
+      "growth": 20.0,
+      "margin": 33.0
+     }
+    ]
+   }
+  },
+  {
+   "name": "a case with other years is ignored",
+   "state": {
+    "companyId": "0001045810",
+    "assumptions": [
+     {
+      "growth": 25,
+      "margin": 30,
+      "note": " ramp "
+     },
+     {
+      "growth": 10,
+      "margin": 28
+     }
+    ],
+    "scenarios": {
+     "bear": [
+      {
+       "growth": 5,
+       "margin": 20
+      }
+     ]
+    }
+   },
+   "expected": {
+    "bear": null,
+    "base": [
+     {
+      "growth": 25.0,
+      "margin": 30.0,
+      "note": "ramp"
+     },
+     {
+      "growth": 10.0,
+      "margin": 28.0
+     }
+    ],
+    "bull": null
+   }
+  },
+  {
+   "name": "malformed entries are dropped, booleans aren't numbers",
+   "state": {
+    "companyId": "0001045810",
+    "assumptions": [
+     {
+      "growth": true,
+      "margin": 1
+     },
+     {
+      "growth": 3,
+      "margin": "4"
+     },
+     {
+      "growth": 3,
+      "margin": 4,
+      "note": 7
+     },
+     "x"
+    ],
+    "scenarios": {
+     "bear": [
+      {
+       "growth": 1,
+       "margin": 2
+      }
+     ],
+     "bull": "x"
+    }
+   },
+   "expected": {
+    "bear": [
+     {
+      "growth": 1.0,
+      "margin": 2.0
+     }
+    ],
+    "base": [
+     {
+      "growth": 3.0,
+      "margin": 4.0
+     }
+    ],
+    "bull": null
+   }
+  },
+  {
+   "name": "no base case: nothing",
+   "state": {
+    "companyId": "0001045810",
+    "assumptions": [],
+    "scenarios": {
+     "bear": [
+      {
+       "growth": 1,
+       "margin": 2
+      }
+     ]
+    }
+   },
+   "expected": {
+    "bear": null,
+    "base": null,
+    "bull": null
+   }
+  },
+  {
+   "name": "not an object",
+   "state": [
+    "assumptions"
+   ],
+   "expected": {
+    "bear": null,
+    "base": null,
+    "bull": null
    }
   }
  ]

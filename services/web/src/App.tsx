@@ -22,6 +22,7 @@ import { useWorkspace } from "./home/useWorkspace";
 import { Home } from "./pages/Home";
 import {
   About,
+  AnalysisPage,
   ChartBuilder,
   Companies,
   Company,
@@ -37,7 +38,7 @@ import {
   WorkspacePage,
 } from "./pages/lazy";
 import { readableCount, Welcome } from "./pages/Welcome";
-import { go, parse, useRoute } from "./route";
+import { go, href, parse, useRoute } from "./route";
 import { resolveTicker } from "./palette/commands";
 import { useShortcuts } from "./shortcuts";
 import { inScope, ScopeContext, scopeOf } from "./scope";
@@ -307,6 +308,17 @@ export function App(props: Props = {}) {
     },
     [saved, setChart],
   );
+
+  // a thesis or model of an analysis project opens inside the project (its header and steps)
+  const inProject = useMemo(() => {
+    if ((route.view !== "thesis" && route.view !== "model") || saved.list.state !== "ok") return null;
+    const id = route.itemId;
+    const ws = saved.list.workspaces.find((w) => w.project && w.items.some((i) => i.item_id === id));
+    return ws ? href({ view: "analysis", projectId: ws.workspace_id, step: route.view, itemId: id }) : null;
+  }, [route, saved.list]);
+  useEffect(() => {
+    if (inProject) window.location.replace(inProject);
+  }, [inProject]);
 
   const exportWatchlist = useCallback(() => {
     if (!token) return;
@@ -658,10 +670,31 @@ export function App(props: Props = {}) {
                 version={saved.version}
                 saved={saved.list.state === "ok" ? saved : null}
               />
+            ) : (route.view === "thesis" || route.view === "model") && inProject ? (
+              <div className="page"><Skeleton lines={6} label="Opening the analysis" /></div>
+            ) : route.view === "analysis" ? (
+              <AnalysisPage
+                key={user}
+                token={token}
+                user={user}
+                projectId={route.projectId}
+                step={route.step}
+                itemId={route.itemId}
+                saved={saved}
+                readable={financialsFor}
+                label={(id) => companyName(id) ?? id}
+                onOpenChart={(s) => {
+                  setChart(() => s);
+                  saved.close("chart");
+                  go({ view: "chart" });
+                }}
+                onChartMany={chartMany}
+              />
             ) : route.view === "thesis" ? (
               <ThesisPage
                 key={`${user}-${route.itemId}`}
                 token={token}
+                user={user}
                 itemId={route.itemId}
                 saved={saved}
                 label={(id) => companyName(id) ?? id}

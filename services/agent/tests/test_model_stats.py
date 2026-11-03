@@ -8,10 +8,12 @@ import pytest
 
 from tributary_agent.model_stats import (
     GROWTH_FLAG_POINTS,
+    SCENARIOS,
     HistoryYear,
     annual_history,
     check_assumptions,
     history_stats,
+    scenario_assumptions,
 )
 
 FIXTURE = Path(__file__).parents[2] / "web" / "src" / "models" / "stats-fixture.json"
@@ -62,3 +64,18 @@ def test_flag_boundaries():
                               {"growth": 10 + GROWTH_FLAG_POINTS - 0.01, "margin": 9.99}])
     assert [(y["growth_flag"], y["margin_flag"]) for y in r["years"]] == [
         ("above", None), (None, "below")]
+
+
+SCENARIO_CASES = json.loads(FIXTURE.read_text())["scenario_cases"]
+
+
+@pytest.mark.parametrize("case", SCENARIO_CASES, ids=[c["name"] for c in SCENARIO_CASES])
+def test_scenarios_pick_the_same_assumptions_as_the_web_app(case):
+    for scenario in SCENARIOS:
+        assert scenario_assumptions(case["state"], scenario) == case["expected"][scenario]
+
+
+def test_the_base_case_is_what_old_models_hold():
+    old = {"companyId": "0001045810", "assumptions": [{"growth": 5, "margin": 10}]}
+    assert scenario_assumptions(old) == [{"growth": 5.0, "margin": 10.0}]
+    assert scenario_assumptions(old, "bear") is None and scenario_assumptions(old, "x") is None

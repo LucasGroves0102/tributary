@@ -13,7 +13,10 @@ both this port's test and the web app's vitest check them, so the two can't drif
 - Average margin: the mean of operating income / revenue over the 5 fiscal years ending at the
   base year (the years that have both); min and max over the same years.
 - Flags (GROWTH_FLAG_POINTS): a forecast year's growth more than 10 percentage points above or
-  below the CAGR, or its margin outside [min, max] of those margins."""
+  below the CAGR, or its margin outside [min, max] of those margins.
+- Scenarios (`scenario_assumptions`): a model's `assumptions` are its BASE case (models saved
+  before scenarios are base only); `scenarios.bear` / `scenarios.bull` hold the other cases for
+  the same years. The thesis check checks the base case only."""
 
 import re
 from dataclasses import asdict, dataclass
@@ -140,6 +143,46 @@ def margin_range(history: list[HistoryYear],
     end = base_year(history)
     margins = _margins(history, end, window) if end else []
     return (min(margins), max(margins)) if margins else None
+
+
+SCENARIOS = ("bear", "base", "bull")
+MAX_YEARS = 10
+MAX_NOTE = 500
+
+
+def _finite(value: Any) -> bool:
+    """JavaScript's `typeof v === "number" && Number.isFinite(v)`: no booleans, no strings."""
+    return (isinstance(value, int | float) and not isinstance(value, bool)
+            and value == value and value not in (float("inf"), float("-inf")))
+
+
+def _years(raw: Any) -> list[dict]:
+    out = []
+    for a in (raw if isinstance(raw, list) else [])[:MAX_YEARS]:
+        if not isinstance(a, dict) or not _finite(a.get("growth")) or not _finite(a.get("margin")):
+            continue
+        note = a.get("note").strip()[:MAX_NOTE] if isinstance(a.get("note"), str) else ""
+        out.append({"growth": float(a["growth"]), "margin": float(a["margin"]),
+                    **({"note": note} if note else {})})
+    return out
+
+
+def scenario_assumptions(state: Any, scenario: str = "base") -> list[dict] | None:
+    """One case's assumptions from a saved model state (untrusted): `base` is `assumptions`;
+    `bear` / `bull` come from `scenarios` and count only with as many years as the base case.
+    None when the state has no such case. web models/model.ts `scenarioAssumptions`."""
+    if not isinstance(state, dict) or scenario not in SCENARIOS:
+        return None
+    base = _years(state.get("assumptions"))
+    if not base:
+        return None
+    if scenario == "base":
+        return base
+    cases = state.get("scenarios") if isinstance(state.get("scenarios"), dict) else {}
+    raw = cases.get(scenario)
+    case = _years(raw)
+    return case if case and isinstance(raw, list) and len(raw) == len(case) == len(base) \
+        else None
 
 
 @dataclass

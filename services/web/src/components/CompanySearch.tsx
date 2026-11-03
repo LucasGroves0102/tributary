@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import type { Readable } from "../access";
 import { searchCompanies } from "../api";
 import { useScope } from "../scope";
 import type { SearchResult } from "../types";
@@ -13,16 +14,22 @@ export function CompanySearch({
   placeholder,
   exclude,
   onPick,
+  readable,
+  autoFocus = false,
 }: {
   token: string;
   label: string;
   placeholder: string;
   exclude: string[];
   onPick: (companyId: string, name: string) => void;
+  /** list only companies the user can read (access.ts readableFor): asked of the API with
+   * access=financials and filtered here too (display only; the API decides) */
+  readable?: Readable;
+  autoFocus?: boolean;
 }) {
   const [q, setQ] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
-  const scoped = useScope() !== null;
+  const scoped = useScope() !== null || readable !== undefined;
 
   useEffect(() => {
     const text = q.trim();
@@ -42,7 +49,7 @@ export function CompanySearch({
     };
   }, [token, q, scoped]);
 
-  const shown = results.filter((r) => !exclude.includes(r.company_id)).slice(0, 8);
+  const shown = results.filter((r) => !exclude.includes(r.company_id) && (!readable || readable.has(r.company_id))).slice(0, 8);
   return (
     <div className="co-search">
       <input
@@ -52,6 +59,7 @@ export function CompanySearch({
         placeholder={placeholder}
         value={q}
         maxLength={100}
+        autoFocus={autoFocus}
         onChange={(e) => setQ(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === "Enter" && shown[0]) {

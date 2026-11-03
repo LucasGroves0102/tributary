@@ -26,10 +26,12 @@ from query_api.workspaces import (
     WORKSPACE_NAME,
     Kind,
     LimitReached,
+    NotAProject,
     StateError,
     UnknownUser,
     Workspaces,
     clean_name,
+    validate_project,
     validate_state,
 )
 
@@ -60,6 +62,13 @@ class _Strict(BaseModel):
 
 class NewWorkspace(_Strict):
     name: WorkspaceName
+    # an analysis project (app DB 012), validated against ProjectState; null: a plain folder
+    project: dict[str, Any] | None = None
+
+
+class WorkspacePatch(_Strict):
+    name: WorkspaceName | None = None
+    project: dict[str, Any] | None = None
 
 
 class CopyWorkspace(_Strict):
@@ -148,13 +157,31 @@ def add_workspace_routes(app: FastAPI, *, store: Store, workspaces: Workspaces |
         """The caller's workspaces, oldest first, each with its items (no states)."""
         return {"workspaces": ws().list(user_id)}
 
+    def project_of(raw: Any) -> dict:
+        try:
+            return validate_project(raw)
+        except StateError as e:
+            raise HTTPException(422, f"invalid project: {e}") from None
+
     @app.post("/v1/workspaces", status_code=201, response_model=dict)
     def create_workspace(user_id: User, body: NewWorkspace) -> dict:
-        return write(lambda: ws().create(user_id, body.name))
+        """A workspace; with `project` ({companyId, peers, notes, done}), an analysis project
+        about that company (Analysis tab)."""
+        project = project_of(body.project) if body.project is not None else None
+        return write(lambda: ws().create(user_id, body.name, project))
 
     @app.patch("/v1/workspaces/{workspace_id}", response_model=dict)
-    def rename_workspace(user_id: User, workspace_id: WorkspaceId, body: NewWorkspace) -> dict:
-        return found(ws().rename(user_id, str(workspace_id), body.name))
+    def update_workspace(user_id: User, workspace_id: WorkspaceId,
+                         body: WorkspacePatch) -> dict:
+        """Rename, and/or save an analysis project's state over (a plain workspace can't take
+        one: 422, it stays a folder)."""
+        if body.name is None and body.project is None:
+            raise HTTPException(422, "nothing to change: give name, project or both")
+        project = project_of(body.project) if body.project is not None else None
+        try:
+            return found(ws().update(user_id, str(workspace_id), body.name, project))
+        except NotAProject:
+            raise HTTPException(422, "this workspace isn't an analysis project") from None
 
     @app.delete("/v1/workspaces/{workspace_id}", response_model=dict)
     def delete_workspace(user_id: User, workspace_id: WorkspaceId) -> dict:
