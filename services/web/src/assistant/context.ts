@@ -187,5 +187,14 @@ export function pageContext(
       return { label: "Thesis", suggestions: ["What changed in my companies' latest 10-Q risk factors?", GENERAL[0]!] };
     case "model":
       return { label: "Model", suggestions: ["What does the latest 10-K say about revenue growth drivers?", GENERAL[0]!] };
+    case "analysis":
+      return {
+        label: "Analysis",
+        suggestions: [
+          "What changed in my companies' latest 10-Q risk factors?",
+          "What does the latest 10-K say about revenue growth drivers?",
+          GENERAL[0]!,
+        ],
+      };
   }
 }

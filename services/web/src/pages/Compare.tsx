@@ -35,6 +35,9 @@ interface Props {
   onChart: (companyIds: string[], metric: string, transform: "ttm" | "q" | "yoy", title: string) => void;
   /** Save / Save as (workspaces/SaveBar) */
   saveBar?: ReactNode;
+  /** inside an analysis project: the comps are the project's (state handed in, changes handed
+   * back instead of going to the URL), the target is fixed and the page title is a section's */
+  embedded?: { onChange: (next: CompareState) => void };
 }
 
 type Load<T> = { state: "loading" } | { state: "ok"; data: T } | { state: "error"; message: string };
@@ -44,7 +47,7 @@ const SUGGESTIONS = 10;
 /** Compare: a comps table of a target and its peers over /v1/screener (`company_id`), each
  * value with its period and source, the peer median, suggestions from /v1/companies/{id}/peers.
  * The comps live in the URL, so a table can be bookmarked, shared and undone with Back. */
-export function Compare({ token, compare: asked, onChart, saveBar }: Props) {
+export function Compare({ token, compare: asked, onChart, saveBar, embedded }: Props) {
   // a demo sandbox suggests, finds and shows only its own companies (scope.ts); a link with
   // others (an old or shared one) drops them, with a note
   const scope = useScope();
@@ -107,7 +110,8 @@ export function Compare({ token, compare: asked, onChart, saveBar }: Props) {
     };
   }, [token, compare.target, scoped]);
 
-  const set = (patch: Partial<CompareState>) => go({ view: "compare", compare: { ...compare, ...patch } });
+  const set = (patch: Partial<CompareState>) =>
+    embedded ? embedded.onChange({ ...compare, ...patch }) : go({ view: "compare", compare: { ...compare, ...patch } });
   const peerIds = compare.peers ?? [];
   const addPeer = (id: string) => peerIds.length < MAX_PEERS && set({ peers: [...peerIds, id] });
   const removePeer = (id: string) => set({ peers: peerIds.filter((p) => p !== id) });
@@ -141,10 +145,10 @@ export function Compare({ token, compare: asked, onChart, saveBar }: Props) {
   };
 
   return (
-    <div className="page">
-      <div className="row">
-        <h1 className="grow">Compare</h1>
-        {target && <span className="muted">Comps: {target.name}</span>}
+    <div className={embedded ? "compare-embedded" : "page"}>
+      <div className={embedded ? "row wrap" : "row"}>
+        {embedded ? <h2 className="grow">Comps</h2> : <h1 className="grow">Compare</h1>}
+        {target && !embedded && <span className="muted">Comps: {target.name}</span>}
         <button className="btn" onClick={exportCsv} disabled={!rows.length}
           title="Exact values with each one's period end and source filing, plus the peer median">
           Export CSV
@@ -159,7 +163,7 @@ export function Compare({ token, compare: asked, onChart, saveBar }: Props) {
             {compare.target ? (
               <span className="tag">
                 {names.get(compare.target) ?? compare.target}{" "}
-                <button className="link" aria-label="Change target" onClick={() => set({ target: undefined })}>✕</button>
+                {!embedded && <button className="link" aria-label="Change target" onClick={() => set({ target: undefined })}>✕</button>}
               </span>
             ) : (
               <CompanySearch token={token} label="Target company" placeholder="Company to compare, e.g. PEP"

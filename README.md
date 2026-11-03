@@ -165,7 +165,7 @@ curl "localhost:8000/v1/companies/0001045810/financials?metrics=revenue" # 401: 
 ### Web app
 
 `services/web` (React, TypeScript, Vite): a research workspace with Home (watchlist, new and
-expected filings), a screener over every company, company tearsheets (statements, revenue,
+expected filings), guided [Analysis](#analysis) projects from filings to a checked thesis, a screener over every company, company tearsheets (statements, revenue,
 segments, ratios, filings, peers), a chart builder with formula layers, comps tables, a filing reader
 with "what changed" diffs, and full-text search. The assistant sits on every screen, sees what
 you're looking at, and can build charts, screens and comps for you, with Undo. Model output is
@@ -175,7 +175,9 @@ a permanent account that keeps your saved work.
 
 #### Thesis and Model
 
-Research ends in your own argument, so a workspace holds what you write next to what you chart:
+Research ends in your own argument, so a workspace holds what you write next to what you chart.
+The [Analysis](#analysis) tab strings all of this into one guided path per company; the pieces
+also work on their own:
 
 - **Revenue view** (a company's Revenue tab): revenue by business segment, geography and
   product over time from the filings' XBRL (members missing a period shown as gaps, never zeros;
@@ -187,16 +189,17 @@ Research ends in your own argument, so a workspace holds what you write next to 
   income come live from the filings (as you, through the permission-checked API); you type
   growth and operating margin for each forecast year (1-10 years) with a note on why, each shown
   beside the company's own 5-year revenue CAGR and average margin. The chart draws history solid
-  and your forecast dashed; the table labels every year Reported or Forecast. Only your
-  assumptions are saved.
+  and your forecast dashed; the table labels every year Reported or Forecast. Add **bear and
+  bull** cases beside the base one: the chart draws all three (bear and bull lighter), the table
+  the one you pick. Only your assumptions are saved.
 - **Thesis**: your Markdown about a company, with any chart, comps table, screen or model from
   the same workspace embedded where you put it, drawn live. Write, preview or both side by side;
   import a `.md` file and export one (embeds become `[Chart: name]` lines). Rendered through the
   same sanitizer as model output.
 - **Check my thesis**: the agent reads your saved thesis as you, marks each factual claim
   Supported, Contradicted (with what the filing says) or Can't verify, each with citations that
-  open the filing; compares each embedded model's growth and margin per year with the company's
-  5-year history (computed in code, flagged when growth is more than 10 points off the CAGR or a
+  open the filing; compares each embedded model's growth and margin per year (its base case)
+  with the company's 5-year history (computed in code, flagged when growth is more than 10 points off the CAGR or a
   margin is outside the 5-year range); and lists what the latest 10-K/10-Q says that you don't.
   Every figure goes through the same verifier as chat; anything it can't trace is flagged.
   Checks are kept with the thesis (history, stale once the text changes) and count as 4
@@ -212,6 +215,34 @@ Both start from a company page or a workspace ("New thesis", "New model"), are o
 both layers like all saved work (the Query API filters on the token's user; the app database's
 row-level security is forced), and grant nothing: an embedded chart or a model's history is read
 as the viewer, so it shows only what you may read.
+
+#### Analysis
+
+The Analysis tab is one guided project per company, the way an analyst builds a thesis from
+filings. "New analysis" picks a company you can read and its peers (suggested from the same
+industry and size); the project then walks seven steps, each with a done marker, under a header
+with the company and tabs (Company · Charts · Model · Thesis · Monitor) that switch instantly
+without losing anything you typed:
+
+1. **Business**: the latest 10-K's Item 1, the segments, and your "how it makes money" notes.
+2. **Numbers**: ten fiscal years of revenue and growth, gross and operating margin, free cash
+   flow (operating cash flow − capex), receivables against revenue, and debt; each chart opens
+   in the chart builder or saves to the project.
+3. **What changed**: new, removed and rewritten Risk Factors and MD&A paragraphs in the latest
+   10-K and 10-Q.
+4. **Peers**: the comps table for the company and its peers.
+5. **Model**: the revenue model with bear, base and bull cases.
+6. **Thesis**: starts from a template: core thesis (3-5 sentences), variant perception
+   (what the market misses), pillars with evidence, catalysts (the next expected filings
+   prefilled), risks and mitigants, what would prove you wrong, and KPIs to watch.
+7. **Monitor**: Check my thesis and the new-filing notice; KPIs with red lines checked after
+   every filing come next.
+
+**Add to thesis** on any step pins the evidence into a section you pick: a chart or comps
+table is saved in the project and embedded, a filing passage is quoted with its form, date,
+section and an EDGAR link. Unsaved thesis edits are kept in the browser until you save. A
+project is a workspace with its company and peers on it (app database migration 012), so its
+charts, model and thesis are ordinary saved items: owner-only in both layers, granting nothing.
 
 #### Connect your data
 

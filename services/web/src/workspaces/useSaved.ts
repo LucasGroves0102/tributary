@@ -53,9 +53,10 @@ export interface Saved {
   saveAs: (current: Current, name: string, target: Target) => Promise<SavedItemFull>;
   /** saves over the page's open item */
   save: (current: Current) => Promise<void>;
-  /** a new thesis or model (its own page edits it), or a chart saved from elsewhere than the
-   * chart builder (the Revenue view): it doesn't become the chart builder's open item */
-  create: (kind: WrittenKind | "chart", name: string, state: object, target: Target) => Promise<SavedItemFull>;
+  /** a new thesis or model (its own page edits it), or a chart or comps set saved from
+   * elsewhere than their page (the Revenue view, an analysis project): it doesn't become that
+   * page's open item */
+  create: (kind: WrittenKind | "chart" | "comps", name: string, state: object, target: Target) => Promise<SavedItemFull>;
   /** saves a thesis or model over (state and/or name) */
   update: (id: string, patch: { name?: string; state?: object }) => Promise<SavedItemFull>;
   /** fetches an item's state (recorded as opened) and makes it the page's open item */
@@ -252,7 +253,7 @@ export function useSaved(token: string | null, user: string | null): Saved {
   );
 
   const createItem = useCallback(
-    async (kind: WrittenKind | "chart", name: string, state: object, t: Target) => {
+    async (kind: WrittenKind | "chart" | "comps", name: string, state: object, t: Target) => {
       const ws = await target(t);
       const item = await addItem(need(), ws.id, kind, name.trim(), state);
       refresh();

@@ -19,6 +19,7 @@ import type {
   Me,
   Peers,
   Prices,
+  ProjectState,
   Recap,
   SandboxCreated,
   SandboxOffer,
@@ -171,8 +172,13 @@ export const workspaces = (token: string) =>
 export const workspace = (token: string, id: string) =>
   get<SavedWorkspaceFull>(token, `/v1/workspaces/${enc(id)}`);
 
-export const createWorkspace = (token: string, name: string) =>
-  sendJson<SavedWorkspace>(token, "POST", "/v1/workspaces", { name });
+/** A workspace; with `project`, an analysis project about that company (app DB 012). */
+export const createWorkspace = (token: string, name: string, project?: ProjectState) =>
+  sendJson<SavedWorkspace>(token, "POST", "/v1/workspaces", project ? { name, project } : { name });
+
+/** Saves an analysis project's state over (the Query API refuses it for a plain workspace). */
+export const updateProject = (token: string, id: string, project: ProjectState) =>
+  sendJson<SavedWorkspace>(token, "PATCH", `/v1/workspaces/${enc(id)}`, { project });
 
 export const renameWorkspace = (token: string, id: string, name: string) =>
   sendJson<SavedWorkspace>(token, "PATCH", `/v1/workspaces/${enc(id)}`, { name });
@@ -185,6 +191,10 @@ export const duplicateWorkspace = (token: string, id: string) =>
 
 export const addItem = (token: string, workspaceId: string, kind: SavedKind | WrittenKind, name: string, state: object) =>
   sendJson<SavedItemFull>(token, "POST", `/v1/workspaces/${enc(workspaceId)}/items`, { kind, name, state });
+
+/** The item with its state, without recording it as opened. */
+export const getItem = (token: string, id: string) =>
+  get<SavedItemFull>(token, `/v1/workspace-items/${enc(id)}`);
 
 /** The item with its state; the API records it as opened (Home's "Continue where you left off"). */
 export const openItem = (token: string, id: string) =>
@@ -390,8 +400,9 @@ export const segmentsOf = (
 export const sectionChanges = (token: string, companyId: string, accessionNo: string) =>
   get<SectionChanges>(token, `/v1/companies/${companyId}/filings/${accessionNo}/changes`);
 
-export const expectedFilingsOf = (token: string, companyId: string) =>
-  get<ExpectedFilings>(token, `/v1/companies/${companyId}/expected-filings`, { periods: 1 });
+/** The next `periods` (1-4) estimated 10-Q/10-K filings (public index metadata). */
+export const expectedFilingsOf = (token: string, companyId: string, periods = 1) =>
+  get<ExpectedFilings>(token, `/v1/companies/${companyId}/expected-filings`, { periods });
 
 /** The latest section with this key in a form's filings (10-K "1": Business), cut short. */
 export const latestSection = (token: string, companyId: string, key: string, form: string, maxChars: number) =>
