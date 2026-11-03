@@ -193,6 +193,37 @@ def test_compare_without_peers_takes_the_readable_suggestions():
     assert f"/v1/companies/{NVDA}/peers" in {r.url.path for r in seen}
 
 
+def open_api(tiers=("financials", "filings")):
+    """The Query API with the public catalog open: /v1/me lists no companies, says public."""
+    def handler(request):
+        if request.url.path == "/v1/me":
+            return httpx.Response(200, json={
+                "user_id": "carol", "companies": [],
+                "catalog": {"public": True, "tiers": list(tiers), "companies": 6012}})
+        return query_api_handler(request)
+
+    http = httpx.Client(base_url="http://query-api", transport=httpx.MockTransport(handler))
+    return QueryApi("http://query-api", "carol-token", http=http)
+
+
+def test_with_the_catalog_open_any_known_company_is_chartable_and_comparable():
+    _, is_error, action = UiActions(open_api()).run(
+        {"action": "set_compare", "target": "NVDA", "peers": ["TSLA", "MSFT"]})
+    assert not is_error and [p["company_id"] for p in action["peers"]] == [TSLA, MSFT]
+    _, is_error, action = UiActions(open_api()).run({"action": "set_compare", "target": "NVDA"})
+    assert not is_error and [p["company_id"] for p in action["peers"]] == [TSLA, AAPL]
+    # unknown companies are still refused
+    content, is_error, _ = UiActions(open_api()).run(
+        {"action": "add_chart_layer", "layer": {"company": "ZZZZ", "metric": "revenue"}})
+    assert is_error and "ZZZZ isn't one of the companies" in content
+
+
+def test_a_catalog_open_without_financials_opens_nothing_to_chart():
+    content, is_error, _ = UiActions(open_api(("filings",))).run(
+        {"action": "add_chart_layer", "layer": {"company": "TSLA", "metric": "revenue"}})
+    assert is_error and "TSLA isn't one of the companies" in content
+
+
 def test_compare_input_is_strict():
     for bad in ({"action": "set_compare"},
                 {"action": "set_compare", "target": "NVDA", "columns": ["salary_ttm"]},

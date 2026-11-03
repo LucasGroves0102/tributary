@@ -91,10 +91,13 @@ def test_plan_downgrade_removes_filings_only(stack, record, run):
 
 
 def user_state(fga, analytics, user):
-    """(OpenFGA tuples naming the user, authz.user_access rows, can read Nvidia financials)."""
+    """(OpenFGA tuples naming the user, authz.user_access + authz.user_tiers rows, can read
+    Nvidia financials)."""
     tuples = {t for t in fga.read_all() if t.user == f"user:{user}"}
-    rows = analytics.execute("SELECT count(*) FROM authz.user_access WHERE user_id = %s",
-                             (user,)).fetchone()[0]
+    rows = analytics.execute(
+        "SELECT (SELECT count(*) FROM authz.user_access WHERE user_id = %s)"
+        "     + (SELECT count(*) FROM authz.user_tiers WHERE user_id = %s)",
+        (user, user)).fetchone()[0]
     return tuples, rows, fga.check(f"user:{user}", "can_read_financials", f"company:{NVDA}")
 
 
@@ -116,8 +119,9 @@ def test_deleted_user_loses_everything(stack, record, run):
         app.execute("INSERT INTO subscriptions (user_id, plan_id) VALUES (%s, 'pro')", (user,))
         app.execute("INSERT INTO company_grants (company_id, user_id) VALUES (%s, %s)",
                     (APPLE, user))
-        # acme (NVDA, MSFT) + direct AAPL, both tiers: 6 rows; member, 2 x subscriber, viewer
-        wait_until(lambda: counts(state()) == (4, 6, True))
+        # acme (NVDA, MSFT) + direct AAPL, both tiers: 6 user_access + 2 user_tiers rows;
+        # member, 2 x subscriber, viewer + granted (AAPL)
+        wait_until(lambda: counts(state()) == (5, 8, True))
     finally:
         app.execute("DELETE FROM users WHERE user_id = %s", (user,))
     delete_s = wait_until(lambda: state() == (set(), 0, False))
@@ -127,3 +131,61 @@ def test_deleted_user_loses_everything(stack, record, run):
     # the org's other members keep their access
     assert access_state(fga, analytics, "dave", "can_read_financials", "financials") \
         == (True, True)
+
+
+# Open access: the public catalog switch (app migration 008) ----------------------------------
+
+CATALOG_CO = "9000000099"  # a throwaway company with one stored document: in catalog:sec
+MEMBER = tributary_authz.Tuple("catalog:sec", "catalog", f"company:{CATALOG_CO}")
+
+
+@pytest.fixture(scope="module")
+def catalog_company(stack):
+    """A company authz-sync puts in catalog:sec (authz.catalog_companies(): it has a stored
+    document). authz-sync re-reads the catalog every CATALOG_REFRESH_SECONDS (CI: 1)."""
+    fga, _, analytics = stack
+    analytics.execute("INSERT INTO silver.companies (company_id, name, current_cik)"
+                      " VALUES (%s, 'E2E Catalog Co', %s) ON CONFLICT DO NOTHING",
+                      (CATALOG_CO, CATALOG_CO))
+    analytics.execute("INSERT INTO silver.company_ciks (cik, company_id) VALUES (%s, %s)"
+                      " ON CONFLICT DO NOTHING", (CATALOG_CO, CATALOG_CO))
+    analytics.execute(
+        "INSERT INTO bronze.filing_documents (accession_no, cik, form, filed, document_name,"
+        " url, content_gzip, content_sha256, size_bytes) VALUES (%s, %s, '8-K', '2026-01-02',"
+        " 'e2e.htm', 'https://example.invalid/e2e.htm', '\\x00', 'e2e', 1)"
+        " ON CONFLICT DO NOTHING", (f"{CATALOG_CO}-26-000001", CATALOG_CO))
+    wait_until(lambda: MEMBER in fga.read_all(), timeout=120)
+    return CATALOG_CO
+
+
+def catalog_state(fga, analytics):
+    """(carol, Pro with no grants, can read the catalog company's filings in OpenFGA;
+    authz.public_access holds it)."""
+    allowed = fga.check("user:carol", "can_read_filings", f"company:{CATALOG_CO}")
+    row = analytics.execute("SELECT 1 FROM authz.public_access"
+                            " WHERE company_id = %s AND tier = 'filings'",
+                            (CATALOG_CO,)).fetchone() is not None
+    return allowed, row
+
+
+@pytest.mark.parametrize("run", REPEATS)
+def test_opening_and_closing_the_catalog(stack, catalog_company, record, run):
+    """One app-DB row opens every catalog company to every user, and closing it is the same
+    one row: both must reach OpenFGA and authz.public_access like any revocation."""
+    fga, app, analytics = stack
+    state = partial(catalog_state, fga, analytics)
+    assert state() == (False, False), "precondition: the catalog ships closed"
+    app.execute("UPDATE public_catalogs SET public = true WHERE catalog_id = 'sec'")
+    try:
+        open_s = wait_until(lambda: state() == (True, True))
+    finally:
+        app.execute("UPDATE public_catalogs SET public = false WHERE catalog_id = 'sec'")
+    close_s = wait_until(lambda: state() == (False, False))
+    # a private grant never depended on the catalog
+    assert access_state(fga, analytics, "alice", "can_read_financials", "financials") \
+        == (True, True)
+    print(f"\ncatalog: open everywhere in {open_s:.2f}s, closed again in {close_s:.2f}s")
+    record("catalog_open", open_s)
+    record("catalog_close", close_s)
+    assert within_targets(close_s) and within_targets(open_s)
+

@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient
 
 from query_api.app import create_app
 from query_api.auth import mint
+from query_api.authorizer import Access
 from query_api.github import (
     COOKIE_PATH,
     NONCE_COOKIE,
@@ -109,6 +110,9 @@ class Authorizer:
 
     def __init__(self, accounts: FakeAccounts):
         self.accounts = accounts
+
+    def access(self, user_id):
+        return Access(frozenset(), self.readable(user_id))
 
     def readable(self, user_id):
         a = self.accounts.accounts.get(user_id)

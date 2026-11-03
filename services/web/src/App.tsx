@@ -38,6 +38,7 @@ import { go, parse, useRoute } from "./route";
 import { resolveTicker } from "./palette/commands";
 import { useShortcuts } from "./shortcuts";
 import { inScope, ScopeContext, scopeOf } from "./scope";
+import { catalogOpen, readableFor } from "./access";
 import {
   clearFragment,
   clearSession,
@@ -89,8 +90,10 @@ export function App(props: Props = {}) {
     github?: { token: string; expiresIn: number };
   } | null>(null);
   const [clock, setClock] = useState(() => Date.now());
-  // a demo sandbox lists only its own companies everywhere (scope.ts); others see the index
-  const scope = useMemo(() => scopeOf(session), [session]);
+  // a demo sandbox lists only its own companies everywhere (scope.ts) while the public catalog
+  // is closed; with it open every company is readable, so nothing is scoped
+  const open = !!me?.catalog?.public;
+  const scope = useMemo(() => (open ? null : scopeOf(session)), [session, open]);
   // open by default where it fits beside the page; below that it floats over it (styles.css)
   const [drawerOpen, setDrawerOpen] = useState(
     () => (load(DRAWER_KEY) ?? (window.innerWidth > DRAWER_FITS_PX ? "open" : "closed")) === "open",
@@ -338,14 +341,8 @@ export function App(props: Props = {}) {
     [workspace.watchlist],
   );
   const companyName = useCallback((id: string) => names.get(id) ?? null, [names]);
-  const filingsFor = useMemo(
-    () => new Set((me?.companies ?? []).filter((c) => c.tiers.includes("filings")).map((c) => c.company_id)),
-    [me],
-  );
-  const financialsFor = useMemo(
-    () => new Set((me?.companies ?? []).filter((c) => c.tiers.includes("financials")).map((c) => c.company_id)),
-    [me],
-  );
+  const filingsFor = useMemo(() => readableFor(me, "filings"), [me]);
+  const financialsFor = useMemo(() => readableFor(me, "financials"), [me]);
   watchedRef.current = watched;
   nameRef.current = companyName;
   const context = useMemo(
@@ -490,7 +487,7 @@ export function App(props: Props = {}) {
           />
           {session?.kind === "sandbox" && (
             <div className="sandbox-banner" role="note">
-              Demo sandbox: {session.companies.length} companies · resets in{" "}
+              Demo sandbox: {open ? "every company" : `${session.companies.length} companies`} · resets in{" "}
               {resetsIn(session.expiresAt, clock)}
             </div>
           )}
@@ -607,7 +604,8 @@ export function App(props: Props = {}) {
                 onRead={(section) => saved.recordFiling(route.companyId, route.accessionNo, section)}
               />
             ) : route.view === "search" ? (
-              <Search key={user} token={token} search={route.search} companies={me?.companies ?? []} />
+              <Search key={user} token={token} search={route.search} companies={me?.companies ?? []}
+                open={catalogOpen(me, "filings")} />
             ) : route.view === "chart" ? (
               <ChartBuilder
                 key={user}

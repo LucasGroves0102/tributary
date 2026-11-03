@@ -160,6 +160,7 @@ jobs:
         env:
           KAFKA_SECURITY_PROTOCOL: SASL_PLAINTEXT
           KAFKA_SASL_USERNAME: authz-sync
+          CATALOG_REFRESH_SECONDS: "1"  # test_revocation adds a catalog company
         run: |
           KAFKA_SASL_PASSWORD="$(cat "$KAFKA_PASSWORDS_DIR/kafka-password-authz-sync")" \
             nohup authz-sync > "$RUNNER_TEMP/authz-sync.log" 2>&1 &
@@ -170,7 +171,7 @@ jobs:
             sleep 1
           done
           echo "authz-sync did not catch up" >&2; exit 1
-      - name: Propagation tests (revocation, downgrade, user deletion; < 30 s each, guard 3 s)
+      - name: Propagation tests (revocation, downgrade, user deletion, catalog switch; < 30 s each, guard 3 s)
         env:
           PROPAGATION_REPEATS: "5"
           PROPAGATION_RESULTS: ${{ runner.temp }}/propagation.json

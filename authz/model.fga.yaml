@@ -3,34 +3,48 @@ name: Tributary access model
 model_file: ./model.fga
 
 tuples:
-  # every company points at both tier objects (written by the sync for granted companies)
+  # every company with data is in catalog:sec and points at both tier objects (authz-sync);
+  # company:fund stands for private data outside any catalog: only a grant opens it
   - {user: tier:financials, relation: financials_tier, object: company:nvda}
   - {user: tier:filings, relation: filings_tier, object: company:nvda}
   - {user: tier:financials, relation: financials_tier, object: company:tsla}
   - {user: tier:filings, relation: filings_tier, object: company:tsla}
+  - {user: tier:financials, relation: financials_tier, object: company:fund}
+  - {user: tier:filings, relation: filings_tier, object: company:fund}
+  - {user: catalog:sec, relation: catalog, object: company:nvda}
+  - {user: catalog:sec, relation: catalog, object: company:tsla}
 
-  # alice: Free plan, granted Nvidia directly
+  # private grants: authz-sync writes each one as viewer AND granted
+  # alice: financials tier only, granted Nvidia and the private fund directly
   - {user: user:alice, relation: subscriber, object: tier:financials}
   - {user: user:alice, relation: viewer, object: company:nvda}
+  - {user: user:alice, relation: granted, object: company:nvda}
+  - {user: user:alice, relation: viewer, object: company:fund}
+  - {user: user:alice, relation: granted, object: company:fund}
 
-  # bob: Pro plan, member of acme, which is granted Nvidia
+  # bob: both tiers, member of acme, which is granted Nvidia
   - {user: user:bob, relation: subscriber, object: tier:financials}
   - {user: user:bob, relation: subscriber, object: tier:filings}
   - {user: user:bob, relation: member, object: organization:acme}
   - {user: organization:acme#member, relation: viewer, object: company:nvda}
+  - {user: organization:acme#member, relation: granted, object: company:nvda}
 
-  # carol: Pro plan, no grants at all
+  # carol: both tiers, no grants at all
   - {user: user:carol, relation: subscriber, object: tier:financials}
   - {user: user:carol, relation: subscriber, object: tier:filings}
 
+  # erin: no subscription, so no tiers
+
+# The global tuples leave the catalog closed. Tests with their own `tuples:` add
+# catalog:sec#reader@user:*, the switch on.
 tests:
-  - name: Free plan reads granted financials but not filings
+  - name: Financials tier reads granted financials but not filings
     check:
       - user: user:alice
         object: company:nvda
         assertions: {viewer: true, can_read_financials: true, can_read_filings: false}
 
-  - name: No grant means no access, whatever the plan
+  - name: Closed catalog grants nothing; no grant means no access, whatever the plan
     check:
       - user: user:alice
         object: company:tsla
@@ -38,8 +52,11 @@ tests:
       - user: user:carol
         object: company:nvda
         assertions: {viewer: false, can_read_financials: false, can_read_filings: false}
+      - user: user:carol
+        object: catalog:sec
+        assertions: {reader: false}
 
-  - name: Organization grant reaches its members, and Pro adds filings
+  - name: Organization grant reaches its members, and the filings tier adds filings
     check:
       - user: user:bob
         object: company:nvda
@@ -48,7 +65,7 @@ tests:
         object: company:tsla
         assertions: {can_read_financials: false, can_read_filings: false}
 
-  - name: Listing what a user can read
+  - name: Listing what a user can read (catalog closed)
     list_objects:
       - user: user:bob
         type: company
@@ -57,5 +74,83 @@ tests:
       - user: user:alice
         type: company
         assertions:
-          can_read_financials: [company:nvda]
+          can_read_financials: [company:fund, company:nvda]
           can_read_filings: []
+      - user: user:carol
+        type: company
+        assertions:
+          can_read_financials: []
+
+  - name: Public catalog opens every catalog company to every user, within their tiers
+    tuples:
+      - {user: "user:*", relation: reader, object: catalog:sec}
+    check:
+      - user: user:carol
+        object: catalog:sec
+        assertions: {reader: true}
+      - user: user:carol
+        object: company:tsla
+        assertions: {viewer: true, can_read_financials: true, can_read_filings: true}
+      - user: user:alice
+        object: company:tsla
+        assertions: {viewer: true, can_read_financials: true, can_read_filings: false}
+      - user: user:erin
+        object: company:nvda
+        assertions: {viewer: true, can_read_financials: false, can_read_filings: false}
+
+  - name: A public catalog never opens a company outside it; private grants still apply
+    tuples:
+      - {user: "user:*", relation: reader, object: catalog:sec}
+    check:
+      - user: user:carol
+        object: company:fund
+        assertions: {viewer: false, can_read_financials: false, can_read_filings: false}
+      - user: user:bob
+        object: company:fund
+        assertions: {viewer: false, can_read_financials: false}
+      - user: user:alice
+        object: company:fund
+        assertions: {viewer: true, can_read_financials: true, can_read_filings: false}
+
+  - name: Listing what a user can read (catalog public)
+    tuples:
+      - {user: "user:*", relation: reader, object: catalog:sec}
+    list_objects:
+      - user: user:carol
+        type: company
+        assertions:
+          can_read_filings: [company:nvda, company:tsla]
+      - user: user:alice
+        type: company
+        assertions:
+          can_read_financials: [company:fund, company:nvda, company:tsla]
+          can_read_filings: []
+      - user: user:carol
+        type: catalog
+        assertions:
+          reader: [catalog:sec]
+
+  - name: granted lists private grants only, never the catalog (the Query API's readable())
+    tuples:
+      - {user: "user:*", relation: reader, object: catalog:sec}
+    list_objects:
+      - user: user:carol
+        type: company
+        assertions:
+          granted: []
+      - user: user:alice
+        type: company
+        assertions:
+          granted: [company:fund, company:nvda]
+      - user: user:bob
+        type: company
+        assertions:
+          granted: [company:nvda]
+
+  - name: A grant written only as granted is enough to view
+    tuples:
+      - {user: user:carol, relation: granted, object: company:fund}
+    check:
+      - user: user:carol
+        object: company:fund
+        assertions: {viewer: true, can_read_financials: true, can_read_filings: true}

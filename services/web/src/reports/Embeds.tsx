@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import type { Readable } from "../access";
 import { ApiError, evaluateFormula, FormulaApiError, type FormulaRequest } from "../api";
 import { cached, remember } from "../chart/cache";
 import { autoSubtitle, methodNote, sourceFootnote } from "../chart/deck";
@@ -30,7 +31,7 @@ type Result = { state: "loading" } | { state: "ok"; data: FormulaSeries } | { st
 
 /** A saved item drawn in a report from its saved state: the data is read now, through the
  * Query API as the viewer (an ungranted company shows "no access", as anywhere else). */
-export function Embed(props: Common & { readable: ReadonlySet<string>; hasTtm: TtmCatalog; onOpenChart: (s: ChartState) => void }) {
+export function Embed(props: Common & { readable: Readable; hasTtm: TtmCatalog; onOpenChart: (s: ChartState) => void }) {
   const { item } = props;
   return (
     <figure className="card report-embed" aria-label={item.name}>
@@ -146,7 +147,7 @@ function EmbeddedChart({ token, item, label, hasTtm }: Common & { hasTtm: TtmCat
   );
 }
 
-function EmbeddedComps({ token, item, label, readable }: Common & { readable: ReadonlySet<string> }) {
+function EmbeddedComps({ token, item, label, readable }: Common & { readable: Readable }) {
   const s = restoreCompare(item.state);
   const ids = [s.target, ...(s.peers ?? [])].filter((x): x is string => !!x);
   const mine = ids.filter((id) => readable.has(id));

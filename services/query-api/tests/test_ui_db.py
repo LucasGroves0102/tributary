@@ -10,6 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from query_api.app import create_app
+from query_api.authorizer import Access
 from query_api.store import Store
 
 from .conftest import SECRET
@@ -40,6 +41,9 @@ REPORTS = [
 class AllowAll:
     def can(self, *_):
         return True
+
+    def access(self, user_id):
+        return Access(frozenset(), self.readable(user_id))
 
     def readable(self, _):
         return {}
@@ -218,6 +222,9 @@ P1, P2, P3, P4 = "9100000011", "9100000012", "9100000013", "9100000014"
 
 
 class AllowAllCompanies(AllowAll):
+    def access(self, user_id):
+        return Access(frozenset(), self.readable(user_id))
+
     def readable(self, _):
         return {c: {"financials"} for c in (P1, P2, P3, P4)}
 

@@ -75,6 +75,13 @@ class Store:
                 " ORDER BY r.ordinality LIMIT %(limit)s", {"q": q, "only": only, "limit": limit})
             return cur.fetchall()
 
+    def catalog_companies(self, user_id: str) -> frozenset[str]:
+        """The public catalog's company ids while it is public (authz.public_access, written by
+        authz-sync; RLS shows it only to a session with a user). Empty while closed."""
+        with self._session(user_id) as cur:
+            cur.execute("SELECT DISTINCT company_id FROM authz.public_access")
+            return frozenset(r["company_id"] for r in cur.fetchall())
+
     def profiles(self, user_id: str, company_ids: list[str]) -> dict[str, dict]:
         """company_id → name, sic, industry, exchanges."""
         with self._session(user_id) as cur:

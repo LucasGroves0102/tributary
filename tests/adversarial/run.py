@@ -39,8 +39,13 @@ def ground_truth(conn) -> dict:
     tracked = dict(conn.execute(
         "SELECT company_id, name FROM silver.companies WHERE tracked").fetchall())
     readable: dict[str, dict[str, list[str]]] = {}
+    # private grants, plus the public catalog within each user's tiers (db/migrations/030;
+    # empty while the catalog is closed)
     for user, company, tier in conn.execute(
-            "SELECT user_id, company_id, tier FROM authz.user_access ORDER BY 1, 2, 3"):
+            "SELECT user_id, company_id, tier FROM authz.user_access"
+            " UNION SELECT t.user_id, p.company_id, p.tier"
+            " FROM authz.public_access p JOIN authz.user_tiers t USING (tier)"
+            " ORDER BY 1, 2, 3"):
         readable.setdefault(user, {}).setdefault(company, []).append(tier)
     values: dict[str, list[dict]] = {}
     for company, metric, period_end, value in conn.execute(

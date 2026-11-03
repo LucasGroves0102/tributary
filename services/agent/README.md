@@ -41,7 +41,8 @@ untrusted and never decides who the user is: that is still only the token. agent
 `propose_ui_action` tool (set/add/remove chart layers, chart options, screener filters, add or
 remove a watchlist company). Each proposal is checked as the user through the Query API
 (`/v1/me`, `/v1/companies/search`, `/v1/formulas/validate`): chart companies must be readable,
-unknown and ungranted ones get the same refusal. Accepted ones stream as `action` events (also in
+unknown and ungranted ones get the same refusal (with `/v1/me`'s public catalog open with
+financials, every company the search resolves is readable). Accepted ones stream as `action` events (also in
 `answer.actions`) for the app to apply with Undo; the app reads any data itself, through the
 Query API. `save_to_workspace` (item `chart`, `comps` or `screen`, a name, a workspace name)
 saves what the screen shows: it is accepted only if the context showed that item or an accepted
@@ -66,7 +67,8 @@ it couldn't be saved, before `done`.
   the user's token (`GET /v1/workspaces/{id}`): someone else's is the same 404 as a missing one,
   and nothing is spent. Its first 8 charts, comps sets and screens are the report's items; the
   model gets them as a `<workspace>` data block (names are labels, `<`/`>` escaped so a name
-  can't close the block) with what the user can read of each company (`/v1/me`).
+  can't close the block) with what the user can read of each company (`/v1/me`: its listed
+  companies' tiers, plus the public catalog's tiers for every company while it is open).
 - **Only the workspace's companies.** The tools are the chat tools as the user, but limited to the
   companies the items name (chart layers and formula tickers, comps target and peers, each saved
   screen's top 8 rows from the screener run as the user); anything else is refused before any

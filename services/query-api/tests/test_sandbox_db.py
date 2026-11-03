@@ -66,6 +66,19 @@ def test_create_writes_an_ordinary_user_plan_grants_and_watchlist(db):
     assert s.expires_at("alice-not-a-sandbox") is None
 
 
+def test_with_the_catalog_public_a_sandbox_gets_no_company_grants(db):
+    s, conn = db
+    conn.execute("UPDATE public_catalogs SET public = true WHERE catalog_id = 'sec'")
+    s.create(sandbox(), "ip1", 3, 10)
+    assert rows(conn, "SELECT 1 FROM company_grants WHERE user_id = 'demo-t1'") == []
+    # the rest is the same: plan, watchlist, sandbox row
+    assert rows(conn, "SELECT plan_id FROM subscriptions WHERE user_id = 'demo-t1'") == [
+        (DEMO_PLAN,)]
+    assert rows(conn, "SELECT company_id FROM watchlists WHERE user_id = 'demo-t1'"
+                      " ORDER BY added_at") == [(KO,), (PEP,)]
+    assert s.expires_at("demo-t1") == NOW + timedelta(hours=24)
+
+
 def test_per_ip_limit_and_live_cap(db):
     s, _ = db
     s.create(sandbox("demo-a"), "ip1", 2, 3)

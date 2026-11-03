@@ -14,6 +14,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from query_api.app import create_app
+from query_api.authorizer import Access
 from query_api.github import NONCE_COOKIE, AppAccounts, GitHubUser
 from query_api.sandbox import (
     DEMO_PLAN,
@@ -56,6 +57,9 @@ class Clock:
 
 
 class NoAuthz:
+    def access(self, user_id):
+        return Access(frozenset(), self.readable(user_id))
+
     def readable(self, user_id):
         return {}
 
@@ -108,6 +112,17 @@ def test_first_sign_in_writes_an_ordinary_user_with_the_demo_access(world):
         ("PepsiCo vs Coca-Cola",)]
     # a GitHub user is not a sandbox
     assert rows(conn, "SELECT 1 FROM demo_sandboxes WHERE user_id = %s", USER) == []
+
+
+def test_with_the_catalog_public_sign_in_writes_no_company_grants(world):
+    client, conn, _, _ = world
+    conn.execute("UPDATE public_catalogs SET public = true WHERE catalog_id = 'sec'")
+    sign_in(client)
+    assert rows(conn, "SELECT 1 FROM company_grants WHERE user_id = %s", USER) == []
+    assert rows(conn, "SELECT plan_id FROM subscriptions WHERE user_id = %s", USER) == [
+        (DEMO_PLAN,)]
+    assert len(rows(conn, "SELECT 1 FROM watchlists WHERE user_id = %s", USER)) == len(
+        DEMO_WATCHLIST)
 
 
 def test_the_access_token_is_stored_nowhere(world):

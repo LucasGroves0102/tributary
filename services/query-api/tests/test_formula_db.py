@@ -9,6 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from query_api.app import create_app
+from query_api.authorizer import Access
 from query_api.store import Store
 
 from .conftest import SECRET
@@ -68,6 +69,9 @@ class Grants:
 
     def can(self, user_id, tier, company_id):
         return tier == "financials" and company_id in self.grants.get(user_id, set())
+
+    def access(self, user_id):
+        return Access(frozenset(), self.readable(user_id))
 
     def readable(self, user_id):
         return {c: {"financials"} for c in self.grants.get(user_id, set())}

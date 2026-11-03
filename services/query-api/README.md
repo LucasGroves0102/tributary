@@ -8,8 +8,16 @@ Every data route is permission-checked twice:
    before any query. Denied → 403 (same response whether the company exists or not).
    OpenFGA unreachable → 503: fail closed.
 2. **Postgres row-level security** (`store.py`): queries run as the `query_api` role with
-   `app.user_id` set for the transaction; policies return only rows in `authz.user_access`.
-   This holds even if a route forgot layer 1.
+   `app.user_id` set for the transaction; policies return only rows of companies in
+   `authz.readable_companies(tier)` (private grants, plus the public catalog within the user's
+   tiers; db/migrations/030). No user id, no rows. This holds even if a route forgot layer 1.
+
+**Open access.** While the app database's `public_catalogs` row `sec` is public (the switch:
+[db/app](../../db/app/README.md), "Open access"), every signed-in user reads every company in
+the public catalog (every company with gold financials or a stored document) within their
+plan's tiers, through the same two layers: OpenFGA resolves `reader from catalog` in the same
+Check, and RLS reads `authz.public_access`. Per-company grants keep working for anything outside
+the catalog. Nothing in the API changes shape except `/v1/me`'s `catalog` (below).
 
 The caller is identified by an HS256 JWT (`sub` = app user_id). The user is never read from
 request parameters. Dev tokens: `make token USER=alice`.
@@ -27,7 +35,7 @@ request parameters. Dev tokens: `make token USER=alice`.
 | `GET /v1/auth/providers` | | `{"github": true\|false}`: which sign-in buttons the web app shows |
 | `GET /v1/auth/github/start` | `GITHUB_CLIENT_ID` + `GITHUB_CLIENT_SECRET` | 302 to GitHub's authorize page (no scopes) with a signed `state`, and the state's nonce in a short-lived cookie (404 when not configured; [GitHub sign-in](#github-sign-in)) |
 | `GET /v1/auth/github/callback?code=&state=` | `GITHUB_CLIENT_ID` + `GITHUB_CLIENT_SECRET` | GitHub's redirect back: 302 to `/#/signed-in?token=…&expires_in=…` (a 7-day JWT, in the URL fragment), or `/#/signed-in?error=<code>` |
-| `GET /v1/me` | token | companies the caller can read, with tiers; `sandbox` (expiry, plan, assistant allowance) for a demo sandbox user; `github` (login, plan, the demo's company ids, assistant allowance) for a GitHub sign-in |
+| `GET /v1/me` | token | `catalog`: `{public, tiers, companies}`, whether every catalog company is readable to the caller and with which tiers (`companies`: how many); `companies`: with the catalog public, only what the caller reads beyond it (private grants), else every company the caller can read, with tiers; `sandbox` (expiry, plan, assistant allowance) for a demo sandbox user; `github` (login, plan, the demo's company ids, assistant allowance) for a GitHub sign-in |
 | `GET /v1/companies/search?q=&access=` | token | candidates (public identity) + caller's access; `access=financials`: only companies you can read |
 | `GET /v1/metrics` | | metric names served by `financials`: `silver.metrics` and `gold.derived_metrics`, read once |
 | `GET /v1/companies/{id}/financials?metrics=&quarters=&view=&basis=&format=` | financials | values + citation + freshness; `format=csv`: one row per value with its source filing |
@@ -103,6 +111,14 @@ checked in OpenFGA and again by RLS. Routes that list many companies (screener, 
 peers) take the caller's readable companies from OpenFGA (`readable()`), read values only for
 those (in SQL, and RLS filters again) and null any value of other companies before responding.
 SQL for these routes is in `db/migrations/017_ui_data.sql`.
+
+`readable()` never asks OpenFGA to enumerate the catalog (ListObjects over ~6,000 companies is
+capped at 1,000 by default, and slow). `FgaAuthorizer.access()` makes one Check
+(`catalog:sec#reader`): closed → ListObjects `can_read_*` as before (two small lists); public →
+the user's tiers (ListObjects `subscriber` on `tier`) and private grants (ListObjects `granted`,
+which never includes the catalog). The catalog's company ids come from `authz.public_access`
+(`Store.catalog_companies`, read under RLS) and are cached for 60 s in the process: every
+user sees the same list. `require()` stays a single Check.
 
 ## Screener
 
@@ -301,10 +317,12 @@ the demo routes), the demo sandbox settings below, `GITHUB_CLIENT_ID` / `GITHUB_
 visitor exercises the whole access path instead of sharing an account: one app-DB transaction
 writes `users`, `subscriptions` (plan pro), `company_grants` for the 20 companies in
 `sandbox.py` `DEMO_TICKERS` (the only list; resolved through `silver.resolve_company`, never
-CIK = company), a watchlist (`DEMO_WATCHLIST`: PEP, KO, MSFT, NVDA, COST, JPM) and
+CIK = company; written only while the public catalog is closed: with it open the sandbox reads
+every company through it, so `grant_demo_access` writes no grant), a watchlist (`DEMO_WATCHLIST`: PEP, KO, MSFT, NVDA, COST, JPM) and
 `demo_sandboxes` (expiry). The Query API writes no tuples: Debezium → Kafka → authz-sync turns
 those rows into OpenFGA tuples and `authz.user_access` like any user's, so the web app polls
-`/v1/me` until all 20 companies are readable. The response's token is an ordinary JWT, `sub` =
+`/v1/me` until all 20 companies are readable (with the catalog open there is nothing to wait
+for: `/v1/me` says every company is readable). The response's token is an ordinary JWT, `sub` =
 the new user (`demo-` + 16 hex), `exp` = the sandbox's expiry; nothing can extend it, and the
 creation route takes no input, so it can't pick a plan, companies or lifetime.
 `query-api-demo-cleanup` (Helm CronJob `demo-cleanup`, hourly) deletes expired sandbox users
@@ -352,7 +370,8 @@ routes below exist; otherwise they 404. It needs `APP_DATABASE_URL`.
 A first sign-in writes, in ONE app-DB transaction, `users` (`user_id` `gh-<id>`, `email`
 GitHub's no-reply form `<id>+<login>@users.noreply.github.com`), `github_accounts` (id, login,
 first and last sign-in) and exactly what a sandbox gets (`sandbox.grant_demo_access`): plan pro,
-`company_grants` on the 20 `DEMO_TICKERS`, the `DEMO_WATCHLIST` and the starter workspace. The
+`company_grants` on the 20 `DEMO_TICKERS` (only while the public catalog is closed), the
+`DEMO_WATCHLIST` and the starter workspace. The
 Query API writes no tuples: CDC → authz-sync grants the access, and the web app shows the same
 propagation progress as for a sandbox. A returning sign-in changes no access and keeps the
 user's workspaces and watchlist; only `github_accounts.login` and `last_sign_in_at` are
@@ -389,8 +408,10 @@ schema (`APP_TEST_DATABASE_URL`);
 `test_ui_db.py` runs expected dates, recaps, flags and peers on real Postgres (and the status
 functions of 026 and 028 as query_api, which still can't read the tables behind them) and
 `test_watchlist_db.py` the app-database watchlist (`APP_TEST_DATABASE_URL`); `test_rls.py` wires the API to an authorizer that
-allows everything and checks that row-level security alone still hides ungranted rows (needs
-`TEST_DATABASE_URL`).
+allows everything and checks that row-level security alone still hides ungranted rows, and that
+a public catalog is readable only with a user id, within the user's tiers, while private grants
+stay per user (needs `TEST_DATABASE_URL`); `test_authorizer.py` checks which OpenFGA calls
+`access()` makes (never ListObjects over a public catalog).
 
 ## Segments
 

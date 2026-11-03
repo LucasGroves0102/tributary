@@ -9,6 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from query_api.app import create_app
+from query_api.authorizer import Access
 from query_api.formula import CATALOG
 from query_api.store import Store
 
@@ -24,6 +25,9 @@ A, B = "9000000001", "9000000002"  # test companies
 class AllowAll:
     def can(self, *_):
         return True
+
+    def access(self, user_id):
+        return Access(frozenset(), self.readable(user_id))
 
     def readable(self, _):
         return {A: {"financials", "filings"}, B: {"financials", "filings"}}
@@ -82,6 +86,12 @@ def client():
         conn.execute("INSERT INTO authz.user_access (user_id, company_id, tier) VALUES"
                      " ('t-free', %s, 'financials'), ('t-pro', %s, 'financials'),"
                      " ('t-pro', %s, 'filings')", (A, A, A))
+        # plans' tiers (authz-sync); the catalog starts closed (no public_access rows)
+        conn.execute("DELETE FROM authz.public_access")
+        conn.execute("DELETE FROM authz.user_tiers WHERE user_id LIKE 't-%'")
+        conn.execute("INSERT INTO authz.user_tiers (user_id, tier) VALUES ('t-free', 'financials'),"
+                     " ('t-pro', 'financials'), ('t-pro', 'filings'),"
+                     " ('t-reader', 'financials'), ('t-reader', 'filings')")
         c = TestClient(create_app(AllowAll(), Store(OneConnection(conn)), SECRET))
         c.app_conn = conn
         yield c
@@ -475,4 +485,97 @@ def test_every_session_has_a_statement_timeout(client):
         assert cur.fetchone()["statement_timeout"] == "5s"
     with pytest.raises(psycopg.errors.QueryCanceled), store._session("t-free") as cur:
         cur.execute("SELECT pg_sleep(6)")
+
+
+# Open access (migration 030): the public catalog, as layer 2 sees it ---------------------------
+
+def open_catalog(conn, *companies, tiers=("financials", "filings")):
+    """What authz-sync writes while the app database's public_catalogs row says public."""
+    conn.cursor().executemany(
+        "INSERT INTO authz.public_access (company_id, tier) VALUES (%s, %s)",
+        [(c, t) for c in companies for t in tiers])
+
+
+def visible(conn, user, sql, params=()):
+    """Rows `sql` returns as query_api with app.user_id = user (None: never set), inside a
+    savepoint that is rolled back, so the setting can't leak into the next call."""
+    with conn.transaction(force_rollback=True), conn.cursor() as cur:
+        cur.execute("SET LOCAL ROLE query_api")
+        if user is not None:
+            cur.execute("SELECT set_config('app.user_id', %s, true)", (user,))
+        cur.execute(sql, params)
+        return cur.fetchall()
+
+
+RLS_TABLES = {  # every table with a granted_* policy, and how to find a company's rows
+    "gold.quarterly_financials": "company_id", "gold.derived_financials": "company_id",
+    "gold.segment_financials": "company_id", "gold.filing_sections": "company_id",
+}
+
+
+def test_public_catalog_readable_by_any_signed_in_user(client, token):
+    open_catalog(client.app_conn, B)
+    # t-reader has tiers but no grant at all; t-free has a grant on A only
+    assert len(financials(client, token, "t-reader", B)) == 1
+    assert sections(client, token, "t-reader", B)[0]["text"] == "secret risks"
+    assert len(financials(client, token, "t-free", B)) == 1
+    assert len(segments(client, token, "t-reader", B)) == 1
+    for table, col in RLS_TABLES.items():
+        assert visible(client.app_conn, "t-reader",
+                       f"SELECT DISTINCT {col} FROM {table}"  # noqa: S608
+                       f" WHERE {col} IN (%s, %s)", (A, B)) == [(B,)], table
+
+
+def test_public_catalog_needs_a_user_id(client):
+    open_catalog(client.app_conn, A, B)
+    for user in (None, ""):
+        for table in (*RLS_TABLES, "silver.filing_sections", "authz.public_access"):
+            assert visible(client.app_conn, user,
+                           f"SELECT count(*) FROM {table}") == [(0,)], (user, table)  # noqa: S608
+        assert visible(client.app_conn, user,
+                       "SELECT authz.can_read(%s, 'financials')", (B,)) == [(False,)]
+
+
+def test_public_catalog_stays_within_the_users_tiers(client, token):
+    open_catalog(client.app_conn, B)
+    assert len(financials(client, token, "t-free", B)) == 1
+    assert sections(client, token, "t-free", B) == []  # t-free's plan has no filings tier
+    assert financials(client, token, "t-nobody", B) == []  # no subscription, no tiers
+
+
+def test_public_catalog_by_tier(client, token):
+    open_catalog(client.app_conn, B, tiers=("financials",))
+    assert len(financials(client, token, "t-reader", B)) == 1
+    assert sections(client, token, "t-reader", B) == []
+
+
+def test_private_grants_still_per_user_with_the_catalog_public(client, token):
+    open_catalog(client.app_conn, B)  # A stays outside the catalog: private data
+    assert len(financials(client, token, "t-free", A)) == 1
+    assert sections(client, token, "t-pro", A)[0]["text"] == "secret risks"
+    assert financials(client, token, "t-reader", A) == []
+    assert sections(client, token, "t-reader", A) == []
+    conn = client.app_conn
+    assert visible(conn, "t-pro", "SELECT authz.can_read(%s, 'filings')", (A,)) == [(True,)]
+    assert visible(conn, "t-reader", "SELECT authz.can_read(%s, 'filings')", (A,)) == [(False,)]
+    assert visible(conn, "t-reader", "SELECT authz.can_read(%s, 'filings')", (B,)) == [(True,)]
+    # nobody sees another user's private rows in the authz tables either
+    assert visible(conn, "t-reader", "SELECT count(*) FROM authz.user_access") == [(0,)]
+    assert visible(conn, "t-reader", "SELECT tier FROM authz.user_tiers ORDER BY tier") == [
+        ("filings",), ("financials",)]
+
+
+def test_closing_the_catalog_hides_it_again(client, token):
+    open_catalog(client.app_conn, B)
+    assert len(financials(client, token, "t-reader", B)) == 1
+    client.app_conn.execute("DELETE FROM authz.public_access")
+    assert financials(client, token, "t-reader", B) == []
+
+
+def test_store_reads_the_catalog_list_under_rls(client):
+    store = Store(OneConnection(client.app_conn))
+    assert store.catalog_companies("t-reader") == frozenset()  # closed
+    open_catalog(client.app_conn, B)
+    assert store.catalog_companies("t-reader") == {B}
+    assert store.catalog_companies("") == frozenset()  # no user, no catalog
 

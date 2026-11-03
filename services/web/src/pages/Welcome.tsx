@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
+import { catalogOpen } from "../access";
 import { ApiError, authProviders, createSandbox, GITHUB_SIGN_IN, me as fetchMe, sandboxOffer } from "../api";
 import { href } from "../route";
 import { saveSession, type Session } from "../session";
@@ -25,8 +26,10 @@ interface Props {
   now?: () => number;
 }
 
-/** Companies of the sandbox that /v1/me shows with both of a pro plan's tiers. */
+/** Companies of the sandbox that /v1/me shows with both of a pro plan's tiers (all of them
+ * once the public catalog is open to both: then no grant is written or waited for). */
 export function readableCount(me: Me, companies: Set<string>): number {
+  if (catalogOpen(me, "financials") && catalogOpen(me, "filings")) return companies.size;
   return me.companies.filter(
     (c) =>
       companies.has(c.company_id) && c.tiers.includes("financials") && c.tiers.includes("filings"),

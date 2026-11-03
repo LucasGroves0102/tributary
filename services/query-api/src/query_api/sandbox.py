@@ -39,6 +39,8 @@ DEMO_TICKERS: tuple[str, ...] = (
 # Seeded on the new user's watchlist (a subset of DEMO_TICKERS; watchlists never grant access).
 DEMO_WATCHLIST: tuple[str, ...] = ("PEP", "KO", "MSFT", "NVDA", "COST", "JPM")
 DEMO_PLAN = "pro"
+# The public catalog (app migration 008); while it is public the demo writes no company grants.
+CATALOG = "sec"
 # The starter workspace every sandbox gets (sandbox_workspaces); it goes with the user.
 DEMO_WORKSPACE = "PepsiCo vs Coca-Cola"
 # Sandbox user ids start with this; nothing else in the app database does (named demo users
@@ -178,14 +180,18 @@ class Pool(Protocol):
 def grant_demo_access(cur: Any, user_id: str, at: datetime, company_ids: Sequence[str],
                       watchlist: Sequence[str], workspaces: Sequence[dict]) -> None:
     """What a demo account is given, inside the caller's transaction, after its `users` row:
-    DEMO_PLAN, grants on `company_ids`, the watchlist (in order) and starter workspaces. Plain
-    app-DB rows: authz-sync turns subscriptions and grants into access through CDC. Shared by
-    sandboxes and GitHub sign-in (query_api.github), so both get the same."""
+    DEMO_PLAN, the watchlist (in order), starter workspaces and, only while the public catalog
+    is closed, grants on `company_ids`. With the catalog public (app migration 008) every
+    signed-in user already reads every company, so no grant is written. Plain app-DB rows:
+    authz-sync turns subscriptions and grants into access through CDC. Shared by sandboxes and
+    GitHub sign-in (query_api.github), so both get the same."""
     cur.execute("INSERT INTO subscriptions (user_id, plan_id, started_at)"
                 " VALUES (%s, %s, %s)", (user_id, DEMO_PLAN, at))
     cur.execute("INSERT INTO company_grants (company_id, user_id, granted_at)"
-                " SELECT c, %s, %s FROM unnest(%s::text[]) c",
-                (user_id, at, list(company_ids)))
+                " SELECT c, %s, %s FROM unnest(%s::text[]) c"
+                " WHERE NOT EXISTS (SELECT 1 FROM public_catalogs"
+                "                   WHERE catalog_id = %s AND public)",
+                (user_id, at, list(company_ids), CATALOG))
     cur.execute("INSERT INTO watchlists (user_id, company_id, added_at)"
                 " SELECT %s, c, %s + make_interval(secs => o::float8 / 1000)"
                 " FROM unnest(%s::text[]) WITH ORDINALITY w(c, o)",

@@ -15,16 +15,19 @@ interface Props {
   search?: SearchState;
   /** the user's companies (/v1/me), for the company filter and the coverage note */
   companies: Company[];
+  /** every company's filings are readable (the public catalog, access.ts) */
+  open?: boolean;
 }
 
 /** Full-text search over the parsed sections of the user's companies (/v1/search): the best
  * passage per section, grouped by company and filing, each opening the reader at the passage. */
-export function Search({ token, search, companies }: Props) {
+export function Search({ token, search, companies, open = false }: Props) {
   const readable = companies.filter((c) => c.tiers.includes("filings"));
+  const any = open || readable.length > 0;
   const [draft, setDraft] = useState<SearchState>(search ?? { q: "" });
   useEffect(() => setDraft(search ?? { q: "" }), [search]);
   const page = search?.page ?? 0;
-  const key = search && readable.length ? JSON.stringify(search) : null;
+  const key = search && any ? JSON.stringify(search) : null;
   const load = useLoad(key, () =>
     searchFilings(token, {
       q: search!.q,
@@ -71,7 +74,7 @@ export function Search({ token, search, companies }: Props) {
             <span className="faint">Company</span>
             <select className="field narrow" aria-label="Company" value={draft.company ?? ""}
               onChange={(e) => set({ company: e.target.value || undefined })}>
-              <option value="">All you can read</option>
+              <option value="">{open ? "All companies" : "All you can read"}</option>
               {readable.map((c) => <option key={c.company_id} value={c.company_id}>{c.name ?? c.company_id}</option>)}
             </select>
           </label>
@@ -88,16 +91,22 @@ export function Search({ token, search, companies }: Props) {
         </div>
         <p className="faint small">
           Searches the parsed sections (Risk Factors, MD&amp;A, 8-K items and press releases…) of
-          the companies whose filings you can read: {readable.length
-            ? `${readable.length} ${readable.length === 1 ? "company" : "companies"} on your plan`
-            : "none on your plan"}. Other companies' filings aren't searched, and results never say
-          whether they match.
+          {open ? (
+            "every company with parsed filings."
+          ) : (
+            <>
+              the companies whose filings you can read: {readable.length
+                ? `${readable.length} ${readable.length === 1 ? "company" : "companies"} on your plan`
+                : "none on your plan"}. Other companies' filings aren't searched, and results never
+              say whether they match.
+            </>
+          )}
         </p>
       </form>
 
       {!search ? (
         <p className="empty">Type words to search, then press Enter.</p>
-      ) : !readable.length ? (
+      ) : !any ? (
         <p className="empty locked">
           Searching filing text needs filings access (the pro plan and a grant for a company).
           Every company's filing index is still on its Filings tab.

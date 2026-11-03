@@ -36,6 +36,8 @@ def test_seed_tuples():
     t = seeded().desired_tuples()
     assert Tuple("user:alice", "viewer", "company:nvda") in t
     assert Tuple("organization:acme#member", "viewer", "company:msft") in t
+    assert Tuple("organization:acme#member", "granted", "company:msft") in t
+    assert Tuple("user:alice", "granted", "company:nvda") in t
     assert Tuple("user:bob", "member", "organization:acme") in t
     assert Tuple("user:bob", "subscriber", "tier:filings") in t
     assert Tuple("user:alice", "subscriber", "tier:filings") not in t
@@ -47,6 +49,7 @@ def test_revoking_a_grant():
     s.apply("company_grants", ev("d", before={
         "grant_id": 1, "company_id": "nvda", "user_id": "alice", "org_id": None}))
     assert Tuple("user:alice", "viewer", "company:nvda") not in s.desired_tuples()
+    assert Tuple("user:alice", "granted", "company:nvda") not in s.desired_tuples()
     assert ("alice", "nvda", "financials") not in s.desired_access()
     assert ("alice", "aapl", "financials") in s.desired_access()
 
@@ -83,3 +86,84 @@ def test_watchlists_are_not_consumed():
     import pytest
     with pytest.raises(ValueError, match="watchlists"):
         AppState().apply("watchlists", ev("c", after={"user_id": "alice"}))
+
+
+# Open access: catalog:sec and the public_catalogs switch ------------------------------------
+
+CATALOG = {"nvda", "tsla"}
+READER = Tuple("user:*", "reader", "catalog:sec")
+
+
+def switch(s: AppState, public: bool, before: bool | None = None) -> None:
+    s.apply("public_catalogs", ev(
+        "r" if before is None else "u",
+        before=None if before is None else {"catalog_id": "sec", "public": before},
+        after={"catalog_id": "sec", "public": public}))
+
+
+def test_catalog_membership_is_written_whether_or_not_public():
+    s = seeded()
+    t = s.desired_tuples(CATALOG)
+    assert Tuple("catalog:sec", "catalog", "company:tsla") in t
+    assert Tuple("tier:filings", "filings_tier", "company:tsla") in t
+    assert READER not in t
+    assert not s.is_public()
+    assert s.desired_public_access(CATALOG) == set()
+
+
+def test_opening_the_catalog_is_one_tuple_and_the_public_rows():
+    s = seeded()
+    switch(s, False)
+    closed = s.desired(CATALOG)
+    switch(s, True, before=False)
+    opened = s.desired(CATALOG)
+    assert opened.tuples - closed.tuples == {READER}
+    assert closed.tuples - opened.tuples == set()
+    assert opened.public_access == {("nvda", "financials"), ("nvda", "filings"),
+                                    ("tsla", "financials"), ("tsla", "filings")}
+    # private grants and the users' tiers don't change with the switch
+    assert opened.access == closed.access and opened.user_tiers == closed.user_tiers
+
+
+def test_closing_the_catalog_again():
+    s = seeded()
+    switch(s, True)
+    switch(s, False, before=True)
+    assert READER not in s.desired_tuples(CATALOG)
+    assert s.desired_public_access(CATALOG) == set()
+
+
+def test_deleting_the_row_closes_the_catalog():
+    s = seeded()
+    switch(s, True)
+    s.apply("public_catalogs", ev("d", before={"catalog_id": "sec", "public": True}))
+    assert not s.is_public() and READER not in s.desired_tuples(CATALOG)
+
+
+def test_user_tiers_follow_plans():
+    s = seeded()
+    assert s.desired_user_tiers() == {
+        ("alice", "financials"), ("bob", "financials"), ("bob", "filings"),
+        ("carol", "financials"), ("carol", "filings"), ("dave", "financials")}
+    s.apply("plan_tiers", ev("c", after={"plan_id": "free", "tier": "filings"}))
+    assert ("alice", "filings") in s.desired_user_tiers()
+    s.apply("subscriptions", ev("d", before={"user_id": "carol", "plan_id": "pro"}))
+    assert not any(u == "carol" for u, _ in s.desired_user_tiers())
+
+
+def test_a_public_catalog_writes_no_per_user_rows():
+    s = seeded()
+    switch(s, True)
+    assert s.desired_access() == seeded().desired_access()  # still only private grants
+    for relation in ("viewer", "granted"):
+        mine = {t for t in s.desired_tuples(CATALOG) if t.relation == relation}
+        assert mine == {t for t in seeded().desired_tuples() if t.relation == relation}
+
+
+def test_accept_catalog_refuses_a_collapse():
+    from authz_sync.state import accept_catalog
+    assert accept_catalog(set(), {"a"})
+    assert accept_catalog({"a", "b"}, {"a"})            # half: fine
+    assert not accept_catalog({"a", "b", "c"}, {"a"})   # under half: refused
+    assert not accept_catalog({"a"}, set())
+    assert accept_catalog(set(), set())

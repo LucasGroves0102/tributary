@@ -39,11 +39,18 @@ group (Kafka SASL is on in production; `deploy/helm/platform/files/kafka-acls.ya
 | `app.public.subscriptions` | `{user_id}` | Debezium | authz-sync |
 | `app.public.company_grants` | `{grant_id}` | Debezium | authz-sync |
 | `app.public.plan_tiers` | `{plan_id, tier}` | Debezium | authz-sync |
+| `app.public.public_catalogs` | `{catalog_id}` | Debezium (app migration 008; created by the first change after the table joined the connector, see below) | authz-sync |
 | `app.public.debezium_heartbeat` | `{id}` | Debezium (its own heartbeat query, every 10 s) | none |
 | `__debezium-heartbeat.app` | `{serverName}` | Debezium heartbeat | none |
 
-Only `connect` may write these topics and only `authz-sync` may read the four access tables
+Only `connect` may write these topics and only `authz-sync` may read the five access tables
 (ACLs in `kafka-acls.yaml`), so no other client can forge or read a grant.
+
+`app.public.public_catalogs` is the open-access switch (`{catalog_id, public}`). A table added to
+an already-running connector is not snapshotted (`snapshot.mode: initial`), so on an existing
+deployment the topic appears with the first update of the row (the flip, or the no-op update in
+`db/app/README.md`, "Open access"). authz-sync treats a missing topic as "no catalog is public"
+and subscribes when it appears; a fresh deployment's snapshot creates it at once.
 
 Values are Debezium envelopes `{before, after, op, source, ...}` (JSON, no schemas). Topics
 are compacted, and each delete is followed by a tombstone. See `streaming/debezium/`.

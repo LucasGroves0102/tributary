@@ -45,7 +45,7 @@ def test_authz_sync_can_only_read_the_cdc_topics(spec):
     assert {op for _, op in ops(acls, "authz-sync")} == {"read"}
     assert {name for name, _ in ops(acls, "authz-sync")} == {
         "app.public.users", "app.public.subscriptions", "app.public.company_grants",
-        "app.public.plan_tiers"}
+        "app.public.plan_tiers", "app.public.public_catalogs"}
 
 
 def test_only_connect_writes_cdc_topics(spec):
