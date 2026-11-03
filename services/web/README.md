@@ -42,7 +42,11 @@ readable, showing how many have arrived (access travels app DB → Debezium → 
 OpenFGA; the BRD target is under 30 s; after that it offers "Continue anyway"). The session is
 kept in localStorage until the sandbox expires; a banner shows "Demo sandbox: every company ·
 resets in Xh" ("20 companies" while the catalog is closed), and an expired or rejected token
-returns to the front door. The named demo users (alice, bob, carol, dave: `/v1/demo/users`,
+returns to the front door. A regular account (not a sandbox or GitHub user, e.g. a tester the owner invites) signs in with
+an owner-issued link: the owner mints a token on the server (`query-api-token <user_id> --hours
+N` inside the query-api pod) and sends `https://<site>/#/signed-in?token=<token>&expires_in=<s>`;
+the app keeps it as an `account` session, with no demo scope (it reads what the API says).
+The named demo users (alice, bob, carol, dave: `/v1/demo/users`,
 `/v1/demo/token`) are test personas: production turns them off (`demo.enabled: false` in the Flux
 release), and locally they are behind a dev flag: build with `VITE_DEMO_PICKER=1`, or run
 `localStorage.setItem("tributary.picker", "1")` in the browser and reload.

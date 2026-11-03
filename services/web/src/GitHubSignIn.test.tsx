@@ -135,6 +135,24 @@ describe("Sign in with GitHub", () => {
     expect($(".top .who")?.textContent).toContain("octocat");
   });
 
+  it("an owner-issued sign-in link signs in a regular account, with no demo scope", async () => {
+    meSequence = [() => Response.json({ user_id: "tester-claude", companies: [] })];
+    window.history.replaceState(null, "", "/#/signed-in?token=link-token&expires_in=604800");
+    await mount(<App picker={false} />);
+    expect(window.location.href).not.toContain("link-token");
+    expect(loadSession()).toMatchObject({ kind: "account", token: "link-token", userId: "tester-claude", login: "tester-claude" });
+    expect($(".top .who")?.textContent).toContain("tester-claude");
+    expect($(".sandbox-banner")).toBeNull();
+  });
+
+  it("a sign-in link for a sandbox is refused", async () => {
+    meSequence = [() => Response.json({ user_id: "demo-1", companies: [], sandbox: { expires_at: "2099-01-01T00:00:00Z", plan: "pro", agent: true, agent_questions_per_day: 10, companies: [] } })];
+    window.history.replaceState(null, "", "/#/signed-in?token=sbx&expires_in=604800");
+    await mount(<App picker={false} />);
+    expect($("[role=alert]")?.textContent).toContain("Couldn't sign in");
+    expect(loadSession()).toBeNull();
+  });
+
   it("shows an error code plainly and keeps nobody signed in", async () => {
     window.history.replaceState(null, "", "/#/signed-in?error=denied");
     await mount(<App picker={false} />);

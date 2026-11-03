@@ -11,14 +11,16 @@
 import { load, remove, save } from "./storage";
 
 export interface Session {
-  kind: "sandbox" | "github";
+  /** "account": any other user, signed in with an owner-issued sign-in link
+   * (`query-api-token` on the server, then `#/signed-in?token=…&expires_in=…`) */
+  kind: "sandbox" | "github" | "account";
   token: string;
   userId: string;
   /** ISO time the sandbox (and its token) expires; for GitHub, the token's expiry */
   expiresAt: string;
   /** companies the sandbox (or the GitHub account, the same 20) was granted */
   companies: string[];
-  /** the GitHub login (kind "github") */
+  /** the GitHub login (kind "github"), or the user id (kind "account") */
   login?: string;
 }
 
@@ -38,7 +40,8 @@ export function loadSession(now: number = Date.now()): Session | null {
   try {
     const s = JSON.parse(raw) as Partial<Session>;
     if (
-      (s.kind === "sandbox" || (s.kind === "github" && typeof s.login === "string")) &&
+      (s.kind === "sandbox" ||
+        ((s.kind === "github" || s.kind === "account") && typeof s.login === "string")) &&
       typeof s.token === "string" &&
       typeof s.userId === "string" &&
       typeof s.expiresAt === "string" &&

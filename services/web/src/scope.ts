@@ -22,7 +22,8 @@ export function useScope(): Scope | null {
 
 /** The scope for a session: a sandbox's (or GitHub account's) companies, else none. */
 export function scopeOf(session: Session | null): Scope | null {
-  return session ? { ids: new Set(session.companies) } : null;
+  // an account from a sign-in link has no demo scope: it reads what the API says it can
+  return session && session.kind !== "account" ? { ids: new Set(session.companies) } : null;
 }
 
 /** Whether a page may list this company (always, without a scope). */

@@ -78,7 +78,21 @@ export function Welcome({ onReady, notice, github, pollMs = 1000, now = Date.now
     }
     if (!alive.current) return;
     if (!m.github) {
-      setPhase({ kind: "error", message: "Couldn't sign in with GitHub. Try again." });
+      // an owner-issued sign-in link for a regular account (never a sandbox: those start here)
+      if (m.sandbox) {
+        setPhase({ kind: "error", message: "Couldn't sign in with GitHub. Try again." });
+        return;
+      }
+      const account: Session = {
+        kind: "account",
+        token,
+        userId: m.user_id,
+        login: m.user_id,
+        expiresAt: new Date(now() + expiresIn * 1000).toISOString(),
+        companies: [],
+      };
+      saveSession(account);
+      onReady(account, m);
       return;
     }
     const session: Session = {
