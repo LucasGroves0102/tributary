@@ -290,8 +290,9 @@ def query_api_who_is(base_url: str) -> Callable[[str], str]:
 
 def query_api_quota(base_url: str,
                     http: httpx.Client | None = None) -> Callable[[str, int], None]:
-    """Demo sandboxes' (and GitHub sign-ins') daily question caps live in the Query API (app
-    database), so they hold across restarts and replicas; other users aren't limited there.
+    """Demo sandboxes' (and GitHub sign-ins') daily question caps, and each owner-created
+    password account's own cap, live in the Query API (app database), so they hold across
+    restarts and replicas; other users aren't limited there.
     The Query API decides who is capped from the token. A report takes several
     questions at once (all or none)."""
     post = http.post if http else httpx.post

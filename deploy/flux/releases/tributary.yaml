@@ -45,6 +45,13 @@ spec:
         replicas: 1
       doc-crawler:
         replicas: 1
+      # Owner-created password accounts (query-api-account) have their own daily assistant cap;
+      # a tester on the owner's network shares the owner's address, so 10 questions per IP per
+      # hour would stop both. Sandboxes and GitHub accounts stay capped per day in the Query
+      # API, and the daily model budget still bounds spend. Helm merges this into the chart's env.
+      agent-api:
+        env:
+          AGENT_IP_RATE_PER_HOUR: "40"
     # The jobs that read the crawled documents run hourly.
     jobs:
       segments:
