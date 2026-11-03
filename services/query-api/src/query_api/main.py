@@ -9,7 +9,9 @@ from psycopg_pool import ConnectionPool
 from query_api.app import create_app
 from query_api.auth import check_secret
 from query_api.authorizer import FgaAuthorizer
+from query_api.connections import AppConnections, market_data_from_env
 from query_api.github import AppAccounts, GitHubConfig, HttpGitHub
+from query_api.providers import PROVIDERS
 from query_api.sandbox import AppSandboxes, SandboxConfig
 from query_api.store import Store
 from query_api.thesis_checks import AppThesisChecks
@@ -30,6 +32,11 @@ def build_app():
     github_config = GitHubConfig.from_env(os.environ)  # None unless both GITHUB_CLIENT_* set
     if github_config and app_pool is None:
         raise RuntimeError("GITHUB_CLIENT_ID needs APP_DATABASE_URL")
+    # Connect your data: off unless DATA_CONNECTIONS_KEY is set (malformed: fails at start)
+    provider_http = httpx.Client(timeout=20, headers={"User-Agent": "Tributary"})
+    market_data = market_data_from_env(
+        os.environ, AppConnections(app_pool) if app_pool else None,
+        {p: make(provider_http) for p, make in PROVIDERS.items()})
     return create_app(
         authorizer=FgaAuthorizer(FgaClient.from_env()),
         store=Store(pool),
@@ -45,6 +52,7 @@ def build_app():
             timeout=10, headers={"User-Agent": "Tributary"})) if github_config else None,
         github_accounts=AppAccounts(app_pool) if github_config and app_pool else None,
         thesis_checks=AppThesisChecks(app_pool) if app_pool else None,
+        market_data=market_data,
     )
 
 

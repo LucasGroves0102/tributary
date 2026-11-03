@@ -256,6 +256,30 @@ They render, save, embed and restore like any layer (`model.ts` `layerKey`/`segm
 the Revenue view). The assistant's page context leaves them out and reports the Revenue tab as
 `segments` (agent-api's context knows neither).
 
+Connect your data (Query API README, "Connect your data"; shown only when `/v1/connections`
+answers, i.e. the server has `DATA_CONNECTIONS_KEY`: `market/useMarketData.ts`, one request per
+token shared by every component; a 404 or an error hides everything below):
+
+- **Settings → Connections** (`#/settings`, `pages/Settings.tsx`, linked from the sidebar footer):
+  per provider (Tiingo today) a link to get a key, a password field (`autocomplete=off`) and
+  Connect. The key goes out once, in the `PUT /v1/connections/{provider}` body; the field is
+  cleared on success and nothing keeps it (no state, no storage). A saved key shows as provider,
+  `…last4` and the date it was added, with Replace key and Disconnect (deletes the key and every
+  price fetched with it). Errors are the API's own messages (a refused key, rate limit).
+- **Company Price tab** (`company/Price.tsx`): without a connection, only a "Connect your market
+  data" prompt (no price request is made); with one, the daily close (1y/5y/Max; as traded, not
+  adjusted) and a Valuation panel: market cap, P/E, P/S, EV/EBIT (formulas in the Query API
+  README, shown on each tile) and a table of every input with its date: the close's day, the
+  shares' and TTM figures' period ends and filings. Each view names the provider (attribution).
+- **Price layers** (`chart/prices.ts`): "+ Price" in the chart builder (only with a connection)
+  adds a layer of kind `price` (company only) on calendar quarters: Quarter-end close (as
+  traded), YoY % or Indexed (both over adjusted closes). A visible price layer puts the chart on
+  calendar quarters (`model.ts` `basis`; prices have no fiscal calendar). Saved charts store the
+  company and transform only, never prices: whoever opens a saved or embedded chart sees their
+  own prices, or the layer's error ("connect your market data first") without a connection. The
+  footnote names the provider. The assistant's page context leaves price layers out, reports the
+  Price tab as `overview` and Settings as `about` (the agent can't read prices).
+
 Data notes (`src/company/notes.ts`, Query API `/v1/companies/{id}/data-notes`, `/v1/data-notes`):
 the tearsheet's Data notes tab groups what the automated checks found (freshness, restated
 figures, gaps and overlapping periods, values to double-check, derived quarters) in plain
@@ -330,6 +354,7 @@ React.lazy); once signed in and idle the app prefetches them, so switching scree
 | + Thesis (`#/thesis/…`), Model (`#/model/…`) (2026-11-02) | + ThesisPage 9.6 kB (4.0 kB) + markdown, Embeds 5.0 kB, ModelView 3.1 kB; ModelPage 7.3 kB (2.8 kB) + LayerChart; NewWork 3.5 kB (1.6 kB) with Company or Workspace | |
 | + Check my thesis (2026-11-02) | ThesisPage 21.7 kB (8.1 kB) with the check panel | |
 | + Revenue tab, Revisit (2026-11-02) | Company 30.0 kB (9.5 kB) with the Revenue view and its chart renderer; ThesisPage 22.8 kB (8.1 kB) | |
+| + Price tab, Settings (`#/settings`) (2026-11-02, Connect your data) | Company 37.1 kB (11.7 kB) with the Price tab; Settings 3.1 kB (1.4 kB); shell 358.7 kB (114.3 kB) | |
 
 Before splitting, everything was one 493.6 kB (156.3 kB gzip) script; the first screen now
 loads a third less. Most of what remains is React DOM. Chart data is cached in memory per

@@ -2,7 +2,8 @@
 
 FR7, week 2. The application's own database (`app`), separate from the analytics database
 (`tributary`): users, organizations, plans, subscriptions, company grants, watchlists, saved
-work (workspaces, theses, models, reports, thesis checks) and view preferences.
+work (workspaces, theses, models, reports, thesis checks), view preferences, and each user's own
+market-data connection and prices ("Connect your data", Query API README).
 In production this would belong to a different service, so other components learn about
 changes through Debezium CDC ([streaming/debezium](../../streaming/debezium)), never by querying
 it directly. [authz-sync](../../services/authz-sync) turns those changes into OpenFGA tuples and
@@ -16,6 +17,7 @@ it directly. [authz-sync](../../services/authz-sync) turns those changes into Op
 | `workspaces`, `workspace_items` (saved charts, comps sets, screens; reports the agent writes, migration 005; theses and revenue models the user writes, migration 009: state up to 128 KiB for reports and theses, 16 KiB otherwise), `recent_filings` (migration 004; owner-only, forced RLS on `app.user_id`) | no: they grant nothing |
 | `user_views` (per-user layout of Home, the screener and the watchlist; migration 006; owner-only, forced RLS) | no: it grants nothing |
 | `thesis_checks` (migration 010: the history of "Check my thesis" results per thesis, written only by agent-api through the Query API; owner-only, forced RLS, `(item_id, user_id)` references the thesis and cascades) | no: it grants nothing |
+| `data_connections` (migration 011: a user's own market-data API key per provider, envelope-encrypted with a master key that is never in this database, plus `last4`), `market_prices` (end-of-day prices fetched with that key, per user), `market_price_fetches` (last fetch per user and company: the once-a-day window); owner-only, forced RLS on `app.user_id`; prices and fetches reference the connection and cascade (disconnect deletes them) | no: they grant nothing |
 | `demo_sandboxes` (sandbox user → expiry), `demo_creations` (creation rate limit, HMAC of the client address), `demo_agent_usage` / `demo_agent_daily` (assistant question caps) | no: they grant nothing |
 | `github_accounts` (migration 007: GitHub id → `gh-<id>` user, login, first/last sign-in) | no: identity, not access |
 

@@ -59,6 +59,11 @@ request parameters. Dev tokens: `make token USER=alice`.
 | `GET /v1/companies/{id}/expected-filings?periods=` | token | estimated next 10-Q/10-K dates with their basis |
 | `GET /v1/filings/{accession}/recap?metrics=` | financials (flags: filings) | metrics vs prior quarter and year-ago, cited; one-time-item flags |
 | `GET /v1/companies/{id}/peers?limit=&columns=&access=` | token | suggested peers (SIC, size band, filer category), values where permitted |
+| `GET /v1/connections` | `DATA_CONNECTIONS_KEY`, token | providers offered and the caller's market-data connections (provider, `…last4`, dates; never the key) ([Connect your data](#connect-your-data)) |
+| `PUT /v1/connections/{provider}` | `DATA_CONNECTIONS_KEY`, token | `{"api_key": "…"}`: validated with one provider call, stored encrypted |
+| `DELETE /v1/connections/{provider}` | `DATA_CONNECTIONS_KEY`, token | deletes the key and every price fetched with it |
+| `GET /v1/companies/{id}/prices?from=&to=` | `DATA_CONNECTIONS_KEY`, financials, the caller's own connection | the caller's end-of-day closes (exact decimals), refreshed at most once per US Eastern day |
+| `GET /v1/companies/{id}/valuation` | `DATA_CONNECTIONS_KEY`, financials, the caller's own connection | market cap, P/E, P/S, EV/EBIT from the caller's latest close and the latest gold figures, each with its date and citation |
 
 `{id}` is the canonical 10-digit `company_id`. Prometheus metrics are on `/metrics` (including
 `tributary_permission_checks_total{tier,result}`); the web proxy blocks it and `/docs` from the
@@ -456,6 +461,100 @@ after 7 days.
 
 Outbound: only `github.com` and `api.github.com` over HTTPS (Helm `uses: github`).
 
+## Connect your data
+
+Share prices can't be shown publicly: market-data vendors license them for personal use, not
+redistribution. So each user connects their **own** market-data API key; the Query API fetches
+end-of-day prices with that key, stores them for that user only and shows them only to that
+user. There is no shared price cache across users (`connections.py`, `keybox.py`,
+`providers.py`, `valuation.py`, app migration 011).
+
+**Off unless `DATA_CONNECTIONS_KEY` is set.** Without it no route below exists (404) and the web
+app hides the feature, so deploying the code changes nothing. A malformed value stops the API
+at start (never a silent "off"). It needs `APP_DATABASE_URL`.
+
+**Provider: Tiingo** (end-of-day daily prices, US equities). Chosen because its developer guide
+explicitly covers this model: software that requires each user to supply their own Tiingo API
+token, without contacting Tiingo, as long as the software does not redistribute the data and
+Tiingo is clearly attributed as the source (every price view and chart footnote names it). Free
+plan (as published by third parties; check Tiingo's pricing page): 50 requests/hour,
+1,000/day, 500 symbols/month. Others considered:
+
+| Provider | Why not first |
+|---|---|
+| Financial Modeling Prep | terms restrict a key to the individual's own use and prohibit "enabling" others' use of the services; a key used by a third-party server is a grey area |
+| Massive (formerly Polygon.io) | individual plans are personal, non-business use; no statement on third-party software holding the key |
+| Alpha Vantage | free tier 25 requests/day; adjusted daily series is premium |
+| Finnhub | daily candles moved to paid plans |
+| EODHD | free tier 20 calls/day |
+| Yahoo | no official API |
+
+**Verify before launch** (terms change; this was read on 2026-11-02 from tiingo.com's
+documentation, the developer appendix and third-party summaries, not a lawyer's review):
+(1) Tiingo's current Terms of Service still allow a user's own token in third-party
+server-side software, with the attribution wording they require; (2) the free plan's limits
+above; (3) `Authorization: Token <key>` header auth and the metadata endpoint used to validate
+a key (`GET /tiingo/daily/SPY`); (4) re-record the test fixtures from the live API once
+(`tests/fixtures/README.md`: today they follow the documented shape).
+
+**Keys at rest** (`keybox.py`): envelope encryption with AES-256-GCM (Python `cryptography`).
+`DATA_CONNECTIONS_KEY` = one or more `<key id>:<base64 of 32 random bytes>`, comma-separated,
+newest first. Per save: a fresh random 256-bit data key encrypts the API key (12-byte random
+nonce); the current master key wraps the data key (own nonce). Both use associated data
+`"tributary data-connection v1\0" + user id + "\0" + provider`, so a ciphertext moved to another
+user's row (or provider) fails to decrypt. Stored: `key_id`, `wrapped_key`, `nonce`,
+`ciphertext`, `last4`. Rotation: put the new key first in `DATA_CONNECTIONS_KEY` and keep the
+old one listed; new saves use the new key, old rows still open (`Keyring.rewrap` re-wraps a row
+without touching the API key; a bulk rewrap job is not built yet). The key is decrypted only in
+process, into a `Secret` (repr `Secret(***)`), straight into the provider request's
+`Authorization` header: never into a URL (httpx logs request URLs), a log line, an exception
+message or a response. The `PUT` body is parsed by hand (FastAPI's 422 would echo the input):
+a key must match the provider's pattern (Tiingo: 20-64 letters/digits), bodies over 1 KiB are
+refused with 413, then ONE provider call validates it; a refused key is not stored.
+
+**Prices** (app DB `market_prices`, `market_price_fetches`): fetched on demand when the user
+opens a company's Price tab, valuation, or a chart with a price layer. A (user, company) is
+refreshed at most once per US Eastern day: the first fetch asks for 10 years, later ones from
+10 days before the newest stored day (catches the provider's corrections). The ticker is the
+company's current SEC ticker (alphabetically first if several). Per-user limits, in process
+(per replica): 30 provider calls and 5 key saves per hour; over the limit, or when the provider
+fails, the stored prices are served with `stale: true` and a `warning`. A key the provider now
+refuses answers 409 ("reconnect"). Disconnecting deletes the key and (FK `ON DELETE CASCADE`)
+every price and fetch row; deleting the user deletes everything.
+
+**Two layers** (like every private thing here): layer 1, `require(financials)` on the company
+(OpenFGA) before anything else, and the route reads only the JWT user's own connection; layer 2,
+the three tables' FORCEd owner-only row-level security on `app.user_id` (every statement also
+filters on it). Why the app DB and not the tributary DB: prices are per-user private data, like
+saved work, so they live next to `users` with the same owner-only policy, cascade with the
+user and the connection, and never mix with the shared, catalog-wide analytics tables (whose
+RLS is per company, not per user). The valuation joins them in Python: gold through `Store`
+(as `query_api`, RLS), prices through `AppConnections` (owner RLS).
+
+**Valuation** (`valuation.py`; latest close × latest gold figures, each with its own date):
+
+| Figure | Formula |
+|---|---|
+| Market cap | close × `shares_outstanding` (latest reported) |
+| P/E | market cap / TTM `net_income` (net income ≤ 0: not meaningful) |
+| P/S | market cap / TTM `revenue` |
+| EV | market cap + `net_debt` (long-term debt incl. current − cash − short-term investments) |
+| EV/EBIT | EV / TTM `operating_income` (≤ 0 or no net debt: not shown) |
+
+P/E is market cap over TTM net income, not price over TTM diluted EPS: gold has no TTM EPS
+(fiscal Q4 EPS is never reported or derived, migration 014); the two differ by the diluted vs
+outstanding share count and preferred dividends. The close used is the newest within 14 days.
+A company with several share classes (several current tickers) prices one class against the
+total share count; the response lists them in `share_classes`.
+
+| Env | |
+|---|---|
+| `DATA_CONNECTIONS_KEY` | master key(s), `k1:<base64 32 bytes>[,k0:…]`; unset = feature off |
+
+Outbound: the provider adapters' hosts only (today `api.tiingo.com`) over HTTPS (Helm
+`uses: market-data`). Metric: `tributary_market_data_calls_total{provider,kind,result}`.
+The agent has no price tool (deferred: its citation contract has no shape for licensed data).
+
 ## Tests
 
 `pytest services/query-api` (install with `pip install -e 'services/query-api[test]'`).
@@ -474,7 +573,15 @@ functions of 026 and 028 as query_api, which still can't read the tables behind 
 allows everything and checks that row-level security alone still hides ungranted rows, and that
 a public catalog is readable only with a user id, within the user's tiers, while private grants
 stay per user (needs `TEST_DATABASE_URL`); `test_authorizer.py` checks which OpenFGA calls
-`access()` makes (never ListObjects over a public catalog).
+`access()` makes (never ListObjects over a public catalog). Connect your data:
+`test_keybox.py` (round trip, a ciphertext moved to another user or tampered fails, rotation,
+nothing prints key material), `test_connections.py` (routes absent without the master key, the
+key never in a response or any log record, forged and oversized input refused before any
+provider call, another user can't see my connection or prices, layer 1 before the provider,
+once-a-day refresh, rate limits, disconnect deletes the prices, valuation formulas; the real
+Tiingo adapter over `httpx.MockTransport` with `tests/fixtures/`, never Tiingo itself) and
+`test_connections_db.py` (the three tables' forced owner RLS for another user and for no user,
+WITH CHECK, cascades, checks; `APP_TEST_DATABASE_URL`).
 
 ## Segments
 

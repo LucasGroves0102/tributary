@@ -37,6 +37,11 @@ const COMPANY_SUGGESTIONS: Record<CompanyTab, (n: string) => string[]> = {
     `Compare ${n} with its peers`,
     `How does ${n}'s operating margin compare with its peers?`,
   ],
+  // the assistant can't read the user's prices: ask about the filings behind the multiples
+  price: (n) => [
+    `How has ${n}'s TTM net income changed over the last year?`,
+    `What is ${n}'s net debt in its latest 10-Q?`,
+  ],
 };
 
 export interface PageContext {
@@ -172,6 +177,8 @@ export function pageContext(
       return { label: "What Tributary covers", suggestions: ["What is Nvidia's P/E ratio?", "Did Nvidia beat consensus last quarter?"] };
     case "status":
       return { label: "Data status", suggestions: [GENERAL[0]!, GENERAL[1]!] };
+    case "settings":
+      return { label: "Settings", suggestions: [GENERAL[0]!, GENERAL[1]!] };
     case "workspace":
       return { label: "Workspace", suggestions: ["What did my companies file recently?", GENERAL[0]!] };
     case "report":

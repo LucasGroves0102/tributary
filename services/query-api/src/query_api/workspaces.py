@@ -72,13 +72,18 @@ def clean_name(value: str, limit: int) -> str:
 SEGMENT_MEMBER = r"^[A-Za-z0-9_.:-]{1,200}$"  # an XBRL member QName (chart/segments.ts MEMBER)
 MAX_SEGMENT_MEMBERS = 20
 SEGMENT_TRANSFORMS = ("q", "ttm", "yoy", "contrib")
+# price layers (web chart/prices.ts): quarter-end close, YoY and indexed over adjusted closes
+PRICE_TRANSFORMS = ("q", "yoy", "idx")
 
 
 class ChartLayer(_Strict):
     """chart/model.ts Layer, without its id. A segment layer (the Revenue view's charts) sums
     members of one axis of /v1/companies/{id}/segments; it holds ids and names only, like every
-    layer, and the web app reads its values through the permission-checked route."""
-    kind: Literal["metric", "formula", "segment"]
+    layer, and the web app reads its values through the permission-checked route. A price
+    layer ("Connect your data") names a company only; the web app reads the viewer's OWN
+    prices (/v1/companies/{id}/prices), so a saved or embedded price layer never carries or
+    shares prices."""
+    kind: Literal["metric", "formula", "segment", "price"]
     companyId: str | None = Field(default=None, pattern=CIK)
     metric: str | None = Field(default=None, pattern=r"^[a-z_]{1,64}$")
     formula: str | None = Field(default=None, max_length=500)
@@ -109,6 +114,14 @@ class ChartLayer(_Strict):
                 raise ValueError(f"a segment layer's transform is one of {SEGMENT_TRANSFORMS}")
             if len(set(self.members)) != len(self.members):
                 raise ValueError("a segment layer lists a member twice")
+            return self
+        if self.kind == "price":
+            if (not self.companyId or self.metric is not None or self.formula is not None
+                    or self.defaultCompany is not None or self.segmentAxis is not None
+                    or self.members is not None):
+                raise ValueError("a price layer has companyId only")
+            if self.transform not in PRICE_TRANSFORMS:
+                raise ValueError(f"a price layer's transform is one of {PRICE_TRANSFORMS}")
             return self
         if self.segmentAxis is not None or self.members is not None or self.transform == "contrib":
             raise ValueError("segmentAxis, members and contrib are for segment layers")

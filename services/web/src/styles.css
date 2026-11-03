@@ -3448,3 +3448,67 @@ mark.claim-mark {
     padding: 0;
   }
 }
+
+/* Connect your data: company Price tab, Settings → Connections */
+.price-chart {
+  margin: 0;
+  padding: var(--sp-5) var(--sp-6) 0;
+}
+
+.price-chart svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.price-line {
+  stroke: var(--series-0);
+  stroke-width: 1.5;
+}
+
+.price-axis {
+  fill: var(--text-3);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.price-cursor {
+  stroke: var(--line-2);
+}
+
+.price-dot {
+  fill: var(--series-0);
+}
+
+.price-tab .btn[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.valuation-inputs th {
+  text-align: left;
+  font-weight: 400;
+  color: var(--text-2);
+}
+
+.valuation-inputs td,
+.valuation-inputs th {
+  padding: 6px 12px;
+  border-top: 1px solid var(--line);
+}
+
+.connection {
+  display: grid;
+  gap: var(--sp-4);
+}
+
+.connection form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+}
+
+.connection form .field {
+  flex: 1 1 260px;
+  min-width: 0;
+}

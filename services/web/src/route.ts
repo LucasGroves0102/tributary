@@ -14,6 +14,8 @@ export const COMPANY_TABS = [
   ["filings", "Filings"],
   ["notes", "Data notes"],
   ["peers", "Peers"],
+  /** "Connect your data": shown only when the server has the feature on (Company.tsx) */
+  ["price", "Price"],
 ] as const;
 export type CompanyTab = (typeof COMPANY_TABS)[number][0];
 const TABS = new Set<string>(COMPANY_TABS.map(([t]) => t));
@@ -40,6 +42,8 @@ export type Route =
   | { view: "about" }
   /** how fresh, complete and checked the data is; public (shown signed out too) */
   | { view: "status" }
+  /** Settings → Connections: the user's own market-data key ("Connect your data") */
+  | { view: "settings" }
   /** one saved workspace: its items and reports, "Write a report" */
   | { view: "workspace"; workspaceId: string }
   /** a report the assistant wrote (a workspace item of kind report) */
@@ -68,7 +72,7 @@ const ACCESSION = /^\d{10}-\d{2}-\d{6}$/;
 /** Section keys as the Query API takes them: 10-K "1A", 10-Q "II-1A", 8-K "2.02", "EX-99.1". */
 export const SECTION = /^[A-Z0-9.?-]{1,8}$/;
 const MAX_Q = 200;
-const SIMPLE = new Set(["chart", "ask", "about", "status"]);
+const SIMPLE = new Set(["chart", "ask", "about", "status", "settings"]);
 
 /** "#/company/0001045810" → route; anything unrecognized is Home. Companies keeps its
  * screener filters in a query ("#/companies?band=1b-10b"), Compare its comps
@@ -88,7 +92,7 @@ export function parse(hash: string): Route {
     const search = parseSearch(query);
     return search ? { view, search } : { view };
   }
-  if (view && SIMPLE.has(view)) return { view: view as "chart" | "ask" | "about" | "status" };
+  if (view && SIMPLE.has(view)) return { view: view as "chart" | "ask" | "about" | "status" | "settings" };
   if (view === "explore") return { view: "companies" }; // links from before the v3 shell
   if ((view === "workspace" || view === "report" || view === "thesis" || view === "model") && ID.test(a ?? "")) {
     return view === "workspace" ? { view, workspaceId: a! } : { view, itemId: a! };

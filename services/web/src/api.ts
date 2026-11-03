@@ -14,8 +14,11 @@ import type {
   FormulaValidation,
   HistoryTurn,
   LatestFiling,
+  MarketConnection,
+  MarketConnections,
   Me,
   Peers,
+  Prices,
   Recap,
   SandboxCreated,
   SandboxOffer,
@@ -36,6 +39,7 @@ import type {
   SavedWorkspaceFull,
   ViewPrefs,
   UiContext,
+  Valuation,
   Watchlist,
 } from "./types";
 
@@ -136,6 +140,29 @@ function sendJson<T>(token: string, method: "POST" | "PUT" | "PATCH" | "DELETE",
 }
 
 const enc = encodeURIComponent;
+
+/** "Connect your data": null when the server has it off (404). */
+export async function marketConnections(token: string): Promise<MarketConnections | null> {
+  const r = await fetch(url("/v1/connections", {}), { headers: { Authorization: `Bearer ${token}` } });
+  if (r.status === 404) return null;
+  return json<MarketConnections>(r);
+}
+
+/** Saves the caller's own key; the server validates it with the provider and keeps it encrypted.
+ * The key goes only in this request's body and is never stored in the browser. */
+export const connectMarketData = (token: string, provider: string, apiKey: string) =>
+  sendJson<{ connection: MarketConnection }>(token, "PUT", `/v1/connections/${enc(provider)}`, { api_key: apiKey });
+
+/** Deletes the key and every price fetched with it. */
+export const disconnectMarketData = (token: string, provider: string) =>
+  sendJson<{ deleted: boolean }>(token, "DELETE", `/v1/connections/${enc(provider)}`);
+
+/** The caller's own end-of-day prices for a company (oldest first). */
+export const pricesOf = (token: string, companyId: string, from?: string) =>
+  get<Prices>(token, `/v1/companies/${companyId}/prices`, from ? { from } : {});
+
+export const valuationOf = (token: string, companyId: string) =>
+  get<Valuation>(token, `/v1/companies/${companyId}/valuation`);
 
 export const workspaces = (token: string) =>
   get<{ workspaces: SavedWorkspace[] }>(token, "/v1/workspaces").then((r) => r.workspaces);

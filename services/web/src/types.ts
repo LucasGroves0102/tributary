@@ -1020,3 +1020,78 @@ export interface RecordedRun {
   commit: string;
   committed: string;
 }
+
+/** "Connect your data" (Query API query_api/connections.py): exists only when the server has a
+ * master key (otherwise /v1/connections is 404 and the feature is hidden). Never the key. */
+export interface MarketProvider {
+  id: string;
+  name: string;
+  signup_url: string;
+  terms_url: string;
+  attribution: string;
+  data: string;
+}
+
+export interface MarketConnection {
+  provider: string;
+  /** "…a1b2": the key's last four characters, all the API ever returns of it */
+  key_hint: string;
+  created_at: string;
+  validated_at: string;
+}
+
+export interface MarketConnections {
+  providers: MarketProvider[];
+  connections: MarketConnection[];
+}
+
+/** Shared by /prices and /valuation: where the caller's own prices came from and how fresh. */
+export interface PriceMeta {
+  company_id: string;
+  provider: string;
+  attribution: string;
+  ticker: string | null;
+  /** not_found: the provider has no prices for the ticker; no_ticker: the company has none */
+  status: "ok" | "not_found" | "no_ticker";
+  fetched_at: string | null;
+  /** the refresh was skipped or failed: older stored prices are shown */
+  stale: boolean;
+  warning: string | null;
+}
+
+export interface PriceRow {
+  day: string;
+  /** exact decimals */
+  close: string;
+  adj_close: string | null;
+}
+
+export interface Prices extends PriceMeta {
+  rows: PriceRow[];
+}
+
+export interface ValuationInput {
+  value: string;
+  unit: string;
+  period_end: string;
+  citation: { accession_no: string; form: string; filed: string; xbrl_tag: string | null; filing_url: string | null };
+}
+
+export interface ValuationMultiple {
+  value: string | null;
+  note: string | null;
+}
+
+export type ValuationMetric = "shares_outstanding" | "net_income" | "revenue" | "operating_income" | "net_debt";
+
+export interface Valuation extends PriceMeta {
+  price: { close: string; day: string; ticker: string } | null;
+  inputs: Record<ValuationMetric, ValuationInput | null>;
+  formulas: Record<string, string>;
+  /** several current tickers: one class's price against the total share count */
+  share_classes: string[] | null;
+  market_cap: { value: string; price_day: string; shares_period_end: string } | null;
+  enterprise_value: { value: string; net_debt_period_end: string } | null;
+  multiples: Partial<Record<"pe" | "ps" | "ev_ebit", ValuationMultiple>>;
+  note: string | null;
+}

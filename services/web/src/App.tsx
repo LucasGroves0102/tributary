@@ -31,6 +31,7 @@ import {
   ReportView,
   Search,
   ModelPage,
+  Settings,
   Status,
   ThesisPage,
   WorkspacePage,
@@ -57,6 +58,7 @@ import { useTheme } from "./theme";
 import { ColumnPicker, HomeLayoutEditor } from "./views/Editors";
 import { columnSpecs, DEFAULT_SCREENER_COLUMNS, DEFAULT_WATCHLIST_COLUMNS } from "./views/model";
 import { useViews } from "./views/useViews";
+import { useMarketData } from "./market/useMarketData";
 import type { Me } from "./types";
 import { itemRoute, restoreChartState, type Current } from "./workspaces/model";
 import { Recent } from "./workspaces/Recent";
@@ -127,6 +129,8 @@ export function App(props: Props = {}) {
   const screenCols = useMemo(() => columnSpecs(views.screenerColumns, views.options), [views.screenerColumns, views.options]);
   const workspace = useWorkspace(token, user, me?.companies.map((c) => c.company_id), watchCols);
   const saved = useSaved(token, user);
+  // "Connect your data": offered only when the server has it on (useMarketData's docstring)
+  const market = useMarketData(token);
   const reload = saved.reload;
   // a report saved: refresh the lists, and show it if its workspace is still on screen
   const writer = useReportWriter(token, user, useCallback((itemId: string, workspaceId: string) => {
@@ -467,6 +471,7 @@ export function App(props: Props = {}) {
           onAdd={() => setPalette(WATCH_PREFIX)}
           onExport={exportWatchlist}
           onShortcuts={() => setHelp(true)}
+          connections={market?.enabled ?? false}
           workspaces={token ? <WorkspaceTree saved={saved} onOpen={openSaved} onError={setError} /> : null}
         />
         {navOpen && <div className="scrim" aria-hidden="true" onClick={() => setNavOpen(false)} />}
@@ -639,6 +644,8 @@ export function App(props: Props = {}) {
               </div>
             ) : route.view === "about" ? (
               <About />
+            ) : route.view === "settings" ? (
+              <Settings key={user} token={token} />
             ) : route.view === "workspace" ? (
               <WorkspacePage
                 key={`${user}-${route.workspaceId}`}
