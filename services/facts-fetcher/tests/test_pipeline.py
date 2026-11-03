@@ -337,3 +337,145 @@ def test_impossible_derived_quarter_is_left_out(conn):
         ("2022-01-01", "2022-12-31", 2963000, "fy", "2024-03-13"),
     ])
     assert quarters(conn, HD, "revenue") == []
+
+
+# Migration 031: one series of quarters per company and metric. Rows are (metric, start, end,
+# value, accession, form, filed); a None start is a balance-sheet (instant) value.
+TAGS = {"revenue": "Revenues", "net_income": "NetIncomeLoss", "total_assets": "Assets"}
+
+
+def insert_rows(conn, rows):
+    conn.execute("DELETE FROM silver.financial_facts")
+    for metric, start, end, value, accession, form, filed in rows:
+        conn.execute(
+            "INSERT INTO silver.financial_facts (cik, metric, tag, unit, period_start,"
+            " period_end, value, accession_no, form, filed, ingested_at)"
+            " VALUES (%s, %s, %s, 'USD', %s, %s, %s, %s, %s, %s, '2025-11-02')",
+            (HD, metric, TAGS[metric], start, end, value, accession, form, filed))
+    refresh_gold(conn, [HD])
+
+
+def spans(conn, metric):
+    return conn.execute(
+        "SELECT period_start, period_end, value, value_source, source_accessions"
+        " FROM gold.quarterly_financials WHERE company_id = %s AND metric = %s"
+        " ORDER BY period_end", (HD, metric)).fetchall()
+
+
+def overlap_findings(conn):
+    return conn.execute(
+        "SELECT count(*) FROM ops.quality_findings"
+        " WHERE company_id = %s AND check_name = 'overlapping_quarters'", (HD,)).fetchone()[0]
+
+
+def test_same_quarter_ending_a_day_apart_is_kept_once(conn):
+    # NVIDIA Q2 FY2011: the 10-Q ends it on Aug 1 (its balance-sheet date), a later 10-K on
+    # Jul 31, same value. Gold kept both (one per period_end).
+    insert_rows(conn, [
+        ("revenue", "2010-05-03", "2010-08-01", 811208000, "q2", "10-Q", "2010-08-25"),
+        ("total_assets", None, "2010-08-01", 3600000000, "q2", "10-Q", "2010-08-25"),
+        ("revenue", "2010-05-03", "2010-07-31", 811208000, "k", "10-K", "2012-03-13"),
+    ])
+    assert spans(conn, "revenue") == [
+        (date(2010, 5, 3), date(2010, 8, 1), 811208000, "reported", ["q2"])]
+    assert overlap_findings(conn) == 0
+
+
+def test_reported_quarter_beats_derived_one_ending_a_day_earlier(conn):
+    # Worthington: nine months tagged to Feb 28 in a leap year derive a quarter that duplicates
+    # the reported Dec 1 - Feb 29 one
+    insert_rows(conn, [
+        ("total_assets", None, "2023-11-30", 3000, "q2", "10-Q", "2024-01-09"),
+        ("revenue", "2023-06-01", "2023-11-30", 610, "q2", "10-Q", "2024-01-09"),
+        ("revenue", "2023-06-01", "2024-02-28", 927, "q3", "10-Q", "2024-04-09"),
+        ("revenue", "2023-12-01", "2024-02-29", 317, "q3", "10-Q", "2024-04-09"),
+        ("total_assets", None, "2024-02-29", 3100, "q3", "10-Q", "2024-04-09"),
+    ])
+    assert spans(conn, "revenue") == [
+        (date(2023, 12, 1), date(2024, 2, 29), 317, "reported", ["q3"])]
+
+
+# ATI: its 2023 10-Qs and 10-K use a 52/53-week calendar (balance sheets on those dates); the
+# next year's filings repeat 2023 as calendar quarters, restated. Both Q4s end Dec 31.
+FISCAL_2023 = [
+    ("total_assets", None, "2023-01-01", 4400, "k22", "10-K", "2023-02-20"),
+    ("revenue", "2023-01-02", "2023-04-02", 100, "q1", "10-Q", "2023-05-01"),
+    ("total_assets", None, "2023-04-02", 4500, "q1", "10-Q", "2023-05-01"),
+    ("revenue", "2023-04-03", "2023-07-02", 110, "q2", "10-Q", "2023-08-01"),
+    ("total_assets", None, "2023-07-02", 4600, "q2", "10-Q", "2023-08-01"),
+    ("revenue", "2023-07-03", "2023-10-01", 120, "q3", "10-Q", "2023-11-01"),
+    ("revenue", "2023-01-02", "2023-10-01", 330, "q3", "10-Q", "2023-11-01"),
+    ("total_assets", None, "2023-10-01", 4700, "q3", "10-Q", "2023-11-01"),
+    ("revenue", "2023-01-02", "2023-12-31", 460, "k23", "10-K", "2024-02-20"),
+    ("total_assets", None, "2023-12-31", 4900, "k23", "10-K", "2024-02-20"),
+]
+CALENDAR_2023 = [
+    ("revenue", "2023-01-01", "2023-03-31", 101, "r1", "10-Q", "2024-05-01"),
+    ("revenue", "2023-04-01", "2023-06-30", 111, "r2", "10-Q", "2024-08-01"),
+    ("revenue", "2023-07-01", "2023-09-30", 121, "r3", "10-Q", "2024-11-01"),
+    ("revenue", "2023-01-01", "2023-09-30", 333, "r3", "10-Q", "2024-11-01"),
+    ("revenue", "2023-01-01", "2023-12-31", 470, "k24", "10-K", "2025-02-20"),
+]
+
+
+def test_interleaved_calendars_keep_one_series_and_its_own_fourth_quarter(conn):
+    insert_rows(conn, FISCAL_2023 + CALENDAR_2023)
+    # Q4 = FY - 9M of the same series (130), not the calendar one (470 - 333 = 137)
+    assert spans(conn, "revenue") == [
+        (date(2023, 1, 2), date(2023, 4, 2), 100, "reported", ["q1"]),
+        (date(2023, 4, 3), date(2023, 7, 2), 110, "reported", ["q2"]),
+        (date(2023, 7, 3), date(2023, 10, 1), 120, "reported", ["q3"]),
+        (date(2023, 10, 2), date(2023, 12, 31), 130, "derived", ["q3", "k23"]),
+    ]
+    assert overlap_findings(conn) == 0
+    ttm = conn.execute(
+        "SELECT period_start, value FROM gold.derived_financials WHERE company_id = %s"
+        " AND span = 'ttm' AND metric = 'revenue'", (HD,)).fetchall()
+    assert ttm == [(date(2023, 1, 2), 460)]  # the fiscal year's 10-K figure
+
+
+def test_relabelled_quarter_with_a_slightly_different_value_is_kept_once(conn):
+    # Dine Brands: the Q1 2025 10-Q (balance sheet on Mar 31) says 4,598,000; the Q1 2026
+    # 10-Q's comparative calls the quarter Dec 30 - Mar 30 and says 4,600,000
+    insert_rows(conn, [
+        ("total_assets", None, "2024-12-31", 1900, "k24", "10-K", "2025-03-05"),
+        ("net_income", "2025-01-01", "2025-03-31", 4598000, "q1-25", "10-Q", "2025-05-07"),
+        ("total_assets", None, "2025-03-31", 1950, "q1-25", "10-Q", "2025-05-07"),
+        ("net_income", "2024-12-30", "2025-03-30", 4600000, "q1-26", "10-Q", "2026-05-06"),
+    ])
+    assert spans(conn, "net_income") == [
+        (date(2025, 1, 1), date(2025, 3, 31), 4598000, "reported", ["q1-25"])]
+
+
+def test_conflicts_are_resolved_best_first_without_losing_a_chain(conn):
+    # B overlaps both A and C; A beats B (balance sheets), B beats C (filed later). Dropping B
+    # leaves nothing that overlaps C, so C stays: a quarter is only dropped for a kept one.
+    insert_rows(conn, [
+        ("total_assets", None, "2022-12-31", 10, "a", "10-K", "2023-02-01"),
+        ("revenue", "2023-01-01", "2023-03-31", 1, "a", "10-Q", "2023-05-01"),
+        ("total_assets", None, "2023-03-31", 11, "a", "10-Q", "2023-05-01"),
+        ("revenue", "2023-02-15", "2023-05-15", 2, "b", "10-Q", "2023-09-01"),
+        ("revenue", "2023-04-02", "2023-06-30", 3, "c", "10-Q", "2023-08-01"),
+    ])
+    assert [r[2] for r in spans(conn, "revenue")] == [1, 3]
+
+
+def test_a_clean_series_is_unchanged(conn):
+    # calendar quarters with a derived Q4, and a next quarter tagged to start a day early
+    # (Dec 30 after a quarter ending Dec 31): one series, overlap tolerated (up to 7 days)
+    insert_rows(conn, [
+        ("revenue", "2023-01-01", "2023-03-31", 100, "q1", "10-Q", "2023-05-01"),
+        ("revenue", "2023-04-01", "2023-06-30", 110, "q2", "10-Q", "2023-08-01"),
+        ("revenue", "2023-01-01", "2023-06-30", 210, "q2", "10-Q", "2023-08-01"),
+        ("revenue", "2023-07-01", "2023-09-30", 120, "q3", "10-Q", "2023-11-01"),
+        ("revenue", "2023-01-01", "2023-09-30", 330, "q3", "10-Q", "2023-11-01"),
+        ("revenue", "2023-01-01", "2023-12-31", 460, "k", "10-K", "2024-02-20"),
+        ("revenue", "2023-12-30", "2024-03-31", 105, "q1-24", "10-Q", "2024-05-01"),
+    ])
+    assert spans(conn, "revenue") == [
+        (date(2023, 1, 1), date(2023, 3, 31), 100, "reported", ["q1"]),
+        (date(2023, 4, 1), date(2023, 6, 30), 110, "reported", ["q2"]),
+        (date(2023, 7, 1), date(2023, 9, 30), 120, "reported", ["q3"]),
+        (date(2023, 10, 1), date(2023, 12, 31), 130, "derived", ["q3", "k"]),
+        (date(2023, 12, 30), date(2024, 3, 31), 105, "reported", ["q1-24"]),
+    ]
