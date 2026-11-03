@@ -8,6 +8,7 @@ import type { ChartState } from "../chart/model";
 import { CompanySearch } from "../components/CompanySearch";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { download } from "../download";
+import { day } from "../format";
 import { renderMarkdown } from "../markdown";
 import { Embed } from "../reports/Embeds";
 import { href } from "../route";
@@ -32,6 +33,7 @@ import {
   type EmbedItem,
   type Thesis,
 } from "./model";
+import { useNewerFiling } from "./useRevisit";
 import { useThesisCheck } from "./useThesisCheck";
 
 interface Props {
@@ -135,6 +137,8 @@ function ThesisEditor({ token, item, initial, items, saved, label, readable, onO
   const cursor = useRef<number | null>(null);
   const hasTtm = useHasTtm(token);
   const checks = useThesisCheck(token, item.item_id);
+  // Revisit: the company's newest 10-K/10-Q vs the last check (thesis/revisit.ts)
+  const newer = useNewerFiling(token, checks.history[0], companyId);
   const [hash, setHash] = useState<string | null>(null);
   const [highlight, setHighlight] = useState<{ quote: string; n: number } | null>(null);
 
@@ -326,6 +330,15 @@ function ThesisEditor({ token, item, initial, items, saved, label, readable, onO
             </button>
           )}
           <button className="btn sm ghost" onClick={() => setNotice(null)}>Dismiss</button>
+        </div>
+      )}
+      {newer && !checking && (
+        <div className="report-status revisit no-print" role="status">
+          New {newer.form} filed {day(newer.filed, true)} since your last check — re-check?{" "}
+          <button className="btn sm" onClick={checks.start} disabled={dirty}
+            title={dirty ? "Save first: the check reads the saved thesis" : "Check the thesis again against the new filing (counts as 4 questions)"}>
+            Re-check
+          </button>
         </div>
       )}
       <div className="editor-title">

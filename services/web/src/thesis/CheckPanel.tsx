@@ -3,8 +3,9 @@ import { useId, useMemo } from "react";
 import { ago, day, pct } from "../format";
 import { renderAnswer } from "../markdown";
 import { href, SECTION } from "../route";
-import type { CheckCitation, CheckClaim, CheckFigure, CheckModel, ThesisCheck, ThesisCheckSummary } from "../types";
+import type { CheckCitation, CheckClaim, CheckFigure, CheckModel, ClaimStatus, ThesisCheck, ThesisCheckSummary } from "../types";
 import { asCitations, points, problems, STATUS_LABELS, unverifiedFigures } from "./check";
+import { diffChecks, flagWords, isQuiet, type CheckDiff } from "./revisit";
 import type { ThesisChecks } from "./useThesisCheck";
 
 const CIK = /^\d{10}$/;
@@ -50,7 +51,7 @@ export function CheckPanel({ checks, stale, onQuote, label }: {
           Stale: the thesis changed since this check. Check it again to see the current text checked.
         </p>
       )}
-      {shown ? <CheckBody check={shown} onQuote={onQuote} label={label} /> : run.status !== "running" && (
+      {shown ? <CheckBody check={shown} previous={checks.previous} onQuote={onQuote} label={label} /> : run.status !== "running" && (
         <p className="empty">
           No check yet. “Check my thesis” has the assistant test each factual claim against the filings, compare your
           model's assumptions with history, and list what the latest 10-K or 10-Q says that you don't.
@@ -65,9 +66,15 @@ function historyLabel(c: ThesisCheckSummary): string {
   return `${day(c.created_at, true)} ${c.created_at.slice(11, 16)} · ${n.supported}✓ ${n.contradicted}✗ ${n.unverifiable}?`;
 }
 
-function CheckBody({ check, onQuote, label }: { check: ThesisCheck; onQuote: (q: string) => void; label: (c: string) => string }) {
+function CheckBody({ check, previous, onQuote, label }: {
+  check: ThesisCheck;
+  previous: ThesisCheck | null;
+  onQuote: (q: string) => void;
+  label: (c: string) => string;
+}) {
   const r = check.result;
   const issues = problems(r);
+  const diff = useMemo(() => (previous ? diffChecks(previous.result, r) : null), [previous, r]);
   return (
     <div className="check-body">
       <p className="faint small">
@@ -80,6 +87,7 @@ function CheckBody({ check, onQuote, label }: { check: ThesisCheck; onQuote: (q:
       ) : (
         r.verification.used_data && <p className="badge ok">✓ Every figure and filing traced to data the assistant read</p>
       )}
+      {diff && previous && <Changes diff={diff} since={previous.created_at} onQuote={onQuote} />}
       {r.summary && <Text text={r.summary} figures={r.verification.figures} />}
       {r.notes.length > 0 && (
         <ul className="check-notes small">
@@ -117,6 +125,55 @@ function CheckBody({ check, onQuote, label }: { check: ThesisCheck; onQuote: (q:
         <p className="empty">Nothing material from the latest filings that the thesis leaves out.</p>
       )}
     </div>
+  );
+}
+
+/** What changed since the previous check (revisit.ts diffChecks). Quotes are plain text (React
+ * escapes them; they are the thesis's own words), statuses are labels: no model prose here. */
+export function Changes({ diff, since, onQuote }: { diff: CheckDiff; since: string; onQuote: (q: string) => void }) {
+  const when = day(since, true);
+  const badge = (s: ClaimStatus) => <span className={`status-badge ${s}`}>{STATUS_LABELS[s]}</span>;
+  const quote = (q: string) => (
+    <button className="claim-quote" onClick={() => onQuote(q)} title="Show this sentence in the thesis">“{q}”</button>
+  );
+  return (
+    <section className="check-changes" aria-label={`Changes since ${when}`}>
+      <h3>Changes since {when}</h3>
+      {isQuiet(diff) ? (
+        <p className="faint small">
+          No claim changed status ({diff.unchanged} the same), no assumption flag changed.
+        </p>
+      ) : (
+        <ul className="changes small">
+          {diff.flipped.map((f, i) => (
+            <li key={`f${i}`} className="change flipped">
+              {badge(f.from)} → {badge(f.to)} {quote(f.quote)}
+            </li>
+          ))}
+          {diff.added.map((c, i) => (
+            <li key={`a${i}`} className="change added">
+              <span className="muted">New:</span> {badge(c.status)} {quote(c.quote)}
+            </li>
+          ))}
+          {diff.removed.map((c, i) => (
+            <li key={`r${i}`} className="change removed">
+              <span className="muted">No longer checked:</span> {badge(c.status)} <span className="claim-quote missing">“{c.quote}”</span>
+            </li>
+          ))}
+          {diff.flags.map((f, i) => (
+            <li key={`g${i}`} className="change flag">
+              <span className="muted">{f.model} FY{f.fy}E {f.what}:</span> {flagWords(f.what, f.from)} → <b>{flagWords(f.what, f.to)}</b>
+            </li>
+          ))}
+          {diff.modelsAdded.map((m) => <li key={`ma${m}`} className="change added"><span className="muted">Model now checked:</span> {m}</li>)}
+          {diff.modelsRemoved.map((m) => <li key={`mr${m}`} className="change removed"><span className="muted">Model no longer checked:</span> {m}</li>)}
+          {diff.unchanged > 0 && <li className="faint">{diff.unchanged} claim{diff.unchanged === 1 ? "" : "s"} unchanged</li>}
+        </ul>
+      )}
+      {diff.notMentioned.before !== diff.notMentioned.after && (
+        <p className="faint small">Not mentioned: {diff.notMentioned.before} → {diff.notMentioned.after} points.</p>
+      )}
+    </section>
   );
 }
 

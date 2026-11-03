@@ -4,6 +4,8 @@ import { DataNotes } from "../company/DataNotes";
 import { Filings } from "../company/Filings";
 import { Overview } from "../company/Overview";
 import { Peers } from "../company/Peers";
+import { Revenue } from "../company/Revenue";
+import type { ChartState } from "../chart/model";
 import { Ratios, Segments, Statements } from "../company/Tables";
 import { useLoad } from "../company/useLoad";
 import { ErrorPanel, Skeleton } from "../components/States";
@@ -21,6 +23,8 @@ interface Props {
   onWatch: (watch: boolean) => Promise<void>;
   onChart: (name: string) => void;
   onChartMany: (ids: string[], metric: string, transform: "ttm", title: string) => void;
+  /** a Revenue view chart opened in the chart builder */
+  onOpenChart?: (s: ChartState) => void;
   onAsk: (question: string) => void;
   /** saved work, for "New thesis" / "New model" about this company (null: unavailable) */
   saved?: Saved | null;
@@ -28,7 +32,7 @@ interface Props {
 
 /** The tearsheet: who the company is (public metadata), then its data by tab. Identity, the
  * filing index and expected dates are public; values need financials, text needs filings. */
-export function Company({ token, companyId, tab, watched, onWatch, onChart, onChartMany, onAsk, saved }: Props) {
+export function Company({ token, companyId, tab, watched, onWatch, onChart, onChartMany, onOpenChart, onAsk, saved }: Props) {
   const meta = useLoad(companyId, () =>
     screener(token, { company_id: [companyId], columns: HEADER_COLUMNS, sort: "name", limit: 1 }).then(
       (r) => r.rows.find((x) => x.company_id === companyId) ?? null,
@@ -123,6 +127,9 @@ export function Company({ token, companyId, tab, watched, onWatch, onChart, onCh
 
       {tab === "overview" && <Overview token={token} companyId={companyId} name={h.name} row={row} access={row.access} />}
       {tab === "statements" && <Statements token={token} companyId={companyId} name={h.name} ticker={ticker} industry={h.industry} />}
+      {tab === "revenue" && (
+        <Revenue token={token} companyId={companyId} name={h.name} ticker={ticker} saved={saved ?? null} onOpenChart={onOpenChart} />
+      )}
       {tab === "segments" && <Segments token={token} companyId={companyId} name={h.name} />}
       {tab === "ratios" && <Ratios token={token} companyId={companyId} name={h.name} ticker={ticker} industry={h.industry} />}
       {tab === "filings" && <Filings token={token} companyId={companyId} name={h.name} canRead={row.access.includes("filings")} />}

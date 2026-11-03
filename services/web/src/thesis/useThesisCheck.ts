@@ -3,10 +3,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, checkThesis, thesisCheck, thesisChecks } from "../api";
 import type { AgentEvent, ThesisCheck, ThesisCheckSummary } from "../types";
 
-/** One thesis's checks: the history (newest first), the one shown, and a run in progress. */
+/** One thesis's checks: the history (newest first), the one shown, the one before it (what
+ * "Changes since" compares with), and a run in progress. */
 export interface ThesisChecks {
   history: ThesisCheckSummary[];
   shown: ThesisCheck | null;
+  /** the check just older than `shown` in the history, once read; null if none */
+  previous: ThesisCheck | null;
   run: { status: "idle" } | { status: "running"; tools: number } | { status: "error"; message: string };
   loading: boolean;
   start: () => void;
@@ -19,8 +22,10 @@ export function useThesisCheck(token: string, itemId: string): ThesisChecks {
   const [shown, setShown] = useState<ThesisCheck | null>(null);
   const [run, setRun] = useState<ThesisChecks["run"]>({ status: "idle" });
   const [loading, setLoading] = useState(true);
+  const [previous, setPrevious] = useState<ThesisCheck | null>(null);
   const abort = useRef<AbortController | null>(null);
   const live = useRef(true);
+  const read = useRef(new Map<string, ThesisCheck>());
 
   useEffect(() => {
     live.current = true;
@@ -84,6 +89,34 @@ export function useThesisCheck(token: string, itemId: string): ThesisChecks {
       });
   }, [token, itemId, run.status]);
 
+  // the check before the shown one, for "Changes since" (results never change: kept once read)
+  const shownId = shown?.check_id;
+  const at = shownId ? history.findIndex((c) => c.check_id === shownId) : -1;
+  const beforeId = at >= 0 ? history[at + 1]?.check_id : undefined;
+  useEffect(() => {
+    if (shown) read.current.set(shown.check_id, shown);
+    if (!beforeId) {
+      setPrevious(null);
+      return;
+    }
+    const hit = read.current.get(beforeId);
+    if (hit) {
+      setPrevious(hit);
+      return;
+    }
+    let ok = true;
+    setPrevious(null);
+    thesisCheck(token, itemId, beforeId)
+      .then((c) => {
+        read.current.set(c.check_id, c);
+        if (ok && live.current) setPrevious(c);
+      })
+      .catch(() => undefined); // no "Changes since"; the check itself still shows
+    return () => {
+      ok = false;
+    };
+  }, [token, itemId, shownId, beforeId]);
+
   const stop = useCallback(() => abort.current?.abort(), []);
-  return { history, shown, run, loading, start, stop, show };
+  return { history, shown, previous, run, loading, start, stop, show };
 }

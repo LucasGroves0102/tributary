@@ -586,6 +586,11 @@ export function App(props: Props = {}) {
                   go({ view: "chart" });
                 }}
                 onChartMany={chartMany}
+                onOpenChart={(s) => {
+                  setChart(() => s);
+                  saved.close("chart");
+                  go({ view: "chart" });
+                }}
                 onAsk={(q) => {
                   assistant.setDraft(q);
                   focusAssistant();

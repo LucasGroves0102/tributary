@@ -25,7 +25,11 @@ POST /v1/thesis-checks (server.py) with a thesis's item id:
    one dropped, quotes checked against the thesis text.
 5. It is saved through the Query API (`POST /v1/thesis-checks/{id}`, user's token; nginx keeps
    it off the public site) with the thesis text's hash, so the web app shows when a check is
-   stale.
+   stale, and `filings` (Revisit): per company in the scope, the newest 10-K/10-Q in the SEC
+   filing index when the check ran (`read_filings`: public metadata from
+   `/v1/companies/{id}/filing-index`, read as the user, never a tool result, so it verifies
+   nothing) and the newest filing the result's verified citations rely on. The web app offers a
+   re-check when the index has a newer 10-K/10-Q than `latest`.
 
 The model never names the user, the thesis or where the check is saved: those come from the
 token and the request, and every read is the user's own Query API call."""
@@ -76,6 +80,7 @@ MAX_SCOPE = 12
 MAX_CLAIMS = 25
 MAX_NOT_MENTIONED = 8
 MAX_CITATIONS = 6
+PERIODIC_FORMS = ("10-K", "10-Q")  # what "a newer filing since the check" means (Revisit)
 SUBMIT = "submit_check"
 STATUSES = ("supported", "contradicted", "unverifiable")
 FIGURE_STATUSES = ("verified", "derived", "quoted", "unverified")
@@ -218,6 +223,8 @@ class Job:
     # company_id -> {"name": str | None, "access": [tiers]}
     companies: dict[str, dict] = field(default_factory=dict)
     prefetched: list[str] = field(default_factory=list)  # tool results read before the loop
+    # company_id -> newest 10-K/10-Q in the filing index at check time (None: unknown)
+    latest: dict[str, dict | None] = field(default_factory=dict)
 
     @property
     def allowed(self) -> set[str]:
@@ -343,6 +350,49 @@ def read_history(api: ToolRunner, job: Job) -> None:
         body = json.loads(content)
         m.history = annual_history(body.get("rows") or [], MAX_HISTORY)
         m.check = check_assumptions(m.history, m.assumptions)
+
+
+def _filing_ref(row: Any, forms: tuple[str, ...] | None = None) -> dict | None:
+    """{accession_no, form, filed} from an index row or citation, or None if malformed."""
+    if not isinstance(row, dict):
+        return None
+    acc, form, filed = row.get("accession_no"), row.get("form"), row.get("filed")
+    if not (isinstance(acc, str) and ACCESSION.fullmatch(acc) and isinstance(form, str)
+            and 0 < len(form) <= 20 and isinstance(filed, str) and ISO_DATE.fullmatch(filed)):
+        return None
+    if forms is not None and form not in forms:
+        return None
+    return {"accession_no": acc, "form": form, "filed": filed}
+
+
+def read_filings(api: Api, job: Job) -> None:
+    """Revisit: each scope company's newest 10-K/10-Q in the SEC filing index (public
+    metadata), as the user. Not a tool result: it goes into the stored result only, never into
+    the evidence. A failure leaves None (the web app then compares against the check's date)."""
+    for cid in job.companies:
+        r = api.call("GET", f"/v1/companies/{cid}/filing-index",
+                      params={"form": list(PERIODIC_FORMS), "limit": 1})
+        body = _json(r) if r is not None and r.status_code == 200 else None
+        rows = body.get("filings") if isinstance(body, dict) else None
+        job.latest[cid] = (_filing_ref(rows[0], PERIODIC_FORMS)
+                           if isinstance(rows, list) and rows else None)
+
+
+def _newer(a: dict | None, b: dict) -> bool:
+    return a is None or (b["filed"], b["accession_no"]) > (a["filed"], a["accession_no"])
+
+
+def filings_basis(job: Job, cited: list[dict]) -> list[dict]:
+    """Per scope company: `latest` (the index's newest 10-K/10-Q at check time) and
+    `evidence` (the newest filing among the result's verified citations of that company)."""
+    evidence: dict[str, dict] = {}
+    for c in cited:
+        ref = _filing_ref(c) if c.get("verified") else None
+        cid = c.get("company_id")
+        if ref and isinstance(cid, str) and _newer(evidence.get(cid), ref):
+            evidence[cid] = ref
+    return [{"company_id": cid, "latest": job.latest.get(cid), "evidence": evidence.get(cid)}
+            for cid in job.companies]
 
 
 def _escape(data: Any) -> str:
@@ -590,6 +640,8 @@ def assemble(job: Job, submitted: dict, answer: Answer, results: list[str], now:
         notes.append(f"The assistant stopped before finishing ({answer.stop}).")
     as_of = newest_as_of(results)
     unknown = sorted(set(ev.unknown))
+    cited = [c for x in (*claims, *not_mentioned) for c in x["citations"]] + [
+        c for m in assumptions for y in m.get("years", []) for c in y["citations"]]
     result: dict[str, Any] = {
         "version": 1,
         "thesis": {"item_id": job.item_id, "title": job.title, "company_id": job.company_id,
@@ -613,6 +665,7 @@ def assemble(job: Job, submitted: dict, answer: Answer, results: list[str], now:
             "input_tokens", "output_tokens", "cache_read_input_tokens",
             "cache_creation_input_tokens")},
         "cost_usd": answer.cost_usd,
+        "filings": filings_basis(job, cited),
     }
     result["verification"]["ok"] = (not unknown and all(
         f["status"] != "unverified" for f in ev.figures) and (as_of is not None or not results))
@@ -631,7 +684,8 @@ def save(api: Api, job: Job, result: dict) -> dict:
         raise CheckError(r.status_code, "the check wasn't saved: "
                          + (detail if isinstance(detail, str) else f"error {r.status_code}"))
     return {k: body.get(k) for k in ("check_id", "item_id", "text_hash", "model", "cost_usd",
-                                     "counts", "created_at")}
+                                     "counts", "created_at", "company_id", "checked_at",
+                                     "filings")}
 
 
 class Checker:
@@ -648,6 +702,7 @@ class Checker:
         _models(self._api, job)
         build_scope(self._api, job)
         read_history(self._api, job)
+        read_filings(self._api, job)
         return job
 
     def events(self, job: Job) -> Iterator[dict]:

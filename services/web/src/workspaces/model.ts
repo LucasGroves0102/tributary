@@ -48,11 +48,16 @@ export function stateOf(c: Current): Record<string, unknown> {
         range: c.chart.range,
         align: c.chart.align,
         // a metric layer still being filled in isn't saved
-        layers: c.chart.layers.filter((l) => l.kind === "formula" || (l.companyId && l.metric)).map((l) => {
+        layers: c.chart.layers.filter((l) => l.kind === "formula" || (l.companyId && l.metric && (l.kind === "metric" || l.members?.length))).map((l) => {
           const out: Record<string, unknown> = { kind: l.kind, transform: l.transform, type: l.type, axis: l.axis };
           if (l.kind === "metric") {
             out.companyId = l.companyId;
             out.metric = l.metric;
+          } else if (l.kind === "segment") {
+            out.companyId = l.companyId;
+            out.metric = l.metric;
+            out.segmentAxis = l.segmentAxis;
+            out.members = l.members;
           } else {
             out.formula = l.formula ?? "";
             if (l.defaultCompany) out.defaultCompany = l.defaultCompany;
@@ -78,7 +83,9 @@ export function stateOf(c: Current): Record<string, unknown> {
 
 /** Whether there is anything to save: a chart needs a complete layer, comps a target. */
 export function canSave(c: Current): boolean {
-  if (c.kind === "chart") return c.chart.layers.some((l) => (l.kind === "metric" ? l.companyId && l.metric : l.formula?.trim()));
+  if (c.kind === "chart") {
+    return c.chart.layers.some((l) => (l.kind === "metric" ? l.companyId && l.metric : l.kind === "segment" ? l.companyId && l.members?.length : l.formula?.trim()));
+  }
   if (c.kind === "comps") return !!cleanCompare(c.compare).target;
   return true;
 }

@@ -155,6 +155,21 @@ sidebar with the other items (rename, duplicate, delete as usual).
   current text (SHA-256 of the company id, a newline and the Markdown; `textHash`, the same as
   agent-api's `text_hash`, with a shared test vector) is labelled stale. All of the assistant's
   text renders through `markdown.ts` `renderAnswer`, like chat answers.
+- **Revisit** (`thesis/revisit.ts`, pure; `useRevisit.ts`): on page load the thesis page asks the
+  company's filing index for its newest 10-K/10-Q (`/v1/companies/{id}/filing-index?form=10-K&
+  form=10-Q&limit=1`, public metadata, one request per company per page load) and compares it
+  with the last check: newer when the check recorded the index's newest 10-K/10-Q (`filings[].
+  latest`) and this one differs and was filed on or after it, or, for checks stored before that
+  record, when it was filed after the check's day. Then "New 10-Q filed <date> since your last
+  check — re-check?" with a Re-check button (the same check, 4 questions). The workspace page
+  shows the same line beside each such thesis (its checks list gives the thesis's company and
+  record: one request per thesis, first 20). No background job. After a re-check, the panel
+  opens with **Changes since <date>** against the check before the one shown (`diffChecks`):
+  claims matched by quote (normalised like the highlighter, trailing punctuation ignored;
+  repeats in order) with changed statuses (Supported → Contradicted, ...), new and no-longer
+  checked claims, model assumption flags that changed (by model and fiscal year), models added or
+  removed, and the count of points not mentioned. Quotes there are plain text (React-escaped),
+  statuses are labels; the assistant's prose still renders only in the claims below.
 - **Model** (`#/model/{id}`, `ModelPage.tsx`, pure parts in `models/model.ts`): a company's
   fiscal years of revenue and operating income, read live from `/v1/companies/{id}/financials`
   (`view=ttm`, 40 quarters: the TTM at each fiscal Q4 is the fiscal year, as the Statements tab's
@@ -204,6 +219,42 @@ asks the API nothing. Clicking a point
 reader. Filing markers put each company's 10-Ks and 10-Qs (public index) and 8-K results (item
 2.02, from parsed filings) on the time axis. "View as table" shows the plotted values with their
 sources as a data table.
+
+Revenue view (the company page's Revenue tab, `src/company/Revenue.tsx`; rules in
+`company/revenue.ts`'s docstring): three sections, each chart an ordinary chart state, so "Save
+to workspace" (`workspaces/SaveChart.tsx`: name and workspace, through the same item route and
+state cleaner as the chart builder's Save as, without becoming the chart builder's open item)
+makes it a chart item a thesis there can embed, and "Open in Chart builder" opens it there.
+Values need financials access, like Statements.
+
+- **Revenue by segment and geography** (TTM or Quarterly, fiscal periods; `/v1/companies/{id}/
+  segments?metric=revenue`): per axis (business segment, geography, product/service) a chart and
+  a members × periods table (last 8 periods), each value's hover naming its filing. A member
+  missing a period shows "—", never zero; one reported in part of the window says "from FY2024
+  Q1" / "until FY2023 Q4". The 6 largest members (by the latest period) are named, the rest folded
+  into "Other (n members)" (the sum of those reporting each period). A "Sum vs reported revenue"
+  row compares the members with `/financials` revenue: bars stack only when every period is within
+  2% of 100%, otherwise each member is a line and the table says the breakdown is partial or
+  overlapping (a few named countries, two breakdowns on one axis).
+- **Growth decomposition** (TTM, year over year): each member's contribution in percentage points
+  = its TTM change over four quarters / company TTM revenue four quarters earlier (members
+  reporting both periods), "Not attributed" = revenue growth minus their sum, and revenue
+  growth; chart: contributions as stacked bars (negatives down) with revenue growth (TTM YoY) as
+  a line.
+- **Revenue quality**: per quarter, TTM revenue, quarter-end receivables, DSO (receivables / TTM
+  revenue × 365), both YoY rates and their gap. A quarter is **flagged when receivables grew more
+  than 10 percentage points faster than TTM revenue** over the same four quarters (`QUALITY_FLAG_
+  POINTS`); the chart is two formula-API lines (`revenue` YoY over TTM, `receivables /
+  receivables[-4q] - 1`).
+
+Segment layers (`chart/segments.ts`, `chart/fetch.ts`): the Revenue view's segment charts are
+chart builder layers of kind `segment` (company, segment metric, axis, 1-20 members), read from
+`/segments` instead of `/v1/formulas/evaluate` (one request per company, axis, metric and view,
+shared by the chart's layers), with transforms Quarterly, TTM, YoY and Contribution to growth.
+They render, save, embed and restore like any layer (`model.ts` `layerKey`/`segmentRequest`,
+`restoreChart`); the chart builder shows them as "Segments" cards (members fixed: they come from
+the Revenue view). The assistant's page context leaves them out and reports the Revenue tab as
+`segments` (agent-api's context knows neither).
 
 Data notes (`src/company/notes.ts`, Query API `/v1/companies/{id}/data-notes`, `/v1/data-notes`):
 the tearsheet's Data notes tab groups what the automated checks found (freshness, restated
@@ -278,6 +329,7 @@ React.lazy); once signed in and idle the app prefetches them, so switching scree
 | + Workspace (`#/workspace/…`), Report (`#/report/…`) | + 8.3 kB (3.4 kB) each, Report + markdown, LayerChart, SmallMultiples 2.4 kB | |
 | + Thesis (`#/thesis/…`), Model (`#/model/…`) (2026-11-02) | + ThesisPage 9.6 kB (4.0 kB) + markdown, Embeds 5.0 kB, ModelView 3.1 kB; ModelPage 7.3 kB (2.8 kB) + LayerChart; NewWork 3.5 kB (1.6 kB) with Company or Workspace | |
 | + Check my thesis (2026-11-02) | ThesisPage 21.7 kB (8.1 kB) with the check panel | |
+| + Revenue tab, Revisit (2026-11-02) | Company 30.0 kB (9.5 kB) with the Revenue view and its chart renderer; ThesisPage 22.8 kB (8.1 kB) | |
 
 Before splitting, everything was one 493.6 kB (156.3 kB gzip) script; the first screen now
 loads a third less. Most of what remains is React DOM. Chart data is cached in memory per

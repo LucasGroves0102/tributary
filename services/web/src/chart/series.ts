@@ -79,7 +79,7 @@ export function toSeries(
     };
   });
   if (frequency === "annual") points = annualPoints(points);
-  let unit = layer.transform === "yoy" || layer.transform === "qoq" ? "pct" : data.unit;
+  let unit = layer.transform === "yoy" || layer.transform === "qoq" || layer.transform === "contrib" ? "pct" : data.unit;
   if (layer.transform === "idx") {
     // index to the first value in range; meaningless from zero or a negative base
     const base = points.find((p) => p.y !== null)?.y ?? null;

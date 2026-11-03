@@ -36,6 +36,9 @@ ACC = "0001045810-26-000012"
 CHART = {"title": "NVDA revenue", "range": 3, "align": "calendar", "layers": [
     {"kind": "metric", "companyId": NVDA, "metric": "revenue", "transform": "ttm",
      "type": "line", "axis": "L"}]}
+SEGMENT = {"kind": "segment", "companyId": NVDA, "metric": "revenue",
+           "segmentAxis": "business_segment", "members": ["nvda:ComputeAndNetworkingSegmentMember"],
+           "transform": "q", "type": "sbar", "axis": "L"}
 COMPS = {"target": NVDA, "peers": [AAPL, TSLA], "cols": ["revenue_ttm", "operating_margin_ttm"]}
 SCREEN = {"industry": "software", "margin": 20, "sort": "-revenue_ttm"}
 SAVED_CHART = validate_state("chart", CHART)  # as stored: defaults filled in
@@ -401,6 +404,17 @@ BAD_STATES = [
     ("chart", {**CHART, "layers": [{"kind": "formula", "formula": "x" * 501}]}),
     ("chart", {**CHART, "layers": [{"kind": "formula", "formula": "a", "metric": "revenue"}]}),
     ("chart", {**CHART, "layers": [{**CHART["layers"][0], "id": 1}]}),
+    # segment layers (the Revenue view): complete, members by pattern, segment transforms only
+    ("chart", {**CHART, "layers": [{**SEGMENT, "members": []}]}),
+    ("chart", {**CHART, "layers": [{**SEGMENT, "members": ["a b"]}]}),
+    ("chart", {**CHART, "layers": [{**SEGMENT, "members": ["x:A"] * 2}]}),
+    ("chart", {**CHART, "layers": [{**SEGMENT, "members": [f"x:M{i}" for i in range(21)]}]}),
+    ("chart", {**CHART, "layers": [{**SEGMENT, "segmentAxis": "reconciliation"}]}),
+    ("chart", {**CHART, "layers": [{**SEGMENT, "segmentAxis": None}]}),
+    ("chart", {**CHART, "layers": [{**SEGMENT, "transform": "ps"}]}),
+    ("chart", {**CHART, "layers": [{**SEGMENT, "formula": "revenue"}]}),
+    ("chart", {**CHART, "layers": [{**CHART["layers"][0], "transform": "contrib"}]}),
+    ("chart", {**CHART, "layers": [{**CHART["layers"][0], "members": ["x:A"]}]}),
     ("comps", {"peers": [AAPL]}),  # no target
     ("comps", {"target": NVDA, "peers": [AAPL] * 2}),
     ("comps", {"target": NVDA, "peers": [NVDA]}),
@@ -503,6 +517,15 @@ def test_state_size_cap():
     validate_state("chart", many)  # the largest valid chart fits
     with pytest.raises(StateError):
         validate_state("notes", {})
+
+
+def test_segment_layers():
+    """The Revenue view saves its charts as chart items with segment layers."""
+    saved = validate_state("chart", {**CHART, "layers": [
+        SEGMENT, {**SEGMENT, "transform": "contrib", "type": "sbar", "name": "Other (3)",
+                  "members": ["country:US", "srt:AsiaMember", "nvda:AllOtherCountriesMember"]}]})
+    assert saved["layers"][0]["members"] == ["nvda:ComputeAndNetworkingSegmentMember"]
+    assert saved["layers"][1]["transform"] == "contrib"
 
 
 def test_chart_range_frequency_and_deck_settings():

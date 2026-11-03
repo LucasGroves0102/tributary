@@ -2,8 +2,9 @@ import { useEffect, useState } from "react";
 
 import { ApiError, workspace as fetchWorkspace } from "../api";
 import { ErrorPanel, Skeleton } from "../components/States";
-import { ago } from "../format";
+import { ago, day } from "../format";
 import { href } from "../route";
+import { useNewerFilings } from "../thesis/useRevisit";
 import type { SavedWorkspaceFull } from "../types";
 import { isPageKind, KIND_LABELS, KIND_PAGES } from "../workspaces/model";
 import { NewWork } from "../workspaces/NewWork";
@@ -49,6 +50,9 @@ export function WorkspacePage({ token, workspaceId, writer, onOpen, version, sav
       live = false;
     };
   }, [token, workspaceId, version, retry]);
+  // Revisit: theses whose company filed a 10-K/10-Q since their last check
+  const theses = loaded.state === "ok" ? loaded.ws.items.filter((i) => i.kind === "thesis").map((i) => i.item_id) : [];
+  const newer = useNewerFilings(token, theses);
 
   if (loaded.state === "loading") return <div className="page"><Skeleton lines={6} label="Loading the workspace" /></div>;
   if (loaded.state === "error") {
@@ -108,6 +112,15 @@ export function WorkspacePage({ token, workspaceId, writer, onOpen, version, sav
                   <b>{i.name}</b>
                 </button>{" "}
                 <span className="faint">updated {ago(i.updated_at)}</span>
+                {newer[i.item_id] && (
+                  <>
+                    {" "}
+                    <button className="link revisit small" onClick={() => onOpen(i.item_id)}
+                      title="Open the thesis to check it again against the new filing">
+                      New {newer[i.item_id]!.form} filed {day(newer[i.item_id]!.filed, true)} since your last check — re-check?
+                    </button>
+                  </>
+                )}
               </li>
             ))}
           </ul>

@@ -92,7 +92,8 @@ export function uiContext(route: Route, chart: ChartState, name: (id: string) =>
   // the status page is an information page like About (agent-api's pages have no "status")
   const ctx: UiContext = { page: route.view === "status" ? "about" : route.view };
   if (route.view === "company" || route.view === "filing") ctx.company_id = route.companyId;
-  if (route.view === "company" && route.tab) ctx.tab = route.tab;
+  // agent-api's tabs predate Revenue: it is reported as the segments tab (same data family)
+  if (route.view === "company" && route.tab) ctx.tab = route.tab === "revenue" ? "segments" : route.tab;
   if (route.view === "compare" && route.compare) {
     const c = route.compare;
     ctx.compare = { ...(c.target ? { target: c.target } : {}), peers: c.peers ?? [], columns: columnsOf(c) };
@@ -107,7 +108,9 @@ export function uiContext(route: Route, chart: ChartState, name: (id: string) =>
   }
   if (route.view === "companies" && route.screen) ctx.screen = { ...route.screen, page: undefined } as UiContext["screen"];
   if (route.view === "chart") {
-    const layers = chart.layers.map((l) => ({
+    // segment layers stay out: agent-api's context knows metric and formula layers only
+    const shown = chart.layers.filter((l): l is typeof l & { kind: "metric" | "formula" } => l.kind !== "segment");
+    const layers = shown.map((l) => ({
       kind: l.kind,
       ...(l.companyId ? { company_id: l.companyId } : l.defaultCompany ? { company_id: l.defaultCompany } : {}),
       ...((l.companyId ?? l.defaultCompany) && name((l.companyId ?? l.defaultCompany)!)
@@ -115,7 +118,8 @@ export function uiContext(route: Route, chart: ChartState, name: (id: string) =>
         : {}),
       ...(l.metric ? { metric: l.metric } : {}),
       ...(l.formula ? { formula: l.formula.slice(0, 300) } : {}),
-      transform: l.transform,
+      // contrib exists only on segment layers (left out above)
+      transform: l.transform as Exclude<typeof l.transform, "contrib">,
       type: l.type,
       axis: l.axis,
       hidden: l.hidden ?? false,

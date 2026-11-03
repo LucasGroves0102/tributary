@@ -1,0 +1,327 @@
+/** The company Revenue view: revenue by segment and by geography over time, growth
+ * decomposition and revenue quality. Pure, tested without rendering; Revenue.tsx draws it.
+ * Every chart here is an ordinary chart state (segment layers, chart/segments.ts; metric and
+ * formula layers), so it can be saved to a workspace, embedded in a thesis or opened in the
+ * chart builder.
+ *
+ * Members (gold.segments, `/v1/companies/{id}/segments`):
+ *   - The API merges a member renamed between filings (`member_aliases`); members still differ
+ *     period to period when a company reorganises its segments or discloses a country only in
+ *     some filings. A member missing a period is shown as a gap ("—"), never as zero, and a
+ *     member reported only in part of the window says so ("from FY2024 Q1", "until FY2023 Q4").
+ *   - At most SHOWN members are drawn by name (the largest by their latest value); the rest are
+ *     folded into one "Other (n members)" row and layer: the sum of those that report each
+ *     period. Reconciliation members (corporate, eliminations) are left out, as on Segments.
+ *   - Coverage: per period, the members' sum over the company's reported revenue (the same view,
+ *     from `/financials`). Members can overlap (two breakdowns on one axis) or cover only part of
+ *     revenue (a few named countries); bars stack only when every period's coverage is within
+ *     COVERAGE_TOLERANCE of 100%, else each member is a line, and the table says how far off.
+ *
+ * Growth decomposition (over TTM values, year over year): a member's contribution to revenue
+ * growth in percentage points = (member TTM − member TTM four quarters earlier) / (company TTM
+ * revenue four quarters earlier), over members that report both periods ("Other" folded the
+ * same way). "Not attributed" = total growth − the sum of contributions: members missing a
+ * period, a breakdown that doesn't add up to revenue, and rounding.
+ *
+ * Revenue quality: DSO = receivables at the quarter end / TTM revenue × 365. Flagged when
+ * receivables grew more than QUALITY_FLAG_POINTS (10) percentage points faster than TTM revenue
+ * over the same four quarters (receivables YoY − TTM revenue YoY > 10 pts): sales booked faster
+ * than cash comes in, or customers paying later. A flag is a prompt to read the filing (MD&A,
+ * the receivables note), not a verdict. */
+
+import type { ChartState, Layer } from "../chart/model";
+import { SEGMENT_AXES, type SegmentAxisKind } from "../chart/segments";
+import { periodKey } from "../chart/series";
+import type { FinancialRow, SegmentRow } from "../types";
+
+export const SHOWN = 6;
+export const PERIODS = 8;
+export const COVERAGE_TOLERANCE = 0.02;
+export const QUALITY_FLAG_POINTS = 10;
+export const AXIS_TITLES: Record<SegmentAxisKind, string> = {
+  business_segment: "Revenue by business segment",
+  geography: "Revenue by geography",
+  product_service: "Revenue by product or service",
+};
+
+export type View = "quarter" | "ttm";
+
+export interface MemberRow {
+  /** members summed in this row: one, or the folded ones */
+  members: string[];
+  label: string;
+  /** "from FY2024 Q1" / "until FY2023 Q4" / "some periods missing" */
+  note: string | null;
+  values: (number | null)[];
+  /** a cell's hover: the filing behind it */
+  sources: (string | null)[];
+}
+
+export interface AxisTable {
+  axis: SegmentAxisKind;
+  periods: { key: number; label: string; end: string }[];
+  rows: MemberRow[];
+  /** members' sum / reported revenue per period (null: no total that period) */
+  coverage: (number | null)[];
+  /** every period covers revenue within the tolerance: the chart stacks */
+  additive: boolean;
+}
+
+const num = (v: string | undefined | null): number | null => {
+  if (v === undefined || v === null) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
+
+/** Company totals by fiscal period key, for one metric. */
+export function totalsByKey(rows: FinancialRow[], metric: string): Map<number, number> {
+  const out = new Map<number, number>();
+  for (const r of rows) {
+    const k = periodKey(r.fiscal_period);
+    const v = num(r.value);
+    if (r.metric === metric && k !== null && v !== null) out.set(k, v);
+  }
+  return out;
+}
+
+interface Cell {
+  value: number;
+  row: SegmentRow;
+}
+
+/** member → key → cell, for one axis of revenue rows */
+function grid(rows: SegmentRow[], axis: SegmentAxisKind): { cells: Map<string, Map<number, Cell>>; labels: Map<string, string>; ends: Map<number, { label: string; end: string }> } {
+  const cells = new Map<string, Map<number, Cell>>();
+  const labels = new Map<string, string>();
+  const ends = new Map<number, { label: string; end: string }>();
+  for (const r of rows) {
+    if (r.axis !== axis || r.metric !== "revenue") continue;
+    const k = periodKey(r.fiscal_period);
+    const v = num(r.value);
+    if (k === null || v === null) continue;
+    const m = cells.get(r.member) ?? new Map<number, Cell>();
+    const seen = m.get(k);
+    if (!seen || r.period_end > seen.row.period_end) m.set(k, { value: v, row: r });
+    cells.set(r.member, m);
+    labels.set(r.member, r.member_label || r.member);
+    const e = ends.get(k);
+    if (!e || r.period_end > e.end) ends.set(k, { label: r.fiscal_period!, end: r.period_end });
+  }
+  return { cells, labels, ends };
+}
+
+const source = (c: Cell | undefined) =>
+  c ? `${c.row.citation.form} filed ${c.row.citation.filed}, ${c.row.citation.accession_no} (${c.row.value_source})` : null;
+
+/** Which axes have revenue members (business segment, geography, product/service order). */
+export function axesOf(rows: SegmentRow[]): SegmentAxisKind[] {
+  return SEGMENT_AXES.filter((a) => rows.some((r) => r.axis === a && r.metric === "revenue"));
+}
+
+/** One axis as a table: the latest PERIODS periods, the SHOWN largest members by name and the
+ * rest folded, coverage of reported revenue per period. */
+export function axisTable(rows: SegmentRow[], axis: SegmentAxisKind, totals: Map<number, number>, periods = PERIODS): AxisTable {
+  const { cells, labels, ends } = grid(rows, axis);
+  const keys = [...ends.keys()].sort((a, b) => a - b).slice(-periods);
+  const inWindow = [...cells.entries()].filter(([, m]) => keys.some((k) => m.has(k)));
+  // largest first by the latest period's value; members that stopped reporting go after the
+  // ones still reporting, by their own latest value
+  const now = keys.at(-1);
+  const latest = (m: Map<number, Cell>) => {
+    for (let i = keys.length - 1; i >= 0; i--) {
+      const c = m.get(keys[i]!);
+      if (c) return c.value;
+    }
+    return -Infinity;
+  };
+  const current = (m: Map<number, Cell>) => (now !== undefined ? m.get(now)?.value ?? -Infinity : -Infinity);
+  inWindow.sort((a, b) => current(b[1]) - current(a[1]) || latest(b[1]) - latest(a[1]) || a[0].localeCompare(b[0]));
+  const named = inWindow.length > SHOWN + 1 ? inWindow.slice(0, SHOWN) : inWindow;
+  const folded = inWindow.length > SHOWN + 1 ? inWindow.slice(SHOWN) : [];
+
+  const note = (has: boolean[]): string | null => {
+    const first = has.indexOf(true);
+    const last = has.lastIndexOf(true);
+    if (first > 0 && last === has.length - 1) return `from ${ends.get(keys[first]!)!.label}`;
+    if (first === 0 && last < has.length - 1) return `until ${ends.get(keys[last]!)!.label}`;
+    if (has.some((h) => !h)) return "some periods missing";
+    return null;
+  };
+  const out: MemberRow[] = named.map(([member, m]) => {
+    const has = keys.map((k) => m.has(k));
+    return {
+      members: [member],
+      label: labels.get(member) ?? member,
+      note: note(has),
+      values: keys.map((k) => m.get(k)?.value ?? null),
+      sources: keys.map((k) => source(m.get(k))),
+    };
+  });
+  if (folded.length) {
+    const values = keys.map((k) => {
+      const present = folded.map(([, m]) => m.get(k)).filter((c): c is Cell => !!c);
+      return present.length ? present.reduce((s, c) => s + c.value, 0) : null;
+    });
+    out.push({
+      members: folded.map(([m]) => m),
+      label: `Other (${folded.length} members)`,
+      note: "the sum of the members that report each period",
+      values,
+      sources: keys.map(() => null),
+    });
+  }
+  const coverage = keys.map((k, i) => {
+    const total = totals.get(k);
+    const sum = out.reduce((s, r) => s + (r.values[i] ?? 0), 0);
+    return total && total > 0 && out.some((r) => r.values[i] !== null) ? sum / total : null;
+  });
+  return {
+    axis,
+    periods: keys.map((k) => ({ key: k, label: ends.get(k)!.label, end: ends.get(k)!.end })),
+    rows: out,
+    coverage,
+    additive: coverage.length > 0 && coverage.every((c) => c !== null && Math.abs(c - 1) <= COVERAGE_TOLERANCE),
+  };
+}
+
+function segmentLayers(t: AxisTable, companyId: string, transform: Layer["transform"], type: Layer["type"], startId: number): Layer[] {
+  return t.rows.slice(0, 11).map((r, i) => ({
+    id: startId + i,
+    kind: "segment",
+    companyId,
+    metric: "revenue",
+    segmentAxis: t.axis,
+    members: r.members.slice(0, 20),
+    transform,
+    type,
+    axis: "L",
+    name: r.label.slice(0, 80),
+    color: i % 8,
+  }));
+}
+
+/** The axis over time as a chart: stacked bars when the members add up to revenue, else lines. */
+export function axisChart(t: AxisTable, companyId: string, ticker: string, view: View): ChartState {
+  const layers = segmentLayers(t, companyId, view === "quarter" ? "q" : "ttm", t.additive ? "sbar" : "line", 1);
+  return {
+    title: `${ticker}: ${AXIS_TITLES[t.axis].toLowerCase()}${view === "ttm" ? " (TTM)" : ""}`,
+    layers,
+    range: 3,
+    align: "fiscal",
+    nextId: layers.length + 1,
+  };
+}
+
+export interface Decomposition {
+  periods: { key: number; label: string }[];
+  /** per member row: contribution in percentage points per period (null: not both periods) */
+  rows: { label: string; members: string[]; points: (number | null)[] }[];
+  /** company revenue growth, TTM over TTM four quarters earlier, in points */
+  total: (number | null)[];
+  /** total − the sum of contributions */
+  unattributed: (number | null)[];
+}
+
+/** Contributions to TTM revenue growth, year over year, for the table's latest `n` periods.
+ * `t` must be built from TTM rows and `totals` from TTM revenue. */
+export function decompose(t: AxisTable, rows: SegmentRow[], totals: Map<number, number>, n = 4): Decomposition {
+  const { cells } = grid(rows, t.axis);
+  const periods = t.periods.slice(-n);
+  const out = t.rows.map((r) => ({
+    label: r.label,
+    members: r.members,
+    points: periods.map(({ key }) => {
+      const both = r.members.filter((m) => cells.get(m)?.has(key) && cells.get(m)?.has(key - 4));
+      const base = totals.get(key - 4);
+      if (!both.length || !base || base <= 0) return null;
+      const delta = both.reduce((s, m) => s + cells.get(m)!.get(key)!.value - cells.get(m)!.get(key - 4)!.value, 0);
+      return (delta / base) * 100;
+    }),
+  }));
+  const total = periods.map(({ key }) => {
+    const now = totals.get(key);
+    const before = totals.get(key - 4);
+    return now !== undefined && before && before > 0 ? (now / before - 1) * 100 : null;
+  });
+  const unattributed = total.map((g, i) => {
+    if (g === null) return null;
+    const parts = out.map((r) => r.points[i]).filter((p): p is number => p !== null);
+    return parts.length ? g - parts.reduce((s, p) => s + p, 0) : null;
+  });
+  return { periods: periods.map(({ key, label }) => ({ key, label })), rows: out, total, unattributed };
+}
+
+/** The decomposition as a chart: contributions stacked (negatives downward) and revenue growth
+ * (TTM YoY, the formula API) as a line. */
+export function decompositionChart(t: AxisTable, companyId: string, ticker: string): ChartState {
+  const layers = segmentLayers(t, companyId, "contrib", "sbar", 1);
+  const id = layers.length + 1;
+  return {
+    title: `${ticker}: contributions to revenue growth by ${t.axis === "geography" ? "geography" : t.axis === "product_service" ? "product or service" : "business segment"} (TTM, YoY)`,
+    layers: [...layers, { id, kind: "metric", companyId, metric: "revenue", transform: "yoy", type: "line", axis: "L", name: "Revenue growth (TTM YoY)", color: 7 }],
+    range: 3,
+    align: "fiscal",
+    nextId: id + 1,
+  };
+}
+
+export interface QualityRow {
+  label: string;
+  end: string;
+  revenue: number;
+  receivables: number;
+  dso: number;
+  receivablesGrowth: number | null;
+  revenueGrowth: number | null;
+  /** receivables growth − revenue growth, in points */
+  gap: number | null;
+  flagged: boolean;
+}
+
+/** Revenue quality per quarter (the latest `n`), from /financials TTM rows: revenue (TTM) and
+ * receivables (quarter end). */
+export function revenueQuality(rows: FinancialRow[], n = PERIODS): QualityRow[] {
+  const rev = totalsByKey(rows, "revenue");
+  const ar = totalsByKey(rows, "receivables");
+  const label = new Map<number, { label: string; end: string }>();
+  for (const r of rows) {
+    const k = periodKey(r.fiscal_period);
+    if (k !== null && r.metric === "receivables") label.set(k, { label: r.fiscal_period!, end: r.period_end });
+  }
+  const keys = [...ar.keys()].filter((k) => rev.has(k) && (rev.get(k) ?? 0) > 0).sort((a, b) => a - b).slice(-n);
+  return keys.map((k) => {
+    const R = rev.get(k)!;
+    const A = ar.get(k)!;
+    const R0 = rev.get(k - 4);
+    const A0 = ar.get(k - 4);
+    const revenueGrowth = R0 && R0 > 0 ? R / R0 - 1 : null;
+    const receivablesGrowth = A0 && A0 > 0 ? A / A0 - 1 : null;
+    const gap = revenueGrowth !== null && receivablesGrowth !== null ? (receivablesGrowth - revenueGrowth) * 100 : null;
+    return {
+      label: label.get(k)!.label,
+      end: label.get(k)!.end,
+      revenue: R,
+      receivables: A,
+      dso: (A / R) * 365,
+      receivablesGrowth,
+      revenueGrowth,
+      gap,
+      flagged: gap !== null && gap > QUALITY_FLAG_POINTS + 1e-9, // exactly 10 pts isn't (float noise)
+    };
+  });
+}
+
+/** Receivables vs revenue growth as a chart: both YoY lines from the formula API (receivables
+ * at quarter ends, revenue TTM), the flag rule's two sides. */
+export function qualityChart(companyId: string, ticker: string): ChartState {
+  return {
+    title: `${ticker}: receivables vs revenue growth (YoY)`,
+    layers: [
+      { id: 1, kind: "metric", companyId, metric: "revenue", transform: "yoy", type: "line", axis: "L", name: "Revenue growth (TTM YoY)", color: 0 },
+      { id: 2, kind: "formula", formula: "receivables / receivables[-4q] - 1", defaultCompany: companyId, transform: "q", type: "line", axis: "L", name: "Receivables growth (YoY)", color: 2 },
+    ],
+    range: 3,
+    align: "fiscal",
+    nextId: 3,
+  };
+}

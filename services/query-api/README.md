@@ -198,7 +198,9 @@ for that in a demo sandbox, which lists nothing else); the default ranks every c
 
 Workspaces are named folders of saved items in the app database (`workspace_api.py`,
 `workspaces.py`, app migrations 004 and 009): a chart builder state (`chart`: title, range,
-alignment, up to 12 layers), a comps set (`comps`: target, up to 20 peers, columns), a screener
+alignment, up to 12 layers: `metric`, `formula`, or `segment` (company, segment metric,
+`segmentAxis`, 1-20 `members` as XBRL QNames, transforms q / ttm / yoy / contrib; the web app's
+Revenue view saves these, and reads their values from `/segments`)), a comps set (`comps`: target, up to 20 peers, columns), a screener
 screen (`screen`: filters and sort), a thesis (`thesis`) or a model (`model`; both below).
 `GET/POST /v1/workspaces`, `PATCH/DELETE /v1/workspaces/{id}`,
 `POST /v1/workspaces/{id}/duplicate`, `POST /v1/workspaces/{id}/items`,
@@ -289,13 +291,17 @@ checks"), one row per check in `thesis_checks`, kept with the thesis they checke
   thesis (anything else, someone else's included, is the same 404); the result must name it.
 - `GET /v1/workspace-items/{item_id}/checks`: the thesis's checks, newest first, without
   results (check id, created, `text_hash`, model, cost, counts of supported / contradicted /
-  unverifiable claims, flagged assumptions, points not mentioned, `ok`).
+  unverifiable claims, flagged assumptions, points not mentioned, `ok`), plus what the web
+  app's Revisit notice compares, read out of the stored result: the thesis's `company_id`,
+  `checked_at` and `filings` (`[]` for checks stored before Revisit).
   `GET /v1/workspace-items/{item_id}/checks/{check_id}` returns one with its result.
 - **Validated.** `CheckResult` is strict: a supported or contradicted claim and every "not
   mentioned" point cites at least one filing the agent's tools returned (`verified`); citation
   URLs only `https://www.sec.gov/`; accession numbers, section keys, the text hash and
   timestamps by pattern; numbers finite; at most 30 claims, 10 points, 4 models; the
-  verification's `ok` recomputed. At most 120,000 bytes (the table allows 128 KiB); bodies up to
+  verification's `ok` recomputed. `filings` (Revisit, optional so older results still
+  validate; `version` stays 1): at most 12 companies, once each, `latest` a 10-K or 10-Q,
+  `evidence` one of the result's own verified citations of that company. At most 120,000 bytes (the table allows 128 KiB); bodies up to
   160,000 bytes. The newest 20 checks per thesis are kept.
 - **Why a table and not the thesis's state:** the thesis state is written by the browser through
   the generic item routes, so a verdict stored there could be forged; a history of results

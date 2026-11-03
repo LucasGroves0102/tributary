@@ -2,7 +2,6 @@ import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "rea
 
 import {
   ApiError,
-  evaluateFormula,
   filingIndex,
   filings as fetchFilings,
   FormulaApiError,
@@ -13,6 +12,8 @@ import {
 } from "../api";
 import { apply as applyCompletion, complete, type Suggestion, type Vocabulary } from "../chart/autocomplete";
 import { cached, remember } from "../chart/cache";
+import { fetchLayer } from "../chart/fetch";
+import { memberName, SEGMENT_AXIS_LABELS, SEGMENT_TRANSFORMS } from "../chart/segments";
 import { autoSubtitle, methodNote, sourceFootnote } from "../chart/deck";
 import { LayerChart } from "../chart/LayerChart";
 import { filingMarkers, MARKER_FORMS, type Marker } from "../chart/markers";
@@ -26,6 +27,7 @@ import {
   frequencyOf,
   LAYER_TYPES,
   layerColor,
+  layerKey,
   layerName,
   MAX_LAYER_NAME,
   MAX_LAYERS,
@@ -34,7 +36,6 @@ import {
   rangeDates,
   rangeLabel,
   removeLayer,
-  request,
   SHARES_METRIC,
   TEMPLATES,
   TRANSFORMS,
@@ -149,8 +150,9 @@ export function ChartBuilder({ token, chart, setChart, saveBar }: Props) {
 
   const frequency = frequencyOf(chart);
   const visible = chart.layers.filter((l) => !l.hidden);
-  const requests = visible.map((l) => ({ layer: l, req: request(l, chart, ttm) }));
-  const keyOf = (req: FormulaRequest) => JSON.stringify(req);
+  // each layer's request as its cache key (chart/model.ts layerKey: evaluate or segments)
+  const requests = visible.map((l) => ({ layer: l, req: layerKey(l, chart, ttm) }));
+  const keyOf = (req: string) => req;
   // answers already fetched this session (chart/cache.ts) show at once, e.g. back from another page
   const resultOf = (k: string): Result | undefined => {
     const hit = cached(token, k);
@@ -171,7 +173,7 @@ export function ChartBuilder({ token, chart, setChart, saveBar }: Props) {
     for (const k of new Set(wanted)) {
       if ((results[k] && results[k].state !== "error") || cached(token, k)) continue;
       setResults((r) => ({ ...r, [k]: { state: "loading" } }));
-      evaluateFormula(token, JSON.parse(k) as FormulaRequest)
+      fetchLayer(token, k)
         .then((data) => {
           remember(token, k, data);
           if (live()) setResults((r) => ({ ...r, [k]: { state: "ok", data } }));
@@ -203,7 +205,7 @@ export function ChartBuilder({ token, chart, setChart, saveBar }: Props) {
     return [toSeries(r.data, layer, layerName(layer, short, metricLabel, frequency), colorOf(layer), frequency)];
   });
   const status = (l: Layer): Result | undefined => {
-    const req = request(l, chart, ttm);
+    const req = layerKey(l, chart, ttm);
     return req ? resultOf(keyOf(req)) : undefined;
   };
   const loading = requests.some(({ req }) => req && resultOf(keyOf(req))?.state === "loading");
@@ -228,7 +230,7 @@ export function ChartBuilder({ token, chart, setChart, saveBar }: Props) {
 
   // filing markers: each company a visible metric layer (or formula's default company) reads
   const chartCompanies = [...new Set(visible.flatMap((l) => {
-    const c = l.kind === "metric" ? l.companyId : l.defaultCompany;
+    const c = l.kind === "formula" ? l.defaultCompany : l.companyId;
     return c ? [c] : [];
   }))].slice(0, 8);
   const { from } = rangeDates(chart);
@@ -236,7 +238,7 @@ export function ChartBuilder({ token, chart, setChart, saveBar }: Props) {
   const markers: Marker[] = chart.markers
     ? chartCompanies.flatMap((c) => {
         const f = filingsBy[c];
-        const layer = visible.find((l) => (l.kind === "metric" ? l.companyId : l.defaultCompany) === c);
+        const layer = visible.find((l) => (l.kind === "formula" ? l.defaultCompany : l.companyId) === c);
         return f ? filingMarkers(c, short(c), layer ? colorOf(layer) : 0, f.index, f.parsed, from) : [];
       })
     : [];
@@ -533,8 +535,9 @@ function LayerEditor({
   const metric = metrics.find((m) => m.name === layer.metric);
   const [name, setName] = useState(layer.name ?? "");
   const label = layer.name?.trim() || auto;
-  const companyId = layer.kind === "metric" ? layer.companyId : layer.defaultCompany;
+  const companyId = layer.kind === "formula" ? layer.defaultCompany : layer.companyId;
   const company = companies.find((c) => c.companyId === companyId);
+  const segment = layer.kind === "segment";
   const companyOptions = companies.map((c) => (
     <option key={c.companyId} value={c.companyId}>
       {c.ticker ? `${c.ticker} · ${c.name}` : c.name}
@@ -554,7 +557,7 @@ function LayerEditor({
           <rect width="9" height="9" rx="2" fill="currentColor" />
         </svg>
         <b className="grow" title={company?.name}>
-          {layer.kind === "formula" ? "Formula" : "Metric"}
+          {layer.kind === "formula" ? "Formula" : segment ? "Segments" : "Metric"}
           {company && <span className="faint"> · {company.ticker ?? company.name}</span>}
         </b>
         <button className="btn sm ghost icon" onClick={() => move(-1)} disabled={index === 0}
@@ -575,7 +578,9 @@ function LayerEditor({
       </div>
       <label className="row layer-company">
         <span className="small">Company</span>
-        {layer.kind === "metric" ? (
+        {segment ? (
+          <span className="grow">{company ? (company.ticker ?? company.name) : layer.companyId}</span>
+        ) : layer.kind === "metric" ? (
           <select className="grow" aria-label="Company" value={layer.companyId ?? ""} onChange={(e) => set({ companyId: e.target.value })}>
             {!company && <option value={layer.companyId ?? ""}>{layer.companyId ?? "Choose a company"}</option>}
             {companyOptions}
@@ -589,7 +594,13 @@ function LayerEditor({
           </select>
         )}
       </label>
-      {layer.kind === "metric" ? (
+      {segment ? (
+        <p className="small muted segment-members" title={(layer.members ?? []).join(", ")}>
+          {metricLabel(layer.metric ?? "revenue")} by {SEGMENT_AXIS_LABELS[layer.segmentAxis!] ?? "segment"}:{" "}
+          {(layer.members ?? []).length === 1 ? memberName(layer.members![0]!) : `${layer.members?.length ?? 0} members summed`}
+          <span className="faint"> (from the company's Revenue tab)</span>
+        </p>
+      ) : layer.kind === "metric" ? (
         <div className="row">
           <select className="grow" aria-label="Metric" value={layer.metric ?? ""} onChange={(e) => set({ metric: e.target.value })}>
             {!metric && <option value={layer.metric ?? ""}>{layer.metric ? metricLabel(layer.metric) : "Metric"}</option>}
@@ -615,9 +626,9 @@ function LayerEditor({
       </div>
       <div className="row">
         <select aria-label="Transform" value={layer.transform} onChange={(e) => set({ transform: e.target.value as Layer["transform"] })}>
-          {TRANSFORMS.filter(([v]) => v !== "ps" || hasShares || layer.transform === "ps").map(([v, label]) => (
+          {(segment ? SEGMENT_TRANSFORMS : TRANSFORMS.filter(([v]) => v !== "ps" || hasShares || layer.transform === "ps")).map(([v, label]) => (
             <option key={v} value={v}
-              disabled={(v === "ttm" && metric !== undefined && !metric.ttm) || (v === "ps" && !perShareOk) || (v === "qoq" && annual)}>
+              disabled={!segment && ((v === "ttm" && metric !== undefined && !metric.ttm) || (v === "ps" && !perShareOk) || (v === "qoq" && annual))}>
               {annual && v === "qoq" ? `${label} (quarterly only)` : label}
             </option>
           ))}

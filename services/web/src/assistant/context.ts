@@ -12,6 +12,10 @@ const COMPANY_SUGGESTIONS: Record<CompanyTab, (n: string) => string[]> = {
     `Chart ${n}'s revenue and operating income`,
     `Which of ${n}'s expenses grew fastest over the last year?`,
   ],
+  revenue: (n) => [
+    `Which of ${n}'s segments drove its revenue growth over the last year?`,
+    `Are ${n}'s receivables growing faster than its revenue?`,
+  ],
   segments: (n) => [
     `Which of ${n}'s segments grew fastest over the last year?`,
     `How much of ${n}'s revenue comes from its largest segment?`,

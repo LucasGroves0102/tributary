@@ -345,6 +345,20 @@ export const recap = (token: string, accessionNo: string) =>
 export const segments = (token: string, companyId: string, quarters = 8) =>
   get<{ as_of: string; rows: SegmentRow[] }>(token, `/v1/companies/${companyId}/segments`, { quarters });
 
+/** Segments of one axis and metric (chart segment layers, the Revenue view). */
+export const segmentsOf = (
+  token: string,
+  companyId: string,
+  q: { axis?: string; metric?: string; quarters: number; view: "quarter" | "ttm"; basis: "fiscal" | "calendar" },
+) =>
+  get<{ as_of: string; rows: SegmentRow[] }>(token, `/v1/companies/${companyId}/segments`, {
+    ...(q.axis ? { axis: q.axis } : {}),
+    ...(q.metric ? { metric: q.metric } : {}),
+    quarters: q.quarters,
+    view: q.view,
+    ...(q.basis === "calendar" ? { basis: q.basis } : {}),
+  });
+
 /** Paragraphs of Risk Factors and MD&A that changed since the comparable earlier filing. */
 export const sectionChanges = (token: string, companyId: string, accessionNo: string) =>
   get<SectionChanges>(token, `/v1/companies/${companyId}/filings/${accessionNo}/changes`);
