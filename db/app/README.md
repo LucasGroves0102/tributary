@@ -24,7 +24,8 @@ Watchlists are preferences only and never grant access.
 - `seed.sql`: demo users covering every access path (`make seed-app`): alice (free; NVDA,
   AAPL; watches TSLA), bob (pro; org acme: NVDA, MSFT), carol (pro; no grants), dave (free; acme).
   With the catalog public they all read every company; their grants and plans are the test
-  personas for private grants and tiers (what they read with the catalog closed).
+  personas for private grants and tiers (what they read with the catalog closed). Production
+  doesn't seed them or let anyone sign in as them (`demo.enabled: false`).
 
 Demo sandboxes (migration 003, Query API README): "Try the demo" users are ordinary rows in
 `users`, `subscriptions` and (only while the catalog is closed) `company_grants`, so CDC grants

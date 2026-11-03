@@ -43,7 +43,8 @@ OpenFGA; the BRD target is under 30 s; after that it offers "Continue anyway"). 
 kept in localStorage until the sandbox expires; a banner shows "Demo sandbox: every company ·
 resets in Xh" ("20 companies" while the catalog is closed), and an expired or rejected token
 returns to the front door. The named demo users (alice, bob, carol, dave: `/v1/demo/users`,
-`/v1/demo/token`) are behind a dev flag: build with `VITE_DEMO_PICKER=1`, or run
+`/v1/demo/token`) are test personas: production turns them off (`demo.enabled: false` in the Flux
+release), and locally they are behind a dev flag: build with `VITE_DEMO_PICKER=1`, or run
 `localStorage.setItem("tributary.picker", "1")` in the browser and reload.
 
 "Sign in with GitHub" sits next to "Try the demo" when `GET /v1/auth/providers` says

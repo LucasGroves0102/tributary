@@ -83,8 +83,9 @@ Every pod runs as non-root with a read-only root filesystem, no capabilities, th
 ## Demo sandboxes
 
 "Try the demo" on the web app calls the Query API's `POST /v1/demo/sandbox`, which creates a
-temporary real user in the app database (plan pro, grants on the 20 companies in
-`services/query-api/src/query_api/sandbox.py` `DEMO_TICKERS`, a seeded watchlist) and returns a
+temporary real user in the app database (plan pro, a seeded watchlist and workspace; while the
+public catalog is closed, also grants on the 20 companies in
+`services/query-api/src/query_api/sandbox.py` `DEMO_TICKERS`) and returns a
 JWT for it that expires with the sandbox. Access then propagates like any user's: Debezium →
 Kafka → authz-sync → OpenFGA + `authz.user_access`. The `demo-cleanup` CronJob (hourly, at :15)
 deletes expired sandbox users, which revokes their access the same way.
@@ -109,7 +110,8 @@ and let Flux upgrade; to stop demo spend at once, set `demo.sandbox.agent.enable
 ## GitHub sign-in
 
 "Sign in with GitHub" (Query API README, "GitHub sign-in") gives a visitor a permanent account
-with a sandbox's access (plan pro, the same 20 companies) and the same assistant caps
+with a sandbox's access (plan pro; the same 20 companies while the catalog is closed, every
+company once it is public) and the same assistant caps
 (`demo.sandbox.agent.*`, which apply to GitHub accounts even with sandboxes off). query-api
 `uses: github`:
 
