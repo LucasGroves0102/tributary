@@ -153,17 +153,26 @@ query-api `uses: market-data`:
   (`allow-internet`). query-api already had it through `uses: github`; `market-data` keeps it
   independent of GitHub sign-in.
 
-Owner steps (on hermes, in the repo checkout where sops can decrypt; the value is generated
-inside the command and never printed, the same way `scripts/kafka-passwords.sh` writes keys):
+Owner steps. The age key lives only on hermes and hermes has no repo checkout, so the encrypted
+file goes there and back (it stays encrypted on the way; the value is generated inside the
+command and never printed, the same way `scripts/kafka-passwords.sh` writes keys):
 
 ```bash
-sops set deploy/secrets/tributary.yaml '["stringData"]["data-connections-key"]' \
+# laptop: send the current encrypted file to hermes
+scp deploy/secrets/tributary.yaml hermes:~/tributary-secrets/tributary.yaml
+# hermes: add the key
+cd ~/tributary-secrets && sops set tributary.yaml '["stringData"]["data-connections-key"]' \
   "\"k1:$(openssl rand -base64 32)\""
-git diff --stat deploy/secrets/tributary.yaml   # one key added, value encrypted
-git commit -m "Add data-connections-key" deploy/secrets/tributary.yaml && git push
-# after Flux applies the secret (flux get kustomizations): env is read at start
-kubectl -n tributary rollout restart deployment/query-api
+# laptop: bring it back, check one key was added and every value is encrypted, commit, push
+scp hermes:~/tributary-secrets/tributary.yaml deploy/secrets/tributary.yaml
+python3 scripts/check-secrets-encrypted.py && git diff --stat deploy/secrets/tributary.yaml
+git commit -m "Secrets: data-connections-key" deploy/secrets/tributary.yaml && git push
+# hermes, after Flux applies the secret: env is read at start
+sudo k3s kubectl -n tributary rollout restart deployment/query-api
 ```
+
+Back the key up in the password manager next to the age key: losing it makes every stored API
+key unreadable (users would have to reconnect).
 
 Then `GET /api/query/v1/connections` with a token answers 200 instead of 404, and Settings →
 Connections appears in the web app. Keep the master key backed up with the age key: losing it
