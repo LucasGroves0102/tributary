@@ -43,6 +43,8 @@ export interface LegendItem {
   x: number;
   y: number;
   dashed: boolean;
+  /** drawn lighter (a model's bear / bull case) */
+  faint?: boolean;
 }
 
 export interface Drawn {
@@ -50,6 +52,7 @@ export interface Drawn {
   color: number;
   type: Series["type"];
   dashed: boolean;
+  faint?: boolean;
   /** line/area: the path; area also gets `area` closed to the zero line (or the stack below) */
   path?: string;
   area?: string;
@@ -177,7 +180,7 @@ export function layout(series: Series[], title: boolean, markers: Marker[] = [],
       x = l;
       y += LEGEND_LINE;
     }
-    legend.push({ id: s.id, color: s.color, name, x, y, dashed: dashedOf(s) });
+    legend.push({ id: s.id, color: s.color, name, x, y, dashed: dashedOf(s), ...(s.faint ? { faint: true } : {}) });
     x += w;
   }
   const top = (series.length ? y : y - LEGEND_LINE) + 14;
@@ -213,7 +216,7 @@ export function layout(series: Series[], title: boolean, markers: Marker[] = [],
   const bw = Math.max(2, (slot * 0.7) / Math.max(1, slots.length));
   const drawn: Drawn[] = series.map((s, si) => {
     const sc = s.axis === "R" ? right : left;
-    const base = { id: s.id, color: s.color, type: s.type, dashed: dashedOf(s) };
+    const base = { id: s.id, color: s.color, type: s.type, dashed: dashedOf(s), ...(s.faint ? { faint: true } : {}) };
     if (!sc) return { ...base, ys: ticks.map(() => null) };
     const at = sp[si]!;
     const val = (v: [number, number]) => (stacked(s.type) ? (v[1] > 0 || v[0] === 0 ? v[1] : v[0]) : v[1]);

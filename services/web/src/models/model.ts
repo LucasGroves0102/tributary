@@ -16,7 +16,15 @@
  *   CAGR, or its operating margin outside [min, max] of the margins `historyStats` averages
  * - `project`: revenue_t = revenue_(t-1) x (1 + growth_t); operating income_t = revenue_t x
  *   margin_t, from the latest fiscal year with revenue
- * - `modelSeries` / `modelRows`: the chart (history solid, forecast dashed) and the table */
+ * - `modelSeries` / `modelRows`: the chart (history solid, forecast dashed) and the table
+ *
+ * Scenarios (the Analysis tab): `assumptions` is the BASE case, which is all a model saved
+ * before scenarios holds; `scenarios.bear` / `scenarios.bull` optionally hold the other cases for
+ * the same forecast years. `scenarioAssumptions` reads one case from a saved state (ported to
+ * agent-api `model_stats.scenario_assumptions`; `stats-fixture.json` `scenario_cases` keep the
+ * two equal); the thesis check checks the base case only. New bear / bull cases start from the
+ * base case shifted by SCENARIO_SHIFT (growth and margin, percentage points). The chart draws
+ * the base forecast dashed and bear / bull lighter (`faint`); the table shows the selected case. */
 
 import type { Series, Source } from "../chart/series";
 import type { FinancialRow } from "../types";
@@ -45,10 +53,19 @@ export interface Assumption {
   note?: string;
 }
 
+export const SCENARIOS = ["bear", "base", "bull"] as const;
+export type Scenario = (typeof SCENARIOS)[number];
+export const SCENARIO_LABELS: Record<Scenario, string> = { bear: "Bear", base: "Base", bull: "Bull" };
+/** what a new bear (minus) or bull (plus) case shifts the base case by, percentage points */
+export const SCENARIO_SHIFT = { growth: 5, margin: 3 } as const;
+
 export interface ModelState {
   companyId: string;
   historyYears: number;
+  /** the base case */
   assumptions: Assumption[];
+  /** bear / bull cases for the same years; absent: base only */
+  scenarios?: { bear?: Assumption[]; bull?: Assumption[] };
 }
 
 export interface HistoryYear {
@@ -87,36 +104,88 @@ export interface HistoryStats {
 const clamp = (v: number, [lo, hi]: readonly [number, number]) => Math.min(hi, Math.max(lo, v));
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
-/** A model's state from the API (untrusted) as a ModelState, or null without a company. */
-export function restoreModel(raw: unknown): ModelState | null {
-  const o = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : null;
-  if (!o || typeof o.companyId !== "string" || !CIK.test(o.companyId)) return null;
-  const years = num(o.historyYears);
-  const assumptions = (Array.isArray(o.assumptions) ? o.assumptions : []).slice(0, MAX_YEARS).flatMap((x) => {
-    const a = x && typeof x === "object" ? (x as Record<string, unknown>) : null;
+const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
+
+/** Per-year assumptions from untrusted JSON: entries with finite growth and margin, the first
+ * MAX_YEARS, notes trimmed (blank ones dropped). Not clamped (scenarioAssumptions mirrors the
+ * agent's port); restoreModel clamps. */
+function years(raw: unknown): Assumption[] {
+  return (Array.isArray(raw) ? raw : []).slice(0, MAX_YEARS).flatMap((x) => {
+    const a = isObject(x) ? x : null;
     const growth = num(a?.growth);
     const margin = num(a?.margin);
     if (growth === null || margin === null) return [];
     const note = typeof a?.note === "string" ? a.note.trim().slice(0, NOTE_MAX) : "";
-    return [{ growth: clamp(growth, GROWTH_RANGE), margin: clamp(margin, MARGIN_RANGE), ...(note ? { note } : {}) }];
+    return [{ growth, margin, ...(note ? { note } : {}) }];
   });
+}
+
+/** One case's assumptions from a saved model state (untrusted): base = `assumptions`; bear and
+ * bull from `scenarios`, only with as many (valid) years as the base case; null when there is
+ * no such case. agent-api `model_stats.scenario_assumptions` is the port the thesis check uses
+ * (on the base case). */
+export function scenarioAssumptions(raw: unknown, scenario: Scenario): Assumption[] | null {
+  if (!isObject(raw) || !SCENARIOS.includes(scenario)) return null;
+  const base = years(raw.assumptions);
+  if (!base.length) return null;
+  if (scenario === "base") return base;
+  const cases = isObject(raw.scenarios) ? raw.scenarios : {};
+  const list = cases[scenario];
+  const out = years(list);
+  return out.length && Array.isArray(list) && list.length === out.length && out.length === base.length ? out : null;
+}
+
+const clampYear = (a: Assumption): Assumption => ({ ...a, growth: clamp(a.growth, GROWTH_RANGE), margin: clamp(a.margin, MARGIN_RANGE) });
+
+/** A model's state from the API (untrusted) as a ModelState, or null without a company. */
+export function restoreModel(raw: unknown): ModelState | null {
+  const o = isObject(raw) ? raw : null;
+  if (!o || typeof o.companyId !== "string" || !CIK.test(o.companyId)) return null;
+  const years = num(o.historyYears);
+  const assumptions = (scenarioAssumptions(o, "base") ?? []).map(clampYear);
+  const bear = scenarioAssumptions(o, "bear")?.map(clampYear);
+  const bull = scenarioAssumptions(o, "bull")?.map(clampYear);
   return {
     companyId: o.companyId,
     historyYears: years === null ? DEFAULT_HISTORY : Math.round(clamp(years, [MIN_HISTORY, MAX_HISTORY])),
     assumptions: assumptions.length ? assumptions : [{ growth: 0, margin: 0 }],
+    ...(bear || bull ? { scenarios: { ...(bear ? { bear } : {}), ...(bull ? { bull } : {}) } } : {}),
   };
 }
 
-/** The state as saved: blank notes dropped, numbers rounded to 0.01. */
+const savedYears = (list: Assumption[]) =>
+  list.map((a) => {
+    const note = a.note?.trim();
+    return { growth: round2(a.growth), margin: round2(a.margin), ...(note ? { note: note.slice(0, NOTE_MAX) } : {}) };
+  });
+
+/** The state as saved: blank notes dropped, numbers rounded to 0.01; bear / bull only when set
+ * (a base-only model saves exactly as before scenarios). */
 export function modelState(m: ModelState): Record<string, unknown> {
+  const bear = m.scenarios?.bear;
+  const bull = m.scenarios?.bull;
   return {
     companyId: m.companyId,
     historyYears: m.historyYears,
-    assumptions: m.assumptions.map((a) => {
-      const note = a.note?.trim();
-      return { growth: round2(a.growth), margin: round2(a.margin), ...(note ? { note: note.slice(0, NOTE_MAX) } : {}) };
-    }),
+    assumptions: savedYears(m.assumptions),
+    ...(bear || bull
+      ? { scenarios: { ...(bear ? { bear: savedYears(bear) } : {}), ...(bull ? { bull: savedYears(bull) } : {}) } }
+      : {}),
   };
+}
+
+/** The assumptions of one case of a model (base when the case isn't set). */
+export function caseOf(m: Pick<ModelState, "assumptions" | "scenarios">, scenario: Scenario): Assumption[] {
+  return scenario === "base" ? m.assumptions : (m.scenarios?.[scenario] ?? m.assumptions);
+}
+
+/** A new bear (or bull) case: the base case shifted down (up) by SCENARIO_SHIFT, without notes. */
+export function shiftedCase(base: Assumption[], scenario: "bear" | "bull"): Assumption[] {
+  const sign = scenario === "bear" ? -1 : 1;
+  return base.map((a) => ({
+    growth: round2(clamp(a.growth + sign * SCENARIO_SHIFT.growth, GROWTH_RANGE)),
+    margin: round2(clamp(a.margin + sign * SCENARIO_SHIFT.margin, MARGIN_RANGE)),
+  }));
 }
 
 const round2 = (v: number) => Math.round(v * 100) / 100;
@@ -335,7 +404,12 @@ export function modelRows(history: HistoryYear[], projection: ProjectedYear[]): 
 /** Chart series on a fiscal-year axis: revenue and operating income, history solid and
  * forecast dashed in the same colour; each forecast line starts at the base year so the two
  * join. History points carry their filing (a click opens it); forecast points have none. */
-export function modelSeries(history: HistoryYear[], projection: ProjectedYear[]): Series[] {
+export function modelSeries(
+  history: HistoryYear[],
+  projection: ProjectedYear[],
+  /** bear / bull forecasts, drawn lighter (faint) beside the base one */
+  others: Partial<Record<"bear" | "bull", ProjectedYear[]>> = {},
+): Series[] {
   const base = baseYear(history);
   const hist = (id: number, name: string, color: number, value: (y: HistoryYear) => number | null, src: (y: HistoryYear) => Source | null): Series => ({
     id,
@@ -350,7 +424,7 @@ export function modelSeries(history: HistoryYear[], projection: ProjectedYear[])
       return { key: y.fy, period: fyLabel(y.fy), periodEnd: y.periodEnd, y: v, raw: v === null ? "" : String(v), sources: s ? [s] : [] };
     }),
   });
-  const fore = (id: number, name: string, color: number, start: number | null, value: (p: ProjectedYear) => number): Series => ({
+  const fore = (id: number, name: string, color: number, start: number | null, value: (p: ProjectedYear) => number, rows = projection, faint = false): Series => ({
     id,
     name,
     unit: "USD",
@@ -358,18 +432,22 @@ export function modelSeries(history: HistoryYear[], projection: ProjectedYear[])
     type: "line",
     axis: "L",
     dashed: true,
+    ...(faint ? { faint: true } : {}),
     points: [
       ...(base && start !== null
         ? [{ key: base.fy, period: fyLabel(base.fy), periodEnd: base.periodEnd, y: start, raw: String(start), sources: [] }]
         : []),
-      ...projection.map((p) => ({ key: p.fy, period: fyLabel(p.fy, true), periodEnd: "", y: value(p), raw: String(value(p)), sources: [] })),
+      ...rows.map((p) => ({ key: p.fy, period: fyLabel(p.fy, true), periodEnd: "", y: value(p), raw: String(value(p)), sources: [] })),
     ],
   });
+  const cases = (["bear", "bull"] as const).filter((c) => others[c]?.length);
   const out = [
     hist(0, "Revenue", 0, (y) => y.revenue, (y) => y.revenueSource),
-    fore(1, "Revenue (forecast)", 0, base?.revenue ?? null, (p) => p.revenue),
+    fore(1, cases.length ? "Revenue (base)" : "Revenue (forecast)", 0, base?.revenue ?? null, (p) => p.revenue),
+    ...cases.map((c, k) => fore(4 + k, `Revenue (${c})`, 0, base?.revenue ?? null, (p) => p.revenue, others[c], true)),
     hist(2, "Operating income", 1, (y) => y.operatingIncome, (y) => y.operatingIncomeSource),
-    fore(3, "Operating income (forecast)", 1, base?.operatingIncome ?? null, (p) => p.operatingIncome),
+    fore(3, cases.length ? "Operating income (base)" : "Operating income (forecast)", 1, base?.operatingIncome ?? null, (p) => p.operatingIncome),
+    ...cases.map((c, k) => fore(6 + k, `Operating income (${c})`, 1, base?.operatingIncome ?? null, (p) => p.operatingIncome, others[c], true)),
   ];
   return out.filter((s) => s.points.some((p) => p.y !== null));
 }

@@ -184,7 +184,16 @@ sidebar with the other items (rename, duplicate, delete as usual).
   starts every year at the company's own CAGR and average margin; "Reset to history" does so
   again. Only the assumptions are saved, never the history. A model embeds in a thesis like a
   chart (its chart and table from the saved assumptions and the live history). Per-segment
-  growth isn't there yet. `checkAssumptions` / `marginRange` hold the thesis check's flag rule
+  growth isn't there yet. **Bear / base / bull**: a Scenario switch above the assumptions picks
+  the case being edited; "Add bear and bull cases" starts them from the base case minus / plus
+  5 points of growth and 3 of margin (`SCENARIO_SHIFT`), for the same forecast years (changing
+  the number of years changes every case). The chart draws the base forecast dashed and the bear
+  and bull ones lighter (a series' `faint`: thinner, `stroke-opacity`, an SVG attribute, not a
+  style); the table shows the selected case. Saved as `scenarios: {bear, bull}` beside
+  `assumptions`, which stays the base case: a model saved before scenarios is base only and
+  saves exactly as before, and Check my thesis checks the base case (`scenarioAssumptions`,
+  ported to agent-api; the fixture's `scenario_cases`). An embedded model draws all three.
+  `checkAssumptions` / `marginRange` hold the thesis check's flag rule
   (growth more than 10 points from the CAGR, a margin outside the 5-year [min, max]);
   `models/stats-fixture.json` is shared with agent-api's Python port (`model_stats.py`), and
   both test suites check the same numbers.

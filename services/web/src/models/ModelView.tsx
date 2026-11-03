@@ -6,33 +6,48 @@ import type { Source } from "../chart/series";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { day } from "../format";
 import { go } from "../route";
-import { modelRows, modelSeries, project, type Assumption, type HistoryYear } from "./model";
+import { modelRows, modelSeries, project, SCENARIO_LABELS, type Assumption, type HistoryYear, type ModelState, type Scenario } from "./model";
 import { useHistory, type History } from "./useHistory";
 
 const pct = (v: number | null) => (v === null ? "—" : `${(v * 100).toFixed(1)}%`);
 const usd = (v: number | null) => (v === null ? "—" : formatValue(v, "USD"));
 
 /** A model drawn: history (solid) and forecast (dashed) on one chart, then the years as a table
- * with history and forecast rows labelled. History points open their filing. */
+ * with history and forecast rows labelled. History points open their filing. With bear / bull
+ * cases, the chart adds them lighter beside the base forecast and the table shows `selected`. */
 export function ModelView({
   history,
   historyYears,
   assumptions,
   company,
   asOf,
+  scenarios,
+  selected = "base",
 }: {
   history: HistoryYear[];
   historyYears: number;
-  /** null: the assumptions don't parse; the history is drawn alone */
+  /** the base case; null: the assumptions don't parse; the history is drawn alone */
   assumptions: Assumption[] | null;
   /** the company's name or ticker */
   company: string;
   asOf: string | null;
+  /** bear / bull cases (null: one doesn't parse, left out) */
+  scenarios?: ModelState["scenarios"] | Partial<Record<"bear" | "bull", Assumption[] | null>>;
+  /** the case the table shows */
+  selected?: Scenario;
 }) {
   const shown = useMemo(() => history.slice(-historyYears), [history, historyYears]);
   const projection = useMemo(() => (assumptions ? project(history, assumptions) : []), [history, assumptions]);
-  const series = useMemo(() => modelSeries(shown, projection), [shown, projection]);
-  const rows = useMemo(() => modelRows(shown, projection), [shown, projection]);
+  const bear = scenarios?.bear;
+  const bull = scenarios?.bull;
+  const others = useMemo(() => ({
+    ...(bear ? { bear: project(history, bear) } : {}),
+    ...(bull ? { bull: project(history, bull) } : {}),
+  }), [history, bear, bull]);
+  const series = useMemo(() => modelSeries(shown, projection, others), [shown, projection, others]);
+  const tableCase = selected === "base" ? projection : (others[selected] ?? projection);
+  const tableLabel = selected !== "base" && others[selected] ? SCENARIO_LABELS[selected] : others.bear || others.bull ? "Base" : null;
+  const rows = useMemo(() => modelRows(shown, tableCase), [shown, tableCase]);
   const svg = useRef<SVGSVGElement>(null);
   const open = (src: Source) => {
     if (src.companyId) go({ view: "filing", companyId: src.companyId, accessionNo: src.accessionNo, section: null });
@@ -49,7 +64,9 @@ export function ModelView({
         title={`${company}: revenue and operating income`}
         footnote={[
           `History: SEC filings via Tributary, fiscal years (TTM at each fiscal Q4)${asOf ? `, as of ${day(asOf.slice(0, 10), true)}` : ""}.`,
-          first ? `Forecast (dashed) from FY${first.fy}: your assumptions, not data.` : "No forecast: fix the assumptions.",
+          first
+            ? `Forecast (dashed) from FY${first.fy}: your assumptions, not data.${others.bear || others.bull ? " Bear and bull cases lighter." : ""}`
+            : "No forecast: fix the assumptions.",
         ]}
         svgRef={svg}
         onOpen={open}
@@ -57,7 +74,8 @@ export function ModelView({
       <div className="tw">
         <table className="t model-table">
           <caption className="visually-hidden">
-            {company}: revenue, growth, operating margin and operating income by fiscal year; reported history, then your forecast
+            {company}: revenue, growth, operating margin and operating income by fiscal year; reported history, then your
+            {tableLabel ? ` ${tableLabel.toLowerCase()} case` : " forecast"}
           </caption>
           <thead>
             <tr>
@@ -75,7 +93,7 @@ export function ModelView({
                 <th className="first" scope="row">{r.label}</th>
                 <td>
                   {r.forecast ? (
-                    <span className="tag e" title={r.note ?? "Your assumption"}>Forecast</span>
+                    <span className="tag e" title={r.note ?? "Your assumption"}>{tableLabel ? `${tableLabel} case` : "Forecast"}</span>
                   ) : (
                     <span className="tag k" title={r.revenueSource ? `${r.revenueSource.form} filed ${day(r.revenueSource.filed, true)}, ${r.revenueSource.accessionNo}` : undefined}>
                       Reported
@@ -102,12 +120,13 @@ export function ModelEmbed({
   company,
 }: {
   token: string;
-  state: { companyId: string; historyYears: number; assumptions: Assumption[] };
+  state: ModelState;
   company: string;
 }) {
   const history = useHistory(token, state.companyId);
   return <HistoryState history={history} company={company} render={(years, asOf) => (
-    <ModelView history={years} historyYears={state.historyYears} assumptions={state.assumptions} company={company} asOf={asOf} />
+    <ModelView history={years} historyYears={state.historyYears} assumptions={state.assumptions} company={company} asOf={asOf}
+      scenarios={state.scenarios} />
   )} />;
 }
 
