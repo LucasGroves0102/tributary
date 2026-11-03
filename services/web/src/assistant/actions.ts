@@ -89,11 +89,8 @@ const MAX_CONTEXT = 3800; // agent-api refuses more than 4000 bytes
 /** What the screen shows, for the agent: the page, its company, and the chart or screen when
  * that's the page. `name` labels companies the way the user sees them. */
 export function uiContext(route: Route, chart: ChartState, name: (id: string) => string | null): UiContext {
-  // the status page is an information page like About (agent-api's pages have no "status");
-  // a thesis or model is a workspace's page (agent-api has no "thesis"/"model" page yet)
-  const ctx: UiContext = {
-    page: route.view === "status" ? "about" : route.view === "thesis" || route.view === "model" ? "workspace" : route.view,
-  };
+  // the status page is an information page like About (agent-api's pages have no "status")
+  const ctx: UiContext = { page: route.view === "status" ? "about" : route.view };
   if (route.view === "company" || route.view === "filing") ctx.company_id = route.companyId;
   if (route.view === "company" && route.tab) ctx.tab = route.tab;
   if (route.view === "compare" && route.compare) {

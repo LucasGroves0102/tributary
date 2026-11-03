@@ -123,7 +123,9 @@ export type AgentEvent =
   | { type: "done"; answer: Answer }
   | { type: "error"; message: string }
   /** /v1/reports: the report was saved (before "done") */
-  | { type: "report"; item: { item_id: string; workspace_id: string; name: string }; verification: { ok: boolean; unverified: number } };
+  | { type: "report"; item: { item_id: string; workspace_id: string; name: string }; verification: { ok: boolean; unverified: number } }
+  /** /v1/thesis-checks: the check was saved (before "done") */
+  | { type: "check"; check: ThesisCheckSummary; result: ThesisCheckResult };
 
 type Transform = "q" | "ttm" | "yoy" | "idx";
 type LayerType = "line" | "bar" | "area";
@@ -190,6 +192,131 @@ export type SavedKind = "chart" | "comps" | "screen";
 export type WrittenKind = "thesis" | "model";
 /** Every item kind: reports are written by the assistant (agent-api /v1/reports). */
 export type ItemKind = SavedKind | WrittenKind | "report";
+
+/** "Check my thesis" (agent-api thesis_check.py; stored by the Query API, thesis_checks.py,
+ * app DB 010). Numbers in `stats` are ratios; a year's growth and margin are percent as typed. */
+export type ClaimStatus = "supported" | "contradicted" | "unverifiable";
+export type FigureStatus = "verified" | "derived" | "quoted" | "unverified";
+
+export interface CheckFigure {
+  text: string;
+  status: FigureStatus;
+}
+
+export interface CheckCitation {
+  accession_no: string;
+  form?: string | null;
+  filed?: string | null;
+  company_id?: string | null;
+  url?: string | null;
+  section_key?: string | null;
+  figure?: string | null;
+  figure_status?: FigureStatus | null;
+  as_of?: string | null;
+  /** a tool returned this filing; false = flagged */
+  verified: boolean;
+}
+
+export interface CheckClaim {
+  quote: string;
+  /** the quote appears in the thesis text (it can be highlighted) */
+  quote_found: boolean;
+  status: ClaimStatus;
+  explanation: string;
+  citations: CheckCitation[];
+  figures: CheckFigure[];
+  /** the model said supported/contradicted without a citation of data it read */
+  downgraded?: boolean;
+}
+
+export type CheckFlag = "above" | "below" | null;
+
+export interface CheckYear {
+  fy: number;
+  growth: number;
+  margin: number;
+  growth_vs_cagr: number | null;
+  growth_flag: CheckFlag;
+  margin_flag: CheckFlag;
+  commentary: string;
+  citations: CheckCitation[];
+  figures: CheckFigure[];
+}
+
+export interface CheckModel {
+  ref: string;
+  item_id: string;
+  name: string;
+  company_id: string;
+  base_fy?: number | null;
+  stats?: {
+    cagr: number | null;
+    cagr_years: number;
+    avg_margin: number | null;
+    margin_years: number;
+    last_growth: number | null;
+    last_margin: number | null;
+  } | null;
+  margin_min?: number | null;
+  margin_max?: number | null;
+  years: CheckYear[];
+  error?: string | null;
+}
+
+export interface CheckPoint {
+  point: string;
+  citations: CheckCitation[];
+  figures: CheckFigure[];
+}
+
+export interface ThesisCheckResult {
+  version: 1;
+  thesis: {
+    item_id: string;
+    title: string;
+    company_id: string | null;
+    text_hash: string;
+    characters: number;
+    characters_checked: number;
+    truncated: boolean;
+  };
+  summary: string;
+  claims: CheckClaim[];
+  assumptions: CheckModel[];
+  not_mentioned: CheckPoint[];
+  notes: string[];
+  /** every filing the tools returned (chat's citation shape) */
+  citations: Citation[];
+  verification: Omit<Verification, "figures"> & { figures: CheckFigure[] };
+  as_of?: string | null;
+  checked_at: string;
+  model: string;
+  questions: number;
+  stop: string;
+  rounds: number;
+  cost_usd: number | null;
+}
+
+export interface ThesisCheckSummary {
+  check_id: string;
+  item_id: string;
+  text_hash: string;
+  model: string;
+  cost_usd: number | null;
+  counts: {
+    supported: number;
+    contradicted: number;
+    unverifiable: number;
+    flagged_assumptions: number;
+    not_mentioned: number;
+    ok: boolean;
+  };
+  created_at: string;
+}
+
+export interface ThesisCheck extends ThesisCheckSummary {
+  result: ThesisCheckResult;
+}
 
 export interface SavedItem {
   item_id: string;
@@ -262,7 +389,7 @@ export interface UiCompany {
 /** What the screen shows, sent with each question (agent-api ui.UiContext). Untrusted there:
  * it describes the screen and never identifies the user. */
 export interface UiContext {
-  page: "home" | "companies" | "company" | "filing" | "chart" | "compare" | "search" | "ask" | "about" | "workspace" | "report";
+  page: "home" | "companies" | "company" | "filing" | "chart" | "compare" | "search" | "ask" | "about" | "workspace" | "report" | "thesis" | "model";
   /** the full-text search page's words */
   query?: string;
   company_id?: string;

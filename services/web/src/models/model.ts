@@ -10,6 +10,10 @@
  * - `annualHistory`: fiscal years of revenue and operating income from the API's rows
  * - `historyStats`: the revenue CAGR and average operating margin over the last 5 fiscal years
  *   (what each assumption is shown next to, and what the thesis checker compares against)
+ * - `marginRange` / `checkAssumptions`: the thesis check's flags (agent-api ports these to
+ *   Python, services/agent `model_stats.py`; `stats-fixture.json` keeps the two equal): a
+ *   forecast year's growth more than GROWTH_FLAG_POINTS percentage points above or below the
+ *   CAGR, or its operating margin outside [min, max] of the margins `historyStats` averages
  * - `project`: revenue_t = revenue_(t-1) x (1 + growth_t); operating income_t = revenue_t x
  *   margin_t, from the latest fiscal year with revenue
  * - `modelSeries` / `modelRows`: the chart (history solid, forecast dashed) and the table */
@@ -197,6 +201,59 @@ export function historyStats(history: HistoryYear[], window = STATS_WINDOW): His
     marginYears: margins.length,
     lastGrowth: growthOf(prev, end),
     lastMargin: marginOf(end),
+  };
+}
+
+/** Lowest and highest operating margin over the fiscal years `historyStats` averages (the
+ * STATS_WINDOW years ending at the base year that have both values); null without any. */
+export function marginRange(history: HistoryYear[], window = STATS_WINDOW): { min: number; max: number } | null {
+  const end = baseYear(history);
+  if (!end) return null;
+  const margins = history.filter((y) => y.fy <= end.fy && y.fy > end.fy - window).map(marginOf).filter((m): m is number => m !== null);
+  return margins.length ? { min: Math.min(...margins), max: Math.max(...margins) } : null;
+}
+
+/** percentage points of growth above or below the CAGR before the thesis check flags a year */
+export const GROWTH_FLAG_POINTS = 10;
+/** margins are typed to 0.01%; this only absorbs float noise */
+const MARGIN_EPSILON = 1e-9;
+
+export type Flag = "above" | "below" | null;
+
+export interface AssumptionCheck {
+  fy: number;
+  /** percent, as typed */
+  growth: number;
+  margin: number;
+  /** growth minus the CAGR, in percentage points (null without a CAGR) */
+  growthVsCagr: number | null;
+  growthFlag: Flag;
+  marginFlag: Flag;
+}
+
+/** Each forecast year's growth and margin against history (the thesis check, B2). */
+export function checkAssumptions(history: HistoryYear[], assumptions: Assumption[]): {
+  baseFy: number | null;
+  stats: HistoryStats;
+  marginMin: number | null;
+  marginMax: number | null;
+  years: AssumptionCheck[];
+} {
+  const stats = historyStats(history);
+  const range = marginRange(history);
+  const base = baseYear(history);
+  return {
+    baseFy: base?.fy ?? null,
+    stats,
+    marginMin: range?.min ?? null,
+    marginMax: range?.max ?? null,
+    years: assumptions.map((a, i) => {
+      const diff = stats.cagr === null ? null : a.growth - stats.cagr * 100;
+      const growthFlag: Flag = diff === null ? null : diff > GROWTH_FLAG_POINTS ? "above" : diff < -GROWTH_FLAG_POINTS ? "below" : null;
+      const ratio = a.margin / 100;
+      const marginFlag: Flag = !range ? null : ratio > range.max + MARGIN_EPSILON ? "above" : ratio < range.min - MARGIN_EPSILON ? "below" : null;
+      return { fy: base ? base.fy + i + 1 : i + 1, growth: a.growth, margin: a.margin, growthVsCagr: diff, growthFlag, marginFlag };
+    }),
   };
 }
 

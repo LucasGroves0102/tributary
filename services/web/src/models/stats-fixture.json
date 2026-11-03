@@ -1,0 +1,971 @@
+{
+ "note": "Generated from services/agent model_stats.py; the web app's model.test.ts and services/agent tests/test_model_stats.py both check these numbers.",
+ "cases": [
+  {
+   "name": "10% a year, margins 10-22%",
+   "rows": [
+    {
+     "metric": "revenue",
+     "period_start": null,
+     "period_end": "2019-12-31",
+     "fiscal_period": "FY2019 Q4",
+     "calendar_period": null,
+     "value": "80000000000",
+     "unit": "USD",
+     "value_source": "reported",
+     "citation": {
+      "accession_no": "0000000001-26-000001",
+      "form": "10-K",
+      "filed": "2019-12-31",
+      "xbrl_tag": "Revenues",
+      "source_accessions": null,
+      "filing_url": null
+     },
+     "freshness": {
+      "filed": "2019-12-31",
+      "ingested_at": "2019-12-31T00:00:00Z"
+     }
+    },
+    {
+     "metric": "revenue",
+     "period_start": null,
+     "period_end": "2020-12-31",
+     "fiscal_period": "FY2020 Q4",
+     "calendar_period": null,
+     "value": "100000000000",
+     "unit": "USD",
+     "value_source": "reported",
+     "citation": {
+      "accession_no": "0000000001-26-000001",
+      "form": "10-K",
+      "filed": "2020-12-31",
+      "xbrl_tag": "Revenues",
+      "source_accessions": null,
+      "filing_url": null
+     },
+     "freshness": {
+      "filed": "2020-12-31",
+      "ingested_at": "2020-12-31T00:00:00Z"
+     }
+    },
+    {
+     "metric": "revenue",
+     "period_start": null,
+     "period_end": "2021-12-31",
+     "fiscal_period": "FY2021 Q4",
+     "calendar_period": null,
+     "value": "110000000000",
+     "unit": "USD",
+     "value_source": "reported",
+     "citation": {
+      "accession_no": "0000000001-26-000001",
+      "form": "10-K",
+      "filed": "2021-12-31",
+      "xbrl_tag": "Revenues",
+      "source_accessions": null,
+      "filing_url": null
+     },
+     "freshness": {
+      "filed": "2021-12-31",
+      "ingested_at": "2021-12-31T00:00:00Z"
+     }
+    },
+    {
+     "metric": "revenue",
+     "period_start": null,
+     "period_end": "2022-12-31",
+     "fiscal_period": "FY2022 Q4",
+     "calendar_period": null,
+     "value": "121000000000",
+     "unit": "USD",
+     "value_source": "reported",
+     "citation": {
+      "accession_no": "0000000001-26-000001",
+      "form": "10-K",
+      "filed": "2022-12-31",
+      "xbrl_tag": "Revenues",
+      "source_accessions": null,
+      "filing_url": null
+     },
+     "freshness": {
+      "filed": "2022-12-31",
+      "ingested_at": "2022-12-31T00:00:00Z"
+     }
+    },
+    {
+     "metric": "revenue",
+     "period_start": null,
+     "period_end": "2023-12-31",
+     "fiscal_period": "FY2023 Q4",
+     "calendar_period": null,
+     "value": "133100000000",
+     "unit": "USD",
+     "value_source": "reported",
+     "citation": {
+      "accession_no": "0000000001-26-000001",
+      "form": "10-K",
+      "filed": "2023-12-31",
+      "xbrl_tag": "Revenues",
+      "source_accessions": null,
+      "filing_url": null
+     },
+     "freshness": {
+      "filed": "2023-12-31",
+      "ingested_at": "2023-12-31T00:00:00Z"
+     }
+    },
+    {
+     "metric": "revenue",
+     "period_start": null,
+     "period_end": "2024-12-31",
+     "fiscal_period": "FY2024 Q4",
+     "calendar_period": null,
+     "value": "146410000000",
+     "unit": "USD",
+     "value_source": "reported",
+     "citation": {
+      "accession_no": "0000000001-26-000001",
+      "form": "10-K",
+      "filed": "2024-12-31",
+      "xbrl_tag": "Revenues",
+      "source_accessions": null,
+      "filing_url": null
+     },
+     "freshness": {
+      "filed": "2024-12-31",
+      "ingested_at": "2024-12-31T00:00:00Z"
+     }
+    },
+    {
+     "metric": "revenue",
+     "period_start": null,
+     "period_end": "2025-12-31",
+     "fiscal_period": "FY2025 Q4",
+     "calendar_period": null,
+     "value": "161051000000",
+     "unit": "USD",
+     "value_source": "reported",
+     "citation": {
+      "accession_no": "0000000001-26-000001",
+      "form": "10-K",
+      "filed": "2025-12-31",
+      "xbrl_tag": "Revenues",
+      "source_accessions": null,
+      "filing_url": null
+     },
+     "freshness": {
+      "filed": "2025-12-31",
+      "ingested_at": "2025-12-31T00:00:00Z"
+     }
+    },
+    {
+     "metric": "operating_income",
+     "period_start": null,
+     "period_end": "2019-12-31",
+     "fiscal_period": "FY2019 Q4",
+     "calendar_period": null,
+     "value": "8000000000",
+     "unit": "USD",
+     "value_source": "reported",
+     "citation": {
+      "accession_no": "0000000001-26-000001",
+      "form": "10-K",
+      "filed": "2019-12-31",
+      "xbrl_tag": "Revenues",
+      "source_accessions": null,
+      "filing_url": null
+     },
+     "freshness": {
+      "filed": "2019-12-31",
+      "ingested_at": "2019-12-31T00:00:00Z"
+     }
+    },
+    {
+     "metric": "operating_income",
+     "period_start": null,
+     "period_end": "2020-12-31",
+     "fiscal_period": "FY2020 Q4",
+     "calendar_period": null,
+     "value": "10000000000",
+     "unit": "USD",
+     "value_source": "reported",
+     "citation": {
+      "accession_no": "0000000001-26-000001",
+      "form": "10-K",
+      "filed": "2020-12-31",
+      "xbrl_tag": "Revenues",
+      "source_accessions": null,
+      "filing_url": null
+     },
+     "freshness": {
+      "filed": "2020-12-31",
+      "ingested_at": "2020-12-31T00:00:00Z"
+     }
+    },
+    {
+     "metric": "operating_income",
+     "period_start": null,
+     "period_end": "2021-12-31",
+     "fiscal_period": "FY2021 Q4",
+     "calendar_period": null,
+     "value": "22000000000",
+     "unit": "USD",
+     "value_source": "reported",
+     "citation": {
+      "accession_no": "0000000001-26-000001",
+      "form": "10-K",
+      "filed": "2021-12-31",
+      "xbrl_tag": "Revenues",
+      "source_accessions": null,
+      "filing_url": null
+     },
+     "freshness": {
+      "filed": "2021-12-31",
+      "ingested_at": "2021-12-31T00:00:00Z"
+     }
+    },
+    {
+     "metric": "operating_income",
+     "period_start": null,
+     "period_end": "2022-12-31",
+     "fiscal_period": "FY2022 Q4",
+     "calendar_period": null,
+     "value": "24200000000",
+     "unit": "USD",
+     "value_source": "reported",
+     "citation": {
+      "accession_no": "0000000001-26-000001",
+      "form": "10-K",
+      "filed": "2022-12-31",
+      "xbrl_tag": "Revenues",
+      "source_accessions": null,
+      "filing_url": null
+     },
+     "freshness": {
+      "filed": "2022-12-31",
+      "ingested_at": "2022-12-31T00:00:00Z"
+     }
+    },
+    {
+     "metric": "operating_income",
+     "period_start": null,
+     "period_end": "2023-12-31",
+     "fiscal_period": "FY2023 Q4",
+     "calendar_period": null,
+     "value": "13310000000",
+     "unit": "USD",
+     "value_source": "reported",
+     "citation": {
+      "accession_no": "0000000001-26-000001",
+      "form": "10-K",
+      "filed": "2023-12-31",
+      "xbrl_tag": "Revenues",
+      "source_accessions": null,
+      "filing_url": null
+     },
+     "freshness": {
+      "filed": "2023-12-31",
+      "ingested_at": "2023-12-31T00:00:00Z"
+     }
+    },
+    {
+     "metric": "operating_income",
+     "period_start": null,
+     "period_end": "2024-12-31",
+     "fiscal_period": "FY2024 Q4",
+     "calendar_period": null,
+     "value": "29282000000",
+     "unit": "USD",
+     "value_source": "reported",
+     "citation": {
+      "accession_no": "0000000001-26-000001",
+      "form": "10-K",
+      "filed": "2024-12-31",
+      "xbrl_tag": "Revenues",
+      "source_accessions": null,
+      "filing_url": null
+     },
+     "freshness": {
+      "filed": "2024-12-31",
+      "ingested_at": "2024-12-31T00:00:00Z"
+     }
+    },
+    {
+     "metric": "operating_income",
+     "period_start": null,
+     "period_end": "2025-12-31",
+     "fiscal_period": "FY2025 Q4",
+     "calendar_period": null,
+     "value": "16105100000",
+     "unit": "USD",
+     "value_source": "reported",
+     "citation": {
+      "accession_no": "0000000001-26-000001",
+      "form": "10-K",
+      "filed": "2025-12-31",
+      "xbrl_tag": "Revenues",
+      "source_accessions": null,
+      "filing_url": null
+     },
+     "freshness": {
+      "filed": "2025-12-31",
+      "ingested_at": "2025-12-31T00:00:00Z"
+     }
+    },
+    {
+     "metric": "revenue",
+     "period_start": null,
+     "period_end": "2025-09-30",
+     "fiscal_period": "FY2025 Q3",
+     "calendar_period": null,
+     "value": "158000000000",
+     "unit": "USD",
+     "value_source": "reported",
+     "citation": {
+      "accession_no": "0000000001-26-000001",
+      "form": "10-K",
+      "filed": "2025-09-30",
+      "xbrl_tag": "Revenues",
+      "source_accessions": null,
+      "filing_url": null
+     },
+     "freshness": {
+      "filed": "2025-09-30",
+      "ingested_at": "2025-09-30T00:00:00Z"
+     }
+    },
+    {
+     "metric": "gross_profit",
+     "period_start": null,
+     "period_end": "2025-12-31",
+     "fiscal_period": "FY2025 Q4",
+     "calendar_period": null,
+     "value": "90000000000",
+     "unit": "USD",
+     "value_source": "reported",
+     "citation": {
+      "accession_no": "0000000001-26-000001",
+      "form": "10-K",
+      "filed": "2025-12-31",
+      "xbrl_tag": "Revenues",
+      "source_accessions": null,
+      "filing_url": null
+     },
+     "freshness": {
+      "filed": "2025-12-31",
+      "ingested_at": "2025-12-31T00:00:00Z"
+     }
+    }
+   ],
+   "assumptions": [
+    {
+     "growth": 25,
+     "margin": 30
+    },
+    {
+     "growth": 12,
+     "margin": 12
+    },
+    {
+     "growth": -5,
+     "margin": 9.5
+    },
+    {
+     "growth": 19.99,
+     "margin": 22
+    }
+   ],
+   "expected": {
+    "history": [
+     {
+      "fy": 2019,
+      "periodEnd": "2019-12-31",
+      "revenue": 80000000000.0,
+      "operatingIncome": 8000000000.0
+     },
+     {
+      "fy": 2020,
+      "periodEnd": "2020-12-31",
+      "revenue": 100000000000.0,
+      "operatingIncome": 10000000000.0
+     },
+     {
+      "fy": 2021,
+      "periodEnd": "2021-12-31",
+      "revenue": 110000000000.0,
+      "operatingIncome": 22000000000.0
+     },
+     {
+      "fy": 2022,
+      "periodEnd": "2022-12-31",
+      "revenue": 121000000000.0,
+      "operatingIncome": 24200000000.0
+     },
+     {
+      "fy": 2023,
+      "periodEnd": "2023-12-31",
+      "revenue": 133100000000.0,
+      "operatingIncome": 13310000000.0
+     },
+     {
+      "fy": 2024,
+      "periodEnd": "2024-12-31",
+      "revenue": 146410000000.0,
+      "operatingIncome": 29282000000.0
+     },
+     {
+      "fy": 2025,
+      "periodEnd": "2025-12-31",
+      "revenue": 161051000000.0,
+      "operatingIncome": 16105100000.0
+     }
+    ],
+    "base_fy": 2025,
+    "stats": {
+     "cagr": 0.10000000000000009,
+     "cagr_years": 5,
+     "avg_margin": 0.15999999999999998,
+     "margin_years": 5,
+     "last_growth": 0.10000000000000009,
+     "last_margin": 0.1
+    },
+    "margin_min": 0.1,
+    "margin_max": 0.2,
+    "years": [
+     {
+      "fy": 2026,
+      "growth": 25.0,
+      "margin": 30.0,
+      "growth_vs_cagr": 14.999999999999991,
+      "growth_flag": "above",
+      "margin_flag": "above"
+     },
+     {
+      "fy": 2027,
+      "growth": 12.0,
+      "margin": 12.0,
+      "growth_vs_cagr": 1.9999999999999911,
+      "growth_flag": null,
+      "margin_flag": null
+     },
+     {
+      "fy": 2028,
+      "growth": -5.0,
+      "margin": 9.5,
+      "growth_vs_cagr": -15.000000000000009,
+      "growth_flag": "below",
+      "margin_flag": "below"
+     },
+     {
+      "fy": 2029,
+      "growth": 19.99,
+      "margin": 22.0,
+      "growth_vs_cagr": 9.98999999999999,
+      "growth_flag": null,
+      "margin_flag": "above"
+     }
+    ]
+   }
+  },
+  {
+   "name": "gaps, a negative year, a base year without operating income",
+   "rows": [
+    {
+     "metric": "revenue",
+     "period_start": null,
+     "period_end": "2015-01-25",
+     "fiscal_period": "FY2014 Q4",
+     "calendar_period": null,
+     "value": "4681507000",
+     "unit": "USD",
+     "value_source": "reported",
+     "citation": {
+      "accession_no": "0000000001-26-000001",
+      "form": "10-K",
+      "filed": "2015-01-25",
+      "xbrl_tag": "Revenues",
+      "source_accessions": null,
+      "filing_url": null
+     },
+     "freshness": {
+      "filed": "2015-01-25",
+      "ingested_at": "2015-01-25T00:00:00Z"
+     }
+    },
+    {
+     "metric": "revenue",
+     "period_start": null,
+     "period_end": "2017-01-29",
+     "fiscal_period": "FY2016 Q4",
+     "calendar_period": null,
+     "value": "-12000000",
+     "unit": "USD",
+     "value_source": "reported",
+     "citation": {
+      "accession_no": "0000000001-26-000001",
+      "form": "10-K",
+      "filed": "2017-01-29",
+      "xbrl_tag": "Revenues",
+      "source_accessions": null,
+      "filing_url": null
+     },
+     "freshness": {
+      "filed": "2017-01-29",
+      "ingested_at": "2017-01-29T00:00:00Z"
+     }
+    },
+    {
+     "metric": "revenue",
+     "period_start": null,
+     "period_end": "2018-01-28",
+     "fiscal_period": "FY2017 Q4",
+     "calendar_period": null,
+     "value": "9714000000",
+     "unit": "USD",
+     "value_source": "reported",
+     "citation": {
+      "accession_no": "0000000001-26-000001",
+      "form": "10-K",
+      "filed": "2018-01-28",
+      "xbrl_tag": "Revenues",
+      "source_accessions": null,
+      "filing_url": null
+     },
+     "freshness": {
+      "filed": "2018-01-28",
+      "ingested_at": "2018-01-28T00:00:00Z"
+     }
+    },
+    {
+     "metric": "operating_income",
+     "period_start": null,
+     "period_end": "2018-01-28",
+     "fiscal_period": "FY2017 Q4",
+     "calendar_period": null,
+     "value": "3210000000",
+     "unit": "USD",
+     "value_source": "reported",
+     "citation": {
+      "accession_no": "0000000001-26-000001",
+      "form": "10-K",
+      "filed": "2018-01-28",
+      "xbrl_tag": "Revenues",
+      "source_accessions": null,
+      "filing_url": null
+     },
+     "freshness": {
+      "filed": "2018-01-28",
+      "ingested_at": "2018-01-28T00:00:00Z"
+     }
+    },
+    {
+     "metric": "revenue",
+     "period_start": null,
+     "period_end": "2019-01-27",
+     "fiscal_period": "FY2018 Q4",
+     "calendar_period": null,
+     "value": "11716000000",
+     "unit": "USD",
+     "value_source": "reported",
+     "citation": {
+      "accession_no": "0000000001-26-000001",
+      "form": "10-K",
+      "filed": "2019-01-27",
+      "xbrl_tag": "Revenues",
+      "source_accessions": null,
+      "filing_url": null
+     },
+     "freshness": {
+      "filed": "2019-01-27",
+      "ingested_at": "2019-01-27T00:00:00Z"
+     }
+    },
+    {
+     "metric": "operating_income",
+     "period_start": null,
+     "period_end": "2019-01-27",
+     "fiscal_period": "FY2018 Q4",
+     "calendar_period": null,
+     "value": "3804000000",
+     "unit": "USD",
+     "value_source": "reported",
+     "citation": {
+      "accession_no": "0000000001-26-000001",
+      "form": "10-K",
+      "filed": "2019-01-27",
+      "xbrl_tag": "Revenues",
+      "source_accessions": null,
+      "filing_url": null
+     },
+     "freshness": {
+      "filed": "2019-01-27",
+      "ingested_at": "2019-01-27T00:00:00Z"
+     }
+    },
+    {
+     "metric": "revenue",
+     "period_start": null,
+     "period_end": "2021-01-31",
+     "fiscal_period": "FY2020 Q4",
+     "calendar_period": null,
+     "value": "16675000000",
+     "unit": "USD",
+     "value_source": "reported",
+     "citation": {
+      "accession_no": "0000000001-26-000001",
+      "form": "10-K",
+      "filed": "2021-01-31",
+      "xbrl_tag": "Revenues",
+      "source_accessions": null,
+      "filing_url": null
+     },
+     "freshness": {
+      "filed": "2021-01-31",
+      "ingested_at": "2021-01-31T00:00:00Z"
+     }
+    },
+    {
+     "metric": "operating_income",
+     "period_start": null,
+     "period_end": "2021-01-31",
+     "fiscal_period": "FY2020 Q4",
+     "calendar_period": null,
+     "value": "4532000000",
+     "unit": "USD",
+     "value_source": "reported",
+     "citation": {
+      "accession_no": "0000000001-26-000001",
+      "form": "10-K",
+      "filed": "2021-01-31",
+      "xbrl_tag": "Revenues",
+      "source_accessions": null,
+      "filing_url": null
+     },
+     "freshness": {
+      "filed": "2021-01-31",
+      "ingested_at": "2021-01-31T00:00:00Z"
+     }
+    },
+    {
+     "metric": "revenue",
+     "period_start": null,
+     "period_end": "2022-01-30",
+     "fiscal_period": "FY2021 Q4",
+     "calendar_period": null,
+     "value": "26914000000",
+     "unit": "USD",
+     "value_source": "reported",
+     "citation": {
+      "accession_no": "0000000001-26-000001",
+      "form": "10-K",
+      "filed": "2022-01-30",
+      "xbrl_tag": "Revenues",
+      "source_accessions": null,
+      "filing_url": null
+     },
+     "freshness": {
+      "filed": "2022-01-30",
+      "ingested_at": "2022-01-30T00:00:00Z"
+     }
+    },
+    {
+     "metric": "operating_income",
+     "period_start": null,
+     "period_end": "2022-01-30",
+     "fiscal_period": "FY2021 Q4",
+     "calendar_period": null,
+     "value": "10041000000",
+     "unit": "USD",
+     "value_source": "reported",
+     "citation": {
+      "accession_no": "0000000001-26-000001",
+      "form": "10-K",
+      "filed": "2022-01-30",
+      "xbrl_tag": "Revenues",
+      "source_accessions": null,
+      "filing_url": null
+     },
+     "freshness": {
+      "filed": "2022-01-30",
+      "ingested_at": "2022-01-30T00:00:00Z"
+     }
+    },
+    {
+     "metric": "operating_income",
+     "period_start": null,
+     "period_end": "2023-01-29",
+     "fiscal_period": "FY2022 Q4",
+     "calendar_period": null,
+     "value": "4224000000",
+     "unit": "USD",
+     "value_source": "reported",
+     "citation": {
+      "accession_no": "0000000001-26-000001",
+      "form": "10-K",
+      "filed": "2023-01-29",
+      "xbrl_tag": "Revenues",
+      "source_accessions": null,
+      "filing_url": null
+     },
+     "freshness": {
+      "filed": "2023-01-29",
+      "ingested_at": "2023-01-29T00:00:00Z"
+     }
+    },
+    {
+     "metric": "revenue",
+     "period_start": null,
+     "period_end": "2024-01-28",
+     "fiscal_period": "FY2023 Q4",
+     "calendar_period": null,
+     "value": "60922000000",
+     "unit": "USD",
+     "value_source": "reported",
+     "citation": {
+      "accession_no": "0000000001-26-000001",
+      "form": "10-K",
+      "filed": "2024-01-28",
+      "xbrl_tag": "Revenues",
+      "source_accessions": null,
+      "filing_url": null
+     },
+     "freshness": {
+      "filed": "2024-01-28",
+      "ingested_at": "2024-01-28T00:00:00Z"
+     }
+    },
+    {
+     "metric": "operating_income",
+     "period_start": null,
+     "period_end": "2024-01-28",
+     "fiscal_period": "FY2023 Q4",
+     "calendar_period": null,
+     "value": "32972000000",
+     "unit": "USD",
+     "value_source": "reported",
+     "citation": {
+      "accession_no": "0000000001-26-000001",
+      "form": "10-K",
+      "filed": "2024-01-28",
+      "xbrl_tag": "Revenues",
+      "source_accessions": null,
+      "filing_url": null
+     },
+     "freshness": {
+      "filed": "2024-01-28",
+      "ingested_at": "2024-01-28T00:00:00Z"
+     }
+    },
+    {
+     "metric": "revenue",
+     "period_start": null,
+     "period_end": "2024-01-29",
+     "fiscal_period": "FY2023 Q4",
+     "calendar_period": null,
+     "value": "60922000000",
+     "unit": "USD",
+     "value_source": "reported",
+     "citation": {
+      "accession_no": "0000000001-26-000001",
+      "form": "10-K",
+      "filed": "2024-01-29",
+      "xbrl_tag": "Revenues",
+      "source_accessions": null,
+      "filing_url": null
+     },
+     "freshness": {
+      "filed": "2024-01-29",
+      "ingested_at": "2024-01-29T00:00:00Z"
+     }
+    },
+    {
+     "metric": "revenue",
+     "period_start": null,
+     "period_end": "2025-01-26",
+     "fiscal_period": "FY2024 Q4",
+     "calendar_period": null,
+     "value": "130497000000",
+     "unit": "USD",
+     "value_source": "reported",
+     "citation": {
+      "accession_no": "0000000001-26-000001",
+      "form": "10-K",
+      "filed": "2025-01-26",
+      "xbrl_tag": "Revenues",
+      "source_accessions": null,
+      "filing_url": null
+     },
+     "freshness": {
+      "filed": "2025-01-26",
+      "ingested_at": "2025-01-26T00:00:00Z"
+     }
+    },
+    {
+     "metric": "revenue",
+     "period_start": null,
+     "period_end": "2025-01-26",
+     "fiscal_period": "FY2024 Q4",
+     "calendar_period": null,
+     "value": "not a number",
+     "unit": "USD",
+     "value_source": "reported",
+     "citation": {
+      "accession_no": "0000000001-26-000001",
+      "form": "10-K",
+      "filed": "2025-01-26",
+      "xbrl_tag": "Revenues",
+      "source_accessions": null,
+      "filing_url": null
+     },
+     "freshness": {
+      "filed": "2025-01-26",
+      "ingested_at": "2025-01-26T00:00:00Z"
+     }
+    }
+   ],
+   "assumptions": [
+    {
+     "growth": 40,
+     "margin": 55
+    },
+    {
+     "growth": 100,
+     "margin": 27.5
+    },
+    {
+     "growth": 150,
+     "margin": 20
+    }
+   ],
+   "expected": {
+    "history": [
+     {
+      "fy": 2014,
+      "periodEnd": "2015-01-25",
+      "revenue": 4681507000.0,
+      "operatingIncome": null
+     },
+     {
+      "fy": 2016,
+      "periodEnd": "2017-01-29",
+      "revenue": -12000000.0,
+      "operatingIncome": null
+     },
+     {
+      "fy": 2017,
+      "periodEnd": "2018-01-28",
+      "revenue": 9714000000.0,
+      "operatingIncome": 3210000000.0
+     },
+     {
+      "fy": 2018,
+      "periodEnd": "2019-01-27",
+      "revenue": 11716000000.0,
+      "operatingIncome": 3804000000.0
+     },
+     {
+      "fy": 2020,
+      "periodEnd": "2021-01-31",
+      "revenue": 16675000000.0,
+      "operatingIncome": 4532000000.0
+     },
+     {
+      "fy": 2021,
+      "periodEnd": "2022-01-30",
+      "revenue": 26914000000.0,
+      "operatingIncome": 10041000000.0
+     },
+     {
+      "fy": 2022,
+      "periodEnd": "2023-01-29",
+      "revenue": null,
+      "operatingIncome": 4224000000.0
+     },
+     {
+      "fy": 2023,
+      "periodEnd": "2024-01-29",
+      "revenue": 60922000000.0,
+      "operatingIncome": 32972000000.0
+     },
+     {
+      "fy": 2024,
+      "periodEnd": "2025-01-26",
+      "revenue": 130497000000.0,
+      "operatingIncome": null
+     }
+    ],
+    "base_fy": 2024,
+    "stats": {
+     "cagr": 0.6725675679020933,
+     "cagr_years": 4,
+     "avg_margin": 0.39535931816714415,
+     "margin_years": 3,
+     "last_growth": 1.1420340763599355,
+     "last_margin": null
+    },
+    "margin_min": 0.271784107946027,
+    "margin_max": 0.5412166376678376,
+    "years": [
+     {
+      "fy": 2025,
+      "growth": 40.0,
+      "margin": 55.0,
+      "growth_vs_cagr": -27.256756790209323,
+      "growth_flag": "below",
+      "margin_flag": "above"
+     },
+     {
+      "fy": 2026,
+      "growth": 100.0,
+      "margin": 27.5,
+      "growth_vs_cagr": 32.74324320979068,
+      "growth_flag": "above",
+      "margin_flag": null
+     },
+     {
+      "fy": 2027,
+      "growth": 150.0,
+      "margin": 20.0,
+      "growth_vs_cagr": 82.74324320979068,
+      "growth_flag": "above",
+      "margin_flag": "below"
+     }
+    ]
+   }
+  },
+  {
+   "name": "no history",
+   "rows": [],
+   "assumptions": [
+    {
+     "growth": 8,
+     "margin": 15
+    }
+   ],
+   "expected": {
+    "history": [],
+    "base_fy": null,
+    "stats": {
+     "cagr": null,
+     "cagr_years": 0,
+     "avg_margin": null,
+     "margin_years": 0,
+     "last_growth": null,
+     "last_margin": null
+    },
+    "margin_min": null,
+    "margin_max": null,
+    "years": [
+     {
+      "fy": 1,
+      "growth": 8.0,
+      "margin": 15.0,
+      "growth_vs_cagr": null,
+      "growth_flag": null,
+      "margin_flag": null
+     }
+    ]
+   }
+  }
+ ]
+}

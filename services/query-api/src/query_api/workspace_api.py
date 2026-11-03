@@ -17,6 +17,7 @@ from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 
 from query_api.reports import MAX_REPORT_BODY, validate_report
 from query_api.store import Store
+from query_api.thesis_checks import MAX_CHECK_BODY
 from query_api.workspaces import (
     ITEM_NAME,
     MAX_BODY_BYTES,
@@ -32,8 +33,10 @@ from query_api.workspaces import (
     validate_state,
 )
 
-PREFIXES = ("/v1/workspaces", "/v1/workspace-items", "/v1/recent", "/v1/views")
+PREFIXES = ("/v1/workspaces", "/v1/workspace-items", "/v1/recent", "/v1/views",
+            "/v1/thesis-checks")
 REPORT_PATH = re.compile(r"^/v1/workspaces/[^/]+/reports(/|$)")
+CHECK_PATH = re.compile(r"^/v1/thesis-checks/")  # query_api.thesis_checks
 # an item's create and save-over bodies may carry a thesis (up to MAX_THESIS_BYTES)
 ITEM_PATH = re.compile(r"^/v1/workspaces/[^/]+/items$|^/v1/workspace-items/[^/]+$")
 NOT_FOUND = "workspace not found"
@@ -105,6 +108,7 @@ def add_workspace_routes(app: FastAPI, *, store: Store, workspaces: Workspaces |
         if request.method in ("POST", "PUT", "PATCH") and request.url.path.startswith(PREFIXES):
             path = request.url.path
             cap = (MAX_REPORT_BODY if REPORT_PATH.match(path)
+                   else MAX_CHECK_BODY if CHECK_PATH.match(path)
                    else MAX_ITEM_BODY if ITEM_PATH.match(path) else MAX_BODY_BYTES)
             size = request.headers.get("content-length")
             if size is None or not size.isdigit():

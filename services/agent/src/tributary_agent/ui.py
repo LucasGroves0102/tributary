@@ -104,7 +104,7 @@ class CompareContext(_Strict):
 
 class UiContext(_Strict):
     page: Literal["home", "companies", "company", "filing", "chart", "compare", "search", "ask",
-                  "about", "workspace", "report"]
+                  "about", "workspace", "report", "thesis", "model"]
     query: str | None = Field(default=None, max_length=200,
                               description="the full-text search page's words")
     company_id: str | None = Field(default=None, pattern=CIK)

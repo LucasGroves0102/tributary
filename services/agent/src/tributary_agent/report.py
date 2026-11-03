@@ -179,19 +179,30 @@ def load(api: Http, workspace_id: str, report_id: str | None = None) -> Job:
     )
 
 
-def build_scope(api: Http, job: Job) -> None:
-    """The companies the report may read, per item, with the user's access to each."""
+def user_access(api: Http) -> tuple[dict[str, dict], set[str]]:
+    """What the token's user can read (`/v1/me`): their listed companies by id, and the tiers
+    every company has for them while the public catalog is open (`companies` then lists only
+    private grants beyond it)."""
     r = _get(api, "/v1/me")
     me = _json(r) if r.status_code == 200 else None
     if not isinstance(me, dict):
         raise ReportError(503, "couldn't check the user's companies")
     readable = {c["company_id"]: c for c in me.get("companies") or []
                 if isinstance(c, dict) and isinstance(c.get("company_id"), str)}
-    # with the public catalog open, every company is readable with its tiers and `companies`
-    # lists only private grants beyond it
     catalog = me.get("catalog") if isinstance(me.get("catalog"), dict) else {}
     everyone = {t for t in catalog.get("tiers") or [] if t in ("financials", "filings")} \
         if catalog.get("public") else set()
+    return readable, everyone
+
+
+def tiers_of(readable: dict[str, dict], everyone: set[str], company_id: str) -> list[str]:
+    c = readable.get(company_id) or {}
+    return sorted(everyone | {t for t in c.get("tiers") or [] if t in ("financials", "filings")})
+
+
+def build_scope(api: Http, job: Job) -> None:
+    """The companies the report may read, per item, with the user's access to each."""
+    readable, everyone = user_access(api)
     names: dict[str, str | None] = {cid: c.get("name") for cid, c in readable.items()}
     for item in job.items:
         ids: list[str] = []
@@ -212,11 +223,8 @@ def build_scope(api: Http, job: Job) -> None:
         job.item_companies[item.ref] = ids
         for cid in ids:
             if cid not in job.companies and len(job.companies) < MAX_SCOPE:
-                c = readable.get(cid) or {}
                 job.companies[cid] = {"name": names.get(cid),
-                                      "access": sorted(everyone | {
-                                          t for t in c.get("tiers") or []
-                                          if t in ("financials", "filings")})}
+                                      "access": tiers_of(readable, everyone, cid)}
 
 
 def _formula_companies(api: Http, formula: str, names: dict[str, str | None]) -> list[str]:
@@ -298,19 +306,23 @@ class ScopedTools:
     """The Query API tools as the user, limited to the report's companies; every successful
     result is kept for the as-of time."""
 
-    def __init__(self, api: ToolRunner, allowed: set[str]) -> None:
+    def __init__(self, api: ToolRunner, allowed: set[str], what: str = "a report",
+                 where: str = "the workspace") -> None:
+        """what/where name the job in refusals ("a thesis check", "the check's scope")."""
         self._api = api
         self._allowed = allowed
+        self._what = what
+        self._where = where
         self.results: list[str] = []
 
     def run(self, name: str, args: dict[str, Any]) -> tuple[str, bool]:
         if name in COMPANY_TOOLS:
             cid = args.get("company_id")
             if name == "search_filings" and cid is None:
-                return ("not run: in a report, search_filings needs the company_id of a "
-                        "company in the workspace"), True
+                return (f"not run: in {self._what}, search_filings needs the company_id of a "
+                        f"company in {self._where}"), True
             if str(cid) not in self._allowed:
-                return ("not run: a report covers only the companies in the workspace; "
+                return (f"not run: {self._what} covers only the companies in {self._where}; "
                         f"{cid} isn't one of them"), True
         content, is_error = self._api.run(name, args)
         if not is_error:
@@ -405,8 +417,14 @@ def assemble(answer: Answer, job: Job, results: list[str], written_at: datetime,
 
 
 def _citations(answer: Answer) -> list[dict]:
+    return citations_of(answer.citations)
+
+
+def citations_of(filings: dict[str, dict]) -> list[dict]:
+    """Filings the tools returned (agent._collect_citations), as stored with a report or a
+    thesis check: EDGAR URLs only, valid section keys, at most 200."""
     out = []
-    for c in list(answer.citations.values())[:200]:
+    for c in list(filings.values())[:200]:
         acc = str(c.get("accession_no", ""))
         if not ACCESSION.fullmatch(acc):
             continue

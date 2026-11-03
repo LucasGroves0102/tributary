@@ -6,6 +6,7 @@ import { App } from "../App";
 import { clearChartCache } from "../chart/cache";
 import { entry, fin, NVDA, nvdaRow, TSLA } from "../fixtures";
 import { forgetVisits } from "../home/lastVisit";
+import { textHash } from "./check";
 
 const ME = {
   user_id: "alice",
@@ -33,6 +34,44 @@ const HISTORY = [2021, 2022, 2023, 2024, 2025].flatMap((fy, i) => {
   ];
 });
 
+const ACC = "0001045810-26-000021";
+const CHECK_ID = "66666666-6666-4666-8666-666666666666";
+const CITE = { accession_no: ACC, form: "10-Q", filed: "2026-08-27", company_id: NVDA, url: "https://www.sec.gov/Archives/edgar/data/1045810/x.htm", section_key: "I-2", figure: null, figure_status: null, as_of: "2026-11-02T08:00:00+00:00", verified: true };
+/** a check as agent-api stores it (thesis_check.assemble), for the thesis text `hash` */
+function checkResult(hash: string) {
+  return {
+    version: 1,
+    thesis: { item_id: THESIS_ID, title: "NVDA: the build-out", company_id: NVDA, text_hash: hash, characters: BODY.length, characters_checked: BODY.length, truncated: false },
+    summary: "One claim holds; the **supply** claim <img src=x onerror=alert(2)> doesn't.",
+    claims: [
+      { quote: "Data centers keep buying.", quote_found: true, status: "supported", explanation: `Data Center revenue was $41.1B (10-Q, ${ACC}).`, citations: [CITE], figures: [{ text: "$41.1B", status: "verified" }] },
+      { quote: "Margins never fall.", quote_found: false, status: "unverifiable", explanation: "Revenue was $99.9B per 0000000000-26-000001.", citations: [{ accession_no: "0000000000-26-000001", verified: false }], figures: [{ text: "$99.9B", status: "unverified" }], downgraded: true },
+    ],
+    assumptions: [{
+      ref: "model-1", item_id: MODEL_ID, name: "NVDA model", company_id: NVDA, base_fy: 2025,
+      stats: { cagr: 0.1, cagr_years: 4, avg_margin: 0.2, margin_years: 5, last_growth: 0.1, last_margin: 0.2 },
+      margin_min: 0.2, margin_max: 0.2,
+      years: [
+        { fy: 2026, growth: 25, margin: 50, growth_vs_cagr: 15, growth_flag: "above", margin_flag: "above", commentary: "Well above history.", citations: [CITE], figures: [] },
+        { fy: 2027, growth: 10, margin: 45, growth_vs_cagr: 0, growth_flag: null, margin_flag: "above", commentary: "", citations: [], figures: [] },
+      ],
+    }],
+    not_mentioned: [{ point: "Supply of Blackwell stayed constrained (MD&A).", citations: [CITE], figures: [] }],
+    notes: [],
+    citations: [{ accession_no: ACC, form: "10-Q", filed: "2026-08-27", company_id: NVDA, url: null, sections: ["I-2"] }],
+    verification: { ok: false, figures: [{ text: "$41.1B", status: "verified" }, { text: "$99.9B", status: "unverified" }], unverified_accessions: ["0000000000-26-000001"], used_data: true, freshness: true },
+    as_of: "2026-11-02T08:00:00+00:00", checked_at: "2026-11-02T09:00:00+00:00", model: "claude-haiku-5-5", questions: 4, stop: "end_turn", rounds: 5, cost_usd: 0.0123,
+  };
+}
+const summary = (hash: string, id = CHECK_ID) => ({
+  check_id: id, item_id: THESIS_ID, text_hash: hash, model: "claude-haiku-5-5", cost_usd: 0.0123,
+  counts: { supported: 1, contradicted: 0, unverifiable: 1, flagged_assumptions: 2, not_mentioned: 1, ok: false }, created_at: "2026-11-02T09:00:00Z",
+});
+let stored: { check_id: string; text_hash: string }[];
+let asked: Record<string, unknown>[];
+const sse = (events: object[]) =>
+  new Response(events.map((e) => `data: ${JSON.stringify(e)}\n\n`).join(""), { headers: { "Content-Type": "text/event-stream" } });
+
 type Item = { item_id: string; workspace_id: string; kind: string; name: string; state: Record<string, unknown> | null; created_at: string; updated_at: string; opened_at: string | null };
 let items: Map<string, Item>;
 let writes: { method: string; path: string; body: Record<string, unknown> }[];
@@ -56,6 +95,18 @@ function respond(url: string, init?: RequestInit): Response {
   if (p === "/v1/formulas/evaluate") return Response.json({ formula: "revenue", unit: "USD", basis: "calendar", view: "ttm", alignment: "calendar", as_of: "", inputs: [], points: [] });
   if (p === `/v1/companies/${NVDA}/financials`) return Response.json({ company_id: NVDA, view: "ttm", basis: "fiscal", as_of: "2026-11-02T00:00:00Z", rows: HISTORY });
   if (p === "/v1/companies/search") return Response.json({ results: [{ company_id: TSLA, name: "Tesla", matched_on: "ticker", matched_alias: "TSLA", access: ["financials"] }] });
+  if (p === "/api/agent/v1/thesis-checks" && method === "POST") {
+    asked.push(body);
+    const hash = stored[0]?.text_hash ?? "0".repeat(64);
+    const fresh = summary(hash, "77777777-7777-4777-8777-777777777777");
+    return sse([{ type: "tool", round: 0, name: "get_financials", input: {}, is_error: false }, { type: "check", check: fresh, result: checkResult(hash) }, { type: "done", answer: {} }]);
+  }
+  if (p === `/v1/workspace-items/${THESIS_ID}/checks`) return Response.json({ item_id: THESIS_ID, checks: stored.map((c) => summary(c.text_hash, c.check_id)) });
+  const one = p.match(/^\/v1\/workspace-items\/[^/]+\/checks\/([^/]+)$/);
+  if (one) {
+    const c = stored.find((x) => x.check_id === one[1]);
+    return c ? Response.json({ ...summary(c.text_hash, c.check_id), result: checkResult(c.text_hash) }) : Response.json({ detail: "check not found" }, { status: 404 });
+  }
   const listed = () => [...items.values()].map(({ state: _s, ...rest }) => rest);
   if (p === "/v1/workspaces") return Response.json({ workspaces: [{ workspace_id: "w1", name: "Semis", created_at: "", updated_at: "", items: listed() }] });
   if (p === "/v1/workspaces/w1" && method === "GET") {
@@ -133,6 +184,8 @@ beforeEach(() => {
   Object.defineProperty(window, "innerWidth", { value: 1440, configurable: true });
   forgetVisits();
   writes = [];
+  stored = [];
+  asked = [];
   items = new Map([
     [CHART_ID, item(CHART_ID, "chart", "NVDA revenue", CHART)],
     [MODEL_ID, item(MODEL_ID, "model", "NVDA model", MODEL)],
@@ -290,4 +343,49 @@ it("creates a model from the company page, starting from the company's own histo
     state: { companyId: NVDA, historyYears: 8, assumptions: [{ growth: 10, margin: 20 }, { growth: 10, margin: 20 }, { growth: 10, margin: 20 }] },
   });
   expect(window.location.hash).toMatch(/^#\/model\/55555555-/);
+});
+
+it("checks the saved thesis and shows claims, assumptions, what's not mentioned and staleness", async () => {
+  stored = [{ check_id: CHECK_ID, text_hash: await textHash(NVDA, BODY) }];
+  await render(`#/thesis/${THESIS_ID}`, ".check-panel .claims");
+  const panel = container.querySelector<HTMLElement>(".check-panel")!;
+  // claims with status badges; model text sanitized and its figures checked
+  expect([...panel.querySelectorAll(".claim .status-badge")].map((b) => b.textContent)).toEqual(["Supported", "Can't verify"]);
+  expect(panel.querySelector("[onerror], script")).toBeNull(); // DOMPurify, as in chat answers
+  expect(panel.querySelector(".claims .figure.unverified")?.textContent).toBe("$99.9B");
+  expect(panel.querySelector(".claims .accession.unverified")?.textContent).toContain("0000000000-26-000001");
+  // a cited section opens the filing reader there
+  const reader = panel.querySelector<HTMLAnchorElement>(".check-cites a.reader-link")!;
+  expect(reader.getAttribute("href")).toBe(`#/filing/${NVDA}/${ACC}/I-2`);
+  // assumptions: flagged years, the numbers as computed
+  const rows = [...panel.querySelectorAll(".check-assumptions tbody tr")];
+  expect(rows.map((r) => r.className)).toEqual(["flagged", "flagged"]);
+  expect(rows[0]!.textContent).toContain("+15.0 pts");
+  expect(panel.textContent).toContain("4-yr revenue CAGR 10.0%");
+  expect(panel.querySelector(".not-mentioned")?.textContent).toContain("Blackwell");
+  expect(panel.textContent).not.toContain("Stale");
+  // clicking a quote marks it in the preview
+  await click(panel.querySelector<HTMLButtonElement>("button.claim-quote")!);
+  expect(container.querySelector(".thesis-doc mark.claim-mark")?.textContent).toBe("Data centers keep buying.");
+  // the text changes: the check is stale, and Check waits for Save
+  await act(async () => type(textarea(), BODY + "\n\nMore."));
+  await settle();
+  expect(panel.textContent).toContain("Stale: the thesis changed since this check");
+  expect(button("Check my thesis").disabled).toBe(true);
+  await click(button("Save"));
+  stored = [{ check_id: CHECK_ID, text_hash: await textHash(NVDA, BODY + "\n\nMore.") }];
+  expect(button("Check my thesis").disabled).toBe(false);
+  await click(button("Check my thesis"));
+  await waitFor('.check-panel select option[value="77777777-7777-4777-8777-777777777777"]');
+  expect(asked).toEqual([{ item_id: THESIS_ID }]);
+  // the new check is shown first in the history, and isn't stale
+  const history = container.querySelector<HTMLSelectElement>(".check-panel select")!;
+  expect([...history.options].map((o) => o.value)).toEqual(["77777777-7777-4777-8777-777777777777", CHECK_ID]);
+  expect(container.querySelector(".check-panel")?.textContent).not.toContain("Stale");
+});
+
+it("shows no check panel until a check exists", async () => {
+  await render(`#/thesis/${THESIS_ID}`, "textarea.thesis-text");
+  expect(container.querySelector(".check-panel")).toBeNull();
+  expect(button("Check my thesis").disabled).toBe(false);
 });

@@ -43,8 +43,8 @@ DEMO_QUESTIONS = Counter("tributary_demo_agent_questions_total",
 
 log = logging.getLogger("query_api.demo")
 
-# the most one request may take: a report (services/agent report.py REPORT_QUESTIONS) counts as
-# several questions
+# the most one request may take: a report (services/agent report.py REPORT_QUESTIONS, 3) and a
+# thesis check (thesis_check.py CHECK_QUESTIONS, 4) count as several questions
 MAX_QUESTIONS_AT_ONCE = 5
 
 
@@ -149,9 +149,9 @@ def add_sandbox_routes(app: FastAPI, *, store: Store, sandboxes: Sandboxes | Non
     def agent_quota(user_id: User, body: QuotaRequest | None = None) -> dict:
         """Called by agent-api before each question (nginx keeps it off the public site).
         Takes one of the caller's assistant questions (or `questions` of them, all or none:
-        a report counts as several) if they are a demo sandbox or a GitHub sign-in (same
-        caps); other users aren't limited here. 429 with a message the assistant shows when a
-        cap is hit."""
+        a report or a thesis check counts as several) if they are a demo sandbox or a GitHub
+        sign-in (same caps); other users aren't limited here. 429 with a message the assistant
+        shows when a cap is hit."""
         n = body.questions if body else 1
         github = is_github_user(user_id)
         if not is_sandbox_user(user_id) and not github:
@@ -180,7 +180,8 @@ def add_sandbox_routes(app: FastAPI, *, store: Store, sandboxes: Sandboxes | Non
                 DEMO_QUESTIONS.labels("user_limit").inc()
                 if n > 1 and e.left > 0:
                     raise HTTPException(429, (
-                        f"A report counts as {n} assistant questions and {who[0].lower()}"
+                        f"This counts as {n} assistant questions (a report or a thesis "
+                        f"check) and {who[0].lower()}"
                         f"{who[1:]} has {e.left} left today. Ask a question instead, or come "
                         "back after midnight UTC.")) from None
                 raise HTTPException(429, (

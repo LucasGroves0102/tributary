@@ -1,5 +1,6 @@
 """Agent HTTP API: POST /v1/ask streams the agent's events as server-sent events; POST
-/v1/reports writes a research note from one of the user's workspaces (report.py)."""
+/v1/reports writes a research note from one of the user's workspaces (report.py); POST
+/v1/thesis-checks checks one of the user's theses against the data (thesis_check.py)."""
 
 import json
 import logging
@@ -30,6 +31,13 @@ from tributary_agent.report import (
     ReportError,
 )
 from tributary_agent.telemetry import record_answer, record_error
+from tributary_agent.thesis_check import (
+    CHECK_QUESTIONS,
+    CHECK_ROUNDS,
+    CHECK_RULES,
+    SUBMIT_TOOL,
+    Checker,
+)
 from tributary_agent.tools import MetricTools, QueryApi
 from tributary_agent.ui import UiActions, UiContext
 from tributary_telemetry import configure_logging
@@ -56,6 +64,12 @@ class ReportRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     workspace_id: UUID
     report_id: UUID | None = None
+
+
+class CheckRequest(BaseModel):
+    """Check this thesis (the user's own: the Query API checks)."""
+    model_config = ConfigDict(extra="forbid")
+    item_id: UUID
 
 
 class LimitExceeded(Exception):
@@ -96,9 +110,10 @@ class Limits:
             for key in [k for k, v in windows.items() if not self._recent(v, now)]:
                 del windows[key]
 
-    def acquire(self, user_id: str, client_ip: str, questions: int = 1) -> None:
-        """Takes `questions` from the hour's allowances (a report counts as several), or none
-        of them."""
+    def acquire(self, user_id: str, client_ip: str, questions: int = 1,
+                what: str = "A report") -> None:
+        """Takes `questions` from the hour's allowances (a report or a thesis check counts as
+        several), or none of them. `what` names it in the refusal."""
         now = self._clock()
         with self._lock:
             if self._spent[self._today()] >= self._budget:
@@ -106,7 +121,7 @@ class Limits:
             self._sweep(now)
             by_ip = self._recent(self._by_ip[client_ip], now)
             by_user = self._recent(self._by_user[user_id], now)
-            report = f"A report counts as {questions} questions. " if questions > 1 else ""
+            report = f"{what} counts as {questions} questions. " if questions > 1 else ""
             if len(by_ip) + questions > self._per_ip:
                 raise LimitExceeded(f"{report}Limit of {self._per_ip} questions per hour "
                                     "reached. Try again later.")
@@ -139,13 +154,15 @@ def _no_quota(tok: str, questions: int = 1) -> None:
 def create_app(make_agent: Callable[[str], Agent], who_is: Callable[[str], str],
                limits: Limits, client_ip_header: str = "X-Client-IP",
                take_quota: Callable[[str, int], None] = _no_quota,
-               make_reporter: Callable[[str], Reporter] | None = None) -> FastAPI:
+               make_reporter: Callable[[str], Reporter] | None = None,
+               make_checker: Callable[[str], Checker] | None = None) -> FastAPI:
     """make_agent(token) builds an agent reading as the token's user; who_is(token) returns
     that user's id or raises HTTPException. The client IP is read from client_ip_header, set
     by the web proxy, else the connection's peer address. take_quota(token, n) takes n of the
     user's persistent question allowances (demo sandboxes, Query API) or raises
     HTTPException (429 with the message to show). make_reporter(token): reports as the
-    token's user (report.py); None leaves /v1/reports out."""
+    token's user (report.py); None leaves /v1/reports out. make_checker(token): thesis checks
+    as the token's user (thesis_check.py); None leaves /v1/thesis-checks out."""
     app = FastAPI(title="Tributary Agent", version="1")
     instrument(app)
     bearer = HTTPBearer(auto_error=False)
@@ -228,6 +245,29 @@ def create_app(make_agent: Callable[[str], Agent], who_is: Callable[[str], str],
             take_quota(tok, REPORT_QUESTIONS)
             return sse(reporter.events(job), user_id, "report")
 
+    if make_checker is not None:
+        checker_for = make_checker
+
+        @app.post("/v1/thesis-checks")
+        def check_thesis(body: CheckRequest, tok: Annotated[str, Depends(token)],
+                         ip: Annotated[str, Depends(client_ip)]) -> StreamingResponse:
+            """Checks one of the user's theses against the data and saves the result with it
+            (thesis_check.py). Streams the agent's events, a "check" event once saved (or an
+            "error"), then "done". Counts as CHECK_QUESTIONS questions against every limit,
+            taken only once the thesis is the user's and has text to check."""
+            user_id = who_is(tok)
+            checker = checker_for(tok)
+            try:
+                job = checker.prepare(str(body.item_id))
+            except ReportError as e:
+                raise HTTPException(e.status, e.message) from None
+            try:
+                limits.acquire(user_id, ip, CHECK_QUESTIONS, what="A thesis check")
+            except LimitExceeded as e:
+                raise HTTPException(429, str(e)) from None
+            take_quota(tok, CHECK_QUESTIONS)
+            return sse(checker.events(job), user_id, "thesis_check")
+
     return app
 
 
@@ -298,6 +338,12 @@ def build_app() -> FastAPI:
             messages, scoped, model, stream=True, effort=effort, tools=tools.get(api),
             rules=REPORT_RULES, max_rounds=REPORT_ROUNDS))
 
+    def make_checker(tok: str) -> Checker:
+        api = QueryApi(base_url, tok, http=http)
+        return Checker(api, lambda scoped: Agent(
+            messages, scoped, model, stream=True, effort=effort,
+            tools=[*tools.get(api), SUBMIT_TOOL], rules=CHECK_RULES, max_rounds=CHECK_ROUNDS))
+
     return create_app(
         make_agent=make_agent,
         who_is=query_api_who_is(base_url),
@@ -306,6 +352,7 @@ def build_app() -> FastAPI:
                       float(os.environ.get("AGENT_DAILY_BUDGET_USD", "2"))),
         take_quota=query_api_quota(base_url),
         make_reporter=make_reporter,
+        make_checker=make_checker,
     )
 
 

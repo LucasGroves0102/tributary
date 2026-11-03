@@ -16,6 +16,8 @@ import type { SavedItemFull } from "../types";
 import { ITEM_NAME_MAX, KIND_LABELS, nameProblem } from "../workspaces/model";
 import { useEditorKeys } from "../workspaces/useEditor";
 import type { Saved } from "../workspaces/useSaved";
+import { clearHighlights, findQuote, highlightQuote, textHash } from "./check";
+import { CheckPanel } from "./CheckPanel";
 import {
   EMBEDDABLE,
   embeddedIds,
@@ -30,6 +32,7 @@ import {
   type EmbedItem,
   type Thesis,
 } from "./model";
+import { useThesisCheck } from "./useThesisCheck";
 
 interface Props {
   token: string;
@@ -68,7 +71,8 @@ const today = () => {
 
 /** A thesis: the user's Markdown about a company, with the workspace's charts, comps, screens
  * and models embedded where they put `[[embed:…]]` lines. Write / Preview / Side by side;
- * Save (Ctrl+S); Import and Export .md. Owner-only like every saved item. */
+ * Save (Ctrl+S); Import and Export .md; Check my thesis (the assistant checks the saved text,
+ * results beside it, with a history of checks). Owner-only like every saved item. */
 export function ThesisPage(props: Props) {
   const { token, itemId } = props;
   const [loaded, setLoaded] = useState<Loaded>({ state: "loading" });
@@ -130,6 +134,9 @@ function ThesisEditor({ token, item, initial, items, saved, label, readable, onO
   const file = useRef<HTMLInputElement>(null);
   const cursor = useRef<number | null>(null);
   const hasTtm = useHasTtm(token);
+  const checks = useThesisCheck(token, item.item_id);
+  const [hash, setHash] = useState<string | null>(null);
+  const [highlight, setHighlight] = useState<{ quote: string; n: number } | null>(null);
 
   const thesis: Thesis = { companyId, markdown };
   const dirty = JSON.stringify({ name: name.trim(), state: thesisState(thesis) }) !== savedAs;
@@ -139,6 +146,35 @@ function ThesisEditor({ token, item, initial, items, saved, label, readable, onO
     const known = new Set(items.map((i) => i.item_id));
     return new Set(embeddedIds(markdown).filter((x) => !known.has(x))).size;
   }, [markdown, items]);
+
+  // what the shown check's text_hash is compared with: the text as it is now
+  useEffect(() => {
+    let live = true;
+    textHash(companyId, markdown)
+      .then((h) => live && setHash(h))
+      .catch(() => live && setHash(null));
+    return () => {
+      live = false;
+    };
+  }, [companyId, markdown]);
+  const stale = !!checks.shown && hash !== null && checks.shown.text_hash !== hash;
+  const checking = checks.run.status === "running";
+  const showChecks = checks.history.length > 0 || checks.run.status !== "idle";
+
+  /** A claim's quote: highlighted in the preview when it shows, else selected in the editor. */
+  const showQuote = (quote: string) => {
+    if (mode !== "write") {
+      setHighlight((h) => ({ quote, n: (h?.n ?? 0) + 1 }));
+      return;
+    }
+    selectQuote(quote);
+  };
+  const selectQuote = (quote: string) => {
+    const at = findQuote(markdown, quote);
+    if (!at || !text.current) return;
+    text.current.focus();
+    text.current.setSelectionRange(at.start, at.end);
+  };
 
   const setMode = (m: Mode) => {
     setModeState(m);
@@ -250,7 +286,8 @@ function ThesisEditor({ token, item, initial, items, saved, label, readable, onO
     </div>
   );
   const preview = (
-    <ThesisBody markdown={markdown} items={items} label={label} token={token} readable={readable} hasTtm={hasTtm} onOpenChart={onOpenChart} />
+    <ThesisBody markdown={markdown} items={items} label={label} token={token} readable={readable} hasTtm={hasTtm} onOpenChart={onOpenChart}
+      highlight={highlight} onNotShown={(q) => selectQuote(q)} />
   );
 
   return (
@@ -268,7 +305,11 @@ function ThesisEditor({ token, item, initial, items, saved, label, readable, onO
         <button className="btn sm" onClick={exportMd} title="Download as Markdown; embeds become a line naming the item">
           Export .md
         </button>
-        {/* B2 "Check my thesis" goes here */}
+        <button className="btn sm" onClick={checks.start} disabled={dirty || checking || !markdown.trim()}
+          title={dirty ? "Save first: the check reads the saved thesis" : !markdown.trim() ? "Write the thesis first"
+            : "The assistant checks each factual claim and your models' assumptions against the filings (counts as 4 questions)"}>
+          {checking ? "Checking…" : "Check my thesis"}
+        </button>
         <button className="btn primary" onClick={() => void save()} disabled={!dirty || busy || !!nameError} title="Save (Ctrl+S)">
           {busy ? "Saving…" : "Save"}
         </button>
@@ -324,9 +365,12 @@ function ThesisEditor({ token, item, initial, items, saved, label, readable, onO
           </button>
         ))}
       </div>
-      <div className={`thesis-panes ${mode}`}>
-        {mode !== "preview" && editor}
-        {mode !== "write" && <div className="thesis-preview card">{preview}</div>}
+      <div className={showChecks ? "thesis-main with-check" : "thesis-main"}>
+        <div className={`thesis-panes ${mode}`}>
+          {mode !== "preview" && editor}
+          {mode !== "write" && <div className="thesis-preview card">{preview}</div>}
+        </div>
+        {showChecks && <CheckPanel checks={checks} stale={stale} onQuote={showQuote} label={label} />}
       </div>
     </div>
   );
@@ -334,7 +378,7 @@ function ThesisEditor({ token, item, initial, items, saved, label, readable, onO
 
 /** The thesis rendered: its Markdown through markdown.ts (DOMPurify) and its embeds drawn from
  * this workspace's items, reading their data now as the viewer. */
-export function ThesisBody({ markdown, items, label, token, readable, hasTtm, onOpenChart }: {
+export function ThesisBody({ markdown, items, label, token, readable, hasTtm, onOpenChart, highlight, onNotShown }: {
   markdown: string;
   items: EmbedItem[];
   label: (companyId: string) => string;
@@ -342,11 +386,26 @@ export function ThesisBody({ markdown, items, label, token, readable, hasTtm, on
   readable: Readable;
   hasTtm: (metric: string) => boolean;
   onOpenChart: (s: ChartState) => void;
+  /** a check's quote to mark in the rendered text (n changes on every click) */
+  highlight?: { quote: string; n: number } | null;
+  /** the quote isn't in the rendered text (e.g. it spans Markdown syntax) */
+  onNotShown?: (quote: string) => void;
 }) {
   const parts = useMemo(() => thesisSegments(markdown, items), [markdown, items]);
+  const doc = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const root = doc.current;
+    if (!root) return;
+    const texts = [...root.querySelectorAll<HTMLElement>(".report-text")];
+    texts.forEach(clearHighlights);
+    if (!highlight) return;
+    const mark = texts.reduce<HTMLElement | null>((found, t) => found ?? highlightQuote(t, highlight.quote), null);
+    if (mark) mark.scrollIntoView?.({ block: "center", behavior: "smooth" });
+    else onNotShown?.(highlight.quote);
+  }, [highlight]);
   if (!parts.length) return <p className="empty">Nothing written yet.</p>;
   return (
-    <article className="report-doc thesis-doc" aria-label="Thesis preview">
+    <article ref={doc} className="report-doc thesis-doc" aria-label="Thesis preview">
       {parts.map((p, i) =>
         p.type === "text" ? (
           <Markdown key={i} markdown={p.markdown} />

@@ -332,7 +332,7 @@ def test_a_report_takes_several_questions_or_none(world):
     # one question left (per user 2): a 2-question report is refused, all or nothing
     r = client.post("/v1/demo/agent-quota", headers=bearer(a), json={"questions": 2})
     assert r.status_code == 429
-    assert "A report counts as 2 assistant questions" in r.json()["detail"]
+    assert "This counts as 2 assistant questions" in r.json()["detail"]
     assert "1 left today" in r.json()["detail"]
     assert sum(sandboxes.usage.values()) == 1
     assert client.post("/v1/demo/agent-quota", headers=bearer(a)).status_code == 200
