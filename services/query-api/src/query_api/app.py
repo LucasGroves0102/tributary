@@ -44,6 +44,7 @@ from query_api.shapes import filing_url
 from query_api.shapes import period as _period
 from query_api.status import add_status_routes
 from query_api.store import QUERY_TIMEOUT, Store
+from query_api.thesis_checks import ThesisChecks, add_thesis_check_routes
 from query_api.ui import add_ui_routes
 from query_api.views import Views, add_view_routes
 from query_api.watchlist import Watchlists
@@ -101,6 +102,7 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
                github_config: GitHubConfig | None = None,
                github: GitHub | None = None,
                github_accounts: Accounts | None = None,
+               thesis_checks: ThesisChecks | None = None,
                monotonic: Callable[[], float] = time.monotonic) -> FastAPI:
     """demo_users: accounts anyone may sign in as without a password (empty disables it).
     today: the current US Eastern date (EDGAR's), injectable for tests.
@@ -110,7 +112,9 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
     workspaces: saved work in the app database (None: those routes answer 503).
     views: per-user view preferences in the app database (None: those routes answer 503).
     github_config, github, github_accounts: "Sign in with GitHub" (query_api.github); its
-    routes 404 unless all three are given."""
+    routes 404 unless all three are given.
+    thesis_checks: "Check my thesis" history in the app database (None: those routes answer
+    503)."""
     app = FastAPI(title="Tributary Query API", version="1")
     instrument(app)
 
@@ -195,6 +199,7 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
                      readable=readable)
 
     add_workspace_routes(app, store=store, workspaces=workspaces, current_user=current_user)
+    add_thesis_check_routes(app, checks=thesis_checks, current_user=current_user)
     add_view_routes(app, views=views, current_user=current_user)
 
     now = clock or (lambda: datetime.now(UTC))

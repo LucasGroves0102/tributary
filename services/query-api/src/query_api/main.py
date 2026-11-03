@@ -12,6 +12,7 @@ from query_api.authorizer import FgaAuthorizer
 from query_api.github import AppAccounts, GitHubConfig, HttpGitHub
 from query_api.sandbox import AppSandboxes, SandboxConfig
 from query_api.store import Store
+from query_api.thesis_checks import AppThesisChecks
 from query_api.views import AppViews
 from query_api.watchlist import AppWatchlists
 from query_api.workspaces import AppWorkspaces
@@ -43,6 +44,7 @@ def build_app():
         github=HttpGitHub(github_config, httpx.Client(
             timeout=10, headers={"User-Agent": "Tributary"})) if github_config else None,
         github_accounts=AppAccounts(app_pool) if github_config and app_pool else None,
+        thesis_checks=AppThesisChecks(app_pool) if app_pool else None,
     )
 
 
