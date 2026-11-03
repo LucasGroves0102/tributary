@@ -523,3 +523,16 @@ def test_http_needs_a_valid_token():
     r = client.post("/v1/thesis-checks", json={"item_id": THESIS},
                     headers={"Authorization": "Bearer forged"})
     assert r.status_code == 401
+
+
+def test_text_hash_matches_the_web_app():
+    """services/web src/thesis/check.test.ts textHash: the same hex for the same input."""
+    assert text_hash(NVDA, "# NVDA\n\nRevenue grew 10% — “fast”.\n") == \
+        "55f4f1947748203606ebbc64d43ed7de1b85ceef384d181d98bfff120ad38f17"
+    assert text_hash(None, "x") == \
+        "bbe56d7c2d0f1f7271eb6f829800598a0a1c5a54f09cb49c47607e0698af7d6f"
+
+
+def test_the_web_app_can_say_it_is_on_a_thesis_or_model_page():
+    from tributary_agent.ui import UiContext
+    assert UiContext(page="thesis").page == "thesis" and UiContext(page="model").page == "model"

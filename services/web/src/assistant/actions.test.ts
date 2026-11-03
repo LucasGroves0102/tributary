@@ -99,6 +99,13 @@ describe("screen context", () => {
     });
   });
 
+  it("names the thesis and model pages (agent-api ui.py has both)", () => {
+    const id = "33333333-3333-4333-8333-333333333333";
+    expect(uiContext({ view: "thesis", itemId: id }, emptyChart(), () => null)).toEqual({ page: "thesis" });
+    expect(uiContext({ view: "model", itemId: id }, emptyChart(), () => null)).toEqual({ page: "model" });
+    expect(uiContext({ view: "status" }, emptyChart(), () => null)).toEqual({ page: "about" });
+  });
+
   it("sends the reader's filing and open section, never its search words", () => {
     const acc = "0001045810-26-000075";
     expect(uiContext({ view: "filing", companyId: NVDA, accessionNo: acc, section: "II-1A", at: 120, q: "export" }, emptyChart(), () => null))

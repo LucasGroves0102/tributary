@@ -27,6 +27,8 @@ import type {
   SectionSearch,
   SegmentRow,
   RecentWork,
+  ThesisCheck,
+  ThesisCheckSummary,
   SavedItemFull,
   SavedKind,
   WrittenKind,
@@ -471,6 +473,30 @@ export async function writeReport(
   });
   await stream(r, onEvent);
 }
+
+/** The assistant checks one of the user's theses against the data and saves the result with
+ * it; events as `ask`'s, plus "check" once saved. Counts as several questions. */
+export async function checkThesis(
+  token: string,
+  itemId: string,
+  onEvent: (e: AgentEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const r = await fetch(`${AGENT}/v1/thesis-checks`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ item_id: itemId }),
+    signal,
+  });
+  await stream(r, onEvent);
+}
+
+/** A thesis's checks, newest first (no results). */
+export const thesisChecks = (token: string, itemId: string) =>
+  get<{ item_id: string; checks: ThesisCheckSummary[] }>(token, `/v1/workspace-items/${itemId}/checks`);
+
+export const thesisCheck = (token: string, itemId: string, checkId: string) =>
+  get<ThesisCheck>(token, `/v1/workspace-items/${itemId}/checks/${checkId}`);
 
 export async function ask(
   token: string,
