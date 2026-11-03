@@ -247,6 +247,24 @@ class Store:
             cur.execute("SELECT * FROM ops.feed_status()")
             return cur.fetchone() or {"last_accepted_at": None, "last_ingested_at": None}
 
+    def data_status(self) -> dict:
+        """The public status page's aggregates (migration 028's SECURITY DEFINER functions):
+        counts and timestamps only, no user. {freshness, ingest, completeness, coverage,
+        quality: [one row per check]}."""
+        with self._session("") as cur:
+            out = {}
+            cur.execute("SELECT * FROM ops.feed_status()")
+            out["freshness"] = cur.fetchone() or {}
+            cur.execute("SELECT * FROM ops.public_ingest()")
+            out["ingest"] = cur.fetchone() or {}
+            cur.execute("SELECT * FROM ops.public_completeness()")
+            out["completeness"] = cur.fetchone() or {}
+            cur.execute("SELECT * FROM ops.public_coverage()")
+            out["coverage"] = cur.fetchone() or {}
+            cur.execute("SELECT * FROM ops.public_quality()")
+            out["quality"] = cur.fetchall()
+            return out
+
     def segment_metric_names(self) -> list[str]:
         """silver.segment_metrics, by name."""
         with self._session("") as cur:

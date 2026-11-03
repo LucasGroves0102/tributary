@@ -304,3 +304,59 @@ def test_feed_status_runs_as_query_api_without_bronze_access(conn):
     with pytest.raises(psycopg.errors.InsufficientPrivilege):
         with conn.transaction():
             as_query_api(conn, "SELECT 1 FROM bronze.filings LIMIT 1")
+
+
+def test_status_data_runs_as_query_api_without_bronze_or_ops_access(conn):
+    """The public status page (migration 028): aggregates through SECURITY DEFINER functions,
+    while query_api still can't read the tables behind them."""
+    before = as_query_api(conn, "SELECT * FROM ops.public_coverage()")[0]
+    # the window queries are exact on emptied tables (the test's transaction rolls back)
+    conn.execute("DELETE FROM bronze.filings")
+    conn.execute("DELETE FROM ops.filing_completeness")
+    conn.execute(
+        "INSERT INTO bronze.filings (accession_no, cik, form_type, filed_at, payload,"
+        " kafka_partition, kafka_offset, ingested_at) VALUES"
+        # caught live, 30 s from acceptance to bronze; the daily-index row of the same
+        # accession (midnight ET) must not count as its acceptance time
+        " ('9100000001-26-000001', %(c)s, '8-K', now() - interval '1 hour',"
+        "  '{\"source\": \"feed\"}', 0, 0, now() - interval '1 hour' + interval '30 seconds'),"
+        " ('9100000001-26-000001', %(w)s, '8-K', now() - interval '1 day',"
+        "  '{\"source\": \"daily-index\"}', 0, 1, now()),"
+        # only the backfill had this one; the last is outside the 7-day window
+        " ('9100000002-26-000001', %(w)s, '10-Q', now() - interval '2 days',"
+        "  '{\"source\": \"daily-index\"}', 0, 2, now()),"
+        " ('9100000003-26-000001', %(s)s, '8-K', now() - interval '8 days',"
+        "  '{\"source\": \"feed\"}', 0, 3, now() - interval '8 days')",
+        {"c": C, "w": W, "s": S})
+    conn.execute(
+        "INSERT INTO ops.filing_completeness (day, indexed, missing, republished) VALUES"
+        " ((now() AT TIME ZONE 'America/New_York')::date - 1, 100, 1, 2),"
+        " ((now() AT TIME ZONE 'America/New_York')::date - 2, 50, 0, 0),"
+        " ((now() AT TIME ZONE 'America/New_York')::date - 40, 9, 9, 9)")  # outside the window
+    conn.execute("INSERT INTO gold.quarterly_financials (company_id, metric, period_end, value,"
+                 " unit, value_source, source_tag, accession_no, filed, source_accessions,"
+                 " ingested_at) VALUES (%s, 'revenue', '2026-06-30', 1, 'USD', 'reported',"
+                 " 'us-gaap:Revenues', '9100000001-26-000002', '2026-07-30', '{}', now())", (C,))
+    conn.execute("INSERT INTO bronze.filing_documents (accession_no, cik, form, filed,"
+                 " document_name, url, content_gzip, content_sha256, size_bytes) VALUES"
+                 " ('9100000001-26-000002', %s, '10-Q', '2026-07-30', 'q.htm', 'https://x', '',"
+                 " 'h', 0)", (C,))
+    conn.execute("INSERT INTO ops.section_index (accession_no, company_id, form, filed, period,"
+                 " sections_parsed_at, sections, passages) VALUES ('9100000001-26-000002', %s,"
+                 " '10-Q', '2026-07-30', '2026-06-30', now(), 7, 30)", (C,))
+
+    assert as_query_api(conn, "SELECT filings, via_feed, p50_seconds, p95_seconds"
+                              " FROM ops.public_ingest()") == [(2, 1, 30.0, 30.0)]
+    assert as_query_api(conn, "SELECT days, indexed, missing, republished, days_with_missing"
+                              " FROM ops.public_completeness()") == [(2, 150, 1, 2, 1)]
+    coverage = as_query_api(conn, "SELECT * FROM ops.public_coverage()")[0]
+    assert coverage[:4] == (before[0] + 1, before[1] + 1, before[2] + 1, before[3] + 7)
+    assert len(as_query_api(conn, "SELECT * FROM ops.public_quality()")) == 11
+
+    body = client(conn).get("/v1/status/data").json()  # no token
+    assert body["ingest"]["filings"] == 2 and body["ingest"]["live_pct"] == 50.0
+    assert body["completeness"]["days_checked"] == 2
+    for table in ("bronze.filings", "ops.filing_completeness", "ops.section_index"):
+        with pytest.raises(psycopg.errors.InsufficientPrivilege):
+            with conn.transaction():
+                as_query_api(conn, f"SELECT 1 FROM {table} LIMIT 1")

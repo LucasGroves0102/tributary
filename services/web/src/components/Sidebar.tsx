@@ -155,6 +155,9 @@ export function Sidebar({ route, me, workspace, lastIngested, onAdd, onExport, o
       <a className="cover-link" href={href({ view: "about" })} aria-current={route.view === "about" ? "page" : undefined}>
         What Tributary covers <span className="faint">· no prices, consensus or transcripts</span>
       </a>
+      <a className="cover-link" href={href({ view: "status" })} aria-current={route.view === "status" ? "page" : undefined}>
+        Data status <span className="faint">· freshness, completeness, checks</span>
+      </a>
       {onShortcuts && (
         <button className="link cover-link" onClick={onShortcuts}>
           Keyboard shortcuts <span className="kbd">?</span>

@@ -22,5 +22,8 @@ make citations          # all questions; rewrites recordings and report.md
 pytest tests/citations  # replay only, no network
 ```
 
+After committing a full run, `make status-results` updates the status page's summary
+([`../status`](../status)); CI fails until it matches the recordings.
+
 The live run needs the Query API on `QUERY_API_URL`, `QUERY_API_JWT_SECRET`,
 `ANTHROPIC_API_KEY` and `AGENT_MODEL` from `.env`.

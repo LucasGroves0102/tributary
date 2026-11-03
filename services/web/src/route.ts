@@ -37,6 +37,8 @@ export type Route =
   | { view: "ask" }
   /** what Tributary covers and doesn't (prices, consensus, transcripts) */
   | { view: "about" }
+  /** how fresh, complete and checked the data is; public (shown signed out too) */
+  | { view: "status" }
   /** one saved workspace: its items and reports, "Write a report" */
   | { view: "workspace"; workspaceId: string }
   /** a report the assistant wrote (a workspace item of kind report) */
@@ -61,7 +63,7 @@ const ACCESSION = /^\d{10}-\d{2}-\d{6}$/;
 /** Section keys as the Query API takes them: 10-K "1A", 10-Q "II-1A", 8-K "2.02", "EX-99.1". */
 export const SECTION = /^[A-Z0-9.?-]{1,8}$/;
 const MAX_Q = 200;
-const SIMPLE = new Set(["chart", "ask", "about"]);
+const SIMPLE = new Set(["chart", "ask", "about", "status"]);
 
 /** "#/company/0001045810" → route; anything unrecognized is Home. Companies keeps its
  * screener filters in a query ("#/companies?band=1b-10b"), Compare its comps
@@ -81,7 +83,7 @@ export function parse(hash: string): Route {
     const search = parseSearch(query);
     return search ? { view, search } : { view };
   }
-  if (view && SIMPLE.has(view)) return { view: view as "chart" | "ask" | "about" };
+  if (view && SIMPLE.has(view)) return { view: view as "chart" | "ask" | "about" | "status" };
   if (view === "explore") return { view: "companies" }; // links from before the v3 shell
   if ((view === "workspace" || view === "report") && ID.test(a ?? "")) {
     return view === "workspace" ? { view, workspaceId: a! } : { view, itemId: a! };

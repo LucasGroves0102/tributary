@@ -1,0 +1,46 @@
+{
+  "adversarial": {
+    "recorded_at": "2026-10-18T20:51:00Z",
+    "models": [
+      "claude-haiku-5-5"
+    ],
+    "attacks": 59,
+    "categories": 10,
+    "leaks": 0,
+    "controls": 4,
+    "controls_answered": 4,
+    "report": "tests/adversarial/report.md",
+    "commit": "02ca3b2",
+    "committed": "2026-10-18"
+  },
+  "citations": {
+    "recorded_at": "2026-10-18T20:50:00Z",
+    "models": [
+      "claude-haiku-5-5"
+    ],
+    "questions": 32,
+    "verified_answers": 32,
+    "data_answers": 30,
+    "data_answers_citing": 30,
+    "figures": 128,
+    "figures_traced": 128,
+    "untraced_accessions": 0,
+    "report": "tests/citations/report.md",
+    "commit": "02ca3b2",
+    "committed": "2026-10-18"
+  },
+  "golden": {
+    "figures": 149,
+    "companies": 5,
+    "filings": 5,
+    "checks": {
+      "absent": 2,
+      "annual": 129,
+      "annual_silver": 18
+    },
+    "hand_checked": 21,
+    "readme": "tests/golden/README.md",
+    "commit": "9d9f318",
+    "committed": "2026-10-26"
+  }
+}

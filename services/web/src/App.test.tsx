@@ -397,6 +397,18 @@ it("says what Tributary covers, from the sidebar footer and the assistant's empt
   expect($(".side .cover-link")?.getAttribute("aria-current")).toBe("page");
 });
 
+it("links the data status page from the sidebar footer and shows it in the shell", async () => {
+  await render();
+  const link = [...container.querySelectorAll(".side .cover-link")].find((a) => a.textContent?.startsWith("Data status"));
+  expect(link?.getAttribute("href")).toBe("#/status");
+  window.location.hash = "#/status";
+  await settle();
+  expect($("h1")?.textContent).toBe("Data status");
+  expect($(".crumb")?.textContent).toBe("Data status");
+  expect(link?.getAttribute("aria-current")).toBe("page");
+  expect($(".status-home")).toBeNull();
+});
+
 it("switches theme and remembers it per user", async () => {
   await render();
   expect(document.documentElement.dataset.theme).toBe("dark");

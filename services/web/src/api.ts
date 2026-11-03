@@ -4,6 +4,7 @@ import type {
   AuthProviders,
   Calendar,
   DataNotes,
+  DataStatus,
   ExpectedFilings,
   Filing,
   FilingIndex,
@@ -75,6 +76,11 @@ export async function sandboxOffer(): Promise<SandboxOffer> {
 /** "Try the demo": a new temporary user (plan, companies and lifetime are the server's). */
 export async function createSandbox(): Promise<SandboxCreated> {
   return json<SandboxCreated>(await fetch(`${QUERY}/v1/demo/sandbox`, { method: "POST" }));
+}
+
+/** The public status page's data: no token. */
+export async function dataStatus(): Promise<DataStatus> {
+  return json<DataStatus>(await fetch(`${QUERY}/v1/status/data`));
 }
 
 /** Sign-in providers the Query API has configured. */

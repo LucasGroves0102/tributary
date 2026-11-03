@@ -69,6 +69,15 @@ can't read `bronze.filings`) and backs the Query API's public `/v1/status`, whic
 accessions indexed, accessions missing from bronze at the last check, rows republished), written
 by the nightly completeness check ([poller-backfill](../services/poller/README.md#backfill-fr1b)),
 and `ops.filing_completeness_status` for ops_reader. Counts only.
+`028_public_status.sql` backs the public status page (Query API `/v1/status/data`): four SECURITY
+DEFINER functions (search_path pinned, EXECUTE only for query_api, like 026) that return
+aggregates only: `ops.public_ingest()` (last 7 days of `bronze.filings`: filings, how many the live
+feed caught, p50/p95 seconds from acceptance to bronze), `ops.public_completeness()` (the last 30
+days of `ops.filing_completeness`), `ops.public_coverage()` (companies with gold financials by a
+loose index scan of its primary key, stored documents, search-indexed filings and sections) and
+`ops.public_quality()` (`ops.quality_summary`). It also indexes `bronze.filings (filed_at)` so the
+7-day window is a range scan; the index is built inside the migration, so writes to
+`bronze.filings` wait for it.
 `029_gold_quality_fixes.sql` fixes two causes of the quality checks' errors in
 `gold.quarterly_financials`: flow metrics tagged at an instant (UnitedHealth's dividend payment
 dates) no longer become extra quarter rows (1,838 rows on hermes), and a derived quarter that

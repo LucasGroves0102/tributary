@@ -30,6 +30,7 @@ import {
   prefetchScreens,
   ReportView,
   Search,
+  Status,
   WorkspacePage,
 } from "./pages/lazy";
 import { readableCount, Welcome } from "./pages/Welcome";
@@ -429,6 +430,17 @@ export function App(props: Props = {}) {
     inputRef: input,
   };
 
+  // the status page is public: signed out, it shows without the app shell
+  if (!picker && !token && frontDoor && route.view === "status") {
+    return (
+      <main className="welcome status-public">
+        <Suspense fallback={<p className="muted">Loading the status…</p>}>
+          <Status signedOut />
+        </Suspense>
+      </main>
+    );
+  }
+
   if (!picker && !token && frontDoor) {
     return (
       <Welcome
@@ -492,7 +504,9 @@ export function App(props: Props = {}) {
           )}
           <main className="content">
             <Suspense fallback={<div className="page"><Skeleton lines={6} label="Loading the page" /></div>}>
-            {!token ? (
+            {route.view === "status" ? (
+              <Status />
+            ) : !token ? (
               <p className="page muted">Signing in…</p>
             ) : route.view === "home" ? (
               <Home

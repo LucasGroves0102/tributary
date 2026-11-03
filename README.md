@@ -4,6 +4,9 @@
 
 **[Live demo → tributary.lucasgroves.dev](https://tributary.lucasgroves.dev)** · click *Try the demo* for your own
 sandbox with 20 companies (PepsiCo, Coca-Cola, Apple, Microsoft, Nvidia, JPMorgan, ...).
+**[Data status](https://tributary.lucasgroves.dev/#/status)** (no sign-in): feed freshness, EDGAR-to-database
+latency, completeness against EDGAR's daily indexes, coverage, data-quality checks and the last
+recorded test-suite runs, live from the production database.
 
 | | |
 |---|---|
