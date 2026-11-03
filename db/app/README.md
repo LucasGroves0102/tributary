@@ -2,7 +2,7 @@
 
 FR7, week 2. The application's own database (`app`), separate from the analytics database
 (`tributary`): users, organizations, plans, subscriptions, company grants, watchlists, saved
-work (workspaces, reports) and view preferences.
+work (workspaces, theses, models, reports) and view preferences.
 In production this would belong to a different service, so other components learn about
 changes through Debezium CDC ([streaming/debezium](../../streaming/debezium)), never by querying
 it directly. [authz-sync](../../services/authz-sync) turns those changes into OpenFGA tuples and
@@ -13,7 +13,7 @@ it directly. [authz-sync](../../services/authz-sync) turns those changes into Op
 | `users` (with optional `org_id`), `subscriptions` (user → plan), `plan_tiers` (plan → tier), `company_grants` (company → user or organization) | yes |
 | `public_catalogs` (migration 008: catalog → public or not; the open-access switch, below) | yes |
 | `organizations`, `plans`, `watchlists` | no |
-| `workspaces`, `workspace_items` (saved charts, comps sets, screens; reports the agent writes, migration 005), `recent_filings` (migration 004; owner-only, forced RLS on `app.user_id`) | no: they grant nothing |
+| `workspaces`, `workspace_items` (saved charts, comps sets, screens; reports the agent writes, migration 005; theses and revenue models the user writes, migration 009: state up to 128 KiB for reports and theses, 16 KiB otherwise), `recent_filings` (migration 004; owner-only, forced RLS on `app.user_id`) | no: they grant nothing |
 | `user_views` (per-user layout of Home, the screener and the watchlist; migration 006; owner-only, forced RLS) | no: it grants nothing |
 | `demo_sandboxes` (sandbox user → expiry), `demo_creations` (creation rate limit, HMAC of the client address), `demo_agent_usage` / `demo_agent_daily` (assistant question caps) | no: they grant nothing |
 | `github_accounts` (migration 007: GitHub id → `gh-<id>` user, login, first/last sign-in) | no: identity, not access |

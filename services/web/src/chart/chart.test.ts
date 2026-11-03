@@ -188,6 +188,14 @@ describe("layout", () => {
     expect(lay.rightLabels.at(-1)?.label).toBe("20%");
     expect(nearest(lay, lay.x[2]! + 3)).toBe(2);
   });
+
+  it("dashes a series that asks for it (a model's forecast) on the left axis, never bars", () => {
+    const line = toSeries(series([[1, "Q1", "10"], [2, "Q2", "20"]]), metric(), "forecast", 0);
+    const bar = toSeries(series([[1, "Q1", "10"]]), metric({ id: 2, type: "bar" }), "bars", 1);
+    const lay = layout([{ ...line, dashed: true }, { ...bar, dashed: true }, line], false);
+    expect(lay.drawn.map((d) => d.dashed)).toEqual([true, false, false]);
+    expect(lay.legend.map((l) => l.dashed)).toEqual([true, false, false]);
+  });
 });
 
 describe("metrics", () => {

@@ -115,6 +115,44 @@ unverified figures are marked `[unverified]`, sources listed) and Print / PDF (`
 keeps it equal to the light tokens). "Write again" regenerates it over the same item. A report
 counts as 3 assistant questions; the API's refusal (hourly or demo cap) is shown as is.
 
+Theses and models (`src/thesis/`, `src/models/`; Query API README, "Theses and models"): what
+you write yourself, saved as workspace items through the generic item routes and owner-only
+like everything saved. "New thesis" and "New model" sit on a workspace's page (next to "Write a
+report") and on a company's page (next to Chart / Compare / Ask: about that company, in a
+workspace you pick or a new one); the workspace page lists them under "Theses and models", the
+sidebar with the other items (rename, duplicate, delete as usual).
+
+- **Thesis** (`#/thesis/{id}`, `ThesisPage.tsx`, pure parts in `thesis/model.ts`): a title (the
+  item's name), an optional company and a Markdown body (up to 100,000 characters). Write,
+  Preview or Side by side (remembered per browser); Save or Ctrl/Cmd+S, with an "unsaved
+  changes" mark and the browser's leave-page warning. "Embed a saved item…" inserts a
+  `[[embed:<item id>]]` line at the cursor for any chart, comps set, screen or model in the same
+  workspace; the preview draws each one in place as reports do (`reports/Embeds.tsx`, the data
+  read now as the viewer). A marker for anything else (another workspace's or user's item, a
+  report, a malformed line) is dropped and the editor says how many don't resolve. The text is
+  rendered only through `markdown.ts` `renderMarkdown` (marked + DOMPurify, no inline styles or
+  form controls; images become their alt text, since the CSP loads nothing from elsewhere;
+  accession numbers stay plain text). Import .md reads a `.md`/`.txt` file in the browser (up to
+  400 KB, refused if it isn't plain text), drops a front-matter header (its title becomes the
+  thesis's if it is still "Untitled"), and replaces the text until you Save (Undo import).
+  Export .md downloads the thesis with a front-matter header (title, company, CIK, date) and each
+  embed as a readable line, `[Chart: NVDA revenue]`; it holds only your own item.
+- **Model** (`#/model/{id}`, `ModelPage.tsx`, pure parts in `models/model.ts`): a company's
+  fiscal years of revenue and operating income, read live from `/v1/companies/{id}/financials`
+  (`view=ttm`, 40 quarters: the TTM at each fiscal Q4 is the fiscal year, as the Statements tab's
+  annual view), and your assumptions per forecast year (1-10, default 3): revenue growth %,
+  operating margin % and a note. Each assumption shows the history next to it: the revenue CAGR
+  and the mean operating margin over the last 5 fiscal years ("5-yr CAGR 8.1%", "5-yr avg
+  22.0%"; fewer years when the history is shorter). The projection starts at the latest fiscal
+  year with revenue: revenue_t = revenue_(t-1) × (1 + growth_t), operating income_t = revenue_t ×
+  margin_t. The chart draws history solid and forecast dashed in the same colour (a series'
+  `dashed`), joined at the base year; history points open their filing. The table labels each
+  year Reported or Forecast (`FY2027E`). History years shown: 3-10 (default 8). A new model
+  starts every year at the company's own CAGR and average margin; "Reset to history" does so
+  again. Only the assumptions are saved, never the history. A model embeds in a thesis like a
+  chart (its chart and table from the saved assumptions and the live history). Per-segment
+  growth isn't there yet.
+
 Customizable views (`src/views/`, Query API `/v1/views`): Home's "Customize" shows, hides and
 reorders its cards; the watchlist and the screener have "Columns" to choose and order their value
 columns from what `/v1/screener/columns` offers (up to 8 and 12), with Reset. Each change is saved
@@ -217,6 +255,7 @@ React.lazy); once signed in and idle the app prefetches them, so switching scree
 | + Data status (`#/status`) | + Status 10.2 kB (3.4 kB) | |
 | + first assistant answer (marked, DOMPurify) | + AssistantMessage 68.1 kB (23.2 kB) | |
 | + Workspace (`#/workspace/…`), Report (`#/report/…`) | + 8.3 kB (3.4 kB) each, Report + markdown, LayerChart, SmallMultiples 2.4 kB | |
+| + Thesis (`#/thesis/…`), Model (`#/model/…`) (2026-11-02) | + ThesisPage 9.6 kB (4.0 kB) + markdown, Embeds 5.0 kB, ModelView 3.1 kB; ModelPage 7.3 kB (2.8 kB) + LayerChart; NewWork 3.5 kB (1.6 kB) with Company or Workspace | |
 
 Before splitting, everything was one 493.6 kB (156.3 kB gzip) script; the first screen now
 loads a third less. Most of what remains is React DOM. Chart data is cached in memory per
