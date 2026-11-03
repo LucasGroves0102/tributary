@@ -11,6 +11,7 @@ from query_api.auth import check_secret
 from query_api.authorizer import FgaAuthorizer
 from query_api.connections import AppConnections, market_data_from_env
 from query_api.github import AppAccounts, GitHubConfig, HttpGitHub
+from query_api.password_accounts import AppPasswordAccounts
 from query_api.providers import PROVIDERS
 from query_api.sandbox import AppSandboxes, SandboxConfig
 from query_api.store import Store
@@ -53,6 +54,8 @@ def build_app():
         github_accounts=AppAccounts(app_pool) if github_config and app_pool else None,
         thesis_checks=AppThesisChecks(app_pool) if app_pool else None,
         market_data=market_data,
+        # owner-created accounts (query-api-account); sign-in needs the app database
+        password_accounts=AppPasswordAccounts(app_pool) if app_pool else None,
     )
 
 

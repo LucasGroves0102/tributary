@@ -127,13 +127,23 @@ make consume           # watch filings arrive (or open the Kafka UI at http://lo
 
 ## Access control
 
-Every signed-in user (a demo sandbox, a GitHub account, the named test users) reads every
+Every signed-in user (a demo sandbox, a GitHub account, an owner-created password account, the
+named test users) reads every
 company's financials and filings, within their plan's tiers: the **public catalog** `catalog:sec`
 holds every company with gold financials or a stored filing, and while it is public OpenFGA lets
 every user read it (`catalog:sec#reader@user:*`) and row-level security accepts its companies
 (`authz.public_access`). A request without a user reads nothing. Per-company grants (to a user
 or an organization) still work for anything outside the catalog, and saved work (workspaces,
-theses, models, reports, views) and a user's own market-data key and prices stay owner-only. The switch is one app-database row, streamed like any grant:
+theses, models, reports, views) and a user's own market-data key and prices stay owner-only.
+
+There is no public signup. Besides the demo and GitHub, the owner can create username/password
+accounts for testers with `query-api-account create <username> --questions-per-day N` inside the
+Query API pod: one app-DB transaction (user, plan, and the GitHub account's grants while the
+catalog is closed) that CDC turns into access like any other, scrypt-hashed passwords, one 401
+for every refusal, a lockout after 10 failures, a per-address attempt limit, and each account's
+own daily assistant cap (Query API README, "Password accounts").
+
+The switch is one app-database row, streamed like any grant:
 
 ```sql
 UPDATE public_catalogs SET public = true  WHERE catalog_id = 'sec';  -- open (db/app README)
@@ -171,7 +181,8 @@ with "what changed" diffs, and full-text search. The assistant sits on every scr
 you're looking at, and can build charts, screens and comps for you, with Undo. Model output is
 sanitized and served under a strict Content-Security-Policy. `make web` runs the dev server on
 :5173. Besides *Try the demo*, you can *Sign in with GitHub* (no scopes, public profile only) for
-a permanent account that keeps your saved work.
+a permanent account that keeps your saved work, or *Sign in* with the username and password of
+an account the owner created.
 
 #### Thesis and Model
 

@@ -20,6 +20,7 @@ it directly. [authz-sync](../../services/authz-sync) turns those changes into Op
 | `data_connections` (migration 011: a user's own market-data API key per provider, envelope-encrypted with a master key that is never in this database, plus `last4`), `market_prices` (end-of-day prices fetched with that key, per user), `market_price_fetches` (last fetch per user and company: the once-a-day window); owner-only, forced RLS on `app.user_id`; prices and fetches reference the connection and cascade (disconnect deletes them) | no: they grant nothing |
 | `demo_sandboxes` (sandbox user → expiry), `demo_creations` (creation rate limit, HMAC of the client address), `demo_agent_usage` / `demo_agent_daily` (assistant question caps) | no: they grant nothing |
 | `github_accounts` (migration 007: GitHub id → `gh-<id>` user, login, first/last sign-in) | no: identity, not access |
+| `password_accounts` (migration 013: owner-created username → `pw-<username>` user, scrypt hash, own daily assistant cap, disabled, lockout, `sessions_valid_after`, first/last sign-in) | no: identity, not access |
 
 Watchlists are preferences only and never grant access.
 
@@ -42,6 +43,17 @@ plus `github_accounts`, in one transaction; CDC grants the access. These users h
 `demo_sandboxes` row, so `demo-cleanup` never deletes them, but their assistant questions count
 in `demo_agent_usage` / `demo_agent_daily` (rows older than 90 days are pruned). No GitHub
 access token or email address is stored; `users.email` is GitHub's no-reply form.
+
+Password accounts (migration 013, Query API README "Password accounts"): no signup; the owner's
+`query-api-account create` writes the same `users` / `subscriptions` / `watchlists` / workspace
+rows (and, while the catalog is closed, `company_grants`) as a GitHub sign-in, plus
+`password_accounts`, in one transaction; CDC grants the access. `user_id` is `pw-<username>`
+(a CHECK ties them), `users.email` is `<username>@password.invalid`. Only a self-describing
+scrypt hash is stored (`scrypt$n=..,r=..,p=..$salt$key`, CHECKed), never the password.
+`questions_per_day` (0-1000) is the account's own assistant cap, counted in `demo_agent_usage`
+but not in the demo's shared `demo_agent_daily`. Like `github_accounts` it isn't streamed and
+has no row-level security: sign-in must read it before there is a user id, and only the Query
+API's login reads it.
 
 `company_id` values refer to `silver.companies` in the `tributary` database; there is no
 cross-database foreign key. Tests: `tests/integration/test_app_schema.py` (needs

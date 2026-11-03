@@ -31,11 +31,12 @@ request parameters. Dev tokens: `make token USER=alice`.
 | `POST /v1/demo/token` | `DEMO_USERS` set | an 8-hour token for a demo account (never a sandbox user) |
 | `GET /v1/demo/sandbox` | `DEMO_SANDBOX_ENABLED` | what "Try the demo" creates: lifetime, plan, tickers, assistant allowance ([Demo sandboxes](#demo-sandboxes)) |
 | `POST /v1/demo/sandbox` | `DEMO_SANDBOX_ENABLED` | 201: a new temporary user and its token (expires with the sandbox); 429 when the per-IP or live-sandbox cap is hit. Takes no input |
-| `POST /v1/demo/agent-quota` | token | agent-api only (nginx hides it): takes one assistant question (or `{"questions": n}`, 1-5, all or none: a report counts as 3) from a sandbox's or GitHub account's daily caps; 429 with the message to show; `{"demo": false}` for other users |
-| `GET /v1/auth/providers` | | `{"github": true\|false}`: which sign-in buttons the web app shows |
+| `POST /v1/demo/agent-quota` | token | agent-api only (nginx hides it): takes one assistant question (or `{"questions": n}`, 1-5, all or none: a report counts as 3) from a sandbox's or GitHub account's daily caps, or from a password account's own daily cap; 429 with the message to show; `{"demo": false}` for other users |
+| `GET /v1/auth/providers` | | `{"github": true\|false, "password": true\|false}`: which sign-in buttons the web app shows |
+| `POST /v1/auth/password` | `APP_DATABASE_URL` | `{"username", "password"}` → `{"token", "expires_in"}` (a 7-day JWT) for an owner-created account; 401 with one body for every refusal, 429 per client address, 422 never echoes the input ([Password accounts](#password-accounts)) |
 | `GET /v1/auth/github/start` | `GITHUB_CLIENT_ID` + `GITHUB_CLIENT_SECRET` | 302 to GitHub's authorize page (no scopes) with a signed `state`, and the state's nonce in a short-lived cookie (404 when not configured; [GitHub sign-in](#github-sign-in)) |
 | `GET /v1/auth/github/callback?code=&state=` | `GITHUB_CLIENT_ID` + `GITHUB_CLIENT_SECRET` | GitHub's redirect back: 302 to `/#/signed-in?token=…&expires_in=…` (a 7-day JWT, in the URL fragment), or `/#/signed-in?error=<code>` |
-| `GET /v1/me` | token | `catalog`: `{public, tiers, companies}`, whether every catalog company is readable to the caller and with which tiers (`companies`: how many); `companies`: with the catalog public, only what the caller reads beyond it (private grants), else every company the caller can read, with tiers; `sandbox` (expiry, plan, assistant allowance) for a demo sandbox user; `github` (login, plan, the demo's company ids, assistant allowance) for a GitHub sign-in |
+| `GET /v1/me` | token | `catalog`: `{public, tiers, companies}`, whether every catalog company is readable to the caller and with which tiers (`companies`: how many); `companies`: with the catalog public, only what the caller reads beyond it (private grants), else every company the caller can read, with tiers; `sandbox` (expiry, plan, assistant allowance) for a demo sandbox user; `github` (login, plan, the demo's company ids, assistant allowance) for a GitHub sign-in; `account` (username, plan, `agent_questions_per_day`) for a password account |
 | `GET /v1/companies/search?q=&access=` | token | candidates (public identity) + caller's access; `access=financials`: only companies you can read |
 | `GET /v1/metrics` | | metric names served by `financials`: `silver.metrics` and `gold.derived_metrics`, read once |
 | `GET /v1/companies/{id}/financials?metrics=&quarters=&view=&basis=&format=` | financials | values + citation + freshness; `format=csv`: one row per value with its source filing |
@@ -382,6 +383,7 @@ route. The result is cached per process for 60 s (`max_age_seconds`).
 make up-all                                       # in docker-compose, on http://localhost:8000
 set -a; . ./.env; set +a; .venv/bin/query-api     # locally
 make token USER=alice                             # query-api-token: dev JWT for a user
+.venv/bin/query-api-account list                  # owner-created password accounts (below)
 ```
 
 Config (env): `DATABASE_URL`, `FGA_API_URL`, `QUERY_API_JWT_SECRET` (all required; the secret
@@ -390,6 +392,7 @@ unset makes those routes answer 503), `FGA_API_TOKEN` (OpenFGA preshared key, wh
 `DEMO_USERS` (comma-separated accounts allowed to sign in without a password; unset disables
 the demo routes), the demo sandbox settings below, `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` /
 `GITHUB_REDIRECT_URI` ([GitHub sign-in](#github-sign-in)), `PORT` (default 8000), `LOG_LEVEL`.
+Password accounts need no setting: their route exists whenever `APP_DATABASE_URL` is set.
 
 ## Demo sandboxes
 
@@ -472,6 +475,67 @@ after 7 days.
 | `GITHUB_REDIRECT_URI` | the OAuth app's "Authorization callback URL", e.g. `https://<host>/api/query/v1/auth/github/callback` |
 
 Outbound: only `github.com` and `api.github.com` over HTTPS (Helm `uses: github`).
+
+## Password accounts
+
+Username/password accounts the owner creates by hand (`passwords.py`, `password_accounts.py`,
+app migration 013), for testers who shouldn't need GitHub. **There is no signup**: no route
+creates an account. The owner runs the CLI inside the Query API pod (Helm chart README,
+"Password accounts"):
+
+```bash
+query-api-account create <username> --questions-per-day 100  # prompts twice for the password
+query-api-account set-password <username>                    # prompts; unlocks; ends sessions
+query-api-account set-limit <username> --questions-per-day 50
+query-api-account disable <username>                         # refuses sign-in, ends sessions
+query-api-account enable <username>                          # also unlocks
+query-api-account list                                       # never prints a hash
+```
+
+The password is read with `getpass` (twice, must match) on a terminal, or as one line from
+stdin when it isn't one; it is never an argument, never printed. Usernames match
+`^[a-z0-9_.-]{3,32}$`; passwords are 12-256 characters. `create` writes, in ONE app-DB
+transaction, `users` (`user_id` `pw-<username>`, email `<username>@password.invalid`),
+`password_accounts` and exactly what a GitHub account gets (`sandbox.grant_demo_access`): plan
+pro, the demo's watchlist and starter workspace and, only while the public catalog is closed,
+grants on the 20 `DEMO_TICKERS` (with it open every signed-in user reads the catalog). Plain
+app-DB rows: authz-sync grants the access through CDC; nothing writes OpenFGA tuples. It needs
+`APP_DATABASE_URL` and, to resolve the demo's tickers, `DATABASE_URL` (both in the pod).
+
+**Hashing.** stdlib `hashlib.scrypt` (no dependency), a random 16-byte salt per password,
+n=2^15, r=8, p=1, 32-byte key, stored self-describing as
+`scrypt$n=32768,r=8,p=1$<salt b64>$<key b64>` so the parameters can be raised later (a weaker
+stored hash still verifies and is replaced at the next sign-in). Each call passes an explicit
+`maxmem` (scrypt needs 128·r·n = 32 MiB here, OpenSSL's default limit) and verification reads
+the parameters with bounds, so a bad row can't exhaust memory. Comparison is
+`hmac.compare_digest`. At most 2 hashes run at once per replica (`SCRYPT_SLOTS`; the pod has
+384 MiB); a sign-in that waits more than 10 s gets 503.
+
+**Sign-in** (`POST /v1/auth/password`, public through nginx like the GitHub routes): the body
+is parsed by hand (exactly `username` and `password`, strings, at most 4 KiB), so a validation
+error never echoes the password (FastAPI's 422 would). Unknown username, wrong password,
+disabled and locked all answer the same `401 {"detail": "Wrong username or password, or the
+account is locked."}`, and each attempt runs exactly one scrypt (an unknown or malformed
+username is checked against a dummy hash), so neither the body nor the timing says whether an
+account exists. 10 consecutive failures lock the account for 15 minutes (the count starts
+again after the lock; a success resets it). Each client address gets 20 attempts per 15
+minutes (`X-Client-IP`, which nginx sets from Cloudflare's `CF-Connecting-IP`; in process, per
+replica): then 429. Logs carry the user id of a known account and the refusal reason, never the
+password, the token or a username that matched no account. Success mints the ordinary JWT
+(`sub` = `pw-<username>`, 7 days).
+
+**Sessions.** Every route's token check also refuses a `pw-` token when its account is
+disabled, deleted, or the token was issued before `sessions_valid_after` (moved by
+`set-password` and `disable`); the check is cached 10 s per user, so a disable takes effect
+within 10 s. `/v1/demo/token` never mints a `pw-` user's token.
+
+**Assistant.** `agent-quota` takes a password account's questions from its own
+`questions_per_day` (0 turns its assistant off), counted in `demo_agent_usage` and never in, or
+blocked by, the demo's shared `DEMO_AGENT_QUESTIONS_PER_DAY`: the owner chose that allowance,
+and the shared cap exists to bound anonymous visitors, so a busy demo day must not stop a
+tester. `DEMO_SANDBOX_ENABLED` and `DEMO_AGENT_ENABLED` don't apply either; agent-api's
+hourly per-user and per-IP limits and its daily model budget (`AGENT_DAILY_BUDGET_USD`) still
+do. Refusals read "Your account has used its N assistant questions for today…".
 
 ## Connect your data
 
@@ -578,7 +642,13 @@ over real gold rows (PepsiCo, Coca-Cola, Apple) with both permission layers (nee
 `test_github.py` covers GitHub sign-in with a fake GitHub (state tampering, expiry, the
 cookie nonce, error redirects, the fragment token, the caps) and `HttpGitHub` over
 GitHub-shaped responses (never GitHub itself); `test_github_db.py` runs it on the real app
-schema (`APP_TEST_DATABASE_URL`);
+schema (`APP_TEST_DATABASE_URL`); `test_passwords.py` covers password accounts with fakes
+(scrypt round trip and parameter encoding, bounds, one scrypt per attempt and one 401 for
+every refusal, lockout and reset, the per-address limit, bodies never echoed, nothing secret in
+any log record, disable and set-password ending sessions, the per-account assistant cap, the
+CLI's password prompt) and `test_password_accounts_db.py` on the real app schema (`create` in
+one transaction, the owner commands, lockout rows, the account's own cap beside a used-up
+demo day; `APP_TEST_DATABASE_URL`);
 `test_ui_db.py` runs expected dates, recaps, flags and peers on real Postgres (and the status
 functions of 026 and 028 as query_api, which still can't read the tables behind them) and
 `test_watchlist_db.py` the app-database watchlist (`APP_TEST_DATABASE_URL`); `test_rls.py` wires the API to an authorizer that
