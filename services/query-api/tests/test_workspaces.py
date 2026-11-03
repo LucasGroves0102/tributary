@@ -21,9 +21,11 @@ from query_api.workspaces import (
     MAX_THESIS_BYTES,
     MAX_WORKSPACES,
     LimitReached,
+    NotAProject,
     StateError,
     UnknownUser,
     copy_name,
+    validate_project,
     validate_state,
 )
 
@@ -81,7 +83,7 @@ class FakeWorkspaces:
     @staticmethod
     def _public(w, items):
         return {**{k: w[k] for k in ("workspace_id", "name", "created_at", "updated_at")},
-                "items": items}
+                "project": copy.deepcopy(w.get("project")), "items": items}
 
     def _room(self, user_id, workspaces=0, items=0, workspace_id=None):
         mine = [w for w in self.workspaces.values() if w["user_id"] == user_id]
@@ -96,21 +98,28 @@ class FakeWorkspaces:
                                  if i["workspace_id"] == w["workspace_id"]])
                 for w in self.workspaces.values() if w["user_id"] == user_id]
 
-    def create(self, user_id, name):
+    def create(self, user_id, name, project=None):
         if user_id not in self.users:
             raise UnknownUser(user_id)
         self._room(user_id, workspaces=1)
         now = self._now()
         w = {"workspace_id": str(uuid.uuid4()), "user_id": user_id, "name": name,
-             "created_at": now, "updated_at": now}
+             "created_at": now, "updated_at": now, "project": copy.deepcopy(project)}
         self.workspaces[w["workspace_id"]] = w
         return self._public(w, [])
 
     def rename(self, user_id, workspace_id, name):
+        return self.update(user_id, workspace_id, name, None)
+
+    def update(self, user_id, workspace_id, name, project):
         w = self._ws(user_id, workspace_id)
         if not w:
             return None
-        w["name"] = name
+        if project is not None and w.get("project") is None:
+            raise NotAProject(workspace_id)
+        w["name"] = name or w["name"]
+        w["project"] = copy.deepcopy(project) if project is not None else w.get("project")
+        w["updated_at"] = self._now()
         return self._public(w, [])
 
     def delete(self, user_id, workspace_id):
@@ -124,7 +133,7 @@ class FakeWorkspaces:
         w = self._ws(user_id, workspace_id)
         if not w:
             return None
-        new = self.create(user_id, name or copy_name(w["name"], 100))
+        new = self.create(user_id, name or copy_name(w["name"], 100), w.get("project"))
         for i in [i for i in self.items.values() if i["workspace_id"] == workspace_id]:
             self.add_item(user_id, new["workspace_id"], i["kind"], i["name"], i["state"])
         return self.list(user_id)[-1]
@@ -742,3 +751,130 @@ def test_reports_still_cant_embed_theses_or_models():
     with pytest.raises(ValueError):
         ReportItem.model_validate({"ref": "item-1", "item_id": str(uuid.uuid4()),
                                    "kind": "model", "name": "M", "state": MODEL})
+
+
+# --- analysis projects (app DB 012) and model scenarios ------------------------------------
+
+PROJECT = {"companyId": NVDA, "peers": [AAPL, TSLA], "notes": "Sells GPUs.\n\tMostly to clouds.",
+           "done": ["business", "numbers"]}
+SCENARIOS = {**MODEL, "scenarios": {
+    "bear": [{"growth": 5, "margin": 40}, {"growth": 0, "margin": 35},
+             {"growth": -10, "margin": 30, "note": "digestion"}],
+    "bull": [{"growth": 40, "margin": 60}, {"growth": 25, "margin": 58},
+             {"growth": 10, "margin": 55}]}}
+
+
+def test_a_project_is_a_workspace_bound_to_a_company(world, token):
+    client, ws, _ = world
+    r = client.post("/v1/workspaces", json={"name": "NVDA analysis", "project": PROJECT},
+                    headers=token("alice"))
+    assert r.status_code == 201, r.text
+    assert r.json()["project"] == PROJECT
+    wid = r.json()["workspace_id"]
+    plain = new_workspace(client, token)
+    listed = {w["workspace_id"]: w for w in
+              client.get("/v1/workspaces", headers=token("alice")).json()["workspaces"]}
+    assert listed[wid]["project"] == PROJECT and listed[plain]["project"] is None
+    assert client.get(f"/v1/workspaces/{wid}", headers=token("alice")).json()["project"] \
+        == PROJECT
+    # its charts, models and thesis are ordinary items
+    new_item(client, token, wid, kind="model", state=SCENARIOS, name="M")
+    new_item(client, token, wid, kind="thesis", state=THESIS, name="T")
+    # saved over: notes, peers and done steps change
+    changed = {**PROJECT, "peers": [AAPL], "notes": "", "done": ["business"]}
+    r = client.patch(f"/v1/workspaces/{wid}", json={"project": changed}, headers=token("alice"))
+    assert r.status_code == 200 and r.json()["project"] == changed
+    assert r.json()["name"] == "NVDA analysis"
+    r = client.patch(f"/v1/workspaces/{wid}", json={"name": "Nvidia"}, headers=token("alice"))
+    assert r.json()["project"] == changed and r.json()["name"] == "Nvidia"
+    # a duplicate is a project too, with copies of its items
+    copy_ = client.post(f"/v1/workspaces/{wid}/duplicate", headers=token("alice")).json()
+    assert copy_["project"] == changed
+    assert [i["kind"] for i in copy_["items"]] == ["model", "thesis"]
+
+
+def test_a_folder_stays_a_folder(world, token):
+    client, *_ = world
+    wid = new_workspace(client, token)
+    r = client.patch(f"/v1/workspaces/{wid}", json={"project": PROJECT}, headers=token("alice"))
+    assert r.status_code == 422 and "isn't an analysis project" in r.json()["detail"]
+    r = client.patch(f"/v1/workspaces/{wid}", json={}, headers=token("alice"))
+    assert r.status_code == 422
+    assert client.get(f"/v1/workspaces/{wid}", headers=token("alice")).json()["project"] is None
+
+
+def test_another_users_project_is_a_404(world, token):
+    client, ws, _ = world
+    r = client.post("/v1/workspaces", json={"name": "NVDA", "project": PROJECT},
+                    headers=token("alice"))
+    wid = r.json()["workspace_id"]
+    bob = token("bob")
+    answers = [
+        client.get(f"/v1/workspaces/{wid}", headers=bob),
+        client.patch(f"/v1/workspaces/{wid}", json={"project": PROJECT}, headers=bob),
+        client.patch(f"/v1/workspaces/{wid}", json={"name": "mine"}, headers=bob),
+        client.post(f"/v1/workspaces/{wid}/duplicate", headers=bob),
+        client.delete(f"/v1/workspaces/{wid}", headers=bob),
+    ]
+    assert {r.status_code for r in answers} == {404}
+    assert client.get("/v1/workspaces", headers=bob).json() == {"workspaces": []}
+    assert ws.workspaces[wid]["project"] == PROJECT and ws.workspaces[wid]["name"] == "NVDA"
+
+
+BAD_PROJECTS = [
+    {},
+    {"companyId": "NVDA"},
+    {**PROJECT, "user_id": "bob"},
+    {**PROJECT, "peers": [NVDA]},  # the company itself
+    {**PROJECT, "peers": [AAPL, AAPL]},
+    {**PROJECT, "peers": [f"{n:010d}" for n in range(1, 22)]},
+    {**PROJECT, "peers": ["../admin"]},
+    {**PROJECT, "notes": "x" * 4001},
+    {**PROJECT, "notes": "a\x00b"},
+    {**PROJECT, "done": ["business", "business"]},
+    {**PROJECT, "done": ["admin"]},
+    {**PROJECT, "kind": "analysis"},
+    [],
+]
+
+
+@pytest.mark.parametrize("project", BAD_PROJECTS)
+def test_malformed_projects_are_refused(world, token, project):
+    client, ws, _ = world
+    r = client.post("/v1/workspaces", json={"name": "x", "project": project},
+                    headers=token("alice"))
+    assert r.status_code == 422, project
+    assert ws.workspaces == {}
+
+
+def test_project_as_stored():
+    assert validate_project({"companyId": NVDA}) == {"companyId": NVDA, "peers": [],
+                                                     "notes": "", "done": []}
+
+
+def test_model_scenarios_as_stored():
+    saved = validate_state("model", SCENARIOS)
+    assert saved["assumptions"] == validate_state("model", MODEL)["assumptions"]  # the base
+    assert saved["scenarios"]["bear"][2] == {"growth": -10.0, "margin": 30.0,
+                                             "note": "digestion"}
+    assert len(saved["scenarios"]["bull"]) == 3
+    # one case alone is fine; none at all is no scenarios
+    only_bear = validate_state("model", {**MODEL, "scenarios": {
+        "bear": SCENARIOS["scenarios"]["bear"]}})
+    assert "bull" not in only_bear["scenarios"]
+    assert "scenarios" not in validate_state("model", {**MODEL, "scenarios": {}})
+    # a model saved before scenarios is unchanged (base only)
+    assert "scenarios" not in validate_state("model", MODEL)
+
+
+@pytest.mark.parametrize("scenarios", [
+    {"bear": [{"growth": 1, "margin": 1}]},  # fewer years than the base case
+    {"bull": [*SCENARIOS["scenarios"]["bull"], {"growth": 1, "margin": 1}]},
+    {"base": SCENARIOS["scenarios"]["bull"]},  # the base case is `assumptions`
+    {"bear": [{"growth": 1001, "margin": 1}] * 3},
+    {"bull": [{"growth": 1, "margin": 101}] * 3},
+    {"bear": []},
+])
+def test_malformed_scenarios_are_refused(scenarios):
+    with pytest.raises(StateError):
+        validate_state("model", {**MODEL, "scenarios": scenarios})

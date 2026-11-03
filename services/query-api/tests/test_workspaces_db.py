@@ -10,7 +10,15 @@ from contextlib import contextmanager
 import pytest
 
 import query_api.workspaces as w
-from query_api.workspaces import AppWorkspaces, LimitReached, UnknownUser, seed, validate_state
+from query_api.workspaces import (
+    AppWorkspaces,
+    LimitReached,
+    NotAProject,
+    UnknownUser,
+    seed,
+    validate_project,
+    validate_state,
+)
 
 psycopg = pytest.importorskip("psycopg")
 from psycopg import sql  # noqa: E402
@@ -282,3 +290,60 @@ def test_thesis_state_may_be_as_large_as_a_reports(db):
                         ("model", big), ("chart", big), ("essay", "{}")):
         with pytest.raises(psycopg.errors.CheckViolation), conn.transaction():
             conn.execute(insert, (wid, kind, state))
+
+
+PROJECT = validate_project({"companyId": NVDA, "peers": [AAPL], "notes": "GPUs", "done": []})
+
+
+def test_analysis_projects_are_owner_only_workspaces(db):
+    """App migration 012: a project is a workspace with `project` set; existing workspaces keep
+    NULL. 004's forced RLS covers the column: another user can't read, change or copy it."""
+    s, conn = db
+    plain = s.create("t-ws1", "Folder")
+    assert plain["project"] is None
+    p = s.create("t-ws1", "NVDA analysis", PROJECT)
+    assert p["project"] == PROJECT
+    s.add_item("t-ws1", p["workspace_id"], "model", "M", MODEL)
+    assert {x["name"]: x["project"] for x in s.list("t-ws1")} == {
+        "Folder": None, "NVDA analysis": PROJECT}
+    assert s.get("t-ws1", p["workspace_id"])["project"] == PROJECT
+    changed = {**PROJECT, "notes": "Data centers", "done": ["business"]}
+    got = s.update("t-ws1", p["workspace_id"], None, changed)
+    assert got["project"] == changed and got["name"] == "NVDA analysis"
+    assert s.update("t-ws1", p["workspace_id"], "Nvidia", None)["project"] == changed
+    with pytest.raises(NotAProject):
+        s.update("t-ws1", plain["workspace_id"], None, PROJECT)
+    assert s.get("t-ws1", plain["workspace_id"])["project"] is None
+    copy = s.duplicate("t-ws1", p["workspace_id"], None)
+    assert copy["project"] == changed and [i["kind"] for i in copy["items"]] == ["model"]
+    # another user: the same None as a missing workspace
+    assert s.update("t-ws2", p["workspace_id"], None, PROJECT) is None
+    assert s.update("t-ws2", p["workspace_id"], "taken", None) is None
+    assert s.get("t-ws2", p["workspace_id"]) is None
+    assert s.duplicate("t-ws2", p["workspace_id"], None) is None
+    assert s.get("t-ws1", p["workspace_id"])["project"] == changed
+    # the policy alone hides the column's rows from another user, as the table owner
+    owner = conn.execute("SELECT tableowner FROM pg_tables WHERE schemaname = 'public'"
+                         " AND tablename = 'workspaces'").fetchone()[0]
+    if conn.execute("SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname = %s",
+                    (owner,)).fetchone()[0]:
+        pytest.skip(f"table owner {owner} bypasses row-level security")
+    conn.execute(sql.SQL("SET LOCAL ROLE {}").format(sql.Identifier(owner)))
+    conn.execute("SELECT set_config('app.user_id', 't-ws2', true)")
+    assert conn.execute("SELECT count(*) FROM workspaces WHERE project IS NOT NULL"
+                        ).fetchone()[0] == 0
+    assert conn.execute("UPDATE workspaces SET project = '{}'").rowcount == 0
+    conn.execute("SELECT set_config('app.user_id', 't-ws1', true)")
+    assert conn.execute("SELECT count(*) FROM workspaces WHERE project IS NOT NULL"
+                        ).fetchone()[0] == 2
+    conn.execute("RESET ROLE")
+
+
+def test_project_checks_in_the_database(db):
+    _, conn = db
+    insert = "INSERT INTO workspaces (user_id, name, project) VALUES ('t-ws1', 'p', %s::jsonb)"
+    conn.execute(insert, ('{"companyId": "0001045810"}',))
+    conn.execute(insert, (None,))  # a plain folder
+    for bad in ("[]", '"x"', '{"notes": "' + "x" * 17000 + '"}'):
+        with pytest.raises(psycopg.errors.CheckViolation), conn.transaction():
+            conn.execute(insert, (bad,))
