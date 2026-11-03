@@ -4,6 +4,8 @@ import type { FinancialRow } from "../types";
 import {
   annualHistory,
   baseYear,
+  checkAssumptions,
+  GROWTH_FLAG_POINTS,
   defaultAssumptions,
   growthOf,
   historyStats,
@@ -17,6 +19,7 @@ import {
   statLabel,
   type HistoryYear,
 } from "./model";
+import fixture from "./stats-fixture.json";
 
 const NVDA = "0001045810";
 
@@ -224,5 +227,51 @@ describe("restoreModel / modelState", () => {
       historyYears: 8,
       assumptions: [{ growth: 1.23, margin: 2 }, { growth: 3, margin: 4, note: "ok" }],
     });
+  });
+});
+
+/** The same inputs and numbers as services/agent tests/test_model_stats.py: the thesis check
+ * (Python) and the model page (here) must compute identical statistics and flags. */
+describe("checkAssumptions matches the agent's Python port (stats-fixture.json)", () => {
+  const close = (a: number | null, b: number | null) => {
+    if (a === null || b === null) expect(a).toBe(b);
+    else expect(a).toBeCloseTo(b, 12);
+  };
+  for (const c of fixture.cases) {
+    it(c.name, () => {
+      const history = annualHistory(c.rows as unknown as FinancialRow[], 10);
+      expect(history.map((y) => ({ fy: y.fy, periodEnd: y.periodEnd, revenue: y.revenue, operatingIncome: y.operatingIncome }))).toEqual(c.expected.history);
+      const r = checkAssumptions(history, c.assumptions);
+      const e = c.expected;
+      expect(r.baseFy).toBe(e.base_fy);
+      close(r.stats.cagr, e.stats.cagr);
+      expect(r.stats.cagrYears).toBe(e.stats.cagr_years);
+      close(r.stats.avgMargin, e.stats.avg_margin);
+      expect(r.stats.marginYears).toBe(e.stats.margin_years);
+      close(r.stats.lastGrowth, e.stats.last_growth);
+      close(r.stats.lastMargin, e.stats.last_margin);
+      close(r.marginMin, e.margin_min);
+      close(r.marginMax, e.margin_max);
+      expect(r.years.length).toBe(e.years.length);
+      r.years.forEach((y, i) => {
+        const x = e.years[i]!;
+        expect([y.fy, y.growth, y.margin, y.growthFlag, y.marginFlag]).toEqual([x.fy, x.growth, x.margin, x.growth_flag, x.margin_flag]);
+        close(y.growthVsCagr, x.growth_vs_cagr);
+      });
+    });
+  }
+
+  it("flags growth more than GROWTH_FLAG_POINTS from the CAGR and margins outside the 5-year range", () => {
+    const h = [year(2020, 100, 10), year(2021, 110, 22), year(2022, 121, 24.2), year(2023, 133.1, 13.31), year(2024, 146.41, 29.282), year(2025, 161.051, 16.1051)];
+    const r = checkAssumptions(h, [
+      { growth: 10 + GROWTH_FLAG_POINTS + 0.5, margin: 20 },
+      { growth: 10 - GROWTH_FLAG_POINTS - 0.5, margin: 10 },
+      { growth: 15, margin: 25 },
+    ]);
+    expect(r.years.map((y) => [y.fy, y.growthFlag, y.marginFlag])).toEqual([
+      [2026, "above", null],
+      [2027, "below", null],
+      [2028, null, "above"],
+    ]);
   });
 });
