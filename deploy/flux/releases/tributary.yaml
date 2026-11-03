@@ -32,6 +32,11 @@ spec:
     openfga:
       auth:
         enabled: true
+    # Named demo users (alice, bob, carol, dave) are test personas only (2026-11-02): no
+    # /v1/demo/token for them in production and no re-seeding. Visitors use a demo sandbox or
+    # GitHub sign-in; the sandbox has its own switch (demo.sandbox.enabled) and stays on.
+    demo:
+      enabled: false
     # doc-crawler stays on after the 5-year crawl (finished 2026-10-22): every CRAWL_PLAN_HOURS it
     # queues new 10-K/10-Q/8-K filings of every operating company, while the live doc-fetcher only
     # covers tracked companies. Scaling it to 0 stops documents for everyone else.

@@ -66,7 +66,7 @@ decides its environment variables, which Secret keys it can read, and its networ
 | `github` | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` (`github-client-id` / `github-client-secret`, both `optional: true`), `GITHUB_REDIRECT_URI` (`github.redirectUri`) | HTTPS to public addresses |
 | `jwt` | `QUERY_API_JWT_SECRET` | |
 | `query-api` | `QUERY_API_URL` | |
-| `demo` | `DEMO_USERS` when `demo.enabled`; `DEMO_SANDBOX_*`, `DEMO_AGENT_*` when `demo.sandbox.enabled` | |
+| `demo` | `DEMO_USERS` when `demo.enabled` (off on hermes: the named users are test personas); `DEMO_SANDBOX_*`, `DEMO_AGENT_*` when `demo.sandbox.enabled` | |
 
 A service with a `port` gets a Service, health probes, and an ingress policy admitting only the
 components in its `from` list and pods in its `fromNamespaces`. Everything else is denied.
