@@ -46,9 +46,24 @@ export interface GitHubInfo {
   agent_questions_per_day: number;
 }
 
+/** /v1/me's `account`: present only for an owner-created username/password account. */
+export interface AccountInfo {
+  username: string;
+  plan: string;
+  agent_questions_per_day: number;
+}
+
 /** GET /v1/auth/providers: which sign-in buttons to show. */
 export interface AuthProviders {
   github: boolean;
+  /** username/password sign-in (owner-created accounts); absent from older APIs */
+  password?: boolean;
+}
+
+/** POST /v1/auth/password */
+export interface PasswordSignedIn {
+  token: string;
+  expires_in: number;
 }
 
 /** /v1/me `catalog`: while public, every company in the public catalog is readable with
@@ -67,6 +82,7 @@ export interface Me {
   companies: Company[];
   sandbox?: SandboxInfo;
   github?: GitHubInfo;
+  account?: AccountInfo;
 }
 
 export interface Citation {
