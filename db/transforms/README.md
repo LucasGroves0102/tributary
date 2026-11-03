@@ -5,7 +5,7 @@ functions defined in the migrations, latest definitions first:
 
 | Function | Defined in |
 |---|---|
-| `gold.refresh_quarterly_financials(text[])` | `029_gold_quality_fixes.sql` (instants only for balance-sheet metrics; no negative derived quarter for metrics that can't be negative; before: `024_gold_ignores_proxy_statements.sql` skips proxy-statement facts, `015_gold_tiebreaks.sql` deterministic tie-breaks, `011_bulk_financials.sql`, `003_financials.sql`) |
+| `gold.refresh_quarterly_financials(text[])` | `031_gold_one_quarter_series.sql` (one non-overlapping series of quarters per company and metric, chosen by calendar votes; before: `029_gold_quality_fixes.sql` instants only for balance-sheet metrics, no negative derived quarter for metrics that can't be negative; `024_gold_ignores_proxy_statements.sql` skips proxy-statement facts, `015_gold_tiebreaks.sql` deterministic tie-breaks, `011_bulk_financials.sql`, `003_financials.sql`) |
 | `silver.refresh_financial_facts(text[])` | `011_bulk_financials.sql` (first in `003_financials.sql`); metric tags in `012_more_metrics.sql` (+ one in `024`) |
 | `gold.refresh_derived_financials(text[])`, `gold.refresh_financials(text[])` | `014_gold_calendar.sql` |
 | `silver.refresh_company_metadata` | `013_submissions.sql` |

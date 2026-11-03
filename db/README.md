@@ -93,6 +93,29 @@ dividends) is left missing instead of published (11,320 rows; e.g. Cytek's Q4 20
 document, read by authz-sync) and the nine `granted_*` policies re-pointed at the rule. Ships
 with `public_access` empty: no one's access changes until the catalog is opened
 ([app/README.md](app/README.md), "Open access").
+`031_gold_one_quarter_series.sql` gives `gold.quarterly_financials` one non-overlapping series of
+quarters per company and metric. Gold kept one row per period end, so a quarter reported with two
+(start, end) pairs survived twice: an end date a day apart (NVIDIA's Q2 FY2011 ends Aug 1 in the
+10-Q, Jul 31 in a later 10-K), last year's quarters re-labelled to another calendar in this
+year's comparatives (ATI, Dine Brands), calendar-month quarters next to fiscal ones after a
+change of fiscal year (TranSuite.org). On hermes that was 11,080 `overlapping_quarters` findings
+at 620 companies. The rule, for duration rows (instants are points and keep one row per date):
+(a) calendar votes: per company and date, how many metrics have a balance-sheet value on it and
+how many have any fact ending on it; a quarter scores its last day plus the day before its first
+day, so the series whose boundaries carry the company's own balance sheets wins (a re-labelled
+comparative has none); (b) rank, best first: instant votes, metric votes, then 029's order
+(tag priority, reported over derived, latest filed, accession, ...), then period end: total, so
+refreshes stay byte-identical; the same order picks the one row per period end; (c) two rows
+overlapping by more than 7 days conflict (quarters are 80-120 days, so they can't share a
+series; up to 7 days is a start tagged a day or two early, tolerated like the TTM's 0-7 day
+gaps); (d) greedy, best first: a row is dropped only for a kept row it conflicts with (no
+quarter is lost to a chain), and rows without a conflict are untouched. Derived quarters never
+mix series: both inputs come from one year-to-date chain (same start), and the start-day vote
+keeps the Q4 of the chain whose quarters are kept. A read-only simulation on hermes' gold took
+the 620 companies from 11,041 overlaps to 1,686, all of 1-7 days, dropping ~6,400 rows; the
+fixture companies (Costco's 16-week Q4 included) and the golden 10-K figures are unchanged.
+Trade-off: when a company re-labels and also restates last year's quarters (ATI 2022-2023),
+gold keeps the original filing's dates and values. Needs `make financials-rebuild`.
 
 ## Migrations
 
