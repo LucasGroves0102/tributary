@@ -30,7 +30,9 @@ import {
   prefetchScreens,
   ReportView,
   Search,
+  ModelPage,
   Status,
+  ThesisPage,
   WorkspacePage,
 } from "./pages/lazy";
 import { readableCount, Welcome } from "./pages/Welcome";
@@ -289,7 +291,9 @@ export function App(props: Props = {}) {
       saved
         .openItem(itemId)
         .then((item) => {
-          if (item.kind === "report") return go({ view: "report", itemId: item.item_id });
+          if (item.kind === "report" || item.kind === "thesis" || item.kind === "model") {
+            return go({ view: item.kind, itemId: item.item_id });
+          }
           if (item.kind === "chart") setChart(() => restoreChartState(item.state));
           go(itemRoute(item.kind, item.state));
         })
@@ -586,6 +590,7 @@ export function App(props: Props = {}) {
                   assistant.setDraft(q);
                   focusAssistant();
                 }}
+                saved={saved.list.state === "ok" ? saved : null}
               />
             ) : route.view === "filing" ? (
               <FilingReader
@@ -637,7 +642,25 @@ export function App(props: Props = {}) {
                 writer={writer}
                 onOpen={openSaved}
                 version={saved.version}
+                saved={saved.list.state === "ok" ? saved : null}
               />
+            ) : route.view === "thesis" ? (
+              <ThesisPage
+                key={`${user}-${route.itemId}`}
+                token={token}
+                itemId={route.itemId}
+                saved={saved}
+                label={(id) => companyName(id) ?? id}
+                readable={financialsFor}
+                onOpenChart={(s) => {
+                  setChart(() => s);
+                  saved.close("chart");
+                  go({ view: "chart" });
+                }}
+              />
+            ) : route.view === "model" ? (
+              <ModelPage key={`${user}-${route.itemId}`} token={token} itemId={route.itemId} saved={saved}
+                label={(id) => companyName(id) ?? id} />
             ) : route.view === "report" ? (
               <ReportView
                 key={`${user}-${route.itemId}`}

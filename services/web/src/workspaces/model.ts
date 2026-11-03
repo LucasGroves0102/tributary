@@ -12,13 +12,24 @@ import { cleanCompare, compareQuery, parseCompare, type CompareState } from "../
 import type { Route } from "../route";
 import type { ItemKind, SavedKind } from "../types";
 
-export const KIND_LABELS: Record<ItemKind, string> = { chart: "Chart", comps: "Comps", screen: "Screen", report: "Report" };
+export const KIND_LABELS: Record<ItemKind, string> = {
+  chart: "Chart",
+  comps: "Comps",
+  screen: "Screen",
+  report: "Report",
+  thesis: "Thesis",
+  model: "Model",
+};
 export const KIND_PAGES: Record<ItemKind, string> = {
   chart: "Chart builder",
   comps: "Compare",
   screen: "Companies",
   report: "the report view",
+  thesis: "the thesis editor",
+  model: "the model",
 };
+/** Kinds a page's Save bar keeps "open" (reports, theses and models have their own pages). */
+export const isPageKind = (k: ItemKind): k is SavedKind => k === "chart" || k === "comps" || k === "screen";
 export const WORKSPACE_NAME_MAX = 100;
 export const ITEM_NAME_MAX = 120;
 

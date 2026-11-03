@@ -98,6 +98,8 @@ export interface LayoutOptions {
 
 const stacked = (t: Series["type"]) => t === "sbar" || t === "sarea";
 const barLike = (t: Series["type"]) => t === "bar" || t === "sbar";
+/** Right-axis lines are dashed; a series may ask for it itself (a forecast). */
+const dashedOf = (s: Series) => !barLike(s.type) && (s.dashed ?? s.axis === "R");
 
 /** Per series per tick, the span it covers: [0, v] alone, or its segment of the stack it
  * belongs to (same stacked type and axis; positives stack up, negatives down). */
@@ -175,7 +177,7 @@ export function layout(series: Series[], title: boolean, markers: Marker[] = [],
       x = l;
       y += LEGEND_LINE;
     }
-    legend.push({ id: s.id, color: s.color, name, x, y, dashed: s.axis === "R" && !barLike(s.type) });
+    legend.push({ id: s.id, color: s.color, name, x, y, dashed: dashedOf(s) });
     x += w;
   }
   const top = (series.length ? y : y - LEGEND_LINE) + 14;
@@ -211,7 +213,7 @@ export function layout(series: Series[], title: boolean, markers: Marker[] = [],
   const bw = Math.max(2, (slot * 0.7) / Math.max(1, slots.length));
   const drawn: Drawn[] = series.map((s, si) => {
     const sc = s.axis === "R" ? right : left;
-    const base = { id: s.id, color: s.color, type: s.type, dashed: s.axis === "R" && !barLike(s.type) };
+    const base = { id: s.id, color: s.color, type: s.type, dashed: dashedOf(s) };
     if (!sc) return { ...base, ys: ticks.map(() => null) };
     const at = sp[si]!;
     const val = (v: [number, number]) => (stacked(s.type) ? (v[1] > 0 || v[0] === 0 ? v[1] : v[0]) : v[1]);

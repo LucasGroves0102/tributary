@@ -13,7 +13,8 @@ export const REPORT_QUESTIONS = 3;
 export interface ReportItem {
   ref: string;
   item_id: string;
-  kind: SavedKind;
+  /** a report embeds charts, comps and screens; a thesis also models (thesis/model.ts) */
+  kind: SavedKind | "model";
   name: string;
   state: Record<string, unknown>;
 }

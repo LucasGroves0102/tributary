@@ -42,7 +42,11 @@ export type Route =
   /** one saved workspace: its items and reports, "Write a report" */
   | { view: "workspace"; workspaceId: string }
   /** a report the assistant wrote (a workspace item of kind report) */
-  | { view: "report"; itemId: string };
+  | { view: "report"; itemId: string }
+  /** a thesis the user writes (Markdown with embedded items; workspace item of kind thesis) */
+  | { view: "thesis"; itemId: string }
+  /** a revenue model: history + the user's assumptions → forecast (item of kind model) */
+  | { view: "model"; itemId: string };
 
 /** Screens in the left nav: routes without parameters. */
 export type NavView = "home" | "companies" | "chart" | "compare" | "ask";
@@ -85,7 +89,7 @@ export function parse(hash: string): Route {
   }
   if (view && SIMPLE.has(view)) return { view: view as "chart" | "ask" | "about" | "status" };
   if (view === "explore") return { view: "companies" }; // links from before the v3 shell
-  if ((view === "workspace" || view === "report") && ID.test(a ?? "")) {
+  if ((view === "workspace" || view === "report" || view === "thesis" || view === "model") && ID.test(a ?? "")) {
     return view === "workspace" ? { view, workspaceId: a! } : { view, itemId: a! };
   }
   if (view === "company" && CIK.test(a ?? "")) {
@@ -126,7 +130,9 @@ export function href(route: Route): string {
     case "workspace":
       return `#/workspace/${encodeURIComponent(route.workspaceId)}`;
     case "report":
-      return `#/report/${encodeURIComponent(route.itemId)}`;
+    case "thesis":
+    case "model":
+      return `#/${route.view}/${encodeURIComponent(route.itemId)}`;
     case "company":
       return `#/company/${route.companyId}` + (route.tab && route.tab !== "overview" ? `/${route.tab}` : "");
     case "filing": {

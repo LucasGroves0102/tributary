@@ -16,10 +16,11 @@ import {
   workspaces as fetchWorkspaces,
 } from "../api";
 import { load, save as store } from "../storage";
-import type { RecentWork, SavedItemFull, SavedKind, SavedWorkspace } from "../types";
+import type { RecentWork, SavedItemFull, SavedKind, SavedWorkspace, WrittenKind } from "../types";
 import {
   findWorkspace,
   fingerprint,
+  isPageKind,
   restoreOpen,
   stateOf,
   type Current,
@@ -52,6 +53,10 @@ export interface Saved {
   saveAs: (current: Current, name: string, target: Target) => Promise<SavedItemFull>;
   /** saves over the page's open item */
   save: (current: Current) => Promise<void>;
+  /** a new thesis or model (its own page edits it) */
+  create: (kind: WrittenKind, name: string, state: object, target: Target) => Promise<SavedItemFull>;
+  /** saves a thesis or model over (state and/or name) */
+  update: (id: string, patch: { name?: string; state?: object }) => Promise<SavedItemFull>;
   /** fetches an item's state (recorded as opened) and makes it the page's open item */
   openItem: (id: string) => Promise<SavedItemFull>;
   /** the page no longer edits a saved item (a new chart, other comps) */
@@ -226,8 +231,8 @@ export function useSaved(token: string | null, user: string | null): Saved {
         throw e;
       }
       const kind = item.kind;
-      // a report isn't edited on a page: nothing to keep open
-      if (kind !== "report") {
+      // reports, theses and models have their own pages: nothing to keep open
+      if (isPageKind(kind)) {
         setOpenItems((o) => ({
           ...o,
           [kind]: {
@@ -243,6 +248,25 @@ export function useSaved(token: string | null, user: string | null): Saved {
       return item;
     },
     [setOpenItems, forget, refresh],
+  );
+
+  const createItem = useCallback(
+    async (kind: WrittenKind, name: string, state: object, t: Target) => {
+      const ws = await target(t);
+      const item = await addItem(need(), ws.id, kind, name.trim(), state);
+      refresh();
+      return { ...item, workspace_name: ws.name };
+    },
+    [target, refresh],
+  );
+
+  const update = useCallback(
+    async (id: string, patch: { name?: string; state?: object }) => {
+      const item = await updateItem(need(), id, patch.name === undefined ? patch : { ...patch, name: patch.name.trim() });
+      refresh();
+      return item;
+    },
+    [refresh],
   );
 
   const renameWs = useCallback(async (id: string, name: string) => {
@@ -322,6 +346,8 @@ export function useSaved(token: string | null, user: string | null): Saved {
     deleteItem,
     saveAs,
     save,
+    create: createItem,
+    update,
     openItem: openOne,
     close,
     recordFiling,

@@ -12,6 +12,8 @@ import { BAND_LABELS, FILER_LABELS } from "../companies/screen";
 import { SmallMultiples } from "../compare/SmallMultiples";
 import { COMPARE_COLUMNS, DEFAULT_COLUMNS } from "../compare/state";
 import { Skeleton } from "../components/States";
+import { ModelEmbed } from "../models/ModelView";
+import { restoreModel } from "../models/model";
 import { go, href } from "../route";
 import type { FormulaSeries } from "../types";
 import { restoreChartState, restoreCompare, restoreScreen } from "../workspaces/model";
@@ -29,14 +31,17 @@ interface Common {
 
 type Result = { state: "loading" } | { state: "ok"; data: FormulaSeries } | { state: "error"; message: string };
 
-/** A saved item drawn in a report from its saved state: the data is read now, through the
- * Query API as the viewer (an ungranted company shows "no access", as anywhere else). */
+const TAGS = { chart: "Chart", comps: "Comps", screen: "Screen", model: "Model" } as const;
+
+/** A saved item drawn in a report or thesis from its saved state: the data is read now,
+ * through the Query API as the viewer (an ungranted company shows "no access", as anywhere
+ * else). */
 export function Embed(props: Common & { readable: Readable; hasTtm: TtmCatalog; onOpenChart: (s: ChartState) => void }) {
   const { item } = props;
   return (
     <figure className="card report-embed" aria-label={item.name}>
       <figcaption className="embed-h">
-        <span className={`tag ${item.kind}`}>{item.kind === "chart" ? "Chart" : item.kind === "comps" ? "Comps" : "Screen"}</span>{" "}
+        <span className={`tag ${item.kind}`}>{TAGS[item.kind]}</span>{" "}
         <b>{item.name}</b>
         <span className="grow" />
         <span className="no-print">
@@ -47,6 +52,10 @@ export function Embed(props: Common & { readable: Readable; hasTtm: TtmCatalog; 
           ) : item.kind === "comps" ? (
             <a className="btn sm ghost" href={href({ view: "compare", compare: restoreCompare(item.state) })}>
               Open in Compare
+            </a>
+          ) : item.kind === "model" ? (
+            <a className="btn sm ghost" href={href({ view: "model", itemId: item.item_id })}>
+              Open the model
             </a>
           ) : (
             <a className="btn sm ghost" href={href({ view: "companies", screen: restoreScreen(item.state) })}>
@@ -59,6 +68,8 @@ export function Embed(props: Common & { readable: Readable; hasTtm: TtmCatalog; 
         <EmbeddedChart {...props} />
       ) : item.kind === "comps" ? (
         <EmbeddedComps {...props} />
+      ) : item.kind === "model" ? (
+        <EmbeddedModel {...props} />
       ) : (
         <EmbeddedScreen {...props} />
       )}
@@ -165,6 +176,12 @@ function EmbeddedComps({ token, item, label, readable }: Common & { readable: Re
       )}
     </>
   );
+}
+
+function EmbeddedModel({ token, item, label }: Common) {
+  const model = useMemo(() => restoreModel(item.state), [item.state]);
+  if (!model) return <p className="empty">This model has no company.</p>;
+  return <ModelEmbed token={token} state={model} company={label(model.companyId)} />;
 }
 
 function EmbeddedScreen({ item }: Common) {

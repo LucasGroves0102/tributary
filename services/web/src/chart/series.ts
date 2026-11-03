@@ -34,6 +34,8 @@ export interface Series {
   type: LayerType;
   axis: Axis;
   points: Point[];
+  /** drawn dashed whatever its axis (a model's forecast); unset: dashed on the right axis */
+  dashed?: boolean;
 }
 
 export const COLORS = 8;
