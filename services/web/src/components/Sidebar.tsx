@@ -24,6 +24,8 @@ interface Props {
   workspaces?: ReactNode;
   /** narrow screens: shown as a drawer over the page */
   open?: boolean;
+  /** the server offers "Connect your data": show Settings → Connections */
+  connections?: boolean;
 }
 
 /** Which nav entry a route belongs to: a company or filing is under Companies. */
@@ -31,7 +33,7 @@ function section(route: Route): Route["view"] {
   return route.view === "company" || route.view === "filing" ? "companies" : route.view;
 }
 
-export function Sidebar({ route, me, workspace, lastIngested, onAdd, onExport, onShortcuts, workspaces, open = false }: Props) {
+export function Sidebar({ route, me, workspace, lastIngested, onAdd, onExport, onShortcuts, workspaces, open = false, connections = false }: Props) {
   const { rows, filings, watchlist } = workspace;
   const active = section(route);
   const newCount = (filings ?? []).filter((f) => f.isNew).length;
@@ -159,6 +161,11 @@ export function Sidebar({ route, me, workspace, lastIngested, onAdd, onExport, o
       <a className="cover-link" href={href({ view: "status" })} aria-current={route.view === "status" ? "page" : undefined}>
         Data status <span className="faint">· freshness, completeness, checks</span>
       </a>
+      {connections && (
+        <a className="cover-link" href={href({ view: "settings" })} aria-current={route.view === "settings" ? "page" : undefined}>
+          Settings <span className="faint">· connect your market data</span>
+        </a>
+      )}
       {onShortcuts && (
         <button className="link cover-link" onClick={onShortcuts}>
           Keyboard shortcuts <span className="kbd">?</span>

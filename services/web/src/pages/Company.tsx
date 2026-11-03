@@ -4,6 +4,8 @@ import { DataNotes } from "../company/DataNotes";
 import { Filings } from "../company/Filings";
 import { Overview } from "../company/Overview";
 import { Peers } from "../company/Peers";
+import { Price } from "../company/Price";
+import { useMarketData } from "../market/useMarketData";
 import { Revenue } from "../company/Revenue";
 import type { ChartState } from "../chart/model";
 import { Ratios, Segments, Statements } from "../company/Tables";
@@ -39,6 +41,9 @@ export function Company({ token, companyId, tab, watched, onWatch, onChart, onCh
     ),
   );
   const expected = useLoad(companyId, () => expectedFilingsOf(token, companyId));
+  // the Price tab exists only when the server offers "Connect your data"
+  const market = useMarketData(token);
+  const tabs = COMPANY_TABS.filter(([t]) => t !== "price" || market?.enabled);
 
   if (!meta || meta.state === "loading") return <div className="page"><Skeleton lines={6} label="Loading the company" /></div>;
   if (meta.state === "error") {
@@ -117,7 +122,7 @@ export function Company({ token, companyId, tab, watched, onWatch, onChart, onCh
           </div>
         </div>
         <nav className="tabs" aria-label="Company sections">
-          {COMPANY_TABS.map(([t, label]) => (
+          {tabs.map(([t, label]) => (
             <a key={t} href={href({ view: "company", companyId, tab: t })} aria-current={t === tab ? "page" : undefined}>
               {label}
             </a>
@@ -135,6 +140,7 @@ export function Company({ token, companyId, tab, watched, onWatch, onChart, onCh
       {tab === "filings" && <Filings token={token} companyId={companyId} name={h.name} canRead={row.access.includes("filings")} />}
       {tab === "notes" && <DataNotes token={token} companyId={companyId} name={h.name} canReadFilings={row.access.includes("filings")} />}
       {tab === "peers" && <Peers token={token} companyId={companyId} name={h.name} onChart={onChartMany} />}
+      {tab === "price" && <Price token={token} companyId={companyId} name={h.name} />}
     </div>
   );
 }

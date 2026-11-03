@@ -1,11 +1,13 @@
 /** A chart layer's data by its key (model.ts `layerKey`): formula and metric layers through
- * `/v1/formulas/evaluate`, segment layers through `/v1/companies/{id}/segments` (and, for
+ * `/v1/formulas/evaluate`, price layers through the viewer's own `/v1/companies/{id}/prices`
+ * (chart/prices.ts), segment layers through `/v1/companies/{id}/segments` (and, for
  * `contrib`, the company's total from `/financials`), turned into the same FormulaSeries shape
  * (chart/segments.ts). The segment and total answers are shared by every member layer of one
  * chart: asked once per (token, company, axis, metric, view, basis) while the page lives. */
 
-import { evaluateFormula, financialsView, segmentsOf, type FormulaRequest } from "../api";
+import { evaluateFormula, financialsView, pricesOf, segmentsOf, type FormulaRequest } from "../api";
 import type { FinancialRow, FormulaSeries } from "../types";
+import { priceSeries, type PriceRequest } from "./prices";
 import { SEGMENT_QUARTERS, segmentSeries, type SegmentRequest } from "./segments";
 
 let owner: string | null = null;
@@ -32,7 +34,13 @@ export function clearShared(): void {
 }
 
 export async function fetchLayer(token: string, key: string): Promise<FormulaSeries> {
-  const req = JSON.parse(key) as FormulaRequest | SegmentRequest;
+  const req = JSON.parse(key) as FormulaRequest | SegmentRequest | PriceRequest;
+  if ("price" in req) {
+    // the viewer's own prices, all of them (≤ 10 years), once per company while the page lives
+    const p = req.price;
+    const prices = await once(token, JSON.stringify(["prices", p.company]), () => pricesOf(token, p.company));
+    return priceSeries(req, prices.rows, prices.fetched_at ?? "");
+  }
   if (!("segment" in req)) return evaluateFormula(token, req);
   const r = req.segment;
   const rows = once(token, JSON.stringify(["segments", r.company, r.axis, r.metric, r.view, r.basis]), () =>

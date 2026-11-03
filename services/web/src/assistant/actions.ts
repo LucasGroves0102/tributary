@@ -90,10 +90,14 @@ const MAX_CONTEXT = 3800; // agent-api refuses more than 4000 bytes
  * that's the page. `name` labels companies the way the user sees them. */
 export function uiContext(route: Route, chart: ChartState, name: (id: string) => string | null): UiContext {
   // the status page is an information page like About (agent-api's pages have no "status")
-  const ctx: UiContext = { page: route.view === "status" ? "about" : route.view };
+  // (and Settings: agent-api's pages have no "settings"; the assistant has no price tool)
+  const ctx: UiContext = { page: route.view === "status" || route.view === "settings" ? "about" : route.view };
   if (route.view === "company" || route.view === "filing") ctx.company_id = route.companyId;
-  // agent-api's tabs predate Revenue: it is reported as the segments tab (same data family)
-  if (route.view === "company" && route.tab) ctx.tab = route.tab === "revenue" ? "segments" : route.tab;
+  // agent-api's tabs predate Revenue: it is reported as the segments tab (same data family);
+  // the Price tab ("Connect your data") as the overview (the agent can't read prices)
+  if (route.view === "company" && route.tab) {
+    ctx.tab = route.tab === "revenue" ? "segments" : route.tab === "price" ? "overview" : route.tab;
+  }
   if (route.view === "compare" && route.compare) {
     const c = route.compare;
     ctx.compare = { ...(c.target ? { target: c.target } : {}), peers: c.peers ?? [], columns: columnsOf(c) };
@@ -108,8 +112,9 @@ export function uiContext(route: Route, chart: ChartState, name: (id: string) =>
   }
   if (route.view === "companies" && route.screen) ctx.screen = { ...route.screen, page: undefined } as UiContext["screen"];
   if (route.view === "chart") {
-    // segment layers stay out: agent-api's context knows metric and formula layers only
-    const shown = chart.layers.filter((l): l is typeof l & { kind: "metric" | "formula" } => l.kind !== "segment");
+    // segment and price layers stay out: agent-api's context knows metric and formula layers
+    // only (and a user's prices never go to the model)
+    const shown = chart.layers.filter((l): l is typeof l & { kind: "metric" | "formula" } => l.kind === "metric" || l.kind === "formula");
     const layers = shown.map((l) => ({
       kind: l.kind,
       ...(l.companyId ? { company_id: l.companyId } : l.defaultCompany ? { company_id: l.defaultCompany } : {}),

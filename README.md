@@ -133,7 +133,7 @@ holds every company with gold financials or a stored filing, and while it is pub
 every user read it (`catalog:sec#reader@user:*`) and row-level security accepts its companies
 (`authz.public_access`). A request without a user reads nothing. Per-company grants (to a user
 or an organization) still work for anything outside the catalog, and saved work (workspaces,
-theses, models, reports, views) stays owner-only. The switch is one app-database row, streamed like any grant:
+theses, models, reports, views) and a user's own market-data key and prices stay owner-only. The switch is one app-database row, streamed like any grant:
 
 ```sql
 UPDATE public_catalogs SET public = true  WHERE catalog_id = 'sec';  -- open (db/app README)
@@ -212,6 +212,25 @@ Both start from a company page or a workspace ("New thesis", "New model"), are o
 both layers like all saved work (the Query API filters on the token's user; the app database's
 row-level security is forced), and grant nothing: an embedded chart or a model's history is read
 as the viewer, so it shows only what you may read.
+
+#### Connect your data
+
+Share prices can't be shown publicly (vendors license them for personal use, not
+redistribution), so each user brings their own: in Settings → Connections you add your own
+market-data API key (Tiingo first, behind a small adapter interface). Tributary validates it
+with one call, stores it encrypted (AES-256-GCM envelope; the master key lives in the
+deployment's secrets, never in the database; the ciphertext is bound to your user), and shows
+you only the provider and its last four characters. End-of-day prices are fetched with your
+key when you open a company, at most once a day, and stored for you alone: no cache is shared
+between users. With a connection, a company's Price tab shows the daily close and a valuation
+(market cap, P/E, P/S, EV/EBIT from your latest close and the latest filed figures, each with
+its date), and the chart builder gets a price layer. Another user never sees your key or your
+prices, in either permission layer (OpenFGA on the company, then owner-only row-level
+security). Disconnecting deletes the key and every price fetched with it.
+
+**Off until configured:** the feature exists only when the deployment has the
+`data-connections-key` secret ([deploy/helm/tributary](deploy/helm/tributary/README.md#connect-your-data));
+without it the routes are absent and the UI hides it. The assistant has no price tool yet.
 
 ### Agent
 

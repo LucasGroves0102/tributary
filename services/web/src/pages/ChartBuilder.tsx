@@ -14,6 +14,8 @@ import { apply as applyCompletion, complete, type Suggestion, type Vocabulary } 
 import { cached, remember } from "../chart/cache";
 import { fetchLayer } from "../chart/fetch";
 import { memberName, SEGMENT_AXIS_LABELS, SEGMENT_TRANSFORMS } from "../chart/segments";
+import { PRICE_TRANSFORMS } from "../chart/prices";
+import { isConnected, useMarketData } from "../market/useMarketData";
 import { autoSubtitle, methodNote, sourceFootnote } from "../chart/deck";
 import { LayerChart } from "../chart/LayerChart";
 import { filingMarkers, MARKER_FORMS, type Marker } from "../chart/markers";
@@ -134,6 +136,9 @@ function useFilings(token: string, companyIds: string[], from: string | null, on
 export function ChartBuilder({ token, chart, setChart, saveBar }: Props) {
   const companies = useChartCompanies(token);
   const metrics = useMetrics(token);
+  // "+ Price" only with the user's own market-data connection (chart/prices.ts)
+  const market = useMarketData(token);
+  const priced = isConnected(market);
   const [results, setResults] = useState<Record<string, Result>>({});
   const [note, setNote] = useState<string | null>(null);
   const [retry, setRetry] = useState(0);
@@ -220,11 +225,18 @@ export function ChartBuilder({ token, chart, setChart, saveBar }: Props) {
   const transforms = new Set<string>(visible.map((l) => l.transform));
   const method = methodNote(effective, frequency, transforms);
   // deck output: the source line slides need (forms, companies, latest filing, as of)
+  // price layers cite no filing: name where the viewer's own prices come from
+  const priceNote = visible.some((l) => l.kind === "price") && market?.enabled
+    ? `Share prices (calendar quarter-end closes): ${market.providers
+        .filter((p) => market.connections.some((c) => c.provider === p.id))
+        .map((p) => p.attribution).join(" ") || "your market-data connection."}`
+    : "";
   const footnote = chart.deck
-    ? [sourceFootnote(series, short, asOf), method]
+    ? [sourceFootnote(series, short, asOf), method, priceNote].filter(Boolean)
     : [
         `Source: SEC filings (10-Q, 10-K XBRL) via Tributary. ${method}`,
         latest ? `Latest filing used: ${latest.form} filed ${latest.filed} (${latest.accessionNo}).` : "",
+        priceNote,
       ].filter(Boolean);
   const subtitle = chart.deck ? chart.subtitle?.trim() || autoSubtitle(series, frequency, effective) : "";
 
@@ -322,6 +334,20 @@ export function ChartBuilder({ token, chart, setChart, saveBar }: Props) {
             >
               + Formula
             </button>
+            {priced && (
+              <button
+                className="btn sm"
+                disabled={!firstCompany || chart.layers.length >= MAX_LAYERS}
+                title="Your own end-of-day prices (calendar quarter-end closes)"
+                onClick={() =>
+                  setChart((s) =>
+                    addLayer(s, { kind: "price", companyId: firstCompany, transform: "q", type: "line", axis: "R" }),
+                  )
+                }
+              >
+                + Price
+              </button>
+            )}
           </div>
           <div className="card-b layer-list">
             {companies === null && <Skeleton lines={3} label="Loading your companies" />}
@@ -538,6 +564,7 @@ function LayerEditor({
   const companyId = layer.kind === "formula" ? layer.defaultCompany : layer.companyId;
   const company = companies.find((c) => c.companyId === companyId);
   const segment = layer.kind === "segment";
+  const price = layer.kind === "price";
   const companyOptions = companies.map((c) => (
     <option key={c.companyId} value={c.companyId}>
       {c.ticker ? `${c.ticker} · ${c.name}` : c.name}
@@ -557,7 +584,7 @@ function LayerEditor({
           <rect width="9" height="9" rx="2" fill="currentColor" />
         </svg>
         <b className="grow" title={company?.name}>
-          {layer.kind === "formula" ? "Formula" : segment ? "Segments" : "Metric"}
+          {layer.kind === "formula" ? "Formula" : segment ? "Segments" : price ? "Price" : "Metric"}
           {company && <span className="faint"> · {company.ticker ?? company.name}</span>}
         </b>
         <button className="btn sm ghost icon" onClick={() => move(-1)} disabled={index === 0}
@@ -580,7 +607,7 @@ function LayerEditor({
         <span className="small">Company</span>
         {segment ? (
           <span className="grow">{company ? (company.ticker ?? company.name) : layer.companyId}</span>
-        ) : layer.kind === "metric" ? (
+        ) : layer.kind === "metric" || price ? (
           <select className="grow" aria-label="Company" value={layer.companyId ?? ""} onChange={(e) => set({ companyId: e.target.value })}>
             {!company && <option value={layer.companyId ?? ""}>{layer.companyId ?? "Choose a company"}</option>}
             {companyOptions}
@@ -600,6 +627,8 @@ function LayerEditor({
           {(layer.members ?? []).length === 1 ? memberName(layer.members![0]!) : `${layer.members?.length ?? 0} members summed`}
           <span className="faint"> (from the company's Revenue tab)</span>
         </p>
+      ) : price ? (
+        <p className="small muted">Share price from your own market-data connection, on calendar quarters.</p>
       ) : layer.kind === "metric" ? (
         <div className="row">
           <select className="grow" aria-label="Metric" value={layer.metric ?? ""} onChange={(e) => set({ metric: e.target.value })}>
@@ -626,9 +655,9 @@ function LayerEditor({
       </div>
       <div className="row">
         <select aria-label="Transform" value={layer.transform} onChange={(e) => set({ transform: e.target.value as Layer["transform"] })}>
-          {(segment ? SEGMENT_TRANSFORMS : TRANSFORMS.filter(([v]) => v !== "ps" || hasShares || layer.transform === "ps")).map(([v, label]) => (
+          {(segment ? SEGMENT_TRANSFORMS : price ? PRICE_TRANSFORMS : TRANSFORMS.filter(([v]) => v !== "ps" || hasShares || layer.transform === "ps")).map(([v, label]) => (
             <option key={v} value={v}
-              disabled={!segment && ((v === "ttm" && metric !== undefined && !metric.ttm) || (v === "ps" && !perShareOk) || (v === "qoq" && annual))}>
+              disabled={!segment && !price && ((v === "ttm" && metric !== undefined && !metric.ttm) || (v === "ps" && !perShareOk) || (v === "qoq" && annual))}>
               {annual && v === "qoq" ? `${label} (quarterly only)` : label}
             </option>
           ))}

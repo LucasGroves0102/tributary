@@ -11,10 +11,13 @@
  *
  * Segment layers (kind "segment", made by the company Revenue view) are the exception: they
  * read /v1/companies/{id}/segments instead (`segmentRequest`; rules in chart/segments.ts), with
- * their own transforms (quarterly, TTM, YoY, contribution to growth). `layerKey` gives either
- * request as the key chart/fetch.ts `fetchLayer` answers. */
+ * their own transforms (quarterly, TTM, YoY, contribution to growth). Price layers (kind
+ * "price", "Connect your data") read the viewer's own prices (`priceRequest`, chart/prices.ts)
+ * and put the chart on calendar quarters (`basis`). `layerKey` gives any of the requests as
+ * the key chart/fetch.ts `fetchLayer` answers. */
 
 import type { FormulaRequest } from "../api";
+import { PRICE_TRANSFORM_SET, type PriceRequest, type PriceTransform } from "./prices";
 import { MAX_MEMBERS, MEMBER, memberName, SEGMENT_AXES, SEGMENT_TRANSFORMS, type SegmentAxisKind, type SegmentRequest } from "./segments";
 
 /** contrib: segment layers only (chart/segments.ts) */
@@ -31,8 +34,9 @@ export type Frequency = "quarterly" | "annual";
 
 export interface Layer {
   id: number;
-  /** segment: members of one segment axis from /segments (chart/segments.ts) */
-  kind: "metric" | "formula" | "segment";
+  /** segment: members of one segment axis from /segments (chart/segments.ts); price: the
+   * viewer's own share prices (chart/prices.ts; companyId only) */
+  kind: "metric" | "formula" | "segment" | "price";
   /** metric and segment layers: the company and metric (a segment metric for segment layers) */
   companyId?: string;
   metric?: string;
@@ -105,7 +109,7 @@ export type TtmCatalog = (metric: string) => boolean;
 
 /** Companies a layer reads: its company or default company, plus any TICKER.metric. */
 export function layerCompanies(l: Layer): string[] {
-  if (l.kind === "metric" || l.kind === "segment") return l.companyId ? [l.companyId] : [];
+  if (l.kind === "metric" || l.kind === "segment" || l.kind === "price") return l.companyId ? [l.companyId] : [];
   const tickers = [...(l.formula ?? "").matchAll(/\b([A-Za-z][A-Za-z0-9]{0,9})\.[a-z_]/g)].map(
     (m) => `ticker:${m[1]!.toUpperCase()}`,
   );
@@ -113,10 +117,13 @@ export function layerCompanies(l: Layer): string[] {
 }
 
 /** Fiscal quarters only line up within one company (the API's alignment rule), so fiscal
- * applies only when every visible layer reads the same single company. */
+ * applies only when every visible layer reads the same single company. Prices have no fiscal
+ * calendar: a visible price layer puts the chart on calendar quarters. */
 export function basis(s: ChartState): Align {
   if (s.align === "calendar") return "calendar";
-  const companies = new Set(s.layers.filter((l) => !l.hidden).flatMap(layerCompanies));
+  const visible = s.layers.filter((l) => !l.hidden);
+  if (visible.some((l) => l.kind === "price")) return "calendar";
+  const companies = new Set(visible.flatMap(layerCompanies));
   return companies.size <= 1 ? "fiscal" : "calendar";
 }
 
@@ -146,7 +153,7 @@ export const frequencyOf = (s: Pick<ChartState, "frequency">): Frequency => s.fr
 export function request(l: Layer, s: ChartState, hasTtm: TtmCatalog, today?: Date): FormulaRequest | null {
   let formula: string;
   let ttm: boolean;
-  if (l.kind === "segment") return null; // segmentRequest
+  if (l.kind === "segment" || l.kind === "price") return null; // segmentRequest, priceRequest
   if (l.kind === "metric") {
     if (!l.companyId || !l.metric) return null;
     formula = l.metric;
@@ -198,10 +205,20 @@ export function segmentRequest(l: Layer, s: ChartState, today?: Date): SegmentRe
   };
 }
 
-/** What a layer's answer is cached under: its evaluate request or its segment request, as
- * JSON (chart/fetch.ts `fetchLayer` takes it back). */
+/** A price layer's request (chart/prices.ts), or null without a company. */
+export function priceRequest(l: Layer, s: ChartState, today?: Date): PriceRequest | null {
+  if (l.kind !== "price" || !l.companyId) return null;
+  const transform = PRICE_TRANSFORM_SET.has(l.transform) ? (l.transform as PriceTransform) : "q";
+  const { from, to } = rangeDates(s, today);
+  return { price: { company: l.companyId, transform, ...(from ? { from } : {}), ...(to ? { to } : {}) } };
+}
+
+/** What a layer's answer is cached under: its evaluate, segment or price request, as JSON
+ * (chart/fetch.ts `fetchLayer` takes it back). */
 export function layerKey(l: Layer, s: ChartState, hasTtm: TtmCatalog, today?: Date): string | null {
-  const req = l.kind === "segment" ? segmentRequest(l, s, today) : request(l, s, hasTtm, today);
+  const req = l.kind === "segment" ? segmentRequest(l, s, today)
+    : l.kind === "price" ? priceRequest(l, s, today)
+    : request(l, s, hasTtm, today);
   return req ? JSON.stringify(req) : null;
 }
 
@@ -213,6 +230,10 @@ export function layerName(l: Layer, short: (companyId: string) => string, label:
 }
 
 export function autoName(l: Layer, short: (companyId: string) => string, label: (metric: string) => string, frequency: Frequency = "quarterly"): string {
+  if (l.kind === "price") {
+    const who = l.companyId ? short(l.companyId) : "?";
+    return l.transform === "yoy" ? `${who} share price YoY` : l.transform === "idx" ? `${who} share price (indexed)` : `${who} share price`;
+  }
   const base =
     l.kind === "metric"
       ? `${l.companyId ? short(l.companyId) : "?"} ${l.metric ? label(l.metric).toLowerCase() : "?"}`
@@ -372,10 +393,11 @@ export function restoreChart(raw: unknown): ChartState {
     if (!x || typeof x !== "object") continue;
     const l = x as Record<string, unknown>;
     const name = typeof l.name === "string" ? l.name.replace(/[\x00-\x1f\x7f]/g, "").trim().slice(0, MAX_LAYER_NAME) : "";
-    const transforms = l.kind === "segment" ? SEGMENT_TRANSFORM_SET : TRANSFORM_SET;
+    const transforms = l.kind === "segment" ? SEGMENT_TRANSFORM_SET : l.kind === "price" ? PRICE_TRANSFORM_SET : TRANSFORM_SET;
     const common = {
       id,
-      transform: transforms.has(l.transform as Transform) ? (l.transform as Transform) : ("ttm" as Transform),
+      transform: transforms.has(l.transform as Transform) ? (l.transform as Transform)
+        : l.kind === "price" ? ("q" as Transform) : ("ttm" as Transform),
       type: TYPE_SET.has(l.type as LayerType) ? (l.type as LayerType) : "line",
       axis: l.axis === "R" ? ("R" as const) : ("L" as const),
       ...(l.hidden === true ? { hidden: true } : {}),
@@ -386,6 +408,9 @@ export function restoreChart(raw: unknown): ChartState {
     };
     if (l.kind === "metric" && CIK.test(String(l.companyId)) && /^[a-z_]{1,64}$/.test(String(l.metric))) {
       layers.push({ ...common, kind: "metric", companyId: String(l.companyId), metric: String(l.metric) });
+      id++;
+    } else if (l.kind === "price" && CIK.test(String(l.companyId))) {
+      layers.push({ ...common, kind: "price", companyId: String(l.companyId) });
       id++;
     } else if (
       l.kind === "segment" && CIK.test(String(l.companyId)) && /^[a-z_]{1,64}$/.test(String(l.metric))
