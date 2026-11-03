@@ -226,3 +226,59 @@ def test_state_and_name_checks_in_the_database(db):
         with pytest.raises(psycopg.errors.CheckViolation), conn.transaction():
             conn.execute("INSERT INTO workspace_items (workspace_id, user_id, kind, name, state)"
                          " VALUES (%s, 't-ws1', %s, %s, %s::jsonb)", (wid, kind, name, state))
+
+
+THESIS = validate_state("thesis", {"companyId": NVDA, "markdown": "# Why\n\nBecause.\n"})
+MODEL = validate_state("model", {"companyId": NVDA, "assumptions": [
+    {"growth": 10, "margin": 30, "note": "steady"}]})
+
+
+def test_theses_and_models_are_owner_only(db):
+    """App migration 009: a thesis or model is another workspace item; 004's forced RLS and
+    the owner filter keep it from every other user."""
+    s, conn = db
+    wid = s.create("t-ws1", "Mine")["workspace_id"]
+    theirs = s.create("t-ws2", "Theirs")["workspace_id"]
+    t = s.add_item("t-ws1", wid, "thesis", "NVDA thesis", THESIS)["item_id"]
+    m = s.add_item("t-ws1", wid, "model", "NVDA model", MODEL)["item_id"]
+    for iid in (t, m):
+        assert s.item("t-ws2", iid) is None
+        assert s.update_item("t-ws2", iid, "taken", None) is None
+        assert s.duplicate_item("t-ws2", iid, theirs, None) is None
+        assert s.delete_item("t-ws2", iid) is False
+        assert s.mark_opened("t-ws2", iid) is None
+    assert s.item("t-ws1", t)["state"] == THESIS and s.item("t-ws1", m)["state"] == MODEL
+    # the workspace lists a thesis without its state (large, like a report), a model with it
+    got = {i["kind"]: i["state"] for i in s.get("t-ws1", wid)["items"]}
+    assert got == {"thesis": None, "model": MODEL}
+    assert s.get("t-ws2", wid) is None
+    # and the policy alone hides them (no WHERE), as the table owner
+    owner = conn.execute("SELECT tableowner FROM pg_tables WHERE schemaname = 'public'"
+                         " AND tablename = 'workspace_items'").fetchone()[0]
+    if conn.execute("SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname = %s",
+                    (owner,)).fetchone()[0]:
+        pytest.skip(f"table owner {owner} bypasses row-level security")
+    conn.execute(sql.SQL("SET LOCAL ROLE {}").format(sql.Identifier(owner)))
+    conn.execute("SELECT set_config('app.user_id', 't-ws2', true)")
+    assert conn.execute("SELECT count(*) FROM workspace_items WHERE kind IN"
+                        " ('thesis', 'model')").fetchone()[0] == 0
+    assert conn.execute("UPDATE workspace_items SET state = '{}'").rowcount == 0
+    assert conn.execute("DELETE FROM workspace_items").rowcount == 0
+    conn.execute("SELECT set_config('app.user_id', 't-ws1', true)")
+    assert conn.execute("SELECT count(*) FROM workspace_items WHERE kind IN"
+                        " ('thesis', 'model')").fetchone()[0] == 2
+    conn.execute("RESET ROLE")
+
+
+def test_thesis_state_may_be_as_large_as_a_reports(db):
+    _, conn = db
+    wid = conn.execute("INSERT INTO workspaces (user_id, name) VALUES ('t-ws1', 'w')"
+                       " RETURNING workspace_id").fetchone()[0]
+    big = '{"markdown": "' + "x" * 120_000 + '"}'
+    insert = ("INSERT INTO workspace_items (workspace_id, user_id, kind, name, state)"
+              " VALUES (%s, 't-ws1', %s, 'x', %s::jsonb)")
+    conn.execute(insert, (wid, "thesis", big))
+    for kind, state in (("thesis", '{"markdown": "' + "x" * 131_100 + '"}'),
+                        ("model", big), ("chart", big), ("essay", "{}")):
+        with pytest.raises(psycopg.errors.CheckViolation), conn.transaction():
+            conn.execute(insert, (wid, kind, state))

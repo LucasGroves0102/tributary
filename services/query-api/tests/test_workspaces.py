@@ -13,9 +13,12 @@ from fastapi.testclient import TestClient
 
 from query_api.app import create_app
 from query_api.workspaces import (
+    LARGE,
     MAX_BODY_BYTES,
+    MAX_ITEM_BODY,
     MAX_ITEMS_PER_WORKSPACE,
     MAX_RECENT_FILINGS,
+    MAX_THESIS_BYTES,
     MAX_WORKSPACES,
     LimitReached,
     StateError,
@@ -36,6 +39,12 @@ CHART = {"title": "NVDA revenue", "range": 3, "align": "calendar", "layers": [
 COMPS = {"target": NVDA, "peers": [AAPL, TSLA], "cols": ["revenue_ttm", "operating_margin_ttm"]}
 SCREEN = {"industry": "software", "margin": 20, "sort": "-revenue_ttm"}
 SAVED_CHART = validate_state("chart", CHART)  # as stored: defaults filled in
+THESIS = {"companyId": NVDA, "markdown": "# Why NVDA\n\nData centers.\n\n[[embed:"
+          "0b6f8a52-63f4-4d6e-9d0e-2f4d3b8a1c11]]\n\n\tIndented, with tabs.\n"}
+MODEL = {"companyId": NVDA, "historyYears": 8, "assumptions": [
+    {"growth": 25, "margin": 55.5, "note": "Blackwell ramp"},
+    {"growth": 12.5, "margin": 50},
+    {"growth": -3, "margin": 48, "note": "  "}]}
 
 
 class FakeWorkspaces:
@@ -133,7 +142,7 @@ class FakeWorkspaces:
         if not w:
             return None
         return self._public(w, [{**self._summary(i),
-                                 "state": None if i["kind"] == "report" else i["state"]}
+                                 "state": None if i["kind"] in LARGE else i["state"]}
                                 for i in self.items.values()
                                 if i["workspace_id"] == workspace_id])
 
@@ -287,7 +296,8 @@ CHART_V2 = {"title": "Capital return", "range": "max", "align": "fiscal", "marke
 
 
 @pytest.mark.parametrize("kind, state", [("chart", CHART), ("chart", CHART_V2), ("comps", COMPS),
-                                         ("screen", SCREEN)])
+                                         ("screen", SCREEN), ("thesis", THESIS),
+                                         ("thesis", {}), ("model", MODEL)])
 def test_each_kind_round_trips(world, token, kind, state):
     client, *_ = world
     wid = new_workspace(client, token)
@@ -402,6 +412,28 @@ BAD_STATES = [
     ("screen", {"q": "x" * 101}),
     ("screen", {"page": 3}),
     ("screen", {"band": "huge"}),
+    ("thesis", {"markdown": "bell\x07"}),
+    ("thesis", {"markdown": "nul\x00"}),
+    ("thesis", {"markdown": "x" * 100_001}),
+    ("thesis", {"companyId": "NVDA"}),
+    ("thesis", {"title": "x"}),  # the item's name is the title
+    ("thesis", {"markdown": 5}),
+    ("model", {"assumptions": [{"growth": 1, "margin": 1}]}),  # no company
+    ("model", {"companyId": NVDA, "assumptions": []}),
+    ("model", {"companyId": NVDA, "assumptions": [{"growth": 1, "margin": 1}] * 11}),
+    ("model", {"companyId": NVDA, "assumptions": [{"growth": -101, "margin": 1}]}),
+    ("model", {"companyId": NVDA, "assumptions": [{"growth": 1, "margin": 101}]}),
+    ("model", {"companyId": NVDA, "assumptions": [{"growth": 1, "margin": 1, "x": 1}]}),
+    ("model", {"companyId": NVDA, "assumptions": [{"growth": 1}]}),
+    ("model", {"companyId": NVDA, "assumptions": [{"growth": 1, "margin": 1,
+                                                   "note": "x" * 501}]}),
+    ("model", {"companyId": NVDA, "assumptions": [{"growth": 1, "margin": 1,
+                                                   "note": "a\x00b"}]}),
+    ("model", {"companyId": NVDA, "historyYears": 2, "assumptions": [{"growth": 1,
+                                                                      "margin": 1}]}),
+    ("model", {"companyId": NVDA, "historyYears": 11, "assumptions": [{"growth": 1,
+                                                                       "margin": 1}]}),
+    ("model", {**MODEL, "history": [{"revenue": 1}]}),  # history is never stored
 ]
 
 
@@ -451,10 +483,12 @@ def test_malformed_workspace_names(world, token, name):
 def test_oversized_and_unsized_bodies_are_refused_before_reading(world, token):
     client, ws, _ = world
     wid = new_workspace(client, token)
-    big = {"kind": "chart", "name": "x",
-           "state": {**CHART, "title": "x" * (MAX_BODY_BYTES + 1)}}
+    big = {"kind": "thesis", "name": "x", "state": {"markdown": "x" * (MAX_ITEM_BODY + 1)}}
     r = client.post(f"/v1/workspaces/{wid}/items", json=big, headers=token("alice"))
     assert r.status_code == 413
+    r = client.patch(f"/v1/workspaces/{wid}", json={"name": "x" * (MAX_BODY_BYTES + 1)},
+                     headers=token("alice"))
+    assert r.status_code == 413  # other saved-work routes keep the small cap
     r = client.post("/v1/workspaces", headers={**token("alice"), "Transfer-Encoding": "chunked"},
                     content=iter([json.dumps({"name": "x"}).encode()]))
     assert r.status_code == 411
@@ -568,3 +602,105 @@ def test_saved_work_is_not_streamed():
                            .read_text())
     for table in ("workspaces", "workspace_items", "recent_filings"):
         assert table not in connector["table.include.list"]
+
+
+# --- theses and models (app migration 009): user-written, through the generic routes ---------
+
+def test_thesis_is_written_and_saved_over_by_its_owner(world, token):
+    client, *_ = world
+    wid = new_workspace(client, token)
+    chart = new_item(client, token, wid)
+    t = new_item(client, token, wid, kind="thesis", name="NVDA: the AI build-out",
+                 state={"companyId": NVDA, "markdown": ""})
+    assert t["kind"] == "thesis" and t["state"] == {"companyId": NVDA, "markdown": ""}
+    body = f"# Thesis\n\n[[embed:{chart['item_id']}]]\n"
+    r = client.put(f"/v1/workspace-items/{t['item_id']}",
+                   json={"name": "NVDA thesis", "state": {"companyId": NVDA, "markdown": body}},
+                   headers=token("alice"))
+    assert r.status_code == 200, r.text
+    assert (r.json()["name"], r.json()["state"]["markdown"]) == ("NVDA thesis", body)
+    # the workspace lists the thesis without its (large) state; one fetch returns it
+    items = client.get(f"/v1/workspaces/{wid}", headers=token("alice")).json()["items"]
+    by_kind = {i["kind"]: i for i in items}
+    assert by_kind["thesis"]["state"] is None and by_kind["chart"]["state"] == SAVED_CHART
+    got = client.get(f"/v1/workspace-items/{t['item_id']}", headers=token("alice")).json()
+    assert got["state"]["markdown"] == body
+    # a thesis can't be saved over with another kind's state
+    r = client.put(f"/v1/workspace-items/{t['item_id']}", json={"state": MODEL},
+                   headers=token("alice"))
+    assert r.status_code == 422
+
+
+def test_a_large_thesis_fits_and_a_larger_one_is_refused(world, token):
+    client, ws, _ = world
+    wid = new_workspace(client, token)
+    big = {"markdown": "x" * 100_000}
+    assert len(json.dumps(big)) < MAX_THESIS_BYTES < MAX_ITEM_BODY
+    new_item(client, token, wid, kind="thesis", state=big)
+    # 45,000 three-byte characters are under the character cap but over the byte cap
+    r = client.post(f"/v1/workspaces/{wid}/items",
+                    json={"kind": "thesis", "name": "x", "state": {"markdown": "\u20ac" * 45_000}},
+                    headers=token("alice"))
+    assert r.status_code == 422 and "larger than" in r.json()["detail"]
+
+
+def test_model_state_as_stored():
+    saved = validate_state("model", MODEL)
+    assert saved == {"companyId": NVDA, "historyYears": 8, "assumptions": [
+        {"growth": 25.0, "margin": 55.5, "note": "Blackwell ramp"},
+        {"growth": 12.5, "margin": 50.0},
+        {"growth": -3.0, "margin": 48.0}]}  # a blank note is dropped
+    assert validate_state("model", {"companyId": NVDA, "assumptions": [
+        {"growth": 0, "margin": 0}]})["historyYears"] == 8
+
+
+@pytest.mark.parametrize("kind, state", [("thesis", THESIS), ("model", MODEL)])
+def test_another_user_cant_read_update_or_delete_a_thesis_or_model(world, token, kind, state):
+    client, ws, _ = world
+    wid = new_workspace(client, token)
+    iid = new_item(client, token, wid, kind=kind, state=state)["item_id"]
+    bob = token("bob")
+    answers = [
+        client.get(f"/v1/workspace-items/{iid}", headers=bob),
+        client.post(f"/v1/workspace-items/{iid}/open", headers=bob),
+        client.put(f"/v1/workspace-items/{iid}", json={"state": state}, headers=bob),
+        client.put(f"/v1/workspace-items/{iid}", json={"name": "mine"}, headers=bob),
+        client.post(f"/v1/workspace-items/{iid}/duplicate", headers=bob),
+        client.delete(f"/v1/workspace-items/{iid}", headers=bob),
+    ]
+    assert {(r.status_code, r.text) for r in answers} == {(404, '{"detail":"item not found"}')}
+    assert client.get(f"/v1/workspaces/{wid}", headers=bob).status_code == 404
+    mine = client.get(f"/v1/workspace-items/{iid}", headers=token("alice")).json()
+    assert mine["state"] == validate_state(kind, state) and mine["name"] == "Rev"
+
+
+def test_theses_and_models_duplicate_like_any_item(world, token):
+    client, *_ = world
+    wid = new_workspace(client, token)
+    t = new_item(client, token, wid, kind="thesis", state=THESIS, name="T")
+    m = new_item(client, token, wid, kind="model", state=MODEL, name="M")
+    for src in (t, m):
+        r = client.post(f"/v1/workspace-items/{src['item_id']}/duplicate",
+                        headers=token("alice"))
+        assert r.status_code == 201 and r.json()["state"] == src["state"]
+    copy_ = client.post(f"/v1/workspaces/{wid}/duplicate", headers=token("alice")).json()
+    assert [i["kind"] for i in copy_["items"]] == ["thesis", "model", "thesis", "model"]
+
+
+def test_a_model_or_thesis_grants_nothing(world, token):
+    """bob can save a model of NVDA (a company id and his numbers), but its history still
+    comes from the financials route, which refuses him."""
+    client, *_ = world
+    wid = new_workspace(client, token, user="bob")
+    new_item(client, token, wid, user="bob", kind="model", state=MODEL)
+    new_item(client, token, wid, user="bob", kind="thesis", state=THESIS)
+    r = client.get(f"/v1/companies/{NVDA}/financials", params={"view": "ttm", "quarters": 40},
+                   headers=token("bob"))
+    assert r.status_code == 403
+
+
+def test_reports_still_cant_embed_theses_or_models():
+    from query_api.reports import ReportItem
+    with pytest.raises(ValueError):
+        ReportItem.model_validate({"ref": "item-1", "item_id": str(uuid.uuid4()),
+                                   "kind": "model", "name": "M", "state": MODEL})
