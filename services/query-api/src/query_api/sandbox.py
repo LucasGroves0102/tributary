@@ -15,7 +15,8 @@ deletion; watchlists, workspaces and usage go with them (ON DELETE CASCADE).
 GitHub sign-in (query_api.github) is a second way to get the same kind of JWT: it finds or
 creates a permanent user with the same access (grant_demo_access) and the same assistant caps
 (take_question), but no demo_sandboxes row, so demo-cleanup never deletes it; nothing
-downstream knows how the user signed in."""
+downstream knows how the user signed in. Owner-created password accounts
+(query_api.password_accounts) get the same access too, but their own assistant cap."""
 
 import hashlib
 import hmac
@@ -28,6 +29,7 @@ from typing import Any, Protocol
 
 import psycopg
 
+from query_api.passwords import is_password_user
 from query_api.workspaces import seed, starter
 
 # The demo's companies, by ticker. The one list: the API resolves it, the web app shows what
@@ -44,7 +46,8 @@ CATALOG = "sec"
 # The starter workspace every sandbox gets (sandbox_workspaces); it goes with the user.
 DEMO_WORKSPACE = "PepsiCo vs Coca-Cola"
 # Sandbox user ids start with this; nothing else in the app database does (named demo users
-# are alice/bob/carol/dave, GitHub sign-in uses "gh-<id>", query_api.github).
+# are alice/bob/carol/dave, GitHub sign-in uses "gh-<id>", query_api.github, and owner-created
+# password accounts "pw-<username>", query_api.passwords).
 USER_PREFIX = "demo-"
 # Serializes sandbox creation, so the per-IP and live-sandbox caps can't be raced past.
 LOCK_KEY = 0x7472_6962_6465_6D6F  # "tribdemo"
@@ -141,12 +144,13 @@ class Refused(Exception):
 
 class QuotaExceeded(Exception):
     """Not enough assistant questions left: `scope` is "user" or "day" (all sandboxes);
-    `left` is how many that scope still has today."""
+    `left` is how many that scope still has today; `limit` the cap that was hit."""
 
-    def __init__(self, scope: str, left: int = 0) -> None:
+    def __init__(self, scope: str, left: int = 0, limit: int | None = None) -> None:
         super().__init__(scope)
         self.scope = scope
         self.left = max(0, left)
+        self.limit = limit
 
 
 class SandboxGone(Exception):
@@ -239,8 +243,15 @@ class AppSandboxes:
     def take_question(self, user_id: str, now: datetime, per_user: int, per_day: int,
                       questions: int = 1) -> int:
         """Takes `questions` (a report counts as several) or none: all or nothing. For a demo
-        sandbox or a GitHub account (query_api.github); anyone else is SandboxGone."""
+        sandbox or a GitHub account (query_api.github), capped by `per_user` and the shared
+        `per_day`; for an owner-created password account (app migration 013), capped by its
+        own questions_per_day instead, and never by (or counted in) the shared `per_day`: the
+        owner chose that account's allowance, and the demo's daily cap exists to bound
+        anonymous visitors, so a busy demo day mustn't block it (agent-api's daily model
+        budget still bounds spend). Anyone else, or a disabled account, is SandboxGone."""
         day = now.astimezone(UTC).date()
+        if is_password_user(user_id):
+            return self._take_account_question(user_id, day, questions)
         with self._pool.connection() as conn, conn.transaction(), conn.cursor() as cur:
             # a live sandbox, or a GitHub account (app migration 007: same caps, no expiry)
             cur.execute("SELECT expires_at > %s FROM demo_sandboxes WHERE user_id = %s"
@@ -260,9 +271,9 @@ class AppSandboxes:
             mine = _count(cur)
             # the user's own cap first, so one sandbox can't spend more than its share of the day
             if mine + questions > per_user:
-                raise QuotaExceeded("user", per_user - mine)
+                raise QuotaExceeded("user", per_user - mine, per_user)
             if total + questions > per_day:
-                raise QuotaExceeded("day", per_day - total)
+                raise QuotaExceeded("day", per_day - total, per_day)
             cur.execute("INSERT INTO demo_agent_usage (user_id, day, questions)"
                         " VALUES (%s, %s, %s) ON CONFLICT (user_id, day)"
                         " DO UPDATE SET questions"
@@ -271,6 +282,27 @@ class AppSandboxes:
             cur.execute("UPDATE demo_agent_daily SET questions = questions + %s WHERE day = %s",
                         (questions, day))
             return min(per_user - mine, per_day - total) - questions
+
+    def _take_account_question(self, user_id: str, day: date, questions: int) -> int:
+        with self._pool.connection() as conn, conn.transaction(), conn.cursor() as cur:
+            # the account's row lock serializes its own question count
+            cur.execute("SELECT questions_per_day, disabled FROM password_accounts"
+                        " WHERE user_id = %s FOR UPDATE", (user_id,))
+            row = cur.fetchone()
+            if row is None or row[1]:
+                raise SandboxGone(user_id)
+            cap = int(row[0])
+            cur.execute("SELECT questions FROM demo_agent_usage WHERE user_id = %s AND day = %s",
+                        (user_id, day))
+            mine = _count(cur)
+            if mine + questions > cap:
+                raise QuotaExceeded("user", cap - mine, cap)
+            cur.execute("INSERT INTO demo_agent_usage (user_id, day, questions)"
+                        " VALUES (%s, %s, %s) ON CONFLICT (user_id, day)"
+                        " DO UPDATE SET questions"
+                        "     = demo_agent_usage.questions + EXCLUDED.questions",
+                        (user_id, day, questions))
+            return cap - mine - questions
 
     def delete_expired(self, now: datetime) -> dict[str, int]:
         """Deletes expired sandbox users (only users with a sandbox row: never anyone else, so
@@ -283,7 +315,7 @@ class AppSandboxes:
             cur.execute("DELETE FROM demo_creations WHERE created_at < %s",
                         (now - timedelta(days=1),))
             creations = cur.rowcount
-            # GitHub accounts' usage rows don't go with a user; nothing reads past days
+            # GitHub and password accounts' usage rows outlive the day; nothing reads past days
             cur.execute("DELETE FROM demo_agent_usage WHERE day < %s",
                         (_day(now) - timedelta(days=90),))
             usage = cur.rowcount

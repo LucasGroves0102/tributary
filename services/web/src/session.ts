@@ -1,5 +1,6 @@
 /** Who the app is signed in as. Every way in ends with the same thing: a Query API JWT whose
- * `sub` is the user. There are three: a demo sandbox ("Try the demo", POST /v1/demo/sandbox),
+ * `sub` is the user. There are four: the username and password of an owner-created account
+ * (POST /v1/auth/password, kind "account"), a demo sandbox ("Try the demo", POST /v1/demo/sandbox),
  * "Sign in with GitHub" (the Query API redirects back to `#/signed-in?token=…`, the token in the
  * URL fragment, `readSignedIn`) and, behind the dev flag, the named demo users (alice, bob,
  * carol, dave).
@@ -12,7 +13,9 @@ import { load, remove, save } from "./storage";
 
 export interface Session {
   /** "account": any other user, signed in with an owner-issued sign-in link
-   * (`query-api-token` on the server, then `#/signed-in?token=…&expires_in=…`) */
+   * (`query-api-token` on the server, then `#/signed-in?token=…&expires_in=…`) or with the
+   * username and password of an owner-created account (`query-api-account`, POST
+   * /v1/auth/password; the password itself is never stored) */
   kind: "sandbox" | "github" | "account";
   token: string;
   userId: string;
@@ -20,7 +23,8 @@ export interface Session {
   expiresAt: string;
   /** companies the sandbox (or the GitHub account, the same 20) was granted */
   companies: string[];
-  /** the GitHub login (kind "github"), or the user id (kind "account") */
+  /** the GitHub login (kind "github"), or the user id (kind "account"; the username for a
+   * password account) */
   login?: string;
 }
 

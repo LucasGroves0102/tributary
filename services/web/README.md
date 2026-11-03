@@ -46,6 +46,16 @@ returns to the front door. A regular account (not a sandbox or GitHub user, e.g.
 an owner-issued link: the owner mints a token on the server (`query-api-token <user_id> --hours
 N` inside the query-api pod) and sends `https://<site>/#/signed-in?token=<token>&expires_in=<s>`;
 the app keeps it as an `account` session, with no demo scope (it reads what the API says).
+An owner-created username/password account (Query API README, "Password accounts"; there is
+no signup) uses "Sign in" on the front door, shown when `GET /v1/auth/providers` says
+`"password": true`: a labelled form (username, and a `type="password"`,
+`autocomplete="current-password"` field) that posts once to `/api/query/v1/auth/password`, then
+reads `/v1/me` and stores the same `account` session (login = the username, from `/v1/me`'s
+`account`). The password stays only in the form's state until it is sent and is cleared right
+away; it is never stored. Every refusal shows "Wrong username or password, or the account is
+locked."; a 429 shows the API's message. An expired or revoked session (the owner disabled the
+account or changed its password) returns to the front door with "Your sign-in expired. Sign in
+again." `src/PasswordSignIn.test.tsx` covers the form, the error and the session.
 The named demo users (alice, bob, carol, dave: `/v1/demo/users`,
 `/v1/demo/token`) are test personas: production turns them off (`demo.enabled: false` in the Flux
 release), and locally they are behind a dev flag: build with `VITE_DEMO_PICKER=1`, or run

@@ -53,6 +53,12 @@ requests are unchanged.
 
 Limits: questions per hour per user and per client IP (`X-Client-IP`, set by the web proxy from
 Cloudflare's `CF-Connecting-IP`), and a daily model budget across all users. Over a limit → 429.
+Before each question it also takes the user's persistent daily allowance from the Query API
+(`/v1/demo/agent-quota`): a demo sandbox's or GitHub account's demo caps, or an owner-created
+password account's own `questions_per_day` (Query API README, "Password accounts"); the
+Query API decides from the token, and its 429 message is shown as is. Production raises
+`AGENT_IP_RATE_PER_HOUR` to 40 (Flux release): a tester on the owner's network shares the
+owner's address, and the per-account daily caps still hold.
 A report counts as 3 questions ([Reports](#reports)), a thesis check 4
 ([Thesis checks](#thesis-checks)).
 
@@ -178,7 +184,7 @@ Config (env):
 | `AGENT_TOKEN` | required | `agent-ask` (`make ask` mints it) |
 | `AGENT_MAX_ROUNDS` | 6 | `agent-ask` |
 | `AGENT_RATE_PER_HOUR` | 30 | `agent-api`, per user |
-| `AGENT_IP_RATE_PER_HOUR` | 10 | `agent-api`, per client IP |
+| `AGENT_IP_RATE_PER_HOUR` | 10 | `agent-api`, per client IP (production: 40, Flux release) |
 | `AGENT_DAILY_BUDGET_USD` | 2 | `agent-api`, all users, per UTC day |
 | `PORT` | 8001 | `agent-api` |
 

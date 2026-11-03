@@ -163,7 +163,7 @@ def sign_in(client):
 def test_routes_404_without_config():
     app = create_app(Authorizer(FakeAccounts()), FakeStore(), SECRET)
     c = TestClient(app, follow_redirects=False)
-    assert c.get("/v1/auth/providers").json() == {"github": False}
+    assert c.get("/v1/auth/providers").json() == {"github": False, "password": False}
     assert c.get("/v1/auth/github/start").status_code == 404
     assert c.get("/v1/auth/github/callback", params={"code": "x", "state": "y"}).status_code == 404
 
@@ -178,7 +178,7 @@ def test_config_needs_both_keys():
 
 def test_start_redirects_to_github_with_no_scopes_and_a_browser_bound_state(world):
     client, *_ = world
-    assert client.get("/v1/auth/providers").json() == {"github": True}
+    assert client.get("/v1/auth/providers").json() == {"github": True, "password": False}
     r = client.get("/v1/auth/github/start")
     assert r.status_code == 302
     url = urlsplit(r.headers["location"])

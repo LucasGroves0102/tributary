@@ -2,6 +2,7 @@ import { displayNames } from "./format";
 import type {
   AgentEvent,
   AuthProviders,
+  PasswordSignedIn,
   Calendar,
   DataNotes,
   DataStatus,
@@ -94,6 +95,17 @@ export async function dataStatus(): Promise<DataStatus> {
 /** Sign-in providers the Query API has configured. */
 export async function authProviders(): Promise<AuthProviders> {
   return json<AuthProviders>(await fetch(`${QUERY}/v1/auth/providers`));
+}
+
+/** Username/password sign-in for an owner-created account (there is no signup). The password
+ * goes only into this request's body: never a URL, storage or an error message. */
+export async function passwordSignIn(username: string, password: string): Promise<PasswordSignedIn> {
+  const r = await fetch(`${QUERY}/v1/auth/password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
+  return json<PasswordSignedIn>(r);
 }
 
 /** "Sign in with GitHub" is a full-page navigation here (the API redirects to GitHub and back to

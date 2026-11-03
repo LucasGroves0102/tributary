@@ -293,6 +293,20 @@ a.btn:hover {
   padding: var(--sp-3) var(--sp-4);
 }
 
+.welcome-signin {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.welcome-signin label {
+  font-weight: 500;
+}
+
+.welcome-signin .row {
+  margin-top: var(--sp-2);
+}
+
 .welcome-progress {
   display: flex;
   flex-direction: column;

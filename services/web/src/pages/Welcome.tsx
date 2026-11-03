@@ -1,10 +1,21 @@
 import { useEffect, useRef, useState } from "react";
 
 import { catalogOpen } from "../access";
-import { ApiError, authProviders, createSandbox, GITHUB_SIGN_IN, me as fetchMe, sandboxOffer } from "../api";
+import {
+  ApiError,
+  authProviders,
+  createSandbox,
+  GITHUB_SIGN_IN,
+  me as fetchMe,
+  passwordSignIn,
+  sandboxOffer,
+} from "../api";
 import { href } from "../route";
 import { saveSession, type Session } from "../session";
 import type { Me, SandboxOffer } from "../types";
+
+/** What a refused username/password sign-in says (the API gives every refusal the same 401). */
+export const WRONG_PASSWORD = "Wrong username or password, or the account is locked.";
 
 /** The BRD's propagation target: after this, say it's slow and offer to continue. */
 const TARGET_MS = 30_000;
@@ -39,10 +50,14 @@ export function readableCount(me: Me, companies: Set<string>): number {
 /** The public front door: "Try the demo" creates a temporary real user, and "Sign in with
  * GitHub" (when the API has it configured) a permanent one with the same access; either way it
  * then waits, showing progress, until the grants have propagated (app DB → Debezium → Kafka →
- * authz-sync → OpenFGA) and /v1/me lists every company. */
+ * authz-sync → OpenFGA) and /v1/me lists every company. "Sign in" takes the username and
+ * password of an account the owner created (there is no signup) and signs in like an
+ * owner-issued sign-in link: session kind "account", no demo scope. */
 export function Welcome({ onReady, notice, github, pollMs = 1000, now = Date.now }: Props) {
   const [offer, setOffer] = useState<SandboxOffer | "off" | null>(null);
   const [githubOn, setGithubOn] = useState(false);
+  const [passwordOn, setPasswordOn] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
   const [phase, setPhase] = useState<Phase>(() => (github ? { kind: "creating", github: true } : { kind: "idle" }));
   const alive = useRef(true);
   const latest = useRef<{ session: Session; me: Me | null } | null>(null);
@@ -53,7 +68,11 @@ export function Welcome({ onReady, notice, github, pollMs = 1000, now = Date.now
       .then((o) => alive.current && setOffer(o))
       .catch(() => alive.current && setOffer("off"));
     authProviders()
-      .then((p) => alive.current && setGithubOn(p.github === true))
+      .then((p) => {
+        if (!alive.current) return;
+        setGithubOn(p.github === true);
+        setPasswordOn(p.password === true);
+      })
       .catch(() => undefined);
     return () => {
       alive.current = false;
@@ -105,6 +124,39 @@ export function Welcome({ onReady, notice, github, pollMs = 1000, now = Date.now
     };
     saveSession(session);
     await waitForAccess(session, m);
+  }
+
+  /** An owner-created account: the password goes to the API once and is never kept. */
+  async function signInWithPassword(username: string, password: string) {
+    setPhase({ kind: "creating", github: true });
+    let token: string;
+    let expiresIn: number;
+    let m: Me;
+    try {
+      ({ token, expires_in: expiresIn } = await passwordSignIn(username, password));
+      m = await fetchMe(token);
+    } catch (e) {
+      if (!alive.current) return;
+      const message =
+        e instanceof ApiError && e.status === 401
+          ? WRONG_PASSWORD
+          : e instanceof ApiError && e.status === 429
+            ? e.message
+            : "Couldn't sign in. Try again.";
+      setPhase({ kind: "error", message });
+      return;
+    }
+    if (!alive.current) return;
+    const account: Session = {
+      kind: "account",
+      token,
+      userId: m.user_id,
+      login: m.account?.username ?? username.trim().toLowerCase(),
+      expiresAt: new Date(now() + expiresIn * 1000).toISOString(),
+      companies: [],
+    };
+    saveSession(account);
+    onReady(account, m);
   }
 
   async function start() {
@@ -192,7 +244,19 @@ export function Welcome({ onReady, notice, github, pollMs = 1000, now = Date.now
               Sign in with GitHub
             </a>
           )}
+          {passwordOn && !busy && !formOpen && (
+            <button className="btn" onClick={() => setFormOpen(true)}>
+              Sign in
+            </button>
+          )}
         </div>
+        {passwordOn && formOpen && (
+          <PasswordForm
+            busy={busy}
+            onSubmit={(u, p) => void signInWithPassword(u, p)}
+            onCancel={() => setFormOpen(false)}
+          />
+        )}
         {offer === "off" ? (
           <p className="small muted">The demo isn't available right now.</p>
         ) : (
@@ -220,6 +284,69 @@ export function Welcome({ onReady, notice, github, pollMs = 1000, now = Date.now
         </p>
       </section>
     </main>
+  );
+}
+
+/** Username and password of an owner-created account. The password lives only in this form's
+ * state until it is sent, and is cleared as soon as it is. */
+function PasswordForm({
+  busy,
+  onSubmit,
+  onCancel,
+}: {
+  busy: boolean;
+  onSubmit: (username: string, password: string) => void;
+  onCancel: () => void;
+}) {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  return (
+    <form
+      className="welcome-signin"
+      aria-label="Sign in with a username and password"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (busy || !username.trim() || !password) return;
+        const p = password;
+        setPassword("");
+        onSubmit(username, p);
+      }}
+    >
+      <label htmlFor="signin-username">Username</label>
+      <input
+        id="signin-username"
+        className="field"
+        name="username"
+        autoComplete="username"
+        autoCapitalize="none"
+        spellCheck={false}
+        required
+        maxLength={32}
+        value={username}
+        onChange={(e) => setUsername(e.target.value)}
+      />
+      <label htmlFor="signin-password">Password</label>
+      <input
+        id="signin-password"
+        className="field"
+        type="password"
+        name="password"
+        autoComplete="current-password"
+        required
+        maxLength={256}
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+      />
+      <div className="row">
+        <button className="btn primary" type="submit" disabled={busy}>
+          Sign in
+        </button>
+        <button className="btn" type="button" onClick={onCancel} disabled={busy}>
+          Cancel
+        </button>
+      </div>
+      <p className="small faint">For accounts the owner created. There is no sign-up.</p>
+    </form>
   );
 }
 

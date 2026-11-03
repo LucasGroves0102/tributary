@@ -59,7 +59,7 @@ decides its environment variables, which Secret keys it can read, and its networ
 | uses | Env | Network |
 |---|---|---|
 | `postgres` | `DATABASE_URL` | host Postgres |
-| `app-postgres` | `APP_DATABASE_URL` (query-api: watchlists, workspaces, demo sandboxes; demo-cleanup) | host Postgres |
+| `app-postgres` | `APP_DATABASE_URL` (query-api: watchlists, workspaces, demo sandboxes, password accounts; demo-cleanup) | host Postgres |
 | `kafka` | `KAFKA_BOOTSTRAP_SERVERS`; with `kafka.sasl.enabled` also `KAFKA_SECURITY_PROTOCOL`, `KAFKA_SASL_MECHANISM`, `KAFKA_SASL_USERNAME` (`kafkaUser`, default the service/job name) and `KAFKA_SASL_PASSWORD` (`kafka-password-<user>`) | Kafka in `platform` (9092, or the SASL listener 9094) |
 | `openfga` | `FGA_API_URL`, `FGA_API_TOKEN` when `openfga.auth.enabled` | OpenFGA in `platform` |
 | `sec` | `SEC_USER_AGENT`; `SEC_LIMITER_DATABASE_URL` (main database: `database-url`, or `sec-limiter-database-url` with `secLimiter.dedicatedLogin`) and `SEC_CALLER_CLASS` (`secClass`, default `live` for services, `batch` for jobs) for the shared SEC rate limit | HTTPS to public addresses, host Postgres |
@@ -134,6 +134,33 @@ Owner steps: create a GitHub OAuth app (Settings → Developer settings → OAut
 generate a client secret; `sops deploy/secrets/tributary.yaml` and add `github-client-id` and
 `github-client-secret` under `stringData`; commit, and Flux applies it (restart query-api if
 the secret changed after the pod started: env from a Secret is read at start).
+
+## Password accounts
+
+Username/password accounts for testers (Query API README, "Password accounts"). There is no
+signup and nothing to configure: the sign-in route exists whenever query-api has the app
+database, and the web app shows "Sign in" on the front door. The owner creates each account
+inside the running query-api pod (it has `APP_DATABASE_URL` and `DATABASE_URL`); the password is
+prompted for twice and never echoed, printed or passed as an argument:
+
+```bash
+sudo k3s kubectl -n tributary exec -it deploy/query-api -- query-api-account create <username> --questions-per-day 100
+sudo k3s kubectl -n tributary exec -it deploy/query-api -- query-api-account list
+sudo k3s kubectl -n tributary exec -it deploy/query-api -- query-api-account set-limit <username> --questions-per-day 50
+sudo k3s kubectl -n tributary exec -it deploy/query-api -- query-api-account set-password <username>
+sudo k3s kubectl -n tributary exec -it deploy/query-api -- query-api-account disable <username>
+sudo k3s kubectl -n tributary exec -it deploy/query-api -- query-api-account enable <username>
+```
+
+Usernames are 3-32 of `a-z 0-9 _ . -`; passwords 12-256 characters. `create` writes one
+app-DB transaction (user `pw-<username>`, plan pro, the demo's watchlist and workspace, and the
+GitHub account's 20 company grants only while the catalog is closed); authz-sync grants the
+access within seconds, so send the tester the site address, the username and (over another
+channel) the password. `disable` and `set-password` end the account's sessions within 10 s;
+`enable` and `set-password` also lift a lockout (10 wrong passwords: 15 minutes). Each account's
+`--questions-per-day` (0-1000) is its own assistant cap, separate from `demo.sandbox.agent.*`;
+the Flux release raises agent-api's `AGENT_IP_RATE_PER_HOUR` to 40 so a tester on the owner's
+network isn't stopped by the shared address, and `AGENT_DAILY_BUDGET_USD` still caps spend.
 
 ## Connect your data
 

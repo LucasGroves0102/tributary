@@ -73,8 +73,16 @@ const DRAWER_FITS_PX = 1200;
 const SANDBOX_EXPIRED = "Your demo sandbox expired and was reset. Start a new one.";
 const GITHUB_EXPIRED = "Your sign-in expired. Sign in with GitHub again.";
 const ACCOUNT_EXPIRED = "Your sign-in link expired. Ask for a new one.";
+/** an owner-created username/password account ("pw-<username>"): it can just sign in again */
+const PASSWORD_EXPIRED = "Your sign-in expired. Sign in again.";
 const expired = (s: Session) =>
-  s.kind === "github" ? GITHUB_EXPIRED : s.kind === "account" ? ACCOUNT_EXPIRED : SANDBOX_EXPIRED;
+  s.kind === "github"
+    ? GITHUB_EXPIRED
+    : s.kind === "account"
+      ? s.userId.startsWith("pw-")
+        ? PASSWORD_EXPIRED
+        : ACCOUNT_EXPIRED
+      : SANDBOX_EXPIRED;
 
 interface Props {
   /** The named demo-user picker (alice, bob, …) instead of "Try the demo". Default: the dev

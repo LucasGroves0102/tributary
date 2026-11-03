@@ -235,8 +235,11 @@ def add_github_routes(app: FastAPI, *, config: GitHubConfig | None, github: GitH
                       demo_companies: Callable[[], dict[str, str]],
                       workspaces: Callable[[dict[str, str]], list[dict]],
                       clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+                      password: bool = False,
                       ) -> Callable[[str], str | None]:
-    """Adds the routes; returns login(user_id) for /v1/me (None: not a GitHub user)."""
+    """Adds the routes; returns login(user_id) for /v1/me (None: not a GitHub user).
+    password: whether username/password sign-in exists (query_api.password_accounts), for
+    /v1/auth/providers."""
     enabled = config is not None and github is not None and accounts is not None
     key = state_key(jwt_secret)
 
@@ -257,7 +260,7 @@ def add_github_routes(app: FastAPI, *, config: GitHubConfig | None, github: GitH
     @app.get("/v1/auth/providers")
     def providers() -> dict:
         """Which sign-in buttons the web app shows (public)."""
-        return {"github": enabled}
+        return {"github": enabled, "password": password}
 
     @app.get("/v1/auth/github/start")
     def start() -> RedirectResponse:

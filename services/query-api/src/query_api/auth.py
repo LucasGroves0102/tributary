@@ -21,14 +21,18 @@ def check_secret(secret: str) -> str:
     return secret
 
 
-def verify(token: str, secret: str) -> str:
-    """The user_id in a valid, unexpired token signed with `secret`."""
+def verify_claims(token: str, secret: str) -> dict:
+    """The claims of a valid, unexpired token signed with `secret` (`sub`, `exp`, `iat`)."""
     try:
-        claims = jwt.decode(token, secret, algorithms=[ALGORITHM],
-                            options={"require": ["sub", "exp"]})
+        return jwt.decode(token, secret, algorithms=[ALGORITHM],
+                          options={"require": ["sub", "exp"]})
     except jwt.PyJWTError as e:
         raise Unauthenticated(str(e)) from None
-    return claims["sub"]
+
+
+def verify(token: str, secret: str) -> str:
+    """The user_id in a valid, unexpired token signed with `secret`."""
+    return verify_claims(token, secret)["sub"]
 
 
 def mint(user_id: str, secret: str, ttl_seconds: int = 3600, now: int | None = None) -> str:

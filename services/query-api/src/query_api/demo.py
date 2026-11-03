@@ -4,7 +4,8 @@ POST /v1/demo/sandbox takes no input at all: plan, companies, watchlist, starter
 lifetime come from sandbox.py and SandboxConfig, so the route can't be used to pick any of them.
 Identity is still only ever the JWT `sub` (the agent-quota route uses current_user like every
 other route). The agent quota also caps GitHub sign-ins (query_api.github), with the same
-limits."""
+limits, and owner-created password accounts (query_api.password_accounts), each with its own
+daily cap."""
 
 import logging
 import secrets
@@ -18,6 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from query_api.auth import mint
 from query_api.github import is_github_user
+from query_api.passwords import is_password_user
 from query_api.sandbox import (
     DEMO_PLAN,
     DEMO_TICKERS,
@@ -40,6 +42,10 @@ SANDBOXES = Counter("tributary_demo_sandboxes_total",
 DEMO_QUESTIONS = Counter("tributary_demo_agent_questions_total",
                          "Assistant questions from demo sandboxes by result (allowed, disabled, "
                          "user_limit, day_limit, expired)", ["result"])
+
+ACCOUNT_QUESTIONS = Counter("tributary_account_agent_questions_total",
+                            "Assistant questions from owner-created password accounts by "
+                            "result (allowed, disabled, user_limit, gone)", ["result"])
 
 log = logging.getLogger("query_api.demo")
 
@@ -151,8 +157,11 @@ def add_sandbox_routes(app: FastAPI, *, store: Store, sandboxes: Sandboxes | Non
         Takes one of the caller's assistant questions (or `questions` of them, all or none:
         a report or a thesis check counts as several) if they are a demo sandbox or a GitHub
         sign-in (same caps); other users aren't limited here. 429 with a message the assistant
-        shows when a cap is hit."""
+        shows when a cap is hit. An owner-created password account is capped by its own
+        questions_per_day only (account_quota)."""
         n = body.questions if body else 1
+        if is_password_user(user_id):
+            return account_quota(user_id, n)
         github = is_github_user(user_id)
         if not is_sandbox_user(user_id) and not github:
             return {"demo": False}
@@ -193,6 +202,38 @@ def add_sandbox_routes(app: FastAPI, *, store: Store, sandboxes: Sandboxes | Non
                 "The assistant has answered all the demo questions it can today. The rest "
                 "of the app keeps working; try the assistant again after midnight UTC.")) from None
         DEMO_QUESTIONS.labels("allowed").inc()
+        return {"demo": True, "remaining_today": left}
+
+    def account_quota(user_id: str, n: int) -> dict:
+        """A password account's own daily cap (app migration 013, set by the owner with
+        query-api-account). Not subject to DEMO_SANDBOX_ENABLED, DEMO_AGENT_ENABLED or the
+        demo's shared per-day cap: the owner sets this account's allowance (0 turns its
+        assistant off); agent-api's daily model budget and hourly limits still apply."""
+        if sandboxes is None:
+            ACCOUNT_QUESTIONS.labels("disabled").inc()
+            raise HTTPException(429, "The assistant isn't available right now.")
+        try:
+            # per_user and per_day are the demo's; take_question uses the account's own cap
+            left = sandboxes.take_question(user_id, clock(),
+                                           config.agent_questions_per_user_per_day,
+                                           config.agent_questions_per_day, n)
+        except SandboxGone:
+            ACCOUNT_QUESTIONS.labels("gone").inc()
+            raise HTTPException(401, "account not found") from None
+        except QuotaExceeded as e:
+            ACCOUNT_QUESTIONS.labels("user_limit").inc()
+            if e.limit == 0:
+                raise HTTPException(429, "Your account has no assistant questions. The rest "
+                                         "of the app works as usual.") from None
+            if n > 1 and e.left > 0:
+                raise HTTPException(429, (
+                    f"This counts as {n} assistant questions (a report or a thesis check) and "
+                    f"your account has {e.left} left today. Ask a question instead, or come "
+                    "back after midnight UTC.")) from None
+            raise HTTPException(429, (
+                f"Your account has used its {e.limit} assistant questions for today. The "
+                "rest of the app keeps working; the count resets at midnight UTC.")) from None
+        ACCOUNT_QUESTIONS.labels("allowed").inc()
         return {"demo": True, "remaining_today": left}
 
     def sandbox_info(user_id: str) -> dict | None:

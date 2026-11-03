@@ -14,7 +14,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from prometheus_client import Counter
 from pydantic import BaseModel, Field
 
-from query_api.auth import Unauthenticated, mint, verify
+from query_api.auth import Unauthenticated, mint, verify_claims
 from query_api.authorizer import Access, Authorizer, AuthzUnavailable
 from query_api.connections import MarketData, add_connection_routes
 from query_api.csv_export import csv_response
@@ -33,6 +33,8 @@ from query_api.formula import (
 )
 from query_api.github import Accounts, GitHub, GitHubConfig, add_github_routes, is_github_user
 from query_api.notes import add_notes_routes
+from query_api.password_accounts import PasswordAccounts, add_password_routes
+from query_api.passwords import is_password_user
 from query_api.research import add_research_routes
 from query_api.sandbox import (
     DEMO_PLAN,
@@ -105,6 +107,7 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
                github_accounts: Accounts | None = None,
                thesis_checks: ThesisChecks | None = None,
                market_data: MarketData | None = None,
+               password_accounts: PasswordAccounts | None = None,
                monotonic: Callable[[], float] = time.monotonic) -> FastAPI:
     """demo_users: accounts anyone may sign in as without a password (empty disables it).
     today: the current US Eastern date (EDGAR's), injectable for tests.
@@ -118,7 +121,9 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
     thesis_checks: "Check my thesis" history in the app database (None: those routes answer
     503).
     market_data: "Connect your data" (query_api.connections); None (no DATA_CONNECTIONS_KEY):
-    its routes don't exist."""
+    its routes don't exist.
+    password_accounts: owner-created username/password accounts (query_api.password_accounts);
+    None (no app database): POST /v1/auth/password answers 404 and "pw-" tokens are refused."""
     app = FastAPI(title="Tributary Query API", version="1")
     instrument(app)
 
@@ -128,6 +133,9 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
         return JSONResponse({"detail": f"query took longer than {QUERY_TIMEOUT}; narrow it "
                                        "(fewer companies, columns or periods)"}, status_code=503)
     bearer = HTTPBearer(auto_error=False)
+    password_session_ok, password_info = add_password_routes(
+        app, accounts=password_accounts, jwt_secret=jwt_secret,
+        clock=clock or (lambda: datetime.now(UTC)), monotonic=monotonic)
 
     def current_user(
         creds: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)],
@@ -135,9 +143,19 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
         if creds is None:
             raise HTTPException(401, "missing bearer token")
         try:
-            return verify(creds.credentials, jwt_secret)
+            claims = verify_claims(creds.credentials, jwt_secret)
         except Unauthenticated:
             raise HTTPException(401, "invalid token") from None
+        user_id = claims["sub"]
+        # a password account's token dies with a disable or a password change
+        try:
+            ok = password_session_ok(user_id, claims.get("iat"))
+        except psycopg.Error:
+            log.warning("password account check unavailable", extra={"user_id": user_id})
+            raise HTTPException(503, "sign-in check unavailable") from None
+        if not ok:
+            raise HTTPException(401, "invalid token")
+        return user_id
 
     User = Annotated[str, Depends(current_user)]
 
@@ -217,7 +235,7 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
     github_login = add_github_routes(
         app, config=github_config, github=github, accounts=github_accounts,
         jwt_secret=jwt_secret, demo_companies=demo_companies, workspaces=sandbox_workspaces,
-        clock=now)
+        clock=now, password=password_accounts is not None)
 
     def github_info(user_id: str) -> dict | None:
         """/v1/me's `github` for a GitHub sign-in: the login, and the demo's companies and
@@ -231,6 +249,15 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
                 "agent": sandbox_config.agent_enabled,
                 "agent_questions_per_day": sandbox_config.agent_questions_per_user_per_day
                 if sandbox_config.agent_enabled else 0}
+
+    def account_info(user_id: str) -> dict | None:
+        """/v1/me's `account` for an owner-created password account: the username, plan and
+        its own daily assistant allowance."""
+        info = password_info(user_id)
+        if info is None:
+            return None
+        return {"username": info["username"], "plan": DEMO_PLAN,
+                "agent_questions_per_day": info["questions_per_day"]}
 
     @app.get("/health")
     def health() -> dict:
@@ -253,7 +280,7 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
         # a sandbox user's only token is the one its creation returned (it can't be renewed);
         # a GitHub user's come only from signing in with GitHub
         if (body.user_id not in demo_users or is_sandbox_user(body.user_id)
-                or is_github_user(body.user_id)):
+                or is_github_user(body.user_id) or is_password_user(body.user_id)):
             raise HTTPException(404)
         return {"token": mint(body.user_id, jwt_secret, DEMO_TOKEN_TTL),
                 "expires_in": DEMO_TOKEN_TTL}
@@ -268,6 +295,7 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
         profiles = store.profiles(user_id, sorted(listed)) if listed else {}
         sandbox = sandbox_info(user_id)
         github_account = github_info(user_id)
+        account = account_info(user_id)
         return {
             "user_id": user_id,
             "catalog": ({"public": True, "tiers": sorted(access.public),
@@ -277,6 +305,7 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
                           for c, t in sorted(listed.items())],
             **({"sandbox": sandbox} if sandbox else {}),
             **({"github": github_account} if github_account else {}),
+            **({"account": account} if account else {}),
         }
 
     @app.get("/v1/companies/search")
