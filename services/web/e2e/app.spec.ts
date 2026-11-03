@@ -219,7 +219,7 @@ test("keyboard: ? lists the shortcuts, Ctrl+arrows jump in tables; the limits pa
   await page.keyboard.press("Escape");
   await expect(sheet).toBeHidden();
 
-  await page.locator(".side a.cover-link").click();
+  await page.locator('.side a.cover-link[href="#/about"]').click();
   await expect(page.getByRole("heading", { name: "What Tributary covers" })).toBeVisible();
   await expect(page.locator(".about")).toContainText("No consensus estimates");
 });
