@@ -117,6 +117,10 @@ function Breadcrumb({
   }
   const label = route.view === "about" ? "What Tributary covers"
     : route.view === "status" ? "Data status"
+    : route.view === "workspace" ? "Workspace"
+    : route.view === "report" ? "Report"
+    : route.view === "thesis" ? "Thesis"
+    : route.view === "model" ? "Model"
     : (NAV.find((n) => n.view === route.view)?.label ?? "Home");
   return (
     <nav className="crumb" aria-label="Breadcrumb">

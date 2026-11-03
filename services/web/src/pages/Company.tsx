@@ -9,6 +9,8 @@ import { useLoad } from "../company/useLoad";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { day } from "../format";
 import { COMPANY_TABS, go, href, type CompanyTab } from "../route";
+import { NewWork } from "../workspaces/NewWork";
+import type { Saved } from "../workspaces/useSaved";
 
 interface Props {
   token: string;
@@ -20,11 +22,13 @@ interface Props {
   onChart: (name: string) => void;
   onChartMany: (ids: string[], metric: string, transform: "ttm", title: string) => void;
   onAsk: (question: string) => void;
+  /** saved work, for "New thesis" / "New model" about this company (null: unavailable) */
+  saved?: Saved | null;
 }
 
 /** The tearsheet: who the company is (public metadata), then its data by tab. Identity, the
  * filing index and expected dates are public; values need financials, text needs filings. */
-export function Company({ token, companyId, tab, watched, onWatch, onChart, onChartMany, onAsk }: Props) {
+export function Company({ token, companyId, tab, watched, onWatch, onChart, onChartMany, onAsk, saved }: Props) {
   const meta = useLoad(companyId, () =>
     screener(token, { company_id: [companyId], columns: HEADER_COLUMNS, sort: "name", limit: 1 }).then(
       (r) => r.rows.find((x) => x.company_id === companyId) ?? null,
@@ -105,6 +109,7 @@ export function Company({ token, companyId, tab, watched, onWatch, onChart, onCh
             )}
             <button className="btn" onClick={() => go({ view: "compare", compare: { target: companyId } })}>Compare</button>
             <button className="btn" onClick={() => onAsk(`Summarize ${h.name}'s latest quarter.`)}>Ask</button>
+            {saved && <NewWork token={token} saved={saved} company={{ id: companyId, name: ticker === companyId ? h.name : ticker }} />}
           </div>
         </div>
         <nav className="tabs" aria-label="Company sections">

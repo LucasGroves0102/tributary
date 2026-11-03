@@ -184,10 +184,12 @@ export type UiAction = { label: string } & (
   | { action: "save_to_workspace"; item: SavedKind; name: string; workspace: string }
 );
 
-/** Saved work (Query API /v1/workspaces, workspace_api.py): what users save. */
+/** Saved work (Query API /v1/workspaces, workspace_api.py): what the pages save (Save / Save as). */
 export type SavedKind = "chart" | "comps" | "screen";
+/** What users write on their own pages: a thesis (Markdown) and a revenue model (app DB 009). */
+export type WrittenKind = "thesis" | "model";
 /** Every item kind: reports are written by the assistant (agent-api /v1/reports). */
-export type ItemKind = SavedKind | "report";
+export type ItemKind = SavedKind | WrittenKind | "report";
 
 export interface SavedItem {
   item_id: string;
@@ -213,7 +215,7 @@ export interface SavedWorkspace {
   items: SavedItem[];
 }
 
-/** /v1/workspaces/{id}: items with their states (a report's state is null there). */
+/** /v1/workspaces/{id}: items with their states (a report's or thesis's state is null there). */
 export interface SavedWorkspaceFull extends Omit<SavedWorkspace, "items"> {
   items: (SavedItem & { state: Record<string, unknown> | null })[];
 }

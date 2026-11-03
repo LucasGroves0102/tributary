@@ -197,9 +197,10 @@ for that in a demo sandbox, which lists nothing else); the default ranks every c
 ## Workspaces (saved work)
 
 Workspaces are named folders of saved items in the app database (`workspace_api.py`,
-`workspaces.py`, app migration 004): a chart builder state (`chart`: title, range, alignment,
-up to 12 layers), a comps set (`comps`: target, up to 20 peers, columns) or a screener screen
-(`screen`: filters and sort). `GET/POST /v1/workspaces`, `PATCH/DELETE /v1/workspaces/{id}`,
+`workspaces.py`, app migrations 004 and 009): a chart builder state (`chart`: title, range,
+alignment, up to 12 layers), a comps set (`comps`: target, up to 20 peers, columns), a screener
+screen (`screen`: filters and sort), a thesis (`thesis`) or a model (`model`; both below).
+`GET/POST /v1/workspaces`, `PATCH/DELETE /v1/workspaces/{id}`,
 `POST /v1/workspaces/{id}/duplicate`, `POST /v1/workspaces/{id}/items`,
 `GET/PUT/DELETE /v1/workspace-items/{id}`, `POST /v1/workspace-items/{id}/open` (returns the
 state and records it for Home), `POST /v1/workspace-items/{id}/duplicate` (same or another of
@@ -213,7 +214,8 @@ first) and `PUT /v1/recent/filings` (the reader records what you open; the newes
   (`test_workspaces_db.py` proves it as the table owner).
 - **Validated.** Each kind's state has a strict schema (unknown fields refused) mirroring the web
   app's state; names are 1-100 (workspace) / 1-120 (item) characters without control
-  characters; a state is at most 16,000 bytes of JSON; bodies over 32 KiB (or without a
+  characters; a state is at most 16,000 bytes of compact UTF-8 JSON (a thesis 120,000); item
+  create/save bodies over 160,000 bytes, other saved-work bodies over 32 KiB (or any without a
   Content-Length) are refused before they are read. Caps: 50 workspaces, 100 items per
   workspace, 500 items per user (409 beyond).
 - **Grants nothing.** An item holds company ids and settings. Opening it reads no data: the web
@@ -227,6 +229,31 @@ first) and `PUT /v1/recent/filings` (the reader records what you open; the newes
   `workspaces` (+ a shares table) in Debezium's `table.include.list` with REPLICA IDENTITY FULL,
   the authz-sync mapping to tuples, the setup image redeploying the model, and these routes
   checking `viewer` through OpenFGA before reading (keeping the owner filter for writes).
+
+## Theses and models
+
+Two item kinds the user writes (app migration 009), through the same generic item routes as
+charts (`POST /v1/workspaces/{id}/items`, `PUT /v1/workspace-items/{id}` to save over or
+rename), owner-only and validated like every item:
+
+- **`thesis`** (`ThesisState`): `{companyId?, markdown}`. The item's name is the thesis's title;
+  the company is optional. Markdown up to 100,000 characters, newlines and tabs but no other
+  control characters, the state at most 120,000 bytes (the table allows 128 KiB, as for
+  reports). Lines `[[embed:<item id>]]` draw another item of the same workspace in the web app;
+  they aren't checked here (an embedded item may be deleted later) and the web app drops any
+  that don't resolve. `GET /v1/workspaces/{id}` leaves a thesis's state out (null, like a
+  report's); `/v1/workspace-items/{id}` returns it.
+- **`model`** (`ModelState`): `{companyId, historyYears (3-10, default 8), assumptions: [{growth,
+  margin, note?}] (1-10)}`, growth -100..1000 and operating margin -1000..100, in percent; notes
+  up to 500 characters (blank ones dropped). Only the assumptions are stored: the web app reads
+  the history from `/v1/companies/{id}/financials?view=ttm` as the viewer, so a model of a
+  company you can't read draws nothing (the financials route answers 403 as always).
+
+Both grant nothing (a company id, the user's text and numbers). Reports never include them:
+`ReportItem` still accepts only charts, comps and screens, and agent-api's report writer skips
+them. Tests: `test_workspaces.py` (states, sizes, bodies, another user's thesis or model is a
+404 for every route), `test_workspaces_db.py` (forced RLS as the table owner, the 128 KiB
+check for theses only).
 
 ## Reports
 
@@ -244,8 +271,9 @@ any item).
   snapshots (ref, item id, kind, name, state), each state validated against its kind like a
   saved one; citations (accession, form, filed, company, `https://www.sec.gov/` URL, section
   keys); the figure verification, whose `ok` is recomputed here; as-of, written-at, model,
-  questions (1-10), stop. At most 120,000 bytes (the table allows 128 KiB for reports, 16 KiB for
-  every other kind); report bodies may be 160,000 bytes, the other saved-work routes keep 32 KiB.
+  questions (1-10), stop. At most 120,000 bytes (the table allows 128 KiB for reports and theses,
+  16 KiB for every other kind); report bodies may be 160,000 bytes, like item bodies (a thesis);
+  the other saved-work routes keep 32 KiB.
 - **Owner-only and grants nothing**, exactly like other items: the same filters, the same forced
   row-level security, the same 404 for someone else's. The web app draws each embedded chart from
   its snapshot, reading the data through the permission-checked routes as the viewer.

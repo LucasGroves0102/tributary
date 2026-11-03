@@ -7,7 +7,7 @@ import copy
 import pytest
 
 from query_api.reports import MAX_MARKDOWN, MAX_REPORT_BODY, validate_report
-from query_api.workspaces import MAX_BODY_BYTES, StateError
+from query_api.workspaces import MAX_BODY_BYTES, MAX_ITEM_BODY, StateError
 
 from .test_api import NVDA
 from .test_workspaces import CHART, COMPS, new_item, new_workspace, world  # noqa: F401
@@ -184,8 +184,13 @@ def test_report_bodies_have_their_own_size_cap(saved, token):
                     headers={**token("alice"), "Content-Length": str(MAX_REPORT_BODY + 1),
                              "Content-Type": "application/json"})
     assert r.status_code == 413
-    # the generic routes keep the small cap
+    # the generic item routes have their own cap (a thesis), the other saved-work routes a
+    # small one
     r = client.post(f"/v1/workspaces/{wid}/items", content=b"x",
+                    headers={**token("alice"), "Content-Length": str(MAX_ITEM_BODY + 1),
+                             "Content-Type": "application/json"})
+    assert r.status_code == 413
+    r = client.post("/v1/workspaces", content=b"x",
                     headers={**token("alice"), "Content-Length": str(MAX_BODY_BYTES + 1),
                              "Content-Type": "application/json"})
     assert r.status_code == 413

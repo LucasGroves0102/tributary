@@ -1,6 +1,7 @@
-"""Saved work in the app database (db/app migration 004): workspaces (named folders) of saved
-items (a chart builder state, a comps set or a screener screen), and the filings a user last
-opened, for Home's "Continue where you left off".
+"""Saved work in the app database (db/app migrations 004, 005, 009): workspaces (named folders)
+of saved items (a chart builder state, a comps set, a screener screen, a thesis the user writes,
+a revenue model; reports the agent writes), and the filings a user last opened, for Home's
+"Continue where you left off".
 
 Owner-only: every statement is filtered on the JWT `sub` the route passes in, and the tables'
 row-level security (FORCEd, keyed on `app.user_id`, set per transaction here) admits only that
@@ -31,15 +32,23 @@ MAX_ITEMS = 500  # per user, across workspaces
 MAX_RECENT_FILINGS = 20
 MAX_STATE_BYTES = 16_000  # an item's state as compact JSON (the table allows 16384)
 MAX_BODY_BYTES = 32_768  # request bodies of the saved-work routes
+MAX_ITEM_BODY = 160_000  # ...but an item's create/save body may carry a thesis
+MAX_THESIS_MARKDOWN = 100_000  # characters
+MAX_THESIS_BYTES = 120_000  # a thesis state as compact UTF-8 JSON (the table allows 131072)
+MAX_MODEL_YEARS = 10
+MAX_NOTE = 500
 WORKSPACE_NAME = 100
 ITEM_NAME = 120
-KINDS = ("chart", "comps", "screen")  # what users save; reports (005) only the agent writes
-Kind = Literal["chart", "comps", "screen"]
+# what users save (009 adds thesis and model); reports (005) only the agent writes
+KINDS = ("chart", "comps", "screen", "thesis", "model")
+Kind = Literal["chart", "comps", "screen", "thesis", "model"]
 REPORT = "report"
+LARGE = ("report", "thesis")  # kinds whose state the workspace listing leaves out
 
 CIK = r"^\d{10}$"
 ISO_DATE = r"^\d{4}-\d{2}-\d{2}$"
 _CONTROL = re.compile(r"[\x00-\x1f\x7f]")
+_TEXT_CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")  # text keeps newlines and tabs
 
 
 class _Strict(BaseModel):
@@ -150,8 +159,52 @@ class ScreenState(_Strict):
     sort: str | None = Field(default=None, pattern=rf"^-?({'|'.join(SCREEN_SORTS)})$")
 
 
+def clean_text(value: str, what: str) -> str:
+    """Multi-line user text: newlines and tabs, no other control characters."""
+    if _TEXT_CONTROL.search(value):
+        raise ValueError(f"{what} contains control characters")
+    return value
+
+
+class ThesisState(_Strict):
+    """thesis/model.ts Thesis: the user's Markdown about a company (optional). The item's name
+    is its title. Lines `[[embed:<item id>]]` draw an item saved in the same workspace; the web
+    app resolves them against that workspace and drops anything else, so they aren't checked
+    here (an item may be deleted after it was embedded)."""
+    companyId: str | None = Field(default=None, pattern=CIK)
+    markdown: str = Field(default="", max_length=MAX_THESIS_MARKDOWN)
+
+    @field_validator("markdown")
+    @classmethod
+    def _text(cls, v: str) -> str:
+        return clean_text(v, "markdown")
+
+
+class ModelYear(_Strict):
+    """One forecast year's assumptions, in percent: revenue growth over the year before, and
+    operating margin (operating income = revenue x margin)."""
+    growth: float = Field(ge=-100, le=1000)
+    margin: float = Field(ge=-1000, le=100)
+    note: str | None = Field(default=None, max_length=MAX_NOTE)
+
+    @field_validator("note")
+    @classmethod
+    def _note(cls, v: str | None) -> str | None:
+        return None if v is None or not v.strip() else clean_text(v.strip(), "note")
+
+
+class ModelState(_Strict):
+    """models/model.ts ModelState: a company, how many fiscal years of history to show, and one
+    set of assumptions per forecast year (the first is the year after the latest reported one).
+    The history itself is never stored: the web app reads it through the Query API."""
+    companyId: str = Field(pattern=CIK)
+    historyYears: int = Field(default=8, ge=3, le=10)
+    assumptions: list[ModelYear] = Field(min_length=1, max_length=MAX_MODEL_YEARS)
+
+
 STATES: dict[str, type[BaseModel]] = {"chart": ChartState, "comps": CompsState,
-                                      "screen": ScreenState}
+                                      "screen": ScreenState, "thesis": ThesisState,
+                                      "model": ModelState}
 
 
 class StateError(ValueError):
@@ -167,8 +220,9 @@ def validate_state(kind: str, raw: Any) -> dict:
         state = model.model_validate(raw).model_dump(exclude_none=True)
     except ValueError as e:  # pydantic's ValidationError is a ValueError
         raise StateError(str(e)) from None
-    if len(json.dumps(state, separators=(",", ":"))) > MAX_STATE_BYTES:
-        raise StateError(f"state is larger than {MAX_STATE_BYTES} bytes")
+    cap = MAX_THESIS_BYTES if kind == "thesis" else MAX_STATE_BYTES
+    if len(json.dumps(state, separators=(",", ":"), ensure_ascii=False).encode()) > cap:
+        raise StateError(f"state is larger than {cap} bytes")
     return state
 
 
@@ -321,8 +375,8 @@ class AppWorkspaces:
             return self._insert_item(cur, user_id, workspace_id, kind, name, state)
 
     def get(self, user_id: str, workspace_id: str) -> dict | None:
-        """One workspace with its items in order, each with its state except reports' (large;
-        fetched one at a time)."""
+        """One workspace with its items in order, each with its state except reports' and
+        theses' (large; fetched one at a time)."""
         with self._tx(user_id) as cur:
             cur.execute(f"SELECT {WORKSPACE_COLUMNS} FROM workspaces w"
                         " WHERE w.workspace_id = %s AND w.user_id = %s", (workspace_id, user_id))
@@ -330,9 +384,10 @@ class AppWorkspaces:
             if ws is None:
                 return None
             cur.execute(f"SELECT {ITEM_SUMMARY},"
-                        " CASE WHEN i.kind = 'report' THEN NULL ELSE i.state END AS state"
+                        " CASE WHEN i.kind = ANY(%s) THEN NULL ELSE i.state END AS state"
                         " FROM workspace_items i WHERE i.workspace_id = %s AND i.user_id = %s"
-                        " ORDER BY i.created_at, i.item_id", (workspace_id, user_id))
+                        " ORDER BY i.created_at, i.item_id",
+                        (list(LARGE), workspace_id, user_id))
             return {**ws, "items": cur.fetchall()}
 
     def update_report(self, user_id: str, workspace_id: str, item_id: str,

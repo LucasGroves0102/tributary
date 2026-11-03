@@ -54,6 +54,31 @@ export function renderAnswer(
   return root.innerHTML;
 }
 
+/**
+ * The user's own Markdown (a thesis) → sanitized HTML: the same marked + DOMPurify pipeline,
+ * without the citation check (nothing here came from a tool, so accession numbers stay text
+ * rather than being flagged). Untrusted all the same: imported files and pasted text go
+ * through DOMPurify, and links open in a new tab without an opener.
+ */
+export function renderMarkdown(markdown: string): string {
+  const root = document.createElement("div");
+  root.innerHTML = DOMPurify.sanitize(marked.parse(markdown, { async: false, gfm: true }), {
+    // no inline styles (the CSP refuses them anyway) and no form controls in a note
+    FORBID_TAGS: ["style", "form", "input", "button", "select", "textarea"],
+    FORBID_ATTR: ["style"],
+  });
+  // the app loads nothing from other origins (CSP img-src 'self'): an image is its alt text
+  root.querySelectorAll("img").forEach((img) => {
+    const alt = img.getAttribute("alt")?.trim();
+    img.replaceWith(document.createTextNode(alt ? `[image: ${alt}]` : "[image]"));
+  });
+  root.querySelectorAll("a[href]").forEach((a) => {
+    a.setAttribute("target", "_blank");
+    a.setAttribute("rel", "noopener noreferrer");
+  });
+  return root.innerHTML;
+}
+
 function describe(c: Citation): string {
   return [c.form ?? "Source filing", c.filed && `filed ${c.filed}`].filter(Boolean).join(", ");
 }

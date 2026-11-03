@@ -133,7 +133,7 @@ holds every company with gold financials or a stored filing, and while it is pub
 every user read it (`catalog:sec#reader@user:*`) and row-level security accepts its companies
 (`authz.public_access`). A request without a user reads nothing. Per-company grants (to a user
 or an organization) still work for anything outside the catalog, and saved work (workspaces,
-reports, views) stays owner-only. The switch is one app-database row, streamed like any grant:
+theses, models, reports, views) stays owner-only. The switch is one app-database row, streamed like any grant:
 
 ```sql
 UPDATE public_catalogs SET public = true  WHERE catalog_id = 'sec';  -- open (db/app README)
@@ -172,6 +172,26 @@ you're looking at, and can build charts, screens and comps for you, with Undo. M
 sanitized and served under a strict Content-Security-Policy. `make web` runs the dev server on
 :5173. Besides *Try the demo*, you can *Sign in with GitHub* (no scopes, public profile only) for
 a permanent account that keeps your saved work.
+
+#### Thesis and Model
+
+Research ends in your own argument, so a workspace holds what you write next to what you chart:
+
+- **Model**: a revenue-first forecast for one company. Its fiscal-year revenue and operating
+  income come live from the filings (as you, through the permission-checked API); you type
+  growth and operating margin for each forecast year (1-10 years) with a note on why, each shown
+  beside the company's own 5-year revenue CAGR and average margin. The chart draws history solid
+  and your forecast dashed; the table labels every year Reported or Forecast. Only your
+  assumptions are saved.
+- **Thesis**: your Markdown about a company, with any chart, comps table, screen or model from
+  the same workspace embedded where you put it, drawn live. Write, preview or both side by side;
+  import a `.md` file and export one (embeds become `[Chart: name]` lines). Rendered through the
+  same sanitizer as model output.
+
+Both start from a company page or a workspace ("New thesis", "New model"), are owner-only in
+both layers like all saved work (the Query API filters on the token's user; the app database's
+row-level security is forced), and grant nothing: an embedded chart or a model's history is read
+as the viewer, so it shows only what you may read.
 
 ### Agent
 

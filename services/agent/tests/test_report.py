@@ -312,6 +312,32 @@ def test_nothing_to_report_on():
     assert e.value.status == 422 and "Save a chart" in e.value.message
 
 
+THESIS_ID = "77777777-7777-4777-8777-777777777777"
+MODEL_ID = "88888888-8888-4888-8888-888888888888"
+MODEL = {"companyId": NVDA, "historyYears": 8, "assumptions": [{"growth": 10.0, "margin": 30.0}]}
+
+
+def test_theses_and_models_are_left_out_of_a_report():
+    """Users write theses and models (app migration 009). A report covers saved charts, comps
+    and screens only: a thesis's state isn't in the workspace listing (null) and a model isn't
+    one of the kinds a report can embed, so both are skipped, never sent to the model."""
+    items = [item(THESIS_ID, "thesis", "My NVDA thesis", None),
+             item(CHART_ID, "chart", "Revenue", CHART),
+             item(MODEL_ID, "model", "NVDA model", MODEL),
+             item(COMPS_ID, "comps", "Comps", COMPS)]
+    fake = FakeQueryApi(items=items)
+    events, messages, job = run(fake, response("end_turn", text(NOTE)))
+    assert [(i.ref, i.kind) for i in job.items] == [("item-1", "chart"), ("item-2", "comps")]
+    assert job.skipped == 0
+    assert events[0]["type"] == "report"
+    prompt = json.dumps(messages.requests[0]["messages"])
+    assert "My NVDA thesis" not in prompt and "NVDA model" not in prompt
+    # a workspace with only a thesis and a model has nothing to report on
+    with pytest.raises(ReportError) as e:
+        run(FakeQueryApi(items=[items[0], items[2]]))
+    assert e.value.status == 422
+
+
 def test_a_refused_save_is_an_error_event():
     fake = FakeQueryApi(save_status=422)
     events, *_ = run(fake, response("end_turn", text(NOTE)))

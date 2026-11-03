@@ -3084,3 +3084,164 @@ button.link.num {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* Theses and models: what the user writes (thesis/, models/) */
+
+.tag.thesis,
+.tag.model {
+  background: var(--warn-soft);
+  color: var(--warn);
+  border-color: transparent;
+}
+
+.editor-bar {
+  margin-bottom: var(--sp-4);
+}
+
+.editor-bar .dirty,
+.editor-warn {
+  color: var(--warn);
+}
+
+.editor-title {
+  display: grid;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-6);
+}
+
+.editor-title p {
+  margin: 0;
+}
+
+.title-input {
+  font-size: var(--fs-xl);
+  font-weight: 650;
+  max-width: 720px;
+}
+
+.thesis-page .seg {
+  margin-bottom: var(--sp-4);
+}
+
+.thesis-panes {
+  display: grid;
+  gap: var(--sp-6);
+  align-items: start;
+}
+
+.thesis-panes.split {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.thesis-write {
+  display: grid;
+  gap: var(--sp-3);
+}
+
+.thesis-write p {
+  margin: 0;
+}
+
+.thesis-text {
+  min-height: 60vh;
+  resize: vertical;
+  font-family: var(--mono);
+  font-size: var(--fs-base);
+  line-height: 1.55;
+  tab-size: 4;
+}
+
+.thesis-preview {
+  padding: var(--sp-7) var(--sp-8);
+  min-width: 0;
+}
+
+.thesis-panes.split .thesis-preview {
+  max-height: calc(60vh + 60px);
+  overflow: auto;
+}
+
+.model-view {
+  display: grid;
+  gap: var(--sp-6);
+}
+
+.model-table tr.forecast th,
+.model-table tr.forecast td {
+  font-style: italic;
+}
+
+.assumptions td {
+  vertical-align: top;
+}
+
+.assumptions td > .small {
+  display: block;
+  margin-top: var(--sp-1);
+}
+
+.pct-in {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.pct-in .field {
+  width: 88px;
+  text-align: right;
+}
+
+.assumptions .field[aria-invalid="true"],
+.title-input[aria-invalid="true"] {
+  border-color: var(--neg);
+}
+
+.assumptions .note-cell {
+  min-width: 220px;
+  width: 40%;
+}
+
+.new-work .save-form {
+  width: 320px;
+}
+
+.new-work .co-search {
+  width: 100%;
+}
+
+@media (max-width: 1100px) {
+  .thesis-panes.split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .thesis-panes.split .thesis-preview {
+    max-height: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .new-work .save-form {
+    position: fixed;
+    left: var(--sp-6);
+    right: var(--sp-6);
+    top: 72px;
+    width: auto;
+  }
+}
+
+@media print {
+  .thesis-panes {
+    display: block;
+  }
+
+  .thesis-write,
+  .thesis-page .seg {
+    display: none !important;
+  }
+
+  .thesis-preview {
+    border: 0;
+    box-shadow: none;
+    padding: 0;
+  }
+}

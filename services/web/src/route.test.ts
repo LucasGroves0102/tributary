@@ -59,6 +59,15 @@ it("round-trips workspace and report routes and refuses odd ids", () => {
   expect(parse("#/report/")).toEqual({ view: "home" });
 });
 
+it("round-trips thesis and model routes and refuses odd ids", () => {
+  const id = "3f2b8c1e-5d4a-4f6b-9c2d-1a2b3c4d5e6f";
+  const routes: Route[] = [{ view: "thesis", itemId: id }, { view: "model", itemId: id }];
+  for (const r of routes) expect(parse(href(r))).toEqual(r);
+  expect(href({ view: "thesis", itemId: id })).toBe(`#/thesis/${id}`);
+  expect(parse("#/thesis/<img src=x>")).toEqual({ view: "home" });
+  expect(parse("#/model/")).toEqual({ view: "home" });
+});
+
 it("sends old explore links to Companies", () => {
   expect(parse("#/explore")).toEqual({ view: "companies" });
 });

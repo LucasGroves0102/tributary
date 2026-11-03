@@ -29,6 +29,7 @@ import type {
   RecentWork,
   SavedItemFull,
   SavedKind,
+  WrittenKind,
   SavedWorkspace,
   SavedWorkspaceFull,
   ViewPrefs,
@@ -153,7 +154,7 @@ export const deleteWorkspace = (token: string, id: string) =>
 export const duplicateWorkspace = (token: string, id: string) =>
   sendJson<SavedWorkspace>(token, "POST", `/v1/workspaces/${enc(id)}/duplicate`, {});
 
-export const addItem = (token: string, workspaceId: string, kind: SavedKind, name: string, state: object) =>
+export const addItem = (token: string, workspaceId: string, kind: SavedKind | WrittenKind, name: string, state: object) =>
   sendJson<SavedItemFull>(token, "POST", `/v1/workspaces/${enc(workspaceId)}/items`, { kind, name, state });
 
 /** The item with its state; the API records it as opened (Home's "Continue where you left off"). */

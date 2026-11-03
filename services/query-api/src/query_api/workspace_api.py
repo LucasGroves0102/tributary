@@ -20,6 +20,7 @@ from query_api.store import Store
 from query_api.workspaces import (
     ITEM_NAME,
     MAX_BODY_BYTES,
+    MAX_ITEM_BODY,
     REPORT,
     WORKSPACE_NAME,
     Kind,
@@ -33,6 +34,8 @@ from query_api.workspaces import (
 
 PREFIXES = ("/v1/workspaces", "/v1/workspace-items", "/v1/recent", "/v1/views")
 REPORT_PATH = re.compile(r"^/v1/workspaces/[^/]+/reports(/|$)")
+# an item's create and save-over bodies may carry a thesis (up to MAX_THESIS_BYTES)
+ITEM_PATH = re.compile(r"^/v1/workspaces/[^/]+/items$|^/v1/workspace-items/[^/]+$")
 NOT_FOUND = "workspace not found"
 ITEM_NOT_FOUND = "item not found"
 
@@ -100,7 +103,9 @@ def add_workspace_routes(app: FastAPI, *, store: Store, workspaces: Workspaces |
         """Bodies of the saved-work routes are small JSON: refuse a large or unsized one before
         reading it."""
         if request.method in ("POST", "PUT", "PATCH") and request.url.path.startswith(PREFIXES):
-            cap = MAX_REPORT_BODY if REPORT_PATH.match(request.url.path) else MAX_BODY_BYTES
+            path = request.url.path
+            cap = (MAX_REPORT_BODY if REPORT_PATH.match(path)
+                   else MAX_ITEM_BODY if ITEM_PATH.match(path) else MAX_BODY_BYTES)
             size = request.headers.get("content-length")
             if size is None or not size.isdigit():
                 if request.headers.get("transfer-encoding"):
@@ -161,16 +166,17 @@ def add_workspace_routes(app: FastAPI, *, store: Store, workspaces: Workspaces |
 
     @app.post("/v1/workspaces/{workspace_id}/items", status_code=201, response_model=dict)
     def add_item(user_id: User, workspace_id: WorkspaceId, body: NewItem) -> dict:
-        """Saves a chart, comps set or screen. The state is the web app's own (chart builder
-        layers and options, comps target/peers/columns, screener filters), validated here."""
+        """Saves a chart, comps set, screen, thesis or model. The state is the web app's own
+        (chart builder layers and options, comps target/peers/columns, screener filters, a
+        thesis's Markdown and company, a model's company and assumptions), validated here."""
         state = state_of(body.kind, body.state)
         return found(write(lambda: ws().add_item(user_id, str(workspace_id), body.kind,
                                                  body.name, state)))
 
     @app.get("/v1/workspaces/{workspace_id}", response_model=dict)
     def get_workspace(user_id: User, workspace_id: WorkspaceId) -> dict:
-        """One workspace with its items in order, each with its saved state (a report's
-        state only from /v1/workspace-items/{id})."""
+        """One workspace with its items in order, each with its saved state (a report's or
+        thesis's state only from /v1/workspace-items/{id})."""
         return found(ws().get(user_id, str(workspace_id)))
 
     def report_of(raw: Any) -> dict:

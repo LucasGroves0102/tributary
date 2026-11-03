@@ -5,7 +5,9 @@ import { ErrorPanel, Skeleton } from "../components/States";
 import { ago } from "../format";
 import { href } from "../route";
 import type { SavedWorkspaceFull } from "../types";
-import { KIND_LABELS, KIND_PAGES } from "../workspaces/model";
+import { isPageKind, KIND_LABELS, KIND_PAGES } from "../workspaces/model";
+import { NewWork } from "../workspaces/NewWork";
+import type { Saved } from "../workspaces/useSaved";
 import { REPORT_QUESTIONS } from "./model";
 import type { ReportWriter } from "./useReportWriter";
 
@@ -19,6 +21,8 @@ interface Props {
   onOpen: (itemId: string) => void;
   /** bumps when saved work changed elsewhere (a report saved, an item renamed) */
   version: number;
+  /** New thesis / New model (null: saved work unavailable) */
+  saved: Saved | null;
 }
 
 type Loaded =
@@ -26,8 +30,9 @@ type Loaded =
   | { state: "ok"; ws: SavedWorkspaceFull }
   | { state: "error"; message: string; notFound: boolean };
 
-/** One workspace: its saved items and reports, and "Write a report". */
-export function WorkspacePage({ token, workspaceId, writer, onOpen, version }: Props) {
+/** One workspace: your theses and models, its saved items and reports; "New thesis", "New
+ * model" and "Write a report". */
+export function WorkspacePage({ token, workspaceId, writer, onOpen, version, saved }: Props) {
   const [loaded, setLoaded] = useState<Loaded>({ state: "loading" });
   const [retry, setRetry] = useState(0);
 
@@ -58,16 +63,19 @@ export function WorkspacePage({ token, workspaceId, writer, onOpen, version }: P
     );
   }
   const { ws } = loaded;
-  const items = ws.items.filter((i) => i.kind !== "report");
+  // a report is written from charts, comps and screens (services/agent report.py)
+  const items = ws.items.filter((i) => isPageKind(i.kind));
   const reports = ws.items.filter((i) => i.kind === "report");
+  const written = ws.items.filter((i) => i.kind === "thesis" || i.kind === "model");
   const run = writer.run;
   const busy = run.status === "writing";
   const here = run.status !== "idle" && run.workspaceId === workspaceId;
 
   return (
     <div className="page">
-      <div className="row">
+      <div className="row wrap">
         <h1 className="grow">{ws.name}</h1>
+        {saved && <NewWork token={token} saved={saved} workspaceId={workspaceId} />}
         <button
           className="btn primary"
           disabled={busy || items.length === 0}
@@ -85,6 +93,31 @@ export function WorkspacePage({ token, workspaceId, writer, onOpen, version }: P
         {items.length > MAX_REPORT_ITEMS ? ` and covers the first ${MAX_REPORT_ITEMS} items` : ""}.
       </p>
       {here && <WritingStatus writer={writer} />}
+
+      <section className="card">
+        <div className="card-h">
+          <h2>Theses and models</h2>
+          <span className="sub">written by you; a thesis can embed this workspace's charts, comps, screens and models</span>
+        </div>
+        {written.length ? (
+          <ul className="ws-list">
+            {written.map((i) => (
+              <li key={i.item_id}>
+                <span className={`tag ${i.kind}`}>{KIND_LABELS[i.kind]}</span>{" "}
+                <button className="link" onClick={() => onOpen(i.item_id)} title={`Open in ${KIND_PAGES[i.kind]}`}>
+                  <b>{i.name}</b>
+                </button>{" "}
+                <span className="faint">updated {ago(i.updated_at)}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="empty">
+            No thesis or model yet. A model forecasts a company's revenue and operating income from its history and your
+            assumptions; a thesis is your argument in Markdown, with the charts and models drawn in place.
+          </p>
+        )}
+      </section>
 
       <section className="card">
         <div className="card-h">

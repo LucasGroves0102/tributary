@@ -1,0 +1,393 @@
+import { useEffect, useId, useMemo, useRef, useState, type ChangeEvent } from "react";
+
+import type { Readable } from "../access";
+import { ApiError, openItem, screenerColumns, workspace as fetchWorkspace } from "../api";
+import { slug } from "../chart/export";
+import { catalog } from "../chart/metrics";
+import type { ChartState } from "../chart/model";
+import { CompanySearch } from "../components/CompanySearch";
+import { ErrorPanel, Skeleton } from "../components/States";
+import { download } from "../download";
+import { renderMarkdown } from "../markdown";
+import { Embed } from "../reports/Embeds";
+import { href } from "../route";
+import { load, save as store } from "../storage";
+import type { SavedItemFull } from "../types";
+import { ITEM_NAME_MAX, KIND_LABELS, nameProblem } from "../workspaces/model";
+import { useEditorKeys } from "../workspaces/useEditor";
+import type { Saved } from "../workspaces/useSaved";
+import {
+  EMBEDDABLE,
+  embeddedIds,
+  importMarkdown,
+  insertEmbed,
+  MAX_IMPORT_BYTES,
+  MAX_MARKDOWN,
+  restoreThesis,
+  thesisMarkdown,
+  thesisSegments,
+  thesisState,
+  type EmbedItem,
+  type Thesis,
+} from "./model";
+
+interface Props {
+  token: string;
+  itemId: string;
+  saved: Saved;
+  /** company id → ticker or name */
+  label: (companyId: string) => string;
+  /** companies whose financials the viewer can read (comps embeds) */
+  readable: Readable;
+  onOpenChart: (s: ChartState) => void;
+}
+
+type Loaded =
+  | { state: "loading" }
+  | { state: "ok"; item: SavedItemFull; thesis: Thesis; items: EmbedItem[] }
+  | { state: "error"; message: string; notFound: boolean };
+
+export type Mode = "write" | "preview" | "split";
+const MODE_KEY = "tributary.thesis.mode";
+const MODES: [Mode, string][] = [
+  ["write", "Write"],
+  ["preview", "Preview"],
+  ["split", "Side by side"],
+];
+
+function storedMode(): Mode {
+  const m = load(MODE_KEY);
+  if (m === "write" || m === "preview" || m === "split") return m;
+  return typeof window !== "undefined" && window.innerWidth >= 1280 ? "split" : "write";
+}
+
+const today = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
+/** A thesis: the user's Markdown about a company, with the workspace's charts, comps, screens
+ * and models embedded where they put `[[embed:…]]` lines. Write / Preview / Side by side;
+ * Save (Ctrl+S); Import and Export .md. Owner-only like every saved item. */
+export function ThesisPage(props: Props) {
+  const { token, itemId } = props;
+  const [loaded, setLoaded] = useState<Loaded>({ state: "loading" });
+  const [retry, setRetry] = useState(0);
+
+  useEffect(() => {
+    let live = true;
+    openItem(token, itemId)
+      .then(async (item) => {
+        if (item.kind !== "thesis") throw new Error("not a thesis");
+        // the workspace's other items, with their states: what the thesis can embed
+        const ws = await fetchWorkspace(token, item.workspace_id);
+        const items = ws.items.flatMap((i) =>
+          EMBEDDABLE.has(i.kind) && i.state ? [{ item_id: i.item_id, kind: i.kind, name: i.name, state: i.state }] : [],
+        );
+        if (live) setLoaded({ state: "ok", item, thesis: restoreThesis(item.state), items });
+      })
+      .catch((e) => live && setLoaded({
+        state: "error",
+        message: e instanceof ApiError ? e.message : e instanceof Error && e.message === "not a thesis" ? "This item isn't a thesis." : "the Query API didn't answer",
+        notFound: e instanceof ApiError && e.status === 404,
+      }));
+    return () => {
+      live = false;
+    };
+  }, [token, itemId, retry]);
+
+  if (loaded.state === "loading") return <div className="page"><Skeleton lines={8} label="Loading the thesis" /></div>;
+  if (loaded.state === "error") {
+    return (
+      <div className="page">
+        {loaded.notFound ? (
+          <p className="empty">This thesis doesn't exist, or isn't yours. Theses are visible only to their owner.</p>
+        ) : (
+          <ErrorPanel what="the thesis" detail={loaded.message} onRetry={() => setRetry((r) => r + 1)} />
+        )}
+      </div>
+    );
+  }
+  return <ThesisEditor key={loaded.item.item_id} {...props} item={loaded.item} initial={loaded.thesis} items={loaded.items} />;
+}
+
+function ThesisEditor({ token, item, initial, items, saved, label, readable, onOpenChart }: Props & {
+  item: SavedItemFull;
+  initial: Thesis;
+  items: EmbedItem[];
+}) {
+  const id = useId();
+  const [name, setName] = useState(item.name);
+  const [companyId, setCompanyId] = useState(initial.companyId);
+  const [companyName, setCompanyName] = useState<string | null>(null);
+  const [picking, setPicking] = useState(false);
+  const [markdown, setMarkdown] = useState(initial.markdown);
+  const [savedAs, setSavedAs] = useState(() => JSON.stringify({ name: item.name, state: thesisState(initial) }));
+  const [mode, setModeState] = useState<Mode>(storedMode);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<{ text: string; undo?: string; error?: boolean } | null>(null);
+  const text = useRef<HTMLTextAreaElement>(null);
+  const file = useRef<HTMLInputElement>(null);
+  const cursor = useRef<number | null>(null);
+  const hasTtm = useHasTtm(token);
+
+  const thesis: Thesis = { companyId, markdown };
+  const dirty = JSON.stringify({ name: name.trim(), state: thesisState(thesis) }) !== savedAs;
+  const nameError = nameProblem(name, ITEM_NAME_MAX);
+  const company = companyId ? (companyName ?? label(companyId)) : null;
+  const missing = useMemo(() => {
+    const known = new Set(items.map((i) => i.item_id));
+    return new Set(embeddedIds(markdown).filter((x) => !known.has(x))).size;
+  }, [markdown, items]);
+
+  const setMode = (m: Mode) => {
+    setModeState(m);
+    store(MODE_KEY, m);
+  };
+
+  const save = async () => {
+    if (nameError || busy || !dirty) return;
+    setBusy(true);
+    try {
+      const next = await saved.update(item.item_id, { name, state: thesisState(thesis) });
+      setName(next.name);
+      setSavedAs(JSON.stringify({ name: next.name, state: thesisState(restoreThesis(next.state)) }));
+      setNotice(null);
+    } catch (e) {
+      setNotice({ text: `Couldn't save: ${e instanceof ApiError ? e.message : "the Query API didn't answer"}.`, error: true });
+    } finally {
+      setBusy(false);
+    }
+  };
+  useEditorKeys(dirty, () => void save());
+
+  // after an insert, put the cursor after the marker
+  useEffect(() => {
+    if (cursor.current === null || !text.current) return;
+    text.current.focus();
+    text.current.setSelectionRange(cursor.current, cursor.current);
+    cursor.current = null;
+  }, [markdown]);
+
+  const embed = (itemId: string) => {
+    if (!itemId) return;
+    const at = text.current?.selectionStart ?? markdown.length;
+    const r = insertEmbed(markdown, at, itemId);
+    if (r.text.length > MAX_MARKDOWN) {
+      setNotice({ text: `A thesis holds up to ${MAX_MARKDOWN.toLocaleString("en-US")} characters.`, error: true });
+      return;
+    }
+    cursor.current = r.cursor;
+    setMarkdown(r.text);
+    if (mode === "preview") setMode("write");
+  };
+
+  const onFile = async (e: ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f) return;
+    if (f.size > MAX_IMPORT_BYTES) {
+      setNotice({ text: `${f.name} is too large to import (over ${Math.round(MAX_IMPORT_BYTES / 1000)} KB).`, error: true });
+      return;
+    }
+    let raw: string;
+    try {
+      raw = await readText(f);
+    } catch {
+      setNotice({ text: `Couldn't read ${f.name}.`, error: true });
+      return;
+    }
+    const r = importMarkdown(raw);
+    if (!r.ok) {
+      setNotice({ text: r.error, error: true });
+      return;
+    }
+    const before = markdown;
+    setMarkdown(r.markdown);
+    if (r.title && /^untitled/i.test(name.trim())) setName(r.title);
+    setNotice({ text: `Imported ${f.name}. Save to keep it.`, ...(before ? { undo: before } : {}) });
+  };
+
+  const exportMd = () => {
+    const md = thesisMarkdown({ title: name.trim() || "Thesis", thesis, company, date: today(), items });
+    download(`${slug(name.trim() || "thesis")}.md`, new Blob([md], { type: "text/markdown" }));
+  };
+
+  const embeddable = items.filter((i) => i.item_id !== item.item_id);
+  const editor = (
+    <div className="thesis-write">
+      <div className="row wrap thesis-tools">
+        <label className="visually-hidden" htmlFor={`${id}-embed`}>Embed a saved item</label>
+        <select id={`${id}-embed`} className="field narrow" value="" disabled={!embeddable.length}
+          title={embeddable.length ? "Inserts an embed line at the cursor" : "Save a chart, comps table, screen or model in this workspace first"}
+          onChange={(e) => embed(e.target.value)}>
+          <option value="">{embeddable.length ? "Embed a saved item…" : "Nothing to embed yet"}</option>
+          {embeddable.map((i) => (
+            <option key={i.item_id} value={i.item_id}>{KIND_LABELS[i.kind]} · {i.name}</option>
+          ))}
+        </select>
+        <span className="grow" />
+        <span className={markdown.length > MAX_MARKDOWN * 0.95 ? "editor-warn small" : "faint small"}>
+          {markdown.length.toLocaleString("en-US")} / {MAX_MARKDOWN.toLocaleString("en-US")}
+        </span>
+      </div>
+      <label className="visually-hidden" htmlFor={`${id}-md`}>Thesis, in Markdown</label>
+      <textarea
+        id={`${id}-md`}
+        ref={text}
+        className="field thesis-text"
+        value={markdown}
+        maxLength={MAX_MARKDOWN}
+        spellCheck
+        placeholder={"# The thesis in one line\n\nWhy now, what the filings show, what would prove it wrong.\n\nPick “Embed a saved item” to draw a chart or model here."}
+        onChange={(e) => setMarkdown(e.target.value)}
+      />
+      <p className="faint small">
+        Markdown: # headings, **bold**, lists, tables, links. An embed is a line of its own; items from other workspaces
+        aren't drawn.
+        {missing > 0 && <span className="editor-warn"> {missing} embed{missing === 1 ? " points" : "s point"} at an item no longer in this workspace (skipped).</span>}
+      </p>
+    </div>
+  );
+  const preview = (
+    <ThesisBody markdown={markdown} items={items} label={label} token={token} readable={readable} hasTtm={hasTtm} onOpenChart={onOpenChart} />
+  );
+
+  return (
+    <div className="page thesis-page">
+      <div className="row wrap editor-bar no-print">
+        <a className="btn sm ghost" href={href({ view: "workspace", workspaceId: item.workspace_id })}>
+          ← {item.workspace_name ?? "Workspace"}
+        </a>
+        <span className="grow" />
+        <span className={dirty ? "dirty small" : "faint small"} role="status">{dirty ? "● unsaved changes" : "saved"}</span>
+        <input ref={file} type="file" hidden accept=".md,.markdown,.txt,text/markdown,text/plain" onChange={(e) => void onFile(e)} />
+        <button className="btn sm" onClick={() => file.current?.click()} title="Replace the text with a .md or .txt file (not saved until you Save)">
+          Import .md
+        </button>
+        <button className="btn sm" onClick={exportMd} title="Download as Markdown; embeds become a line naming the item">
+          Export .md
+        </button>
+        {/* B2 "Check my thesis" goes here */}
+        <button className="btn primary" onClick={() => void save()} disabled={!dirty || busy || !!nameError} title="Save (Ctrl+S)">
+          {busy ? "Saving…" : "Save"}
+        </button>
+      </div>
+      {notice && (
+        <div className={notice.error ? "report-status error" : "report-status"} role={notice.error ? "alert" : "status"}>
+          {notice.text}{" "}
+          {notice.undo !== undefined && (
+            <button className="btn sm ghost" onClick={() => {
+              setMarkdown(notice.undo!);
+              setNotice(null);
+            }}>
+              Undo import
+            </button>
+          )}
+          <button className="btn sm ghost" onClick={() => setNotice(null)}>Dismiss</button>
+        </div>
+      )}
+      <div className="editor-title">
+        <label className="visually-hidden" htmlFor={`${id}-name`}>Title</label>
+        <input id={`${id}-name`} className="field title-input" value={name} maxLength={ITEM_NAME_MAX} aria-invalid={!!nameError}
+          onChange={(e) => setName(e.target.value)} />
+        {nameError && <p className="err small" role="alert">{nameError}</p>}
+        <div className="row wrap small">
+          <span className="muted">Company:</span>
+          {companyId && !picking ? (
+            <>
+              <a href={href({ view: "company", companyId })}>{company}</a>
+              <button className="btn sm ghost" onClick={() => setPicking(true)}>Change</button>
+              <button className="btn sm ghost" onClick={() => {
+                setCompanyId(null);
+                setCompanyName(null);
+              }}>Remove</button>
+            </>
+          ) : picking || !companyId ? (
+            <>
+              <CompanySearch token={token} label="Company this thesis is about" placeholder="Optional: a company or ticker"
+                exclude={companyId ? [companyId] : []}
+                onPick={(cid, n) => {
+                  setCompanyId(cid);
+                  setCompanyName(n);
+                  setPicking(false);
+                }} />
+              {picking && <button className="btn sm ghost" onClick={() => setPicking(false)}>Cancel</button>}
+            </>
+          ) : null}
+        </div>
+      </div>
+      <div className="seg no-print" role="group" aria-label="View">
+        {MODES.map(([m, l]) => (
+          <button key={m} className={mode === m ? "on" : undefined} aria-pressed={mode === m} onClick={() => setMode(m)}>
+            {l}
+          </button>
+        ))}
+      </div>
+      <div className={`thesis-panes ${mode}`}>
+        {mode !== "preview" && editor}
+        {mode !== "write" && <div className="thesis-preview card">{preview}</div>}
+      </div>
+    </div>
+  );
+}
+
+/** The thesis rendered: its Markdown through markdown.ts (DOMPurify) and its embeds drawn from
+ * this workspace's items, reading their data now as the viewer. */
+export function ThesisBody({ markdown, items, label, token, readable, hasTtm, onOpenChart }: {
+  markdown: string;
+  items: EmbedItem[];
+  label: (companyId: string) => string;
+  token: string;
+  readable: Readable;
+  hasTtm: (metric: string) => boolean;
+  onOpenChart: (s: ChartState) => void;
+}) {
+  const parts = useMemo(() => thesisSegments(markdown, items), [markdown, items]);
+  if (!parts.length) return <p className="empty">Nothing written yet.</p>;
+  return (
+    <article className="report-doc thesis-doc" aria-label="Thesis preview">
+      {parts.map((p, i) =>
+        p.type === "text" ? (
+          <Markdown key={i} markdown={p.markdown} />
+        ) : p.item.kind === "report" || p.item.kind === "thesis" ? null : (
+          <Embed key={p.item.item_id} token={token} item={{ ...p.item, kind: p.item.kind, ref: p.item.item_id }} label={label}
+            readable={readable} hasTtm={hasTtm} onOpenChart={onOpenChart} />
+        ),
+      )}
+    </article>
+  );
+}
+
+function Markdown({ markdown }: { markdown: string }) {
+  const html = useMemo(() => renderMarkdown(markdown), [markdown]);
+  return <div className="answer report-text" dangerouslySetInnerHTML={{ __html: html }} />;
+}
+
+/** A picked file's text, read in the browser as UTF-8 (nothing is uploaded). */
+function readText(f: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result ?? ""));
+    r.onerror = () => reject(r.error);
+    r.readAsText(f, "utf-8");
+  });
+}
+
+/** Which metrics have a TTM view (embedded charts ask for it), from /v1/screener/columns. */
+function useHasTtm(token: string): (metric: string) => boolean {
+  const [hasTtm, setHasTtm] = useState<(m: string) => boolean>(() => () => true);
+  useEffect(() => {
+    let live = true;
+    screenerColumns(token)
+      .then((r) => {
+        const ttm = new Map(catalog(r.columns).map((m) => [m.name, m.ttm]));
+        if (live) setHasTtm(() => (m: string) => ttm.get(m) ?? true);
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [token]);
+  return hasTtm;
+}

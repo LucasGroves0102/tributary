@@ -65,8 +65,10 @@ it couldn't be saved, before `done`.
 
 - **The user's own workspace, read as the user.** The workspace comes from the Query API with
   the user's token (`GET /v1/workspaces/{id}`): someone else's is the same 404 as a missing one,
-  and nothing is spent. Its first 8 charts, comps sets and screens are the report's items; the
-  model gets them as a `<workspace>` data block (names are labels, `<`/`>` escaped so a name
+  and nothing is spent. Its first 8 charts, comps sets and screens are the report's items
+  (`REPORT_KINDS`; the user's theses and models, app migration 009, and earlier reports are
+  skipped: never sent to the model, never embedded, and a workspace holding only those is a
+  422 "save a chart … first"); the model gets them as a `<workspace>` data block (names are labels, `<`/`>` escaped so a name
   can't close the block) with what the user can read of each company (`/v1/me`: its listed
   companies' tiers, plus the public catalog's tiers for every company while it is open).
 - **Only the workspace's companies.** The tools are the chat tools as the user, but limited to the

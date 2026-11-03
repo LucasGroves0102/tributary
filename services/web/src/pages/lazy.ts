@@ -17,6 +17,8 @@ const screens = {
   answers: () => import("../components/AssistantMessage"),
   workspace: () => import("../reports/WorkspacePage"),
   report: () => import("../reports/ReportView"),
+  thesis: () => import("../thesis/ThesisPage"),
+  model: () => import("../models/ModelPage"),
 };
 
 export const ChartBuilder = lazy(() => screens.chart().then((m) => ({ default: m.ChartBuilder })));
@@ -28,6 +30,8 @@ export const About = lazy(() => screens.about().then((m) => ({ default: m.About 
 export const Status = lazy(() => screens.status().then((m) => ({ default: m.Status })));
 export const WorkspacePage = lazy(() => screens.workspace().then((m) => ({ default: m.WorkspacePage })));
 export const ReportView = lazy(() => screens.report().then((m) => ({ default: m.ReportView })));
+export const ThesisPage = lazy(() => screens.thesis().then((m) => ({ default: m.ThesisPage })));
+export const ModelPage = lazy(() => screens.model().then((m) => ({ default: m.ModelPage })));
 export const FilingReader = lazy(() => screens.reader().then((m) => ({ default: m.FilingReader })));
 
 /** Every screen's module, loaded (tests render lazy screens without waiting on imports). */
