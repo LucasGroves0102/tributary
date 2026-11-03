@@ -14,8 +14,14 @@ stale notice compares the check's `text_hash` with the text as it is now).
   every "not mentioned" point carries a citation of a filing the tools returned, the figure
   verification's `ok` is recomputed here, sizes are capped. The newest MAX_CHECKS per thesis
   are kept.
-- `GET /v1/workspace-items/{item_id}/checks` lists them (newest first, counts only) and
+- `GET /v1/workspace-items/{item_id}/checks` lists them (newest first, counts only, plus
+  what Revisit needs: the thesis's company, `checked_at` and the result's `filings`) and
   `GET /v1/workspace-items/{item_id}/checks/{check_id}` returns one with its result.
+
+Revisit: `filings` (optional, so results stored before it validate and read as they were)
+records per company in the check's scope the newest 10-K/10-Q in the SEC index when the check
+ran (`latest`) and the newest filing the result's verified citations rely on (`evidence`,
+which must be one of those citations). `version` stays 1: the field is additive.
 
 Owner-only in both layers like every saved item: statements filter on the JWT `sub` and the
 table's row-level security is FORCEd on `app.user_id`. A check grants nothing: it holds what
@@ -179,6 +185,26 @@ class ThesisRef(_Strict):
     truncated: bool
 
 
+class FilingRef(_Strict):
+    accession_no: str = Field(pattern=ACCESSION)
+    form: str = Field(min_length=1, max_length=20)
+    filed: str = Field(pattern=ISO_DATE)
+
+
+class FilingBasis(_Strict):
+    """Revisit: what a check knew of one company's filings (agent thesis_check.filings_basis)."""
+    company_id: str = Field(pattern=CIK)
+    latest: FilingRef | None = None  # newest 10-K/10-Q in the SEC index at check time
+    evidence: FilingRef | None = None  # newest filing the result's verified citations cite
+
+    @field_validator("latest")
+    @classmethod
+    def _periodic(cls, v: FilingRef | None) -> FilingRef | None:
+        if v is not None and v.form not in ("10-K", "10-Q"):
+            raise ValueError("latest is a 10-K or 10-Q")
+        return v
+
+
 class Usage(_Strict):
     input_tokens: int = Field(ge=0)
     output_tokens: int = Field(ge=0)
@@ -204,6 +230,22 @@ class CheckResult(_Strict):
     rounds: int = Field(ge=0, le=50)
     usage: Usage
     cost_usd: Num | None = Field(default=None, ge=0)
+    filings: list[FilingBasis] = Field(default=[], max_length=12)  # Revisit (optional)
+
+    @model_validator(mode="after")
+    def _basis(self) -> "CheckResult":
+        """Evidence names a filing the result cites as verified for that company; one entry
+        per company."""
+        if len({f.company_id for f in self.filings}) != len(self.filings):
+            raise ValueError("filings lists a company twice")
+        cited = {(c.company_id, c.accession_no)
+                 for x in (*self.claims, *self.not_mentioned) for c in x.citations if c.verified}
+        cited |= {(c.company_id, c.accession_no) for m in self.assumptions for y in m.years
+                  for c in y.citations if c.verified}
+        for f in self.filings:
+            if f.evidence and (f.company_id, f.evidence.accession_no) not in cited:
+                raise ValueError("filings evidence is not a verified citation of the check")
+        return self
 
 
 def counts(result: dict) -> dict:
@@ -240,7 +282,11 @@ class Pool(Protocol):
     def connection(self) -> Any: ...
 
 
-SUMMARY = "check_id::text, item_id::text, text_hash, model, cost_usd, counts, created_at"
+SUMMARY = ("check_id::text, item_id::text, text_hash, model, cost_usd, counts, created_at,"
+           # Revisit: what the web app compares with the filing index (absent before it: [])
+           " result #>> '{thesis,company_id}' AS company_id,"
+           " result ->> 'checked_at' AS checked_at,"
+           " COALESCE(result -> 'filings', '[]'::jsonb) AS filings")
 
 
 class AppThesisChecks:

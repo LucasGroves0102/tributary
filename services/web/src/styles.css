@@ -3203,6 +3203,35 @@ button.link.num {
   color: var(--warn);
 }
 
+/* Revisit: a newer 10-K/10-Q since the last check; what flipped between two checks */
+.report-status.revisit {
+  background: var(--accent-soft);
+}
+
+.ws-list .revisit {
+  color: var(--accent);
+}
+
+.check-changes {
+  display: grid;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.check-changes h3 {
+  margin: 0;
+}
+
+.changes {
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+  display: grid;
+  gap: var(--sp-2);
+}
+
 .claims,
 .not-mentioned,
 .check-notes,

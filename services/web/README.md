@@ -155,6 +155,21 @@ sidebar with the other items (rename, duplicate, delete as usual).
   current text (SHA-256 of the company id, a newline and the Markdown; `textHash`, the same as
   agent-api's `text_hash`, with a shared test vector) is labelled stale. All of the assistant's
   text renders through `markdown.ts` `renderAnswer`, like chat answers.
+- **Revisit** (`thesis/revisit.ts`, pure; `useRevisit.ts`): on page load the thesis page asks the
+  company's filing index for its newest 10-K/10-Q (`/v1/companies/{id}/filing-index?form=10-K&
+  form=10-Q&limit=1`, public metadata, one request per company per page load) and compares it
+  with the last check: newer when the check recorded the index's newest 10-K/10-Q (`filings[].
+  latest`) and this one differs and was filed on or after it, or, for checks stored before that
+  record, when it was filed after the check's day. Then "New 10-Q filed <date> since your last
+  check — re-check?" with a Re-check button (the same check, 4 questions). The workspace page
+  shows the same line beside each such thesis (its checks list gives the thesis's company and
+  record: one request per thesis, first 20). No background job. After a re-check, the panel
+  opens with **Changes since <date>** against the check before the one shown (`diffChecks`):
+  claims matched by quote (normalised like the highlighter, trailing punctuation ignored;
+  repeats in order) with changed statuses (Supported → Contradicted, ...), new and no-longer
+  checked claims, model assumption flags that changed (by model and fiscal year), models added or
+  removed, and the count of points not mentioned. Quotes there are plain text (React-escaped),
+  statuses are labels; the assistant's prose still renders only in the claims below.
 - **Model** (`#/model/{id}`, `ModelPage.tsx`, pure parts in `models/model.ts`): a company's
   fiscal years of revenue and operating income, read live from `/v1/companies/{id}/financials`
   (`view=ttm`, 40 quarters: the TTM at each fiscal Q4 is the fiscal year, as the Statements tab's

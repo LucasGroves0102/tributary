@@ -63,6 +63,21 @@ def test_add_list_get(db):
     assert got["result"]["claims"][0]["quote"] == "Revenue was $46.7B."
 
 
+def test_summary_carries_what_revisit_needs(db):
+    """SUMMARY reads the thesis's company, checked_at and filings out of the result; a result
+    stored before Revisit (no filings) lists []."""
+    s, _, _, tid, _ = db
+    basis = [{"company_id": NVDA, "evidence": None, "latest": {
+        "accession_no": "0001045810-26-000030", "form": "10-Q", "filed": "2026-08-27"}}]
+    row = s.add("t-tc1", tid, validate_check(result(tid, filings=basis)))
+    assert (row["company_id"], row["filings"]) == (NVDA, basis)
+    assert row["checked_at"] == "2026-11-02T09:00:00+00:00"
+    old = check(tid)
+    del old["filings"]
+    s.add("t-tc1", tid, old)
+    assert [c["filings"] for c in s.list("t-tc1", tid)] == [[], basis]
+
+
 def test_only_the_owners_thesis(db):
     s, _, _, tid, chart = db
     assert s.add("t-tc2", tid, check(tid)) is None  # bob's view: no such thesis

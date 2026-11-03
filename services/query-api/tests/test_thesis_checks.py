@@ -86,7 +86,10 @@ class FakeChecks:
         row = {"check_id": str(uuid.uuid4()), "item_id": item_id, "user_id": user_id,
                "text_hash": res["thesis"]["text_hash"], "model": res["model"],
                "cost_usd": res["cost_usd"], "counts": counts(res), "result": res,
-               "created_at": datetime(2026, 11, 2, tzinfo=UTC) + timedelta(seconds=self.tick)}
+               "created_at": datetime(2026, 11, 2, tzinfo=UTC) + timedelta(seconds=self.tick),
+               # SUMMARY's Revisit columns
+               "company_id": res["thesis"]["company_id"], "checked_at": res["checked_at"],
+               "filings": res.get("filings") or []}
         self.rows.append(row)
         mine = sorted((r for r in self.rows if r["item_id"] == item_id),
                       key=lambda r: r["created_at"], reverse=True)
@@ -188,6 +191,49 @@ def test_invalid_results_are_refused(world, token, change):
     r = post(client, token, tid, {"result": bad})
     assert r.status_code == 422, r.text
     assert checks.rows == []
+
+
+LATEST = {"accession_no": "0001045810-26-000030", "form": "10-Q", "filed": "2026-08-27"}
+EVIDENCE = {"accession_no": ACC, "form": "10-Q", "filed": "2026-08-27"}
+
+
+def test_revisit_filings_are_stored_and_listed(world, token):
+    """Revisit: the newest 10-K/10-Q at check time and the newest cited filing, per company;
+    the list carries them (and the thesis's company, checked_at) so the web app needs no
+    result to offer a re-check."""
+    client, _, tid, _ = world
+    basis = [{"company_id": NVDA, "latest": LATEST, "evidence": EVIDENCE},
+             {"company_id": "0000002488", "latest": None, "evidence": None}]
+    r = post(client, token, tid, {"result": result(tid, filings=basis)})
+    assert r.status_code == 201, r.text
+    listed = client.get(f"/v1/workspace-items/{tid}/checks", headers=token("alice")).json()
+    one = listed["checks"][0]
+    assert one["filings"] == basis and one["company_id"] == NVDA
+    assert one["checked_at"] == "2026-11-02T09:00:00+00:00"
+
+
+def test_results_without_filings_still_validate():
+    """Checks stored before Revisit have no `filings`: still valid, read as []."""
+    old = result(str(uuid.uuid4()))
+    assert "filings" not in old
+    assert validate_check(old)["filings"] == []
+
+
+@pytest.mark.parametrize("filings", [
+    # evidence must be a verified citation of this check, for that company
+    [{"company_id": NVDA, "evidence": {**EVIDENCE, "accession_no": "0001045810-26-000099"}}],
+    [{"company_id": "0000002488", "evidence": EVIDENCE}],
+    # latest is a 10-K or 10-Q
+    [{"company_id": NVDA, "latest": {**LATEST, "form": "8-K"}}],
+    [{"company_id": NVDA, "latest": {**LATEST, "filed": "yesterday"}}],
+    [{"company_id": NVDA}, {"company_id": NVDA}],
+    [{"company_id": "nvda"}],
+    [{"company_id": NVDA, "extra": 1}],
+    [{"company_id": f"{i:010d}"} for i in range(13)],
+])
+def test_invalid_filings_are_refused(filings):
+    with pytest.raises(StateError):
+        validate_check(result(str(uuid.uuid4()), filings=filings))
 
 
 def test_numbers_are_finite():

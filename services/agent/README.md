@@ -132,6 +132,14 @@ result) or an `error` event if it couldn't be saved or the model never submitted
 - **Saved with the thesis.** Through the Query API with the user's token
   (`POST /v1/thesis-checks/{id}`, off the public site), with the SHA-256 of the company id and
   the text it checked (`text_hash`), the model, rounds, token usage and estimated cost.
+- **What it knew of the filings (Revisit).** Before the loop, `read_filings` asks
+  `/v1/companies/{id}/filing-index?form=10-K&form=10-Q&limit=1` as the user for each company in
+  the scope (public SEC index metadata; a failure leaves it unknown). The result's `filings[]`
+  holds per company `latest` (the newest 10-K/10-Q in the index when the check ran) and
+  `evidence` (the newest filing among the result's verified citations of that company). The
+  index answer is never a tool result: it reaches neither the model nor the evidence, so it
+  can't verify a citation. The web app offers a re-check when the index later has a newer
+  10-K/10-Q than `latest`.
 - **Counts as 4 questions** (`CHECK_QUESTIONS`) against every limit, like a report's 3: a check
   runs up to 16 tool rounds (`CHECK_ROUNDS`), about 4 rounds per question as reports (12 rounds,
   3 questions); refused with a message saying so when it doesn't fit.
@@ -143,7 +151,9 @@ figure, figure_status, as_of, verified}, `figures[]`, `downgraded`), `assumption
 `stats`, `margin_min`/`max`, `years[]` {fy, growth, margin, growth_vs_cagr, growth_flag,
 margin_flag, commentary, citations, figures}, or `error`), `not_mentioned[]`, `notes[]`,
 `citations[]`, `verification`, `as_of`, `checked_at`, `model`, `questions`, `stop`, `rounds`,
-`usage`, `cost_usd`.
+`usage`, `cost_usd`, `filings[]` {company_id, latest, evidence: {accession, form, filed} or
+null} (added for Revisit; optional, `version` stays 1, so checks stored before it still read).
+The Query API validates `filings` first, so deploy it before (or with) agent-api.
 
 ## Run
 

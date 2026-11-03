@@ -295,6 +295,23 @@ export interface ThesisCheckResult {
   stop: string;
   rounds: number;
   cost_usd: number | null;
+  /** Revisit (absent on checks stored before it) */
+  filings?: CheckFilingBasis[];
+}
+
+/** A filing a check knew of: accession, form, filed date. */
+export interface CheckFilingRef {
+  accession_no: string;
+  form: string;
+  filed: string;
+}
+
+/** Revisit: per company in a check's scope, the newest 10-K/10-Q in the SEC index when it ran
+ * (`latest`) and the newest filing its verified citations rely on (`evidence`). */
+export interface CheckFilingBasis {
+  company_id: string;
+  latest?: CheckFilingRef | null;
+  evidence?: CheckFilingRef | null;
 }
 
 export interface ThesisCheckSummary {
@@ -312,6 +329,11 @@ export interface ThesisCheckSummary {
     ok: boolean;
   };
   created_at: string;
+  /** Revisit: the thesis's company, when the check ran and its filings basis (the list has
+   * them from the stored result; `filings` is [] for checks stored before Revisit) */
+  company_id?: string | null;
+  checked_at?: string | null;
+  filings?: CheckFilingBasis[];
 }
 
 export interface ThesisCheck extends ThesisCheckSummary {

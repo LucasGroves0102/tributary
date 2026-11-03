@@ -7,6 +7,7 @@ import { clearChartCache } from "../chart/cache";
 import { entry, fin, NVDA, nvdaRow, TSLA } from "../fixtures";
 import { forgetVisits } from "../home/lastVisit";
 import { textHash } from "./check";
+import { clearNewest } from "./useRevisit";
 
 const ME = {
   user_id: "alice",
@@ -66,8 +67,16 @@ function checkResult(hash: string) {
 const summary = (hash: string, id = CHECK_ID) => ({
   check_id: id, item_id: THESIS_ID, text_hash: hash, model: "claude-haiku-5-5", cost_usd: 0.0123,
   counts: { supported: 1, contradicted: 0, unverifiable: 1, flagged_assumptions: 2, not_mentioned: 1, ok: false }, created_at: "2026-11-02T09:00:00Z",
+  // what the list reads out of a result stored before Revisit (no filings)
+  company_id: NVDA, checked_at: "2026-11-02T09:00:00+00:00", filings: [],
 });
 let stored: { check_id: string; text_hash: string }[];
+/** what the next check returns (default: checkResult) */
+let recheck: ((hash: string) => ReturnType<typeof checkResult> & { filings?: unknown[] }) | null;
+/** NVDA's newest 10-K/10-Q in the filing index */
+let indexRows: Record<string, unknown>[];
+const NEW_10Q = "0001045810-26-000030";
+const INDEX_ROW = { accession_no: NEW_10Q, company_id: NVDA, name: "Nvidia", form: "10-Q", filed: "2026-11-20", accepted_at: null, period_of_report: "2026-10-25", filing_url: null, document_url: null, sections: null, sections_available: false };
 let asked: Record<string, unknown>[];
 const sse = (events: object[]) =>
   new Response(events.map((e) => `data: ${JSON.stringify(e)}\n\n`).join(""), { headers: { "Content-Type": "text/event-stream" } });
@@ -98,8 +107,13 @@ function respond(url: string, init?: RequestInit): Response {
   if (p === "/api/agent/v1/thesis-checks" && method === "POST") {
     asked.push(body);
     const hash = stored[0]?.text_hash ?? "0".repeat(64);
-    const fresh = summary(hash, "77777777-7777-4777-8777-777777777777");
-    return sse([{ type: "tool", round: 0, name: "get_financials", input: {}, is_error: false }, { type: "check", check: fresh, result: checkResult(hash) }, { type: "done", answer: {} }]);
+    const result = recheck ? recheck(hash) : checkResult(hash);
+    const fresh = { ...summary(hash, "77777777-7777-4777-8777-777777777777"), company_id: NVDA, checked_at: result.checked_at, filings: result.filings ?? [] };
+    return sse([{ type: "tool", round: 0, name: "get_financials", input: {}, is_error: false }, { type: "check", check: fresh, result }, { type: "done", answer: {} }]);
+  }
+  if (p === `/v1/companies/${NVDA}/filing-index`) {
+    expect(u.searchParams.getAll("form")).toEqual(["10-K", "10-Q"]);
+    return Response.json({ company_id: NVDA, as_of: "", forms: ["10-K", "10-Q"], from: null, to: null, limit: 1, offset: 0, has_more: false, filings: indexRows });
   }
   if (p === `/v1/workspace-items/${THESIS_ID}/checks`) return Response.json({ item_id: THESIS_ID, checks: stored.map((c) => summary(c.text_hash, c.check_id)) });
   const one = p.match(/^\/v1\/workspace-items\/[^/]+\/checks\/([^/]+)$/);
@@ -178,6 +192,9 @@ async function blobText(b: Blob): Promise<string> {
 
 beforeEach(() => {
   clearChartCache();
+  clearNewest();
+  recheck = null;
+  indexRows = [];
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => respond(url, init)));
   window.localStorage.clear();
@@ -382,6 +399,64 @@ it("checks the saved thesis and shows claims, assumptions, what's not mentioned 
   const history = container.querySelector<HTMLSelectElement>(".check-panel select")!;
   expect([...history.options].map((o) => o.value)).toEqual(["77777777-7777-4777-8777-777777777777", CHECK_ID]);
   expect(container.querySelector(".check-panel")?.textContent).not.toContain("Stale");
+});
+
+it("offers a re-check after a newer 10-Q, then shows what flipped", async () => {
+  const hash = await textHash(NVDA, BODY);
+  stored = [{ check_id: CHECK_ID, text_hash: hash }];
+  indexRows = [INDEX_ROW]; // filed after the check (a check without `filings`: its date counts)
+  recheck = (h) => {
+    const r = checkResult(h);
+    return {
+      ...r,
+      checked_at: "2026-11-21T09:00:00+00:00",
+      filings: [{ company_id: NVDA, latest: { accession_no: NEW_10Q, form: "10-Q", filed: "2026-11-20" }, evidence: null }],
+      claims: [
+        { ...r.claims[0]!, quote: "Data centers  keep buying", status: "contradicted" }, // same quote, normalised
+        { quote: "Supply is fine.", quote_found: false, status: "unverifiable", explanation: "Opinion.", citations: [], figures: [] },
+      ],
+      assumptions: [{ ...r.assumptions[0]!, years: [r.assumptions[0]!.years[0]!, { ...r.assumptions[0]!.years[1]!, margin_flag: null }] }],
+    } as ReturnType<typeof checkResult> & { filings: unknown[] };
+  };
+  await render(`#/thesis/${THESIS_ID}`, ".revisit");
+  const notice = container.querySelector<HTMLElement>(".revisit")!;
+  expect(notice.textContent).toContain("New 10-Q filed");
+  expect(notice.textContent).toContain("since your last check — re-check?");
+  // only one check: nothing to compare with yet
+  expect(container.querySelector(".check-changes")).toBeNull();
+  await click(button("Re-check", notice));
+  await waitFor(".check-changes");
+  expect(asked).toEqual([{ item_id: THESIS_ID }]);
+  // the new check knows the 10-Q: no more notice
+  expect(container.querySelector(".revisit")).toBeNull();
+  const changes = container.querySelector<HTMLElement>(".check-changes")!;
+  expect(changes.querySelector("h3")?.textContent).toMatch(/^Changes since /);
+  const flipped = changes.querySelector(".change.flipped")!;
+  expect([...flipped.querySelectorAll(".status-badge")].map((b) => b.textContent)).toEqual(["Supported", "Contradicted"]);
+  expect(changes.querySelector(".change.added")?.textContent).toContain("Supply is fine.");
+  expect(changes.querySelector(".change.removed")?.textContent).toContain("Margins never fall.");
+  expect(changes.querySelector(".change.flag")?.textContent).toContain("NVDA model FY2027E margin");
+  expect(changes.querySelector(".change.flag")?.textContent).toContain("above the 5-year range → within the 5-year range");
+  expect(changes.querySelector("[onerror], script, img")).toBeNull();
+});
+
+it("doesn't offer a re-check when the check already knew the newest 10-Q", async () => {
+  stored = [{ check_id: CHECK_ID, text_hash: await textHash(NVDA, BODY) }];
+  indexRows = [{ ...INDEX_ROW, filed: "2026-11-02" }]; // filed the day of the check
+  await render(`#/thesis/${THESIS_ID}`, ".check-panel .claims");
+  await settle();
+  expect(container.querySelector(".revisit")).toBeNull();
+});
+
+it("lists theses with a newer 10-Q on the workspace page", async () => {
+  stored = [{ check_id: CHECK_ID, text_hash: "0".repeat(64) }];
+  indexRows = [INDEX_ROW];
+  await render("#/workspace/w1", ".revisit");
+  const link = container.querySelector<HTMLButtonElement>(".ws-list .revisit")!;
+  expect(link.textContent).toContain("New 10-Q filed");
+  // the summary carries the company: the listing's null thesis state isn't needed
+  await click(link);
+  expect(window.location.hash).toBe(`#/thesis/${THESIS_ID}`);
 });
 
 it("shows no check panel until a check exists", async () => {

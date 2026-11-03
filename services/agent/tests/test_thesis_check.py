@@ -82,6 +82,14 @@ SECTION = {"company_id": NVDA, "as_of": AS_OF, "accession_no": ACC, "form": "10-
                    "constrained during the quarter.", "truncated": False}
 
 
+# the newest 10-Q in the SEC index: filed after the one the tools read (Revisit)
+INDEX_ACC = "0001045810-26-000030"
+INDEX_ROW = {"accession_no": INDEX_ACC, "company_id": NVDA, "name": "NVIDIA", "form": "10-Q",
+             "filed": "2026-11-01", "accepted_at": None, "period_of_report": "2026-10-25",
+             "filing_url": URL, "document_url": None, "sections": None,
+             "sections_available": False}
+
+
 def item(item_id, kind, name, state):
     return {"item_id": item_id, "workspace_id": WS, "kind": kind, "name": name, "state": state,
             "created_at": "2026-11-01T00:00:00Z", "updated_at": "2026-11-01T00:00:00Z",
@@ -134,6 +142,8 @@ class FakeQueryApi:
             return httpx.Response(200, json=QUARTER)
         if path == f"/v1/companies/{NVDA}/filings":
             return httpx.Response(200, json=FILINGS)
+        if path == f"/v1/companies/{NVDA}/filing-index":
+            return httpx.Response(200, json={"company_id": NVDA, "filings": [INDEX_ROW]})
         if path == f"/v1/companies/{NVDA}/sections/I-2":
             return httpx.Response(200, json=SECTION)
         if path.startswith("/v1/companies/"):
@@ -283,6 +293,43 @@ def test_checks_the_thesis_and_saves_the_result():
     # scope: the thesis's company, plus AMD (named, readable); NVDA once
     assert job.allowed == {NVDA, AMD}
     assert {r.headers["authorization"] for r in fake.seen} == {"Bearer alice-token"}
+
+
+def test_the_check_records_the_filings_it_relied_on():
+    """Revisit: per scope company, the index's newest 10-K/10-Q at check time (read as the
+    user, forms 10-K and 10-Q only) and the newest filing the verified citations cite. The
+    index row is metadata, not evidence: it never becomes a verified citation."""
+    fake = FakeQueryApi()
+    events, _, job = run(fake, *script())
+    result = validate_check(fake.saved[0]["result"])
+    assert result["filings"] == [
+        {"company_id": NVDA,
+         "latest": {"accession_no": INDEX_ACC, "form": "10-Q", "filed": "2026-11-01"},
+         "evidence": {"accession_no": ACC, "form": "10-Q", "filed": "2026-08-27"}},
+        {"company_id": AMD, "latest": None, "evidence": None}]  # AMD's index: 403 here
+    index = [r for r in fake.seen if r.url.path.endswith("/filing-index")]
+    assert {r.url.path for r in index} == {f"/v1/companies/{NVDA}/filing-index",
+                                           f"/v1/companies/{AMD}/filing-index"}
+    assert index[0].url.params.get_list("form") == ["10-K", "10-Q"]
+    assert index[0].url.params["limit"] == "1"
+    assert INDEX_ACC not in {c["accession_no"] for c in result["citations"]}
+    assert INDEX_ACC not in "".join(job.prefetched)
+    # what the web app's history gets back (the saved summary)
+    assert set(events[4]["check"]) >= {"company_id", "checked_at", "filings"}
+
+
+def test_a_malformed_index_row_is_left_out():
+    fake = FakeQueryApi()
+    original = fake.__call__
+
+    def bad_index(request):
+        if request.url.path.endswith("/filing-index"):
+            return httpx.Response(200, json={"filings": [{**INDEX_ROW, "form": "8-K"}]})
+        return original(request)
+
+    run(bad_index, *script())
+    result = validate_check(fake.saved[0]["result"])
+    assert result["filings"][0]["latest"] is None
 
 
 def test_citations_of_filings_the_tools_never_returned_are_flagged():

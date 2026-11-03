@@ -196,6 +196,11 @@ Research ends in your own argument, so a workspace holds what you write next to 
   Checks are kept with the thesis (history, stale once the text changes) and count as 4
   questions. The thesis reaches the model as escaped data, and its tools stay limited to the
   thesis's companies.
+- **Revisit**: each check records the newest 10-K/10-Q in the SEC index for every company it
+  covered, and the newest filing its citations rely on. When the company files a newer one, the
+  thesis (and its workspace's list) says "New 10-Q filed <date> since your last check —
+  re-check?"; after the re-check, "Changes since <date>" lists the claims whose verdict flipped
+  (matched by quote), new and dropped claims, and model assumption flags that changed.
 
 Both start from a company page or a workspace ("New thesis", "New model"), are owner-only in
 both layers like all saved work (the Query API filters on the token's user; the app database's
