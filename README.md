@@ -187,6 +187,15 @@ Research ends in your own argument, so a workspace holds what you write next to 
   the same workspace embedded where you put it, drawn live. Write, preview or both side by side;
   import a `.md` file and export one (embeds become `[Chart: name]` lines). Rendered through the
   same sanitizer as model output.
+- **Check my thesis**: the agent reads your saved thesis as you, marks each factual claim
+  Supported, Contradicted (with what the filing says) or Can't verify, each with citations that
+  open the filing; compares each embedded model's growth and margin per year with the company's
+  5-year history (computed in code, flagged when growth is more than 10 points off the CAGR or a
+  margin is outside the 5-year range); and lists what the latest 10-K/10-Q says that you don't.
+  Every figure goes through the same verifier as chat; anything it can't trace is flagged.
+  Checks are kept with the thesis (history, stale once the text changes) and count as 4
+  questions. The thesis reaches the model as escaped data, and its tools stay limited to the
+  thesis's companies.
 
 Both start from a company page or a workspace ("New thesis", "New model"), are owner-only in
 both layers like all saved work (the Query API filters on the token's user; the app database's

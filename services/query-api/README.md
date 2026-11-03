@@ -249,7 +249,8 @@ rename), owner-only and validated like every item:
   the history from `/v1/companies/{id}/financials?view=ttm` as the viewer, so a model of a
   company you can't read draws nothing (the financials route answers 403 as always).
 
-Both grant nothing (a company id, the user's text and numbers). Reports never include them:
+Both grant nothing (a company id, the user's text and numbers). A thesis can be checked by the
+assistant ([Thesis checks](#thesis-checks)). Reports never include them:
 `ReportItem` still accepts only charts, comps and screens, and agent-api's report writer skips
 them. Tests: `test_workspaces.py` (states, sizes, bodies, another user's thesis or model is a
 404 for every route), `test_workspaces_db.py` (forced RLS as the table owner, the 128 KiB
@@ -277,6 +278,34 @@ any item).
 - **Owner-only and grants nothing**, exactly like other items: the same filters, the same forced
   row-level security, the same 404 for someone else's. The web app draws each embedded chart from
   its snapshot, reading the data through the permission-checked routes as the viewer.
+
+## Thesis checks
+
+"Check my thesis" results (app migration 010, `thesis_checks.py`; services/agent README, "Thesis
+checks"), one row per check in `thesis_checks`, kept with the thesis they checked.
+
+- `POST /v1/thesis-checks/{item_id}` (`{result}`) stores one. For agent-api only: nginx 404s
+  `/v1/thesis-checks` on the public site, like the report routes. The item must be the caller's
+  thesis (anything else, someone else's included, is the same 404); the result must name it.
+- `GET /v1/workspace-items/{item_id}/checks`: the thesis's checks, newest first, without
+  results (check id, created, `text_hash`, model, cost, counts of supported / contradicted /
+  unverifiable claims, flagged assumptions, points not mentioned, `ok`).
+  `GET /v1/workspace-items/{item_id}/checks/{check_id}` returns one with its result.
+- **Validated.** `CheckResult` is strict: a supported or contradicted claim and every "not
+  mentioned" point cites at least one filing the agent's tools returned (`verified`); citation
+  URLs only `https://www.sec.gov/`; accession numbers, section keys, the text hash and
+  timestamps by pattern; numbers finite; at most 30 claims, 10 points, 4 models; the
+  verification's `ok` recomputed. At most 120,000 bytes (the table allows 128 KiB); bodies up to
+  160,000 bytes. The newest 20 checks per thesis are kept.
+- **Why a table and not the thesis's state:** the thesis state is written by the browser through
+  the generic item routes, so a verdict stored there could be forged; a history of results
+  wouldn't fit a thesis's 128 KiB; and an old check must stay readable after the text changes
+  (its `text_hash` is what the web app's stale notice compares).
+- **Owner-only and grants nothing,** like every saved item: statements filter on the JWT
+  `sub`, row-level security is FORCEd on `app.user_id`, and `(item_id, user_id)` references
+  the thesis, so a check can't name another owner and goes when the thesis is deleted. Tests:
+  `test_thesis_checks.py` (routes, validation, nginx), `test_thesis_checks_db.py` (forced RLS
+  as the table owner, the composite key, the cascade).
 
 ## Customizable views
 

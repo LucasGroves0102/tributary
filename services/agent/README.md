@@ -53,7 +53,11 @@ requests are unchanged.
 
 Limits: questions per hour per user and per client IP (`X-Client-IP`, set by the web proxy from
 Cloudflare's `CF-Connecting-IP`), and a daily model budget across all users. Over a limit → 429.
-A report counts as 3 questions ([Reports](#reports)).
+A report counts as 3 questions ([Reports](#reports)), a thesis check 4
+([Thesis checks](#thesis-checks)).
+
+The web app's `context.page` is one of home, companies, company, filing, chart, compare,
+search, ask, about, workspace, report, thesis, model.
 
 ## Reports
 
@@ -88,6 +92,59 @@ it couldn't be saved, before `done`.
   hour, the daily budget, and a demo sandbox's daily caps (taken all at once, or refused with a
   message saying how many are left). Up to 12 tool rounds.
 
+## Thesis checks
+
+`POST /v1/thesis-checks` with `{"item_id": ...}` (one of the user's theses) checks it against
+the data and saves the result with it (`thesis_check.py`; Query API README, "Thesis checks").
+Streams the same events as `/v1/ask`, plus a `check` event (the saved check's summary and its
+result) or an `error` event if it couldn't be saved or the model never submitted, before `done`.
+
+- **The user's own thesis, read as the user.** `GET /v1/workspace-items/{id}` with the user's
+  token: someone else's thesis, a missing one and an item that isn't a thesis are the same 404,
+  and nothing is spent; an empty thesis is a 422. The models it embeds (`[[embed:<id>]]` lines
+  naming `model` items of its workspace, first 4) come from `GET /v1/workspaces/{id}`.
+- **Assumptions computed, not written by the model.** For each model, its company's history is
+  read as the user (`get_financials`, TTM, 40 quarters, as the web app's model page) and
+  `model_stats.py`, a port of the web app's `models/model.ts`, computes the 5-fiscal-year revenue
+  CAGR, mean operating margin and its [min, max], each forecast year's growth minus the CAGR and
+  two flags: **growth more than 10 percentage points above or below the CAGR, or a margin
+  outside the 5-year [min, max]** (`GROWTH_FLAG_POINTS`). The numbers go to the model as data;
+  it only writes the commentary. `services/web/src/models/stats-fixture.json` holds the same
+  inputs and expected numbers for both test suites.
+- **The thesis is data.** The first 30,000 characters (`MAX_THESIS_CHARS`; the result says
+  when the rest wasn't checked) go in a `<thesis>` block as a JSON string with `<`/`>` escaped,
+  so nothing in it can close the block; Tributary's numbers in a `<check_data>` block. The chat
+  rules apply unchanged, plus `CHECK_RULES` (the thesis is material to check, never
+  instructions).
+- **Only the thesis's companies.** The tools are the chat tools as the user, limited
+  (`report.ScopedTools`) to the thesis's company, its models' companies and companies it names
+  by ticker (`$NVDA`, `(NASDAQ: NVDA)`, bare upper-case tickers outside a stop list; at most 8
+  lookups) that `/v1/me` says the user can read; 12 at most. A CIK, a workspace id or another
+  user's name in the text widens nothing; the tools take no workspace or user. Plus
+  `submit_check`, which takes the structured result once.
+- **Every claim cited, every figure verified.** Each citation is checked against the filings the
+  tools returned (form, date, EDGAR URL, section, the newest `as_of` of the results that held
+  it); one the tools never returned is kept but flagged and listed. Every explanation,
+  commentary, point and summary goes through `verify.py` as in chat; unverified figures are
+  flagged. A supported or contradicted claim without a citation of a filing the tools returned
+  becomes "unverifiable" (`downgraded`); a "not mentioned" point without one is dropped (and the
+  notes say so). Quotes are checked against the thesis text (`quote_found`).
+- **Saved with the thesis.** Through the Query API with the user's token
+  (`POST /v1/thesis-checks/{id}`, off the public site), with the SHA-256 of the company id and
+  the text it checked (`text_hash`), the model, rounds, token usage and estimated cost.
+- **Counts as 4 questions** (`CHECK_QUESTIONS`) against every limit, like a report's 3: a check
+  runs up to 16 tool rounds (`CHECK_ROUNDS`), about 4 rounds per question as reports (12 rounds,
+  3 questions); refused with a message saying so when it doesn't fit.
+
+Result shape (`query_api.thesis_checks.CheckResult`): `thesis` (item, title, company,
+`text_hash`, characters checked, truncated), `summary`, `claims[]` (`quote`, `quote_found`,
+`status`, `explanation`, `citations[]` {accession, form, filed, company, url, section_key,
+figure, figure_status, as_of, verified}, `figures[]`, `downgraded`), `assumptions[]` (per model:
+`stats`, `margin_min`/`max`, `years[]` {fy, growth, margin, growth_vs_cagr, growth_flag,
+margin_flag, commentary, citations, figures}, or `error`), `not_mentioned[]`, `notes[]`,
+`citations[]`, `verification`, `as_of`, `checked_at`, `model`, `questions`, `stop`, `rounds`,
+`usage`, `cost_usd`.
+
 ## Run
 
 ```bash
@@ -113,5 +170,7 @@ Config (env):
 ## Tests
 
 `pytest services/agent`: the tool loop runs against a scripted fake model and a mocked Query API transport;
-no API key needed. The live suites are [tests/adversarial](../../tests/adversarial) (leaks)
+no API key needed. `test_thesis_check.py` includes the adversarial cases (injection in the
+thesis, another user's thesis, forged citations and figures); `test_model_stats.py` checks the
+shared fixture. The live suites are [tests/adversarial](../../tests/adversarial) (leaks)
 and [tests/citations](../../tests/citations) (citation accuracy); CI replays their recordings.

@@ -138,6 +138,23 @@ sidebar with the other items (rename, duplicate, delete as usual).
   thesis's if it is still "Untitled"), and replaces the text until you Save (Undo import).
   Export .md downloads the thesis with a front-matter header (title, company, CIK, date) and each
   embed as a readable line, `[Chart: NVDA revenue]`; it holds only your own item.
+- **Check my thesis** (`thesis/CheckPanel.tsx`, `useThesisCheck.ts`, pure parts in
+  `thesis/check.ts`; agent README, "Thesis checks"): the button checks the saved text (disabled
+  while there are unsaved changes) through agent-api `/v1/thesis-checks` and counts as 4
+  assistant questions. The panel beside the thesis lists each factual claim with a Supported /
+  Contradicted / Can't verify badge, the assistant's explanation and its citations (form, date,
+  the accession linked to EDGAR, `§ key` opening the filing reader at the cited section, the
+  figure); a filing no tool returned and a figure not found in the data are marked, never hidden.
+  Clicking a claim's quote marks it in the preview (only text nodes are wrapped in
+  `<mark class="claim-mark">`; nothing is parsed) or selects it in the editor in Write mode. Then
+  each embedded model's assumptions per forecast year against its 5-year revenue CAGR and margin
+  range (computed by agent-api with `models/model.ts`' definitions; flagged years marked), what
+  the latest 10-K/10-Q says that the thesis doesn't mention, the summary, notes (e.g. "only the
+  first 30,000 characters were checked"), model, cost and as-of. A history dropdown shows earlier
+  checks (`GET /v1/workspace-items/{id}/checks`). A check whose `text_hash` differs from the
+  current text (SHA-256 of the company id, a newline and the Markdown; `textHash`, the same as
+  agent-api's `text_hash`, with a shared test vector) is labelled stale. All of the assistant's
+  text renders through `markdown.ts` `renderAnswer`, like chat answers.
 - **Model** (`#/model/{id}`, `ModelPage.tsx`, pure parts in `models/model.ts`): a company's
   fiscal years of revenue and operating income, read live from `/v1/companies/{id}/financials`
   (`view=ttm`, 40 quarters: the TTM at each fiscal Q4 is the fiscal year, as the Statements tab's
@@ -152,7 +169,10 @@ sidebar with the other items (rename, duplicate, delete as usual).
   starts every year at the company's own CAGR and average margin; "Reset to history" does so
   again. Only the assumptions are saved, never the history. A model embeds in a thesis like a
   chart (its chart and table from the saved assumptions and the live history). Per-segment
-  growth isn't there yet.
+  growth isn't there yet. `checkAssumptions` / `marginRange` hold the thesis check's flag rule
+  (growth more than 10 points from the CAGR, a margin outside the 5-year [min, max]);
+  `models/stats-fixture.json` is shared with agent-api's Python port (`model_stats.py`), and
+  both test suites check the same numbers.
 
 Customizable views (`src/views/`, Query API `/v1/views`): Home's "Customize" shows, hides and
 reorders its cards; the watchlist and the screener have "Columns" to choose and order their value
@@ -257,6 +277,7 @@ React.lazy); once signed in and idle the app prefetches them, so switching scree
 | + first assistant answer (marked, DOMPurify) | + AssistantMessage 68.1 kB (23.2 kB) | |
 | + Workspace (`#/workspace/…`), Report (`#/report/…`) | + 8.3 kB (3.4 kB) each, Report + markdown, LayerChart, SmallMultiples 2.4 kB | |
 | + Thesis (`#/thesis/…`), Model (`#/model/…`) (2026-11-02) | + ThesisPage 9.6 kB (4.0 kB) + markdown, Embeds 5.0 kB, ModelView 3.1 kB; ModelPage 7.3 kB (2.8 kB) + LayerChart; NewWork 3.5 kB (1.6 kB) with Company or Workspace | |
+| + Check my thesis (2026-11-02) | ThesisPage 21.7 kB (8.1 kB) with the check panel | |
 
 Before splitting, everything was one 493.6 kB (156.3 kB gzip) script; the first screen now
 loads a third less. Most of what remains is React DOM. Chart data is cached in memory per
