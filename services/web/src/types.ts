@@ -21,6 +21,8 @@ export interface SandboxOffer {
   ttl_hours: number;
   plan: string;
   tickers: string[];
+  /** every company is open to signed-in users: `tickers` is then only the starter watchlist */
+  catalog_public?: boolean;
   agent: boolean;
   agent_questions_per_day: number;
 }

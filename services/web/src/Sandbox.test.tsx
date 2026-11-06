@@ -344,6 +344,13 @@ describe("a sandbox lists only its own companies", () => {
     expect(searches.every((u) => u.searchParams.get("access") !== "financials")).toBe(true);
   });
 
+  it("the front door says every company, not the starter tickers, once the catalog is open", async () => {
+    offerResponse = () => Response.json({ ttl_hours: 24, plan: "pro", tickers: TICKERS, catalog_public: true, agent: true, agent_questions_per_day: 10 });
+    await mount(<App picker={false} />);
+    expect(container.textContent).toContain("access to every company");
+    expect(container.textContent).not.toContain(TICKERS[0]!);
+  });
+
   it("with the public catalog open Home's calendar is the watchlist's, never every company's", async () => {
     meSequence = [() => Response.json(openMe())];
     stored();

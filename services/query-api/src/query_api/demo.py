@@ -108,6 +108,7 @@ def add_sandbox_routes(app: FastAPI, *, store: Store, sandboxes: Sandboxes | Non
         if not enabled:
             raise HTTPException(404)
         return {"ttl_hours": config.ttl_hours, "plan": DEMO_PLAN, "tickers": list(DEMO_TICKERS),
+                "catalog_public": sandboxes is not None and sandboxes.catalog_public(),
                 "agent": config.agent_enabled,
                 "agent_questions_per_day": config.agent_questions_per_user_per_day
                 if config.agent_enabled else 0}

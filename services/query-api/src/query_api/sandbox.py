@@ -175,6 +175,7 @@ class Sandboxes(Protocol):
     def take_question(self, user_id: str, now: datetime, per_user: int, per_day: int,
                       questions: int = 1) -> int: ...  # left today; raises QuotaExceeded
     def delete_expired(self, now: datetime) -> dict[str, int]: ...
+    def catalog_public(self) -> bool: ...
 
 
 class Pool(Protocol):
@@ -303,6 +304,14 @@ class AppSandboxes:
                         "     = demo_agent_usage.questions + EXCLUDED.questions",
                         (user_id, day, questions))
             return cap - mine - questions
+
+    def catalog_public(self) -> bool:
+        """Whether every company is open to signed-in users (app migration 008's switch), so the
+        front door can say what a sandbox reads. Wording only: access is decided elsewhere."""
+        with self._pool.connection() as conn, conn.transaction(), conn.cursor() as cur:
+            cur.execute("SELECT public FROM public_catalogs WHERE catalog_id = 'sec'")
+            row: Any = cur.fetchone()
+            return bool(row and row[0])
 
     def delete_expired(self, now: datetime) -> dict[str, int]:
         """Deletes expired sandbox users (only users with a sandbox row: never anyone else, so

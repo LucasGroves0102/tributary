@@ -80,7 +80,8 @@ tiers; then `companies` lists only private grants). `src/access.ts` turns that i
 pages show: `readableFor(me, tier)` (every company while the catalog is open with that tier),
 `readableTotal(me)` (the sidebar's count) and `catalogOpen`. With the catalog open nothing below
 is scoped: a sandbox or GitHub session sees every company like anyone else, the banner says
-"Demo sandbox: every company · resets in Xh", the Welcome page waits for no grant (none is
+"Demo sandbox: every company · resets in Xh", the front door says "access to every company"
+(`catalog_public` on `GET /v1/demo/sandbox`), the Welcome page waits for no grant (none is
 written), Search covers every company's filings (ranked within the newest window that fills the
 page, with a line saying how far back, unless a company or dates narrow it), and Home's expected
 filings are the watchlist's (`scope=readable` would be thousands of rows). Display only: the API decides.

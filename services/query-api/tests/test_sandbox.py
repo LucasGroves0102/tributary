@@ -60,6 +60,9 @@ class FakeStore:
 class FakeSandboxes:
     """Same rules as AppSandboxes, in memory; `grants` is what authz-sync would derive."""
 
+    def catalog_public(self):
+        return False
+
     def __init__(self):
         self.sandboxes: dict[str, NewSandbox] = {}
         self.creations: list[tuple[str, datetime]] = []
@@ -166,6 +169,7 @@ def test_offer_describes_the_sandbox(world):
     offer = client.get("/v1/demo/sandbox").json()
     assert offer["tickers"] == list(DEMO_TICKERS)
     assert offer["ttl_hours"] == 24 and offer["agent_questions_per_day"] == 2
+    assert offer["catalog_public"] is False
 
 
 def test_each_creation_is_a_new_user(world):

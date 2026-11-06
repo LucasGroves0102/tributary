@@ -263,7 +263,7 @@ export function Welcome({ onReady, notice, github, pollMs = 1000, now = Date.now
           o && (
             <p className="small faint">
               Starts a private sandbox for {o.ttl_hours} hours: a {o.plan} account with access to{" "}
-              {o.tickers.length} companies ({o.tickers.join(", ")})
+              {o.catalog_public ? "every company" : `${o.tickers.length} companies (${o.tickers.join(", ")})`}
               {o.agent
                 ? ` and ${o.agent_questions_per_day} assistant questions a day`
                 : "; the assistant is off for demo sandboxes"}
@@ -273,7 +273,7 @@ export function Welcome({ onReady, notice, github, pollMs = 1000, now = Date.now
         )}
         {githubOn && (
           <p className="small faint">
-            Signing in with GitHub gives you the same companies in an account that stays, with your
+            Signing in with GitHub gives you the same {o?.catalog_public ? "access" : "companies"} in an account that stays, with your
             saved work. It reads only your public GitHub profile.
           </p>
         )}

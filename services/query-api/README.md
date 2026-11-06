@@ -29,7 +29,7 @@ request parameters. Dev tokens: `make token USER=alice`.
 | `GET /v1/status/data` | | the public status page: freshness, ingest latency, completeness against EDGAR, coverage counts, data-quality totals and the last recorded suite runs; aggregate counts and timestamps only, cached 60 s ([Status page](#status-page)) |
 | `GET /v1/demo/users` | `DEMO_USERS` set | demo accounts (404 when disabled) |
 | `POST /v1/demo/token` | `DEMO_USERS` set | an 8-hour token for a demo account (never a sandbox user) |
-| `GET /v1/demo/sandbox` | `DEMO_SANDBOX_ENABLED` | what "Try the demo" creates: lifetime, plan, tickers, assistant allowance ([Demo sandboxes](#demo-sandboxes)) |
+| `GET /v1/demo/sandbox` | `DEMO_SANDBOX_ENABLED` | what "Try the demo" creates: lifetime, plan, tickers, whether every company is open (`catalog_public`), assistant allowance ([Demo sandboxes](#demo-sandboxes)) |
 | `POST /v1/demo/sandbox` | `DEMO_SANDBOX_ENABLED` | 201: a new temporary user and its token (expires with the sandbox); 429 when the per-IP or live-sandbox cap is hit. Takes no input |
 | `POST /v1/demo/agent-quota` | token | agent-api only (nginx hides it): takes one assistant question (or `{"questions": n}`, 1-5, all or none: a report counts as 3) from a sandbox's or GitHub account's daily caps, or from a password account's own daily cap; 429 with the message to show; `{"demo": false}` for other users |
 | `GET /v1/auth/providers` | | `{"github": true\|false, "password": true\|false}`: which sign-in buttons the web app shows |
