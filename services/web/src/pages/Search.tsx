@@ -121,6 +121,12 @@ export function Search({ token, search, companies, open = false }: Props) {
         <p className="empty">No passages match “{search.q}”{page ? " on this page" : ""}. Try fewer or different words.</p>
       ) : (
         <section className="card results">
+          {load.data.searched_from && (
+            <p className="foot searched-from">
+              Best matches in filings since {day(load.data.searched_from, true)}. Pick a company or
+              dates to search further back.
+            </p>
+          )}
           {groupHits(load.data.results).map((c) => (
             <div key={c.companyId} className="result-co">
               <h2>

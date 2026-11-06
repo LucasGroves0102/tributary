@@ -69,6 +69,10 @@ export function useWorkspace(
   user: string | null,
   companyIds: string[] = [],
   columns: WatchColumn[] = WATCH_COLUMNS,
+  /** also list expected filings of every readable company. False with the public catalog open:
+   * "readable" is then ~6,000 companies, thousands of rows and the route's slowest query, so the
+   * card shows the watchlist's */
+  calendarOfReadable = true,
 ): Workspace {
   const [list, setList] = useState<WatchlistState>({ state: "loading" });
   const [latest, setLatest] = useState<LatestFiling[] | null>(null);
@@ -123,14 +127,14 @@ export function useWorkspace(
     const none = { filings: [] as CalendarEntry[] };
     Promise.all([
       expectedFilings(token, EXPECTED_DAYS, "watchlist").catch(() => none),
-      expectedFilings(token, EXPECTED_DAYS, "readable").catch(() => none),
+      calendarOfReadable ? expectedFilings(token, EXPECTED_DAYS, "readable").catch(() => none) : none,
     ]).then(([w, r]) => {
       if (live) setCalendars({ watched: w.filings, readable: r.filings });
     });
     return () => {
       live = false;
     };
-  }, [token, version]);
+  }, [token, version, calendarOfReadable]);
 
   // sparklines: quarterly revenue, only for watched companies the user can read
   const readableIds = list.state === "ok"

@@ -343,4 +343,16 @@ describe("a sandbox lists only its own companies", () => {
     expect(searches.length).toBeGreaterThan(0);
     expect(searches.every((u) => u.searchParams.get("access") !== "financials")).toBe(true);
   });
+
+  it("with the public catalog open Home's calendar is the watchlist's, never every company's", async () => {
+    meSequence = [() => Response.json(openMe())];
+    stored();
+    window.location.hash = "#/";
+    await mount(<App picker={false} />);
+    const scopes = vi.mocked(fetch).mock.calls.map(([u]) => new URL(String(u), "http://x"))
+      .filter((u) => u.pathname.endsWith("/v1/calendar/expected-filings"))
+      .map((u) => u.searchParams.get("scope"));
+    expect(scopes).toContain("watchlist");
+    expect(scopes).not.toContain("readable");
+  });
 });
