@@ -56,6 +56,18 @@ async function render(search?: SearchState, companies = COMPANIES) {
 
 const calls = () => vi.mocked(fetch).mock.calls.map(([u]) => new URL(String(u), "http://x"));
 
+it("says how far back the ranking goes when the API searched a recent window", async () => {
+  reply = () => Response.json({ query: "", as_of: "2026-10-21T10:00:00Z", limit: 20, offset: 0, has_more: false, results: HITS, searched_from: "2026-09-21" });
+  await render({ q: "supply chain", page: 0 });
+  expect(container.querySelector(".searched-from")?.textContent).toContain("since");
+  expect(container.querySelector(".searched-from")?.textContent).toContain("Pick a company or");
+});
+
+it("says nothing about a window when the whole index was searched", async () => {
+  await render({ q: "supply chain", page: 0 });
+  expect(container.querySelector(".searched-from")).toBeNull();
+});
+
 it("groups ranked passages by company and filing, each opening the reader at the passage", async () => {
   await render({ q: "export controls", form: "10-Q", from: "2026-01-01", page: 1 });
   const u = calls()[0]!;

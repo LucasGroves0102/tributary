@@ -21,6 +21,15 @@ QUERY_TIMEOUT = "5s"
 SEARCH_TIMEOUT = "8s"
 # Data notes: a 10-K/10-Q filed in the last BEHIND_DAYS whose XBRL isn't in companyfacts yet.
 BEHIND_DAYS = 120
+# silver.filings.filed_on (migration 032) is the date from the row's own base table, so a filter
+# on it reaches both UNION branches. Up to this many days from filing_date (a filing accepted
+# after hours before a long weekend is dated days later), so bounds on it carry this margin.
+FILED_ON_MARGIN_DAYS = 7
+# The companies the caller can read at any tier, as their CIKs: a base column of silver.filings
+# (company_id comes from a join inside each UNION branch), in the caller's session under RLS.
+READABLE_CIKS = """ARRAY(SELECT k.cik FROM silver.company_ciks k WHERE k.company_id IN (
+    SELECT r FROM authz.readable_companies('financials') r
+    UNION SELECT r FROM authz.readable_companies('filings') r))"""
 HEADLINE = ("StartSel=«, StopSel=», MaxWords=35, MinWords=15, MaxFragments=2,"
             " FragmentDelimiter=\" … \"")
 
@@ -43,6 +52,10 @@ class Store:
                 conn.cursor(row_factory=dict_row) as cur:
             cur.execute("SET LOCAL ROLE query_api")
             cur.execute(f"SET LOCAL statement_timeout = '{QUERY_TIMEOUT}'")
+            # These queries read few rows but cost a lot on paper (a LATERAL is charged the RLS
+            # policy's hashed subplan on every rescan), so JIT compiled them for 0.7-1.6 s to
+            # save nothing (hermes and local plans, migration 032).
+            cur.execute("SET LOCAL jit = off")
             cur.execute("SELECT set_config('app.user_id', %s, true)", (user_id,))
             try:
                 yield cur
@@ -61,18 +74,22 @@ class Store:
                 "           AS derived_metrics")
             return dict(cur.fetchone() or {})
 
-    def search(self, user_id: str, q: str, limit: int = 5,
-               only: list[str] | None = None) -> list[dict]:
+    def search(self, user_id: str, q: str, limit: int = 5, only: list[str] | None = None,
+               readable_only: bool = False) -> list[dict]:
         """Best matches for a name, ticker or CIK. only: just these companies (the caller's
-        readable ones, for a demo that lists nothing else); None: every company."""
+        readable ones, for a demo that lists nothing else); None: every company. readable_only:
+        the same narrowing when the catalog is public (no id list; RLS on the authz tables)."""
+        narrow = (" AND r.company_id IN (SELECT x FROM authz.readable_companies('financials') x)"
+                  if readable_only else "")
         with self._session(user_id) as cur:
             cur.execute(
                 "SELECT r.company_id, r.name, r.matched_on, r.matched_alias, r.is_current,"
                 "       c.sic, c.sic_description AS industry, c.exchanges"
                 " FROM silver.resolve_company(%(q)s) WITH ORDINALITY r"
                 " JOIN silver.companies c USING (company_id)"
-                " WHERE %(only)s::text[] IS NULL OR r.company_id = ANY(%(only)s::text[])"
-                " ORDER BY r.ordinality LIMIT %(limit)s", {"q": q, "only": only, "limit": limit})
+                " WHERE (%(only)s::text[] IS NULL OR r.company_id = ANY(%(only)s::text[]))" + narrow
+                + " ORDER BY r.ordinality LIMIT %(limit)s",
+                {"q": q, "only": only, "limit": limit})
             return cur.fetchall()
 
     def catalog_companies(self, user_id: str) -> frozenset[str]:
@@ -124,12 +141,17 @@ class Store:
             cur.execute(compiled.sql, compiled.params)  # pyright: ignore[reportArgumentType]
             return cur.fetchall()
 
-    def expected_filings(self, user_id: str, company_ids: list[str], as_of: date,
+    def expected_filings(self, user_id: str, company_ids: list[str] | None, as_of: date,
                          periods: int) -> list[dict]:
-        """Estimated next 10-Q/10-K filings (gold.expected_filings; public filing index)."""
+        """Estimated next 10-Q/10-K filings (gold.expected_filings; public filing index).
+        company_ids None: every company the caller can read (gold.expected_filings_recent)."""
         with self._session(user_id) as cur:
-            cur.execute("SELECT * FROM gold.expected_filings(%s, %s, %s)",
-                        (company_ids, as_of, periods))
+            if company_ids is None:
+                cur.execute("SELECT * FROM gold.expected_filings_recent(%s, %s)",
+                            (as_of, periods))
+            else:
+                cur.execute("SELECT * FROM gold.expected_filings(%s, %s, %s)",
+                            (company_ids, as_of, periods))
             return cur.fetchall()
 
     def last_reports(self, user_id: str, company_ids: list[str]) -> dict[str, dict]:
@@ -194,23 +216,28 @@ class Store:
             cur.execute("SELECT * FROM gold.filing_flags(%s)", (accession_no,))
             return cur.fetchall()
 
-    def peers(self, user_id: str, company_id: str, granted: list[str], revenue: Decimal | None,
-              limit: int, granted_only: bool = False) -> list[dict]:
+    def peers(self, user_id: str, company_id: str, granted: list[str] | None,
+              revenue: Decimal | None, limit: int, granted_only: bool = False) -> list[dict]:
         """Ranked peer candidates (gold.peer_candidates): SIC level, then the same revenue size
         band as `revenue` (only companies in `granted` have one; RLS applies too), then the
         same filer category, then revenue closeness, then name. granted_only: only candidates
-        in `granted`."""
+        in `granted`. granted None: the catalog is public at this tier, RLS alone bounds the
+        revenue (query_api.authorizer.Readable)."""
+        gate = "" if granted is None else "WHERE p.company_id = ANY(%(granted)s)"
+        only = ("p.company_id IN (SELECT x FROM authz.readable_companies('financials') x)"
+                if granted is None else "p.company_id = ANY(%(granted)s)")
         with self._session(user_id) as cur:
             cur.execute(
-                """
+                f"""
                 SELECT p.company_id, p.sic_level, p.same_filer_category,
                        gold.revenue_band(r.value) AS revenue_band
                 FROM gold.peer_candidates(%(company)s) p
                 JOIN silver.companies c ON c.company_id = p.company_id
-                LEFT JOIN gold.latest_financials r
-                       ON r.company_id = p.company_id AND r.company_id = ANY(%(granted)s)
-                      AND r.span = 'ttm' AND r.metric = 'revenue'
-                WHERE NOT %(granted_only)s OR p.company_id = ANY(%(granted)s)
+                LEFT JOIN LATERAL (
+                    SELECT x.value FROM gold.latest_value(p.company_id, 'ttm', 'revenue') x
+                    {gate}
+                ) r ON true
+                WHERE NOT %(granted_only)s OR {only}
                 ORDER BY p.sic_level DESC,
                          coalesce(gold.revenue_band(r.value)
                                   = gold.revenue_band(%(revenue)s::numeric), false) DESC,
@@ -329,22 +356,34 @@ class Store:
                 """, (company_id, accession_no, accession_no, limit))
             return cur.fetchall()
 
-    def filing_index(self, user_id: str, company_ids: list[str], forms: list[str],
+    def filing_index(self, user_id: str, company_ids: list[str] | None, forms: list[str],
                      start: date | None, end: date | None, limit: int, offset: int,
-                     sections_for: list[str]) -> list[dict]:
+                     sections_for: list[str] | None) -> list[dict]:
         """The public SEC filing index (silver.filings) of these companies, newest first, one
         row per accession. `sections` counts parsed sections only for companies in
         `sections_for` (layer 1 said the caller may read their filings); RLS on
-        silver.filing_sections filters that count again. NULL for every other company."""
+        silver.filing_sections filters that count again. NULL for every other company.
+
+        company_ids None: every company the caller can read, without an id list (the catalog
+        is public): filtered on their CIKs and a window on filed_on, the two base columns that
+        reach silver.filings' UNION branches. Call it with a `start` (ui.py walks windows).
+        sections_for None: every company on the page, RLS alone."""
+        if company_ids is None:
+            scope = f"f.cik = ANY({READABLE_CIKS})"
+            if start is not None:
+                scope += " AND f.filed_on >= %(start)s::date - %(margin)s"
+        else:
+            scope = "f.company_id = ANY(%(companies)s)"
+        sections = "true" if sections_for is None else "p.company_id = ANY(%(sections_for)s)"
         with self._session(user_id) as cur:
             cur.execute(
-                """
+                f"""
                 WITH f AS (
                     SELECT DISTINCT ON (f.accession_no)
                            f.accession_no, f.company_id, f.cik, f.form, f.filing_date,
                            f.accepted_at, f.report_date, f.primary_document
                     FROM silver.filings f
-                    WHERE f.company_id = ANY(%(companies)s)
+                    WHERE {scope}
                       AND (cardinality(%(forms)s::text[]) = 0 OR f.form = ANY(%(forms)s))
                       AND (%(start)s::date IS NULL OR f.filing_date >= %(start)s)
                       AND (%(end)s::date IS NULL OR f.filing_date <= %(end)s)
@@ -358,19 +397,41 @@ class Store:
                 SELECT p.accession_no, p.company_id, c.name, p.cik, p.form,
                        p.filing_date AS filed, p.accepted_at, p.report_date AS period_of_report,
                        p.primary_document,
-                       CASE WHEN p.company_id = ANY(%(sections_for)s) THEN (
+                       CASE WHEN {sections} THEN (
                            SELECT count(DISTINCT s.section_key) FROM silver.filing_sections s
                            WHERE s.accession_no = p.accession_no) END AS sections
                 FROM page p
                 LEFT JOIN silver.companies c ON c.company_id = p.company_id
                 ORDER BY p.filing_date DESC, p.accepted_at DESC NULLS LAST, p.accession_no DESC
                 """, {"companies": company_ids, "forms": forms, "start": start, "end": end,
-                      "limit": limit, "offset": offset, "sections_for": sections_for})
+                      "limit": limit, "offset": offset, "sections_for": sections_for,
+                      "margin": FILED_ON_MARGIN_DAYS})
             return cur.fetchall()
 
-    def latest_filings(self, user_id: str, company_ids: list[str], limit: int) -> list[dict]:
-        """Newest parsed filings of these companies (no text)."""
+    def latest_filings(self, user_id: str, company_ids: list[str] | None,
+                       limit: int) -> list[dict]:
+        """Newest parsed filings of these companies (no text). company_ids None: of every
+        company the caller can read (the catalog is public): walk the documents newest first
+        and stop at `limit` with sections, instead of grouping every section under RLS."""
+        accessions: list[str] | None = None
         with self._session(user_id) as cur:
+            if company_ids is None:
+                cur.execute(
+                    """
+                    SELECT d.accession_no, k.company_id
+                    FROM bronze.filing_documents d
+                    JOIN silver.company_ciks k ON k.cik = d.cik
+                    WHERE k.company_id IN (SELECT r FROM authz.readable_companies('filings') r)
+                      AND EXISTS (SELECT 1 FROM silver.filing_sections x
+                                  WHERE x.accession_no = d.accession_no)
+                    ORDER BY d.filed DESC, d.fetched_at DESC
+                    LIMIT %s
+                    """, (limit,))
+                newest = cur.fetchall()
+                # Their companies as bound values too: only company_id reaches the view's DISTINCT
+                # ON (025), neither the accession nor a subquery does.
+                company_ids = sorted({r["company_id"] for r in newest})
+                accessions = [r["accession_no"] for r in newest]
             cur.execute(
                 """
                 SELECT s.company_id, c.name, s.accession_no, s.form, s.filed,
@@ -378,12 +439,12 @@ class Store:
                        max(s.ingested_at) AS ingested_at
                 FROM gold.filing_sections s
                 JOIN silver.companies c USING (company_id)
-                WHERE s.company_id = ANY(%s)
+                WHERE s.company_id = ANY(%s) AND (%s::text[] IS NULL OR s.accession_no = ANY(%s))
                 GROUP BY s.company_id, c.name, s.accession_no, s.form, s.filed,
                          s.period_of_report, s.document_url
                 ORDER BY s.filed DESC, max(s.ingested_at) DESC
                 LIMIT %s
-                """, (company_ids, limit))
+                """, (company_ids, accessions, accessions, limit))
             return cur.fetchall()
 
     def sections(self, user_id: str, company_id: str, section_key: str, form: str | None,
@@ -455,11 +516,13 @@ class Store:
             row = cur.fetchone()
             return bool(row and row["found"])
 
-    def search_sections(self, user_id: str, company_ids: list[str], q: str, form: str | None,
-                        section_key: str | None, start: date | None, end: date | None,
-                        limit: int, offset: int) -> list[dict]:
+    def search_sections(self, user_id: str, company_ids: list[str] | None, q: str,
+                        form: str | None, section_key: str | None, start: date | None,
+                        end: date | None, limit: int, offset: int) -> list[dict]:
         """Best passage per section matching websearch_to_tsquery(q), ranked by ts_rank_cd,
         with a ts_headline snippet cut from that passage only (never the whole section).
+        company_ids None: every company the caller can read (gold.search_passages, migration
+        032, applies the same read rule as RLS; the section text below is still read under RLS).
         Raises SearchTooBroad when ranking the matches takes over SEARCH_TIMEOUT."""
         try:
             with self._session(user_id) as cur:
@@ -467,26 +530,11 @@ class Store:
                 cur.execute(
                     """
                     WITH q AS (SELECT websearch_to_tsquery('english', %(q)s) AS q),
-                    matches AS (
-                        SELECT p.*, ts_rank_cd(p.tsv, q.q) AS rank,
-                               count(*) OVER (PARTITION BY p.accession_no, p.section_key)
-                                   AS passages_matched
-                        FROM gold.section_search p, q
-                        WHERE p.tsv @@ q.q AND p.company_id = ANY(%(companies)s)
-                          AND (%(form)s::text IS NULL OR p.form = %(form)s)
-                          AND (%(section)s::text IS NULL OR p.section_key = %(section)s)
-                          AND (%(start)s::date IS NULL OR p.filed >= %(start)s)
-                          AND (%(end)s::date IS NULL OR p.filed <= %(end)s)
-                    ),
-                    best AS (
-                        SELECT DISTINCT ON (accession_no, section_key) *
-                        FROM matches
-                        ORDER BY accession_no, section_key, rank DESC, passage
-                    ),
                     page AS (
-                        SELECT * FROM best
-                        ORDER BY rank DESC, filed DESC, accession_no, section_key
-                        LIMIT %(limit)s OFFSET %(offset)s
+                        SELECT p.*
+                        FROM q CROSS JOIN LATERAL gold.search_passages(
+                            q.q, %(companies)s::text[], %(form)s::text, %(section)s::text,
+                            %(start)s::date, %(end)s::date, %(limit)s::int, %(offset)s::int) p
                     )
                     SELECT h.company_id, c.name, h.accession_no, h.form, h.filed,
                            h.section_key, h.rank, h.passages_matched, s.title,
@@ -517,20 +565,22 @@ class Store:
         except psycopg.errors.QueryCanceled:
             raise SearchTooBroad from None
 
-    def data_notes(self, user_id: str, company_ids: list[str], derived: bool,
+    def data_notes(self, user_id: str, company_ids: list[str] | None, derived: bool,
                    limit: int) -> dict[str, Any]:
         """Raw data notes (query_api.notes): the newest `limit` quality findings, quarters
         derived from year-to-date values per metric (when `derived`), 10-K/10-Q filings on
         EDGAR since the latest one in gold that companyfacts doesn't carry yet, and when the
-        companies were last checked. RLS filters findings and gold rows."""
+        companies were last checked. RLS filters findings and gold rows. company_ids None:
+        every company the caller can read (the catalog is public), RLS alone; no `derived`."""
+        scope = "TRUE" if company_ids is None else "f.company_id = ANY(%(c)s)"
         with self._session(user_id) as cur:
             cur.execute(
-                """
+                f"""
                 SELECT f.company_id, f.check_name, f.severity, f.metric, f.period_end,
                        f.detail, q.checked_at
                 FROM ops.quality_findings f
                 LEFT JOIN ops.quality_companies q ON q.company_id = f.company_id
-                WHERE f.company_id = ANY(%(c)s)
+                WHERE {scope}
                 ORDER BY coalesce((f.detail->>'restated_filed')::date, f.period_end) DESC,
                          f.company_id, f.check_name, f.metric
                 LIMIT %(limit)s
@@ -551,6 +601,37 @@ class Store:
                     ORDER BY company_id, metric
                     """, (company_ids,))
                 rows = cur.fetchall()
+            if company_ids is None:
+                # The filings since the BEHIND_DAYS cut without facts are few, so start there and
+                # read each one's company's latest gold filing (RLS), not gold for every company.
+                cur.execute(
+                    """
+                    WITH recent AS MATERIALIZED (
+                        SELECT f.company_id, f.accession_no, f.form, f.filing_date, f.cik
+                        FROM silver.filings f
+                        WHERE f.form IN ('10-K', '10-Q')
+                          AND f.filing_date >= current_date - %(days)s
+                          AND f.filed_on >= current_date - %(days)s - %(margin)s
+                          AND f.company_id IS NOT NULL
+                          AND NOT EXISTS (SELECT 1 FROM silver.financial_facts x
+                                          WHERE x.accession_no = f.accession_no)
+                    )
+                    SELECT DISTINCT ON (f.accession_no)
+                           f.company_id, l.facts_filed, f.accession_no, f.form, f.filing_date,
+                           f.cik
+                    FROM recent f
+                    CROSS JOIN LATERAL (
+                        SELECT max(q.filed) AS facts_filed FROM gold.quarterly_financials q
+                        WHERE q.company_id = f.company_id
+                    ) l
+                    WHERE f.filing_date >= l.facts_filed
+                    ORDER BY f.accession_no, f.filing_date DESC
+                    """, {"days": BEHIND_DAYS, "margin": FILED_ON_MARGIN_DAYS})
+                behind = cur.fetchall()
+                cur.execute("SELECT max(checked_at) AS checked_at FROM ops.quality_companies")
+                checked = (cur.fetchone() or {}).get("checked_at")
+                return {"findings": findings, "derived": rows, "behind": behind,
+                        "checked_at": checked}
             # silver.filings gets company_id from a join inside each UNION branch, so a filter on
             # it can't reach the 27M-row bronze.submission_filings index: filter on the CIKs
             # (a base column) as literal values instead (5.4 s → 0.07 s for 20 companies).

@@ -81,7 +81,9 @@ pages show: `readableFor(me, tier)` (every company while the catalog is open wit
 `readableTotal(me)` (the sidebar's count) and `catalogOpen`. With the catalog open nothing below
 is scoped: a sandbox or GitHub session sees every company like anyone else, the banner says
 "Demo sandbox: every company · resets in Xh", the Welcome page waits for no grant (none is
-written), and Search covers every company's filings. Display only: the API decides.
+written), Search covers every company's filings (ranked within the newest window that fills the
+page, with a line saying how far back, unless a company or dates narrow it), and Home's expected
+filings are the watchlist's (`scope=readable` would be thousands of rows). Display only: the API decides.
 
 While the catalog is closed, a sandbox (or a GitHub sign-in) lists only its own 20 companies
 (`src/scope.ts`, a React context set from the session, and only while `/v1/me` says the catalog

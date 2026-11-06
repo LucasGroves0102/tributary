@@ -17,6 +17,7 @@ from zoneinfo import ZoneInfo
 from fastapi import Depends, FastAPI, HTTPException, Path, Query
 from fastapi.responses import Response
 
+from query_api.authorizer import Readable
 from query_api.csv_export import csv_response
 from query_api.screener import (
     COLUMNS,
@@ -32,7 +33,7 @@ from query_api.screener import (
     parse_filter,
     shape,
 )
-from query_api.shapes import document_url, filing_url, period
+from query_api.shapes import document_url, filing_url, newest_windows, period
 from query_api.store import Store
 from query_api.watchlist import MAX_ENTRIES, UnknownUser, Watchlists
 
@@ -62,6 +63,9 @@ WATCHLIST_COLUMNS: tuple[str, ...] = ("revenue_ttm", "revenue_growth_q", "operat
 FORM_TYPE = r"^[A-Z0-9][A-Z0-9 ./-]{0,19}$"  # SEC form types: 10-K, 8-K/A, SC 13G, DEF 14A
 MAX_FORMS = 20
 MAX_INDEX_COMPANIES = 50
+# /v1/filing-index with the catalog public: filing-date windows to try, in days back. Each query
+# is a few hundred ms to seconds; 3 days fills a page on any normal day.
+INDEX_WINDOW_DAYS = (3, 14, 90, 365)
 META_CSV = ["company_id", "name", "tickers", "exchanges", "sic", "industry", "fiscal_year_end",
             "filer_category", "state_of_incorporation"]
 
@@ -69,7 +73,7 @@ META_CSV = ["company_id", "name", "tickers", "exchanges", "sic", "industry", "fi
 def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str],
                   require: Callable[[str, str, str], None],
                   allowed: Callable[[str, str, str], bool],
-                  readable: Callable[[str], dict[str, set[str]]],
+                  readable: Callable[[str], Readable],
                   today: Callable[[], date] | None = None,
                   watchlists: Watchlists | None = None) -> None:
     clock = today or _today_eastern
@@ -79,15 +83,14 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
             raise HTTPException(503, "watchlists unavailable")
         return watchlists.list(user_id)
 
-    def run_screen(user_id: str, screen: Screen, access: dict[str, set[str]]):
-        granted = sorted(c for c, t in access.items() if "financials" in t)
+    def run_screen(user_id: str, screen: Screen, access: Readable):
         try:
-            compiled = compile_screen(screen, granted)
+            compiled = compile_screen(screen, access.ids("financials"))
         except ScreenError as e:
             raise HTTPException(422, str(e)) from None
         rows = store.screen(user_id, compiled)
-        can_read = set(granted)
-        shaped = [{**shape(r, compiled, r["company_id"] in can_read),
+        # layer 1 again on every row, also when no id list went into the query
+        shaped = [{**shape(r, compiled, "financials" in access.get(r["company_id"], set())),
                    "access": sorted(access.get(r["company_id"], set()))} for r in rows]
         total = rows[0]["total"] if rows else (0 if screen.offset == 0 else None)
         return compiled, shaped, total
@@ -175,14 +178,22 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
         return {"company_id": company_id, "as_of": clock(), "method": EXPECTED_METHOD,
                 "expected": [_expected(r) for r in rows]}
 
-    def filing_index(user_id: str, ids: list[str], sections_for: list[str],
+    def filing_index(user_id: str, ids: list[str] | None, sections_for: list[str] | None,
                      forms: list[str] | None, start: date | None, end: date | None,
                      limit: int, offset: int) -> dict:
         forms = sorted(set(forms or []))
         if len(forms) > MAX_FORMS or any(not re.match(FORM_TYPE, f) for f in forms):
             raise HTTPException(422, f"form: at most {MAX_FORMS} SEC form types such as 10-K")
-        rows = store.filing_index(user_id, ids, forms, start, end, limit + 1, offset,
-                                  sections_for) if ids else []
+        rows: list[dict] = []
+        if ids is None:  # every readable company, catalog public: newest first, stop when full
+            for lower in newest_windows(INDEX_WINDOW_DAYS, start, end, clock()):
+                rows = store.filing_index(user_id, None, forms, lower, end, limit + 1, offset,
+                                          sections_for)
+                if len(rows) > limit:
+                    break
+        elif ids:
+            rows = store.filing_index(user_id, ids, forms, start, end, limit + 1, offset,
+                                      sections_for)
         return {"as_of": _now(), "forms": forms, "from": start, "to": end, "limit": limit,
                 "offset": offset, "has_more": len(rows) > limit,
                 "filings": [_index_row(r) for r in rows[:limit]]}
@@ -228,6 +239,14 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
                 or any(len(c) != 10 or not c.isdigit() for c in company_id)):
             raise HTTPException(422, f"company_id: at most {MAX_INDEX_COMPANIES} 10-digit ids")
         access = readable(user_id)
+        if company_id is None and access.public:
+            # Public metadata over the whole catalog: no id list, RLS decides the section counts
+            sections_for = None if "filings" in access.public else []
+            page = filing_index(user_id, None, sections_for, form, start, end, limit, offset)
+            for f in page["filings"]:  # layer 1 on every row, as with a list of ids
+                if "filings" not in access.get(f["company_id"], set()):
+                    f["sections"], f["sections_available"] = None, False
+            return page
         ids = sorted(set(company_id) if company_id is not None else access)
         sections_for = sorted(c for c in ids if "filings" in access.get(c, set()))
         return filing_index(user_id, ids, sections_for, form, start, end, limit, offset)
@@ -298,11 +317,16 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
     ) -> dict | Response:
         """Expected 10-Q/10-K filings in the next `days` days, plus ones already due or
         overdue (period over, not filed yet). Estimates from public metadata."""
-        ids = sorted({e["company_id"] for e in saved(user_id)} if scope == "watchlist"
-                     else readable(user_id))
+        ids: list[str] | None
+        if scope == "watchlist":
+            ids = sorted({e["company_id"] for e in saved(user_id)})
+        else:
+            access = readable(user_id)
+            ids = None if access.public else sorted(access)
         start = clock()
         end = date.fromordinal(start.toordinal() + days)
-        rows = [r for r in (store.expected_filings(user_id, ids, start, 2) if ids else [])
+        found = store.expected_filings(user_id, ids, start, 2) if ids != [] else []
+        rows = [r for r in found
                 if r["expected_date"] is not None and r["expected_date"] <= end]
         profiles = store.profiles(user_id, sorted({r["company_id"] for r in rows})) if rows \
             else {}
@@ -374,8 +398,8 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
         if not target:
             raise HTTPException(404, "unknown company")
         revenue = target[0]["values"].get("revenue_ttm") if "revenue_ttm" in cols else None
-        granted = sorted(c for c, t in access.items() if "financials" in t)
-        if revenue is None and company_id in granted:
+        granted = access.ids("financials")
+        if revenue is None and "financials" in access.get(company_id, set()):
             _, own, _ = run_screen(user_id, Screen(columns=["revenue_ttm"],
                                                    company_ids=[company_id], coverage=False,
                                                    sort="name", limit=1), access)

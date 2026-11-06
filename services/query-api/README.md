@@ -116,7 +116,7 @@ through `Store`. Financial values need `financials` on that company and section 
 checked in OpenFGA and again by RLS. Routes that list many companies (screener, watchlist,
 peers) take the caller's readable companies from OpenFGA (`readable()`), read values only for
 those (in SQL, and RLS filters again) and null any value of other companies before responding.
-SQL for these routes is in `db/migrations/017_ui_data.sql`.
+SQL for these routes is in `db/migrations/017_ui_data.sql` and `032_open_access_speed.sql`.
 
 `readable()` never asks OpenFGA to enumerate the catalog (ListObjects over ~6,000 companies is
 capped at 1,000 by default, and slow). `FgaAuthorizer.access()` makes one Check
@@ -125,6 +125,29 @@ the user's tiers (ListObjects `subscriber` on `tier`) and private grants (ListOb
 which never includes the catalog). The catalog's company ids come from `authz.public_access`
 (`Store.catalog_companies`, read under RLS) and are cached for 60 s in the process: every
 user sees the same list. `require()` stays a single Check.
+
+**The catalog's ids never go into SQL.** `readable()` keeps the whole answer in Python for layer
+1's per-row checks, but a route narrows a query with `Readable.ids(tier)`: a short sorted list
+while the catalog is closed (or not public at this tier), `None` when it is public at this tier,
+and then the query takes no id list and RLS alone bounds the rows. The list would only repeat
+`authz.public_access`, which RLS reads anyway. `tests/test_catalog_queries.py` fails if a
+route passes a catalog-sized list. What changes per route when public:
+
+| Route | With the catalog public | Why it has to differ |
+|---|---|---|
+| `/v1/screener`, `/v1/watchlist`, `/peers` | two stages: `gold.latest_value` per company for the sort and value filters, the other columns only for the page | pivoting `gold.latest_financials` read and sorted 1.6M rows for a page of 50 |
+| `/v1/filings/latest` | documents newest first, stop at `limit` with sections, then the same grouping | grouped every section under RLS, then `LIMIT` |
+| `/v1/filing-index` (no `company_id`) | filing-date windows (3, 14, 90, 365 days, all time) on CIKs and `filed_on`, stopping at the first that fills the page: the same rows, because the query sorts newest first | `silver.filings` joined and de-duplicated 5M rows, then `LIMIT` |
+| `/v1/search` (no `company`) | ranks the newest window that fills the page (30, 180, 730 days, all time): **`searched_from` in the response says how far back** | can't rank 276,000 passages ("supply chain") in 8 s; see Search |
+| `/v1/data-notes` | findings under RLS; "behind" starts from recent filings without facts | gold grouped for every company |
+| `/v1/calendar/expected-filings?scope=readable` (the home page) | `gold.expected_filings_recent`: the same estimates from the last 1,500 days of reports | read every 10-K/10-Q of all time; a company with long gaps can get fewer lag samples |
+
+The formula routes' ticker suggestions on an unknown ticker still pass the list (an error path,
+an index lookup on a small table).
+
+Every `Store` session also sets `jit = off`: a LATERAL is charged the policy's hashed subplan on each
+rescan, so these queries read few rows but cost millions on paper, and JIT spent 0.7-1.6 s compiling
+them for nothing.
 
 ## Screener
 
@@ -688,8 +711,9 @@ per segment member, from `gold.segments` (migration 018; built by facts-fetcher'
 
 `query_api/notes.py` (migration 023). Findings are about values, so they are not public
 metadata: the company route calls `require(financials)`; `/v1/data-notes` takes the companies
-from `readable()` (financials) and passes them into the SQL; RLS (`granted_financials` on
-`ops.quality_findings`, `ops.quality_companies`, `gold.quarterly_financials`) filters again.
+from `readable()` (financials) and passes them into the SQL (with the catalog public, no list:
+`Readable.ids`); RLS (`granted_financials` on `ops.quality_findings`, `ops.quality_companies`,
+`gold.quarterly_financials`) filters again.
 
 - Findings from `ops.check_financials` / `ops.check_segments` (`kind` = check name: `series_gap`,
   `overlapping_quarters`, `calendar_collision`, `annual_sum`, `impossible_value`, `sign_flip`,
@@ -733,8 +757,11 @@ built by the parser's `parser-index`; algorithm in `services/parser/src/filing_p
 `GET /v1/search`: Postgres full-text search over `gold.section_search` (one row per
 ~2,000-character passage of every parsed section, `tsvector` with a GIN index; migration 021).
 With `company`, `require(filings)` on it; without, the companies `readable()` lists with the
-filings tier (no OpenFGA list entry → no query). Either way the query runs through `Store` and
-RLS (`granted_filings`) filters again.
+filings tier (no OpenFGA list entry → no query), or with the catalog public at that tier every
+company the read rule allows. The first stage is `gold.search_passages` (migration 032), which
+applies `authz.readable_companies('filings')` itself: `@@` isn't leakproof, so under RLS on
+`gold.section_search` the planner can't use the GIN index at all. It returns offsets and ranks,
+no text; the snippet's text is still read through RLS on `silver.filing_sections`.
 
 - `q`: `websearch_to_tsquery('english', q)`: words, `"a phrase"`, `or`, `-excluded`.
   Filters: `company`, `form` (`10-K`, `10-Q`, `8-K`, `/A` amendments), `section`, `from` / `to`
@@ -743,5 +770,11 @@ RLS (`granted_filings`) filters again.
   `passages_matched` counts the section's matching passages. `snippet` is `ts_headline` over that
   passage only (matches between « and »), cut from `silver.filing_sections` at query time.
   `citation` has the passage's character offsets into the document text.
-- Ranking runs over every match, so a very common word across thousands of companies can be
-  slow: queries stop after 8 s (`SEARCH_TIMEOUT`) with 422 "search too broad".
+- Ranking runs over every match of the companies searched. With a company or a closed catalog
+  that is all time. With the catalog public (no `company`) ranking every match of a common phrase
+  can't finish in time, so the route ranks the newest window that fills the page: 30 days back
+  from `to` (or today), then 180, 730, then all time (a phrase with few recent matches has few
+  matches), never before `from`. `searched_from` in the response is that lower bound (`null`:
+  all time or `from`). A consequence: a page past the end of one window re-ranks a wider one, so
+  deep paging can repeat a result. Queries still stop after 8 s (`SEARCH_TIMEOUT`) with 422
+  "search too broad".

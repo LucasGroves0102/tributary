@@ -26,6 +26,25 @@ class Access(NamedTuple):
     listed: dict[str, set[str]]
 
 
+class Readable(dict[str, set[str]]):
+    """company_id → tiers, for every company a user can read (app.py's readable()). `public`
+    is Access.public: the tiers under which layer 1 said the whole public catalog is readable."""
+
+    def __init__(self, tiers: dict[str, set[str]], public: frozenset[str] = frozenset()) -> None:
+        super().__init__(tiers)
+        self.public = public
+
+    def ids(self, tier: str) -> list[str] | None:
+        """The companies to narrow a query to at this tier. None: don't narrow, the catalog is
+        public at this tier and RLS alone bounds the rows. Never pass ~6,000 ids into SQL: the
+        list comes from authz.public_access, the table RLS already reads, so it filters nothing
+        and costs seconds (migration 032). A company list only reaches SQL while it is short:
+        private grants, or a catalog closed to this user."""
+        if tier in self.public:
+            return None
+        return sorted(c for c, tiers in self.items() if tier in tiers)
+
+
 class Authorizer(Protocol):
     def can(self, user_id: str, tier: str, company_id: str) -> bool: ...
     def access(self, user_id: str) -> Access: ...

@@ -13,7 +13,8 @@ from typing import Annotated, Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Path, Query
 
-from query_api.shapes import filing_url
+from query_api.authorizer import Readable
+from query_api.shapes import filing_url, newest_windows
 from query_api.store import SearchTooBroad, Store
 
 CompanyId = Annotated[str, Path(pattern=r"^\d{10}$", description="canonical company_id")]
@@ -22,6 +23,10 @@ SECTION = r"^[A-Z0-9.?-]{1,8}$"
 FORM = r"^(10-K|10-Q|8-K)(/A)?$"
 Kind = Literal["new", "removed", "rewritten"]
 SNIPPET_MARKS = ("«", "»")  # around matched words in search snippets
+# /v1/search over the whole public catalog: rank the matches of the newest window that fills the
+# page. Ranking every match of a common phrase (276,000 passages for "supply chain" on hermes)
+# can't finish within SEARCH_TIMEOUT; a closed catalog or one company is ranked over all time.
+SEARCH_WINDOW_DAYS = (30, 180, 730)
 
 
 def render_words(old: str, new: str, opcodes: list[list]) -> list[list[str]]:
@@ -96,7 +101,7 @@ def shape_section(d: dict, changes: list[dict]) -> dict:
 
 def add_research_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str],
                         require: Callable[[str, str, str], None],
-                        readable: Callable[[str], dict[str, set[str]]]) -> None:
+                        readable: Callable[[str], Readable]) -> None:
     User = Annotated[str, Depends(current_user)]
 
     @app.get("/v1/companies/{company_id}/filings/{accession_no}/changes")
@@ -147,23 +152,37 @@ def add_research_routes(app: FastAPI, *, store: Store, current_user: Callable[..
     ) -> dict:
         """Full-text search over the parsed sections of the companies whose filings the caller
         can read: the best-matching passage per section, ranked, with a snippet (matches
-        between « and ») and a citation to the passage."""
+        between « and ») and a citation to the passage. With the catalog public and no `company`,
+        `searched_from` says how far back the ranked filings go: the newest window that fills
+        the page, wider only when there are few matches."""
         if company is not None:
             require(user_id, "filings", company)
-            granted = [company]
+            granted: list[str] | None = [company]
+            allows = {company}
         else:
-            granted = sorted(c for c, tiers in readable(user_id).items() if "filings" in tiers)
+            access = readable(user_id)
+            granted = access.ids("filings")
+            allows = {c for c, tiers in access.items() if "filings" in tiers}
         rows: list[dict] = []
-        if granted:
-            try:
+        windowed: dict[str, date | None] = {}
+        try:
+            if granted is None:
+                today = datetime.now(UTC).date()  # EDGAR dates are US Eastern, never later
+                for lower in newest_windows(SEARCH_WINDOW_DAYS, start, end, today):
+                    rows = store.search_sections(user_id, None, q, form, section, lower, end,
+                                                 limit + 1, offset)
+                    windowed = {"searched_from": lower}
+                    if len(rows) > limit:
+                        break
+            elif granted:
                 rows = store.search_sections(user_id, granted, q, form, section, start, end,
                                              limit + 1, offset)
-            except SearchTooBroad:
-                raise HTTPException(422, "search too broad: add a company, form, section or"
-                                         " date filter, or more specific words") from None
+        except SearchTooBroad:
+            raise HTTPException(422, "search too broad: add a company, form, section or"
+                                     " date filter, or more specific words") from None
         return {
-            "query": q, "as_of": _now(), "limit": limit, "offset": offset,
-            "has_more": len(rows) > limit,
+            "query": q, "as_of": _now(), "limit": limit, "offset": offset, **windowed,
+            "has_more": len(rows) > limit,  # layer 1 on every row below, also without an id list
             "results": [{
                 "company_id": r["company_id"], "name": r["name"],
                 "section_key": r["section_key"], "title": r["title"],
@@ -175,7 +194,7 @@ def add_research_routes(app: FastAPI, *, store: Store, current_user: Callable[..
                              "filing_url": filing_url(r.get("cik"), r["accession_no"]),
                              "char_start": r["char_start"], "char_end": r["char_end"]},
                 "freshness": {"filed": r["filed"], "ingested_at": r["ingested_at"]},
-            } for r in rows[:limit]],
+            } for r in rows[:limit] if r["company_id"] in allows],
         }
 
 

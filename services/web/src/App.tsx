@@ -138,7 +138,7 @@ export function App(props: Props = {}) {
   const [customizing, setCustomizing] = useState(false);
   const watchCols = useMemo(() => watchColumns(views.watchlistColumns, views.options), [views.watchlistColumns, views.options]);
   const screenCols = useMemo(() => columnSpecs(views.screenerColumns, views.options), [views.screenerColumns, views.options]);
-  const workspace = useWorkspace(token, user, me?.companies.map((c) => c.company_id), watchCols);
+  const workspace = useWorkspace(token, user, me?.companies.map((c) => c.company_id), watchCols, !!me && !me.catalog?.public);
   const saved = useSaved(token, user);
   // "Connect your data": offered only when the server has it on (useMarketData's docstring)
   const market = useMarketData(token);

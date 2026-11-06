@@ -93,6 +93,16 @@ dividends) is left missing instead of published (11,320 rows; e.g. Cytek's Q4 20
 document, read by authz-sync) and the nine `granted_*` policies re-pointed at the rule. Ships
 with `public_access` empty: no one's access changes until the catalog is opened
 ([app/README.md](app/README.md), "Open access").
+`032_open_access_speed.sql` keeps the cross-company routes fast with the catalog open, without
+changing who reads what: `gold.latest_value(company, span, metric)` (`gold.latest_financials`' rule
+as one index lookup per table, security invoker, inlined), a last column `filed_on` on
+`silver.filings` (the date from the row's own table, so a window reaches both UNION branches), and
+`gold.search_passages` (search's first stage: `@@` isn't leakproof, so under RLS the GIN index on
+`gold.section_search` is unusable; SECURITY DEFINER with `authz.readable_companies('filings')`
+applied inside, search_path pinned, `query_api` only, returns offsets and ranks, no text), and
+`gold.expected_filings_recent` (017's estimates for every readable company, from the last 1,500 days
+of reports). No index is built; the view takes a brief lock (`lock_timeout` 30 s, the migration fails rather than queueing
+readers).
 `031_gold_one_quarter_series.sql` gives `gold.quarterly_financials` one non-overlapping series of
 quarters per company and metric. Gold kept one row per period end, so a quarter reported with two
 (start, end) pairs survived twice: an end date a day apart (NVIDIA's Q2 FY2011 ends Aug 1 in the

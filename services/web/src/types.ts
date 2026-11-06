@@ -596,6 +596,8 @@ export interface SectionSearch {
   limit: number;
   offset: number;
   has_more: boolean;
+  /** catalog open, no company: ranked filings go back to here (absent or null: all of them) */
+  searched_from?: string | null;
   results: SectionHit[];
 }
 
