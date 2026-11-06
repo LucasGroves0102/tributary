@@ -27,3 +27,11 @@ No `app.user_id` (unset or empty) reads nothing, public catalog or not. The poli
 hashed SubPlan built once per query, but never inlines a scalar function with a subquery (that
 form ran 50x slower on a 1.2M-row scan). `authz.can_read` is the same rule for one company.
 A new policy should use the same `IN (SELECT r FROM authz.readable_companies(...) r)` form.
+
+Under a policy the planner uses an index condition only if its operator is leakproof. `=` on text
+and date comparisons are; `@@` isn't (and only a superuser can mark it), so as `query_api` the GIN
+index on `gold.section_search` never runs. `032_open_access_speed.sql` therefore adds the one
+SECURITY DEFINER read of a policy-protected table, `gold.search_passages`: it applies
+`authz.readable_companies('filings')` itself and returns offsets and ranks, never text.
+`services/query-api/tests/test_rls.py` holds it to the same cases as the policy. When reading a plan,
+EXPLAIN as `query_api`: an owner or BYPASSRLS login gets a plan `query_api` doesn't.
