@@ -22,6 +22,7 @@ from typing import Annotated, Any
 
 from fastapi import Depends, FastAPI, Path, Query
 
+from query_api.authorizer import Readable
 from query_api.shapes import filing_url
 from query_api.store import Store
 
@@ -113,10 +114,10 @@ _SEVERITY = {"error": 2, "warning": 1, "info": 0}
 
 def add_notes_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str],
                      require: Callable[[str, str, str], None],
-                     readable: Callable[[str], dict[str, set[str]]]) -> None:
+                     readable: Callable[[str], Readable]) -> None:
     User = Annotated[str, Depends(current_user)]
 
-    def load(user_id: str, company_ids: list[str], derived: bool,
+    def load(user_id: str, company_ids: list[str] | None, derived: bool,
              limit: int) -> tuple[list[dict], Any]:
         raw = store.data_notes(user_id, company_ids, derived, limit)
         accs = sorted({a for r in raw["findings"]
@@ -140,9 +141,14 @@ def add_notes_routes(app: FastAPI, *, store: Store, current_user: Callable[..., 
                      limit: Annotated[int, Query(ge=1, le=100)] = 20) -> dict:
         """The newest notes across the companies whose financials the caller can read
         (without the standing derived-quarters notes)."""
-        granted = sorted(c for c, tiers in readable(user_id).items() if "financials" in tiers)
-        notes, checked = load(user_id, granted, False, limit) if granted else ([], None)
-        return {"as_of": _now(), "checked_at": checked, "companies": len(granted),
+        access = readable(user_id)
+        granted = access.ids("financials")
+        notes, checked = load(user_id, granted, False, limit) if granted != [] else ([], None)
+        # layer 1 on every note, also when no id list went into the query
+        notes = [n for n in notes if "financials" in access.get(n["company_id"], set())]
+        companies = len(granted) if granted is not None else sum(
+            "financials" in tiers for tiers in access.values())
+        return {"as_of": _now(), "checked_at": checked, "companies": companies,
                 "notes": notes[:limit]}
 
 

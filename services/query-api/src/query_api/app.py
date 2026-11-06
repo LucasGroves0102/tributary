@@ -15,7 +15,7 @@ from prometheus_client import Counter
 from pydantic import BaseModel, Field
 
 from query_api.auth import Unauthenticated, mint, verify_claims
-from query_api.authorizer import Access, Authorizer, AuthzUnavailable
+from query_api.authorizer import Access, Authorizer, AuthzUnavailable, Readable
 from query_api.connections import MarketData, add_connection_routes
 from query_api.csv_export import csv_response
 from query_api.demo import add_sandbox_routes, demo_company_resolver
@@ -202,16 +202,18 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
             catalog_cache["until"] = now + CATALOG_TTL_SECONDS
         return catalog_cache["ids"]
 
-    def readable(user_id: str) -> dict[str, set[str]]:
+    def readable(user_id: str) -> Readable:
         """company_id → tiers, for every company the user can read: with the catalog public,
-        every catalog company (one Check, then the cached list) plus their private grants."""
+        every catalog company (one Check, then the cached list) plus their private grants.
+        Layer 1's answer in Python; routes pass Readable.ids(tier) into SQL, never the whole
+        list (query_api.authorizer.Readable)."""
         access = access_of(user_id)
         if not access.public:
-            return access.listed
+            return Readable(access.listed)
         out = {c: set(access.public) for c in catalog(user_id)}
         for c, tiers in access.listed.items():
             out.setdefault(c, set()).update(tiers)
-        return out
+        return Readable(out, access.public)
 
     add_ui_routes(app, store=store, current_user=current_user, require=require,
                   allowed=allowed, readable=readable, today=today, watchlists=watchlists)
@@ -317,11 +319,11 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
     ) -> dict:
         """Company identity is public metadata; `access` says what the caller can read."""
         access = readable(user_id)
-        only = (sorted(c for c, t in access.items() if "financials" in t)
-                if access_filter == "financials" else None)
+        narrow = access_filter == "financials"
+        only = access.ids("financials") if narrow else None
         return {"results": [
             {**r, "access": sorted(access.get(r["company_id"], set()))}
-            for r in store.search(user_id, q, only=only)
+            for r in store.search(user_id, q, only=only, readable_only=narrow and only is None)
         ]}
 
     known: dict[str, list[str]] = {}
@@ -464,9 +466,12 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
     def latest_filings(user_id: User,
                        limit: Annotated[int, Query(ge=1, le=50)] = 20) -> dict:
         """Newest parsed filings across the companies the caller can read filings for."""
-        companies = sorted(c for c, tiers in readable(user_id).items() if "filings" in tiers)
-        rows = store.latest_filings(user_id, companies, limit) if companies else []
-        return {"as_of": _now(), "filings": rows}
+        access = readable(user_id)
+        companies = access.ids("filings")
+        rows = store.latest_filings(user_id, companies, limit) if companies != [] else []
+        # layer 1 on every row, also when no id list went into the query
+        return {"as_of": _now(), "filings": [
+            r for r in rows if "filings" in access.get(r["company_id"], set())]}
 
     @app.get("/v1/companies/{company_id}/sections/{section_key}")
     def sections(

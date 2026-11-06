@@ -4,6 +4,7 @@ Skipped unless TEST_DATABASE_URL is set; every test is rolled back."""
 
 import os
 from contextlib import contextmanager
+from datetime import date
 
 import pytest
 from fastapi.testclient import TestClient
@@ -11,6 +12,7 @@ from fastapi.testclient import TestClient
 from query_api.app import create_app
 from query_api.authorizer import Access
 from query_api.formula import CATALOG
+from query_api.screener import Screen, compile_screen, parse_filter
 from query_api.store import Store
 
 from .conftest import SECRET
@@ -579,3 +581,267 @@ def test_store_reads_the_catalog_list_under_rls(client):
     assert store.catalog_companies("t-reader") == {B}
     assert store.catalog_companies("") == frozenset()  # no user, no catalog
 
+
+# Open access without an id list (migration 032): RLS alone, as with the catalog public ---------
+
+SEARCH_FN = "gold.search_passages(tsquery, text[], text, text, date, date, int, int)"
+
+
+class PublicCatalogSaysOpenFga:
+    """Layer 1 says the catalog is public to everyone and lists A for everyone too (the catalog's
+    ids are the real ones, under RLS): only layer 2 can hide A from those it wasn't granted to."""
+
+    def can(self, *_):
+        return True
+
+    def access(self, _):
+        return Access(frozenset({"financials", "filings"}), {A: {"financials", "filings"}})
+
+
+def public_client(conn):
+    c = TestClient(create_app(PublicCatalogSaysOpenFga(), Store(OneConnection(conn)), SECRET))
+    c.app_conn = conn
+    return c
+
+
+def passages(conn, user, companies=None, query="secret"):
+    return visible(conn, user,
+                   "SELECT company_id, section_key, passage, filed, rank > 0 FROM"
+                   " gold.search_passages(websearch_to_tsquery('english', %s), %s::text[], NULL,"
+                   " NULL, NULL, NULL, 10, 0) ORDER BY company_id",
+                   (query, companies))
+
+
+def add_quarter(conn, company, metric, period_end, value):
+    conn.execute(
+        "INSERT INTO gold.quarterly_financials (company_id, metric, period_end, value,"
+        " unit, value_source, source_tag, accession_no, filed, source_accessions,"
+        " ingested_at) VALUES (%s, %s, %s, %s, 'USD', 'reported', 't', 'acc', '2026-08-01',"
+        " ARRAY['acc'], now())", (company, metric, period_end, value))
+
+
+def test_latest_value_is_latest_financials_under_rls(client):
+    conn = client.app_conn
+    add_quarter(conn, A, "revenue", "2026-03-31", 2)  # older than the fixture's 2026-06-30
+    add_quarter(conn, A, "cash", "2026-06-30", 3)  # instant: also the ttm span
+    for span, metric, value in (("quarter", "revenue", 1), ("ttm", "net_margin", "0.25"),
+                                ("quarter", "cash", 3), ("ttm", "cash", 3)):
+        rows = visible(conn, "t-free", "SELECT period_end::text, value, accession_no, filed::text"
+                       " FROM gold.latest_value(%s, %s, %s)", (A, span, metric))
+        assert rows == visible(conn, "t-free", "SELECT period_end::text, value, accession_no,"
+                               " filed::text FROM gold.latest_financials"
+                               " WHERE company_id = %s AND span = %s AND metric = %s",
+                               (A, span, metric)), (span, metric)
+        assert len(rows) == 1 and str(rows[0][1]).rstrip("0").rstrip(".") == str(value)
+    # a duration metric has no ttm from the quarterly table, and nothing without a read grant
+    assert visible(conn, "t-free", "SELECT * FROM gold.latest_value(%s, 'ttm', 'revenue')",
+                   (A,)) == []
+    assert visible(conn, "t-free", "SELECT * FROM gold.latest_value(%s, 'quarter', 'revenue')",
+                   (B,)) == []
+    for user in (None, "", "t-nobody"):
+        assert visible(conn, user, "SELECT * FROM gold.latest_value(%s, 'quarter', 'revenue')",
+                       (A,)) == []
+
+
+def test_screen_without_an_id_list_reads_values_only_under_rls(client):
+    """Metadata for both; A's value only for who may read it; never a value filter's match."""
+    store = Store(OneConnection(client.app_conn))
+    both = Screen(columns=["revenue_q"], company_ids=[A, B], coverage=False, sort="company_id")
+    compiled = compile_screen(both, None)
+    assert "granted" not in compiled.params
+    rows = store.screen("t-free", compiled)
+    assert [(r["company_id"], r["v0"]) for r in rows] == [(A, 1), (B, None)]
+    assert rows[1]["src0"] is None and rows[0]["src0"]["accession_no"] == f"{A}-26-000001"
+    assert [r["v0"] for r in store.screen("t-nobody", compiled)] == [None, None]
+    assert [r["v0"] for r in store.screen("", compiled)] == [None, None]
+
+    filtered = Screen(columns=["revenue_q"], company_ids=[A, B], coverage=False, sort="company_id",
+                      filters=[parse_filter("revenue_q:gte:0")])
+    assert [r["company_id"] for r in store.screen("t-free", compile_screen(filtered, None))] == [A]
+    assert store.screen("", compile_screen(filtered, None)) == []
+
+    only = Screen(columns=["revenue_q"], company_ids=[A, B], coverage=False, sort="company_id",
+                  granted_only=True)
+    assert [r["company_id"] for r in store.screen("t-free", compile_screen(only, None))] == [A]
+    assert store.screen("", compile_screen(only, None)) == []
+    # the sort reads values too: an unreadable one sorts last, whatever it is
+    add_quarter(client.app_conn, B, "revenue", "2026-09-30", 999)
+    ranked = Screen(columns=["revenue_q"], company_ids=[A, B], coverage=False, sort="-revenue_q")
+    assert [r["company_id"] for r in store.screen("t-free", compile_screen(ranked, None))] == [A, B]
+
+
+def test_screen_with_a_list_gates_on_it_and_rls(client):
+    store = Store(OneConnection(client.app_conn))
+    both = Screen(columns=["revenue_q"], company_ids=[A, B], coverage=False, sort="company_id")
+    assert [r["v0"] for r in store.screen("t-free", compile_screen(both, [A]))] == [1, None]
+    assert [r["v0"] for r in store.screen("t-free", compile_screen(both, []))] == [None, None]
+    assert [r["v0"] for r in store.screen("t-free", compile_screen(both, [B]))] == [None, None]
+
+
+def test_screener_route_with_the_catalog_public_is_bounded_by_rls(client, token):
+    open_catalog(client.app_conn, B)
+    r = public_client(client.app_conn).get(
+        "/v1/screener?columns=revenue_q&company_id=" + A + "&company_id=" + B,
+        headers=token("t-reader"))
+    values = {x["company_id"]: x["values"]["revenue_q"] for x in r.json()["rows"]}
+    assert r.status_code == 200 and values == {A: None, B: "1"}  # A: private to t-free, t-pro
+
+
+def test_latest_filings_without_an_id_list_are_bounded_by_rls(client, token):
+    conn = client.app_conn
+    open_catalog(conn, B)
+    c = public_client(conn)
+    latest = lambda user: c.get("/v1/filings/latest", headers=token(user)).json()["filings"]  # noqa: E731
+    assert [f["company_id"] for f in latest("t-reader")] == [B]
+    assert sorted(f["company_id"] for f in latest("t-pro")) == [A, B]  # private grant + catalog
+    assert latest("t-free") == []  # the plan has no filings tier, whatever layer 1 said
+    assert Store(OneConnection(conn)).latest_filings("", None, 10) == []
+    assert Store(OneConnection(conn)).latest_filings("t-nobody", None, 10) == []
+
+
+def test_latest_filings_rows_are_the_same_with_and_without_a_list(client):
+    conn = client.app_conn
+    open_catalog(conn, A, B)
+    store = Store(OneConnection(conn))
+    key = lambda rows: sorted((r["company_id"], r["accession_no"], r["sections"]) for r in rows)  # noqa: E731
+    assert key(store.latest_filings("t-reader", None, 10)) == key(
+        store.latest_filings("t-reader", [A, B], 10))
+
+
+def test_search_passages_applies_the_read_rule(client):
+    conn = client.app_conn
+    for cid in (A, B):
+        conn.execute("SELECT gold.refresh_section_search(ARRAY[%s])", (f"{cid}-26-000002",))
+    assert [r[0] for r in passages(conn, "t-pro")] == [A]  # closed: its grant only
+    assert passages(conn, "t-pro", [B]) == []  # p_companies can only narrow
+    assert [r[0] for r in passages(conn, "t-pro", [A, B])] == [A]
+    assert passages(conn, "t-free") == []  # a grant at another tier
+    assert passages(conn, "t-reader") == []
+    for user in (None, ""):
+        assert passages(conn, user) == [] and passages(conn, user, [A, B]) == []
+    open_catalog(conn, B)
+    assert [r[0] for r in passages(conn, "t-reader")] == [B]
+    assert [r[0] for r in passages(conn, "t-reader", [A, B])] == [B]
+    assert [r[0] for r in passages(conn, "t-pro")] == [A, B]
+    assert passages(conn, "t-free") == []  # public, but no filings tier on the plan
+    assert passages(conn, "t-nobody") == []
+    for user in (None, ""):
+        assert passages(conn, user) == []
+    open_catalog(conn, A, tiers=("financials",))  # another tier: doesn't open filings
+    assert [r[0] for r in passages(conn, "t-reader")] == [B]
+
+
+def test_search_passages_is_locked_down(client):
+    conn = client.app_conn
+    fn = (SEARCH_FN,)
+    assert conn.execute("SELECT has_function_privilege('query_api', %s, 'EXECUTE')",
+                        fn).fetchone() == (True,)
+    assert conn.execute("SELECT has_function_privilege('ops_reader', %s, 'EXECUTE')",
+                        fn).fetchone() == (False,)
+    secdef, config = conn.execute(
+        "SELECT prosecdef, proconfig FROM pg_proc WHERE oid = %s::regprocedure", fn).fetchone()
+    assert secdef is True and config == ["search_path=pg_catalog, pg_temp"]
+
+
+def test_search_with_the_catalog_public_is_bounded_by_rls(client, token):
+    conn = client.app_conn
+    for cid in (A, B):
+        conn.execute("SELECT gold.refresh_section_search(ARRAY[%s])", (f"{cid}-26-000002",))
+    open_catalog(conn, B)
+    c = public_client(conn)
+    found = lambda user, q="q=secret": [  # noqa: E731
+        h["company_id"] for h in c.get(f"/v1/search?{q}", headers=token(user)).json()["results"]]
+    assert found("t-reader") == [B]  # A is private: never returned, whatever layer 1 said
+    assert sorted(found("t-pro")) == [A, B]
+    assert found("t-free") == [] and found("t-nobody") == []
+    body = c.get("/v1/search?q=secret", headers=token("t-reader")).json()
+    assert body["results"][0]["snippet"] == "«secret» risks"
+    assert body["searched_from"] is None  # few matches: widened to all time
+    # and the store with no user at all
+    assert Store(OneConnection(conn)).search_sections("", None, "secret", None, None, None, None,
+                                                      10, 0) == []
+
+
+def add_filing(conn, cik):
+    conn.execute(
+        "INSERT INTO bronze.filings (accession_no, cik, form_type, filed_at, payload,"
+        " kafka_partition, kafka_offset)"
+        " VALUES (%s, %s, '10-K', '2026-02-01 12:00+00', '{}', 0, 0)",
+        (f"{cik}-26-000002", cik))
+    conn.execute(
+        "INSERT INTO bronze.submission_filings (accession_no, cik, form, filing_date)"
+        " VALUES (%s, %s, '8-K', '2026-01-15')", (f"{cik}-26-000009", cik))
+
+
+def test_filing_index_without_a_list_covers_readable_companies_under_rls(client, token):
+    conn = client.app_conn
+    add_filing(conn, A)
+    add_filing(conn, B)
+    open_catalog(conn, B)
+    store = Store(OneConnection(conn))
+
+    def index(user, start=None):
+        return [(r["accession_no"], r["sections"]) for r in store.filing_index(
+            user, None, [], start, None, 10, 0, None)]
+    assert index("t-reader") == [(f"{B}-26-000002", 1), (f"{B}-26-000009", 0)]
+    assert index("t-reader", date(2026, 1, 20)) == [(f"{B}-26-000002", 1)]
+    # t-free reads financials (A granted, B public): in the index, no section count from RLS
+    assert sorted(index("t-free")) == [(f"{c}-26-00000{n}", 0) for c in (A, B) for n in (2, 9)]
+    assert sorted(a for a, _ in index("t-pro")) == [
+        f"{A}-26-000002", f"{A}-26-000009", f"{B}-26-000002", f"{B}-26-000009"]
+    assert index("") == [] and index("t-nobody") == []
+    r = public_client(conn).get("/v1/filing-index?limit=1", headers=token("t-reader"))
+    assert r.status_code == 200 and [f["company_id"] for f in r.json()["filings"]] == [B]
+
+
+def test_filed_on_reaches_both_branches_of_the_filing_index(client):
+    conn = client.app_conn
+    add_filing(conn, A)
+    rows = conn.execute("SELECT accession_no, filing_date::text, filed_on::text FROM silver.filings"
+                        " WHERE cik = %s ORDER BY 1", (A,)).fetchall()
+    assert rows == [(f"{A}-26-000002", "2026-02-01", "2026-02-01"),
+                    (f"{A}-26-000009", "2026-01-15", "2026-01-15")]
+
+
+def test_peers_without_a_list_read_revenue_under_rls(client):
+    conn = client.app_conn
+    conn.execute("UPDATE silver.companies SET sic = '2080'")
+    conn.execute(
+        "INSERT INTO gold.derived_financials (company_id, span, metric, period_end, value, unit,"
+        " value_source, inputs, accession_no, filed, source_accessions, ingested_at)"
+        " VALUES (%s, 'ttm', 'revenue', '2026-06-30', 500e9, 'USD', 'ttm', '{}', 'a',"
+        " '2026-08-01', ARRAY['a'], now())", (B,))
+    store = Store(OneConnection(conn))
+    [row] = store.peers("t-free", A, None, None, 10)
+    assert row["company_id"] == B and row["revenue_band"] is None  # t-free can't read B
+    open_catalog(conn, B)
+    [row] = store.peers("t-free", A, None, None, 10)
+    assert row["revenue_band"] == 4
+    assert store.peers("t-nobody", A, None, None, 10, granted_only=True) == []
+    [row] = store.peers("t-free", A, None, None, 10, granted_only=True)
+    assert row["company_id"] == B
+
+
+def test_expected_filings_recent_covers_only_readable_companies(client):
+    conn = client.app_conn
+    for company in (A, B):
+        for i, (end, filed) in enumerate((("2026-03-31", "2026-05-01"),
+                                          ("2026-06-30", "2026-08-01"))):
+            conn.execute(
+                "INSERT INTO bronze.submission_filings (accession_no, cik, form, filing_date,"
+                " report_date) VALUES (%s, %s, '10-Q', %s, %s)",
+                (f"{company}-26-10000{i}", company, filed, end))
+    open_catalog(conn, B)
+    store = Store(OneConnection(conn))
+    as_of = date(2026, 8, 15)
+
+    def estimated(user):
+        return {r["company_id"] for r in store.expected_filings(user, None, as_of, 2)}
+    assert estimated("t-reader") == {B}
+    assert estimated("t-pro") == {A, B}
+    assert estimated("") == set() and estimated("t-nobody") == set()
+    rows = lambda fn: [  # noqa: E731
+        {k: r[k] for k in ("form", "period_end", "expected_date", "lag_samples", "status")}
+        for r in fn]
+    assert rows(store.expected_filings("t-reader", None, as_of, 2)) == rows(
+        store.expected_filings("t-reader", [B], as_of, 2))

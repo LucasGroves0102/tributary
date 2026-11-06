@@ -6,13 +6,20 @@ bind parameter.
 
 Columns are `<metric>_ttm` (trailing twelve months; balance-sheet metrics at the quarter end)
 or `<metric>_q` (latest fiscal quarter), for every metric in the formula CATALOG with values in
-that view. Each value is the latest one of that metric and span (gold.latest_financials) and
-carries its own period_end and filing.
+that view. Each value is the latest one of that metric and span (gold.latest_value: an index
+lookup per company and column, migration 032) and carries its own period_end and filing.
+
+The query has two stages, so its cost follows what the screen asks for and not how many
+companies the caller can read: the values filters and the sort need are read for every company
+in the universe, the other columns only for the page.
 
 Permissions: metadata rows are public; values are read only for `granted` (companies the
-caller can read financials for, from OpenFGA) and, under RLS, only rows authz.user_access
-grants. A value filter can't be evaluated without a value, so ungranted companies drop out of
-any screen with a value filter; a sort on a value column puts them last.
+caller can read financials for, from OpenFGA) and, under RLS, only rows
+authz.readable_companies allows. granted None: OpenFGA says the whole public catalog is
+readable at this tier, so no id list goes into the query and RLS alone bounds the values (the
+list would come from authz.public_access, which RLS reads anyway). A value filter can't be
+evaluated without a value, so ungranted companies drop out of any screen with a value filter; a
+sort on a value column puts them last.
 """
 
 from dataclasses import dataclass, field
@@ -130,7 +137,24 @@ def _like(text: str) -> str:
     return "%" + text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
 
 
-def compile_screen(s: Screen, granted: list[str]) -> Compiled:
+def _values(slots: dict[str, int], company: str, granted: list[str] | None) -> str:
+    """A lateral row with v<i> and src<i> of these slots, for the company in the column
+    `company`. Closed catalog: a one-time filter, so an ungranted company reads no value."""
+    if not slots:
+        return "(SELECT 1)"
+    outputs, joins = [], []
+    for i in slots.values():
+        outputs += [f"x{i}.value AS v{i}",
+                    f"CASE WHEN x{i}.period_end IS NOT NULL THEN jsonb_build_object("
+                    f"'period_end', x{i}.period_end, 'accession_no', x{i}.accession_no,"
+                    f" 'form', x{i}.form, 'filed', x{i}.filed) END AS src{i}"]
+        joins.append(f"LEFT JOIN LATERAL gold.latest_value({company}, %(s{i})s, %(m{i})s) x{i}"
+                     " ON true")
+    gate = "" if granted is None else f" WHERE {company} = ANY(%(granted)s)"
+    return f"(SELECT {', '.join(outputs)} FROM (SELECT 1{gate}) one {' '.join(joins)})"
+
+
+def compile_screen(s: Screen, granted: list[str] | None) -> Compiled:
     unknown = [c for c in s.columns if c not in COLUMNS]
     if unknown:
         raise ScreenError(f"unknown columns: {unknown}")
@@ -152,7 +176,9 @@ def compile_screen(s: Screen, granted: list[str]) -> Compiled:
                 *([sort_key] if sort_key in COLUMNS else [])]:
         slots.setdefault(key, len(slots))
 
-    params: dict = {"granted": granted, "limit": s.limit, "offset": s.offset}
+    params: dict = {"limit": s.limit, "offset": s.offset}
+    if granted is not None:
+        params["granted"] = granted
     meta = ["TRUE"]
     if s.coverage:
         meta.append("EXISTS (SELECT 1 FROM gold.financials_coverage v"
@@ -161,7 +187,8 @@ def compile_screen(s: Screen, granted: list[str]) -> Compiled:
         meta.append("c.company_id = ANY(%(ids)s)")
         params["ids"] = s.company_ids
     if s.granted_only:
-        meta.append("c.company_id = ANY(%(granted)s)")
+        meta.append("c.company_id IN (SELECT r FROM authz.readable_companies('financials') r)"
+                    if granted is None else "c.company_id = ANY(%(granted)s)")
     if s.sic:
         meta.append("c.sic = ANY(%(sic)s)")
         params["sic"] = s.sic
@@ -185,34 +212,22 @@ def compile_screen(s: Screen, granted: list[str]) -> Compiled:
         meta.append("gold.filer_category(c.filer_categories) = ANY(%(filer_categories)s)")
         params["filer_categories"] = s.filer_categories
 
-    pivots, outputs = [], []
     for key, i in slots.items():
-        metric, span, _ = COLUMNS[key]
-        params[f"m{i}"], params[f"s{i}"] = metric, span
-        match = f"metric = %(m{i})s AND span = %(s{i})s"
-        pivots.append(f"max(value) FILTER (WHERE {match}) AS v{i}")
-        pivots.append("(array_agg(jsonb_build_object('period_end', period_end,"
-                      " 'accession_no', accession_no, 'form', form, 'filed', filed))"
-                      f" FILTER (WHERE {match}))[1] AS src{i}")
-        outputs += [f"v.v{i}", f"v.src{i}"]
-    params["metrics"] = sorted({COLUMNS[k][0] for k in slots})
+        params[f"m{i}"], params[f"s{i}"] = COLUMNS[key][0], COLUMNS[key][1]
 
     where = ["TRUE"]
     for j, f in enumerate(s.filters):
         where.append(f"v.v{slots[f.column]} {OPS[f.op]} %(w{j})s")
         params[f"w{j}"] = f.value
 
+    needed = {f.column for f in s.filters} | ({sort_key} if sort_key in COLUMNS else set())
+    ranked = {k: i for k, i in slots.items() if k in needed}
+    page = {k: i for k, i in slots.items() if k not in needed}
     direction = "DESC" if descending else "ASC"
-    order = (f"v.v{slots[sort_key]}" if sort_key in COLUMNS else META_SORT[sort_key])
-    vals = (
-        "vals AS (\n"
-        f"    SELECT company_id, {', '.join(pivots)}\n"
-        "    FROM gold.latest_financials\n"
-        "    WHERE company_id = ANY(%(granted)s) AND metric = ANY(%(metrics)s)\n"
-        "    GROUP BY company_id\n"
-        ")" if slots else
-        "vals AS (SELECT NULL::text AS company_id WHERE FALSE)"
-    )
+    order = f"v.v{slots[sort_key]}" if sort_key in COLUMNS else META_SORT[sort_key]
+    final = order.replace("v.v", "r.v").replace("b.", "r.")
+    ranked_outputs = "".join(f", v.v{i}, v.src{i}" for i in ranked.values())
+    page_outputs = "".join(f", w.v{i}, w.src{i}" for i in page.values())
     sql = f"""
 WITH base AS (
     SELECT c.company_id, c.name, c.tickers, c.exchanges, c.sic,
@@ -222,13 +237,18 @@ WITH base AS (
     FROM silver.companies c
     WHERE {' AND '.join(meta)}
 ),
-{vals}
-SELECT b.*{''.join(', ' + o for o in outputs)}, count(*) OVER () AS total
-FROM base b
-LEFT JOIN vals v ON v.company_id = b.company_id
-WHERE {' AND '.join(where)}
-ORDER BY {order} {direction} NULLS LAST, b.company_id
-LIMIT %(limit)s OFFSET %(offset)s
+ranked AS (
+    SELECT b.*{ranked_outputs}, count(*) OVER () AS total
+    FROM base b
+    LEFT JOIN LATERAL {_values(ranked, 'b.company_id', granted)} v ON true
+    WHERE {' AND '.join(where)}
+    ORDER BY {order} {direction} NULLS LAST, b.company_id
+    LIMIT %(limit)s OFFSET %(offset)s
+)
+SELECT r.*{page_outputs}
+FROM ranked r
+LEFT JOIN LATERAL {_values(page, 'r.company_id', granted)} w ON true
+ORDER BY {final} {direction} NULLS LAST, r.company_id
 """
     return Compiled(sql, params, list(dict.fromkeys(s.columns)), slots)
 

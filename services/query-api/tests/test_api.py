@@ -105,10 +105,11 @@ class FakeStore:
         return []
 
     def latest_filings(self, user_id, company_ids, limit):
-        self.calls.append(("latest_filings", user_id, tuple(company_ids)))
+        self.calls.append(("latest_filings", user_id,
+                           None if company_ids is None else tuple(company_ids)))
         return []
 
-    def search(self, user_id, q, only=None):
+    def search(self, user_id, q, only=None, readable_only=False):
         self.calls.append(("search", q, None if only is None else tuple(only)))
         return [{"company_id": NVDA, "name": "NVIDIA CORP", "matched_on": "ticker",
                  "matched_alias": "NVDA", "is_current": True, "sic": "3674",
@@ -308,9 +309,10 @@ def test_me_with_the_catalog_public_lists_only_private_grants(token):
 def test_readable_with_the_catalog_public_is_the_catalog_plus_private_grants(token):
     c = open_client()
     c.get("/v1/filings/latest", headers=token("carol"))
-    assert c.store.calls[-1] == ("latest_filings", "carol", (AMD, NVDA, TSLA))
+    assert c.store.calls[-1] == ("latest_filings", "carol", None)  # public: no id list (RLS)
+    n = len(c.store.calls)
     c.get("/v1/filings/latest", headers=token("dave"))  # financials only: no filings
-    assert ("latest_filings", "dave", ()) not in c.store.calls
+    assert len(c.store.calls) == n  # no query at all
     r = c.get("/v1/companies/search?q=n&access=financials", headers=token("dave")).json()
     assert {x["company_id"]: x["access"] for x in r["results"]} == {
         NVDA: ["financials"], TSLA: ["financials"]}
