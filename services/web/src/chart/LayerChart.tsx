@@ -5,6 +5,7 @@ import { layout, nearest, nearestSeries } from "./layout";
 import type { Marker } from "./markers";
 import { formatValue, unitLabel } from "./metrics";
 import { pointAt, type Point, type Series, type Source } from "./series";
+import { TableScroll } from "../components/TableScroll";
 
 interface Props {
   series: Series[];
@@ -282,7 +283,7 @@ export function DataTable({ series, title, onOpen }: { series: Series[]; title: 
     return [...keys.entries()].sort((a, b) => b[0] - a[0]);
   }, [series]);
   return (
-    <div className="tw">
+    <TableScroll label="Chart values">
       <table className="t">
         <caption className="visually-hidden">{title || "Chart"}: values by quarter, newest first</caption>
         <thead>
@@ -321,7 +322,7 @@ export function DataTable({ series, title, onOpen }: { series: Series[]; title: 
           ))}
         </tbody>
       </table>
-    </div>
+    </TableScroll>
   );
 }
 

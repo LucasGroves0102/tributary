@@ -8,6 +8,7 @@ import { day } from "../format";
 import { go } from "../route";
 import { modelRows, modelSeries, project, SCENARIO_LABELS, type Assumption, type HistoryYear, type ModelState, type Scenario } from "./model";
 import { useHistory, type History } from "./useHistory";
+import { TableScroll } from "../components/TableScroll";
 
 const pct = (v: number | null) => (v === null ? "—" : `${(v * 100).toFixed(1)}%`);
 const usd = (v: number | null) => (v === null ? "—" : formatValue(v, "USD"));
@@ -71,7 +72,7 @@ export function ModelView({
         svgRef={svg}
         onOpen={open}
       />
-      <div className="tw">
+      <TableScroll label="The model">
         <table className="t model-table">
           <caption className="visually-hidden">
             {company}: revenue, growth, operating margin and operating income by fiscal year; reported history, then your
@@ -108,7 +109,7 @@ export function ModelView({
             ))}
           </tbody>
         </table>
-      </div>
+      </TableScroll>
     </div>
   );
 }

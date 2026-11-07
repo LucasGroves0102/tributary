@@ -31,6 +31,7 @@ import { day } from "../format";
 import { go, href } from "../route";
 import { inScope, useScope } from "../scope";
 import type { Peers, Screener } from "../types";
+import { TableScroll } from "../components/TableScroll";
 
 interface Props {
   token: string;
@@ -130,10 +131,11 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
   const stats = useMemo(() => peerStats(rows, cols), [rows, cols]);
   const sorted = useMemo(() => sortRows(rows, sort), [rows, sort]);
   /** A sortable header: a button in the th, so the keyboard reaches it. */
-  const sortHead = (key: string, content: ReactNode, title?: string) => (
+  const sortHead = (key: string, content: ReactNode, title?: string, unit?: string) => (
     <button type="button" className="th-sort" title={title} onClick={() => setSort((s) => nextSort(s, key))}>
       {content}
       {sort?.key === key ? (sort.desc ? " ↓" : " ↑") : ""}
+      {unit && <span className="unit"> {unit}</span>}
     </button>
   );
   const ariaSort = (key: string) =>
@@ -280,7 +282,7 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
         ) : !table || table.state === "loading" ? (
           <Skeleton lines={Math.min(ids.length, 8) + 2} label="Loading the comps" />
         ) : (
-          <div className="tw">
+          <TableScroll label="Comparable companies">
             <table className="t comps">
               <thead>
                 <tr>
@@ -290,7 +292,7 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
                     const c = COMPARE_COLUMNS.find((x) => x.key === k)!;
                     return (
                       <th key={k} className="n" aria-sort={ariaSort(k)}>
-                        {sortHead(k, <>{c.label} <span className="unit">{c.period}</span></>, c.long)}
+                        {sortHead(k, c.label, c.long, c.period)}
                       </th>
                     );
                   })}
@@ -309,11 +311,11 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
                         {!r.readable && <span className="tag" title={MASKED_TITLE}>metadata only</span>}
                       </a>
                     </td>
-                    <td className="muted" title={r.latest ? `Period ended ${day(r.latest.periodEnd, true)}; ${r.latest.form} filed ${day(r.latest.filed, true)}` : undefined}>
+                    <td className="muted" title={r.latest ? `${r.latest.fiscal ? `${short(r.latest.fiscal)}. ` : ""}Period ended ${day(r.latest.periodEnd, true)}; ${r.latest.form} filed ${day(r.latest.filed, true)}` : undefined}>
                       {r.latest ? (
                         <>
                           {short(r.latest.calendar)}
-                          {r.latest.fiscal && <span className="faint"> ({short(r.latest.fiscal)})</span>}
+                          {r.latest.fiscal && <span className="faint wide-only"> ({short(r.latest.fiscal)})</span>}
                         </>
                       ) : (
                         "—"
@@ -346,7 +348,7 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
                 ))}
                 <tr className="agg">
                   <td className="first">Peer median</td>
-                  <td className="faint">{rows.filter((r) => !r.isTarget && r.readable).length} readable peers</td>
+                  <td className="faint" title="Peers you can read, excluding the target">{rows.filter((r) => !r.isTarget && r.readable).length} readable</td>
                   {cols.map((k) => (
                     <td key={k} className="n" title={medianTitle(stats[k]!)}>
                       {statText(k, stats[k]!.median)}
@@ -356,18 +358,24 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
                   <td />
                 </tr>
                 <tr className="agg">
-                  <td className="first">High / low</td>
+                  <td className="first">High</td>
                   <td />
                   {cols.map((k) => (
-                    <td key={k} className="n">
-                      {stats[k]!.n ? `${statText(k, stats[k]!.high)} / ${statText(k, stats[k]!.low)}` : "—"}
-                    </td>
+                    <td key={k} className="n">{stats[k]!.n ? statText(k, stats[k]!.high) : "—"}</td>
+                  ))}
+                  <td />
+                </tr>
+                <tr className="agg">
+                  <td className="first">Low</td>
+                  <td />
+                  {cols.map((k) => (
+                    <td key={k} className="n">{stats[k]!.n ? statText(k, stats[k]!.low) : "—"}</td>
                   ))}
                   <td />
                 </tr>
               </tbody>
             </table>
-          </div>
+          </TableScroll>
         )}
         <div className="foot">
           USD. No valuation multiples: Tributary has no market prices. Each company's own latest

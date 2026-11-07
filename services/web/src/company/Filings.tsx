@@ -12,6 +12,7 @@ export type PinChange = (change: Change, section: ChangedSection) => ReactNode;
 import { eightKItems, filingHeadings, FORM_FILTERS, formsOf, formTag, parsedNote, type FormFilter } from "./data";
 import { Gate } from "./Tables";
 import { useLoad } from "./useLoad";
+import { TableScroll } from "../components/TableScroll";
 
 export const INDEX_PAGE = 25;
 
@@ -98,7 +99,7 @@ export function Filings({ token, companyId, name, canRead, initialDiff, fiscalYe
                 )}
               </p>
             ) : (
-              <div className="tw">
+              <TableScroll label="Filings">
                 <table className="t filings">
                   <thead>
                     <tr>
@@ -161,7 +162,7 @@ export function Filings({ token, companyId, name, canRead, initialDiff, fiscalYe
                     })}
                   </tbody>
                 </table>
-              </div>
+              </TableScroll>
             )
           }
         </Gate>

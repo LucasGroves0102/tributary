@@ -4,6 +4,7 @@ import { go, href } from "../route";
 import { useScope } from "../scope";
 import { Gate } from "./Tables";
 import { useLoad } from "./useLoad";
+import { TableScroll } from "../components/TableScroll";
 
 export const PEER_COLUMNS = ["revenue_ttm", "revenue_growth_ttm", "gross_margin_ttm", "operating_margin_ttm", "free_cash_flow_ttm", "net_debt_q"];
 const SIC_LEVEL: Record<number, string> = { 4: "same SIC", 3: "same 3-digit SIC group", 2: "same 2-digit SIC group" };
@@ -58,8 +59,8 @@ export function Peers({
               <a href={href({ view: "compare", compare: { target: companyId } })}>Compare</a>.
             </p>
           ) : (
-            <div className="tw">
-              <table className="t">
+            <TableScroll label="Peers">
+              <table className="t peers">
                 <thead>
                   <tr>
                     <th className="first">Company</th>
@@ -72,12 +73,19 @@ export function Peers({
                       );
                     })}
                     <th>FYE</th>
-                    <th>Why</th>
+                    <th className="why">Why</th>
                   </tr>
                 </thead>
                 <tbody>
                   {rows.map((r) => {
                     const m = match.get(r.companyId);
+                    const why = r.isTarget
+                      ? "this company"
+                      : m
+                        ? [SIC_LEVEL[m.sic_level] ?? "SIC", m.same_revenue_band && "same size band", m.same_filer_category && "same filer category"]
+                            .filter(Boolean)
+                            .join(", ")
+                        : "";
                     return (
                       <tr key={r.companyId} className={[r.isTarget ? "sel" : "", r.readable ? "" : "masked"].join(" ").trim() || undefined}>
                         <td className="first">
@@ -86,31 +94,25 @@ export function Peers({
                             {r.ticker && <span className="faint mono">{r.ticker}</span>}
                             {!r.readable && <span className="tag" title={MASKED_TITLE}>metadata only</span>}
                           </a>
+                          {why && <div className="co-sub faint small" title={why}>{why}</div>}
                         </td>
                         {PEER_COLUMNS.map((k) => {
                           const cell = r.cells[k]!;
+                          const tone = cell.value === null ? "faint" : k === "revenue_growth_ttm" ? (cell.value >= 0 ? "pos" : "neg") : "";
                           return (
-                            <td key={k} className={cell.value === null ? "n faint" : "n"} title={cell.title}>
+                            <td key={k} className={`n ${tone}`} title={cell.title}>
                               {cell.text}
                             </td>
                           );
                         })}
-                        <td className="muted">{r.fye ?? "—"}</td>
-                        <td className="muted">
-                          {r.isTarget
-                            ? "this company"
-                            : m
-                              ? [SIC_LEVEL[m.sic_level] ?? "SIC", m.same_revenue_band && "same size band", m.same_filer_category && "same filer category"]
-                                  .filter(Boolean)
-                                  .join(", ")
-                              : ""}
-                        </td>
+                        <td className="muted" title={r.fye ?? undefined}>{r.fye?.slice(0, 3) ?? "—"}</td>
+                        <td className="muted why">{why}</td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
-            </div>
+            </TableScroll>
           )
         }
       </Gate>

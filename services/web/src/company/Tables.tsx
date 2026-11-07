@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import type { ReactNode } from "react";
 
 import { financialsView, segments as fetchSegments } from "../api";
 import { download } from "../download";
@@ -21,6 +21,7 @@ import {
 import { go } from "../route";
 import type { StatementView } from "./statementView";
 import { ErrorPanel, Skeleton } from "../components/States";
+import { TableScroll } from "../components/TableScroll";
 import { useLoad, type Load } from "./useLoad";
 
 const PERIODS: [Period, string][] = [
@@ -72,14 +73,9 @@ function Cell({ cell, bank, label = "" }: { cell: TableCell | null; bank?: boole
 /** A metric × period table; every cell's hover names its filing and links to it. Columns run
  * oldest to newest, as statements read, so a wide one opens at its newest end. */
 export function MetricTableView({ table, first }: { table: MetricTable; first: string }) {
-  const wrap = useRef<HTMLDivElement>(null);
-  const columns = table.columns.length;
-  useEffect(() => {
-    if (wrap.current) wrap.current.scrollLeft = wrap.current.scrollWidth;
-  }, [columns]);
   return (
-    <div className="tw" ref={wrap}>
-      <table className="t">
+    <TableScroll atEnd resetKey={table.columns.length} label={first}>
+      <table className="t statement">
         <thead>
           <tr>
             <th className="first">{first}</th>
@@ -102,7 +98,7 @@ export function MetricTableView({ table, first }: { table: MetricTable; first: s
           ))}
         </tbody>
       </table>
-    </div>
+    </TableScroll>
   );
 }
 
@@ -228,8 +224,8 @@ export function Segments({ token, companyId, name }: { token: string; companyId:
                   <h2>{t.title}</h2>
                   <span className="sub">quarterly · USD · as reported in the filings' XBRL</span>
                 </div>
-                <div className="tw">
-                  <table className="t">
+                <TableScroll atEnd resetKey={t.columns.length} label={t.title}>
+                  <table className="t aligned">
                     <thead>
                       <tr>
                         <th className="first">Member</th>
@@ -255,7 +251,7 @@ export function Segments({ token, companyId, name }: { token: string; companyId:
                       ))}
                     </tbody>
                   </table>
-                </div>
+                </TableScroll>
               </section>
             ))}
             <div className="foot">

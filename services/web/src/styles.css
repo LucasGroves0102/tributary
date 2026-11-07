@@ -667,9 +667,51 @@ a.btn:hover {
   align-items: start;
 }
 
+/* Tables (components/TableScroll): one behaviour everywhere. `.first` is the frozen column, numeric
+   headers stack their label over their unit so a column is as wide as its numbers, and a table that
+   doesn't fit says so above itself and at its cut edge. */
+.tw-frame {
+  min-width: 0;
+}
+
+.tw-port {
+  position: relative;
+}
+
+.tw-port.more-r::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 28px;
+  pointer-events: none;
+  z-index: 3;
+  background: linear-gradient(to right, transparent, var(--panel));
+}
+
+.tw-cue {
+  display: flex;
+  gap: var(--sp-4);
+  padding: 2px var(--sp-6);
+  border-bottom: 1px solid var(--line);
+  font-size: var(--fs-xs);
+}
+
+.tw-cue button {
+  color: var(--accent);
+  font-size: inherit;
+}
+
 .tw {
   overflow: auto;
   max-width: 100%;
+  container: tw / inline-size;
+  scroll-padding-left: 180px;
+}
+
+.tw:focus-visible {
+  outline-offset: -2px;
 }
 
 table.t {
@@ -696,10 +738,28 @@ table.t {
   font-size: var(--fs-xs);
 }
 
+/* a right-aligned number under a right-aligned heading; a catalog column's long name wraps */
+.t th.n {
+  text-align: right;
+}
+
+.t th.n.long {
+  white-space: normal;
+  min-width: 92px;
+}
+
+.t th.n .unit {
+  display: block;
+}
+
 .t td {
   padding: 6px 10px;
   border-bottom: 1px solid var(--line);
   white-space: nowrap;
+}
+
+.t td.n {
+  font-size: var(--fs-base);
 }
 
 .t tr:last-child td {
@@ -716,6 +776,20 @@ table.t {
   left: 0;
   background: var(--panel);
   z-index: 1;
+}
+
+.t th.first {
+  z-index: 2;
+}
+
+/* frozen: a line while the table scrolls, a shadow once a column has gone under it */
+.tw-port.scrolls .t .first {
+  border-right: 1px solid var(--line);
+}
+
+.tw-port.more-l .t .first {
+  border-right-color: var(--line-2);
+  box-shadow: 8px 0 8px -7px var(--edge-shadow);
 }
 
 .t tbody tr:hover td.first {
@@ -2020,11 +2094,7 @@ button.chip:disabled {
 
 .t td.n a:hover {
   color: var(--accent);
-  text-decoration: none;
-}
-
-.t td.n a.btn {
-  border-bottom: 0;
+  text-decoration: underline;
 }
 
 .flags {
@@ -4207,6 +4277,7 @@ button.chip.on {
 }
 
 @media print {
+  .tw-cue,
   .step-rail,
   .project-head .tabs,
   .step-head .step-done,
@@ -4216,3 +4287,122 @@ button.chip.on {
     display: none !important;
   }
 }
+/* Tables at real widths: what gives way as a table narrows (components/TableScroll) */
+
+.t td.why {
+  white-space: normal;
+  min-width: 170px;
+}
+
+.t .first .co {
+  min-width: 0;
+}
+
+.t .first .co b {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.t.screen .first {
+  max-width: 250px;
+}
+
+.t.screen td.ind {
+  max-width: 190px;
+}
+
+.ind-in {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+
+.ind-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ind-in button {
+  flex: none;
+}
+
+.co-sub {
+  display: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* a statement's long row names wrap, and the room goes to the periods */
+.t.statement .first {
+  white-space: normal;
+  min-width: 150px;
+  max-width: 190px;
+}
+
+/* segment tables line their periods up from one table to the next */
+.t.aligned {
+  table-layout: fixed;
+  min-width: 760px;
+}
+
+.t.aligned .first {
+  width: 240px;
+  white-space: normal;
+}
+
+@container tw (max-width: 1040px) {
+  .t.screen .ind,
+  .t.peers .why {
+    display: none;
+  }
+
+  .t.peers .first {
+    max-width: 230px;
+  }
+
+  .co-sub {
+    display: block;
+  }
+
+  .t.screen .first {
+    max-width: 210px;
+  }
+
+  .wide-only {
+    display: none;
+  }
+}
+
+@container tw (max-width: 620px) {
+  .t .first,
+  .t.screen .first {
+    min-width: 96px;
+    max-width: 128px;
+    white-space: normal;
+  }
+
+  .t .first .co {
+    flex-wrap: wrap;
+    gap: 0 var(--sp-2);
+  }
+
+  .t .first .co b {
+    white-space: normal;
+  }
+
+  .co-sub {
+    display: none;
+  }
+
+  .t.aligned {
+    min-width: 620px;
+  }
+
+  .t.aligned .first {
+    width: 128px;
+  }
+}
+

@@ -9,6 +9,7 @@ import { EXPECTED_DAYS, RECENT_DAYS, type Workspace } from "../home/useWorkspace
 import { edgarOpen } from "../components/Sidebar";
 import { go, href } from "../route";
 import { defaultHome, type HomeCard, type HomeCardId } from "../views/model";
+import { TableScroll } from "../components/TableScroll";
 
 const FEED_ROWS = 10;
 
@@ -323,7 +324,7 @@ function WatchTable({ workspace, onAdd }: { workspace: Workspace; onAdd: () => v
     <>
       {error && <p className="empty error">{error}</p>}
       {notice}
-      <div className="tw">
+      <TableScroll label="Watchlist">
         <table className="t watchlist">
           <thead>
             <tr>
@@ -331,7 +332,7 @@ function WatchTable({ workspace, onAdd }: { workspace: Workspace; onAdd: () => v
               <th>Last filing</th>
               <th>Period</th>
               {workspace.columns.map((c) => (
-                <th key={c.key} className="n">
+                <th key={c.key} className={c.label.length > 14 ? "n long" : "n"}>
                   {c.label} <span className="unit">{c.period}</span>
                 </th>
               ))}
@@ -359,11 +360,11 @@ function WatchTable({ workspace, onAdd }: { workspace: Workspace; onAdd: () => v
                     <span className="faint">none on file</span>
                   )}
                 </td>
-                <td className="muted">
+                <td className="muted" title={r.last?.periodEnd ? `Period to ${day(r.last.periodEnd, true)}` : undefined}>
                   {r.last?.periodEnd ? (
                     <>
                       {r.last.fiscalPeriod ?? "Quarter"}{" "}
-                      <span className="faint">(to {day(r.last.periodEnd, true)})</span>
+                      <span className="faint wide-only">(to {day(r.last.periodEnd, true)})</span>
                     </>
                   ) : (
                     "—"
@@ -410,7 +411,7 @@ function WatchTable({ workspace, onAdd }: { workspace: Workspace; onAdd: () => v
             ))}
           </tbody>
         </table>
-      </div>
+      </TableScroll>
     </>
   );
 }
@@ -475,7 +476,7 @@ function ExpectedTable({ expected }: { expected: ExpectedItem[] | null }) {
     );
   }
   return (
-    <div className="tw">
+    <TableScroll label="Expected filings">
       <table className="t">
         <thead>
           <tr>
@@ -506,6 +507,6 @@ function ExpectedTable({ expected }: { expected: ExpectedItem[] | null }) {
           ))}
         </tbody>
       </table>
-    </div>
+    </TableScroll>
   );
 }

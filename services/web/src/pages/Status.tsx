@@ -5,6 +5,7 @@ import { CHECKS } from "../companies/screen";
 import { ago, day } from "../format";
 import { href } from "../route";
 import type { DataStatus, RecordedRun } from "../types";
+import { TableScroll } from "../components/TableScroll";
 
 const REPO = "https://github.com/LucasGroves0102/tributary";
 
@@ -230,7 +231,7 @@ function Quality({ data, when, signedIn }: { data: DataStatus; when: (iso: strin
             : "no check has run yet"}
         </span>
       </div>
-      <div className="tw">
+      <TableScroll label="Data-quality checks">
         <table className="t">
           <thead>
             <tr>
@@ -263,7 +264,7 @@ function Quality({ data, when, signedIn }: { data: DataStatus; when: (iso: strin
             ))}
           </tbody>
         </table>
-      </div>
+      </TableScroll>
       <p className="foot">
         A company is checked whenever its figures change, so its own last check can be days old while the latest run
         is minutes old. {noSeries > 0 && `${count(q.companies_checked)} companies have XBRL figures to check; ${count(noSeries)} of them have no quarterly series, which is why ${count(withSeries)} show as having quarterly financials. `}

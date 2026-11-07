@@ -10,6 +10,7 @@ import { keyStats, recapAccession, recapRows } from "./data";
 import { ErrorPanel, sentence, Skeleton } from "../components/States";
 import { Gate } from "./Tables";
 import { useLoad } from "./useLoad";
+import { TableScroll } from "../components/TableScroll";
 
 const EXCERPT_CHARS = 1500;
 
@@ -82,7 +83,7 @@ function Recap({ token, companyId, name, accession, canFin }: { token: string; c
         <Gate load={load} name={name} what="Financials">
           {() => (
             <>
-              <div className="tw">
+              <TableScroll label="Latest quarter">
                 <table className="t">
                   <thead>
                     <tr>
@@ -107,7 +108,7 @@ function Recap({ token, companyId, name, accession, canFin }: { token: string; c
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </TableScroll>
               {data!.flags && data!.flags.length > 0 && (
                 <div className="card-b">
                   <b>Flagged in the filing text</b>

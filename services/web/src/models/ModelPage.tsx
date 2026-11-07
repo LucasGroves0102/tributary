@@ -31,6 +31,7 @@ import {
 } from "./model";
 import { HistoryState, ModelView } from "./ModelView";
 import { useHistory } from "./useHistory";
+import { TableScroll } from "../components/TableScroll";
 
 interface Props {
   token: string;
@@ -295,7 +296,7 @@ function ModelEditor({ token, item, initial, saved, label, embedded = false, act
                 <button className="link" onClick={removeCases}>Remove bear and bull</button>
               </p>
             )}
-            <div className="tw">
+            <TableScroll label="Assumptions">
               <table className="t assumptions">
                 <caption className="visually-hidden">Assumptions per forecast year, {caseLabel} case</caption>
                 <thead>
@@ -345,7 +346,7 @@ function ModelEditor({ token, item, initial, saved, label, embedded = false, act
                   })}
                 </tbody>
               </table>
-            </div>
+            </TableScroll>
           </>
         )}
       </section>

@@ -27,6 +27,7 @@ import {
 } from "./revenue";
 import { Gate } from "./Tables";
 import { useLoad } from "./useLoad";
+import { TableScroll } from "../components/TableScroll";
 
 interface Props {
   token: string;
@@ -148,7 +149,7 @@ function AxisBlock({ t, view, token, companyId, ticker, saved, onOpenChart, labe
       <h3>{AXIS_TITLES[t.axis]}</h3>
       <ChartView token={token} chart={chart} name={chart.title} label={label} hasTtm={everyMetric} />
       <ChartActions chart={chart} saved={saved} onOpenChart={onOpenChart} />
-      <div className="tw">
+      <TableScroll label="Revenue by member">
         <table className="t">
           <thead>
             <tr>
@@ -181,7 +182,7 @@ function AxisBlock({ t, view, token, companyId, ticker, saved, onOpenChart, labe
             </tr>
           </tbody>
         </table>
-      </div>
+      </TableScroll>
       {off.length > 0 && (
         <p className="small muted">
           In {off.length} of {t.coverage.length} periods these members don't add up to reported revenue: the breakdown
@@ -221,7 +222,7 @@ function Decomposition({ rows, totals, ...c }: Common & { rows: SegmentRow[]; to
         <>
           <ChartView token={c.token} chart={chart} name={chart.title} label={c.label} hasTtm={everyMetric} />
           <ChartActions chart={chart} saved={c.saved} onOpenChart={c.onOpenChart} />
-          <div className="tw">
+          <TableScroll label="Growth decomposition">
             <table className="t decomposition">
               <thead>
                 <tr>
@@ -252,7 +253,7 @@ function Decomposition({ rows, totals, ...c }: Common & { rows: SegmentRow[]; to
                 </tr>
               </tbody>
             </table>
-          </div>
+          </TableScroll>
           <div className="foot">
             A member's contribution = its TTM revenue change over four quarters / the company's TTM revenue four quarters
             earlier, over members reporting both periods. They add up to revenue growth only when the members cover revenue;
@@ -285,7 +286,7 @@ function Quality({ rows, ...c }: Common & { rows: FinancialRow[] }) {
               ⚠ Receivables grew more than {QUALITY_FLAG_POINTS} points faster than revenue in {flagged} of the last {q.length} quarters
             </p>
           )}
-          <div className="tw">
+          <TableScroll label="Revenue quality">
             <table className="t quality">
               <thead>
                 <tr>
@@ -314,7 +315,7 @@ function Quality({ rows, ...c }: Common & { rows: FinancialRow[] }) {
                 ))}
               </tbody>
             </table>
-          </div>
+          </TableScroll>
           <div className="foot">
             DSO = receivables at the quarter end / TTM revenue × 365. A quarter is flagged when receivables grew more than
             {" "}{QUALITY_FLAG_POINTS} percentage points faster than TTM revenue over the same four quarters: sales booked faster

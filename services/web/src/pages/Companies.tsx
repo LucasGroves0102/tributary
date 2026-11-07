@@ -28,6 +28,7 @@ import { go, href } from "../route";
 import { useScope } from "../scope";
 import type { Screener } from "../types";
 import type { ColumnSpec } from "../views/model";
+import { TableScroll } from "../components/TableScroll";
 
 interface Props {
   token: string;
@@ -403,20 +404,19 @@ function Table({
   return (
     <>
       {error && <p className="empty error">{error}</p>}
-      <div className="tw">
+      <TableScroll label="Screener results">
         <table className="t screen">
           <thead>
             <tr>
               <th className="first sort" {...th("name", false)}>Company{arrow("name")}</th>
-              <th className="sort" {...th("sic", false)}>Industry (SIC){arrow("sic")}</th>
+              <th className="ind sort" {...th("sic", false)}>Industry (SIC){arrow("sic")}</th>
               {columns.map((c) =>
                 sortable(c.key) ? (
-                  <th key={c.key} className="n sort" {...th(c.key, true)}>
-                    {c.label} <span className="unit">{c.period}</span>
-                    {arrow(c.key)}
+                  <th key={c.key} className={c.label.length > 14 ? "n long sort" : "n sort"} {...th(c.key, true)}>
+                    {c.label}{arrow(c.key)} <span className="unit">{c.period}</span>
                   </th>
                 ) : (
-                  <th key={c.key} className="n" title={c.long}>
+                  <th key={c.key} className={c.label.length > 14 ? "n long" : "n"} title={c.long}>
                     {c.label} <span className="unit">{c.period}</span>
                   </th>
                 ),
@@ -442,18 +442,21 @@ function Table({
                         <span className="tag" title={MASKED_TITLE}>metadata only</span>
                       )}
                     </a>
+                    {r.industry && <div className="co-sub faint small" title={r.industry}>{r.industry}</div>}
                   </td>
-                  <td className="muted">
-                    {r.industry ?? "—"}{" "}
-                    {r.sic && (
-                      <button className="link faint mono" title={`Only SIC ${r.sic}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onSic(r.sic!);
-                        }}>
-                        {r.sic}
-                      </button>
-                    )}
+                  <td className="muted ind" title={r.industry ?? undefined}>
+                    <span className="ind-in">
+                      <span className="ind-name">{r.industry ?? "—"}</span>
+                      {r.sic && (
+                        <button className="link faint mono" title={`Only SIC ${r.sic}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onSic(r.sic!);
+                          }}>
+                          {r.sic}
+                        </button>
+                      )}
+                    </span>
                   </td>
                   {columns.map((c) => {
                     const cell = r.cells[c.key]!;
@@ -468,7 +471,7 @@ function Table({
                       </td>
                     );
                   })}
-                  <td className="muted">{r.fye ?? "—"}</td>
+                  <td className="muted" title={r.fye ?? undefined}>{r.fye?.slice(0, 3) ?? "—"}</td>
                   <td className="n actions" onClick={(e) => e.stopPropagation()}>
                     {r.readable && onChart && (
                       <button className="btn sm ghost" onClick={() => onChart(r.companyId, r.name)}
@@ -493,7 +496,7 @@ function Table({
             })}
           </tbody>
         </table>
-      </div>
+      </TableScroll>
     </>
   );
 }

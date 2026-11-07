@@ -142,7 +142,7 @@ it("puts the peer median, without the target, under the table", async () => {
   const median = rows().find((r) => r.textContent?.startsWith("Peer median"))!;
   // only AAPL: TSLA is ungranted and NVDA is the target
   expect([...median.querySelectorAll("td.n")].map((td) => td.textContent)).toEqual(["$400.00B", "30.0%", "-2.0%"]);
-  expect(median.textContent).toContain("1 readable peers");
+  expect(median.textContent).toContain("1 readable");
   expect($(".foot")?.textContent).toContain("1 company shows metadata only");
 });
 
