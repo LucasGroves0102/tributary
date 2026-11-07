@@ -606,6 +606,29 @@ it("switches theme and remembers it per user", async () => {
   expect(window.localStorage.getItem("tributary.theme.alice")).toBe("light");
 });
 
+describe("the sidebar", () => {
+  it("keeps the logo and screens fixed, the lists scrolling and the footer whole", async () => {
+    await render();
+    const part = (s: string) => $(`.side > ${s}`)!;
+    expect(part(".side-top").querySelector("nav.nav")).not.toBeNull();
+    expect(part(".side-top").querySelector(".brand")).not.toBeNull();
+    expect(part(".side-lists").querySelector(".wl")).not.toBeNull();
+    expect(part(".side-foot").querySelector(".fresh")).not.toBeNull();
+    expect(part(".side-foot").querySelector(".cover-link")).not.toBeNull();
+    // nothing outside those three: nothing else scrolls with the lists
+    expect($(".side")!.children.length).toBe(3);
+  });
+
+  it("opens at the top of its lists, wherever they were left", async () => {
+    await render();
+    const lists = $(".side-lists")!;
+    lists.scrollTop = 400;
+    expect(lists.scrollTop).toBe(400);
+    await act(async () => $('button[aria-label="Menu"]')!.click());
+    expect(lists.scrollTop).toBe(0);
+  });
+});
+
 describe("narrow screens", () => {
   it("open the sidebar as a drawer from Menu; Escape, the scrim or a link close it", async () => {
     await render();

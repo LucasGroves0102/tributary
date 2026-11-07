@@ -331,9 +331,39 @@ a.btn:hover {
   height: 100vh;
   display: flex;
   flex-direction: column;
-  gap: 1px;
-  overflow-y: auto;
+  overflow: hidden;
   font-size: 12px;
+}
+
+.side-top {
+  flex: none;
+  padding: 10px 8px 6px;
+  border-bottom: 1px solid var(--line);
+}
+
+.side-lists {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 2px 8px 8px;
+}
+
+.side-foot {
+  flex: none;
+  padding: 6px 8px 8px;
+  border-top: 1px solid var(--line);
+}
+
+.side-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px var(--sp-5);
+  padding: 4px 6px 0;
+}
+
+.side .side-links .cover-link,
+.side .side-links .cover-link.link {
+  padding: 0;
 }
 
 .brand {
@@ -514,6 +544,15 @@ a.btn:hover {
   font-size: 11px;
   color: var(--text-3);
   line-height: 1.5;
+}
+
+.side .fresh summary {
+  cursor: pointer;
+  color: var(--text-2);
+}
+
+.side-signout {
+  margin: 4px 6px 0;
 }
 
 /* Top bar */
@@ -4443,6 +4482,42 @@ button.chip.on {
 
   .lchart-bar .faint {
     display: none;
+  }
+}
+
+/* A phone: nothing in the bar is cut; the crumb goes because each page has its heading, and Sign out
+   moves to the menu (Sidebar). */
+@container main (max-width: 560px) {
+  .top {
+    padding: 0 var(--sp-4);
+    gap: var(--sp-3);
+  }
+
+  .top .crumb,
+  .top .who {
+    display: none;
+  }
+
+  .top .btn {
+    flex: none;
+  }
+
+  .search-box {
+    padding: 5px 8px;
+  }
+}
+
+.page-bar {
+  flex-wrap: wrap;
+}
+
+.side-signout {
+  display: none;
+}
+
+@media (max-width: 600px) {
+  .side-signout {
+    display: inline-block;
   }
 }
 

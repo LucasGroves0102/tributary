@@ -584,6 +584,7 @@ export function App(props: Props = {}) {
           connections={market?.enabled ?? false}
           sandboxResetsIn={session?.kind === "sandbox" ? resetsIn(session.expiresAt, clock) : null}
           workspaces={token ? <WorkspaceTree saved={saved} onOpen={openSaved} onError={setError} /> : null}
+          onSignOut={(session?.kind === "github" || session?.kind === "account") ? () => signOut(null) : undefined}
         />
         {navOpen && <div className="scrim" aria-hidden="true" onClick={() => setNavOpen(false)} />}
         <div className="main">
