@@ -219,5 +219,5 @@ it("opening a report from the sidebar goes to its page", async () => {
   const open = [...container.querySelectorAll<HTMLButtonElement>(".side .ws-row.it .ws-open")].find((b) => b.textContent?.includes("Report: Semis"))!;
   await click(open);
   expect(window.location.hash).toBe("#/report/r1");
-  expect(container.querySelector<HTMLAnchorElement>('a[aria-label^="Open workspace Semis"]')?.getAttribute("href")).toBe("#/workspace/w1");
+  expect(container.querySelector<HTMLAnchorElement>(".side .ws-row.fd a.ws-open")?.getAttribute("href")).toBe("#/workspace/w1");
 });

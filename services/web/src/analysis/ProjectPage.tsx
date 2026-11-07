@@ -19,6 +19,7 @@ import { useNewerFiling } from "../thesis/useRevisit";
 import { useThesisCheck } from "../thesis/useThesisCheck";
 import { embedMarker } from "../thesis/model";
 import type { ProjectState, ProjectStep, SavedWorkspaceFull, ScreenerRow } from "../types";
+import { WorkspaceActions } from "../workspaces/Actions";
 import type { Saved } from "../workspaces/useSaved";
 import type { ThesisHandle, ThesisStatus } from "./bridge";
 import { PinButton, PinContext, type Pinning } from "./Pin";
@@ -303,6 +304,7 @@ function Project({ token, user, projectId, step: asked, itemId, saved, readable,
               <span className="small muted">{doneCount} of {STEPS.length} steps done</span>
               <span className="bar" aria-hidden="true"><span className={`fill f${doneCount}`} /></span>
               <a className="btn sm ghost" href={href({ view: "company", companyId })}>Company page</a>
+              <WorkspaceActions workspace={ws} saved={saved} what="analysis" onDeleted={() => go({ view: "analysis" })} />
             </div>
           </div>
           <nav className="tabs" aria-label="Project">

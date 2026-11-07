@@ -3,8 +3,9 @@ import { useEffect, useState } from "react";
 import { ApiError, failureReason, workspace as fetchWorkspace } from "../api";
 import { leftText, useAllowanceContext } from "../assistant/useAllowance";
 import { ErrorPanel, Skeleton } from "../components/States";
+import { ItemActions, WorkspaceActions } from "../workspaces/Actions";
 import { ago, day } from "../format";
-import { href } from "../route";
+import { go, href } from "../route";
 import { useNewerFilings } from "../thesis/useRevisit";
 import type { SavedWorkspaceFull } from "../types";
 import { isPageKind, KIND_LABELS, KIND_PAGES } from "../workspaces/model";
@@ -79,8 +80,10 @@ export function WorkspacePage({ token, workspaceId, writer, onOpen, version, sav
 
   return (
     <div className="page">
-      <div className="row wrap">
-        <h1 className="grow">{ws.name}</h1>
+      <div className="row wrap page-bar">
+        <h1>{ws.name}</h1>
+        {saved && <WorkspaceActions workspace={ws} saved={saved} onDeleted={() => go({ view: "home" })} />}
+        <span className="grow" />
         {saved && <NewWork token={token} saved={saved} workspaceId={workspaceId} />}
         <button
           className="btn primary"
@@ -120,6 +123,7 @@ export function WorkspacePage({ token, workspaceId, writer, onOpen, version, sav
                   <b>{i.name}</b>
                 </button>{" "}
                 <span className="faint">updated {ago(i.updated_at)}</span>
+                {saved && <ItemActions item={i} saved={saved} />}
                 {newer[i.item_id] && (
                   <>
                     {" "}
@@ -154,6 +158,7 @@ export function WorkspacePage({ token, workspaceId, writer, onOpen, version, sav
                   <b>{r.name}</b>
                 </button>{" "}
                 <span className="faint">updated {ago(r.updated_at)}</span>
+                {saved && <ItemActions item={r} saved={saved} />}
               </li>
             ))}
           </ul>
@@ -175,6 +180,7 @@ export function WorkspacePage({ token, workspaceId, writer, onOpen, version, sav
                 <button className="link" onClick={() => onOpen(i.item_id)} title={`Open in ${KIND_PAGES[i.kind]}`}>
                   <b>{i.name}</b>
                 </button>
+                {saved && <ItemActions item={i} saved={saved} />}
               </li>
             ))}
           </ul>

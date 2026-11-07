@@ -2516,7 +2516,91 @@ mark {
 }
 
 .side .ws-row.it .ws-open {
-  padding-left: 18px;
+  padding-left: 16px;
+}
+
+.side .ws-row.fd .ws-open {
+  padding-left: 0;
+  color: var(--text);
+}
+
+.side .ws-row.fd a.ws-open:hover {
+  text-decoration: none;
+}
+
+.side .ws-fold {
+  flex: none;
+  width: 18px;
+  border: 0;
+  background: none;
+  padding: 3px 0;
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+
+/* over the row's edge, not beside its name: a name keeps its room when the row is hovered */
+.side .ws-dots {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 0 5px 5px 0;
+  padding: 0;
+  background: var(--panel-2);
+  color: var(--text-2);
+  cursor: pointer;
+  opacity: 0;
+}
+
+.side .ws-row.on .ws-dots {
+  background: var(--accent-soft);
+}
+
+.side .ws-row:hover .ws-dots,
+.side .ws-row:focus-within .ws-dots,
+.side .ws-dots[aria-expanded="true"] {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .side .ws-dots {
+    opacity: 1;
+    background: transparent;
+  }
+
+  .side .ws-open {
+    padding-right: 26px;
+  }
+}
+
+.side .ws-dots:hover {
+  color: var(--accent);
+}
+
+.side .ws-menu {
+  display: flex;
+  gap: var(--sp-2);
+  padding: 2px 4px 4px 18px;
+}
+
+.side .ws-menu button {
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  padding: 1px 6px;
+  color: var(--text-2);
+  font-size: var(--fs-xs);
+  cursor: pointer;
+}
+
+.side .ws-menu button:hover {
+  color: var(--accent);
 }
 
 .side .ws-row.fd .ws-open {
@@ -2535,29 +2619,6 @@ mark {
   padding: 0 4px;
 }
 
-.side .ws .acts {
-  display: none;
-  gap: 1px;
-  padding-right: 4px;
-}
-
-.side .ws-row:hover .acts,
-.side .ws-row:focus-within .acts {
-  display: flex;
-}
-
-.side .ws .acts button {
-  border: 0;
-  background: none;
-  color: var(--text-3);
-  padding: 0 3px;
-  cursor: pointer;
-}
-
-.side .ws .acts button:hover {
-  color: var(--accent);
-}
-
 .side .ws-edit {
   padding: 2px 6px;
 }
@@ -2566,7 +2627,51 @@ mark {
   width: 100%;
 }
 
-.side .ws-confirm {
+/* "Delete this?": components/Actions ConfirmDelete, over the whole screen */
+.ws-confirm {
+  width: min(420px, 100%);
+  padding: var(--sp-7) var(--sp-8);
+  box-shadow: var(--popover-shadow);
+}
+
+.ws-confirm p {
+  margin: 0 0 var(--sp-3);
+}
+
+.ws-confirm .row {
+  margin-top: var(--sp-6);
+}
+
+.btn.danger {
+  background: var(--neg-soft);
+  border-color: var(--neg);
+  color: var(--neg);
+}
+
+.btn.danger:hover:not(:disabled) {
+  background: var(--neg-soft);
+  filter: brightness(1.1);
+}
+
+.ws-actions {
+  gap: var(--sp-2);
+}
+
+.ws-actions .ws-edit input,
+.ws-item-acts .ws-edit input {
+  width: 240px;
+  max-width: 100%;
+}
+
+.ws-item-acts {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.ws-list li {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -3216,16 +3321,6 @@ button.link.num {
   padding: var(--sp-4) var(--sp-6);
   display: grid;
   gap: var(--sp-3);
-}
-
-.side .ws-row .acts a {
-  color: var(--text-3);
-  text-decoration: none;
-  padding: 0 var(--sp-1);
-}
-
-.side .ws-row .acts a:hover {
-  color: var(--text);
 }
 
 .report-status {
@@ -4287,7 +4382,38 @@ button.chip.on {
   }
 
   .project-progress {
-    justify-items: start;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-3) var(--sp-5);
+    width: 100%;
+  }
+
+  .project-progress .ws-actions {
+    justify-content: flex-start;
+  }
+
+  .project-head .co-head > .grow {
+    flex-basis: 100%;
+  }
+}
+
+@container main (max-width: 560px) {
+  .step-rail a:not([aria-current="step"]) .grow {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .step-rail a {
+    padding: 3px;
+  }
+
+  .step-rail a[aria-current="step"] {
+    padding-right: 8px;
   }
 }
 
