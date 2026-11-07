@@ -2,7 +2,7 @@ import { act, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { LayerChart } from "./LayerChart";
+import { DataTable, LayerChart } from "./LayerChart";
 import { chartSize, footnoteLines, layout, titleLines, WIDTH, wrapToWidth } from "./layout";
 import { formatValue } from "./metrics";
 import type { Series } from "./series";
@@ -75,6 +75,27 @@ describe("axes and bars", () => {
     const xs = lay.xLabels.map((l) => l.x);
     expect(xs.at(-1)! - xs.at(-2)!).toBeGreaterThanOrEqual(60);
     expect(lay.xLabels.at(-1)!.label).toBe("FY2027 Q1");
+  });
+});
+
+describe("LayerChart's table", () => {
+  it("says quarter or year, and lists the periods the axis has", async () => {
+    const yearly: Series = { ...series(), points: [
+      { key: 8067, period: "FY2016", periodEnd: "2016-12-31", y: 1, raw: "1", sources: [] },
+      { key: 8075, period: "FY2018", periodEnd: "2018-12-31", y: 2, raw: "2", sources: [] },
+    ] };
+    const container = document.createElement("div");
+    document.body.append(container);
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    const root = createRoot(container);
+    await act(async () => root.render(<DataTable series={[yearly]} title="FCF" />));
+    expect(container.querySelector("caption")?.textContent).toBe("FCF: values by year, newest first");
+    expect([...container.querySelectorAll("tbody th")].map((t) => t.textContent)).toEqual(["FY2018", "FY2017", "FY2016"]);
+    expect([...container.querySelectorAll("tbody td")].map((t) => t.textContent)[1]).toBe("—");
+    await act(async () => root.render(<DataTable series={[series()]} title="Revenue" />));
+    expect(container.querySelector("caption")?.textContent).toBe("Revenue: values by quarter, newest first");
+    act(() => root.unmount());
+    container.remove();
   });
 });
 

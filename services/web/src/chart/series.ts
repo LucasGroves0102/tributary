@@ -2,7 +2,9 @@
  * decimals stay strings (`raw`) for the CSV; `y` is the parsed number for drawing. */
 
 import type { FinancialRow, FormulaSeries } from "../types";
-import type { Axis, LayerType, Transform } from "./model";
+import type { Axis, Display, LayerType, Transform } from "./model";
+
+export type { Axis };
 
 export interface Source {
   form: string;
@@ -28,7 +30,9 @@ export interface Point {
 export interface Series {
   id: number;
   name: string;
-  /** API unit (USD, ratio, USD/shares, ...), "pct" for YoY, "index" for indexed */
+  /** API unit (USD, USD/shares, ...); a dimensionless one as it reads: "ratio" a percent,
+   * "multiple" or "number" (the API's `display` or the layer's own); "pct" for a change, "pts" for
+   * points of growth, "index" for indexed */
   unit: string;
   color: number;
   type: LayerType;
@@ -38,6 +42,8 @@ export interface Series {
   dashed?: boolean;
   /** drawn lighter and thinner: a model's bear / bull case beside its base case */
   faint?: boolean;
+  /** something to say about this series under the chart (chart/notes.ts) */
+  note?: string;
 }
 
 export const COLORS = 8;
@@ -52,7 +58,7 @@ export function annualPoints(points: Point[]): Point[] {
 
 export function toSeries(
   data: FormulaSeries,
-  layer: { id: number; transform: Transform; type: LayerType; axis: Axis },
+  layer: { id: number; transform: Transform; type: LayerType; axis: Axis; display?: Display },
   name: string,
   color: number,
   frequency: "quarterly" | "annual" = "quarterly",
@@ -81,7 +87,11 @@ export function toSeries(
     };
   });
   if (frequency === "annual") points = annualPoints(points);
-  let unit = layer.transform === "yoy" || layer.transform === "qoq" || layer.transform === "contrib" ? "pct" : data.unit;
+  let unit = layer.transform === "yoy" || layer.transform === "qoq" ? "pct"
+    : layer.transform === "contrib" ? "pts"
+    : data.unit === "ratio" ? readsAs(layer.display ?? data.display)
+    : data.unit;
+  let note: string | undefined;
   if (layer.transform === "idx") {
     // index to the first value in range; meaningless from zero or a negative base
     const base = points.find((p) => p.y !== null)?.y ?? null;
@@ -90,20 +100,53 @@ export function toSeries(
       return { ...p, y, raw: y === null ? "" : String(Number(y.toPrecision(10))) };
     });
     unit = "index";
+    if (base !== null && base <= 0) note = `${name} can't be indexed: its first value in this range is zero or negative.`;
+    else if (points.some((p) => p.y !== null && p.y < 0)) note = `${name} is below 0 where the value itself is negative: read those periods as losses, not as an index.`;
   }
-  return { id: layer.id, name, unit, color: color % COLORS, type: layer.type, axis: layer.axis, points };
+  return { id: layer.id, name, unit, color: color % COLORS, type: layer.type, axis: layer.axis, points, ...(note ? { note } : {}) };
+}
+
+/** The unit a dimensionless value reads in (an API without `display` meant a percent). */
+function readsAs(display: Display | null | undefined): string {
+  return display === "multiple" ? "multiple" : display === "number" ? "number" : "ratio";
 }
 
 export interface Tick {
   key: number;
   period: string;
+  /** on the axis only because periods either side are: no series has it */
+  gap?: boolean;
 }
 
-/** Every quarter any series has, oldest first, labelled by the first series that has it. */
+const LABEL = /^(FY|CY)(\d{4})(?: Q([1-4]))?$/;
+/** far past any real chart: a key that isn't a period doesn't fill an axis with thousands of ticks */
+const MOST_TICKS = 400;
+
+/** Every period from the first any series has to the last, oldest first, labelled by the first
+ * series that has it. A period none of them has is still on the axis (`gap`), named like its
+ * neighbours: a missing year or quarter shows as a hole, it doesn't close up. Annual series tick
+ * every fourth key (annualPoints keeps the Q4s). Keys that aren't quarters since year 0 (a model's
+ * fiscal years, its FY2027E) aren't periods to fill. */
 export function xAxis(series: Series[]): Tick[] {
   const out = new Map<number, string>();
   for (const s of series) for (const p of s.points) if (!out.has(p.key)) out.set(p.key, p.period);
-  return [...out.entries()].sort((a, b) => a[0] - b[0]).map(([key, period]) => ({ key, period }));
+  const known = [...out.entries()].sort((a, b) => a[0] - b[0]).map(([key, period]): Tick => ({ key, period }));
+  const parsed = known.map((t) => LABEL.exec(t.period));
+  const annual = parsed.every((m) => m && !m[3]);
+  const periods = parsed.every((m, i) => m && Number(m[2]) * 4 + (m[3] ? Number(m[3]) - 1 : 3) === known[i]!.key);
+  if (known.length < 2 || !periods) return known;
+  const step = annual ? 4 : 1;
+  if ((known.at(-1)!.key - known[0]!.key) / step > MOST_TICKS) return known;
+  const ticks: Tick[] = [];
+  for (let i = 0; i < known.length; i++) {
+    ticks.push(known[i]!);
+    const prefix = parsed[i]![1]!;
+    for (let key = known[i]!.key + step; i + 1 < known.length && key < known[i + 1]!.key; key += step) {
+      const year = Math.floor(key / 4);
+      ticks.push({ key, period: annual ? `${prefix}${year}` : `${prefix}${year} Q${(key % 4) + 1}`, gap: true });
+    }
+  }
+  return ticks;
 }
 
 export function pointAt(s: Series, key: number): Point | undefined {

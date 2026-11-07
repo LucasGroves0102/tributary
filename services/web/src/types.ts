@@ -743,7 +743,7 @@ export interface FormulaInput {
 }
 
 export type FormulaValidation =
-  | { valid: true; unit: string; alignment: "fiscal" | "calendar"; inputs: FormulaInput[] }
+  | { valid: true; unit: string; display?: "percent" | "multiple" | "number" | null; alignment: "fiscal" | "calendar"; inputs: FormulaInput[] }
   | { valid: false; errors: FormulaProblem[] };
 
 export interface FormulaPoint {
@@ -774,6 +774,9 @@ export interface FormulaPoint {
 export interface FormulaSeries {
   formula: string;
   unit: string;
+  /** how a dimensionless result reads (query-api formula/check.py); null with a unit, missing
+   * from an older API */
+  display?: "percent" | "multiple" | "number" | null;
   basis: "fiscal" | "calendar";
   view: "quarter" | "ttm";
   alignment: "fiscal" | "calendar";

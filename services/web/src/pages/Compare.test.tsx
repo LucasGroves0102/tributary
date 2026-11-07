@@ -193,7 +193,7 @@ it("exports the table as CSV and charts the readable companies", async () => {
     select.dispatchEvent(new Event("change", { bubbles: true }));
   });
   await click([...container.querySelectorAll("button")].find((b) => b.textContent === "Chart these"));
-  expect(onChart).toHaveBeenCalledWith([NVDA, AAPL], "operating_margin", "ttm", "Operating margin, TTM");
+  expect(onChart).toHaveBeenCalledWith([NVDA, AAPL], "operating_margin", "ttm");
 });
 
 it("toggles columns and starts empty with a hint", async () => {
@@ -246,6 +246,16 @@ it("side by side: one small chart per column, a line per readable company, on de
     expect([...c.querySelectorAll(".ch-legend g")].map((g) => [g.getAttribute("class"), g.textContent])).toEqual([["c0", "NVDA"], ["c1", "AAPL"]]);
   }
   expect(charts[0]!.querySelector("svg")!.getAttribute("viewBox")).toBe("0 0 460 294"); // narrow and short: the text stays legible
+  // the dollar charts can read on a log scale or indexed; the percents stay as they are
+  const scale = (name: string) => [...container.querySelectorAll<HTMLButtonElement>('[aria-label="Dollar charts\' scale"] button')].find((b) => b.textContent === name)!;
+  expect(scale("Dollars").getAttribute("aria-pressed")).toBe("true");
+  await click(scale("Indexed"));
+  expect(container.querySelectorAll(".multiple")[0]!.querySelector(".ch-title")?.textContent).toBe("Revenue, TTM, indexed");
+  expect(container.querySelectorAll(".multiple")[1]!.querySelector(".ch-title")?.textContent).toBe("Operating margin, TTM");
+  expect(evaluated).toHaveLength(6); // nothing asked again: indexing is the same answers
+  await click(scale("Log scale"));
+  expect([...container.querySelectorAll(".multiple")[0]!.querySelectorAll(".ch-unit")].map((u) => u.textContent)).toEqual(["USD, log scale"]);
+  expect([...container.querySelectorAll(".multiple")[0]!.querySelectorAll(".ch-foot")].map((f) => f.textContent).join(" ")).toContain("Log scale: zero and negative values aren't drawn");
   await click([...container.querySelectorAll("button")].find((b) => b.textContent === "Hide charts"));
   expect(container.querySelector(".multiple")).toBeNull();
 });

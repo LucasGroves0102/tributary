@@ -68,9 +68,9 @@ describe("segmentSeries", () => {
     expect(s.points.map((p) => [p.period, Number(p.value)])).toEqual([["FY2027 Q2", (7922000000 - 5412000000) / 50000000000]]);
     // without a total that period: no point
     expect(segmentSeries(req({ members: [GR], transform: "contrib" }), ROWS, []).points).toEqual([]);
-    // as a chart series: percent change units
+    // as a chart series: points of growth, on the same scale as a percent
     const series = toSeries(s, { id: 1, transform: "contrib", type: "sbar", axis: "L" }, "Graphics", 0);
-    expect(series.unit).toBe("pct");
+    expect(series.unit).toBe("pts");
   });
 
   it("keeps the range and the basis's labels", () => {

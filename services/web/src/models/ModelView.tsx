@@ -71,6 +71,7 @@ export function ModelView({
         ]}
         svgRef={svg}
         onOpen={open}
+        notes={false}
       />
       <TableScroll label="The model">
         <table className="t model-table">

@@ -5,9 +5,10 @@ import { failureReason } from "../api";
 import { cached, remember } from "../chart/cache";
 import { fetchLayer } from "../chart/fetch";
 import { autoSubtitle, methodNote, sourceFootnote } from "../chart/deck";
+import { drawnIds } from "../chart/axes";
 import { LayerChart } from "../chart/LayerChart";
 import { metricLabel } from "../chart/metrics";
-import { basis, frequencyOf, layerColor, layerKey, layerName, type ChartState, type TtmCatalog } from "../chart/model";
+import { basis, frequencyOf, layerColor, layerKey, layerName, type ChartState, type TtmCatalog, chartTitle, rangeDates } from "../chart/model";
 import { toSeries, type Series, type Source } from "../chart/series";
 import { BAND_LABELS, FILER_LABELS } from "../companies/screen";
 import { SmallMultiples } from "../compare/SmallMultiples";
@@ -85,14 +86,12 @@ function EmbeddedChart({ token, item, label, hasTtm }: Common & { hasTtm: TtmCat
 
 /** A chart state drawn read-only (embeds, the company Revenue view): each layer's data read
  * now as the viewer (chart/fetch.ts), drawn by LayerChart with its source footnote. */
-export function ChartView({ token, chart, name, label, hasTtm, axisCaption }: {
+export function ChartView({ token, chart, name, label, hasTtm }: {
   token: string;
   chart: ChartState;
   name: string;
   label: (companyId: string) => string;
   hasTtm: TtmCatalog;
-  /** the left axis's caption instead of the unit's own */
-  axisCaption?: string;
 }) {
   const visible = chart.layers.filter((l) => !l.hidden);
   const requests = visible.flatMap((layer) => {
@@ -157,17 +156,19 @@ export function ChartView({ token, chart, name, label, hasTtm, axisCaption }: {
     );
   }
   const effective = basis(chart);
+  const drawn = drawnIds(series);
+  const answered = new Set(series.map((x) => x.id));
   return (
     <>
       <LayerChart
         series={series}
-        title={chart.title}
+        title={chartTitle(chart, label, metricLabel, (l) => !answered.has(l.id) || drawn.has(l.id))}
         subtitle={chart.deck ? chart.subtitle?.trim() || autoSubtitle(series, frequency, effective) : ""}
         footnote={[sourceFootnote(series, label, asOf), methodNote(effective, frequency, new Set(visible.map((l) => l.transform)))]}
         svgRef={svg}
         deck={chart.deck}
         onOpen={open}
-        axisCaption={axisCaption}
+        from={rangeDates(chart).from}
       />
       {errors.length > 0 && <p className="faint small">{errors.length} line{errors.length === 1 ? "" : "s"} couldn't be drawn: {[...new Set(errors)].join("; ")}.</p>}
     </>

@@ -1360,12 +1360,23 @@ button.link:hover {
   min-width: 200px;
 }
 
-.chart-card .note {
+/* what the chart draws when it isn't what the controls asked for */
+.chart-why {
   margin: 0;
-  padding: var(--sp-4) var(--sp-6);
+  padding: var(--sp-3) var(--sp-6) 0;
   font-size: var(--fs-sm);
-  color: var(--warn);
-  border-bottom: 1px solid var(--line);
+  color: var(--text-2);
+}
+
+.title-mode {
+  white-space: nowrap;
+}
+
+.layer-reads {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  color: var(--text-2);
 }
 
 .lchart {
@@ -1412,6 +1423,12 @@ button.link:hover {
 .ch-hover {
   stroke: var(--text-3);
   stroke-dasharray: 3 3;
+}
+
+/* a period no layer has a value for */
+.ch-gap {
+  fill: var(--text-3);
+  fill-opacity: 0.1;
 }
 
 .c0 { color: var(--series-0); }
@@ -3406,8 +3423,9 @@ button.link.num {
 }
 
 /* Deck output: the chart in the light palette whatever the app theme, as SVG / PNG exports
-   draw it (tokens.css light values; chart/export.ts mirrors them). */
-.lchart.deck {
+   draw it (tokens.css light values; chart/export.ts mirrors them). The drawing only: the button
+   above it and the table view sit on the card, in the app's own theme. */
+.lchart.deck .lchart-svg {
   --panel: #ffffff;
   --line: #e3e6eb;
   --line-2: #d3d8df;
@@ -3422,14 +3440,18 @@ button.link.num {
   --series-5: #7048e8;
   --series-6: #d6336c;
   --series-7: #495057;
-}
-
-.lchart.deck .lchart-svg {
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
 }
 
 /* Compare: side-by-side small multiples */
+.multiples-bar {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-4);
+}
 
 .multiples {
   display: grid;
@@ -4868,10 +4890,6 @@ button.chip.on {
 
   .page {
     padding: var(--sp-7) 16px;
-  }
-
-  .lchart-bar .faint {
-    display: none;
   }
 
   /* above the text, its own short scroller: a row of groups hid everything past Part I */

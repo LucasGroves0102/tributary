@@ -4,7 +4,8 @@ import { day } from "../format";
 import { chartSize, footnoteLines, layout, nearest, nearestSeries, titleLines, WIDTH, type Layout } from "./layout";
 import type { Marker } from "./markers";
 import { formatValue, unitLabel } from "./metrics";
-import { pointAt, type Point, type Series, type Source } from "./series";
+import { chartNotes } from "./notes";
+import { pointAt, xAxis, type Point, type Series, type Source } from "./series";
 import { TableScroll } from "../components/TableScroll";
 
 interface Props {
@@ -23,8 +24,12 @@ interface Props {
   deck?: boolean;
   /** a small multiple: a narrower, shorter viewBox (same text size, so it stays legible) */
   compact?: boolean;
-  /** the left axis's caption instead of the unit's own (the Revenue tab's contributions are points) */
-  axisCaption?: string;
+  /** the earliest period end the chart asked for, so it can say when nothing goes back that far */
+  from?: string | null;
+  /** a log scale on the left axis (Compare's dollar charts) */
+  log?: boolean;
+  /** false: no notes about gaps (a model's forecast starting where its history stops isn't one) */
+  notes?: boolean;
 }
 
 /** stroke opacity of a faint series (a model's bear / bull case): an SVG attribute, not a style */
@@ -38,14 +43,14 @@ export function newestSource(p: Point | undefined): Source | null {
 }
 
 /** The chart builder's chart: plain SVG (no inline styles, so the CSP holds), with title,
- * legend and source footnote inside the SVG for deck exports. Hover (or the arrow keys) shows
- * every layer's value, period and source filing; a click or Enter opens the filing in the
- * reader. "View as table" shows the same values as a data table.
+ * legend, source footnote and what the chart leaves out (chart/notes.ts) inside the SVG for deck
+ * exports. Hover (or the arrow keys) shows every layer's value, period and source filing; a click
+ * or Enter opens the filing in the reader. "View as table" shows the same values as a data table.
  *
  * On screen it is drawn for the width it has (layout.ts `chartSize`), so its text is its real size
  * whatever the window. `svgRef` always gets the standard-size drawing (hidden when that isn't the
  * one on screen), so Export SVG / PNG give the same deck-ready image from a phone or a wide monitor. */
-export function LayerChart({ series, title, footnote, svgRef, markers = [], onOpen, subtitle = "", deck = false, compact = false, axisCaption }: Props) {
+export function LayerChart({ series, title, footnote, svgRef, markers = [], onOpen, subtitle = "", deck = false, compact = false, from = null, log = false, notes = true }: Props) {
   const room = useRef<HTMLDivElement>(null);
   const [measured, setMeasured] = useState<number | null>(null);
   useEffect(() => {
@@ -60,16 +65,19 @@ export function LayerChart({ series, title, footnote, svgRef, markers = [], onOp
   }, [compact]);
   const fixed = compact ? { width: COMPACT_WIDTH, plotHeight: COMPACT_PLOT_H } : { width: WIDTH };
   const size = compact || measured === null ? fixed : chartSize(measured);
+  const said = useMemo(
+    () => (notes ? [...footnote, ...chartNotes(series, { from, brief: compact })] : footnote),
+    [footnote.join("\n"), series, from, compact, notes],
+  );
   const drawnFor = (o: { width?: number; plotHeight?: number }) => {
     const w = o.width ?? WIDTH;
-    const foot = footnoteLines(footnote, w);
+    const foot = footnoteLines(said, w);
     const heading = titleLines(title, w);
-    const lay = layout(series, Boolean(title), markers, { ...o, subtitle: Boolean(subtitle), footLines: foot.length, titleLines: heading.length });
-    return { lay: axisCaption ? { ...lay, units: { ...lay.units, left: axisCaption } } : lay, foot, heading };
+    const lay = layout(series, Boolean(title), markers, { ...o, log, subtitle: Boolean(subtitle), footLines: foot.length, titleLines: heading.length });
+    return { lay, foot, heading };
   };
-  const notes = footnote.join("\n");
-  const shown = useMemo(() => drawnFor(size), [series, title, markers, subtitle, notes, size.width, size.plotHeight, axisCaption]);
-  const standard = useMemo(() => drawnFor(fixed), [series, title, markers, subtitle, notes, compact, axisCaption]);
+  const shown = useMemo(() => drawnFor(size), [series, title, markers, subtitle, said, size.width, size.plotHeight, log]);
+  const standard = useMemo(() => drawnFor(fixed), [series, title, markers, subtitle, said, compact, log]);
   const lay = shown.lay;
   const sameDrawing = shown.lay.width === standard.lay.width && shown.lay.height === standard.lay.height;
   const [hover, setHover] = useState<number | null>(null);
@@ -135,7 +143,7 @@ export function LayerChart({ series, title, footnote, svgRef, markers = [], onOp
   return (
     <div className={["lchart", deck && "deck", compact && "compact"].filter(Boolean).join(" ")}>
       <div className="lchart-bar">
-        <span className="faint small" id={help}>
+        <span className="visually-hidden" id={help}>
           {onOpen ? "Click a point to open its filing. " : ""}Focus the chart for arrow keys
           {onOpen ? " (Enter opens the filing)" : ""}.
         </span>
@@ -177,6 +185,7 @@ export function LayerChart({ series, title, footnote, svgRef, markers = [], onOp
             </div>
             {series.map((s, k) => {
               const p = pointAt(s, tick.key);
+              if (!s.points.some((x) => x.y !== null)) return null;
               return (
                 <div key={s.id} className={k === sel ? "tip-r sel" : "tip-r"}>
                   <div className="row">
@@ -240,12 +249,12 @@ function Drawing({ lay, heading, subtitle, foot, onMarker, children }: {
         </text>
       )}
       {lay.units.left && (
-        <text className="ch-unit" x={plot.l - 6} y={plot.t - 6} textAnchor="end">
+        <text className="ch-unit" x={lay.leftCaption.x} y={plot.t - 6} textAnchor={lay.leftCaption.anchor}>
           {lay.units.left}
         </text>
       )}
       {lay.units.right && (
-        <text className="ch-unit" x={lay.width - 4} y={plot.t - 6} textAnchor="end">
+        <text className="ch-unit" x={lay.rightCaption.x} y={plot.t - 6} textAnchor={lay.rightCaption.anchor}>
           {lay.units.right}
         </text>
       )}
@@ -276,9 +285,14 @@ function Drawing({ lay, heading, subtitle, foot, onMarker, children }: {
           </text>
         ))}
       </g>
+      <g className="ch-gaps">
+        {lay.gaps.map((g) => (
+          <rect key={g.x} className="ch-gap" x={g.x} y={plot.t} width={g.w} height={plot.b - plot.t} />
+        ))}
+      </g>
       <g className="ch-axis">
         {lay.xLabels.map((x) => (
-          <text key={x.label} x={x.x} y={plot.b + 18} textAnchor="middle">
+          <text key={x.label} x={x.x} y={lay.axisY} textAnchor="middle">
             {x.label}
           </text>
         ))}
@@ -292,6 +306,9 @@ function Drawing({ lay, heading, subtitle, foot, onMarker, children }: {
           )}
           {d.bars?.map((b, i) => (
             <rect key={i} x={b.x} y={b.y} width={Math.max(1, b.w)} height={b.h} fill="currentColor" fillOpacity={0.85} />
+          ))}
+          {d.dots?.map((p) => (
+            <circle key={p.x} cx={p.x} cy={p.y} r={2.5} fill="currentColor" fillOpacity={d.faint ? FAINT : undefined} />
           ))}
         </g>
       ))}
@@ -309,8 +326,8 @@ function Drawing({ lay, heading, subtitle, foot, onMarker, children }: {
                 }
               } : undefined}>
               <title>{m.label}</title>
-              <line x1={m.x} x2={m.x} y1={plot.b} y2={m.y - 8} stroke="currentColor" strokeWidth={1} />
-              <text x={m.x} y={m.y + 4} textAnchor="middle">{m.glyph}</text>
+              <line x1={m.x} x2={m.x} y1={plot.b} y2={plot.b + 5} stroke="currentColor" strokeWidth={1} />
+              {m.letter && <text x={m.x} y={m.y} textAnchor="middle">{m.glyph}</text>}
             </g>
           ))}
         </g>
@@ -325,18 +342,15 @@ function Drawing({ lay, heading, subtitle, foot, onMarker, children }: {
   );
 }
 
-/** The chart's values as a table: one row per quarter, one column per layer, each value with
- * its period and source filing. */
+/** The chart's values as a table: one row per period the chart's axis has (a missing one reads
+ * "—"), one column per layer, each value with its period and source filing. */
 export function DataTable({ series, title, onOpen }: { series: Series[]; title: string; onOpen?: (s: Source) => void }) {
-  const ticks = useMemo(() => {
-    const keys = new Map<number, string>();
-    for (const s of series) for (const p of s.points) if (!keys.has(p.key)) keys.set(p.key, p.period);
-    return [...keys.entries()].sort((a, b) => b[0] - a[0]);
-  }, [series]);
+  const ticks = useMemo(() => xAxis(series).reverse().map((t) => [t.key, t.period] as const), [series]);
+  const yearly = ticks.length > 0 && !ticks.some(([, period]) => / Q[1-4]$/.test(period));
   return (
     <TableScroll label="Chart values">
       <table className="t">
-        <caption className="visually-hidden">{title || "Chart"}: values by quarter, newest first</caption>
+        <caption className="visually-hidden">{title || "Chart"}: values by {yearly ? "year" : "quarter"}, newest first</caption>
         <thead>
           <tr>
             <th className="first" scope="col">Period</th>
