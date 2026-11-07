@@ -132,6 +132,26 @@ def test_take_several_questions_all_or_none(db):
     assert s.take_question("demo-a", NOW, 4, 10) == 0
 
 
+def test_questions_left_reads_the_caps_and_takes_nothing(db):
+    s, conn = db
+    day = NOW.date()
+    conn.execute("DELETE FROM demo_agent_usage WHERE day = %s", (day,))
+    conn.execute("DELETE FROM demo_agent_daily WHERE day = %s", (day,))
+    s.create(sandbox(), "ip1", 3, 10)
+    assert s.questions_left("demo-t1", NOW, 2, 3) == (2, 2)
+    assert s.questions_left("demo-t1", NOW, 2, 3) == (2, 2)  # nothing taken, no day row made
+    assert rows(conn, "SELECT 1 FROM demo_agent_daily WHERE day = %s", day) == []
+    s.take_question("demo-t1", NOW, 2, 3)
+    assert s.questions_left("demo-t1", NOW, 2, 3) == (2, 1)
+    # the shared day is the tighter of the two once it's nearly gone
+    assert s.questions_left("demo-t1", NOW, 5, 1) == (5, 0)
+    # the same refusal as taking one
+    with pytest.raises(SandboxGone):
+        s.questions_left("demo-t1", NOW + timedelta(hours=25), 2, 3)
+    with pytest.raises(SandboxGone):
+        s.questions_left("demo-nobody", NOW, 2, 3)
+
+
 def test_take_question_for_expired_or_unknown_sandbox(db):
     s, _ = db
     s.create(sandbox("demo-a", hours=1), "ip1", 5, 5)

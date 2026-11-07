@@ -147,8 +147,10 @@ describe("Try the demo", () => {
     window.location.hash = "#/companies";
     await mount(<App picker={false} />);
     expect($("h1")?.textContent).toBe("Tributary");
-    expect(container.textContent).toContain("access to 20 companies (PEP, KO, KDP");
+    expect(container.textContent).toContain("of 20 companies (PEP, KO, KDP");
     expect(container.textContent).toContain("10 assistant questions a day");
+    expect(container.textContent).toContain("financials and filing text");
+    expect(container.textContent).not.toContain("pro account");
     await click(button("Try the demo"));
     expect(created).toBe(1);
     await settle();

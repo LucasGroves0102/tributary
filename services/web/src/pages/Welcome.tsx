@@ -218,6 +218,8 @@ export function Welcome({ onReady, notice, github, pollMs = 1000, now = Date.now
 
   const busy = phase.kind === "creating" || phase.kind === "propagating";
   const o = offer && offer !== "off" ? offer : null;
+  // what its plan reads, instead of a plan's name a visitor has no way to know
+  const reads = o?.plan === "pro" ? "financials and filing text" : "financials";
   return (
     <main className="welcome">
       <section className="card pad welcome-card" aria-labelledby="welcome-title">
@@ -262,10 +264,10 @@ export function Welcome({ onReady, notice, github, pollMs = 1000, now = Date.now
         ) : (
           o && (
             <p className="small faint">
-              Starts a private sandbox for {o.ttl_hours} hours with access to {o.catalog_public ? "every company" : `${o.tickers.length} companies (${o.tickers.join(", ")})`}:{" "}
-              {o.plan === "pro" ? "financials and filing text" : "financials"}
+              Starts a private sandbox for {o.ttl_hours} hours with access to{" "}
+              {o.catalog_public ? `every company's ${reads}` : `the ${reads} of ${o.tickers.length} companies (${o.tickers.join(", ")})`}
               {o.agent
-                ? ` and ${o.agent_questions_per_day} assistant questions a day`
+                ? `, and ${o.agent_questions_per_day} assistant questions a day`
                 : "; the assistant is off for demo sandboxes"}
               . No sign-up. It's deleted when it expires.
             </p>
