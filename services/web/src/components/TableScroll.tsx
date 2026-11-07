@@ -18,6 +18,21 @@ export function columnsOff(
   return { left, right };
 }
 
+/** Columns showing only in part: under the frozen column, or cut by the far edge. Their text is
+ * blanked while they are (`.tw-cut`), so a number is never read with digits missing. Pure. */
+export function cutColumns(
+  cells: { left: number; right: number; frozen: boolean; width: number }[],
+  view: { left: number; right: number },
+): number[] {
+  const edge = cells.reduce((e, c) => (c.frozen ? Math.max(e, c.right) : e), view.left);
+  return cells.flatMap((c, i) => {
+    if (c.frozen || c.width === 0) return [];
+    const under = c.left < edge - 1 && c.right > edge + 1;
+    const past = c.left < view.right - 1 && c.right > view.right + 1;
+    return under || past ? [i] : [];
+  });
+}
+
 interface Props {
   children: ReactNode;
   /** open at the far end: statements run oldest to newest, so the newest stays in view when narrow */
@@ -32,10 +47,11 @@ type Off = { left: number; right: number; scrolls: boolean };
 const NONE: Off = { left: 0, right: 0, scrolls: false };
 
 /** Every data table sits in one of these (styles.css "Tables"): a scroller that says when it scrolls.
- * The frozen `.first` column keeps numbers from passing under it unmarked (it shows a shadow once
- * something is under it), a fade marks the cut edge, and a line above the table says how many
- * columns are off screen on each side and moves to them. A table that fits shows none of it. Arrow
- * keys scroll it once it has focus; it is a tab stop only while there is something to scroll. */
+ * The frozen `.first` column shows a shadow once something is under it, the far edge shows one while
+ * there's more that way, a column showing only in part is blanked rather than cut mid-number, and a
+ * line above the table says how many columns are off screen on each side and moves to them. A table
+ * that fits shows none of it. Arrow keys scroll it once it has focus; it is a tab stop only while
+ * there is something to scroll. */
 export function TableScroll({ children, atEnd = false, resetKey, label = "Table" }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const [off, setOff] = useState<Off>(NONE);
@@ -46,16 +62,28 @@ export function TableScroll({ children, atEnd = false, resetKey, label = "Table"
     const el = box.current;
     if (!el) return;
     const scrolls = el.scrollWidth - el.clientWidth > 1;
-    const view = el.getBoundingClientRect();
+    const rect = el.getBoundingClientRect();
+    const view = { left: rect.left, right: rect.right };
+    const header = [...el.querySelectorAll<HTMLTableCellElement>("thead tr:first-child > th")];
     const cells = scrolls
-      ? [...el.querySelectorAll<HTMLTableCellElement>("thead tr:first-child > th")].map((c) => {
+      ? header.map((c) => {
           const r = c.getBoundingClientRect();
           return { left: r.left, right: r.right, width: r.width, frozen: c.classList.contains("first") };
         })
       : [];
-    const next = { ...columnsOff(cells, { left: view.left, right: view.right }), scrolls };
+    const next = { ...columnsOff(cells, view), scrolls };
     setOff((o) => (o.left === next.left && o.right === next.right && o.scrolls === next.scrolls ? o : next));
+    const cut = new Set(cutColumns(cells, view));
+    for (const row of el.querySelector("table")?.rows ?? []) {
+      if (row.cells.length !== header.length) continue; // a heading across the table
+      for (let i = 0; i < row.cells.length; i++) row.cells[i]!.classList.toggle("tw-cut", cut.has(i));
+    }
   }, []);
+
+  // a new sort or page can bring new rows without a scroll or a resize
+  useEffect(() => {
+    measure();
+  });
 
   useLayoutEffect(() => {
     const el = box.current;
@@ -68,12 +96,21 @@ export function TableScroll({ children, atEnd = false, resetKey, label = "Table"
   useEffect(() => {
     const el = box.current;
     if (!el) return;
+    let frame = 0;
     const onScroll = () => {
       moved.current = el.scrollLeft < el.scrollWidth - el.clientWidth - 2;
-      measure();
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        measure();
+      });
     };
     el.addEventListener("scroll", onScroll, { passive: true });
-    if (typeof ResizeObserver === "undefined") return () => el.removeEventListener("scroll", onScroll);
+    const stop = () => {
+      if (frame) cancelAnimationFrame(frame);
+      el.removeEventListener("scroll", onScroll);
+    };
+    if (typeof ResizeObserver === "undefined") return stop;
     const onResize = () => {
       if (atEnd && !moved.current) el.scrollLeft = el.scrollWidth;
       measure();
@@ -83,7 +120,7 @@ export function TableScroll({ children, atEnd = false, resetKey, label = "Table"
     if (el.firstElementChild) seen.observe(el.firstElementChild);
     return () => {
       seen.disconnect();
-      el.removeEventListener("scroll", onScroll);
+      stop();
     };
   }, [atEnd, measure]);
 

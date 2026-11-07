@@ -850,7 +850,25 @@ a.btn:hover {
   width: 28px;
   pointer-events: none;
   z-index: 3;
-  background: linear-gradient(to right, transparent, var(--panel));
+  background: linear-gradient(to left, var(--edge-shadow), transparent);
+}
+
+/* part of a column at an edge: blank, not a number with digits missing (TableScroll cutColumns) */
+.t .tw-cut {
+  color: transparent !important;
+}
+
+.t .tw-cut > * {
+  visibility: hidden;
+}
+
+/* the Filings tab's actions stay in view whatever their header's doing */
+.t.filings td.actions.tw-cut {
+  color: inherit !important;
+}
+
+.t.filings td.actions.tw-cut > * {
+  visibility: visible;
 }
 
 .tw-cue {
@@ -953,7 +971,17 @@ table.t {
 
 .tw-port.more-l .t .first {
   border-right-color: var(--line-2);
-  box-shadow: 8px 0 8px -7px var(--edge-shadow);
+}
+
+.tw-port.more-l .t .first::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: -9px;
+  bottom: 0;
+  width: 8px;
+  pointer-events: none;
+  background: linear-gradient(to right, var(--edge-shadow), transparent);
 }
 
 .t tbody tr:hover td.first {
@@ -3689,6 +3717,14 @@ button.link.num {
   a {
     color: inherit;
   }
+
+  .t .tw-cut {
+    color: inherit !important;
+  }
+
+  .t .tw-cut > * {
+    visibility: visible;
+  }
 }
 
 /* chart builder: the layer's company, labelled, first in its card */
@@ -4748,7 +4784,8 @@ button.chip.on {
 
 @container tw (max-width: 620px) {
   .t .first,
-  .t.screen .first {
+  .t.screen .first,
+  .t.statement .first {
     min-width: 96px;
     max-width: 128px;
     white-space: normal;
