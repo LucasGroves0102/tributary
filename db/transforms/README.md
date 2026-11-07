@@ -13,5 +13,6 @@ functions defined in the migrations, latest definitions first:
 | `gold.refresh_section_search(text[])` (search passages); `ops.section_index_priors(text[])`, `ops.section_index_pending(text, int)` (parser-index work); the diffs themselves are Python (`filing_parser/diff.py`) | `021_section_diffs_search.sql` |
 | `ops.check_financials(text[])` (keeps segment findings; adds the restatement check) | `023_data_notes.sql` (before: `018_segments.sql`, `014_gold_calendar.sql`) |
 | `silver.resolve_company`, `silver.normalize_name` (entity resolution) | `002_companies.sql` |
+| `silver.search_companies` (what a search box finds, ranked) | `034_company_search.sql` |
 
 See [`../migrations/`](../migrations).

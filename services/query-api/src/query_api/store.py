@@ -79,16 +79,18 @@ class Store:
 
     def search(self, user_id: str, q: str, limit: int = 5, only: list[str] | None = None,
                readable_only: bool = False) -> list[dict]:
-        """Best matches for a name, ticker or CIK. only: just these companies (the caller's
+        """Best matches for what someone typed: a ticker, a CIK, or part of a name
+        (silver.search_companies has the ranking). only: just these companies (the caller's
         readable ones, for a demo that lists nothing else); None: every company. readable_only:
-        the same narrowing when the catalog is public (no id list; RLS on the authz tables)."""
+        the same narrowing when the catalog is public (no id list; RLS on the authz tables).
+        Narrowed before LIMIT, so a page of unreadable matches can't hide a readable one."""
         narrow = (" AND r.company_id IN (SELECT x FROM authz.readable_companies('financials') x)"
                   if readable_only else "")
         with self._session(user_id) as cur:
             cur.execute(
                 "SELECT r.company_id, r.name, r.matched_on, r.matched_alias, r.is_current,"
-                "       c.sic, c.sic_description AS industry, c.exchanges"
-                " FROM silver.resolve_company(%(q)s) WITH ORDINALITY r"
+                "       c.sic, c.sic_description AS industry, c.exchanges, c.tickers"
+                " FROM silver.search_companies(%(q)s) WITH ORDINALITY r"
                 " JOIN silver.companies c USING (company_id)"
                 " WHERE (%(only)s::text[] IS NULL OR r.company_id = ANY(%(only)s::text[]))" + narrow
                 + " ORDER BY r.ordinality LIMIT %(limit)s",

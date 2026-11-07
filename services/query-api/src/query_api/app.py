@@ -316,14 +316,17 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
         access_filter: Annotated[Literal["all", "financials"], Query(
             alias="access", description="all: every company; financials: only companies you "
                                         "can read (a demo sandbox lists nothing else)")] = "all",
+        limit: Annotated[int, Query(ge=1, le=25)] = 5,
     ) -> dict:
-        """Company identity is public metadata; `access` says what the caller can read."""
+        """Tickers, CIKs and any part of a name, best match first (silver.search_companies).
+        Company identity is public metadata; `access` says what the caller can read."""
         access = readable(user_id)
         narrow = access_filter == "financials"
         only = access.ids("financials") if narrow else None
         return {"results": [
             {**r, "access": sorted(access.get(r["company_id"], set()))}
-            for r in store.search(user_id, q, only=only, readable_only=narrow and only is None)
+            for r in store.search(user_id, q, limit, only=only,
+                                  readable_only=narrow and only is None)
         ]}
 
     known: dict[str, list[str]] = {}

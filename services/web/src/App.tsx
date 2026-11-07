@@ -758,6 +758,7 @@ export function App(props: Props = {}) {
           token={token}
           initial={palette}
           companies={paletteCompanies}
+          watched={watched}
           actions={actions}
           onClose={() => setPalette(null)}
         />

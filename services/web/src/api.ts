@@ -239,11 +239,14 @@ export const readFiling = (token: string, companyId: string, accessionNo: string
     ...(sectionKey ? { section_key: sectionKey } : {}),
   });
 
-/** readableOnly: only companies the user can read (a demo sandbox lists nothing else). */
-export const searchCompanies = (token: string, q: string, readableOnly = false) =>
+/** Tickers, CIKs and any part of a name, best match first (silver.search_companies).
+ * readableOnly: only companies the user can read (a demo sandbox lists nothing else).
+ * limit: 1-25; the API's default is 5. */
+export const searchCompanies = (token: string, q: string, readableOnly = false, limit?: number) =>
   get<{ results: SearchResult[] }>(token, "/v1/companies/search", {
     q,
     ...(readableOnly ? { access: "financials" } : {}),
+    ...(limit ? { limit } : {}),
   }).then((r) => r.results);
 
 export const financials = (

@@ -486,6 +486,8 @@ export interface SearchResult {
   matched_on: string;
   matched_alias: string;
   is_current: boolean;
+  /** the company's current tickers, primary first; null or empty when it has none */
+  tickers?: string[] | null;
   access: Tier[];
 }
 

@@ -4,7 +4,7 @@ FR5, week 1. Batch job that builds company identity in `silver.companies`,
 `silver.company_ciks` and `silver.company_aliases`. Run it daily; each run is idempotent.
 Every later stage joins through these tables: [facts-fetcher](../facts-fetcher) and
 [doc-fetcher](../doc-fetcher) read the tracked CIKs, gold rows are keyed by `company_id`, and
-the [Query API](../query-api) searches companies with `silver.resolve_company`.
+the [Query API](../query-api) resolves tickers with `silver.resolve_company` and searches companies with `silver.search_companies`.
 
 Sources:
 - `company_tickers.json`: every SEC-registered ticker, CIK and current name (one request)

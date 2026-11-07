@@ -306,6 +306,87 @@ def test_peers_and_search_can_be_only_granted_companies(peer_conn):
     assert [r["company_id"] for r in store.search("t-free", P3, only=[P3])] == [P3]
 
 
+S_APPLE, S_APPLEBY, S_ACME, S_GS, S_SPROUT, S_SPROUTS = (
+    "9100000021", "9100000022", "9100000023", "9100000024", "9100000025", "9100000026")
+
+
+@pytest.fixture
+def search_conn(conn):
+    """Fictional names (no SEC data in fixtures): rows the search must rank, in every shape."""
+    for cid, name, filer, tickers, former in (
+        (S_APPLE, "ZQAPPLE Inc.", "Large accelerated filer", ["ZQAP"], "Zqfruit Computer Corp"),
+        (S_APPLEBY, "ZQAPPLE Hospitality REIT", "Accelerated filer", ["ZQAH"], None),
+        (S_ACME, "Holding of ZQAPPLE Trust", None, None, None),
+        (S_GS, "ZQGOLD SACHSEN GROUP INC", "Large accelerated filer", ["ZQG"], None),
+        (S_SPROUT, "ZQSprout Social, Inc.", "Large accelerated filer", ["ZQS"], None),
+        (S_SPROUTS, "ZQSprouts Farmers Market, Inc.", "Accelerated filer", ["ZQSF"], None),
+    ):
+        conn.execute("INSERT INTO silver.companies (company_id, name, current_cik,"
+                     " filer_categories, tickers) VALUES (%s, %s, %s, %s, %s)",
+                     (cid, name, cid, [filer] if filer else None, tickers))
+        conn.execute("INSERT INTO silver.company_ciks (cik, company_id) VALUES (%s, %s)",
+                     (cid, cid))
+        conn.execute("INSERT INTO silver.company_aliases (company_id, cik, alias_type, alias,"
+                     " source) VALUES (%s, %s, 'name', %s, 'sec_submissions')", (cid, cid, name))
+        for t in tickers or []:
+            conn.execute("INSERT INTO silver.company_aliases (company_id, cik, alias_type, alias,"
+                         " source) VALUES (%s, %s, 'ticker', %s, 'sec_tickers')", (cid, cid, t))
+        if former:
+            conn.execute("INSERT INTO silver.company_aliases (company_id, cik, alias_type, alias,"
+                         " valid_to, source) VALUES (%s, %s, 'name', %s, '2020-01-01',"
+                         " 'sec_submissions')", (cid, cid, former))
+    # a retired ticker on one company, the same letters starting another's current ticker
+    conn.execute("INSERT INTO silver.company_aliases (company_id, cik, alias_type, alias,"
+                 " valid_to, source) VALUES (%s, %s, 'ticker', 'ZQO', '2020-01-01', 'curated')",
+                 (S_ACME, S_ACME))
+    return conn
+
+
+def found(conn, q, **kw):
+    return [r["company_id"] for r in Store(OneConnection(conn)).search("t-free", q, 25, **kw)]
+
+
+def test_search_exact_ticker_first_then_prefix(search_conn):
+    assert found(search_conn, "zqs")[:2] == [S_SPROUT, S_SPROUTS]
+    assert found(search_conn, "ZQSF") == [S_SPROUTS]
+    assert found(search_conn, "ZQA")[:2] == [S_APPLE, S_APPLEBY]  # prefix: bigger filer first
+    row = Store(OneConnection(search_conn)).search("t-free", "ZQAP", 25)[0]
+    assert (row["matched_on"], row["matched_alias"], row["tickers"]) == ("ticker", "ZQAP", ["ZQAP"])
+
+
+def test_search_name_prefix_word_and_contains(search_conn):
+    # a whole-word prefix beats the same letters run together: Sprouts isn't Sprout Social
+    assert found(search_conn, "ZQSprouts")[:2] == [S_SPROUTS, S_SPROUT]
+    assert found(search_conn, "zqapple")[:2] == [S_APPLE, S_APPLEBY]  # exact name, then prefix
+    assert found(search_conn, "zqapple")[2] == S_ACME  # a later word
+    assert found(search_conn, "sachsen") == [S_GS]  # a word that isn't the first
+    assert found(search_conn, "achsen") == [S_GS]  # contained
+    assert found(search_conn, "zq gold") == [S_GS]  # spaces ignored
+
+
+def test_search_former_names_and_retired_tickers_rank_below_current(search_conn):
+    rows = Store(OneConnection(search_conn)).search("t-free", "Zqfruit Computer", 25)
+    assert [(r["company_id"], r["is_current"]) for r in rows] == [(S_APPLE, False)]
+    assert found(search_conn, "ZQO") == [S_ACME]
+
+
+def test_search_takes_no_pattern_from_what_is_typed(search_conn):
+    assert found(search_conn, "zq%") == found(search_conn, "zq")
+    assert found(search_conn, "z_apple") == []
+    assert found(search_conn, "%") == found(search_conn, "_") == []
+
+
+def test_search_finds_a_cik_and_narrows_before_the_limit(search_conn):
+    assert found(search_conn, S_GS.lstrip("0")) == [S_GS]
+    assert found(search_conn, "ZQ", only=[S_ACME]) == [S_ACME]
+    # identity is public: t-free reads nothing here and still finds it, unless asked to narrow
+    assert S_GS in found(search_conn, "ZQ")
+    assert found(search_conn, "ZQ", readable_only=True) == []
+    search_conn.execute("INSERT INTO authz.user_access (user_id, company_id, tier)"
+                        " VALUES ('t-free', %s, 'financials')", (S_ACME,))
+    assert found(search_conn, "ZQ", readable_only=True) == [S_ACME]
+
+
 def test_filings_meta_reads_the_public_index_as_query_api(conn):
     """Recent filings on Home: form and dates from silver.filings for any accession."""
     meta = Store(OneConnection(conn)).filings_meta("t-nobody", [f"{C}-00-000001", "nope"])

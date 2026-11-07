@@ -68,6 +68,11 @@ de-duplicating every section first.
 `s.accession_no`, the key column: a filter on accession now reaches the base tables too. Before
 it, `gold.filing_flags` and so `/v1/filings/{acc}/recap` sorted all 1.8M sections and timed out,
 and `gold.refresh_section_search` sorted them once per batch (locally 3.3 s → 12 ms).
+`034_company_search.sql` adds `silver.search_companies(q)`, what a search box does with what
+people type: exact ticker first (`BRK.B` = `BRK-B`), then CIK, exact name, retired ticker or former
+name, then prefix, a later word, and contained (3+ characters), with spaces ignored for `JP Morgan`
+→ JPMorgan Chase. `silver.resolve_company` keeps its exact-match meaning for formulas and the
+sandbox. Reads all 33,000 aliases per call (25-38 ms on hermes); no index was needed.
 `026_feed_status.sql` adds `ops.feed_status()`: when the newest filing was accepted by EDGAR and
 when it reached bronze, two timestamps and nothing else. It is SECURITY DEFINER (query_api still
 can't read `bronze.filings`) and backs the Query API's public `/v1/status`, which the
