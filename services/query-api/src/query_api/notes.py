@@ -118,9 +118,9 @@ def _unit_change(change: float) -> bool:
 
 
 def _is_outlier_seasonal(series: list[tuple[date, float]], at: date) -> bool:
-    """Whether this metric peaks in the same quarter of other years: within 20 days of a year, two or
-    three apart, at least SEASON_YEARS of them have the same sign and PEAK times the quarters beside
-    them. A scale error doesn't repeat; one coincidence of a lumpy buyback isn't a season."""
+    """Whether this metric peaks in the same quarter of other years: within 20 days of a year, two
+    or three apart, at least SEASON_YEARS of them have the same sign and PEAK times the quarters
+    beside them. A scale error doesn't repeat; one coincidence of a lumpy buyback isn't a season."""
     value = next((v for d, v in series if d == at), None)
     if value is None:
         return False
