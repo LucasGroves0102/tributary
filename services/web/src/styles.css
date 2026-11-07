@@ -1408,9 +1408,43 @@ button.link:hover {
   gap: var(--sp-4);
 }
 
-.sources .reader-link {
-  font-family: var(--mono);
+/* the two ways to read a citation (components/FilingLinks): here, or on EDGAR */
+.reader-link {
+  font-weight: 600;
+}
+
+.edgar-link {
+  color: var(--text-2);
+}
+
+/* model, tokens and cost, for whoever goes looking */
+.tech {
+  display: inline-block;
   font-size: 11px;
+  color: var(--text-3);
+}
+
+.tech summary {
+  cursor: pointer;
+}
+
+.tech[open] {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+}
+
+.check-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px var(--sp-4);
+}
+
+.check-cites li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px var(--sp-3);
+  align-items: baseline;
 }
 
 .form {
@@ -1439,6 +1473,14 @@ button.link:hover {
 
 .ask-page {
   max-width: none;
+}
+
+/* A page that failed to render (components/ErrorBoundary) */
+.crash {
+  max-width: 520px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
 }
 
 /* Command palette */

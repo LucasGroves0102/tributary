@@ -288,10 +288,41 @@ describe("navigation", () => {
     expect($('.nav a[aria-current="page"]')?.textContent).toContain("Companies");
   });
 
+  it("the browser tab says what's on screen", async () => {
+    await render("#/companies");
+    expect(document.title).toBe("Companies · Tributary");
+    window.location.hash = `#/company/${NVDA}/statements`;
+    await settle();
+    expect(document.title).toBe("Nvidia (NVDA) · Statements · Tributary");
+    window.location.hash = "#/status";
+    await settle();
+    expect(document.title).toBe("Data status · Tributary");
+  });
+
+  it("keeps the shell when a page fails to render", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.mocked(fetch).mockImplementation(async (url, init) => {
+      if (new URL(String(url), "http://x").pathname.endsWith("/v1/data-notes")) return Response.json({ notes: "not a list", checked_at: null, companies: 1 });
+      return respond(String(url), init);
+    });
+    await render();
+    expect($(".content [role=alert] h1")?.textContent).toBe("This page didn't load");
+    expect($(".side")).not.toBeNull();
+    window.location.hash = "#/about";
+    await settle();
+    expect($(".content h1")?.textContent).toBe("What Tributary covers");
+    vi.restoreAllMocks();
+  });
+
+  it("shows no demo badge on a real account or a persona", async () => {
+    await render();
+    expect($(".brand .env")).toBeNull();
+    expect($(".side .fresh")?.textContent).toContain("Signed in as alice");
+  });
+
   it("names a company it knows only by id: breadcrumb and assistant, never the CIK", async () => {
     await render(`#/company/${APPLE}`);
     // the watchlist and /v1/me don't hold Apple: the name comes from the shared directory
-    await act(async () => new Promise((r) => setTimeout(r, 60)));
     await settle();
     expect($(".crumb")?.textContent).toBe("Companies/Apple (AAPL)");
     expect(chip()).toBe("Apple (AAPL) · Overview");
@@ -451,10 +482,20 @@ describe("assistant drawer", () => {
     expect(asked[0]?.question).toBe("What did Nvidia and Tesla file recently?");
     const link = container.querySelector<HTMLAnchorElement>(".ai-m .answer a.accession");
     expect(link?.href).toBe(EDGAR);
-    expect($(".ai-m .sources")?.textContent).toContain(ACC);
+    // two links that say which is which: the section here, the filing on EDGAR
+    const edgar = $(".ai-m .sources a.edgar-link") as HTMLAnchorElement;
+    expect(edgar.textContent).toBe("EDGAR ↗");
+    expect(edgar.href).toBe(EDGAR);
+    expect(edgar.title).toContain(ACC);
     // a section the tools returned opens the reader there; anything else is dropped
     const reader = [...container.querySelectorAll<HTMLAnchorElement>(".ai-m .sources a.reader-link")];
     expect(reader.map((a) => a.getAttribute("href"))).toEqual([`#/filing/${NVDA}/${ACC}/I-2`]);
+    expect(reader[0]!.textContent).toBe("Read MD&A");
+    // the answer's own footer is about the answer: no model name, tokens or cost until asked for
+    const meta = $(".ai-m .meta") as HTMLElement;
+    expect(meta.textContent).toContain("Newest filing cited: Aug 26, 2026");
+    expect(meta.querySelector("details:not([open]) summary")?.textContent).toBe("Details");
+    expect(meta.querySelector("details")?.textContent).toContain("claude-test");
   });
 });
 

@@ -128,7 +128,9 @@ export function Filings({ token, companyId, name, canRead, initialDiff, fiscalYe
                           <td>
                             <span className={`tag ${formTag(f.form)}`}>{f.form}</span>
                           </td>
-                          <td className="muted">{f.period_of_report ? day(f.period_of_report, true) : "—"}</td>
+                          <td className="muted">
+                            {f.period_of_report ? (f.form.startsWith("8-K") ? `event ${day(f.period_of_report, true)}` : day(f.period_of_report, true)) : "—"}
+                          </td>
                           <td className="muted items">
                             {eightK.length
                               ? eightK.join(" · ")

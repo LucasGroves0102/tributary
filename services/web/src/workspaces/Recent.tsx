@@ -1,5 +1,6 @@
 import { Skeleton } from "../components/States";
-import { ago, day, UNNAMED } from "../format";
+import { ago, periodPhrase, UNNAMED } from "../format";
+import { sectionName } from "../reader/sections";
 import { href } from "../route";
 import type { RecentWork } from "../types";
 import { KIND_LABELS } from "./model";
@@ -67,8 +68,8 @@ export function Recent({ recent, onOpen }: { recent: RecentWork | null; onOpen: 
                   </b>
                 </a>{" "}
                 <span className="muted">
-                  {r.filing.period_end && `· period ending ${day(r.filing.period_end, true)}`}
-                  {r.filing.section_key && ` · read to section ${r.filing.section_key}`}
+                  {r.filing.period_end && `· ${periodPhrase(r.filing.form, r.filing.period_end)}`}
+                  {r.filing.section_key && ` · last read: ${sectionName(r.filing.section_key)}`}
                 </span>
               </td>
               <td className="faint n">read {ago(r.at)}</td>

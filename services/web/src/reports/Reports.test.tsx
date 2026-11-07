@@ -160,7 +160,7 @@ it("writes a report from the workspace page and opens it", async () => {
   expect(JSON.parse(String(evaluate[1]!.body))).toMatchObject({ formula: "revenue", default_company: NVDA, view: "ttm" });
   // the comps' ungranted peer isn't read: no access, as anywhere else
   await waitFor(".report-embed");
-  await act(async () => new Promise((r) => setTimeout(r, 60)));
+  await act(async () => new Promise((r) => setTimeout(r, 0)));
   expect(report.textContent).toContain("No access to AAPL");
   expect(report.textContent).not.toContain("0000320193");
   // the unverified figure is flagged; the cited filing links to EDGAR

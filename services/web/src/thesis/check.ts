@@ -119,6 +119,16 @@ export function points(v: number): string {
   return `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(1)} pts`;
 }
 
+/** A quote from the thesis as it reads, without the Markdown it was written in ("**Export
+ * controls** matter"). Display only: finding it in the thesis still uses the quote as given. */
+export function plainQuote(quote: string): string {
+  return quote
+    .replace(/(\*\*|__)(.+?)\1/g, "$2")
+    .replace(/(^|[\s(])[*_]([^\s*_][^*_]*?)[*_](?=[\s).,;:!?]|$)/g, "$1$2")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/^\s*(#{1,6}\s+|>\s+|[-*+]\s+)/, "");
+}
+
 /** Problems worth a line under the result: unverified figures and unknown filings. */
 export function problems(r: ThesisCheckResult): string[] {
   const bad = r.verification.figures.filter((f) => f.status === "unverified").length;

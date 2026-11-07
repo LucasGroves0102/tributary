@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
 
+import { day } from "../format";
 import { renderAnswer } from "../markdown";
-import { href, SECTION } from "../route";
 import type { Answer, Citation, ToolCall, Verification } from "../types";
+import { FilingLinks } from "./FilingLinks";
 
 /** A change the assistant made in the UI (chart, screen, watchlist), shown under its message
  * with Undo (assistant/useUiActions). */
@@ -113,7 +114,7 @@ function Trace({ turn, finalRound }: { turn: AssistantTurn; finalRound: number }
     <div className="trace">
       <button className="trace-toggle" aria-expanded={open} onClick={() => setOpen(!open)}>
         <span className="chevron">{open ? "▾" : "▸"}</span>
-        {turn.tools.length} tool call{turn.tools.length === 1 ? "" : "s"}
+        {turn.tools.length} lookup{turn.tools.length === 1 ? "" : "s"}
         {denied > 0 && <span className="denied-count">{denied} denied</span>}
       </button>
       {open && (
@@ -136,9 +137,11 @@ function Trace({ turn, finalRound }: { turn: AssistantTurn; finalRound: number }
   );
 }
 
+/** What a lookup asked for: the words, without the id it asked about. */
 function argsSummary(input: Record<string, unknown>): string {
   return Object.entries(input)
-    .map(([k, v]) => `${k}=${Array.isArray(v) ? v.join(",") : String(v)}`)
+    .filter(([k]) => k !== "company_id")
+    .map(([k, v]) => `${k.replace(/_/g, " ")}: ${Array.isArray(v) ? v.join(", ") : String(v)}`)
     .join("  ");
 }
 
@@ -149,24 +152,6 @@ function usedCitations(answer: Answer): Citation[] {
     .sort((a, b) => (b.filed ?? "").localeCompare(a.filed ?? ""));
 }
 
-const CIK = /^\d{10}$/;
-const ACCESSION = /^\d{10}-\d{2}-\d{6}$/;
-
-/** Links that open the filing reader at each section a tool returned for this filing (the
- * agent collects them from Query API results, so the user could read them when it asked). */
-function readerLinks(c: Citation) {
-  if (!c.company_id || !CIK.test(c.company_id) || !ACCESSION.test(c.accession_no)) return null;
-  return (c.sections ?? [])
-    .filter((s) => SECTION.test(s))
-    .slice(0, 6)
-    .map((s) => (
-      <a key={s} className="reader-link" href={href({ view: "filing", companyId: c.company_id!, accessionNo: c.accession_no, section: s })}
-        title={`Open ${s} in the filing reader`}>
-        § {s}
-      </a>
-    ));
-}
-
 function Sources({ citations }: { citations: Citation[] }) {
   if (!citations.length) return null;
   return (
@@ -175,16 +160,8 @@ function Sources({ citations }: { citations: Citation[] }) {
       <ul>
         {citations.map((c) => (
           <li key={c.accession_no}>
-            <span className="form">{c.form ?? "source"}</span>
-            <span className="muted">{c.filed}</span>
-            {c.url ? (
-              <a href={c.url} target="_blank" rel="noopener noreferrer" className="accession">
-                {c.accession_no}
-              </a>
-            ) : (
-              <span className="accession">{c.accession_no}</span>
-            )}
-            {readerLinks(c)}
+            {/* the sections a tool returned, so the user could read them when it asked */}
+            <FilingLinks form={c.form} filed={c.filed} accessionNo={c.accession_no} url={c.url} companyId={c.company_id} sections={c.sections ?? []} />
           </li>
         ))}
       </ul>
@@ -222,10 +199,13 @@ function Meta({ answer }: { answer: Answer }) {
   return (
     <footer className="meta">
       {answer.verification && <VerifiedBadge v={answer.verification} />}
-      {latest && <span>Data as of filing {latest}</span>}
-      <span>{answer.model}</span>
-      <span>{tokens.toLocaleString()} tokens</span>
-      {answer.cost_usd !== null && <span>${answer.cost_usd.toFixed(4)}</span>}
+      {latest && <span title="The newest filing this answer cites, not necessarily the newest on EDGAR">Newest filing cited: {day(latest, true)}</span>}
+      <details className="tech">
+        <summary>Details</summary>
+        <span>{answer.model}</span>
+        <span>{tokens.toLocaleString()} tokens</span>
+        {answer.cost_usd !== null && <span>${answer.cost_usd.toFixed(4)}</span>}
+      </details>
     </footer>
   );
 }

@@ -2,14 +2,12 @@ import { useId, useMemo } from "react";
 
 import { ago, day, pct } from "../format";
 import { renderAnswer } from "../markdown";
-import { href, SECTION } from "../route";
+import { FilingLinks } from "../components/FilingLinks";
+import { href } from "../route";
 import type { CheckCitation, CheckClaim, CheckFigure, CheckModel, ClaimStatus, ThesisCheck, ThesisCheckSummary } from "../types";
-import { asCitations, points, problems, STATUS_LABELS, unverifiedFigures } from "./check";
+import { asCitations, plainQuote, points, problems, STATUS_LABELS, unverifiedFigures } from "./check";
 import { diffChecks, flagWords, isQuiet, type CheckDiff } from "./revisit";
 import type { ThesisChecks } from "./useThesisCheck";
-
-const CIK = /^\d{10}$/;
-const ACCESSION = /^\d{10}-\d{2}-\d{6}$/;
 
 /** The assistant's check of a thesis, beside it: claims with status badges and citations
  * (clicking a quote highlights it in the thesis), the models' assumptions against history,
@@ -63,7 +61,7 @@ export function CheckPanel({ checks, stale, onQuote, label }: {
 
 function historyLabel(c: ThesisCheckSummary): string {
   const n = c.counts;
-  return `${day(c.created_at, true)} ${c.created_at.slice(11, 16)} · ${n.supported}✓ ${n.contradicted}✗ ${n.unverifiable}?`;
+  return `${day(c.created_at, true)} ${c.created_at.slice(11, 16)} UTC · ${n.supported}✓ ${n.contradicted}✗ ${n.unverifiable}?`;
 }
 
 function CheckBody({ check, previous, onQuote, label }: {
@@ -77,11 +75,17 @@ function CheckBody({ check, previous, onQuote, label }: {
   const diff = useMemo(() => (previous ? diffChecks(previous.result, r) : null), [previous, r]);
   return (
     <div className="check-body">
-      <p className="faint small">
-        Checked {ago(r.checked_at)} by {r.model}
-        {r.cost_usd !== null ? ` · about $${r.cost_usd.toFixed(3)}` : ""} · counts as {r.questions} questions
-        {r.as_of ? ` · data as of ${day(r.as_of, true)}` : ""}
-      </p>
+      <div className="faint small check-meta">
+        <span>
+          Checked {ago(r.checked_at)} · counted as {r.questions} questions
+          {r.as_of ? ` · data as of ${day(r.as_of, true)}` : ""}
+        </span>
+        <details className="tech">
+          <summary>Details</summary>
+          <span>{r.model}</span>
+          {r.cost_usd !== null && <span>about ${r.cost_usd.toFixed(3)}</span>}
+        </details>
+      </div>
       {issues.length > 0 ? (
         <p className="badge warn" title="Flagged items are marked below">⚠ {issues.join(", ")}</p>
       ) : (
@@ -134,7 +138,7 @@ export function Changes({ diff, since, onQuote }: { diff: CheckDiff; since: stri
   const when = day(since, true);
   const badge = (s: ClaimStatus) => <span className={`status-badge ${s}`}>{STATUS_LABELS[s]}</span>;
   const quote = (q: string) => (
-    <button className="claim-quote" onClick={() => onQuote(q)} title="Show this sentence in the thesis">“{q}”</button>
+    <button className="claim-quote" onClick={() => onQuote(q)} title="Show this sentence in the thesis">“{plainQuote(q)}”</button>
   );
   return (
     <section className="check-changes" aria-label={`Changes since ${when}`}>
@@ -157,7 +161,7 @@ export function Changes({ diff, since, onQuote }: { diff: CheckDiff; since: stri
           ))}
           {diff.removed.map((c, i) => (
             <li key={`r${i}`} className="change removed">
-              <span className="muted">No longer checked:</span> {badge(c.status)} <span className="claim-quote missing">“{c.quote}”</span>
+              <span className="muted">No longer checked:</span> {badge(c.status)} <span className="claim-quote missing">“{plainQuote(c.quote)}”</span>
             </li>
           ))}
           {diff.flags.map((f, i) => (
@@ -186,10 +190,10 @@ function Claim({ claim, onQuote }: { claim: CheckClaim; onQuote: (q: string) => 
       </div>
       {claim.quote_found ? (
         <button className="claim-quote" onClick={() => onQuote(claim.quote)} title="Show this sentence in the thesis">
-          “{claim.quote}”
+          “{plainQuote(claim.quote)}”
         </button>
       ) : (
-        <p className="claim-quote missing" title="Not found word for word in the thesis">“{claim.quote}”</p>
+        <p className="claim-quote missing" title="Not found word for word in the thesis">“{plainQuote(claim.quote)}”</p>
       )}
       <Text text={claim.explanation} figures={claim.figures} cites={claim.citations} />
       <Cites cites={claim.citations} />
@@ -268,19 +272,8 @@ function Cites({ cites }: { cites: CheckCitation[] }) {
         <li key={`${c.accession_no}-${i}`} className={c.verified ? undefined : "unverified"}>
           {c.verified ? (
             <>
-              <span className="form">{c.form ?? "filing"}</span>
-              {c.filed && <span className="muted"> {c.filed}</span>}{" "}
-              {c.url ? (
-                <a href={c.url} target="_blank" rel="noopener noreferrer" className="accession">{c.accession_no}</a>
-              ) : (
-                <span className="accession">{c.accession_no}</span>
-              )}
-              {c.section_key && SECTION.test(c.section_key) && c.company_id && CIK.test(c.company_id) && ACCESSION.test(c.accession_no) && (
-                <a className="reader-link" href={href({ view: "filing", companyId: c.company_id, accessionNo: c.accession_no, section: c.section_key })}
-                  title={`Open ${c.section_key} in the filing reader`}>
-                  {" "}§ {c.section_key}
-                </a>
-              )}
+              <FilingLinks form={c.form ?? null} filed={c.filed ?? null} accessionNo={c.accession_no} url={c.url ?? null}
+                companyId={c.company_id} sections={c.section_key ? [c.section_key] : []} />
               {c.figure && (
                 <span className={c.figure_status === "unverified" ? "figure unverified" : "muted"} title={c.figure_status ?? undefined}> · {c.figure}</span>
               )}

@@ -7,6 +7,7 @@ import { catalog } from "../chart/metrics";
 import type { ChartState } from "../chart/model";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { download } from "../download";
+import { FilingLinks } from "../components/FilingLinks";
 import { ago, day } from "../format";
 import { renderAnswer } from "../markdown";
 import { href } from "../route";
@@ -135,9 +136,9 @@ export function ReportBody({ report, name, label, token, readable, hasTtm, onOpe
     <article className="report-doc" aria-label={name}>
       <p className="report-meta">
         <span className={sum.ok ? "badge ok" : "badge warn"}>{sum.ok ? "✓ " : "⚠ "}{sum.text}</span>{" "}
-        <span className="muted">
+        <span className="muted" title={`Written with ${report.model}`}>
           Written {report.writtenAt ? `${day(report.writtenAt.slice(0, 10), true)} (${ago(report.writtenAt)})` : ""} by the
-          assistant ({report.model}) from the workspace's saved items
+          assistant from the workspace's saved items
           {report.asOf ? ` · data as of ${day(report.asOf.slice(0, 10), true)}` : ""}
         </span>
       </p>
@@ -154,15 +155,7 @@ export function ReportBody({ report, name, label, token, readable, hasTtm, onOpe
           <ul>
             {report.citations.map((c) => (
               <li key={c.accession_no}>
-                <span className="form">{c.form ?? "source"}</span>
-                <span className="muted">{c.filed}</span>
-                {c.url ? (
-                  <a href={c.url} target="_blank" rel="noopener noreferrer" className="accession">
-                    {c.accession_no}
-                  </a>
-                ) : (
-                  <span className="accession">{c.accession_no}</span>
-                )}
+                <FilingLinks form={c.form} filed={c.filed} accessionNo={c.accession_no} url={c.url} companyId={c.company_id} sections={c.sections ?? []} />
               </li>
             ))}
           </ul>
