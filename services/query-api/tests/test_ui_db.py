@@ -208,6 +208,22 @@ def test_recap_vs_prior_and_year_ago(recap_conn, token):
             rev["prior_quarter"]["pct_change"]) == ("120", "10", "0.083333")
     assert (rev["year_ago"]["value"], rev["year_ago"]["pct_change"]) == ("100", "0.300000")
     assert body["flags"] == []  # layer 1 allows all here; RLS has no filings rows for t-free
+    assert rev["current"]["not_meaningful"] is None  # a reported figure: nothing to say
+
+
+def test_recap_says_when_a_margin_isnt_meaningful(recap_conn, token):
+    recap_conn.execute(
+        "INSERT INTO gold.derived_financials (company_id, span, metric, period_start, period_end,"
+        " value, unit, value_source, inputs, accession_no, form, filed, source_accessions,"
+        " ingested_at) VALUES (%s, 'quarter', 'gross_margin', '2026-04-01', '2026-06-30', 20.9,"
+        " 'ratio', 'computed', %s, %s, '10-Q', '2026-07-30', ARRAY[%s], now())",
+        (R, '{"revenue": 420, "gross_profit": 8778}', ACC, ACC))
+    r = client(recap_conn).get(f"/v1/filings/{ACC}/recap?metrics=gross_margin",
+                               headers=token("t-free"))
+    assert r.status_code == 200, r.text
+    [margin] = r.json()["metrics"]
+    assert float(margin["current"]["value"]) == 20.9
+    assert "under $100K" in margin["current"]["not_meaningful"]
 
 
 def test_a_filter_on_accession_reaches_the_sections_table(recap_conn):

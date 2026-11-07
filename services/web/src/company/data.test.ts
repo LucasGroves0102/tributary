@@ -132,6 +132,17 @@ describe("recap", () => {
     expect(rows[1]).toMatchObject({ current: "60.0%", qoq: { text: "-200 bp", sign: -1 }, yoy: { text: "+200 bp" } });
     expect(rows[0]!.title).toContain(`FY2027 Q1: 10-Q filed Aug 26, 2026, ${ACC}`);
   });
+
+  it("a margin that isn't meaningful reads n/m, moves no delta, and keeps its figure in the hover", () => {
+    const margin = recap.metrics[0]!;
+    const { rows } = recapRows({
+      ...recap,
+      metrics: [{ ...margin, current: { ...margin.current!, value: "20.9", not_meaningful: "the amount is more than ten times revenue" } }],
+    });
+    expect(rows[0]).toMatchObject({ current: "n/m", qoq: null, yoy: null });
+    expect(rows[0]!.title).toContain("because the amount is more than ten times revenue");
+    expect(rows[0]!.title).toContain("2090.0%");
+  });
 });
 
 describe("segments", () => {
