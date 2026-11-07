@@ -230,9 +230,20 @@ export function Ratios({ token, companyId, name, ticker, notApplicable = [] }: T
   );
 }
 
+function shareBlank(of: "consolidated" | "members" | "none"): string {
+  return of === "none" ? "No share: consolidated revenue isn't known for this quarter, and these lines overlap." : NO_DATA_TITLE;
+}
+
 export function Segments({ token, companyId, name }: { token: string; companyId: string; name: string }) {
-  const load = useLoad(companyId, () => fetchSegments(token, companyId, 8));
-  const tables = load?.state === "ok" ? segmentTables(load.data.rows) : [];
+  const load = useLoad(companyId, async () => {
+    const [seg, fin] = await Promise.all([
+      fetchSegments(token, companyId, 8),
+      // shares are of consolidated revenue; without it the table says what they're of instead
+      financialsView(token, companyId, 8, ["revenue"], "quarter").catch(() => ({ rows: [] as FinancialRow[] })),
+    ]);
+    return { rows: seg.rows, revenue: fin.rows };
+  });
+  const tables = load?.state === "ok" ? segmentTables(load.data.rows, load.data.revenue) : [];
   return (
     <Gate load={load} name={name} what="Financials">
       {() =>
@@ -273,20 +284,33 @@ export function Segments({ token, companyId, name }: { token: string; companyId:
                           {r.cells.map((c, i) => (
                             <Cell key={t.columns[i]!.periodEnd} cell={c} />
                           ))}
-                          {t.metric === "revenue" ? <td className="n">{r.share === null ? "—" : pct(r.share)}</td> : <td aria-hidden="true" />}
-                          <td className={`n ${r.yoy === null ? "faint" : r.yoy >= 0 ? "pos" : "neg"}`}>
-                            {r.yoy === null ? "—" : change(r.yoy)}
+                          {t.metric === "revenue" ? (
+                            r.shareTooBig ? (
+                              <td className="n faint" title={`Not meaningful: ${r.label} is larger than the consolidated revenue reported for this quarter (${pct(r.share!)}), so the two aren't on the same basis.`}>{NOT_MEANINGFUL}</td>
+                            ) : (
+                              <td className={r.share === null ? "n faint" : "n"} title={r.share === null ? shareBlank(t.shareOf) : t.shareOf === "members" ? "Of these members' sum: consolidated revenue isn't known for this quarter." : "Of consolidated revenue for the latest quarter."}>
+                                {r.share === null ? NO_DATA : pct(r.share)}
+                              </td>
+                            )
+                          ) : <td aria-hidden="true" />}
+                          <td className={`n ${r.yoy === null ? "faint" : r.yoy >= 0 ? "pos" : "neg"}`}
+                            title={r.yoy === null ? NO_DATA_TITLE : undefined}>
+                            {r.yoy === null ? NO_DATA : change(r.yoy)}
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </TableScroll>
+                {t.overlapNote && <p className="small muted card-b">{t.overlapNote}</p>}
+                {t.metric === "revenue" && t.shareOf === "none" && (
+                  <p className="small muted card-b">No shares: consolidated revenue isn't known for this quarter, and these lines overlap, so their sum isn't a total either.</p>
+                )}
               </section>
             ))}
             <div className="foot">
-              Share: of the latest quarter's total across members. YoY: latest quarter vs four
-              quarters earlier. Members overlap when a company reports several breakdowns.
+              Share: of consolidated revenue in the latest quarter, so lines that overlap each read
+              their true share. YoY: latest quarter vs four quarters earlier.
             </div>
           </>
         )

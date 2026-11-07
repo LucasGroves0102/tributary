@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { financialsView, segmentsOf } from "../api";
 import type { ChartState } from "../chart/model";
 import type { SegmentAxisKind } from "../chart/segments";
+import { NO_DATA, NO_DATA_TITLE } from "../blanks";
 import { change, money, moneyRow, pct, UNNAMED } from "../format";
 import { ChartView } from "../reports/Embeds";
 import type { FinancialRow, SegmentRow } from "../types";
@@ -42,6 +43,7 @@ interface Props {
 const QUARTERS = PERIODS + 4;
 const everyMetric = () => true;
 const points = (v: number) => `${v >= -0.05 ? "+" : "−"}${Math.abs(v).toFixed(1)} pts`; // −0.0 reads as +0.0
+const BLOCKED_TITLE = "No contribution: these members changed by more than revenue did, so they overlap or changed basis between the two years.";
 
 /** The Revenue tab: revenue by segment and geography over time, growth decomposition and
  * revenue quality (company/revenue.ts has the rules). Every chart is a chart state: it can be
@@ -133,7 +135,7 @@ function Axes({ rows, totals, view, ...c }: Common & { rows: SegmentRow[]; total
     <>
       {axes.map((axis) => <AxisBlock key={axis} t={axisTable(rows, axis, totals)} view={view} {...c} />)}
       <div className="foot">
-        Charts draw the last 3 years; tables list the latest {PERIODS} periods. Members missing a period show “—”, never zero. Beyond the {SHOWN} largest, members are folded into “Other”. Bars stack only
+        Charts draw the last 3 years; tables list the latest {PERIODS} periods. Members missing a period show “{NO_DATA}”, never zero. Beyond the {SHOWN} largest, members are folded into “Other”. Bars stack only
         when the members add up to reported revenue (within {pct(COVERAGE_TOLERANCE, 0)}) in every period; otherwise each
         member is a line.
       </div>
@@ -167,8 +169,8 @@ function AxisBlock({ t, view, token, companyId, ticker, saved, onOpenChart, labe
                     {r.note && <span className="faint small"> · {r.note}</span>}
                   </td>
                   {r.values.map((v, i) => (
-                    <td key={t.periods[i]!.key} className={v === null ? "n faint" : "n"} title={r.sources[i] ?? undefined}>
-                      {texts[i] ?? "—"}
+                    <td key={t.periods[i]!.key} className={v === null ? "n faint" : "n"} title={r.sources[i] ?? (v === null ? NO_DATA_TITLE : undefined)}>
+                      {texts[i] ?? NO_DATA}
                     </td>
                   ))}
                 </tr>
@@ -179,18 +181,25 @@ function AxisBlock({ t, view, token, companyId, ticker, saved, onOpenChart, labe
               {t.coverage.map((x, i) => (
                 <td key={t.periods[i]!.key}
                   className={x === null ? "n faint" : Math.abs(x - 1) > COVERAGE_TOLERANCE ? "n warn" : "n faint"}>
-                  {x === null ? "—" : pct(x, 0)}
+                  {x === null ? NO_DATA : pct(x, 0)}
                 </td>
               ))}
             </tr>
           </tbody>
         </table>
       </TableScroll>
+      {t.rows.some((r) => r.overlaps) && (
+        <p className="small muted">
+          {t.rows.filter((r) => r.overlaps).map((r) => r.label).join(", ")}
+          {t.moreOverlapping > 0 ? ` and ${t.moreOverlapping} more` : ""} overlap the other lines: part of one of them, or another
+          cut of the same revenue. They're listed as reported, and left out of the sum.
+        </p>
+      )}
       {off.length > 0 && (
         <p className="small muted">
           In {off.length} of {t.coverage.length} periods these members don't add up to reported revenue: the breakdown
-          {view === "ttm" ? " (TTM needs four quarters of a member)" : ""} names only part of it, or overlaps. Read it as
-          {" "}reported, not as shares of the total.
+          {view === "ttm" ? " (TTM needs four quarters of a member)" : ""} names only part of it
+          {t.unreliable.some(Boolean) ? ", or overlaps in a way the data can't separate" : ""}. Read it as reported, not as shares of the total.
         </p>
       )}
     </div>
@@ -238,8 +247,9 @@ function Decomposition({ rows, totals, ...c }: Common & { rows: SegmentRow[]; to
                   <tr key={r.members.join("|")}>
                     <td className="first">{r.label}</td>
                     {r.points.map((v, i) => (
-                      <td key={d.periods[i]!.key} className={v === null ? "n faint" : v >= 0 ? "n pos" : "n neg"}>
-                        {v === null ? "—" : points(v)}
+                      <td key={d.periods[i]!.key} className={v === null ? "n faint" : v >= 0 ? "n pos" : "n neg"}
+                        title={v === null ? (d.blocked[i] ? BLOCKED_TITLE : NO_DATA_TITLE) : undefined}>
+                        {v === null ? NO_DATA : points(v)}
                       </td>
                     ))}
                   </tr>
@@ -248,19 +258,25 @@ function Decomposition({ rows, totals, ...c }: Common & { rows: SegmentRow[]; to
                   <td className="first faint" title="Members missing a period, a breakdown that doesn't add up to revenue, rounding">
                     Not attributed
                   </td>
-                  {d.unattributed.map((v, i) => <td key={d.periods[i]!.key} className="n faint">{v === null ? "—" : points(v)}</td>)}
+                  {d.unattributed.map((v, i) => <td key={d.periods[i]!.key} className="n faint">{v === null ? NO_DATA : points(v)}</td>)}
                 </tr>
                 <tr className="total">
                   <td className="first"><b>Revenue growth</b></td>
-                  {d.total.map((v, i) => <td key={d.periods[i]!.key} className="n"><b>{v === null ? "—" : change(v / 100)}</b></td>)}
+                  {d.total.map((v, i) => <td key={d.periods[i]!.key} className="n"><b>{v === null ? NO_DATA : change(v / 100)}</b></td>)}
                 </tr>
               </tbody>
             </table>
           </TableScroll>
+          {d.blocked.some(Boolean) && (
+            <p className="small muted card-b">
+              {d.periods.filter((_, i) => d.blocked[i]).map((p) => p.label).join(", ")}: no contributions. These members changed
+              by more than revenue did, so they overlap or changed basis between the two years, and bars would overshoot the total.
+            </p>
+          )}
           <div className="foot">
             A member's contribution = its TTM revenue change over four quarters / the company's TTM revenue four quarters
-            earlier, over members reporting both periods. They add up to revenue growth only when the members cover revenue;
-            the rest is “Not attributed”.
+            earlier, over members reporting both periods and leaving out members that overlap the rest. They add up to revenue
+            growth only when the members cover revenue; the rest is “Not attributed”.
           </div>
         </>
       )}
@@ -309,10 +325,10 @@ function Quality({ rows, ...c }: Common & { rows: FinancialRow[] }) {
                     <td className="n">{money(r.revenue, "USD")}</td>
                     <td className="n">{money(r.receivables, "USD")}</td>
                     <td className="n">{r.dso.toFixed(0)}</td>
-                    <td className="n">{r.revenueGrowth === null ? "—" : change(r.revenueGrowth)}</td>
-                    <td className="n">{r.receivablesGrowth === null ? "—" : change(r.receivablesGrowth)}</td>
+                    <td className="n">{r.revenueGrowth === null ? NO_DATA : change(r.revenueGrowth)}</td>
+                    <td className="n">{r.receivablesGrowth === null ? NO_DATA : change(r.receivablesGrowth)}</td>
                     <td className={r.flagged ? "n flag" : "n"} title={r.flagged ? `More than ${QUALITY_FLAG_POINTS} points faster than revenue` : undefined}>
-                      {r.gap === null ? "—" : `${points(r.gap)}${r.flagged ? " ⚠" : ""}`}
+                      {r.gap === null ? NO_DATA : `${points(r.gap)}${r.flagged ? " ⚠" : ""}`}
                     </td>
                   </tr>
                 ))}

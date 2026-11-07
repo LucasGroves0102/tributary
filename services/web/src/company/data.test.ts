@@ -18,6 +18,7 @@ import {
   segmentTables,
   STATEMENTS,
   listingLine,
+  withAnnualPerShare,
 } from "./data";
 
 describe("the header's listing line", () => {
@@ -169,18 +170,130 @@ it("labels 8-K items and filters forms", () => {
 });
 
 describe("banks on the tearsheet", () => {
-  it("key stats and ratio rows read n/a where the metric doesn't describe a bank", () => {
-    const bank = nvdaRow({ industry: "National Commercial Banks", values: { revenue_ttm: "180000000000" } });
+  const BANK_METRICS = ["gross_margin", "operating_margin", "free_cash_flow", "fcf_margin", "net_debt", "debt_to_equity", "current_ratio"];
+  it("key stats and ratio rows read n/a for what doesn't describe a bank, by the API's rule", () => {
+    const reason = "this is a bank: deposits are its debt and lending its operations";
+    const bank = nvdaRow({
+      values: { revenue_ttm: "180000000000" },
+      readings: { operating_margin_ttm: { status: "not_applicable", reason }, net_debt_q: { status: "not_applicable", reason } },
+    });
     const stats = keyStats(bank);
     expect(stats.find((s) => s.label === "Operating margin")).toMatchObject({ text: "n/a (bank)", period: "not applicable" });
-    expect(stats.find((s) => s.label === "Net debt")!.title).toContain("doesn't describe a bank");
-    expect(stats.find((s) => s.label === "Gross margin")).toMatchObject({ text: "—" });
-    const rows = [fin("roe", "2026-07-26", "0.17", "FY2026 Q2")];
-    const t = metricTable(rows, RATIOS, "ttm", "fiscal", "National Commercial Banks");
-    expect(t.rows.map((r) => r.metric)).toEqual(["operating_margin", "fcf_margin", "roe"]);
-    expect(t.rows[0]).toMatchObject({ bank: true, cells: [null] });
+    expect(stats.find((s) => s.label === "Net debt")!.title).toContain("This is a bank");
+    const rows = [fin("roe", "2026-07-26", "0.17", "FY2026 Q2"), fin("fcf_margin", "2026-07-26", "1.56", "FY2026 Q2")];
+    const t = metricTable(rows, RATIOS, "ttm", "fiscal", BANK_METRICS);
+    expect(t.rows.map((r) => r.metric)).toEqual(["gross_margin", "operating_margin", "fcf_margin", "roe", "debt_to_equity", "current_ratio"]);
+    // a figure on file doesn't change what it reads: it moves to the hover
+    const fcf = t.rows.find((r) => r.metric === "fcf_margin")!;
+    expect(fcf.cells[0]).toMatchObject({ text: "n/a (bank)", url: "https://www.sec.gov/x/" });
+    expect(fcf.cells[0]!.title).toContain("156.0%");
+    expect(t.rows[0]).toMatchObject({ cells: [null], blanks: [{ text: "n/a (bank)" }] });
     // not a bank: empty rows are dropped as before
-    expect(metricTable(rows, RATIOS, "ttm").rows.map((r) => r.metric)).toEqual(["roe"]);
+    expect(metricTable(rows, RATIOS, "ttm").rows.map((r) => r.metric)).toEqual(["fcf_margin", "roe"]);
+  });
+});
+
+describe("what a blank means in a period table", () => {
+  it("no data in this period is ·; a fiscal Q4's EPS is not reported, and says why", () => {
+    const rows = [
+      fin("revenue", "2025-10-26", "57", "FY2026 Q3"), fin("revenue", "2026-01-25", "68", "FY2026 Q4"),
+      fin("eps_diluted", "2025-10-26", "1.3", "FY2026 Q3"),
+      fin("cash", "2025-10-26", "0", "FY2026 Q3"),
+    ];
+    const t = metricTable(rows, [["revenue", "Revenue", "usd"], ["eps_diluted", "EPS (diluted)", "eps"], ["cash", "Cash", "usd"]], "q");
+    const eps = t.rows[1]!;
+    expect(eps.cells[1]).toBeNull();
+    expect(eps.blanks[1]).toMatchObject({ text: "—" });
+    expect(eps.blanks[1]!.title).toContain("year less nine months isn't the quarter");
+    const cash = t.rows[2]!;
+    expect(cash.blanks[1]).toMatchObject({ text: "·" });
+    // a real zero is a figure
+    expect(cash.cells[0]!.text).toBe("$0");
+  });
+
+  it("TTM keeps the per-share rows, as n/a, so they don't just vanish", () => {
+    const rows = [fin("revenue", "2026-07-26", "302", "FY2027 Q2")];
+    const t = metricTable(rows, [["revenue", "Revenue", "usd"], ["eps_diluted", "EPS (diluted)", "eps"]], "ttm");
+    expect(t.rows.map((r) => r.metric)).toEqual(["revenue", "eps_diluted"]);
+    expect(t.rows[1]!.blanks[0]).toMatchObject({ text: "n/a" });
+    expect(t.rows[1]!.blanks[0]!.title).toContain("don't add across quarters");
+  });
+
+  it("Annual takes EPS from the 10-K, in the column of the year it ends, a day's difference allowed", () => {
+    const ttm = [fin("revenue", "2026-01-25", "216", "FY2026 Q4"), fin("revenue", "2025-01-26", "130", "FY2025 Q4")];
+    const annual = [
+      fin("eps_diluted", "2026-01-26", "4.90", "", { fiscal_period: null }),
+      fin("eps_diluted", "2019-01-27", "6.63", "", { fiscal_period: null }), // no such column
+    ];
+    const t = metricTable(withAnnualPerShare(ttm, annual, "fiscal"), [["revenue", "Revenue", "usd"], ["eps_diluted", "EPS (diluted)", "eps"]], "a");
+    expect(t.columns.map((c) => c.label)).toEqual(["FY2025", "FY2026"]);
+    expect(t.rows[1]!.cells.map((c) => c?.text ?? null)).toEqual([null, "$4.90"]);
+  });
+
+  it("a ratio on negative equity reads n/m, not as a gap, and a ratio the API calls n/m keeps its figure in the hover", () => {
+    const rows = [
+      { ...fin("debt_to_equity", "2026-04-26", "563.3", "FY2027 Q1"), not_meaningful: "debt is over 100 times equity, so equity is close to zero" },
+      fin("stockholders_equity", "2026-04-26", "6700000", "FY2027 Q1"),
+      fin("stockholders_equity", "2026-07-26", "-5000000", "FY2027 Q2"),
+      fin("gross_margin", "2026-07-26", "0.7", "FY2027 Q2"),
+    ];
+    const t = metricTable(rows, RATIOS, "ttm");
+    const de = t.rows.find((r) => r.metric === "debt_to_equity")!;
+    expect(de.cells[0]).toMatchObject({ text: "n/m" });
+    expect(de.cells[0]!.title).toContain("over 100 times equity");
+    expect(de.cells[0]!.title).toContain("563.30x");
+    expect(de.cells[1]).toMatchObject({ text: "n/m" });
+    expect(de.cells[1]!.title).toContain("equity is negative at Jul 26, 2026");
+  });
+});
+
+describe("segment shares", () => {
+  // NVIDIA's FY2027 Q2, as filed: Data Center is Hyperscale + AI Clouds, and with Edge is revenue
+  const row = (member: string, label: string, value: string): SegmentRow => ({
+    axis: "product_service", member, member_label: label, member_aliases: [], metric: "revenue", period_start: null,
+    period_end: "2026-07-26", fiscal_period: null, calendar_period: null, value, unit: "USD", value_source: "reported",
+    citation: { accession_no: ACC, form: "10-Q", filed: "2026-08-26", xbrl_tag: "Revenues", xbrl_axis: "srt:ProductOrServiceAxis",
+      xbrl_member: member, source_accessions: null, filing_url: null },
+    freshness: { filed: "", ingested_at: "" },
+  });
+  const NVDA_ROWS = [
+    row("nvda:DataCenterMember", "Data Center", "89023000000"),
+    row("nvda:HyperscaleMember", "Hyperscale", "48710000000"),
+    row("nvda:AICloudsMember", "AI Clouds", "40313000000"),
+    row("nvda:EdgeComputingMember", "Edge Computing", "7198000000"),
+  ];
+  const REVENUE = [fin("revenue", "2026-07-26", "96221000000", "FY2027 Q2")];
+
+  it("are of consolidated revenue, so a parent beside its children reads its true share", () => {
+    const [t] = segmentTables(NVDA_ROWS, REVENUE);
+    expect(t!.shareOf).toBe("consolidated");
+    expect(t!.rows.find((r) => r.label === "Data Center")!.share).toBeCloseTo(0.9252, 3);
+    expect(t!.rows.find((r) => r.label === "Hyperscale")!.share).toBeCloseTo(0.5062, 3);
+    expect(t!.overlapNote).toContain("Hyperscale, AI Clouds are part of another line");
+    expect(t!.rows.filter((r) => r.overlaps).map((r) => r.label)).toEqual(["Hyperscale", "AI Clouds"]);
+  });
+
+  it("two cuts of the same revenue: Vertiv's Products read 84.3%, and the larger cut is the one kept", () => {
+    const [t] = segmentTables([
+      row("vrt:Products", "Products", "3637100000"),
+      row("vrt:ProductExSpares", "Product excluding Spares", "3593800000"),
+      row("vrt:ServicesAndSpares", "Services and Spares", "719000000"),
+      row("vrt:Services", "Services", "675700000"),
+    ], [fin("revenue", "2026-07-26", "4312800000", "FY2026 Q3")]);
+    expect(t!.rows.find((r) => r.label === "Products")!.share).toBeCloseTo(0.8433, 3);
+    expect(t!.rows.filter((r) => r.overlaps).map((r) => r.label)).toEqual(["Product excluding Spares", "Services and Spares"]);
+  });
+
+  it("without revenue: of the members' sum if nothing shows they overlap, and none if something does", () => {
+    const [plain] = segmentTables([row("x:A", "A", "75"), row("x:B", "B", "25")]);
+    expect(plain!.shareOf).toBe("members");
+    expect(plain!.rows[0]!.share).toBeCloseTo(0.75);
+  });
+
+  it("a member bigger than reported revenue isn't a share: the two aren't on one basis", () => {
+    const [t] = segmentTables([row("x:A", "A", "900000000"), row("x:B", "B", "20000000")], [fin("revenue", "2026-07-26", "114000000", "FY2026 Q3")]);
+    expect(t!.rows[0]!.shareTooBig).toBe(true);
+    expect(t!.rows[1]!.shareTooBig).toBe(false);
   });
 });
 

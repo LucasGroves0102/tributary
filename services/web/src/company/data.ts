@@ -5,9 +5,11 @@
 import { csvCell } from "../chart/series";
 import { calendarLabel } from "../compare/state";
 import { FILER_LABELS, fyeMonth, type FilerCategory } from "../companies/screen";
-import { BANK_NA, bankTitle, change, day, money, moneyRow, notForBanks, pct } from "../format";
+import { BANK_NA, NO_DATA, NO_DATA_TITLE, NOT_APPLICABLE, NOT_MEANINGFUL, NOT_REPORTED, readFigure } from "../blanks";
+import { change, day, money, moneyRow, pct } from "../format";
 import { num } from "../home/data";
 import { EIGHT_K_ITEMS } from "../reader/sections";
+import { separateMembers } from "../chart/segments";
 import type { FinancialRow, Recap, RecapValue, ScreenerRow, SegmentRow, ValueSource } from "../types";
 
 export type Fmt = "usd" | "pct" | "growth" | "x" | "eps" | "shares";
@@ -452,19 +454,42 @@ export const AXIS_LABELS: Record<string, string> = {
   product_service: "Products and services",
 };
 const SEGMENT_METRICS: Record<string, string> = { revenue: "Revenue", operating_income: "Operating income" };
+const SHARE_TOLERANCE = 0.02;
 
 export interface SegmentTable {
   axis: string;
   metric: string;
   title: string;
   columns: { periodEnd: string; label: string }[];
-  rows: { member: string; label: string; cells: (TableCell | null)[]; share: number | null; yoy: number | null }[];
+  rows: {
+    member: string;
+    label: string;
+    cells: (TableCell | null)[];
+    /** of consolidated revenue when it's known, else of the members' sum (`shareOf` says) */
+    share: number | null;
+    /** the member is bigger than the consolidated figure: not on the same basis */
+    shareTooBig: boolean;
+    yoy: number | null;
+    /** part of another member, or another cut of the same revenue */
+    overlaps: boolean;
+  }[];
+  /** consolidated: reported revenue. members: their sum, because revenue isn't known for the period.
+   * none: neither can be trusted, so no share is printed. */
+  shareOf: "consolidated" | "members" | "none";
+  /** what the table says about members that overlap, when they do */
+  overlapNote: string | null;
 }
 
-/** One table per axis and metric (revenue, operating income), members by period, newest
- * last; share of the latest period's total and YoY vs four periods earlier. Reconciliation
- * members (corporate, eliminations) are left out. */
-export function segmentTables(rows: SegmentRow[]): SegmentTable[] {
+const listOf = (names: string[], most = 4) =>
+  names.length <= most ? names.join(", ") : `${names.slice(0, most).join(", ")} and ${names.length - most} more`;
+
+/** One table per axis and metric (revenue, operating income), members by period, newest last; YoY
+ * vs four periods earlier; reconciliation members (corporate, eliminations) left out. A revenue
+ * share is the member over consolidated revenue for that period, never over the members' sum: a
+ * parent reported beside its children (NVIDIA's Data Center and Hyperscale) or two cuts of the same
+ * revenue (Vertiv's Products and Product excluding Spares) would halve everything. Without revenue
+ * for the period, it's over the members' sum only if nothing shows they overlap. */
+export function segmentTables(rows: SegmentRow[], revenue: FinancialRow[] = []): SegmentTable[] {
   const groups = new Map<string, SegmentRow[]>();
   for (const r of rows) {
     if (!AXIS_LABELS[r.axis] || !SEGMENT_METRICS[r.metric]) continue;
@@ -475,14 +500,38 @@ export function segmentTables(rows: SegmentRow[]): SegmentTable[] {
     const [axis, metric] = k.split("|");
     return Object.keys(AXIS_LABELS).indexOf(axis!) * 10 + Object.keys(SEGMENT_METRICS).indexOf(metric!);
   };
+  // the same quarter: gold's period end and the segment fact's can be a day or two apart
+  const revenueRows = revenue.filter((r) => r.metric === "revenue");
+  const consolidatedAt = (end: string): number | null => {
+    const at = Date.parse(end);
+    const near = revenueRows.find((r) => Math.abs(Date.parse(r.period_end) - at) <= 7 * 86_400_000);
+    return near ? num(near.value) : null;
+  };
   return [...groups.entries()].sort(([a], [b]) => order(a) - order(b)).map(([k, rs]) => {
     const [axis, metric] = k.split("|") as [string, string];
     const ends = [...new Set(rs.map((r) => r.period_end))].sort().slice(-8);
     const columns = ends.map((e) => ({ periodEnd: e, label: rs.find((r) => r.period_end === e && r.fiscal_period)?.fiscal_period ?? calendarLabel(e) }));
     const members = [...new Map(rs.map((r) => [r.member, r.member_label])).entries()];
     const latest = ends.at(-1);
-    const total = rs.filter((r) => r.period_end === latest).reduce((s, r) => s + (num(r.value) ?? 0), 0);
     const at = (member: string, end: string | undefined) => rs.find((r) => r.member === member && r.period_end === end);
+    // which members overlap, over the table's periods
+    const periods = new Map(ends.map((e, i) => [i, new Map(rs.filter((r) => r.period_end === e && num(r.value) !== null).map((r) => [r.member, num(r.value)!]))]));
+    const totals = new Map(ends.flatMap((e, i): [number, number][] => {
+      const v = consolidatedAt(e);
+      return v ? [[i, v]] : [];
+    }));
+    const separated = metric === "revenue" ? separateMembers(periods, totals) : null;
+    const latestIndex = ends.length - 1;
+    const total = latest === undefined ? null : consolidatedAt(latest);
+    const memberSum = rs.filter((r) => r.period_end === latest).reduce((s, r) => s + (num(r.value) ?? 0), 0);
+    const shareOf: SegmentTable["shareOf"] = metric !== "revenue"
+      ? "none"
+      : total !== null && total > 0
+        ? "consolidated"
+        : separated && separated.drop.size === 0 && !separated.unreliable.has(latestIndex)
+          ? "members"
+          : "none";
+    const base = shareOf === "consolidated" ? total! : memberSum;
     const out = members.map(([member, label]) => {
       const texts = moneyRow(ends.map((end) => {
         const r = at(member, end);
@@ -503,16 +552,25 @@ export function segmentTables(rows: SegmentRow[]): SegmentTable[] {
       });
       const last = num(at(member, latest)?.value);
       const yearAgo = ends.length >= 5 ? num(at(member, ends[ends.length - 5])?.value) : null;
+      const share = last !== null && shareOf !== "none" && base > 0 ? last / base : null;
       return {
         member,
         label,
         cells,
-        share: last !== null && total > 0 && metric === "revenue" ? last / total : null,
+        share,
+        shareTooBig: share !== null && share > 1 + SHARE_TOLERANCE,
         yoy: last !== null && yearAgo ? last / yearAgo - 1 : null,
+        overlaps: separated?.drop.has(member) ?? false,
       };
     });
     out.sort((a, b) => (num(at(b.member, latest)?.value) ?? -Infinity) - (num(at(a.member, latest)?.value) ?? -Infinity));
-    return { axis, metric, title: `${SEGMENT_METRICS[metric]} by ${AXIS_LABELS[axis]!.toLowerCase()}`, columns, rows: out };
+    const parts = out.filter((r) => r.overlaps).map((r) => r.label);
+    const overlapNote = parts.length
+      ? `${listOf(parts)} ${parts.length === 1 ? "is" : "are"} part of another line here, or another cut of the same revenue, so the lines add up to more than revenue. Each share is of consolidated revenue.`
+      : separated?.unreliable.has(latestIndex)
+        ? "These lines add up to more than revenue and can't be separated: some overlap, or include sales between segments. Each share is of consolidated revenue, so don't add them up."
+        : null;
+    return { axis, metric, title: `${SEGMENT_METRICS[metric]} by ${AXIS_LABELS[axis]!.toLowerCase()}`, columns, rows: out, shareOf, overlapNote };
   });
 }
 
