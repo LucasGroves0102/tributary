@@ -1,7 +1,7 @@
 import { useId, useState } from "react";
 
 import type { ColumnInfo } from "../types";
-import { columnSpec, HOME_CARD_LABELS, isDefaultHome, move, sameColumns, toggleCard, type HomeCard } from "./model";
+import { columnSpec, HOME_CARD_LABELS, isDefaultHome, move, offeredColumn, sameColumns, toggleCard, type HomeCard } from "./model";
 
 /** Home's "Customize": show or hide each card and change their order; saved per user. */
 export function HomeLayoutEditor({
@@ -79,7 +79,7 @@ export function ColumnPicker({
     return `${s.long} (${s.period})`;
   };
   const rest = (options ?? [])
-    .filter((o) => !columns.includes(o.key))
+    .filter((o) => !columns.includes(o.key) && offeredColumn(o))
     .map((o) => ({ key: o.key, name: name(o.key) }))
     .sort((a, b) => a.name.localeCompare(b.name));
   const words = find.trim().toLowerCase().split(/\s+/).filter(Boolean);

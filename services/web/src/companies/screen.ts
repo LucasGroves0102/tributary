@@ -162,6 +162,12 @@ export function fraction(percent: number): string {
 
 type Params = Record<string, string | number | string[]>;
 
+/** What the count above the table counts. Without a name or a data check, a company with none of
+ * the shown columns isn't listed (the API's rule), so the count doesn't claim a row of blanks. */
+export function countWords(f: ScreenFilters): string {
+  return f.q || f.issue ? "" : " with figures in these columns";
+}
+
 /** Whether the screener sorts on this key (saved screens and URLs take only these). */
 export const sortable = (key: string) => SORTS.has(key);
 

@@ -259,5 +259,5 @@ it("a named user keeps the full index and the 'only mine' box", async () => {
   await render();
   expect(calls()[0]!.searchParams.get("access")).toBeNull();
   expect(container.textContent).toContain("Only companies I can read");
-  expect($(".page > .row .muted")?.textContent).toBe("2 companies with financials");
+  expect($(".page > .row .muted")?.textContent).toBe("2 companies with figures in these columns");
 });

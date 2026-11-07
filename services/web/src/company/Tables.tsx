@@ -1,8 +1,10 @@
 import type { ReactNode } from "react";
 
-import { financialsView, segments as fetchSegments } from "../api";
+import { annualPerShare, financialsView, segments as fetchSegments } from "../api";
+import { NO_DATA, NO_DATA_TITLE, NOT_APPLICABLE, NOT_MEANINGFUL } from "../blanks";
 import { download } from "../download";
-import { BANK_NA, bankTitle, change, pct } from "../format";
+import { change, pct } from "../format";
+import type { FinancialRow } from "../types";
 import {
   financialsCsv,
   metricTable,
@@ -128,25 +130,34 @@ interface TableProps {
   companyId: string;
   name: string;
   ticker: string;
-  /** SIC description: a bank's operating margin / FCF / net debt rows read n/a */
-  industry?: string | null;
+  /** metrics that don't describe this company (ScreenerRow.not_applicable): they read n/a */
+  notApplicable?: string[];
 }
+
+const BALANCE_NOT_TTM = "A balance is a point in time, so it has no trailing twelve months. Quarterly shows every quarter end.";
 
 /** Statement, period, basis and range live in the address (route.ts), so a view can be linked,
  * bookmarked and undone with Back. Range applies to Quarterly and TTM; Annual is ten years. */
-export function Statements({ token, companyId, name, ticker, industry = null, view = {} }: TableProps & { view?: StatementView }) {
+export function Statements({ token, companyId, name, ticker, notApplicable = [], view = {} }: TableProps & { view?: StatementView }) {
   const kind: Statement = view.kind ?? "is";
-  const period: Period = view.period ?? "q";
+  // the address keeps TTM for the statements that have one
+  const period: Period = kind === "bs" && view.period === "ttm" ? "q" : view.period ?? "q";
   const basis: Basis = view.basis ?? "fiscal";
   const range: StatementRange = view.range ?? "8q";
   const set = (patch: StatementView) =>
     go({ view: "company", companyId, tab: "statements", statements: { ...view, ...patch } });
   const req = statementRequest(period, range);
   const metrics = STATEMENTS[kind].rows;
-  const load = useLoad(`${companyId}|${kind}|${period}|${basis}|${req.quarters}`, () =>
-    financialsView(token, companyId, req.quarters, metrics.map(([m]) => m), req.view, basis),
-  );
-  const table = load?.state === "ok" ? metricTable(load.data.rows, metrics, period, basis, industry, RANGE_QUARTERS[range]) : null;
+  const annual = period === "a" && kind === "is";
+  const load = useLoad(`${companyId}|${kind}|${period}|${basis}|${req.quarters}`, async (): Promise<{ rows: FinancialRow[] }> => {
+    const [fin, perShare] = await Promise.all([
+      financialsView(token, companyId, req.quarters, metrics.map(([m]) => m), req.view, basis),
+      // a company with no annual per-share facts, or an older API, still has its statement
+      annual ? annualPerShare(token, companyId).catch(() => ({ rows: [] as FinancialRow[] })) : { rows: [] as FinancialRow[] },
+    ]);
+    return { rows: annual ? withAnnualPerShare(fin.rows, perShare.rows, basis) : fin.rows };
+  });
+  const table = load?.state === "ok" ? metricTable(load.data.rows, metrics, period, basis, notApplicable, RANGE_QUARTERS[range]) : null;
   const exportCsv = () =>
     load?.state === "ok" && table &&
     download(`${ticker.toLowerCase()}-${kind}-${period}${period !== "a" && range !== "8q" ? `-${range}` : ""}${basis === "calendar" ? "-calendar" : ""}.csv`, new Blob([financialsCsv(load.data.rows, table, req.view)], { type: "text/csv" }));
@@ -156,7 +167,8 @@ export function Statements({ token, companyId, name, ticker, industry = null, vi
       <div className="card-h wrap">
         <Seg label="Statement" value={kind} set={(k) => set({ kind: k })}
           options={(Object.keys(STATEMENTS) as Statement[]).map((k) => [k, STATEMENTS[k].label])} />
-        <Seg label="Period" value={period} set={(p) => set({ period: p })} options={PERIODS} />
+        <Seg label="Period" value={period} set={(p) => set({ period: p })} options={PERIODS}
+          off={kind === "bs" ? { ttm: BALANCE_NOT_TTM } : undefined} />
         {period !== "a" && <Seg label="Range" value={range} set={(r) => set({ range: r })} options={RANGES} />}
         <Seg label="Basis" value={basis} set={(b) => set({ basis: b })} options={BASES} />
         <span className="sub">{basis === "calendar" ? "calendar quarters" : "fiscal periods"} · USD · hover a value for its filing</span>
@@ -179,12 +191,14 @@ export function Statements({ token, companyId, name, ticker, industry = null, vi
         {period === "a"
           ? basis === "calendar"
             ? "Annual = the calendar year: the four quarters ending nearest each calendar Q4, balances at its end. "
-            : "Annual = the fiscal year: four quarters to each fiscal Q4, balances at the year end. "
+            : "Annual = the fiscal year: four quarters to each fiscal Q4, balances at the year end, EPS and shares as the latest 10-K to state them, so years before a stock split may not be adjusted for it. "
           : period === "ttm"
-            ? "TTM = trailing twelve months to each quarter end; balances at the quarter end. "
-            : ""}
+            ? "TTM = trailing twelve months to each quarter end. Per-share figures don't add across quarters: n/a. "
+            : kind === "is"
+              ? "EPS and diluted shares have no fiscal Q4: a 10-K states the year, and the year less nine months isn't the quarter when the share count changes. "
+              : ""}
         Italic values are derived (e.g. Q4 = the 10-K's year minus nine months year-to-date),
-        the rest are reported. Every value links to its filing.
+        the rest are reported. Every value links to its filing. {NO_DATA} no data in this period, — not reported, $0 a real zero.
       </div>
     </section>
   );

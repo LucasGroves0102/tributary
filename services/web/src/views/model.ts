@@ -100,6 +100,14 @@ const SHORT: Record<string, { label: string; long: string }> = {
   debt_to_equity_q: { label: "Debt/eq", long: "Debt to equity" },
 };
 const MULTIPLES = new Set(["debt_to_equity", "current_ratio"]);
+/** query_api POINT_IN_TIME, for a key the API's catalog hasn't answered for yet. */
+const BALANCES = new Set(["cash", "short_term_investments", "receivables", "inventory", "current_assets", "total_assets",
+  "current_liabilities", "long_term_debt_current", "long_term_debt", "total_liabilities", "stockholders_equity", "net_debt",
+  "shares_outstanding", "debt_to_equity", "current_ratio"]);
+
+/** A balance has no trailing twelve months: its _ttm column is its _q column under a false label, so
+ * a picker doesn't offer it. A saved one still reads, as what it is. */
+export const offeredColumn = (o: ColumnInfo): boolean => !(o.span === "ttm" && (o.balance ?? BALANCES.has(o.metric)));
 
 /** The spec for a column key, from the API's catalog entry when known. */
 export function columnSpec(key: string, info?: ColumnInfo): ColumnSpec {
@@ -119,7 +127,7 @@ export function columnSpec(key: string, info?: ColumnInfo): ColumnSpec {
     key,
     label: known?.label ?? long,
     long,
-    period: span === "ttm" ? (kind === "growth" ? "TTM YoY" : "TTM") : "qtr end",
+    period: info?.balance ?? BALANCES.has(metric) ? "qtr end" : span === "ttm" ? (kind === "growth" ? "TTM YoY" : "TTM") : "quarter",
     kind,
   };
 }

@@ -2,6 +2,7 @@ import { expect, it } from "vitest";
 
 import { WATCHLIST_COLUMNS } from "../api";
 import { SCREEN_COLUMNS } from "../companies/screen";
+import type { ColumnInfo } from "../types";
 import {
   columnList,
   columnSpec,
@@ -11,6 +12,7 @@ import {
   homeLayout,
   isDefaultHome,
   move,
+  offeredColumn,
   sameColumns,
   toggleCard,
 } from "./model";
@@ -56,11 +58,22 @@ it("the defaults are the tables' own columns", () => {
   expect(WATCHLIST_COLUMNS).toEqual(["revenue_ttm", "revenue_growth_ttm", "operating_margin_ttm", "free_cash_flow_ttm", "net_debt_q"]);
 });
 
+it("a balance is at a date: no TTM on offer, and a saved one reads as what it is", () => {
+  const cash = (span: "ttm" | "quarter", key: string): ColumnInfo => ({ key, metric: "cash", span, unit: "USD", balance: true });
+  expect(offeredColumn(cash("ttm", "cash_ttm"))).toBe(false);
+  expect(offeredColumn(cash("quarter", "cash_q"))).toBe(true);
+  expect(offeredColumn({ key: "revenue_ttm", metric: "revenue", span: "ttm", unit: "USD", balance: false })).toBe(true);
+  expect(columnSpec("cash_ttm", cash("ttm", "cash_ttm")).period).toBe("qtr end");
+  expect(columnSpec("net_debt_ttm").period).toBe("qtr end");
+  // a flow in one quarter isn't "at the quarter end"
+  expect(columnSpec("revenue_q").period).toBe("quarter");
+});
+
 it("columns from the API's catalog get labels, periods and formats by unit", () => {
   const spec = (k: string) => columnSpec(k, OPTIONS.find((o) => o.key === k));
   expect(spec("revenue_ttm")).toMatchObject({ label: "Revenue", period: "TTM", kind: "usd" });
   expect(spec("net_income_ttm")).toMatchObject({ label: "Net income", period: "TTM", kind: "usd" });
-  expect(spec("eps_diluted_q")).toMatchObject({ period: "qtr end", kind: "eps" });
+  expect(spec("eps_diluted_q")).toMatchObject({ period: "quarter", kind: "eps" });
   expect(spec("weighted_shares_diluted_q").kind).toBe("shares");
   expect(spec("net_income_growth_ttm")).toMatchObject({ kind: "growth", period: "TTM YoY" });
   expect(spec("current_ratio_q").kind).toBe("x");

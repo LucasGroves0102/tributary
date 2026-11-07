@@ -7,6 +7,7 @@ import {
   BAND_LABELS,
   BANDS,
   CHECKS,
+  countWords,
   DEFAULT_SORT,
   describe,
   EXCHANGES,
@@ -117,7 +118,7 @@ export function Companies({ token, screen: asked, watched, onWatch, onChart, sav
               ? isEmpty(screen)
                 ? `${total} ${total === 1 ? "company" : "companies"} in your demo`
                 : `${total} of the ${scope.ids.size} companies in your demo`
-              : `${total.toLocaleString()} ${total === 1 ? "company" : "companies"} with financials`}
+              : `${total.toLocaleString()} ${total === 1 ? "company" : "companies"}${countWords(screen)}`}
           </span>
         )}
         <button

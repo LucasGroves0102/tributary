@@ -287,17 +287,28 @@ it("an ungranted company shows its metadata and says what its plan doesn't cover
 });
 
 it("statements: what's chosen comes from the address and goes back to it", async () => {
-  await render("statements", NVDA, null, { kind: "bs", period: "ttm", basis: "calendar", range: "5y" });
+  await render("statements", NVDA, null, { kind: "cf", period: "ttm", basis: "calendar", range: "5y" });
   const q = paths().find((u) => u.pathname.endsWith("/financials"))!;
   expect(q.searchParams.get("view")).toBe("ttm");
   expect(q.searchParams.get("quarters")).toBe("20");
   expect(q.searchParams.get("basis")).toBe("calendar");
-  expect(q.searchParams.getAll("metrics")).toContain("total_assets");
+  expect(q.searchParams.getAll("metrics")).toContain("capex");
   expect($('[aria-label="Range"] [aria-pressed="true"]')?.textContent).toBe("5y");
   await click(button("Max"));
-  expect(window.location.hash).toBe(`#/company/${NVDA}/statements?kind=bs&period=ttm&basis=calendar&range=max`);
-  await click(button("Cash flow"));
-  expect(window.location.hash).toBe(`#/company/${NVDA}/statements?kind=cf&period=ttm&basis=calendar&range=5y`);
+  expect(window.location.hash).toBe(`#/company/${NVDA}/statements?kind=cf&period=ttm&basis=calendar&range=max`);
+  await click(button("Income statement"));
+  expect(window.location.hash).toBe(`#/company/${NVDA}/statements?period=ttm&basis=calendar&range=5y`);
+});
+
+it("statements: a balance sheet has no TTM, so it shows quarters and says why", async () => {
+  await render("statements", NVDA, null, { kind: "bs", period: "ttm" });
+  const q = paths().find((u) => u.pathname.endsWith("/financials"))!;
+  expect(q.searchParams.get("view")).toBe("quarter");
+  expect(q.searchParams.getAll("metrics")).toContain("total_assets");
+  expect($('[aria-label="Period"] [aria-pressed="true"]')?.textContent).toBe("Quarterly");
+  const ttm = button("TTM") as HTMLButtonElement;
+  expect(ttm.disabled).toBe(true);
+  expect(ttm.title).toContain("point in time");
 });
 
 it("statements: range is for Quarterly and TTM; Annual has its ten years", async () => {
