@@ -2970,14 +2970,6 @@ button.link.num {
     -webkit-overflow-scrolling: touch;
   }
 
-  .lchart-bar .faint {
-    display: none;
-  }
-
-  .card-h.wrap,
-  .chart-card .card-h {
-    flex-wrap: wrap;
-  }
 }
 
 @media (max-width: 600px) {

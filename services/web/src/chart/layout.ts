@@ -11,8 +11,48 @@ export const PLOT_H = 300;
 const PAD = { l: 64, r: 16, rAxis: 64, t: 10, b: 26 };
 const LEGEND_LINE = 18;
 const CHAR_W = 6.6; // approximate width of a legend character at 11.5px
+const FOOT_CHAR_W = 5.3; // of a footnote character at 10.5px italic
+const TITLE_CHAR_W = 8.2; // of a title character at 15px semibold
+const TITLE_LINE = 18;
+/** below this width the left margin shrinks, and titles and notes start at the card's edge */
+const NARROW = 520;
+const MIN_W = 300;
+const MAX_W = 1400;
 const MARKER_BAND = 18;
 const DAY = 86400000;
+
+/** The viewBox for the width a chart really has, so its text is drawn at its real size and never
+ * scaled up past the page heading or down to nothing: a title is 15px at any width. */
+export function chartSize(measured: number): { width: number; plotHeight: number } {
+  const width = Math.round(Math.max(MIN_W, Math.min(MAX_W, measured)));
+  return { width, plotHeight: Math.round(Math.max(210, Math.min(360, width * 0.34))) };
+}
+
+/** Text wrapped to the chart's width: SVG text doesn't wrap and is cut at the edge of its viewBox. */
+export function wrapToWidth(lines: string[], width: number, charWidth: number): string[] {
+  const most = Math.max(20, Math.floor(width / charWidth));
+  return lines.flatMap((line) => {
+    const out: string[] = [];
+    let cur = "";
+    for (const word of line.split(" ")) {
+      if (cur && cur.length + 1 + word.length > most) {
+        out.push(cur);
+        cur = word;
+      } else {
+        cur = cur ? `${cur} ${word}` : word;
+      }
+    }
+    if (cur) out.push(cur);
+    return out;
+  });
+}
+
+/** Where titles and notes start, and how much room they have, at a chart's width. */
+export const textLeft = (width: number) => (width < NARROW ? 8 : PAD.l);
+export const footnoteLines = (lines: string[], width: number) =>
+  wrapToWidth(lines, width - textLeft(width) - 8, FOOT_CHAR_W);
+export const titleLines = (title: string, width: number) =>
+  title ? wrapToWidth([title], width - textLeft(width) - 8, TITLE_CHAR_W) : [];
 
 export interface Scale {
   lo: number;
@@ -69,6 +109,8 @@ export interface PlacedMarker extends Marker {
 export interface Layout {
   width: number;
   height: number;
+  /** x where the title, legend and footnote start */
+  lead: number;
   /** top of the plot (below title and legend) */
   top: number;
   plot: { l: number; r: number; t: number; b: number };
@@ -97,6 +139,8 @@ export interface LayoutOptions {
   width?: number;
   /** plot height (default PLOT_H) */
   plotHeight?: number;
+  /** title lines, when a narrow chart wraps it (default 1) */
+  titleLines?: number;
 }
 
 const stacked = (t: Series["type"]) => t === "sbar" || t === "sarea";
@@ -165,19 +209,22 @@ function scaleFor(series: Series[], sp: ([number, number] | null)[][]): Scale | 
 export function layout(series: Series[], title: boolean, markers: Marker[] = [], opts: LayoutOptions = {}): Layout {
   const ticks = xAxis(series);
   const hasRight = series.some((s) => s.axis === "R");
-  const l = PAD.l;
   const W = opts.width ?? WIDTH;
-  const r = W - (hasRight ? PAD.rAxis : PAD.r);
+  const narrow = W < NARROW;
+  const l = narrow ? 48 : PAD.l;
+  const r = W - (hasRight ? (narrow ? 48 : PAD.rAxis) : PAD.r);
+  const lead = textLeft(W);
 
   // title, then the legend wrapped to the width
-  let y = title ? (opts.subtitle ? 52 : 34) : opts.subtitle ? 32 : 14;
-  let x = l;
+  const extraTitle = title ? Math.max(0, (opts.titleLines ?? 1) - 1) * TITLE_LINE : 0;
+  let y = (title ? (opts.subtitle ? 52 : 34) : opts.subtitle ? 32 : 14) + extraTitle;
+  let x = lead;
   const legend: LegendItem[] = [];
   for (const s of series) {
     const name = s.name + (s.axis === "R" ? " (right axis)" : "");
     const w = 18 + name.length * CHAR_W + 16;
-    if (x + w > W - PAD.r && x > l) {
-      x = l;
+    if (x + w > W - PAD.r && x > lead) {
+      x = lead;
       y += LEGEND_LINE;
     }
     legend.push({ id: s.id, color: s.color, name, x, y, dashed: dashedOf(s), ...(s.faint ? { faint: true } : {}) });
@@ -193,7 +240,9 @@ export function layout(series: Series[], title: boolean, markers: Marker[] = [],
   const right = scaleFor(on("R").map((i) => series[i]!), on("R").map((i) => sp[i]!));
   const yOf = (sc: Scale, v: number) => b - ((v - sc.lo) / (sc.hi - sc.lo)) * (b - t);
   const n = ticks.length;
-  const xs = ticks.map((_, i) => (n < 2 ? (l + r) / 2 : l + 14 + (i * (r - l - 28)) / (n - 1)));
+  // bars need half a bar slot at each end, or the first and last overprint the axis labels
+  const inset = series.some((s) => barLike(s.type)) && n ? Math.max(14, (r - l) / n / 2) : 14;
+  const xs = ticks.map((_, i) => (n < 2 ? (l + r) / 2 : l + inset + (i * (r - l - 2 * inset)) / (n - 1)));
 
   const lines = (sc: Scale | null) => {
     if (!sc) return [];
@@ -205,8 +254,9 @@ export function layout(series: Series[], title: boolean, markers: Marker[] = [],
   };
   // ten labels across the full width, fewer on the narrower small multiples
   const every = Math.ceil(n / Math.max(2, Math.min(10, Math.floor(W / 90))));
+  // the last period always has its label; one that would run into it gives way
   const xLabels = ticks.flatMap((tk, i) =>
-    i % every === 0 || i === n - 1 ? [{ x: xs[i]!, label: tk.period }] : [],
+    (i % every === 0 && n - 1 - i >= Math.max(1, every * 0.6)) || i === n - 1 ? [{ x: xs[i]!, label: tk.period }] : [],
   );
 
   // bar slots: one per plain bar layer, one per stacked-bar group (axis)
@@ -273,6 +323,7 @@ export function layout(series: Series[], title: boolean, markers: Marker[] = [],
   return {
     width: W,
     height: b + PAD.b + 46 + band + extraFoot,
+    lead,
     top,
     plot: { l, r, t, b },
     ticks,

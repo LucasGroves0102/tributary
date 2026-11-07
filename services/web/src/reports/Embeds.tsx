@@ -85,12 +85,14 @@ function EmbeddedChart({ token, item, label, hasTtm }: Common & { hasTtm: TtmCat
 
 /** A chart state drawn read-only (embeds, the company Revenue view): each layer's data read
  * now as the viewer (chart/fetch.ts), drawn by LayerChart with its source footnote. */
-export function ChartView({ token, chart, name, label, hasTtm }: {
+export function ChartView({ token, chart, name, label, hasTtm, axisCaption }: {
   token: string;
   chart: ChartState;
   name: string;
   label: (companyId: string) => string;
   hasTtm: TtmCatalog;
+  /** the left axis's caption instead of the unit's own */
+  axisCaption?: string;
 }) {
   const visible = chart.layers.filter((l) => !l.hidden);
   const requests = visible.flatMap((layer) => {
@@ -165,6 +167,7 @@ export function ChartView({ token, chart, name, label, hasTtm }: {
         svgRef={svg}
         deck={chart.deck}
         onOpen={open}
+        axisCaption={axisCaption}
       />
       {errors.length > 0 && <p className="faint small">{errors.length} line{errors.length === 1 ? "" : "s"} couldn't be drawn: {[...new Set(errors)].join("; ")}.</p>}
     </>

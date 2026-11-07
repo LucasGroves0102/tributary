@@ -55,9 +55,13 @@ export function Overview({
         <Recap token={token} companyId={companyId} name={name} accession={canFin ? recapAccession(row) : null} canFin={canFin} />
         <section className="card">
           <Business token={token} companyId={companyId} name={name} canRead={access.includes("filings")} />
-          {canFin && <Revenue token={token} companyId={companyId} />}
         </section>
       </div>
+      {canFin && (
+        <section className="card">
+          <Revenue token={token} companyId={companyId} />
+        </section>
+      )}
     </>
   );
 }

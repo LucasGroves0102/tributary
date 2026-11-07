@@ -50,7 +50,8 @@ export function unitLabel(unit: string): string {
 export function formatValue(v: number, unit: string, compact = false): string {
   switch (unit) {
     case "USD":
-      return money(v, "USD");
+      // an axis tick is a round number: "$400B", not "$400.00B"
+      return compact ? money(v, "USD").replace(/\.?0+(?=[TBMK]$)/, "") : money(v, "USD");
     case "USD/shares":
       return `${v < 0 ? "-" : ""}$${Math.abs(v).toFixed(2)}`;
     case "ratio":

@@ -220,7 +220,7 @@ function Decomposition({ rows, totals, ...c }: Common & { rows: SegmentRow[]; to
         <p className="empty">No segment revenue for {c.name} to decompose.</p>
       ) : (
         <>
-          <ChartView token={c.token} chart={chart} name={chart.title} label={c.label} hasTtm={everyMetric} />
+          <ChartView token={c.token} chart={chart} name={chart.title} label={c.label} hasTtm={everyMetric} axisCaption="points" />
           <ChartActions chart={chart} saved={c.saved} onOpenChart={c.onOpenChart} />
           <TableScroll label="Growth decomposition">
             <table className="t decomposition">
