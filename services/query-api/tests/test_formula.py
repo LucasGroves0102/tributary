@@ -79,12 +79,106 @@ def test_syntax_errors_have_positions(src, message, pos):
 @pytest.mark.parametrize("src, message, pos, length, hint", [
     ("revnue / revenue", "Unknown metric 'revnue'", 0, 6, "Did you mean revenue?"),
     ("KO.revnue / PEP.revenue", "Unknown metric 'revnue'", 3, 6, "Did you mean revenue?"),
-    ("zzzzzzzz", "Unknown metric 'zzzzzzzz'", 0, 8, "GET /v1/metrics lists the metrics"),
+    ("zzzzzzzz", "Unknown metric 'zzzzzzzz'", 0, 8, "Start typing to see the metric names"),
 ])
 def test_unknown_metrics_suggest(src, message, pos, length, hint):
     e = error(src)
     assert (e.message, e.pos, e.length, e.hint, e.code) == (
         message, pos, length, hint, "unknown_metric")
+
+
+def test_every_unknown_metric_is_reported_with_its_own_suggestion():
+    problems = error("ebitda / revnue + ebitda - revenue").all()
+    assert [(p.message, p.pos, p.length, p.hint) for p in problems] == [
+        ("Unknown metric 'ebitda'", 0, 6, "Start typing to see the metric names"),
+        ("Unknown metric 'revnue'", 9, 6, "Did you mean revenue?"),
+    ]
+    assert error("revnue").all()[0].message == "Unknown metric 'revnue'"
+
+
+@pytest.mark.parametrize("src, pos, length", [
+    ("revenue / 0", 8, 3),
+    ("revenue / 0.00", 8, 6),
+    ("revenue / (0)", 8, 4),
+    ("revenue / -0", 8, 4),
+    ("revenue / (1 - 1)", 8, 8),
+    ("ttm(revenue) / (2 * 0)", 13, 8),
+])
+def test_dividing_by_a_constant_zero_is_an_error(src, pos, length):
+    e = error(src)
+    assert (e.message, e.code) == ("Can't divide by zero", "zero")
+    assert e.hint == "Divide by a metric, or a number other than 0"
+    assert (e.pos, e.length) == (pos, length)
+
+
+def test_a_zero_that_is_not_a_divisor_is_fine():
+    assert analyze(parse("revenue + 0")).unit == "USD"
+    assert analyze(parse("0 / revenue")).unit == "1/USD"
+    assert analyze(parse("revenue / (1 - 0.5)")).unit == "USD"
+
+
+def test_huge_constants_dont_break_the_check():
+    big = " * ".join(["9" * 30] * 12)
+    assert analyze(parse(f"revenue / ({big})")).unit == "USD"
+
+
+@pytest.mark.parametrize("src, display", [
+    # ratio metrics
+    ("gross_margin", "percent"),
+    ("revenue_growth", "percent"),
+    ("debt_to_equity", "multiple"),
+    ("current_ratio", "multiple"),
+    ("ttm(operating_margin)", "percent"),
+    ("abs(current_ratio)", "multiple"),
+    ("-gross_margin", "percent"),
+    # same unit over same unit
+    ("net_income / revenue", "percent"),
+    ("(revenue - cost_of_revenue) / revenue", "percent"),
+    ("NVDA.revenue / MSFT.revenue", "multiple"),
+    ("NVDA.revenue / revenue", "multiple"),
+    ("revenue / revenue[-4q]", "multiple"),
+    ("operating_cash_flow / net_income", "multiple"),
+    ("long_term_debt / stockholders_equity", "multiple"),
+    ("(long_term_debt + long_term_debt_current) / stockholders_equity", "multiple"),
+    ("current_assets / current_liabilities", "multiple"),
+    ("net_income / stockholders_equity", "percent"),
+    ("cash / total_assets", "percent"),
+    ("eps_diluted / eps_diluted[-4q]", "multiple"),
+    # changes
+    ("revenue / revenue[-4q] - 1", "percent"),
+    ("abs(revenue / revenue[-4q]) - 1", "percent"),
+    ("(net_income / revenue) / (net_income / revenue)[-4q] - 1", "percent"),
+    ("current_ratio - 2", "multiple"),
+    ("gross_margin - 0.05", "percent"),
+    # scaled: days, points, per-hundred
+    ("receivables / revenue * 365", "number"),
+    ("365 * receivables / revenue", "number"),
+    ("receivables * 365 / revenue", "number"),
+    ("receivables / (revenue / 365)", "number"),
+    ("net_income / revenue * 100", "number"),
+    ("net_income / revenue / 4", "number"),
+    ("1 / current_ratio", "number"),
+    ("gross_margin * 1", "percent"),
+    # two ratios
+    ("gross_margin - operating_margin", "percent"),
+    ("gross_margin - current_ratio", "number"),
+    ("net_margin * debt_to_equity", "percent"),
+    ("current_ratio * debt_to_equity", "multiple"),
+    ("gross_margin / operating_margin", "multiple"),
+    ("current_ratio / debt_to_equity", "number"),
+    # dimensions that cancel in a product have no usual reading
+    ("revenue * (1 / revenue)", "number"),
+])
+def test_a_dimensionless_result_says_how_it_reads(src, display):
+    a = analyze(parse(src))
+    assert a.unit == "ratio"
+    assert a.display == display
+
+
+@pytest.mark.parametrize("src", ["revenue", "revenue * 365", "eps_diluted", "shares_outstanding",
+                                 "gross_margin * revenue", "revenue * revenue"])
+def test_a_result_with_a_unit_has_no_display(src):
+    assert analyze(parse(src)).display is None
 
 
 @pytest.mark.parametrize("src, unit", [
@@ -156,14 +250,14 @@ COMPANIES = {None: "0000077476", "KO": "0000021344"}
 
 
 def test_compiled_sql_carries_no_user_text():
-    src = "revenue / KO.revenue[-4q] * 1.5 - abs(-net_income) / revenue / 0"
+    src = "revenue / KO.revenue[-4q] * 1.5 - abs(-net_income) / revenue / 7"
     ast = parse(src)
     c = compile_formula(ast, analyze(ast), COMPANIES, "fiscal")
     for word in ("revenue", "net_income", "KO", "1.5", "0000077476"):
         assert word not in c.sql
     assert c.params[:10] == [0, "0000077476", "revenue", "quarter", 0,
                              1, "0000021344", "revenue", "quarter", 4]
-    assert Decimal("1.5") in c.params and Decimal("0") in c.params
+    assert Decimal("1.5") in c.params and Decimal("7") in c.params
     assert "NULLIF" in c.sql and "abs(" in c.sql
     assert c.sql.count("%s") == len(c.params)
     assert c.alignment == "calendar"  # two companies

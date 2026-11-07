@@ -81,6 +81,39 @@ def test_cross_company_formula_checks_every_company(client, token):
     assert point["inputs"][1]["freshness"]["filed"] == "2025-07-24"
 
 
+def test_both_routes_say_how_a_dimensionless_result_reads(client, token):
+    body = {"formula": "PEP.revenue / KO.revenue"}
+    assert evaluate(client, token, "bob", **body).json()["display"] == "multiple"
+    v = client.post("/v1/formulas/validate", json=body, headers=token("bob")).json()
+    assert (v["valid"], v["unit"], v["display"]) == (True, "ratio", "multiple")
+    body = {"formula": "receivables / revenue * 365", "default_company": PEP}
+    assert client.post("/v1/formulas/validate", json=body,
+                       headers=token("bob")).json()["display"] == "number"
+    body = {"formula": "revenue", "default_company": PEP}
+    assert client.post("/v1/formulas/validate", json=body,
+                       headers=token("bob")).json()["display"] is None
+
+
+def test_every_bad_name_comes_back_and_no_route_is_named(client, token):
+    body = {"formula": "ebitda / revnue", "default_company": PEP}
+    v = client.post("/v1/formulas/validate", json=body, headers=token("bob")).json()
+    assert v["valid"] is False
+    assert [e["message"] for e in v["errors"]] == [
+        "Unknown metric 'ebitda'", "Unknown metric 'revnue'"]
+    assert v["errors"][1]["hint"] == "Did you mean revenue?"
+    assert "/v1/" not in str(v)
+    r = evaluate(client, token, "bob", **body)
+    assert r.status_code == 422 and len(r.json()["detail"]["errors"]) == 2
+
+
+def test_a_literal_zero_divisor_is_refused_before_any_query(client, token):
+    body = {"formula": "revenue / 0", "default_company": PEP}
+    v = client.post("/v1/formulas/validate", json=body, headers=token("bob")).json()
+    assert v["valid"] is False and v["errors"][0]["message"] == "Can't divide by zero"
+    r = evaluate(client, token, "bob", **body)
+    assert r.status_code == 422 and "formula" not in [c[0] for c in client.store.calls]
+
+
 def test_ungranted_company_in_formula_is_refused_before_any_query(client, token):
     r = evaluate(client, token, "alice", formula="KO.revenue / PEP.revenue")
     assert r.status_code == 403

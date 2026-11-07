@@ -84,9 +84,16 @@ company_id of metrics written without a ticker.
   unary minus, parentheses. A recursive-descent parser builds an AST; nothing is evaluated.
   Limits: 500 characters, 24 levels of nesting, 100 nodes, 40 quarters of lag, 5 companies,
   20 distinct input series.
-- **Checks** (`check.py`): unknown metrics (with "did you mean"), metrics without values in
-  the requested view (`ttm(eps_diluted)`), and units: + and - need the same unit (a constant
-  takes the other side's), * and / combine them (USD / shares = USD/shares, USD / USD = ratio).
+- **Checks** (`check.py`): unknown metrics (every one at once, each with "did you mean" when
+  there's a close name; `GET /v1/metrics` lists them), metrics without values in the requested
+  view (`ttm(eps_diluted)`), a division by a constant that is zero (`revenue / 0`), and units: +
+  and - need the same unit (a constant takes the other side's), * and / combine them (USD /
+  shares = USD/shares, USD / USD = ratio).
+- **Display** (rules in `check.py`'s docstring): a dimensionless result isn't necessarily a
+  percent, so both routes also say `display`: `percent` (`net_income / revenue`,
+  `revenue / revenue[-4q] - 1`), `multiple` (`NVDA.revenue / MSFT.revenue`, `debt_to_equity`) or
+  `number` (`receivables / revenue * 365`, days); `null` when the result has a unit. Values don't
+  change, only how a chart reads them. A saved chart layer's `display` overrides it.
 - **Tickers** resolve through `silver.resolve_company` (best ticker match). A ticker that
   matches nothing and one the caller can't read give the same error
   ("KO isn't one of your companies"); suggestions come only from the caller's own companies.
@@ -95,7 +102,7 @@ company_id of metrics written without a ticker.
   fiscal quarter; otherwise (basis `calendar`, or several companies) the calendar quarter of
   migration 014's rule, using `calendar_primary` rows. A lag of n moves an input's rows n keys
   later. A point exists where the expression is not NULL: a missing input or a division by zero
-  is a gap. `view` picks quarter or TTM inputs; `ttm(...)` forces TTM inside it. The rows are
+  in the data is a gap. `view` picks quarter or TTM inputs; `ttm(...)` forces TTM inside it. The rows are
   also filtered on the input companies' ids as a bound array: `gold.financials` is a UNION
   view, and a company filter that arrives only through a join can't reach its indexes.
 - **Errors**: `{"code", "message", "pos", "length", "hint"}`. `validate` returns them with

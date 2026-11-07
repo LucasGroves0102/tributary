@@ -399,6 +399,7 @@ BAD_STATES = [
     ("chart", {**CHART, "range": 7}),
     ("chart", {**CHART, "range": "all"}),
     ("chart", {**CHART, "layers": [{**CHART["layers"][0], "color": 8}]}),
+    ("chart", {**CHART, "layers": [{**CHART["layers"][0], "display": "days"}]}),
     ("chart", {**CHART, "layers": [{**CHART["layers"][0], "name": "a\x00b"}]}),
     ("chart", {**CHART, "layers": [{**CHART["layers"][0], "name": "x" * 81}]}),
     ("chart", {**CHART, "layers": [{**CHART["layers"][0], "type": "pie"}]}),
@@ -541,6 +542,18 @@ def test_segment_layers():
                   "members": ["country:US", "srt:AsiaMember", "nvda:AllOtherCountriesMember"]}]})
     assert saved["layers"][0]["members"] == ["nvda:ComputeAndNetworkingSegmentMember"]
     assert saved["layers"][1]["transform"] == "contrib"
+
+
+def test_a_layer_can_say_how_it_reads():
+    """Metric and formula layers only; a chart saved before the field still validates."""
+    saved = validate_state("chart", {**CHART, "layers": [
+        {"kind": "formula", "formula": "receivables / revenue", "display": "number"},
+        {"kind": "metric", "companyId": NVDA, "metric": "debt_to_equity", "display": "percent"}]})
+    assert [x["display"] for x in saved["layers"]] == ["number", "percent"]
+    assert "display" not in validate_state("chart", CHART)["layers"][0]
+    for layer in (SEGMENT, {"kind": "price", "companyId": NVDA, "transform": "q"}):
+        with pytest.raises(StateError):
+            validate_state("chart", {**CHART, "layers": [{**layer, "display": "number"}]})
 
 
 def test_price_layers():

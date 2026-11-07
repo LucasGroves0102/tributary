@@ -103,6 +103,8 @@ class ChartLayer(_Strict):
     hidden: bool = False
     name: str | None = Field(default=None, max_length=80)  # legend name
     color: int | None = Field(default=None, ge=0, le=7)    # tokens.css --series-N
+    # how a dimensionless layer reads, instead of what its formula's shape says (formula/check.py)
+    display: Literal["percent", "multiple", "number"] | None = None
 
     @field_validator("name")
     @classmethod
@@ -111,6 +113,8 @@ class ChartLayer(_Strict):
 
     @model_validator(mode="after")
     def _complete(self) -> ChartLayer:
+        if self.display is not None and self.kind not in ("metric", "formula"):
+            raise ValueError("display is for metric and formula layers")
         if self.kind == "segment":
             if (not self.companyId or not self.metric or not self.segmentAxis or not self.members
                     or self.formula is not None or self.defaultCompany is not None):

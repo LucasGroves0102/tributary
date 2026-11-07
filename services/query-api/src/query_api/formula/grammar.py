@@ -39,6 +39,22 @@ class FormulaError(Exception):
         return {"code": self.code, "message": self.message, "pos": self.pos,
                 "length": self.length, "hint": self.hint}
 
+    def all(self) -> list["FormulaError"]:
+        """Every problem this error stands for (several: FormulaErrors)."""
+        return [self]
+
+
+class FormulaErrors(FormulaError):
+    """Several problems found at once (every bad name in a formula). It reads as the first."""
+
+    def __init__(self, problems: list[FormulaError]) -> None:
+        first = problems[0]
+        super().__init__(first.message, first.pos, first.length, first.hint, first.code)
+        self.problems = problems
+
+    def all(self) -> list[FormulaError]:
+        return list(self.problems)
+
 
 @dataclass(frozen=True)
 class Node:

@@ -511,7 +511,7 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
             ast = parse(body.formula)
             a = analyze(ast, body.view)
         except FormulaError as e:
-            raise HTTPException(422, {"errors": [e.to_dict()]}) from None
+            raise HTTPException(422, {"errors": [x.to_dict() for x in e.all()]}) from None
         if a.bare and not body.default_company:
             raise HTTPException(422, {"errors": [_no_default(a.bare).to_dict()]})
         return ast, a
@@ -545,7 +545,8 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
             if bad:
                 return {"valid": False, "errors": not_yours(user_id, bad)}
         ids = {resolved[t] for t in a.tickers} | ({body.default_company} if a.bare else set())
-        return {"valid": True, "unit": a.unit, "alignment": alignment(body.basis, ids),
+        return {"valid": True, "unit": a.unit, "display": a.display,
+                "alignment": alignment(body.basis, ids),
                 "ast": to_dict(ast), "inputs": _inputs(a, {**resolved, None: body.default_company})}
 
     @app.post("/v1/formulas/evaluate")
@@ -571,7 +572,8 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
         compiled = compile_formula(ast, a, companies, body.basis, body.start, body.end)
         rows = store.formula(user_id, compiled)
         return {
-            "formula": body.formula, "unit": a.unit, "basis": body.basis, "view": body.view,
+            "formula": body.formula, "unit": a.unit, "display": a.display,
+            "basis": body.basis, "view": body.view,
             "alignment": compiled.alignment, "as_of": _now(),
             "inputs": _inputs(a, companies),
             "points": [_point(r, compiled.alignment) for r in rows],
@@ -582,7 +584,7 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
 
 def _no_default(at: tuple[int, int]) -> FormulaError:
     return FormulaError("Metrics without a ticker need a default company", at[0], at[1],
-                        "Pass default_company, or write TICKER.metric", code="company")
+                        "Choose a default company, or write TICKER.metric", code="company")
 
 
 def _inputs(a: Analysis, companies: dict[str | None, str | None]) -> list[dict]:
