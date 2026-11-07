@@ -136,7 +136,9 @@ it("evaluates each layer through the formula API and draws them", async () => {
   ]);
   expect(container.querySelectorAll(".lchart-svg rect[fill='currentColor']")).toHaveLength(2);
   expect($(".ch-foot")?.textContent).toContain("Fiscal quarters");
-  expect(container.textContent).toContain("Latest filing used: 10-Q filed 2026-08-26 (0001045810-26-000075)");
+  // the footer reads as a sentence: the company, a date a person would write, no accession number
+  expect(container.textContent).toContain("Latest filing used: NVDA 10-Q filed Aug 26, 2026.");
+  expect($(".ch-foot")?.textContent).not.toMatch(/\d{10}-\d{2}-\d{6}/);
 });
 
 it("draws a segment layer (saved from the Revenue view) from /segments, with its own transforms", async () => {

@@ -1,7 +1,7 @@
 /** Query API responses → what Home and the sidebar show. Pure functions, so the mapping (units,
  * periods, sources, what counts as new) is tested without rendering. */
 
-import { BANK_NA, bankTitle, change, day, money, pct, notForBanks } from "../format";
+import { BANK_NA, bankTitle, change, day, money, pct, notForBanks, UNNAMED } from "../format";
 import { columnSpec, formatColumn } from "../views/model";
 import type {
   CalendarEntry,
@@ -146,7 +146,7 @@ export function watchRows(
     const lf = e.last_filing;
     return {
       companyId: e.company_id,
-      name: e.name ?? e.company_id,
+      name: e.name ?? UNNAMED,
       ticker: e.tickers?.[0] ?? null,
       industry: e.industry,
       readable,
@@ -203,7 +203,7 @@ export function recentFilings(
   for (const f of index) {
     out.set(f.accession_no, {
       companyId: f.company_id,
-      name: f.name ?? f.company_id,
+      name: f.name ?? UNNAMED,
       accessionNo: f.accession_no,
       form: f.form,
       filed: f.filed,
@@ -229,7 +229,7 @@ export function recentFilings(
     if (!lf || out.has(lf.accession_no)) continue;
     out.set(lf.accession_no, {
       companyId: e.company_id,
-      name: e.name ?? e.company_id,
+      name: e.name ?? UNNAMED,
       accessionNo: lf.accession_no,
       form: lf.form,
       filed: lf.filing_date,

@@ -1,10 +1,11 @@
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { ApiError, demoUsers, login, me as fetchMe, watchlistCsv } from "./api";
 import { AssistantPanel } from "./assistant/AssistantPanel";
 import { metricLabel } from "./chart/metrics";
 import { companiesChart, companyChart, emptyChart, type ChartState, type Transform } from "./chart/model";
 import { useChart } from "./chart/useChart";
+import { directoryFor, DirectoryContext, UNNAMED } from "./companies/directory";
 import { uiContext } from "./assistant/actions";
 import { pageContext } from "./assistant/context";
 import { useAssistant } from "./assistant/useAssistant";
@@ -359,12 +360,16 @@ export function App(props: Props = {}) {
     }
   });
 
-  const names = useMemo(() => {
-    const out = new Map<string, string>();
-    for (const r of workspace.rows) out.set(r.companyId, r.name);
-    for (const c of me?.companies ?? []) if (c.name) out.set(c.company_id, c.name);
-    return out;
-  }, [me, workspace.rows]);
+  // names for anything that holds only an id (companies/directory.ts): with the catalog open
+  // `me.companies` has only private grants, so most companies are known only by asking
+  const directory = useMemo(() => directoryFor(token), [token]);
+  const namesVersion = useSyncExternalStore(directory.subscribe, directory.snapshot);
+  useEffect(() => {
+    directory.learn([
+      ...(me?.companies ?? []).flatMap((c) => (c.name ? [{ companyId: c.company_id, name: c.name, ticker: null }] : [])),
+      ...workspace.rows.map((r) => ({ companyId: r.companyId, name: r.name, ticker: r.ticker })),
+    ]);
+  }, [directory, me, workspace.rows]);
   const watched = useMemo(
     () =>
       workspace.watchlist.state === "ok"
@@ -377,7 +382,10 @@ export function App(props: Props = {}) {
     () => workspace.rows.map((r) => ({ companyId: r.companyId, name: r.name, ticker: r.ticker })),
     [workspace.rows],
   );
-  const companyName = useCallback((id: string) => names.get(id) ?? null, [names]);
+  // new identities whenever a name arrives, so what's built from them follows
+  const companyName = useCallback((id: string) => directory.name(id), [directory, namesVersion]);
+  const companyLabel = useCallback((id: string) => directory.label(id), [directory, namesVersion]);
+  const companyShort = useCallback((id: string) => directory.short(id), [directory, namesVersion]);
   const filingsFor = useMemo(() => readableFor(me, "filings"), [me]);
   const financialsFor = useMemo(() => readableFor(me, "financials"), [me]);
   watchedRef.current = watched;
@@ -401,7 +409,7 @@ export function App(props: Props = {}) {
       if (!out.has(c.company_id)) {
         out.set(c.company_id, {
           companyId: c.company_id,
-          name: c.name ?? c.company_id,
+          name: c.name ?? UNNAMED,
           sub: `company · ${c.tiers.join(", ")}`,
         });
       }
@@ -464,7 +472,7 @@ export function App(props: Props = {}) {
 
   const saveBar = (current: Current) =>
     saved.list.state === "unavailable" ? null : (
-      <SaveBar current={current} saved={saved} label={(id) => companyName(id) ?? id} />
+      <SaveBar current={current} saved={saved} label={(id) => companyName(id) ?? UNNAMED} />
     );
 
   const showDrawer = drawerOpen && route.view !== "ask";
@@ -504,6 +512,7 @@ export function App(props: Props = {}) {
 
   return (
     <ScopeContext.Provider value={scope}>
+      <DirectoryContext.Provider value={directory}>
       <div className={showDrawer ? "app with-ai" : "app"}>
         <Sidebar
           open={navOpen}
@@ -523,7 +532,7 @@ export function App(props: Props = {}) {
             menuOpen={navOpen}
             onMenu={() => setNavOpen((o) => !o)}
             route={route}
-            companyName={companyName}
+            companyName={companyLabel}
             users={users}
             user={session?.kind === "sandbox" ? "demo sandbox" : user}
             account={(session?.kind === "github" || session?.kind === "account") && session.login
@@ -566,7 +575,7 @@ export function App(props: Props = {}) {
                 readableCompanies={me ? readableTotal(me) : 0}
                 onNewChart={newChart}
                 recent={saved.list.state === "unavailable" ? null : <Recent recent={saved.recent} onOpen={openSaved} />}
-                notes={<RecentNotes token={token} name={companyName} filingsFor={filingsFor} />}
+                notes={<RecentNotes token={token} name={companyLabel} filingsFor={filingsFor} catalogOpen={catalogOpen(me, "financials")} />}
                 layout={views.home}
                 onCustomize={views.editable ? () => setCustomizing((c) => !c) : undefined}
                 editor={customizing && views.editable ? (
@@ -718,7 +727,7 @@ export function App(props: Props = {}) {
                 itemId={route.itemId}
                 saved={saved}
                 readable={financialsFor}
-                label={(id) => companyName(id) ?? id}
+                label={companyShort}
                 onOpenChart={(s) => {
                   setChart(() => s);
                   saved.close("chart");
@@ -733,7 +742,7 @@ export function App(props: Props = {}) {
                 user={user}
                 itemId={route.itemId}
                 saved={saved}
-                label={(id) => companyName(id) ?? id}
+                label={companyShort}
                 readable={financialsFor}
                 onOpenChart={(s) => {
                   setChart(() => s);
@@ -743,14 +752,14 @@ export function App(props: Props = {}) {
               />
             ) : route.view === "model" ? (
               <ModelPage key={`${user}-${route.itemId}`} token={token} itemId={route.itemId} saved={saved}
-                label={(id) => companyName(id) ?? id} />
+                label={companyLabel} />
             ) : route.view === "report" ? (
               <ReportView
                 key={`${user}-${route.itemId}`}
                 token={token}
                 itemId={route.itemId}
                 writer={writer}
-                label={(id) => companyName(id) ?? id}
+                label={companyShort}
                 readable={financialsFor}
                 onOpenChart={(s) => {
                   setChart(() => s);
@@ -788,9 +797,11 @@ export function App(props: Props = {}) {
           companies={paletteCompanies}
           watched={watched}
           actions={actions}
+          catalogOpen={catalogOpen(me, "financials")}
           onClose={() => setPalette(null)}
         />
       )}
+      </DirectoryContext.Provider>
     </ScopeContext.Provider>
   );
 }

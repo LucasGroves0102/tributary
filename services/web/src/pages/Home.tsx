@@ -2,7 +2,7 @@ import { Fragment, useEffect, useState, type ReactNode } from "react";
 
 import { ErrorPanel, Skeleton } from "../components/States";
 import { navRow, onTableKey } from "../components/tableNav";
-import { ago, change, day } from "../format";
+import { ago, change, day, UNNAMED } from "../format";
 import { sinceLabel, status, type ExpectedItem, type FilingItem, type WatchRow } from "../home/data";
 import { EXPECTED_DAYS, RECENT_DAYS, type Workspace } from "../home/useWorkspace";
 import { go, href } from "../route";
@@ -491,7 +491,7 @@ function ExpectedTable({ expected }: { expected: ExpectedItem[] | null }) {
                 ~{e.expected_date ? day(e.expected_date) : "—"}
                 {e.status === "overdue" && <span className="tag warn">overdue</span>}
               </td>
-              <td>{e.watched ? <b>{e.name ?? e.company_id}</b> : (e.name ?? e.company_id)}</td>
+              <td>{e.watched ? <b>{e.name ?? UNNAMED}</b> : (e.name ?? UNNAMED)}</td>
               <td>
                 <span className="tag e">{e.form}</span>
               </td>

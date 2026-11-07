@@ -1,7 +1,7 @@
 /** Screener rows → table cells: units, the period behind each value, its source filing, and an
  * honest note where the API masked a company's values. Pure, tested without rendering. */
 
-import { BANK_NA, bankTitle, day, notForBanks } from "../format";
+import { BANK_NA, bankTitle, day, notForBanks, UNNAMED } from "../format";
 import { num, type Cell } from "../home/data";
 import type { ScreenerRow, ValueSource } from "../types";
 import { columnSpec, formatColumn, type ColumnSpec } from "../views/model";
@@ -61,7 +61,7 @@ export function screenRow(r: ScreenerRow, columns: ColumnSpec[] = DEFAULT_SPECS)
   }
   return {
     companyId: r.company_id,
-    name: r.name ?? r.company_id,
+    name: r.name ?? UNNAMED,
     ticker: r.tickers?.[0] ?? null,
     exchange: r.exchanges?.[0] ?? null,
     industry: r.industry,

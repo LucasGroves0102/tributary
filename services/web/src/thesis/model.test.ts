@@ -114,6 +114,10 @@ describe("thesisMarkdown (export)", () => {
   it("names no company when the thesis has none", () => {
     const md = thesisMarkdown({ title: "Ideas", thesis: { companyId: null, markdown: "x" }, company: null, date: "2026-11-02", items: [] });
     expect(md).not.toMatch(/company:|cik:/);
+    // a name not known yet is left out: the id goes only in its labelled field
+    const unnamed = thesisMarkdown({ title: "T", thesis: { companyId: NVDA, markdown: "x" }, company: null, date: "2026-11-02", items: [] });
+    expect(unnamed).not.toContain("company:");
+    expect(unnamed).toContain(`cik: "${NVDA}"`);
   });
 });
 

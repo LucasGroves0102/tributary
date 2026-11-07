@@ -1,5 +1,5 @@
 import { Skeleton } from "../components/States";
-import { ago, day } from "../format";
+import { ago, day, UNNAMED } from "../format";
 import { href } from "../route";
 import type { RecentWork } from "../types";
 import { KIND_LABELS } from "./model";
@@ -63,7 +63,7 @@ export function Recent({ recent, onOpen }: { recent: RecentWork | null; onOpen: 
                   })}
                 >
                   <b>
-                    {r.filing.name ?? r.filing.company_id} {r.filing.form ?? "filing"}
+                    {r.filing.name ?? UNNAMED} {r.filing.form ?? "filing"}
                   </b>
                 </a>{" "}
                 <span className="muted">

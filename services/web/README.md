@@ -36,6 +36,19 @@ read with such a finding); the status route itself stays aggregate, and signed o
 such links. The agent's page context reports it as `about` (agent-api has no `status` page) and
 leaves the data-check filter out of the screen it sends (its filters are strict).
 
+Company names (`src/displayNames.ts`, `src/companies/directory.ts`): SEC conformed names are made
+readable for display only, wherever API JSON arrives (`api.ts` `displayNames`): state and listing tags
+and legal suffixes come off, then a table of brands, the SEC's surname-first forms ("HUNT J B
+TRANSPORT" is J.B. Hunt Transport), then casing, which leaves a name the filer wrote properly alone and
+keeps initialisms in capitals (three letters or fewer unless it's a word). The stored name is untouched
+and CSV exports keep it. `displayNames.test.ts` is a table of real names. Segment labels get the same
+treatment (`segmentLabel`, ported from facts-fetcher's `labels.py`). Anything that holds only a company
+id asks one directory per session (`CompanyDirectory`): it answers from what the app already holds,
+otherwise gathers the ids and asks the screener's `company_id` list (identity is public metadata, and
+that route needs a token; no public route gained company data). Legends and source lines use the ticker
+(or name), headings, breadcrumbs, Home's data notes and thesis exports use "Nvidia (NVDA)". While a name
+is on its way a company reads "Company"; it never reads as a CIK.
+
 Sign-in (`src/session.ts`): the front door is "Try the demo" (`pages/Welcome.tsx`). It calls
 `POST /v1/demo/sandbox`, which creates a temporary real user (plan pro, a seeded watchlist and
 workspace; see the Query API README) and returns its JWT, then lands on Home. With the public

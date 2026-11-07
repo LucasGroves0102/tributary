@@ -1,8 +1,10 @@
+import { UNNAMED } from "../companies/directory";
 import { href, NAV, type Route } from "../route";
 import type { Theme } from "../theme";
 
 interface Props {
   route: Route;
+  /** "Nvidia (NVDA)" (companies/directory.ts) */
   companyName: (companyId: string) => string | null;
   users: string[];
   user: string | null;
@@ -91,7 +93,7 @@ function Breadcrumb({
   companyName: (companyId: string) => string | null;
 }) {
   if (route.view === "company" || route.view === "filing") {
-    const name = companyName(route.companyId) ?? `CIK ${route.companyId}`;
+    const name = companyName(route.companyId) ?? UNNAMED;
     return (
       <nav className="crumb" aria-label="Breadcrumb">
         <a href={href({ view: "companies" })}>Companies</a>

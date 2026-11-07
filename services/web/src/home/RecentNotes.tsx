@@ -10,17 +10,20 @@ export const HOME_NOTES = 6;
 
 /** Home: the newest data notes (restatements, filings not yet in the figures, gaps...) across
  * the companies whose financials the user can read. */
-export function RecentNotes({ token, name, filingsFor }: {
+export function RecentNotes({ token, name, filingsFor, catalogOpen = false }: {
   token: string;
-  name: (companyId: string) => string | null;
+  /** "Nvidia (NVDA)" (companies/directory.ts) */
+  name: (companyId: string) => string;
   /** company ids whose filings the user can read (links open the reader there) */
   filingsFor: Readable;
+  /** every company is readable, so these aren't "yours" in any sense the user chose */
+  catalogOpen?: boolean;
 }) {
   const load = useLoad(token, () => recentDataNotes(token, HOME_NOTES));
   return (
     <section className="card">
       <div className="card-h">
-        <h2>Recent data notes for your companies</h2>
+        <h2>{catalogOpen ? "Recent data notes, every company" : "Recent data notes for your companies"}</h2>
         <span className="sub">
           restatements, filings not yet in the figures, gaps{load?.state === "ok" && load.data.checked_at ? ` · checked ${ago(load.data.checked_at)}` : ""}
         </span>
@@ -42,7 +45,7 @@ export function RecentNotes({ token, name, filingsFor }: {
               key={`${n.company_id}-${n.kind}-${n.metric}-${n.period_end}-${i}`}
               note={n}
               companyId={n.company_id}
-              company={name(n.company_id) ?? n.company_id}
+              company={name(n.company_id)}
               canReadFilings={filingsFor.has(n.company_id)}
             />
           ))}

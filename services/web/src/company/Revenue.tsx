@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { financialsView, segmentsOf } from "../api";
 import type { ChartState } from "../chart/model";
 import type { SegmentAxisKind } from "../chart/segments";
-import { change, money, pct } from "../format";
+import { change, money, pct, UNNAMED } from "../format";
 import { ChartView } from "../reports/Embeds";
 import type { FinancialRow, SegmentRow } from "../types";
 import { SaveChart } from "../workspaces/SaveChart";
@@ -60,7 +60,7 @@ export function Revenue({ token, companyId, name, ticker, saved, onOpenChart }: 
       financialsView(token, companyId, PERIODS, ["revenue"], "quarter"),
     ]),
   );
-  const label = (id: string) => (id === companyId ? ticker : id);
+  const label = (id: string) => (id === companyId ? ticker : UNNAMED);
   const shown = view === "quarter" ? quarter : ttm;
 
   return (

@@ -60,7 +60,7 @@ export function Company({ token, companyId, tab, statements, watched, onWatch, o
     return (
       <div className="page">
         <p className="empty">
-          No company with CIK {companyId} has financials or filings here. Find it under{" "}
+          This company has no financials or filings here. Find one under{" "}
           <a href={href({ view: "companies" })}>Companies</a>, or search with Ctrl K.
         </p>
       </div>
@@ -68,7 +68,8 @@ export function Company({ token, companyId, tab, statements, watched, onWatch, o
   }
   const row = meta.data;
   const h = header(row);
-  const ticker = h.tickers[0] ?? companyId;
+  // charts and saved work call it this: its ticker, or its name when it has none
+  const ticker = h.tickers[0] ?? h.name;
   const next = expected?.state === "ok" ? (expected.data.expected[0] ?? null) : null;
 
   return (
@@ -121,7 +122,7 @@ export function Company({ token, companyId, tab, statements, watched, onWatch, o
             )}
             <button className="btn" onClick={() => go({ view: "compare", compare: { target: companyId } })}>Compare</button>
             <button className="btn" onClick={() => onAsk(`Summarize ${h.name}'s latest quarter.`)}>Ask</button>
-            {saved && <NewWork token={token} saved={saved} company={{ id: companyId, name: ticker === companyId ? h.name : ticker }} />}
+            {saved && <NewWork token={token} saved={saved} company={{ id: companyId, name: ticker }} />}
           </div>
         </div>
         <nav className="tabs" aria-label="Company sections">

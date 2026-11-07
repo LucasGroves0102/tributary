@@ -7,6 +7,7 @@ import { ApiError, failureReason, openItem, screenerColumns, workspace as fetchW
 import { slug } from "../chart/export";
 import { catalog } from "../chart/metrics";
 import type { ChartState } from "../chart/model";
+import { useDirectory } from "../companies/directory";
 import { CompanySearch } from "../components/CompanySearch";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { download } from "../download";
@@ -244,7 +245,9 @@ function ThesisEditor({ token, item, initial, items, saved, label, readable, onO
     };
   }, [bridge, item.item_id, saved]);
   const nameError = nameProblem(name, ITEM_NAME_MAX);
-  const company = companyId ? (companyName ?? label(companyId)) : null;
+  const directory = useDirectory(token);
+  const named = companyId ? directory.company(companyId) : null;
+  const company = companyId ? (named ? directory.label(companyId) : companyName) : null;
   const missing = useMemo(() => {
     const known = new Set(items.map((i) => i.item_id));
     return new Set(embeddedIds(markdown).filter((x) => !known.has(x))).size;

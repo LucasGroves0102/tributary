@@ -127,7 +127,8 @@ export function thesisMarkdown(opts: {
   const head = [
     "---",
     `title: ${yamlString(title)}`,
-    ...(thesis.companyId ? [`company: ${yamlString(company ?? thesis.companyId)}`, `cik: "${thesis.companyId}"`] : []),
+    ...(company ? [`company: ${yamlString(company)}`] : []),
+    ...(thesis.companyId ? [`cik: "${thesis.companyId}"`] : []),
     `date: ${date}`,
     "source: Tributary thesis",
     "---",

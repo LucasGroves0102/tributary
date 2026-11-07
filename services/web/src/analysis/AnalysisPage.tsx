@@ -15,6 +15,7 @@ export function AnalysisPage(props: {
   itemId?: string;
   saved: Saved;
   readable: Readable;
+  /** company id → ticker or name (companies/directory.ts `short`) */
   label: (companyId: string) => string;
   onOpenChart: (s: ChartState) => void;
   onChartMany: (ids: string[], metric: string, transform: "ttm" | "q" | "yoy", title: string) => void;

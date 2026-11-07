@@ -58,11 +58,14 @@ interface Props {
   watched?: ReadonlySet<string> | null;
   actions: PaletteActions;
   onClose: () => void;
+  /** every company in the catalog is readable: one that isn't has no financials or stored
+   * documents here, which isn't a matter of access */
+  catalogOpen?: boolean;
 }
 
 /** Ctrl/Cmd-K: jump to a company or screen, run an action, or ask the assistant. Prefix the
  * query with "watch:" to add a company to the watchlist instead of opening it. */
-export function Palette({ token, initial, companies, watched, actions, onClose }: Props) {
+export function Palette({ token, initial, companies, watched, actions, onClose, catalogOpen = false }: Props) {
   const [q, setQ] = useState(initial);
   const [active, setActive] = useState(0);
   const [remote, setRemote] = useState<SearchResult[]>([]);
@@ -98,6 +101,7 @@ export function Palette({ token, initial, companies, watched, actions, onClose }
   const found = useMemo(() => new Set(remote.map((r) => `c-${r.company_id}`)), [remote]);
 
   const items = useMemo(() => {
+    const noAccess = catalogOpen ? "company · filing index only" : "company · no access";
     const known = new Map(companies.map((c) => [c.companyId, c]));
     const ranked = new Set(remote.map((r) => r.company_id));
     const all: PaletteCompany[] = [
@@ -107,7 +111,7 @@ export function Palette({ token, initial, companies, watched, actions, onClose }
         return {
           companyId: r.company_id,
           name: r.name,
-          sub: mine?.sub ?? [ticker, r.access.length ? `company · ${r.access.join(", ")}` : "company · no access"]
+          sub: mine?.sub ?? [ticker, r.access.length ? `company · ${r.access.join(", ")}` : noAccess]
             .filter(Boolean).join(" · "),
         };
       }),
@@ -155,7 +159,7 @@ export function Palette({ token, initial, companies, watched, actions, onClose }
         ? [{ key: "cmd", label: `Compare ${command.tickers.join(", ")}`, sub: `action · ${command.tickers[0]} vs peers`, run: () => actions.compareTickers(command.tickers) }]
         : [{ key: "cmd", label: `Chart ${command.ticker} ${metricLabel(command.metric).toLowerCase()}`, sub: "action · chart builder", run: () => actions.chartTicker(command.ticker, command.metric) }];
     return [...commandItem, ...companyItems, ...pages, ...commands, ...searchItem, ...askItem];
-  }, [companies, remote, watchMode, watched, text, actions]);
+  }, [companies, remote, watchMode, watched, text, actions, catalogOpen]);
 
   const shown = useMemo(() => {
     const needle = text.toLowerCase();

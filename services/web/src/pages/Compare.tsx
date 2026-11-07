@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { failureReason, peers as fetchPeers, screener } from "../api";
+import { UNNAMED } from "../displayNames";
 import {
   chartMetric,
   COMPARE_COLUMNS,
@@ -176,7 +177,7 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
             <span className="faint">Target</span>
             {compare.target ? (
               <span className="tag">
-                {names.get(compare.target) ?? compare.target}{" "}
+                {names.get(compare.target) ?? UNNAMED}{" "}
                 {!embedded && <button className="link" aria-label="Change target" onClick={() => set({ target: undefined })}>✕</button>}
               </span>
             ) : (
@@ -188,8 +189,8 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
             <span className="faint">Peers ({peerIds.length}/{MAX_PEERS})</span>
             {peerIds.map((p) => (
               <span key={p} className="tag">
-                {names.get(p) ?? p}{" "}
-                <button className="link" aria-label={`Remove ${names.get(p) ?? p}`} onClick={() => removePeer(p)}>✕</button>
+                {names.get(p) ?? UNNAMED}{" "}
+                <button className="link" aria-label={`Remove ${names.get(p) ?? "this company"}`} onClick={() => removePeer(p)}>✕</button>
               </span>
             ))}
             {peerIds.length < MAX_PEERS && (
@@ -396,7 +397,7 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
             </button>
           </div>
           {multiples ? (
-            <SmallMultiples token={token} companyIds={readableIds} cols={cols} label={(id) => names.get(id) ?? id} />
+            <SmallMultiples token={token} companyIds={readableIds} cols={cols} label={(id) => names.get(id) ?? UNNAMED} />
           ) : (
             <p className="empty">
               {readableIds.length

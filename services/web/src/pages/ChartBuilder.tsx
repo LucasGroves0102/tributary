@@ -47,6 +47,7 @@ import {
   type Layer,
 } from "../chart/model";
 import { pngBlob, slug, svgText } from "../chart/export";
+import { useDirectory } from "../companies/directory";
 import { chartCsv, latestSource, toSeries, type Series, type Source } from "../chart/series";
 import type { Readable } from "../access";
 import { CompanyPicker, CompanySearch, resultTicker } from "../components/CompanySearch";
@@ -105,32 +106,6 @@ function useChartSeed(token: string, preferred: string[]): { none: boolean; ids:
   return { none: rows.length === 0, ids: [...new Set([...preferred, ...rows])].slice(0, 2) };
 }
 
-/** Name and ticker of the companies on the chart: from the pick itself when it was just chosen,
- * else asked once (public identity, through the screener's company_id list). */
-function useCompanyNames(token: string, ids: string[]) {
-  const [known, setKnown] = useState<ReadonlyMap<string, ChartCompany>>(new Map());
-  const missing = ids.filter((id) => !known.has(id));
-  const missingKey = [...new Set(missing)].sort().join(",");
-  useEffect(() => {
-    if (!missingKey) return;
-    let live = true;
-    const asked = missingKey.split(",");
-    screener(token, { company_id: asked, columns: ["revenue_ttm"], sort: "name", limit: asked.length })
-      .then((r) => {
-        if (!live) return;
-        setKnown((m) => new Map([...m, ...r.rows.map((x): [string, ChartCompany] => [
-          x.company_id, { companyId: x.company_id, name: x.name ?? x.company_id, ticker: x.tickers?.[0] ?? null },
-        ])]));
-      })
-      .catch(() => {});
-    return () => {
-      live = false;
-    };
-  }, [token, missingKey]);
-  const learn = useCallback((c: ChartCompany) => setKnown((m) => new Map(m).set(c.companyId, c)), []);
-  return { known, learn };
-}
-
 function useMetrics(token: string): MetricInfo[] | null {
   const [out, setOut] = useState<MetricInfo[] | null>(null);
   useEffect(() => {
@@ -179,7 +154,16 @@ export function ChartBuilder({ token, chart, setChart, saveBar, readable = ANYTH
     const id = l.kind === "formula" ? l.defaultCompany : l.companyId;
     return id ? [id] : [];
   }))];
-  const { known, learn } = useCompanyNames(token, onChart);
+  // name and ticker of the companies on the chart: from the pick itself when just chosen, else asked
+  const directory = useDirectory(token);
+  const known = useMemo(
+    () => new Map(onChart.flatMap((id): [string, ChartCompany][] => {
+      const c = directory.company(id);
+      return c ? [[id, c]] : [];
+    })),
+    [directory, onChart.join(","), directory.snapshot()],
+  );
+  const learn = useCallback((c: ChartCompany) => directory.learn([c]), [directory]);
   const metrics = useMetrics(token);
   // "+ Price" only with the user's own market-data connection (chart/prices.ts)
   const market = useMarketData(token);
@@ -189,7 +173,7 @@ export function ChartBuilder({ token, chart, setChart, saveBar, readable = ANYTH
   const [retry, setRetry] = useState(0);
   const svg = useRef<SVGSVGElement>(null);
 
-  const short = (id: string) => known.get(id)?.ticker ?? known.get(id)?.name ?? id;
+  const short = directory.short;
   const ttm = useMemo(() => {
     const m = new Map((metrics ?? []).map((x) => [x.name, x.ttm]));
     return (name: string) => m.get(name) ?? true;
@@ -277,7 +261,7 @@ export function ChartBuilder({ token, chart, setChart, saveBar, readable = ANYTH
     ? [sourceFootnote(series, short, asOf), method, priceNote].filter(Boolean)
     : [
         `Source: SEC filings (10-Q, 10-K XBRL) via Tributary. ${method}`,
-        latest ? `Latest filing used: ${latest.form} filed ${latest.filed} (${latest.accessionNo}).` : "",
+        latest ? `Latest filing used: ${latest.companyId ? `${short(latest.companyId)} ` : ""}${latest.form} filed ${day(latest.filed, true)}.` : "",
         priceNote,
       ].filter(Boolean);
   const subtitle = chart.deck ? chart.subtitle?.trim() || autoSubtitle(series, frequency, effective) : "";

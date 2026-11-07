@@ -5,7 +5,7 @@ import { formTag } from "../company/data";
 import { useLoad } from "../company/useLoad";
 import { CompanyPicker, type PickedCompany } from "../components/CompanySearch";
 import { Skeleton } from "../components/States";
-import { day } from "../format";
+import { day, UNNAMED } from "../format";
 import { snippetRuns } from "../reader/text";
 import { go, href } from "../route";
 import { datesInverted, groupHits, SEARCH_FORMS, SEARCH_PAGE, usableDate, type SearchForm, type SearchState } from "../search/state";
@@ -225,7 +225,7 @@ function CompanyFilter({ token, value, open, companies, suggestions, set }: {
     return { has: (id: string) => open || ids.has(id) };
   }, [open, companies]);
   const mine = useMemo(
-    () => companies.map((c): PickedCompany => ({ companyId: c.company_id, name: c.name ?? c.company_id })),
+    () => companies.map((c): PickedCompany => ({ companyId: c.company_id, name: c.name ?? UNNAMED })),
     [companies],
   );
   const offered = useMemo(

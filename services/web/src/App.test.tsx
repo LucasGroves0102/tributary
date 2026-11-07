@@ -13,6 +13,7 @@ const ME = {
   companies: [{ company_id: NVDA, name: "Nvidia", industry: null, tiers: ["financials"] }],
 };
 const EDGAR = "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000075/";
+const APPLE = "0000320193";
 const ANSWER = {
   text: `Revenue was $46.74B in the quarter (${ACC}).`,
   stop: "end_turn",
@@ -60,6 +61,14 @@ function respond(url: string, init?: RequestInit): Response {
     const q = new URL(url, "http://x").searchParams.get("q");
     const ids: Record<string, string> = { NVDA, TSLA };
     return Response.json({ results: q && ids[q] ? [{ company_id: ids[q], name: q, matched_on: "ticker", matched_alias: q, is_current: true, access: [] }] : [] });
+  }
+  if (path.endsWith("/v1/screener")) {
+    // identity for any id asked (companies/directory.ts); Apple is on no list of this user's
+    const ids = new URL(url, "http://x").searchParams.getAll("company_id");
+    return Response.json({ as_of: "", total: ids.length, limit: 50, offset: 0, sort: "name", columns: [], rows: ids.map((id) => ({
+      company_id: id, name: id === APPLE ? "Apple Inc." : "Nvidia", tickers: [id === APPLE ? "AAPL" : "NVDA"], exchanges: [], sic: null,
+      industry: null, fiscal_year_end: null, filer_category: null, filer_categories: [], state_of_incorporation: null,
+      values: {}, sources: {}, access: [] })) });
   }
   if (path.endsWith("/api/agent/v1/ask")) {
     asked.push(JSON.parse(String(init?.body)));
@@ -164,7 +173,7 @@ describe("Home", () => {
   it("lists recent data notes for companies with financials, linked to their Data notes tab", async () => {
     await render();
     const card = [...container.querySelectorAll("section.card")].find((c) => c.querySelector("h2")?.textContent === "Recent data notes for your companies")!;
-    expect(card.querySelector(".note")?.textContent).toContain("Nvidia · Revenue restated · Feb 26, 2026");
+    expect(card.querySelector(".note")?.textContent).toContain("Nvidia (NVDA) · Revenue restated · Feb 26, 2026");
     expect(card.querySelector(".note a")?.getAttribute("href")).toBe(`#/company/${NVDA}/notes`);
     // alice reads NVDA's financials, not its filings: the filing opens on EDGAR
     expect(card.querySelector(".note-f a")?.getAttribute("href")).toBe(EDGAR);
@@ -275,8 +284,20 @@ describe("navigation", () => {
     expect($('.nav a[aria-current="page"]')?.textContent).toContain("Companies");
     window.location.hash = `#/company/${NVDA}`;
     await settle();
-    expect($(".crumb")?.textContent).toBe("Companies/Nvidia");
+    expect($(".crumb")?.textContent).toBe("Companies/Nvidia (NVDA)");
     expect($('.nav a[aria-current="page"]')?.textContent).toContain("Companies");
+  });
+
+  it("names a company it knows only by id: breadcrumb and assistant, never the CIK", async () => {
+    await render(`#/company/${APPLE}`);
+    // the watchlist and /v1/me don't hold Apple: the name comes from the shared directory
+    await act(async () => new Promise((r) => setTimeout(r, 60)));
+    await settle();
+    expect($(".crumb")?.textContent).toBe("Companies/Apple (AAPL)");
+    expect(chip()).toBe("Apple · Overview");
+    expect($(".top")?.textContent).not.toContain(APPLE);
+    expect($(".ai")?.textContent).not.toContain(APPLE);
+    expect($(".ai-s")?.textContent).toContain("Apple");
   });
 
   it("? shows the keyboard shortcut sheet; Escape closes it and focus returns", async () => {
