@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-import { catalogOpen } from "../access";
+import { accountName, catalogOpen } from "../access";
 import {
   ApiError,
   authProviders,
@@ -106,7 +106,7 @@ export function Welcome({ onReady, notice, github, pollMs = 1000, now = Date.now
         kind: "account",
         token,
         userId: m.user_id,
-        login: m.user_id,
+        login: accountName(m),
         expiresAt: new Date(now() + expiresIn * 1000).toISOString(),
         companies: [],
       };
@@ -262,8 +262,8 @@ export function Welcome({ onReady, notice, github, pollMs = 1000, now = Date.now
         ) : (
           o && (
             <p className="small faint">
-              Starts a private sandbox for {o.ttl_hours} hours: a {o.plan} account with access to{" "}
-              {o.catalog_public ? "every company" : `${o.tickers.length} companies (${o.tickers.join(", ")})`}
+              Starts a private sandbox for {o.ttl_hours} hours with access to {o.catalog_public ? "every company" : `${o.tickers.length} companies (${o.tickers.join(", ")})`}:{" "}
+              {o.plan === "pro" ? "financials and filing text" : "financials"}
               {o.agent
                 ? ` and ${o.agent_questions_per_day} assistant questions a day`
                 : "; the assistant is off for demo sandboxes"}
@@ -378,8 +378,7 @@ function Progress({ phase, onContinue }: { phase: Phase; onContinue: () => void 
       </div>
       <progress value={phase.visible} max={phase.total} aria-label="Companies readable" />
       <p className="small faint">
-        Your user and its grants are in the app database. Access reaches the Query API through
-        Debezium, Kafka and authz-sync into OpenFGA and Postgres row-level security, usually in
+        Your account is created. Permission to read each company is on its way through the system, usually in
         under 30 s.
       </p>
       {slow && (

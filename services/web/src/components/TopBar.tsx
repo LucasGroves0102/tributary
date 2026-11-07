@@ -6,6 +6,8 @@ interface Props {
   route: Route;
   /** "Nvidia (NVDA)" (companies/directory.ts) */
   companyName: (companyId: string) => string | null;
+  /** what the reader has open: "10-K filed Feb 21, 2026" */
+  filingLabel?: string | null;
   users: string[];
   user: string | null;
   busy: boolean;
@@ -32,7 +34,7 @@ export function TopBar(props: Props) {
           ☰
         </button>
       )}
-      <Breadcrumb route={route} companyName={props.companyName} />
+      <Breadcrumb route={route} companyName={props.companyName} filingLabel={props.filingLabel ?? null} />
       <button className="search-box" onClick={props.onSearch} aria-label="Search (Ctrl K)">
         <span>Search companies, filings, pages, actions</span>
         <span className="grow" />
@@ -88,9 +90,11 @@ export function TopBar(props: Props) {
 function Breadcrumb({
   route,
   companyName,
+  filingLabel,
 }: {
   route: Route;
   companyName: (companyId: string) => string | null;
+  filingLabel: string | null;
 }) {
   if (route.view === "company" || route.view === "filing") {
     const name = companyName(route.companyId) ?? UNNAMED;
@@ -104,7 +108,7 @@ function Breadcrumb({
           <>
             <a href={href({ view: "company", companyId: route.companyId })}>{name}</a>
             <span className="sep">/</span>
-            <span aria-current="page">Filing {route.accessionNo}</span>
+            <span aria-current="page">{filingLabel ?? "Filing"}</span>
           </>
         )}
       </nav>

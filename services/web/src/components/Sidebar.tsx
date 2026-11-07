@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { readableTotal } from "../access";
+import { accountName, readableTotal } from "../access";
 import { ago, day } from "../format";
 import { sinceLabel, type WatchRow } from "../home/data";
 import type { Workspace } from "../home/useWorkspace";
@@ -26,6 +26,8 @@ interface Props {
   open?: boolean;
   /** the server offers "Connect your data": show Settings → Connections */
   connections?: boolean;
+  /** this is a temporary demo sandbox: how long until it resets ("3h 20m") */
+  sandboxResetsIn?: string | null;
 }
 
 /** Which nav entry a route belongs to: a company or filing is under Companies. */
@@ -33,7 +35,7 @@ function section(route: Route): Route["view"] {
   return route.view === "company" || route.view === "filing" ? "companies" : route.view;
 }
 
-export function Sidebar({ route, me, workspace, lastIngested, onAdd, onExport, onShortcuts, workspaces, open = false, connections = false }: Props) {
+export function Sidebar({ route, me, workspace, lastIngested, onAdd, onExport, onShortcuts, workspaces, open = false, connections = false, sandboxResetsIn = null }: Props) {
   const { rows, watchlist } = workspace;
   const active = section(route);
   const newCount = workspace.fresh.length;
@@ -48,9 +50,11 @@ export function Sidebar({ route, me, workspace, lastIngested, onAdd, onExport, o
       <div className="brand">
         <img src="/favicon.svg" alt="" width={18} height={18} />
         Tributary
-        <span className="env" title="Demo users: sign in as any of them from the top bar">
-          demo
-        </span>
+        {sandboxResetsIn && (
+          <span className="env" title={`A temporary demo sandbox: it and what you save in it are deleted in ${sandboxResetsIn}`}>
+            demo
+          </span>
+        )}
       </div>
 
       <nav className="nav" aria-label="Screens">
@@ -69,7 +73,7 @@ export function Sidebar({ route, me, workspace, lastIngested, onAdd, onExport, o
             )}
             {n.view === "companies" && me && (
               <span className="cnt" title="Companies you can read">
-                {readableTotal(me)}
+                {readableTotal(me).toLocaleString("en-US")}
               </span>
             )}
             <kbd>g{n.key}</kbd>
@@ -151,7 +155,7 @@ export function Sidebar({ route, me, workspace, lastIngested, onAdd, onExport, o
         {me && (
           <>
             <br />
-            Signed in as {me.user_id} · {readableTotal(me)} readable{" "}
+            Signed in as {accountName(me)} · {readableTotal(me).toLocaleString("en-US")} readable{" "}
             {readableTotal(me) === 1 ? "company" : "companies"}
           </>
         )}

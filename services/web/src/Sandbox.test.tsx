@@ -316,6 +316,15 @@ describe("a sandbox lists only its own companies", () => {
     expect($("[role=alert]")?.textContent).toContain("TSLA isn't one of the companies in this demo.");
   });
 
+  it("a sandbox shows its demo badge, explained, and says who it is in words", async () => {
+    stored();
+    await mount(<App picker={false} />);
+    const badge = $(".brand .env") as HTMLElement;
+    expect(badge.textContent).toBe("demo");
+    expect(badge.title).toMatch(/temporary demo sandbox/);
+    expect(badge.title).not.toMatch(/top bar/);
+  });
+
   it("offers no permission tests on Ask: the adversarial suite has those, the product doesn't", async () => {
     stored();
     window.location.hash = "#/ask";

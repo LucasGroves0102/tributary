@@ -24,7 +24,7 @@ export { UNNAMED };
 const CIK = /^\d{10}$/;
 /** The screener's `company_id` cap (query_api ui.py MAX_COMPANY_IDS). */
 const BATCH = 21;
-const GATHER_MS = 30;
+const GATHER_MS = 0; // what one render asks for goes together
 /** A failed lookup may be asked again after this long (the next render that needs it asks). */
 const RETRY_MS = 15_000;
 

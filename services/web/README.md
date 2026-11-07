@@ -9,6 +9,12 @@ CORS:
 | `/api/query/*` | Query API (`query-api:8000`) |
 | `/api/agent/*` | agent-api (`agent-api:8001`), unbuffered for server-sent events |
 
+Every screen sets the browser tab's title (`src/title.ts`: "Nvidia (NVDA) · Statements · Tributary").
+A page that fails to render shows "This page didn't load" with Reload and Home, keeping the shell
+(`components/ErrorBoundary.tsx`, around the page and around the whole app; the error goes to the
+console, never on screen). The "demo" badge shows only on a sandbox; the app names an account the way a
+person knows it (`access.ts` `accountName`: "morgan", not the API's "pw-morgan").
+
 The shell follows prototype v3: a sidebar (screens with `g`-then-letter shortcuts, watchlist
 with revenue sparklines, next expected filings, freshness), a top bar (breadcrumb, Ctrl/Cmd-K
 command palette, theme, demo user) and the assistant drawer on every page (Ctrl/Cmd-J toggles,

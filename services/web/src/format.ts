@@ -34,6 +34,12 @@ export function day(isoDate: string, withYear = false): string {
   return `${MONTHS[m! - 1]} ${d}${withYear ? `, ${y}` : ""}`;
 }
 
+/** A filing's "period of report": the period a 10-K or 10-Q covers, but on an 8-K the date of the
+ * event it reports, which covers no period. */
+export function periodPhrase(form: string | null | undefined, isoDate: string): string {
+  return /^8-K/.test(form ?? "") ? `event on ${day(isoDate, true)}` : `period ending ${day(isoDate, true)}`;
+}
+
 /** Quarter label from its end date: "2026-07-26" → "Jul '26". */
 export function quarter(periodEnd: string): string {
   const d = new Date(`${periodEnd}T00:00:00Z`);

@@ -10,6 +10,7 @@ import { uiContext } from "./assistant/actions";
 import { pageContext } from "./assistant/context";
 import { useAssistant } from "./assistant/useAssistant";
 import { useUiActions } from "./assistant/useUiActions";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { NotInDemo } from "./components/NotInDemo";
 import { Palette, WATCH_PREFIX, type PaletteActions, type PaletteCompany } from "./components/Palette";
 import { ShortcutSheet } from "./components/ShortcutSheet";
@@ -43,7 +44,7 @@ import { go, href, parse, useRoute } from "./route";
 import { resolveTicker } from "./palette/commands";
 import { useShortcuts } from "./shortcuts";
 import { inScope, ScopeContext, scopeOf } from "./scope";
-import { catalogOpen, readableFor, readableTotal } from "./access";
+import { accountName, catalogOpen, readableFor, readableTotal } from "./access";
 import {
   clearFragment,
   clearSession,
@@ -57,6 +58,7 @@ import {
 import { load, save } from "./storage";
 import { useReportWriter } from "./reports/useReportWriter";
 import { useTheme } from "./theme";
+import { screenTitle } from "./title";
 import { ColumnPicker, HomeLayoutEditor } from "./views/Editors";
 import { columnSpecs, DEFAULT_SCREENER_COLUMNS, DEFAULT_WATCHLIST_COLUMNS } from "./views/model";
 import { useViews } from "./views/useViews";
@@ -390,6 +392,9 @@ export function App(props: Props = {}) {
   const financialsFor = useMemo(() => readableFor(me, "financials"), [me]);
   watchedRef.current = watched;
   nameRef.current = companyName;
+  // what the reader has open, in words (it knows the form and date once the filing has loaded)
+  const [readerFiling, setReaderFiling] = useState<{ accessionNo: string; label: string } | null>(null);
+  const filingText = route.view === "filing" && readerFiling?.accessionNo === route.accessionNo ? readerFiling.label : null;
   const chartCompany = chart.layers.find((l) => l.companyId ?? l.defaultCompany);
   const researchCompany = useMemo(() => {
     if (route.view === "chart") return chartCompany?.companyId ?? chartCompany?.defaultCompany ?? null;
@@ -401,9 +406,10 @@ export function App(props: Props = {}) {
       watchlist: watchedIds,
       company: researchCompany,
       charted: chart.layers.length > 0,
+      filing: filingText,
       title: companyLabel,
     }),
-    [route, companyName, companyLabel, scope, watchedIds, researchCompany, chart.layers.length],
+    [route, companyName, companyLabel, scope, watchedIds, researchCompany, chart.layers.length, filingText],
   );
 
   const paletteCompanies = useMemo((): PaletteCompany[] => {
@@ -486,6 +492,22 @@ export function App(props: Props = {}) {
       <SaveBar current={current} saved={saved} label={(id) => companyName(id) ?? UNNAMED} />
     );
 
+  // the browser tab says what's on screen
+  const savedName = useCallback((id: string) => {
+    if (saved.list.state !== "ok") return null;
+    for (const w of saved.list.workspaces) {
+      if (w.workspace_id === id) return w.name;
+      const item = w.items.find((i) => i.item_id === id);
+      if (item) return item.name;
+    }
+    return null;
+  }, [saved.list]);
+  useEffect(() => {
+    document.title = !picker && !token
+      ? route.view === "status" ? screenTitle(route, { company: () => null }) : "Tributary"
+      : screenTitle(route, { company: companyLabel, filing: filingText, chart: chart.title, saved: savedName });
+  }, [picker, token, route, companyLabel, filingText, chart.title, savedName]);
+
   const showDrawer = drawerOpen && route.view !== "ask";
   const ingested = lastIngested(workspace.latest ?? []);
   const panelProps = {
@@ -535,6 +557,7 @@ export function App(props: Props = {}) {
           onExport={exportWatchlist}
           onShortcuts={() => setHelp(true)}
           connections={market?.enabled ?? false}
+          sandboxResetsIn={session?.kind === "sandbox" ? resetsIn(session.expiresAt, clock) : null}
           workspaces={token ? <WorkspaceTree saved={saved} onOpen={openSaved} onError={setError} /> : null}
         />
         {navOpen && <div className="scrim" aria-hidden="true" onClick={() => setNavOpen(false)} />}
@@ -544,10 +567,11 @@ export function App(props: Props = {}) {
             onMenu={() => setNavOpen((o) => !o)}
             route={route}
             companyName={companyLabel}
+            filingLabel={filingText}
             users={users}
             user={session?.kind === "sandbox" ? "demo sandbox" : user}
             account={(session?.kind === "github" || session?.kind === "account") && session.login
-              ? { login: session.login, onSignOut: () => signOut(null) }
+              ? { login: me ? accountName(me) : session.login, onSignOut: () => signOut(null) }
               : undefined}
             busy={assistant.busy}
             theme={theme}
@@ -572,6 +596,7 @@ export function App(props: Props = {}) {
             </div>
           )}
           <main className="content">
+            <ErrorBoundary resetKey={window.location.hash}>
             <Suspense fallback={<div className="page"><Skeleton lines={6} label="Loading the page" /></div>}>
             {route.view === "status" ? (
               <Status />
@@ -683,6 +708,7 @@ export function App(props: Props = {}) {
                   focusAssistant();
                 }}
                 onRead={(section) => saved.recordFiling(route.companyId, route.accessionNo, section)}
+                onFiling={(label) => setReaderFiling({ accessionNo: route.accessionNo, label })}
               />
             ) : route.view === "search" ? (
               <Search key={user} token={token} search={route.search} companies={me?.companies ?? []}
@@ -788,6 +814,7 @@ export function App(props: Props = {}) {
               />
             )}
             </Suspense>
+            </ErrorBoundary>
           </main>
         </div>
         {showDrawer && (

@@ -24,6 +24,11 @@ export function readableFor(me: Me | null, tier: Tier): Readable {
   return new Set((me?.companies ?? []).filter((c) => c.tiers.includes(tier)).map((c) => c.company_id));
 }
 
+/** The name a person knows this account by: never the id the API uses ("pw-morgan", "sbx-…"). */
+export function accountName(me: Me): string {
+  return me.account?.username ?? me.github?.login ?? (me.sandbox ? "demo sandbox" : me.user_id);
+}
+
 /** How many companies the user can read: the catalog's size while it is open. */
 export function readableTotal(me: Me): number {
   return me.catalog?.public ? Math.max(me.catalog.companies, me.companies.length) : me.companies.length;

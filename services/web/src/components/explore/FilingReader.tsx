@@ -12,7 +12,7 @@ import { addDays } from "../../home/data";
 import { formTag } from "../../company/data";
 import { useLoad, type Load } from "../../company/useLoad";
 import { ErrorPanel, Skeleton } from "../States";
-import { day } from "../../format";
+import { day, periodPhrase } from "../../format";
 import {
   comparableForm,
   countMatches,
@@ -36,6 +36,8 @@ interface Props {
   companyId: string;
   accessionNo: string;
   sectionKey: string | null;
+  /** what's open in words, once it has loaded: "10-K filed Feb 21, 2026" */
+  onFiling?: (label: string) => void;
   /** a document character offset to scroll to (a citation's char_start) */
   at?: number;
   /** words to highlight, and to search the filing for */
@@ -62,12 +64,17 @@ const NEXT_8K_WITHIN_DAYS = 400;
  * about 2,000 characters that hold all the words, from the API), the section heading shows the
  * same passages and *highlights* (each word marked in the text, counted here, what next and
  * previous step through). */
-export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q, name, onAsk, onRead }: Props) {
+export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q, name, onAsk, onRead, onFiling }: Props) {
   const filing = useLoad(`${companyId}|${accessionNo}`, () => parsedFiling(token, companyId, accessionNo));
   const f = filing?.state === "ok" ? filing.data : null;
   const active = f ? (f.sections.find((s) => s.section_key === sectionKey) ?? f.sections[0] ?? null) : null;
   const readRef = useRef(onRead);
   readRef.current = onRead;
+  // the breadcrumb and tab title say what's open in words
+  const openLabel = f ? `${f.form} filed ${day(f.filed, true)}` : null;
+  useEffect(() => {
+    if (openLabel) onFiling?.(openLabel);
+  }, [openLabel]);
   const readKey = f ? `${accessionNo}|${active?.section_key ?? ""}` : null;
   useEffect(() => {
     if (readKey) readRef.current?.(readKey.split("|")[1] || null);
@@ -185,7 +192,7 @@ export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q,
           </h1>
           <p className="muted">
             <span className="mono">{accessionNo}</span>
-            {f.period_of_report && ` · period ending ${day(f.period_of_report, true)}`}
+            {f.period_of_report && ` · ${periodPhrase(f.form, f.period_of_report)}`}
           </p>
         </div>
         <div className="row wrap">

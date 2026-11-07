@@ -135,12 +135,12 @@ export function Palette({ token, initial, companies, watched, actions, onClose, 
     const pages: Item[] = NAV.map((n) => ({
       key: `p-${n.view}`,
       label: n.label,
-      sub: `page · g${n.key}`,
+      sub: `page · press g then ${n.key}`,
       run: () => actions.go(n.view),
     }));
     const commands: Item[] = [
       { key: "a-assistant", label: "Open the assistant", sub: "action · Ctrl J", run: actions.openAssistant },
-      { key: "a-watch", label: "Add a company to the watchlist", sub: "action · watch:", run: () => setQ(WATCH_PREFIX) },
+      { key: "a-watch", label: "Add a company to the watchlist", sub: "action", run: () => setQ(WATCH_PREFIX) },
       { key: "a-export", label: "Export watchlist CSV", sub: "action", run: actions.exportWatchlist },
       { key: "a-theme", label: "Switch light / dark theme", sub: "action", run: actions.toggleTheme },
     ];
@@ -150,7 +150,7 @@ export function Palette({ token, initial, companies, watched, actions, onClose, 
         : [];
     const searchItem: Item[] =
       text.length >= 2
-        ? [{ key: "search", label: `Search filings for “${text}”`, sub: "full text · your companies", run: () => actions.searchFilings(text) }]
+        ? [{ key: "search", label: `Search filings for “${text}”`, sub: catalogOpen ? "full text · every company" : "full text · your companies", run: () => actions.searchFilings(text) }]
         : [];
     const command = parseCommand(text);
     const commandItem: Item[] = !command
@@ -198,7 +198,7 @@ export function Palette({ token, initial, companies, watched, actions, onClose, 
         <input
           ref={input}
           value={q}
-          placeholder="Search companies, filings, pages, actions… (watch: to add to your watchlist)"
+          placeholder={watchMode ? "Add to your watchlist: a name or ticker" : "Search companies, filings, pages…"}
           aria-label="Command"
           autoComplete="off"
           onChange={(e) => setQ(e.target.value)}

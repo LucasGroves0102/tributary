@@ -110,7 +110,7 @@ export function Search({ token, search, companies, open = false, suggestions = N
           </p>
         )}
         <p className="faint small">
-          Searches the parsed sections (Risk Factors, MD&amp;A, 8-K items and press releases…) of
+          Searches the parsed sections (Risk Factors, MD&amp;A, 8-K items and press releases…) of{" "}
           {open ? (
             "every company with parsed filings."
           ) : (
