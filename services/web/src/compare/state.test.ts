@@ -15,7 +15,9 @@ import {
   median,
   medianTitle,
   parseCompare,
+  nextSort,
   peerStats,
+  sortRows,
 } from "./state";
 
 const AAPL = "0000320193";
@@ -155,5 +157,30 @@ describe("banks", () => {
     const rows = compareRows(s, [row(entry()), APPLE("0.3"), BANK({ operating_margin_ttm: "0.9" })]);
     expect(rows[2]!.cells.operating_margin_ttm).toMatchObject({ text: "90.0%", bank: true });
     expect(peerStats(rows, s.cols).operating_margin_ttm!.median).toBe(0.3);
+  });
+});
+
+describe("sorting a comps table", () => {
+  const s = { target: NVDA, peers: [TSLA], cols: ["revenue_ttm"] };
+  const rows = () => compareRows(s, [row(entry()), row(TESLA)]);
+
+  it("starts high-first on values, A-Z on names, and the third click clears it", () => {
+    const one = nextSort(null, "revenue_ttm");
+    expect(one).toEqual({ key: "revenue_ttm", desc: true });
+    const two = nextSort(one, "revenue_ttm");
+    expect(two).toEqual({ key: "revenue_ttm", desc: false });
+    expect(nextSort(two, "revenue_ttm")).toBeNull();
+    expect(nextSort(two, "name")).toEqual({ key: "name", desc: false });
+    expect(nextSort({ key: "name", desc: false }, "name")).toEqual({ key: "name", desc: true });
+  });
+
+  it("keeps empty cells last whichever way, and doesn't change the rows it was given", () => {
+    const given = rows();
+    const masked = given.find((r) => r.companyId === TSLA)!;
+    expect(masked.cells.revenue_ttm!.value).toBeNull(); // TESLA has no grant in the fixture
+    expect(sortRows(given, { key: "revenue_ttm", desc: true })[1]!.companyId).toBe(TSLA);
+    expect(sortRows(given, { key: "revenue_ttm", desc: false })[1]!.companyId).toBe(TSLA);
+    expect(given.map((r) => r.companyId)).toEqual([NVDA, TSLA]);
+    expect(sortRows(given, null)).toBe(given);
   });
 });

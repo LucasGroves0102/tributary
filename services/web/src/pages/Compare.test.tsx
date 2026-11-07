@@ -104,6 +104,23 @@ const rows = () => [...container.querySelectorAll("table.comps tbody tr")];
 
 const COMPS = { target: NVDA, peers: [TSLA, AAPL], cols: ["revenue_ttm", "operating_margin_ttm", "revenue_growth_ttm"] };
 
+it("sorts by a column header, empty values last, and back to the order added", async () => {
+  await render(COMPS);
+  const names = () => rows().slice(0, 3).map((r) => r.querySelector("b")!.textContent);
+  expect(names()).toEqual(["Nvidia", "Tesla", "Apple"]);
+  const head = () => [...container.querySelectorAll<HTMLElement>("table.comps thead th")].find((t) => t.textContent?.startsWith("Revenue"))!;
+  await click(head().querySelector("button"));
+  expect(head().getAttribute("aria-sort")).toBe("descending");
+  // Apple $400B, Nvidia $130B; Tesla is metadata only: no value, so last either way
+  expect(names()).toEqual(["Apple", "Nvidia", "Tesla"]);
+  await click(head().querySelector("button"));
+  expect(head().getAttribute("aria-sort")).toBe("ascending");
+  expect(names()).toEqual(["Nvidia", "Apple", "Tesla"]);
+  await click(head().querySelector("button"));
+  expect(head().getAttribute("aria-sort")).toBeNull();
+  expect(names()).toEqual(["Nvidia", "Tesla", "Apple"]);
+});
+
 it("asks the screener for the comps by id and shows each value with its period and source", async () => {
   await render(COMPS);
   const q = calls().find((u) => u.pathname === "/api/query/v1/screener")!;

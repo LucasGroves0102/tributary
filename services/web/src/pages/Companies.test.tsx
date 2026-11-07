@@ -117,6 +117,26 @@ it("applies a filter from the rail to the URL", async () => {
   expect(window.location.hash).toBe("#/companies?industry=semi&fye=1");
 });
 
+it("applies typed filters by themselves a moment after typing stops, keeping the cursor", async () => {
+  vi.useFakeTimers();
+  await render({ industry: "semi" });
+  const q = $("#f-q") as HTMLInputElement;
+  q.focus();
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(q, "TSLA");
+    q.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  expect(window.location.hash).toBe("");
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(450);
+  });
+  vi.useRealTimers();
+  expect(window.location.hash).toBe("#/companies?q=TSLA&industry=semi");
+  // the same field, still focused: the rail isn't remounted while typing
+  expect($("#f-q")).toBe(q);
+  expect(document.activeElement).toBe(q);
+});
+
 it("watches, unwatches and charts from a row", async () => {
   await render();
   await act(async () => $(`button[aria-label="Add Nvidia to watchlist"]`)!.click());
@@ -174,7 +194,9 @@ it("shows a skeleton while the screen runs and a retry when it fails", async () 
   await act(async () => {});
   const panel = container.querySelector(".errpanel")!;
   expect(panel.textContent).toContain("Couldn't load this screen");
-  expect(panel.textContent).toContain("database is restarting");
+  // a 5xx's detail is for developers: the user gets what happened and what might help
+  expect(panel.textContent).not.toContain("database is restarting");
+  expect(panel.textContent).toContain("The server didn't answer in time");
   fail = false;
   await act(async () => panel.querySelector("button")!.click());
   await act(async () => {});

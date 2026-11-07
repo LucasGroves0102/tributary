@@ -320,3 +320,36 @@ export function chartMetric(key: string): { metric: string; transform: "ttm" | "
     title: `${c.long}, ${quarterEnd ? "quarter end" : "TTM"}`,
   };
 }
+
+/** How a comps table is sorted: a column key, "name" or "latest"; high-first for values. */
+export interface CompareSort {
+  key: string;
+  desc: boolean;
+}
+
+/** The next sort after clicking a header: first click high-first (names A-Z), second click the
+ * other way, third click back to the order the comps were added in (null). */
+export function nextSort(sort: CompareSort | null, key: string): CompareSort | null {
+  const first = key !== "name";
+  if (sort?.key !== key) return { key, desc: first };
+  return sort.desc === first ? { key, desc: !first } : null;
+}
+
+/** Rows sorted by the column, the target among them; empty cells always last, whichever way. */
+export function sortRows(rows: CompareRow[], sort: CompareSort | null): CompareRow[] {
+  if (!sort) return rows;
+  const by = sort.desc ? -1 : 1;
+  const text = (r: CompareRow) => (sort.key === "latest" ? (r.latest?.periodEnd ?? null) : sort.key === "name" ? r.name : null);
+  return [...rows].sort((a, b) => {
+    if (sort.key === "name" || sort.key === "latest") {
+      const x = text(a);
+      const y = text(b);
+      if (x === null || y === null) return x === y ? 0 : x === null ? 1 : -1;
+      return by * x.localeCompare(y);
+    }
+    const x = a.cells[sort.key]?.value ?? null;
+    const y = b.cells[sort.key]?.value ?? null;
+    if (x === null || y === null) return x === y ? 0 : x === null ? 1 : -1;
+    return by * (x - y);
+  });
+}

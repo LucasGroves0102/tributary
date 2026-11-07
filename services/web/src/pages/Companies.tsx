@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 
 import { failureReason, screener, SCREENER_CSV_ROWS, screenerCsv } from "../api";
 import { DEFAULT_SPECS, MASKED_TITLE, screenRow } from "../companies/rows";
@@ -130,7 +130,7 @@ export function Companies({ token, screen: asked, watched, onWatch, onChart, sav
       {note && <p className="empty error">{note}</p>}
 
       <div className="screener">
-        <FilterRail key={JSON.stringify(screen)} screen={screen} set={set} scoped={scope !== null} />
+        <FilterRail screen={screen} set={set} scoped={scope !== null} />
 
         <section className="card grow">
           <div className="card-h">
@@ -144,7 +144,7 @@ export function Companies({ token, screen: asked, watched, onWatch, onChart, sav
             )}
           </div>
           {result.state === "error" ? (
-            <ErrorPanel what="this screen" detail={result.message}
+            <ErrorPanel what="this screen" detail={`${result.message}. Fewer columns or filters may help`}
               onRetry={() => {
                 setResult({ state: "loading" });
                 setAttempt((n) => n + 1);
@@ -201,13 +201,17 @@ export function Companies({ token, screen: asked, watched, onWatch, onChart, sav
   );
 }
 
+/** A typed filter applies this long after the last keystroke. */
+const APPLY_AFTER_MS = 400;
+
 function FilterRail({ screen, set, scoped }: {
   screen: ScreenFilters;
   set: (p: Partial<ScreenFilters>) => void;
   /** a demo sandbox: only its companies, so no "Only companies I can read" */
   scoped: boolean;
 }) {
-  // text and number inputs apply on Enter or when they lose focus; selects apply at once
+  // every filter applies by itself: selects at once, typed ones a moment after typing stops (or
+  // on Enter or leaving the field), so nothing needs a second step
   const [q, setQ] = useState(screen.q ?? "");
   const [industry, setIndustry] = useState(screen.industry ?? "");
   const [growth, setGrowth] = useState(screen.growth?.toString() ?? "");
@@ -237,6 +241,29 @@ function FilterRail({ screen, set, scoped }: {
     e.preventDefault();
     commit();
   };
+  // the rail stays mounted while typing (a remount would drop the cursor): the address moved by
+  // something else (Back, Reset filters, a shared link) sets the fields
+  const fromUrl = `${screen.q ?? ""}|${screen.industry ?? ""}|${screen.growth ?? ""}|${screen.margin ?? ""}`;
+  const typed = useRef(fromUrl);
+  useEffect(() => {
+    if (fromUrl === typed.current) return;
+    typed.current = fromUrl;
+    setQ(screen.q ?? "");
+    setIndustry(screen.industry ?? "");
+    setGrowth(screen.growth?.toString() ?? "");
+    setMargin(screen.margin?.toString() ?? "");
+    // only when the address changes
+  }, [fromUrl]);
+  const draftKey = `${q.trim()}|${industry.trim()}|${n(growth) ?? ""}|${n(margin) ?? ""}`;
+  useEffect(() => {
+    if (draftKey === typed.current) return;
+    const t = setTimeout(() => {
+      typed.current = draftKey;
+      commit();
+    }, APPLY_AFTER_MS);
+    return () => clearTimeout(t);
+    // commit reads the drafts this key describes
+  }, [draftKey]);
 
   return (
     <form className="card card-b filters" onSubmit={submit} aria-label="Screen filters">
@@ -314,6 +341,7 @@ function FilterRail({ screen, set, scoped }: {
           Only companies I can read
         </label>
       )}
+      <p className="faint small">Filters apply as you change them.</p>
       <button type="submit" className="visually-hidden">Apply</button>
     </form>
   );

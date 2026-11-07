@@ -12,9 +12,12 @@ import {
   MASKED_TITLE,
   MAX_PEERS,
   medianTitle,
+  nextSort,
   peerStats,
   short,
+  sortRows,
   statText,
+  type CompareSort,
   type CompareState,
 } from "../compare/state";
 import { MAX_COMPANY_LINES } from "../chart/model";
@@ -73,6 +76,7 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
   const [attempt, setAttempt] = useState(0);
   const [chosen, setChartKey] = useState(cols[0]!);
   const [multiples, setMultiples] = useState(false);
+  const [sort, setSort] = useState<CompareSort | null>(null);
   const chartKey = cols.includes(chosen) ? chosen : cols[0]!;
 
   useEffect(() => {
@@ -123,6 +127,16 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
     [table, compare],
   );
   const stats = useMemo(() => peerStats(rows, cols), [rows, cols]);
+  const sorted = useMemo(() => sortRows(rows, sort), [rows, sort]);
+  /** A sortable header: a button in the th, so the keyboard reaches it. */
+  const sortHead = (key: string, content: ReactNode, title?: string) => (
+    <button type="button" className="th-sort" title={title} onClick={() => setSort((s) => nextSort(s, key))}>
+      {content}
+      {sort?.key === key ? (sort.desc ? " ↓" : " ↑") : ""}
+    </button>
+  );
+  const ariaSort = (key: string) =>
+    sort?.key === key ? (sort.desc ? ("descending" as const) : ("ascending" as const)) : undefined;
   const bankCols = cols
     .filter((k) => rows.some((r) => r.cells[k]?.bank))
     .map((k) => COMPARE_COLUMNS.find((c) => c.key === k)!.long.toLowerCase());
@@ -257,7 +271,7 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
             similar size). Or open a company and choose Compare.
           </p>
         ) : table?.state === "error" ? (
-          <ErrorPanel what="the comps" detail={table.message}
+          <ErrorPanel what="the comps" detail={`${table.message}. Fewer columns or peers may help`}
             onRetry={() => {
               setTable({ state: "loading" });
               setAttempt((n) => n + 1);
@@ -269,13 +283,13 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
             <table className="t comps">
               <thead>
                 <tr>
-                  <th className="first">Company</th>
-                  <th>Latest quarter</th>
+                  <th className="first" aria-sort={ariaSort("name")}>{sortHead("name", "Company")}</th>
+                  <th aria-sort={ariaSort("latest")}>{sortHead("latest", "Latest quarter")}</th>
                   {cols.map((k) => {
                     const c = COMPARE_COLUMNS.find((x) => x.key === k)!;
                     return (
-                      <th key={k} className="n" title={c.long}>
-                        {c.label} <span className="unit">{c.period}</span>
+                      <th key={k} className="n" aria-sort={ariaSort(k)}>
+                        {sortHead(k, <>{c.label} <span className="unit">{c.period}</span></>, c.long)}
                       </th>
                     );
                   })}
@@ -283,7 +297,7 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
                 </tr>
               </thead>
               <tbody onKeyDown={onTableKey}>
-                {rows.map((r, i) => (
+                {sorted.map((r, i) => (
                   <tr key={r.companyId} className={[r.isTarget ? "sel" : "", r.readable ? "" : "masked"].join(" ").trim() || undefined}
                     {...navRow(i, r.name)}>
                     <td className="first">
@@ -357,7 +371,8 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
         <div className="foot">
           USD. No valuation multiples: Tributary has no market prices. Each company's own latest
           quarter, labelled by calendar quarter (fiscal in brackets); hover a value for its
-          period and source filing. Keyboard: ↑ ↓ move between rows, Enter opens the company.
+          period and source filing. Click a column to sort, again to reverse, a third time for
+          the order you added them. Keyboard: ↑ ↓ move between rows, Enter opens the company.
           {bankCols.length > 0 &&
             ` Banks show n/a for ${bankCols.join(", ")} (deposits are a bank's debt and lending its operations) and are left out of ${bankCols.length === 1 ? "that column's" : "those columns'"} median.`}
           {fyes.length > 1 &&` Fiscal years end in different months (${fyes.join(", ")}); TTM figures compare regardless.`}
