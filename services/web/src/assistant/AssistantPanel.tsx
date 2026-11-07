@@ -71,7 +71,7 @@ export function AssistantPanel({
           <div className="empty">
             Ask about any company you can read: revenue, margins, cash flow, what a filing says
             or what changed since the last one. Every answer cites its filing and section, and I
-            only see the companies your plan covers.
+            only read what you can read.
             <p className="faint">
               I can't give stock prices, valuation multiples, consensus estimates or call
               transcripts: Tributary has SEC filings and XBRL only.{" "}

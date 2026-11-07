@@ -136,12 +136,12 @@ export function Company({ token, companyId, tab, statements, watched, onWatch, o
       </section>
 
       {tab === "overview" && <Overview token={token} companyId={companyId} name={h.name} row={row} access={row.access} />}
-      {tab === "statements" && <Statements token={token} companyId={companyId} name={h.name} ticker={ticker} industry={h.industry} view={statements} />}
+      {tab === "statements" && <Statements token={token} companyId={companyId} name={h.name} ticker={ticker} notApplicable={row.not_applicable} view={statements} />}
       {tab === "revenue" && (
         <Revenue token={token} companyId={companyId} name={h.name} ticker={ticker} saved={saved ?? null} onOpenChart={onOpenChart} />
       )}
       {tab === "segments" && <Segments token={token} companyId={companyId} name={h.name} />}
-      {tab === "ratios" && <Ratios token={token} companyId={companyId} name={h.name} ticker={ticker} industry={h.industry} />}
+      {tab === "ratios" && <Ratios token={token} companyId={companyId} name={h.name} ticker={ticker} notApplicable={row.not_applicable} />}
       {tab === "filings" && <Filings token={token} companyId={companyId} name={h.name} canRead={row.access.includes("filings")} fiscalYearEnd={row.fiscal_year_end} />}
       {tab === "notes" && <DataNotes token={token} companyId={companyId} name={h.name} canReadFilings={row.access.includes("filings")} />}
       {tab === "peers" && <Peers token={token} companyId={companyId} name={h.name} onChart={onChartMany} />}

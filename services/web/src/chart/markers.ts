@@ -23,7 +23,7 @@ const PERIODIC: Record<string, MarkerKind> = { "10-K": "10-K", "10-KT": "10-K", 
 const GLYPH: Record<MarkerKind, string> = { "10-K": "K", "10-Q": "Q", "8-K": "8" };
 export const MARKER_FORMS = Object.keys(PERIODIC);
 /** What the letters mean, for the chart's own footnote so an export carries it too. */
-export const MARKER_KEY = "Markers: K = 10-K, Q = 10-Q, 8 = 8-K results (item 2.02, where the filing is parsed and your plan covers filings).";
+export const MARKER_KEY = "Markers: K = 10-K, Q = 10-Q, 8 = 8-K results (item 2.02, where the filing is parsed and you can read filings).";
 export const ANNUAL_MARKER_KEY = "Markers: K = 10-K.";
 
 /** A chart of years marks the filing a year is reported in: quarterly ones say nothing there. */

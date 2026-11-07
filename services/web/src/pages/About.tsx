@@ -26,8 +26,12 @@ export const GOOD_TO_KNOW: { title: string; text: string }[] = [
     text: "From each company's own filing history, capped at the SEC deadline, not dates the company announced.",
   },
   {
+    title: "Figures that read n/m or old",
+    text: "n/m means a figure exists but says nothing: what it divides by is close to zero, negative or on another basis, such as a gross margin over 100% or debt 500 times equity. The exact figure and the reason are in the hover. A figure about a year or more behind the company's latest period reads old and shows its date. Neither wins a sort, passes a filter or enters a median.",
+  },
+  {
     title: "Banks: some metrics are n/a",
-    text: "Operating margin, free cash flow and net debt show \"n/a (bank)\": deposits are a bank's funding and lending its operations, so those measures don't describe it.",
+    text: "Gross and operating margin, free cash flow, net debt, debt to equity and the current ratio show \"n/a (bank)\" for every bank, whatever it tags: deposits are a bank's funding and lending its operations, so those measures don't describe it.",
   },
   {
     title: "After-hours filings arrive the next morning",

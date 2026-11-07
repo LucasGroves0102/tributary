@@ -2406,6 +2406,32 @@ button.chip:disabled {
   font-style: italic;
 }
 
+/* a figure from another period than the company's latest (blanks.ts): the date under it; an old one dimmed */
+.fig {
+  display: inline-block;
+}
+
+.fig .asof {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 400;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+.fig.old {
+  color: var(--text-3);
+}
+
+.kv > div.old .v {
+  color: var(--text-3);
+  font-weight: 500;
+}
+
+.kv > div.old .p {
+  color: var(--warn, var(--text-3));
+}
+
 /* every value links to its filing, so a link can't look special: quiet until hovered */
 .t td.n a {
   color: inherit;

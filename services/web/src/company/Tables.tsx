@@ -14,9 +14,11 @@ import {
   type Basis,
   type MetricTable,
   type Period,
+  type BlankCell,
   type Statement,
   type StatementRange,
   type TableCell,
+  withAnnualPerShare,
 } from "./data";
 import { go } from "../route";
 import type { StatementView } from "./statementView";
@@ -42,11 +44,19 @@ const RANGES: [StatementRange, string][] = [
   ["max", "Max"],
 ];
 
-function Seg<T extends string>({ value, options, set, label }: { value: T; options: [T, string][]; set: (v: T) => void; label: string }) {
+function Seg<T extends string>({ value, options, set, label, off }: {
+  value: T;
+  options: [T, string][];
+  set: (v: T) => void;
+  label: string;
+  /** an option that doesn't apply here, and why (its hover) */
+  off?: Partial<Record<T, string>>;
+}) {
   return (
     <span className="seg" role="group" aria-label={label}>
       {options.map(([v, l]) => (
-        <button key={v} className={v === value ? "on" : undefined} aria-pressed={v === value} onClick={() => set(v)}>
+        <button key={v} className={v === value ? "on" : undefined} aria-pressed={v === value} onClick={() => set(v)}
+          disabled={!!off?.[v]} title={off?.[v]}>
           {l}
         </button>
       ))}
@@ -54,9 +64,13 @@ function Seg<T extends string>({ value, options, set, label }: { value: T; optio
   );
 }
 
-function Cell({ cell, bank, label = "" }: { cell: TableCell | null; bank?: boolean; label?: string }) {
-  if (!cell && bank) return <td className="n faint" title={bankTitle(label)}>{BANK_NA}</td>;
-  if (!cell) return <td className="n faint">—</td>;
+const NO_DATA_CELL: BlankCell = { text: NO_DATA, title: NO_DATA_TITLE };
+
+function Cell({ cell, blank = NO_DATA_CELL }: { cell: TableCell | null; blank?: BlankCell }) {
+  if (!cell) return <td className="n faint" title={blank.title}>{blank.text}</td>;
+  if (cell.text === NOT_MEANINGFUL || cell.text.startsWith(NOT_APPLICABLE)) {
+    return <td className="n faint" title={cell.title}>{cell.text}</td>;
+  }
   return (
     <td className={cell.derived ? "n derived" : "n"} title={cell.title}>
       {cell.url ? (
@@ -92,7 +106,7 @@ export function MetricTableView({ table, first }: { table: MetricTable; first: s
             <tr key={r.metric}>
               <td className="first">{r.label}</td>
               {r.cells.map((c, i) => (
-                <Cell key={table.columns[i]!.periodEnd} cell={c} bank={r.bank} label={r.label} />
+                <Cell key={table.columns[i]!.periodEnd} cell={c} blank={r.blanks[i]} />
               ))}
             </tr>
           ))}
@@ -176,9 +190,10 @@ export function Statements({ token, companyId, name, ticker, industry = null, vi
   );
 }
 
-export function Ratios({ token, companyId, name, ticker, industry = null }: TableProps) {
-  const load = useLoad(companyId, () => financialsView(token, companyId, 8, RATIOS.map(([m]) => m), "ttm"));
-  const table = load?.state === "ok" ? metricTable(load.data.rows, RATIOS, "ttm", "fiscal", industry) : null;
+export function Ratios({ token, companyId, name, ticker, notApplicable = [] }: TableProps) {
+  // equity too: debt/equity and ROE on negative equity read n/m, not as a gap
+  const load = useLoad(companyId, () => financialsView(token, companyId, 8, [...RATIOS.map(([m]) => m), "stockholders_equity"], "ttm", "fiscal", true));
+  const table = load?.state === "ok" ? metricTable(load.data.rows, RATIOS, "ttm", "fiscal", notApplicable) : null;
   return (
     <section className="card">
       <div className="card-h">

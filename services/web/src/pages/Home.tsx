@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useState, type ReactNode } from "react";
 
+import { FigureText } from "../components/FigureText";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { navRow, onTableKey } from "../components/tableNav";
 import { ago, change, day, periodPhrase, UNNAMED } from "../format";
@@ -382,7 +383,7 @@ function WatchTable({ workspace, onAdd }: { workspace: Workspace; onAdd: () => v
                         : "";
                   return (
                     <td key={c.key} className={`n ${tone}`} title={cell.title}>
-                      {cell.text}
+                      <FigureText cell={cell} />
                     </td>
                   );
                 })}

@@ -1,6 +1,7 @@
 import { peers as fetchPeers } from "../api";
 import { MAX_COMPANY_LINES } from "../chart/model";
 import { COMPARE_COLUMNS, compareRows, MASKED_TITLE } from "../compare/state";
+import { FigureText } from "../components/FigureText";
 import { go, href } from "../route";
 import { useScope } from "../scope";
 import { Gate } from "./Tables";
@@ -32,6 +33,8 @@ export function Peers({
   const rows = data ? compareRows(state, [data.company, ...data.peers]) : [];
   const readable = rows.filter((r) => r.readable).map((r) => r.companyId);
   const capped = readable.length > MAX_COMPANY_LINES;
+  // a bank peer group has no operating margin to chart; net margin is what they all report
+  const chartNet = rows.length > 0 && rows.every((r) => !r.readable || r.cells.operating_margin_ttm?.value == null);
 
   return (
     <section className="card">
@@ -43,9 +46,9 @@ export function Peers({
           Open in Compare
         </button>
         <button className="btn sm" disabled={readable.length < 2}
-          onClick={() => onChart(readable, "operating_margin", "ttm")}
-          title={`Operating margin, TTM: one line per company you can read${capped ? `, the first ${MAX_COMPANY_LINES} (a chart tells ${MAX_COMPANY_LINES} colours apart)` : ""}`}>
-          Chart margins{capped ? ` (first ${MAX_COMPANY_LINES} of ${readable.length})` : ""}
+          onClick={() => onChart(readable, chartNet ? "net_margin" : "operating_margin", "ttm")}
+          title={`${chartNet ? `Net margin, TTM: ${rows.some((r) => r.cells.operating_margin_ttm?.status === "not_applicable") ? "operating margin doesn't describe a bank" : "too few of these report an operating margin"}, so this` : "Operating margin, TTM:"} one line per company you can read${capped ? `, the first ${MAX_COMPANY_LINES} (a chart tells ${MAX_COMPANY_LINES} colours apart)` : ""}`}>
+          Chart {chartNet ? "net " : ""}margins{capped ? ` (first ${MAX_COMPANY_LINES} of ${readable.length})` : ""}
         </button>
       </div>
       <Gate load={load} name={name} what="Peers">
@@ -103,7 +106,7 @@ export function Peers({
                           const tone = cell.value === null ? "faint" : k === "revenue_growth_ttm" ? (cell.value >= 0 ? "pos" : "neg") : "";
                           return (
                             <td key={k} className={`n ${tone}`} title={cell.title}>
-                              {cell.text}
+                              <FigureText cell={cell} />
                             </td>
                           );
                         })}

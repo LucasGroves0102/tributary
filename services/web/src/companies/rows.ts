@@ -1,8 +1,9 @@
 /** Screener rows → table cells: units, the period behind each value, its source filing, and an
  * honest note where the API masked a company's values. Pure, tested without rendering. */
 
-import { BANK_NA, bankTitle, day, notForBanks, UNNAMED } from "../format";
-import { num, type Cell } from "../home/data";
+import { NOT_REPORTED, readFigure } from "../blanks";
+import { day, UNNAMED } from "../format";
+import type { Cell } from "../home/data";
 import type { ScreenerRow, ValueSource } from "../types";
 import { columnSpec, formatColumn, type ColumnSpec } from "../views/model";
 import { fyeMonth, SCREEN_COLUMNS } from "./screen";
@@ -50,14 +51,19 @@ export function screenRow(r: ScreenerRow, columns: ColumnSpec[] = DEFAULT_SPECS)
   const cells: Record<string, Cell> = {};
   for (const c of columns) {
     const long = LONG[c.key] ?? c.long;
-    const value = readable ? num(r.values[c.key]) : null;
+    const source = r.sources[c.key] ?? null;
     cells[c.key] = !readable
-      ? { value, text: "—", title: MASKED_TITLE }
-      : value === null && notForBanks(r.industry, c.key)
-        ? { value, text: BANK_NA, title: bankTitle(long) }
-        : value === null
-        ? { value, text: "—", title: `${long}: not reported for the latest period` }
-        : { value, text: formatColumn(c.kind, value), title: title(c.key, r.sources[c.key] ?? null, long) };
+      ? { value: null, text: NOT_REPORTED, title: MASKED_TITLE }
+      : readFigure({
+          label: long,
+          columnKey: c.key,
+          raw: r.values[c.key],
+          reading: r.readings?.[c.key],
+          source,
+          latestPeriod: r.latest_period,
+          format: (v) => formatColumn(c.kind, v),
+          sourceTitle: title(c.key, source, long),
+        });
   }
   return {
     companyId: r.company_id,

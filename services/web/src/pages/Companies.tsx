@@ -22,6 +22,7 @@ import {
   type FilerCategory,
   type ScreenFilters,
 } from "../companies/screen";
+import { FigureText } from "../components/FigureText";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { navRow, onTableKey } from "../components/tableNav";
 import { download } from "../download";
@@ -170,7 +171,7 @@ export function Companies({ token, screen: asked, watched, onWatch, onChart, sav
                 <p className="empty">
                   {scope ? "None of the companies in your demo match." : "No companies match."}{" "}
                   {hasValueFilter(screen) && !scope
-                    ? "Value filters only match companies your plan covers; loosen a filter or clear it."
+                    ? "Value filters only match figures that are current and meaningful; loosen a filter or clear it."
                     : "Loosen a filter."}
                 </p>
               )}
@@ -187,6 +188,9 @@ export function Companies({ token, screen: asked, watched, onWatch, onChart, sav
           <div className="foot">
             USD. TTM = trailing twelve months to each company's latest reported quarter; net debt
             and debt/equity at that quarter's end. Hover a value for its period and source filing.
+            A figure from an earlier period than the company's latest shows its date; about a year or
+            more behind it reads old, dimmed, and leaves sorts and filters. n/m = not meaningful,
+            n/a = doesn't apply, — = not reported; hover for why.
             Keyboard: ↑ ↓ move between rows, Home/End jump, Enter opens the company.
             {masked > 0 && (
               <>
@@ -480,7 +484,7 @@ function Table({
                         : "";
                     return (
                       <td key={c.key} className={`n ${tone}`} title={cell.title}>
-                        {cell.text}
+                        <FigureText cell={cell} />
                       </td>
                     );
                   })}

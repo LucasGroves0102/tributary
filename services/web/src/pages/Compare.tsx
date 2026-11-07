@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { failureReason, peers as fetchPeers, screener } from "../api";
+import { NOT_APPLICABLE, NOT_REPORTED } from "../blanks";
 import { UNNAMED } from "../displayNames";
 import {
   chartMetric,
@@ -24,6 +25,7 @@ import {
 import { MAX_COMPANY_LINES } from "../chart/model";
 import { SmallMultiples } from "../compare/SmallMultiples";
 import { CompanySearch } from "../components/CompanySearch";
+import { FigureText } from "../components/FigureText";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { navRow, onTableKey } from "../components/tableNav";
 import { download } from "../download";
@@ -141,7 +143,7 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
   const ariaSort = (key: string) =>
     sort?.key === key ? (sort.desc ? ("descending" as const) : ("ascending" as const)) : undefined;
   const bankCols = cols
-    .filter((k) => rows.some((r) => r.cells[k]?.bank))
+    .filter((k) => rows.some((r) => r.cells[k]?.status === "not_applicable"))
     .map((k) => COMPARE_COLUMNS.find((c) => c.key === k)!.long.toLowerCase());
   const target = rows.find((r) => r.isTarget);
   const names = new Map(rows.map((r) => [r.companyId, r.ticker ?? r.name]));
@@ -327,7 +329,7 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
                       return (
                         <td key={k} className={`n ${cell.value === null ? "faint" : growth ? (cell.value >= 0 ? "pos" : "neg") : ""}`}
                           title={cell.title}>
-                          {cell.text}
+                          <FigureText cell={cell} />
                         </td>
                       );
                     })}
@@ -351,8 +353,8 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
                   <td className="faint" title="Peers you can read, excluding the target">{rows.filter((r) => !r.isTarget && r.readable).length} readable</td>
                   {cols.map((k) => (
                     <td key={k} className="n" title={medianTitle(stats[k]!)}>
-                      {statText(k, stats[k]!.median)}
-                      {stats[k]!.banks > 0 && <span className="unit"> excl. banks</span>}
+                      {stats[k]!.n === 0 && stats[k]!.banks > 0 ? NOT_APPLICABLE : statText(k, stats[k]!.median)}
+                      {stats[k]!.n > 0 && stats[k]!.banks > 0 && <span className="unit"> excl. banks</span>}
                     </td>
                   ))}
                   <td />
@@ -361,7 +363,7 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
                   <td className="first">High</td>
                   <td />
                   {cols.map((k) => (
-                    <td key={k} className="n">{stats[k]!.n ? statText(k, stats[k]!.high) : "—"}</td>
+                    <td key={k} className="n">{stats[k]!.n ? statText(k, stats[k]!.high) : stats[k]!.banks ? NOT_APPLICABLE : NOT_REPORTED}</td>
                   ))}
                   <td />
                 </tr>
@@ -369,7 +371,7 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
                   <td className="first">Low</td>
                   <td />
                   {cols.map((k) => (
-                    <td key={k} className="n">{stats[k]!.n ? statText(k, stats[k]!.low) : "—"}</td>
+                    <td key={k} className="n">{stats[k]!.n ? statText(k, stats[k]!.low) : stats[k]!.banks ? NOT_APPLICABLE : NOT_REPORTED}</td>
                   ))}
                   <td />
                 </tr>

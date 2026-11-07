@@ -67,6 +67,8 @@ export interface KeyStat {
   /** the period the value covers, e.g. "TTM to Jul 26, 2026" */
   period: string;
   title: string;
+  /** years older than the company's latest period (dimmed) */
+  old?: boolean;
 }
 
 function periodText(key: string, src: ValueSource): string {
@@ -79,20 +81,30 @@ function periodText(key: string, src: ValueSource): string {
 
 export function keyStats(row: ScreenerRow): KeyStat[] {
   return KEY_STATS.map(({ key, label, kind }) => {
-    const v = num(row.values[key]);
     const src = row.sources[key] ?? null;
-    if ((v === null || !src) && notForBanks(row.industry, key)) {
-      return { label, text: BANK_NA, period: "not applicable", title: bankTitle(label) };
-    }
-    if (v === null || !src) return { label, text: "—", period: "not reported", title: `${label}: not reported for the latest period` };
-    const period = periodText(key, src);
-    return {
+    const f = readFigure({
       label,
-      text: fmt(kind, v),
-      period,
-      title: `${label}, ${period} (${calendarLabel(src.period_end)}). Source: ${src.form} filed ` +
-        `${day(src.filed, true)}, ${src.accession_no}`,
-    };
+      columnKey: key,
+      raw: row.values[key],
+      reading: row.readings?.[key],
+      source: src,
+      latestPeriod: row.latest_period,
+      format: (v) => fmt(kind, v),
+      sourceTitle: src
+        ? `${label}, ${periodText(key, src)} (${calendarLabel(src.period_end)}). Source: ${src.form} filed ` +
+          `${day(src.filed, true)}, ${src.accession_no}.`
+        : label,
+    });
+    const period = f.status === "not_applicable"
+      ? "not applicable"
+      : f.status === "not_meaningful"
+        ? "not meaningful"
+        : !src || f.text === NOT_REPORTED
+          ? "not reported"
+          : f.old
+            ? `old · ${periodText(key, src)}`
+            : periodText(key, src);
+    return { label, text: f.text, period, title: f.title, old: f.old };
   });
 }
 
@@ -214,10 +226,46 @@ export interface TableCell {
   url: string | null;
 }
 
+/** What an empty cell reads (blanks.ts). */
+export interface BlankCell {
+  text: string;
+  title: string;
+}
+
 export interface MetricTable {
   columns: { periodEnd: string; label: string; sub: string }[];
-  /** bank: the metric doesn't describe this company (a bank), so empty cells read n/a */
-  rows: { metric: string; label: string; cells: (TableCell | null)[]; bank?: boolean }[];
+  /** `blanks[i]` is what `cells[i]` reads when it's null */
+  rows: { metric: string; label: string; cells: (TableCell | null)[]; blanks: BlankCell[] }[];
+}
+
+/** Per-share figures: quarters state them, but they don't add (the share count changes), so gold
+ * derives neither a TTM nor a fiscal Q4. Annual comes from the 10-K itself (annualPerShare). */
+const PER_SHARE = new Set(["eps_diluted", "eps_basic", "weighted_shares_diluted", "weighted_shares_basic"]);
+const Q4_PER_SHARE = "not reported. A 10-K gives the year's figure, not its fourth quarter's, and the year less nine " +
+  "months isn't the quarter when the share count changes, so it isn't derived as revenue is. Annual shows the year's.";
+const TTM_PER_SHARE = "not applicable. Per-share figures don't add across quarters, because the share count changes. " +
+  "Annual shows the 10-K's figure for each fiscal year.";
+const BANK_TITLE = "not applicable. This is a bank: deposits are its debt and lending its operations, so the figure has no comparable meaning.";
+const EQUITY_RATIOS = new Set(["debt_to_equity", "roe"]);
+
+function blankCell(metric: string, name: string, period: Period, column: string, notApplicable: string[]): BlankCell {
+  if (notApplicable.includes(metric)) return { text: BANK_NA, title: `${name}: ${BANK_TITLE}` };
+  if (PER_SHARE.has(metric) && period === "ttm") return { text: NOT_APPLICABLE, title: `${name}: ${TTM_PER_SHARE}` };
+  if (PER_SHARE.has(metric) && period === "q" && column.endsWith("Q4")) return { text: NOT_REPORTED, title: `${name}: ${Q4_PER_SHARE}` };
+  return { text: NO_DATA, title: `${name}: ${NO_DATA_TITLE.toLowerCase()}` };
+}
+
+/** The 10-K's per-share rows (annualPerShare) as rows of the annual table: each takes the fiscal
+ * period of the year it ends, so it lands in that year's column. A year-end within a week counts:
+ * gold's Q4 and the 10-K can differ by a day. */
+export function withAnnualPerShare(rows: FinancialRow[], annual: FinancialRow[], basis: Basis): FinancialRow[] {
+  const ends = rows.filter((r) => ((basis === "calendar" ? r.calendar_period : r.fiscal_period) ?? "").endsWith("Q4"));
+  const placed = annual.flatMap((a) => {
+    const at = Date.parse(a.period_end);
+    const year = ends.find((r) => Math.abs(Date.parse(r.period_end) - at) <= 7 * 86_400_000);
+    return year ? [{ ...a, period_end: year.period_end, fiscal_period: year.fiscal_period, calendar_period: year.calendar_period }] : [];
+  });
+  return [...rows, ...placed];
 }
 
 function cellTitle(label: string, r: FinancialRow): string {
@@ -235,8 +283,8 @@ export function metricTable(
   metrics: [string, string, Fmt][],
   period: Period,
   basis: Basis = "fiscal",
-  /** the company's SIC description: a bank's empty operating margin / FCF / net debt reads n/a */
-  industry: string | null = null,
+  /** metrics that don't describe this company, whatever it tags (ScreenerRow.not_applicable) */
+  notApplicable: string[] = [],
   /** how many quarterly or TTM columns to keep (annual always shows ANNUAL_YEARS) */
   columnsWanted = RANGE_QUARTERS["8q"],
 ): MetricTable {
@@ -252,6 +300,10 @@ export function metricTable(
   };
   const columns = ends.map((end) => ({ periodEnd: end, label: label(end), sub: day(end, true) }));
   const by = new Map(kept.map((r) => [`${r.metric}|${r.period_end}`, r]));
+  const equityAt = (end: string) => {
+    const r = by.get(`stockholders_equity|${end}`);
+    return r ? num(r.value) : null;
+  };
   return {
     columns,
     rows: metrics
@@ -266,23 +318,36 @@ export function metricTable(
         return {
           metric,
           label: name,
+          blanks: ends.map((_, i) => blankCell(metric, name, period, columns[i]!.label, notApplicable)),
           cells: ends.map((end, i): TableCell | null => {
             const r = by.get(`${metric}|${end}`);
             const v = r ? num(r.value) : null;
+            // gold has no debt/equity or ROE on negative equity: it isn't a gap, it means nothing
+            if (EQUITY_RATIOS.has(metric) && (equityAt(end) ?? 1) <= 0) {
+              return {
+                text: NOT_MEANINGFUL, raw: v === null ? "" : String(r!.value), derived: false, url: null,
+                title: `${name}: not meaningful, because stockholders' equity is negative at ${day(end, true)}.`,
+              };
+            }
             if (!r || v === null) return null;
-            return {
-              text: row?.[i] ?? fmt(kind, v),
+            const figure = row?.[i] ?? fmt(kind, v);
+            const source = {
               raw: String(r.value),
-              title: cellTitle(name, r),
               derived: r.value_source === "derived",
               url: r.citation.filing_url,
             };
+            if (notApplicable.includes(metric)) {
+              return { ...source, derived: false, text: BANK_NA, title: `${name}: ${BANK_TITLE} The figure on file: ${figure}. ${cellTitle(name, r)}` };
+            }
+            if (r.not_meaningful) {
+              return { ...source, derived: false, text: NOT_MEANINGFUL, title: `${name}: not meaningful, because ${r.not_meaningful}. The figure on file: ${figure}. ${cellTitle(name, r)}` };
+            }
+            return { ...source, text: figure, title: cellTitle(name, r) };
           }),
-          bank: notForBanks(industry, metric) || undefined,
         };
       })
-      // a bank's operating margin / FCF / net debt stays, as n/a, so its absence is explained
-      .filter((r) => r.cells.some(Boolean) || (r.bank && ends.length > 0)),
+      // an n/a row stays, so its absence is explained: a bank's FCF, EPS in a TTM view
+      .filter((r) => r.cells.some(Boolean) || (ends.length > 0 && r.blanks.every((b) => b.text === BANK_NA || b.text === NOT_APPLICABLE))),
   };
 }
 
@@ -362,16 +427,18 @@ export function recapRows(recap: Recap): { labels: [string, string, string]; row
       const [label, kind] = RECAP_LABELS[m.metric]!;
       const show = (v: RecapValue | null) => {
         const n = v ? num(v.value) : null;
-        return n === null ? "—" : fmt(kind, n);
+        return n === null ? NO_DATA : v?.not_meaningful ? NOT_MEANINGFUL : fmt(kind, n);
       };
+      const unusable = m.current?.not_meaningful;
       return {
         label,
         current: show(m.current),
         prior: show(m.prior_quarter),
-        qoq: delta(m.prior_quarter, m.unit),
+        qoq: unusable || m.prior_quarter?.not_meaningful ? null : delta(m.prior_quarter, m.unit),
         yearAgo: show(m.year_ago),
-        yoy: delta(m.year_ago, m.unit),
-        title: [src(m.current), src(m.prior_quarter), src(m.year_ago)].filter(Boolean).join("\n"),
+        yoy: unusable || m.year_ago?.not_meaningful ? null : delta(m.year_ago, m.unit),
+        title: [unusable ? `${label}: not meaningful, because ${unusable}. The figure on file: ${fmt(kind, num(m.current!.value)!)}.` : "",
+          src(m.current), src(m.prior_quarter), src(m.year_ago)].filter(Boolean).join("\n"),
       };
     });
   return { labels, rows };

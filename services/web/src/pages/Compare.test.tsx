@@ -207,8 +207,11 @@ it("toggles columns and starts empty with a hint", async () => {
 
 it("shows a bank's operating margin as n/a and leaves it out of the median, with a note", async () => {
   const JPM = "0000019617";
-  const bank = row(entry({ company_id: JPM, name: "JPMORGAN CHASE & CO", tickers: ["JPM"], industry: "National Commercial Banks",
-    values: { revenue_ttm: "180000000000", operating_margin_ttm: null } }));
+  const bank = {
+    ...row(entry({ company_id: JPM, name: "JPMORGAN CHASE & CO", tickers: ["JPM"], industry: "National Commercial Banks",
+      values: { revenue_ttm: "180000000000", operating_margin_ttm: null } })),
+    readings: { operating_margin_ttm: { status: "not_applicable" as const, reason: "this is a bank: deposits are its debt" } },
+  };
   vi.mocked(fetch).mockImplementation(async (url) => new URL(String(url), "http://x").pathname.endsWith("/peers")
     ? Response.json(PEERS)
     : Response.json({ as_of: "", total: 3, limit: 3, offset: 0, sort: "name", columns: [], rows: [row(entry()), APPLE, bank] }));
@@ -216,7 +219,7 @@ it("shows a bank's operating margin as n/a and leaves it out of the median, with
   const jpm = rows().find((r) => r.textContent?.includes("JPM"))!;
   const cell = [...jpm.querySelectorAll("td.n")][1]!;
   expect(cell.textContent).toBe("n/a (bank)");
-  expect(cell.getAttribute("title")).toContain("doesn't describe a bank");
+  expect(cell.getAttribute("title")).toContain("This is a bank");
   const median = rows().find((r) => r.textContent?.startsWith("Peer median"))!;
   const m = [...median.querySelectorAll("td.n")][1]!;
   expect(m.textContent).toBe("30.0% excl. banks");

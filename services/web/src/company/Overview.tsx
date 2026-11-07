@@ -35,12 +35,12 @@ export function Overview({
       <section className="card">
         <div className="card-h">
           <h2>Key stats</h2>
-          <span className="sub">latest reported periods · USD · hover for the source filing</span>
+          <span className="sub">the latest period of each figure · USD · hover for the source filing, or for why a figure reads n/m</span>
         </div>
         {canFin ? (
           <div className="kv stats">
             {keyStats(row).map((s) => (
-              <div key={s.label} title={s.title}>
+              <div key={s.label} title={s.title} className={s.old ? "old" : undefined}>
                 <div className="k">{s.label}</div>
                 <div className="v">{s.text}</div>
                 <div className="p">{s.period}</div>

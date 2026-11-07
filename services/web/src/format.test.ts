@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ago, change, companyName, day, displayNames, duration, money, moneyRow, notForBanks, pct, quarter } from "./format";
+import { ago, change, companyName, day, displayNames, duration, money, moneyRow, pct, quarter } from "./format";
 
 describe("moneyRow", () => {
   it("reads a row in the largest value's unit", () => {
@@ -84,15 +84,5 @@ describe("companyName", () => {
   it("rewrites names only on objects that carry a company_id", () => {
     expect(displayNames({ rows: [{ company_id: "1", name: "COCA COLA CO" }], name: "KEEP" })).toEqual({
       rows: [{ company_id: "1", name: "Coca-Cola" }], name: "KEEP" });
-  });
-});
-
-describe("notForBanks", () => {
-  it("marks margin, FCF and net debt as n/a for banks only", () => {
-    expect(notForBanks("National Commercial Banks", "operating_margin_ttm")).toBe(true);
-    expect(notForBanks("National Commercial Banks", "net_debt_q")).toBe(true);
-    expect(notForBanks("National Commercial Banks", "revenue_ttm")).toBe(false);
-    expect(notForBanks("Beverages", "operating_margin_ttm")).toBe(false);
-    expect(notForBanks(null, "net_debt_q")).toBe(false);
   });
 });

@@ -515,6 +515,8 @@ export interface FinancialRow {
   value: string;
   unit: string;
   value_source: "reported" | "derived";
+  /** why this ratio reads n/m (asked for with `readings`) */
+  not_meaningful?: string | null;
   citation: {
     accession_no: string;
     form: string;
@@ -628,6 +630,15 @@ export interface ColumnInfo {
   metric: string;
   span: "quarter" | "ttm";
   unit: string;
+  /** a point in time: its _ttm column is the same number as its _q one */
+  balance?: boolean;
+}
+
+/** How to read a screener value (migration 035): not_applicable and not_meaningful give a reason,
+ * old and behind are about its date (blanks.ts has what each shows). */
+export interface ValueReading {
+  status: "not_applicable" | "not_meaningful" | "old" | "behind";
+  reason?: string | null;
 }
 
 /** Where a screener/watchlist value came from: the latest period's filing. */
@@ -655,6 +666,9 @@ export interface ExpectedFiling {
 }
 
 export interface WatchlistEntry {
+  /** how to read each value (ScreenerRow) */
+  readings?: Record<string, ValueReading>;
+  latest_period?: string | null;
   company_id: string;
   name: string | null;
   tickers: string[] | null;
@@ -713,6 +727,12 @@ export interface ScreenerRow {
   access: Tier[];
   values: Record<string, Num | null>;
   sources: Record<string, ValueSource | null>;
+  /** only where there's something to say; the exact figure stays in `values` */
+  readings?: Record<string, ValueReading>;
+  /** what "old" is measured against */
+  latest_period?: string | null;
+  /** metrics that don't describe this company, whatever a filing tags (banks) */
+  not_applicable?: string[];
 }
 
 /** /v1/screener/columns: every column key, i.e. every formula metric with each span it has. */
@@ -815,6 +835,8 @@ export interface Peers {
 }
 
 export interface RecapValue {
+  /** why this ratio reads n/m */
+  not_meaningful?: string | null;
   value: Num;
   period_start: string | null;
   period_end: string;

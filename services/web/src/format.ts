@@ -78,17 +78,3 @@ export function ago(iso: string, now = Date.now()): string {
 }
 
 export { companyName, displayNames, segmentLabel, UNNAMED } from "./displayNames";
-
-/** Operating margin, FCF and net debt don't describe a bank (deposits are its debt, lending its
- * operations), so a missing value there is "n/a", not missing data. */
-export function notForBanks(industry: string | null | undefined, metric: string): boolean {
-  return !!industry && /\bbank|savings institution|bancorp/i.test(industry)
-    && /operating_margin|free_cash_flow|fcf|net_debt/.test(metric);
-}
-
-/** What a bank's inapplicable metric shows instead of a dash, and why (its hover). */
-export const BANK_NA = "n/a (bank)";
-export function bankTitle(label: string): string {
-  return `${label} doesn't describe a bank: deposits are its debt and lending is its operations, ` +
-    "so the SEC data has no comparable figure.";
-}
