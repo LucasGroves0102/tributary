@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { dataStatus } from "../api";
 import { CHECKS } from "../companies/screen";
-import { ago, day } from "../format";
+import { ago, day, duration } from "../format";
 import { href } from "../route";
 import type { DataStatus, RecordedRun } from "../types";
 import { TableScroll } from "../components/TableScroll";
@@ -20,13 +20,7 @@ interface Props {
 
 const count = (n: number | null | undefined) => (n === null || n === undefined ? "—" : n.toLocaleString("en-US"));
 
-/** 43 → "43 s", 108 → "1.8 min", 7200 → "2.0 h". */
-export function duration(seconds: number | null): string {
-  if (seconds === null) return "—";
-  if (seconds < 90) return `${Math.round(seconds)} s`;
-  if (seconds < 5400) return `${(seconds / 60).toFixed(1)} min`;
-  return `${(seconds / 3600).toFixed(1)} h`;
-}
+export { duration };
 
 /** "Nov 6, 2026, 3:30 PM PST": a time means little without its zone, beside "10 pm ET". */
 function stamp(iso: string): string {

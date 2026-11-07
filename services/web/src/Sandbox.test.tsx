@@ -142,6 +142,15 @@ afterEach(() => {
   window.location.hash = "";
 });
 
+describe("the front door's figures", () => {
+  it("the door opens without them when the route fails", async () => {
+    await mount(<Welcome onReady={() => undefined} />);
+    await settle();
+    expect(container.querySelector(".proof")).toBeNull();
+    expect(button("Try the demo")).toBeTruthy();
+  });
+});
+
 describe("Try the demo", () => {
   it("creates a sandbox, waits for its access and lands on Home with the banner", async () => {
     window.location.hash = "#/companies";

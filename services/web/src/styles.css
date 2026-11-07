@@ -272,18 +272,117 @@ a.btn:hover {
   background: var(--bg);
 }
 
+/* Who it is and what's in it on the left, the way in on the right; on a phone the way in comes
+   second, above the figures. */
+.welcome-layout {
+  width: 100%;
+  max-width: 1040px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 400px);
+  grid-template-areas:
+    "head card"
+    "proof card";
+  grid-template-rows: auto 1fr;
+  gap: var(--sp-8) 48px;
+}
+
+.welcome-head {
+  grid-area: head;
+}
+
+.welcome-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  font-size: 26px;
+}
+
+.welcome-lead {
+  margin: var(--sp-5) 0 0;
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+.welcome-proof {
+  grid-area: proof;
+  min-width: 0;
+}
+
+.proof {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: var(--sp-6) var(--sp-8);
+  margin: 0 0 var(--sp-8);
+}
+
+.proof dt {
+  font-size: var(--fs-xl);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.proof dd {
+  margin: var(--sp-1) 0 0;
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+  line-height: 1.4;
+}
+
+.welcome-list {
+  margin: 0 0 var(--sp-6);
+  padding-left: 18px;
+  display: grid;
+  gap: var(--sp-3);
+  color: var(--text-2);
+  line-height: 1.45;
+}
+
 .welcome-card {
   grid-area: card;
   align-self: start;
   width: 100%;
-  max-width: 560px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-7);
+}
+
+.welcome-card p {
+  margin: 0;
+}
+
+.welcome-try {
   display: flex;
   flex-direction: column;
   gap: var(--sp-5);
 }
 
-.welcome-card p {
-  margin: 0;
+.welcome-try > .btn {
+  justify-content: center;
+  padding: 8px 12px;
+}
+
+.welcome-account {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  border-top: 1px solid var(--line);
+  padding-top: var(--sp-7);
+}
+
+@media (max-width: 860px) {
+  .welcome {
+    align-items: flex-start;
+  }
+
+  .welcome-layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "head"
+      "card"
+      "proof";
+    grid-template-rows: none;
+  }
 }
 
 .welcome-notice {
@@ -3646,7 +3745,21 @@ button.link.num {
   gap: var(--sp-7);
 }
 
-@media (max-width: 1100px) {
+/* neighbours are one height, and their tiles fill it */
+.status-grid > .card {
+  display: flex;
+  flex-direction: column;
+}
+
+.status-grid > .card > .kv {
+  flex: 1;
+}
+
+.status-grid > .card > .kv > div {
+  flex-basis: 170px;
+}
+
+@container main (max-width: 1000px) {
   .status-grid {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -4133,6 +4246,15 @@ button.chip.on {
   gap: var(--sp-3);
   justify-items: end;
   min-width: 160px;
+}
+
+.project-progress .ws-actions {
+  justify-content: flex-end;
+}
+
+.status-page .page-header {
+  flex-direction: column;
+  gap: var(--sp-2);
 }
 
 .project-progress .bar {
