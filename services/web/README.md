@@ -18,8 +18,29 @@ person knows it (`access.ts` `accountName`: "morgan", not the API's "pw-morgan")
 The shell follows prototype v3: a sidebar (screens with `g`-then-letter shortcuts, watchlist
 with revenue sparklines, next expected filings, freshness), a top bar (breadcrumb, Ctrl/Cmd-K
 command palette, theme, demo user) and the assistant drawer on every page (Ctrl/Cmd-J toggles,
-`/` focuses). Dark is the default theme; the choice is kept per user in localStorage. Design
+`/` focuses; the top bar's Assistant is the way in, closed until asked for and then remembered per
+browser). Dark is the default theme; the choice is kept per user in localStorage. Design
 tokens (colours for both themes, type scale, spacing) are in `src/tokens.css`.
+
+Layout: pages lay out by the room they have, not the window's width, because the assistant takes
+372px at any window size: `.main` is a CSS container and `@container main` rules reflow it (the
+same rules with the panel open at 1440 as at 1024). Above 1200px the panel sits beside the page;
+at or below that it floats over it; under 600px it is full screen. The sidebar has three parts: the
+logo and screens stay put, the lists scroll between them (on a phone they open at the top), and the
+footer is always whole, with the freshness detail behind its summary line. Nothing floats over a
+page. Every data table is a `components/TableScroll`: a table that doesn't fit says how many columns
+are off screen on each side and moves to them, shows a fade at its cut edge and a frozen name column
+with a shadow once something is under it, and takes arrow keys once focused; a statement opens at
+its newest periods. Numeric headers stack their label over their unit, so a column is as wide as
+its numbers, and as a table narrows the wordy columns give way first (the screener's industry and
+Peers' "Why" move under the name; the watchlist's period end and Compare's fiscal label go to the
+hover). Dollars in a statement, segment or revenue row share the largest value's unit (`format.ts`
+`moneyRow`: $0.05M, $0.96M, $2.43M; a figure that would round to nothing keeps its own, and the hover
+has the exact value). A company header shows its main ticker and "+8 more", with the rest in the hover.
+Charts are drawn for the width they have (`chart/layout.ts` `chartSize`), so their text is its real
+size at any width and titles and footnotes wrap instead of being cut; `svgRef` always gets the
+standard-size drawing, so Export SVG / PNG give the same deck-ready image from a phone or a monitor.
+The chart builder puts the chart first when there's no room for it beside the layers.
 
 Views (hash routes): `#/` Home (status strip, watchlist table, new filings since the last
 visit, expected filings); `#/companies?<filters>` the screener (`/v1/screener`: filters kept in
@@ -58,7 +79,9 @@ that route needs a token; no public route gained company data). Legends and sour
 (or name), headings, breadcrumbs, Home's data notes and thesis exports use "Nvidia (NVDA)". While a name
 is on its way a company reads "Company"; it never reads as a CIK.
 
-Sign-in (`src/session.ts`): the front door is "Try the demo" (`pages/Welcome.tsx`). It calls
+Sign-in (`src/session.ts`): the front door (`pages/Welcome.tsx`) says what Tributary is beside the
+way in, with figures from the public `GET /v1/status/data` (none hard-coded; if the route fails the
+page reads the same without them). Its first action is "Try the demo". It calls
 `POST /v1/demo/sandbox`, which creates a temporary real user (plan pro, a seeded watchlist and
 workspace; see the Query API README) and returns its JWT, then lands on Home. With the public
 catalog open the user reads every company at once (`/v1/me` says so). While it is closed the
@@ -190,7 +213,11 @@ it, reverses watchlist calls, deletes an item the assistant saved (`save_to_work
 also undoes every later action.
 
 Saved work (`src/workspaces/`, Query API `/v1/workspaces`): the sidebar's Workspaces are folders
-of saved charts, comps sets and screens (rename, duplicate, delete beside each row); clicking an
+of saved charts, comps sets and screens. A folder's arrow folds it and its name opens the workspace
+(or the analysis) page, which has Rename, Duplicate and Delete in the open, for itself and for each
+item (`workspaces/Actions.tsx`); "⋯" on a sidebar row is the shortcut to the same actions, in a strip
+under the row, so a name never gives up room for them. Delete asks over the whole screen, with the
+safe answer focused and Escape keeping it. Clicking an
 item opens its page with the saved state (`model.ts` restores it through the same cleaners as a
 URL, so a saved item is trusted no more than a link). The Chart builder, Compare and Companies
 have Save / Save as… with the open item's workspace and an "unsaved changes" mark; the open item
@@ -199,8 +226,8 @@ recently opened items and filings read in the reader, newest first. Saved items 
 the pages read data through the Query API as usual, so a chart for a company you lost shows the
 same "isn't one of your companies" state as anywhere else.
 
-Reports (`src/reports/`, agent-api `/v1/reports`): a workspace's page (`#/workspace/{id}`, ▤ beside
-the folder in the sidebar) lists its items and reports and has "Write a report". The assistant
+Reports (`src/reports/`, agent-api `/v1/reports`): a workspace's page (`#/workspace/{id}`, the
+folder's name in the sidebar) lists its items and reports and has "Write a report". The assistant
 writes a research note from the saved items and saves it as an item of kind `report`; progress
 streams while it works, and the app stays usable (the run lives with the app, `useReportWriter`).
 The report page (`#/report/{id}`) renders its Markdown through `markdown.ts` (DOMPurify; accession
@@ -364,7 +391,7 @@ per company, from its filings to a thesis that's checked after every filing. Rul
 
 Customizable views (`src/views/`, Query API `/v1/views`): Home's "Customize" shows, hides and
 reorders its cards; the watchlist and the screener have "Columns" to choose and order their value
-columns from what `/v1/screener/columns` offers (up to 8 and 12), with Reset. Each change is saved
+columns from what `/v1/screener/columns` offers (up to 8 and 12; typing finds one among the 80 or so), with Reset. Each change is saved
 to the user's account at once (optimistic; a failed save restores the last saved state and says
 so). Saved preferences are cleaned like any untrusted input (`views/model.ts`: unknown cards and
 columns dropped, missing ones default) and grant nothing: values are still read through the
@@ -485,8 +512,9 @@ row, Right or Ctrl/Cmd + Left/Right into the cells, then the first and last colu
 `components/tableNav.ts`). `?` opens the keyboard shortcut sheet (`components/ShortcutSheet.tsx`,
 also from the sidebar footer).
 `src/tokens.test.ts` checks every text, state and series token against WCAG AA in both themes.
-Under 900px the sidebar becomes a drawer behind Menu; under 600px the assistant drawer is full
-screen. Banks show "n/a (bank)" for operating margin, FCF and net debt (`format.ts`
+Under 900px the sidebar becomes a drawer behind Menu; on a phone Sign out moves into it, the
+screener's filters start folded, and an analysis's steps show their numbers with the current step
+named. Banks show "n/a (bank)" for operating margin, FCF and net debt (`format.ts`
 `notForBanks`), and Compare leaves them out of those columns' peer median.
 
 ## Run
@@ -509,7 +537,8 @@ npm run e2e       # Playwright flows in e2e/ against dist/ (build first)
 
 The end-to-end flows (`e2e/app.spec.ts`: try the demo → Home, screener filter/sort/watch, a
 two-layer chart with a formula exported as CSV, comps, saving a chart to a workspace and
-reopening it, the assistant drawer with a streamed answer, the narrow-screen menu, formula
+reopening it, the assistant drawer with a streamed answer, the narrow-screen menu, no screen
+scrolling sideways on a phone, at 1024 or at 1440 with the panel open, workspace actions, formula
 autocomplete with annual frequency and deck output, Compare's side-by-side charts, the shortcut
 sheet and Ctrl+arrow table jumps, the limits page, data notes on Home and the tearsheet, writing
 a report from a workspace with a mocked SSE stream (embedded charts, the flagged figure, Markdown

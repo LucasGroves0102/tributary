@@ -72,7 +72,7 @@ test("chart builder: two metric layers and a formula, exported as CSV", async ({
   await page.getByLabel("Formula", { exact: true }).press("Enter");
   await page.getByLabel("Chart title").fill("Revenue and margin");
 
-  const legend = page.locator(".ch-legend text");
+  const legend = page.locator(".lchart-svg .ch-legend text");
   // the first layer starts from the watchlist's first company
   await expect(legend).toHaveText(["NVDA revenue (TTM)", "MSFT revenue (TTM)", "net_income / revenue (TTM) (right axis)"]);
   await expect(page.locator(".ch-foot").first()).toContainText("Source: SEC filings");
@@ -108,13 +108,13 @@ test("chart builder: formula autocomplete, annual frequency and deck output", as
   await suggestions.getByRole("option", { name: /÷/ }).click();
   await formula.pressSequentially("revenue");
   await formula.press("Enter");
-  await expect(page.locator(".ch-legend text")).toHaveCount(2);
+  await expect(page.locator(".lchart-svg .ch-legend text")).toHaveCount(2);
 
   await page.getByRole("button", { name: "Annual" }).click();
-  await expect(page.locator(".ch-axis text")).toHaveText(["CY2025"]); // the mock's one full calendar year
+  await expect(page.locator(".lchart-svg .ch-axis text")).toHaveText(["CY2025"]); // the mock's one full calendar year
   await page.getByLabel("Deck output").check();
   await expect(page.locator(".lchart.deck")).toBeVisible();
-  await expect(page.locator(".ch-sub")).toHaveText(/^Calendar years, CY2025 · USD \(left\), % \(right\)$/);
+  await expect(page.locator(".lchart-svg .ch-sub")).toHaveText(/^Calendar years, CY2025 · USD \(left\), % \(right\)$/);
   await expect(page.locator(".ch-foot").first()).toContainText("Source: SEC filings via Tributary; 10-Q for NVDA; latest NVDA 10-Q filed Jul 30, 2026; as of Oct 21, 2026.");
   const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Export SVG" }).click()]);
   const svg = readFileSync((await download.path())!, "utf8");
@@ -127,7 +127,7 @@ test("comps: target and peers with the peer median, exported as CSV", async ({ p
   await startDemo(page);
   await page.goto(`/#/compare?target=${PEP}&peers=${KO},${NVDA}`);
   const rows = page.locator("table.comps tbody tr");
-  await expect(rows).toHaveCount(5); // 3 companies, median, high/low
+  await expect(rows).toHaveCount(6); // 3 companies, median, high, low
   await expect(rows.first()).toContainText("PepsiCo");
   await expect(rows.first()).toContainText("target");
   await expect(rows.nth(3)).toContainText("Peer median");
@@ -311,7 +311,8 @@ test("customizable views: Home arrangement and table columns, saved and reset", 
   // watchlist columns
   const watch = page.locator("section.card", { has: page.getByRole("heading", { name: "Watchlist" }) });
   await watch.getByRole("button", { name: "Columns" }).click();
-  await page.getByLabel("Add a watchlist column").selectOption({ label: "Gross margin (TTM)" });
+  await page.getByLabel("Add a watchlist column").fill("gross");
+  await page.getByRole("button", { name: "+ Gross margin (TTM)" }).click();
   await page.getByRole("button", { name: "Remove Net debt (qtr end)" }).click();
   await expect(page.locator("table.watchlist thead")).toContainText("Gross mgn");
   await expect(page.locator("table.watchlist thead")).not.toContainText("Net debt");
@@ -326,7 +327,8 @@ test("customizable views: Home arrangement and table columns, saved and reset", 
   // screener columns, then reset
   await page.goto("/#/companies");
   await page.getByRole("button", { name: "Columns" }).click();
-  await page.getByLabel("Add a screener column").selectOption({ label: "Net margin (TTM)" });
+  await page.getByLabel("Add a screener column").fill("net margin");
+  await page.getByRole("button", { name: "+ Net margin (TTM)" }).click();
   await expect(page.locator("table.screen thead")).toContainText("Net margin");
   expect(fake.views.screener).toEqual({ columns: [
     "revenue_ttm", "revenue_growth_ttm", "gross_margin_ttm", "operating_margin_ttm", "free_cash_flow_ttm", "net_debt_q", "debt_to_equity_q", "net_margin_ttm",
@@ -334,4 +336,66 @@ test("customizable views: Home arrangement and table columns, saved and reset", 
   await page.getByRole("button", { name: "Reset" }).click();
   await expect(page.locator("table.screen thead")).not.toContainText("Net margin");
   expect(fake.views.screener).toBeUndefined();
+});
+
+test("a first visit starts with the assistant closed, and nothing floats over the page", async ({ page }) => {
+  await mockApi(page);
+  await startDemo(page);
+  await expect(page.locator("aside.ai-drawer")).toHaveCount(0);
+  await expect(page.locator(".fab")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Assistant/ })).toBeVisible();
+});
+
+test("no screen scrolls sideways, on a phone, at 1024 or at 1440 with the panel open", async ({ page }) => {
+  await mockApi(page);
+  await startDemo(page);
+  const screens = ["#/", "#/companies", `#/company/${NVDA}`, `#/company/${NVDA}/statements`, `#/company/${NVDA}/peers`, `#/compare?target=${PEP}&peers=${KO}`, "#/chart"];
+  for (const [width, height, panel] of [[390, 844, false], [1024, 768, false], [1440, 900, true]] as const) {
+    await page.setViewportSize({ width, height });
+    await page.evaluate((open) => localStorage.setItem("tributary.assistant", open ? "open" : "closed"), panel);
+    await page.reload();
+    await expect(page.locator("aside.ai-drawer")).toHaveCount(panel ? 1 : 0);
+    for (const hash of screens) {
+      await page.goto(`/${hash}`);
+      await page.waitForLoadState("networkidle");
+      const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      expect(over, `${hash} at ${width}`).toBe(0);
+    }
+  }
+});
+
+test("with the panel open at 1440 the screener still shows its numbers, under a frozen name", async ({ page }) => {
+  await mockApi(page);
+  await startDemo(page);
+  await page.evaluate(() => localStorage.setItem("tributary.assistant", "open"));
+  await page.goto("/#/companies");
+  await page.reload();
+  await expect(page.locator("aside.ai-drawer")).toBeVisible();
+  const row = page.locator("table.screen tbody tr").first();
+  const box = await page.locator(".tw").first().boundingBox();
+  const revenue = await row.locator("td.n").first().boundingBox();
+  expect(revenue!.x + revenue!.width).toBeLessThan(box!.x + box!.width);
+  await expect(row.locator("td.first")).toHaveCSS("position", "sticky");
+});
+
+test("workspace actions: from the page, with a confirmation over the whole screen", async ({ page }) => {
+  await mockApi(page);
+  await startDemo(page);
+  await page.goto("/#/chart");
+  await page.getByRole("button", { name: "Margins", exact: true }).click();
+  await page.getByRole("button", { name: "Save…" }).click();
+  const form = page.locator(".save-form");
+  await form.getByLabel("Name").fill("Margin check");
+  await form.getByLabel("Workspace", { exact: true }).selectOption({ label: "New workspace…" });
+  await form.getByLabel("New workspace").fill("Beverages");
+  await form.getByRole("button", { name: "Save" }).click();
+  await page.locator(".side a.ws-open", { hasText: "Beverages" }).click();
+  await expect(page.getByRole("heading", { name: "Beverages" })).toBeVisible();
+  const main = page.locator("main.content");
+  await main.getByRole("button", { name: "Delete", exact: true }).click();
+  const dialog = page.getByRole("alertdialog");
+  await expect(dialog).toContainText("Delete “Beverages” and its 1 item?");
+  await expect(dialog.getByRole("button", { name: "Keep" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
 });
