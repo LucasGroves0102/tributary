@@ -9,7 +9,9 @@ label is derived from the member's name, in this order:
 3. Otherwise the local name: drop the prefix and a trailing "Member"/"Domain", then a trailing
    "Segment"/"Segments" (when something remains), split CamelCase into words keeping acronyms
    together (OEMAndOther → OEM and Other), write a leading "I" + word as iWord (IPhone →
-   iPhone), and lowercase joining words after the first (and, of, the, including, ...).
+   iPhone), split a joining word a filer ran into the word before it (AssetandWealth → Asset
+   and Wealth: `_unjoin`, ported to web `displayNames.ts`, change both), and lowercase joining
+   words after the first (and, of, the, including, ...).
 
 Gold matches members across filings by these labels folded (case, spaces, punctuation,
 "&" = "and"), so a QName renamed without changing its words stays one member (migration 018,
@@ -27,6 +29,20 @@ DATA = Path(__file__).parent / "data"
 _TOKENS = re.compile(r"[A-Z]+(?=[A-Z][a-z])|[A-Z]?[a-z]+|[A-Z]+|\d+|[^A-Za-z\d]+")
 _SMALL = {"and", "of", "the", "in", "for", "to", "on", "by", "with", "or", "a", "an", "at",
           "including", "excluding", "except", "from", "into", "per", "via"}
+# a joining word run into the word before it (Assetand, Salesof, Restofthe); these end the same
+# way and are words
+_RUN_ON = re.compile(r"^([A-Za-z]+?)(and|of|the|for|with|excluding|including)$")
+_RUN_ON_EXACT = {"businessto": ["Business", "to"], "markto": ["Mark", "to"],
+                 "subjectto": ["Subject", "to"], "chargeon": ["Charge", "on"],
+                 "chargeson": ["Charges", "on"], "losson": ["Loss", "on"],
+                 "incomeon": ["Income", "on"]}
+_NOT_RUN_ON = frozenset({
+    "brand", "broadband", "wideband", "narrowband", "baseband", "boadband", "cobrand", "band",
+    "sand", "demand", "ondemand", "stand", "understand", "withstand", "command", "telecommand",
+    "rand", "strand", "grand", "expand", "hand", "wand", "thousand", "ligand", "remand", "gland",
+    "bland", "zealand", "thailand", "holland", "roof", "proof", "hoof", "aloof", "spoof",
+    "thereof", "whereof", "hereof", "waterproof", "fireproof", "lathe", "bathe", "breathe",
+    "clothe", "soothe", "therefor", "herewith", "therewith", "forthwith"})
 _SUFFIX = re.compile(r"(Member|Domain)$")
 _SEGMENT = re.compile(r"(Reportable)?(Operating)?Segments?$")
 
@@ -69,9 +85,30 @@ def curated() -> dict[str, str]:
         return {r["member"]: r["label"] for r in csv.DictReader(f)}
 
 
+def _unjoin(token: str) -> list[str]:
+    """Assetand → Asset, and; Restofthe → Rest, of, the. Words that just end that way stay
+    whole: Brand, Ireland, Portland ("-land" splits only after al, il, ll: Agriculturaland)."""
+    low = token.lower()
+    if low in _RUN_ON_EXACT:
+        return _RUN_ON_EXACT[low]
+    if low in _NOT_RUN_ON:
+        return [token]
+    m = _RUN_ON.match(token)
+    if m is None:
+        return [token]
+    head, joiner = m.groups()
+    if joiner == "and" and head[-1:].lower() == "l" and head[-2:].lower() not in ("al", "il", "ll"):
+        return [token]
+    return [*_unjoin(head), joiner]
+
+
 def words(name: str) -> str:
-    """CamelCase → words: OEMAndOther → OEM and Other, IPhone → iPhone."""
-    tokens = [t for t in _TOKENS.findall(name) if t.strip()]
+    """CamelCase → words: OEMAndOther → OEM and Other, IPhone → iPhone, Assetand → Asset and."""
+    raw = [t for t in _TOKENS.findall(name) if t.strip()]
+    # a joining word needs something after it
+    tokens = [part for i, t in enumerate(raw)
+              for part in (_unjoin(t) if i < len(raw) - 1 and t.isalpha() and t[1:].islower()
+                           else [t])]
     out: list[str] = []
     for i, t in enumerate(tokens):
         if t in ".,&-/" and out:

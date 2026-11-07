@@ -94,7 +94,9 @@ How it runs (module docstrings hold the exact rules):
   `segment_sum_<axis>`.
 - `--rebuild` re-projects `raw_gzip` with the current axes and labels and re-derives silver
   and gold, without reading a document (after changing `segment_axes`, `segment_metric_tags`
-  or label rules; label rule changes need it).
+  or label rules; label rule changes need it). The web app repairs labels stored before the
+  run-on rule (`Assetand Wealth Management`) as it displays them (`displayNames.ts`
+  `segmentLabel`, the same rule: change both), so a rebuild for labels alone can wait.
 
 ## Run
 

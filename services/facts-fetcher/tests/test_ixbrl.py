@@ -191,6 +191,31 @@ def test_coca_cola_and_pepsico_segments():
     ("x:Segment1Member", "Segment 1"),
     ("x:SegmentMember", "Segment"),
     ("x:typed:17", "17"),
+    # a joining word run into the word before it
+    ("jpm:AssetandWealthManagementSegmentMember", "Asset & Wealth Management"),
+    ("jpm:ConsumerCommunityBankingMember", "Consumer & Community Banking"),
+    ("x:AdvertisingandMarketingMember", "Advertising and Marketing"),
+    ("x:AgriculturalandMetalsFuturesandOptionsMember",
+     "Agricultural and Metals Futures and Options"),
+    ("x:OilandGasMember", "Oil and Gas"),
+    ("x:ProductsandServicesMember", "Products and Services"),
+    ("x:ResearchandDevelopmentMember", "Research and Development"),
+    ("x:SalesofGoodsMember", "Sales of Goods"),
+    ("x:RestoftheWorldMember", "Rest of the World"),
+    ("x:AmericasexcludingtheUnitedStatesMember", "Americas excluding the United States"),
+    ("x:BusinesstoBusinessMember", "Business to Business"),
+    # words that only end that way
+    ("x:BrandRevenueMember", "Brand Revenue"),
+    ("x:BroadbandServicesMember", "Broadband Services"),
+    ("x:LandSalesMember", "Land Sales"),
+    ("x:IrelandOperationsMember", "Ireland Operations"),
+    ("x:NewZealandDairyMember", "New Zealand Dairy"),
+    ("x:ThailandPlantMember", "Thailand Plant"),
+    ("x:PortlandGeneralMember", "Portland General"),
+    ("x:SandMiningMember", "Sand Mining"),
+    ("x:DemandResponseMember", "Demand Response"),
+    ("x:RoofTilesMember", "Roof Tiles"),
+    ("x:MainlandMember", "Mainland"),
 ])
 def test_member_labels(qname, label):
     assert member_label(qname) == label
