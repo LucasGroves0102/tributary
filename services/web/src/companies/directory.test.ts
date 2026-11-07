@@ -57,6 +57,18 @@ describe("CompanyDirectory", () => {
     expect(ask).not.toHaveBeenCalled();
   });
 
+  it("a name taught without a ticker is asked for its ticker, once", async () => {
+    const ask = vi.fn(async (ids: string[]) => ids.map((id) => known(id, "Nvidia", "NVDA")));
+    const d = new CompanyDirectory(ask);
+    d.learn([known(NVDA, "Nvidia")]);
+    expect(d.label(NVDA)).toBe("Nvidia");
+    await vi.runAllTimersAsync();
+    expect(d.label(NVDA)).toBe("Nvidia (NVDA)");
+    d.label(NVDA);
+    await vi.runAllTimersAsync();
+    expect(ask).toHaveBeenCalledTimes(1);
+  });
+
   it("learning a name without a ticker keeps the ticker it has", () => {
     const d = new CompanyDirectory(async () => []);
     d.learn([known(NVDA, "Nvidia", "NVDA")]);

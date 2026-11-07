@@ -64,7 +64,8 @@ export class CompanyDirectory {
 
   company(id: string): KnownCompany | null {
     const c = this.known.get(id);
-    if (!c) this.want(id);
+    // what /v1/me teaches has no ticker: worth asking once
+    if (!c || c.ticker === null) this.want(id);
     return c ?? null;
   }
 
@@ -91,7 +92,7 @@ export class CompanyDirectory {
 
   private flush(): void {
     this.timer = null;
-    const ids = [...this.queue].filter((id) => !this.known.has(id));
+    const ids = [...this.queue].filter((id) => !this.known.get(id)?.ticker);
     this.queue.clear();
     for (let i = 0; i < ids.length; i += BATCH) {
       const batch = ids.slice(i, i + BATCH);
