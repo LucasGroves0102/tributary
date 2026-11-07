@@ -703,7 +703,7 @@ function LayerEditor({
   const optionLabel = (v: string, label: string) => {
     if (!annual || segment || price) return label;
     if (v === "q" || v === "ttm") return "Annual";
-    if (v === "qoq") return layer.transform === "qoq" ? "YoY % (a year's QoQ)" : `${label} (quarterly only)`;
+    if (v === "qoq") return layer.transform === "qoq" ? "YoY % (QoQ needs quarters)" : `${label} (quarterly only)`;
     return label;
   };
   // only a dimensionless value has a choice: a change, an index or per share reads as that
@@ -737,7 +737,7 @@ function LayerEditor({
         </button>
       </div>
       <div className="row layer-company">
-        <span className="small">Company</span>
+        <span className="small">{layer.kind === "formula" ? "Default" : "Company"}</span>
         {segment ? (
           <span className="grow">{company ? (company.ticker ?? company.name) : layer.companyId}</span>
         ) : layer.kind === "metric" || price ? (

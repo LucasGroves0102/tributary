@@ -180,7 +180,7 @@ it("watches, unwatches and charts from a row", async () => {
   await act(async () => $(`button[aria-label="Remove Tesla from watchlist"]`)!.click());
   expect(onWatch).toHaveBeenCalledWith(TSLA, false);
   await act(async () => $(`button[aria-label="Chart Nvidia"]`)!.click());
-  expect(onChart).toHaveBeenCalledWith(NVDA, "Nvidia");
+  expect(onChart).toHaveBeenCalledWith(NVDA);
 });
 
 it("exports the whole screen as the API's CSV", async () => {
