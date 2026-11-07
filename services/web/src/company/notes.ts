@@ -16,6 +16,7 @@ export interface Explained {
 /** Groups on the Data notes tab, in order, with the kinds each holds. */
 export const NOTE_GROUPS: { key: string; label: string; kinds: (k: string) => boolean }[] = [
   { key: "freshness", label: "Freshness", kinds: (k) => k === "companyfacts_behind" },
+  { key: "splits", label: "Stock splits", kinds: (k) => k === "stock_split" },
   { key: "restated", label: "Restated figures", kinds: (k) => k === "restatement" || k === "annual_sum" },
   { key: "periods", label: "Gaps and overlapping periods", kinds: (k) => ["series_gap", "overlapping_quarters", "calendar_collision"].includes(k) },
   { key: "values", label: "Values to double-check", kinds: (k) => ["impossible_value", "sign_flip", "outlier"].includes(k) || k.startsWith("segment_sum_") },
@@ -31,7 +32,9 @@ export function severityLabel(s: DataNote["severity"]): string {
 const str = (v: unknown): string | null => (typeof v === "string" && v ? v : null);
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 const date = (v: unknown): string => (str(v) ? day(str(v)!, true) : "an unknown date");
-const signedPct = (r: number): string => `${r >= 0 ? "+" : "−"}${Math.abs(r * 100).toFixed(Math.abs(r) < 0.1 ? 1 : 0)}%`;
+const signedPct = (r: number): string => `${r >= 0 ? "+" : "−"}${Math.abs(r * 100).toLocaleString("en-US", { maximumFractionDigits: Math.abs(r) < 0.1 ? 1 : 0, minimumFractionDigits: Math.abs(r) < 0.1 ? 1 : 0 })}%`;
+/** A restatement this many times the original (1,000%) isn't a correction of the same figure. */
+const BIG_CHANGE = 10;
 
 /** "the 10-Q filed Feb 25, 2026", from the note's filing with that role. */
 function filingPhrase(n: DataNote, role: NoteFiling["role"], fallbackDate?: unknown): string {
@@ -75,14 +78,33 @@ export function explain(n: DataNote, now = Date.now()): Explained {
             : "They update once the SEC publishes that data, usually within a day or two."),
       };
     }
+    case "stock_split": {
+      const split = str(d.split) ?? "A split";
+      const periods = num(d.periods) ?? 0;
+      return {
+        title: `${split} ${d.reverse ? "reverse " : ""}stock split`,
+        text:
+          `Later filings restated share counts and per-share figures for ${periods} ${periods === 1 ? "period" : "periods"} from ${date(d.first_period_end)} to ${date(d.last_period_end)} ` +
+          "by the split's ratio, share counts and EPS moving opposite ways in the same filing. That isn't a correction. Periods no filing restated stay on the old share count, so read per-share figures across the split with care.",
+      };
+    }
     case "restatement": {
       const change = num(d.change);
+      const unit = d.unit_change === true;
+      const maybeSplit = str(d.may_be_split);
+      const big = change !== null && Math.abs(change) >= BIG_CHANGE;
       return {
-        title: `${m} restated`,
+        title: unit ? `${m}: unit changed between filings` : `${m} restated`,
         text:
           `${m} for ${pe} was first reported in ${filingPhrase(n, "original", d.original_filed)} and ` +
           `changed${change !== null ? ` by ${signedPct(change)}` : ""} in ${filingPhrase(n, "restated", d.restated_filed)}. ` +
-          "Tributary shows the latest figure; growth rates against the original would differ.",
+          (unit
+            ? "That's the size of a unit change (thousands against ones) in the filing's XBRL, not a change in the figure."
+            : maybeSplit
+              ? `That's exactly what a ${maybeSplit} stock split does, so it may be a split; nothing else here confirms it, so check the filing.`
+              : big
+                ? "A change this large usually means the two filings describe different things (a shell company before a merger, say) or a scale slip in one, rather than a correction. Tributary shows the latest figure."
+                : "Tributary shows the latest figure; growth rates against the original would differ."),
       };
     }
     case "annual_sum": {
@@ -141,12 +163,16 @@ export function explain(n: DataNote, now = Date.now()): Explained {
       };
     case "outlier": {
       const x = num(d.vs_neighbours);
-      return {
-        title: `${m}: one-quarter spike`,
-        text:
-          `${m} for ${pe} is ${x !== null ? `${Math.abs(x).toFixed(1)}×` : "many times"} the size of the quarters around it, ` +
-          "typically a scale error (thousands entered as units) in the filing's XBRL.",
-      };
+      const size = `${x !== null ? `${Math.abs(x).toFixed(1)}×` : "many times"} the size of the quarters around it`;
+      return d.seasonal === true
+        ? {
+            title: `${m}: seasonal peak`,
+            text: `${m} for ${pe} is ${size}, and the same quarter peaks in other years too: the business's season, not an error.`,
+          }
+        : {
+            title: `${m}: one-quarter spike`,
+            text: `${m} for ${pe} is ${size}, and other years' same quarter doesn't do this. That can be a one-off event, or a scale error (thousands entered as units) in the filing's XBRL: check the filing.`,
+          };
     }
     case "derived_quarters": {
       const q = num(d.quarters) ?? 0;
@@ -161,11 +187,16 @@ export function explain(n: DataNote, now = Date.now()): Explained {
       if (n.kind.startsWith("segment_sum_")) {
         const dev = num(d.deviation);
         const axis = AXES[str(d.axis) ?? ""] ?? "segments";
+        // a segment's profit leaves out what no segment carries, so these two differing is normal
+        const unallocated = n.metric === "operating_income";
         return {
           title: `${m}: ${axis} don't add up`,
           text:
             `For ${pe}, ${num(d.members) ?? "the"} ${axis} sum to ${dev !== null ? `${Math.abs(dev * 100).toFixed(1)}% ${dev > 0 ? "more" : "less"} than` : "something other than"} ` +
-            `consolidated ${m.toLowerCase()}. Segment data may overlap or omit a member; read segment shares with care.`,
+            `consolidated ${m.toLowerCase()}. ` +
+            (unallocated
+              ? "Costs no segment carries, such as unallocated corporate costs, usually explain this; the 10-K's segment note reconciles it."
+              : "Some members overlap or one is missing; each share on the Segments tab is of consolidated revenue, so don't add them up."),
         };
       }
       return { title: `${m}: ${n.kind.replace(/_/g, " ")}`, text: `A data check flagged ${m.toLowerCase()} for ${pe}.` };
@@ -189,10 +220,13 @@ export function edgarUrl(f: NoteFiling): string | null {
   return f.filing_url?.startsWith("https://www.sec.gov/") ? f.filing_url : null;
 }
 
-/** Notes by group (NOTE_GROUPS order), dropping empty groups. Notes keep the API's order
- * (newest first). */
+/** Notes by group, dropping empty groups. Notes keep the API's order (newest first), and so do the
+ * groups, by their newest note: a tab opening on a 2021 restatement above 2026 gaps reads as if
+ * nothing newer happened. Derived quarters aren't events, so they stay last whatever their date. */
 export function groupNotes(notes: DataNote[]): { key: string; label: string; notes: DataNote[] }[] {
+  const newest = (g: { notes: DataNote[] }) => g.notes.reduce((d, n) => ((n.date ?? "") > d ? n.date ?? "" : d), "");
   return NOTE_GROUPS.map((g) => ({ key: g.key, label: g.label, notes: notes.filter((n) => g.kinds(n.kind)) }))
     .concat([{ key: "other", label: "Other", notes: notes.filter((n) => !NOTE_GROUPS.some((g) => g.kinds(n.kind))) }])
-    .filter((g) => g.notes.length > 0);
+    .filter((g) => g.notes.length > 0)
+    .sort((a, b) => Number(a.key === "derived") - Number(b.key === "derived") || newest(b).localeCompare(newest(a)));
 }

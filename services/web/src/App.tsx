@@ -419,6 +419,12 @@ export function App(props: Props = {}) {
     [workspace.watchlist],
   );
   const watchedIds = useMemo(() => workspace.rows.map((r) => r.companyId), [workspace.rows]);
+  // Home's data notes with the catalog open: what this user chose, not every company (null: still loading)
+  const ownCompanies = useMemo(() => {
+    if (workspace.watchlist.state === "loading") return null;
+    const projects = saved.list.state === "ok" ? saved.list.workspaces.flatMap((w) => (w.project ? [w.project.companyId] : [])) : [];
+    return [...new Set([...watchedIds, ...projects])];
+  }, [workspace.watchlist.state, watchedIds, saved.list]);
   const searchSuggestions = useMemo(
     () => workspace.rows.map((r) => ({ companyId: r.companyId, name: r.name, ticker: r.ticker })),
     [workspace.rows],
@@ -658,7 +664,7 @@ export function App(props: Props = {}) {
                 readableCompanies={me ? readableTotal(me) : 0}
                 onNewChart={newChart}
                 recent={saved.list.state === "unavailable" ? null : <Recent recent={saved.recent} onOpen={openSaved} />}
-                notes={<RecentNotes token={token} name={companyLabel} filingsFor={filingsFor} catalogOpen={catalogOpen(me, "financials")} />}
+                notes={<RecentNotes token={token} name={companyLabel} filingsFor={filingsFor} catalogOpen={catalogOpen(me, "financials")} companies={ownCompanies} />}
                 layout={views.home}
                 onCustomize={views.editable ? () => setCustomizing((c) => !c) : undefined}
                 editor={customizing && views.editable ? (

@@ -686,6 +686,21 @@ class Store:
             return {"findings": findings, "derived": rows, "behind": behind,
                     "checked_at": checked}
 
+    def metric_series(self, user_id: str, company_ids: list[str],
+                      metrics: list[str]) -> dict[tuple[str, str], list[tuple[date, float]]]:
+        """(company, metric) → its quarters, oldest first (a data note's one-quarter spike, read
+        against the other years). A few companies and metrics at most, under RLS."""
+        with self._session(user_id) as cur:
+            cur.execute("SELECT company_id, metric, period_end, value"
+                        " FROM gold.quarterly_financials"
+                        " WHERE company_id = ANY(%s) AND metric = ANY(%s)"
+                        " ORDER BY company_id, metric, period_end", (company_ids, metrics))
+            out: dict[tuple[str, str], list[tuple[date, float]]] = {}
+            for r in cur.fetchall():
+                out.setdefault((r["company_id"], r["metric"]), []).append(
+                    (r["period_end"], float(r["value"])))
+            return out
+
     def filing_refs(self, user_id: str, accessions: list[str]) -> dict[str, dict]:
         """accession_no → form, filed, cik (the filer, for EDGAR links), from the public filing
         index; the facts' filer CIK when the index doesn't have it."""

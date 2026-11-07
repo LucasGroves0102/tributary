@@ -331,7 +331,13 @@ export const dataNotes = (token: string, companyId: string) =>
   get<DataNotes>(token, `/v1/companies/${companyId}/data-notes`);
 
 /** The newest notes across the companies whose financials the user can read. */
-export const recentDataNotes = (token: string, limit = 8) => get<DataNotes>(token, "/v1/data-notes", { limit });
+/** The newest data notes: of these companies (at most 50), or of every company the user can read. */
+export const recentDataNotes = (token: string, limit = 8, companies?: string[]) =>
+  get<DataNotes>(token, "/v1/data-notes", { limit, ...(companies ? { company_id: companies } : {}) });
+
+/** The 10-K's own EPS and weighted shares per fiscal year: quarters can't give them. */
+export const annualPerShare = (token: string, companyId: string, years = 10) =>
+  get<{ as_of: string; rows: FinancialRow[] }>(token, `/v1/companies/${companyId}/annual-per-share`, { years });
 
 export const expectedFilings = (token: string, days: number, scope: "watchlist" | "readable") =>
   get<Calendar>(token, "/v1/calendar/expected-filings", { days, scope });
@@ -459,8 +465,11 @@ export const financialsView = (
   metrics: string[],
   view: "quarter" | "ttm",
   basis: "fiscal" | "calendar" = "fiscal",
+  /** ask why a ratio reads n/m (`not_meaningful` on each row) */
+  readings = false,
 ) =>
   get<{ as_of: string; rows: FinancialRow[] }>(token, `/v1/companies/${companyId}/financials`, {
+    ...(readings ? { readings: "true" } : {}),
     quarters,
     metrics,
     view,

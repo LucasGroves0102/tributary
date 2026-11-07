@@ -31,7 +31,7 @@ export const CHECKS: Record<string, string> = {
   annual_sum: "Four quarters differing from the reported year by more than 1%",
   series_gap: "A quarter missing after four contiguous ones",
   sign_flip: "An expense or outflow whose sign differs from both neighbouring quarters",
-  outlier: "A one-quarter spike of 10× or more, typically a scale error",
+  outlier: "A one-quarter spike of 10× or more: seasonal, a one-off, or a scale error in the filing",
   segment_sum_business_segment: "Business segments not adding up to the company total (±1%)",
   segment_sum_geography: "Geographic segments not adding up to the company total (±1%)",
   segment_sum_product_service: "Product and service lines not adding up to the company total (±1%)",
