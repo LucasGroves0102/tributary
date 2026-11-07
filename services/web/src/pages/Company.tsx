@@ -1,5 +1,5 @@
 import { expectedFilingsOf, screener } from "../api";
-import { header, HEADER_COLUMNS } from "../company/data";
+import { header, HEADER_COLUMNS, listingLine } from "../company/data";
 import { DataNotes } from "../company/DataNotes";
 import { Filings } from "../company/Filings";
 import { Overview } from "../company/Overview";
@@ -71,6 +71,7 @@ export function Company({ token, companyId, tab, statements, watched, onWatch, o
   // charts and saved work call it this: its ticker, or its name when it has none
   const ticker = h.tickers[0] ?? h.name;
   const next = expected?.state === "ok" ? (expected.data.expected[0] ?? null) : null;
+  const listing = listingLine(h.tickers, h.exchanges);
 
   return (
     <div className="page">
@@ -79,7 +80,7 @@ export function Company({ token, companyId, tab, statements, watched, onWatch, o
           <div className="grow">
             <div className="row wrap">
               <h1>{h.name}</h1>
-              <span className="mono muted">{[h.tickers.join(", "), h.exchanges.join(", ")].filter(Boolean).join(" · ")}</span>
+              <span className="mono muted" title={listing.more ?? undefined}>{listing.text}</span>
               <span className="tiers">
                 {row.access.length ? (
                   row.access.map((t) => <span key={t} className={`tier ${t}`}>{t}</span>)

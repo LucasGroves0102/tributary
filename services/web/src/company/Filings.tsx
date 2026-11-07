@@ -50,13 +50,21 @@ export function Filings({ token, companyId, name, canRead, initialDiff, fiscalYe
   const items = new Map(
     parsed?.state === "ok" ? parsed.data.map((f) => [f.accession_no, eightKItems(f.sections.map((s) => s.section_key))]) : [],
   );
+  const [diffFiling, setDiffFiling] = useState<IndexedFiling | null>(null);
+  const closeDiff = () => {
+    setDiff(null);
+    setDiffFiling(null);
+  };
+  // another filter lists other filings: a comparison left open would belong to none of them
   const refilter = (f: () => void) => {
     f();
     setOffset(0);
+    closeDiff();
   };
   const changes = useRef<HTMLElement>(null);
-  const showDiff = (accession: string) => {
-    setDiff(accession);
+  const showDiff = (f: IndexedFiling) => {
+    setDiff(f.accession_no);
+    setDiffFiling(f);
     requestAnimationFrame(() => changes.current?.scrollIntoView?.({ block: "start" }));
   };
   const headings = filingHeadings(rows, fiscalYearEnd);
@@ -151,7 +159,7 @@ export function Filings({ token, companyId, name, canRead, initialDiff, fiscalYe
                               </a>
                             ) : null}
                             {periodic && f.sections_available && (
-                              <button className="btn sm ghost" onClick={() => showDiff(f.accession_no)}>
+                              <button className="btn sm ghost" onClick={() => showDiff(f)}>
                                 What changed
                               </button>
                             )}
@@ -189,7 +197,13 @@ export function Filings({ token, companyId, name, canRead, initialDiff, fiscalYe
       <section className="card" ref={changes}>
         <div className="card-h">
           <h2>What changed</h2>
-          {diff && <span className="sub mono">{diff}</span>}
+          {diff && (
+            <span className="sub" title={`Accession ${diff}`}>
+              {diffFiling ? `${diffFiling.form} filed ${day(diffFiling.filed, true)}, against the previous ${diffFiling.form}` : "the filing you chose, against the previous one of its type"}
+            </span>
+          )}
+          {diff && <span className="grow" />}
+          {diff && <button className="btn sm ghost" onClick={closeDiff}>Close</button>}
         </div>
         {diff ? (
           <Changes key={diff} token={token} companyId={companyId} accessionNo={diff} name={name} />

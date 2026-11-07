@@ -20,7 +20,9 @@ const SPECIAL: Record<string, string> = {
   fcf_margin: "FCF margin",
   free_cash_flow: "Free cash flow",
   research_and_development: "R&D",
+  long_term_debt: "Long-term debt",
   long_term_debt_current: "Long-term debt, current",
+  eps_growth: "EPS growth",
   depreciation_amortization: "D&A",
 };
 

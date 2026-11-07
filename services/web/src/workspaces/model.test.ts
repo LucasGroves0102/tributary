@@ -110,6 +110,9 @@ describe("names and open items", () => {
     const label = (id: string) => (id === NVDA ? "NVDA" : "AAPL");
     expect(suggestName({ kind: "chart", chart: chart() }, label)).toBe("NVDA revenue");
     expect(suggestName({ kind: "comps", compare: { target: NVDA, peers: [AAPL] } }, label)).toBe("NVDA comps");
+    // a screen is named for what it screens
+    expect(suggestName({ kind: "screen", screen: {} }, label)).toBe("All companies");
+    expect(suggestName({ kind: "screen", screen: { industry: "beverages" } }, label)).toBe('Industry contains "beverages"');
     expect(suggestName({ kind: "comps", compare: { target: NVDA } }, label)).toBe("NVDA comps");
   });
 

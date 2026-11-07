@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { financialsView, segmentsOf } from "../api";
 import type { ChartState } from "../chart/model";
 import type { SegmentAxisKind } from "../chart/segments";
-import { change, money, pct, UNNAMED } from "../format";
+import { change, money, moneyRow, pct, UNNAMED } from "../format";
 import { ChartView } from "../reports/Embeds";
 import type { FinancialRow, SegmentRow } from "../types";
 import { SaveChart } from "../workspaces/SaveChart";
@@ -133,7 +133,7 @@ function Axes({ rows, totals, view, ...c }: Common & { rows: SegmentRow[]; total
     <>
       {axes.map((axis) => <AxisBlock key={axis} t={axisTable(rows, axis, totals)} view={view} {...c} />)}
       <div className="foot">
-        Members missing a period show “—”, never zero. Beyond the {SHOWN} largest, members are folded into “Other”. Bars stack only
+        Charts draw the last 3 years; tables list the latest {PERIODS} periods. Members missing a period show “—”, never zero. Beyond the {SHOWN} largest, members are folded into “Other”. Bars stack only
         when the members add up to reported revenue (within {pct(COVERAGE_TOLERANCE, 0)}) in every period; otherwise each
         member is a line.
       </div>
@@ -158,19 +158,22 @@ function AxisBlock({ t, view, token, companyId, ticker, saved, onOpenChart, labe
             </tr>
           </thead>
           <tbody>
-            {t.rows.map((r) => (
-              <tr key={r.members.join("|")}>
-                <td className="first" title={r.members.join(", ")}>
-                  {r.label}
-                  {r.note && <span className="faint small"> · {r.note}</span>}
-                </td>
-                {r.values.map((v, i) => (
-                  <td key={t.periods[i]!.key} className={v === null ? "n faint" : "n"} title={r.sources[i] ?? undefined}>
-                    {v === null ? "—" : money(v, "USD")}
+            {t.rows.map((r) => {
+              const texts = moneyRow(r.values);
+              return (
+                <tr key={r.members.join("|")}>
+                  <td className="first" title={r.members.join(", ")}>
+                    {r.label}
+                    {r.note && <span className="faint small"> · {r.note}</span>}
                   </td>
-                ))}
-              </tr>
-            ))}
+                  {r.values.map((v, i) => (
+                    <td key={t.periods[i]!.key} className={v === null ? "n faint" : "n"} title={r.sources[i] ?? undefined}>
+                      {texts[i] ?? "—"}
+                    </td>
+                  ))}
+                </tr>
+              );
+            })}
             <tr className="coverage">
               <td className="first faint">Sum vs reported revenue</td>
               {t.coverage.map((x, i) => (

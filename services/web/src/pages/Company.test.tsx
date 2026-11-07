@@ -396,6 +396,27 @@ it("filings: a free plan sees the whole index with EDGAR links, no reader", asyn
   expect(paths().some((u) => u.pathname === `/api/query/v1/companies/${NVDA}/filings`)).toBe(false);
 });
 
+it("what changed says which filing it is, in words, and closes when a filter hides the row", async () => {
+  await render("filings");
+  await click(button("All"));
+  const row = [...container.querySelectorAll("table.t tbody tr:not(.year-h)")].find((r) => r.textContent?.includes("What changed"))!;
+  await click([...row.querySelectorAll("button")].find((b) => b.textContent === "What changed")!);
+  for (let i = 0; i < 2; i++) await act(async () => {});
+  expect(row.className).toBe("sel");
+  const head = () => [...container.querySelectorAll(".card-h")].find((h) => h.textContent?.startsWith("What changed"))!;
+  expect(head().textContent).toMatch(/10-[KQ] filed .*, against the previous 10-[KQ]/);
+  expect(head().querySelector(".sub")?.getAttribute("title")).toContain("Accession ");
+  expect(head().querySelector(".mono")).toBeNull();
+  await click(button("10-K"));
+  expect(head().querySelector(".sub")).toBeNull();
+  expect(button("Close")).toBeUndefined();
+});
+
+it("the header keeps one main ticker, whatever else a company lists", async () => {
+  await render("overview");
+  expect(container.querySelector(".co-head .mono")?.textContent).toBe("NVDA · Nasdaq");
+});
+
 it("peers: suggested by SIC and size, into Compare and the chart builder", async () => {
   await render("peers");
   const body = [...container.querySelectorAll("tbody tr")];

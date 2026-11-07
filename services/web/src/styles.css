@@ -2791,8 +2791,16 @@ mark {
 }
 
 .save-form label {
-  font-size: var(--fs-xs);
-  color: var(--text-3);
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+
+.save-form label:not(:first-child) {
+  margin-top: var(--sp-2);
+}
+
+.save-form .row {
+  margin-top: var(--sp-4);
 }
 
 /* the company Revenue view (company/Revenue.tsx) */
@@ -3495,8 +3503,25 @@ button.link.num {
   gap: var(--sp-2);
 }
 
-.col-pop select {
-  max-width: 180px;
+.col-add {
+  padding: var(--sp-3) var(--sp-6);
+  border-top: 1px solid var(--line);
+}
+
+.col-found {
+  list-style: none;
+  margin: var(--sp-3) 0 0;
+  padding: 0;
+  max-height: 180px;
+  overflow-y: auto;
+  display: grid;
+  gap: 2px;
+}
+
+.col-found button {
+  text-align: left;
+  color: var(--text);
+  padding: 2px 0;
 }
 
 /* Print (a report's "Print / PDF"): the page alone, in the light deck palette (tokens.css light
@@ -3927,15 +3952,6 @@ mark.claim-mark {
   }
 }
 
-@media (max-width: 600px) {
-  .new-work .save-form {
-    position: fixed;
-    left: var(--sp-6);
-    right: var(--sp-6);
-    top: 72px;
-    width: auto;
-  }
-}
 
 @media print {
   .thesis-panes {

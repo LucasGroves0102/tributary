@@ -152,9 +152,9 @@ function SaveForm({
   return (
     <form className="save-form card" onSubmit={(e) => void submit(e)} aria-label={`Save ${KIND_LABELS[current.kind].toLowerCase()}`}>
       <label htmlFor={`${id}-name`}>Name</label>
-      <input id={`${id}-name`} value={name} maxLength={ITEM_NAME_MAX} onChange={(e) => setName(e.target.value)} autoFocus />
+      <input id={`${id}-name`} className="field" value={name} maxLength={ITEM_NAME_MAX} onChange={(e) => setName(e.target.value)} autoFocus />
       <label htmlFor={`${id}-ws`}>Workspace</label>
-      <select id={`${id}-ws`} value={workspace} onChange={(e) => setWorkspace(e.target.value)}>
+      <select id={`${id}-ws`} className="field" value={workspace} onChange={(e) => setWorkspace(e.target.value)}>
         {list.map((w) => (
           <option key={w.workspace_id} value={w.workspace_id}>
             {w.name}
@@ -167,6 +167,7 @@ function SaveForm({
           <label htmlFor={`${id}-new`}>New workspace</label>
           <input
             id={`${id}-new`}
+            className="field"
             value={newName}
             maxLength={WORKSPACE_NAME_MAX}
             placeholder="e.g. Beverages"

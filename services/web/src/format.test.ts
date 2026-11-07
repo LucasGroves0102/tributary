@@ -1,6 +1,27 @@
 import { describe, expect, it } from "vitest";
 
-import { ago, change, companyName, day, displayNames, money, notForBanks, pct, quarter } from "./format";
+import { ago, change, companyName, day, displayNames, duration, money, moneyRow, notForBanks, pct, quarter } from "./format";
+
+describe("moneyRow", () => {
+  it("reads a row in the largest value's unit", () => {
+    expect(moneyRow([54740, 963570, 2430000])).toEqual(["$0.05M", "$0.96M", "$2.43M"]);
+    expect(moneyRow([897e6, 1.04e9, null])).toEqual(["$0.90B", "$1.04B", null]);
+    expect(moneyRow([-198360, 2430000])).toEqual(["-$0.20M", "$2.43M"]);
+  });
+
+  it("never rounds a real figure to nothing", () => {
+    expect(moneyRow([302e9, 12e6])).toEqual(["$302.00B", "$0.01B"]);
+    expect(moneyRow([302e9, 4e6])).toEqual(["$302.00B", "$4.00M"]);
+    expect(moneyRow([0, 2e6])).toEqual(["$0", "$2.00M"]);
+    expect(moneyRow([640, 12])).toEqual(["$640", "$12"]);
+  });
+});
+
+describe("duration", () => {
+  it("reads in the unit that suits it", () => {
+    expect([duration(43), duration(108), duration(7200), duration(null)]).toEqual(["43 s", "1.8 min", "2.0 h", "—"]);
+  });
+});
 
 describe("money", () => {
   it("scales USD", () => {

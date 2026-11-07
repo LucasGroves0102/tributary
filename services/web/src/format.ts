@@ -16,6 +16,19 @@ export function money(value: number, unit: string): string {
   return `${sign}$${abs.toFixed(0)}`;
 }
 
+/** A row of USD amounts in one unit, the largest value's, so periods compare at a glance: $0.05M,
+ * $0.96M, $2.43M instead of $54.74K, $963.57K, $2.43M. A value that would round to nothing in that
+ * unit keeps its own: a figure never reads as $0.00. */
+export function moneyRow(values: (number | null)[]): (string | null)[] {
+  const top = Math.max(0, ...values.map((v) => (v === null ? 0 : Math.abs(v))));
+  const scale = SCALES.find(([size]) => top >= size);
+  return values.map((v) => {
+    if (v === null) return null;
+    if (!scale || v === 0 || Math.abs(v) / scale[0] < 0.005) return money(v, "USD");
+    return `${v < 0 ? "-" : ""}$${(Math.abs(v) / scale[0]).toFixed(2)}${scale[1]}`;
+  });
+}
+
 /** Ratios as percentages: 0.2134 → "21.3%". */
 export function pct(ratio: number, digits = 1): string {
   return `${(ratio * 100).toFixed(digits)}%`;
@@ -45,6 +58,14 @@ export function quarter(periodEnd: string): string {
   const d = new Date(`${periodEnd}T00:00:00Z`);
   const month = d.toLocaleString("en-US", { month: "short", timeZone: "UTC" });
   return `${month} '${String(d.getUTCFullYear()).slice(2)}`;
+}
+
+/** 43 → "43 s", 108 → "1.8 min", 7200 → "2.0 h". */
+export function duration(seconds: number | null): string {
+  if (seconds === null) return "—";
+  if (seconds < 90) return `${Math.round(seconds)} s`;
+  if (seconds < 5400) return `${(seconds / 60).toFixed(1)} min`;
+  return `${(seconds / 3600).toFixed(1)} h`;
 }
 
 /** "3 min ago", "5 h ago", "2 d ago". */

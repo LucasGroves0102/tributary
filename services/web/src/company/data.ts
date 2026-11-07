@@ -5,7 +5,7 @@
 import { csvCell } from "../chart/series";
 import { calendarLabel } from "../compare/state";
 import { FILER_LABELS, fyeMonth, type FilerCategory } from "../companies/screen";
-import { BANK_NA, bankTitle, change, day, money, notForBanks, pct } from "../format";
+import { BANK_NA, bankTitle, change, day, money, moneyRow, notForBanks, pct } from "../format";
 import { num } from "../home/data";
 import { EIGHT_K_ITEMS } from "../reader/sections";
 import type { FinancialRow, Recap, RecapValue, ScreenerRow, SegmentRow, ValueSource } from "../types";
@@ -49,6 +49,17 @@ export const KEY_STATS: { key: string; label: string; kind: Fmt }[] = [
 /** Asked for with the key stats: the latest quarter's revenue names the filing to recap. */
 export const RECAP_COLUMN = "revenue_q";
 export const HEADER_COLUMNS = [...KEY_STATS.map((s) => s.key), RECAP_COLUMN];
+
+/** The header's listing line: the main ticker, then how many other classes and notes it has (their
+ * tickers in the hover). A bank can have a dozen preferreds. */
+export function listingLine(tickers: string[], exchanges: string[]): { text: string; more: string | null } {
+  const rest = tickers.slice(1);
+  const main = [tickers[0], rest.length ? `+${rest.length} more` : null].filter(Boolean).join(" ");
+  return {
+    text: [main, exchanges.join(", ")].filter(Boolean).join(" · "),
+    more: rest.length ? `Also listed: ${rest.join(", ")}` : null,
+  };
+}
 
 export interface KeyStat {
   label: string;
@@ -244,23 +255,32 @@ export function metricTable(
   return {
     columns,
     rows: metrics
-      .map(([metric, name, kind]) => ({
-        metric,
-        label: name,
-        cells: ends.map((end): TableCell | null => {
-          const r = by.get(`${metric}|${end}`);
-          const v = r ? num(r.value) : null;
-          if (!r || v === null) return null;
-          return {
-            text: fmt(kind, v),
-            raw: String(r.value),
-            title: cellTitle(name, r),
-            derived: r.value_source === "derived",
-            url: r.citation.filing_url,
-          };
-        }),
-        bank: notForBanks(industry, metric) || undefined,
-      }))
+      .map(([metric, name, kind]) => {
+        // dollars read in one unit across a row; the hover has the exact figure
+        const row = kind === "usd"
+          ? moneyRow(ends.map((end) => {
+              const r = by.get(`${metric}|${end}`);
+              return r ? num(r.value) : null;
+            }))
+          : null;
+        return {
+          metric,
+          label: name,
+          cells: ends.map((end, i): TableCell | null => {
+            const r = by.get(`${metric}|${end}`);
+            const v = r ? num(r.value) : null;
+            if (!r || v === null) return null;
+            return {
+              text: row?.[i] ?? fmt(kind, v),
+              raw: String(r.value),
+              title: cellTitle(name, r),
+              derived: r.value_source === "derived",
+              url: r.citation.filing_url,
+            };
+          }),
+          bank: notForBanks(industry, metric) || undefined,
+        };
+      })
       // a bank's operating margin / FCF / net debt stays, as n/a, so its absence is explained
       .filter((r) => r.cells.some(Boolean) || (r.bank && ends.length > 0)),
   };
@@ -397,12 +417,16 @@ export function segmentTables(rows: SegmentRow[]): SegmentTable[] {
     const total = rs.filter((r) => r.period_end === latest).reduce((s, r) => s + (num(r.value) ?? 0), 0);
     const at = (member: string, end: string | undefined) => rs.find((r) => r.member === member && r.period_end === end);
     const out = members.map(([member, label]) => {
-      const cells = ends.map((end): TableCell | null => {
+      const texts = moneyRow(ends.map((end) => {
+        const r = at(member, end);
+        return r ? num(r.value) : null;
+      }));
+      const cells = ends.map((end, i): TableCell | null => {
         const r = at(member, end);
         const v = r ? num(r.value) : null;
         if (!r || v === null) return null;
         return {
-          text: fmt("usd", v),
+          text: texts[i] ?? fmt("usd", v),
           raw: r.value,
           title: `${label}, ${r.fiscal_period ?? day(end, true)}. Source: ${r.citation.form} filed ${day(r.citation.filed, true)}, ` +
             `${r.citation.accession_no}; ${r.value_source}${r.citation.xbrl_axis ? `, ${r.citation.xbrl_axis}` : ""}`,

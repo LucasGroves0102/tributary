@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import type { Readable } from "../access";
 import { ApiError, expectedFilingsOf, failureReason, getItem, screener, updateProject, workspace as fetchWorkspace } from "../api";
 import type { ChartState } from "../chart/model";
-import { header, HEADER_COLUMNS } from "../company/data";
+import { header, HEADER_COLUMNS, listingLine } from "../company/data";
 import { leftText, useAllowanceContext } from "../assistant/useAllowance";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { day } from "../format";
@@ -291,7 +291,7 @@ function Project({ token, user, projectId, step: asked, itemId, saved, readable,
               <div className="eyebrow"><a href={href({ view: "analysis" })}>Analysis</a> · {ws.name}</div>
               <div className="row wrap">
                 <h1>{name}</h1>
-                {h && <span className="mono muted">{[h.tickers.join(", "), h.exchanges.join(", ")].filter(Boolean).join(" · ")}</span>}
+                {h && <span className="mono muted" title={listingLine(h.tickers, h.exchanges).more ?? undefined}>{listingLine(h.tickers, h.exchanges).text}</span>}
               </div>
               {h && (
                 <div className="meta">

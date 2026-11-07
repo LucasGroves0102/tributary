@@ -7,7 +7,7 @@
  * through the Query API as usual. */
 
 import { emptyChart, restoreChart, type ChartState } from "../chart/model";
-import { parseScreen, screenQuery, type ScreenFilters } from "../companies/screen";
+import { describe, isEmpty, parseScreen, screenQuery, type ScreenFilters } from "../companies/screen";
 import { cleanCompare, compareQuery, parseCompare, type CompareState } from "../compare/state";
 import type { Route } from "../route";
 import type { ItemKind, SavedKind } from "../types";
@@ -224,5 +224,6 @@ export function suggestName(c: Current, label: (companyId: string) => string): s
     const s = cleanCompare(c.compare);
     return s.target ? `${label(s.target)} comps`.slice(0, ITEM_NAME_MAX) : "Comps";
   }
-  return "Screen";
+  const what = isEmpty(c.screen) ? "All companies" : describe(c.screen);
+  return (what.charAt(0).toUpperCase() + what.slice(1)).slice(0, ITEM_NAME_MAX);
 }
