@@ -460,6 +460,18 @@ a.btn:hover {
   border-top: 1px solid var(--line);
 }
 
+/* too short for three parts (a phone on its side): the whole sidebar scrolls as one */
+@media (max-height: 560px) {
+  .side {
+    overflow-y: auto;
+  }
+
+  .side-lists {
+    flex: none;
+    overflow: visible;
+  }
+}
+
 .side-links {
   display: flex;
   flex-wrap: wrap;
@@ -841,13 +853,14 @@ a.btn:hover {
   position: relative;
 }
 
+/* a shadow, not a fade: it says there's more that way without dimming the last number */
 .tw-port.more-r::after {
   content: "";
   position: absolute;
   top: 0;
   right: 0;
   bottom: 0;
-  width: 28px;
+  width: 8px;
   pointer-events: none;
   z-index: 3;
   background: linear-gradient(to left, var(--edge-shadow), transparent);
@@ -1287,8 +1300,13 @@ button.link:hover {
   flex: 1 1 88px;
 }
 
+/* the name takes the room: "COST operating margin (TTM)" reads whole beside its colour */
 .layer .row .field.grow {
   flex: 1 1 150px;
+}
+
+.layer .row select[aria-label="Colour"] {
+  flex: 0 0 76px;
 }
 
 .err {
@@ -2659,17 +2677,6 @@ mark {
     display: none;
   }
 
-  .toc {
-    position: static;
-    max-height: none;
-    flex-direction: row;
-    overflow-x: auto;
-  }
-
-  .toc a {
-    white-space: nowrap;
-  }
-
   .chart text {
     font-size: 20px;
   }
@@ -2791,8 +2798,9 @@ mark {
 
 .side .ws-menu {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--sp-2);
-  padding: 2px 4px 4px 18px;
+  padding: 2px 4px 4px;
 }
 
 .side .ws-menu button {
@@ -4859,6 +4867,12 @@ button.chip.on {
 
   .lchart-bar .faint {
     display: none;
+  }
+
+  /* above the text, its own short scroller: a row of groups hid everything past Part I */
+  .toc {
+    position: static;
+    max-height: 42vh;
   }
 }
 

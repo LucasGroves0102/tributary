@@ -232,7 +232,8 @@ export function Segments({ token, companyId, name }: { token: string; companyId:
                         {t.columns.map((c) => (
                           <th key={c.periodEnd} className="n">{c.label}</th>
                         ))}
-                        {t.metric === "revenue" && <th className="n">Share</th>}
+                        {/* only revenue has a share; the blank column keeps the periods lined up across tables */}
+                        {t.metric === "revenue" ? <th className="n">Share</th> : <th aria-hidden="true" />}
                         <th className="n">YoY</th>
                       </tr>
                     </thead>
@@ -243,7 +244,7 @@ export function Segments({ token, companyId, name }: { token: string; companyId:
                           {r.cells.map((c, i) => (
                             <Cell key={t.columns[i]!.periodEnd} cell={c} />
                           ))}
-                          {t.metric === "revenue" && <td className="n">{r.share === null ? "—" : pct(r.share)}</td>}
+                          {t.metric === "revenue" ? <td className="n">{r.share === null ? "—" : pct(r.share)}</td> : <td aria-hidden="true" />}
                           <td className={`n ${r.yoy === null ? "faint" : r.yoy >= 0 ? "pos" : "neg"}`}>
                             {r.yoy === null ? "—" : change(r.yoy)}
                           </td>
