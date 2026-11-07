@@ -38,7 +38,7 @@ export function Overview({
           <span className="sub">latest reported periods · USD · hover for the source filing</span>
         </div>
         {canFin ? (
-          <div className="kv">
+          <div className="kv stats">
             {keyStats(row).map((s) => (
               <div key={s.label} title={s.title}>
                 <div className="k">{s.label}</div>

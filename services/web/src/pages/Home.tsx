@@ -142,7 +142,7 @@ export function Home({ workspace, lastIngested, listed = null, onAdd, onExport, 
 
   return (
     <div className="page">
-      <div className="row">
+      <div className="row page-bar">
         <h1 className="grow">Home</h1>
         {onCustomize && (
           <button className="btn ghost" onClick={onCustomize} aria-label="Customize Home">

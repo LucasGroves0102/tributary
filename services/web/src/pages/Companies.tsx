@@ -108,7 +108,7 @@ export function Companies({ token, screen: asked, watched, onWatch, onChart, sav
 
   return (
     <div className="page">
-      <div className="row">
+      <div className="row page-bar">
         <h1 className="grow">Companies</h1>
         {total !== null && (
           <span className="muted">
