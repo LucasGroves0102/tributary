@@ -38,7 +38,12 @@ export function TopBar(props: Props) {
       )}
       <Breadcrumb route={route} companyName={props.companyName} companyShort={props.companyShort} filingLabel={props.filingLabel ?? null} />
       <button className="search-box" onClick={props.onSearch} aria-label="Search (Ctrl K)">
-        <span>Search companies, filings, pages, actions</span>
+        <svg className="search-ic" width="13" height="13" viewBox="0 0 16 16" aria-hidden="true">
+          <circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+          <path d="M11 11l4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        </svg>
+        <span className="sb-long">Search companies, filings, pages, actions</span>
+        <span className="sb-short">Search</span>
         <span className="grow" />
         <kbd>Ctrl K</kbd>
       </button>

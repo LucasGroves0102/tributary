@@ -121,7 +121,8 @@ beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => respond(url, init)));
   window.localStorage.clear();
-  // wide enough for the drawer to open beside the page by default
+  // a returning user who keeps the assistant open (a first visit starts closed: its own test)
+  window.localStorage.setItem("tributary.assistant", "open");
   Object.defineProperty(window, "innerWidth", { value: 1440, configurable: true });
   forgetVisits();
   asked.length = 0;
@@ -457,7 +458,7 @@ describe("assistant drawer", () => {
     expect(drawer()).not.toBeNull();
     await key("j", { ctrlKey: true });
     expect(drawer()).toBeNull();
-    expect($(".fab")).not.toBeNull();
+    expect(window.localStorage.getItem("tributary.assistant")).toBe("closed");
     await key("/", {}, document.body);
     expect(drawer()).not.toBeNull();
     expect(document.activeElement).toBe($("aside.ai-drawer textarea"));
@@ -467,6 +468,20 @@ describe("assistant drawer", () => {
     await settle();
     expect(drawer()).toBeNull();
     expect($("aside.ai-page")).not.toBeNull();
+  });
+
+  it("starts closed on a first visit, whatever the width, with one way in that covers nothing", async () => {
+    window.localStorage.clear();
+    await render();
+    expect(drawer()).toBeNull();
+    // no floating button over the page: the top bar's Assistant is the way in
+    expect($(".fab")).toBeNull();
+    const open = [...container.querySelectorAll<HTMLButtonElement>(".top button")].find((b) => b.textContent?.includes("Assistant"))!;
+    expect(open.getAttribute("aria-pressed")).toBe("false");
+    act(() => open.click());
+    await settle();
+    expect(drawer()).not.toBeNull();
+    expect(window.localStorage.getItem("tributary.assistant")).toBe("open");
   });
 
   it("shows the questions left before one is spent, and looks again after one is", async () => {

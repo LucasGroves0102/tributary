@@ -573,7 +573,12 @@ a.btn:hover {
   text-align: left;
 }
 
-.search-box > span:first-child {
+.search-ic {
+  flex: none;
+}
+
+.sb-long,
+.sb-short {
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
@@ -1592,16 +1597,7 @@ button.link:hover {
   color: var(--text-3);
 }
 
-.fab {
-  position: fixed;
-  right: 18px;
-  bottom: 18px;
-  z-index: 15;
-  border-radius: 999px;
-  padding: 9px 14px;
-  box-shadow: var(--popover-shadow);
-}
-
+/* one readable column, centred: answers, prompts and the box line up */
 .ask-page {
   max-width: none;
 }
@@ -2826,10 +2822,6 @@ button.link.num {
     min-width: 0;
   }
 
-  .search-box kbd {
-    display: none;
-  }
-
   .tw {
     -webkit-overflow-scrolling: touch;
   }
@@ -2851,16 +2843,7 @@ button.link.num {
     border-left: 0;
   }
 
-  .top .who,
-  .top .btn .kbd {
-    display: none;
-  }
-
-  .fab {
-    right: 12px;
-    bottom: 12px;
-  }
-
+@container main (max-width: 560px) {
   .tip {
     position: static;
     margin: var(--sp-4) var(--sp-6);
@@ -3353,7 +3336,6 @@ button.link.num {
   .side,
   .top,
   .ai,
-  .fab,
   .banner,
   .sandbox-banner,
   .scrim,
@@ -4412,6 +4394,55 @@ button.chip.on {
 
   .t.aligned .first {
     width: 128px;
+  }
+}
+
+/* Reflow by the page's own width (`.main`): the same rules with the panel open at 1440 as at 1024 */
+
+@container main (max-width: 1000px) {
+  .grid2 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* the company's name and facts get the whole width; its buttons a row of their own */
+  .co-head > .grow {
+    flex-basis: 100%;
+  }
+
+  .search-box kbd {
+    display: none;
+  }
+
+  .sb-long {
+    display: none;
+  }
+
+  .sb-short {
+    display: inline;
+  }
+
+  .who .faint {
+    display: none;
+  }
+
+  .top .btn .kbd {
+    display: none;
+  }
+}
+
+@container main (max-width: 720px) {
+  .reader-body,
+  .sbs-h,
+  .sbs-r {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .page {
+    padding: var(--sp-7) 16px;
+  }
+
+  .lchart-bar .faint {
+    display: none;
   }
 }
 

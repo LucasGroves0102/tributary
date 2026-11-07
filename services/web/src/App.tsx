@@ -73,7 +73,6 @@ import { useSaved } from "./workspaces/useSaved";
 import { WorkspaceTree } from "./workspaces/WorkspaceTree";
 
 const DRAWER_KEY = "tributary.assistant";
-const DRAWER_FITS_PX = 1200;
 
 const SANDBOX_EXPIRED = "Your demo sandbox expired and was reset. Start a new one.";
 const GITHUB_EXPIRED = "Your sign-in expired. Sign in with GitHub again.";
@@ -114,10 +113,9 @@ export function App(props: Props = {}) {
   // is closed; with it open every company is readable, so nothing is scoped
   const open = !!me?.catalog?.public;
   const scope = useMemo(() => (open ? null : scopeOf(session)), [session, open]);
-  // open by default where it fits beside the page; below that it floats over it (styles.css)
-  const [drawerOpen, setDrawerOpen] = useState(
-    () => (load(DRAWER_KEY) ?? (window.innerWidth > DRAWER_FITS_PX ? "open" : "closed")) === "open",
-  );
+  // closed until asked for: a first visit sees the page at full width, and the top bar's Assistant
+  // is one click (or Ctrl J) away. The choice is remembered per browser.
+  const [drawerOpen, setDrawerOpen] = useState(() => load(DRAWER_KEY) === "open");
   const [palette, setPalette] = useState<string | null>(null);
   const [help, setHelp] = useState(false);
   const [focusTick, setFocusTick] = useState(0);
@@ -844,11 +842,6 @@ export function App(props: Props = {}) {
           <AssistantPanel variant="drawer" {...panelProps} onClose={() => setDrawer(false)} />
         )}
       </div>
-      {!showDrawer && route.view !== "ask" && (
-        <button className="btn primary fab" onClick={focusAssistant}>
-          ✦ Ask the assistant
-        </button>
-      )}
       {help && <ShortcutSheet onClose={() => setHelp(false)} />}
       {palette !== null && (
         <Palette
