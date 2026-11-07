@@ -1,13 +1,14 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 
-import { searchFilings } from "../api";
+import { searchCompanies, searchFilings } from "../api";
 import { formTag } from "../company/data";
 import { useLoad } from "../company/useLoad";
+import { CompanyPicker, type PickedCompany } from "../components/CompanySearch";
 import { Skeleton } from "../components/States";
 import { day } from "../format";
 import { snippetRuns } from "../reader/text";
 import { go, href } from "../route";
-import { groupHits, SEARCH_FORMS, SEARCH_PAGE, type SearchForm, type SearchState } from "../search/state";
+import { datesInverted, groupHits, SEARCH_FORMS, SEARCH_PAGE, usableDate, type SearchForm, type SearchState } from "../search/state";
 import type { Company } from "../types";
 
 interface Props {
@@ -17,17 +18,22 @@ interface Props {
   companies: Company[];
   /** every company's filings are readable (the public catalog, access.ts) */
   open?: boolean;
+  /** offered in the company filter with nothing typed (the watchlist) */
+  suggestions?: PickedCompany[];
 }
+
+const NONE: PickedCompany[] = [];
 
 /** Full-text search over the parsed sections of the user's companies (/v1/search): the best
  * passage per section, grouped by company and filing, each opening the reader at the passage. */
-export function Search({ token, search, companies, open = false }: Props) {
+export function Search({ token, search, companies, open = false, suggestions = NONE }: Props) {
   const readable = companies.filter((c) => c.tiers.includes("filings"));
   const any = open || readable.length > 0;
   const [draft, setDraft] = useState<SearchState>(search ?? { q: "" });
   useEffect(() => setDraft(search ?? { q: "" }), [search]);
   const page = search?.page ?? 0;
-  const key = search && any ? JSON.stringify(search) : null;
+  const inverted = datesInverted(draft);
+  const key = search && any && !datesInverted(search) ? JSON.stringify(search) : null;
   const load = useLoad(key, () =>
     searchFilings(token, {
       q: search!.q,
@@ -43,10 +49,19 @@ export function Search({ token, search, companies, open = false }: Props) {
   const submit = (e: FormEvent) => {
     e.preventDefault();
     const q = draft.q.trim();
-    if (!q) return;
+    if (!q || inverted) return;
     go({ view: "search", search: { ...draft, q, page: undefined } });
   };
-  const set = (patch: Partial<SearchState>) => setDraft((d) => ({ ...d, ...patch }));
+  /** The words are searched on Enter or the button (each search is a ranking of every match);
+   * a filter applies as soon as it changes, like every other filter in the app. */
+  const filter = (patch: Partial<SearchState>) => {
+    const next = { ...draft, ...patch };
+    setDraft(next);
+    const q = next.q.trim() || search?.q;
+    if (q && !datesInverted(next) && usableDate(next.from) && usableDate(next.to)) {
+      go({ view: "search", search: { ...next, q, page: undefined } });
+    }
+  };
   const toPage = (p: number) => search && go({ view: "search", search: { ...search, page: p || undefined } });
 
   return (
@@ -58,37 +73,42 @@ export function Search({ token, search, companies, open = false }: Props) {
         <div className="row wrap">
           <input className="field grow" type="search" aria-label="Search words" maxLength={200}
             placeholder={'Words, "an exact phrase", or, -excluded'} value={draft.q}
-            onChange={(e) => set({ q: e.target.value })} />
+            onChange={(e) => setDraft((d) => ({ ...d, q: e.target.value }))} />
           <button className="btn primary" type="submit" disabled={!draft.q.trim()}>Search</button>
         </div>
         <div className="row wrap">
           <label className="row">
             <span className="faint">Form</span>
             <select className="field narrow" aria-label="Form" value={draft.form ?? ""}
-              onChange={(e) => set({ form: (e.target.value || undefined) as SearchForm | undefined })}>
+              onChange={(e) => filter({ form: (e.target.value || undefined) as SearchForm | undefined })}>
               <option value="">Any</option>
               {SEARCH_FORMS.map((f) => <option key={f} value={f}>{f}</option>)}
             </select>
           </label>
-          <label className="row">
+          <div className="row search-company">
             <span className="faint">Company</span>
-            <select className="field narrow" aria-label="Company" value={draft.company ?? ""}
-              onChange={(e) => set({ company: e.target.value || undefined })}>
-              <option value="">{open ? "All companies" : "All you can read"}</option>
-              {readable.map((c) => <option key={c.company_id} value={c.company_id}>{c.name ?? c.company_id}</option>)}
-            </select>
-          </label>
+            <CompanyFilter token={token} value={draft.company} open={open} companies={readable} suggestions={suggestions}
+              set={(company) => filter({ company })} />
+          </div>
           <label className="row">
             <span className="faint">Filed from</span>
             <input className="field narrow" type="date" aria-label="Filed from" value={draft.from ?? ""}
-              onChange={(e) => set({ from: e.target.value || undefined })} />
+              onChange={(e) => filter({ from: e.target.value || undefined })} />
           </label>
           <label className="row">
             <span className="faint">to</span>
             <input className="field narrow" type="date" aria-label="Filed to" value={draft.to ?? ""}
-              onChange={(e) => set({ to: e.target.value || undefined })} />
+              onChange={(e) => filter({ to: e.target.value || undefined })} />
           </label>
         </div>
+        {inverted && (
+          <p className="error small" role="alert">
+            “Filed from” is after “to”, so no filing could match.{" "}
+            <button type="button" className="btn sm" onClick={() => filter({ from: draft.to, to: draft.from })}>
+              Swap the dates
+            </button>
+          </p>
+        )}
         <p className="faint small">
           Searches the parsed sections (Risk Factors, MD&amp;A, 8-K items and press releases…) of
           {open ? (
@@ -106,6 +126,8 @@ export function Search({ token, search, companies, open = false }: Props) {
 
       {!search ? (
         <p className="empty">Type words to search, then press Enter.</p>
+      ) : datesInverted(search) ? (
+        <p className="empty">Nothing searched yet: the dates above are the wrong way round.</p>
       ) : !any ? (
         <p className="empty locked">
           Searching filing text needs filings access (the pro plan and a grant for a company).
@@ -118,7 +140,17 @@ export function Search({ token, search, companies, open = false }: Props) {
       ) : load.state === "error" ? (
         <p className="empty error">{load.message}</p>
       ) : load.data.results.length === 0 ? (
-        <p className="empty">No passages match “{search.q}”{page ? " on this page" : ""}. Try fewer or different words.</p>
+        <p className="empty">
+          No passages match “{search.q}”{page ? " on this page" : ""}
+          {search.form || search.company || search.from || search.to ? (
+            <>
+              {" "}with these filters.{" "}
+              <button className="btn sm" onClick={() => go({ view: "search", search: { q: search.q } })}>Clear the filters</button>
+            </>
+          ) : (
+            ". Try fewer or different words."
+          )}
+        </p>
       ) : (
         <section className="card results">
           {load.data.searched_from && (
@@ -174,5 +206,58 @@ export function Search({ token, search, companies, open = false }: Props) {
         </section>
       )}
     </div>
+  );
+}
+
+/** One company or all of them: the shared search, narrowed to what the user can read. A company
+ * in the address (a link, Back) is named from the user's list or asked once. */
+function CompanyFilter({ token, value, open, companies, suggestions, set }: {
+  token: string;
+  value: string | undefined;
+  open: boolean;
+  companies: Company[];
+  suggestions: PickedCompany[];
+  set: (company: string | undefined) => void;
+}) {
+  const [named, setNamed] = useState<PickedCompany | null>(null);
+  const readable = useMemo(() => {
+    const ids = new Set(companies.map((c) => c.company_id));
+    return { has: (id: string) => open || ids.has(id) };
+  }, [open, companies]);
+  const mine = useMemo(
+    () => companies.map((c): PickedCompany => ({ companyId: c.company_id, name: c.name ?? c.company_id })),
+    [companies],
+  );
+  const offered = useMemo(
+    () => [...new Map([...suggestions, ...mine].map((c) => [c.companyId, c])).values()],
+    [suggestions, mine],
+  );
+  useEffect(() => {
+    if (!value || named?.companyId === value) return;
+    const known = offered.find((c) => c.companyId === value);
+    if (known) {
+      setNamed(known);
+      return;
+    }
+    let live = true;
+    searchCompanies(token, value, false, 1)
+      .then((rs) => {
+        const r = rs.find((x) => x.company_id === value);
+        if (live && r) setNamed({ companyId: value, name: r.name, ticker: r.tickers?.[0] ?? null });
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [token, value, named, offered]);
+  const shown = value ? (named?.companyId === value ? named : { companyId: value, name: value }) : null;
+  return (
+    <CompanyPicker token={token} label="Company" value={shown} emptyLabel={open ? "All companies" : "All you can read"}
+      placeholder="Name or ticker" readable={readable} suggestions={offered}
+      onChange={(c) => {
+        setNamed(c);
+        set(c.companyId);
+      }}
+      onClear={() => set(undefined)} />
   );
 }

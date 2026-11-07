@@ -42,7 +42,7 @@ import { go, href, parse, useRoute } from "./route";
 import { resolveTicker } from "./palette/commands";
 import { useShortcuts } from "./shortcuts";
 import { inScope, ScopeContext, scopeOf } from "./scope";
-import { catalogOpen, readableFor } from "./access";
+import { catalogOpen, readableFor, readableTotal } from "./access";
 import {
   clearFragment,
   clearSession,
@@ -370,6 +370,11 @@ export function App(props: Props = {}) {
         : null,
     [workspace.watchlist],
   );
+  const watchedIds = useMemo(() => workspace.rows.map((r) => r.companyId), [workspace.rows]);
+  const searchSuggestions = useMemo(
+    () => workspace.rows.map((r) => ({ companyId: r.companyId, name: r.name, ticker: r.ticker })),
+    [workspace.rows],
+  );
   const companyName = useCallback((id: string) => names.get(id) ?? null, [names]);
   const filingsFor = useMemo(() => readableFor(me, "filings"), [me]);
   const financialsFor = useMemo(() => readableFor(me, "financials"), [me]);
@@ -542,6 +547,7 @@ export function App(props: Props = {}) {
                 lastIngested={ingested}
                 onAdd={() => setPalette(WATCH_PREFIX)}
                 onExport={exportWatchlist}
+                readableCompanies={me ? readableTotal(me) : 0}
                 recent={saved.list.state === "unavailable" ? null : <Recent recent={saved.recent} onOpen={openSaved} />}
                 notes={<RecentNotes token={token} name={companyName} filingsFor={filingsFor} />}
                 layout={views.home}
@@ -642,7 +648,7 @@ export function App(props: Props = {}) {
               />
             ) : route.view === "search" ? (
               <Search key={user} token={token} search={route.search} companies={me?.companies ?? []}
-                open={catalogOpen(me, "filings")} />
+                open={catalogOpen(me, "filings")} suggestions={searchSuggestions} />
             ) : route.view === "chart" ? (
               <ChartBuilder
                 key={user}
@@ -650,6 +656,8 @@ export function App(props: Props = {}) {
                 chart={chart}
                 setChart={setChart}
                 saveBar={saveBar({ kind: "chart", chart })}
+                readable={financialsFor}
+                preferred={watchedIds}
               />
             ) : route.view === "ask" ? (
               <div className="page ask-page">

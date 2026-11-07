@@ -5,6 +5,7 @@ import { metricLabel } from "../chart/metrics";
 import { parseCommand } from "../palette/commands";
 import { NAV, type NavView } from "../route";
 import { useScope } from "../scope";
+import { resultTicker } from "./CompanySearch";
 import type { SearchResult } from "../types";
 
 export const WATCH_PREFIX = "watch:";
@@ -46,11 +47,6 @@ interface Item {
   /** "watch:" on a company already on the watchlist: shown, marked, does nothing */
   already?: boolean;
   run: () => void;
-}
-
-/** The ticker to show for a search result: the one it matched on, else the company's first. */
-function tickerOf(r: SearchResult): string | null {
-  return r.matched_on === "ticker" && r.is_current ? r.matched_alias : (r.tickers?.[0] ?? null);
 }
 
 interface Props {
@@ -107,7 +103,7 @@ export function Palette({ token, initial, companies, watched, actions, onClose }
     const all: PaletteCompany[] = [
       ...remote.map((r) => {
         const mine = known.get(r.company_id);
-        const ticker = tickerOf(r);
+        const ticker = resultTicker(r);
         return {
           companyId: r.company_id,
           name: r.name,

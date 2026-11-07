@@ -83,8 +83,13 @@ is scoped: a sandbox or GitHub session sees every company like anyone else, the 
 "Demo sandbox: every company · resets in Xh", the front door says "access to every company"
 (`catalog_public` on `GET /v1/demo/sandbox`), the Welcome page waits for no grant (none is
 written), Search covers every company's filings (ranked within the newest window that fills the
-page, with a line saying how far back, unless a company or dates narrow it), and Home's expected
-filings are the watchlist's (`scope=readable` would be thousands of rows). Display only: the API decides.
+page, with a line saying how far back, unless a company or dates narrow it), Home's feed heading
+counts `readableTotal`, and Home's expected filings are the watchlist's (`scope=readable` would be
+thousands of rows). Display only: the API decides.
+
+Search (`pages/Search.tsx`): words run on Enter or the button (each search ranks every match);
+form, company and dates apply as soon as they change. Inverted dates aren't searched: the page says
+so and offers to swap them. No result under filters offers to clear them instead of blaming the words.
 
 While the catalog is closed, a sandbox (or a GitHub sign-in) lists only its own 20 companies
 (`src/scope.ts`, a React context set from the session, and only while `/v1/me` says the catalog
@@ -99,7 +104,7 @@ in this demo.", instead of locked tabs, and the assistant suggests nothing about
 page's deliberate permission tests are labelled "Try to break it:". Already scoped by the API
 for everyone: the chart builder's companies (`access=financials`), Home's feed and expected
 filings (`/v1/filings/latest`, `scope=readable`/`watchlist`), the Search page's company filter
-(`/v1/me`). Named demo users and future signed-in users keep the full public index, with
+(`access=financials`, `readableFor`). Named demo users and future signed-in users keep the full public index, with
 ungranted companies as metadata only.
 
 The assistant sends the screen as `context` with each question (`assistant/actions.ts`) and
@@ -287,10 +292,18 @@ columns dropped, missing ones default) and grant nothing: values are still read 
 permission-checked routes, masked for ungranted companies. Without the app database the defaults
 show and the controls are hidden.
 
-Chart builder (`src/chart/`): a "Chart a company" box next to the title lists the companies the
+Finding a company (`components/CompanySearch.tsx`): one server-backed combobox everywhere a
+company is picked (Chart builder, Compare, Search's filter, Analysis, thesis and model pickers;
+`CompanyPicker` shows a choice and opens the search to change it). It asks `/v1/companies/search`
+per keystroke (debounced, tickers, CIKs and any part of a name, best first), shows ticker and name,
+works with arrows and Enter, and says when nothing matches. No page loads a list of companies: a
+screener capped at 500 stopped near "ARTC" and hid NVDA, MSFT and TSLA without saying so.
+
+Chart builder (`src/chart/`): a "Chart a company" box next to the title searches the companies the
 chart can read (by name or ticker) and adds the picked one's revenue (TTM) as a new line layer.
 Each layer card starts with a labelled Company row (full width) and its header shows the
-ticker. Layers can be renamed (legend), recoloured (colours stay with a
+ticker. Names and tickers of companies on the chart come from the pick, or are asked once by id.
+Tickers in a formula's suggestions come from the same search. Layers can be renamed (legend), recoloured (colours stay with a
 layer when it moves), moved up or down, hidden; types line, bar, area, stacked bar and stacked
 area (layers of the same stacked type and axis stack, negatives downward); transforms quarterly,
 TTM, YoY, QoQ, indexed and per share (`ttm(f) / weighted_shares_diluted` in the quarter view,

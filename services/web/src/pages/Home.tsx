@@ -26,12 +26,14 @@ interface Props {
   editor?: ReactNode;
   /** the watchlist's "Columns" (views/Editors ColumnPicker) */
   columnPicker?: ReactNode;
+  /** how many companies the user can read (access.ts readableTotal): the feed covers them all */
+  readableCompanies?: number;
 }
 
 /** Cards shown side by side when next to each other. */
 const HALF = new Set<HomeCardId>(["filings", "expected"]);
 
-export function Home({ workspace, lastIngested, onAdd, onExport, recent, notes, layout, onCustomize, editor, columnPicker }: Props) {
+export function Home({ workspace, lastIngested, onAdd, onExport, recent, notes, layout, onCustomize, editor, columnPicker, readableCompanies = 0 }: Props) {
   const { watchlist, rows, filings, expected, since, firstVisit } = workspace;
   const newLabel = firstVisit
     ? "new in the last 7 days in bold"
@@ -78,8 +80,8 @@ export function Home({ workspace, lastIngested, onAdd, onExport, recent, notes, 
           <section className="card">
             <div className="card-h">
               <h2>
-                New filings for {workspace.readableCount
-                  ? `the ${workspace.readableCount} companies you can read`
+                New filings for {readableCompanies
+                  ? `the ${readableCompanies.toLocaleString("en-US")} ${readableCompanies === 1 ? "company" : "companies"} you can read`
                   : "your watchlist"}
               </h2>
               <span className="sub">

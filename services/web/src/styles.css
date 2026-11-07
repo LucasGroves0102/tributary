@@ -1758,8 +1758,76 @@ button.chip:disabled {
 }
 
 .co-results button:hover,
-.co-results button:focus {
+.co-results button:focus,
+.co-results button.on {
   background: var(--panel-2);
+}
+
+.th-sort {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.th-sort:hover {
+  color: var(--text);
+}
+
+.co-results b {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-weight: 500;
+}
+
+.co-ticker {
+  flex: none;
+  color: var(--text-3);
+}
+
+.co-none {
+  padding: 8px 12px;
+  color: var(--text-3);
+}
+
+/* a chosen company (CompanyPicker): a button that reads like a field */
+.co-picked {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.co-value {
+  display: inline-flex;
+  gap: var(--sp-3);
+  align-items: baseline;
+  min-width: 0;
+  flex: 1;
+  width: auto;
+  text-align: left;
+  cursor: pointer;
+}
+
+.search-company .co-search,
+.search-company .co-picked {
+  width: 240px;
+}
+
+.co-value .co-name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .field.narrow {
@@ -1907,6 +1975,37 @@ button.chip:disabled {
 
 .reader-tools form {
   max-width: 480px;
+}
+
+.toc-legend {
+  margin: 0 0 var(--sp-3);
+  padding: 0 8px;
+}
+
+.toc .search-hits {
+  max-height: 42vh;
+  overflow-y: auto;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: var(--sp-3);
+  margin-bottom: var(--sp-3);
+}
+
+.filing-steps {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  align-items: center;
+}
+
+.match-nav {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.section-text mark.cur {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 .toc .grp {
@@ -3088,10 +3187,17 @@ button.link.num {
 }
 
 /* chart builder: the layer's company, labelled, first in its card */
-.layer-company > span {
+.layer-company > .small {
   flex: none;
   width: 58px;
   color: var(--text-3);
+}
+
+.layer-company .co-search,
+.layer-company .co-picked {
+  flex: 1;
+  width: auto;
+  min-width: 0;
 }
 
 .layer > .row > b.grow {

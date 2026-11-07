@@ -42,8 +42,6 @@ export interface Workspace {
   firstVisit: boolean;
   watch: (companyId: string) => Promise<void>;
   unwatch: (companyId: string) => Promise<void>;
-  /** how many companies the user can read (Home's filing feed covers them all) */
-  readableCount: number;
   /** asks again for the watchlist, feed and calendars (after an error) */
   reload?: () => void;
   /** the watchlist's value columns, as chosen (views) */
@@ -221,7 +219,6 @@ export function useWorkspace(
     firstVisit: visit?.first ?? false,
     watch,
     unwatch,
-    readableCount: companyIds.length,
     columns,
     reload: () => {
       setList({ state: "loading" });

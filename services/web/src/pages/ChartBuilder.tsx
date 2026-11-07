@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 
 import {
   filingIndex,
@@ -7,10 +7,11 @@ import {
   FormulaApiError,
   screener,
   screenerColumns,
+  searchCompanies,
   validateFormula,
   type FormulaRequest,
 } from "../api";
-import { apply as applyCompletion, complete, type Suggestion, type Vocabulary } from "../chart/autocomplete";
+import { apply as applyCompletion, complete, MAX_SUGGESTIONS, type Suggestion, type Vocabulary } from "../chart/autocomplete";
 import { cached, remember } from "../chart/cache";
 import { fetchLayer } from "../chart/fetch";
 import { memberName, SEGMENT_AXIS_LABELS, SEGMENT_TRANSFORMS } from "../chart/segments";
@@ -47,6 +48,8 @@ import {
 } from "../chart/model";
 import { pngBlob, slug, svgText } from "../chart/export";
 import { chartCsv, latestSource, toSeries, type Series, type Source } from "../chart/series";
+import type { Readable } from "../access";
+import { CompanyPicker, CompanySearch, resultTicker } from "../components/CompanySearch";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { download } from "../download";
 import { day } from "../format";
@@ -70,25 +73,58 @@ interface Props {
   setChart: (f: (s: ChartState) => ChartState) => void;
   /** Save / Save as (workspaces/SaveBar) */
   saveBar?: ReactNode;
+  /** the companies whose financials the user can read (access.ts readableFor); default: what
+   * the API's access=financials answers */
+  readable?: Readable;
+  /** the user's own companies (the watchlist): what a template starts from on an empty chart */
+  preferred?: string[];
 }
 
-/** Companies the user can chart: the screener restricted to companies whose financials they
- * can read (it also gives their tickers). */
-function useChartCompanies(token: string): ChartCompany[] | null {
-  const [out, setOut] = useState<ChartCompany[] | null>(null);
+const ANYTHING_THE_API_ALLOWS: Readable = { has: () => true };
+const NO_PREFERENCE: string[] = [];
+
+/** Screened once, for the two things that aren't a search: whether the plan can chart anything,
+ * and which companies start a template on an empty chart (the user's own first). Everything else
+ * asks the server what was typed (CompanySearch): no list of ~6,000 names in the browser. */
+function useChartSeed(token: string, preferred: string[]): { none: boolean; ids: string[] } | null {
+  const [rows, setRows] = useState<string[] | null>(null);
   useEffect(() => {
     let live = true;
-    screener(token, { access: "financials", columns: ["revenue_ttm"], sort: "name", limit: 500 })
-      .then((r) =>
-        live &&
-        setOut(r.rows.map((x) => ({ companyId: x.company_id, name: x.name ?? x.company_id, ticker: x.tickers?.[0] ?? null }))),
-      )
-      .catch(() => live && setOut([]));
+    screener(token, { access: "financials", columns: ["revenue_ttm"], sort: "name", limit: 2 })
+      .then((r) => live && setRows(r.rows.map((x) => x.company_id)))
+      .catch(() => live && setRows([]));
     return () => {
       live = false;
     };
   }, [token]);
-  return out;
+  if (rows === null) return null;
+  return { none: rows.length === 0, ids: [...new Set([...preferred, ...rows])].slice(0, 2) };
+}
+
+/** Name and ticker of the companies on the chart: from the pick itself when it was just chosen,
+ * else asked once (public identity, through the screener's company_id list). */
+function useCompanyNames(token: string, ids: string[]) {
+  const [known, setKnown] = useState<ReadonlyMap<string, ChartCompany>>(new Map());
+  const missing = ids.filter((id) => !known.has(id));
+  const missingKey = [...new Set(missing)].sort().join(",");
+  useEffect(() => {
+    if (!missingKey) return;
+    let live = true;
+    const asked = missingKey.split(",");
+    screener(token, { company_id: asked, columns: ["revenue_ttm"], sort: "name", limit: asked.length })
+      .then((r) => {
+        if (!live) return;
+        setKnown((m) => new Map([...m, ...r.rows.map((x): [string, ChartCompany] => [
+          x.company_id, { companyId: x.company_id, name: x.name ?? x.company_id, ticker: x.tickers?.[0] ?? null },
+        ])]));
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [token, missingKey]);
+  const learn = useCallback((c: ChartCompany) => setKnown((m) => new Map(m).set(c.companyId, c)), []);
+  return { known, learn };
 }
 
 function useMetrics(token: string): MetricInfo[] | null {
@@ -133,8 +169,13 @@ function useFilings(token: string, companyIds: string[], from: string | null, on
 }
 
 /** Chart builder: layers of company × metric or formula over /v1/formulas/evaluate. */
-export function ChartBuilder({ token, chart, setChart, saveBar }: Props) {
-  const companies = useChartCompanies(token);
+export function ChartBuilder({ token, chart, setChart, saveBar, readable = ANYTHING_THE_API_ALLOWS, preferred = NO_PREFERENCE }: Props) {
+  const seed = useChartSeed(token, preferred);
+  const onChart = [...new Set(chart.layers.flatMap((l) => {
+    const id = l.kind === "formula" ? l.defaultCompany : l.companyId;
+    return id ? [id] : [];
+  }))];
+  const { known, learn } = useCompanyNames(token, onChart);
   const metrics = useMetrics(token);
   // "+ Price" only with the user's own market-data connection (chart/prices.ts)
   const market = useMarketData(token);
@@ -144,8 +185,7 @@ export function ChartBuilder({ token, chart, setChart, saveBar }: Props) {
   const [retry, setRetry] = useState(0);
   const svg = useRef<SVGSVGElement>(null);
 
-  const byId = useMemo(() => new Map((companies ?? []).map((c) => [c.companyId, c])), [companies]);
-  const short = (id: string) => byId.get(id)?.ticker ?? byId.get(id)?.name ?? id;
+  const short = (id: string) => known.get(id)?.ticker ?? known.get(id)?.name ?? id;
   const ttm = useMemo(() => {
     const m = new Map((metrics ?? []).map((x) => [x.name, x.ttm]));
     return (name: string) => m.get(name) ?? true;
@@ -255,9 +295,9 @@ export function ChartBuilder({ token, chart, setChart, saveBar }: Props) {
 
   const vocab = useMemo((): Vocabulary => ({
     metrics: metrics ?? [],
-    tickers: (companies ?? []).flatMap((c) => (c.ticker ? [{ ticker: c.ticker, name: c.name }] : [])),
-  }), [metrics, companies]);
-  const fallback = (companies ?? []).slice(0, 2).map((c) => c.companyId);
+    tickers: [...known.values()].flatMap((c) => (c.ticker ? [{ ticker: c.ticker, name: c.name }] : [])),
+  }), [metrics, known]);
+  const fallback = seed?.ids ?? [];
   const firstCompany = chart.layers.find((l) => l.companyId)?.companyId ?? fallback[0];
   const name = chart.title || "chart";
 
@@ -287,9 +327,16 @@ export function ChartBuilder({ token, chart, setChart, saveBar }: Props) {
     <div className="page">
       <div className="row wrap">
         <h1>Chart builder</h1>
-        {companies !== null && companies.length > 0 && (
-          <ChartCompanyBox companies={companies} disabled={chart.layers.length >= MAX_LAYERS}
-            onPick={(id) => setChart((s) => addLayer(s, { kind: "metric", companyId: id, metric: "revenue", transform: "ttm", type: "line", axis: "L" }))} />
+        {seed !== null && !seed.none && (
+          <div className="chart-co">
+            <CompanySearch token={token} label="Chart a company" readable={readable}
+              placeholder={chart.layers.length >= MAX_LAYERS ? "Layer limit reached" : "Chart a company, e.g. AMZN"}
+              disabled={chart.layers.length >= MAX_LAYERS}
+              onPick={(id, name, ticker) => {
+                learn({ companyId: id, name, ticker });
+                setChart((s) => addLayer(s, { kind: "metric", companyId: id, metric: "revenue", transform: "ttm", type: "line", axis: "L" }));
+              }} />
+          </div>
         )}
         <span className="grow" />
         <button className="btn" onClick={exportCsv} disabled={!series.length}
@@ -348,8 +395,8 @@ export function ChartBuilder({ token, chart, setChart, saveBar }: Props) {
             )}
           </div>
           <div className="card-b layer-list">
-            {companies === null && <Skeleton lines={3} label="Loading your companies" />}
-            {companies !== null && companies.length === 0 && (
+            {seed === null && <Skeleton lines={3} label="Loading your companies" />}
+            {seed !== null && seed.none && (
               <p className="faint small">
                 Your plan covers no company's financials yet, so there's nothing to chart. Ask
                 for a financials grant, or try the demo for a sandbox with 20 companies.
@@ -366,7 +413,9 @@ export function ChartBuilder({ token, chart, setChart, saveBar }: Props) {
                 auto={autoName(l, short, metricLabel, frequency)}
                 annual={frequency === "annual"}
                 vocab={vocab}
-                companies={companies ?? []}
+                company={known.get((l.kind === "formula" ? l.defaultCompany : l.companyId) ?? "") ?? null}
+                readable={readable}
+                learn={learn}
                 metrics={metrics ?? []}
                 hasShares={hasShares}
                 basis={effective}
@@ -528,7 +577,9 @@ function LayerEditor({
   auto,
   annual,
   vocab,
-  companies,
+  company,
+  readable,
+  learn,
   metrics,
   hasShares,
   basis,
@@ -547,7 +598,10 @@ function LayerEditor({
   /** annual frequency: QoQ means nothing there (it charts as YoY) */
   annual: boolean;
   vocab: Vocabulary;
-  companies: { companyId: string; name: string; ticker: string | null }[];
+  /** name and ticker of the layer's company, once known */
+  company: ChartCompany | null;
+  readable: Readable;
+  learn: (c: ChartCompany) => void;
   metrics: MetricInfo[];
   hasShares: boolean;
   basis: "fiscal" | "calendar";
@@ -560,14 +614,8 @@ function LayerEditor({
   const [name, setName] = useState(layer.name ?? "");
   const label = layer.name?.trim() || auto;
   const companyId = layer.kind === "formula" ? layer.defaultCompany : layer.companyId;
-  const company = companies.find((c) => c.companyId === companyId);
   const segment = layer.kind === "segment";
   const price = layer.kind === "price";
-  const companyOptions = companies.map((c) => (
-    <option key={c.companyId} value={c.companyId}>
-      {c.ticker ? `${c.ticker} · ${c.name}` : c.name}
-    </option>
-  ));
   // per share divides dollars by shares: only for USD metrics (formulas are checked by the API)
   const perShareOk = hasShares && (layer.kind === "formula" || !metric || metric.unit === "USD");
   const commitName = () => {
@@ -601,24 +649,28 @@ function LayerEditor({
           ✕
         </button>
       </div>
-      <label className="row layer-company">
+      <div className="row layer-company">
         <span className="small">Company</span>
         {segment ? (
           <span className="grow">{company ? (company.ticker ?? company.name) : layer.companyId}</span>
         ) : layer.kind === "metric" || price ? (
-          <select className="grow" aria-label="Company" value={layer.companyId ?? ""} onChange={(e) => set({ companyId: e.target.value })}>
-            {!company && <option value={layer.companyId ?? ""}>{layer.companyId ?? "Choose a company"}</option>}
-            {companyOptions}
-          </select>
+          <CompanyPicker token={token} label="Company" value={company ?? (companyId ? { companyId, name: companyId } : null)}
+            emptyLabel="Choose a company" readable={readable}
+            onChange={(c) => {
+              learn({ companyId: c.companyId, name: c.name, ticker: c.ticker ?? null });
+              set({ companyId: c.companyId });
+            }} />
         ) : (
-          <select className="grow" aria-label="Default company" value={layer.defaultCompany ?? ""}
+          <CompanyPicker token={token} label="Default company" value={company ?? (companyId ? { companyId, name: companyId } : null)}
+            emptyLabel="None (tickers only)" readable={readable}
             title="The company for metrics written without a ticker; TICKER.metric reads another company"
-            onChange={(e) => set({ defaultCompany: e.target.value || undefined })}>
-            <option value="">None (tickers only)</option>
-            {companyOptions}
-          </select>
+            onChange={(c) => {
+              learn({ companyId: c.companyId, name: c.name, ticker: c.ticker ?? null });
+              set({ defaultCompany: c.companyId });
+            }}
+            onClear={() => set({ defaultCompany: undefined })} />
         )}
-      </label>
+      </div>
       {segment ? (
         <p className="small muted segment-members" title={(layer.members ?? []).join(", ")}>
           {metricLabel(layer.metric ?? "revenue")} by {SEGMENT_AXIS_LABELS[layer.segmentAxis!] ?? "segment"}:{" "}
@@ -678,50 +730,6 @@ function LayerEditor({
   );
 }
 
-/** Next to the title: type a company's name or ticker to chart its revenue as a new layer.
- * Lists only the companies the chart can read (useChartCompanies). */
-function ChartCompanyBox({ companies, disabled, onPick }: {
-  companies: ChartCompany[];
-  disabled: boolean;
-  onPick: (companyId: string) => void;
-}) {
-  const [q, setQ] = useState("");
-  const text = q.trim().toLowerCase();
-  const shown = text
-    ? companies
-        .filter((c) => c.ticker?.toLowerCase().startsWith(text) || c.name.toLowerCase().includes(text))
-        .sort((a, b) => Number(b.ticker?.toLowerCase() === text) - Number(a.ticker?.toLowerCase() === text))
-        .slice(0, 8)
-    : [];
-  const pick = (c: ChartCompany) => {
-    onPick(c.companyId);
-    setQ("");
-  };
-  return (
-    <div className="co-search chart-co">
-      <input className="field" type="search" aria-label="Chart a company" value={q} maxLength={100}
-        placeholder={disabled ? "Layer limit reached" : "Chart a company, e.g. AMZN"} disabled={disabled}
-        onChange={(e) => setQ(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && shown[0]) pick(shown[0]);
-          if (e.key === "Escape") setQ("");
-        }} />
-      {shown.length > 0 && (
-        <ul className="co-results" role="listbox" aria-label="Chart a company results">
-          {shown.map((c) => (
-            <li key={c.companyId}>
-              <button type="button" role="option" aria-selected={false} onClick={() => pick(c)}>
-                <b>{c.name}</b>
-                {c.ticker && <span className="mono faint">{c.ticker}</span>}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
 const KIND_LABEL: Record<Suggestion["kind"], string> = {
   metric: "metric", ticker: "company", function: "function", operator: "operator", lag: "lag",
 };
@@ -752,7 +760,36 @@ function FormulaInput({
   const input = useRef<HTMLInputElement>(null);
   const pending = useRef<number | null>(null);
   const listId = useId();
-  const comp = cursor === null ? null : complete(draft, cursor, vocab);
+  // a capitalized word being typed may be a ticker: asked of the server, like every company search
+  const typed = cursor === null ? null : (/(?:^|[^A-Za-z0-9_.])([A-Z][A-Z0-9-]{0,9})$/.exec(draft.slice(0, cursor))?.[1] ?? null);
+  const [found, setFound] = useState<{ word: string; tickers: Vocabulary["tickers"] }>({ word: "", tickers: [] });
+  useEffect(() => {
+    if (!typed) return;
+    let live = true;
+    const t = setTimeout(() => {
+      searchCompanies(token, typed, true, MAX_SUGGESTIONS)
+        .then((rs) => {
+          if (!live) return;
+          setFound({
+            word: typed,
+            tickers: rs.flatMap((r) => {
+              const ticker = resultTicker(r);
+              return ticker ? [{ ticker, name: r.name }] : [];
+            }),
+          });
+        })
+        .catch(() => {});
+    }, 150);
+    return () => {
+      live = false;
+      clearTimeout(t);
+    };
+  }, [token, typed]);
+  const words = useMemo((): Vocabulary => ({
+    metrics: vocab.metrics,
+    tickers: [...new Map([...vocab.tickers, ...found.tickers].map((t) => [t.ticker, t])).values()],
+  }), [vocab, found]);
+  const comp = cursor === null ? null : complete(draft, cursor, words);
   const open = !!comp && comp.items.length > 0;
 
   useEffect(() => {

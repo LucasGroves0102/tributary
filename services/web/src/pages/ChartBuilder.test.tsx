@@ -34,12 +34,23 @@ function point(key: number, period: string, value: string) {
 }
 
 const bodies: { path: string; body: Record<string, string> }[] = [];
+const searches: URL[] = [];
 
 function respond(url: string, init?: RequestInit): Response {
   const path = new URL(url, "http://x").pathname;
   if (path.endsWith("/v1/screener/columns")) return Response.json(COLUMNS);
   if (path.endsWith("/v1/screener")) {
     return Response.json({ total: 1, rows: [{ ...entry(), filer_categories: null, state_of_incorporation: null }] });
+  }
+  if (path.endsWith("/v1/companies/search")) {
+    searches.push(new URL(url, "http://x"));
+    const q = (new URL(url, "http://x").searchParams.get("q") ?? "").toUpperCase();
+    const all = [
+      { company_id: NVDA, name: "Nvidia", matched_on: "ticker", matched_alias: "NVDA", is_current: true, tickers: ["NVDA"], access: ["financials"] },
+      // far past any first page of names: the reason the list isn't loaded into the browser
+      { company_id: "0001318605", name: "Tesla, Inc.", matched_on: "ticker", matched_alias: "TSLA", is_current: true, tickers: ["TSLA"], access: ["financials"] },
+    ];
+    return Response.json({ results: all.filter((r) => r.matched_alias.startsWith(q) || r.name.toUpperCase().startsWith(q)) });
   }
   if (path.endsWith("/filing-index")) {
     return Response.json({ filings: [
@@ -90,6 +101,7 @@ beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => respond(url, init)));
   bodies.length = 0;
+  searches.length = 0;
   vi.mocked(download).mockClear();
 });
 
@@ -310,6 +322,13 @@ const type = async (input: HTMLInputElement, text: string) => {
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
 };
+/** Past CompanySearch's debounce, and its answer. */
+const wait = async () => {
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 170));
+  });
+  for (let i = 0; i < 2; i++) await act(async () => {});
+};
 const key = (el: Element, k: string) => act(async () => {
   el.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true }));
 });
@@ -402,13 +421,39 @@ it("the box next to the title charts a typed company's revenue as a new layer", 
   const input = container.querySelector<HTMLInputElement>('input[aria-label="Chart a company"]')!;
   const options = () => [...container.querySelectorAll('[aria-label="Chart a company results"] [role="option"]')].map((o) => o.textContent);
   await type(input, "nvid");
-  expect(options()).toEqual(["NvidiaNVDA"]);
+  await wait();
+  expect(options()).toEqual(["NVDANvidia"]);
+  // readable companies only: asked of the API, never a list held in the browser
+  expect(searches.at(-1)!.searchParams.get("access")).toBe("financials");
   await type(input, "zzz");
+  await wait();
   expect(options()).toEqual([]);
+  expect(container.querySelector(".co-none")?.textContent).toContain("No company matches “zzz”");
   await type(input, "NVDA");
+  await wait();
   await key(input, "Enter");
   for (let i = 0; i < 3; i++) await act(async () => {});
   expect(input.value).toBe("");
   expect(latest.layers).toMatchObject([{ kind: "metric", companyId: NVDA, metric: "revenue", transform: "ttm" }]);
   expect(bodies.some((b) => b.path.endsWith("/evaluate") && b.body.default_company === NVDA)).toBe(true);
+});
+
+it("finds a company past any first page of names, and a layer's company is the same search", async () => {
+  await render(companyChart(emptyChart(), NVDA, "Nvidia"));
+  // nothing asks for a long list up front
+  const screens = vi.mocked(fetch).mock.calls.map(([u]) => new URL(String(u), "http://x")).filter((u) => u.pathname.endsWith("/v1/screener"));
+  expect(screens.every((u) => Number(u.searchParams.get("limit")) <= 2)).toBe(true);
+  const change = container.querySelector<HTMLButtonElement>('button[aria-label^="Company: Nvidia"]')!;
+  expect(change.textContent).toContain("NVDA");
+  await act(async () => change.click());
+  const box = container.querySelector<HTMLInputElement>('input[aria-label="Company"]')!;
+  await type(box, "TSLA");
+  await wait();
+  const option = container.querySelector<HTMLButtonElement>('[aria-label="Company results"] [role="option"]')!;
+  expect(option.textContent).toBe("TSLATesla");
+  await act(async () => option.click());
+  for (let i = 0; i < 3; i++) await act(async () => {});
+  expect(latest.layers[0]!.companyId).toBe("0001318605");
+  // the layer's legend name uses the pick's ticker at once, no CIK in between
+  expect(container.querySelector<HTMLInputElement>('input[aria-label="Layer name (legend)"]')!.placeholder).toBe("TSLA revenue");
 });

@@ -89,8 +89,10 @@ it("groups ranked passages by company and filing, each opening the reader at the
 it("submits the form into the address and offers only companies with filings access", async () => {
   await render();
   expect(calls()).toHaveLength(0);
-  expect([...container.querySelectorAll('select[aria-label="Company"] option')].map((o) => o.textContent))
-    .toEqual(["All you can read", "Nvidia", "Microsoft"]);
+  await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label^="Company: All you can read"]')!.click());
+  expect([...container.querySelectorAll('[aria-label="Company results"] [role="option"]')].map((o) => o.textContent))
+    .toEqual(["Nvidia", "Microsoft"]);
+  await act(async () => container.querySelector<HTMLInputElement>('input[aria-label="Company"]')!.blur());
   const input = container.querySelector<HTMLInputElement>('input[aria-label="Search words"]')!;
   await act(async () => {
     const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
@@ -102,8 +104,58 @@ it("submits the form into the address and offers only companies with filings acc
     select.value = "8-K";
     select.dispatchEvent(new Event("change", { bubbles: true }));
   });
-  await act(async () => input.form!.requestSubmit());
+  // the form filter applies at once with the words typed so far: no second step
   expect(parseSearch(window.location.hash.split("?")[1]!)).toEqual({ q: '"supply chain" -china', form: "8-K" });
+});
+
+const pickDate = async (label: string, value: string) => {
+  const el = container.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`)!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(el, value);
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+};
+
+it("applies a filter to the search on screen at once, and holds a half-typed year", async () => {
+  await render({ q: "tariffs" });
+  await pickDate("Filed from", "0002-01-01");
+  expect(window.location.hash).toBe("");
+  await pickDate("Filed from", "2024-01-01");
+  expect(parseSearch(window.location.hash.split("?")[1]!)).toEqual({ q: "tariffs", from: "2024-01-01" });
+});
+
+it("refuses inverted dates, says so and offers to swap them, without blaming the words", async () => {
+  await render({ q: "tariffs", from: "2026-01-01", to: "2020-01-01" });
+  expect(calls()).toHaveLength(0);
+  expect(container.querySelector('[role="alert"]')?.textContent).toContain("“Filed from” is after “to”");
+  expect(container.textContent).not.toContain("different words");
+  await act(async () => [...container.querySelectorAll("button")].find((b) => b.textContent === "Swap the dates")!.click());
+  expect(parseSearch(window.location.hash.split("?")[1]!)).toEqual({ q: "tariffs", from: "2020-01-01", to: "2026-01-01" });
+});
+
+it("with no match under filters, offers to clear them instead of blaming the words", async () => {
+  reply = () => Response.json({ query: "zzz", as_of: "", limit: 20, offset: 0, has_more: false, results: [] });
+  await render({ q: "zzz", form: "10-K" });
+  expect(container.textContent).toContain("No passages match “zzz” with these filters");
+  expect(container.textContent).not.toContain("different words");
+});
+
+it("the company filter searches every company with the catalog open, and names a linked one", async () => {
+  vi.mocked(fetch).mockImplementation(async (u: string | URL | Request) => {
+    const url = new URL(String(u), "http://x");
+    return url.pathname.endsWith("/v1/companies/search")
+      ? Response.json({ results: [{ company_id: "0001318605", name: "Tesla, Inc.", matched_on: "ticker", matched_alias: "TSLA", is_current: true, tickers: ["TSLA"], access: ["financials", "filings"] }] })
+      : reply();
+  });
+  container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  await act(async () => root.render(<Search token="t" search={{ q: "x", company: "0001318605" }} companies={[]} open />));
+  for (let i = 0; i < 3; i++) await act(async () => {});
+  expect(container.querySelector('button[aria-label^="Company: "]')?.textContent).toContain("Tesla");
+  expect(container.querySelector('button[aria-label^="Company: "]')?.textContent).toContain("TSLA");
+  await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Clear Company"]')!.click());
+  expect(parseSearch(window.location.hash.split("?")[1]!)).toEqual({ q: "x" });
 });
 
 it("says why there are no results: too broad, no access, nothing matched", async () => {
