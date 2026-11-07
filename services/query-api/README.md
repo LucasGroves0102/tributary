@@ -241,7 +241,8 @@ Workspaces are named folders of saved items in the app database (`workspace_api.
 `workspaces.py`, app migrations 004 and 009): a chart builder state (`chart`: title, range,
 alignment, up to 12 layers: `metric`, `formula`, or `segment` (company, segment metric,
 `segmentAxis`, 1-20 `members` as XBRL QNames, transforms q / ttm / yoy / contrib; the web app's
-Revenue view saves these, and reads their values from `/segments`)), a comps set (`comps`: target, up to 20 peers, columns), a screener
+Revenue view saves these, and reads their values from `/segments`); a metric or formula layer may
+say how a dimensionless value reads, `display`: percent, multiple or number), a comps set (`comps`: target, up to 20 peers, columns), a screener
 screen (`screen`: filters and sort), a thesis (`thesis`) or a model (`model`; both below).
 A workspace can also be an **analysis project** (app migration 012, the web app's Analysis
 tab): its `project` is `{companyId, peers (up to 20), notes (up to 4,000 characters, "How it

@@ -179,8 +179,9 @@ Home: the sidebar badge and the status tile count the same filings (`Workspace.f
 watchlist's with the catalog open, since the feed is then everyone's latest 50) and say the same
 thing (`home/data.ts` `sinceLabel`: since your last visit, or the last 7 days on a first visit in
 this browser). Removing a watchlist company offers Undo for 15 seconds. "New chart" starts empty
-and detached from any saved chart (the nav's Chart builder still reopens the draft), and the draft it
-replaced can be restored until the next one.
+and detached from any saved chart (the nav's Chart builder still reopens the draft). Anything that
+replaces a chart with work in it (New chart, a template, a Chart button, opening a saved chart) keeps
+that draft: the builder says what happened and can restore it until the next replacement.
 
 Search (`pages/Search.tsx`): words run on Enter or the button (each search ranks every match);
 form, company and dates apply as soon as they change. Inverted dates aren't searched: the page says
@@ -416,18 +417,57 @@ area (layers of the same stacked type and axis stack, negatives downward); trans
 TTM, YoY, QoQ, indexed and per share (`ttm(f) / weighted_shares_diluted` in the quarter view,
 offered only when the catalog has the share count); ranges 1y/3y/5y/10y/max or a custom first and last period end; quarterly or annual frequency
 (annual = each year's fourth quarter: flows as TTM there, i.e. the fiscal- or calendar-year total,
-balances as the year-end value, ratios full-year; QoQ becomes YoY). Formulas autocomplete metric
-names (the catalog), your companies' tickers (`TICKER.`), `ttm()` / `abs()`, operators and lags
-(`chart/autocomplete.ts`; Tab completes, arrows then Enter pick), and the API still checks them
-inline. Deck output draws the chart in the light palette with a subtitle (periods and units,
+balances as the year-end value, ratios full-year; QoQ becomes YoY; the Transform control then reads
+"Annual"). Formulas autocomplete metric names (the catalog), your companies' tickers (`TICKER.`) and
+`ttm()` / `abs()` while a name is unfinished, and stop once it's complete, since the list sits over the
+controls below (`chart/autocomplete.ts`; Tab completes, arrows then Enter pick). The API checks them as
+you type: the chart takes a formula as soon as it's valid (the check's 350 ms is the debounce), or on
+Enter or blur whatever it is; every bad name shows at once, with "did you mean" when there is a close
+one. Deck output draws the chart in the light palette with a subtitle (periods and units,
 editable), axis unit captions and a source footnote ("Source: SEC filings via Tributary; forms
 for companies; latest filing; as of"), which SVG and PNG exports keep. Evaluate answers are kept
 in memory per (token, request) for the session (`chart/cache.ts`), so coming back to a chart
 asks the API nothing. Clicking a point
 (or Enter on it; arrows move between quarters and layers) opens its newest source filing in the
 reader. Filing markers put each company's 10-Ks and 10-Qs (public index) and 8-K results (item
-2.02, from parsed filings) on the time axis. "View as table" shows the plotted values with their
-sources as a data table.
+2.02, from parsed filings) in a band of their own under the plot, their letters only where they fit
+(10-Ks first; the rest stay as stems, their hover names them), and on a chart of years only the 10-Ks.
+"View as table" shows the plotted values with their sources as a data table.
+
+How charts tell the truth, in every chart that draws through `chart/LayerChart.tsx` (the builder,
+Overview, Revenue, Analysis Numbers, Compare, thesis and report embeds), SVG, PNG and CSV included:
+
+- **Titles** come from the layers (`chart/model.ts` `autoTitle`: "AMZN: revenue (TTM) and net_income /
+  revenue (TTM)", "Operating margin (TTM): KO and PEP", ", annual" when it is), naming what is drawn,
+  until the user types one; then the builder says "Custom title" and offers the automatic one back.
+  `ChartState.title` holds only what was typed, so a chart saved before this keeps its stored title as
+  a custom one. Templates and the Chart buttons leave it empty.
+- **An axis holds one unit** (`chart/axes.ts`): a layer asks for a side; if that side reads in another
+  unit it moves to the other, and with both taken it isn't drawn (the card and the chart's footnote say
+  so, and its values stay in the tooltip, the table and the CSV). Dollars, dollars per share, an index
+  and a multiple never share one, so the smaller doesn't flatten at zero. Percents of every kind do.
+- **A ratio isn't necessarily a percent**: the API says how a dimensionless result reads from its
+  formula's shape (query-api `formula/check.py`), percent, multiple or plain number, and a layer's
+  "Reads as" overrides it (`display`, saved with the chart). Debt to equity is 1.91x here as in the tables,
+  NVDA / MSFT a multiple, `receivables / revenue * 365` a number of days. A contribution to growth is
+  in points on axis and tooltip alike.
+- **Gaps are gaps** (`chart/series.ts` `xAxis`): the axis has every period between the first and the
+  last, so a missing year is a shaded hole, lines and areas break there, a point alone gets a dot, the
+  table and the CSV have its row. The legend lists only what is drawn. `chart/notes.ts` says the rest in
+  words, under the chart and in its exports: a period with no value, a series that starts late or
+  stops early (one quarter behind others isn't a gap: companies file at different times), a layer with
+  no values, a chart with nothing as far back as it asked, a negative index. A layer with nothing to
+  draw is asked once over everything on file, so "try Max" appears only when Max has something.
+- **Basis**: the Calendar / Fiscal control highlights what is applied. Fiscal quarters only line up
+  within one company, so with several (counted from what the formulas really read) the chart draws calendar
+  ones and says why; the choice is kept for when it's one company again.
+- **Axes**: margins are as wide as the tick labels, a caption too wide for its margin runs from the
+  chart's edge, period labels never touch, a sliver past zero (-$8K beside $30M) doesn't earn a step of
+  empty axis, ticks have the decimals to tell them apart, and a lone bar doesn't fill the chart.
+
+Compare's dollar charts can also read on a log scale or indexed to the first value in range (not
+saved; it says so when the largest company is over 100 times the smallest). "Chart these" and Peers'
+"Chart margins" draw at most 8 companies, the colours a chart tells apart, and say so.
 
 Revenue view (the company page's Revenue tab, `src/company/Revenue.tsx`; rules in
 `company/revenue.ts`'s docstring): three sections, each chart an ordinary chart state, so "Save

@@ -105,8 +105,8 @@ test("chart builder: formula autocomplete, annual frequency and deck output", as
   await formula.press("Tab");
   await expect(formula).toHaveValue("net_income");
   await formula.pressSequentially(" ");
-  await suggestions.getByRole("option", { name: /÷/ }).click();
-  await formula.pressSequentially("revenue");
+  await expect(suggestions).toHaveCount(0); // a complete name: nothing more to offer over the controls
+  await formula.pressSequentially("/ revenue");
   await formula.press("Enter");
   await expect(page.locator(".lchart-svg .ch-legend text")).toHaveCount(2);
 
@@ -165,9 +165,10 @@ test("save a chart to a new workspace and reopen it", async ({ page }) => {
   // start over, then reopen it from the sidebar
   await page.getByRole("button", { name: "Close", exact: true }).click();
   await page.getByRole("button", { name: "Leverage" }).click();
-  await expect(page.getByLabel("Chart title")).toHaveValue("Debt to equity, quarter end");
+  await expect(page.getByLabel("Chart title")).toHaveValue(""); // written from the layers
+  await expect(page.locator(".lchart-svg .ch-title").first()).toContainText("Debt to equity");
   await page.locator('button[title="Open in Chart builder: Margin check"]').click();
-  await expect(page.getByLabel("Chart title")).toHaveValue("Operating margin, TTM");
+  await expect(page.locator(".lchart-svg .ch-title").first()).toContainText("Operating margin");
   await expect(page.locator(".savebar")).toContainText("Margin check");
 });
 

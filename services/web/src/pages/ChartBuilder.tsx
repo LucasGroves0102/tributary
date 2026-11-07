@@ -19,14 +19,20 @@ import { PRICE_TRANSFORMS } from "../chart/prices";
 import { isConnected, useMarketData } from "../market/useMarketData";
 import { autoSubtitle, methodNote, sourceFootnote } from "../chart/deck";
 import { LayerChart } from "../chart/LayerChart";
-import { filingMarkers, MARKER_FORMS, type Marker } from "../chart/markers";
+import { drawnIds, planAxes } from "../chart/axes";
+import { ANNUAL_MARKER_KEY, filingMarkers, MARKER_FORMS, MARKER_KEY, markersFor, type Marker } from "../chart/markers";
 import { catalog, metricLabel, type MetricInfo } from "../chart/metrics";
 import {
   addLayer,
   applyTemplate,
   autoName,
+  autoTitle,
   basis,
+  basisReason,
+  chartTitle,
   COLOR_NAMES,
+  DISPLAYS,
+  formulaReads,
   frequencyOf,
   LAYER_TYPES,
   layerColor,
@@ -44,6 +50,7 @@ import {
   TRANSFORMS,
   updateLayer,
   type ChartState,
+  type Display,
   type Layer,
 } from "../chart/model";
 import { pngBlob, slug, svgText } from "../chart/export";
@@ -66,7 +73,8 @@ export interface ChartCompany {
 type Result =
   | { state: "loading" }
   | { state: "ok"; data: FormulaSeries }
-  | { state: "error"; message: string };
+  /** `formula`: the formula itself is wrong, which its own input already says */
+  | { state: "error"; message: string; formula?: boolean };
 
 interface Props {
   token: string;
@@ -83,6 +91,12 @@ interface Props {
   onNew?: () => void;
   /** set while there is a replaced draft to bring back */
   onRestore?: (() => void) | null;
+  /** says what replaced the draft (shown beside the Restore button) */
+  restoreNote?: string | null;
+  /** about to replace the layers: keep the draft for `onRestore` (`why` says what happened) */
+  onReplace?: (why: string) => void;
+  /** something the page that opened this chart needs to say about it */
+  notice?: string | null;
 }
 
 const ANYTHING_THE_API_ALLOWS: Readable = { has: () => true };
@@ -148,7 +162,7 @@ function useFilings(token: string, companyIds: string[], from: string | null, on
 }
 
 /** Chart builder: layers of company × metric or formula over /v1/formulas/evaluate. */
-export function ChartBuilder({ token, chart, setChart, saveBar, readable = ANYTHING_THE_API_ALLOWS, preferred = NO_PREFERENCE, onNew, onRestore }: Props) {
+export function ChartBuilder({ token, chart, setChart, saveBar, readable = ANYTHING_THE_API_ALLOWS, preferred = NO_PREFERENCE, onNew, onRestore, restoreNote, onReplace, notice }: Props) {
   const seed = useChartSeed(token, preferred);
   const onChart = [...new Set(chart.layers.flatMap((l) => {
     const id = l.kind === "formula" ? l.defaultCompany : l.companyId;
@@ -191,7 +205,18 @@ export function ChartBuilder({ token, chart, setChart, saveBar, readable = ANYTH
     const hit = cached(token, k);
     return results[k] ?? (hit ? { state: "ok", data: hit } : undefined);
   };
-  const wanted = requests.flatMap(({ req }) => (req ? [keyOf(req)] : []));
+  // whether a layer's answer draws anything; undefined while there is no answer. One that doesn't is
+  // asked once over everything on file, so the advice under it is true: "try Max" only if Max has some
+  const draws = (l: Layer, k: string | null): boolean | undefined => {
+    const r = k ? resultOf(keyOf(k)) : undefined;
+    return r?.state === "ok" ? toSeries(r.data, l, "", 0, frequency).points.some((p) => p.y !== null) : undefined;
+  };
+  const onFile: ChartState = { ...chart, range: "max", start: undefined, end: undefined };
+  const probes = chart.range === "max" ? [] : requests.flatMap(({ layer, req }) => {
+    const whole = draws(layer, req) === false ? layerKey(layer, onFile, ttm) : null;
+    return whole ? [keyOf(whole)] : [];
+  });
+  const wanted = [...requests.flatMap(({ req }) => (req ? [keyOf(req)] : [])), ...probes];
   const wantedKey = wanted.join("\n");
 
   // answers are keyed by request: one that arrives after the layers changed is still kept (a
@@ -222,6 +247,7 @@ export function ChartBuilder({ token, chart, setChart, saveBar, readable = ANYTH
                   e instanceof FormulaApiError
                     ? e.problems.map((p) => p.message + (p.hint ? `. ${p.hint}` : "")).join("; ")
                     : failureReason(e),
+                formula: e instanceof FormulaApiError,
               },
             })),
         );
@@ -257,28 +283,31 @@ export function ChartBuilder({ token, chart, setChart, saveBar, readable = ANYTH
         .filter((p) => market.connections.some((c) => c.provider === p.id))
         .map((p) => p.attribution).join(" ") || "your market-data connection."}`
     : "";
+  const markerKey = chart.markers ? (frequency === "annual" ? ANNUAL_MARKER_KEY : MARKER_KEY) : "";
   const footnote = chart.deck
-    ? [sourceFootnote(series, short, asOf), method, priceNote].filter(Boolean)
+    ? [sourceFootnote(series, short, asOf), method, priceNote, markerKey].filter(Boolean)
     : [
         `Source: SEC filings (10-Q, 10-K XBRL) via Tributary. ${method}`,
         latest ? `Latest filing used: ${latest.companyId ? `${short(latest.companyId)} ` : ""}${latest.form} filed ${day(latest.filed, true)}.` : "",
         priceNote,
+        markerKey,
       ].filter(Boolean);
   const subtitle = chart.deck ? chart.subtitle?.trim() || autoSubtitle(series, frequency, effective) : "";
 
-  // filing markers: each company a visible metric layer (or formula's default company) reads
+  // filing markers: each company a visible metric layer (or a formula's metrics without a ticker) reads
+  const markedBy = (l: Layer) => (l.kind !== "formula" ? l.companyId : formulaReads(l.formula ?? "").bare ? l.defaultCompany : undefined);
   const chartCompanies = [...new Set(visible.flatMap((l) => {
-    const c = l.kind === "formula" ? l.defaultCompany : l.companyId;
+    const c = markedBy(l);
     return c ? [c] : [];
   }))].slice(0, 8);
   const { from } = rangeDates(chart);
   const filingsBy = useFilings(token, chartCompanies, from, !!chart.markers);
   const markers: Marker[] = chart.markers
-    ? chartCompanies.flatMap((c) => {
+    ? markersFor(chartCompanies.flatMap((c) => {
         const f = filingsBy[c];
-        const layer = visible.find((l) => (l.kind === "formula" ? l.defaultCompany : l.companyId) === c);
+        const layer = visible.find((l) => markedBy(l) === c);
         return f ? filingMarkers(c, short(c), layer ? colorOf(layer) : 0, f.index, f.parsed, from) : [];
-      })
+      }), frequency)
     : [];
 
   const vocab = useMemo((): Vocabulary => ({
@@ -287,7 +316,38 @@ export function ChartBuilder({ token, chart, setChart, saveBar, readable = ANYTH
   }), [metrics, known]);
   const fallback = seed?.ids ?? [];
   const firstCompany = chart.layers.find((l) => l.companyId)?.companyId ?? fallback[0];
-  const name = chart.title || "chart";
+  // named for what draws, once that's known: a layer with nothing to show isn't in the title
+  const drawn = drawnIds(series);
+  const answered = new Set(series.map((x) => x.id));
+  const shows = (l: Layer) => (answered.has(l.id) ? drawn.has(l.id) : status(l)?.state !== "error");
+  const title = chartTitle(chart, short, metricLabel, shows);
+  const name = title || "chart";
+  const whyCalendar = basisReason(chart);
+  // which axis each plotted layer ended up on (chart/axes.ts: one unit per axis)
+  const plan = planAxes(series);
+  const placedOn = (l: Layer) => {
+    const i = series.findIndex((s) => s.id === l.id);
+    return i < 0 || !series[i]!.points.some((p) => p.y !== null) ? undefined : plan.axes[i];
+  };
+  // a layer with an answer but nothing to draw: what would change that, and only that
+  const what = frequency === "annual" ? "No full year" : "No values";
+  const onFileNote = frequency === "annual" ? "No full year on file: try Quarterly." : "No values on file.";
+  const nothingNote = (l: Layer): string | null => {
+    if (draws(l, layerKey(l, chart, ttm)) !== false) return null;
+    if (chart.range === "max") return onFileNote;
+    const whole = layerKey(l, onFile, ttm);
+    const ever = draws(l, whole);
+    if (ever === undefined) return `${what} in this range.`;
+    if (!ever) return onFileNote;
+    const r = resultOf(keyOf(whole!));
+    const latest = r?.state === "ok" ? toSeries(r.data, l, "", 0, frequency).points.filter((p) => p.y !== null).at(-1)?.period : null;
+    return `${what} in this range${latest ? `; the latest is ${latest}` : ""}: try Max.`;
+  };
+  const emptyNote = (() => {
+    const notes = visible.map(nothingNote).filter((n): n is string => n !== null);
+    if (notes.some((n) => n.endsWith("try Max."))) return `${what} for these layers in this range: try Max.`;
+    return notes.length && notes.every((n) => n === onFileNote) ? `${what} on file for these layers.` : `${what} for these layers in this range.`;
+  })();
 
   const openSource = (src: Source) => {
     if (!src.companyId) {
@@ -346,9 +406,10 @@ export function ChartBuilder({ token, chart, setChart, saveBar, readable = ANYTH
         {saveBar}
       </div>
       {note && <p className="empty error" role="alert">{note}</p>}
+      {notice && <p className="undo-note" role="status">{notice}</p>}
       {onRestore && (
         <p className="undo-note" role="status">
-          Started a new chart.{" "}
+          {restoreNote ?? "Started a new chart."}{" "}
           <button className="btn sm" onClick={onRestore}>Restore the previous draft</button>
         </p>
       )}
@@ -420,6 +481,8 @@ export function ChartBuilder({ token, chart, setChart, saveBar, readable = ANYTH
                 hasShares={hasShares}
                 basis={effective}
                 status={status(l)}
+                placedOn={placedOn(l)}
+                nothingNote={nothingNote(l)}
                 set={(patch) => setChart((s) => updateLayer(s, l.id, patch))}
                 move={(by) => setChart((s) => moveLayer(s, l.id, by))}
                 remove={() => setChart((s) => removeLayer(s, l.id))}
@@ -436,8 +499,11 @@ export function ChartBuilder({ token, chart, setChart, saveBar, readable = ANYTH
               <div className="row wrap">
                 {TEMPLATES.map((t) => (
                   <button key={t.label} className="btn sm" disabled={!fallback.length && !chart.layers.length}
-                    title={t.hint + (t.per === "one" ? " (the chart's first company)" : "")}
-                    onClick={() => setChart((s) => applyTemplate(s, t, fallback))}>
+                    title={t.hint + (t.per === "one" ? " (the chart's first company)" : "") + (chart.layers.length ? ". Replaces the layers; you can restore them" : "")}
+                    onClick={() => {
+                      if (chart.layers.length || chart.title) onReplace?.(`Replaced your layers with the ${t.label} template.`);
+                      setChart((s) => applyTemplate(s, t, fallback));
+                    }}>
                     {t.label}
                   </button>
                 ))}
@@ -452,13 +518,20 @@ export function ChartBuilder({ token, chart, setChart, saveBar, readable = ANYTH
               className="field title-field"
               value={chart.title}
               maxLength={200}
-              placeholder="Chart title"
+              placeholder={autoTitle(chart, short, metricLabel, shows) || "Chart title"}
+              title={chart.title.trim() ? "Your own title: it stays whatever the layers show" : "Written from the layers until you type your own"}
               aria-label="Chart title"
               onChange={(e) => {
                 const title = e.target.value;
                 setChart((s) => ({ ...s, title }));
               }}
             />
+            {chart.title.trim() && (
+              <span className="sub title-mode">
+                Custom title{" "}
+                <button className="btn sm ghost" onClick={() => setChart((s) => ({ ...s, title: "" }))}>Use automatic</button>
+              </span>
+            )}
             <span className="seg" role="group" aria-label="Range">
               {[...RANGES, "custom" as const].map((r) => (
                 <button key={r} className={chart.range === r ? "on" : undefined} aria-pressed={chart.range === r}
@@ -494,7 +567,9 @@ export function ChartBuilder({ token, chart, setChart, saveBar, readable = ANYTH
             </span>
             <span className="seg" role="group" aria-label="Quarters">
               {(["calendar", "fiscal"] as const).map((a) => (
-                <button key={a} className={chart.align === a ? "on" : undefined} aria-pressed={chart.align === a}
+                <button key={a} className={effective === a ? "on" : undefined} aria-pressed={effective === a}
+                  disabled={a === "fiscal" && whyCalendar !== null}
+                  title={a === "fiscal" && whyCalendar ? whyCalendar : a === "fiscal" ? "Each company's own fiscal quarters" : "Calendar quarters"}
                   onClick={() => setChart((s) => ({ ...s, align: a }))}>
                   {a === "calendar" ? "Calendar" : "Fiscal"}
                 </button>
@@ -516,7 +591,7 @@ export function ChartBuilder({ token, chart, setChart, saveBar, readable = ANYTH
                 }} />
               Deck output
             </label>
-            <span className="sub">{loading ? "Loading…" : "hover for values and source filings"}</span>
+            {loading && <span className="sub">Loading…</span>}
           </div>
           {chart.deck && (
             <div className="card-h deck-h">
@@ -530,15 +605,10 @@ export function ChartBuilder({ token, chart, setChart, saveBar, readable = ANYTH
               <span className="sub">deck output: light background · source footnote added automatically</span>
             </div>
           )}
-          {chart.align === "fiscal" && effective === "calendar" && (
-            <p className="note">
-              Fiscal quarters only line up within one company, so this chart of several companies
-              uses calendar quarters.
-            </p>
-          )}
-          {series.some((s) => s.points.length > 0) ? (
-            <LayerChart series={series} title={chart.title} footnote={footnote} svgRef={svg}
-              markers={markers} onOpen={openSource} subtitle={subtitle} deck={!!chart.deck} />
+          {whyCalendar && <p className="chart-why">{whyCalendar}</p>}
+          {series.some((s) => s.points.some((p) => p.y !== null)) ? (
+            <LayerChart series={series} title={title} footnote={footnote} svgRef={svg}
+              markers={markers} onOpen={openSource} subtitle={subtitle} deck={!!chart.deck} from={from} />
           ) : visible.length && loading ? (
             <Skeleton chart label="Loading the series" />
           ) : visible.length && failed ? (
@@ -547,21 +617,15 @@ export function ChartBuilder({ token, chart, setChart, saveBar, readable = ANYTH
           ) : (
             <p className="empty">
               {visible.length
-                ? frequency === "annual"
-                  ? "No full years for these layers in this range. Try a longer range, or Quarterly."
-                  : "No values for these layers in this range. Try a longer range (10y or Max), or another metric."
+                ? requests.every(({ req }) => !req)
+                  ? "Type a formula in the layer to plot it. It draws as soon as it's valid."
+                  : emptyNote
                 : chart.layers.length
                   ? "Every layer is hidden. Show one, or add a metric or formula layer."
                   : "Start with + Metric (a company and a metric), + Formula (e.g. net_income / revenue), or one of the templates."}
             </p>
           )}
-          {latest && (
-            <div className="foot">
-              Every point comes from a filing: hover for each layer's value, period and accession;
-              click to open it in the reader. Latest: {latest.form} filed {day(latest.filed, true)}.
-              {chart.markers && " Markers: K = 10-K, Q = 10-Q, 8 = 8-K results (item 2.02; only where the filing is parsed and your plan covers filings)."}
-            </div>
-          )}
+          {latest && <div className="foot">Hover for each value's period and filing; click a point to open it in the reader.</div>}
         </section>
       </div>
     </div>
@@ -584,6 +648,8 @@ function LayerEditor({
   hasShares,
   basis,
   status,
+  placedOn,
+  nothingNote,
   set,
   move,
   remove,
@@ -606,6 +672,10 @@ function LayerEditor({
   hasShares: boolean;
   basis: "fiscal" | "calendar";
   status: Result | undefined;
+  /** where it drew: an axis other than its own, or null when neither could take it (chart/axes.ts) */
+  placedOn: "L" | "R" | null | undefined;
+  /** it has an answer with nothing to draw: what to do about it */
+  nothingNote: string | null;
   set: (patch: Partial<Layer>) => void;
   move: (by: -1 | 1) => void;
   remove: () => void;
@@ -622,6 +692,23 @@ function LayerEditor({
     const n = name.trim().slice(0, MAX_LAYER_NAME);
     if (n !== (layer.name ?? "")) set({ name: n || undefined });
   };
+  // who a layer reads: for a formula what its text names, not the company in the box
+  const reads = layer.kind === "formula" ? formulaReads(layer.formula ?? "") : null;
+  const who = reads
+    ? [...(reads.bare && company ? [company.ticker ?? company.name] : []), ...reads.tickers].join(", ")
+    : company ? company.ticker ?? company.name : "";
+  // annual: a flow's TTM at Q4 and its "quarterly" are the same year total, so one choice, "Annual"
+  const options = (segment ? SEGMENT_TRANSFORMS : price ? PRICE_TRANSFORMS : TRANSFORMS.filter(([v]) => v !== "ps" || hasShares || layer.transform === "ps"))
+    .filter(([v]) => segment || price || !annual || v !== (layer.transform === "q" ? "ttm" : "q"));
+  const optionLabel = (v: string, label: string) => {
+    if (!annual || segment || price) return label;
+    if (v === "q" || v === "ttm") return "Annual";
+    if (v === "qoq") return layer.transform === "qoq" ? "YoY % (a year's QoQ)" : `${label} (quarterly only)`;
+    return label;
+  };
+  // only a dimensionless value has a choice: a change, an index or per share reads as that
+  const dimensionless = status?.state === "ok" && status.data.unit === "ratio" && (layer.transform === "q" || layer.transform === "ttm");
+  const asked = status?.state === "ok" ? status.data.display : null;
 
   return (
     <div className={layer.hidden ? "layer off" : "layer"} role="group" aria-label={`Layer ${index + 1}: ${label}`}>
@@ -631,7 +718,7 @@ function LayerEditor({
         </svg>
         <b className="grow" title={company?.name}>
           {layer.kind === "formula" ? "Formula" : segment ? "Segments" : price ? "Price" : "Metric"}
-          {company && <span className="faint"> · {company.ticker ?? company.name}</span>}
+          {who && <span className="faint"> · {who}</span>}
         </b>
         <button className="btn sm ghost icon" onClick={() => move(-1)} disabled={index === 0}
           aria-label={`Move ${label} up`} title="Move up">
@@ -705,10 +792,10 @@ function LayerEditor({
       </div>
       <div className="row">
         <select aria-label="Transform" value={layer.transform} onChange={(e) => set({ transform: e.target.value as Layer["transform"] })}>
-          {(segment ? SEGMENT_TRANSFORMS : price ? PRICE_TRANSFORMS : TRANSFORMS.filter(([v]) => v !== "ps" || hasShares || layer.transform === "ps")).map(([v, label]) => (
+          {options.map(([v, label]) => (
             <option key={v} value={v}
-              disabled={!segment && !price && ((v === "ttm" && metric !== undefined && !metric.ttm) || (v === "ps" && !perShareOk) || (v === "qoq" && annual))}>
-              {annual && v === "qoq" ? `${label} (quarterly only)` : label}
+              disabled={!segment && !price && ((v === "ttm" && metric !== undefined && !metric.ttm && !annual) || (v === "ps" && !perShareOk) || (v === "qoq" && annual && layer.transform !== "qoq"))}>
+              {optionLabel(v, label)}
             </option>
           ))}
         </select>
@@ -722,22 +809,43 @@ function LayerEditor({
           <option value="R">Right axis</option>
         </select>
       </div>
-      {status?.state === "error" && <div className="err" role="alert">{status.message}</div>}
-      {status?.state === "ok" && status.data.points.length === 0 && (
-        <div className="faint small">No values in this range: try 10y or Max.</div>
+      {dimensionless && (
+        <div className="row">
+          <label className="small layer-reads">
+            Reads as{" "}
+            <select aria-label="Reads as" value={layer.display ?? "auto"}
+              onChange={(e) => set({ display: e.target.value === "auto" ? undefined : (e.target.value as Display) })}>
+              <option value="auto">Automatic ({DISPLAYS.find(([d]) => d === (asked ?? "percent"))![1].toLowerCase()})</option>
+              {DISPLAYS.map(([d, label]) => <option key={d} value={d}>{label}</option>)}
+            </select>
+          </label>
+        </div>
+      )}
+      {status?.state === "error" && !(layer.kind === "formula" && status.formula) && <div className="err" role="alert">{status.message}</div>}
+      {nothingNote && <div className="faint small">{nothingNote}</div>}
+      {placedOn === null && !layer.hidden && (
+        <div className="err">Not drawn: both axes already read in other units. Hide a layer, or give this one its own chart.</div>
+      )}
+      {placedOn && placedOn !== layer.axis && !layer.hidden && (
+        <div className="faint small">Drawn on the {placedOn === "R" ? "right" : "left"} axis: the other side reads in another unit.</div>
       )}
     </div>
   );
 }
 
-const KIND_LABEL: Record<Suggestion["kind"], string> = {
-  metric: "metric", ticker: "company", function: "function", operator: "operator", lag: "lag",
-};
+const KIND_LABEL: Record<Suggestion["kind"], string> = { metric: "metric", ticker: "company", function: "function" };
+
+/** "Valid · ...": what the chart will read it as, in a person's words. */
+function readsAs(unit: string, display: FormulaSeries["display"]): string {
+  if (unit === "ratio") return display === "multiple" ? "a multiple, like 1.50x" : display === "number" ? "a plain number" : "a percent";
+  return ({ USD: "dollars", shares: "shares", "USD/shares": "dollars per share" } as Record<string, string>)[unit] ?? unit;
+}
 
 /** A formula with autocomplete (chart/autocomplete.ts: metrics, your companies' tickers,
- * functions, operators) and inline checks (/v1/formulas/validate) as you type; applied on
- * Enter or when the field loses focus. Tab takes the highlighted suggestion; ↑ ↓ move, and
- * Enter takes one once you've moved to it; Escape closes the list. */
+ * functions) and inline checks (/v1/formulas/validate) as you type; the chart takes it as soon
+ * as it's valid (the check's own 350 ms is the debounce), or on Enter or blur whatever it is, when
+ * the layer shows what's wrong. Tab takes the highlighted suggestion; ↑ ↓ move, and Enter takes
+ * one once you've moved to it; Escape closes the list. */
 function FormulaInput({
   token,
   layer,
@@ -833,7 +941,8 @@ function FormulaInput({
       commit();
     }
   };
-  const [check, setCheck] = useState<{ ok: true; unit: string } | { ok: false; problems: FormulaProblem[] } | null>(null);
+  const [check, setCheck] = useState<{ ok: true; unit: string; display: FormulaSeries["display"] } | { ok: false; problems: FormulaProblem[] } | null>(null);
+  const [focused, setFocused] = useState(false);
 
   useEffect(() => {
     const formula = draft.trim();
@@ -846,7 +955,11 @@ function FormulaInput({
       const body: FormulaRequest = { formula, basis, view: layer.transform === "q" || layer.transform === "qoq" ? "quarter" : "ttm" };
       if (layer.defaultCompany) body.default_company = layer.defaultCompany;
       validateFormula(token, body)
-        .then((v) => live && setCheck(v.valid ? { ok: true, unit: v.unit } : { ok: false, problems: v.errors }))
+        .then((v) => {
+          if (!live) return;
+          setCheck(v.valid ? { ok: true, unit: v.unit, display: v.display } : { ok: false, problems: v.errors });
+          if (v.valid && formula !== (layer.formula ?? "").trim()) set({ formula });
+        })
         .catch((e) => live && setCheck(e instanceof FormulaApiError ? { ok: false, problems: e.problems } : null));
     }, 350);
     return () => {
@@ -881,7 +994,9 @@ function FormulaInput({
             setActive(0);
             setMoved(false);
           }}
+          onFocus={() => setFocused(true)}
           onBlur={() => {
+            setFocused(false);
             setCursor(null);
             commit();
           }}
@@ -904,21 +1019,22 @@ function FormulaInput({
           </ul>
         )}
       </div>
-      {check?.ok === false ? (
-        check.problems.map((p, i) => (
-          <div key={i} className="err">
-            {p.message}
-            {draft.length > 0 && p.pos < draft.length && (
-              <span className="mono"> at “{draft.slice(p.pos, p.pos + p.length)}”</span>
-            )}
-            {p.hint && <span className="faint"> · {p.hint}</span>}
-          </div>
-        ))
-      ) : (
+      {check?.ok === false
+        ? check.problems.map((p, i) => {
+            const at = draft.slice(p.pos, p.pos + p.length);
+            return (
+              <div key={i} className="err">
+                {p.message}
+                {at && !p.message.includes(at) && <span className="mono"> at “{at}”</span>}
+                {p.hint && <span className="faint"> · {p.hint}</span>}
+              </div>
+            );
+          })
+        : check?.ok && <div className="faint small">Valid · reads as {readsAs(check.unit, check.display)}.</div>}
+      {check?.ok !== false && (focused || !draft.trim()) && (
         <div className="faint small">
-          {check?.ok ? `Valid · ${check.unit}. ` : ""}
           Metrics by name read the company above; TICKER.metric reads another; ttm(), abs(), lags like revenue[-4q];
-          + − × ÷ and ( ). Suggestions as you type: Tab completes.
+          + − × ÷ and ( ). Tab takes a suggestion.
         </div>
       )}
     </>
