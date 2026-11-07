@@ -253,7 +253,7 @@ export async function mockApi(page: Page): Promise<Fake> {
     if (path === "/v1/companies/search") {
       const s = (q.get("q") ?? "").toUpperCase();
       return json({ results: COMPANIES.filter((c) => c.ticker.startsWith(s) || c.name.includes(s)).map((c) => ({
-        company_id: c.id, name: c.name, matched_on: "ticker", matched_alias: c.ticker, is_current: true, access: ["financials", "filings"],
+        company_id: c.id, name: c.name, matched_on: "ticker", matched_alias: c.ticker, is_current: true, tickers: [c.ticker], access: ["financials", "filings"],
       })) });
     }
     if (path === "/v1/screener/columns") {

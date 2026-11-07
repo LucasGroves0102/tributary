@@ -4,7 +4,7 @@ import { ACC, fin, NVDA, nvdaRow } from "../fixtures";
 import type { Recap, RecapValue, SegmentRow } from "../types";
 import {
   eightKItems,
-  filingYear,
+  filingHeadings,
   fiscalYear,
   parsedNote,
   financialsCsv,
@@ -182,11 +182,20 @@ describe("the Filings tab's headings and notes", () => {
     expect(fiscalYear("2027-01-02", "1231")).toBe(2026); // a 53-week December year
   });
 
-  it("goes by the filing date without a reporting period or a fiscal year end", () => {
-    const f = (form: string, filed: string, period_of_report: string | null) => ({ form, filed, period_of_report });
-    expect(filingYear(f("10-Q", "2026-08-26", "2026-07-26"), "0126")).toBe("FY2027");
-    expect(filingYear(f("4", "2026-08-26", "2024-01-01"), "0126")).toBe("FY2027");
-    expect(filingYear(f("10-Q", "2026-08-26", "2026-07-26"), null)).toBe("Filed in 2026");
+  it("heads a newest-first page with years that only move back", () => {
+    const f = (form: string, filed: string, period_of_report: string | null = null) => ({ form, filed, period_of_report });
+    const page = [
+      f("10-Q", "2026-05-20", "2026-04-26"), // FY2027
+      f("8-K", "2026-03-02", "2026-03-02"), // FY2027
+      f("10-K", "2026-02-25", "2026-01-25"), // FY2026
+      f("8-K", "2026-02-25", "2026-02-25"), // dated FY2027, but the page is past it: stays under FY2026
+      f("4", "2026-01-30", "2020-01-01"), // not a reporting period: the date filed, FY2027, stays too
+      f("10-Q", "2025-11-19", "2025-10-26"), // FY2026
+      f("10-K", "2025-02-26", "2025-01-26"), // FY2025
+    ];
+    expect(filingHeadings(page, "0125")).toEqual(["FY2027", null, "FY2026", null, null, null, "FY2025"]);
+    expect(filingHeadings(page.slice(5), null)).toEqual(["Filed in 2025", null]);
+    expect(filingHeadings([], "0125")).toEqual([]);
   });
 
   it("says 'not parsed' only where a parsed filing was to be expected", () => {

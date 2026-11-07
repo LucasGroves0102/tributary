@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 
 import { expect, test } from "@playwright/test";
 
-import { KO, mockApi, MSFT, NVDA, PEP, startDemo } from "./mockApi";
+import { KO, mockApi, NVDA, PEP, startDemo } from "./mockApi";
 
 test("try the demo lands on Home with the sandbox and its watchlist", async ({ page }) => {
   await mockApi(page);
@@ -60,24 +60,30 @@ test("chart builder: two metric layers and a formula, exported as CSV", async ({
   await page.goto("/#/chart");
   await page.getByRole("button", { name: "+ Metric" }).click();
   await page.getByRole("button", { name: "+ Metric" }).click();
-  await page.getByLabel("Company", { exact: true }).nth(1).selectOption(MSFT);
+  // a layer's company is the shared search, not a list loaded into the browser
+  await page.getByRole("button", { name: /^Company: / }).nth(1).click();
+  const pick = page.getByRole("combobox", { name: "Company", exact: true });
+  await pick.fill("MSFT");
+  await expect(page.getByRole("listbox", { name: "Company results" }).getByRole("option").first()).toContainText("MSFT");
+  await pick.press("Enter");
   await page.getByRole("button", { name: "+ Formula" }).click();
   await page.getByLabel("Formula", { exact: true }).fill("net_income / revenue");
   await page.getByLabel("Formula", { exact: true }).press("Enter");
   await page.getByLabel("Chart title").fill("Revenue and margin");
 
   const legend = page.locator(".ch-legend text");
-  await expect(legend).toHaveText(["KO revenue (TTM)", "MSFT revenue (TTM)", "net_income / revenue (TTM) (right axis)"]);
+  // the first layer starts from the watchlist's first company
+  await expect(legend).toHaveText(["NVDA revenue (TTM)", "MSFT revenue (TTM)", "net_income / revenue (TTM) (right axis)"]);
   await expect(page.locator(".ch-foot").first()).toContainText("Source: SEC filings");
 
   const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Export CSV" }).click()]);
   expect(download.suggestedFilename()).toBe("revenue-and-margin.csv");
   const csv = readFileSync((await download.path())!, "utf8").split("\r\n");
   expect(csv[0]).toBe(
-    "period,KO revenue (TTM) (USD),KO revenue (TTM) sources,MSFT revenue (TTM) (USD),MSFT revenue (TTM) sources," +
+    "period,NVDA revenue (TTM) (USD),NVDA revenue (TTM) sources,MSFT revenue (TTM) (USD),MSFT revenue (TTM) sources," +
       "net_income / revenue (TTM) (ratio),net_income / revenue (TTM) sources",
   );
-  expect(csv[1]).toMatch(/^CY2025 Q3,\d+,0000021344-26-000030,\d+,0000789019-26-000030,0\.\d+,/);
+  expect(csv[1]).toMatch(/^CY2025 Q3,\d+,0001045810-26-000030,\d+,0000789019-26-000030,0\.\d+,/);
 
   // the same values as a table, for screen readers and copying
   await page.getByRole("button", { name: "View as table" }).click();
@@ -108,7 +114,7 @@ test("chart builder: formula autocomplete, annual frequency and deck output", as
   await page.getByLabel("Deck output").check();
   await expect(page.locator(".lchart.deck")).toBeVisible();
   await expect(page.locator(".ch-sub")).toHaveText(/^Calendar years, CY2025 · USD \(left\), % \(right\)$/);
-  await expect(page.locator(".ch-foot").first()).toContainText("Source: SEC filings via Tributary; 10-Q for KO; latest KO 10-Q filed Jul 30, 2026; as of Oct 21, 2026.");
+  await expect(page.locator(".ch-foot").first()).toContainText("Source: SEC filings via Tributary; 10-Q for NVDA; latest NVDA 10-Q filed Jul 30, 2026; as of Oct 21, 2026.");
   const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Export SVG" }).click()]);
   const svg = readFileSync((await download.path())!, "utf8");
   expect(svg).toContain("Source: SEC filings via Tributary");

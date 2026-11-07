@@ -106,8 +106,10 @@ address (`#/company/{id}/statements?kind=bs&period=ttm&range=5y`, `company/state
 left out, so a view can be linked), with a range control for Quarterly and TTM (8 quarters, 5y, 10y,
 Max; wide tables open at their newest end); Annual stays ten years. Filings opens on Reports (10-K,
 10-Q, 8-K; All is one click away), headed by fiscal year with gold's rule (`data.ts` `fiscalYear`,
-migration 014), and says "not parsed yet" only on forms that get parsed. What changed sits under the
-table, so the table has the page's width and its actions aren't clipped.
+migration 014; `filingHeadings`: on a newest-first page a heading only moves back in time, since a
+10-K for FY2026 is filed in FY2027 beside that quarter's 8-Ks), and says "not parsed yet" only on
+forms that get parsed. What changed sits under the table, so the table has the page's width; its
+actions stay in view on narrow pages (sticky) and long 8-K item lists wrap.
 
 Home: the sidebar badge and the status tile count the same filings (`Workspace.fresh`: the
 watchlist's with the catalog open, since the feed is then everyone's latest 50) and say the same

@@ -9,7 +9,7 @@ export type ChangedSection = SectionChanges["sections"][number];
 export type Change = ChangedSection["changes"][number];
 /** "📌 Add to thesis" beside each changed paragraph (the Analysis tab's What changed step) */
 export type PinChange = (change: Change, section: ChangedSection) => ReactNode;
-import { eightKItems, filingYear, FORM_FILTERS, formsOf, formTag, parsedNote, type FormFilter } from "./data";
+import { eightKItems, filingHeadings, FORM_FILTERS, formsOf, formTag, parsedNote, type FormFilter } from "./data";
 import { Gate } from "./Tables";
 import { useLoad } from "./useLoad";
 
@@ -58,7 +58,7 @@ export function Filings({ token, companyId, name, canRead, initialDiff, fiscalYe
     setDiff(accession);
     requestAnimationFrame(() => changes.current?.scrollIntoView?.({ block: "start" }));
   };
-  let year: string | null = null;
+  const headings = filingHeadings(rows, fiscalYearEnd);
 
   return (
     <>
@@ -99,7 +99,7 @@ export function Filings({ token, companyId, name, canRead, initialDiff, fiscalYe
               </p>
             ) : (
               <div className="tw">
-                <table className="t">
+                <table className="t filings">
                   <thead>
                     <tr>
                       <th>Filed</th>
@@ -111,19 +111,16 @@ export function Filings({ token, companyId, name, canRead, initialDiff, fiscalYe
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.map((f) => {
+                    {rows.map((f, i) => {
                       const eightK = f.form.startsWith("8-K") ? (items.get(f.accession_no) ?? []) : [];
                       const periodic = /^10-[KQ]/.test(f.form);
                       const edgar = edgarLink(f);
-                      const heading = filingYear(f, fiscalYearEnd);
-                      const newYear = heading !== year;
-                      year = heading;
                       const note = parsedNote(f);
                       return (
                         <Fragment key={f.accession_no}>
-                        {newYear && (
+                        {headings[i] && (
                           <tr className="year-h">
-                            <th colSpan={6} scope="rowgroup">{heading}</th>
+                            <th colSpan={6} scope="rowgroup">{headings[i]}</th>
                           </tr>
                         )}
                         <tr className={diff === f.accession_no ? "sel" : undefined}>
@@ -132,7 +129,7 @@ export function Filings({ token, companyId, name, canRead, initialDiff, fiscalYe
                             <span className={`tag ${formTag(f.form)}`}>{f.form}</span>
                           </td>
                           <td className="muted">{f.period_of_report ? day(f.period_of_report, true) : "—"}</td>
-                          <td className="muted">
+                          <td className="muted items">
                             {eightK.length
                               ? eightK.join(" · ")
                               : f.sections

@@ -501,13 +501,27 @@ export function fiscalYear(periodEnd: string, mmdd: string): number {
   return new Date(end - 7 * 86_400_000).getUTCFullYear();
 }
 
-/** The heading a filing sorts under in the Filings tab: the fiscal year its period falls in, or
- * the year it was filed in when there's no period or no known fiscal year end. A proxy's or Form
- * 4's "period" isn't a reporting period, so those go by the date filed. */
-export function filingYear(f: { form: string; filed: string; period_of_report: string | null }, fye: string | null): string {
+/** The fiscal year a filing belongs to, or null without a known fiscal year end. A report goes by
+ * its period; a proxy's or Form 4's "period" isn't a reporting period, so those go by the date filed. */
+function filingFiscalYear(f: { form: string; filed: string; period_of_report: string | null }, fye: string | null): number | null {
+  if (!fye || !/^\d{4}$/.test(fye)) return null;
   const reports = /^(10-[KQ]|8-K)/.test(f.form);
-  const date = reports && f.period_of_report ? f.period_of_report : f.filed;
-  return fye && /^\d{4}$/.test(fye) ? `FY${fiscalYear(date, fye)}` : `Filed in ${f.filed.slice(0, 4)}`;
+  return fiscalYear(reports && f.period_of_report ? f.period_of_report : f.filed, fye);
+}
+
+/** The heading each row of a newest-first page starts, or null when it continues the one above:
+ * fiscal years, or the year filed without a fiscal year end. Filing dates and fiscal years don't
+ * run in step (a 10-K for FY2026 is filed in FY2027, beside that quarter's 8-Ks), so the heading
+ * only ever moves back in time: the page reads FY2027, FY2026, never FY2027 again. */
+export function filingHeadings(rows: { form: string; filed: string; period_of_report: string | null }[], fye: string | null): (string | null)[] {
+  let current: number | null = null;
+  return rows.map((f) => {
+    const year = filingFiscalYear(f, fye);
+    const y = year ?? Number(f.filed.slice(0, 4));
+    if (current !== null && y >= current) return null;
+    current = y;
+    return year === null ? `Filed in ${y}` : `FY${y}`;
+  });
 }
 
 /** Whether the parsed-text note applies: only reports are ever parsed, so saying "not parsed" on

@@ -736,6 +736,23 @@ table.t {
   white-space: nowrap;
 }
 
+/* the Filings tab: long 8-K item lists wrap, and the actions stay in view however narrow the page */
+.t.filings td.items {
+  min-width: 170px;
+  white-space: normal;
+}
+
+.t.filings td.actions {
+  position: sticky;
+  right: 0;
+  z-index: 1;
+  background: var(--panel);
+}
+
+.t.filings tbody tr:hover td.actions {
+  background: var(--panel-2);
+}
+
 .co {
   display: flex;
   align-items: baseline;
@@ -1801,6 +1818,15 @@ button.chip:disabled {
   color: var(--text);
 }
 
+.co-results .tag {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 45%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 .co-results b {
   min-width: 0;
   flex: 1;
@@ -2006,6 +2032,7 @@ button.chip:disabled {
 }
 
 .toc .search-hits {
+  flex: none;
   max-height: 42vh;
   overflow-y: auto;
   border-bottom: 1px solid var(--line);
@@ -2089,6 +2116,15 @@ mark {
 
 .section-h h2 {
   margin: 0;
+}
+
+/* next and previous match stay in reach while the text scrolls under them */
+.section-text .section-h {
+  position: sticky;
+  top: var(--topbar-h);
+  z-index: 2;
+  padding: 6px 0;
+  background: var(--panel);
 }
 
 .section-nav {
