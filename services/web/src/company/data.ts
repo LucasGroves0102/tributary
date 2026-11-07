@@ -7,6 +7,7 @@ import { calendarLabel } from "../compare/state";
 import { FILER_LABELS, fyeMonth, type FilerCategory } from "../companies/screen";
 import { BANK_NA, bankTitle, change, day, money, notForBanks, pct } from "../format";
 import { num } from "../home/data";
+import { EIGHT_K_ITEMS } from "../reader/sections";
 import type { FinancialRow, Recap, RecapValue, ScreenerRow, SegmentRow, ValueSource } from "../types";
 
 export type Fmt = "usd" | "pct" | "growth" | "x" | "eps" | "shares";
@@ -425,33 +426,6 @@ export function segmentTables(rows: SegmentRow[]): SegmentTable[] {
 }
 
 // --- filings -------------------------------------------------------------------------------------
-
-/** 8-K items (Form 8-K General Instructions B), short labels. */
-export const EIGHT_K_ITEMS: Record<string, string> = {
-  "1.01": "Material agreement",
-  "1.02": "Agreement terminated",
-  "1.03": "Bankruptcy",
-  "1.05": "Cybersecurity incident",
-  "2.01": "Acquisition or disposition",
-  "2.02": "Results of operations",
-  "2.03": "New debt obligation",
-  "2.04": "Debt acceleration",
-  "2.05": "Exit or restructuring costs",
-  "2.06": "Impairment",
-  "3.01": "Delisting notice",
-  "3.02": "Unregistered equity sale",
-  "3.03": "Change to holders' rights",
-  "4.01": "Auditor change",
-  "4.02": "Non-reliance on prior financials",
-  "5.01": "Change in control",
-  "5.02": "Officer or director change",
-  "5.03": "Bylaws or fiscal year change",
-  "5.05": "Code of ethics",
-  "5.07": "Shareholder vote",
-  "7.01": "Regulation FD disclosure",
-  "8.01": "Other events",
-  "9.01": "Financial statements and exhibits",
-};
 
 /** An 8-K's items from its section keys ("2.02", "EX-99.1"), labelled; 9.01 and exhibits
  * are left out (every 8-K has them). */

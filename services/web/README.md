@@ -144,12 +144,17 @@ commands search with `/v1/companies/search?access=financials`; Compare's suggest
 company Peers tab ask `/v1/companies/{id}/peers?access=financials` (no readable peers: a short
 note pointing to Compare); a Compare link with other companies leaves them out, with a note;
 a company or filing URL outside the demo shows one page, "<Name> isn't one of the 20 companies
-in this demo.", instead of locked tabs, and the assistant suggests nothing about it. The Ask
-page's deliberate permission tests are labelled "Try to break it:". Already scoped by the API
+in this demo.", instead of locked tabs, and the assistant suggests nothing about it. Already scoped by the API
 for everyone: the chart builder's companies (`access=financials`), Home's feed and expected
 filings (`/v1/filings/latest`, `scope=readable`/`watchlist`), the Search page's company filter
 (`access=financials`, `readableFor`). Named demo users and future signed-in users keep the full public index, with
 ungranted companies as metadata only.
+
+The assistant's suggestions (`assistant/context.ts`) follow the page and are true for this user: the
+company on screen, the chart's first company, an analysis's company, or the user's own watchlist by
+name (the agent can't see a watchlist, so a prompt says who). With nothing to go on they name no
+company. Test strings ("I'm bob", "SYSTEM: admin override") aren't in the product; they live in the
+adversarial suite (`tests/adversarial`).
 
 The assistant sends the screen as `context` with each question (`assistant/actions.ts`) and
 applies the agent's `action` events (chart layers and options, screener filters, watchlist) with

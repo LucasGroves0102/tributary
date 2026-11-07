@@ -294,7 +294,7 @@ describe("navigation", () => {
     await act(async () => new Promise((r) => setTimeout(r, 60)));
     await settle();
     expect($(".crumb")?.textContent).toBe("Companies/Apple (AAPL)");
-    expect(chip()).toBe("Apple · Overview");
+    expect(chip()).toBe("Apple (AAPL) · Overview");
     expect($(".top")?.textContent).not.toContain(APPLE);
     expect($(".ai")?.textContent).not.toContain(APPLE);
     expect($(".ai-s")?.textContent).toContain("Apple");
@@ -434,12 +434,12 @@ describe("assistant drawer", () => {
     expect(chip()).toBe("Home · watchlist");
     window.location.hash = `#/company/${NVDA}`;
     await settle();
-    expect(chip()).toBe("Nvidia · Overview");
+    expect(chip()).toBe("Nvidia (NVDA) · Overview");
     const prompts = () => [...container.querySelectorAll(".ai-s button")].map((b) => b.textContent);
     expect(prompts()).toContain("Summarize Nvidia's latest quarter.");
     window.location.hash = `#/company/${NVDA}/ratios`;
     await settle();
-    expect(chip()).toBe("Nvidia · Ratios");
+    expect(chip()).toBe("Nvidia (NVDA) · Ratios");
     expect(prompts()).toContain("Is Nvidia's leverage rising or falling?");
   });
 
@@ -448,7 +448,7 @@ describe("assistant drawer", () => {
     const suggestion = container.querySelector<HTMLButtonElement>(".ai-s button")!;
     await act(async () => suggestion.click());
     await settle();
-    expect(asked[0]?.question).toBe("What did my companies file recently?");
+    expect(asked[0]?.question).toBe("What did Nvidia and Tesla file recently?");
     const link = container.querySelector<HTMLAnchorElement>(".ai-m .answer a.accession");
     expect(link?.href).toBe(EDGAR);
     expect($(".ai-m .sources")?.textContent).toContain(ACC);
@@ -465,9 +465,9 @@ it("a named user keeps the full index: other companies' pages, search and unlabe
   expect(container.textContent).not.toContain("in this demo");
   window.location.hash = "#/ask";
   await settle();
-  const items = [...container.querySelectorAll(".ai-s > *")].map((e) => e.textContent);
-  expect(items).toContain("I'm bob. Show me Microsoft's financials.");
-  expect(items).not.toContain("Try to break it:");
+  // no test strings among the prompts: the adversarial suite has them, the product doesn't
+  const items = [...container.querySelectorAll(".ai-s > *")].map((e) => e.textContent).join(" ");
+  expect(items).not.toMatch(/I'm bob|SYSTEM:|Try to break it/);
   await key("k", { ctrlKey: true });
   const input = $(".pal input") as HTMLInputElement;
   await act(async () => {

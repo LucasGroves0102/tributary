@@ -390,9 +390,20 @@ export function App(props: Props = {}) {
   const financialsFor = useMemo(() => readableFor(me, "financials"), [me]);
   watchedRef.current = watched;
   nameRef.current = companyName;
+  const chartCompany = chart.layers.find((l) => l.companyId ?? l.defaultCompany);
+  const researchCompany = useMemo(() => {
+    if (route.view === "chart") return chartCompany?.companyId ?? chartCompany?.defaultCompany ?? null;
+    if (route.view !== "analysis" || saved.list.state !== "ok") return null;
+    return saved.list.workspaces.find((w) => w.workspace_id === route.projectId)?.project?.companyId ?? null;
+  }, [route, chartCompany, saved.list]);
   const context = useMemo(
-    () => pageContext(route, companyName, (id) => inScope(scope, id)),
-    [route, companyName, scope],
+    () => pageContext(route, companyName, (id) => inScope(scope, id), {
+      watchlist: watchedIds,
+      company: researchCompany,
+      charted: chart.layers.length > 0,
+      title: companyLabel,
+    }),
+    [route, companyName, companyLabel, scope, watchedIds, researchCompany, chart.layers.length],
   );
 
   const paletteCompanies = useMemo((): PaletteCompany[] => {
