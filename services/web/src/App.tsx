@@ -154,6 +154,7 @@ export function App(props: Props = {}) {
   }, [views.error]);
   const [chart, setChart] = useChart(user);
   const [replacedChart, setReplacedChart] = useState<ChartState | null>(null);
+  useEffect(() => setReplacedChart(null), [user]); // never another user's draft
   // read when the assistant sends a question or applies an action, so always the latest
   const chartRef = useRef(chart);
   chartRef.current = chart;

@@ -53,13 +53,15 @@ export function CompanySearch({
   autoFocus?: boolean;
   disabled?: boolean;
   suggestions?: PickedCompany[];
-  /** Escape on an empty box, or leaving it (CompanyPicker closes) */
+  /** Escape on an empty box, or leaving the box (CompanyPicker closes) */
   onCancel?: () => void;
 }) {
   const [q, setQ] = useState("");
   const [asked, setAsked] = useState<Asked | null>(null);
   const [active, setActive] = useState(0);
   const [focused, setFocused] = useState(autoFocus);
+  // clicking away closes the list, keeping what was typed; coming back opens it again
+  const [left, setLeft] = useState(false);
   const list = useId();
   const scoped = useScope() !== null || readable !== undefined;
   const text = q.trim();
@@ -82,7 +84,9 @@ export function CompanySearch({
   }, [token, text, scoped]);
 
   // nothing typed: the suggestions; typing: the latest answer (the previous one until it comes)
-  const rows: { id: string; name: string; ticker: string | null; note: string | null }[] = text
+  const rows: { id: string; name: string; ticker: string | null; note: string | null }[] = left
+    ? []
+    : text
     ? (asked?.results ?? [])
         .filter((r) => !exclude.includes(r.company_id) && (!readable || readable.has(r.company_id)))
         .slice(0, SHOW)
@@ -104,7 +108,7 @@ export function CompanySearch({
       : [];
   const on = Math.min(active, Math.max(rows.length - 1, 0));
   const searching = !!text && asked?.q !== text;
-  const nothing = !!text && !searching && rows.length === 0;
+  const nothing = !!text && !left && !searching && rows.length === 0;
 
   const pick = (r: (typeof rows)[number]) => {
     onPick(r.id, r.name, r.ticker);
@@ -132,11 +136,16 @@ export function CompanySearch({
         onChange={(e) => {
           setQ(e.target.value);
           setActive(0);
+          setLeft(false);
         }}
-        onFocus={() => setFocused(true)}
+        onFocus={() => {
+          setFocused(true);
+          setLeft(false);
+        }}
         onBlur={() => {
           setFocused(false);
-          if (!text) onCancel?.();
+          setLeft(true);
+          onCancel?.();
         }}
         onKeyDown={(e) => {
           if (e.key === "ArrowDown" && rows.length) setActive((on + 1) % rows.length);
