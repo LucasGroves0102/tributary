@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 
 import { financialsView, segments as fetchSegments } from "../api";
 import { download } from "../download";
@@ -6,6 +6,7 @@ import { BANK_NA, bankTitle, change, pct } from "../format";
 import {
   financialsCsv,
   metricTable,
+  RANGE_QUARTERS,
   RATIOS,
   segmentTables,
   statementRequest,
@@ -14,8 +15,11 @@ import {
   type MetricTable,
   type Period,
   type Statement,
+  type StatementRange,
   type TableCell,
 } from "./data";
+import { go } from "../route";
+import type { StatementView } from "./statementView";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { useLoad, type Load } from "./useLoad";
 
@@ -28,6 +32,13 @@ const PERIODS: [Period, string][] = [
 const BASES: [Basis, string][] = [
   ["fiscal", "Fiscal"],
   ["calendar", "Calendar"],
+];
+
+const RANGES: [StatementRange, string][] = [
+  ["8q", "8 quarters"],
+  ["5y", "5y"],
+  ["10y", "10y"],
+  ["max", "Max"],
 ];
 
 function Seg<T extends string>({ value, options, set, label }: { value: T; options: [T, string][]; set: (v: T) => void; label: string }) {
@@ -58,10 +69,16 @@ function Cell({ cell, bank, label = "" }: { cell: TableCell | null; bank?: boole
   );
 }
 
-/** A metric × period table; every cell's hover names its filing and links to it. */
+/** A metric × period table; every cell's hover names its filing and links to it. Columns run
+ * oldest to newest, as statements read, so a wide one opens at its newest end. */
 export function MetricTableView({ table, first }: { table: MetricTable; first: string }) {
+  const wrap = useRef<HTMLDivElement>(null);
+  const columns = table.columns.length;
+  useEffect(() => {
+    if (wrap.current) wrap.current.scrollLeft = wrap.current.scrollWidth;
+  }, [columns]);
   return (
-    <div className="tw">
+    <div className="tw" ref={wrap}>
       <table className="t">
         <thead>
           <tr>
@@ -105,27 +122,33 @@ interface TableProps {
   industry?: string | null;
 }
 
-export function Statements({ token, companyId, name, ticker, industry = null }: TableProps) {
-  const [kind, setKind] = useState<Statement>("is");
-  const [period, setPeriod] = useState<Period>("q");
-  const [basis, setBasis] = useState<Basis>("fiscal");
-  const req = statementRequest(period);
+/** Statement, period, basis and range live in the address (route.ts), so a view can be linked,
+ * bookmarked and undone with Back. Range applies to Quarterly and TTM; Annual is ten years. */
+export function Statements({ token, companyId, name, ticker, industry = null, view = {} }: TableProps & { view?: StatementView }) {
+  const kind: Statement = view.kind ?? "is";
+  const period: Period = view.period ?? "q";
+  const basis: Basis = view.basis ?? "fiscal";
+  const range: StatementRange = view.range ?? "8q";
+  const set = (patch: StatementView) =>
+    go({ view: "company", companyId, tab: "statements", statements: { ...view, ...patch } });
+  const req = statementRequest(period, range);
   const metrics = STATEMENTS[kind].rows;
-  const load = useLoad(`${companyId}|${kind}|${period}|${basis}`, () =>
+  const load = useLoad(`${companyId}|${kind}|${period}|${basis}|${req.quarters}`, () =>
     financialsView(token, companyId, req.quarters, metrics.map(([m]) => m), req.view, basis),
   );
-  const table = load?.state === "ok" ? metricTable(load.data.rows, metrics, period, basis, industry) : null;
+  const table = load?.state === "ok" ? metricTable(load.data.rows, metrics, period, basis, industry, RANGE_QUARTERS[range]) : null;
   const exportCsv = () =>
     load?.state === "ok" && table &&
-    download(`${ticker.toLowerCase()}-${kind}-${period}${basis === "calendar" ? "-calendar" : ""}.csv`, new Blob([financialsCsv(load.data.rows, table, req.view)], { type: "text/csv" }));
+    download(`${ticker.toLowerCase()}-${kind}-${period}${period !== "a" && range !== "8q" ? `-${range}` : ""}${basis === "calendar" ? "-calendar" : ""}.csv`, new Blob([financialsCsv(load.data.rows, table, req.view)], { type: "text/csv" }));
 
   return (
     <section className="card">
       <div className="card-h wrap">
-        <Seg label="Statement" value={kind} set={setKind}
+        <Seg label="Statement" value={kind} set={(k) => set({ kind: k })}
           options={(Object.keys(STATEMENTS) as Statement[]).map((k) => [k, STATEMENTS[k].label])} />
-        <Seg label="Period" value={period} set={setPeriod} options={PERIODS} />
-        <Seg label="Basis" value={basis} set={setBasis} options={BASES} />
+        <Seg label="Period" value={period} set={(p) => set({ period: p })} options={PERIODS} />
+        {period !== "a" && <Seg label="Range" value={range} set={(r) => set({ range: r })} options={RANGES} />}
+        <Seg label="Basis" value={basis} set={(b) => set({ basis: b })} options={BASES} />
         <span className="sub">{basis === "calendar" ? "calendar quarters" : "fiscal periods"} · USD · hover a value for its filing</span>
         <span className="grow" />
         <button className="btn sm" onClick={exportCsv} disabled={!table?.rows.length}>Export CSV</button>

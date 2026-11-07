@@ -77,6 +77,9 @@ PERMISSION_CHECKS = Counter("tributary_permission_checks_total",
                             "(allowed, denied, error)", ["tier", "result"])
 
 log = logging.getLogger("query_api")
+# /v1/companies/{id}/financials: the web app's "Max" statements. XBRL facts start around 2009, so
+# this is every quarter there is; one company's rows through an index, not a scan.
+MAX_FINANCIAL_QUARTERS = 120
 
 
 class DemoLogin(BaseModel):
@@ -346,7 +349,7 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
     def financials(
         user_id: User, company_id: CompanyId,
         metrics: Annotated[list[str] | None, Query(description="default: all")] = None,
-        quarters: Annotated[int, Query(ge=1, le=40)] = 4,
+        quarters: Annotated[int, Query(ge=1, le=MAX_FINANCIAL_QUARTERS)] = 4,
         view: Annotated[Literal["quarter", "ttm"], Query(
             description="quarter, or trailing twelve months ending each quarter")] = "quarter",
         basis: Annotated[Literal["fiscal", "calendar"], Query(

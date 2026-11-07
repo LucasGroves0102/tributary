@@ -607,6 +607,7 @@ export function App(props: Props = {}) {
                 token={token}
                 companyId={route.companyId}
                 tab={route.tab ?? "overview"}
+                statements={route.statements}
                 watched={watched ? watched.has(route.companyId) : null}
                 onWatch={(on) =>
                   (on ? workspace.watch(route.companyId) : workspace.unwatch(route.companyId)).catch(() =>

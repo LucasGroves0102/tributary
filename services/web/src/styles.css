@@ -724,6 +724,18 @@ table.t {
   cursor: pointer;
 }
 
+/* the Filings tab's fiscal-year headings */
+.t tr.year-h th {
+  background: var(--panel-2);
+  color: var(--text-2);
+  font-weight: 600;
+  text-align: left;
+}
+
+.t td.actions {
+  white-space: nowrap;
+}
+
 .co {
   display: flex;
   align-items: baseline;
@@ -1761,6 +1773,17 @@ button.chip:disabled {
 .co-results button:focus,
 .co-results button.on {
   background: var(--panel-2);
+}
+
+.undo-note {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  align-items: center;
+  margin: 0;
+  padding: 8px 14px;
+  background: var(--accent-soft);
+  border-radius: var(--radius);
 }
 
 .th-sort {

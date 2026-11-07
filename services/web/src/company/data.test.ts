@@ -4,6 +4,9 @@ import { ACC, fin, NVDA, nvdaRow } from "../fixtures";
 import type { Recap, RecapValue, SegmentRow } from "../types";
 import {
   eightKItems,
+  filingYear,
+  fiscalYear,
+  parsedNote,
   financialsCsv,
   formMatches,
   header,
@@ -166,5 +169,31 @@ describe("banks on the tearsheet", () => {
     expect(t.rows[0]).toMatchObject({ bank: true, cells: [null] });
     // not a bank: empty rows are dropped as before
     expect(metricTable(rows, RATIOS, "ttm").rows.map((r) => r.metric)).toEqual(["roe"]);
+  });
+});
+
+describe("the Filings tab's headings and notes", () => {
+  it("names a filing's fiscal year as gold does, 52/53-week ends included", () => {
+    expect(fiscalYear("2026-07-26", "0126")).toBe(2027); // Nvidia's FY2027 Q2
+    expect(fiscalYear("2026-01-25", "0126")).toBe(2026);
+    expect(fiscalYear("2024-09-01", "0831")).toBe(2024); // Costco's year, a day past the nominal end
+    expect(fiscalYear("2024-11-24", "0831")).toBe(2025);
+    expect(fiscalYear("2026-12-31", "1231")).toBe(2026);
+    expect(fiscalYear("2027-01-02", "1231")).toBe(2026); // a 53-week December year
+  });
+
+  it("goes by the filing date without a reporting period or a fiscal year end", () => {
+    const f = (form: string, filed: string, period_of_report: string | null) => ({ form, filed, period_of_report });
+    expect(filingYear(f("10-Q", "2026-08-26", "2026-07-26"), "0126")).toBe("FY2027");
+    expect(filingYear(f("4", "2026-08-26", "2024-01-01"), "0126")).toBe("FY2027");
+    expect(filingYear(f("10-Q", "2026-08-26", "2026-07-26"), null)).toBe("Filed in 2026");
+  });
+
+  it("says 'not parsed' only where a parsed filing was to be expected", () => {
+    expect(parsedNote({ form: "4", sections: 0 })).toBeNull();
+    expect(parsedNote({ form: "144", sections: null })).toBeNull();
+    expect(parsedNote({ form: "10-Q", sections: 0 })).toBe("not parsed yet");
+    expect(parsedNote({ form: "8-K", sections: null })).toBe("index only");
+    expect(parsedNote({ form: "10-K", sections: 12 })).toBe("12 sections");
   });
 });

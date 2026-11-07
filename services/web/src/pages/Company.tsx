@@ -8,6 +8,7 @@ import { Price } from "../company/Price";
 import { useMarketData } from "../market/useMarketData";
 import { Revenue } from "../company/Revenue";
 import type { ChartState } from "../chart/model";
+import type { StatementView } from "../company/statementView";
 import { Ratios, Segments, Statements } from "../company/Tables";
 import { useLoad } from "../company/useLoad";
 import { ErrorPanel, Skeleton } from "../components/States";
@@ -20,6 +21,8 @@ interface Props {
   token: string;
   companyId: string;
   tab: CompanyTab;
+  /** the Statements tab's choices from the address */
+  statements?: StatementView;
   /** null while the watchlist loads or is unavailable */
   watched: boolean | null;
   onWatch: (watch: boolean) => Promise<void>;
@@ -34,7 +37,7 @@ interface Props {
 
 /** The tearsheet: who the company is (public metadata), then its data by tab. Identity, the
  * filing index and expected dates are public; values need financials, text needs filings. */
-export function Company({ token, companyId, tab, watched, onWatch, onChart, onChartMany, onOpenChart, onAsk, saved }: Props) {
+export function Company({ token, companyId, tab, statements, watched, onWatch, onChart, onChartMany, onOpenChart, onAsk, saved }: Props) {
   const meta = useLoad(companyId, () =>
     screener(token, { company_id: [companyId], columns: HEADER_COLUMNS, sort: "name", limit: 1 }).then(
       (r) => r.rows.find((x) => x.company_id === companyId) ?? null,
@@ -131,13 +134,13 @@ export function Company({ token, companyId, tab, watched, onWatch, onChart, onCh
       </section>
 
       {tab === "overview" && <Overview token={token} companyId={companyId} name={h.name} row={row} access={row.access} />}
-      {tab === "statements" && <Statements token={token} companyId={companyId} name={h.name} ticker={ticker} industry={h.industry} />}
+      {tab === "statements" && <Statements token={token} companyId={companyId} name={h.name} ticker={ticker} industry={h.industry} view={statements} />}
       {tab === "revenue" && (
         <Revenue token={token} companyId={companyId} name={h.name} ticker={ticker} saved={saved ?? null} onOpenChart={onOpenChart} />
       )}
       {tab === "segments" && <Segments token={token} companyId={companyId} name={h.name} />}
       {tab === "ratios" && <Ratios token={token} companyId={companyId} name={h.name} ticker={ticker} industry={h.industry} />}
-      {tab === "filings" && <Filings token={token} companyId={companyId} name={h.name} canRead={row.access.includes("filings")} />}
+      {tab === "filings" && <Filings token={token} companyId={companyId} name={h.name} canRead={row.access.includes("filings")} fiscalYearEnd={row.fiscal_year_end} />}
       {tab === "notes" && <DataNotes token={token} companyId={companyId} name={h.name} canReadFilings={row.access.includes("filings")} />}
       {tab === "peers" && <Peers token={token} companyId={companyId} name={h.name} onChart={onChartMany} />}
       {tab === "price" && <Price token={token} companyId={companyId} name={h.name} />}

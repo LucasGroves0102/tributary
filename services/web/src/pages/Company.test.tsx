@@ -3,6 +3,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { excerpt } from "../company/Overview";
+import type { StatementView } from "../company/statementView";
 import { download } from "../download";
 import { ACC, entry, fin, NVDA, nvdaRow, TESLA, TSLA } from "../fixtures";
 import type { CompanyTab } from "../route";
@@ -160,14 +161,14 @@ afterEach(() => {
   window.location.hash = "";
 });
 
-async function render(tab: CompanyTab = "overview", companyId = NVDA, scope: Scope | null = null) {
+async function render(tab: CompanyTab = "overview", companyId = NVDA, scope: Scope | null = null, statements?: StatementView) {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
   await act(async () =>
     root.render(
       <ScopeContext.Provider value={scope}>
-        <Company token="t" companyId={companyId} tab={tab} watched={false} onWatch={onWatch}
+        <Company token="t" companyId={companyId} tab={tab} statements={statements} watched={false} onWatch={onWatch}
           onChart={onChart} onChartMany={onChartMany} onAsk={onAsk} />
       </ScopeContext.Provider>,
     ),
@@ -277,6 +278,27 @@ it("an ungranted company shows its metadata and says what its plan doesn't cover
   expect([...container.querySelectorAll("button")].some((b) => b.textContent === "Chart")).toBe(false);
 });
 
+it("statements: what's chosen comes from the address and goes back to it", async () => {
+  await render("statements", NVDA, null, { kind: "bs", period: "ttm", basis: "calendar", range: "5y" });
+  const q = paths().find((u) => u.pathname.endsWith("/financials"))!;
+  expect(q.searchParams.get("view")).toBe("ttm");
+  expect(q.searchParams.get("quarters")).toBe("20");
+  expect(q.searchParams.get("basis")).toBe("calendar");
+  expect(q.searchParams.getAll("metrics")).toContain("total_assets");
+  expect($('[aria-label="Range"] [aria-pressed="true"]')?.textContent).toBe("5y");
+  await click(button("Max"));
+  expect(window.location.hash).toBe(`#/company/${NVDA}/statements?kind=bs&period=ttm&basis=calendar&range=max`);
+  await click(button("Cash flow"));
+  expect(window.location.hash).toBe(`#/company/${NVDA}/statements?kind=cf&period=ttm&basis=calendar&range=5y`);
+});
+
+it("statements: range is for Quarterly and TTM; Annual has its ten years", async () => {
+  await render("statements", NVDA, null, { period: "a" });
+  expect($('[aria-label="Range"]')).toBeNull();
+  const q = paths().find((u) => u.pathname.endsWith("/financials"))!;
+  expect(q.searchParams.get("quarters")).toBe("40");
+});
+
 it("statements: quarterly, annual and TTM, each value cited, CSV export", async () => {
   await render("statements");
   const q = paths().find((u) => u.pathname.endsWith("/financials"))!;
@@ -286,7 +308,9 @@ it("statements: quarterly, annual and TTM, each value cited, CSV export", async 
   expect(cell.getAttribute("title")).toContain(`Source: 10-Q filed Aug 26, 2026, ${ACC}`);
   expect(cell.querySelector("a")?.getAttribute("href")).toBe("https://www.sec.gov/x/");
   await click(button("Annual"));
-  for (let i = 0; i < 2; i++) await act(async () => {});
+  expect(window.location.hash).toBe(`#/company/${NVDA}/statements?period=a`);
+  act(() => root.unmount());
+  await render("statements", NVDA, null, { period: "a" });
   const a = paths().filter((u) => u.pathname.endsWith("/financials")).at(-1)!;
   expect([a.searchParams.get("view"), a.searchParams.get("quarters")]).toEqual(["ttm", "40"]);
   expect([...container.querySelectorAll("thead th")].map((t) => t.firstChild?.textContent)).toEqual(["Income statement", "FY2026"]);
@@ -295,11 +319,13 @@ it("statements: quarterly, annual and TTM, each value cited, CSV export", async 
   // calendar basis: asked of the API, said in the header, named in the export
   expect(paths().filter((u) => u.pathname.endsWith("/financials")).every((u) => !u.searchParams.has("basis"))).toBe(true);
   await click(button("Calendar"));
-  for (let i = 0; i < 2; i++) await act(async () => {});
+  expect(window.location.hash).toBe(`#/company/${NVDA}/statements?period=a&basis=calendar`);
+  act(() => root.unmount());
+  await render("statements", NVDA, null, { period: "a", basis: "calendar" });
   expect(paths().filter((u) => u.pathname.endsWith("/financials")).at(-1)!.searchParams.get("basis")).toBe("calendar");
   expect(container.textContent).toContain("calendar quarters");
-  await click(button("Quarterly"));
-  for (let i = 0; i < 2; i++) await act(async () => {});
+  act(() => root.unmount());
+  await render("statements", NVDA, null, { basis: "calendar" });
   await click(button("Export CSV"));
   expect(vi.mocked(download).mock.calls.at(-1)![0]).toBe("nvda-is-q-calendar.csv");
 });
@@ -317,13 +343,20 @@ it("ratios read TTM values; segments say honestly when none are loaded", async (
 
 it("filings: form filters, 8-K items, the reader, and what changed", async () => {
   await render("filings");
-  const rows = () => [...container.querySelectorAll(".grid2 tbody tr")];
+  const rows = () => [...container.querySelectorAll("table.t tbody tr:not(.year-h)")];
+  // reports first: the insider forms and the rest are one click away
+  expect(paths().find((u) => u.pathname.endsWith("/filing-index"))!.searchParams.getAll("form")).toContain("10-K");
+  expect(rows()).toHaveLength(3);
+  await click(button("All"));
+  expect(paths().filter((u) => u.pathname.endsWith("/filing-index")).at(-1)!.searchParams.getAll("form")).toEqual([]);
   expect(rows()).toHaveLength(4);
+  // headed by fiscal year, the same years as the statements (FYE Jan: Aug 2026 is FY2027)
+  expect([...container.querySelectorAll(".year-h th")].map((t) => t.textContent)).toEqual(["FY2027", "FY2026"]);
   expect(rows()[0]!.textContent).toContain("2.02 Results of operations");
   expect(rows()[0]!.textContent).not.toContain("9.01");
   expect(rows()[0]!.querySelector("a")?.getAttribute("href")).toBe(`#/filing/${NVDA}/${EIGHT_K}`);
-  // a Form 4 Tributary hasn't parsed links to EDGAR instead
-  expect(rows()[2]!.textContent).toContain("not parsed");
+  // a Form 4 is never parsed: no note saying so on every row, and it links to EDGAR
+  expect(rows()[2]!.textContent).not.toContain("not parsed");
   expect(rows()[2]!.querySelector("a")?.getAttribute("href")).toMatch(/^https:\/\/www\.sec\.gov\//);
   // the form filter and paging run on the server
   await click(button("Older"));
@@ -350,7 +383,8 @@ it("filings: a free plan sees the whole index with EDGAR links, no reader", asyn
   rowFor = () => nvdaRow({ access: ["financials"] });
   indexReadable = false;
   await render("filings");
-  const rows = [...container.querySelectorAll(".grid2 tbody tr")];
+  await click(button("All"));
+  const rows = [...container.querySelectorAll("table.t tbody tr:not(.year-h)")];
   expect(rows).toHaveLength(4);
   expect(rows.map((r) => r.querySelector(".tag")?.textContent)).toEqual(["8-K", "10-Q", "4", "10-K"]);
   expect(container.querySelector('a[href^="#/filing/"]')).toBeNull();

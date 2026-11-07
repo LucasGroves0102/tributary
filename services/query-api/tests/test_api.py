@@ -247,6 +247,13 @@ def test_search_can_list_only_readable_companies(client, token):
                       headers=token("alice")).status_code == 422
 
 
+def test_financials_can_ask_for_every_quarter_there_is_but_not_without_a_cap(client, token):
+    ok = client.get(f"/v1/companies/{NVDA}/financials?quarters=120", headers=token("alice"))
+    assert ok.status_code == 200, ok.text
+    too_many = client.get(f"/v1/companies/{NVDA}/financials?quarters=121", headers=token("alice"))
+    assert too_many.status_code == 422
+
+
 def test_a_section_can_be_asked_for_whole_but_not_without_a_cap(client, token):
     ok = client.get(f"/v1/companies/{NVDA}/sections/1A?max_chars=1000000", headers=token("bob"))
     assert ok.status_code != 422

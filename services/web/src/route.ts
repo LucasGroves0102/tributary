@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { parseScreen, screenQuery, type ScreenFilters } from "./companies/screen";
+import { parseStatementView, statementQuery, type StatementView } from "./company/statementView";
 import { compareQuery, parseCompare, type CompareState } from "./compare/state";
 import { parseSearch, searchQuery, type SearchState } from "./search/state";
 import type { ProjectStep } from "./types";
@@ -30,7 +31,13 @@ const TABS = new Set<string>(COMPANY_TABS.map(([t]) => t));
 export type Route =
   | { view: "home" }
   | { view: "companies"; screen?: ScreenFilters }
-  | { view: "company"; companyId: string; tab?: CompanyTab }
+  | {
+      view: "company";
+      companyId: string;
+      tab?: CompanyTab;
+      /** the Statements tab's choices, in the address so they can be linked */
+      statements?: StatementView;
+    }
   | {
       view: "filing";
       companyId: string;
@@ -115,9 +122,14 @@ export function parse(hash: string): Route {
     return view === "workspace" ? { view, workspaceId: a! } : { view, itemId: a! };
   }
   if (view === "company" && CIK.test(a ?? "")) {
-    return b && b !== "overview" && TABS.has(b)
-      ? { view: "company", companyId: a!, tab: b as CompanyTab }
-      : { view: "company", companyId: a! };
+    if (!b || b === "overview" || !TABS.has(b)) return { view: "company", companyId: a! };
+    const statements = b === "statements" ? parseStatementView(query) : {};
+    return {
+      view: "company",
+      companyId: a!,
+      tab: b as CompanyTab,
+      ...(Object.keys(statements).length ? { statements } : {}),
+    };
   }
   if (view === "filing" && CIK.test(a ?? "") && ACCESSION.test(b ?? "")) {
     const params = new URLSearchParams(query);
@@ -160,8 +172,10 @@ export function href(route: Route): string {
     case "thesis":
     case "model":
       return `#/${route.view}/${encodeURIComponent(route.itemId)}`;
-    case "company":
-      return `#/company/${route.companyId}` + (route.tab && route.tab !== "overview" ? `/${route.tab}` : "");
+    case "company": {
+      const q = route.tab === "statements" && route.statements ? statementQuery(route.statements) : "";
+      return `#/company/${route.companyId}` + (route.tab && route.tab !== "overview" ? `/${route.tab}` : "") + (q ? `?${q}` : "");
+    }
     case "filing": {
       const params = new URLSearchParams();
       if (route.at !== undefined) params.set("at", String(route.at));

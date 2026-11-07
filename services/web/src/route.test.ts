@@ -104,3 +104,20 @@ it("round-trips analysis routes and refuses odd ids and steps", () => {
   expect(parse("#/analysis/..%2F..%2Fadmin")).toEqual({ view: "analysis" });
   expect(href({ view: "analysis", projectId: id, step: "numbers", itemId: item })).toBe(`#/analysis/${id}/numbers`);
 });
+
+it("round-trips the Statements tab's choices, dropping defaults and anything unknown", () => {
+  const id = "0001045810";
+  const views: Route[] = [
+    { view: "company", companyId: id, tab: "statements" },
+    { view: "company", companyId: id, tab: "statements", statements: { kind: "bs" } },
+    { view: "company", companyId: id, tab: "statements", statements: { kind: "cf", period: "ttm", basis: "calendar", range: "max" } },
+    { view: "company", companyId: id, tab: "statements", statements: { period: "a" } },
+  ];
+  for (const r of views) expect(parse(href(r))).toEqual(r);
+  expect(href(views[2]!)).toBe(`#/company/${id}/statements?kind=cf&period=ttm&basis=calendar&range=max`);
+  expect(parse(`#/company/${id}/statements?kind=is&period=q&basis=fiscal&range=8q`)).toEqual({ view: "company", companyId: id, tab: "statements" });
+  expect(parse(`#/company/${id}/statements?kind=drop&period=weekly&range=99y`)).toEqual({ view: "company", companyId: id, tab: "statements" });
+  // only that tab reads them
+  expect(parse(`#/company/${id}/filings?kind=bs`)).toEqual({ view: "company", companyId: id, tab: "filings" });
+  expect(href({ view: "company", companyId: id, tab: "filings", statements: { kind: "bs" } })).toBe(`#/company/${id}/filings`);
+});

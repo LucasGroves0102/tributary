@@ -120,6 +120,9 @@ export type Period = "q" | "a" | "ttm";
 /** Fiscal: every fiscal quarter, labelled FY; calendar: one per calendar quarter, labelled CY. */
 export type Basis = "fiscal" | "calendar";
 export type Statement = "is" | "bs" | "cf";
+/** How far back Quarterly and TTM statements go (StatementView in route.ts's address). */
+export type StatementRange = "8q" | "5y" | "10y" | "max";
+export const RANGE_QUARTERS: Record<StatementRange, number> = { "8q": 8, "5y": 20, "10y": 40, max: 120 };
 
 export const STATEMENTS: Record<Statement, { label: string; rows: [string, string, Fmt][] }> = {
   is: {
@@ -185,8 +188,8 @@ export const RATIOS: [string, string, Fmt][] = [
 
 /** What to request for a period choice: quarterly values, TTM ending each quarter, or annual
  * (TTM at each fiscal Q4: the fiscal year; balances at its end). */
-export function statementRequest(period: Period): { view: "quarter" | "ttm"; quarters: number } {
-  return period === "q" ? { view: "quarter", quarters: 8 } : period === "ttm" ? { view: "ttm", quarters: 8 } : { view: "ttm", quarters: 40 };
+export function statementRequest(period: Period, range: StatementRange = "8q"): { view: "quarter" | "ttm"; quarters: number } {
+  return period === "a" ? { view: "ttm", quarters: 40 } : { view: period === "q" ? "quarter" : "ttm", quarters: RANGE_QUARTERS[range] };
 }
 
 export const ANNUAL_YEARS = 10;
@@ -222,11 +225,13 @@ export function metricTable(
   basis: Basis = "fiscal",
   /** the company's SIC description: a bank's empty operating margin / FCF / net debt reads n/a */
   industry: string | null = null,
+  /** how many quarterly or TTM columns to keep (annual always shows ANNUAL_YEARS) */
+  columnsWanted = RANGE_QUARTERS["8q"],
 ): MetricTable {
   const periodOf = (r: FinancialRow) => (basis === "calendar" ? r.calendar_period : r.fiscal_period) ?? null;
   const kept = period === "a" ? rows.filter((r) => periodOf(r)?.endsWith("Q4")) : rows;
   let ends = [...new Set(kept.map((r) => r.period_end))].sort();
-  ends = ends.slice(-(period === "a" ? ANNUAL_YEARS : 8));
+  ends = ends.slice(-(period === "a" ? ANNUAL_YEARS : columnsWanted));
   const label = (end: string) => {
     const fp = kept.map(periodOf).find((p, i) => p && kept[i]!.period_end === end) ?? null;
     if (period === "a") return fp ? fp.replace(/ Q4$/, "") : `${basis === "calendar" ? "CY" : "FY"} ending ${end.slice(0, 7)}`;
@@ -456,16 +461,18 @@ export function eightKItems(sectionKeys: string[]): string[] {
     .map((k) => `${k} ${EIGHT_K_ITEMS[k] ?? "Item"}`);
 }
 
-export type FormFilter = "all" | "10-K" | "10-Q" | "8-K" | "proxy" | "insider";
+export type FormFilter = "reports" | "all" | "10-K" | "10-Q" | "8-K" | "proxy" | "insider";
 
-/** The filing index's form chips: each is a list of exact SEC form types (sent to the API). */
+/** The filing index's form chips: each is a list of exact SEC form types (sent to the API).
+ * Reports first: 57 of a company's 1,233 filings can be 10-K/Qs among the insider forms. */
 export const FORM_FILTERS: [FormFilter, string, string[]][] = [
-  ["all", "All", []],
+  ["reports", "Reports", ["10-K", "10-K/A", "10-KT", "10-Q", "10-Q/A", "10-QT", "8-K", "8-K/A"]],
   ["10-K", "10-K", ["10-K", "10-K/A", "10-KT"]],
   ["10-Q", "10-Q", ["10-Q", "10-Q/A", "10-QT"]],
   ["8-K", "8-K", ["8-K", "8-K/A"]],
   ["proxy", "Proxy", ["DEF 14A", "DEFA14A", "DEFM14A", "PRE 14A"]],
   ["insider", "Insider", ["3", "4", "5", "3/A", "4/A", "5/A"]],
+  ["all", "All", []],
 ];
 
 export function formsOf(f: FormFilter): string[] {
@@ -479,4 +486,34 @@ export function formMatches(form: string, f: FormFilter): boolean {
 /** The tag class a form gets in tables: k (annual), q (quarterly) or none. */
 export function formTag(form: string): string {
   return form.startsWith("10-K") ? "k" : form.startsWith("10-Q") ? "q" : "";
+}
+
+/** gold.fiscal_year_end's rule (migration 014) and gold's label (the year of that date less 7
+ * days), so a filing's year here reads like the FY2027 Q2 on every other tab. */
+export function fiscalYear(periodEnd: string, mmdd: string): number {
+  const shifted = new Date(`${periodEnd}T00:00:00Z`);
+  shifted.setUTCDate(shifted.getUTCDate() - 10);
+  const month = Number(mmdd.slice(0, 2));
+  const dayOf = Number(mmdd.slice(2));
+  const nominal = (year: number) => Date.UTC(year, month - 1, 1) + (dayOf - 1) * 86_400_000;
+  const year = shifted.getUTCFullYear();
+  const end = nominal(year) >= shifted.getTime() ? nominal(year) : nominal(year + 1);
+  return new Date(end - 7 * 86_400_000).getUTCFullYear();
+}
+
+/** The heading a filing sorts under in the Filings tab: the fiscal year its period falls in, or
+ * the year it was filed in when there's no period or no known fiscal year end. A proxy's or Form
+ * 4's "period" isn't a reporting period, so those go by the date filed. */
+export function filingYear(f: { form: string; filed: string; period_of_report: string | null }, fye: string | null): string {
+  const reports = /^(10-[KQ]|8-K)/.test(f.form);
+  const date = reports && f.period_of_report ? f.period_of_report : f.filed;
+  return fye && /^\d{4}$/.test(fye) ? `FY${fiscalYear(date, fye)}` : `Filed in ${f.filed.slice(0, 4)}`;
+}
+
+/** Whether the parsed-text note applies: only reports are ever parsed, so saying "not parsed" on
+ * every Form 4 or 144 is noise, while a 10-Q not parsed yet is worth saying. */
+export function parsedNote(f: { form: string; sections: number | null | undefined }): string | null {
+  if (f.sections) return `${f.sections} section${f.sections === 1 ? "" : "s"}`;
+  if (!/^(10-[KQ]|8-K)/.test(f.form)) return null;
+  return f.sections === 0 ? "not parsed yet" : "index only";
 }
