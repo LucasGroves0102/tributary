@@ -26,8 +26,8 @@ interface Props {
   /** null while the watchlist loads or is unavailable */
   watched: boolean | null;
   onWatch: (watch: boolean) => Promise<void>;
-  onChart: (name: string) => void;
-  onChartMany: (ids: string[], metric: string, transform: "ttm", title: string) => void;
+  onChart: () => void;
+  onChartMany: (ids: string[], metric: string, transform: "ttm") => void;
   /** a Revenue view chart opened in the chart builder */
   onOpenChart?: (s: ChartState) => void;
   onAsk: (question: string) => void;
@@ -119,7 +119,7 @@ export function Company({ token, companyId, tab, statements, watched, onWatch, o
               </button>
             )}
             {row.access.includes("financials") && (
-              <button className="btn" onClick={() => onChart(h.name)}>Chart</button>
+              <button className="btn" onClick={() => onChart()}>Chart</button>
             )}
             <button className="btn" onClick={() => go({ view: "compare", compare: { target: companyId } })}>Compare</button>
             <button className="btn" onClick={() => onAsk(`Summarize ${h.name}'s latest quarter.`)}>Ask</button>

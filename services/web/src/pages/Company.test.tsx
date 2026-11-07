@@ -121,7 +121,7 @@ function respond(url: string): Response {
       fin("revenue", "2026-07-26", "46743000000", "FY2027 Q2"),
       fin("operating_margin", "2026-07-26", "0.6", "FY2027 Q2"),
       ...(view === "ttm" ? [fin("revenue", "2026-01-25", "130497000000", "FY2026 Q4")] : []),
-    ].filter((r) => metrics.includes(r.metric)) });
+    ].filter((r) => metrics.includes(r.metric) && !(noMargin && r.metric === "operating_margin")) });
   }
   if (p.endsWith("/segments")) return Response.json({ as_of: "", rows: [] });
   if (p.endsWith("/data-notes")) return Response.json(NOTES);
@@ -134,6 +134,10 @@ function respond(url: string): Response {
         { ...nvdaRow({ ...entry({ company_id: AAPL, name: "Apple", tickers: ["AAPL"] }), filer_categories: null, state_of_incorporation: null }),
           match: { sic_level: 3, same_filer_category: true, revenue_band: ">=$100B", same_revenue_band: true } },
         { ...tesla, match: { sic_level: 2, same_filer_category: false, revenue_band: null, same_revenue_band: false } },
+        ...Array.from({ length: morePeers }, (_, i) => ({
+          ...nvdaRow({ ...entry({ company_id: String(1000000000 + i), name: `Peer ${i}`, tickers: [`P${i}`] }), filer_categories: null, state_of_incorporation: null }),
+          match: { sic_level: 2, same_filer_category: false, revenue_band: null, same_revenue_band: false },
+        })),
       ] });
   }
   return Response.json({ detail: "not found" }, { status: 404 });
@@ -145,12 +149,16 @@ const onWatch = vi.fn(async () => {});
 const onChart = vi.fn();
 const onChartMany = vi.fn();
 const onAsk = vi.fn();
+let noMargin = false;
+let morePeers = 0;
 
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   vi.stubGlobal("fetch", vi.fn(async (url: string) => respond(url)));
   rowFor = () => nvdaRow({ access: ["filings", "financials"] });
   indexReadable = true;
+  noMargin = false;
+  morePeers = 0;
   [onWatch, onChart, onChartMany, onAsk].forEach((f) => f.mockClear());
 });
 
@@ -202,7 +210,7 @@ it("heads the page with public metadata, the next expected filing and the tabs",
   await click(button("Compare"));
   expect(window.location.hash).toBe(`#/compare?target=${NVDA}`);
   await click(button("Chart"));
-  expect(onChart).toHaveBeenCalledWith("Nvidia");
+  expect(onChart).toHaveBeenCalledWith();
 });
 
 it("overview: a slow recap says so plainly and can be retried", async () => {
@@ -424,9 +432,29 @@ it("peers: suggested by SIC and size, into Compare and the chart builder", async
   expect(body[1]!.textContent).toContain("same 3-digit SIC group, same size band, same filer category");
   expect(body[2]!.className).toBe("masked");
   await click(button("Chart margins"));
-  expect(onChartMany).toHaveBeenCalledWith([NVDA, AAPL], "operating_margin", "ttm", "Operating margin, TTM");
+  expect(onChartMany).toHaveBeenCalledWith([NVDA, AAPL], "operating_margin", "ttm");
   await click(button("Open in Compare"));
   expect(window.location.hash).toBe(`#/compare?target=${NVDA}&peers=${AAPL},${TSLA}`);
+});
+
+it("peers: says when a chart can carry only some of them", async () => {
+  morePeers = 9; // with the company and Apple, 11 it could read
+  await render("peers");
+  const chart = [...container.querySelectorAll("button")].find((b) => b.textContent?.startsWith("Chart margins"))!;
+  expect(chart.textContent).toBe("Chart margins (first 8 of 11)");
+  expect(chart.title).toContain("the first 8");
+});
+
+it("overview: the chart's heading says what it draws", async () => {
+  await render();
+  const heading = () => [...container.querySelectorAll("h2")].find((h) => h.textContent?.startsWith("Revenue"))!;
+  expect(heading().textContent).toBe("Revenue and operating margin");
+  act(() => root.unmount());
+  document.body.innerHTML = "";
+  noMargin = true; // a bank reports none
+  await render();
+  expect(heading().textContent).toBe("Revenue");
+  expect(heading().parentElement!.textContent).toContain("no operating margin reported");
 });
 
 it("peers: a named user's ranking covers every company", async () => {

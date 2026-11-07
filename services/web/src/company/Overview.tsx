@@ -191,11 +191,14 @@ function Revenue({ token, companyId }: { token: string; companyId: string }) {
         financialSeries(load.data.rows, "operating_margin", { id: 2, name: "Operating margin", color: 1, type: "line", axis: "R" }, companyId),
       ].filter((s) => s.points.length)
     : [];
+  // the heading says what's drawn: a bank reports no operating margin, so it gets revenue alone
+  const heading = series.length === 1 ? series[0]!.name : "Revenue and operating margin";
+  const without = series.length === 1 ? (series[0]!.id === 1 ? " · no operating margin reported" : " · no revenue reported") : "";
   return (
     <>
       <div className="card-h">
-        <h2>Revenue and operating margin</h2>
-        <span className="sub">fiscal quarters, last 12 · hover for each value's filing</span>
+        <h2>{heading}</h2>
+        <span className="sub">fiscal quarters, last 12{without} · hover for each value's filing</span>
         <span className="grow" />
         <a className="btn sm ghost" href={href({ view: "company", companyId, tab: "statements" })}>Statements</a>
       </div>

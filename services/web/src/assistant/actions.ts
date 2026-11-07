@@ -6,7 +6,8 @@
 
 import { clean, type ScreenFilters } from "../companies/screen";
 import { cleanCompare, columnsOf, type CompareState } from "../compare/state";
-import { addLayer, MAX_LAYERS, type ChartState, type Layer } from "../chart/model";
+import { metricLabel } from "../chart/metrics";
+import { addLayer, MAX_LAYERS, type ChartState, type Layer, chartTitle } from "../chart/model";
 import type { Route } from "../route";
 import type { UiAction, UiContext, UiLayer } from "../types";
 
@@ -33,7 +34,8 @@ function toLayer(l: UiLayer): Omit<Layer, "id"> {
 export function applyChartAction(s: ChartState, a: ChartAction): ChartState {
   switch (a.action) {
     case "set_chart_layers": {
-      const empty: ChartState = { ...s, layers: [], title: a.title || a.label.replace(/^Chart: /, "") };
+      // no title of its own: the chart's automatic one, from these layers
+      const empty: ChartState = { ...s, layers: [], title: a.title ?? "" };
       return a.layers.slice(0, MAX_LAYERS).reduce<ChartState>((acc, l) => addLayer(acc, toLayer(l)), empty);
     }
     case "add_chart_layer":
@@ -136,7 +138,8 @@ export function uiContext(route: Route, chart: ChartState, name: (id: string) =>
       axis: l.axis,
       hidden: l.hidden ?? false,
     }));
-    ctx.chart = { title: chart.title.slice(0, 200), range: chart.range, frequency: chart.frequency ?? "quarterly", align: chart.align, layers };
+    const title = chartTitle(chart, (id) => name(id) ?? "?", metricLabel).slice(0, 200);
+    ctx.chart = { title, range: chart.range, frequency: chart.frequency ?? "quarterly", align: chart.align, layers };
     while (JSON.stringify(ctx).length > MAX_CONTEXT && ctx.chart.layers.length) ctx.chart.layers.pop();
   }
   return JSON.parse(JSON.stringify(ctx)) as UiContext; // drops undefined fields

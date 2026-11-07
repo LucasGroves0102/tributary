@@ -309,16 +309,10 @@ export function compareCsv(s: CompareState, rows: CompareRow[]): string {
 }
 
 /** "Chart these": the column's metric and transform in the chart builder. */
-export function chartMetric(key: string): { metric: string; transform: "ttm" | "q" | "yoy"; title: string } | null {
-  const c = BY_KEY.get(key);
-  if (!c) return null;
-  if (key === "revenue_growth_ttm") return { metric: "revenue", transform: "yoy", title: "Revenue growth, YoY (TTM)" };
-  const quarterEnd = key.endsWith("_q");
-  return {
-    metric: key.replace(/_(ttm|q)$/, ""),
-    transform: quarterEnd ? "q" : "ttm",
-    title: `${c.long}, ${quarterEnd ? "quarter end" : "TTM"}`,
-  };
+export function chartMetric(key: string): { metric: string; transform: "ttm" | "q" | "yoy" } | null {
+  if (!BY_KEY.has(key)) return null;
+  if (key === "revenue_growth_ttm") return { metric: "revenue", transform: "yoy" };
+  return { metric: key.replace(/_(ttm|q)$/, ""), transform: key.endsWith("_q") ? "q" : "ttm" };
 }
 
 /** How a comps table is sorted: a column key, "name" or "latest"; high-first for values. */

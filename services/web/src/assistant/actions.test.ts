@@ -40,11 +40,11 @@ describe("compare actions", () => {
 
 describe("chart actions", () => {
   it("replace the layers and title", () => {
-    const s = applyChartAction(companyChart(emptyChart(), NVDA, "Nvidia"), chartAction({
+    const s = applyChartAction(companyChart(emptyChart(), NVDA), chartAction({
       action: "set_chart_layers", title: "", label: "Chart: NVDA revenue, AAPL revenue",
       layers: [layer(), layer({ company_id: AAPL, company_label: "AAPL", transform: "yoy" })],
     }));
-    expect(s.title).toBe("NVDA revenue, AAPL revenue");
+    expect(s.title).toBe(""); // no title of its own: the chart's automatic one
     expect(s.layers.map((l) => [l.companyId, l.metric, l.transform])).toEqual([
       [NVDA, "revenue", "ttm"],
       [AAPL, "revenue", "yoy"],
@@ -61,7 +61,7 @@ describe("chart actions", () => {
   });
 
   it("remove by company, metric or both", () => {
-    const base = companyChart(emptyChart(), NVDA, "Nvidia");
+    const base = companyChart(emptyChart(), NVDA);
     const rm = (company_id: string | null, metric: string | null) =>
       applyChartAction(base, chartAction({ action: "remove_chart_layer", label: "x", company_id, metric })).layers;
     expect(rm(NVDA, null)).toEqual([]);
@@ -70,7 +70,7 @@ describe("chart actions", () => {
   });
 
   it("set options on the chart and every layer", () => {
-    const s = applyChartAction(companyChart(emptyChart(), NVDA, "Nvidia"), chartAction({
+    const s = applyChartAction(companyChart(emptyChart(), NVDA), chartAction({
       action: "set_chart_options", label: "x", options: { range: 5, transform: "yoy", type: "bar" },
     }));
     expect(s.range).toBe(5);
@@ -86,7 +86,7 @@ it("merges screen filters unless reset", () => {
 
 describe("screen context", () => {
   it("describes the chart page with labelled layers", () => {
-    const ctx = uiContext({ view: "chart" }, companyChart(emptyChart(), NVDA, "Nvidia"), (id) =>
+    const ctx = uiContext({ view: "chart" }, companyChart(emptyChart(), NVDA), (id) =>
       id === NVDA ? "Nvidia" : null,
     );
     expect(ctx.page).toBe("chart");
@@ -114,7 +114,7 @@ describe("screen context", () => {
   });
 
   it("leaves segment layers out and reports the Revenue tab as segments (agent-api knows neither)", () => {
-    const chart = companyChart(emptyChart(), NVDA, "Nvidia");
+    const chart = companyChart(emptyChart(), NVDA);
     const withSegment = {
       ...chart,
       layers: [...chart.layers, { id: 9, kind: "segment" as const, companyId: NVDA, metric: "revenue", segmentAxis: "geography" as const, members: ["country:US"], transform: "contrib" as const, type: "sbar" as const, axis: "L" as const }],

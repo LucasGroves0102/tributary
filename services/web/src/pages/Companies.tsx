@@ -37,7 +37,7 @@ interface Props {
   /** company ids on the user's watchlist (null while it loads or is unavailable) */
   watched: Set<string> | null;
   onWatch: (companyId: string, watch: boolean) => Promise<void>;
-  onChart?: (companyId: string, name: string) => void;
+  onChart?: (companyId: string) => void;
   /** Save / Save as (workspaces/SaveBar) */
   saveBar?: ReactNode;
   /** the value columns, as the user chose them (views); default: SCREEN_COLUMNS */
@@ -391,7 +391,7 @@ function Table({
   onSort: (sort: string) => void;
   onSic: (sic: string) => void;
   onWatch: (companyId: string, watch: boolean) => Promise<void>;
-  onChart?: (companyId: string, name: string) => void;
+  onChart?: (companyId: string) => void;
 }) {
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -487,7 +487,7 @@ function Table({
                   <td className="muted" title={r.fye ?? undefined}>{r.fye?.slice(0, 3) ?? "—"}</td>
                   <td className="n actions" onClick={(e) => e.stopPropagation()}>
                     {r.readable && onChart && (
-                      <button className="btn sm ghost" onClick={() => onChart(r.companyId, r.name)}
+                      <button className="btn sm ghost" onClick={() => onChart(r.companyId)}
                         aria-label={`Chart ${r.name}`}>
                         Chart
                       </button>

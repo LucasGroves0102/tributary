@@ -60,7 +60,7 @@ interface Props {
   readable: Readable;
   label: (companyId: string) => string;
   onOpenChart: (s: ChartState) => void;
-  onChartMany: (ids: string[], metric: string, transform: "ttm" | "q" | "yoy", title: string) => void;
+  onChartMany: (ids: string[], metric: string, transform: "ttm" | "q" | "yoy") => void;
 }
 
 type Loaded =

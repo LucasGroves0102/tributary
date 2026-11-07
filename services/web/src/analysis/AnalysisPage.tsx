@@ -18,7 +18,7 @@ export function AnalysisPage(props: {
   /** company id → ticker or name (companies/directory.ts `short`) */
   label: (companyId: string) => string;
   onOpenChart: (s: ChartState) => void;
-  onChartMany: (ids: string[], metric: string, transform: "ttm" | "q" | "yoy", title: string) => void;
+  onChartMany: (ids: string[], metric: string, transform: "ttm" | "q" | "yoy") => void;
 }) {
   if (!props.projectId) return <AnalysisHome token={props.token} saved={props.saved} readable={props.readable} label={props.label} />;
   return <ProjectPage key={props.projectId} {...props} projectId={props.projectId} />;

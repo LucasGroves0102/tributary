@@ -3,7 +3,7 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExt
 import { ApiError, demoUsers, login, me as fetchMe, watchlistCsv } from "./api";
 import { AssistantPanel } from "./assistant/AssistantPanel";
 import { metricLabel } from "./chart/metrics";
-import { companiesChart, companyChart, emptyChart, type ChartState, type Transform } from "./chart/model";
+import { chartTitle, companiesChart, companyChart, emptyChart, MAX_COMPANY_LINES, type ChartState, type Transform } from "./chart/model";
 import { useChart } from "./chart/useChart";
 import { directoryFor, DirectoryContext, UNNAMED } from "./companies/directory";
 import { uiContext } from "./assistant/actions";
@@ -156,8 +156,12 @@ export function App(props: Props = {}) {
     if (views.error) setError(views.error);
   }, [views.error]);
   const [chart, setChart] = useChart(user);
-  const [replacedChart, setReplacedChart] = useState<ChartState | null>(null);
-  useEffect(() => setReplacedChart(null), [user]); // never another user's draft
+  const [replacedChart, setReplacedChart] = useState<{ state: ChartState; why: string } | null>(null);
+  const [chartNotice, setChartNotice] = useState<string | null>(null);
+  useEffect(() => {
+    setReplacedChart(null); // never another user's draft
+    setChartNotice(null);
+  }, [user]);
   // read when the assistant sends a question or applies an action, so always the latest
   const chartRef = useRef(chart);
   chartRef.current = chart;
@@ -315,14 +319,26 @@ export function App(props: Props = {}) {
     prefilled.current = null;
   }, [route]);
 
+  /** Anything that replaces the chart keeps the draft for one Restore, when there's work in it. */
+  const keepDraft = useCallback((why: string) => {
+    const before = chartRef.current;
+    if (before.layers.length || before.title) setReplacedChart({ state: before, why });
+    setChartNotice(null);
+  }, []);
+  const OPENED = "Opened a new chart.";
+
   /** Compare's "Chart these" and the peers tab: one line per company for a metric. */
   const chartMany = useCallback(
-    (ids: string[], metric: string, transform: Transform, title: string) => {
-      setChart((s) => companiesChart(s, ids, metric, transform, title));
+    (ids: string[], metric: string, transform: Transform) => {
+      keepDraft(OPENED);
+      setChart((s) => companiesChart(s, ids, metric, transform));
+      if (ids.length > MAX_COMPANY_LINES) {
+        setChartNotice(`Showing the first ${MAX_COMPANY_LINES} of ${ids.length} companies: a chart tells ${MAX_COMPANY_LINES} colours apart.`);
+      }
       saved.close("chart"); // a new chart, not an edit of the saved one
       go({ view: "chart" });
     },
-    [setChart, saved],
+    [setChart, saved, keepDraft],
   );
 
   /** Opens a saved item: its state on its page (the page then reads data as usual). */
@@ -334,12 +350,15 @@ export function App(props: Props = {}) {
           if (item.kind === "report" || item.kind === "thesis" || item.kind === "model") {
             return go({ view: item.kind, itemId: item.item_id });
           }
-          if (item.kind === "chart") setChart(() => restoreChartState(item.state));
+          if (item.kind === "chart") {
+            keepDraft(`Opened ${item.name}.`);
+            setChart(() => restoreChartState(item.state));
+          }
           go(itemRoute(item.kind, item.state));
         })
         .catch(() => setError("Couldn't open that item. It may have been deleted; the list is refreshed."));
     },
-    [saved, setChart],
+    [saved, setChart, keepDraft],
   );
 
   // a thesis or model of an analysis project opens inside the project (its header and steps)
@@ -486,7 +505,7 @@ export function App(props: Props = {}) {
         resolveTicker(token, ticker, scope !== null)
           .then((found) => {
             if (!found) return setError(noTicker([ticker], scope !== null));
-            chartMany([found.companyId], metric, "ttm", `${ticker} ${metricLabel(metric).toLowerCase()}`);
+            chartMany([found.companyId], metric, "ttm");
           })
           .catch(() => setError("Couldn't look that ticker up. Try again."));
       },
@@ -497,15 +516,15 @@ export function App(props: Props = {}) {
   // "New chart" empties the builder (and detaches it from a saved chart, so Save can't overwrite
   // it), keeping the draft for one Restore; "Chart builder" in the nav still reopens the draft
   const newChart = () => {
-    const before = chartRef.current;
-    if (before.layers.length || before.title) setReplacedChart(before);
+    keepDraft("Started a new chart.");
     setChart(() => emptyChart());
     saved.close("chart");
     go({ view: "chart" });
   };
   const restoreChartDraft = () => {
-    if (replacedChart) setChart(() => replacedChart);
+    if (replacedChart) setChart(() => replacedChart.state);
     setReplacedChart(null);
+    setChartNotice(null);
   };
 
   const saveBar = (current: Current) =>
@@ -526,8 +545,8 @@ export function App(props: Props = {}) {
   useEffect(() => {
     document.title = !picker && !token
       ? route.view === "status" ? screenTitle(route, { company: () => null }) : "Tributary"
-      : screenTitle(route, { company: companyLabel, filing: filingText, chart: chart.title, saved: savedName });
-  }, [picker, token, route, companyLabel, filingText, chart.title, savedName]);
+      : screenTitle(route, { company: companyLabel, filing: filingText, chart: chartTitle(chart, companyShort, metricLabel), saved: savedName });
+  }, [picker, token, route, companyLabel, companyShort, filingText, chart, savedName]);
 
   const showDrawer = drawerOpen && route.view !== "ask";
   const ingested = lastIngested(workspace.latest ?? []);
@@ -669,8 +688,9 @@ export function App(props: Props = {}) {
                 screen={route.screen ?? {}}
                 watched={watched}
                 onWatch={(id, on) => (on ? workspace.watch(id) : workspace.unwatch(id))}
-                onChart={(id, name) => {
-                  setChart((s) => companyChart(s, id, name));
+                onChart={(id) => {
+                  keepDraft(OPENED);
+                  setChart((s) => companyChart(s, id));
                   saved.close("chart");
                   go({ view: "chart" });
                 }}
@@ -704,13 +724,15 @@ export function App(props: Props = {}) {
                     setError("Couldn't update the watchlist. Try again."),
                   )
                 }
-                onChart={(name) => {
-                  setChart((s) => companyChart(s, route.companyId, name));
+                onChart={() => {
+                  keepDraft(OPENED);
+                  setChart((s) => companyChart(s, route.companyId));
                   saved.close("chart");
                   go({ view: "chart" });
                 }}
                 onChartMany={chartMany}
                 onOpenChart={(s) => {
+                  keepDraft(OPENED);
                   setChart(() => s);
                   saved.close("chart");
                   go({ view: "chart" });
@@ -746,6 +768,9 @@ export function App(props: Props = {}) {
                 preferred={watchedIds}
                 onNew={newChart}
                 onRestore={replacedChart ? restoreChartDraft : null}
+                restoreNote={replacedChart?.why ?? null}
+                onReplace={keepDraft}
+                notice={chartNotice}
               />
             ) : route.view === "ask" ? (
               <div className="page ask-page">
@@ -788,6 +813,7 @@ export function App(props: Props = {}) {
                 readable={financialsFor}
                 label={companyShort}
                 onOpenChart={(s) => {
+                  keepDraft(OPENED);
                   setChart(() => s);
                   saved.close("chart");
                   go({ view: "chart" });
@@ -804,6 +830,7 @@ export function App(props: Props = {}) {
                 label={companyShort}
                 readable={financialsFor}
                 onOpenChart={(s) => {
+                  keepDraft(OPENED);
                   setChart(() => s);
                   saved.close("chart");
                   go({ view: "chart" });
@@ -821,6 +848,7 @@ export function App(props: Props = {}) {
                 label={companyShort}
                 readable={financialsFor}
                 onOpenChart={(s) => {
+                  keepDraft(OPENED);
                   setChart(() => s);
                   saved.close("chart");
                   go({ view: "chart" });

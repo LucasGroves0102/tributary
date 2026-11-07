@@ -204,7 +204,7 @@ export function Numbers({ token, companyId, name, ticker, label, saved, projectI
         );
       })}
       <p className="faint small">
-        Ten fiscal years of {name}, one point per year (flows are the year's total, balances the year end); receivables vs
+        Up to ten fiscal years of {name}, one point per year (flows are the year's total, balances the year end); receivables vs
         revenue is quarterly. Values link to their filings. Charts you save here, or from the Chart builder into this project,
         show under Charts in the project's workspace.
       </p>
@@ -269,7 +269,7 @@ export function WhatChanged({ token, companyId, name, canReadFilings }: StepComm
 export function PeersStep({ token, companyId, project, onPeers, onChart, saved, projectId, onSaved }: StepCommon & {
   project: ProjectState;
   onPeers: (peers: string[]) => void;
-  onChart: (companyIds: string[], metric: string, transform: "ttm" | "q" | "yoy", title: string) => void;
+  onChart: (companyIds: string[], metric: string, transform: "ttm" | "q" | "yoy") => void;
   saved: Saved;
   projectId: string;
   onSaved: () => void;

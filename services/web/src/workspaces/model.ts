@@ -6,7 +6,8 @@
  * A saved item grants nothing: it holds company ids and settings, and each page reads the data
  * through the Query API as usual. */
 
-import { emptyChart, restoreChart, type ChartState } from "../chart/model";
+import { metricLabel } from "../chart/metrics";
+import { chartTitle, emptyChart, restoreChart, type ChartState } from "../chart/model";
 import { describe, isEmpty, parseScreen, screenQuery, type ScreenFilters } from "../companies/screen";
 import { cleanCompare, compareQuery, parseCompare, type CompareState } from "../compare/state";
 import type { Route } from "../route";
@@ -67,6 +68,7 @@ export function stateOf(c: Current): Record<string, unknown> {
           if (l.hidden) out.hidden = true;
           if (l.name) out.name = l.name;
           if (l.color !== undefined) out.color = l.color;
+          if (l.display) out.display = l.display;
           return out;
         }),
         ...(c.chart.markers ? { markers: true } : {}),
@@ -217,9 +219,10 @@ export function findWorkspace<T extends { name: string }>(list: T[], name: strin
   return list.find((w) => w.name.trim().toLowerCase() === key);
 }
 
-/** A default name for what's on screen: the chart title, the comps' target ticker. */
+/** A default name for what's on screen: the chart's title (typed or automatic), the comps'
+ * target ticker. */
 export function suggestName(c: Current, label: (companyId: string) => string): string {
-  if (c.kind === "chart") return c.chart.title.trim().slice(0, ITEM_NAME_MAX) || "Chart";
+  if (c.kind === "chart") return chartTitle(c.chart, label, metricLabel).slice(0, ITEM_NAME_MAX) || "Chart";
   if (c.kind === "comps") {
     const s = cleanCompare(c.compare);
     return s.target ? `${label(s.target)} comps`.slice(0, ITEM_NAME_MAX) : "Comps";

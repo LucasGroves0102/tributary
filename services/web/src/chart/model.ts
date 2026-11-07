@@ -14,7 +14,12 @@
  * their own transforms (quarterly, TTM, YoY, contribution to growth). Price layers (kind
  * "price", "Connect your data") read the viewer's own prices (`priceRequest`, chart/prices.ts)
  * and put the chart on calendar quarters (`basis`). `layerKey` gives any of the requests as
- * the key chart/fetch.ts `fetchLayer` answers. */
+ * the key chart/fetch.ts `fetchLayer` answers.
+ *
+ * A chart's title belongs to the user only when they typed one: `title` is that text, and empty
+ * means `autoTitle` writes it from the visible layers, so it can't go stale (templates and the
+ * Chart buttons leave it empty). Draw and export through `chartTitle`. A chart saved before this
+ * keeps its stored title as a custom one. */
 
 import type { FormulaRequest } from "../api";
 import { PRICE_TRANSFORM_SET, type PriceRequest, type PriceTransform } from "./prices";
@@ -31,6 +36,8 @@ export type Align = "calendar" | "fiscal";
 export type Range = 1 | 2 | 3 | 5 | 10 | "max" | "custom";
 /** quarterly: every quarter; annual: one point per year (see `request` and series.ts). */
 export type Frequency = "quarterly" | "annual";
+/** How a dimensionless layer reads (query-api formula/check.py). */
+export type Display = "percent" | "multiple" | "number";
 
 export interface Layer {
   id: number;
@@ -54,9 +61,13 @@ export interface Layer {
   name?: string;
   /** series colour 0..7 (tokens.css --series-N); unset = the layer's position */
   color?: number;
+  /** a dimensionless metric or formula layer: how it reads; unset = what the API says from its
+   * formula's shape */
+  display?: Display;
 }
 
 export interface ChartState {
+  /** what the user typed; empty: `autoTitle` */
   title: string;
   layers: Layer[];
   range: Range;
@@ -90,6 +101,11 @@ export const LAYER_TYPES: [LayerType, string][] = [
   ["sbar", "Stacked bar"],
   ["sarea", "Stacked area"],
 ];
+export const DISPLAYS: [Display, string][] = [
+  ["percent", "Percent"],
+  ["multiple", "Multiple (x)"],
+  ["number", "Plain number"],
+];
 export const RANGES: Range[] = [1, 3, 5, 10, "max"];
 const VALID_RANGES: Range[] = [1, 2, 3, 5, 10, "max", "custom"];
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -107,13 +123,26 @@ export function emptyChart(): ChartState {
 /** Metric → whether it has TTM values (from /v1/screener/columns spans). */
 export type TtmCatalog = (metric: string) => boolean;
 
-/** Companies a layer reads: its company or default company, plus any TICKER.metric. */
+/** What a formula's text reads: tickers (TICKER.metric), and whether any metric has no ticker,
+ * which is all the default company is for. */
+export function formulaReads(formula: string): { bare: boolean; tickers: string[] } {
+  const tickers = new Set<string>();
+  let bare = false;
+  // a name not inside another word or after a dot; lag units ("4q") follow a digit
+  for (const m of formula.matchAll(/(?<![A-Za-z0-9_.])([A-Za-z_][A-Za-z0-9_]*)(\.[A-Za-z0-9_]*)?(\s*\()?/g)) {
+    if (m[3]) continue; // ttm( abs(
+    if (m[2]) tickers.add(m[1]!.toUpperCase());
+    else bare = true;
+  }
+  return { bare, tickers: [...tickers] };
+}
+
+/** Companies a layer reads: its company, or what its formula names (the default company only
+ * when a metric goes without a ticker: a DECK-only formula doesn't read the company in the box). */
 export function layerCompanies(l: Layer): string[] {
   if (l.kind === "metric" || l.kind === "segment" || l.kind === "price") return l.companyId ? [l.companyId] : [];
-  const tickers = [...(l.formula ?? "").matchAll(/\b([A-Za-z][A-Za-z0-9]{0,9})\.[a-z_]/g)].map(
-    (m) => `ticker:${m[1]!.toUpperCase()}`,
-  );
-  return [...new Set([...(l.defaultCompany ? [l.defaultCompany] : []), ...tickers])];
+  const reads = formulaReads(l.formula ?? "");
+  return [...(reads.bare && l.defaultCompany ? [l.defaultCompany] : []), ...reads.tickers.map((t) => `ticker:${t}`)];
 }
 
 /** Fiscal quarters only line up within one company (the API's alignment rule), so fiscal
@@ -125,6 +154,15 @@ export function basis(s: ChartState): Align {
   if (visible.some((l) => l.kind === "price")) return "calendar";
   const companies = new Set(visible.flatMap(layerCompanies));
   return companies.size <= 1 ? "fiscal" : "calendar";
+}
+
+/** Why a chart asked for fiscal quarters draws calendar ones (null when it doesn't). */
+export function basisReason(s: ChartState): string | null {
+  if (s.align !== "fiscal" || basis(s) === "fiscal") return null;
+  const visible = s.layers.filter((l) => !l.hidden);
+  if (visible.some((l) => l.kind === "price")) return "Calendar quarters: share prices have no fiscal calendar.";
+  const companies = new Set(visible.flatMap(layerCompanies)).size;
+  return `Calendar quarters: fiscal years only line up within one company, and this chart reads ${companies}.`;
 }
 
 /** Earliest period end in range: `years` back from today, plus a quarter so the oldest
@@ -229,21 +267,68 @@ export function layerName(l: Layer, short: (companyId: string) => string, label:
   return autoName(l, short, label, frequency);
 }
 
-export function autoName(l: Layer, short: (companyId: string) => string, label: (metric: string) => string, frequency: Frequency = "quarterly"): string {
-  if (l.kind === "price") {
-    const who = l.companyId ? short(l.companyId) : "?";
-    return l.transform === "yoy" ? `${who} share price YoY` : l.transform === "idx" ? `${who} share price (indexed)` : `${who} share price`;
-  }
+const transformSuffix = (l: Layer, frequency: Frequency) => (frequency === "annual"
+  ? { q: "", ttm: "", yoy: " YoY", qoq: " YoY", idx: " (indexed)", ps: " per share", contrib: " contribution" }
+  : { q: "", ttm: " (TTM)", yoy: " YoY", qoq: " QoQ", idx: " (indexed)", ps: " per share", contrib: " contribution" })[l.transform];
+
+/** A metric's label mid-sentence: "free cash flow", but "ROE", "R&D" and "FCF margin" as they are. */
+const inSentence = (label: string) => (/[A-Z]{2}|&/.test(label) ? label : label.toLowerCase());
+
+/** What a layer shows, without its company. */
+function layerWhat(l: Layer, label: (metric: string) => string, frequency: Frequency): string {
+  if (l.kind === "price") return l.transform === "yoy" ? "share price YoY" : l.transform === "idx" ? "share price (indexed)" : "share price";
   const base =
     l.kind === "metric"
-      ? `${l.companyId ? short(l.companyId) : "?"} ${l.metric ? label(l.metric).toLowerCase() : "?"}`
+      ? l.metric ? inSentence(label(l.metric)) : "?"
       : l.kind === "segment"
-        ? `${l.companyId ? short(l.companyId) : "?"} ${l.members?.length === 1 ? memberName(l.members[0]!) : `${l.members?.length ?? 0} segments`}`
+        ? l.members?.length === 1 ? memberName(l.members[0]!) : `${l.members?.length ?? 0} segments`
         : (l.formula ?? "").trim() || "formula";
-  const suffix = frequency === "annual"
-    ? { q: "", ttm: "", yoy: " YoY", qoq: " YoY", idx: " (indexed)", ps: " per share", contrib: " contribution" }[l.transform]
-    : { q: "", ttm: " (TTM)", yoy: " YoY", qoq: " QoQ", idx: " (indexed)", ps: " per share", contrib: " contribution" }[l.transform];
-  return base + suffix;
+  return base + transformSuffix(l, frequency);
+}
+
+export function autoName(l: Layer, short: (companyId: string) => string, label: (metric: string) => string, frequency: Frequency = "quarterly"): string {
+  if (l.kind === "formula") return layerWhat(l, label, frequency);
+  return `${l.companyId ? short(l.companyId) : "?"} ${layerWhat(l, label, frequency)}`;
+}
+
+const andList = (items: string[], most: number) => {
+  const shown = items.length > most ? [...items.slice(0, most), `${items.length - most} more`] : items;
+  return shown.length < 2 ? shown.join("") : `${shown.slice(0, -1).join(", ")} and ${shown.at(-1)}`;
+};
+const TITLE_METRICS = 3;
+const TITLE_COMPANIES = 4;
+const MAX_TITLE = 200;
+
+/** The title a chart's visible layers give it: "AMZN: revenue (TTM) and net_income / revenue
+ * (TTM)", "Operating margin (TTM): KO, PEP and KDP", with ", annual" when it is. Empty without a
+ * visible layer. A formula naming its tickers has no company to put in front of it. `shows` leaves
+ * out layers known to draw nothing, so it names what is there (unless nothing would be left). */
+export function autoTitle(s: ChartState, short: (companyId: string) => string, label: (metric: string) => string, shows?: (l: Layer) => boolean): string {
+  const frequency = frequencyOf(s);
+  // a formula layer nothing has been typed into isn't anything yet
+  const visible = s.layers.filter((l) => !l.hidden && (l.kind !== "formula" || l.formula?.trim()));
+  const named = shows && visible.some(shows) ? visible.filter(shows) : visible;
+  const parts = named.map((l) => {
+    const name = l.name?.trim();
+    const what = name || layerWhat(l, label, frequency);
+    const company = l.kind === "formula"
+      ? (formulaReads(l.formula ?? "").tickers.length ? undefined : l.defaultCompany)
+      : l.companyId;
+    const who = company ? short(company) : null;
+    return { who: who && !name?.includes(who) ? who : null, what };
+  });
+  if (!parts.length) return "";
+  const whos = [...new Set(parts.flatMap((p) => (p.who ? [p.who] : [])))];
+  const whats = [...new Set(parts.map((p) => p.what))];
+  const title = whats.length === 1 && whos.length > 1
+    ? `${whats[0]!.charAt(0).toUpperCase()}${whats[0]!.slice(1)}: ${andList(whos, TITLE_COMPANIES)}`
+    : `${whos.length ? `${andList(whos, TITLE_COMPANIES)}: ` : ""}${andList(whats, TITLE_METRICS)}`;
+  return `${title}${frequency === "annual" ? ", annual" : ""}`.slice(0, MAX_TITLE);
+}
+
+/** What a chart is called on screen and in its exports: the user's title, or the automatic one. */
+export function chartTitle(s: ChartState, short: (companyId: string) => string, label: (metric: string) => string, shows?: (l: Layer) => boolean): string {
+  return s.title.trim() || autoTitle(s, short, label, shows);
 }
 
 /** The colour a layer draws in: its own, or its position. */
@@ -253,11 +338,11 @@ export function layerColor(l: Layer, index: number): number {
 
 /** Revenue (quarterly bars) and operating margin (TTM line, right axis) for one company, on
  * its fiscal quarters: the chart "Chart" buttons open. */
-export function companyChart(s: ChartState, companyId: string, name: string): ChartState {
+export function companyChart(s: ChartState, companyId: string): ChartState {
   let id = s.nextId;
   return {
     ...s,
-    title: `${name}: revenue and operating margin`,
+    title: "",
     align: "fiscal",
     layers: [
       { id: id++, kind: "metric", companyId, metric: "revenue", transform: "q", type: "bar", axis: "L" },
@@ -278,20 +363,18 @@ export function companiesChart(
   companyIds: string[],
   metric: string,
   transform: Transform,
-  title: string,
 ): ChartState {
   let id = s.nextId;
   const layers = companyIds.slice(0, MAX_COMPANY_LINES).map(
     (companyId): Layer => ({ id: id++, kind: "metric", companyId, metric, transform, type: "line", axis: "L" }),
   );
-  return { ...s, title, align: "calendar", layers, nextId: id };
+  return { ...s, title: "", align: "calendar", layers, nextId: id };
 }
 
 type TemplateLayer = Pick<Layer, "transform" | "type" | "axis"> & { metric?: string; formula?: string; name?: string };
 
 export interface Template {
   label: string;
-  title: string;
   /** what it shows, for the button's hover */
   hint: string;
   /** "each": the first layer once per company in the chart (up to 4); "one": every layer for
@@ -302,29 +385,29 @@ export interface Template {
 
 /** Templates use only metrics the formula catalog has (query-api formula/check.py CATALOG). */
 export const TEMPLATES: Template[] = [
-  { label: "Margins", title: "Operating margin, TTM", per: "each", hint: "Operating margin, TTM, one line per company",
+  { label: "Margins", per: "each", hint: "Operating margin, TTM, one line per company",
     layers: [{ metric: "operating_margin", transform: "ttm", type: "line", axis: "L" }] },
-  { label: "Revenue growth", title: "Revenue growth, YoY (TTM)", per: "each", hint: "Revenue growth over TTM, one line per company",
+  { label: "Revenue growth", per: "each", hint: "Revenue growth over TTM, one line per company",
     layers: [{ metric: "revenue", transform: "yoy", type: "line", axis: "L" }] },
-  { label: "Free cash flow", title: "Free cash flow, TTM", per: "each", hint: "Free cash flow, TTM, one line per company",
+  { label: "Free cash flow", per: "each", hint: "Free cash flow, TTM, one line per company",
     layers: [{ metric: "free_cash_flow", transform: "ttm", type: "line", axis: "L" }] },
-  { label: "Leverage", title: "Debt to equity, quarter end", per: "each", hint: "Debt to equity at each quarter end, one line per company",
+  { label: "Leverage", per: "each", hint: "Debt to equity at each quarter end, one line per company",
     layers: [{ metric: "debt_to_equity", transform: "q", type: "line", axis: "L" }] },
-  { label: "Cash-flow quality", title: "Cash-flow quality: operating cash flow vs net income, TTM", per: "one",
+  { label: "Cash-flow quality", per: "one",
     hint: "Operating cash flow and net income (TTM bars), and their ratio (right axis)",
     layers: [
       { metric: "operating_cash_flow", transform: "ttm", type: "bar", axis: "L" },
       { metric: "net_income", transform: "ttm", type: "bar", axis: "L" },
       { formula: "operating_cash_flow / net_income", name: "Cash conversion (OCF / net income)", transform: "ttm", type: "line", axis: "R" },
     ] },
-  { label: "Balance-sheet strength", title: "Balance-sheet strength: cash vs debt, quarter end", per: "one",
+  { label: "Balance-sheet strength", per: "one",
     hint: "Cash and long-term debt (bars) and the current ratio (right axis), at quarter ends",
     layers: [
       { metric: "cash", transform: "q", type: "bar", axis: "L" },
       { metric: "long_term_debt", transform: "q", type: "bar", axis: "L" },
       { metric: "current_ratio", transform: "q", type: "line", axis: "R" },
     ] },
-  { label: "Capital return", title: "Capital return: dividends and buybacks vs free cash flow, TTM", per: "one",
+  { label: "Capital return", per: "one",
     hint: "Dividends and buybacks stacked, against free cash flow, TTM",
     layers: [
       { metric: "dividends_paid", transform: "ttm", type: "sbar", axis: "L" },
@@ -349,7 +432,7 @@ export function applyTemplate(s: ChartState, t: Template, fallback: string[]): C
         : { id: id++, kind: "metric", companyId, metric, ...style };
     }),
   );
-  return { ...s, title: t.title, layers, nextId: id };
+  return { ...s, title: "", layers, nextId: id };
 }
 
 export function addLayer(s: ChartState, layer: Omit<Layer, "id">): ChartState {
@@ -379,6 +462,7 @@ export function moveLayer(s: ChartState, id: number, by: -1 | 1): ChartState {
 const TRANSFORM_SET = new Set<Transform>(TRANSFORMS.map(([t]) => t));
 const SEGMENT_TRANSFORM_SET = new Set<Transform>(SEGMENT_TRANSFORMS.map(([t]) => t));
 const TYPE_SET = new Set(LAYER_TYPES.map(([t]) => t));
+const DISPLAY_SET = new Set(DISPLAYS.map(([d]) => d));
 const CIK = /^\d{10}$/;
 export const MAX_LAYER_NAME = 80;
 
@@ -404,6 +488,9 @@ export function restoreChart(raw: unknown): ChartState {
       ...(name ? { name } : {}),
       ...(Number.isInteger(l.color) && (l.color as number) >= 0 && (l.color as number) < COLOR_NAMES.length
         ? { color: l.color as number }
+        : {}),
+      ...((l.kind === "metric" || l.kind === "formula") && DISPLAY_SET.has(l.display as Display)
+        ? { display: l.display as Display }
         : {}),
     };
     if (l.kind === "metric" && CIK.test(String(l.companyId)) && /^[a-z_]{1,64}$/.test(String(l.metric))) {

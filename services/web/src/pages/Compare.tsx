@@ -37,7 +37,7 @@ interface Props {
   token: string;
   compare: CompareState;
   /** "Chart these": one line per company for a metric */
-  onChart: (companyIds: string[], metric: string, transform: "ttm" | "q" | "yoy", title: string) => void;
+  onChart: (companyIds: string[], metric: string, transform: "ttm" | "q" | "yoy") => void;
   /** Save / Save as (workspaces/SaveBar) */
   saveBar?: ReactNode;
   /** inside an analysis project: the comps are the project's (state handed in, changes handed
@@ -158,7 +158,7 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
     );
   const chartThese = () => {
     const m = chartMetric(chartKey);
-    if (m && readableIds.length) onChart(readableIds, m.metric, m.transform, m.title);
+    if (m && readableIds.length) onChart(readableIds, m.metric, m.transform);
   };
 
   return (
@@ -262,7 +262,7 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
                 ))}
               </select>
               <button className="btn sm" onClick={chartThese} disabled={!readableIds.length}
-                title="One line per company you can read, calendar quarters">
+                title={`One line per company you can read, calendar quarters${readableIds.length > MAX_COMPANY_LINES ? `: the first ${MAX_COMPANY_LINES} of ${readableIds.length}` : ""}`}>
                 Chart these
               </button>
             </>
@@ -396,7 +396,7 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
             <h2>Side by side</h2>
             <span className="sub">
               one chart per column · every company you can read a line, in the same colour on each · calendar quarters, last 3 years
-              {readableIds.length > MAX_COMPANY_LINES ? ` · first ${MAX_COMPANY_LINES} companies` : ""}
+              {readableIds.length > MAX_COMPANY_LINES ? ` · the first ${MAX_COMPANY_LINES} of ${readableIds.length} companies` : ""}
             </span>
             <span className="grow" />
             <button className="btn sm" aria-expanded={multiples} onClick={() => setMultiples((m) => !m)}

@@ -12,6 +12,7 @@ import {
   restoreOpen,
   restoreScreen,
   stateOf,
+  restoreChartState,
   suggestName,
 } from "./model";
 
@@ -37,6 +38,22 @@ describe("saved states", () => {
         { kind: "formula", formula: "NVDA.revenue / AAPL.revenue", transform: "q", type: "bar", axis: "R", hidden: true },
       ],
     });
+  });
+
+  it("saves a layer's display, and an automatic title as no title at all", () => {
+    const s: ChartState = { ...chart(), title: "", layers: chart().layers.map((l) => ({ ...l, display: "multiple" as const })) };
+    const saved = stateOf({ kind: "chart", chart: s });
+    expect(saved.title).toBe("");
+    expect((saved.layers as { display?: string }[]).map((l) => l.display)).toEqual(["multiple", "multiple"]);
+    expect(restoreChartState(JSON.parse(JSON.stringify(saved))).layers.map((l) => l.display)).toEqual(["multiple", "multiple"]);
+    expect(currentFingerprint({ kind: "chart", chart: chart() })).toBe(fingerprint("chart", stateOf({ kind: "chart", chart: chart() })));
+  });
+
+  it("names a chart for what it shows when the user hasn't", () => {
+    const name = (id: string) => (id === NVDA ? "Nvidia" : id);
+    expect(suggestName({ kind: "chart", chart: chart() }, name)).toBe("NVDA revenue");
+    expect(suggestName({ kind: "chart", chart: { ...chart(), title: "" } }, name)).toBe("Nvidia: revenue (TTM)");
+    expect(suggestName({ kind: "chart", chart: emptyChart() }, name)).toBe("Chart");
   });
 
   it("saves a custom range, annual frequency and deck output", () => {

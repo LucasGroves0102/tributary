@@ -1,4 +1,5 @@
 import { peers as fetchPeers } from "../api";
+import { MAX_COMPANY_LINES } from "../chart/model";
 import { COMPARE_COLUMNS, compareRows, MASKED_TITLE } from "../compare/state";
 import { go, href } from "../route";
 import { useScope } from "../scope";
@@ -19,7 +20,7 @@ export function Peers({
   token: string;
   companyId: string;
   name: string;
-  onChart: (ids: string[], metric: string, transform: "ttm", title: string) => void;
+  onChart: (ids: string[], metric: string, transform: "ttm") => void;
 }) {
   // a demo sandbox ranks only its own companies (scope.ts)
   const scoped = useScope() !== null;
@@ -30,6 +31,7 @@ export function Peers({
   const state = { target: companyId, peers: peerIds, cols: PEER_COLUMNS };
   const rows = data ? compareRows(state, [data.company, ...data.peers]) : [];
   const readable = rows.filter((r) => r.readable).map((r) => r.companyId);
+  const capped = readable.length > MAX_COMPANY_LINES;
 
   return (
     <section className="card">
@@ -41,9 +43,9 @@ export function Peers({
           Open in Compare
         </button>
         <button className="btn sm" disabled={readable.length < 2}
-          onClick={() => onChart(readable, "operating_margin", "ttm", "Operating margin, TTM")}
-          title="Operating margin, TTM: one line per company you can read">
-          Chart margins
+          onClick={() => onChart(readable, "operating_margin", "ttm")}
+          title={`Operating margin, TTM: one line per company you can read${capped ? `, the first ${MAX_COMPANY_LINES} (a chart tells ${MAX_COMPANY_LINES} colours apart)` : ""}`}>
+          Chart margins{capped ? ` (first ${MAX_COMPANY_LINES} of ${readable.length})` : ""}
         </button>
       </div>
       <Gate load={load} name={name} what="Peers">

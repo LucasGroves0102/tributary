@@ -127,8 +127,8 @@ describe("the table", () => {
 });
 
 it("charts a column as its metric in the chart builder", () => {
-  expect(chartMetric("operating_margin_ttm")).toEqual({ metric: "operating_margin", transform: "ttm", title: "Operating margin, TTM" });
-  expect(chartMetric("net_debt_q")).toEqual({ metric: "net_debt", transform: "q", title: "Net debt, quarter end" });
+  expect(chartMetric("operating_margin_ttm")).toEqual({ metric: "operating_margin", transform: "ttm" });
+  expect(chartMetric("net_debt_q")).toEqual({ metric: "net_debt", transform: "q" });
   expect(chartMetric("revenue_growth_ttm")).toMatchObject({ metric: "revenue", transform: "yoy" });
   expect(chartMetric("salary_ttm")).toBeNull();
 });

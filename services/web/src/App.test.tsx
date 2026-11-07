@@ -257,6 +257,23 @@ describe("new chart", () => {
     expect(box().value).toBe("");
   });
 
+  it("a template over your layers says so, and Restore brings them back", async () => {
+    await render("#/chart");
+    const box = () => container.querySelector<HTMLInputElement>('input[aria-label="Chart title"]')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(box(), "Mine");
+      box().dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => [...container.querySelectorAll("button")].find((b) => b.textContent === "Margins")!.click());
+    await settle();
+    expect(box().value).toBe("");
+    expect($(".undo-note")?.textContent).toContain("Replaced your layers with the Margins template.");
+    await act(async () => [...container.querySelectorAll<HTMLElement>(".undo-note button")].find((b) => b.textContent === "Restore the previous draft")!.click());
+    await settle();
+    expect(box().value).toBe("Mine");
+    expect($(".undo-note")).toBeNull();
+  });
+
   it("the nav's Chart builder still reopens the draft", async () => {
     await render("#/chart");
     const box = () => container.querySelector<HTMLInputElement>('input[aria-label="Chart title"]')!;
