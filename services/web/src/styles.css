@@ -633,6 +633,16 @@ a.btn:hover {
 .card-h .sub {
   font-size: var(--fs-sm);
   color: var(--text-3);
+  min-width: 0;
+}
+
+/* a long description wraps beside its button instead of pushing the button to its own line */
+.card-h.keep {
+  flex-wrap: nowrap;
+}
+
+.card-h.keep .btn {
+  flex: none;
 }
 
 .card-b {
@@ -900,16 +910,42 @@ table.t {
 
 .screener {
   display: flex;
-  align-items: flex-start;
-  gap: var(--sp-7);
+  flex-direction: column;
+  gap: var(--sp-6);
+}
+
+.filter-band > summary {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-4);
+  padding: var(--sp-4) var(--sp-6);
+  cursor: pointer;
+  list-style: none;
+}
+
+.filter-band > summary::-webkit-details-marker {
+  display: none;
+}
+
+.filter-band > summary::before {
+  content: "▸";
+  color: var(--text-3);
+}
+
+.filter-band[open] > summary::before {
+  content: "▾";
 }
 
 .filters {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-7);
-  width: 230px;
-  flex: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--sp-4) var(--sp-5);
+  align-items: end;
+  padding: 0 var(--sp-6) var(--sp-5);
+}
+
+.filter-note {
+  grid-column: 1 / -1;
 }
 
 .filters label:not(.chk) {
@@ -2381,33 +2417,6 @@ mark {
 
   .side {
     display: none;
-  }
-
-  .grid2,
-  .reader-body,
-  .sbs-h,
-  .sbs-r {
-    grid-template-columns: 1fr;
-  }
-
-  .screener,
-  .builder {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .filters,
-  .builder .layers {
-    width: 100%;
-  }
-
-  .who .faint,
-  .search-box span:first-child {
-    display: none;
-  }
-
-  .page {
-    padding: var(--sp-7) 16px;
   }
 
   .toc {

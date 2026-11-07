@@ -154,7 +154,7 @@ it("watchlist and screener columns: choose, order, saved, read from the API", as
   const params = requests("/v1/screener").at(-1)!.url.searchParams;
   expect(params.getAll("columns")).toEqual(["net_income_ttm", "revenue_ttm"]);
   const th = [...container.querySelectorAll("table.screen th")].map((t) => t.textContent);
-  expect(th.slice(2, 4)).toEqual(["Net income TTM", "Revenue TTM ↓"]); // sorted by revenue
+  expect(th.slice(2, 4)).toEqual(["Net income TTM", "Revenue ↓ TTM"]); // sorted by revenue
   await click(container.querySelector<HTMLButtonElement>(".col-picker button")!);
   await click(button("Reset"));
   expect(saved.screener).toBeUndefined();

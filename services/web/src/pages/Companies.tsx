@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } 
 import { failureReason, screener, SCREENER_CSV_ROWS, screenerCsv } from "../api";
 import { DEFAULT_SPECS, MASKED_TITLE, screenRow } from "../companies/rows";
 import {
+  activeFilters,
   BAND_LABELS,
   BANDS,
   CHECKS,
@@ -134,8 +135,8 @@ export function Companies({ token, screen: asked, watched, onWatch, onChart, sav
       <div className="screener">
         <FilterRail screen={screen} set={set} scoped={scope !== null} />
 
-        <section className="card grow">
-          <div className="card-h">
+        <section className="card">
+          <div className="card-h keep">
             <h2>Screen</h2>
             <span className="sub">{describe(screen)}</span>
             <span className="grow" />
@@ -153,24 +154,27 @@ export function Companies({ token, screen: asked, watched, onWatch, onChart, sav
               }} />
           ) : result.state === "loading" ? (
             <Skeleton lines={8} label="Running the screen" />
-          ) : rows.length === 0 ? (
-            <p className="empty">
-              {scope ? "None of the companies in your demo match." : "No companies match."}{" "}
-              {hasValueFilter(screen) && !scope
-                ? "Value filters only match companies your plan covers; loosen a filter or clear it."
-                : "Loosen a filter."}
-            </p>
           ) : (
-            <Table
-              rows={rows}
-              columns={columns}
-              sort={screen.sort ?? DEFAULT_SORT}
-              watched={watched}
-              onSort={(sort) => set({ sort })}
-              onSic={(sic) => set({ sic, industry: undefined })}
-              onWatch={onWatch}
-              onChart={onChart}
-            />
+            <>
+              <Table
+                rows={rows}
+                columns={columns}
+                sort={screen.sort ?? DEFAULT_SORT}
+                watched={watched}
+                onSort={(sort) => set({ sort })}
+                onSic={(sic) => set({ sic, industry: undefined })}
+                onWatch={onWatch}
+                onChart={onChart}
+              />
+              {rows.length === 0 && (
+                <p className="empty">
+                  {scope ? "None of the companies in your demo match." : "No companies match."}{" "}
+                  {hasValueFilter(screen) && !scope
+                    ? "Value filters only match companies your plan covers; loosen a filter or clear it."
+                    : "Loosen a filter."}
+                </p>
+              )}
+            </>
           )}
           {data && rows.length > 0 && (
             <Pager
@@ -205,6 +209,8 @@ export function Companies({ token, screen: asked, watched, onWatch, onChart, sav
 
 /** A typed filter applies this long after the last keystroke. */
 const APPLY_AFTER_MS = 400;
+/** Up to this wide the filters start folded: all nine would fill a phone's first screen. */
+const FOLD_FILTERS_PX = 700;
 
 function FilterRail({ screen, set, scoped }: {
   screen: ScreenFilters;
@@ -218,6 +224,8 @@ function FilterRail({ screen, set, scoped }: {
   const [industry, setIndustry] = useState(screen.industry ?? "");
   const [growth, setGrowth] = useState(screen.growth?.toString() ?? "");
   const [margin, setMargin] = useState(screen.margin?.toString() ?? "");
+  const [open, setOpen] = useState(() => window.innerWidth > FOLD_FILTERS_PX);
+  const active = activeFilters(screen);
 
   const n = (s: string) => (s.trim() === "" || !Number.isFinite(Number(s)) ? undefined : Number(s));
   const drafts = () => ({
@@ -268,9 +276,14 @@ function FilterRail({ screen, set, scoped }: {
   }, [draftKey]);
 
   return (
-    <form className="card card-b filters" onSubmit={submit} aria-label="Screen filters">
+    <details className="card filter-band" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
+      <summary>
+        <b>Filters</b>
+        <span className="faint small">{active ? `${active} active` : "none set"} · apply as you change them</span>
+      </summary>
+      <form className="filters" onSubmit={submit} aria-label="Screen filters">
       {screen.issue && (
-        <div>
+        <div className="filter-note">
           <span className="small muted">From the data status page</span>
           <button type="button" className="chip removable" onClick={() => apply({ issue: undefined })}
             title="Remove the data-check filter">
@@ -287,7 +300,7 @@ function FilterRail({ screen, set, scoped }: {
           placeholder="e.g. PEP or Pepsi" onChange={(e) => setQ(e.target.value)} onBlur={commit} />
       </div>
       <div>
-        <label htmlFor="f-ind">Industry (SIC description)</label>
+        <label htmlFor="f-ind">Industry (SIC)</label>
         <input id="f-ind" className="field" value={industry} maxLength={100}
           placeholder="e.g. beverages, semiconductors" onChange={(e) => setIndustry(e.target.value)}
           onBlur={commit} />
@@ -299,7 +312,7 @@ function FilterRail({ screen, set, scoped }: {
         )}
       </div>
       <div>
-        <label htmlFor="f-band">Size: revenue TTM</label>
+        <label htmlFor="f-band">Revenue TTM</label>
         <select id="f-band" className="field" value={screen.band ?? ""}
           onChange={(e) => apply({ band: (e.target.value || undefined) as Band | undefined })}>
           <option value="">Any</option>
@@ -309,12 +322,12 @@ function FilterRail({ screen, set, scoped }: {
         </select>
       </div>
       <div>
-        <label htmlFor="f-growth">Revenue growth YoY at least (%)</label>
+        <label htmlFor="f-growth">Rev growth YoY, min %</label>
         <input id="f-growth" className="field" type="number" step="any" value={growth}
           placeholder="any" onChange={(e) => setGrowth(e.target.value)} onBlur={commit} />
       </div>
       <div>
-        <label htmlFor="f-margin">Operating margin TTM at least (%)</label>
+        <label htmlFor="f-margin">Op margin TTM, min %</label>
         <input id="f-margin" className="field" type="number" step="any" value={margin}
           placeholder="any" onChange={(e) => setMargin(e.target.value)} onBlur={commit} />
       </div>
@@ -355,9 +368,9 @@ function FilterRail({ screen, set, scoped }: {
           Only companies I can read
         </label>
       )}
-      <p className="faint small">Filters apply as you change them.</p>
       <button type="submit" className="visually-hidden">Apply</button>
-    </form>
+      </form>
+    </details>
   );
 }
 
@@ -436,7 +449,7 @@ function Table({
                   <td className="first">
                     <a className="co" href={href({ view: "company", companyId: r.companyId })}
                       onClick={(e) => e.stopPropagation()}>
-                      <b>{r.name}</b>
+                      <b title={r.name}>{r.name}</b>
                       {r.ticker && <span className="faint mono">{r.ticker}</span>}
                       {!r.readable && (
                         <span className="tag" title={MASKED_TITLE}>metadata only</span>

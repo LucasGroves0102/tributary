@@ -107,6 +107,34 @@ it("sorts by a column, flipping direction on a second click", async () => {
   expect(window.location.hash).toBe("#/companies?sort=operating_margin_ttm");
 });
 
+it("the filters start folded on a phone, say how many are set, and stay mounted", async () => {
+  const width = window.innerWidth;
+  Object.defineProperty(window, "innerWidth", { value: 390, configurable: true });
+  await render({ industry: "semi", band: "over100b" as ScreenFilters["band"] });
+  Object.defineProperty(window, "innerWidth", { value: width, configurable: true });
+  const band = $(".filter-band") as HTMLDetailsElement;
+  expect(band.open).toBe(false);
+  expect(band.querySelector("summary")?.textContent).toContain("2 active");
+  // folded, not gone: what's typed survives opening and closing
+  expect($("#f-ind")).not.toBeNull();
+});
+
+it("the filters start open where there's room", async () => {
+  await render();
+  expect(($(".filter-band") as HTMLDetailsElement).open).toBe(true);
+});
+
+it("an empty result keeps the table's headers", async () => {
+  await render({ q: "no such company" });
+  vi.stubGlobal("fetch", vi.fn(async () => Response.json({ as_of: "", total: 0, limit: 50, offset: 0, sort: "-revenue_ttm", columns: [], rows: [] })));
+  act(() => root.unmount());
+  await render({ q: "no such company" });
+  for (let i = 0; i < 3; i++) await act(async () => {});
+  expect(container.querySelectorAll("table.screen thead th").length).toBeGreaterThan(3);
+  expect(container.querySelectorAll("table.screen tbody tr").length).toBe(0);
+  expect($(".empty")?.textContent).toContain("No companies match");
+});
+
 it("applies a filter from the rail to the URL", async () => {
   await render({ industry: "semi" });
   const select = $("#f-fye") as HTMLSelectElement;

@@ -149,6 +149,12 @@ export function isEmpty(f: ScreenFilters): boolean {
   return screenQuery({ ...f, sort: undefined, page: undefined }) === "";
 }
 
+/** How many filters are set: the count on the collapsed filter band. */
+export function activeFilters(f: ScreenFilters): number {
+  return [f.q, f.industry, f.sic, f.band, f.growth, f.margin, f.fye, f.exchange, f.filer, f.issue, f.mine]
+    .filter((v) => v !== undefined && v !== "" && v !== false).length;
+}
+
 /** Percent → fraction as a decimal string without float noise: 12.5 → "0.125". */
 export function fraction(percent: number): string {
   return String(Number((percent / 100).toPrecision(12)));

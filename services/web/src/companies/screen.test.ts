@@ -3,9 +3,16 @@ import { describe, expect, it } from "vitest";
 import { entry, TESLA } from "../fixtures";
 import type { ScreenerRow } from "../types";
 import { MASKED_TITLE, screenRow } from "./rows";
-import { describe as describeScreen, fraction, parseScreen, screenParams, screenQuery } from "./screen";
+import { activeFilters, describe as describeScreen, fraction, parseScreen, screenParams, screenQuery } from "./screen";
 
 describe("screen filters", () => {
+  it("count what's set, for the folded filter band", () => {
+    expect(activeFilters({})).toBe(0);
+    expect(activeFilters({ sort: "name", page: 2 })).toBe(0);
+    expect(activeFilters({ q: "KO", growth: 0, mine: true })).toBe(3);
+    expect(activeFilters({ mine: false, q: "" })).toBe(0);
+  });
+
   it("map to the Query API's screener parameters", () => {
     const p = screenParams({
       q: "pep",
