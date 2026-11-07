@@ -286,6 +286,14 @@ class Store:
                 """, (company_id, view, metrics, basis, quarters))
             return cur.fetchall()
 
+    def annual_per_share(self, user_id: str, company_id: str, years: int) -> list[dict]:
+        """The 10-K's own EPS and weighted shares per fiscal year (gold.annual_per_share,
+        migration 036): gold's quarters have no annual per-share figure, and these don't add."""
+        with self._session(user_id) as cur:
+            cur.execute("SELECT * FROM gold.annual_per_share(%s, %s)"
+                        " ORDER BY metric, period_end DESC", (company_id, years))
+            return cur.fetchall()
+
     def feed_status(self) -> dict:
         """When the newest filing was accepted by EDGAR and reached bronze (ops.feed_status,
         migration 026): public, no user."""

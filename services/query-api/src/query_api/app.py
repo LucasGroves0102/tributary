@@ -397,6 +397,29 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
             } for r in rows
         ]}
 
+    @app.get("/v1/companies/{company_id}/annual-per-share", response_model=dict)
+    def annual_per_share(
+        user_id: User, company_id: CompanyId,
+        years: Annotated[int, Query(ge=1, le=30)] = 10,
+    ) -> dict:
+        """EPS and weighted shares for each fiscal year, as the 10-K states them. Quarterly and TTM
+        figures come from /financials; these exist only here, because per-share amounts don't add
+        across quarters (the share count changes), so gold derives neither a TTM nor a fiscal Q4."""
+        require(user_id, "financials", company_id)
+        rows = store.annual_per_share(user_id, company_id, years)
+        return {"company_id": company_id, "as_of": _now(), "rows": [
+            {
+                "metric": r["metric"], "period_start": r["period_start"],
+                "period_end": r["period_end"], "fiscal_period": None, "calendar_period": None,
+                "value": r["value"], "unit": r["unit"], "value_source": "reported",
+                "citation": {"accession_no": r["accession_no"], "form": r["form"],
+                             "filed": r["filed"], "xbrl_tag": r["source_tag"],
+                             "source_accessions": [r["accession_no"]],
+                             "filing_url": filing_url(r["filer_cik"], r["accession_no"])},
+                "freshness": {"filed": r["filed"], "ingested_at": r["ingested_at"]},
+            } for r in rows
+        ]}
+
     segment_known: list[str] = []
 
     def segment_metric_names() -> list[str]:
