@@ -479,17 +479,22 @@ Values need financials access, like Statements.
 - **Revenue by segment and geography** (TTM or Quarterly, fiscal periods; `/v1/companies/{id}/
   segments?metric=revenue`): per axis (business segment, geography, product/service) a chart and
   a members × periods table (last 8 periods), each value's hover naming its filing. A member
-  missing a period shows "—", never zero; one reported in part of the window says "from FY2024
+  missing a period shows "·", never zero; one reported in part of the window says "from FY2024
   Q1" / "until FY2023 Q4". The 6 largest members (by the latest period) are named, the rest folded
-  into "Other (n members)" (the sum of those reporting each period). A "Sum vs reported revenue"
-  row compares the members with `/financials` revenue: bars stack only when every period is within
-  2% of 100%, otherwise each member is a line and the table says the breakdown is partial or
-  overlapping (a few named countries, two breakdowns on one axis).
+  into "Other (n members)" (the sum of those reporting each period). Members that overlap the rest
+  (a parent beside its children, a second cut of the same revenue: `chart/segments.ts`
+  `separateMembers`, rules in its docstring) are listed as reported, marked "overlaps the others",
+  and left out of every sum. A "Sum vs reported revenue" row compares the rest with `/financials`
+  revenue: bars stack only when every period is within 2% of 100%, otherwise each member is a line
+  and the table says the breakdown is partial or can't be separated.
 - **Growth decomposition** (TTM, year over year): each member's contribution in percentage points
   = its TTM change over four quarters / company TTM revenue four quarters earlier (members
-  reporting both periods), "Not attributed" = revenue growth minus their sum, and revenue
-  growth; chart: contributions as stacked bars (negatives down) with revenue growth (TTM YoY) as
-  a line.
+  reporting both periods, without those that overlap), "Not attributed" = revenue growth minus
+  their sum, and revenue growth; chart: contributions as stacked bars (negatives down) with revenue
+  growth (TTM YoY) as a line. A period whose members change by more than revenue did (they overlap,
+  or the company changed the basis between the two years, as NVIDIA did with its geography) shows no
+  contributions, in the table or the chart, and says which: a stack never overshoots the total.
+  This is in `contrib` itself, so saved charts get it too.
 - **Revenue quality**: per quarter, TTM revenue, quarter-end receivables, DSO (receivables / TTM
   revenue × 365), both YoY rates and their gap. A quarter is **flagged when receivables grew more
   than 10 percentage points faster than TTM revenue** over the same four quarters (`QUALITY_FLAG_
@@ -533,12 +538,17 @@ Data notes (`src/company/notes.ts`, Query API `/v1/companies/{id}/data-notes`, `
 the tearsheet's Data notes tab groups what the automated checks found (freshness, restated
 figures, gaps and overlapping periods, values to double-check, derived quarters) in plain
 language, each with links to its filings (the reader for 10-K/10-Q text the user can read,
-else EDGAR); Home lists the newest notes across the companies the user can read, by name (headed "every
-company" with the catalog open). They need financials access, like the values they describe. A
+else EDGAR); groups run newest first, by their newest note, with derived quarters last. Home lists
+the newest notes of the user's own companies, by name: with the catalog open, the ones they watch or
+analyse (`/v1/data-notes?company_id=`, at most 50), since every company is readable; while it's closed,
+the ones they can read. They need financials access, like the values they describe. A
 company is checked when its figures change, so its tab says when *its* figures were last checked while
 Home and Data status say when the checks last ran. A note about filings the SEC's XBRL data doesn't have
 yet dates them newest to oldest and promises "a day or two" only while that's true (over 3 days, it
-says how long the oldest has waited).
+says how long the oldest has waited). What a note says follows the API's reading of a finding: a stock
+split is one "10-for-1 stock split" note, a restatement by a clean factor without the other side says it
+may be a split, a factor of 1,000 says the unit changed, a spike the same quarter has in other years
+is a seasonal peak.
 
 Compare's "Side by side" draws the selected columns as small multiples (`compare/SmallMultiples.tsx`):
 one compact LayerChart per column, every readable company a line in the same colour on each
@@ -555,8 +565,20 @@ also from the sidebar footer).
 `src/tokens.test.ts` checks every text, state and series token against WCAG AA in both themes.
 Under 900px the sidebar becomes a drawer behind Menu; on a phone Sign out moves into it, the
 screener's filters start folded, and an analysis's steps show their numbers with the current step
-named. Banks show "n/a (bank)" for operating margin, FCF and net debt (`format.ts`
-`notForBanks`), and Compare leaves them out of those columns' peer median.
+named.
+
+What a table shows where there's no usable figure is one vocabulary, in `src/blanks.ts`: **—** not
+reported, **·** no data in this period, **n/a** not applicable, **n/m** not meaningful, **$0** a real
+zero. Whether a value is n/m, n/a or old is the database's call (migration 035), sent as `readings` so
+the screener, Peers, Compare, Key stats and Home can't disagree with the sort behind them; `readFigure`
+only words it. An n/m keeps its exact figure and reason in the hover. An old figure (about a year or
+more behind the company's latest period) shows dimmed with its date; one merely behind shows its date
+and still counts. Neither n/m, n/a nor old enters a median. A bank reads "n/a (bank)" for gross and
+operating margin, FCF, FCF margin, net debt, debt to equity and the current ratio whether or not it
+tags them, by the API's `not_applicable` list. Statements: a balance sheet has no TTM (the button is off,
+and a saved one reads as quarters); EPS and diluted shares read n/a in TTM, — in a fiscal Q4 (the 10-K
+states the year, and they aren't derived by subtraction) and come from the 10-K itself in Annual
+(`/v1/companies/{id}/annual-per-share`). Column pickers don't offer a balance's `_ttm` column.
 
 ## Run
 

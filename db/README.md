@@ -73,6 +73,18 @@ people type: exact ticker first (`BRK.B` = `BRK-B`), then CIK, exact name, retir
 name, then prefix, a later word, and contained (3+ characters), with spaces ignored for `JP Morgan`
 → JPMorgan Chase. `silver.resolve_company` keeps its exact-match meaning for formulas and the
 sandbox. Reads all 33,000 aliases per call (25-38 ms on hermes); no index was needed.
+`035_value_readings.sql` is the one definition of how a figure may be read: `gold.not_meaningful`
+(thresholds from the data, in its header), `gold.not_applicable_metrics` (banks),
+`gold.period_status` ("stale", once: over 300 days behind the company's latest period is old, over
+45 is behind), `gold.latest_period` and `gold.latest_reading` (032's `gold.latest_value` plus the
+reading, inlinable, under RLS). New functions only; no table changes and nothing to rebuild.
+`036_annual_per_share.sql` adds `gold.annual_per_share`: the 10-K's own EPS and weighted shares
+per fiscal year, SECURITY DEFINER because `query_api` has no grant on the facts table's values, with
+`authz.readable_companies` as its only rule.
+`037_check_segments_subtotal.sql` stops `ops.check_segments` adding a reconciliation member that just
+restates the segments' sum (NVIDIA's "109.0% more" is 4.5%). Stored findings keep their old figure
+until the check runs again (`make segments-rebuild`, or `SELECT ops.check_segments(array_agg(DISTINCT
+company_id)) FROM gold.segment_financials`).
 `026_feed_status.sql` adds `ops.feed_status()`: when the newest filing was accepted by EDGAR and
 when it reached bronze, two timestamps and nothing else. It is SECURITY DEFINER (query_api still
 can't read `bronze.filings`) and backs the Query API's public `/v1/status`, which the

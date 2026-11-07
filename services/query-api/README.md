@@ -50,10 +50,11 @@ request parameters. Dev tokens: `make token USER=alice`.
 | `GET /v1/companies/{id}/filings/{accession}/changes?section=&basis=&kind=` | filings | new / removed / rewritten Risk Factors and MD&A paragraphs vs the comparable earlier filing, word diffs, citations in both filings ([What changed](#what-changed)) |
 | `GET /v1/search?q=&company=&form=&section=&from=&to=&limit=&offset=` | filings (every company searched) | best passage per section, ranked, with snippet and citation ([Search](#search)) |
 | `GET /v1/companies/{id}/data-notes` | financials | data-quality and freshness notes: gaps, overlapping quarters, restatements, derived quarters, filings companyfacts doesn't carry yet, each with its filings ([Data notes](#data-notes)) |
-| `GET /v1/data-notes?limit=` | financials (every company covered) | the newest notes across the caller's companies, without derived-quarters notes ([Data notes](#data-notes)) |
+| `GET /v1/companies/{id}/annual-per-share?years=` | financials | EPS and weighted shares per fiscal year, as the 10-K states them (migration 036): per-share figures don't add, so quarters can't give them |
+| `GET /v1/data-notes?limit=&company_id=` | financials (every company covered) | the newest notes across the caller's companies, or the named ones of them (at most 50), without derived-quarters notes ([Data notes](#data-notes)) |
 | `POST /v1/formulas/validate` | token | AST, unit and inputs, or errors with positions |
 | `POST /v1/formulas/evaluate` | financials, every company in the formula | series; each point cites every input's filing |
-| `GET /v1/screener?columns=&where=&...&format=` | token | companies with financials: public metadata + latest values where permitted ([Screener](#screener)) |
+| `GET /v1/screener?columns=&where=&...&format=` | token | companies with a figure in these columns: public metadata + latest values where permitted, each with how to read it ([Screener](#screener)) |
 | `GET /v1/screener/columns` | | column keys, filer categories, size bands |
 | `GET /v1/watchlist?columns=&sort=&format=` | token, app DB | the caller's watchlist: metadata, last report, next expected filing, values where permitted |
 | `PUT` / `DELETE /v1/watchlist/{id}` | token, app DB | add / remove a company (grants nothing) |
@@ -143,7 +144,7 @@ route passes a catalog-sized list. What changes per route when public:
 
 | Route | With the catalog public | Why it has to differ |
 |---|---|---|
-| `/v1/screener`, `/v1/watchlist`, `/peers` | two stages: `gold.latest_value` per company for the sort and value filters, the other columns only for the page | pivoting `gold.latest_financials` read and sorted 1.6M rows for a page of 50 |
+| `/v1/screener`, `/v1/watchlist`, `/peers` | two stages: `gold.latest_reading` per company for the sort and value filters, the other columns only for the page | pivoting `gold.latest_financials` read and sorted 1.6M rows for a page of 50 |
 | `/v1/filings/latest` | documents newest first, stop at `limit` with sections, then the same grouping | grouped every section under RLS, then `LIMIT` |
 | `/v1/filing-index` (no `company_id`) | filing-date windows (3, 14, 90, 365 days, all time) on CIKs and `filed_on`, stopping at the first that fills the page: the same rows, because the query sorts newest first | `silver.filings` joined and de-duplicated 5M rows, then `LIMIT` |
 | `/v1/search` (no `company`) | ranks the newest window that fills the page (30, 180, 730 days, all time): **`searched_from` in the response says how far back** | can't rank 276,000 passages ("supply chain") in 8 s; see Search |
@@ -159,10 +160,12 @@ them for nothing.
 
 ## Screener
 
-`GET /v1/screener`: every company with gold financials (`access=financials`: only companies you
-can read). `issue` (a data-quality check's name, the status page's rows) lists only companies with
-a finding of it, read under RLS: one the caller can't read never matches, so it says nothing about
-them. Columns are `<metric>_ttm` (trailing twelve months; balance-sheet metrics at the
+`GET /v1/screener`: every company with a figure in at least one of the requested columns
+(`access=financials`: only companies you can read). A row of blanks isn't a result, so it isn't
+counted; `q` and `issue` list a company whatever it has, and with the catalog closed a company you
+can't read is listed anyway. `issue` (a data-quality check's name, the status page's rows) lists only
+companies with a finding of it, read under RLS: one the caller can't read never matches, so it says
+nothing about them. Columns are `<metric>_ttm` (trailing twelve months; balance-sheet metrics at the
 quarter end) or `<metric>_q` (latest fiscal quarter) for every metric in the formula catalog,
 each the latest value with its own `sources[key]` (`period_end`, `accession_no`, `form`,
 `filed`). Filters: `sic` (4-digit, repeatable), `sic_prefix` (1-3 digits), `industry` (SIC
@@ -171,12 +174,27 @@ description contains), `q` (name contains or exact ticker), `exchange`,
 ones without gold financials, for a comps table or a tearsheet), `filer_category` (`large_accelerated`, `accelerated`,
 `non_accelerated`), `revenue_band` / `assets_band` (`lt100m`, `100m-1b`, `1b-10b`, `10b-100b`,
 `gte100b` on `revenue_ttm` / `total_assets_q`) and `where=<column>:<gt|gte|lt|lte>:<number>`
-(ratios as fractions: `operating_margin_ttm:gte:0.2`). `sort` is a column key or `name`, `sic`,
-`fiscal_year_end`, `filer_category`, `state_of_incorporation`, `-` for descending; nulls last.
+(ratios as fractions: `operating_margin_ttm:gte:0.2`). `sort` is a column key or `name`, `sic` (the
+Industry column: by its name, not the code), `fiscal_year_end`, `filer_category`,
+`state_of_incorporation`, `-` for descending; nulls last.
 `limit` (500 as JSON, 5000 as CSV), `offset`, `format=json|csv`. JSON:
-`{as_of, total, limit, offset, sort, columns: [{key, metric, span, unit}], rows: [{company_id,
+`{as_of, total, limit, offset, sort, columns: [{key, metric, span, unit, balance}], rows: [{company_id,
 name, tickers, exchanges, sic, industry, fiscal_year_end, filer_category, filer_categories,
-state_of_incorporation, access: [tiers], values: {key: value}, sources: {key: {...}}}]}`.
+state_of_incorporation, access: [tiers], values: {key: value}, sources: {key: {...}},
+readings: {key: {status, reason}}, latest_period, not_applicable: [metrics]}]}`. CSV adds a `notes`
+column. `balance`: a point in time, so its `_ttm` column is the same number as its `_q` one.
+
+**How a value reads** (`readings`, migration 035, the only definition, used by the screener, watchlist
+and peers): `not_meaningful` (with `reason`): a margin on under $100K of revenue, a gross or operating
+margin over 100%, any margin over ±1,000%, growth of over 1,000% from under $10M or from a base under
+$100K, debt over 100 times equity, debt or equity below zero, ROE or payout over ten times, a current
+ratio over 100x. `not_applicable` (with `reason`): a bank's gross and operating margin, FCF, FCF margin,
+net debt, debt to equity and current ratio, whether or not a value exists. `old`: more than 300 days
+before the company's `latest_period` (the newest of its revenue, net income and total assets, never a
+future date). `behind`: more than 45. `values` keeps the exact figure in every case, but all except
+`behind` sort after real values and never pass a `where` or a size band: sorting by gross margin
+doesn't open on 209,828%. `/financials?readings=true` adds the row's `not_meaningful`; off by default,
+so the agent's tool sees what it always did.
 
 Companies you can't read financials for are **listed with metadata only** (values and sources
 null, `access` without `financials`), because identity is public and the screener is how you
@@ -738,6 +756,12 @@ from `readable()` (financials) and passes them into the SQL (with the catalog pu
   after the latest filing in the company's gold rows and within the last 120 days
   (`store.BEHIND_DAYS`; companyfacts lags by days, not months), that no XBRL fact cites yet.
   The companies' CIKs are looked up first and `silver.filings` is filtered on that array.
+- `stock_split`: what a split's restatements read as, one note per split (`detail`: `split`
+  "10-for-1", `reverse`, `findings`, `periods`, `metrics`, first and last period). Needs a share count
+  restated by a clean ratio and EPS by its reciprocal in the same period and filing. Without the other
+  side a finding stays a `restatement`, with `may_be_split`; a factor of 1,000 or 1,000,000 gets
+  `unit_change`. An `outlier` the same quarter also has in two other years gets `seasonal` and
+  severity info. No check is suppressed: every finding still reaches a note.
 - Every note has `date` (restating or missing filing, else the period end; newest first) and
   `filings` (`role`, accession, form, filed, EDGAR `filing_url` from the public index). The
   plain-language wording is the web app's (`services/web/src/company/notes.ts`).

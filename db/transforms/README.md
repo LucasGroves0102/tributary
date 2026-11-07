@@ -14,5 +14,7 @@ functions defined in the migrations, latest definitions first:
 | `ops.check_financials(text[])` (keeps segment findings; adds the restatement check) | `023_data_notes.sql` (before: `018_segments.sql`, `014_gold_calendar.sql`) |
 | `silver.resolve_company`, `silver.normalize_name` (entity resolution) | `002_companies.sql` |
 | `silver.search_companies` (what a search box finds, ranked) | `034_company_search.sql` |
+| `ops.check_segments(text[])` (latest: a reconciliation member restating the segments' sum isn't added) | `037_check_segments_subtotal.sql` (before: `018_segments.sql`) |
+| `gold.not_meaningful`, `gold.not_applicable_metrics`, `gold.period_status`, `gold.latest_period`, `gold.latest_reading` (how a figure may be read: read, not refreshed) | `035_value_readings.sql` |
 
 See [`../migrations/`](../migrations).
