@@ -152,7 +152,9 @@ them for nothing.
 ## Screener
 
 `GET /v1/screener`: every company with gold financials (`access=financials`: only companies you
-can read). Columns are `<metric>_ttm` (trailing twelve months; balance-sheet metrics at the
+can read). `issue` (a data-quality check's name, the status page's rows) lists only companies with
+a finding of it, read under RLS: one the caller can't read never matches, so it says nothing about
+them. Columns are `<metric>_ttm` (trailing twelve months; balance-sheet metrics at the
 quarter end) or `<metric>_q` (latest fiscal quarter) for every metric in the formula catalog,
 each the latest value with its own `sources[key]` (`period_end`, `accession_no`, `form`,
 `filed`). Filters: `sic` (4-digit, repeatable), `sic_prefix` (1-3 digits), `industry` (SIC

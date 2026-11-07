@@ -116,7 +116,8 @@ export function uiContext(route: Route, chart: ChartState, name: (id: string) =>
     ctx.accession_no = route.accessionNo;
     if (route.section) ctx.section_key = route.section;
   }
-  if (route.view === "companies" && route.screen) ctx.screen = { ...route.screen, page: undefined } as UiContext["screen"];
+  // agent-api's ScreenFilters is strict and doesn't know the status page's data-check filter
+  if (route.view === "companies" && route.screen) ctx.screen = { ...route.screen, page: undefined, issue: undefined } as UiContext["screen"];
   if (route.view === "chart") {
     // segment and price layers stay out: agent-api's context knows metric and formula layers
     // only (and a user's prices never go to the model)

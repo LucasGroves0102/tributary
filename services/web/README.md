@@ -30,8 +30,11 @@ against EDGAR's daily indexes, coverage counts, data-quality check totals and th
 runs of the adversarial, citation and golden-figure suites (linked to their reports on GitHub at
 the commit they were recorded in). It is public: signed out, `#/status` renders it without the
 app shell (and without calling `/v1/me`), linked from the front door; signed in, from the
-sidebar footer. Every figure comes from the API; the page hard-codes none. The agent's page
-context reports it as `about` (agent-api has no `status` page).
+sidebar footer. Every figure comes from the API; the page hard-codes none. A signed-in reader can
+follow a check's company count to the screener (`#/companies?issue=<check>`: the companies they can
+read with such a finding); the status route itself stays aggregate, and signed out there are no
+such links. The agent's page context reports it as `about` (agent-api has no `status` page) and
+leaves the data-check filter out of the screen it sends (its filters are strict).
 
 Sign-in (`src/session.ts`): the front door is "Try the demo" (`pages/Welcome.tsx`). It calls
 `POST /v1/demo/sandbox`, which creates a temporary real user (plan pro, a seeded watchlist and
@@ -105,6 +108,13 @@ Max; wide tables open at their newest end); Annual stays ten years. Filings open
 10-Q, 8-K; All is one click away), headed by fiscal year with gold's rule (`data.ts` `fiscalYear`,
 migration 014), and says "not parsed yet" only on forms that get parsed. What changed sits under the
 table, so the table has the page's width and its actions aren't clipped.
+
+Home: the sidebar badge and the status tile count the same filings (`Workspace.fresh`: the
+watchlist's with the catalog open, since the feed is then everyone's latest 50) and say the same
+thing (`home/data.ts` `sinceLabel`: since your last visit, or the last 7 days on a first visit in
+this browser). Removing a watchlist company offers Undo for 15 seconds. "New chart" starts empty
+and detached from any saved chart (the nav's Chart builder still reopens the draft), and the draft it
+replaced can be restored until the next one.
 
 Search (`pages/Search.tsx`): words run on Enter or the button (each search ranks every match);
 form, company and dates apply as soon as they change. Inverted dates aren't searched: the page says

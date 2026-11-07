@@ -185,3 +185,19 @@ describe("share", () => {
     expect(share(5, 0)).toBe("–");
   });
 });
+
+it("a signed-in reader can follow a check to the screener; signed out, the page stays aggregate", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  await act(async () => root.render(<Status load={async () => status()} now={() => NOW} />));
+  for (let i = 0; i < 2; i++) await act(async () => {});
+  const row = [...container.querySelectorAll("tr")].find((r) => r.textContent?.includes("Impossible values"))!;
+  expect(row.querySelector("a")?.getAttribute("href")).toBe("#/companies?issue=impossible_value");
+  await act(async () => root.render(<Status load={async () => status()} now={() => NOW} signedOut />));
+  for (let i = 0; i < 2; i++) await act(async () => {});
+  expect(container.querySelector('a[href^="#/companies"]')).toBeNull();
+  act(() => root.unmount());
+  container.remove();
+});

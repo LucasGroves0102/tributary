@@ -5,6 +5,7 @@ import { DEFAULT_SPECS, MASKED_TITLE, screenRow } from "../companies/rows";
 import {
   BAND_LABELS,
   BANDS,
+  CHECKS,
   DEFAULT_SORT,
   describe,
   EXCHANGES,
@@ -267,6 +268,18 @@ function FilterRail({ screen, set, scoped }: {
 
   return (
     <form className="card card-b filters" onSubmit={submit} aria-label="Screen filters">
+      {screen.issue && (
+        <div>
+          <span className="small muted">From the data status page</span>
+          <button type="button" className="chip removable" onClick={() => apply({ issue: undefined })}
+            title="Remove the data-check filter">
+            {CHECKS[screen.issue] ?? screen.issue} ✕
+          </button>
+          <p className="faint small">
+            Each company's Data notes tab shows what was found. Only companies you can read are listed.
+          </p>
+        </div>
+      )}
       <div>
         <label htmlFor="f-q">Name or ticker</label>
         <input id="f-q" className="field" type="search" value={q} maxLength={100}

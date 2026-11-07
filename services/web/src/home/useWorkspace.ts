@@ -40,6 +40,11 @@ export interface Workspace {
   latest: LatestFiling[] | null;
   since: string;
   firstVisit: boolean;
+  /** the new filings a count means: with the catalog open the feed is everyone's latest 50, so
+   * a count of it would be meaningless; the watchlist's are what's new for this user */
+  fresh: FilingItem[];
+  /** what `fresh` covers, to say beside the count */
+  freshScope: "your watchlist" | "your companies";
   watch: (companyId: string) => Promise<void>;
   unwatch: (companyId: string) => Promise<void>;
   /** asks again for the watchlist, feed and calendars (after an error) */
@@ -181,6 +186,10 @@ export function useWorkspace(
     const fresh = new Set((filings ?? []).filter((f) => f.isNew).map((f) => f.companyId));
     return watchRows(entries, revenue, fresh, columns);
   }, [entries, revenue, filings, columns]);
+  const fresh = useMemo(() => {
+    const watched = new Set(entries.map((e) => e.company_id));
+    return (filings ?? []).filter((f) => f.isNew && (calendarOfReadable || watched.has(f.companyId)));
+  }, [filings, entries, calendarOfReadable]);
   const expected = useMemo(
     () =>
       calendars &&
@@ -217,6 +226,8 @@ export function useWorkspace(
     latest,
     since,
     firstVisit: visit?.first ?? false,
+    fresh,
+    freshScope: calendarOfReadable ? "your companies" : "your watchlist",
     watch,
     unwatch,
     columns,

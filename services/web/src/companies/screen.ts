@@ -22,6 +22,22 @@ export const FILER_LABELS: Record<FilerCategory, string> = {
 
 export const EXCHANGES = ["NYSE", "Nasdaq", "CBOE", "OTC"] as const;
 
+/** What each data-quality check flags (migrations 014, 018, 023: ops.check_financials). The status
+ * page's rows, and the screener's "with a finding of this check" filter. */
+export const CHECKS: Record<string, string> = {
+  impossible_value: "Impossible values: negative revenue, assets or share counts, or a part larger than its total",
+  overlapping_quarters: "A quarter starting before the previous one ended",
+  calendar_collision: "Two quarters of a metric in one calendar quarter",
+  annual_sum: "Four quarters differing from the reported year by more than 1%",
+  series_gap: "A quarter missing after four contiguous ones",
+  sign_flip: "An expense or outflow whose sign differs from both neighbouring quarters",
+  outlier: "A one-quarter spike of 10× or more, typically a scale error",
+  segment_sum_business_segment: "Business segments not adding up to the company total (±1%)",
+  segment_sum_geography: "Geographic segments not adding up to the company total (±1%)",
+  segment_sum_product_service: "Product and service lines not adding up to the company total (±1%)",
+  restatement: "A figure a later filing changed by more than 0.5%",
+};
+
 /** Value columns the screener shows, in order. Ratios are fractions in the API. */
 export const SCREEN_COLUMNS: { key: string; label: string; period: string; kind: "usd" | "pct" | "growth" | "x" }[] = [
   { key: "revenue_ttm", label: "Revenue", period: "TTM", kind: "usd" },
@@ -55,6 +71,8 @@ export interface ScreenFilters {
   fye?: number;
   exchange?: string;
   filer?: FilerCategory;
+  /** a data check's name (CHECKS): companies with a finding of it, from the status page */
+  issue?: string;
   /** only companies whose financials the user can read */
   mine?: boolean;
   sort?: string;
@@ -62,7 +80,7 @@ export interface ScreenFilters {
   page?: number;
 }
 
-const KEYS = ["q", "industry", "sic", "band", "growth", "margin", "fye", "exchange", "filer",
+const KEYS = ["q", "industry", "sic", "band", "growth", "margin", "fye", "exchange", "filer", "issue",
   "mine", "sort", "page"] as const;
 
 function text(v: string | null, max = 100): string | undefined {
@@ -95,6 +113,7 @@ export function parseScreen(query: string): ScreenFilters {
     filer: (FILER_CATEGORIES as readonly string[]).includes(p.get("filer") ?? "")
       ? (p.get("filer") as FilerCategory)
       : undefined,
+    issue: CHECKS[p.get("issue") ?? ""] ? p.get("issue")! : undefined,
     mine: p.get("mine") === "1" ? true : undefined,
     sort: SORTS.has((p.get("sort") ?? "").replace(/^-/, "")) ? p.get("sort")! : undefined,
     page: int(p.get("page"), 1, 10000),
@@ -159,6 +178,7 @@ export function screenParams(f: ScreenFilters, columns: string[] = SCREEN_COLUMN
   if (f.fye) p.fiscal_year_end_month = f.fye;
   if (f.exchange) p.exchange = [f.exchange];
   if (f.filer) p.filer_category = [f.filer];
+  if (f.issue) p.issue = f.issue;
   if (f.mine) p.access = "financials";
   return p;
 }
@@ -180,6 +200,7 @@ export function describe(f: ScreenFilters): string {
     f.fye && `fiscal year ends in ${MONTHS[f.fye - 1]}`,
     f.exchange && `on ${f.exchange}`,
     f.filer && FILER_LABELS[f.filer].toLowerCase() + " filers",
+    f.issue && `data check: ${CHECKS[f.issue] ?? f.issue}`,
     f.mine && "only companies you can read",
   ].filter(Boolean);
   return parts.length ? parts.join(", ") : "no filters";

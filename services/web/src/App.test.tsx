@@ -32,6 +32,7 @@ function respond(url: string, init?: RequestInit): Response {
   if (path.endsWith("/v1/demo/users")) return Response.json({ users: ["alice", "bob"] });
   if (path.endsWith("/v1/demo/token")) return Response.json({ token: "t", expires_in: 3600 });
   if (path.endsWith("/v1/me")) return Response.json(ME);
+  if (/\/v1\/watchlist\/\d+$/.test(path)) return Response.json({ company_id: path.split("/").at(-1), removed: true, added: true });
   if (path.endsWith("/v1/watchlist")) {
     return Response.json({ as_of: "2026-10-21T12:00:00Z", columns: [], expected_method: "", companies: [entry(), TESLA] });
   }
@@ -177,6 +178,84 @@ describe("Home", () => {
     const calls = vi.mocked(fetch).mock.calls.filter(([, init]) => init?.method === "DELETE");
     expect(String(calls[0]?.[0])).toBe(`/api/query/v1/watchlist/${TSLA}`);
   });
+
+  it("offers to undo a removal, which puts the company back", async () => {
+    await render();
+    await act(async () => container.querySelector<HTMLButtonElement>(`button[aria-label="Remove Tesla from watchlist"]`)!.click());
+    await settle();
+    const note = $(".undo-note")!;
+    expect(note.textContent).toContain("Removed Tesla from your watchlist");
+    await act(async () => note.querySelector("button")!.click());
+    await settle();
+    const puts = vi.mocked(fetch).mock.calls.filter(([, init]) => init?.method === "PUT").map(([u]) => String(u));
+    expect(puts).toContain(`/api/query/v1/watchlist/${TSLA}`);
+    expect($(".undo-note")).toBeNull();
+  });
+
+  it("says the same thing about new filings wherever it counts them", async () => {
+    await render();
+    const badge = $(".nav .cnt.new")!;
+    const tile = [...container.querySelectorAll(".status-strip .k")].find((k) => k.textContent?.startsWith("New "))!;
+    const label = tile.textContent!.replace(/^New /, "");
+    expect(badge.getAttribute("title")).toContain(label);
+    expect(label).toBe("in the last 7 days"); // a first visit in this browser, not "your last visit"
+    expect(badge.getAttribute("title")).toContain(`${badge.textContent} new`);
+    expect(tile.parentElement!.querySelector(".v")?.textContent).toContain(badge.textContent!);
+  });
+
+  it("counts every readable company in the feed's heading with the catalog open", async () => {
+    vi.mocked(fetch).mockImplementation(async (url: string | URL | Request, init?: RequestInit) =>
+      String(url).endsWith("/v1/me")
+        ? Response.json({ ...ME, companies: [], catalog: { public: true, tiers: ["financials", "filings"], companies: 6039 } })
+        : respond(String(url), init));
+    await render();
+    expect(container.textContent).toContain("New filings for the 6,039 companies you can read");
+  });
+});
+
+describe("new chart", () => {
+  it("Home's New chart starts empty, and the draft it replaced can be restored", async () => {
+    await render("#/chart");
+    const box = () => container.querySelector<HTMLInputElement>('input[aria-label="Chart title"]')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(box(), "My draft");
+      box().dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    window.location.hash = "#/";
+    await settle();
+    await act(async () => [...container.querySelectorAll("button")].find((b) => b.textContent?.trim() === "New chart")!.click());
+    await settle();
+    expect($("h1")?.textContent).toBe("Chart builder");
+    expect(box().value).toBe("");
+    const restore = [...container.querySelectorAll(".undo-note button")].find((b) => b.textContent === "Restore the previous draft")!;
+    await act(async () => (restore as HTMLElement).click());
+    await settle();
+    expect(box().value).toBe("My draft");
+    expect($(".undo-note")).toBeNull();
+    // the builder's own New: the same thing, offered there too
+    await act(async () => [...container.querySelectorAll("button")].find((b) => b.textContent?.trim() === "New chart")!.click());
+    await settle();
+    expect(box().value).toBe("");
+  });
+
+  it("the nav's Chart builder still reopens the draft", async () => {
+    await render("#/chart");
+    const box = () => container.querySelector<HTMLInputElement>('input[aria-label="Chart title"]')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(box(), "Keep me");
+      box().dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    window.location.hash = "#/";
+    await settle();
+    window.location.hash = "#/chart";
+    await settle();
+    expect(box().value).toBe("Keep me");
+  });
+});
+
+it("names Settings in the breadcrumb", async () => {
+  await render("#/settings");
+  expect($(".crumb [aria-current]")?.textContent).toBe("Settings");
 });
 
 describe("navigation", () => {

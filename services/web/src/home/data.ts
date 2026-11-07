@@ -304,6 +304,12 @@ export function status(rows: WatchRow[], filings: FilingItem[]): Status {
   };
 }
 
+/** "since your last visit (Nov 5)" or, on a first visit in this browser, "in the last 7 days":
+ * the one wording wherever a count of new filings appears. */
+export function sinceLabel(since: string, firstVisit: boolean): string {
+  return firstVisit ? "in the last 7 days" : `since your last visit (${day(since)})`;
+}
+
 /** Newest ingestion time across the feed, for the freshness notes. */
 export function lastIngested(latest: LatestFiling[]): string | null {
   return latest.map((f) => f.ingested_at).sort().at(-1) ?? null;

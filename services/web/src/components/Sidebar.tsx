@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 import { readableTotal } from "../access";
 import { ago, day } from "../format";
-import type { WatchRow } from "../home/data";
+import { sinceLabel, type WatchRow } from "../home/data";
 import type { Workspace } from "../home/useWorkspace";
 import { href, NAV, type Route } from "../route";
 import type { Me } from "../types";
@@ -34,9 +34,10 @@ function section(route: Route): Route["view"] {
 }
 
 export function Sidebar({ route, me, workspace, lastIngested, onAdd, onExport, onShortcuts, workspaces, open = false, connections = false }: Props) {
-  const { rows, filings, watchlist } = workspace;
+  const { rows, watchlist } = workspace;
   const active = section(route);
-  const newCount = (filings ?? []).filter((f) => f.isNew).length;
+  const newCount = workspace.fresh.length;
+  const newTitle = `${newCount} new ${newCount === 1 ? "filing" : "filings"} on ${workspace.freshScope} ${sinceLabel(workspace.since, workspace.firstVisit)}`;
   const next = rows
     .filter((r) => r.next?.expected_date)
     .sort((a, b) => a.next!.expected_date!.localeCompare(b.next!.expected_date!))
@@ -62,7 +63,7 @@ export function Sidebar({ route, me, workspace, lastIngested, onAdd, onExport, o
           >
             <span className="grow">{n.label}</span>
             {n.view === "home" && newCount > 0 && (
-              <span className="cnt new" title="New filings since your last visit">
+              <span className="cnt new" title={newTitle}>
                 {newCount}
               </span>
             )}
@@ -95,7 +96,7 @@ export function Sidebar({ route, me, workspace, lastIngested, onAdd, onExport, o
           <p className="side-note">Press + to follow a company's filings here.</p>
         )}
         {rows.map((r) => (
-          <WatchLink key={r.companyId} row={r} current={route} />
+          <WatchLink key={r.companyId} row={r} current={route} since={sinceLabel(workspace.since, workspace.firstVisit)} />
         ))}
       </div>
 
@@ -185,7 +186,7 @@ export function Sidebar({ route, me, workspace, lastIngested, onAdd, onExport, o
   );
 }
 
-function WatchLink({ row, current }: { row: WatchRow; current: Route }) {
+function WatchLink({ row, current, since }: { row: WatchRow; current: Route; since: string }) {
   const yoy = row.cells.revenue_growth_ttm!;
   const on = current.view === "company" && current.companyId === row.companyId;
   return (
@@ -194,7 +195,7 @@ function WatchLink({ row, current }: { row: WatchRow; current: Route }) {
       className={on ? "on" : undefined}
       title={`${row.name} · revenue by quarter, last ${row.revenue.length || 12} quarters`}
     >
-      <i className={row.isNew ? "d" : "d off"} title={row.isNew ? "New filing since your last visit" : undefined} />
+      <i className={row.isNew ? "d" : "d off"} title={row.isNew ? `New filing ${since}` : undefined} />
       <b>{row.ticker ?? row.name}</b>
       <Spark values={row.revenue} label={`${row.name} quarterly revenue`} />
       <span className={`num small ${yoy.value === null ? "faint" : yoy.value >= 0 ? "pos" : "neg"}`} title={yoy.title}>

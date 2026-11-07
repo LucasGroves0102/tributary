@@ -306,6 +306,27 @@ def test_peers_and_search_can_be_only_granted_companies(peer_conn):
     assert [r["company_id"] for r in store.search("t-free", P3, only=[P3])] == [P3]
 
 
+def test_screener_lists_a_data_check_only_for_companies_the_caller_can_read(recap_conn, token):
+    """The status page's drill-through: same RLS as everything, so an unreadable company with a
+    finding simply isn't there (no oracle), and the check's name goes in as a bind parameter."""
+    run = recap_conn.execute("INSERT INTO ops.quality_runs (companies, findings) VALUES (1, 1)"
+                             " RETURNING run_id").fetchone()[0]
+    recap_conn.execute("INSERT INTO ops.quality_findings (company_id, check_name, metric,"
+                       " period_end, severity, run_id) VALUES (%s, 'impossible_value', 'revenue',"
+                       " '2026-06-30', 'error', %s)", (R, run))
+    api = client(recap_conn)
+
+    def listed(user, issue):
+        r = api.get(f"/v1/screener?issue={issue}", headers=token(user))
+        assert r.status_code == 200, r.text
+        return [row["company_id"] for row in r.json()["rows"]]
+
+    assert listed("t-free", "impossible_value") == [R]
+    assert listed("t-free", "outlier") == []
+    assert listed("t-nobody", "impossible_value") == []
+    assert api.get("/v1/screener?issue=DROP%20TABLE", headers=token("t-free")).status_code == 422
+
+
 S_APPLE, S_APPLEBY, S_ACME, S_GS, S_SPROUT, S_SPROUTS = (
     "9100000021", "9100000022", "9100000023", "9100000024", "9100000025", "9100000026")
 

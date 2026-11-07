@@ -15,6 +15,13 @@ const chartAction = (a: UiAction) => {
   return a;
 };
 
+describe("the screen sent with a question", () => {
+  it("leaves out the status page's data-check filter: agent-api's filters are strict", () => {
+    const ctx = uiContext({ view: "companies", screen: { margin: 20, issue: "impossible_value", page: 2 } }, emptyChart(), () => null);
+    expect(JSON.parse(JSON.stringify(ctx.screen))).toEqual({ margin: 20 });
+  });
+});
+
 describe("compare actions", () => {
   const COMPARE = {
     action: "set_compare" as const, label: "Comps: NVDA vs AAPL",

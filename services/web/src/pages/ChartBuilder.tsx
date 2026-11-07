@@ -78,6 +78,10 @@ interface Props {
   readable?: Readable;
   /** the user's own companies (the watchlist): what a template starts from on an empty chart */
   preferred?: string[];
+  /** "New chart": empties the chart, keeping the draft it replaces for `onRestore` */
+  onNew?: () => void;
+  /** set while there is a replaced draft to bring back */
+  onRestore?: (() => void) | null;
 }
 
 const ANYTHING_THE_API_ALLOWS: Readable = { has: () => true };
@@ -169,7 +173,7 @@ function useFilings(token: string, companyIds: string[], from: string | null, on
 }
 
 /** Chart builder: layers of company × metric or formula over /v1/formulas/evaluate. */
-export function ChartBuilder({ token, chart, setChart, saveBar, readable = ANYTHING_THE_API_ALLOWS, preferred = NO_PREFERENCE }: Props) {
+export function ChartBuilder({ token, chart, setChart, saveBar, readable = ANYTHING_THE_API_ALLOWS, preferred = NO_PREFERENCE, onNew, onRestore }: Props) {
   const seed = useChartSeed(token, preferred);
   const onChart = [...new Set(chart.layers.flatMap((l) => {
     const id = l.kind === "formula" ? l.defaultCompany : l.companyId;
@@ -339,6 +343,12 @@ export function ChartBuilder({ token, chart, setChart, saveBar, readable = ANYTH
           </div>
         )}
         <span className="grow" />
+        {onNew && (
+          <button className="btn" onClick={onNew} disabled={!chart.layers.length && !chart.title}
+            title="Start an empty chart. Your draft can be restored until you start another">
+            New chart
+          </button>
+        )}
         <button className="btn" onClick={exportCsv} disabled={!series.length}
           title="Exact values from the API with each point's source accessions">
           Export CSV
@@ -352,6 +362,12 @@ export function ChartBuilder({ token, chart, setChart, saveBar, readable = ANYTH
         {saveBar}
       </div>
       {note && <p className="empty error" role="alert">{note}</p>}
+      {onRestore && (
+        <p className="undo-note" role="status">
+          Started a new chart.{" "}
+          <button className="btn sm" onClick={onRestore}>Restore the previous draft</button>
+        </p>
+      )}
 
       <div className="builder">
         <section className="card layers" aria-label="Layers">

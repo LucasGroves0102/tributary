@@ -121,3 +121,9 @@ it("round-trips the Statements tab's choices, dropping defaults and anything unk
   expect(parse(`#/company/${id}/filings?kind=bs`)).toEqual({ view: "company", companyId: id, tab: "filings" });
   expect(href({ view: "company", companyId: id, tab: "filings", statements: { kind: "bs" } })).toBe(`#/company/${id}/filings`);
 });
+
+it("keeps a known data check in the screener's address and drops anything else", () => {
+  expect(parse("#/companies?issue=impossible_value")).toEqual({ view: "companies", screen: { issue: "impossible_value" } });
+  expect(href({ view: "companies", screen: { issue: "impossible_value" } })).toBe("#/companies?issue=impossible_value");
+  expect(parse("#/companies?issue=drop_table")).toEqual({ view: "companies" });
+});

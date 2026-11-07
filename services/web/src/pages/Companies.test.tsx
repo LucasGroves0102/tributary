@@ -137,6 +137,14 @@ it("applies typed filters by themselves a moment after typing stops, keeping the
   expect(document.activeElement).toBe(q);
 });
 
+it("a data check from the status page is a filter you can see and remove", async () => {
+  await render({ issue: "impossible_value" });
+  expect(calls().find((u) => u.pathname.endsWith("/v1/screener"))?.searchParams.get("issue")).toBe("impossible_value");
+  const chip = [...container.querySelectorAll("button.chip")].find((b) => b.textContent?.includes("Impossible values"))!;
+  await act(async () => (chip as HTMLElement).click());
+  expect(window.location.hash.includes("issue")).toBe(false);
+});
+
 it("watches, unwatches and charts from a row", async () => {
   await render();
   await act(async () => $(`button[aria-label="Add Nvidia to watchlist"]`)!.click());

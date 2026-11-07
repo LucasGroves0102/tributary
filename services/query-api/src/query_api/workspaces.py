@@ -196,6 +196,7 @@ class ScreenState(_Strict):
     fye: int | None = Field(default=None, ge=1, le=12)
     exchange: str | None = Field(default=None, min_length=1, max_length=20)
     filer: Literal["large_accelerated", "accelerated", "non_accelerated"] | None = None
+    issue: str | None = Field(default=None, pattern=r"^[a-z_]{1,64}$")
     mine: bool | None = None
     sort: str | None = Field(default=None, pattern=rf"^-?({'|'.join(SCREEN_SORTS)})$")
 

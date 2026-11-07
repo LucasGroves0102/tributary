@@ -1,26 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { dataStatus } from "../api";
+import { CHECKS } from "../companies/screen";
 import { ago, day } from "../format";
 import { href } from "../route";
 import type { DataStatus, RecordedRun } from "../types";
 
 const REPO = "https://github.com/LucasGroves0102/tributary";
-
-/** What each data-quality check flags (migrations 014, 018, 023: ops.check_financials). */
-export const CHECKS: Record<string, string> = {
-  impossible_value: "Impossible values: negative revenue, assets or share counts, or a part larger than its total",
-  overlapping_quarters: "A quarter starting before the previous one ended",
-  calendar_collision: "Two quarters of a metric in one calendar quarter",
-  annual_sum: "Four quarters differing from the reported year by more than 1%",
-  series_gap: "A quarter missing after four contiguous ones",
-  sign_flip: "An expense or outflow whose sign differs from both neighbouring quarters",
-  outlier: "A one-quarter spike of 10× or more, typically a scale error",
-  segment_sum_business_segment: "Business segments not adding up to the company total (±1%)",
-  segment_sum_geography: "Geographic segments not adding up to the company total (±1%)",
-  segment_sum_product_service: "Product and service lines not adding up to the company total (±1%)",
-  restatement: "A figure a later filing changed by more than 0.5%",
-};
 
 type State = { kind: "loading" } | { kind: "ok"; data: DataStatus } | { kind: "error" };
 
@@ -91,12 +77,12 @@ export function Status({ load = dataStatus, now = Date.now, signedOut = false }:
           </button>
         </p>
       )}
-      {state.kind === "ok" && <Body data={state.data} now={now()} />}
+      {state.kind === "ok" && <Body data={state.data} now={now()} signedIn={!signedOut} />}
     </div>
   );
 }
 
-function Body({ data, now }: { data: DataStatus; now: number }) {
+function Body({ data, now, signedIn }: { data: DataStatus; now: number; signedIn: boolean }) {
   const { freshness: f, ingest: i, coverage: c } = data;
   const when = (iso: string | null) => (iso ? ago(iso, now) : "—");
   return (
@@ -161,7 +147,7 @@ function Body({ data, now }: { data: DataStatus; now: number }) {
           </div>
         </section>
       </div>
-      <Quality data={data} when={when} />
+      <Quality data={data} when={when} signedIn={signedIn} />
       <Recorded data={data} />
     </>
   );
@@ -225,7 +211,9 @@ export function share(part: number, total: number): string {
   return `${pct < 0.1 && part > 0 ? "<0.1" : pct.toFixed(1)}%`;
 }
 
-function Quality({ data, when }: { data: DataStatus; when: (iso: string | null) => string }) {
+/** This page is public and aggregate: never a company here. A signed-in reader follows a row to the
+ * screener, which lists the companies they can read with such a finding, under their own access. */
+function Quality({ data, when, signedIn }: { data: DataStatus; when: (iso: string | null) => string; signedIn: boolean }) {
   const q = data.quality;
   return (
     <section className="card">
@@ -255,7 +243,15 @@ function Quality({ data, when }: { data: DataStatus; when: (iso: string | null) 
                 <td>
                   <span className={`tag sev-${c.severity}`}>{c.severity}</span>
                 </td>
-                <td className="n">{count(c.companies)}</td>
+                <td className="n">
+                  {signedIn && CHECKS[c.check] && c.companies ? (
+                    <a href={href({ view: "companies", screen: { issue: c.check } })} title="List these companies in the screener">
+                      {count(c.companies)}
+                    </a>
+                  ) : (
+                    count(c.companies)
+                  )}
+                </td>
                 <td className="n">{share(c.companies, q.companies_checked)}</td>
                 <td className="n">{count(c.findings)}</td>
               </tr>

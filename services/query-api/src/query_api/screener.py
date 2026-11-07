@@ -80,6 +80,7 @@ class Screen:
     exchanges: list[str] = field(default_factory=list)
     fye_months: list[int] = field(default_factory=list)
     filer_categories: list[str] = field(default_factory=list)
+    issue: str | None = None               # a data check's name: companies with a finding of it
     filters: list[Filter] = field(default_factory=list)
     sort: str = "-revenue_ttm"
     limit: int = 50
@@ -211,6 +212,12 @@ def compile_screen(s: Screen, granted: list[str] | None) -> Compiled:
     if s.filer_categories:
         meta.append("gold.filer_category(c.filer_categories) = ANY(%(filer_categories)s)")
         params["filer_categories"] = s.filer_categories
+    if s.issue:
+        # under RLS on ops.quality_findings: a company the caller can't read never matches, so
+        # this says nothing about it (the public status page has the counts only)
+        meta.append("EXISTS (SELECT 1 FROM ops.quality_findings f"
+                    " WHERE f.company_id = c.company_id AND f.check_name = %(issue)s)")
+        params["issue"] = s.issue
 
     for key, i in slots.items():
         params[f"m{i}"], params[f"s{i}"] = COLUMNS[key][0], COLUMNS[key][1]

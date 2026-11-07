@@ -117,6 +117,7 @@ function Breadcrumb({
   }
   const label = route.view === "about" ? "What Tributary covers"
     : route.view === "status" ? "Data status"
+    : route.view === "settings" ? "Settings"
     : route.view === "workspace" ? "Workspace"
     : route.view === "report" ? "Report"
     : route.view === "thesis" ? "Thesis"

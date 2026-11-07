@@ -3,7 +3,7 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { ApiError, demoUsers, login, me as fetchMe, watchlistCsv } from "./api";
 import { AssistantPanel } from "./assistant/AssistantPanel";
 import { metricLabel } from "./chart/metrics";
-import { companiesChart, companyChart, type Transform } from "./chart/model";
+import { companiesChart, companyChart, emptyChart, type ChartState, type Transform } from "./chart/model";
 import { useChart } from "./chart/useChart";
 import { uiContext } from "./assistant/actions";
 import { pageContext } from "./assistant/context";
@@ -153,6 +153,7 @@ export function App(props: Props = {}) {
     if (views.error) setError(views.error);
   }, [views.error]);
   const [chart, setChart] = useChart(user);
+  const [replacedChart, setReplacedChart] = useState<ChartState | null>(null);
   // read when the assistant sends a question or applies an action, so always the latest
   const chartRef = useRef(chart);
   chartRef.current = chart;
@@ -446,6 +447,20 @@ export function App(props: Props = {}) {
     [workspace, focusAssistant, assistant, toggleTheme, exportWatchlist, token, chartMany, scope],
   );
 
+  // "New chart" empties the builder (and detaches it from a saved chart, so Save can't overwrite
+  // it), keeping the draft for one Restore; "Chart builder" in the nav still reopens the draft
+  const newChart = () => {
+    const before = chartRef.current;
+    if (before.layers.length || before.title) setReplacedChart(before);
+    setChart(() => emptyChart());
+    saved.close("chart");
+    go({ view: "chart" });
+  };
+  const restoreChartDraft = () => {
+    if (replacedChart) setChart(() => replacedChart);
+    setReplacedChart(null);
+  };
+
   const saveBar = (current: Current) =>
     saved.list.state === "unavailable" ? null : (
       <SaveBar current={current} saved={saved} label={(id) => companyName(id) ?? id} />
@@ -548,6 +563,7 @@ export function App(props: Props = {}) {
                 onAdd={() => setPalette(WATCH_PREFIX)}
                 onExport={exportWatchlist}
                 readableCompanies={me ? readableTotal(me) : 0}
+                onNewChart={newChart}
                 recent={saved.list.state === "unavailable" ? null : <Recent recent={saved.recent} onOpen={openSaved} />}
                 notes={<RecentNotes token={token} name={companyName} filingsFor={filingsFor} />}
                 layout={views.home}
@@ -659,6 +675,8 @@ export function App(props: Props = {}) {
                 saveBar={saveBar({ kind: "chart", chart })}
                 readable={financialsFor}
                 preferred={watchedIds}
+                onNew={newChart}
+                onRestore={replacedChart ? restoreChartDraft : null}
               />
             ) : route.view === "ask" ? (
               <div className="page ask-page">

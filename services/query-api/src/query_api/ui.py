@@ -117,6 +117,9 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
         exchange: Annotated[list[str] | None, Query(description="e.g. NYSE, Nasdaq")] = None,
         fiscal_year_end_month: Annotated[list[int] | None, Query()] = None,
         filer_category: Annotated[list[FilerCategory] | None, Query()] = None,
+        issue: Annotated[str | None, Query(
+            pattern=r"^[a-z_]{1,64}$", description="a data-quality check's name "
+            "(the status page's rows): only companies you can read with a finding of it")] = None,
         revenue_band: Annotated[Band | None, Query(description="TTM revenue")] = None,
         assets_band: Annotated[Band | None, Query(description="latest total assets")] = None,
         where: Annotated[list[str] | None, Query(
@@ -160,7 +163,7 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
             coverage=company_id is None,
             sic=sic or [], sic_prefix=sic_prefix, industry=industry, q=q,
             exchanges=exchange or [], fye_months=fiscal_year_end_month or [],
-            filer_categories=list(filer_category or []), filters=filters,
+            filer_categories=list(filer_category or []), issue=issue, filters=filters,
             granted_only=access == "financials", sort=sort, limit=limit, offset=offset)
         compiled, rows, total = run_screen(user_id, screen, readable(user_id))
         if fmt == "csv":

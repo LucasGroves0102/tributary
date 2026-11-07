@@ -1,9 +1,9 @@
-import { Fragment, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
 
 import { ErrorPanel, Skeleton } from "../components/States";
 import { navRow, onTableKey } from "../components/tableNav";
 import { ago, change, day } from "../format";
-import { status, type ExpectedItem, type FilingItem, type WatchRow } from "../home/data";
+import { sinceLabel, status, type ExpectedItem, type FilingItem, type WatchRow } from "../home/data";
 import { EXPECTED_DAYS, RECENT_DAYS, type Workspace } from "../home/useWorkspace";
 import { go, href } from "../route";
 import { defaultHome, type HomeCard, type HomeCardId } from "../views/model";
@@ -28,22 +28,22 @@ interface Props {
   columnPicker?: ReactNode;
   /** how many companies the user can read (access.ts readableTotal): the feed covers them all */
   readableCompanies?: number;
+  /** "New chart": an empty chart, the current draft kept for one Restore */
+  onNewChart?: () => void;
 }
 
 /** Cards shown side by side when next to each other. */
 const HALF = new Set<HomeCardId>(["filings", "expected"]);
 
-export function Home({ workspace, lastIngested, onAdd, onExport, recent, notes, layout, onCustomize, editor, columnPicker, readableCompanies = 0 }: Props) {
+export function Home({ workspace, lastIngested, onAdd, onExport, recent, notes, layout, onCustomize, editor, columnPicker, readableCompanies = 0, onNewChart }: Props) {
   const { watchlist, rows, filings, expected, since, firstVisit } = workspace;
-  const newLabel = firstVisit
-    ? "new in the last 7 days in bold"
-    : `new since your last visit (${day(since)}) in bold`;
+  const newLabel = `new ${sinceLabel(since, firstVisit)} in bold`;
 
   const card = (id: HomeCardId): ReactNode => {
     switch (id) {
       case "status":
         return watchlist.state === "ok" ? (
-          <StatusStrip rows={rows} filings={filings ?? []} since={since} firstVisit={firstVisit} lastIngested={lastIngested} />
+          <StatusStrip rows={rows} fresh={workspace.fresh} scope={workspace.freshScope} since={sinceLabel(since, firstVisit)} lastIngested={lastIngested} />
         ) : null;
       case "recent":
         return recent ? (
@@ -145,7 +145,7 @@ export function Home({ workspace, lastIngested, onAdd, onExport, recent, notes, 
         <button className="btn" onClick={() => go({ view: "compare" })}>
           New comps
         </button>
-        <button className="btn primary" onClick={() => go({ view: "chart" })}>
+        <button className="btn primary" onClick={() => (onNewChart ? onNewChart() : go({ view: "chart" }))}>
           New chart
         </button>
       </div>
@@ -158,18 +158,20 @@ export function Home({ workspace, lastIngested, onAdd, onExport, recent, notes, 
 
 function StatusStrip({
   rows,
-  filings,
+  fresh,
+  scope,
   since,
-  firstVisit,
   lastIngested,
 }: {
   rows: WatchRow[];
-  filings: FilingItem[];
+  /** the new filings to count (Workspace.fresh) */
+  fresh: FilingItem[];
+  scope: string;
+  /** sinceLabel */
   since: string;
-  firstVisit: boolean;
   lastIngested: string | null;
 }) {
-  const s = status(rows, filings);
+  const s = status(rows, fresh);
   return (
     <div className="status-strip" role="list" aria-label="Status">
       <div role="listitem">
@@ -182,12 +184,12 @@ function StatusStrip({
         </div>
       </div>
       <div role="listitem">
-        <div className="k">New since {firstVisit ? "a week ago" : day(since)}</div>
+        <div className="k">New {since}</div>
         <div className="v">
           {s.newFilings} {s.newFilings === 1 ? "filing" : "filings"}
         </div>
         <div className="p">
-          {s.newPeriodic} 10-K/10-Q · {s.new8k} 8-K
+          on {scope} · {s.newPeriodic} 10-K/10-Q · {s.new8k} 8-K
         </div>
       </div>
       <div role="listitem" title={s.next?.expected.basis}>
@@ -248,10 +250,31 @@ function StatusStrip({
   );
 }
 
+/** How long "Removed X. Undo" stays. */
+const UNDO_MS = 15_000;
+
 function WatchTable({ workspace, onAdd }: { workspace: Workspace; onAdd: () => void }) {
   const { watchlist, rows } = workspace;
   const [removing, setRemoving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [removed, setRemoved] = useState<{ id: string; name: string } | null>(null);
+  useEffect(() => {
+    if (!removed) return;
+    const t = setTimeout(() => setRemoved(null), UNDO_MS);
+    return () => clearTimeout(t);
+  }, [removed]);
+  const undo = () => {
+    if (!removed) return;
+    const { id } = removed;
+    setRemoved(null);
+    workspace.watch(id).catch(() => setError("Couldn't put it back. Add it again with + Add."));
+  };
+  const notice = removed && (
+    <p className="undo-note" role="status">
+      Removed {removed.name} from your watchlist.{" "}
+      <button className="btn sm" onClick={undo}>Undo</button>
+    </p>
+  );
 
   if (watchlist.state === "loading") return <Skeleton lines={4} label="Loading your watchlist" />;
   if (watchlist.state === "unavailable") {
@@ -267,6 +290,8 @@ function WatchTable({ workspace, onAdd }: { workspace: Workspace; onAdd: () => v
   }
   if (rows.length === 0) {
     return (
+      <>
+      {notice}
       <p className="empty">
         Follow companies here to see their latest filing, key numbers and next expected report.{" "}
         <button className="btn sm" onClick={onAdd}>
@@ -274,14 +299,16 @@ function WatchTable({ workspace, onAdd }: { workspace: Workspace; onAdd: () => v
         </button>{" "}
         or press <span className="kbd">Ctrl K</span> and type <code>watch:</code>.
       </p>
+      </>
     );
   }
 
-  const remove = (id: string) => {
+  const remove = (id: string, name: string) => {
     setRemoving(id);
     setError(null);
     workspace
       .unwatch(id)
+      .then(() => setRemoved({ id, name }))
       .catch(() => setError("Couldn't remove it. Try again."))
       .finally(() => setRemoving(null));
   };
@@ -289,6 +316,7 @@ function WatchTable({ workspace, onAdd }: { workspace: Workspace; onAdd: () => v
   return (
     <>
       {error && <p className="empty error">{error}</p>}
+      {notice}
       <div className="tw">
         <table className="t watchlist">
           <thead>
@@ -366,7 +394,7 @@ function WatchTable({ workspace, onAdd }: { workspace: Workspace; onAdd: () => v
                   <button
                     className="btn sm ghost"
                     disabled={removing === r.companyId}
-                    onClick={() => remove(r.companyId)}
+                    onClick={() => remove(r.companyId, r.name)}
                     aria-label={`Remove ${r.name} from watchlist`}
                   >
                     Remove
