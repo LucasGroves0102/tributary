@@ -86,13 +86,19 @@ describe("Status", () => {
     await mount(<Status load={async () => status()} now={() => NOW} />);
     const t = text();
     expect(container.querySelector("h1")?.textContent).toBe("Data status");
-    for (const s of ["3 min ago", "2 min ago", "43 s / 1.8 min", "39,000 live-feed filings, last 7 days",
+    for (const s of ["3 min ago", "2 min ago", "43 s", "95% within 1.8 min", "39,000 live-feed filings, last 7 days",
       "97.5%", "39,000 of 40,000 filings", "6,025", "265,625", "1,780,000", "43,012", "21 days checked",
-      "on 1 day", "6,024 companies checked", "Permission attacks: 0 leaks in 59", "4 of 4 legitimate",
-      "Citations: 128 of 128 figures traced", "30 of 30 answers using data", "Golden figures: 149 figures printed in 5 10-Ks",
-      "2 known gaps asserted absent", "21 of the figures", "claude-haiku-5-5", "last recorded runs, not live"]) {
+      "all on 1 of those days", "6,024 companies checked", "Access: 59 attempts to reach data a user can't read, 0 succeeded", "4 of 4 ordinary",
+      "Citations: 128 of 128 figures traced", "30 of 30 answers using data", "Figures against the filings: 149 numbers printed in 5 10-Ks",
+      "2 known gaps asserted absent", "21 of the figures", "last recorded results, not live"]) {
       expect(t).toContain(s);
     }
+    // in words an analyst or a reviewer understands: no percentile jargon, model names or hashes on screen
+    for (const s of ["p50", "p95", "Permission attacks", "CI ", "claude-haiku", "02ca3b2", "9d9f318"]) {
+      expect(t).not.toContain(s);
+    }
+    // every time says its zone
+    expect(container.querySelector(".status-strip .p")?.textContent).toMatch(/\b(UTC|GMT|[A-Z]{2,4}T)\b|GMT[+-]\d+/);
     const rows = [...container.querySelectorAll("tbody tr")].map((r) => r.textContent);
     expect(rows[0]).toContain("Impossible values");
     expect(rows[0]).toContain("error");
@@ -112,7 +118,7 @@ describe("Status", () => {
     });
     await mount(<Status load={async () => empty} now={() => NOW} />);
     expect(text()).toContain("First check pending.");
-    expect(text()).not.toContain("Missing at the check");
+    expect(text()).not.toContain("Missing when checked");
   });
 
   it("shows dashes, not zeros, when the feed caught nothing", async () => {
@@ -121,8 +127,17 @@ describe("Status", () => {
       freshness: { last_accepted_at: null, last_ingested_at: null },
     });
     await mount(<Status load={async () => quiet} now={() => NOW} />);
-    expect(text()).toContain("— / —");
+    expect(text()).toContain("95% within —");
     expect(text()).not.toContain("NaN");
+  });
+
+  it("reconciles companies checked with companies shown as having financials", async () => {
+    const more = status({ quality: { ...status().quality, companies_checked: 7063 },
+      coverage: { ...status().coverage, companies_with_financials: 6039 } });
+    await mount(<Status load={async () => more} now={() => NOW} />);
+    expect(text()).toContain("7,063 companies have XBRL figures to check; 1,024 of them have no quarterly series, which is why 6,039 show");
+    // a company's check isn't the latest run
+    expect(text()).toContain("its own last check can be days old");
   });
 
   it("offers a retry when the API fails", async () => {
@@ -132,7 +147,7 @@ describe("Status", () => {
     await act(async () => container.querySelector<HTMLButtonElement>("[role=alert] button")!.click());
     await settle();
     expect(load).toHaveBeenCalledTimes(2);
-    expect(text()).toContain("Permission attacks");
+    expect(text()).toContain("Access:");
   });
 
   it("formats durations", () => {
@@ -160,7 +175,7 @@ describe("Status without signing in", () => {
     window.location.hash = "#/status";
     await mount(<App picker={false} />);
     expect(container.querySelector("h1")?.textContent).toBe("Data status");
-    expect(text()).toContain("Permission attacks: 0 leaks in 59");
+    expect(text()).toContain("Access: 59 attempts");
     expect(container.querySelector(".status-home")?.getAttribute("href")).toBe("#/");
     const calls = vi.mocked(fetch).mock.calls;
     const statusCall = calls.find(([u]) => String(u).endsWith("/v1/status/data"));

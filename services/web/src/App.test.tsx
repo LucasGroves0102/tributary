@@ -37,6 +37,12 @@ function respond(url: string, init?: RequestInit): Response {
   if (path.endsWith("/v1/watchlist")) {
     return Response.json({ as_of: "2026-10-21T12:00:00Z", columns: [], expected_method: "", companies: [entry(), TESLA] });
   }
+  if (path.endsWith("/v1/status")) {
+    return Response.json({ status: "ok", as_of: "", last_accepted_at: null, last_ingested_at: new Date().toISOString() });
+  }
+  if (path.endsWith("/api/agent/v1/allowance")) {
+    return Response.json({ per_hour: 30, network_per_hour: 40, left_this_hour: 28, paused: false, per_day: 1000, left_today: 998, report_questions: 3, check_questions: 4 });
+  }
   if (path.endsWith("/v1/filings/latest")) {
     return Response.json({ as_of: "", filings: [feedFiling({ ingested_at: new Date().toISOString() })] });
   }
@@ -152,7 +158,10 @@ describe("Home", () => {
     expect(strip).toContain("2 companies");
     expect(strip).toContain("NVDA 10-Q ~Nov 19");
     expect(strip).toContain("+69.0%");
-    expect(strip).toContain("Live");
+    expect(strip).toContain("Newest filing listed");
+    expect(strip).toContain("just now");
+    expect(strip).toContain("newest filing text parsed just now");
+    expect(strip).not.toContain("Live");
     expect($(".feed")?.textContent).toContain("Nvidia");
     const feed = [...container.querySelectorAll(".feed li")];
     // Tesla's 8-K from the public index: listed, opened on its Filings tab (no grant to read it)
@@ -458,6 +467,29 @@ describe("assistant drawer", () => {
     await settle();
     expect(drawer()).toBeNull();
     expect($("aside.ai-page")).not.toBeNull();
+  });
+
+  it("shows the questions left before one is spent, and looks again after one is", async () => {
+    await render();
+    await settle();
+    expect($(".ai-meter")?.textContent).toBe("28 of 30 questions left this hour · 998 of 1,000 today");
+    expect($(".ai-meter")?.getAttribute("title")).toMatch(/30 questions an hour.*1,000 a day.*midnight UTC/);
+    const asks = () => vi.mocked(fetch).mock.calls.filter(([u]) => String(u).endsWith("/v1/allowance")).length;
+    const before = asks();
+    await act(async () => container.querySelector<HTMLButtonElement>(".ai-s button")!.click());
+    await settle();
+    expect(asks()).toBe(before + 1);
+  });
+
+  it("a question a page wrote for you leaves when you do, unless you edited it", async () => {
+    await render(`#/company/${NVDA}`);
+    await act(async () => [...container.querySelectorAll<HTMLButtonElement>(".co-head button")].find((b) => b.textContent === "Ask")!.click());
+    await settle();
+    const box = () => $("textarea") as HTMLTextAreaElement;
+    expect(box().value).toContain("latest quarter");
+    window.location.hash = "#/companies";
+    await settle();
+    expect(box().value).toBe("");
   });
 
   it("follows the page: context chip and suggestions", async () => {

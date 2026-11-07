@@ -119,7 +119,7 @@ function escape(s: string): string {
 function flagged(figure: string): HTMLElement {
   const span = document.createElement("span");
   span.className = "figure unverified";
-  span.title = "Not found in any tool result";
+  span.title = "Not found in anything the assistant read";
   span.textContent = figure;
   return span;
 }
@@ -135,7 +135,7 @@ function citationElement(accession: string, c: Citation | undefined): HTMLElemen
   }
   const span = document.createElement("span");
   span.className = c ? "accession" : "accession unverified";
-  span.title = c ? describe(c) : "Not in any tool result";
+  span.title = c ? describe(c) : "A filing the assistant didn't read";
   span.textContent = accession;
   return span;
 }

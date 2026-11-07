@@ -47,8 +47,12 @@ const AXES: Record<string, string> = {
   product_service: "products and services",
 };
 
+/** The SEC's XBRL data usually follows a filing within this many days; past it the note says so
+ * rather than promising the usual. */
+const USUAL_LAG_DAYS = 3;
+
 /** A note in words. Every number keeps its unit (%, days, ×) and period. */
-export function explain(n: DataNote): Explained {
+export function explain(n: DataNote, now = Date.now()): Explained {
   const d = n.detail;
   const m = n.metric ? metricLabel(n.metric) : "A figure";
   const pe = n.period_end ? `the period ending ${day(n.period_end, true)}` : "one period";
@@ -56,12 +60,19 @@ export function explain(n: DataNote): Explained {
     case "companyfacts_behind": {
       const count = num(d.missing_filings) ?? n.filings.length;
       const newest = n.filings[0];
+      // the filings come newest first, so the last is the one that has waited longest
+      const oldestFiled = n.filings.at(-1)?.filed ?? str(d.missing_filed);
+      const waited = oldestFiled ? Math.floor((now - Date.parse(oldestFiled.slice(0, 10))) / 86_400_000) : 0;
+      const which = count === 1
+        ? `a ${newest?.form ?? "10-Q/10-K"} filed ${date(d.missing_filed)}`
+        : `${count} 10-K/10-Q filings, the newest filed ${date(d.missing_filed)} and the oldest ${date(oldestFiled)},`;
       return {
-        title: "A newer filing isn't in the figures yet",
+        title: count === 1 ? "A newer filing isn't in the figures yet" : "Newer filings aren't in the figures yet",
         text:
-          `EDGAR has ${count === 1 ? `a ${newest?.form ?? "10-Q/10-K"}` : `${count} 10-K/10-Q filings`} filed ${date(d.missing_filed)} ` +
-          `that the SEC's XBRL data (companyfacts) doesn't include yet, so the financials here end with the filing of ${date(d.facts_latest_filed)}. ` +
-          "They update once the SEC publishes that data, usually within a day or two.",
+          `EDGAR has ${which} that the SEC's XBRL data (companyfacts) doesn't include yet, so the financials here end with the filing of ${date(d.facts_latest_filed)}. ` +
+          (waited > USUAL_LAG_DAYS
+            ? `${count === 1 ? "It has" : "The oldest has"} been waiting ${waited} days, longer than the usual day or two. The figures update only when the SEC publishes that data; until then, read the filing itself.`
+            : "They update once the SEC publishes that data, usually within a day or two."),
       };
     }
     case "restatement": {

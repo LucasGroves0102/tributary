@@ -174,6 +174,8 @@ class Sandboxes(Protocol):
     def expires_at(self, user_id: str) -> datetime | None: ...
     def take_question(self, user_id: str, now: datetime, per_user: int, per_day: int,
                       questions: int = 1) -> int: ...  # left today; raises QuotaExceeded
+    def questions_left(self, user_id: str, now: datetime, per_user: int,
+                       per_day: int) -> tuple[int, int]: ...  # (daily cap, left); takes nothing
     def delete_expired(self, now: datetime) -> dict[str, int]: ...
     def catalog_public(self) -> bool: ...
 
@@ -304,6 +306,35 @@ class AppSandboxes:
                         "     = demo_agent_usage.questions + EXCLUDED.questions",
                         (user_id, day, questions))
             return cap - mine - questions
+
+    def questions_left(self, user_id: str, now: datetime, per_user: int,
+                       per_day: int) -> tuple[int, int]:
+        """The user's daily cap and what take_question would still allow today, taking nothing
+        and locking nothing: for the assistant panel's meter, so it may be a question out by the
+        time one is asked. Same rules as take_question; anyone it refuses is SandboxGone."""
+        day = now.astimezone(UTC).date()
+        with self._pool.connection() as conn, conn.transaction(), conn.cursor() as cur:
+            if is_password_user(user_id):
+                cur.execute("SELECT questions_per_day, disabled FROM password_accounts"
+                            " WHERE user_id = %s", (user_id,))
+                row = cur.fetchone()
+                if row is None or row[1]:
+                    raise SandboxGone(user_id)
+                cap = int(row[0])
+                cur.execute("SELECT questions FROM demo_agent_usage"
+                            " WHERE user_id = %s AND day = %s", (user_id, day))
+                return cap, max(0, cap - _count(cur))
+            cur.execute("SELECT expires_at > %s FROM demo_sandboxes WHERE user_id = %s"
+                        " UNION ALL SELECT true FROM github_accounts WHERE user_id = %s",
+                        (now, user_id, user_id))
+            row = cur.fetchone()
+            if row is None or not row[0]:
+                raise SandboxGone(user_id)
+            cur.execute("SELECT questions FROM demo_agent_usage WHERE user_id = %s AND day = %s",
+                        (user_id, day))
+            mine = _count(cur)
+            cur.execute("SELECT questions FROM demo_agent_daily WHERE day = %s", (day,))
+            return per_user, max(0, min(per_user - mine, per_day - _count(cur)))
 
     def catalog_public(self) -> bool:
         """Whether every company is open to signed-in users (app migration 008's switch), so the

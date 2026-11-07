@@ -1,6 +1,7 @@
 import { displayNames } from "./format";
 import type {
   AgentEvent,
+  Allowance,
   AuthProviders,
   PasswordSignedIn,
   Calendar,
@@ -99,6 +100,17 @@ export async function createSandbox(): Promise<SandboxCreated> {
 /** The public status page's data: no token. */
 export async function dataStatus(): Promise<DataStatus> {
   return json<DataStatus>(await fetch(`${QUERY}/v1/status/data`));
+}
+
+/** When the newest filing reached the database (public, the outside uptime check's route). */
+export async function feedStatus(): Promise<{ last_accepted_at: string | null; last_ingested_at: string | null }> {
+  return json(await fetch(`${QUERY}/v1/status`));
+}
+
+/** The questions left before spending any; null on an agent-api without the route. */
+export async function allowance(token: string): Promise<Allowance | null> {
+  const r = await fetch(`${AGENT}/v1/allowance`, { headers: { Authorization: `Bearer ${token}` } });
+  return r.ok ? ((await r.json()) as Allowance) : null;
 }
 
 /** Sign-in providers the Query API has configured. */

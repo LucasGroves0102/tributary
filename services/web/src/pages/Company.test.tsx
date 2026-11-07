@@ -437,7 +437,7 @@ it("data notes: plain-language notes by group, each with its filings", async () 
   expect(text).toContain("EDGAR has a 10-Q filed Aug 27, 2026 that the SEC's XBRL data (companyfacts) doesn't include yet");
   expect(text).toContain("Revenue for the period ending Apr 27, 2025 was first reported in the 10-Q filed May 28, 2025 and changed by +1.2% in the 10-K filed Feb 26, 2026");
   expect(text).toContain("No quarterly capex is reported or derivable from Jan 28, 2019 to Apr 28, 2019");
-  expect(text).toContain("Checked 3 h ago");
+  expect(text).toContain("last checked 3 h ago");
   const links = [...container.querySelectorAll(".note-f a")].map((a) => [a.textContent, a.getAttribute("href"), a.getAttribute("title")]);
   expect(links).toEqual([
     ["on EDGAR: 10-Q Aug 27, 2026 ↗", "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000099/", "10-Q 0001045810-26-000099, filed Aug 27, 2026"],

@@ -207,10 +207,12 @@ a.btn:hover {
   border-color: transparent;
 }
 
+/* expected, not filed: an outline, not a colour. Colour says the form (10-K, 10-Q) or, on saved
+   work, the kind; orange is your own writing (thesis, model). */
 .tag.e {
-  background: var(--warn-soft);
-  color: var(--warn);
-  border-color: transparent;
+  background: transparent;
+  color: var(--text-2);
+  border: 1px dashed var(--text-3);
 }
 
 .tag.warn {
@@ -1205,6 +1207,25 @@ button.link:hover {
 
 .ai-i textarea:focus {
   border-color: var(--accent);
+}
+
+.ai-meter {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 0 var(--sp-6);
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.ai-meter meter {
+  width: 48px;
+  height: 6px;
+  flex: none;
+}
+
+.ai-meter.low {
+  color: var(--warn);
 }
 
 .ai-f {

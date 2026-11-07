@@ -7,6 +7,7 @@ import { ApiError, failureReason, openItem, screenerColumns, workspace as fetchW
 import { slug } from "../chart/export";
 import { catalog } from "../chart/metrics";
 import type { ChartState } from "../chart/model";
+import { leftText, useAllowanceContext } from "../assistant/useAllowance";
 import { useDirectory } from "../companies/directory";
 import { CompanySearch } from "../components/CompanySearch";
 import { ErrorPanel, Skeleton } from "../components/States";
@@ -244,6 +245,11 @@ function ThesisEditor({ token, item, initial, items, saved, label, readable, onO
       if (bridge.current === handle) bridge.current = null;
     };
   }, [bridge, item.item_id, saved]);
+  const { allowance, refresh: refreshAllowance } = useAllowanceContext();
+  // a check ran: it counted, several times over
+  useEffect(() => {
+    if (checks.run.status !== "running") refreshAllowance();
+  }, [checks.run.status, refreshAllowance]);
   const nameError = nameProblem(name, ITEM_NAME_MAX);
   const directory = useDirectory(token);
   const named = companyId ? directory.company(companyId) : null;
@@ -432,7 +438,7 @@ function ThesisEditor({ token, item, initial, items, saved, label, readable, onO
         </button>
         <button className="btn sm" onClick={checks.start} disabled={dirty || checking || !written}
           title={dirty ? "Save first: the check reads the saved thesis" : !written ? "Write the thesis first: headings and guidance alone have nothing to check"
-            : "The assistant checks each factual claim and your models' assumptions against the filings (counts as 4 questions)"}>
+            : `The assistant checks each factual claim and your models' assumptions against the filings (counts as 4 questions${allowance ? `; you have ${leftText(allowance)}` : ""})`}>
           {checking ? "Checking…" : "Check my thesis"}
         </button>
         <button className="btn primary" onClick={() => void save()} disabled={!dirty || busy || !!nameError} title="Save (Ctrl+S)">

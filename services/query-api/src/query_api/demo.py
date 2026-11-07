@@ -205,6 +205,27 @@ def add_sandbox_routes(app: FastAPI, *, store: Store, sandboxes: Sandboxes | Non
         DEMO_QUESTIONS.labels("allowed").inc()
         return {"demo": True, "remaining_today": left}
 
+    @app.get("/v1/demo/agent-quota")
+    def agent_quota_left(user_id: User) -> dict:
+        """What POST would still allow today, taking nothing: agent-api's /v1/allowance, for the
+        assistant panel's meter (nginx keeps this off the public site too). `capped` false: this
+        user isn't limited here."""
+        password = is_password_user(user_id)
+        github = is_github_user(user_id)
+        if not password and not github and not is_sandbox_user(user_id):
+            return {"capped": False}
+        off = sandboxes is None or (not password and (
+            not (enabled or github) or not config.agent_enabled))
+        if off or sandboxes is None:
+            return {"capped": True, "per_day": 0, "left_today": 0}
+        try:
+            cap, left = sandboxes.questions_left(user_id, clock(),
+                                                 config.agent_questions_per_user_per_day,
+                                                 config.agent_questions_per_day)
+        except SandboxGone:
+            raise HTTPException(401, "account not found") from None
+        return {"capped": True, "per_day": cap, "left_today": left}
+
     def account_quota(user_id: str, n: int) -> dict:
         """A password account's own daily cap (app migration 013, set by the owner with
         query-api-account). Not subject to DEMO_SANDBOX_ENABLED, DEMO_AGENT_ENABLED or the

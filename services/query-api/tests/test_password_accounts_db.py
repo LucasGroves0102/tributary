@@ -234,6 +234,18 @@ def test_questions_use_the_accounts_own_cap_not_the_demo_day(world):
         sandboxes.take_question(USER, NOW + timedelta(days=1), 1, 1)
 
 
+def test_questions_left_is_the_accounts_own_cap_and_takes_nothing(world):
+    _, conn, _, sandboxes = world
+    assert sandboxes.questions_left(USER, NOW, 1, 1) == (3, 3)
+    sandboxes.take_question(USER, NOW, 1, 1)
+    assert sandboxes.questions_left(USER, NOW, 1, 1) == (3, 2)
+    assert rows(conn, "SELECT questions FROM demo_agent_usage WHERE user_id = %s", USER) == [
+        (1,)]
+    conn.execute("UPDATE password_accounts SET disabled = true")
+    with pytest.raises(SandboxGone):
+        sandboxes.questions_left(USER, NOW, 1, 1)
+
+
 def test_agent_quota_message_names_the_accounts_cap(world):
     client, *_ = world
     h = {"Authorization": f"Bearer {sign_in(client).json()['token']}"}

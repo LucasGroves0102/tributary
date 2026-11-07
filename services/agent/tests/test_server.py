@@ -9,7 +9,13 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from tributary_agent.agent import Agent
-from tributary_agent.server import LimitExceeded, Limits, create_app, query_api_quota
+from tributary_agent.server import (
+    LimitExceeded,
+    Limits,
+    create_app,
+    query_api_daily_count,
+    query_api_quota,
+)
 
 
 class Clock:
@@ -171,6 +177,87 @@ def test_demo_quota_is_taken_after_the_in_process_limits():
     assert len(messages.requests) == 1  # no model call once the quota says no
     assert ask(c, token="forged").status_code == 401
     assert len(taken) == 2  # an invalid token never reaches the quota
+
+
+def allowance(c, token="alice-token", ip=None):
+    headers = {"Authorization": f"Bearer {token}"}
+    if ip:
+        headers["X-Client-IP"] = ip
+    return c.get("/v1/allowance", headers=headers)
+
+
+def test_allowance_says_what_is_left_and_spends_nothing():
+    clock = Clock()
+    limits = Limits(per_hour=3, per_ip_per_hour=10, daily_budget_usd=5, clock=clock)
+    c, messages = client(limits)
+    for _ in range(2):
+        body = allowance(c).json()
+        assert (body["per_hour"], body["left_this_hour"]) == (3, 3)
+    assert messages.requests == []
+    assert body["paused"] is False
+    # what a report and a check take, so the page can say; no daily count without the Query API's
+    assert (body["report_questions"], body["check_questions"]) == (3, 4)
+    assert (body["per_day"], body["left_today"]) == (None, None)
+    assert ask(c).status_code == 200
+    assert allowance(c).json()["left_this_hour"] == 2
+    clock.t += 3601
+    assert allowance(c).json()["left_this_hour"] == 3
+
+
+def test_allowance_is_the_tighter_of_user_and_network():
+    limits = Limits(per_hour=30, per_ip_per_hour=2, daily_budget_usd=5)
+    c, _ = client(limits)
+    limits.acquire("someone-else", "203.0.113.9", 2)
+    r = allowance(c, ip="203.0.113.9").json()
+    assert (r["left_this_hour"], r["per_hour"], r["network_per_hour"]) == (0, 30, 2)
+    assert allowance(c, ip="203.0.113.10").json()["left_this_hour"] == 2
+
+
+def test_allowance_says_when_the_budget_has_run_out():
+    limits = Limits(per_hour=30, per_ip_per_hour=30, daily_budget_usd=5)
+    c, _ = client(limits)
+    limits.spend(6)
+    assert allowance(c).json()["paused"] is True
+
+
+def test_allowance_needs_a_token():
+    c, _ = client()
+    assert c.get("/v1/allowance").status_code == 401
+    assert allowance(c, token="forged").status_code == 401
+
+
+def test_allowance_carries_the_query_apis_daily_count():
+    c = TestClient(create_app(lambda tok: None, who_is, Limits(30, 30, 5),
+                              daily_count=lambda tok: {"per_day": 10, "left_today": 7}))
+    r = allowance(c).json()
+    assert (r["per_day"], r["left_today"]) == (10, 7)
+
+
+@pytest.mark.parametrize("status,body,want", [
+    (200, {"capped": True, "per_day": 10, "left_today": 7}, (10, 7)),
+    (200, {"capped": False}, (None, None)),
+    (404, {}, (None, None)),
+    (500, {}, (None, None)),
+])
+def test_query_api_daily_count(status, body, want):
+    seen = []
+
+    def handler(request):
+        seen.append(request)
+        return httpx.Response(status, json=body)
+
+    http = httpx.Client(transport=httpx.MockTransport(handler))
+    r = query_api_daily_count("http://q", http=http)("tok")
+    assert (r["per_day"], r["left_today"]) == want
+    assert seen[0].method == "GET" and seen[0].headers["authorization"] == "Bearer tok"
+
+
+def test_query_api_daily_count_unreachable_shows_no_count():
+    def handler(request):
+        raise httpx.ConnectError("down")
+
+    http = httpx.Client(transport=httpx.MockTransport(handler))
+    assert query_api_daily_count("http://q", http=http)("tok")["per_day"] is None
 
 
 def quota_with(status, body=None):

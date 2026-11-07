@@ -2,9 +2,11 @@ import { Fragment, useEffect, useState, type ReactNode } from "react";
 
 import { ErrorPanel, Skeleton } from "../components/States";
 import { navRow, onTableKey } from "../components/tableNav";
-import { ago, change, day, UNNAMED } from "../format";
+import { ago, change, day, periodPhrase, UNNAMED } from "../format";
 import { sinceLabel, status, type ExpectedItem, type FilingItem, type WatchRow } from "../home/data";
+import { FRESHNESS_EXPLAINED } from "../home/useFeedStatus";
 import { EXPECTED_DAYS, RECENT_DAYS, type Workspace } from "../home/useWorkspace";
+import { edgarOpen } from "../components/Sidebar";
 import { go, href } from "../route";
 import { defaultHome, type HomeCard, type HomeCardId } from "../views/model";
 
@@ -12,7 +14,10 @@ const FEED_ROWS = 10;
 
 interface Props {
   workspace: Workspace;
+  /** the newest filing's text parsed, among those the user can read */
   lastIngested: string | null;
+  /** the newest filing in the index, whoever's (useFeedStatus) */
+  listed?: string | null;
   onAdd: () => void;
   onExport: () => void;
   /** "Continue where you left off" (workspaces/Recent) */
@@ -35,15 +40,19 @@ interface Props {
 /** Cards shown side by side when next to each other. */
 const HALF = new Set<HomeCardId>(["filings", "expected"]);
 
-export function Home({ workspace, lastIngested, onAdd, onExport, recent, notes, layout, onCustomize, editor, columnPicker, readableCompanies = 0, onNewChart }: Props) {
+export function Home({ workspace, lastIngested, listed = null, onAdd, onExport, recent, notes, layout, onCustomize, editor, columnPicker, readableCompanies = 0, onNewChart }: Props) {
   const { watchlist, rows, filings, expected, since, firstVisit } = workspace;
-  const newLabel = `new ${sinceLabel(since, firstVisit)} in bold`;
+  // bold tells the new rows from the rest, so it says nothing when they're all new or none are
+  const shownFilings = filings?.slice(0, FEED_ROWS) ?? [];
+  const someNew = shownFilings.some((f) => f.isNew);
+  const allNew = shownFilings.length > 0 && shownFilings.every((f) => f.isNew);
+  const newLabel = allNew ? `all new ${sinceLabel(since, firstVisit)}` : someNew ? `new ${sinceLabel(since, firstVisit)} in bold` : `none new ${sinceLabel(since, firstVisit)}`;
 
   const card = (id: HomeCardId): ReactNode => {
     switch (id) {
       case "status":
         return watchlist.state === "ok" ? (
-          <StatusStrip rows={rows} fresh={workspace.fresh} scope={workspace.freshScope} since={sinceLabel(since, firstVisit)} lastIngested={lastIngested} />
+          <StatusStrip rows={rows} fresh={workspace.fresh} scope={workspace.freshScope} since={sinceLabel(since, firstVisit)} lastIngested={lastIngested} listed={listed} />
         ) : null;
       case "recent":
         return recent ? (
@@ -88,7 +97,7 @@ export function Home({ workspace, lastIngested, onAdd, onExport, recent, notes, 
                 last {RECENT_DAYS} days · {newLabel}
               </span>
             </div>
-            <FilingFeed filings={filings} />
+            <FilingFeed filings={filings} bold={someNew && !allNew} />
           </section>
         );
       case "expected":
@@ -100,8 +109,8 @@ export function Home({ workspace, lastIngested, onAdd, onExport, recent, notes, 
             </div>
             <ExpectedTable expected={expected} />
             <div className="foot">
-              Estimates, not filings: each company's median filing lag over its recent reports,
-              capped at the SEC deadline. Watchlist companies in bold.
+              Estimates, not filings (a dashed tag means not filed yet): each company's median filing lag over its
+              recent reports, capped at the SEC deadline. Watchlist companies in bold.
             </div>
           </section>
         );
@@ -162,6 +171,7 @@ function StatusStrip({
   scope,
   since,
   lastIngested,
+  listed,
 }: {
   rows: WatchRow[];
   /** the new filings to count (Workspace.fresh) */
@@ -170,6 +180,7 @@ function StatusStrip({
   /** sinceLabel */
   since: string;
   lastIngested: string | null;
+  listed: string | null;
 }) {
   const s = status(rows, fresh);
   return (
@@ -229,22 +240,17 @@ function StatusStrip({
           </>
         )}
       </div>
-      <div role="listitem">
-        <div className="k">Data freshness</div>
-        {lastIngested ? (
-          <>
-            <div className="v">
-              <span className="live" />
-              Live
-            </div>
-            <div className="p">last filing ingested {ago(lastIngested)}</div>
-          </>
+      <div role="listitem" title={FRESHNESS_EXPLAINED}>
+        <div className="k">Newest filing listed</div>
+        {listed ? (
+          <div className="v">
+            <span className={edgarOpen() ? "live" : "live quiet"} />
+            {ago(listed)}
+          </div>
         ) : (
-          <>
-            <div className="v faint">—</div>
-            <div className="p">shown for companies with filings access</div>
-          </>
+          <div className="v faint">—</div>
         )}
+        <div className="p">{lastIngested ? `newest filing text parsed ${ago(lastIngested)}` : "filing text appears for companies with filings access"}</div>
       </div>
     </div>
   );
@@ -414,7 +420,7 @@ function FormTag({ form }: { form: string }) {
   return <span className={`tag ${kind}`}>{form}</span>;
 }
 
-function FilingFeed({ filings }: { filings: FilingItem[] | null }) {
+function FilingFeed({ filings, bold }: { filings: FilingItem[] | null; bold: boolean }) {
   if (filings === null) return <Skeleton lines={5} label="Loading recent filings" />;
   if (filings.length === 0) {
     return (
@@ -431,8 +437,8 @@ function FilingFeed({ filings }: { filings: FilingItem[] | null }) {
           <span className="muted num">{day(f.filed)}</span>
           <FormTag form={f.form} />
           <span className="feed-name">
-            {f.isNew ? <b>{f.name}</b> : f.name}
-            {f.periodEnd && <span className="muted"> · period to {day(f.periodEnd, true)}</span>}
+            {f.isNew && bold ? <b>{f.name}</b> : f.name}
+            {f.periodEnd && <span className="muted"> · {periodPhrase(f.form, f.periodEnd)}</span>}
           </span>
           <span className="row">
             {f.readable ? (

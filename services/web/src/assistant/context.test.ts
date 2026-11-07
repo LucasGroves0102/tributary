@@ -74,8 +74,11 @@ describe("pageContext", () => {
   it("the chart's prompts follow the chart", () => {
     expect(all({ view: "chart" }).suggestions).toEqual([]);
     expect(all({ view: "chart" }, [TSLA]).suggestions).toEqual(["Chart Tesla's revenue and operating margin"]);
-    const amazonLike = all({ view: "chart" }, [TSLA], { charted: true, company: VRT }).suggestions;
+    const amazonLike = all({ view: "chart" }, [TSLA], { chartHasLayers: true, charted: [VRT], company: VRT }).suggestions;
     expect(amazonLike).toEqual(["Show it as YoY growth over 5 years", "Add Vertiv's operating margin", "Add Tesla's revenue"]);
+    // a company already on it isn't offered again
+    const both = all({ view: "chart" }, [TSLA], { chartHasLayers: true, charted: [VRT, TSLA], company: VRT }).suggestions;
+    expect(both).toEqual(["Show it as YoY growth over 5 years", "Add Vertiv's operating margin"]);
   });
 
   it("a filing is described in words, with no accession number or section key in the prompts", () => {

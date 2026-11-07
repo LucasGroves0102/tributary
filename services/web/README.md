@@ -27,14 +27,17 @@ the URL, sortable, ungranted companies as metadata only, CSV export through the 
 `#/company/<company_id>` 12-quarter chart and table, every value linked to its filing;
 `#/filing/<company_id>/<accession>[/<section>]` parsed filing reader; `#/chart` the chart
 builder (each layer a `/v1/formulas/evaluate` request; plain SVG; CSV, SVG and PNG export);
-`#/ask` the assistant full width, with streamed answers, tool trace and verified citation links;
+`#/ask` the assistant full width, with streamed answers, the lookups it made and verified citation links;
 `#/compare` the comps table; `#/analysis` the Analysis tab (guided research projects, below); `#/about` says what Tributary covers and doesn't (no prices, consensus or
 transcripts; estimated dates; banks; EDGAR timing), linked from the sidebar footer and the
 assistant's empty state; `#/status` the data status page (`pages/Status.tsx`, `GET
-/v1/status/data`): feed freshness, EDGAR-to-database latency, live-feed share, completeness
-against EDGAR's daily indexes, coverage counts, data-quality check totals and the last recorded
-runs of the adversarial, citation and golden-figure suites (linked to their reports on GitHub at
-the commit they were recorded in). It is public: signed out, `#/status` renders it without the
+/v1/status/data`), in words an analyst or a reviewer reads, with every time in its zone: feed
+freshness, how long a filing takes from EDGAR to here (typical, and 95% within), live-feed share,
+completeness against EDGAR's daily indexes (business days only, which is why fewer days than the window
+are checked), coverage counts, data-quality check totals (reconciled: every company with XBRL figures is
+checked, and those without a quarterly series are why fewer show as having financials) and the last
+recorded results of the adversarial, citation and golden-figure suites (linked to their reports on GitHub at
+the commit they were recorded in, which shows only on the link's hover). It is public: signed out, `#/status` renders it without the
 app shell (and without calling `/v1/me`), linked from the front door; signed in, from the
 sidebar footer. Every figure comes from the API; the page hard-codes none. A signed-in reader can
 follow a check's company count to the screener (`#/companies?issue=<check>`: the companies they can
@@ -130,6 +133,24 @@ migration 014; `filingHeadings`: on a newest-first page a heading only moves bac
 forms that get parsed. What changed sits under the table, so the table has the page's width; its
 actions stay in view on narrow pages (sticky) and long 8-K item lists wrap.
 
+Freshness has two clocks, labelled, explained on hover (`home/useFeedStatus.ts`): a filing is *listed*
+(`GET /v1/status`, the same time as Data status's "Newest filing listed here") minutes after EDGAR accepts
+it, and its text *parsed* (the newest in `/v1/filings/latest`) at once for tracked companies and
+within about 6 hours for the rest. They differ by hours, and neither stands in for the other.
+
+The assistant panel shows the questions left before one is spent (`assistant/useAllowance.ts`,
+agent-api `/v1/allowance`): per hour and, where the account has a cap, per day. What Tributary covers
+states the same limits, and a report's and a thesis check's buttons say what's left. On an older agent-api
+it shows nothing. A question a page wrote for the user ("Summarize … in this 10-Q") leaves when they leave
+that page, unless they edited it. The footer's date is "Newest filing cited": it knows what an answer
+cites, not what the answer relied on. Model name, tokens and cost sit behind Details; `renderAnswer` writes
+timestamps, dates, `as_of` and XBRL concepts the model copied from a tool in words (display only, the concept
+on hover; a thesis, which is the user's, isn't touched).
+
+Tags: colour says the form (10-K, 10-Q) or, on saved work, the kind; an expected filing has a dashed outline,
+not a colour, so a colour never means "not filed yet". Bold marks new rows on Home only when some rows aren't,
+and an 8-K's period of report reads as the event date it is (`format.ts` `periodPhrase`).
+
 Home: the sidebar badge and the status tile count the same filings (`Workspace.fresh`: the
 watchlist's with the catalog open, since the feed is then everyone's latest 50) and say the same
 thing (`home/data.ts` `sinceLabel`: since your last visit, or the last 7 days on a first visit in
@@ -220,14 +241,17 @@ sidebar with the other items (rename, duplicate, delete as usual).
   while there are unsaved changes) through agent-api `/v1/thesis-checks` and counts as 4
   assistant questions. The panel beside the thesis lists each factual claim with a Supported /
   Contradicted / Can't verify badge, the assistant's explanation and its citations (form, date,
-  the accession linked to EDGAR, `§ key` opening the filing reader at the cited section, the
-  figure); a filing no tool returned and a figure not found in the data are marked, never hidden.
+  "Read MD&A" opening the filing reader at the cited section, "EDGAR ↗" the filing on sec.gov
+  with its accession on hover, the figure; `components/FilingLinks.tsx`, also on answers and
+  reports); a filing no tool returned and a figure not found in the data are marked, never hidden.
   Clicking a claim's quote marks it in the preview (only text nodes are wrapped in
   `<mark class="claim-mark">`; nothing is parsed) or selects it in the editor in Write mode. Then
   each embedded model's assumptions per forecast year against its 5-year revenue CAGR and margin
   range (computed by agent-api with `models/model.ts`' definitions; flagged years marked), what
   the latest 10-K/10-Q says that the thesis doesn't mention, the summary, notes (e.g. "only the
-  first 30,000 characters were checked"), model, cost and as-of. A history dropdown shows earlier
+  first 30,000 characters were checked") and as-of, with model and cost behind Details. A
+  quote shows without the Markdown it was written in (`plainQuote`; finding it still uses the
+  quote as given). A history dropdown shows earlier
   checks (`GET /v1/workspace-items/{id}/checks`). A check whose `text_hash` differs from the
   current text (SHA-256 of the company id, a newline and the Markdown; `textHash`, the same as
   agent-api's `text_hash`, with a shared test vector) is labelled stale. All of the assistant's
@@ -441,8 +465,12 @@ Data notes (`src/company/notes.ts`, Query API `/v1/companies/{id}/data-notes`, `
 the tearsheet's Data notes tab groups what the automated checks found (freshness, restated
 figures, gaps and overlapping periods, values to double-check, derived quarters) in plain
 language, each with links to its filings (the reader for 10-K/10-Q text the user can read,
-else EDGAR); Home lists the newest notes across the user's companies. They need financials
-access, like the values they describe.
+else EDGAR); Home lists the newest notes across the companies the user can read, by name (headed "every
+company" with the catalog open). They need financials access, like the values they describe. A
+company is checked when its figures change, so its tab says when *its* figures were last checked while
+Home and Data status say when the checks last ran. A note about filings the SEC's XBRL data doesn't have
+yet dates them newest to oldest and promises "a day or two" only while that's true (over 3 days, it
+says how long the oldest has waited).
 
 Compare's "Side by side" draws the selected columns as small multiples (`compare/SmallMultiples.tsx`):
 one compact LayerChart per column, every readable company a line in the same colour on each

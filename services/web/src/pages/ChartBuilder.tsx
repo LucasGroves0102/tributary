@@ -334,7 +334,7 @@ export function ChartBuilder({ token, chart, setChart, saveBar, readable = ANYTH
           </button>
         )}
         <button className="btn" onClick={exportCsv} disabled={!series.length}
-          title="Exact values from the API with each point's source accessions">
+          title="Exact values, with the filing behind each point">
           Export CSV
         </button>
         <button className="btn" onClick={exportSvg} disabled={!series.length}>
@@ -462,7 +462,7 @@ export function ChartBuilder({ token, chart, setChart, saveBar, readable = ANYTH
             <span className="seg" role="group" aria-label="Range">
               {[...RANGES, "custom" as const].map((r) => (
                 <button key={r} className={chart.range === r ? "on" : undefined} aria-pressed={chart.range === r}
-                  title={r === "max" ? "Every quarter the API has" : r === "custom" ? "Choose the first and last period end" : `The last ${r} year${r === 1 ? "" : "s"}`}
+                  title={r === "max" ? "Every quarter on file" : r === "custom" ? "Choose the first and last period end" : `The last ${r} year${r === 1 ? "" : "s"}`}
                   onClick={() => setChart((s) => ({ ...s, range: r }))}>
                   {rangeLabel(r)}
                 </button>

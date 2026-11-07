@@ -8,6 +8,7 @@ import { useChart } from "./chart/useChart";
 import { directoryFor, DirectoryContext, UNNAMED } from "./companies/directory";
 import { uiContext } from "./assistant/actions";
 import { pageContext } from "./assistant/context";
+import { AllowanceContext, useAllowance } from "./assistant/useAllowance";
 import { useAssistant } from "./assistant/useAssistant";
 import { useUiActions } from "./assistant/useUiActions";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -20,6 +21,7 @@ import { TopBar } from "./components/TopBar";
 import { download } from "./download";
 import { lastIngested, watchColumns } from "./home/data";
 import { RecentNotes } from "./home/RecentNotes";
+import { useFeedStatus } from "./home/useFeedStatus";
 import { useWorkspace } from "./home/useWorkspace";
 import { Home } from "./pages/Home";
 import {
@@ -178,6 +180,13 @@ export function App(props: Props = {}) {
     onAction: uiActions.apply,
   });
 
+  const allowanceState = useAllowance(token, assistant.busy);
+  const { allowance, refresh: refreshAllowance } = allowanceState;
+  // a report ran: it counted, several times over
+  useEffect(() => {
+    if (writer.run.status !== "writing") refreshAllowance();
+  }, [writer.run.status, refreshAllowance]);
+
   useEffect(() => {
     if (!picker) return;
     demoUsers()
@@ -295,6 +304,19 @@ export function App(props: Props = {}) {
     setFocusTick((n) => n + 1);
   }, [route.view, setDrawer]);
 
+  // a question a page wrote for the user ("… in this 10-Q") means nothing on another page: it goes
+  // when they leave, unless they've made it their own by editing it
+  const prefilled = useRef<string | null>(null);
+  const askAbout = useCallback((q: string) => {
+    prefilled.current = q;
+    assistant.setDraft(q);
+    focusAssistant();
+  }, [assistant.setDraft, focusAssistant]);
+  useEffect(() => {
+    if (prefilled.current !== null && assistant.draft === prefilled.current) assistant.setDraft("");
+    prefilled.current = null;
+  }, [route]);
+
   /** Compare's "Chart these" and the peers tab: one line per company for a metric. */
   const chartMany = useCallback(
     (ids: string[], metric: string, transform: Transform, title: string) => {
@@ -405,11 +427,12 @@ export function App(props: Props = {}) {
     () => pageContext(route, companyName, (id) => inScope(scope, id), {
       watchlist: watchedIds,
       company: researchCompany,
-      charted: chart.layers.length > 0,
+      charted: chart.layers.flatMap((l) => l.companyId ?? l.defaultCompany ?? []),
+      chartHasLayers: chart.layers.length > 0,
       filing: filingText,
       title: companyLabel,
     }),
-    [route, companyName, companyLabel, scope, watchedIds, researchCompany, chart.layers.length, filingText],
+    [route, companyName, companyLabel, scope, watchedIds, researchCompany, chart.layers, filingText],
   );
 
   const paletteCompanies = useMemo((): PaletteCompany[] => {
@@ -510,6 +533,7 @@ export function App(props: Props = {}) {
 
   const showDrawer = drawerOpen && route.view !== "ask";
   const ingested = lastIngested(workspace.latest ?? []);
+  const listed = useFeedStatus(token !== null);
   const panelProps = {
     assistant,
     onUndo: (id: number) => void uiActions.undo(id),
@@ -517,6 +541,7 @@ export function App(props: Props = {}) {
     context,
     signedIn: token !== null,
     inputRef: input,
+    allowance,
   };
 
   // the status page is public: signed out, it shows without the app shell
@@ -546,6 +571,7 @@ export function App(props: Props = {}) {
   return (
     <ScopeContext.Provider value={scope}>
       <DirectoryContext.Provider value={directory}>
+      <AllowanceContext.Provider value={allowanceState}>
       <div className={showDrawer ? "app with-ai" : "app"}>
         <Sidebar
           open={navOpen}
@@ -553,6 +579,7 @@ export function App(props: Props = {}) {
           me={me}
           workspace={workspace}
           lastIngested={ingested}
+          listed={listed}
           onAdd={() => setPalette(WATCH_PREFIX)}
           onExport={exportWatchlist}
           onShortcuts={() => setHelp(true)}
@@ -567,6 +594,7 @@ export function App(props: Props = {}) {
             onMenu={() => setNavOpen((o) => !o)}
             route={route}
             companyName={companyLabel}
+            companyShort={companyShort}
             filingLabel={filingText}
             users={users}
             user={session?.kind === "sandbox" ? "demo sandbox" : user}
@@ -606,6 +634,7 @@ export function App(props: Props = {}) {
               <Home
                 workspace={workspace}
                 lastIngested={ingested}
+                listed={listed}
                 onAdd={() => setPalette(WATCH_PREFIX)}
                 onExport={exportWatchlist}
                 readableCompanies={me ? readableTotal(me) : 0}
@@ -687,10 +716,7 @@ export function App(props: Props = {}) {
                   saved.close("chart");
                   go({ view: "chart" });
                 }}
-                onAsk={(q) => {
-                  assistant.setDraft(q);
-                  focusAssistant();
-                }}
+                onAsk={askAbout}
                 saved={saved.list.state === "ok" ? saved : null}
               />
             ) : route.view === "filing" ? (
@@ -703,10 +729,7 @@ export function App(props: Props = {}) {
                 at={route.at}
                 q={route.q}
                 name={companyName(route.companyId)}
-                onAsk={(q) => {
-                  assistant.setDraft(q);
-                  focusAssistant();
-                }}
+                onAsk={askAbout}
                 onRead={(section) => saved.recordFiling(route.companyId, route.accessionNo, section)}
                 onFiling={(label) => setReaderFiling({ accessionNo: route.accessionNo, label })}
               />
@@ -739,7 +762,7 @@ export function App(props: Props = {}) {
                 </p>
               </div>
             ) : route.view === "about" ? (
-              <About />
+              <About allowance={allowance} open={catalogOpen(me, "financials")} />
             ) : route.view === "settings" ? (
               <Settings key={user} token={token} />
             ) : route.view === "workspace" ? (
@@ -839,6 +862,7 @@ export function App(props: Props = {}) {
           onClose={() => setPalette(null)}
         />
       )}
+      </AllowanceContext.Provider>
       </DirectoryContext.Provider>
     </ScopeContext.Provider>
   );

@@ -4,6 +4,7 @@ import type { Readable } from "../access";
 import { ApiError, expectedFilingsOf, failureReason, getItem, screener, updateProject, workspace as fetchWorkspace } from "../api";
 import type { ChartState } from "../chart/model";
 import { header, HEADER_COLUMNS } from "../company/data";
+import { leftText, useAllowanceContext } from "../assistant/useAllowance";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { day } from "../format";
 import { defaultAssumptions, DEFAULT_HISTORY, DEFAULT_YEARS, historyStats, modelState } from "../models/model";
@@ -500,11 +501,12 @@ function Monitor({ token, companyId, projectId, thesisId, status, checks, label,
       live = false;
     };
   }, [companyId, savedText]);
+  const { allowance } = useAllowanceContext();
   const checking = checks.run.status === "running";
   const written = savedText !== null && hasOwnText(savedText);
   const why = !status ? "Loading the thesis…" : status.dirty ? "Save the thesis first: the check reads the saved text"
     : !written ? "Write the thesis first: headings and guidance alone have nothing to check"
-    : "The assistant checks each factual claim and your models' base cases against the filings (counts as 4 questions)";
+    : `The assistant checks each factual claim and your models' base cases against the filings (counts as 4 questions${allowance ? `; you have ${leftText(allowance)}` : ""})`;
   if (!thesisId) {
     return (
       <p className="empty card">

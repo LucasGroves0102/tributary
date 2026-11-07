@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { accountName, readableTotal } from "../access";
 import { ago, day } from "../format";
 import { sinceLabel, type WatchRow } from "../home/data";
+import { FRESHNESS_EXPLAINED } from "../home/useFeedStatus";
 import type { Workspace } from "../home/useWorkspace";
 import { href, NAV, type Route } from "../route";
 import type { Me } from "../types";
@@ -15,7 +16,10 @@ interface Props {
   route: Route;
   me: Me | null;
   workspace: Workspace;
+  /** the newest filing's text parsed, among those the user can read */
   lastIngested: string | null;
+  /** the newest filing in the index, whoever's (useFeedStatus) */
+  listed?: string | null;
   onAdd: () => void;
   onExport: () => void;
   /** opens the keyboard shortcut sheet */
@@ -35,7 +39,7 @@ function section(route: Route): Route["view"] {
   return route.view === "company" || route.view === "filing" ? "companies" : route.view;
 }
 
-export function Sidebar({ route, me, workspace, lastIngested, onAdd, onExport, onShortcuts, workspaces, open = false, connections = false, sandboxResetsIn = null }: Props) {
+export function Sidebar({ route, me, workspace, lastIngested, listed = null, onAdd, onExport, onShortcuts, workspaces, open = false, connections = false, sandboxResetsIn = null }: Props) {
   const { rows, watchlist } = workspace;
   const active = section(route);
   const newCount = workspace.fresh.length;
@@ -129,27 +133,28 @@ export function Sidebar({ route, me, workspace, lastIngested, onAdd, onExport, o
       {workspaces}
 
       <div className="grow" />
-      <div className="fresh">
-        {lastIngested ? (
+      <div className="fresh" title={FRESHNESS_EXPLAINED}>
+        {listed && (
           edgarOpen() ? (
             <>
               <span className="live" />
-              Filing feed live · last filing ingested {ago(lastIngested)}
+              Newest filing listed {ago(listed)}
             </>
           ) : (
             <span title="EDGAR accepts filings 6 am–10 pm ET, but filings accepted after 5:30 pm ET mostly reach its feed the next business morning.">
               <span className="live quiet" />
-              EDGAR's feed is quiet after 5:30 pm ET and on weekends · last filing {ago(lastIngested)}
+              Newest filing listed {ago(listed)} · EDGAR's feed slows after 5:30 pm ET and on weekends
             </span>
           )
-        ) : (
-          "Filing feed: nothing you can read yet"
         )}
+        {listed && <br />}
+        {lastIngested ? `Newest filing text parsed ${ago(lastIngested)}` : !listed && "Filings: nothing you can read yet"}
         <br />
         {watchlist.state === "ok"
           ? `Watchlist values as of ${new Date(watchlist.data.as_of).toLocaleTimeString([], {
               hour: "2-digit",
               minute: "2-digit",
+              timeZoneName: "short",
             })}`
           : "Values appear as they're filed"}
         {me && (

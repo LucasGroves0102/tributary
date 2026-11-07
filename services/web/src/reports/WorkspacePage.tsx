@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { ApiError, failureReason, workspace as fetchWorkspace } from "../api";
+import { leftText, useAllowanceContext } from "../assistant/useAllowance";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { ago, day } from "../format";
 import { href } from "../route";
@@ -34,6 +35,7 @@ type Loaded =
 /** One workspace: your theses and models, its saved items and reports; "New thesis", "New
  * model" and "Write a report". */
 export function WorkspacePage({ token, workspaceId, writer, onOpen, version, saved }: Props) {
+  const { allowance } = useAllowanceContext();
   const [loaded, setLoaded] = useState<Loaded>({ state: "loading" });
   const [retry, setRetry] = useState(0);
 
@@ -93,7 +95,7 @@ export function WorkspacePage({ token, workspaceId, writer, onOpen, version, sav
         The assistant writes a research note from the saved items below: a summary, a section per
         item with the chart or table drawn in place, and what changed in the latest filings where
         your plan includes them. Every number is checked against the data and cited; anything it
-        can't verify is flagged. A report counts as {REPORT_QUESTIONS} assistant questions
+        can't verify is flagged. A report counts as {REPORT_QUESTIONS} assistant questions{allowance ? ` (you have ${leftText(allowance)})` : ""}
         {items.length > MAX_REPORT_ITEMS ? ` and covers the first ${MAX_REPORT_ITEMS} items` : ""}.
       </p>
       {ws.project && (

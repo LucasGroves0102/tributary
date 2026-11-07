@@ -2,6 +2,8 @@ import { lazy, Suspense, useEffect, useRef, type RefObject } from "react";
 
 import type { PageContext } from "./context";
 import { href } from "../route";
+import type { Allowance } from "../types";
+import { limitsText, meterText, tightest } from "./useAllowance";
 import type { Assistant } from "./useAssistant";
 
 // answers render through marked + DOMPurify (markdown.ts): loaded with the first answer, or
@@ -20,6 +22,8 @@ interface Props {
   variant: "drawer" | "page";
   inputRef: RefObject<HTMLTextAreaElement | null>;
   onClose?: () => void;
+  /** the questions left: shown before one is spent (null: unknown, so nothing is claimed) */
+  allowance?: Allowance | null;
 }
 
 export function AssistantPanel({
@@ -31,6 +35,7 @@ export function AssistantPanel({
   variant,
   inputRef,
   onClose,
+  allowance = null,
 }: Props) {
   const { turns, draft, busy, setDraft, submit, stop, clear } = assistant;
   const bottom = useRef<HTMLDivElement>(null);
@@ -133,6 +138,7 @@ export function AssistantPanel({
           </button>
         )}
       </form>
+      {allowance && <Meter allowance={allowance} />}
       <div className="ai-f">
         Enter to send · Shift+Enter new line · {variant === "drawer" && (
           <>
@@ -142,5 +148,16 @@ export function AssistantPanel({
         <span className="kbd">/</span> focus
       </div>
     </aside>
+  );
+}
+
+function Meter({ allowance }: { allowance: Allowance }) {
+  const { left, of } = tightest(allowance);
+  const low = allowance.paused || left <= Math.min(3, of);
+  return (
+    <div className={low ? "ai-meter low" : "ai-meter"} title={limitsText(allowance)}>
+      <meter min={0} max={of} value={left} aria-hidden="true" />
+      <span>{meterText(allowance)}</span>
+    </div>
   );
 }

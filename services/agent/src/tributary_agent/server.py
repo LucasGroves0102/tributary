@@ -135,6 +135,17 @@ class Limits:
             by_ip.extend([now] * questions)
             by_user.extend([now] * questions)
 
+    def left(self, user_id: str, client_ip: str) -> dict:
+        """What `acquire` would still allow this hour, taking nothing: for the assistant panel's
+        meter. `left_this_hour` is the tighter of the user's and the address's allowance."""
+        now = self._clock()
+        with self._lock:
+            mine = len(self._recent(self._by_user[user_id], now)) if user_id in self._by_user else 0
+            near = len(self._recent(self._by_ip[client_ip], now)) if client_ip in self._by_ip else 0
+            return {"per_hour": self._per_hour, "network_per_hour": self._per_ip,
+                    "left_this_hour": max(0, min(self._per_hour - mine, self._per_ip - near)),
+                    "paused": self._spent[self._today()] >= self._budget}
+
     def spend(self, usd: float) -> None:
         with self._lock:
             self._spent[self._today()] += usd
@@ -151,9 +162,17 @@ def _no_quota(tok: str, questions: int = 1) -> None:
     return None
 
 
+NO_DAILY_COUNT = {"per_day": None, "left_today": None}
+
+
+def _no_daily_count(tok: str) -> dict:
+    return NO_DAILY_COUNT
+
+
 def create_app(make_agent: Callable[[str], Agent], who_is: Callable[[str], str],
                limits: Limits, client_ip_header: str = "X-Client-IP",
                take_quota: Callable[[str, int], None] = _no_quota,
+               daily_count: Callable[[str], dict] = _no_daily_count,
                make_reporter: Callable[[str], Reporter] | None = None,
                make_checker: Callable[[str], Checker] | None = None) -> FastAPI:
     """make_agent(token) builds an agent reading as the token's user; who_is(token) returns
@@ -162,7 +181,8 @@ def create_app(make_agent: Callable[[str], Agent], who_is: Callable[[str], str],
     user's persistent question allowances (demo sandboxes, Query API) or raises
     HTTPException (429 with the message to show). make_reporter(token): reports as the
     token's user (report.py); None leaves /v1/reports out. make_checker(token): thesis checks
-    as the token's user (thesis_check.py); None leaves /v1/thesis-checks out."""
+    as the token's user (thesis_check.py); None leaves /v1/thesis-checks out. daily_count(tok):
+    the user's daily cap and what's left of it, for /v1/allowance."""
     app = FastAPI(title="Tributary Agent", version="1")
     instrument(app)
     bearer = HTTPBearer(auto_error=False)
@@ -207,6 +227,15 @@ def create_app(make_agent: Callable[[str], Agent], who_is: Callable[[str], str],
     @app.get("/health")
     def health() -> dict:
         return {"status": "ok"}
+
+    @app.get("/v1/allowance")
+    def allowance(tok: Annotated[str, Depends(token)],
+                  ip: Annotated[str, Depends(client_ip)]) -> dict:
+        """The caller's questions left, before spending any: per hour here, per day from the
+        Query API (null where it doesn't count them), and what a report and a thesis check
+        take. Takes nothing and costs no model call."""
+        return {**limits.left(who_is(tok), ip), **daily_count(tok),
+                "report_questions": REPORT_QUESTIONS, "check_questions": CHECK_QUESTIONS}
 
     @app.post("/v1/ask")
     def ask(body: AskRequest, tok: Annotated[str, Depends(token)],
@@ -319,6 +348,26 @@ def query_api_quota(base_url: str,
     return take_quota
 
 
+def query_api_daily_count(base_url: str,
+                          http: httpx.Client | None = None) -> Callable[[str], dict]:
+    """The user's daily question cap and what's left, from the same place `take_quota` takes
+    them. Never raises: a meter that can't get the day's count shows the hour's."""
+    get = http.get if http else httpx.get
+
+    def daily_count(tok: str) -> dict:
+        try:
+            r = get(f"{base_url}/v1/demo/agent-quota",
+                    headers={"Authorization": f"Bearer {tok}", **request_id_headers()}, timeout=10)
+            body = r.json() if r.status_code == 200 else {}
+        except (httpx.HTTPError, ValueError):
+            return NO_DAILY_COUNT
+        if not body.get("capped"):
+            return NO_DAILY_COUNT
+        return {"per_day": body.get("per_day"), "left_today": body.get("left_today")}
+
+    return daily_count
+
+
 def build_app() -> FastAPI:
     base_url = os.environ.get("QUERY_API_URL", "http://localhost:8000")
     messages = anthropic.Anthropic().messages
@@ -352,6 +401,7 @@ def build_app() -> FastAPI:
                       int(os.environ.get("AGENT_IP_RATE_PER_HOUR", "10")),
                       float(os.environ.get("AGENT_DAILY_BUDGET_USD", "2"))),
         take_quota=query_api_quota(base_url),
+        daily_count=query_api_daily_count(base_url),
         make_reporter=make_reporter,
         make_checker=make_checker,
     )

@@ -51,6 +51,11 @@ characters. The app then saves it through the Query API (which validates the sta
 this user only) and Undo deletes the saved item. Without the web app (CLI, recorded suites)
 requests are unchanged.
 
+`GET /v1/allowance` says what's left before anything is spent, for the assistant panel's meter:
+`per_hour`, `network_per_hour`, `left_this_hour` (the tighter of the two), `per_day` and
+`left_today` (from the Query API, null where it doesn't count them), `paused` (the day's budget is
+gone) and what a report and a thesis check take. No model call, takes nothing.
+
 Limits: questions per hour per user and per client IP (`X-Client-IP`, set by the web proxy from
 Cloudflare's `CF-Connecting-IP`), and a daily model budget across all users. Over a limit → 429.
 Before each question it also takes the user's persistent daily allowance from the Query API

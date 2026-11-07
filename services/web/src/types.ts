@@ -55,6 +55,21 @@ export interface AccountInfo {
   agent_questions_per_day: number;
 }
 
+/** agent-api GET /v1/allowance: the questions left, before spending any. The day's are null where
+ * the Query API doesn't count them. */
+export interface Allowance {
+  per_hour: number;
+  network_per_hour: number;
+  /** the tighter of the user's and the network address's */
+  left_this_hour: number;
+  /** the day's model budget is used up, for everyone */
+  paused: boolean;
+  per_day: number | null;
+  left_today: number | null;
+  report_questions: number;
+  check_questions: number;
+}
+
 /** GET /v1/auth/providers: which sign-in buttons to show. */
 export interface AuthProviders {
   github: boolean;

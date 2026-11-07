@@ -6,6 +6,8 @@ interface Props {
   route: Route;
   /** "Nvidia (NVDA)" (companies/directory.ts) */
   companyName: (companyId: string) => string | null;
+  /** "NVDA": beside a filing, where the room goes to the filing */
+  companyShort?: (companyId: string) => string;
   /** what the reader has open: "10-K filed Feb 21, 2026" */
   filingLabel?: string | null;
   users: string[];
@@ -34,7 +36,7 @@ export function TopBar(props: Props) {
           ☰
         </button>
       )}
-      <Breadcrumb route={route} companyName={props.companyName} filingLabel={props.filingLabel ?? null} />
+      <Breadcrumb route={route} companyName={props.companyName} companyShort={props.companyShort} filingLabel={props.filingLabel ?? null} />
       <button className="search-box" onClick={props.onSearch} aria-label="Search (Ctrl K)">
         <span>Search companies, filings, pages, actions</span>
         <span className="grow" />
@@ -90,10 +92,12 @@ export function TopBar(props: Props) {
 function Breadcrumb({
   route,
   companyName,
+  companyShort,
   filingLabel,
 }: {
   route: Route;
   companyName: (companyId: string) => string | null;
+  companyShort?: (companyId: string) => string;
   filingLabel: string | null;
 }) {
   if (route.view === "company" || route.view === "filing") {
@@ -106,7 +110,7 @@ function Breadcrumb({
           <span aria-current="page">{name}</span>
         ) : (
           <>
-            <a href={href({ view: "company", companyId: route.companyId })}>{name}</a>
+            <a href={href({ view: "company", companyId: route.companyId })} title={name}>{companyShort?.(route.companyId) ?? name}</a>
             <span className="sep">/</span>
             <span aria-current="page">{filingLabel ?? "Filing"}</span>
           </>

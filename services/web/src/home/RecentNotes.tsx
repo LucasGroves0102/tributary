@@ -25,7 +25,7 @@ export function RecentNotes({ token, name, filingsFor, catalogOpen = false }: {
       <div className="card-h">
         <h2>{catalogOpen ? "Recent data notes, every company" : "Recent data notes for your companies"}</h2>
         <span className="sub">
-          restatements, filings not yet in the figures, gaps{load?.state === "ok" && load.data.checked_at ? ` · checked ${ago(load.data.checked_at)}` : ""}
+          restatements, filings not yet in the figures, gaps{load?.state === "ok" && load.data.checked_at ? ` · checks last ran ${ago(load.data.checked_at)}` : ""}
         </span>
       </div>
       {!load || load.state === "loading" ? (

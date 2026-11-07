@@ -59,8 +59,10 @@ export interface Situation {
   watchlist?: string[];
   /** the company a chart on screen, or an analysis, is about */
   company?: string | null;
-  /** the chart builder has something on it */
-  charted?: boolean;
+  /** the companies on the chart builder (with `company` the first of them) */
+  charted?: string[];
+  /** something is on the chart, even with no company (a formula) */
+  chartHasLayers?: boolean;
   /** what the reader has open: "10-K filed Feb 21, 2026" */
   filing?: string | null;
   /** "Nvidia (NVDA)" for the header chip; the prompts say the plain name */
@@ -157,8 +159,9 @@ export function pageContext(
       };
     }
     case "chart": {
-      if (situation.charted) {
-        const other = watched.find((w) => w !== subject);
+      if (situation.chartHasLayers) {
+        const onChart = new Set((situation.charted ?? []).map(name));
+        const other = watched.find((w) => !onChart.has(w));
         return {
           label: "Chart builder",
           suggestions: [
