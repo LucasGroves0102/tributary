@@ -87,6 +87,17 @@ page, with a line saying how far back, unless a company or dates narrow it), Hom
 counts `readableTotal`, and Home's expected filings are the watchlist's (`scope=readable` would be
 thousands of rows). Display only: the API decides.
 
+Filing reader (`components/explore/FilingReader.tsx`, pure parts in `reader/text.ts`): the section
+is read in full (`max_chars`, the API's cap is 1,000,000: the old 50,000 hid later matches and
+cited passages). A search lists its matches above the outline, opens the section at the first
+highlight (or the first at a cited passage), and steps with the ↑ ↓ buttons or Enter / Shift+Enter
+in the box. Two counts, labelled, because they count different things: the outline and heading show
+*passages* (the search index's chunks of about 2,000 characters holding all the words, from the
+API), the heading also *highlights* (each word marked, what next and previous step through). The
+outline's legend says what its numbers are; only one kind shows at a time. The previous and next
+filing of the same form (10-K, 10-Q, 8-K) open at the same section with the same search; one that
+isn't parsed links to EDGAR.
+
 Search (`pages/Search.tsx`): words run on Enter or the button (each search ranks every match);
 form, company and dates apply as soon as they change. Inverted dates aren't searched: the page says
 so and offers to swap them. No result under filters offers to clear them instead of blaming the words.

@@ -111,6 +111,19 @@ export function countMatches(text: string, terms: string[]): number {
   return highlight(text, terms).filter((r) => typeof r !== "string").length;
 }
 
+/** The index (among all highlights of these paragraphs) of the first highlight in paragraph
+ * `target` or after it: where a cited passage opens. 0 without a target or a highlight after it. */
+export function firstMatchFrom(ps: Paragraph[], terms: string[], target: number): number {
+  if (target < 0) return 0;
+  let seen = 0;
+  for (let i = 0; i < ps.length; i++) {
+    const here = countMatches(ps[i]!.text, terms);
+    if (i >= target && here > 0) return seen;
+    seen += here;
+  }
+  return 0;
+}
+
 /** A search snippet ("... «export» controls ...") as runs; the marks come from the Query API's
  * ts_headline, the text from the filing. */
 export function snippetRuns(snippet: string): Run[] {
@@ -128,13 +141,34 @@ export function comparableForm(form: string): string | null {
   return base === "10-K" || base === "10-Q" ? base : null;
 }
 
+/** The form family whose filings a reader steps through: 10-K, 10-Q or 8-K, amendments with
+ * their originals' family; anything else has no previous/next. */
+export function steppedForm(form: string): string | null {
+  const base = form.replace(/\/A$/, "");
+  return base === "10-K" || base === "10-Q" || base === "8-K" ? base : null;
+}
+
+/** The next filing of the same form after this one: the mirror of priorComparable. */
+export function nextComparable(
+  index: IndexedFiling[],
+  current: { accession_no: string; form: string; filed: string },
+): IndexedFiling | null {
+  const form = steppedForm(current.form);
+  if (!form) return null;
+  const after = (f: IndexedFiling) =>
+    f.filed > current.filed || (f.filed === current.filed && f.accession_no > current.accession_no);
+  const later = index.filter((f) => f.form === form && f.accession_no !== current.accession_no && after(f));
+  later.sort((a, b) => a.filed.localeCompare(b.filed) || a.accession_no.localeCompare(b.accession_no));
+  return later[0] ?? null;
+}
+
 /** The filing before this one of the same form (an original), from the index; filed the same
  * day counts when its accession number is lower. Whether it was parsed is the caller's to show. */
 export function priorComparable(
   index: IndexedFiling[],
   current: { accession_no: string; form: string; filed: string },
 ): IndexedFiling | null {
-  const form = comparableForm(current.form);
+  const form = steppedForm(current.form);
   if (!form) return null;
   const before = (f: IndexedFiling) =>
     f.filed < current.filed || (f.filed === current.filed && f.accession_no < current.accession_no);

@@ -381,10 +381,14 @@ export const searchFilings = (token: string, query: SearchQuery) =>
     Object.fromEntries(Object.entries(query).filter(([, v]) => v !== undefined && v !== "")) as Params,
   );
 
+/** The Query API's cap on a section's text (app.py). */
+const SECTION_ALL_CHARS = 1_000_000;
+
 export const section = (token: string, companyId: string, key: string, accessionNo: string) =>
   get<{ sections: Section[] }>(token, `/v1/companies/${companyId}/sections/${encodeURIComponent(key)}`, {
     accession_no: accessionNo,
-    max_chars: 50000,
+    // the whole section: matches and cited passages can be anywhere in it
+    max_chars: SECTION_ALL_CHARS,
   }).then((r) => r.sections[0] ?? null);
 
 export const latestFilings = (token: string, limit = 20) =>

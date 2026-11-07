@@ -247,6 +247,14 @@ def test_search_can_list_only_readable_companies(client, token):
                       headers=token("alice")).status_code == 422
 
 
+def test_a_section_can_be_asked_for_whole_but_not_without_a_cap(client, token):
+    ok = client.get(f"/v1/companies/{NVDA}/sections/1A?max_chars=1000000", headers=token("bob"))
+    assert ok.status_code != 422
+    too_many = client.get(f"/v1/companies/{NVDA}/sections/1A?max_chars=1000001",
+                          headers=token("bob"))
+    assert too_many.status_code == 422
+
+
 def test_search_limit_defaults_to_five_and_is_capped(client, token):
     client.get("/v1/companies/search?q=n", headers=token("alice"))
     assert client.store.search_limit == 5

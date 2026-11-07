@@ -484,7 +484,8 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
         form: Annotated[str | None, Query(pattern=r"^(10-K|10-Q|8-K)$")] = None,
         accession_no: Annotated[str | None, Query(pattern=r"^\d{10}-\d{2}-\d{6}$")] = None,
         limit: Annotated[int, Query(ge=1, le=5)] = 1,
-        max_chars: Annotated[int, Query(ge=100, le=50_000)] = 8_000,
+        max_chars: Annotated[int, Query(ge=100, le=1_000_000, description=(
+            "the web reader asks for the whole section; the longest are about 400,000"))] = 8_000,
     ) -> dict:
         require(user_id, "filings", company_id)
         rows = store.sections(user_id, company_id, section_key, form, accession_no, limit,
