@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useState } from "react";
 
-import { ApiError, openItem } from "../api";
+import { ApiError, failureReason, openItem } from "../api";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { href } from "../route";
 import type { SavedItemFull } from "../types";
@@ -94,7 +94,7 @@ export function ModelPage({ token, itemId, saved, label, embedded, active, onSav
       })
       .catch((e) => live && setLoaded({
         state: "error",
-        message: e instanceof ApiError ? e.message : "the Query API didn't answer",
+        message: failureReason(e),
         notFound: e instanceof ApiError && e.status === 404,
       }));
     return () => {
@@ -176,7 +176,7 @@ function ModelEditor({ token, item, initial, saved, label, embedded = false, act
       setName(next.name);
       onSaved?.();
     } catch (e) {
-      setError(`Couldn't save: ${e instanceof ApiError ? e.message : "the Query API didn't answer"}.`);
+      setError(`Couldn't save: ${failureReason(e)}.`);
     } finally {
       setBusy(false);
     }

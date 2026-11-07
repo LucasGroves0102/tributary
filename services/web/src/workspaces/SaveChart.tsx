@@ -1,6 +1,6 @@
 import { useId, useState, type FormEvent } from "react";
 
-import { ApiError } from "../api";
+import { failureReason } from "../api";
 import type { ChartState } from "../chart/model";
 import { href } from "../route";
 import { ITEM_NAME_MAX, nameProblem, stateOf, WORKSPACE_NAME_MAX } from "./model";
@@ -36,7 +36,7 @@ export function SaveChart({ saved, chart }: { saved: Saved; chart: ChartState })
       setDone({ workspaceId: item.workspace_id, workspace: item.workspace_name ?? "the workspace" });
       setOpen(false);
     } catch (err) {
-      setError(`Couldn't save it: ${err instanceof ApiError ? err.message : "the Query API didn't answer"}.`);
+      setError(`Couldn't save it: ${failureReason(err)}.`);
     } finally {
       setBusy(false);
     }

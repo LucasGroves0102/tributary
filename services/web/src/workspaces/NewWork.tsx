@@ -1,6 +1,6 @@
 import { useId, useState, type FormEvent } from "react";
 
-import { ApiError } from "../api";
+import { failureReason } from "../api";
 import { CompanySearch } from "../components/CompanySearch";
 import { defaultAssumptions, DEFAULT_HISTORY, DEFAULT_YEARS, historyStats, modelState } from "../models/model";
 import { loadHistory } from "../models/useHistory";
@@ -74,7 +74,7 @@ function NewWorkForm({ kind, token, saved, company: fixed, workspaceId, onDone }
       onDone();
       go({ view: kind, itemId: item.item_id });
     } catch (err) {
-      setError(`Couldn't create it: ${err instanceof ApiError ? err.message : "the Query API didn't answer"}.`);
+      setError(`Couldn't create it: ${failureReason(err)}.`);
       setBusy(false);
     }
   };

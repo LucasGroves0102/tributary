@@ -28,7 +28,7 @@ export function RecentNotes({ token, name, filingsFor }: {
       {!load || load.state === "loading" ? (
         <Skeleton lines={3} label="Loading data notes" />
       ) : load.state === "error" ? (
-        <ErrorPanel what="data notes" detail={`The Query API said: ${load.message}.`} onRetry={load.retry} />
+        <ErrorPanel what="data notes" detail={load.message} onRetry={load.retry} />
       ) : load.state === "denied" ? null : load.data.notes.length === 0 ? (
         <p className="empty">
           {load.data.companies

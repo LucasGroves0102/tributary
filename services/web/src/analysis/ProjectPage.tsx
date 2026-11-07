@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import type { Readable } from "../access";
-import { ApiError, expectedFilingsOf, getItem, screener, updateProject, workspace as fetchWorkspace } from "../api";
+import { ApiError, expectedFilingsOf, failureReason, getItem, screener, updateProject, workspace as fetchWorkspace } from "../api";
 import type { ChartState } from "../chart/model";
 import { header, HEADER_COLUMNS } from "../company/data";
 import { ErrorPanel, Skeleton } from "../components/States";
@@ -89,7 +89,7 @@ export function ProjectPage(props: Props) {
       })
       .catch((e) => live && setLoaded((l) => l.state === "ok" ? l : {
         state: "error",
-        message: e instanceof ApiError ? e.message : "the Query API didn't answer",
+        message: failureReason(e),
         notFound: e instanceof ApiError && e.status === 404,
       }));
     return () => {
@@ -190,7 +190,7 @@ function Project({ token, user, projectId, step: asked, itemId, saved, readable,
       saved.reload();
     } catch (e) {
       if (what === "notes") setNotesStatus("error");
-      else setProjectError(`Couldn't save the project: ${e instanceof ApiError ? e.message : "the Query API didn't answer"}.`);
+      else setProjectError(`Couldn't save the project: ${failureReason(e)}.`);
     }
   }, [token, projectId, saved]);
 
@@ -369,7 +369,7 @@ function Project({ token, user, projectId, step: asked, itemId, saved, readable,
                 try {
                   await createThesis();
                 } catch (e) {
-                  setToast({ text: `Couldn't start the thesis: ${e instanceof ApiError ? e.message : "the Query API didn't answer"}.`, error: true });
+                  setToast({ text: `Couldn't start the thesis: ${failureReason(e)}.`, error: true });
                 }
               }} />
             ))}
@@ -436,7 +436,7 @@ function ModelStep({ token, companyId, ticker, models, modelId, saved, projectId
       onChanged();
       go({ view: "analysis", projectId, step: "model", itemId: item.item_id });
     } catch (e) {
-      setError(`Couldn't create it: ${e instanceof ApiError ? e.message : "the Query API didn't answer"}.`);
+      setError(`Couldn't create it: ${failureReason(e)}.`);
     } finally {
       setBusy(false);
     }

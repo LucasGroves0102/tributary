@@ -1,15 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import {
-  ApiError,
-  expectedFilings,
-  filingIndexOf,
-  financials,
-  latestFilings,
-  unwatch as apiUnwatch,
-  watch as apiWatch,
-  watchlist as fetchWatchlist,
-} from "../api";
+import { ApiError, expectedFilings, failureReason, filingIndexOf, financials, latestFilings, unwatch as apiUnwatch, watch as apiWatch, watchlist as fetchWatchlist } from "../api";
 import type { CalendarEntry, FinancialRow, IndexedFiling, LatestFiling, Watchlist } from "../types";
 import {
   addDays,
@@ -109,7 +100,7 @@ export function useWorkspace(
               ? { state: "unavailable", message: e.message }
               : {
                   state: "error",
-                  message: (e instanceof ApiError && e.message) || "the Query API didn't answer",
+                  message: failureReason(e),
                 },
           ),
       );

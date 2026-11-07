@@ -180,7 +180,7 @@ export function App(props: Props = {}) {
         setUsers(u);
         setUser(u[0] ?? null);
       })
-      .catch(() => setError("Can't reach the Query API."));
+      .catch(() => setError("Can't reach the server. Try again in a moment."));
   }, [picker]);
 
   const signIn = useCallback((s: Session, m: Me | null) => {

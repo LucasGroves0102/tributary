@@ -7,7 +7,7 @@ import { day } from "../format";
 import { go, href } from "../route";
 import type { ScreenerRow, Tier } from "../types";
 import { keyStats, recapAccession, recapRows } from "./data";
-import { ErrorPanel, Skeleton } from "../components/States";
+import { ErrorPanel, sentence, Skeleton } from "../components/States";
 import { Gate } from "./Tables";
 import { useLoad } from "./useLoad";
 
@@ -124,7 +124,7 @@ function Recap({ token, companyId, name, accession, canFin }: { token: string; c
                 </div>
               )}
               <div className="foot">
-                {data!.flags_unavailable ? "One-time-item flags from the filing text need the filings tier. " : ""}
+                {data!.flags_unavailable ? `${sentence(data!.flags_unavailable)} ` : ""}
                 Margins change in basis points. Values as currently reported; a restated value cites the restating filing.
               </div>
             </>

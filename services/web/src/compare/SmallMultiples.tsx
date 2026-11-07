@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-import { ApiError, evaluateFormula, FormulaApiError, type FormulaRequest } from "../api";
+import { evaluateFormula, failureReason, type FormulaRequest } from "../api";
 import { cached, remember } from "../chart/cache";
 import { LayerChart } from "../chart/LayerChart";
 import { companiesChart, emptyChart, MAX_COMPANY_LINES, request, type Range } from "../chart/model";
@@ -67,7 +67,7 @@ export function SmallMultiples({ token, companyIds, cols, label }: {
         })
         .catch((e) => mounted.current && setAnswers((a) => ({
           ...a,
-          [k]: { state: "error", message: e instanceof FormulaApiError || e instanceof ApiError ? e.message : "the Query API didn't answer" },
+          [k]: { state: "error", message: failureReason(e) },
         })));
     }
     // answers is read only to skip what's already asked

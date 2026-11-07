@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import { SseParser } from "./api";
+import { ApiError, failureReason, SseParser } from "./api";
+
+describe("failureReason", () => {
+  it("keeps a message written for the caller and hides a developer's", () => {
+    expect(failureReason(new ApiError("that form isn't one we know", 422))).toBe("that form isn't one we know");
+    const slow = new ApiError("query took longer than 5s; narrow it (fewer companies, columns or periods)", 503);
+    expect(failureReason(slow)).toBe("the server didn't answer in time");
+    expect(failureReason(new TypeError("Failed to fetch"))).toBe("the server didn't answer in time");
+  });
+});
 
 describe("SseParser", () => {
   it("parses events split across chunks", () => {

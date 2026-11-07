@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 
-import { ApiError } from "../api";
+import { failureReason } from "../api";
 import { Skeleton } from "../components/States";
 import { href } from "../route";
 import type { SavedItem, SavedWorkspace } from "../types";
@@ -21,7 +21,7 @@ interface Props {
   onError: (message: string) => void;
 }
 
-const why = (e: unknown) => (e instanceof ApiError ? e.message : "the Query API didn't answer");
+const why = (e: unknown) => (failureReason(e));
 
 /** The sidebar's Workspaces: folders of saved charts, comps, screens and reports. Click an item
  * to open it; ▤ opens the workspace page (its reports, "Write a report"); rename, duplicate and

@@ -261,7 +261,7 @@ function WatchTable({ workspace, onAdd }: { workspace: Workspace; onAdd: () => v
     );
   }
   if (watchlist.state === "error") {
-    return <ErrorPanel what="your watchlist" detail={`The Query API said: ${watchlist.message}.`} onRetry={workspace.reload} />;
+    return <ErrorPanel what="your watchlist" detail={watchlist.message} onRetry={workspace.reload} />;
   }
   if (rows.length === 0) {
     return (

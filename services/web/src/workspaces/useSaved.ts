@@ -1,20 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import {
-  addItem,
-  ApiError,
-  createWorkspace,
-  deleteItem as apiDeleteItem,
-  deleteWorkspace,
-  duplicateItem as apiDuplicateItem,
-  duplicateWorkspace,
-  openItem,
-  readFiling,
-  recentWork,
-  renameWorkspace,
-  updateItem,
-  workspaces as fetchWorkspaces,
-} from "../api";
+import { addItem, ApiError, createWorkspace, deleteItem as apiDeleteItem, deleteWorkspace, duplicateItem as apiDuplicateItem, duplicateWorkspace, failureReason, openItem, readFiling, recentWork, renameWorkspace, updateItem, workspaces as fetchWorkspaces } from "../api";
 import { load, save as store } from "../storage";
 import type { RecentWork, SavedItemFull, SavedKind, SavedWorkspace, WrittenKind } from "../types";
 import {
@@ -119,7 +105,7 @@ export function useSaved(token: string | null, user: string | null): Saved {
           setList(
             e instanceof ApiError && e.status === 503
               ? { state: "unavailable", message: e.message }
-              : { state: "error", message: (e instanceof ApiError && e.message) || "the Query API didn't answer" },
+              : { state: "error", message: failureReason(e) },
           ),
       );
     return () => {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { ApiError, checkThesis, thesisCheck, thesisChecks } from "../api";
+import { ApiError, checkThesis, failureReason, thesisCheck, thesisChecks } from "../api";
 import type { AgentEvent, ThesisCheck, ThesisCheckSummary } from "../types";
 
 /** One thesis's checks: the history (newest first), the one shown, the one before it (what
@@ -59,7 +59,7 @@ export function useThesisCheck(token: string, itemId: string | null): ThesisChec
       if (!itemId || shown?.check_id === checkId) return;
       thesisCheck(token, itemId, checkId)
         .then((c) => live.current && setShown(c))
-        .catch((e) => live.current && setRun({ status: "error", message: e instanceof ApiError ? e.message : "the Query API didn't answer" }));
+        .catch((e) => live.current && setRun({ status: "error", message: failureReason(e) }));
     },
     [token, itemId, shown],
   );

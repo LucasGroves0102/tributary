@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 
-import { ApiError, screener, screenerCsv, SCREENER_CSV_ROWS } from "../api";
+import { failureReason, screener, SCREENER_CSV_ROWS, screenerCsv } from "../api";
 import { DEFAULT_SPECS, MASKED_TITLE, screenRow } from "../companies/rows";
 import {
   BAND_LABELS,
@@ -77,7 +77,7 @@ export function Companies({ token, screen: asked, watched, onWatch, onChart, sav
           live &&
           setResult({
             state: "error",
-            message: e instanceof ApiError ? e.message : "the Query API didn't answer",
+            message: failureReason(e),
           }),
       );
     return () => {
@@ -144,7 +144,7 @@ export function Companies({ token, screen: asked, watched, onWatch, onChart, sav
             )}
           </div>
           {result.state === "error" ? (
-            <ErrorPanel what="this screen" detail={`The Query API said: ${result.message}.`}
+            <ErrorPanel what="this screen" detail={result.message}
               onRetry={() => {
                 setResult({ state: "loading" });
                 setAttempt((n) => n + 1);

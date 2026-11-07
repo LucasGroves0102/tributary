@@ -19,6 +19,9 @@ from query_api.screener import Compiled as Screen
 # a timeout on query_api would never reach these sessions. Search sets its own, longer one.
 QUERY_TIMEOUT = "5s"
 SEARCH_TIMEOUT = "8s"
+# A recap's one-time-item flags are optional: a slow pass must cost the panel little, and never
+# all of it (ui.py answers without them).
+FLAGS_TIMEOUT = "2s"
 # Data notes: a 10-K/10-Q filed in the last BEHIND_DAYS whose XBRL isn't in companyfacts yet.
 BEHIND_DAYS = 120
 # silver.filings.filed_on (migration 032) is the date from the row's own base table, so a filter
@@ -211,8 +214,9 @@ class Store:
             return cur.fetchall()
 
     def filing_flags(self, user_id: str, accession_no: str) -> list[dict]:
-        """gold.filing_flags rows (RLS: filings tier)."""
+        """gold.filing_flags rows (RLS: filings tier), under its own short timeout."""
         with self._session(user_id) as cur:
+            cur.execute(f"SET LOCAL statement_timeout = '{FLAGS_TIMEOUT}'")
             cur.execute("SELECT * FROM gold.filing_flags(%s)", (accession_no,))
             return cur.fetchall()
 

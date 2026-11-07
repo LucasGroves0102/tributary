@@ -7,6 +7,7 @@ dates, period of report) and what is derived only from them (expected filing dat
 values need `financials` on that company, section text `filings`.
 """
 
+import logging
 import re
 from collections.abc import Callable
 from datetime import UTC, date, datetime
@@ -14,6 +15,7 @@ from decimal import Decimal, InvalidOperation, localcontext
 from typing import Annotated, Literal, get_args
 from zoneinfo import ZoneInfo
 
+import psycopg
 from fastapi import Depends, FastAPI, HTTPException, Path, Query
 from fastapi.responses import Response
 
@@ -37,6 +39,7 @@ from query_api.shapes import document_url, filing_url, newest_windows, period
 from query_api.store import Store
 from query_api.watchlist import MAX_ENTRIES, UnknownUser, Watchlists
 
+log = logging.getLogger("query_api")
 CompanyId = Annotated[str, Path(pattern=r"^\d{10}$", description="canonical company_id")]
 EXPECTED_METHOD = (
     "Estimate, not a filing. Period end: the last reported fiscal period end plus one quarter. "
@@ -365,8 +368,14 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
         rows = store.recap(user_id, company_id, accession_no, filing["period_end"],
                            list(metrics or RECAP_METRICS))
         flags = None
+        flags_note = "one-time-item flags need filings access"
         if allowed(user_id, "filings", company_id):
-            flags = [_flag(f, accession_no) for f in store.filing_flags(user_id, accession_no)]
+            try:
+                flags = [_flag(f, accession_no) for f in store.filing_flags(user_id, accession_no)]
+            except psycopg.Error as e:  # optional: the metrics above still answer
+                log.warning("recap flags unavailable: %s", type(e).__name__,
+                            extra={"accession_no": accession_no})
+                flags_note = "one-time-item flags couldn't be read just now"
         return {"accession_no": accession_no, "company_id": company_id, "form": filing["form"],
                 "filed": filing["filing_date"], "period_end": filing["period_end"],
                 "as_of": _now(),
@@ -375,8 +384,7 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
                         "when the earlier value is 0.",
                 "metrics": _recap_metrics(rows, filing.get("cik")),
                 "flags": flags,
-                **({} if flags is not None else
-                   {"flags_unavailable": "one-time-item flags need filings access"})}
+                **({} if flags is not None else {"flags_unavailable": flags_note})}
 
     @app.get("/v1/companies/{company_id}/peers", response_model=dict)
     def peers(

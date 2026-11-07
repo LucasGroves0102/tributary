@@ -64,6 +64,10 @@ starting DEF or PRE; silver keeps them), and adds Costco's 10-Q pre-tax tag
 `025_filing_sections_company_pushdown.sql` puts `company_id` first in `gold.filing_sections`'
 DISTINCT ON key (same rows), so a company filter reaches the base tables' indexes instead of
 de-duplicating every section first.
+`033_filing_sections_accession_pushdown.sql` (listed here with its sibling) makes the view output
+`s.accession_no`, the key column: a filter on accession now reaches the base tables too. Before
+it, `gold.filing_flags` and so `/v1/filings/{acc}/recap` sorted all 1.8M sections and timed out,
+and `gold.refresh_section_search` sorted them once per batch (locally 3.3 s → 12 ms).
 `026_feed_status.sql` adds `ops.feed_status()`: when the newest filing was accepted by EDGAR and
 when it reached bronze, two timestamps and nothing else. It is SECURITY DEFINER (query_api still
 can't read `bronze.filings`) and backs the Query API's public `/v1/status`, which the

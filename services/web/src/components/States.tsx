@@ -18,12 +18,19 @@ export function Skeleton({ lines = 4, chart = false, label = "Loading" }: { line
   );
 }
 
-/** A friendly error: what couldn't load, why if known, and a retry. */
+/** `detail` as a sentence: reasons are fragments, some ending in a period. */
+export function sentence(detail: string): string {
+  const t = detail.trim();
+  return `${t.charAt(0).toUpperCase()}${t.slice(1)}${/[.!?]$/.test(t) ? "" : "."}`;
+}
+
+/** A friendly error: what couldn't load, why if known (failureReason), and a retry. */
 export function ErrorPanel({ what, detail, onRetry }: { what: string; detail?: string; onRetry?: () => void }) {
   return (
     <div className="errpanel" role="alert">
       <p>
-        <b>Couldn't load {what}.</b> {detail ?? "The Query API didn't answer; it may be restarting."}
+        <b>Couldn't load {what}.</b> {sentence(detail ?? "the server didn't answer in time")}
+        {onRetry ? " It usually clears in a moment." : ""}
       </p>
       {onRetry && (
         <button className="btn sm" onClick={onRetry}>

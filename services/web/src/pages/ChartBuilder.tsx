@@ -1,9 +1,9 @@
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 
 import {
-  ApiError,
   filingIndex,
   filings as fetchFilings,
+  failureReason,
   FormulaApiError,
   screener,
   screenerColumns,
@@ -193,9 +193,7 @@ export function ChartBuilder({ token, chart, setChart, saveBar }: Props) {
                 message:
                   e instanceof FormulaApiError
                     ? e.problems.map((p) => p.message + (p.hint ? `. ${p.hint}` : "")).join("; ")
-                    : e instanceof ApiError
-                      ? e.message
-                      : "the Query API didn't answer",
+                    : failureReason(e),
               },
             })),
         );

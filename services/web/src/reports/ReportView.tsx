@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import type { Readable } from "../access";
-import { ApiError, openItem, screenerColumns } from "../api";
+import { ApiError, failureReason, openItem, screenerColumns } from "../api";
 import { slug } from "../chart/export";
 import { catalog } from "../chart/metrics";
 import type { ChartState } from "../chart/model";
@@ -53,7 +53,7 @@ export function ReportView({ token, itemId, writer, label, readable, onOpenChart
       })
       .catch((e) => live && setLoaded({
         state: "error",
-        message: e instanceof ApiError ? e.message : "the Query API didn't answer",
+        message: failureReason(e),
         notFound: e instanceof ApiError && e.status === 404,
       }));
     return () => {

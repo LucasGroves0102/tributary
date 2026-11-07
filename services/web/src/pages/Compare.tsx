@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
-import { ApiError, peers as fetchPeers, screener } from "../api";
+import { failureReason, peers as fetchPeers, screener } from "../api";
 import {
   chartMetric,
   COMPARE_COLUMNS,
@@ -87,7 +87,7 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
       .catch(
         (e) =>
           live &&
-          setTable({ state: "error", message: e instanceof ApiError ? e.message : "the Query API didn't answer" }),
+          setTable({ state: "error", message: failureReason(e) }),
       );
     return () => {
       live = false;
@@ -257,7 +257,7 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
             similar size). Or open a company and choose Compare.
           </p>
         ) : table?.state === "error" ? (
-          <ErrorPanel what="the comps" detail={`The Query API said: ${table.message}.`}
+          <ErrorPanel what="the comps" detail={table.message}
             onRetry={() => {
               setTable({ state: "loading" });
               setAttempt((n) => n + 1);

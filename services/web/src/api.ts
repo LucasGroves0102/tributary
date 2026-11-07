@@ -57,6 +57,15 @@ export class ApiError extends Error {
   }
 }
 
+const NOT_ANSWERING = "the server didn't answer in time";
+
+/** Why a request failed, for a person, as a sentence fragment ("Couldn't save it: ..."). A 4xx
+ * detail is written for the caller (a validation message, a limit); a 5xx's is for developers
+ * and API clients ("query took longer than 5s; narrow it"), and a person can only try again. */
+export function failureReason(e: unknown): string {
+  return e instanceof ApiError && e.status < 500 && e.message ? e.message : NOT_ANSWERING;
+}
+
 async function json<T>(r: Response): Promise<T> {
   if (!r.ok) {
     const body = await r.json().catch(() => ({}));

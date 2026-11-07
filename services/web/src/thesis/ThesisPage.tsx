@@ -3,7 +3,7 @@ import { useEffect, useId, useMemo, useRef, useState, type ChangeEvent, type Mut
 import type { Readable } from "../access";
 import { draftKey, restoreDraft, type StoredDraft, type ThesisHandle, type ThesisStatus } from "../analysis/bridge";
 import { appendToSection, hasOwnText } from "../analysis/project";
-import { ApiError, openItem, screenerColumns, workspace as fetchWorkspace } from "../api";
+import { ApiError, failureReason, openItem, screenerColumns, workspace as fetchWorkspace } from "../api";
 import { slug } from "../chart/export";
 import { catalog } from "../chart/metrics";
 import type { ChartState } from "../chart/model";
@@ -120,7 +120,7 @@ export function ThesisPage(props: Props) {
       })
       .catch((e) => live && setLoaded({
         state: "error",
-        message: e instanceof ApiError ? e.message : e instanceof Error && e.message === "not a thesis" ? "This item isn't a thesis." : "the Query API didn't answer",
+        message: e instanceof Error && e.message === "not a thesis" ? "This item isn't a thesis." : failureReason(e),
         notFound: e instanceof ApiError && e.status === 404,
       }));
     return () => {
@@ -296,7 +296,7 @@ function ThesisEditor({ token, item, initial, items, saved, label, readable, onO
       setNotice(null);
       setOffered(null);
     } catch (e) {
-      setNotice({ text: `Couldn't save: ${e instanceof ApiError ? e.message : "the Query API didn't answer"}.`, error: true });
+      setNotice({ text: `Couldn't save: ${failureReason(e)}.`, error: true });
     } finally {
       setBusy(false);
     }

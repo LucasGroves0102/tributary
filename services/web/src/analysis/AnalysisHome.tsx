@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useState, type FormEvent } from "react";
 
 import type { Readable } from "../access";
-import { ApiError, createWorkspace, peers as fetchPeers, screener, thesisChecks } from "../api";
+import { createWorkspace, failureReason, peers as fetchPeers, screener, thesisChecks } from "../api";
 import { CompanySearch } from "../components/CompanySearch";
 import { Skeleton } from "../components/States";
 import { ago, day } from "../format";
@@ -214,7 +214,7 @@ function NewAnalysis({ token, saved, readable, onDone }: Omit<Props, "label"> & 
       onDone();
       go({ view: "analysis", projectId: ws.workspace_id, step: "business" });
     } catch (err) {
-      setError(`Couldn't create it: ${err instanceof ApiError ? err.message : "the Query API didn't answer"}.`);
+      setError(`Couldn't create it: ${failureReason(err)}.`);
       setBusy(false);
     }
   };

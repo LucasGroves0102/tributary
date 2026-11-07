@@ -110,7 +110,7 @@ export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q,
       <div className="page">
         {back}
         {filing.state === "error" ? (
-          <ErrorPanel what="this filing" detail={`The Query API said: ${filing.message}.`} onRetry={filing.retry} />
+          <ErrorPanel what="this filing" detail={filing.message} onRetry={filing.retry} />
         ) : (
           <p className="empty">
             Filing {accessionNo} hasn't been parsed into sections yet. The company's Filings tab

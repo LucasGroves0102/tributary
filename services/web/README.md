@@ -383,7 +383,7 @@ by the chart builder's rules and shared with its session cache; nothing is asked
 charts are shown.
 
 States and accessibility: every data panel loads with a skeleton (`components/States.tsx`),
-errors offer a retry, empty states say what to do next. The screener, watchlist and comps rows
+errors say what happened in plain words (`api.ts` `failureReason`: a 4xx detail is written for the caller, a 5xx's is for developers and never shown) and offer a retry, empty states say what to do next. The screener, watchlist and comps rows
 are a roving tab stop (arrows, Page Up/Down, Home/End, Ctrl/Cmd + Up/Down the first and last
 row, Right or Ctrl/Cmd + Left/Right into the cells, then the first and last column; Enter opens:
 `components/tableNav.ts`). `?` opens the keyboard shortcut sheet (`components/ShortcutSheet.tsx`,

@@ -210,6 +210,19 @@ def test_recap_vs_prior_and_year_ago(recap_conn, token):
     assert body["flags"] == []  # layer 1 allows all here; RLS has no filings rows for t-free
 
 
+def test_a_filter_on_accession_reaches_the_sections_table(recap_conn):
+    """033: outputting s.accession_no lets the filter into the DISTINCT ON, as query_api too; on
+    d.accession_no it stayed on a Subquery Scan above a sort of every section (recap 503)."""
+    with recap_conn.cursor() as cur:
+        cur.execute("SET LOCAL ROLE query_api")
+        cur.execute("SELECT set_config('app.user_id', 't-pro', true)")
+        cur.execute("EXPLAIN SELECT * FROM gold.filing_sections WHERE accession_no = %s", (ACC,))
+        plan = "\n".join(r[0] for r in cur.fetchall())
+        cur.execute("RESET ROLE")
+    assert ACC not in plan.split("Unique")[0], plan  # no filter left above the DISTINCT ON
+    assert ACC in plan
+
+
 def test_recap_and_flags_respect_rls(recap_conn, token):
     assert recap(recap_conn, token, "t-nobody")["metrics"] == []
     flags = recap(recap_conn, token, "t-pro")["flags"]

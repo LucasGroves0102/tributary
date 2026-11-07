@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { Readable } from "../access";
-import { ApiError, FormulaApiError } from "../api";
+import { failureReason } from "../api";
 import { cached, remember } from "../chart/cache";
 import { fetchLayer } from "../chart/fetch";
 import { autoSubtitle, methodNote, sourceFootnote } from "../chart/deck";
@@ -115,7 +115,7 @@ export function ChartView({ token, chart, name, label, hasTtm }: {
         })
         .catch((e) => live.current && setResults((r) => ({
           ...r,
-          [key]: { state: "error", message: e instanceof FormulaApiError || e instanceof ApiError ? e.message : "the Query API didn't answer" },
+          [key]: { state: "error", message: failureReason(e) },
         })));
     }
     // results is read only to skip what's already asked

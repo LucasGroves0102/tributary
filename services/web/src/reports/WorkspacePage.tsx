@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { ApiError, workspace as fetchWorkspace } from "../api";
+import { ApiError, failureReason, workspace as fetchWorkspace } from "../api";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { ago, day } from "../format";
 import { href } from "../route";
@@ -43,7 +43,7 @@ export function WorkspacePage({ token, workspaceId, writer, onOpen, version, sav
       .then((ws) => live && setLoaded({ state: "ok", ws }))
       .catch((e) => live && setLoaded({
         state: "error",
-        message: e instanceof ApiError ? e.message : "the Query API didn't answer",
+        message: failureReason(e),
         notFound: e instanceof ApiError && e.status === 404,
       }));
     return () => {

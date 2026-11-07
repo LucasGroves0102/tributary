@@ -1,6 +1,6 @@
 import { useId, useState, type FormEvent } from "react";
 
-import { ApiError } from "../api";
+import { failureReason } from "../api";
 import {
   canSave,
   currentFingerprint,
@@ -23,7 +23,7 @@ interface Props {
 const NEW = "__new__";
 
 function message(e: unknown): string {
-  return e instanceof ApiError ? e.message : "the Query API didn't answer";
+  return failureReason(e);
 }
 
 /** Save / Save as for the page's chart, comps or screen, with the open item's workspace and an

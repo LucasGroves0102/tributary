@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { ApiError, financialsView } from "../api";
+import { ApiError, failureReason, financialsView } from "../api";
 import { annualHistory, HISTORY_METRICS, HISTORY_QUARTERS, MAX_HISTORY, type HistoryYear } from "./model";
 
 export type History =
@@ -21,7 +21,7 @@ export function useHistory(token: string, companyId: string | null): History {
       .then((r) => live && setH({ state: "ok", ...r }))
       .catch((e) => live && setH({
         state: "error",
-        message: e instanceof ApiError ? e.message : "the Query API didn't answer",
+        message: failureReason(e),
         denied: e instanceof ApiError && e.status === 403,
       }));
     return () => {

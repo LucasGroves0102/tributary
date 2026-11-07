@@ -92,7 +92,7 @@ export function MetricTableView({ table, first }: { table: MetricTable; first: s
 export function Gate({ load, name, what, children }: { load: Load<unknown> | null; name: string; what: string; children: () => ReactNode }) {
   if (!load || load.state === "loading") return <Skeleton lines={5} label={`Loading ${what.toLowerCase()}`} />;
   if (load.state === "denied") return <p className="empty locked">{what} for {name} aren't included in your access.</p>;
-  if (load.state === "error") return <ErrorPanel what={what.toLowerCase()} detail={`The Query API said: ${load.message}.`} onRetry={load.retry} />;
+  if (load.state === "error") return <ErrorPanel what={what.toLowerCase()} detail={load.message} onRetry={load.retry} />;
   return <>{children()}</>;
 }
 

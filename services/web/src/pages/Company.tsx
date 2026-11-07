@@ -49,7 +49,7 @@ export function Company({ token, companyId, tab, watched, onWatch, onChart, onCh
   if (meta.state === "error") {
     return (
       <div className="page">
-        <ErrorPanel what="this company" detail={`The Query API said: ${meta.message}.`} onRetry={meta.retry} />
+        <ErrorPanel what="this company" detail={meta.message} onRetry={meta.retry} />
       </div>
     );
   }

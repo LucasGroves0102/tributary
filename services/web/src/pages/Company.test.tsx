@@ -204,6 +204,44 @@ it("heads the page with public metadata, the next expected filing and the tabs",
   expect(onChart).toHaveBeenCalledWith("Nvidia");
 });
 
+it("overview: a slow recap says so plainly and can be retried", async () => {
+  let answers = 0;
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    const u = new URL(url, "http://x");
+    if (u.pathname.endsWith("/recap")) {
+      answers += 1;
+      return answers === 1
+        ? Response.json({ detail: "query took longer than 5s; narrow it (fewer companies, columns or periods)" }, { status: 503 })
+        : Response.json(RECAP);
+    }
+    return respond(url);
+  }));
+  await render();
+  for (let i = 0; i < 3; i++) await act(async () => {});
+  const panel = container.querySelector(".errpanel")!;
+  expect(panel.textContent).toContain("The server didn't answer in time.");
+  expect(container.textContent).not.toMatch(/narrow|Query API/);
+  await act(async () => panel.querySelector("button")!.click());
+  for (let i = 0; i < 3; i++) await act(async () => {});
+  expect(container.querySelector(".errpanel")).toBeNull();
+  expect($(".flags")?.textContent).toContain("restructuring");
+});
+
+it("overview: without flags the recap still renders and says why", async () => {
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    const u = new URL(url, "http://x");
+    if (u.pathname.endsWith("/recap")) {
+      return Response.json({ ...RECAP, flags: null, flags_unavailable: "one-time-item flags couldn't be read just now" });
+    }
+    return respond(url);
+  }));
+  await render();
+  for (let i = 0; i < 3; i++) await act(async () => {});
+  const recap = [...container.querySelectorAll("table")].find((t) => t.textContent?.includes("QoQ"))!;
+  expect(recap.querySelector("tbody tr")?.textContent).toContain("$46.74B");
+  expect(container.textContent).toContain("One-time-item flags couldn't be read just now.");
+});
+
 it("overview: key stats with periods, the latest quarter recap with flags, and Item 1", async () => {
   await render();
   const stat = [...container.querySelectorAll(".kv > div")].find((d) => d.querySelector(".k")?.textContent === "Revenue")!;

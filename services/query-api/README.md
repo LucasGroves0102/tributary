@@ -211,7 +211,9 @@ citation and freshness, and `change` / `pct_change` (6 decimals; null for ratios
 cites the restating filing. With `filings` access, `flags` lists one-time-item keyword matches
 (impairment, restructuring, one-time/non-recurring, gain or loss on sale, write-down,
 litigation settlement) in MD&A and EX-99 sections, each citing section and character offset;
-without it `flags` is null.
+without it `flags` is null. Flags are optional: they run under their own 2 s timeout, and if they
+fail the recap still answers with `flags: null` and `flags_unavailable` saying why (the same field
+explains a plan without `filings`).
 
 ## Peers
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { ApiError, resetViewPref, saveViewPref, viewPrefs, type ViewName } from "../api";
+import { failureReason, resetViewPref, saveViewPref, type ViewName, viewPrefs } from "../api";
 import type { ColumnInfo, ViewPrefs } from "../types";
 import {
   columnList,
@@ -72,7 +72,7 @@ export function useViews(token: string | null, user: string | null): Views {
         })
         .catch((e) => {
           setSaved((s) => ({ ...s, [view]: confirmed.current[view] }));
-          setError(`Couldn't save your ${view} layout: ${e instanceof ApiError ? e.message : "the Query API didn't answer"}.`);
+          setError(`Couldn't save your ${view} layout: ${failureReason(e)}.`);
         });
     },
     [],
