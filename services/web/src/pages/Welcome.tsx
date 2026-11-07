@@ -264,7 +264,7 @@ export function Welcome({ onReady, notice, github, pollMs = 1000, now = Date.now
                 </p>
               )
             )}
-            <Progress phase={phase} onContinue={continueAnyway} />
+            {!formOpen && <Progress phase={phase} onContinue={continueAnyway} />}
           </div>
           {(githubOn || passwordOn) && (
             <div className="welcome-account">
@@ -290,13 +290,14 @@ export function Welcome({ onReady, notice, github, pollMs = 1000, now = Date.now
               {passwordOn && formOpen && (
                 <PasswordForm busy={busy} onSubmit={(u, p) => void signInWithPassword(u, p)} />
               )}
+              {formOpen && <Progress phase={phase} onContinue={continueAnyway} />}
             </div>
           )}
         </section>
         <section className="welcome-proof" aria-label="What's in Tributary">
           <Proof />
           <ul className="welcome-list">
-            <li>Screen every company on revenue, growth, margins and debt, and save the screen.</li>
+            <li>Screen companies on revenue, growth, margins and debt, and save the screen.</li>
             <li>Read 10-K, 10-Q and 8-K filings by section, and see what changed since the last one.</li>
             <li>Chart any metric or your own formula; every point opens the filing behind it.</li>
             <li>Compare a company with its peers, then build a guided analysis with a thesis and a model.</li>

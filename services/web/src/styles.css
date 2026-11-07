@@ -872,7 +872,7 @@ a.btn:hover {
 }
 
 .t .tw-cut > * {
-  visibility: hidden;
+  opacity: 0;
 }
 
 /* the Filings tab's actions stay in view whatever their header's doing */
@@ -881,7 +881,7 @@ a.btn:hover {
 }
 
 .t.filings td.actions.tw-cut > * {
-  visibility: visible;
+  opacity: 1;
 }
 
 .tw-cue {
@@ -1144,6 +1144,11 @@ table.t {
 
 .filter-note {
   grid-column: 1 / -1;
+}
+
+/* selects and inputs are one height, so their labels line up */
+.filters .field {
+  height: 30px;
 }
 
 .filters label:not(.chk) {
@@ -3731,7 +3736,7 @@ button.link.num {
   }
 
   .t .tw-cut > * {
-    visibility: visible;
+    opacity: 1;
   }
 }
 
@@ -4759,7 +4764,7 @@ button.chip.on {
 /* segment tables line their periods up from one table to the next */
 .t.aligned {
   table-layout: fixed;
-  min-width: 760px;
+  min-width: 1080px;
 }
 
 .t.aligned .first {
@@ -4813,7 +4818,7 @@ button.chip.on {
   }
 
   .t.aligned {
-    min-width: 620px;
+    min-width: 968px;
   }
 
   .t.aligned .first {

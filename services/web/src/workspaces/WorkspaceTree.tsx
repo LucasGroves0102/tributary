@@ -43,7 +43,8 @@ export function WorkspaceTree({ saved, onOpen, onError }: Props) {
     });
   };
   const edit = (e: Editing) => {
-    setMenu(null);
+    // a delete keeps its strip open behind the dialog: Keep puts focus back on the button it came from
+    if (e && !e.type.startsWith("delete")) setMenu(null);
     setEditing(e);
   };
 

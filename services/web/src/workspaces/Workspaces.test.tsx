@@ -306,8 +306,15 @@ it("renames, duplicates and deletes from a row's menu, which leaves the row's na
   expect(calls("DELETE").map(([u]) => u)).toEqual(["/api/query/v1/workspace-items/i2"]);
   expect(sidebarItem("Lost access")).toBeUndefined();
   await click(buttons(/Actions for workspace Semis/)[0]!);
-  await click(buttons(/Delete workspace Semis/)[0]!);
+  const del = buttons(/Delete workspace Semis/)[0]!;
+  del.focus();
+  await click(del);
   expect(confirm()?.textContent).toContain("Delete “Semis” and its 3 items?");
+  // Keep goes back to where it was asked from, with the focus there
+  await click([...confirm()!.querySelectorAll("button")].find((b) => b.textContent === "Keep")!);
+  expect(confirm()).toBeNull();
+  expect(document.activeElement).toBe(del);
+  await click(del);
   await click(confirm()!.querySelector("button")!);
   expect($(".side .ws")?.textContent).toContain("Save a chart, comps table or screen");
 });
