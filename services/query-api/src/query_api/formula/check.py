@@ -76,6 +76,15 @@ BALANCES = frozenset({
     "cash", "short_term_investments", "receivables", "inventory", "current_assets",
     "total_assets", "current_liabilities", "long_term_debt_current", "long_term_debt",
     "total_liabilities", "stockholders_equity", "net_debt", "shares_outstanding"})
+# everything that describes one date and so has no trailing twelve months: the balances, and the
+# ratios of two balances
+POINT_IN_TIME = BALANCES | {"debt_to_equity", "current_ratio"}
+# gold.derived_metrics (014): these live in gold.derived_financials, every other metric's quarters
+# in gold.quarterly_financials
+DERIVED = frozenset({
+    "gross_margin", "operating_margin", "net_margin", "free_cash_flow", "fcf_margin",
+    "revenue_growth", "net_income_growth", "eps_growth", "payout_ratio", "debt_to_equity",
+    "net_debt", "current_ratio", "roe"})
 _NAMES = {v: k for k, v in UNITS.items()}
 _LABELS = {"ratio": "a ratio", "USD": "dollars", "shares": "shares",
            "USD/shares": "dollars per share"}

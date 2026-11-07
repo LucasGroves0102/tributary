@@ -32,6 +32,7 @@ from query_api.screener import (
     band_of,
     column_info,
     compile_screen,
+    notes_of,
     parse_filter,
     shape,
 )
@@ -135,8 +136,11 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
         offset: Annotated[int, Query(ge=0, le=1_000_000)] = 0,
         fmt: Format = "json",
     ) -> dict | Response:
-        """Companies with financials. Metadata is public; values only for companies the caller
-        can read financials for. Value filters exclude companies without readable values."""
+        """Companies with a figure in at least one of these columns (naming a company or a data
+        check lists it whatever it has). Metadata is public; values only for companies the caller
+        can read financials for. Value filters exclude companies without readable values. A value
+        that reads as not meaningful, not applicable or old (`readings`, migration 035) is still
+        returned, exact, but sorts last and never passes a value filter."""
         if fmt == "json" and limit > MAX_JSON_ROWS:
             raise HTTPException(422, f"limit: at most {MAX_JSON_ROWS} rows as JSON")
         if any(len(s) != 4 or not s.isdigit() for s in sic or []):
@@ -161,15 +165,16 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
             columns=columns if columns is not None else Screen().columns,
             company_ids=sorted(set(company_id)) if company_id is not None else None,
             coverage=company_id is None,
+            hide_blank=company_id is None and q is None and issue is None,
             sic=sic or [], sic_prefix=sic_prefix, industry=industry, q=q,
             exchanges=exchange or [], fye_months=fiscal_year_end_month or [],
             filer_categories=list(filer_category or []), issue=issue, filters=filters,
             granted_only=access == "financials", sort=sort, limit=limit, offset=offset)
         compiled, rows, total = run_screen(user_id, screen, readable(user_id))
         if fmt == "csv":
-            return csv_response("screener.csv", [*META_CSV, "access", *compiled.columns], (
+            return csv_response("screener.csv", [*META_CSV, "access", *compiled.columns, "notes"], (
                 [*(r[k] for k in META_CSV), r["access"],
-                 *(r["values"][k] for k in compiled.columns)] for r in rows))
+                 *(r["values"][k] for k in compiled.columns), notes_of(r)] for r in rows))
         return {"as_of": _now(), "total": total, "limit": limit, "offset": offset, "sort": sort,
                 "columns": column_info(compiled.columns), "rows": rows}
 
@@ -282,12 +287,12 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
         if fmt == "csv":
             header = [*META_CSV, "access", "added_at", "last_form", "last_filing_date",
                       "last_period_end", "next_form", "next_period_end", "next_expected_date",
-                      "next_expected_basis", *compiled.columns]
+                      "next_expected_basis", *compiled.columns, "notes"]
             return csv_response("watchlist.csv", header, ([
                 *(r[k] for k in META_CSV), r["access"], r["added_at"],
                 *_pick(r["last_filing"], "form", "filing_date", "period_end"),
                 *_pick(r["next_expected"], "form", "period_end", "expected_date", "basis"),
-                *(r["values"][k] for k in compiled.columns)] for r in rows))
+                *(r["values"][k] for k in compiled.columns), notes_of(r)] for r in rows))
         return {"as_of": _now(), "columns": column_info(compiled.columns),
                 "expected_method": EXPECTED_METHOD, "companies": rows}
 
@@ -462,7 +467,8 @@ def _recap_metrics(rows: list[dict], cik: str | None) -> list[dict]:
 
 
 def _recap_value(r: dict, cik: str | None) -> dict:
-    return {"value": r["value"], "period_start": r["period_start"],
+    return {"value": r["value"], "not_meaningful": r.get("not_meaningful"),
+            "period_start": r["period_start"],
             "period_end": r["period_end"],
             "fiscal_period": period("FY", r["fiscal_year"], r["fiscal_quarter"]),
             "calendar_period": period("CY", r["calendar_year"], r["calendar_quarter"]),

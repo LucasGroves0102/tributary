@@ -125,8 +125,8 @@ def test_watchlist_csv(client, token):
     r = client.get("/v1/watchlist?format=csv", headers=token("alice"))
     assert r.status_code == 200
     header, *lines = r.text.splitlines()
-    assert header.split(",")[-4:] == ["revenue_ttm", "revenue_growth_q", "operating_margin_ttm",
-                                      "free_cash_flow_ttm"]
+    assert header.split(",")[-5:] == ["revenue_ttm", "revenue_growth_q", "operating_margin_ttm",
+                                      "free_cash_flow_ttm", "notes"]
     tsla = next(line for line in lines if line.startswith(TSLA))
     assert tsla.endswith(",,,,") and "2026-11-19" in tsla
 

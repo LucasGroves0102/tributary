@@ -358,6 +358,9 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
         fmt: Annotated[Literal["json", "csv"], Query(
             alias="format", description="csv: one row per value, with its source filing")]
             = "json",
+        readings: Annotated[bool, Query(
+            description="add `not_meaningful` (why a ratio reads n/m, migration 035) to each row")]
+            = False,
     ) -> dict | Response:
         names = metric_names()
         every = names["metrics"] + names["derived_metrics"]
@@ -385,6 +388,7 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
                                            r.get("calendar_quarter")),
                 "value": r["value"], "unit": r["unit"], "value_source": r["value_source"],
                 **({"inputs": r["inputs"]} if r.get("inputs") else {}),
+                **({"not_meaningful": r.get("not_meaningful")} if readings else {}),
                 "citation": {"accession_no": r["accession_no"], "form": r["form"],
                              "filed": r["filed"], "xbrl_tag": r["source_tag"],
                              "source_accessions": r["source_accessions"],

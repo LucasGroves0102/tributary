@@ -77,7 +77,45 @@ def test_sql_never_contains_user_text():
     # selected columns first, then filter/sort-only ones
     assert c.columns == ["revenue_ttm"]
     assert c.slots == {"revenue_ttm": 0, "operating_margin_ttm": 1, "net_margin_ttm": 2}
-    assert "ORDER BY v.v2 DESC NULLS LAST" in c.sql
+    # sorts and filters take the comparable value: a figure that reads n/m or old never ranks
+    assert "ORDER BY v.k2 DESC NULLS LAST" in c.sql
+    assert "v.k1 >= %(w0)s" in c.sql
+
+
+def test_the_blank_row_test_can_never_be_a_seq_scan():
+    """As EXISTS under an OR, the planner hashes it: a seq scan of 5M derived rows per screen."""
+    c = compile_screen(Screen(columns=["revenue_ttm", "net_debt_q", "cash_q"], hide_blank=True),
+                       None)
+    assert "LIMIT 1) IS NOT NULL" in c.sql
+    assert "EXISTS (SELECT 1 FROM gold.derived_financials" not in c.sql
+    assert c.params["has_ttm"] == ["revenue"] and c.params["has_quarter"] == ["cash", "net_debt"]
+    assert c.params["has_reported"] == ["cash", "revenue"]
+
+
+def test_the_blank_row_test_leaves_ungranted_companies_listed():
+    c = compile_screen(Screen(columns=["revenue_ttm"], hide_blank=True), ["0000000001"])
+    assert "c.company_id <> ALL(%(granted)s) OR" in c.sql
+    assert "LIMIT 1) IS NOT NULL" not in compile_screen(Screen(columns=["revenue_ttm"]), None).sql
+
+
+def test_no_id_list_reaches_the_query_for_the_readings():
+    c = compile_screen(Screen(columns=["revenue_ttm"], sort="name"), None)
+    assert "granted" not in c.params and "ANY(%(granted)s)" not in c.sql
+
+
+def test_the_latest_period_is_read_once_per_row():
+    ranked = compile_screen(Screen(columns=["revenue_ttm", "cash_q"], sort="-revenue_ttm"), None)
+    assert ranked.sql.count("gold.latest_period(") == 1
+    assert "b.sic, a.latest" in ranked.sql and "r.sic, r.latest_period" in ranked.sql
+    named = compile_screen(Screen(columns=["revenue_ttm"], sort="name"), None)
+    assert named.sql.count("gold.latest_period(") == 1
+    assert "r.sic, a.latest" in named.sql
+
+
+def test_industry_sorts_by_its_name():
+    c = compile_screen(Screen(sort="-sic"), None)
+    assert "ORDER BY lower(b.industry) DESC NULLS LAST" in c.sql
+    assert "ORDER BY lower(r.industry) DESC NULLS LAST" in c.sql
 
 
 def test_like_wildcards_are_escaped():
@@ -182,8 +220,8 @@ def test_csv_export(client, token):
                    headers=token("alice"))
     assert r.status_code == 200 and r.headers["content-type"].startswith("text/csv")
     lines = r.text.splitlines()
-    assert lines[0].endswith(",access,revenue_ttm")
-    assert lines[1].startswith(NVDA) and lines[1].endswith(",financials,130497000000")
+    assert lines[0].endswith(",access,revenue_ttm,notes")
+    assert lines[1].startswith(NVDA) and lines[1].endswith(",financials,130497000000,")
     assert lines[2].startswith(TSLA) and lines[2].endswith(",,")
 
 

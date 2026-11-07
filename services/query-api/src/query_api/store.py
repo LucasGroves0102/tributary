@@ -204,13 +204,19 @@ class Store:
         with self._session(user_id) as cur:
             cur.execute(
                 """
-                SELECT * FROM gold.filing_recap(
+                SELECT r.*,
+                       gold.not_meaningful(r.metric, r.value, (
+                           SELECT d.inputs FROM gold.derived_financials d
+                           WHERE d.company_id = %(company)s AND d.span = r.span
+                             AND d.metric = r.metric AND d.period_end = r.period_end))
+                           AS not_meaningful
+                FROM gold.filing_recap(
                     %(company)s,
                     coalesce(%(period_end)s::date,
                              (SELECT max(q.period_end) FROM gold.quarterly_financials q
                               WHERE q.company_id = %(company)s
                                 AND q.accession_no = %(accession)s)),
-                    %(metrics)s)
+                    %(metrics)s) r
                 """, {"company": company_id, "period_end": period_end,
                       "accession": accession_no, "metrics": metrics})
             return cur.fetchall()
@@ -266,7 +272,7 @@ class Store:
                 SELECT metric, period_start, period_end, fiscal_year, fiscal_quarter,
                        calendar_year, calendar_quarter, value, unit, value_source,
                        source_tag, inputs, accession_no, form, filed, source_accessions,
-                       ingested_at,
+                       ingested_at, gold.not_meaningful(metric, value, inputs) AS not_meaningful,
                        (SELECT f.cik FROM silver.financial_facts f
                         WHERE f.accession_no = q.accession_no LIMIT 1) AS filer_cik
                 FROM (
