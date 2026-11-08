@@ -19,7 +19,9 @@ from query_api.workspaces import (
     MAX_ITEMS_PER_WORKSPACE,
     MAX_RECENT_FILINGS,
     MAX_THESIS_BYTES,
+    MAX_VERSIONS,
     MAX_WORKSPACES,
+    VERSIONED,
     LimitReached,
     NotAProject,
     StateError,
@@ -61,6 +63,7 @@ class FakeWorkspaces:
         self.workspaces: dict[str, dict] = {}
         self.items: dict[str, dict] = {}
         self.reads: dict[str, list[dict]] = {}
+        self.versions_of: dict[str, list[dict]] = {}  # item_id -> newest first
         self.tick = 0
 
     def _now(self):
@@ -177,10 +180,32 @@ class FakeWorkspaces:
         i = self._it(user_id, item_id)
         if not i:
             return None
+        if state is not None and i["kind"] in VERSIONED and state != i["state"]:
+            kept = self.versions_of.setdefault(item_id, [])
+            kept.insert(0, {"version_id": str(uuid.uuid4()), "item_id": item_id,
+                            "user_id": user_id, "name": i["name"],
+                            "state": copy.deepcopy(i["state"]), "saved_at": i["updated_at"],
+                            "replaced_at": self._now()})
+            del kept[MAX_VERSIONS:]
         i["name"] = name or i["name"]
         i["state"] = state if state is not None else i["state"]
         i["updated_at"] = self._now()
         return {**self._summary(i), "state": i["state"]}
+
+    def versions(self, user_id, item_id):
+        if not self._it(user_id, item_id):
+            return None
+        return [{k: v[k] for k in ("version_id", "name", "saved_at", "replaced_at")}
+                | {"characters": len(str(v["state"].get("markdown") or ""))}
+                for v in self.versions_of.get(item_id, [])]
+
+    def version(self, user_id, item_id, version_id):
+        if not self._it(user_id, item_id):
+            return None
+        return next(({k: v[k] for k in ("version_id", "item_id", "name", "state", "saved_at",
+                                         "replaced_at")}
+                     for v in self.versions_of.get(item_id, []) if v["version_id"] == version_id),
+                    None)
 
     def duplicate_item(self, user_id, item_id, workspace_id, name):
         i = self._it(user_id, item_id)
@@ -689,6 +714,58 @@ def test_thesis_is_written_and_saved_over_by_its_owner(world, token):
     r = client.put(f"/v1/workspace-items/{t['item_id']}", json={"state": MODEL},
                    headers=token("alice"))
     assert r.status_code == 422
+
+
+def test_a_save_over_a_thesis_keeps_the_version_it_replaced(world, token):
+    """M5: a long draft overwritten by a short one can be read back and restored (7,269 to
+    1,297 characters in testing)."""
+    client, *_ = world
+    wid = new_workspace(client, token)
+    t = new_item(client, token, wid, kind="thesis", name="NVDA thesis",
+                 state={"companyId": NVDA, "markdown": "x" * 7269})
+    url = f"/v1/workspace-items/{t['item_id']}"
+    alice = token("alice")
+    assert client.get(f"{url}/versions", headers=alice).json() == {
+        "item_id": t["item_id"], "versions": []}
+    client.put(url, json={"state": {"companyId": NVDA, "markdown": "y" * 1297}}, headers=alice)
+    client.put(url, json={"name": "renamed"}, headers=alice)  # a rename alone isn't versioned
+    same = {"companyId": NVDA, "markdown": "y" * 1297}
+    client.put(url, json={"state": same}, headers=alice)  # nor a save that changes nothing
+    listed = client.get(f"{url}/versions", headers=alice).json()["versions"]
+    assert [(v["name"], v["characters"]) for v in listed] == [("NVDA thesis", 7269)]
+    one = client.get(f"{url}/versions/{listed[0]['version_id']}", headers=alice).json()
+    assert one["state"] == {"companyId": NVDA, "markdown": "x" * 7269}
+    assert one["name"] == "NVDA thesis"
+    # restoring is an ordinary save of that state, which keeps the one it replaces in turn
+    client.put(url, json={"state": one["state"]}, headers=alice)
+    assert [v["characters"] for v in client.get(f"{url}/versions", headers=alice)
+            .json()["versions"]] == [1297, 7269]
+
+
+def test_versions_are_capped_and_only_the_owners(world, token):
+    client, ws, _ = world
+    wid = new_workspace(client, token)
+    t = new_item(client, token, wid, kind="thesis", state={"markdown": "0"})
+    url = f"/v1/workspace-items/{t['item_id']}"
+    for n in range(1, MAX_VERSIONS + 5):
+        client.put(url, json={"state": {"markdown": str(n)}}, headers=token("alice"))
+    listed = client.get(f"{url}/versions", headers=token("alice")).json()["versions"]
+    assert len(listed) == MAX_VERSIONS and listed[0]["characters"] == 2  # "33"
+    vid = listed[0]["version_id"]
+    bob = token("bob")
+    assert client.get(f"{url}/versions", headers=bob).status_code == 404
+    assert client.get(f"{url}/versions/{vid}", headers=bob).status_code == 404
+    other = new_item(client, token, wid, kind="thesis", state={"markdown": "b"})
+    r = client.get(f"/v1/workspace-items/{other['item_id']}/versions/{vid}",
+                   headers=token("alice"))
+    assert r.status_code == 404 and r.json() == {"detail": "version not found"}
+    # only theses are versioned
+    assert VERSIONED == ("thesis",)
+    chart = new_item(client, token, wid)
+    client.put(f"/v1/workspace-items/{chart['item_id']}", json={"state": SAVED_CHART | {
+        "title": "other"}}, headers=token("alice"))
+    assert client.get(f"/v1/workspace-items/{chart['item_id']}/versions",
+                      headers=token("alice")).json()["versions"] == []
 
 
 def test_a_large_thesis_fits_and_a_larger_one_is_refused(world, token):

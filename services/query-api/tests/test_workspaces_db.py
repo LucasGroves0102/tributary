@@ -278,6 +278,45 @@ def test_theses_and_models_are_owner_only(db):
     conn.execute("RESET ROLE")
 
 
+def test_a_thesis_keeps_the_versions_it_replaced_owner_only(db):
+    """App migration 014 (M5): a save over a thesis keeps the replaced version in the same
+    transaction, the newest MAX_VERSIONS; versions are owner-only by the forced policy and go
+    with their thesis."""
+    s, conn = db
+    wid = s.create("t-ws1", "Mine")["workspace_id"]
+    t = s.add_item("t-ws1", wid, "thesis", "NVDA thesis",
+                   validate_state("thesis", {"markdown": "x" * 7269}))["item_id"]
+    assert s.versions("t-ws1", t) == []
+    s.update_item("t-ws1", t, None, validate_state("thesis", {"markdown": "y" * 1297}))
+    s.update_item("t-ws1", t, "renamed", None)  # a rename isn't a version
+    s.update_item("t-ws1", t, None, validate_state("thesis", {"markdown": "y" * 1297}))  # same
+    listed = s.versions("t-ws1", t)
+    assert [(v["name"], v["characters"]) for v in listed] == [("NVDA thesis", 7269)]
+    assert s.version("t-ws1", t, listed[0]["version_id"])["state"] == {"markdown": "x" * 7269}
+    assert s.versions("t-ws2", t) is None
+    assert s.version("t-ws2", t, listed[0]["version_id"]) is None
+    for n in range(w.MAX_VERSIONS + 3):
+        s.update_item("t-ws1", t, None, validate_state("thesis", {"markdown": str(n)}))
+    assert len(s.versions("t-ws1", t)) == w.MAX_VERSIONS
+    # the policy alone hides them from another user, as the table owner
+    owner = conn.execute("SELECT tableowner FROM pg_tables WHERE schemaname = 'public'"
+                         " AND tablename = 'item_versions'").fetchone()[0]
+    if not conn.execute("SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname = %s",
+                        (owner,)).fetchone()[0]:
+        conn.execute(sql.SQL("SET LOCAL ROLE {}").format(sql.Identifier(owner)))
+        conn.execute("SELECT set_config('app.user_id', 't-ws2', true)")
+        assert conn.execute("SELECT count(*) FROM item_versions").fetchone()[0] == 0
+        assert conn.execute("DELETE FROM item_versions").rowcount == 0
+        with pytest.raises(psycopg.errors.InsufficientPrivilege), conn.transaction():
+            conn.execute("INSERT INTO item_versions (item_id, user_id, name, state, saved_at)"
+                         " VALUES (%s, 't-ws1', 'x', '{}', now())", (t,))
+        conn.execute("SELECT set_config('app.user_id', 't-ws1', true)")
+        conn.execute("RESET ROLE")
+    # deleting the thesis deletes its versions
+    assert s.delete_item("t-ws1", t)
+    assert count(conn, "item_versions", "t-ws1") == 0
+
+
 def test_thesis_state_may_be_as_large_as_a_reports(db):
     _, conn = db
     wid = conn.execute("INSERT INTO workspaces (user_id, name) VALUES ('t-ws1', 'w')"

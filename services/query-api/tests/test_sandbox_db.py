@@ -132,6 +132,22 @@ def test_take_several_questions_all_or_none(db):
     assert s.take_question("demo-a", NOW, 4, 10) == 0
 
 
+def test_give_back_returns_at_most_todays_use(db):
+    """C1: a run that produced nothing gives its questions back, the shared day's too; never
+    below zero, never more than was used today (yesterday's stay spent)."""
+    s, conn = db
+    s.create(sandbox("demo-a"), "ip1", 5, 5)
+    assert s.take_question("demo-a", NOW, 4, 10, 3) == 1
+    assert s.give_back("demo-a", NOW, 3) == 3
+    assert rows(conn, "SELECT questions FROM demo_agent_usage WHERE user_id = 'demo-a'") == [(0,)]
+    assert rows(conn, "SELECT questions FROM demo_agent_daily WHERE day = %s",
+                NOW.date()) == [(0,)]
+    assert s.give_back("demo-a", NOW, 3) == 0
+    assert s.take_question("demo-a", NOW, 4, 10) == 3
+    assert s.give_back("demo-a", NOW + timedelta(days=1), 1) == 0  # another day: nothing used
+    assert s.give_back("demo-unknown", NOW, 1) == 0
+
+
 def test_questions_left_reads_the_caps_and_takes_nothing(db):
     s, conn = db
     day = NOW.date()

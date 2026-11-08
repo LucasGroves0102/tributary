@@ -43,6 +43,7 @@ CHECK_PATH = re.compile(r"^/v1/thesis-checks/")  # query_api.thesis_checks
 ITEM_PATH = re.compile(r"^/v1/workspaces/[^/]+/items$|^/v1/workspace-items/[^/]+$")
 NOT_FOUND = "workspace not found"
 ITEM_NOT_FOUND = "item not found"
+VERSION_NOT_FOUND = "version not found"
 
 
 def _name(limit: int) -> Callable[[str], str]:
@@ -255,6 +256,21 @@ def add_workspace_routes(app: FastAPI, *, store: Store, workspaces: Workspaces |
                                      "rename it")
         state = state_of(current["kind"], body.state) if body.state is not None else None
         return found(ws().update_item(user_id, str(item_id), body.name, state), ITEM_NOT_FOUND)
+
+    @app.get("/v1/workspace-items/{item_id}/versions", response_model=dict)
+    def item_versions(user_id: User, item_id: ItemId) -> dict:
+        """A thesis's earlier versions, newest first, without their text (app DB 014): each save
+        over a thesis keeps the version it replaced, the newest MAX_VERSIONS. Another user's item
+        is the same 404 as a missing one."""
+        rows = found(ws().versions(user_id, str(item_id)), ITEM_NOT_FOUND)
+        return {"item_id": str(item_id), "versions": rows}
+
+    @app.get("/v1/workspace-items/{item_id}/versions/{version_id}", response_model=dict)
+    def item_version(user_id: User, item_id: ItemId,
+                     version_id: Annotated[UUID, Path(description="a version_id")]) -> dict:
+        """One earlier version with its state (name, markdown): the web app loads it into the
+        editor as unsaved changes; saving it is an ordinary save."""
+        return found(ws().version(user_id, str(item_id), str(version_id)), VERSION_NOT_FOUND)
 
     @app.post("/v1/workspace-items/{item_id}/duplicate", status_code=201, response_model=dict)
     def duplicate_item(user_id: User, item_id: ItemId, body: CopyItem | None = None) -> dict:

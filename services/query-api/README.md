@@ -317,7 +317,14 @@ rename), owner-only and validated like every item:
   reports). Lines `[[embed:<item id>]]` draw another item of the same workspace in the web app;
   they aren't checked here (an embedded item may be deleted later) and the web app drops any
   that don't resolve. `GET /v1/workspaces/{id}` leaves a thesis's state out (null, like a
-  report's); `/v1/workspace-items/{id}` returns it.
+  report's); `/v1/workspace-items/{id}` returns it. **Versions** (app migration 014): a save that
+  changes a thesis's state keeps the version it replaced (`item_versions`, in the same
+  transaction; the newest `MAX_VERSIONS` = 30 per thesis; a rename or a save that changes nothing
+  keeps none). `GET /v1/workspace-items/{id}/versions` lists them newest first without their text
+  (`version_id`, `name`, `saved_at`, `replaced_at`, `characters`), `GET
+  /v1/workspace-items/{id}/versions/{version_id}` returns one with its state; restoring is the web
+  app loading it into the editor, and saving it is an ordinary save. Owner-only like the item
+  (another user's is the same 404), forced RLS on `app.user_id`, deleted with the thesis.
 - **`model`** (`ModelState`): `{companyId, historyYears (3-10, default 8), assumptions: [{growth,
   margin, note?}] (1-10)}`, growth -100..1000 and operating margin -1000..100, in percent; notes
   up to 500 characters (blank ones dropped). Optional `scenarios: {bear?, bull?}`, each a list
