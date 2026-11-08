@@ -76,7 +76,13 @@ Query API decides from the token, and its 429 message is shown as is. Production
 `AGENT_IP_RATE_PER_HOUR` to 40 (Flux release): a tester on the owner's network shares the
 owner's address, and the per-account daily caps still hold.
 A report counts as 3 questions ([Reports](#reports)), a thesis check 4
-([Thesis checks](#thesis-checks)).
+([Thesis checks](#thesis-checks)). Questions are taken before the model runs (so parallel requests
+can't overspend) and given back when the run ends without its result: a model error before any
+answer text, a report or thesis check that saved nothing (`server.Charge`; the Query API's
+`POST /v1/demo/agent-quota/refund` for the daily caps). The stream then carries
+`{"type": "refunded", "questions": n}`. A result counts, partial ones included; a client that
+disconnects is never given anything back (it may have read the answer as it streamed), and the
+day's model budget keeps what was spent. A refused daily quota gives the hour's allowance back.
 
 The web app's `context.page` is one of home, companies, company, filing, chart, compare,
 search, ask, about, workspace, report, thesis, model.
@@ -132,7 +138,18 @@ result) or an `error` event if it couldn't be saved or the model never submitted
   two flags: **growth more than 10 percentage points above or below the CAGR, or a margin
   outside the 5-year [min, max]** (`GROWTH_FLAG_POINTS`). The numbers go to the model as data;
   it only writes the commentary. `services/web/src/models/stats-fixture.json` holds the same
-  inputs and expected numbers for both test suites.
+  inputs and expected numbers for both test suites. Each forecast year also says whether the
+  user set it (`user_set`): a year equal to a default a new model starts from (the run-rate rule
+  below, or the flat 5-year CAGR and average margin of models made before it) is Tributary's, not
+  the user's view, and `CHECK_RULES` tells the model not to endorse it as such. The data also
+  carries the TTM run rate (`ttm_growth_pct`, `ttm_margin_pct`).
+- **Model defaults** (`model_stats.default_assumptions`, port of web `defaultAssumptions`): year 1
+  at the trailing-twelve-month run rate (the newest TTM revenue against the TTM a year earlier,
+  and its operating margin; else the latest fiscal year's), then each year closes half the gap
+  to the long run: growth to the 5-year CAGR held between 0% and 5%, margin to the 5-year
+  average. NVIDIA (TTM +83.4%, 65.2%) starts 83.4 / 44.2 / 24.6% growth at 65.2 / 55.6 / 50.8%;
+  Deckers starts at its 6.3%, not its 16.5% CAGR. The fixture's `default_cases` hold real TTM
+  rows of four shapes (hyper-growth, accelerating, steady, shrinking).
 - **The base case.** A model with bear / base / bull scenarios (the Analysis tab) is checked on
   its **base** case only: `assumptions` in the saved state, which is all a model saved before
   scenarios holds (`model_stats.scenario_assumptions`, ported from `models/model.ts`
@@ -154,8 +171,10 @@ result) or an `error` event if it couldn't be saved or the model never submitted
   it); one the tools never returned is kept but flagged and listed. Every explanation,
   commentary, point and summary goes through `verify.py` as in chat; unverified figures are
   flagged. A supported or contradicted claim without a citation of a filing the tools returned
-  becomes "unverifiable" (`downgraded`); a "not mentioned" point without one is dropped (and the
-  notes say so). Quotes are checked against the thesis text (`quote_found`).
+  becomes "unverifiable" (`downgraded`); so does a supported claim with a dollar figure that isn't
+  in the data, in the thesis's own words, its explanation or a citation's figure (the note names
+  them: "supported" certifies the numbers). A "not mentioned" point without a citation is dropped
+  (and the notes say so). Quotes are checked against the thesis text (`quote_found`).
 - **Saved with the thesis.** Through the Query API with the user's token
   (`POST /v1/thesis-checks/{id}`, off the public site), with the SHA-256 of the company id and
   the text it checked (`text_hash`), the model, rounds, token usage and estimated cost.
@@ -169,7 +188,15 @@ result) or an `error` event if it couldn't be saved or the model never submitted
   10-K/10-Q than `latest`.
 - **Counts as 4 questions** (`CHECK_QUESTIONS`) against every limit, like a report's 3: a check
   runs up to 16 tool rounds (`CHECK_ROUNDS`), about 4 rounds per question as reports (12 rounds,
-  3 questions); refused with a message saying so when it doesn't fit.
+  3 questions); refused with a message saying so when it doesn't fit. A check that saved
+  nothing is given back (see the limits above).
+- **Room to finish** (C1). `submit_check` for a full-length thesis, after thinking, ran past the
+  chat's 8,000 tokens per reply on every run; a check now has `CHECK_MAX_TOKENS` (32,000, thinking
+  included, streamed). A reply cut off while thinking or calling a tool is dropped and the model
+  asked once to submit more briefly (`CHECK_RETRY`); at the round limit a closing call
+  (`CHECK_CLOSING`, tools kept) asks it to submit what it has checked. A result submitted that
+  way is saved like any other, with the stop in `stop` and a note; one that never comes is an
+  error that says why, and the check is given back.
 
 Result shape (`query_api.thesis_checks.CheckResult`): `thesis` (item, title, company,
 `text_hash`, characters checked, truncated), `summary`, `claims[]` (`quote`, `quote_found`,

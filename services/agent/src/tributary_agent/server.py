@@ -31,13 +31,7 @@ from tributary_agent.report import (
     ReportError,
 )
 from tributary_agent.telemetry import record_answer, record_error
-from tributary_agent.thesis_check import (
-    CHECK_QUESTIONS,
-    CHECK_ROUNDS,
-    CHECK_RULES,
-    SUBMIT_TOOL,
-    Checker,
-)
+from tributary_agent.thesis_check import CHECK_QUESTIONS, Checker, check_agent
 from tributary_agent.tools import MetricTools, QueryApi
 from tributary_agent.ui import UiActions, UiContext
 from tributary_telemetry import configure_logging
@@ -111,9 +105,10 @@ class Limits:
                 del windows[key]
 
     def acquire(self, user_id: str, client_ip: str, questions: int = 1,
-                what: str = "A report") -> None:
+                what: str = "A report") -> float:
         """Takes `questions` from the hour's allowances (a report or a thesis check counts as
-        several), or none of them. `what` names it in the refusal."""
+        several), or none of them. `what` names it in the refusal. Returns the stamp
+        `release` gives them back by."""
         now = self._clock()
         with self._lock:
             if self._spent[self._today()] >= self._budget:
@@ -134,6 +129,17 @@ class Limits:
                                     "per hour. Try again later.")
             by_ip.extend([now] * questions)
             by_user.extend([now] * questions)
+            return now
+
+    def release(self, user_id: str, client_ip: str, questions: int, stamp: float) -> None:
+        """Gives back what `acquire` took at `stamp` (a run that produced nothing, a refused
+        quota). The day's spend is never given back: the model calls were made."""
+        with self._lock:
+            for asked in (self._by_user.get(user_id), self._by_ip.get(client_ip)):
+                for _ in range(questions):
+                    if asked is None or stamp not in asked:
+                        break
+                    asked.remove(stamp)
 
     def left(self, user_id: str, client_ip: str) -> dict:
         """What `acquire` would still allow this hour, taking nothing: for the assistant panel's
@@ -169,20 +175,47 @@ def _no_daily_count(tok: str) -> dict:
     return NO_DAILY_COUNT
 
 
+class Charge:
+    """What one request took from the limits (the hour's, per user and per address, and the
+    user's persistent daily quota), and how to give it back when the run produced nothing."""
+
+    def __init__(self, limits: Limits, refund_quota: Callable[[str, int], None], user_id: str,
+                 ip: str, tok: str, questions: int, stamp: float) -> None:
+        self._limits, self._refund = limits, refund_quota
+        self._user, self._ip, self._tok = user_id, ip, tok
+        self.questions, self._stamp = questions, stamp
+        self.refunded = False
+
+    def refund(self) -> None:
+        if self.refunded:
+            return
+        self.refunded = True
+        self._limits.release(self._user, self._ip, self.questions, self._stamp)
+        self._refund(self._tok, self.questions)
+
+
 def create_app(make_agent: Callable[[str], Agent], who_is: Callable[[str], str],
                limits: Limits, client_ip_header: str = "X-Client-IP",
                take_quota: Callable[[str, int], None] = _no_quota,
                daily_count: Callable[[str], dict] = _no_daily_count,
                make_reporter: Callable[[str], Reporter] | None = None,
-               make_checker: Callable[[str], Checker] | None = None) -> FastAPI:
+               make_checker: Callable[[str], Checker] | None = None,
+               refund_quota: Callable[[str, int], None] = _no_quota) -> FastAPI:
     """make_agent(token) builds an agent reading as the token's user; who_is(token) returns
     that user's id or raises HTTPException. The client IP is read from client_ip_header, set
     by the web proxy, else the connection's peer address. take_quota(token, n) takes n of the
     user's persistent question allowances (demo sandboxes, Query API) or raises
-    HTTPException (429 with the message to show). make_reporter(token): reports as the
+    HTTPException (429 with the message to show); refund_quota(token, n) gives them back
+    (never raises). make_reporter(token): reports as the
     token's user (report.py); None leaves /v1/reports out. make_checker(token): thesis checks
     as the token's user (thesis_check.py); None leaves /v1/thesis-checks out. daily_count(tok):
-    the user's daily cap and what's left of it, for /v1/allowance."""
+    the user's daily cap and what's left of it, for /v1/allowance.
+
+    Charging: a request takes its questions before the model runs (so parallel requests can't
+    overspend) and gives them back if the run ends without its result: no answer (a model
+    error), no saved report, no saved check. A result counts, partial ones included (a check
+    the model submitted before stopping); a client that disconnects is never refunded (it may
+    have read a streamed answer). The day's model budget always keeps what was spent."""
     app = FastAPI(title="Tributary Agent", version="1")
     instrument(app)
     bearer = HTTPBearer(auto_error=False)
@@ -198,10 +231,40 @@ def create_app(make_agent: Callable[[str], Agent], who_is: Callable[[str], str],
             return ip
         return request.client.host if request.client else "unknown"
 
-    def sse(events: Iterator[dict], user_id: str, kind: str) -> StreamingResponse:
+    def charge(user_id: str, ip: str, tok: str, questions: int = 1,
+               what: str = "A report") -> Charge:
+        """Takes the questions from every limit, all or none (a refused daily quota gives the
+        hour's back)."""
+        try:
+            stamp = limits.acquire(user_id, ip, questions, what=what)
+        except LimitExceeded as e:
+            raise HTTPException(429, str(e)) from None
+        try:
+            take_quota(tok, questions)
+        except HTTPException:
+            limits.release(user_id, ip, questions, stamp)
+            raise
+        return Charge(limits, refund_quota, user_id, ip, tok, questions, stamp)
+
+    def sse(events: Iterator[dict], user_id: str, kind: str, paid: Charge,
+            result: str | None = None) -> StreamingResponse:
+        """result: the event type that means the run produced what it was asked for ("report",
+        "check"); None: an answer (any streamed text, or done). Without it, `paid` is given
+        back and a "refunded" event says so before done (or the error)."""
+        produces = result or "text"
+
+        def refunded() -> str:
+            paid.refund()
+            log.info("user=%s %s refunded %d questions", user_id, kind, paid.questions,
+                     extra={"user_id": user_id, "kind": kind, "questions": paid.questions})
+            return f"data: {json.dumps({'type': 'refunded', 'questions': paid.questions})}\n\n"
+
         def stream() -> Iterator[str]:
+            produced = False
             try:
                 for event in events:
+                    if event["type"] == produces:
+                        produced = True
                     if event["type"] == "done":
                         answer = event["answer"]
                         limits.spend(answer.cost_usd or 0)
@@ -214,11 +277,15 @@ def create_app(make_agent: Callable[[str], Agent], who_is: Callable[[str], str],
                                         "input_tokens": answer.usage.input_tokens,
                                         "output_tokens": answer.usage.output_tokens,
                                         "tool_calls": len(answer.tool_calls)})
+                        if result is not None and not produced:
+                            yield refunded()
                         event = {"type": "done", "answer": answer_json(answer)}
                     yield f"data: {json.dumps(event, default=str)}\n\n"
             except anthropic.APIError as e:
                 record_error()
                 log.warning("model error for %s: %s", user_id, e, extra={"user_id": user_id})
+                if not produced:
+                    yield refunded()
                 yield f"data: {json.dumps({'type': 'error', 'message': 'model unavailable'})}\n\n"
 
         return StreamingResponse(stream(), media_type="text/event-stream",
@@ -241,14 +308,10 @@ def create_app(make_agent: Callable[[str], Agent], who_is: Callable[[str], str],
     def ask(body: AskRequest, tok: Annotated[str, Depends(token)],
             ip: Annotated[str, Depends(client_ip)]) -> StreamingResponse:
         user_id = who_is(tok)
-        try:
-            limits.acquire(user_id, ip)
-        except LimitExceeded as e:
-            raise HTTPException(429, str(e)) from None
-        take_quota(tok, 1)
+        paid = charge(user_id, ip, tok)
         agent = make_agent(tok)
         return sse(agent.events(body.question, [t.model_dump() for t in body.history],
-                                body.context), user_id, "answer")
+                                body.context), user_id, "answer", paid)
 
     if make_reporter is not None:
         reporter_for = make_reporter
@@ -259,7 +322,8 @@ def create_app(make_agent: Callable[[str], Agent], who_is: Callable[[str], str],
             """Writes a research note from one of the user's workspaces and saves it there
             (report.py). Streams the agent's events, a "report" event once saved (or an
             "error"), then "done". Counts as REPORT_QUESTIONS questions against every limit,
-            taken only once the workspace is the user's and has something to report on."""
+            taken only once the workspace is the user's and has something to report on, and
+            given back ("refunded") when no report was saved."""
             user_id = who_is(tok)
             reporter = reporter_for(tok)
             try:
@@ -267,12 +331,8 @@ def create_app(make_agent: Callable[[str], Agent], who_is: Callable[[str], str],
                                        str(body.report_id) if body.report_id else None)
             except ReportError as e:
                 raise HTTPException(e.status, e.message) from None
-            try:
-                limits.acquire(user_id, ip, REPORT_QUESTIONS)
-            except LimitExceeded as e:
-                raise HTTPException(429, str(e)) from None
-            take_quota(tok, REPORT_QUESTIONS)
-            return sse(reporter.events(job), user_id, "report")
+            paid = charge(user_id, ip, tok, REPORT_QUESTIONS)
+            return sse(reporter.events(job), user_id, "report", paid, result="report")
 
     if make_checker is not None:
         checker_for = make_checker
@@ -283,19 +343,17 @@ def create_app(make_agent: Callable[[str], Agent], who_is: Callable[[str], str],
             """Checks one of the user's theses against the data and saves the result with it
             (thesis_check.py). Streams the agent's events, a "check" event once saved (or an
             "error"), then "done". Counts as CHECK_QUESTIONS questions against every limit,
-            taken only once the thesis is the user's and has text to check."""
+            taken only once the thesis is the user's and has text to check, and given back
+            ("refunded") when no check was saved; a partial check (submitted before the model
+            stopped) is saved and counts."""
             user_id = who_is(tok)
             checker = checker_for(tok)
             try:
                 job = checker.prepare(str(body.item_id))
             except ReportError as e:
                 raise HTTPException(e.status, e.message) from None
-            try:
-                limits.acquire(user_id, ip, CHECK_QUESTIONS, what="A thesis check")
-            except LimitExceeded as e:
-                raise HTTPException(429, str(e)) from None
-            take_quota(tok, CHECK_QUESTIONS)
-            return sse(checker.events(job), user_id, "thesis_check")
+            paid = charge(user_id, ip, tok, CHECK_QUESTIONS, what="A thesis check")
+            return sse(checker.events(job), user_id, "thesis_check", paid, result="check")
 
     return app
 
@@ -348,6 +406,27 @@ def query_api_quota(base_url: str,
     return take_quota
 
 
+def query_api_refund(base_url: str,
+                     http: httpx.Client | None = None) -> Callable[[str, int], None]:
+    """Gives back questions take_quota took for a run that produced nothing
+    (`POST /v1/demo/agent-quota/refund`, off the public site like the take). Never raises: a
+    refund that fails only leaves the count as it was, and is logged."""
+    post = http.post if http else httpx.post
+
+    def refund(tok: str, questions: int = 1) -> None:
+        try:
+            r = post(f"{base_url}/v1/demo/agent-quota/refund",
+                     headers={"Authorization": f"Bearer {tok}", **request_id_headers()},
+                     timeout=10, json={"questions": questions})
+        except httpx.HTTPError as e:
+            log.warning("quota refund failed: %s", type(e).__name__)
+            return
+        if r.status_code not in (200, 404):  # 404: an older Query API without refunds
+            log.warning("quota refund failed: %s", r.status_code)
+
+    return refund
+
+
 def query_api_daily_count(base_url: str,
                           http: httpx.Client | None = None) -> Callable[[str], dict]:
     """The user's daily question cap and what's left, from the same place `take_quota` takes
@@ -390,9 +469,8 @@ def build_app() -> FastAPI:
 
     def make_checker(tok: str) -> Checker:
         api = QueryApi(base_url, tok, http=http)
-        return Checker(api, lambda scoped: Agent(
-            messages, scoped, model, stream=True, effort=effort,
-            tools=[*tools.get(api), SUBMIT_TOOL], rules=CHECK_RULES, max_rounds=CHECK_ROUNDS))
+        return Checker(api, lambda scoped: check_agent(
+            messages, scoped, model, tool_list=tools.get(api), effort=effort, stream=True))
 
     return create_app(
         make_agent=make_agent,
@@ -401,6 +479,7 @@ def build_app() -> FastAPI:
                       int(os.environ.get("AGENT_IP_RATE_PER_HOUR", "10")),
                       float(os.environ.get("AGENT_DAILY_BUDGET_USD", "2"))),
         take_quota=query_api_quota(base_url),
+        refund_quota=query_api_refund(base_url),
         daily_count=query_api_daily_count(base_url),
         make_reporter=make_reporter,
         make_checker=make_checker,

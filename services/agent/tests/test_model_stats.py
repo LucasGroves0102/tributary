@@ -12,8 +12,12 @@ from tributary_agent.model_stats import (
     HistoryYear,
     annual_history,
     check_assumptions,
+    default_assumptions,
     history_stats,
+    old_default,
+    run_rate,
     scenario_assumptions,
+    user_set,
 )
 
 FIXTURE = Path(__file__).parents[2] / "web" / "src" / "models" / "stats-fixture.json"
@@ -79,3 +83,45 @@ def test_the_base_case_is_what_old_models_hold():
     old = {"companyId": "0001045810", "assumptions": [{"growth": 5, "margin": 10}]}
     assert scenario_assumptions(old) == [{"growth": 5.0, "margin": 10.0}]
     assert scenario_assumptions(old, "bear") is None and scenario_assumptions(old, "x") is None
+
+
+DEFAULT_CASES = json.loads(FIXTURE.read_text())["default_cases"]
+
+
+@pytest.mark.parametrize("case", DEFAULT_CASES, ids=[c["name"] for c in DEFAULT_CASES])
+def test_defaults_match_the_web_app(case):
+    s = history_stats(annual_history(case["rows"]))
+    run = run_rate(case["rows"])
+    want = case["expected"]
+    assert run.period == want["run_rate"]["period"]
+    close(run.growth, want["run_rate"]["growth"])
+    close(run.margin, want["run_rate"]["margin"])
+    assert default_assumptions(s, case["years"], run) == want["defaults"]
+    assert old_default(s) == want["old_default"]
+    assert user_set(s, run, want["edited"]) == want["user_set"]
+
+
+def test_defaults_start_at_the_run_rate_and_fade_to_the_long_run():
+    """H5, #72: NVIDIA starts at its TTM growth (83.4%) and margin (65.2%), not the flat 5-yr
+    66.9% and 46.0%; each year closes half the gap to 5% growth (the CAGR, capped) and the
+    5-yr average margin. Deckers starts at its 6.3%, not its 16.5% CAGR."""
+    by = {c["name"].split(":")[0]: c for c in DEFAULT_CASES}
+    nvda = by["hyper-growth"]["expected"]["defaults"]
+    assert [a["growth"] for a in nvda[:3]] == [83.4, 44.2, 24.6]
+    assert [a["margin"] for a in nvda[:3]] == [65.2, 55.6, 50.8]
+    assert by["steady"]["expected"]["defaults"][0] == {"growth": 6.3, "margin": 23.6}
+    # Intel's 5-yr CAGR is negative: the long run is held at 0%, never a permanent decline
+    assert by["shrinking"]["expected"]["defaults"][-1]["growth"] == 0.8
+    assert by["synthetic"]["expected"]["defaults"][0] == {"growth": -20.0, "margin": 8.0}
+
+
+def test_a_model_still_at_its_defaults_isnt_the_users_view():
+    """#74: years equal to either default (this rule, or the flat one older models start
+    from) are user_set False; a changed year is True."""
+    case = DEFAULT_CASES[0]
+    s = history_stats(annual_history(case["rows"]))
+    run = run_rate(case["rows"])
+    flat = [old_default(s)] * 3
+    assert user_set(s, run, flat) == [False, False, False]
+    assert user_set(s, run, default_assumptions(s, 3, run)) == [False, False, False]
+    assert user_set(s, run, [{"growth": 30, "margin": 50}]) == [True]

@@ -41,11 +41,11 @@ SANDBOXES = Counter("tributary_demo_sandboxes_total",
                     "Demo sandbox requests by result (created, ip_limit, full, error)", ["result"])
 DEMO_QUESTIONS = Counter("tributary_demo_agent_questions_total",
                          "Assistant questions from demo sandboxes by result (allowed, disabled, "
-                         "user_limit, day_limit, expired)", ["result"])
+                         "user_limit, day_limit, expired, refunded)", ["result"])
 
 ACCOUNT_QUESTIONS = Counter("tributary_account_agent_questions_total",
                             "Assistant questions from owner-created password accounts by "
-                            "result (allowed, disabled, user_limit, gone)", ["result"])
+                            "result (allowed, disabled, user_limit, gone, refunded)", ["result"])
 
 log = logging.getLogger("query_api.demo")
 
@@ -204,6 +204,21 @@ def add_sandbox_routes(app: FastAPI, *, store: Store, sandboxes: Sandboxes | Non
                 "of the app keeps working; try the assistant again after midnight UTC.")) from None
         DEMO_QUESTIONS.labels("allowed").inc()
         return {"demo": True, "remaining_today": left}
+
+    @app.post("/v1/demo/agent-quota/refund")
+    def agent_quota_refund(user_id: User, body: QuotaRequest) -> dict:
+        """Gives back `questions` agent-api took for a run that produced nothing (a model
+        error, a thesis check or report that saved nothing: agent server.Charge). At most what
+        the caller used today, never below zero, so it can't add questions. Off the public site
+        like the take (nginx's agent-quota rule covers the path): only agent-api calls it."""
+        password = is_password_user(user_id)
+        if not password and not is_github_user(user_id) and not is_sandbox_user(user_id):
+            return {"demo": False}
+        if sandboxes is None:
+            return {"demo": True, "refunded": 0}
+        given = sandboxes.give_back(user_id, clock(), body.questions)
+        (ACCOUNT_QUESTIONS if password else DEMO_QUESTIONS).labels("refunded").inc(given)
+        return {"demo": True, "refunded": given}
 
     @app.get("/v1/demo/agent-quota")
     def agent_quota_left(user_id: User) -> dict:

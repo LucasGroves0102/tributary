@@ -16,8 +16,17 @@ both this port's test and the web app's vitest check them, so the two can't drif
   below the CAGR, or its margin outside [min, max] of those margins.
 - Scenarios (`scenario_assumptions`): a model's `assumptions` are its BASE case (models saved
   before scenarios are base only); `scenarios.bear` / `scenarios.bull` hold the other cases for
-  the same years. The thesis check checks the base case only."""
+  the same years. The thesis check checks the base case only.
+- Defaults (`run_rate`, `default_assumptions`): what a new model starts from. Year 1 at the
+  trailing-twelve-month run rate (the newest TTM revenue against the TTM a year earlier, and
+  its operating margin; the latest fiscal year's when there's no TTM), then each year closes
+  half the gap (FADE) to the long run: growth to the 5-year CAGR held between 0% and
+  LONG_RUN_GROWTH_CAP, margin to the 5-year average. `OLD_DEFAULT` years (the 5-year CAGR and
+  average margin, flat) are what models made before this rule start from. The thesis check
+  tells the model which years are still a default (`user_set` false), so it doesn't endorse
+  them as the user's view."""
 
+import math
 import re
 from dataclasses import asdict, dataclass
 from typing import Any
@@ -222,3 +231,105 @@ def check_assumptions(history: list[HistoryYear], assumptions: list[dict]) -> di
         "margin_max": rng[1] if rng else None,
         "years": [asdict(y) for y in years],
     }
+
+
+# --- defaults: what a new model starts from (web models/model.ts defaultAssumptions) --------
+
+LONG_RUN_GROWTH_CAP = 5.0  # percent: the most a default fades toward
+FADE = 0.5  # each later year closes this share of the gap to the long run
+GROWTH_RANGE = (-100.0, 1000.0)
+MARGIN_RANGE = (-1000.0, 100.0)
+_FY_Q = re.compile(r"^FY(\d{4}) Q([1-4])$")
+
+
+@dataclass
+class RunRate:
+    growth: float | None  # ratio: the newest TTM revenue against the TTM a year earlier
+    margin: float | None  # ratio: that TTM's operating income / revenue
+    period: str | None  # "FY2027 Q2"
+
+
+def run_rate(rows: list[dict]) -> RunRate:
+    """The trailing-twelve-month run rate from the same TTM rows the history comes from: the
+    newest revenue row, the row for the same fiscal quarter a year earlier, and operating
+    income at the newest row's quarter."""
+    rev: dict[tuple[int, int], tuple[str, float]] = {}
+    oi: dict[tuple[int, int], float] = {}
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        m = _FY_Q.match(str(r.get("fiscal_period") or ""))
+        value = _number(r.get("value"))
+        if not m or value is None:
+            continue
+        key = (int(m.group(1)), int(m.group(2)))
+        if r.get("metric") == "revenue":
+            rev[key] = (str(r.get("period_end") or ""), value)
+        elif r.get("metric") == "operating_income":
+            oi[key] = value
+    if not rev:
+        return RunRate(None, None, None)
+    key = max(rev, key=lambda k: (rev[k][0], k))
+    now = rev[key][1]
+    ago = rev.get((key[0] - 1, key[1]))
+    growth = now / ago[1] - 1 if ago is not None and ago[1] > 0 else None
+    margin = oi[key] / now if key in oi and now > 0 else None
+    return RunRate(growth, margin, f"FY{key[0]} Q{key[1]}")
+
+
+def _round1(v: float) -> float:
+    """JavaScript's Math.round(v * 10) / 10 (half up, not Python's half to even)."""
+    return math.floor(v * 10 + 0.5) / 10
+
+
+def _clamp(v: float, lo_hi: tuple[float, float]) -> float:
+    return min(lo_hi[1], max(lo_hi[0], v))
+
+
+def _first(*values: float | None) -> float | None:
+    return next((v for v in values if v is not None), None)
+
+
+def default_assumptions(stats: HistoryStats, years: int, run: RunRate | None = None,
+                        ) -> list[dict]:
+    """Year 1 at the run rate (else the latest fiscal year's growth and margin, else the
+    5-year figures), then each year closes FADE of the gap to the long run: growth to the
+    5-year CAGR held in [0, LONG_RUN_GROWTH_CAP] percent, margin to the 5-year average.
+    Percent, rounded to 0.1."""
+    run = run or RunRate(None, None, None)
+    g0 = _first(run.growth, stats.last_growth, stats.cagr)
+    m0 = _first(run.margin, stats.last_margin, stats.avg_margin)
+    g0 = 0.0 if g0 is None else g0 * 100
+    m0 = 0.0 if m0 is None else m0 * 100
+    g_long = _clamp(stats.cagr * 100 if stats.cagr is not None else g0,
+                    (0.0, LONG_RUN_GROWTH_CAP))
+    m_long = stats.avg_margin * 100 if stats.avg_margin is not None else m0
+    out = []
+    for k in range(min(MAX_YEARS, max(1, years))):
+        keep = FADE ** k
+        out.append({"growth": _round1(_clamp(g_long + (g0 - g_long) * keep, GROWTH_RANGE)),
+                    "margin": _round1(_clamp(m_long + (m0 - m_long) * keep, MARGIN_RANGE))})
+    return out
+
+
+def old_default(stats: HistoryStats) -> dict:
+    """What models made before the run-rate rule started from: the 5-year CAGR and average
+    margin, every year."""
+    return {"growth": 0.0 if stats.cagr is None else _round1(_clamp(stats.cagr * 100,
+                                                                    GROWTH_RANGE)),
+            "margin": 0.0 if stats.avg_margin is None else _round1(
+                _clamp(stats.avg_margin * 100, MARGIN_RANGE))}
+
+
+def user_set(stats: HistoryStats, run: RunRate | None, assumptions: list[dict]) -> list[bool]:
+    """Per forecast year, whether the user changed it from a default (the run-rate rule or
+    the old flat one, both as of today's history): False means it's still Tributary's
+    starting point, not the user's view."""
+    new = default_assumptions(stats, len(assumptions), run)
+    old = old_default(stats)
+
+    def same(a: dict, d: dict) -> bool:
+        return abs(float(a["growth"]) - d["growth"]) < 0.05 and \
+            abs(float(a["margin"]) - d["margin"]) < 0.05
+
+    return [not (same(a, new[i]) or same(a, old)) for i, a in enumerate(assumptions)]

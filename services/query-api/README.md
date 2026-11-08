@@ -33,6 +33,7 @@ request parameters. Dev tokens: `make token USER=alice`.
 | `POST /v1/demo/sandbox` | `DEMO_SANDBOX_ENABLED` | 201: a new temporary user and its token (expires with the sandbox); 429 when the per-IP or live-sandbox cap is hit. Takes no input |
 | `GET /v1/demo/agent-quota` | token | agent-api only (nginx hides it): what POST would still allow today, taking nothing: `{"capped": true, "per_day": n, "left_today": n}`, or `{"capped": false}` for users not limited here |
 | `POST /v1/demo/agent-quota` | token | agent-api only (nginx hides it): takes one assistant question (or `{"questions": n}`, 1-5, all or none: a report counts as 3) from a sandbox's or GitHub account's daily caps, or from a password account's own daily cap; 429 with the message to show; `{"demo": false}` for other users |
+| `POST /v1/demo/agent-quota/refund` | token | agent-api only (nginx hides it): gives back `{"questions": n}` (1-5) taken for a run that produced nothing (a model error, a thesis check or report that saved nothing), at most what the caller used today (UTC) and never below zero; `{"demo": true, "refunded": n}`, or `{"demo": false}` for users not capped here |
 | `GET /v1/auth/providers` | | `{"github": true\|false, "password": true\|false}`: which sign-in buttons the web app shows |
 | `POST /v1/auth/password` | `APP_DATABASE_URL` | `{"username", "password"}` → `{"token", "expires_in"}` (a 7-day JWT) for an owner-created account; 401 with one body for every refusal, 429 per client address, 422 never echoes the input ([Password accounts](#password-accounts)) |
 | `GET /v1/auth/github/start` | `GITHUB_CLIENT_ID` + `GITHUB_CLIENT_SECRET` | 302 to GitHub's authorize page (no scopes) with a signed `state`, and the state's nonce in a short-lived cookie (404 when not configured; [GitHub sign-in](#github-sign-in)) |
@@ -371,7 +372,9 @@ checks"), one row per check in `thesis_checks`, kept with the thesis they checke
   `checked_at` and `filings` (`[]` for checks stored before Revisit).
   `GET /v1/workspace-items/{item_id}/checks/{check_id}` returns one with its result.
 - **Validated.** `CheckResult` is strict: a supported or contradicted claim and every "not
-  mentioned" point cites at least one filing the agent's tools returned (`verified`); citation
+  mentioned" point cites at least one filing the agent's tools returned (`verified`); a
+  supported claim has no figure that isn't in the data (none of its `figures` and no citation's
+  `figure_status` is `unverified`: the agent downgrades such a claim to unverifiable); citation
   URLs only `https://www.sec.gov/`; accession numbers, section keys, the text hash and
   timestamps by pattern; numbers finite; at most 30 claims, 10 points, 4 models; the
   verification's `ok` recomputed. `filings` (Revisit, optional so older results still

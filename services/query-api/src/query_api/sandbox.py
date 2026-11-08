@@ -176,6 +176,8 @@ class Sandboxes(Protocol):
                       questions: int = 1) -> int: ...  # left today; raises QuotaExceeded
     def questions_left(self, user_id: str, now: datetime, per_user: int,
                        per_day: int) -> tuple[int, int]: ...  # (daily cap, left); takes nothing
+    def give_back(self, user_id: str, now: datetime,
+                  questions: int) -> int: ...  # how many; never more than today's use
     def delete_expired(self, now: datetime) -> dict[str, int]: ...
     def catalog_public(self) -> bool: ...
 
@@ -306,6 +308,29 @@ class AppSandboxes:
                         "     = demo_agent_usage.questions + EXCLUDED.questions",
                         (user_id, day, questions))
             return cap - mine - questions
+
+    def give_back(self, user_id: str, now: datetime, questions: int) -> int:
+        """Gives back up to `questions` of today's (UTC) count for a run that produced nothing:
+        never below zero, so it can't add questions; the shared day goes down with a sandbox's
+        or GitHub account's (a password account never counted there). Locks as take_question
+        does (the day's row first), so a refund and a take can't interleave. Returns how many
+        were given back (0 when the run straddled midnight: yesterday's stay spent)."""
+        day = now.astimezone(UTC).date()
+        with self._pool.connection() as conn, conn.transaction(), conn.cursor() as cur:
+            shared = not is_password_user(user_id)
+            if shared:
+                cur.execute("SELECT questions FROM demo_agent_daily WHERE day = %s FOR UPDATE",
+                            (day,))
+            cur.execute("SELECT questions FROM demo_agent_usage WHERE user_id = %s AND day = %s"
+                        " FOR UPDATE", (user_id, day))
+            given = min(max(0, questions), _count(cur))
+            if given:
+                cur.execute("UPDATE demo_agent_usage SET questions = questions - %s"
+                            " WHERE user_id = %s AND day = %s", (given, user_id, day))
+                if shared:
+                    cur.execute("UPDATE demo_agent_daily SET questions"
+                                " = GREATEST(questions - %s, 0) WHERE day = %s", (given, day))
+            return given
 
     def questions_left(self, user_id: str, now: datetime, per_user: int,
                        per_day: int) -> tuple[int, int]:

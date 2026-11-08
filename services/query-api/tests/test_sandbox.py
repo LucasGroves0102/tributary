@@ -106,6 +106,14 @@ class FakeSandboxes:
         mine, total = self.usage.get((user_id, day), 0), self.daily.get(day, 0)
         return per_user, max(0, min(per_user - mine, per_day - total))
 
+    def give_back(self, user_id, now, questions):
+        day = now.date()
+        given = min(questions, self.usage.get((user_id, day), 0))
+        if given:
+            self.usage[(user_id, day)] -= given
+            self.daily[day] = max(0, self.daily.get(day, 0) - given)
+        return given
+
     def delete_expired(self, now):
         raise NotImplementedError
 
@@ -396,6 +404,45 @@ def test_agent_quota_does_not_limit_other_users(world):
 def test_agent_quota_needs_a_token(world):
     client, *_ = world
     assert client.post("/v1/demo/agent-quota").status_code == 401
+
+
+def test_a_refund_gives_back_only_what_was_used_today(world):
+    """C1: agent-api gives back a run that produced nothing (a thesis check that saved
+    nothing). It can't add questions: at most today's use, never below zero."""
+    client, sandboxes, *_ = world
+    a = create(client).json()["token"]
+    assert client.post("/v1/demo/agent-quota", headers=bearer(a),
+                       json={"questions": 2}).status_code == 200
+    r = client.post("/v1/demo/agent-quota/refund", headers=bearer(a), json={"questions": 2})
+    assert r.json() == {"demo": True, "refunded": 2}
+    assert sum(sandboxes.usage.values()) == 0 and sum(sandboxes.daily.values()) == 0
+    r = client.post("/v1/demo/agent-quota/refund", headers=bearer(a), json={"questions": 5})
+    assert r.json() == {"demo": True, "refunded": 0}
+    assert client.get("/v1/demo/agent-quota", headers=bearer(a)).json()["left_today"] == 2
+
+
+def test_a_refund_names_only_the_caller_and_is_strict(world):
+    client, *_ = world
+    assert client.post("/v1/demo/agent-quota/refund", json={"questions": 1}).status_code == 401
+    other = bearer(mint("alice", SECRET))
+    assert client.post("/v1/demo/agent-quota/refund", headers=other,
+                       json={"questions": 1}).json() == {"demo": False}
+    a = create(client).json()["token"]
+    for body in ({"questions": 1, "user_id": "bob"}, {"questions": 0}, {"questions": 6}):
+        assert client.post("/v1/demo/agent-quota/refund", headers=bearer(a),
+                           json=body).status_code == 422
+
+
+def test_nginx_keeps_the_refund_off_the_public_site():
+    """Only agent-api gives questions back (browsers could otherwise refund themselves)."""
+    import re
+    from pathlib import Path
+
+    conf = (Path(__file__).parents[2] / "web/deploy/nginx.conf").read_text()
+    blocked = [re.compile(m) for m in re.findall(r"location ~ (\S+) \{\s*return 404;", conf)]
+    for path in ("/api/query/v1/demo/agent-quota/refund", "/api/query//v1//demo/agent-quota/refund",
+                 "/api/query/v1/demo/agent-quota"):
+        assert any(b.search(path) for b in blocked), path
 
 
 def test_agent_can_be_switched_off_for_sandboxes():

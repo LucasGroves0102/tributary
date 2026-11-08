@@ -49,9 +49,13 @@ from tributary_agent.model_stats import (
     HISTORY_METRICS,
     HISTORY_QUARTERS,
     MAX_HISTORY,
+    RunRate,
     annual_history,
     check_assumptions,
+    history_stats,
+    run_rate,
     scenario_assumptions,
+    user_set,
 )
 from tributary_agent.report import (
     ACCESSION,
@@ -76,6 +80,10 @@ from tributary_agent.verify import verify
 
 CHECK_QUESTIONS = 4  # what one check counts against the assistant limits (README)
 CHECK_ROUNDS = 16
+# per response, thinking included: submit_check for 20 claims with explanations and citations,
+# after thinking, ran past 8,000 on every full-length thesis (C1). Streamed, so no timeout;
+# at Haiku's $0.50 per million output tokens a full response costs $0.016.
+CHECK_MAX_TOKENS = 32_000
 MAX_THESIS_CHARS = 30_000  # of the thesis's text sent to the model; the rest isn't checked
 MAX_MODELS = 4
 MAX_NAMED = 8  # tickers looked up from the text
@@ -131,10 +139,35 @@ filing and section.
 Quote each claim exactly as the thesis writes it: one sentence or phrase, copied character for \
 character. Use only the companies in <check_data>; tools refuse others. Every number comes from \
 a tool result or <check_data>; write dollar amounts with $ and a unit. Keep each explanation to \
-one to three sentences."""
+one to three sentences.
+
+Before marking anything supported:
+- A share, contribution or "X% of" is a part over a whole: compute it from the figures. \
+Percentage points of growth are not a percent of growth: a segment that adds 6 points to 61% \
+growth is about 10% of that growth. When the thesis's number differs from what the data gives \
+by more than rounding, the claim is contradicted; give the computed value.
+- Rows with inputs are figures Tributary computed (net debt, free cash flow, margins). Check \
+the inputs against the filing you cite: net debt is total debt less cash, cash equivalents and \
+marketable securities, so if the filing's balance sheet shows debt or investments the inputs \
+leave out, the claim is contradicted or unverifiable; say what's missing. Never call a figure \
+supported when the filing you cite shows something else.
+- Call a risk factor or disclosure new or rewritten only when get_section_changes shows it new \
+or rewritten in that filing.
+- In <check_data>, a forecast year with user_set false holds Tributary's default (the run rate \
+fading to the long run), not a number the user chose. Say the user hasn't set it; never call it \
+reasonable, supported or inside history because it matches history: a default does by \
+construction."""
 
 CHECK_QUESTION = ("Check this thesis following the check rules, then call submit_check with "
                   "the result.")
+# the closing call at CHECK_ROUNDS (agent.Agent `closing`, tools kept) and the one retry after a
+# reply cut off at CHECK_MAX_TOKENS (`retry`): both ask for what has been checked so far
+CHECK_CLOSING = ("You have no lookups left. Call submit_check now with what you have checked: "
+                 "claims you couldn't check are unverifiable, and leave out what you didn't get "
+                 "to. Then reply with one short line.")
+CHECK_RETRY = ("Your last reply reached the output limit and was discarded, so nothing was "
+               "submitted. Call submit_check now, shorter: one sentence per explanation, at "
+               "most 12 claims (the most material first), no more lookups before it.")
 
 _CITATION = {
     "type": "object",
@@ -192,6 +225,14 @@ SUBMIT_TOOL: dict = {
 }
 
 
+STOPPED = {  # why a check without a result stopped, for the user
+    "max_tokens": "its result was longer than one reply can hold, even when asked to shorten it",
+    "max_rounds": "it used all its lookups without submitting a result",
+    "refusal": "the model declined to check it",
+    "end_turn": "it ended without submitting a result",
+}
+
+
 class CheckError(ReportError):
     """A thesis that can't be checked; status and message go back to the browser."""
 
@@ -212,6 +253,8 @@ class Model:
     history: list = field(default_factory=list)  # model_stats.HistoryYear
     check: dict | None = None  # model_stats.check_assumptions
     error: str | None = None
+    run: RunRate | None = None  # the TTM run rate the defaults start from
+    user_set: list[bool] = field(default_factory=list)  # per year: not one of Tributary's defaults
 
 
 @dataclass
@@ -346,8 +389,11 @@ def read_history(api: ToolRunner, job: Job) -> None:
             continue
         job.prefetched.append(content)
         body = json.loads(content)
-        m.history = annual_history(body.get("rows") or [], MAX_HISTORY)
+        rows = body.get("rows") or []
+        m.history = annual_history(rows, MAX_HISTORY)
         m.check = check_assumptions(m.history, m.assumptions)
+        m.run = run_rate(rows)
+        m.user_set = user_set(history_stats(m.history), m.run, m.assumptions)
 
 
 def _filing_ref(row: Any, forms: tuple[str, ...] | None = None) -> dict | None:
@@ -441,6 +487,9 @@ def data_block(job: Job) -> str:
                 "margin_max_pct": _pct(m.check["margin_max"]),
                 "latest_growth_pct": _pct(s["last_growth"]),
                 "latest_margin_pct": _pct(s["last_margin"]),
+                "ttm_growth_pct": _pct(m.run.growth if m.run else None),
+                "ttm_margin_pct": _pct(m.run.margin if m.run else None),
+                "ttm_period": m.run.period if m.run else None,
                 "forecast": [{"fiscal_year": y["fy"], "growth_pct": y["growth"],
                               "margin_pct": y["margin"],
                               "growth_vs_cagr_points": None if y["growth_vs_cagr"] is None
@@ -449,8 +498,11 @@ def data_block(job: Job) -> str:
                                   y["growth_flag"] and f"growth {y['growth_flag']} history",
                                   y["margin_flag"] and f"margin {y['margin_flag']} history")
                                   if f],
+                              "user_set": mine,
                               "user_note": a.get("note")}
-                             for y, a in zip(m.check["years"], m.assumptions, strict=True)],
+                             for y, a, mine in zip(m.check["years"], m.assumptions,
+                                                   m.user_set or [True] * len(m.assumptions),
+                                                   strict=True)],
             })
         models.append(entry)
     data = {
@@ -464,6 +516,19 @@ def data_block(job: Job) -> str:
     }
     return ("<check_data>\nComputed by Tributary for this check (model names are the user's "
             "labels).\n" + _escape(data) + "\n</check_data>")
+
+
+def check_agent(messages: Any, tools: ToolRunner, model: str, *, tool_list: list[dict],
+                effort: str | None = None, stream: bool = False,
+                max_rounds: int = CHECK_ROUNDS) -> Agent:
+    """The check's agent (server.build_app and the tests): the chat rules plus CHECK_RULES,
+    the chat tools plus submit_check, CHECK_MAX_TOKENS per reply, one retry after a reply cut
+    off there (CHECK_RETRY), and a closing call at the round limit that can still submit
+    (CHECK_CLOSING)."""
+    return Agent(messages, tools, model, stream=stream, effort=effort,
+                 tools=[*tool_list, SUBMIT_TOOL], rules=CHECK_RULES, max_rounds=max_rounds,
+                 max_tokens=CHECK_MAX_TOKENS, closing=CHECK_CLOSING, closing_tools=True,
+                 retry=CHECK_RETRY)
 
 
 class CheckTools(ScopedTools):
@@ -524,6 +589,12 @@ class Evidence:
         out = [{"text": f.text[:60], "status": f.status} for f in v.figures]
         self.figures += out
         return out
+
+    def unfound(self, text: str) -> list[str]:
+        """Dollar figures in text (the thesis's own words) that aren't in the data, without
+        counting them among the check's figures."""
+        return [f.text[:60] for f in verify(text, self.results, set(self.filings)).figures
+                if f.status == "unverified"]
 
     def citations(self, raw: Any) -> list[dict]:
         out = []
@@ -588,8 +659,21 @@ def assemble(job: Job, submitted: dict, answer: Answer, results: list[str], now:
             claim["downgraded"] = True
             explanation = (explanation + " (Marked unverifiable: no citation of a filing the "
                            "assistant read.)").strip()
-        claim.update(explanation=explanation, citations=cites,
-                     figures=ev.check(explanation)[:40])
+        figures = ev.check(explanation)[:40]
+        if claim["status"] == "supported":
+            # supported certifies the claim's numbers: each must be in what the tools returned
+            # (the thesis's own figures, the explanation's, each citation's figure)
+            missing = list(dict.fromkeys([
+                *ev.unfound(quote), *(f["text"] for f in figures if f["status"] == "unverified"),
+                *(c["figure"] for c in cites if c.get("figure_status") == "unverified")]))
+            if missing:
+                claim["status"] = "unverifiable"
+                claim["downgraded"] = True
+                shown = ", ".join(missing[:3]) + (" and others" if len(missing) > 3 else "")
+                explanation = (explanation + f" (Marked unverifiable: {shown} "
+                               f"{'is' if len(missing) == 1 else 'are'} not in the data the "
+                               "assistant read.)").strip()
+        claim.update(explanation=explanation, citations=cites, figures=figures)
         claims.append(claim)
     if len(raw_claims) > MAX_CLAIMS:
         notes.append(f"Only the first {MAX_CLAIMS} claims were kept.")
@@ -713,8 +797,9 @@ class Checker:
             if event["type"] == "done":
                 answer = event["answer"]
                 if tools.submitted is None:
-                    yield {"type": "error", "message": "the assistant didn't finish the check "
-                                                       f"({answer.stop}); nothing was saved"}
+                    why = STOPPED.get(answer.stop, f"it stopped ({answer.stop})")
+                    yield {"type": "error", "message": f"the assistant didn't finish the check: "
+                                                       f"{why}, so there was nothing to save"}
                 else:
                     result = assemble(job, tools.submitted, answer, tools.results, self._clock())
                     try:
