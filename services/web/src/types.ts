@@ -155,6 +155,9 @@ export type AgentEvent =
   | { type: "action"; round: number; action: UiAction }
   | { type: "done"; answer: Answer }
   | { type: "error"; message: string }
+  /** the run ended without its result (no answer, no saved report or check): its questions
+   * were given back (agent-api server.Charge), before "done" or the error */
+  | { type: "refunded"; questions: number }
   /** /v1/reports: the report was saved (before "done") */
   | { type: "report"; item: { item_id: string; workspace_id: string; name: string }; verification: { ok: boolean; unverified: number } }
   /** /v1/thesis-checks: the check was saved (before "done") */

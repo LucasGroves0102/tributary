@@ -120,6 +120,7 @@ function flagged(figure: string): HTMLElement {
   const span = document.createElement("span");
   span.className = "figure unverified";
   span.title = "Not found in anything the assistant read";
+  span.dataset.figure = figure; // FigureFlags finds it by this
   span.textContent = figure;
   return span;
 }

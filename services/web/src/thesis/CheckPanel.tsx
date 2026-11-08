@@ -1,7 +1,8 @@
-import { useId, useMemo } from "react";
+import { useId, useMemo, useRef } from "react";
 
 import { ago, day, pct } from "../format";
 import { renderAnswer } from "../markdown";
+import { FigureFlags } from "../components/FigureFlags";
 import { FilingLinks } from "../components/FilingLinks";
 import { href } from "../route";
 import type { CheckCitation, CheckClaim, CheckFigure, CheckModel, ClaimStatus, ThesisCheck, ThesisCheckSummary } from "../types";
@@ -43,7 +44,13 @@ export function CheckPanel({ checks, stale, onQuote, label }: {
           <button className="btn sm ghost" onClick={stop}>Stop</button>
         </p>
       )}
-      {run.status === "error" && <p className="report-status error" role="alert">{run.message}</p>}
+      {run.status === "error" && (
+        <p className="report-status error" role="alert">
+          {run.message}
+          {run.refunded ? ` It didn't count: the ${run.refunded} questions it took were given back.` : ""}
+          {shown ? " The last saved check is below." : ""}
+        </p>
+      )}
       {stale && shown && (
         <p className="report-status check-stale" role="status">
           Stale: the thesis changed since this check. Check it again to see the current text checked.
@@ -72,9 +79,11 @@ function CheckBody({ check, previous, onQuote, label }: {
 }) {
   const r = check.result;
   const issues = problems(r);
+  const missing = unverifiedFigures(r.verification.figures);
   const diff = useMemo(() => (previous ? diffChecks(previous.result, r) : null), [previous, r]);
+  const body = useRef<HTMLDivElement>(null);
   return (
-    <div className="check-body">
+    <div className="check-body" ref={body}>
       <div className="faint small check-meta">
         <span>
           Checked {ago(r.checked_at)} · counted as {r.questions} questions
@@ -87,7 +96,13 @@ function CheckBody({ check, previous, onQuote, label }: {
         </details>
       </div>
       {issues.length > 0 ? (
-        <p className="badge warn" title="Flagged items are marked below">⚠ {issues.join(", ")}</p>
+        <p className="check-issues">
+          {/* #57: the figures by name, each a link to its mark below */}
+          <FigureFlags figures={missing} within={body} lead={issues[0]!} />
+          {issues.length > (missing.length ? 1 : 0) && (
+            <span className="badge warn" title="Flagged items are marked below">⚠ {issues.slice(missing.length ? 1 : 0).join(", ")}</span>
+          )}
+        </p>
       ) : (
         r.verification.used_data && <p className="badge ok">✓ Every figure and filing traced to data the assistant read</p>
       )}

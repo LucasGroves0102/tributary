@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { ApiError, checkThesis, failureReason, thesisCheck, thesisChecks } from "../api";
+import { agentError, ApiError, checkThesis, failureReason, thesisCheck, thesisChecks } from "../api";
 import type { AgentEvent, ThesisCheck, ThesisCheckSummary } from "../types";
 
 /** One thesis's checks: the history (newest first), the one shown, the one before it (what
@@ -10,7 +10,8 @@ export interface ThesisChecks {
   shown: ThesisCheck | null;
   /** the check just older than `shown` in the history, once read; null if none */
   previous: ThesisCheck | null;
-  run: { status: "idle" } | { status: "running"; tools: number } | { status: "error"; message: string };
+  /** refunded: the questions given back because the check saved nothing */
+  run: { status: "idle" } | { status: "running"; tools: number } | { status: "error"; message: string; refunded?: number };
   loading: boolean;
   start: () => void;
   stop: () => void;
@@ -81,7 +82,10 @@ export function useThesisCheck(token: string, itemId: string | null): ThesisChec
         setRun({ status: "idle" });
       } else if (e.type === "error") {
         finished = true;
-        setRun({ status: "error", message: `The check wasn't finished: ${e.message}.` });
+        setRun({ status: "error", message: `The check wasn't finished: ${agentError(e.message)}.` });
+      } else if (e.type === "refunded") {
+        // C1: a check that saved nothing costs nothing; say so beside the reason
+        setRun((r) => (r.status === "error" ? { ...r, refunded: e.questions } : { status: "error", message: "The check wasn't finished.", refunded: e.questions }));
       }
     };
     checkThesis(token, itemId, onEvent, ctl.signal)

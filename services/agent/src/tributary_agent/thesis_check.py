@@ -233,6 +233,13 @@ STOPPED = {  # why a check without a result stopped, for the user
 }
 
 
+STOPPED_EARLY = {  # a note on a check saved after the model stopped early (a partial result)
+    "max_rounds": "The assistant used all its lookups before checking everything: the claims "
+                  "below are the ones it checked.",
+    "max_tokens": "The assistant's last reply was cut off after it submitted the check.",
+}
+
+
 class CheckError(ReportError):
     """A thesis that can't be checked; status and message go back to the browser."""
 
@@ -719,7 +726,8 @@ def assemble(job: Job, submitted: dict, answer: Answer, results: list[str], now:
     summary = _text(submitted.get("summary"), 3000)
     ev.check(summary)
     if answer.stop != "end_turn":
-        notes.append(f"The assistant stopped before finishing ({answer.stop}).")
+        notes.append(STOPPED_EARLY.get(answer.stop,
+                                       f"The assistant stopped before finishing ({answer.stop})."))
     as_of = newest_as_of(results)
     unknown = sorted(set(ev.unknown))
     cited = [c for x in (*claims, *not_mentioned) for c in x["citations"]] + [
@@ -798,8 +806,7 @@ class Checker:
                 answer = event["answer"]
                 if tools.submitted is None:
                     why = STOPPED.get(answer.stop, f"it stopped ({answer.stop})")
-                    yield {"type": "error", "message": f"the assistant didn't finish the check: "
-                                                       f"{why}, so there was nothing to save"}
+                    yield {"type": "error", "message": f"{why}, so there was nothing to save"}
                 else:
                     result = assemble(job, tools.submitted, answer, tools.results, self._clock())
                     try:

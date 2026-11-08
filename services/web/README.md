@@ -49,7 +49,10 @@ the URL, sortable, ungranted companies as metadata only, CSV export through the 
 `#/company/<company_id>` 12-quarter chart and table, every value linked to its filing;
 `#/filing/<company_id>/<accession>[/<section>]` parsed filing reader; `#/chart` the chart
 builder (each layer a `/v1/formulas/evaluate` request; plain SVG; CSV, SVG and PNG export);
-`#/ask` the assistant full width, with streamed answers, the lookups it made and verified citation links;
+`#/ask` the assistant full width, with streamed answers, the lookups it made and verified citation links
+(an answer's figures not found in the data are named under it, each a button that scrolls to and
+flashes its mark in the answer: `components/FigureFlags.tsx`, the same in the check panel; a
+question that got no answer says it didn't count, after agent-api's `refunded` event);
 `#/compare` the comps table; `#/analysis` the Analysis tab (guided research projects, below); `#/about` says what Tributary covers and doesn't (no prices, consensus or
 transcripts; estimated dates; banks; EDGAR timing), linked from the sidebar footer and the
 assistant's empty state; `#/status` the data status page (`pages/Status.tsx`, `GET
@@ -272,7 +275,10 @@ sidebar with the other items (rename, duplicate, delete as usual).
   Contradicted / Can't verify badge, the assistant's explanation and its citations (form, date,
   "Read MD&A" opening the filing reader at the cited section, "EDGAR ↗" the filing on sec.gov
   with its accession on hover, the figure; `components/FilingLinks.tsx`, also on answers and
-  reports); a filing no tool returned and a figure not found in the data are marked, never hidden.
+  reports); a filing no tool returned and a figure not found in the data are marked, never hidden,
+  and the warning names each figure (a button to its mark). A check that couldn't finish says why
+  and, when agent-api gave its questions back (`refunded`), that it didn't count; the last saved
+  check stays shown.
   Clicking a claim's quote marks it in the preview (only text nodes are wrapped in
   `<mark class="claim-mark">`; nothing is parsed) or selects it in the editor in Write mode. Then
   each embedded model's assumptions per forecast year against its 5-year revenue CAGR and margin
@@ -569,7 +575,7 @@ by the chart builder's rules and shared with its session cache; nothing is asked
 charts are shown.
 
 States and accessibility: every data panel loads with a skeleton (`components/States.tsx`),
-errors say what happened in plain words (`api.ts` `failureReason`: a 4xx detail is written for the caller, a 5xx's is for developers and never shown) and offer a retry, empty states say what to do next. The screener, watchlist and comps rows
+errors say what happened in plain words (`api.ts` `failureReason`: a 4xx detail is written for the caller, a 5xx's is for developers and never shown) and offer a retry; only a failure that clears by itself (a 5xx or no answer) adds "It usually clears in a moment", never a 4xx (a 422 is a request to change). Empty states say what to do next. The screener, watchlist and comps rows
 are a roving tab stop (arrows, Page Up/Down, Home/End, Ctrl/Cmd + Up/Down the first and last
 row, Right or Ctrl/Cmd + Left/Right into the cells, then the first and last column; Enter opens:
 `components/tableNav.ts`). `?` opens the keyboard shortcut sheet (`components/ShortcutSheet.tsx`,

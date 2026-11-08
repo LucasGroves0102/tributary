@@ -21,6 +21,7 @@ from tributary_agent.thesis_check import (
     CHECK_RETRY,
     CHECK_RULES,
     MAX_THESIS_CHARS,
+    STOPPED_EARLY,
     Checker,
     CheckError,
     check_agent,
@@ -442,7 +443,9 @@ def test_no_submission_is_an_error_and_nothing_is_saved():
     fake = FakeQueryApi()
     events, *_ = run(fake, response("end_turn", text("I couldn't do it.")))
     assert [e["type"] for e in events] == ["error", "done"]
-    assert "didn't finish" in events[0]["message"] and fake.saved == []
+    assert events[0]["message"] == ("it ended without submitting a result, so there was "
+                                    "nothing to save")
+    assert fake.saved == []
 
 
 def test_a_refused_save_is_an_error_event():
@@ -652,7 +655,7 @@ def test_at_its_round_limit_a_check_submits_what_it_has():
     assert "tool_choice" not in messages.requests[-1]
     result = validate_check(fake.saved[0]["result"])
     assert result["stop"] == "max_rounds"
-    assert "The assistant stopped before finishing (max_rounds)." in result["notes"]
+    assert STOPPED_EARLY["max_rounds"] in result["notes"]
 
 
 def test_http_a_check_that_saved_nothing_is_given_back():

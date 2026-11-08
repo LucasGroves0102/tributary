@@ -1,8 +1,9 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState, type RefObject } from "react";
 
 import { day } from "../format";
 import { renderAnswer } from "../markdown";
 import type { Answer, Citation, ToolCall, Verification } from "../types";
+import { FigureFlags } from "./FigureFlags";
 import { FilingLinks } from "./FilingLinks";
 
 /** A change the assistant made in the UI (chart, screen, watchlist), shown under its message
@@ -19,6 +20,8 @@ export interface AssistantTurn {
   tools: (ToolCall & { round: number })[];
   answer?: Answer;
   error?: string;
+  /** the question was given back: nothing was answered */
+  refunded?: boolean;
   actions: ActionRecord[];
 }
 
@@ -56,14 +59,15 @@ export function AssistantMessage({
     [text, citations, unverified],
   );
   const pending = !turn.answer && !turn.error;
+  const body = useRef<HTMLDivElement>(null);
 
   return (
     <article className="message assistant" aria-busy={pending}>
       <Trace turn={turn} finalRound={finalRound} />
       {turn.error ? (
-        <p className="error">{turn.error}</p>
+        <p className="error">{turn.error}{turn.refunded ? " It didn't count against your questions." : ""}</p>
       ) : text ? (
-        <div className="answer" dangerouslySetInnerHTML={{ __html: html }} />
+        <div ref={body} className="answer" dangerouslySetInnerHTML={{ __html: html }} />
       ) : (
         <p className="muted thinking">Working…</p>
       )}
@@ -71,7 +75,7 @@ export function AssistantMessage({
         <Action key={a.id} action={a} undone={undone?.has(a.id) ?? false} onUndo={onUndo} />
       ))}
       {turn.answer && <Sources citations={usedCitations(turn.answer)} />}
-      {turn.answer && <Meta answer={turn.answer} />}
+      {turn.answer && <Meta answer={turn.answer} body={body} />}
     </article>
   );
 }
@@ -169,36 +173,44 @@ function Sources({ citations }: { citations: Citation[] }) {
   );
 }
 
-function VerifiedBadge({ v }: { v: Verification }) {
+function VerifiedBadge({ v, body }: { v: Verification; body: RefObject<HTMLDivElement | null> }) {
   const figures = v.figures.length;
   if (!v.used_data && !figures) return null;
-  const bad = v.figures.filter((f) => f.status === "unverified").length;
+  const bad = [...new Set(v.figures.filter((f) => f.status === "unverified").map((f) => f.text))];
   const problems = [
-    bad && `${bad} figure${bad === 1 ? "" : "s"} not in the data`,
     v.unverified_accessions.length &&
       `${v.unverified_accessions.length} unknown filing${v.unverified_accessions.length === 1 ? "" : "s"}`,
     v.used_data && !v.freshness && "no freshness",
   ].filter(Boolean);
   const title = v.figures.map((f) => `${f.text}: ${f.status}`).join("\n");
-  return v.ok ? (
-    <span className="badge ok" title={title}>
-      ✓ {figures} figure{figures === 1 ? "" : "s"} verified against the data
-    </span>
-  ) : (
-    <span className="badge warn" title={title}>
-      ⚠ {problems.join(", ")}
-    </span>
+  if (v.ok) {
+    return (
+      <span className="badge ok" title={title}>
+        ✓ {figures} figure{figures === 1 ? "" : "s"} verified against the data
+      </span>
+    );
+  }
+  return (
+    <>
+      {/* #57: the figures by name, each a link to its mark in the answer */}
+      <FigureFlags figures={bad} within={body} lead={`${bad.length} figure${bad.length === 1 ? "" : "s"} not in the data`} />
+      {problems.length > 0 && (
+        <span className="badge warn" title={title}>
+          ⚠ {problems.join(", ")}
+        </span>
+      )}
+    </>
   );
 }
 
-function Meta({ answer }: { answer: Answer }) {
+function Meta({ answer, body }: { answer: Answer; body: RefObject<HTMLDivElement | null> }) {
   const used = usedCitations(answer);
   const latest = used.map((c) => c.filed).filter(Boolean).sort().at(-1);
   const tokens = answer.usage.input_tokens + answer.usage.cache_read_input_tokens +
     answer.usage.cache_creation_input_tokens + answer.usage.output_tokens;
   return (
     <footer className="meta">
-      {answer.verification && <VerifiedBadge v={answer.verification} />}
+      {answer.verification && <VerifiedBadge v={answer.verification} body={body} />}
       {latest && <span title="The newest filing this answer cites, not necessarily the newest on EDGAR">Newest filing cited: {day(latest, true)}</span>}
       <details className="tech">
         <summary>Details</summary>

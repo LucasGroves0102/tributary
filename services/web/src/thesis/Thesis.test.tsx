@@ -31,7 +31,7 @@ const HISTORY = [2021, 2022, 2023, 2024, 2025].flatMap((fy, i) => {
   return [
     fin("revenue", end, String(revenue), `FY${fy} Q4`, { citation: { accession_no: `0001045810-${String(fy).slice(2)}-000001`, form: "10-K", filed: `${fy}-02-26`, xbrl_tag: "Revenues", source_accessions: null, filing_url: null } }),
     fin("operating_income", end, String(revenue * 0.2), `FY${fy} Q4`),
-    fin("revenue", `${fy}-10-26`, "1", `FY${fy + 1} Q3`), // a TTM at Q3: not a fiscal year
+    fin("revenue", `${fy}-10-26`, String(revenue * 1.1 ** 0.75), `FY${fy + 1} Q3`), // a TTM at Q3: not a fiscal year (the run rate)
   ];
 });
 
@@ -73,6 +73,8 @@ const summary = (hash: string, id = CHECK_ID) => ({
 let stored: { check_id: string; text_hash: string }[];
 /** what the next check returns (default: checkResult) */
 let recheck: ((hash: string) => ReturnType<typeof checkResult> & { filings?: unknown[] }) | null;
+/** the check's stream ends with this error and its questions given back (C1) */
+let failCheck: string | null;
 /** NVDA's newest 10-K/10-Q in the filing index */
 let indexRows: Record<string, unknown>[];
 const NEW_10Q = "0001045810-26-000030";
@@ -106,6 +108,10 @@ function respond(url: string, init?: RequestInit): Response {
   if (p === "/v1/companies/search") return Response.json({ results: [{ company_id: TSLA, name: "Tesla", matched_on: "ticker", matched_alias: "TSLA", access: ["financials"] }] });
   if (p === "/api/agent/v1/thesis-checks" && method === "POST") {
     asked.push(body);
+    if (failCheck) {
+      return sse([{ type: "tool", round: 0, name: "get_financials", input: {}, is_error: false }, { type: "error", message: failCheck },
+        { type: "refunded", questions: 4 }, { type: "done", answer: {} }]);
+    }
     const hash = stored[0]?.text_hash ?? "0".repeat(64);
     const result: ReturnType<typeof checkResult> & { filings?: unknown[] } = recheck ? recheck(hash) : checkResult(hash);
     const fresh = { ...summary(hash, "77777777-7777-4777-8777-777777777777"), company_id: NVDA, checked_at: result.checked_at, filings: result.filings ?? [] };
@@ -194,6 +200,7 @@ beforeEach(() => {
   clearChartCache();
   clearNewest();
   recheck = null;
+  failCheck = null;
   indexRows = [];
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => respond(url, init)));
@@ -312,9 +319,12 @@ it("edits a model's assumptions next to their history and saves them", async () 
   await render(`#/model/${MODEL_ID}`, ".model-table");
   const growth = container.querySelector<HTMLInputElement>('input[aria-label="FY2026E revenue growth, percent"]')!;
   expect(growth.value).toBe("25");
-  // each assumption sits next to its history: 10% a year over 4 years, 20% margins
-  expect(container.querySelector(".assumptions")?.textContent).toContain("4-yr CAGR 10.0%");
-  expect(container.querySelector(".assumptions")?.textContent).toContain("5-yr avg 20.0%");
+  // each assumption sits next to its default; the rule above says the history (10% a year over
+  // 4 years, 20% margins) and the run rate it starts from
+  expect(container.querySelector(".model-rule")?.textContent).toContain("4-yr CAGR 10.0%");
+  expect(container.querySelector(".model-rule")?.textContent).toContain("5-yr avg 20.0%");
+  expect([...container.querySelectorAll(".assumptions td .faint")].map((h) => h.textContent)).toEqual([
+    "default 10.0%", "default 20.0%", "default 7.5%", "default 20.0%"]);
   const forecastRows = () => [...container.querySelectorAll(".model-page .model-table tr.forecast")].map((r) => [...r.querySelectorAll("td")].map((c) => c.textContent));
   expect(forecastRows()[0]).toEqual(["Forecast", "$183.01B", "25.0%", "50.0%", "$91.51B"]);
   await act(async () => type(growth, "0"));
@@ -357,7 +367,8 @@ it("creates a model from the company page, starting from the company's own histo
   const post = writes.find((w) => w.method === "POST")!;
   expect(post.body).toMatchObject({
     kind: "model",
-    state: { companyId: NVDA, historyYears: 8, assumptions: [{ growth: 10, margin: 20 }, { growth: 10, margin: 20 }, { growth: 10, margin: 20 }] },
+    // the latest year's 10% and 20% (no newer TTM here), growth fading half the gap to 5% a year
+    state: { companyId: NVDA, historyYears: 8, assumptions: [{ growth: 10, margin: 20 }, { growth: 7.5, margin: 20 }, { growth: 6.3, margin: 20 }] },
   });
   expect(window.location.hash).toMatch(/^#\/model\/55555555-/);
 });
@@ -370,6 +381,14 @@ it("checks the saved thesis and shows claims, assumptions, what's not mentioned 
   expect([...panel.querySelectorAll(".claim .status-badge")].map((b) => b.textContent)).toEqual(["Supported", "Can't verify"]);
   expect(panel.querySelector("[onerror], script")).toBeNull(); // DOMPurify, as in chat answers
   expect(panel.querySelector(".claims .figure.unverified")?.textContent).toBe("$99.9B");
+  // #57: the warning names the figure, and the name finds its mark
+  const flag = panel.querySelector<HTMLButtonElement>(".figure-flags button")!;
+  expect(panel.querySelector(".figure-flags")?.textContent).toBe("⚠ 1 figure not found in the data: $99.9B");
+  Element.prototype.scrollIntoView = function (this: Element) {
+    this.classList.add("seen");
+  };
+  await click(flag);
+  expect(panel.querySelector(".claims .figure.unverified")?.classList.contains("seen")).toBe(true);
   expect(panel.querySelector(".claims .accession.unverified")?.textContent).toContain("0000000000-26-000001");
   // a cited section opens the filing reader there
   const reader = panel.querySelector<HTMLAnchorElement>(".check-cites a.reader-link")!;
@@ -463,4 +482,19 @@ it("shows no check panel until a check exists", async () => {
   await render(`#/thesis/${THESIS_ID}`, "textarea.thesis-text");
   expect(container.querySelector(".check-panel")).toBeNull();
   expect(button("Check my thesis").disabled).toBe(false);
+});
+
+it("a check that couldn't finish says why, that it didn't count, and keeps the last saved check (C1)", async () => {
+  const hash = await textHash(NVDA, BODY);
+  stored = [{ check_id: CHECK_ID, text_hash: hash }];
+  failCheck = "its result was longer than one reply can hold, even when asked to shorten it, so there was nothing to save";
+  await render(`#/thesis/${THESIS_ID}`, ".check-panel .claims");
+  await click(button("Check my thesis"));
+  await waitFor(".check-panel .report-status.error");
+  const panel = container.querySelector<HTMLElement>(".check-panel")!;
+  expect(panel.querySelector(".report-status.error")?.textContent).toBe(
+    "The check wasn't finished: its result was longer than one reply can hold, even when asked to shorten it, so there was " +
+    "nothing to save. It didn't count: the 4 questions it took were given back. The last saved check is below.");
+  expect([...panel.querySelectorAll(".claim .status-badge")].map((b) => b.textContent)).toEqual(["Supported", "Can't verify"]);
+  expect([...panel.querySelectorAll<HTMLOptionElement>("select option")].map((o) => o.value)).toEqual([CHECK_ID]);
 });

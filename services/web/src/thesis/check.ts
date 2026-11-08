@@ -129,9 +129,10 @@ export function plainQuote(quote: string): string {
     .replace(/^\s*(#{1,6}\s+|>\s+|[-*+]\s+)/, "");
 }
 
-/** Problems worth a line under the result: unverified figures and unknown filings. */
+/** Problems worth a line under the result: unverified figures (each counted once, as the
+ * warning names them) and unknown filings. */
 export function problems(r: ThesisCheckResult): string[] {
-  const bad = r.verification.figures.filter((f) => f.status === "unverified").length;
+  const bad = new Set(unverifiedFigures(r.verification.figures)).size;
   const unknown = r.verification.unverified_accessions.length;
   return [
     bad ? `${bad} figure${bad === 1 ? "" : "s"} not found in the data` : "",

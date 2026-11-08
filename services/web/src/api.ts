@@ -58,7 +58,9 @@ export class ApiError extends Error {
   }
 }
 
-const NOT_ANSWERING = "the server didn't answer in time";
+/** what failureReason says for every 5xx and network failure: the only kind that clears by
+ * itself, so the only one ErrorPanel says "usually clears in a moment" for */
+export const NOT_ANSWERING = "the server didn't answer in time";
 
 /** Why a request failed, for a person, as a sentence fragment ("Couldn't save it: ..."). A 4xx
  * detail is written for the caller (a validation message, a limit); a 5xx's is for developers
@@ -543,6 +545,21 @@ export class SseParser {
     }
     return events;
   }
+}
+
+/** An agent-api error event's message, for a person: "model unavailable" is the one written for
+ * logs (server.py), the others are already sentences or fragments. */
+export function agentError(message: string): string {
+  return message === "model unavailable" ? "the model didn't answer; try again in a moment" : message;
+}
+
+/** Why a question couldn't be asked: a limit's message as written (429), the request refused
+ * as invalid (422: what the user can change), or the assistant not answering (5xx, network). */
+export function askFailure(e: unknown): string {
+  if (!(e instanceof ApiError)) return "The assistant is unreachable. Try again in a moment.";
+  if (e.status === 422) return "That question couldn't be sent: it's empty or longer than 2,000 characters.";
+  if (e.status >= 500) return "The assistant isn't answering right now. Try again in a moment.";
+  return e.message;
 }
 
 /** Reads a server-sent event stream to its end. */

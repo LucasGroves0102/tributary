@@ -196,7 +196,10 @@ export function App(props: Props = {}) {
         setUsers(u);
         setUser(u[0] ?? null);
       })
-      .catch(() => setError("Can't reach the server. Try again in a moment."));
+      // only a failure that clears by itself says to try again soon (a 404: no demo users here)
+      .catch((e) => setError(e instanceof ApiError && e.status < 500
+        ? "Signing in as a demo user isn't available on this server."
+        : "Can't reach the server. Try again in a moment."));
   }, [picker]);
 
   const signIn = useCallback((s: Session, m: Me | null) => {

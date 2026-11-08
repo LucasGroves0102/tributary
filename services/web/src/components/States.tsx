@@ -3,6 +3,8 @@
 
 import type { ReactNode } from "react";
 
+import { NOT_ANSWERING } from "../api";
+
 /** Grey placeholder bars while a panel loads: `lines` rows of a table or list, or a chart
  * area. Announced once to screen readers as `label`. */
 export function Skeleton({ lines = 4, chart = false, label = "Loading" }: { lines?: number; chart?: boolean; label?: string }) {
@@ -24,13 +26,16 @@ export function sentence(detail: string): string {
   return `${t.charAt(0).toUpperCase()}${t.slice(1)}${/[.!?]$/.test(t) ? "" : "."}`;
 }
 
-/** A friendly error: what couldn't load, why if known (failureReason), and a retry. */
+/** A friendly error: what couldn't load, why if known (failureReason), and a retry. Only a
+ * failure that clears by itself (a 5xx or no answer: failureReason's NOT_ANSWERING) says it
+ * usually clears in a moment; a 4xx's reason (a request the API refused) stands on its own. */
 export function ErrorPanel({ what, detail, onRetry }: { what: string; detail?: string; onRetry?: () => void }) {
+  const transient = detail === undefined || detail === NOT_ANSWERING;
   return (
     <div className="errpanel" role="alert">
       <p>
-        <b>Couldn't load {what}.</b> {sentence(detail ?? "the server didn't answer in time")}
-        {onRetry ? " It usually clears in a moment." : ""}
+        <b>Couldn't load {what}.</b> {sentence(detail ?? NOT_ANSWERING)}
+        {onRetry && transient ? " It usually clears in a moment." : ""}
       </p>
       {onRetry && (
         <button className="btn sm" onClick={onRetry}>
