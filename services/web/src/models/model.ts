@@ -17,14 +17,24 @@
  * - `project`: revenue_t = revenue_(t-1) x (1 + growth_t); operating income_t = revenue_t x
  *   margin_t, from the latest fiscal year with revenue
  * - `modelSeries` / `modelRows`: the chart (history solid, forecast dashed) and the table
+ * - `runRate` / `defaultAssumptions`: what a new model starts from and Reset sets. Year 1 at the
+ *   trailing-twelve-month run rate (the newest TTM revenue against the TTM a year earlier, and
+ *   its operating margin; the latest fiscal year's when there's no TTM), then each year closes
+ *   half the gap (FADE) to the long run: growth to the 5-year CAGR held between 0% and
+ *   LONG_RUN_GROWTH_CAP (5%), margin to the 5-year average. A flat 5-year CAGR ignored the run
+ *   rate both ways (Vertiv 11.4% against 20.1% TTM, Deckers 16.5% against 6.3%) and compounded a
+ *   hyper-grower's peak forever. Ported to agent-api (`stats-fixture.json` `default_cases`: real
+ *   TTM rows of NVIDIA, Vertiv, Deckers, Intel).
  *
  * Scenarios (the Analysis tab): `assumptions` is the BASE case, which is all a model saved
  * before scenarios holds; `scenarios.bear` / `scenarios.bull` optionally hold the other cases for
  * the same forecast years. `scenarioAssumptions` reads one case from a saved state (ported to
  * agent-api `model_stats.scenario_assumptions`; `stats-fixture.json` `scenario_cases` keep the
  * two equal); the thesis check checks the base case only. New bear / bull cases start from the
- * base case shifted by SCENARIO_SHIFT (growth and margin, percentage points). The chart draws
- * the base forecast dashed and bear / bull lighter (`faint`); the table shows the selected case. */
+ * base case moved by SCENARIO_SPREAD: half the base growth (at least 5 points) and a fifth of
+ * the base margin (at least 3 points), per year. The chart draws the base forecast dashed and
+ * bear / bull lighter (`faint`); the table shows the selected case, or the case it would be
+ * (labelled a preview) before bear and bull are added. */
 
 import type { Series, Source } from "../chart/series";
 import type { FinancialRow } from "../types";
@@ -56,8 +66,11 @@ export interface Assumption {
 export const SCENARIOS = ["bear", "base", "bull"] as const;
 export type Scenario = (typeof SCENARIOS)[number];
 export const SCENARIO_LABELS: Record<Scenario, string> = { bear: "Bear", base: "Base", bull: "Bull" };
-/** what a new bear (minus) or bull (plus) case shifts the base case by, percentage points */
-export const SCENARIO_SHIFT = { growth: 5, margin: 3 } as const;
+/** How far a new bear (minus) or bull (plus) case sits from the base case, per year: half the
+ * base growth but at least 5 points, a fifth of the base margin but at least 3 points. In
+ * proportion, so a hyper-grower's bear case doesn't still quadruple revenue (5 points off 83%
+ * growth was barely a different line); the minimums keep a slow grower's cases apart. */
+export const SCENARIO_SPREAD = { growth: { share: 0.5, min: 5 }, margin: { share: 0.2, min: 3 } } as const;
 
 export interface ModelState {
   companyId: string;
@@ -179,12 +192,14 @@ export function caseOf(m: Pick<ModelState, "assumptions" | "scenarios">, scenari
   return scenario === "base" ? m.assumptions : (m.scenarios?.[scenario] ?? m.assumptions);
 }
 
-/** A new bear (or bull) case: the base case shifted down (up) by SCENARIO_SHIFT, without notes. */
+/** A new bear (or bull) case: each base year moved down (up) by SCENARIO_SPREAD, without notes,
+ * rounded to 0.1. */
 export function shiftedCase(base: Assumption[], scenario: "bear" | "bull"): Assumption[] {
   const sign = scenario === "bear" ? -1 : 1;
+  const step = (v: number, s: { share: number; min: number }) => Math.max(s.min, Math.abs(v) * s.share);
   return base.map((a) => ({
-    growth: round2(clamp(a.growth + sign * SCENARIO_SHIFT.growth, GROWTH_RANGE)),
-    margin: round2(clamp(a.margin + sign * SCENARIO_SHIFT.margin, MARGIN_RANGE)),
+    growth: round1(clamp(a.growth + sign * step(a.growth, SCENARIO_SPREAD.growth), GROWTH_RANGE)),
+    margin: round1(clamp(a.margin + sign * step(a.margin, SCENARIO_SPREAD.margin), MARGIN_RANGE)),
   }));
 }
 
@@ -326,12 +341,64 @@ export function checkAssumptions(history: HistoryYear[], assumptions: Assumption
   };
 }
 
-/** Assumptions for `years` forecast years, each at the historical CAGR and average margin
- * (0 where history has none), rounded to 0.1. */
-export function defaultAssumptions(stats: HistoryStats, years = DEFAULT_YEARS): Assumption[] {
-  const growth = stats.cagr === null ? 0 : round1(clamp(stats.cagr * 100, GROWTH_RANGE));
-  const margin = stats.avgMargin === null ? 0 : round1(clamp(stats.avgMargin * 100, MARGIN_RANGE));
-  return Array.from({ length: Math.min(MAX_YEARS, Math.max(1, years)) }, () => ({ growth, margin }));
+/** The trailing-twelve-month run rate, from the same TTM rows the history comes from. */
+export interface RunRate {
+  /** the newest TTM revenue against the TTM a year earlier (ratio) */
+  growth: number | null;
+  /** that TTM's operating income / revenue (ratio) */
+  margin: number | null;
+  /** "FY2027 Q2" */
+  period: string | null;
+}
+
+/** The newest TTM revenue row, the row for the same fiscal quarter a year earlier, and
+ * operating income at the newest row's quarter. agent-api `model_stats.run_rate` is the port. */
+export function runRate(rows: FinancialRow[]): RunRate {
+  const rev = new Map<string, { fy: number; q: number; end: string; value: number }>();
+  const oi = new Map<string, number>();
+  for (const r of rows) {
+    const m = /^FY(\d{4}) Q([1-4])$/.exec(r.fiscal_period ?? "");
+    const value = Number(r.value);
+    if (!m || r.value === null || !Number.isFinite(value)) continue;
+    const key = `${m[1]} ${m[2]}`;
+    if (r.metric === "revenue") rev.set(key, { fy: Number(m[1]), q: Number(m[2]), end: r.period_end ?? "", value });
+    else if (r.metric === "operating_income") oi.set(key, value);
+  }
+  const newest = [...rev.values()].sort((a, b) => a.end.localeCompare(b.end) || a.fy - b.fy || a.q - b.q).at(-1);
+  if (!newest) return { growth: null, margin: null, period: null };
+  const ago = rev.get(`${newest.fy - 1} ${newest.q}`);
+  const key = `${newest.fy} ${newest.q}`;
+  return {
+    growth: ago && ago.value > 0 ? newest.value / ago.value - 1 : null,
+    margin: oi.has(key) && newest.value > 0 ? oi.get(key)! / newest.value : null,
+    period: `FY${newest.fy} Q${newest.q}`,
+  };
+}
+
+/** the most growth a default fades toward, percent (a long-run rate a company can hold) */
+export const LONG_RUN_GROWTH_CAP = 5;
+/** each later default year closes this share of the gap to the long run */
+export const FADE = 0.5;
+
+const first = (...values: (number | null | undefined)[]): number | null => values.find((v) => v !== null && v !== undefined) ?? null;
+
+/** What a new model starts from (and Reset sets): year 1 at the run rate (else the latest fiscal
+ * year's growth and margin, else the 5-year figures), then each year closes FADE of the gap to
+ * the long run: growth to the 5-year CAGR held between 0% and LONG_RUN_GROWTH_CAP, margin to the
+ * 5-year average. Percent, rounded to 0.1. Ported to agent-api `model_stats.default_assumptions`
+ * (`stats-fixture.json` `default_cases`), so the thesis check knows a year still at its default. */
+export function defaultAssumptions(stats: HistoryStats, years = DEFAULT_YEARS, run: RunRate | null = null): Assumption[] {
+  const g0 = (first(run?.growth, stats.lastGrowth, stats.cagr) ?? 0) * 100;
+  const m0 = (first(run?.margin, stats.lastMargin, stats.avgMargin) ?? 0) * 100;
+  const gLong = clamp(stats.cagr !== null ? stats.cagr * 100 : g0, [0, LONG_RUN_GROWTH_CAP]);
+  const mLong = stats.avgMargin !== null ? stats.avgMargin * 100 : m0;
+  return Array.from({ length: Math.min(MAX_YEARS, Math.max(1, years)) }, (_, k) => {
+    const keep = FADE ** k;
+    return {
+      growth: round1(clamp(gLong + (g0 - gLong) * keep, GROWTH_RANGE)),
+      margin: round1(clamp(mLong + (m0 - mLong) * keep, MARGIN_RANGE)),
+    };
+  });
 }
 
 /** More or fewer forecast years: new years repeat the last one's numbers (without its note). */

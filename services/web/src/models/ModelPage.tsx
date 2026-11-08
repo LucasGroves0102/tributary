@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { ApiError, failureReason, openItem } from "../api";
 import { ErrorPanel, Skeleton } from "../components/States";
@@ -18,10 +18,11 @@ import {
   modelState,
   NOTE_MAX,
   parsePercent,
+  LONG_RUN_GROWTH_CAP,
   resizeAssumptions,
   restoreModel,
   SCENARIO_LABELS,
-  SCENARIO_SHIFT,
+  SCENARIO_SPREAD,
   SCENARIOS,
   shiftedCase,
   statLabel,
@@ -163,9 +164,27 @@ function ModelEditor({ token, item, initial, saved, label, embedded = false, act
   } : null;
   const state = current();
   const stats = useMemo(() => (history.state === "ok" ? historyStats(history.years) : null), [history]);
+  const run = history.state === "ok" ? history.run : null;
   const dirty = (state ? JSON.stringify({ name: name.trim(), state: modelState(state) }) : null) !== savedAs;
   const nameError = nameProblem(name, ITEM_NAME_MAX);
   const drafts = cases[sel] ?? cases.base;
+  // what Reset sets for the case being edited, shown beside each field (#48: they're the same)
+  const defaults = useMemo(() => {
+    if (!stats) return null;
+    const base = defaultAssumptions(stats, drafts.length, run);
+    return sel === "base" ? base : shiftedCase(base, sel);
+  }, [stats, run, drafts.length, sel]);
+  // a case that doesn't parse right now keeps its last valid numbers on the chart and in the
+  // table (marked), instead of the view falling back to the base case (#98)
+  const lastValid = useRef<Partial<Record<Scenario, Assumption[]>>>({});
+  for (const s of SCENARIOS) {
+    const p = parsed[s];
+    if (p) lastValid.current[s] = p;
+    else if (s !== "base" && !cases[s]) delete lastValid.current[s];
+  }
+  const shown = (s: Scenario) => parsed[s] ?? (s === "base" || cases[s] ? lastValid.current[s] ?? null : null);
+  // before bear and bull exist, their tab shows the case they would start as (#156)
+  const preview = sel !== "base" && !cases[sel] && parsed.base ? shiftedCase(parsed.base, sel) : null;
 
   const save = async () => {
     if (!state || nameError || busy || !dirty) return;
@@ -202,14 +221,18 @@ function ModelEditor({ token, item, initial, saved, label, embedded = false, act
     setSel("base");
   };
   const reset = () => {
-    if (!stats) return;
-    const fromHistory = defaultAssumptions(stats, drafts.length);
-    const target = sel === "base" ? fromHistory : shiftedCase(fromHistory, sel);
-    setDrafts((d) => target.map((a, k) => ({ ...toDraft(a), note: d[k]?.note ?? "" })));
+    if (!defaults) return;
+    setDrafts((d) => defaults.map((a, k) => ({ ...toDraft(a), note: d[k]?.note ?? "" })));
   };
-  const growthHint = stats ? statLabel(stats.cagr, stats.cagrYears, "CAGR") : "history loading";
-  const marginHint = stats ? statLabel(stats.avgMargin, stats.marginYears, "avg") : "history loading";
   const caseLabel = SCENARIO_LABELS[sel].toLowerCase();
+  const hint = (k: number, which: "growth" | "margin") => defaults?.[k] ? `default ${defaults[k]![which].toFixed(1)}%` : "history loading";
+  const pctText = (v: number | null) => (v === null ? "n/a" : `${(v * 100).toFixed(1)}%`);
+  const longRun = stats ? Math.min(LONG_RUN_GROWTH_CAP, Math.max(0, (stats.cagr ?? run?.growth ?? 0) * 100)) : null;
+  const rule = !stats ? null
+    : `Defaults start at the trailing twelve months${run?.period ? ` to ${run.period}` : ""} (growth ${pctText(run?.growth ?? stats.lastGrowth)}, margin ${pctText(run?.margin ?? stats.lastMargin)}) `
+      + `and close half the gap each year to the long run: ${longRun!.toFixed(1)}% growth (the ${statLabel(stats.cagr, stats.cagrYears, "CAGR")}, held between 0% and ${LONG_RUN_GROWTH_CAP}%) `
+      + `and the ${statLabel(stats.avgMargin, stats.marginYears, "avg")} margin.`
+      + (sel === "base" ? "" : ` The ${caseLabel} case moves each year ${sel === "bear" ? "down" : "up"} by half its growth (at least ${SCENARIO_SPREAD.growth.min} points) and a fifth of its margin (at least ${SCENARIO_SPREAD.margin.min}).`);
 
   return (
     <div className={embedded ? "model-page embedded" : "page model-page"}>
@@ -267,20 +290,19 @@ function ModelEditor({ token, item, initial, saved, label, embedded = false, act
           <select id={`${id}-hist`} className="field narrow" value={historyYears} onChange={(e) => setHistoryYears(Number(e.target.value))}>
             {Array.from({ length: MAX_HISTORY - MIN_HISTORY + 1 }, (_, k) => k + MIN_HISTORY).map((n) => <option key={n} value={n}>{n}</option>)}
           </select>
-          <button className="btn sm" disabled={!stats || (sel !== "base" && !cases[sel])}
-            title={sel === "base" ? "Set every year to the historical revenue CAGR and average operating margin"
-              : `Set every year to history, ${sel === "bear" ? "minus" : "plus"} ${SCENARIO_SHIFT.growth} points of growth and ${SCENARIO_SHIFT.margin} of margin`}
+          <button className="btn sm" disabled={!defaults || (sel !== "base" && !cases[sel])}
+            title={`Set every year of the ${caseLabel} case to the default shown beside it`}
             onClick={reset}>
-            Reset to history
+            Reset to defaults
           </button>
         </div>
         {sel !== "base" && !cases[sel] ? (
           <div className="card-b scenario-empty">
             <p>
               No {caseLabel} case yet. A bear and a bull case sit beside your base case: the same years, your numbers for
-              what happens if it goes worse or better. They start from the base case
-              {" "}{sel === "bear" ? "minus" : "plus"} {SCENARIO_SHIFT.growth} points of growth and {SCENARIO_SHIFT.margin} of
-              {" "}margin; the thesis check reads the base case only.
+              what happens if it goes worse or better. Each year starts from the base case {sel === "bear" ? "minus" : "plus"} half
+              its growth (at least {SCENARIO_SPREAD.growth.min} points) and a fifth of its margin (at least {SCENARIO_SPREAD.margin.min}):
+              the table below shows what the {caseLabel} case would start as. The thesis check reads the base case only.
             </p>
             <button className="btn primary" onClick={addCases} disabled={!parsed.base}
               title={parsed.base ? undefined : "Fix the base case first"}>
@@ -289,6 +311,7 @@ function ModelEditor({ token, item, initial, saved, label, embedded = false, act
           </div>
         ) : (
           <>
+            {rule && <p className="small muted model-rule">{rule}</p>}
             {hasCases && (
               <p className="small muted scenario-note">
                 Editing the <b>{caseLabel}</b> case. The chart draws all three (base dashed, bear and bull lighter); the table
@@ -324,7 +347,7 @@ function ModelEditor({ token, item, initial, saved, label, embedded = false, act
                             <span aria-hidden="true">%</span>
                           </span>
                           <span id={`${id}-g${i}`} className={badGrowth ? "err small" : "faint small"}>
-                            {badGrowth ? `${GROWTH_RANGE[0]} to ${GROWTH_RANGE[1]}` : growthHint}
+                            {badGrowth ? `${GROWTH_RANGE[0]} to ${GROWTH_RANGE[1]}` : hint(i, "growth")}
                           </span>
                         </td>
                         <td>
@@ -334,7 +357,7 @@ function ModelEditor({ token, item, initial, saved, label, embedded = false, act
                             <span aria-hidden="true">%</span>
                           </span>
                           <span id={`${id}-m${i}`} className={badMargin ? "err small" : "faint small"}>
-                            {badMargin ? `up to ${MARGIN_RANGE[1]}` : marginHint}
+                            {badMargin ? `up to ${MARGIN_RANGE[1]}` : hint(i, "margin")}
                           </span>
                         </td>
                         <td className="note-cell">
@@ -353,8 +376,9 @@ function ModelEditor({ token, item, initial, saved, label, embedded = false, act
 
       <section className="card pad" aria-label="History and forecast">
         <HistoryState history={history} company={company} render={(years, asOf) => (
-          <ModelView history={years} historyYears={historyYears} assumptions={parsed.base} company={company} asOf={asOf}
-            scenarios={{ bear: parsed.bear, bull: parsed.bull }} selected={sel !== "base" && cases[sel] ? sel : "base"} />
+          <ModelView history={years} historyYears={historyYears} assumptions={shown("base")} company={company} asOf={asOf}
+            scenarios={preview ? { [sel]: preview } : { bear: shown("bear"), bull: shown("bull") }}
+            selected={sel} preview={!!preview} stale={!!cases[sel] && !parsed[sel]} />
         )} />
       </section>
     </div>

@@ -304,22 +304,34 @@ sidebar with the other items (rename, duplicate, delete as usual).
   fiscal years of revenue and operating income, read live from `/v1/companies/{id}/financials`
   (`view=ttm`, 40 quarters: the TTM at each fiscal Q4 is the fiscal year, as the Statements tab's
   annual view), and your assumptions per forecast year (1-10, default 3): revenue growth %,
-  operating margin % and a note. Each assumption shows the history next to it: the revenue CAGR
-  and the mean operating margin over the last 5 fiscal years ("5-yr CAGR 8.1%", "5-yr avg
-  22.0%"; fewer years when the history is shorter). The projection starts at the latest fiscal
+  operating margin % and a note. Each assumption shows its default beside it ("default 44.2%"),
+  and a line above the table says the rule with the company's numbers: the TTM run rate, the
+  revenue CAGR and mean operating margin over the last 5 fiscal years (fewer when the history is
+  shorter) and the long-run rate. The projection starts at the latest fiscal
   year with revenue: revenue_t = revenue_(t-1) × (1 + growth_t), operating income_t = revenue_t ×
   margin_t. The chart draws history solid and forecast dashed in the same colour (a series'
   `dashed`), joined at the base year; history points open their filing. The table labels each
-  year Reported or Forecast (`FY2027E`). History years shown: 3-10 (default 8). A new model
-  starts every year at the company's own CAGR and average margin; "Reset to history" does so
-  again. Only the assumptions are saved, never the history. A model embeds in a thesis like a
+  year Reported or Forecast (`FY2027E`). History years shown: 3-10 (default 8). **Defaults**
+  (`runRate`, `defaultAssumptions`): year 1 at the trailing-twelve-month run rate (the newest TTM
+  revenue against the TTM a year earlier, and its operating margin; the latest fiscal year's
+  without one), then each year closes half the gap (`FADE`) to the long run: growth to the 5-year
+  CAGR held between 0% and 5% (`LONG_RUN_GROWTH_CAP`), margin to the 5-year average. NVIDIA
+  (TTM +83.4% at 65.2%) starts 83.4 / 44.2 / 24.6% at 65.2 / 55.6 / 50.8% instead of a flat 66.9%
+  at 46.0% to $1.00T; Vertiv starts at 35.3% and 20.1%, Deckers at 6.3% (not its 16.5% CAGR); a
+  shrinking company's long run is 0%, not a permanent decline. "Reset to defaults" sets exactly
+  the defaults shown. Only the assumptions are saved, never the history. A model embeds in a thesis like a
   chart (its chart and table from the saved assumptions and the live history). Per-segment
   growth isn't there yet. **Bear / base / bull**: a Scenario switch above the assumptions picks
   the case being edited; "Add bear and bull cases" starts them from the base case minus / plus
-  5 points of growth and 3 of margin (`SCENARIO_SHIFT`), for the same forecast years (changing
-  the number of years changes every case). The chart draws the base forecast dashed and the bear
-  and bull ones lighter (a series' `faint`: thinner, `stroke-opacity`, an SVG attribute, not a
-  style); the table shows the selected case. Saved as `scenarios: {bear, bull}` beside
+  half its growth (at least 5 points) and a fifth of its margin (at least 3), per year
+  (`SCENARIO_SPREAD`): in proportion, so NVIDIA's bear case about doubles revenue in three years
+  while base more than triples it and bull grows it over five times (a fixed 5 points left bear
+  more than quadrupling it). Same forecast years (changing the number of years changes every
+  case). The chart draws the base forecast dashed and the bear and bull ones lighter (a series'
+  `faint`: thinner, `stroke-opacity`, an SVG attribute, not a style); the table shows the
+  selected case: before bear and bull are added, what that case would start as, labelled a
+  preview; while a case's numbers don't parse, its last valid ones (marked), never the base case
+  under the bear tab. Saved as `scenarios: {bear, bull}` beside
   `assumptions`, which stays the base case: a model saved before scenarios is base only and
   saves exactly as before, and Check my thesis checks the base case (`scenarioAssumptions`,
   ported to agent-api; the fixture's `scenario_cases`). An embedded model draws all three.

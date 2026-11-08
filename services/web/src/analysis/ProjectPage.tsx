@@ -7,9 +7,9 @@ import { header, HEADER_COLUMNS, listingLine } from "../company/data";
 import { leftText, useAllowanceContext } from "../assistant/useAllowance";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { day } from "../format";
-import { defaultAssumptions, DEFAULT_HISTORY, DEFAULT_YEARS, historyStats, modelState } from "../models/model";
+import { DEFAULT_HISTORY, DEFAULT_YEARS, modelState } from "../models/model";
 import { ModelPage } from "../models/ModelPage";
-import { loadHistory } from "../models/useHistory";
+import { newModelAssumptions } from "../models/useHistory";
 import { go, href } from "../route";
 import { textHash } from "../thesis/check";
 import { CheckPanel } from "../thesis/CheckPanel";
@@ -433,8 +433,7 @@ function ModelStep({ token, companyId, ticker, models, modelId, saved, projectId
     setBusy(true);
     setError(null);
     try {
-      const years = await loadHistory(token, companyId).then((h) => h.years).catch(() => []);
-      const state = modelState({ companyId, historyYears: DEFAULT_HISTORY, assumptions: defaultAssumptions(historyStats(years), DEFAULT_YEARS) });
+      const state = modelState({ companyId, historyYears: DEFAULT_HISTORY, assumptions: await newModelAssumptions(token, companyId, DEFAULT_YEARS) });
       const item = await saved.create("model", `${ticker} model`.slice(0, 120), state, { workspaceId: projectId });
       onChanged();
       go({ view: "analysis", projectId, step: "model", itemId: item.item_id });
@@ -450,8 +449,8 @@ function ModelStep({ token, companyId, ticker, models, modelId, saved, projectId
         <div className="card-b">
           <p>
             A revenue-first model: the company's fiscal years of revenue and operating income from its filings, then your
-            growth and margin per forecast year, as base, bear and bull cases. It starts at {ticker}'s own 5-year revenue CAGR
-            and average operating margin.
+            growth and margin per forecast year, as base, bear and bull cases. It starts at {ticker}'s trailing-twelve-month
+            growth and operating margin, fading each year toward its long-run rate; change any of it.
           </p>
           <button className="btn primary" disabled={busy} onClick={() => void create()}>{busy ? "Creating…" : "Create the model"}</button>
           {error && <p className="err small" role="alert">{error}</p>}

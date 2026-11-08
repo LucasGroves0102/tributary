@@ -319,25 +319,53 @@ it("adds bear and bull cases to the project's model, switches between them and s
   expect(switchBtn("Base").getAttribute("aria-pressed")).toBe("true");
   await click(switchBtn("Bear"));
   expect(page.querySelector(".scenario-empty")?.textContent).toContain("No bear case yet");
+  // #156: before it's added, the bear tab's table shows the case it would start as, labelled so
+  const tags = () => [...page.querySelectorAll(".model-table tr.forecast .tag")].map((t) => t.textContent);
+  expect(tags()).toEqual(["Bear case (preview)", "Bear case (preview)"]);
   await click(button("Add bear and bull cases", page));
   const growth = page.querySelector<HTMLInputElement>('input[aria-label="FY2026E bear case revenue growth, percent"]')!;
-  expect(growth.value).toBe("5"); // the base case minus 5 points
+  expect(growth.value).toBe("5"); // 10% less half of it, at least 5 points
   await act(async () => type(growth, "-2"));
   await settle();
   // the table shows the selected case; the chart all three, bear and bull lighter
-  expect([...page.querySelectorAll(".model-table tr.forecast .tag")].map((t) => t.textContent)).toEqual(["Bear case", "Bear case"]);
+  expect(tags()).toEqual(["Bear case", "Bear case"]);
   expect(page.querySelectorAll(".lchart-svg path[stroke-opacity]").length).toBe(4);
+  // #98: a number that doesn't parse keeps the bear case on screen (last valid), not the base one
+  await act(async () => type(growth, "-2x"));
+  await settle();
+  expect(tags()).toEqual(["Bear case", "Bear case"]);
+  expect(page.querySelectorAll(".lchart-svg path[stroke-opacity]").length).toBe(4);
+  expect(page.textContent).toContain("the chart and table show the last ones that did");
+  await act(async () => type(growth, "-2"));
+  await settle();
   await click(switchBtn("Bull"));
   expect(page.querySelector<HTMLInputElement>('input[aria-label="FY2026E bull case revenue growth, percent"]')!.value).toBe("15");
   await click(switchBtn("Base"));
-  expect([...page.querySelectorAll(".model-table tr.forecast .tag")].map((t) => t.textContent)).toEqual(["Base case", "Base case"]);
+  expect(tags()).toEqual(["Base case", "Base case"]);
   await click(button("Save", page));
   const put = writes.find((w) => w.method === "PUT" && w.path === `/v1/workspace-items/${MODEL_ID}`)!;
   expect(put.body.state).toEqual({
     companyId: NVDA, historyYears: 8,
     assumptions: [{ growth: 10, margin: 20 }, { growth: 10, margin: 20 }],
-    scenarios: { bear: [{ growth: -2, margin: 17 }, { growth: 5, margin: 17 }], bull: [{ growth: 15, margin: 23 }, { growth: 15, margin: 23 }] },
+    scenarios: { bear: [{ growth: -2, margin: 16 }, { growth: 5, margin: 16 }], bull: [{ growth: 15, margin: 24 }, { growth: 15, margin: 24 }] },
   });
+});
+
+it("Reset to defaults sets exactly the default shown beside each field, in every case (#48)", async () => {
+  await render(`#/analysis/${PID}/model`, ".model-table");
+  const page = visible(".model-page");
+  const switchBtn = (s: string) => [...page.querySelectorAll<HTMLButtonElement>(".scenario-switch button")].find((b) => b.textContent?.startsWith(s))!;
+  await click(switchBtn("Bull"));
+  await click(button("Add bear and bull cases", page));
+  const inputs = () => [...page.querySelectorAll<HTMLInputElement>(".assumptions input[inputmode=decimal]")];
+  const hints = () => [...page.querySelectorAll(".assumptions td .faint")].map((h) => h.textContent);
+  await act(async () => type(inputs()[0]!, "99"));
+  await settle();
+  await click(button("Reset to defaults", page));
+  const shown = hints().map((h) => h!.replace(/^default /, "").replace(/%$/, ""));
+  expect(shown.every((h) => /^-?\d+\.\d$/.test(h))).toBe(true);
+  expect(inputs().map((i) => Number(i.value).toFixed(1))).toEqual(shown);
+  expect(page.querySelector(".model-rule")?.textContent).toContain("close half the gap each year to the long run");
 });
 
 it("opens a project's thesis or model inside the project, and plain ones as before", async () => {
