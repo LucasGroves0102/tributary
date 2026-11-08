@@ -239,6 +239,22 @@ jobs:
     image: facts-fetcher
     schedule: "0 4 * * *"
     uses: [postgres, sec]
+  # Re-derive silver and gold from stored bronze, after a change to silver.metric_tags or gold's rules.
+  # No SEC requests. Ships suspended and never runs on its own. Run now:
+  # kubectl -n tributary create job --from=cronjob/financials-rebuild financials-rebuild-1
+  financials-rebuild:
+    image: facts-fetcher
+    command: [facts-fetcher, --rebuild]
+    schedule: "0 6 1 1 *"
+    suspend: true
+    timeoutSeconds: 21600
+    uses: [postgres]
+    resources:
+      requests:
+        cpu: 250m
+        memory: 256Mi
+      limits:
+        memory: 1Gi
   # Every SEC filer's XBRL facts from the nightly companyfacts.zip (one ~1.4 GB download per
   # night). A run loads batches of BULK_LIMIT changed companies back to back, saving progress
   # after each; a stopped run resumes where it left off. Once caught up, a night only touches the

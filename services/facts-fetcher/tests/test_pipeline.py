@@ -225,6 +225,20 @@ def test_rebuild_reprojects_from_raw_after_metric_tags_change(loaded):
         == before + after
 
 
+def test_rebuild_can_stop_at_a_few_ciks(loaded):
+    loaded.execute("INSERT INTO silver.metric_tags (metric, tag, priority)"
+                   " VALUES ('revenue', 'NoSuchTagYet', 99)")
+    for cik in (NVDA, COST):
+        doc = json.loads(raw(cik))
+        doc["facts"]["us-gaap"]["NoSuchTagYet"] = doc["facts"]["us-gaap"]["Revenues"]
+        store_payload(loaded, cik, json.dumps(doc).encode())
+    loaded.execute("UPDATE bronze.company_facts SET payload = '{}'")
+    rebuild(loaded, [NVDA])
+    ciks = {r[0] for r in loaded.execute(
+        "SELECT DISTINCT cik FROM silver.financial_facts WHERE tag = 'NoSuchTagYet'").fetchall()}
+    assert ciks == {NVDA}
+
+
 def test_ttm_of_a_fiscal_year_matches_the_10k(loaded):
     def ttm(company_id, end):
         return loaded.execute(
