@@ -6,8 +6,8 @@
 --       was filed. Legacy Housing's income tax at 2033-03-31 and Quest Patent's equity at 2029-06-30 now read
 --       as what they are, not as a gap "from Oct 1, 2026 to Dec 31, 2032" (M10), and gold.usable_facts (039)
 --       keeps them out. periods: how many (PennyMac tags a maturity schedule as 40 future balance sheets).
---     rule debt_above_liabilities: a debt fact over five times total liabilities at that date, a scale
---       slip (Bank First's 2019 10-K, 38.4 billion for 38.4 million).
+--     rule debt_above_liabilities: a debt fact over five times both total liabilities and total assets
+--       at that date, a scale slip (Bank First's 2019 10-K, 38.4 billion for 38.4 million).
 --   net_debt_gap (warning, at most one per company): the latest balance sheet with debt and cash has no net
 --     debt (040): the investments series ended recently and there's room for it, or debt is only a part.
 --     investments_end says when the series stopped, if it did. This is #33's silent gap.
@@ -89,7 +89,7 @@ BEGIN
         ) x
         ORDER BY x.company_id, x.metric, x.period_end DESC
     ),
-    debt_scale AS (  -- a debt fact over five times the same date's total liabilities
+    debt_scale AS (  -- a debt fact over five times the same date's total liabilities and total assets
         SELECT DISTINCT ON (k.company_id, t.metric, f.period_end)
                k.company_id, t.metric, f.period_end, f.tag, f.accession_no, f.form, f.filed
         FROM silver.company_ciks k
@@ -101,6 +101,12 @@ BEGIN
               AND x.period_end = f.period_end AND x.period_start IS NULL
             ORDER BY x.filed DESC, x.accession_no DESC LIMIT 1
         ) l ON f.value > l.value * 5
+        JOIN LATERAL (
+            SELECT x.value FROM silver.financial_facts x
+            WHERE x.cik = f.cik AND x.metric = 'total_assets' AND x.tag = 'Assets'
+              AND x.period_end = f.period_end AND x.period_start IS NULL
+            ORDER BY x.filed DESC, x.accession_no DESC LIMIT 1
+        ) a ON f.value > a.value * 5
         WHERE k.company_id = ANY(p_company_ids) AND f.period_start IS NULL
         ORDER BY k.company_id, t.metric, f.period_end, f.filed DESC, f.accession_no DESC
     ),

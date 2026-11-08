@@ -669,12 +669,14 @@ def test_no_fallback_debt_for_a_bank_or_an_unknown_industry(conn, sic):
 
 
 def test_a_debt_figure_many_times_total_liabilities_is_a_scale_slip(conn):
-    # Bank First's 2019 10-K: 38,400,000,000 for $38.4M, against liabilities of $1.98B
+    # Bank First's 2019 10-K: 38,400,000,000 for $38.4M, against liabilities of $1.98B and assets
+    # of $2.21B
     put(
         conn,
         [
             ("LongTermDebtNoncurrent", None, END, 38400000000, "k", FILED, "10-K"),
             ("Liabilities", None, END, 1979957000, "k", FILED, "10-K"),
+            ("Assets", None, END, 2210168000, "k", FILED, "10-K"),
             ("CashAndCashEquivalentsAtCarryingValue", None, END, 100, "k", FILED, "10-K"),
         ],
         sic="6021",
@@ -695,6 +697,20 @@ def test_debt_a_little_above_a_partial_liabilities_tag_stays(conn):
         ],
     )
     assert gold(conn, "long_term_debt", END)[0] == 9100
+
+
+def test_debt_far_above_a_wrong_liabilities_tag_stays_when_assets_hold_it(conn):
+    # USA Compression's 2017: 783M of debt against a 54M Liabilities tag and $1.72B of assets
+    put(
+        conn,
+        [
+            ("LongTermDebtNoncurrent", None, END, 782902000, "k", FILED),
+            ("Liabilities", None, END, 54083000, "k", FILED),
+            ("Assets", None, END, 1718953000, "k", FILED),
+        ],
+    )
+    assert gold(conn, "long_term_debt", END)[0] == 782902000
+    assert findings(conn, "mistagged_fact") == []
 
 
 # --- cash --------------------------------------------------------------------------------------
@@ -887,6 +903,7 @@ def test_a_figure_rounded_for_a_sentence_loses_to_the_exact_difference(conn):
         (1230000000, "a filer in millions rounding one unit: under 0.2% from the difference"),
         (5000000000, "far from the difference: a restatement, not rounding"),
         (1237000000, "four significant digits isn't a rounded sentence"),
+        (1250000000, "three significant digits can be an exact figure in millions (IBM's 5,260)"),
     ],
 )
 def test_other_reported_quarters_stay(conn, reported, why):
@@ -899,6 +916,20 @@ def test_other_reported_quarters_stay(conn, reported, why):
         ],
     )
     assert gold(conn, "dividends_paid", "2026-06-30")[0] == reported, why
+
+
+def test_a_filers_own_rounding_of_two_year_to_date_figures_stays(conn):
+    # Lowe's income tax: 450 for the quarter, 449 as the difference of two figures in millions
+    m = 1000000
+    put(
+        conn,
+        [
+            ("IncomeTaxExpenseBenefit", "2018-02-03", "2018-05-04", 637 * m, "q1", "2018-05-30"),
+            ("IncomeTaxExpenseBenefit", "2018-02-03", "2018-08-03", 1086 * m, "q2", "2018-08-31"),
+            ("IncomeTaxExpenseBenefit", "2018-05-05", "2018-08-03", 450 * m, "q2", "2018-08-31"),
+        ],
+    )
+    assert gold(conn, "income_tax", "2018-08-03")[0] == 450 * m
 
 
 # --- EPS in a loss ------------------------------------------------------------------------------

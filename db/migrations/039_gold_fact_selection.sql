@@ -7,9 +7,10 @@
 --   Proxy and information statements (024).
 --   A period ending more than 7 days after its filing was filed (Legacy Housing 2033, Quest Patent 2029,
 --     Walmart's cash at 2012-12-31 in a 10-K filed 2012-03-27): 47 gold rows at 33 companies on hermes.
---   Debt over five times total liabilities at the same date: a scale slip in the filing (Bank First's
---     2019 10-K tags 38.4 billion for 38.4 million, 19 times). Five, because at 1-2.5 times it's usually
---     the Liabilities tag that is partial (FirstEnergy 2008, Rekor 2018) and the debt is right.
+--   Debt over five times both total liabilities and total assets at the same date: a scale slip in the
+--     filing (Bank First's 2019 10-K tags 38.4 billion for 38.4 million). Both, because one alone is
+--     often the other tag's fault: a partial Liabilities tag (FirstEnergy 2008 at 1.3 times, USA
+--     Compression 2017 at 14), or a shell whose notes really are hundreds of times its assets.
 --   LongTermDebt / LongTermNotesPayable / LongTermNotesAndLoans at a bank: deposits are its debt (035),
 --     and a bank's unclassified balance sheet has no noncurrent debt line. Same with no SIC known.
 --   A fallback debt tag that is the note's total, when a current portion is also reported: it can't be
@@ -140,7 +141,8 @@ LANGUAGE sql STABLE AS $$
                     OR l.value <= b.current_debt) AS total
     ) c
     WHERE NOT (l.metric IN ('long_term_debt', 'long_term_debt_current')
-               AND l.value > coalesce(b.liabilities * 5, 'Infinity'))
+               AND l.value > coalesce(b.liabilities * 5, 'Infinity')
+               AND l.value > coalesce(b.assets * 5, 'Infinity'))
       -- Cash only on a balance sheet's date: elsewhere it's a note (cash paid in a deal, Boston
       -- Scientific on 2023-02-20)
       AND NOT (l.tag = 'Cash' AND b.assets IS NULL)
@@ -249,12 +251,16 @@ BEGIN
         FROM compared c
         -- a figure rounded for a sentence ("we paid $6.0 billion"), tagged in the same filing as an
         -- exact year to date: the difference is the exact quarter (NVIDIA's Q2 FY2027 dividends,
-        -- 6,290 - 243 = 6,047, not 6,000). At most three significant digits, where the difference has
-        -- more, and within 0.2-2%, so a filer's own rounding of one unit is left alone.
+        -- 6,290 - 243 = 6,047, not 6,000; Cisco's "$1.5 billion" against 1,486; American Eagle's
+        -- "$9.3 million" of stock compensation against 9.257). The reported figure has at most two
+        -- significant digits, the difference at least three that aren't zero, and they're 0.2-2%
+        -- apart. Tried on the sample and narrowed: three digits also took IBM's 5,260 of SG&A, which a
+        -- filer in millions can state exactly while an earlier quarter was restated; and a difference
+        -- like Lowe's 449 against 450 is that filer's own rounding of each year-to-date figure.
         WHERE NOT (c.value_source = 'reported' AND c.difference IS NOT NULL AND c.value <> 0
                    AND abs(c.value - c.difference) BETWEEN 0.002 * abs(c.difference)
                                                        AND 0.02 * abs(c.difference)
-                   AND mod(c.value, power(10::numeric, floor(log(nullif(abs(c.value), 0))) - 2)) = 0
+                   AND mod(c.value, power(10::numeric, floor(log(nullif(abs(c.value), 0))) - 1)) = 0
                    AND mod(c.difference, power(10::numeric, floor(log(nullif(abs(c.value), 0))) - 2)) <> 0)
     ),
     -- calendar votes per company and date: metrics with a balance-sheet value on it, and
