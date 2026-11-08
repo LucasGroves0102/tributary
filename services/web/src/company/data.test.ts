@@ -19,6 +19,7 @@ import {
   STATEMENTS,
   listingLine,
   withAnnualPerShare,
+  withBridges,
 } from "./data";
 
 describe("the header's listing line", () => {
@@ -340,5 +341,54 @@ describe("the Filings tab's headings and notes", () => {
     expect(parsedNote({ form: "10-Q", sections: 0 })).toBe("not parsed yet");
     expect(parsedNote({ form: "8-K", sections: null })).toBe("index only");
     expect(parsedNote({ form: "10-K", sections: 12 })).toBe("12 sections");
+  });
+});
+
+describe("what a statement's own lines can't say", () => {
+  const row = (metric: string, value: string, extra: Partial<ReturnType<typeof fin>> = {}) =>
+    fin(metric, "2026-09-30", value, "FY2026 Q3", extra);
+  const table = (rows: ReturnType<typeof fin>[], kind: "is" | "bs") =>
+    withBridges(metricTable(rows, STATEMENTS[kind].rows, "q"), rows, kind);
+
+  it("bridges operating to net income where no pretax line is tagged (Guerrilla RF)", () => {
+    const t = table([row("operating_income", "2428257"), row("interest_expense", "186257"), row("net_income", "-3731159")], "is");
+    const bridge = t.rows.find((r) => r.metric === "other_items")!;
+    expect(bridge.label).toBe("Other items, net");
+    expect(bridge.cells[0]).toMatchObject({ text: "-$6.16M", derived: true, url: null });
+    expect(bridge.cells[0]!.title).toContain("where the filing tags no pretax income");
+    expect(t.rows.map((r) => r.metric)).toEqual(["operating_income", "interest_expense", "other_items", "net_income"]);
+  });
+
+  it("adds no bridge where a pretax line says it all", () => {
+    const t = table([row("operating_income", "100"), row("pretax_income", "90"), row("net_income", "70")], "is");
+    expect(t.rows.some((r) => r.metric === "other_items")).toBe(false);
+  });
+
+  it("says a bank's interest expense is already out of revenue", () => {
+    const tag = { citation: { ...fin("revenue", "2026-09-30", "1", "FY2026 Q3").citation, xbrl_tag: "us-gaap:RevenuesNetOfInterestExpense" } };
+    const t = table([row("revenue", "50170000000", tag), row("interest_expense", "26020000000")], "is");
+    expect(t.rows.find((r) => r.metric === "interest_expense")!.label).toBe("Interest expense (already taken out of revenue)");
+    const sum = { citation: { ...tag.citation, xbrl_tag: "us-gaap:InterestIncomeExpenseNet+NoninterestIncome" } };
+    const t2 = table([row("revenue", "2791000000", sum), row("interest_expense", "1320000000")], "is");
+    expect(t2.rows.find((r) => r.metric === "interest_expense")!.label).toContain("already taken out");
+    const t3 = table([row("revenue", "100"), row("interest_expense", "5")], "is");
+    expect(t3.rows.find((r) => r.metric === "interest_expense")!.label).toBe("Interest expense");
+  });
+
+  it("shows what assets less liabilities and equity leave, when it's real (Guerrilla RF's $20M)", () => {
+    const t = table([row("total_assets", "23327718"), row("total_liabilities", "25742723"), row("stockholders_equity", "-22448560")], "bs");
+    const gap = t.rows.find((r) => r.metric === "other_equity")!;
+    expect(gap.label).toBe("Not itemised");
+    expect(gap.cells[0]).toMatchObject({ text: "$20.03M", derived: true });
+    expect(gap.cells[0]!.title).toContain("redeemable or mezzanine equity");
+    const tied = table([row("total_assets", "100"), row("total_liabilities", "60"), row("stockholders_equity", "40")], "bs");
+    expect(tied.rows.some((r) => r.metric === "other_equity")).toBe(false);
+  });
+
+  it("never puts a computed row in the CSV", () => {
+    const rows = [row("operating_income", "100"), row("net_income", "70")];
+    const csv = financialsCsv(rows, table(rows, "is"), "quarter");
+    expect(csv).not.toContain("other_items");
+    expect(csv).toContain("net_income");
   });
 });

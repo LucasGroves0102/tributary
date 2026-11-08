@@ -579,6 +579,13 @@ tags them, by the API's `not_applicable` list. Statements: a balance sheet has n
 and a saved one reads as quarters); EPS and diluted shares read n/a in TTM, — in a fiscal Q4 (the 10-K
 states the year, and they aren't derived by subtraction) and come from the 10-K itself in Annual
 (`/v1/companies/{id}/annual-per-share`). Column pickers don't offer a balance's `_ttm` column.
+What a statement's lines can't say is a computed row (`withBridges`, data.ts), italic and never in the
+CSV: "Other items, net" between operating and net income where the filing tags no pretax income
+(Guerrilla RF's warrant revaluation), "Not itemised" where assets aren't liabilities plus equity
+(redeemable or mezzanine equity, noncontrolling interests), and a bank's interest expense says it's
+already taken out of revenue. Gross profit computed as revenue less cost (migration 039) says so in its
+hover. A fiscal year's month (`fyeMonth`) gives a date in a month's first week to the month before, as
+`silver.fiscal_year_end_month` does for the screener's filter.
 
 ## Run
 

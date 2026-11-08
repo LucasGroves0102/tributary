@@ -21,6 +21,7 @@ import {
   type StatementRange,
   type TableCell,
   withAnnualPerShare,
+  withBridges,
 } from "./data";
 import { go } from "../route";
 import type { StatementView } from "./statementView";
@@ -157,7 +158,7 @@ export function Statements({ token, companyId, name, ticker, notApplicable = [],
     ]);
     return { rows: annual ? withAnnualPerShare(fin.rows, perShare.rows, basis) : fin.rows };
   });
-  const table = load?.state === "ok" ? metricTable(load.data.rows, metrics, period, basis, notApplicable, RANGE_QUARTERS[range]) : null;
+  const table = load?.state === "ok" ? withBridges(metricTable(load.data.rows, metrics, period, basis, notApplicable, RANGE_QUARTERS[range]), load.data.rows, kind) : null;
   const exportCsv = () =>
     load?.state === "ok" && table &&
     download(`${ticker.toLowerCase()}-${kind}-${period}${period !== "a" && range !== "8q" ? `-${range}` : ""}${basis === "calendar" ? "-calendar" : ""}.csv`, new Blob([financialsCsv(load.data.rows, table, req.view)], { type: "text/csv" }));

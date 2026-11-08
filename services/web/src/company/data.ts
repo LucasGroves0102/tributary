@@ -271,9 +271,11 @@ export function withAnnualPerShare(rows: FinancialRow[], annual: FinancialRow[],
 }
 
 function cellTitle(label: string, r: FinancialRow): string {
-  const src = r.value_source === "derived"
-    ? `derived (${r.citation.source_accessions?.length ? `from ${r.citation.source_accessions.join(", ")}` : "computed"})`
-    : `reported, ${r.citation.xbrl_tag}`;
+  const src = r.citation.xbrl_tag?.startsWith("derived:")
+    ? "computed: revenue less cost of revenue, because the filing prints no gross profit"
+    : r.value_source === "derived"
+      ? `derived (${r.citation.source_accessions?.length ? `from ${r.citation.source_accessions.join(", ")}` : "computed"})`
+      : `reported, ${r.citation.xbrl_tag}`;
   return `${label}, ${r.fiscal_period ?? day(r.period_end, true)} (period ended ${day(r.period_end, true)}). ` +
     `Source: ${r.citation.form} filed ${day(r.citation.filed, true)}, ${r.citation.accession_no}; ${src}`;
 }
@@ -351,6 +353,69 @@ export function metricTable(
       // an n/a row stays, so its absence is explained: a bank's FCF, EPS in a TTM view
       .filter((r) => r.cells.some(Boolean) || (ends.length > 0 && r.blanks.every((b) => b.text === BANK_NA || b.text === NOT_APPLICABLE))),
   };
+}
+
+/** Revenue already net of interest expense: a bank's net revenue tag, or its net interest income plus
+ * noninterest income (migration 038). */
+function revenueIsNetOfInterest(rows: FinancialRow[]): boolean {
+  return rows.some((r) => r.metric === "revenue" && /RevenuesNetOfInterestExpense|InterestIncomeExpenseNet/.test(r.citation.xbrl_tag ?? ""));
+}
+
+const valueAt = (end: string, by: Map<string, FinancialRow>, metric: string): number | null => {
+  const r = by.get(`${metric}|${end}`);
+  return r ? num(r.value) : null;
+};
+
+function computedRow(metric: string, label: string, table: MetricTable, value: (end: string) => number | null, title: string): MetricTable["rows"][number] | null {
+  const ends = table.columns.map((c) => c.periodEnd);
+  const values = ends.map(value);
+  if (!values.some((v) => v !== null)) return null;
+  const figures = moneyRow(values);
+  return {
+    metric,
+    label,
+    blanks: ends.map(() => ({ text: "", title: "" })),
+    cells: values.map((v, i) => (v === null ? null : {
+      text: figures[i] ?? "", raw: String(v), derived: true, url: null,
+      title: `${label}, ${table.columns[i]!.label}: ${title}`,
+    })),
+  };
+}
+
+/** What a statement's own lines can't say, added as computed rows (never a stored figure, so never in
+ * the CSV, a chart or the assistant's data). A bank's interest expense says it's already in revenue.
+ * An income statement with operating income and net income but no pretax line gets the bridge between
+ * them. A balance sheet where assets aren't liabilities plus equity gets the difference. */
+export function withBridges(table: MetricTable, rows: FinancialRow[], kind: Statement): MetricTable {
+  const by = new Map(rows.map((r) => [`${r.metric}|${r.period_end}`, r]));
+  const out = { ...table, rows: [...table.rows] };
+  const insertAfter = (metric: string, row: MetricTable["rows"][number] | null) => {
+    if (!row) return;
+    const i = out.rows.findIndex((r) => r.metric === metric);
+    out.rows.splice(i < 0 ? out.rows.length : i + 1, 0, row);
+  };
+  if (kind === "is") {
+    if (revenueIsNetOfInterest(rows)) {
+      out.rows = out.rows.map((r) => r.metric === "interest_expense"
+        ? { ...r, label: "Interest expense (already taken out of revenue)" } : r);
+    }
+    insertAfter("interest_expense", computedRow("other_items", "Other items, net", table, (end) => {
+      const op = valueAt(end, by, "operating_income");
+      const net = valueAt(end, by, "net_income");
+      return op !== null && net !== null && valueAt(end, by, "pretax_income") === null ? net - op : null;
+    }, "net income less operating income, where the filing tags no pretax income: interest, other income and expense, and any tax, not itemised in its XBRL."));
+  }
+  if (kind === "bs") {
+    insertAfter("stockholders_equity", computedRow("other_equity", "Not itemised", table, (end) => {
+      const assets = valueAt(end, by, "total_assets");
+      const liabilities = valueAt(end, by, "total_liabilities");
+      const equity = valueAt(end, by, "stockholders_equity");
+      if (assets === null || liabilities === null || equity === null) return null;
+      const gap = assets - liabilities - equity;
+      return Math.abs(gap) > 0.01 * Math.abs(assets) ? gap : null;
+    }, "assets less liabilities less stockholders' equity. Usually redeemable or mezzanine equity, or noncontrolling interests, which the filing reports outside these lines."));
+  }
+  return out;
 }
 
 /** Long-format CSV of the rows behind a table: one line per value with its source. */
