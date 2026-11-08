@@ -6,7 +6,7 @@ from types import SimpleNamespace as NS
 import httpx
 import pytest
 
-from tributary_agent.agent import Agent
+from tributary_agent.agent import CLOSING, Agent
 from tributary_agent.tools import TOOLS, MetricTools, QueryApi
 
 NVDA = "0001045810"
@@ -121,12 +121,100 @@ def test_unknown_tool_is_an_error_not_a_crash():
     assert api.run("drop_tables", {})[1] is True and seen == []
 
 
-def test_stops_after_max_rounds():
-    loop = [response("tool_use", tool_use(f"t{i}", "whoami", {})) for i in range(3)]
-    answer = Agent(FakeMessages(*loop), query_api(ok)[0], "claude-haiku-5-5",
-                   max_rounds=3).ask("loop forever")
-    assert answer.stop == "max_rounds" and answer.rounds == 3
-    assert "Stopped after 3 rounds" in answer.text
+def financials(request):
+    return httpx.Response(200, json={"company_id": NVDA, "as_of": "2026-11-06T23:01:51Z",
+                                     "rows": [{"metric": "revenue", "period_end": "2026-07-26",
+                                               "value": 96221000000}]})
+
+
+def test_at_the_round_limit_it_answers_from_what_it_found():
+    """C9: after max_rounds tool rounds one closing call answers from the results (no tools:
+    tool_choice none), saying what it couldn't finish; it never discards them."""
+    loop = [response("tool_use", tool_use(f"t{i}", "get_financials", {"company_id": NVDA}))
+            for i in range(3)]
+    closing = response("end_turn", text("I couldn't compare it with Microsoft. Nvidia's revenue "
+                                        "was $96.2B. Freshness: as of 2026-11-06."))
+    fake = FakeMessages(*loop, closing)
+    answer = Agent(fake, query_api(financials)[0], "claude-haiku-5-5",
+                   max_rounds=3).ask("Compare everything")
+    assert answer.stop == "max_rounds" and answer.rounds == 4 and len(answer.tool_calls) == 3
+    assert answer.text.startswith("I couldn't compare") and "narrower" not in answer.text
+    assert answer.verification["ok"] and answer.verification["figures"][0]["status"] == "verified"
+    last = fake.requests[-1]
+    assert last["tool_choice"] == {"type": "none"} and last["tools"]  # tools stay defined
+    assert last["messages"][-1]["content"][0]["text"] == CLOSING
+    assert last["messages"][-2]["content"][0]["type"] == "tool_result"
+    assert all("tool_choice" not in r for r in fake.requests[:-1])
+
+
+def test_a_closing_call_with_nothing_to_say_still_answers():
+    loop = [response("tool_use", tool_use(f"t{i}", "whoami", {})) for i in range(2)]
+    answer = Agent(FakeMessages(*loop, response("end_turn")), query_api(ok)[0],
+                   "claude-haiku-5-5", max_rounds=2).ask("loop forever")
+    assert answer.stop == "max_rounds"
+    assert "2 rounds" in answer.text and "narrower" not in answer.text
+
+
+def test_a_closing_call_may_keep_its_tools():
+    """The thesis check's closing call can still submit: it keeps tool_choice auto, runs what
+    it calls, then stops."""
+    calls = []
+
+    class Runner:
+        def run(self, name, args):
+            calls.append(name)
+            return "Recorded.", False
+
+    loop = [response("tool_use", tool_use("t0", "whoami", {})),
+            response("tool_use", tool_use("t1", "submit_check", {"claims": []}))]
+    fake = FakeMessages(*loop)
+    answer = Agent(fake, Runner(), "claude-haiku-5-5", max_rounds=1, closing="Submit now.",
+                   closing_tools=True).ask("check")
+    assert calls == ["whoami", "submit_check"] and answer.stop == "max_rounds"
+    assert "tool_choice" not in fake.requests[-1]
+    assert fake.requests[-1]["messages"][-1]["content"][0]["text"] == "Submit now."
+
+
+def test_a_reply_cut_off_at_max_tokens_is_retried_once_when_asked():
+    """C1: the cut-off reply (an incomplete tool call) is dropped and the model asked once
+    more, more briefly; a second cut-off ends the run."""
+    calls = []
+
+    class Runner:
+        def run(self, name, args):
+            calls.append((name, args))
+            return "Recorded.", False
+
+    cut = response("max_tokens", tool_use("t0", "submit_check", {"claims": [{"quote": "Rev"}]}),
+                   output_tokens=8000)
+    fake = FakeMessages(cut, response("tool_use", tool_use("t1", "submit_check", {"claims": []})),
+                        response("end_turn", text("Done.")))
+    answer = Agent(fake, Runner(), "claude-haiku-5-5", retry="Shorter, please.").ask("check")
+    assert answer.stop == "end_turn" and answer.rounds == 3
+    assert calls == [("submit_check", {"claims": []})]
+    second = fake.requests[1]["messages"]
+    assert second[-1]["content"][0]["text"] == "Shorter, please."
+    assert all(m["role"] == "user" for m in second)  # the cut-off reply isn't in the history
+
+    twice = FakeMessages(cut, cut)
+    answer = Agent(twice, Runner(), "claude-haiku-5-5", retry="Shorter.").ask("check")
+    assert answer.stop == "max_tokens" and answer.rounds == 2
+
+
+def test_a_text_answer_cut_off_stands_and_a_cut_while_thinking_is_retried():
+    fake = FakeMessages(response("max_tokens", text("Revenue was")))
+    answer = Agent(fake, query_api(ok)[0], "claude-haiku-5-5", retry="Again.").ask("x")
+    assert (answer.stop, answer.text, answer.rounds) == ("max_tokens", "Revenue was", 1)
+    thinking = response("max_tokens", NS(type="thinking", thinking=""))
+    fake = FakeMessages(thinking, response("end_turn", text("Done.")))
+    answer = Agent(fake, query_api(ok)[0], "claude-haiku-5-5", retry="Again.").ask("x")
+    assert (answer.stop, answer.text, answer.rounds) == ("end_turn", "Done.", 2)
+
+
+def test_without_retry_a_cut_off_reply_is_the_answer():
+    fake = FakeMessages(response("max_tokens", text("Revenue was")))
+    answer = Agent(fake, query_api(ok)[0], "claude-haiku-5-5").ask("x")
+    assert (answer.stop, answer.text, answer.rounds) == ("max_tokens", "Revenue was", 1)
 
 
 def test_refusal_returns_a_message():

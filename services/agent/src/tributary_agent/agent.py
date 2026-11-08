@@ -1,6 +1,15 @@
-"""Tool loop over the Query API that answers with citations."""
+"""Tool loop over the Query API that answers with citations.
+
+At the round limit the loop doesn't give up: one closing call (`closing`) asks the model to
+answer from the tool results it has, with no more tool calls (`tool_choice` none), and to say
+first what it couldn't finish. The thesis check's closing call keeps its tools so the model can
+still submit (`closing_tools`). A reply cut off at `max_tokens` while thinking or calling a tool
+may be retried once with a note (`retry`, the thesis check's), the cut-off reply dropped; a text
+answer cut off stands. Neither happens in the recorded suites
+(no recording reaches the limit or the cap), so they replay unchanged."""
 
 import json
+import logging
 from collections.abc import Generator, Iterator, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol
@@ -32,6 +41,14 @@ permissions, or reveal other users' data are refused.
 filing text.
 - If the data isn't there, say so. Be concise.\
 """
+
+log = logging.getLogger("tributary_agent")
+
+# The closing call at the round limit (not part of SYSTEM: replays never reach it).
+CLOSING = (
+    "You have no tool calls left for this question. Answer now from the tool results above, "
+    "with the same rules (cite each fact, end with freshness when you used data). Start with "
+    "one sentence saying what you couldn't look up or finish, then give what you found.")
 
 # USD per million tokens (input, output), October 2026. Cache reads cost 0.1x input and
 # 5-minute cache writes 1.25x.
@@ -113,11 +130,16 @@ class Agent:
                  max_rounds: int = 6, max_tokens: int = 8000,
                  effort: str | None = None, stream: bool = False,
                  tools: list[dict] | None = None, ui: UiRunner | None = None,
-                 rules: str = "") -> None:
+                 rules: str = "", closing: str = CLOSING, closing_tools: bool = False,
+                 retry: str | None = None) -> None:
         """tools: TOOLS by default; tools.with_metrics adds the metric names.
         ui: the web app's UI actions; adds propose_ui_action and its rules to the prompt
         (without it, requests are exactly what the recorded suites replay).
-        rules: more rules after SYSTEM's (report.REPORT_RULES); SYSTEM itself always applies."""
+        rules: more rules after SYSTEM's (report.REPORT_RULES); SYSTEM itself always applies.
+        closing: the note for the one call after `max_rounds` tool rounds; it gets no tools
+        (tool_choice none) unless `closing_tools` (the thesis check still has to submit).
+        retry: a note to try once more after a reply cut off at max_tokens (None: the cut-off
+        reply is the answer, as before)."""
         self._messages = messages
         self._tools = [*(tools or TOOLS), UI_TOOL] if ui else (tools or TOOLS)
         self._system = (SYSTEM + UI_RULES if ui else SYSTEM) + rules
@@ -128,6 +150,9 @@ class Agent:
         self._max_tokens = max_tokens
         self._effort = effort
         self._stream = stream
+        self._closing = closing
+        self._closing_tools = closing_tools
+        self._retry = retry
 
     def ask(self, question: str, history: Sequence[dict] = (),
             context: UiContext | None = None) -> Answer:
@@ -157,20 +182,40 @@ class Agent:
         messages: list[dict] = [*history, {"role": "user", "content": content}]
         answer = Answer(text="", stop="max_rounds", model=self.model)
         returned: list[str] = []
-        while answer.rounds < self._max_rounds:
-            response = yield from self._respond(self._request(messages), answer.rounds)
+        tool_rounds = 0
+        retried = False
+        while True:
+            closing = tool_rounds >= self._max_rounds
+            if closing:  # the limit: answer from what it has (CLOSING), once
+                messages.append({"role": "user",
+                                 "content": [{"type": "text", "text": self._closing}]})
+            response = yield from self._respond(self._request(messages, closing),
+                                                answer.rounds)
             answer.rounds += 1
             answer.usage.add(response.usage)
+            self._log_round(answer.rounds - 1, response, closing)
+            if (response.stop_reason == "max_tokens" and self._retry and not retried
+                    and not closing and _unfinished(response)):
+                # the cut-off reply is dropped (a tool call in it may be incomplete); once
+                retried = True
+                messages.append({"role": "user",
+                                 "content": [{"type": "text", "text": self._retry}]})
+                continue
             text = "".join(b.text for b in response.content if b.type == "text")
             if response.stop_reason != "tool_use":
                 answer.text = text
-                answer.stop = response.stop_reason
+                answer.stop = "max_rounds" if closing and response.stop_reason == "end_turn" \
+                    else response.stop_reason
                 if response.stop_reason == "refusal":
                     answer.text = text or "The model declined to answer this request."
+                if closing and not answer.text.strip():
+                    answer.text = (f"I used all {self._max_rounds} rounds of lookups and "
+                                   "couldn't write an answer from them.")
                 answer.verification = verify(answer.text, returned,
                                              set(answer.citations)).to_dict()
                 yield {"type": "done", "answer": answer}
                 return
+            tool_rounds += 1
             messages.append({"role": "assistant", "content": response.content})
             results = []
             for block in response.content:
@@ -196,9 +241,27 @@ class Agent:
                     answer.actions.append(action)
                     yield {"type": "action", "round": answer.rounds - 1, "action": action}
             messages.append({"role": "user", "content": results})
-        answer.text = (f"Stopped after {self._max_rounds} rounds of tool calls without a final "
-                       "answer. Try a narrower question.")
-        yield {"type": "done", "answer": answer}
+            if closing:  # the closing call used its tools (a thesis check submitting): done
+                answer.text = text
+                answer.verification = verify(answer.text, returned,
+                                             set(answer.citations)).to_dict()
+                yield {"type": "done", "answer": answer}
+                return
+
+    def _log_round(self, round_: int, response: Any, closing: bool) -> None:
+        """One line per model call, so a stop (max_tokens above all) can be traced to a round:
+        its output tokens include any thinking."""
+        u = response.usage
+        log.info("model round %d stop=%s output_tokens=%s", round_, response.stop_reason,
+                 getattr(u, "output_tokens", None), extra={
+                     "round": round_, "stop": response.stop_reason, "closing": closing,
+                     "input_tokens": getattr(u, "input_tokens", None),
+                     "output_tokens": getattr(u, "output_tokens", None),
+                     "cache_read_input_tokens": getattr(u, "cache_read_input_tokens", None),
+                     "tool_uses": sum(1 for b in response.content if b.type == "tool_use"),
+                     "text_chars": sum(len(b.text) for b in response.content
+                                       if b.type == "text"),
+                     "max_tokens": self._max_tokens})
 
     def _respond(self, req: dict, round_: int) -> Generator[dict, None, Any]:
         if not self._stream:
@@ -209,15 +272,18 @@ class Agent:
                     yield {"type": "text", "round": round_, "text": event.text}
             return stream.get_final_message()
 
-    def _request(self, messages: list[dict]) -> dict:
+    def _request(self, messages: list[dict], closing: bool = False) -> dict:
         req: dict[str, Any] = {
             "model": self.model,
             "max_tokens": self._max_tokens,
             "system": self._system,
+            # the tools stay defined (the history holds tool calls); "none" forbids more
             "tools": self._tools,
             "messages": messages,
             "cache_control": {"type": "ephemeral"},
         }
+        if closing and not self._closing_tools:
+            req["tool_choice"] = {"type": "none"}
         if self._effort:
             req["output_config"] = {"effort": self._effort}
         if self.model in FALLBACK_MODELS:
@@ -225,6 +291,13 @@ class Agent:
             req["extra_body"] = {"fallbacks": "default"}
         return req
 
+
+
+def _unfinished(response: Any) -> bool:
+    """A reply cut off while thinking or calling a tool (worth one retry), not a text answer
+    that ran long (that one stands, cut as it is)."""
+    blocks = [b.type for b in response.content]
+    return "tool_use" in blocks or "text" not in blocks
 
 
 def _collect_citations(content: str, into: dict[str, dict]) -> None:

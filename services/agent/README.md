@@ -21,6 +21,12 @@ as tool errors the model must report.
 `get_financials`' metric names come from `GET /v1/metrics` (`MetricTools`, fetched once; until
 the Query API answers, the tool lists no names and the API rejects unknown ones).
 
+At the round limit (6 rounds of tool calls in chat, 12 in a report, 16 in a thesis check) the agent
+doesn't give up and discard what it found: one more call (`agent.CLOSING`, `tool_choice` none)
+answers from the tool results so far and says first what it couldn't look up or finish; the
+answer's `stop` is `max_rounds`. Each model call is logged with its stop reason and token counts
+(output tokens include thinking), so a `max_tokens` stop can be traced to the reply that hit it.
+
 Before an answer is returned, `verify.py` checks every dollar figure against the tool results
 (matched, derived as a sum or difference of one metric, or quoted from filing text) and every
 accession number against what the tools returned; the result is part of the answer as
