@@ -174,7 +174,10 @@ description contains), `q` (name contains or exact ticker), `exchange`,
 ones without gold financials, for a comps table or a tearsheet), `filer_category` (`large_accelerated`, `accelerated`,
 `non_accelerated`), `revenue_band` / `assets_band` (`lt100m`, `100m-1b`, `1b-10b`, `10b-100b`,
 `gte100b` on `revenue_ttm` / `total_assets_q`) and `where=<column>:<gt|gte|lt|lte>:<number>`
-(ratios as fractions: `operating_margin_ttm:gte:0.2`). `sort` is a column key or `name`, `sic` (the
+(ratios as fractions: `operating_margin_ttm:gte:0.2`). `fiscal_year_end_month` and the
+`fiscal_year_end` sort read `silver.fiscal_year_end_month` (migration 042): a 52/53-week year ending
+in a month's first week belongs to the month before (J&J's `0103` is December), while the row keeps
+the SEC's MMDD. `sort` is a column key or `name`, `sic` (the
 Industry column: by its name, not the code), `fiscal_year_end`, `filer_category`,
 `state_of_incorporation`, `-` for descending; nulls last.
 `limit` (500 as JSON, 5000 as CSV), `offset`, `format=json|csv`. JSON:
@@ -748,10 +751,16 @@ from `readable()` (financials) and passes them into the SQL (with the catalog pu
 
 - Findings from `ops.check_financials` / `ops.check_segments` (`kind` = check name: `series_gap`,
   `overlapping_quarters`, `calendar_collision`, `annual_sum`, `impossible_value`, `sign_flip`,
-  `outlier`, `segment_sum_*`, `restatement`), with `severity` error / warning / info and
-  `detail` as the check wrote it (dates, filings, relative sizes; never values).
+  `outlier`, `segment_sum_*`, `restatement`, `mistagged_fact`, `net_debt_gap`), with `severity`
+  error / warning / info and `detail` as the check wrote it (dates, filings, relative sizes; never
+  values). Migration 041: `mistagged_fact` is a fact gold leaves out (`rule`
+  `period_after_filing`, with `filed` and `periods`; `debt_above_liabilities`); `net_debt_gap` is
+  the latest balance sheet with debt and cash but no net debt (`investments_end` when an investments
+  series stopped, else debt that can't carry its interest); a `series_gap` with `repeated` is the same
+  quarter missing that many years.
 - `derived_quarters` (company route only): per metric, how many quarters are derived from
-  year-to-date differences, the period range and the latest one's filing.
+  year-to-date differences, the period range and the latest one's filing; `computed: true` when
+  they're gross profit as revenue less cost of revenue (migration 039), not a year-to-date difference.
 - `companyfacts_behind`: 10-K/10-Q filings in the public index (`silver.filings`), filed on or
   after the latest filing in the company's gold rows and within the last 120 days
   (`store.BEHIND_DAYS`; companyfacts lags by days, not months), that no XBRL fact cites yet.
@@ -762,7 +771,8 @@ from `readable()` (financials) and passes them into the SQL (with the catalog pu
   side a finding stays a `restatement`, with `may_be_split`; a factor of 1,000 or 1,000,000 gets
   `unit_change`. An `outlier` the same quarter also has in two other years gets `seasonal` and
   severity info. No check is suppressed: every finding still reaches a note.
-- Every note has `date` (restating or missing filing, else the period end; newest first) and
+- Every note has `date` (restating or missing filing, a mistagged fact's filing, else the period
+  end; newest first: a 2033 period mustn't top the list) and
   `filings` (`role`, accession, form, filed, EDGAR `filing_url` from the public index). The
   plain-language wording is the web app's (`services/web/src/company/notes.ts`).
 

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { entry, TESLA } from "../fixtures";
 import type { ScreenerRow } from "../types";
 import { MASKED_TITLE, screenRow } from "./rows";
-import { activeFilters, describe as describeScreen, fraction, parseScreen, screenParams, screenQuery } from "./screen";
+import { activeFilters, describe as describeScreen, fraction, fyeMonth, parseScreen, screenParams, screenQuery } from "./screen";
 
 describe("screen filters", () => {
   it("count what's set, for the folded filter band", () => {
@@ -148,5 +148,32 @@ describe("how a row reads what the API says about each value", () => {
     expect(r.cells.net_debt_q).toMatchObject({ text: "$4.68M", value: null, old: true, asOf: "Dec '20" });
     expect(r.cells.net_debt_q?.title).toContain("latest period is Sep 30, 2026");
     expect(r.cells.debt_to_equity_q).toMatchObject({ text: "1.50x", value: 1.5, old: false, asOf: "Jun '26" });
+  });
+});
+
+describe("the month a fiscal year ends in", () => {
+  it("gives a date in the first week to the month before, for every month", () => {
+    expect(fyeMonth("0103")).toBe("December"); // J&J
+    expect(fyeMonth("0102")).toBe("December"); // L3Harris, Snap-on, Textron, Stanley Black & Decker
+    expect(fyeMonth("0101")).toBe("December"); // Leidos, Exponent
+    expect(fyeMonth("0201")).toBe("January"); // Target, Macy's
+    expect(fyeMonth("0403")).toBe("March");
+    expect(fyeMonth("0703")).toBe("June");
+    expect(fyeMonth("1003")).toBe("September"); // Disney
+    expect(fyeMonth("1101")).toBe("October"); // Broadcom, Deere
+  });
+
+  it("keeps a late date in its own month", () => {
+    expect(fyeMonth("0131")).toBe("January"); // NVIDIA, Home Depot
+    expect(fyeMonth("0126")).toBe("January");
+    expect(fyeMonth("1231")).toBe("December");
+    expect(fyeMonth("0926")).toBe("September"); // Apple
+    expect(fyeMonth("0108")).toBe("January");
+  });
+
+  it("reads nothing into nothing", () => {
+    expect(fyeMonth(null)).toBeNull();
+    expect(fyeMonth("")).toBeNull();
+    expect(fyeMonth("1399")).toBeNull();
   });
 });

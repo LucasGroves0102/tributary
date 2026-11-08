@@ -32,6 +32,8 @@ export const CHECKS: Record<string, string> = {
   series_gap: "A quarter missing after four contiguous ones",
   sign_flip: "An expense or outflow whose sign differs from both neighbouring quarters",
   outlier: "A one-quarter spike of 10× or more: seasonal, a one-off, or a scale error in the filing",
+  mistagged_fact: "A figure kept out of the data: a period ending after its filing, or debt above total liabilities",
+  net_debt_gap: "Debt and cash on file but no net debt: investments or debt can't be told apart from a gap",
   segment_sum_business_segment: "Business segments not adding up to the company total (±1%)",
   segment_sum_geography: "Geographic segments not adding up to the company total (±1%)",
   segment_sum_product_service: "Product and service lines not adding up to the company total (±1%)",
@@ -221,8 +223,13 @@ export function describe(f: ScreenFilters): string {
 export const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August",
   "September", "October", "November", "December"];
 
-/** SEC fiscal year end "0126" (MMDD) → "January". */
+/** SEC fiscal year end "0126" (MMDD) → "January". A 52/53-week year ends up to a week into the next
+ * month, so a day of 1-7 belongs to the month before: J&J's "0103" is December, Target's "0201"
+ * January, and NVIDIA's "0131" stays January. silver.fiscal_year_end_month (migration 042), which the
+ * screener's filter and sort use, is the same rule: change both. */
 export function fyeMonth(fye: string | null): string | null {
   const m = Number(fye?.slice(0, 2));
-  return m >= 1 && m <= 12 ? MONTHS[m - 1]! : null;
+  if (!(m >= 1 && m <= 12)) return null;
+  const first = Number(fye?.slice(2, 4)) <= 7;
+  return MONTHS[first ? (m + 10) % 12 : m - 1]!;
 }

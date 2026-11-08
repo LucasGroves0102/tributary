@@ -41,7 +41,9 @@ COLUMNS: dict[str, tuple[str, str, str]] = {
 # sortable metadata → SQL over the base CTE (fixed fragments). "sic" is the Industry column, which
 # shows the SIC's name: it sorts by that name, not by the code.
 META_SORT = {"name": "b.name", "company_id": "b.company_id", "sic": "lower(b.industry)",
-             "fiscal_year_end": "b.fiscal_year_end", "filer_category": "b.filer_category",
+             # the month the fiscal year ends in (migration 042), so J&J's "0103" sorts as December
+             "fiscal_year_end": "silver.fiscal_year_end_month(b.fiscal_year_end)",
+             "filer_category": "b.filer_category",
              "state_of_incorporation": "b.state_of_incorporation"}
 OPS = {"gt": ">", "gte": ">=", "lt": "<", "lte": "<="}
 FilerCategory = Literal["large_accelerated", "accelerated", "non_accelerated"]
@@ -259,7 +261,7 @@ def compile_screen(s: Screen, granted: list[str] | None) -> Compiled:
                     " WHERE upper(e) = ANY(%(exchanges)s))")
         params["exchanges"] = [e.upper() for e in s.exchanges]
     if s.fye_months:
-        meta.append("left(c.fiscal_year_end, 2)::int = ANY(%(fye_months)s)")
+        meta.append("silver.fiscal_year_end_month(c.fiscal_year_end) = ANY(%(fye_months)s)")
         params["fye_months"] = s.fye_months
     if s.filer_categories:
         meta.append("gold.filer_category(c.filer_categories) = ANY(%(filer_categories)s)")

@@ -614,3 +614,24 @@ def test_a_real_reconciling_item_still_counts(conn):
         ).fetchone()[0]
         == 0
     )
+
+
+def test_the_screener_files_a_first_week_year_end_under_the_month_before(conn, token):
+    """J&J's 0103 is a December year, Target's 0201 a January one, NVIDIA's 0131 stays January: the
+    filter and the sort read silver.fiscal_year_end_month (migration 042). What's stored, and what
+    the API returns, stay the SEC's MMDD."""
+    for cid, fye in ((NORMAL, "0103"), (ABSURD, "0201"), (GENUINE, "0131"), (HIGH_DE, "1231")):
+        conn.execute("UPDATE silver.companies SET fiscal_year_end = %s WHERE company_id = %s",
+                     (fye, cid))
+    conn.execute("UPDATE silver.companies SET fiscal_year_end = '0630' WHERE company_id = ANY(%s)",
+                 ([STALE, BANK, NEGATIVE, BLANK],))
+
+    def fyes(**params):
+        params = {"columns": ["revenue_ttm"], "sort": "name", **params}
+        r = api(conn).get("/v1/screener", params=params, headers=token(USER))
+        assert r.status_code == 200, r.text
+        return [row["fiscal_year_end"] for row in r.json()["rows"]]
+
+    assert sorted(fyes(fiscal_year_end_month=12)) == ["0103", "1231"]
+    assert sorted(fyes(fiscal_year_end_month=1)) == ["0131", "0201"]
+    assert fyes(sort="fiscal_year_end")[-2:] in (["0103", "1231"], ["1231", "0103"])
