@@ -85,6 +85,42 @@ per fiscal year, SECURITY DEFINER because `query_api` has no grant on the facts 
 restates the segments' sum (NVIDIA's "109.0% more" is 4.5%). Stored findings keep their old figure
 until the check runs again (`make segments-rebuild`, or `SELECT ops.check_segments(array_agg(DISTINCT
 company_id)) FROM gold.segment_financials`).
+`038_metric_tags_moved.sql` to `041_quality_findings.sql` change which facts gold believes and what it
+computes from them; they need one `facts-fetcher --rebuild` (the `financials-rebuild` job) to reach
+existing rows, and `backout/` undoes them ([backout/README.md](backout/README.md)). Each file's header
+has the measurements behind its thresholds.
+- 038: tags a line moved to (Nike's investments to
+  `DebtSecuritiesAvailableForSaleExcludingAccruedInterestCurrent`, DTE's and Xcel's revenue to
+  `RegulatedAndUnregulatedOperatingRevenue`, Tesla's, Adobe's, Lennar's and Oracle's debt to
+  `LongTermDebt` / `LongTermNotesPayable` / `LongTermNotesAndLoans` / `DebtCurrent` /
+  `NotesPayableCurrent`, small filers' `Cash`, VF's `PaymentsForCapitalImprovements`) and
+  `silver.metric_sums`: a line filed as two tags, both from one filing for one date (a bank's
+  `InterestIncomeExpenseNet + NoninterestIncome`; NVIDIA's `DebtSecuritiesCurrent + EquitySecuritiesFvNi`).
+  A sum's parts are `silver.metric_tags` rows with `gold_line = false`: stored, never a line alone.
+- 039: `gold.usable_facts(ids)` (silver joined to the tags by tag, so a tag two metrics map serves
+  both: `EarningsPerShareBasicAndDiluted` gave no diluted EPS at 173 of the sample's companies; the sums;
+  a loss quarter's basic EPS as diluted; without proxy statements, periods ending over 7 days after
+  their filing, debt over five times both liabilities and assets, or a fallback debt tag at a bank;
+  a fallback debt total less its current portion) and `gold.best_facts(ids)` (each tag's latest filing,
+  then for revenue: a zero loses to another tag's later or same-filing value of $1M or more; Revenues
+  under 20% of contract revenue is a part; then tag priority). `gold.refresh_quarterly_financials`
+  reads `best_facts` (031's series rule unchanged), drops a reported quarter rounded for a sentence
+  for the exact year-to-date difference (NVIDIA's dividends 6,000 → 6,047), and adds gross profit as
+  revenue less cost where none is printed, behind the guard in the header (SIC, cost ≥ 15% of
+  revenue, margin ≥ operating margin, no large unexplained cost, within 8 points of the company's
+  median, quarters since 2019). Validated on hermes where gross profit is reported: 98.5% within a
+  point; fills 7,675 quarters at 559 companies.
+- 040: `gold.refresh_derived_financials` adds a TTM from the stated year where four quarters don't
+  exist (not when a must-be-positive year is negative or below its own quarters), and net debt's
+  rules: investments inside cash aren't subtracted twice; a recent, material investments series with
+  no value at the date, where the balance sheet has room for it, makes net debt absent; so does debt
+  that can't carry its interest (Ford). Net debt counts short-term investments only.
+- 041: `ops.check_financials` reads `best_facts` for the annual comparison and adds `mistagged_fact`
+  (error: a period after its filing, debt over five times liabilities and assets),
+  `net_debt_gap` (warning) and a repeated `series_gap` (the same quarter missing three or more
+  years); `ops.quality_summary` lists them.
+- `042_fiscal_year_end_month.sql`: `silver.fiscal_year_end_month(mmdd)`, the month a 52/53-week year
+  belongs to (a day of 1-7 is the month before). The screener's filter and sort; labels unchanged.
 `026_feed_status.sql` adds `ops.feed_status()`: when the newest filing was accepted by EDGAR and
 when it reached bronze, two timestamps and nothing else. It is SECURITY DEFINER (query_api still
 can't read `bronze.filings`) and backs the Query API's public `/v1/status`, which the
