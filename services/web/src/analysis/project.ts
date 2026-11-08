@@ -4,13 +4,14 @@
  * by query_api/workspaces.py ProjectState): `{companyId, peers, notes, done}`; its charts,
  * models and thesis are ordinary items in the workspace. Pure, tested without rendering.
  *
- * - Steps: STEPS (order, labels, guidance); the project header's tabs group them (GROUPS:
- *   Company = Business, What changed, Peers; Charts = Numbers; Model; Thesis; Monitor).
- * - Done: a step is done when the user marked it (`done`) or its work exists (`autoDone`):
- *   Business = notes written; Numbers = a chart saved in the project; Peers = at least one
- *   peer; Model = a model in the project; Thesis = the saved thesis's Core thesis section has
- *   text of the user's own; Monitor = the thesis was checked at least once. What changed is
- *   marked by hand.
+ * - Steps: STEPS (order, labels, guidance). The project header's tabs and the rail are the same
+ *   seven steps under the same names (a tab always opens its own step).
+ * - Done: a step is done only when the user marked it (`done`): a box they can always tick and
+ *   untick. Work in a step (`hasWork`: Business = notes written; Numbers = a chart saved in the
+ *   project; Peers = at least one peer; Model = a model in the project; Thesis = the saved
+ *   thesis's Core thesis section has text of the user's own; Monitor = the thesis was checked)
+ *   is a hint beside the box, never a tick: peers suggested at creation, one pinned chart or a
+ *   stub save don't make a step done, and nothing locks.
  * - Thesis template (`thesisTemplate`): plain Markdown headings (THESIS_SECTIONS) with the
  *   guidance under each as an HTML comment (invisible in the preview, one line to delete);
  *   Catalysts prefilled with the company's expected 10-Q/10-K dates (estimates, labelled so).
@@ -38,7 +39,7 @@ export const STEPS: StepInfo[] = [
   { key: "peers", label: "Peers", why: "The same numbers for comparable companies: is this business better or worse than its peers?" },
   { key: "model", label: "Model", why: "Revenue and operating income forward: base, bear and bull cases next to the company's own history." },
   { key: "thesis", label: "Thesis", why: "Your argument in plain words: core thesis, what the market misses, pillars with evidence, risks." },
-  { key: "monitor", label: "Monitor", why: "Each new filing checked against your thesis: which claims still hold, and what changed." },
+  { key: "monitor", label: "Monitor", why: "Check your thesis against the filings when you choose; when the company files a newer 10-K or 10-Q than your last check read, this step says so and offers a re-check." },
 ];
 
 export const STEP_KEYS = STEPS.map((s) => s.key);
@@ -46,16 +47,6 @@ export const stepInfo = (key: ProjectStep): StepInfo => STEPS.find((s) => s.key 
 export const stepNumber = (key: ProjectStep): number => STEP_KEYS.indexOf(key) + 1;
 export const nextStep = (key: ProjectStep): ProjectStep | null => STEP_KEYS[STEP_KEYS.indexOf(key) + 1] ?? null;
 
-export type Group = "company" | "charts" | "model" | "thesis" | "monitor";
-/** The project header's tabs: each opens the last step visited in it (or its first). */
-export const GROUPS: { key: Group; label: string; steps: ProjectStep[] }[] = [
-  { key: "company", label: "Company", steps: ["business", "changes", "peers"] },
-  { key: "charts", label: "Charts", steps: ["numbers"] },
-  { key: "model", label: "Model", steps: ["model"] },
-  { key: "thesis", label: "Thesis", steps: ["thesis"] },
-  { key: "monitor", label: "Monitor", steps: ["monitor"] },
-];
-export const groupOf = (step: ProjectStep): Group => GROUPS.find((g) => g.steps.includes(step))!.key;
 
 export const MAX_PEERS = 20;
 export const MAX_NOTES = 4000;
@@ -91,8 +82,8 @@ export interface Facts {
   checks: number;
 }
 
-/** A step whose work exists counts as done without being marked (the rules above). */
-export function autoDone(step: ProjectStep, p: ProjectState, f: Facts): boolean {
+/** The step has work in the project (the rules above): a hint, not done. */
+export function hasWork(step: ProjectStep, p: ProjectState, f: Facts): boolean {
   switch (step) {
     case "business":
       return p.notes.trim().length > 0;
@@ -111,11 +102,33 @@ export function autoDone(step: ProjectStep, p: ProjectState, f: Facts): boolean 
   }
 }
 
-export const stepDone = (step: ProjectStep, p: ProjectState, f: Facts): boolean => p.done.includes(step) || autoDone(step, p, f);
+/** Done means the user marked it. */
+export const stepDone = (step: ProjectStep, p: ProjectState): boolean => p.done.includes(step);
 
-/** Where a project opens: the first step that isn't done (the last one when all are). */
-export function firstOpenStep(p: ProjectState, f: Facts): ProjectStep {
-  return STEP_KEYS.find((s) => !stepDone(s, p, f)) ?? "monitor";
+/** What the box beside a step says when its work exists but it isn't marked done. */
+export function workHint(step: ProjectStep, p: ProjectState, f: Facts): string | null {
+  if (!hasWork(step, p, f) || stepDone(step, p)) return null;
+  switch (step) {
+    case "business":
+      return "Notes written";
+    case "numbers":
+      return `${f.charts} chart${f.charts === 1 ? "" : "s"} saved here`;
+    case "peers":
+      return `${p.peers.length} peer${p.peers.length === 1 ? "" : "s"} picked`;
+    case "model":
+      return `${f.models} model${f.models === 1 ? "" : "s"} here`;
+    case "thesis":
+      return "Core thesis written";
+    case "monitor":
+      return `Checked ${f.checks} time${f.checks === 1 ? "" : "s"}`;
+    case "changes":
+      return null;
+  }
+}
+
+/** Where a project opens: the first step the user hasn't marked done (the last one when all are). */
+export function firstOpenStep(p: ProjectState): ProjectStep {
+  return STEP_KEYS.find((s) => !stepDone(s, p)) ?? "monitor";
 }
 
 // --- the thesis template ----------------------------------------------------------------

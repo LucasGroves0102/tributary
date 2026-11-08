@@ -28,8 +28,6 @@ import {
   catalystLines,
   coreWritten,
   firstOpenStep,
-  groupOf,
-  GROUPS,
   hasOwnText,
   nextStep,
   restoreProject,
@@ -40,9 +38,8 @@ import {
   STEPS,
   thesisTemplate,
   toggleDone,
-  autoDone,
+  workHint,
   type Facts,
-  type Group,
   type SectionKey,
 } from "./project";
 import { Business, Numbers, PeersStep, WhatChanged } from "./Steps";
@@ -165,14 +162,14 @@ function Project({ token, user, projectId, step: asked, itemId, saved, readable,
     checks: checks.history.length,
   };
   // without a step in the route: where the project stood when it was opened (not a moving target)
-  const [opened] = useState(() => firstOpenStep(initial, facts));
+  const [opened] = useState(() => firstOpenStep(initial));
   const step = asked ?? opened;
   const [visited, setVisited] = useState<Set<ProjectStep>>(() => new Set([step]));
-  const [lastIn, setLastIn] = useState<Partial<Record<Group, ProjectStep>>>({});
   useEffect(() => {
     setVisited((v) => (v.has(step) ? v : new Set([...v, step])));
-    setLastIn((l) => ({ ...l, [groupOf(step)]: step }));
   }, [step]);
+  // M3: the rail says when the last check no longer covers the thesis or the filings
+  const recheck = useRecheckReason(token, companyId, checks, thesisStatus);
   useEffect(() => {
     if (!toast) return;
     const t = window.setTimeout(() => setToast(null), 8000);
@@ -246,7 +243,7 @@ function Project({ token, user, projectId, step: asked, itemId, saved, readable,
   }), [thesisId, createThesis, token, saved, itemsChanged]);
 
   const goStep = (s: ProjectStep) => go({ view: "analysis", projectId, step: s });
-  const doneCount = STEPS.filter((s) => stepDone(s.key, project, facts)).length;
+  const doneCount = STEPS.filter((s) => stepDone(s.key, project)).length;
   const modelId = (itemId && models.some((m) => m.item_id === itemId) ? itemId : models[0]?.item_id) ?? null;
   // the header row says what the viewer reads; until it arrives, ask (the API decides: 403 shows as no access)
   const canFilings = row ? access.includes("filings") : true;
@@ -254,8 +251,8 @@ function Project({ token, user, projectId, step: asked, itemId, saved, readable,
 
   const pane = (key: ProjectStep, body: ReactNode) => {
     const info = stepInfo(key);
-    const done = stepDone(key, project, facts);
-    const auto = autoDone(key, project, facts);
+    const done = stepDone(key, project);
+    const hint = workHint(key, project, facts);
     const next = nextStep(key);
     if (!visited.has(key) && !(key === "thesis" && thesisId)) return null;
     return (
@@ -266,11 +263,13 @@ function Project({ token, user, projectId, step: asked, itemId, saved, readable,
             <h2 id={`step-${key}`}>{info.label}</h2>
             <p className="muted small">{info.why}</p>
           </div>
-          <label className="chk step-done" title={auto ? "Done: its work is in the project" : "Mark this step done when you're happy with it"}>
-            <input type="checkbox" checked={done} disabled={auto && !project.done.includes(key)}
-              onChange={() => void saveProject(toggleDone(project, key))} />
-            {done ? "Done" : "Mark done"}
-          </label>
+          <div className="step-done-box">
+            <label className="chk step-done" title={done ? "You marked this step done; untick to reopen it" : "Mark this step done when you're happy with it"}>
+              <input type="checkbox" checked={done} onChange={() => void saveProject(toggleDone(project, key))} />
+              {done ? "Done" : "Mark done"}
+            </label>
+            {hint && <span className="faint small step-work">{hint}</span>}
+          </div>
         </div>
         {body}
         {next && (
@@ -307,17 +306,14 @@ function Project({ token, user, projectId, step: asked, itemId, saved, readable,
               <WorkspaceActions workspace={ws} saved={saved} what="analysis" onDeleted={() => go({ view: "analysis" })} />
             </div>
           </div>
+          {/* #153: the same steps under the same names as the rail; each tab opens its own step */}
           <nav className="tabs" aria-label="Project">
-            {GROUPS.map((g) => {
-              const target = lastIn[g.key] ?? g.steps[0]!;
-              const on = groupOf(step) === g.key;
-              return (
-                <a key={g.key} href={href({ view: "analysis", projectId, step: target })} aria-current={on ? "page" : undefined}>
-                  {g.label}
-                  {g.key === "thesis" && thesisStatus?.dirty && <span className="dirty" title="Unsaved changes"> ●</span>}
-                </a>
-              );
-            })}
+            {STEPS.map((s) => (
+              <a key={s.key} href={href({ view: "analysis", projectId, step: s.key })} aria-current={step === s.key ? "page" : undefined}>
+                {s.label}
+                {s.key === "thesis" && thesisStatus?.dirty && <span className="dirty" title="Unsaved changes"> ●</span>}
+              </a>
+            ))}
           </nav>
         </section>
         {projectError && <div className="banner" role="alert">{projectError} <button className="btn sm ghost" onClick={() => setProjectError(null)}>Dismiss</button></div>}
@@ -332,14 +328,16 @@ function Project({ token, user, projectId, step: asked, itemId, saved, readable,
           <nav className="step-rail" aria-label="Guided steps">
             <ol>
               {STEPS.map((s, i) => {
-                const done = stepDone(s.key, project, facts);
+                const done = stepDone(s.key, project);
+                const alert = s.key === "monitor" ? recheck : null;
                 return (
                   <li key={s.key}>
                     <a href={href({ view: "analysis", projectId, step: s.key })} aria-current={step === s.key ? "step" : undefined}
                       className={done ? "done" : undefined}>
                       <span className="n" aria-hidden="true">{done ? "✓" : i + 1}</span>
                       <span className="grow">{s.label}</span>
-                      <span className="visually-hidden">{done ? ", done" : ", not done"}</span>
+                      {alert && <span className="step-alert" title={alert}>re-check</span>}
+                      <span className="visually-hidden">{done ? ", done" : ", not done"}{alert ? `, ${alert}` : ""}</span>
                     </a>
                   </li>
                 );
@@ -479,8 +477,31 @@ function ModelStep({ token, companyId, ticker, models, modelId, saved, projectId
   );
 }
 
-/** Step 7: Check my thesis (the shared check, beside the project's thesis) and Revisit's
- * new-filing notice; KPIs and red lines come next (phase 3). */
+/** Why the last check no longer covers the thesis (its text changed since) or the filings (a
+ * newer 10-K/10-Q is in the index), for the rail; null when it does or there's no check. */
+function useRecheckReason(token: string, companyId: string, checks: ReturnType<typeof useThesisCheck>,
+  status: ThesisStatus | null): string | null {
+  const last = checks.history[0];
+  const newer = useNewerFiling(token, last, companyId);
+  const [hash, setHash] = useState<string | null>(null);
+  const savedText = status?.saved ?? null;
+  useEffect(() => {
+    if (savedText === null) return;
+    let live = true;
+    textHash(companyId, savedText).then((x) => live && setHash(x)).catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [companyId, savedText]);
+  if (!last) return null;
+  if (newer) return `a newer ${newer.form} was filed ${day(newer.filed, true)} after your last check`;
+  if (hash !== null && hash !== last.text_hash) return "the thesis changed after your last check";
+  return null;
+}
+
+/** Step 7: Check my thesis (the shared check, beside the project's thesis) and where the last
+ * check stands against the filing index (Revisit): a newer 10-K/10-Q offers a re-check, and
+ * otherwise the step says which filing the last check read. Checks run when the user asks. */
 function Monitor({ token, companyId, projectId, thesisId, status, checks, label, onQuote }: {
   token: string;
   companyId: string;
@@ -511,11 +532,12 @@ function Monitor({ token, companyId, projectId, thesisId, status, checks, label,
   if (!thesisId) {
     return (
       <p className="empty card">
-        Nothing to monitor yet: <a href={href({ view: "analysis", projectId, step: "thesis" })}>write the thesis</a> first. Each
-        new 10-K or 10-Q is then checked against it here.
+        Nothing to monitor yet: <a href={href({ view: "analysis", projectId, step: "thesis" })}>write the thesis</a> first. Then
+        check it here; when the company files a newer 10-K or 10-Q than your last check read, this step says so.
       </p>
     );
   }
+  const read = checks.history[0]?.filings?.find((f) => f.company_id === companyId)?.latest ?? null;
   return (
     <>
       <div className="row wrap monitor-bar">
@@ -527,24 +549,22 @@ function Monitor({ token, companyId, projectId, thesisId, status, checks, label,
           {status?.dirty && " · the thesis has unsaved changes"}
         </span>
       </div>
-      {newer && !checking && (
+      {/* #154: the new-filing notice the guide promises, always in its place */}
+      {newer && !checking ? (
         <div className="report-status revisit" role="status">
           New {newer.form} filed {day(newer.filed, true)} since your last check — re-check?{" "}
           <button className="btn sm" onClick={checks.start} disabled={!status || status.dirty || !written} title={why}>Re-check</button>
         </div>
+      ) : (
+        <p className="faint small filing-watch" role="status">
+          {!checks.history.length
+            ? "Once you've checked the thesis, a newer 10-K or 10-Q than that check read shows here, with a re-check."
+            : read
+              ? `No newer 10-K or 10-Q since your last check, which read the ${read.form} filed ${day(read.filed, true)}. A newer one shows here, with a re-check.`
+              : "A 10-K or 10-Q filed after your last check shows here, with a re-check."}
+        </p>
       )}
       <CheckPanel checks={checks} stale={!!checks.shown && hash !== null && checks.shown.text_hash !== hash} onQuote={onQuote} label={label} />
-      <section className="card coming-next" aria-label="Coming next: KPIs and red lines">
-        <div className="card-h">
-          <h3>KPIs and red lines</h3>
-          <span className="tag e">coming next</span>
-        </div>
-        <p className="empty">
-          Next: the 5-7 KPIs from your thesis as rules with red lines (e.g. “gross margin below 60%”), checked automatically
-          after each new filing, so the project says whether the latest 10-Q confirms, is neutral to or challenges the thesis.
-          Until then, list them under “KPIs to watch” and re-check when a filing arrives.
-        </p>
-      </section>
     </>
   );
 }

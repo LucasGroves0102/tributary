@@ -242,9 +242,14 @@ it("switches steps from the rail and the header's tabs without losing an unsaved
   await render(`#/analysis/${PID}/thesis`, "textarea.thesis-text");
   const head = container.querySelector(".project-head")!;
   expect(head.querySelector("h1")?.textContent).toBe("Nvidia");
-  expect([...head.querySelectorAll(".tabs a")].map((a) => a.textContent)).toEqual(["Company", "Charts", "Model", "Thesis", "Monitor"]);
-  expect([...container.querySelectorAll(".step-rail a")].map((a) => a.textContent?.replace(/,.*$/, ""))).toEqual([
-    "1Business", "2Numbers", "3What changed", "✓Peers", "✓Model", "6Thesis", "7Monitor"]); // a peer and a model exist
+  // #153: the tabs are the rail's steps, under the same names
+  const labels = ["Business", "Numbers", "What changed", "Peers", "Model", "Thesis", "Monitor"];
+  expect([...head.querySelectorAll(".tabs a")].map((a) => a.textContent)).toEqual(labels);
+  expect([...head.querySelectorAll<HTMLAnchorElement>(".tabs a")].map((a) => a.getAttribute("href")!.split("/").pop())).toEqual(
+    ["business", "numbers", "changes", "peers", "model", "thesis", "monitor"]);
+  // #71: a peer and a model exist, but nothing is done until the user says so
+  expect([...container.querySelectorAll(".step-rail a")].map((a) => a.textContent?.replace(/,.*$/, ""))).toEqual(
+    labels.map((l, i) => `${i + 1}${l}`));
   await act(async () => type(thesisText(), `${TEMPLATE}\nMy own words.`));
   await settle();
   expect(head.querySelector(".tabs .dirty")).not.toBeNull();
@@ -254,7 +259,9 @@ it("switches steps from the rail and the header's tabs without losing an unsaved
   expect(container.querySelector(".step-pane:not([hidden]) h2")?.textContent).toBe("Monitor");
   expect(button("Check my thesis").disabled).toBe(true);
   expect(button("Check my thesis").title).toContain("Save the thesis first");
-  expect(container.querySelector(".coming-next .tag")?.textContent).toBe("coming next");
+  // #154: no promise of what isn't there; where the filings stand is always said
+  expect(container.querySelector(".coming-next")).toBeNull();
+  expect(container.querySelector(".filing-watch")?.textContent).toContain("a newer 10-K or 10-Q than that check read shows here");
   // the rail: another step, then back; the thesis editor stayed mounted with the draft
   await goTo(`#/analysis/${PID}/business`, ".notes-text");
   await goTo(`#/analysis/${PID}/thesis`, "textarea.thesis-text");
@@ -286,8 +293,11 @@ it("pins a chart from Numbers into the chosen section of the thesis, saving it",
   expect(md.indexOf(`[[embed:${chartId}]]`)).toBeGreaterThan(risks);
   expect(md.indexOf(`[[embed:${chartId}]]`)).toBeLessThan(md.indexOf("## What would prove me wrong"));
   expect(container.querySelector(".pin-toast")?.textContent).toContain("Pinned the chart under Risks and mitigants in your thesis.");
-  // the Numbers step is done: a chart is saved in the project
-  expect(container.querySelector('.step-rail a[href$="/numbers"]')?.className).toBe("done");
+  // a chart saved in the project is work in the Numbers step, not a tick (#71)
+  expect(container.querySelector('.step-rail a[href$="/numbers"]')?.className).toBe("");
+  await goTo(`#/analysis/${PID}/numbers`, ".step-pane:not([hidden]) .step-work");
+  expect(visible(".step-work").textContent).toBe("1 chart saved here");
+  expect((visible(".step-done input") as HTMLInputElement).disabled).toBe(false);
   // the thesis draws it: its preview resolves the new item
   await goTo(`#/analysis/${PID}/thesis`, ".thesis-doc");
   await waitFor('.thesis-doc .report-embed[aria-label^="NVDA: free cash flow"]');
@@ -391,10 +401,17 @@ it("saves the business notes and marks steps done by hand", async () => {
   await settle();
   const patch = writes.find((w) => w.method === "PATCH")!;
   expect(patch.body).toEqual({ project: { companyId: NVDA, peers: [AAPL], notes: "GPUs to clouds.", done: [] } });
+  // notes are work, not done: the box stays the user's to tick (#71)
+  expect(container.querySelector('.step-rail a[href$="/business"]')?.className).toBe("");
+  expect(visible(".step-work").textContent).toBe("Notes written");
+  await click(visible(".step-done input") as HTMLInputElement);
   expect(container.querySelector('.step-rail a[href$="/business"]')?.className).toBe("done");
   await goTo(`#/analysis/${PID}/changes`, ".diff");
   const mark = visible(".step-done input") as HTMLInputElement;
   await click(mark);
-  expect(writes.filter((w) => w.method === "PATCH").at(-1)!.body).toMatchObject({ project: { done: ["changes"] } });
-  expect(container.querySelector(".project-progress")?.getAttribute("aria-label")).toBe("4 of 7 steps done");
+  expect(writes.filter((w) => w.method === "PATCH").at(-1)!.body).toMatchObject({ project: { done: ["business", "changes"] } });
+  expect(container.querySelector(".project-progress")?.getAttribute("aria-label")).toBe("2 of 7 steps done");
+  // and unticked again: nothing locks
+  await click(visible(".step-done input") as HTMLInputElement);
+  expect(writes.filter((w) => w.method === "PATCH").at(-1)!.body).toMatchObject({ project: { done: ["business"] } });
 });

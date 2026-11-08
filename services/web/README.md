@@ -363,11 +363,13 @@ per company, from its filings to a thesis that's checked after every filing. Rul
   `access=financials` on the API too), suggested peers from `/peers` (readable ones, the first
   3 ticked), a name; it creates the workspace with its project and opens step 1.
 - **A project** (`#/analysis/{id}[/{step}[/{item}]]`, `ProjectPage.tsx`): a header with the
-  company (public identity), "n of 7 steps done" and tabs **Company · Charts · Model · Thesis ·
-  Monitor**, which group the steps (Company = Business, What changed, Peers) and reopen the last
-  one visited; a rail of the 7 steps with a done marker each (done = marked by hand, or its work
-  exists: notes, a chart, a peer, a model, the Core thesis written, a check; What changed by
-  hand only). Without a step in the URL it opens at the first step not done. Each step is a pane
+  company (public identity), "n of 7 steps done" and tabs for the 7 steps under the rail's names
+  (each tab opens its own step); a rail of the 7 steps with a done marker each. Done means the
+  user ticked it (`project.done`), never automatic and never locked: work in a step (notes, a
+  saved chart, peers, a model, the Core thesis written, a check: `hasWork`) shows as a hint under
+  the box ("1 chart saved here"). The rail's Monitor says "re-check" when the last check no longer
+  covers the thesis (its text changed) or a newer 10-K/10-Q is filed. Without a step in the URL
+  it opens at the first step not ticked. Each step is a pane
   that stays mounted once visited (hidden, not unmounted), so switching is instant and keeps
   everything typed; editors take `active` so only the visible one answers Ctrl+S.
 - **Steps**, each reusing a screen scoped to the company: 1 **Business**: "How it makes money"
@@ -382,8 +384,9 @@ per company, from its filings to a thesis that's checked after every filing. Rul
   5 **Model**: the project's models (ModelPage embedded, bear/base/bull), "Create the model"
   from the company's history; 6 **Thesis**: ThesisPage embedded (no back link, no company
   picker); 7 **Monitor**: Check my thesis (disabled while the thesis has unsaved changes or only
-  template text), Revisit's new-filing notice, the check panel (a quote opens the Thesis step
-  and marks it), and a "coming next" card for KPIs and red lines.
+  template text; checks run when the user asks), where the filings stand (Revisit's new-filing
+  notice with a re-check, or which 10-K/10-Q the last check read), and the check panel (a quote
+  opens the Thesis step and marks it).
 - **Thesis template**: a project's thesis starts from `thesisTemplate`: `# Company: thesis`, then
   Core thesis, Variant perception, Pillars (with `### Pillar 1`), Catalysts (prefilled with the
   next expected 10-Q/10-K dates, `/expected-filings?periods=4`, labelled estimated), Risks and
