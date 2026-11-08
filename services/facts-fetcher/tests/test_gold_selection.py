@@ -855,6 +855,32 @@ def test_a_stated_year_fills_ttm_when_quarters_dont_exist(conn):
     assert inputs["quarters"][0]["value"] == 1833
 
 
+def test_a_stated_year_smaller_than_its_own_quarters_is_a_part(conn):
+    # Clover Health's 2022: a 1,097 annual tag beside quarters of about 800 each, one missing
+    put(
+        conn,
+        [
+            *[
+                ("Revenues", s, e, 800, f"q{e}", "2026-11-02")
+                for s, e in [
+                    ("2025-01-01", "2025-03-31"),
+                    ("2025-04-01", "2025-06-30"),
+                    ("2025-10-01", "2025-12-31"),
+                ]
+            ],
+            (
+                "RevenueFromContractWithCustomerExcludingAssessedTax",
+                *FY,
+                1097,
+                "k",
+                "2026-02-25",
+                "10-K",
+            ),
+        ],
+    )
+    assert derived(conn, "revenue", "2025-12-31", "ttm") is None
+
+
 def test_quarters_win_over_the_stated_year(conn):
     put(
         conn,

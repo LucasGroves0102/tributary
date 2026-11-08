@@ -5,7 +5,10 @@
 -- whose quarters are incomplete had no annual figure even with the 10-K's own total in silver: NVIDIA's
 -- FY2023 capex (1,833; its 10-Qs that year tag neither quarters nor six months in us-gaap), Amazon's
 -- FY2017 capex (11,955; no fact ends 2017-06-30). An annual-length fact (350-380 days) now fills a TTM
--- row where the sums left none. inputs.quarters has that one fact, so anything reading it still works.
+-- row where the sums left none, unless (for a metric that can't be negative) it is negative or smaller
+-- than the quarters gold does have inside it: then it's another tag's part. On the sample that keeps
+-- out Clover Health's 2022 revenue (1,097 against about 3,000) and Peoples Bancorp's 2018 (-127).
+-- inputs.quarters has that one fact, so anything reading it still works.
 --
 -- Net debt: long_term_debt + long_term_debt_current - cash - short_term_investments, with the
 -- investments term decided per date:
@@ -120,7 +123,17 @@ BEGIN
     WHERE NOT EXISTS (
         SELECT 1 FROM gold.derived_financials d
         WHERE d.company_id = b.company_id AND d.span = 'ttm' AND d.metric = b.metric
-          AND d.period_end = b.period_end);
+          AND d.period_end = b.period_end)
+      -- a year that can't hold the quarters gold has for it is another tag's part, not the year
+      -- (Clover Health's 2022 revenue at 1,097 beside quarters of about 800 each; Peoples Bancorp's
+      -- 2018 at -127): only for the metrics that can't be negative (029's list)
+      AND NOT (b.metric IN ('revenue', 'cost_of_revenue', 'research_and_development', 'sga', 'capex',
+                            'depreciation_amortization', 'stock_based_compensation',
+                            'share_buybacks', 'dividends_paid')
+               AND (b.value < 0 OR b.value < 0.99 * (
+                   SELECT coalesce(sum(q.value), 0) FROM gold.quarterly_financials q
+                   WHERE q.company_id = b.company_id AND q.metric = b.metric
+                     AND q.period_start >= b.period_start - 7 AND q.period_end <= b.period_end + 7)));
 
     WITH facts AS (
         SELECT 'quarter' AS span, company_id, metric, period_start, period_end, value,
