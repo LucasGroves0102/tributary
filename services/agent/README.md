@@ -22,8 +22,13 @@ as tool errors the model must report.
 the Query API answers, the tool lists no names and the API rejects unknown ones).
 
 Before an answer is returned, `verify.py` checks every dollar figure against the tool results
-(matched, derived as a sum or difference, or quoted from filing text) and every accession number
-against what the tools returned; the result is part of the answer as `verification`.
+(matched, derived as a sum or difference of one metric, or quoted from filing text) and every
+accession number against what the tools returned; the result is part of the answer as
+`verification`. A derived metric's `inputs` count as returned values (net debt's cash and debt, a
+growth rate's year-ago value, a TTM's quarters), and a filing table's cells are read at the scale
+its text states ("(In thousands)", "($ in millions)"; millions when it states none), decimals
+included. Those two came after the recorded suites and only apply to a figure the original rules
+left unverified; a figure that isn't in the data still fails.
 
 ## agent-api
 
