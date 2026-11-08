@@ -18,8 +18,8 @@ export const NOTE_GROUPS: { key: string; label: string; kinds: (k: string) => bo
   { key: "freshness", label: "Freshness", kinds: (k) => k === "companyfacts_behind" },
   { key: "splits", label: "Stock splits", kinds: (k) => k === "stock_split" },
   { key: "restated", label: "Restated figures", kinds: (k) => k === "restatement" || k === "annual_sum" },
-  { key: "periods", label: "Gaps and overlapping periods", kinds: (k) => ["series_gap", "overlapping_quarters", "calendar_collision"].includes(k) },
-  { key: "values", label: "Values to double-check", kinds: (k) => ["impossible_value", "sign_flip", "outlier"].includes(k) || k.startsWith("segment_sum_") },
+  { key: "periods", label: "Gaps and overlapping periods", kinds: (k) => ["series_gap", "overlapping_quarters", "calendar_collision", "net_debt_gap"].includes(k) },
+  { key: "values", label: "Values to double-check", kinds: (k) => ["impossible_value", "sign_flip", "outlier", "mistagged_fact"].includes(k) || k.startsWith("segment_sum_") },
   { key: "derived", label: "Derived quarters", kinds: (k) => k === "derived_quarters" },
 ];
 
@@ -117,13 +117,35 @@ export function explain(n: DataNote, now = Date.now()): Explained {
           "usually because a quarter was later restated or reclassified. TTM uses the quarters.",
       };
     }
-    case "series_gap":
+    case "series_gap": {
+      const years = num(d.repeated);
       return {
-        title: `${m}: missing quarter`,
+        title: years ? `${m}: the same quarter missing in ${years} years` : `${m}: missing quarter`,
         text:
-          `No quarterly ${m.toLowerCase()} is reported or derivable from ${date(d.missing_from)} to ${date(d.missing_to)}. ` +
+          `No quarterly ${m.toLowerCase()} is reported or derivable from ${date(d.missing_from)} to ${date(d.missing_to)}` +
+          (years ? `, and the same quarter is missing in ${years} fiscal years: the 10-K tags the year in a way the 10-Qs don't, often with the company's own tag. ` : ". ") +
           "TTM, year-over-year growth and charts that need that quarter are left blank rather than guessed.",
       };
+    }
+    case "net_debt_gap":
+      return {
+        title: "Net debt: left out",
+        text: d.investments_end
+          ? `Debt and cash are on file for ${pe}, but net debt is left out rather than guessed: short-term investments were last tagged at ${date(d.investments_end)}, and this balance sheet has room for them under a line the filing doesn't tag in a standard way. Check the filing's balance sheet.`
+          : `Debt and cash are on file for ${pe}, but net debt is left out: interest expense is more than half of the debt tagged, so the tagged debt can only be part of it. Check the filing's debt note.`,
+      };
+    case "mistagged_fact": {
+      const filed = d.filed ? ` filed ${date(d.filed)}` : "";
+      return str(d.rule) === "debt_above_liabilities"
+        ? {
+            title: `${m}: left out, larger than total liabilities`,
+            text: `The ${str(d.form) ?? "filing"}${filed} tags ${m.toLowerCase()} for ${pe} above the company's total liabilities at that date, which can't be right, usually a scale slip in its XBRL. The figure isn't used.`,
+          }
+        : {
+            title: `${m}: left out, a period after its filing`,
+            text: `The ${str(d.form) ?? "filing"}${filed} tags ${m.toLowerCase()} for ${pe}, a period that hadn't ended when it was filed, almost always a typing slip in its XBRL. The figure isn't used.`,
+          };
+    }
     case "overlapping_quarters": {
       const days = num(d.overlap_days);
       return {
@@ -176,6 +198,14 @@ export function explain(n: DataNote, now = Date.now()): Explained {
     }
     case "derived_quarters": {
       const q = num(d.quarters) ?? 0;
+      if (d.computed === true) {
+        return {
+          title: `${m}: revenue less cost of revenue`,
+          text:
+            `For ${q} quarter${q === 1 ? "" : "s"} between ${date(d.first_period_end)} and ${date(d.latest_period_end)} the filing prints no gross profit, so it's revenue less its cost of revenue. ` +
+            "That only reads as a gross margin for some businesses, so it's left blank for banks, insurers, utilities, oil and gas, telecoms, restaurants and any quarter where cost is under 15% of revenue or the result looks out of line.",
+        };
+      }
       return {
         title: `${m}: ${q} derived quarter${q === 1 ? "" : "s"}`,
         text:

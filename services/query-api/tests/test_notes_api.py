@@ -298,3 +298,13 @@ def test_every_finding_still_reaches_a_note():
     notes = shape(findings, [], [], {})
     covered = sum(n["detail"]["findings"] if n["kind"] == "stock_split" else 1 for n in notes)
     assert covered == len(findings)
+
+
+def test_a_mistagged_fact_is_dated_by_its_filing_not_its_period():
+    """Legacy Housing's income tax at 2033-03-31, in a 10-Q filed 2024-05-09: not the newest note
+    until 2033."""
+    from datetime import date
+
+    from query_api.notes import note_date
+    note = {"period_end": date(2033, 3, 31), "detail": {"filed": "2024-05-09"}}
+    assert note_date(note) == date(2024, 5, 9)

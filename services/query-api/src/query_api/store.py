@@ -415,7 +415,11 @@ class Store:
                     LIMIT %(limit)s OFFSET %(offset)s
                 )
                 SELECT p.accession_no, p.company_id, c.name, p.cik, p.form,
-                       p.filing_date AS filed, p.accepted_at, p.report_date AS period_of_report,
+                       p.filing_date AS filed, p.accepted_at,
+                       -- the SEC's index gives some old 10-Ks and 10-Qs their filing date as the
+                       -- period (NVIDIA's 2008 10-K): a report can't cover a period ending that day
+                       CASE WHEN p.form ~ '^10-[KQ]' AND p.report_date = p.filing_date
+                            THEN NULL ELSE p.report_date END AS period_of_report,
                        p.primary_document,
                        CASE WHEN {sections} THEN (
                            SELECT count(DISTINCT s.section_key) FROM silver.filing_sections s
@@ -601,7 +605,8 @@ class Store:
                 FROM ops.quality_findings f
                 LEFT JOIN ops.quality_companies q ON q.company_id = f.company_id
                 WHERE {scope}
-                ORDER BY coalesce((f.detail->>'restated_filed')::date, f.period_end) DESC,
+                ORDER BY coalesce((f.detail->>'restated_filed')::date, (f.detail->>'filed')::date,
+                                  f.period_end) DESC,
                          f.company_id, f.check_name, f.metric
                 LIMIT %(limit)s
                 """, {"c": company_ids, "limit": limit})
@@ -614,7 +619,8 @@ class Store:
                            min(period_end) AS first_period_end,
                            max(period_end) AS latest_period_end,
                            (array_agg(accession_no ORDER BY period_end DESC))[1]
-                               AS latest_accession
+                               AS latest_accession,
+                           bool_and(source_tag LIKE 'derived:%%') AS computed
                     FROM gold.quarterly_financials
                     WHERE company_id = ANY(%s) AND value_source = 'derived'
                     GROUP BY company_id, metric

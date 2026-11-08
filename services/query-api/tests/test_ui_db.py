@@ -489,7 +489,8 @@ def test_status_data_runs_as_query_api_without_bronze_or_ops_access(conn):
                               " FROM ops.public_completeness()") == [(2, 150, 1, 2, 1)]
     coverage = as_query_api(conn, "SELECT * FROM ops.public_coverage()")[0]
     assert coverage[:4] == (before[0] + 1, before[1] + 1, before[2] + 1, before[3] + 7)
-    assert len(as_query_api(conn, "SELECT * FROM ops.public_quality()")) == 11
+    # 023's eleven checks, plus 041's mistagged_fact and net_debt_gap
+    assert len(as_query_api(conn, "SELECT * FROM ops.public_quality()")) == 13
 
     body = client(conn).get("/v1/status/data").json()  # no token
     assert body["ingest"]["filings"] == 2 and body["ingest"]["live_pct"] == 50.0
@@ -498,3 +499,19 @@ def test_status_data_runs_as_query_api_without_bronze_or_ops_access(conn):
         with pytest.raises(psycopg.errors.InsufficientPrivilege):
             with conn.transaction():
                 as_query_api(conn, f"SELECT 1 FROM {table} LIMIT 1")
+
+
+def test_a_filing_index_period_on_the_filing_date_reads_as_unknown(conn):
+    """NVIDIA's 2008 10-K: the SEC's index gives the filing date as the period. An 8-K's event can
+    be the day it's filed, so only periodic reports lose it."""
+    for accession, form, filed, period in (
+            (f"{C}-08-000001", "10-K", "2008-03-21", "2008-03-21"),
+            (f"{C}-08-000002", "10-Q", "2008-05-21", "2008-04-27"),
+            (f"{C}-08-000003", "8-K", "2008-05-08", "2008-05-08")):
+        conn.execute("INSERT INTO bronze.submission_filings (accession_no, cik, form, filing_date,"
+                     " report_date) VALUES (%s, %s, %s, %s, %s)",
+                     (accession, C, form, filed, period))
+    rows = Store(OneConnection(conn)).filing_index(
+        "t-nobody", [C], [], date(2008, 1, 1), date(2008, 12, 31), 10, 0, None)
+    assert {r["form"]: r["period_of_report"] for r in rows} == {
+        "10-K": None, "10-Q": date(2008, 4, 27), "8-K": date(2008, 5, 8)}

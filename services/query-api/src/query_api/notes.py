@@ -67,10 +67,11 @@ FILING_LIST_KEYS = {"quarter_accessions": "quarter"}
 
 
 def note_date(n: dict) -> date | None:
-    """When the note happened, for "recent" ordering: the restating or missing filing's date,
-    else the period end."""
+    """When the note happened, for "recent" ordering: the restating or missing filing's date, a
+    mistagged fact's filing (its period end can be 2033, and would top every list until then), else
+    the period end."""
     d = n.get("detail") or {}
-    for key in ("restated_filed", "missing_filed"):
+    for key in ("restated_filed", "missing_filed", "filed"):
         if d.get(key):
             return _as_date(d[key])
     return _as_date(n.get("period_end"))
@@ -255,7 +256,9 @@ def shape(findings: list[dict], derived: list[dict], behind: list[dict],
             "metric": r["metric"], "period_end": r["latest_period_end"],
             "detail": {"quarters": r["quarters"],
                        "first_period_end": _iso(r["first_period_end"]),
-                       "latest_period_end": _iso(r["latest_period_end"])},
+                       "latest_period_end": _iso(r["latest_period_end"]),
+                       # gross profit that is revenue less cost, not a year-to-date difference (039)
+                       **({"computed": True} if r.get("computed") else {})},
             "checked_at": None,
             "filings": [cite("source", r["latest_accession"])],
         })

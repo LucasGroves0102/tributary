@@ -154,3 +154,43 @@ it("links only to EDGAR", () => {
   expect(edgarUrl({ ...f, filing_url: "javascript:alert(1)" })).toBeNull();
   expect(edgarUrl({ ...f, filing_url: null })).toBeNull();
 });
+
+describe("what gold leaves out reads as what it is", () => {
+  it("names a period that hadn't ended when the filing was filed, not a gap to 2032", () => {
+    const e = explain(note("mistagged_fact", { rule: "period_after_filing", form: "10-Q", filed: "2024-05-09" }, { metric: "income_tax", period_end: "2033-03-31" }));
+    expect(e.title).toBe("Income tax: left out, a period after its filing");
+    expect(e.text).toContain("10-Q filed May 9, 2024");
+    expect(e.text).toContain("hadn't ended when it was filed");
+  });
+
+  it("names a debt figure above total liabilities as a scale slip", () => {
+    const e = explain(note("mistagged_fact", { rule: "debt_above_liabilities", form: "10-K", filed: "2020-03-11" }, { metric: "long_term_debt", period_end: "2019-12-31" }));
+    expect(e.title).toBe("Long-term debt: left out, larger than total liabilities");
+    expect(e.text).toContain("scale slip");
+  });
+
+  it("says why net debt is left out, with or without an ended investments series", () => {
+    const ended = explain(note("net_debt_gap", { investments_end: "2025-10-26" }, { metric: "net_debt", period_end: "2026-07-26" }));
+    expect(ended.title).toBe("Net debt: left out");
+    expect(ended.text).toContain("last tagged at Oct 26, 2025");
+    const part = explain(note("net_debt_gap", {}, { metric: "net_debt", period_end: "2020-12-31" }));
+    expect(part.text).toContain("interest expense is more than half");
+  });
+
+  it("files them with gaps and with values to double-check", () => {
+    const groups = groupNotes([note("net_debt_gap", {}), note("mistagged_fact", {})]);
+    expect(groups.map((g) => [g.key, g.notes.length]).sort()).toEqual([["periods", 1], ["values", 1]]);
+  });
+});
+
+it("says when the same quarter is missing year after year", () => {
+  const e = explain(note("series_gap", { missing_from: "2020-10-26", missing_to: "2021-01-31", repeated: 5 }, { metric: "capex" }));
+  expect(e.title).toBe("Capex: the same quarter missing in 5 years");
+  expect(e.text).toContain("the 10-K tags the year in a way the 10-Qs don't");
+});
+
+it("says a computed gross profit is revenue less cost", () => {
+  const e = explain(note("derived_quarters", { quarters: 12, first_period_end: "2023-12-31", latest_period_end: "2026-09-30", computed: true }, { metric: "gross_profit" }));
+  expect(e.title).toBe("Gross profit: revenue less cost of revenue");
+  expect(e.text).toContain("the filing prints no gross profit");
+});
