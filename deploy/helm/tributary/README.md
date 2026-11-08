@@ -39,7 +39,9 @@ kubectl -n tributary create job --from=cronjob/seed-documents seed-documents-1
 ```
 
 `financials-bulk` (every filer's XBRL facts) and `submissions` (every filer's filing history)
-also ship suspended; their comments in `values.yaml` describe the first run.
+also ship suspended; their comments in `values.yaml` describe the first run. So do `segments`
+and `section-index`, which read the crawled documents; on hermes both run hourly
+(`suspend: false` in the Flux release) since the crawl finished.
 
 `financials-rebuild` ships suspended and never runs on a schedule: it re-derives silver and gold from
 the payloads already in bronze (`facts-fetcher --rebuild`, no SEC requests, only `uses: postgres`),
@@ -61,9 +63,9 @@ kubectl -n tributary create job --from=cronjob/financials-rebuild financials-reb
 
 It commits every 50 CIKs, so a stopped run is safe to start again from the top; each company's
 quarters, TTM and checks are replaced in one transaction, so readers see either the old rows or
-the new ones. `timeoutSeconds` is 6 hours. So do `segments`
-and `section-index`, which read the crawled documents; on hermes both run hourly
-(`suspend: false` in the Flux release) since the crawl finished.
+the new ones. `timeoutSeconds` is 6 hours; a 645-company sample (125 MB of payloads) took about
+3 minutes on a laptop, and hermes' 24,000 payloads are 11 times that, so expect 35 minutes to 2 hours.
+Run `VACUUM ANALYZE` on `gold.quarterly_financials` and `gold.derived_financials` afterwards.
 
 The document crawl (`doc-crawler` + `parser-backfill`, see
 [doc-fetcher](../../../services/doc-fetcher/README.md#document-crawl)) ships with `replicas: 0`
