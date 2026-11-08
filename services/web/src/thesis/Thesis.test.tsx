@@ -7,6 +7,7 @@ import { clearChartCache } from "../chart/cache";
 import { entry, fin, NVDA, nvdaRow, TSLA } from "../fixtures";
 import { forgetVisits } from "../home/lastVisit";
 import { textHash } from "./check";
+import { importMarkdown } from "./model";
 import { clearNewest } from "./useRevisit";
 
 const ME = {
@@ -36,6 +37,9 @@ const HISTORY = [2021, 2022, 2023, 2024, 2025].flatMap((fy, i) => {
 });
 
 const ACC = "0001045810-26-000021";
+/** M5: the long draft a short save replaced */
+const LONG_DRAFT = `# The long version\n\n${"Evidence. ".repeat(700)}\n`;
+const VERSION = { version_id: "abababab-abab-4bab-8bab-abababababab", name: "NVDA: the long one", saved_at: "2026-11-05T14:05:00Z", replaced_at: "2026-11-06T09:00:00Z", characters: LONG_DRAFT.length };
 const CHECK_ID = "66666666-6666-4666-8666-666666666666";
 const CITE = { accession_no: ACC, form: "10-Q", filed: "2026-08-27", company_id: NVDA, url: "https://www.sec.gov/Archives/edgar/data/1045810/x.htm", section_key: "I-2", figure: null, figure_status: null, as_of: "2026-11-02T08:00:00+00:00", verified: true };
 /** a check as agent-api stores it (thesis_check.assemble), for the thesis text `hash` */
@@ -122,6 +126,10 @@ function respond(url: string, init?: RequestInit): Response {
     return Response.json({ company_id: NVDA, as_of: "", forms: ["10-K", "10-Q"], from: null, to: null, limit: 1, offset: 0, has_more: false, filings: indexRows });
   }
   if (p === `/v1/workspace-items/${THESIS_ID}/checks`) return Response.json({ item_id: THESIS_ID, checks: stored.map((c) => summary(c.text_hash, c.check_id)) });
+  if (p === `/v1/workspace-items/${THESIS_ID}/versions`) return Response.json({ item_id: THESIS_ID, versions: [VERSION] });
+  if (p === `/v1/workspace-items/${THESIS_ID}/versions/${VERSION.version_id}`) {
+    return Response.json({ ...VERSION, item_id: THESIS_ID, state: { companyId: NVDA, markdown: LONG_DRAFT } });
+  }
   const one = p.match(/^\/v1\/workspace-items\/[^/]+\/checks\/([^/]+)$/);
   if (one) {
     const c = stored.find((x) => x.check_id === one[1]);
@@ -281,9 +289,56 @@ it("exports Markdown with a header and readable embed lines", async () => {
   await click(button("Export .md"));
   const text = await blobText(created.mock.calls[0]![0] as Blob);
   expect(text).toMatch(/^---\ntitle: "NVDA: the build-out"\ncompany: ".+"\ncik: "0001045810"\ndate: \d{4}-\d{2}-\d{2}\nsource: Tributary thesis\n---\n\n# Why NVDA/);
-  expect(text).toContain("[Chart: NVDA revenue]");
-  expect(text).toContain("[Model: NVDA model]");
+  // M6: each embed says what it is and shows; a model its assumptions
+  expect(text).toContain(`<!-- tributary:embed ${CHART_ID} -->\n> **Chart: NVDA revenue**`);
+  expect(text).toContain("> **Model: NVDA model**  \n> NVDA: revenue growth and operating margin per forecast year (your assumptions, not data).  \n" +
+    "> Base: year 1 25.0% growth, 50.0% margin; year 2 10.0% growth, 45.0% margin.");
   expect(text).not.toContain("[[embed:");
+  // #41: and it imports back with the embeds live
+  const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
+  Object.defineProperty(input, "files", { value: [new File([text], "nvda.md", { type: "text/markdown" })], configurable: true });
+  await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));
+  await settle();
+  expect(textarea().value).toContain(`[[embed:${CHART_ID}]]`);
+  expect(textarea().value).toContain(`[[embed:${MODEL_ID}]]`);
+  expect(textarea().value).not.toContain("tributary:embed");
+});
+
+it("exports the last check with it, saying when it's stale (M6)", async () => {
+  stored = [{ check_id: CHECK_ID, text_hash: "0".repeat(64) }]; // checked another text: stale
+  await render(`#/thesis/${THESIS_ID}`, ".check-panel .claims");
+  const created = vi.fn((_b: Blob) => "blob:thesis");
+  Object.assign(URL, { createObjectURL: created, revokeObjectURL: () => {} });
+  await click(button("Export .md"));
+  const text = await blobText(created.mock.calls[0]![0] as Blob);
+  expect(text).toMatch(/<!-- tributary:check -->\n## Check \(Tributary, \d{4}-\d{2}-\d{2}\)\n\n\*\*Stale:\*\* the thesis changed after this check/);
+  expect(text).toContain("1 supported, 0 contradicted, 1 can't verify; figures not found in the data: $99.9B.");
+  expect(text).toContain("- **Supported:** “Data centers keep buying.”");
+  expect(importMarkdown(text)).toMatchObject({ ok: true, markdown: expect.not.stringContaining("tributary:check") });
+});
+
+it("an embed goes at the end until the cursor is placed, never above the title (#62)", async () => {
+  items.set(THESIS_ID, item(THESIS_ID, "thesis", "NVDA", { markdown: "# NVDA\n\nBody." }));
+  await render(`#/thesis/${THESIS_ID}`, "textarea.thesis-text");
+  const picker = container.querySelector<HTMLSelectElement>(".thesis-tools select")!;
+  await act(async () => type(picker, CHART_ID));
+  await settle();
+  expect(textarea().value).toBe(`# NVDA\n\nBody.\n\n[[embed:${CHART_ID}]]\n\n`);
+});
+
+it("lists earlier versions and restores one into the editor, unsaved, with an undo (M5)", async () => {
+  await render(`#/thesis/${THESIS_ID}`, "textarea.thesis-text");
+  await click(button("History"));
+  await waitFor(".version-list li");
+  const row = container.querySelector(".version-list li")!;
+  expect(row.textContent).toContain(`${LONG_DRAFT.length.toLocaleString("en-US")} characters · NVDA: the long one`);
+  await click(button("Restore", row as HTMLElement));
+  expect(textarea().value).toBe(LONG_DRAFT);
+  expect(container.querySelector<HTMLInputElement>("input.title-input")?.value).toBe("NVDA: the long one");
+  expect(container.textContent).toContain("● unsaved changes");
+  expect(writes.filter((w) => w.method === "PUT")).toHaveLength(0); // nothing saved until Save
+  await click(button("Undo restore"));
+  expect(textarea().value).toBe(BODY);
 });
 
 it("imports a .md file, refuses a binary one, and can undo the import", async () => {
@@ -362,7 +417,12 @@ it("creates a model from the company page, starting from the company's own histo
   await render(`#/company/${NVDA}`, ".co-head h1");
   await click(button("New model"));
   const form = container.querySelector<HTMLFormElement>('form[aria-label="New model"]')!;
-  expect(form.querySelector("select")).not.toBeNull(); // which workspace
+  // #119: it doesn't start on the first workspace ("Semis" says nothing of NVDA): a new one named
+  // after the company, unless the user picks another
+  const select = form.querySelector<HTMLSelectElement>("select")!;
+  expect(select.value).toBe("__new__");
+  expect(form.querySelector<HTMLInputElement>('input[id$="-new"]')?.value).toBe("NVDA");
+  await act(async () => type(select, "w1"));
   await click(button("Create model", form));
   const post = writes.find((w) => w.method === "POST")!;
   expect(post.body).toMatchObject({

@@ -386,6 +386,16 @@ export interface SavedItem {
   opened_at: string | null;
 }
 
+/** A thesis's earlier version (Query API /v1/workspace-items/{id}/versions, app DB 014): what a
+ * save replaced. `characters` is its Markdown's length. */
+export interface ItemVersion {
+  version_id: string;
+  name: string;
+  saved_at: string;
+  replaced_at: string;
+  characters?: number;
+}
+
 /** An item with its state: the web app's own chart/comps/screen state, validated by the API. */
 export interface SavedItemFull extends SavedItem {
   state: Record<string, unknown>;

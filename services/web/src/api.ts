@@ -35,6 +35,7 @@ import type {
   RecentWork,
   ThesisCheck,
   ThesisCheckSummary,
+  ItemVersion,
   SavedItemFull,
   SavedKind,
   WrittenKind,
@@ -608,6 +609,14 @@ export async function checkThesis(
   });
   await stream(r, onEvent);
 }
+
+/** A thesis's earlier versions, newest first, without their text (app DB 014). */
+export const itemVersions = (token: string, itemId: string) =>
+  get<{ item_id: string; versions: ItemVersion[] }>(token, `/v1/workspace-items/${itemId}/versions`);
+
+/** One earlier version with its state. */
+export const itemVersion = (token: string, itemId: string, versionId: string) =>
+  get<ItemVersion & { item_id: string; state: Record<string, unknown> }>(token, `/v1/workspace-items/${itemId}/versions/${versionId}`);
 
 /** A thesis's checks, newest first (no results). */
 export const thesisChecks = (token: string, itemId: string) =>

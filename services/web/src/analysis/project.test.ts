@@ -184,6 +184,17 @@ describe("quoting a filing", () => {
     expect(html).toContain('href="https://www.sec.gov/Archives/edgar/data/1045810/');
   });
 
+  it("says which period the quoted filing reports on (H13: six-month wording under Q2 figures)", () => {
+    const at = (form: string, period: string | null) => quoteBlock({
+      text: "HOKA brand net sales increased.", companyId: NVDA, accessionNo: "0001045810-26-000075",
+      form, filed: "2026-10-24", period, section: "Item 2. MD&A",
+    }).split("\n")[2];
+    expect(at("10-Q", "2026-09-30")).toMatch(/^> — 10-Q for the quarter ended 2026-09-30, filed 2026-10-24, Item 2\. MD&A · /);
+    expect(at("10-K", "2026-03-31")).toMatch(/^> — 10-K for the fiscal year ended 2026-03-31, filed 2026-10-24,/);
+    expect(at("10-Q", null)).toMatch(/^> — 10-Q filed 2026-10-24, Item 2/); // unknown: as before
+    expect(at("10-Q", "<b>x</b>")).toMatch(/^> — 10-Q filed 2026-10-24,/); // only a date
+  });
+
   it("splits section text into paragraphs, joining short headings to what follows", () => {
     expect(paragraphs("Item 1. Business\nOur Company\nNVIDIA pioneered accelerated computing to help solve hard problems.\n\n\nWe sell GPUs, systems and software to data centers.\n"))
       .toEqual([

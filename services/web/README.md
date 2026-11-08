@@ -251,13 +251,17 @@ you write yourself, saved as workspace items through the generic item routes and
 like everything saved. "New thesis" and "New model" sit on a workspace's page (next to "Write a
 report") and on a company's page (next to Chart / Compare / Ask: about that company, in a
 workspace you pick or a new one); the workspace page lists them under "Theses and models", the
-sidebar with the other items (rename, duplicate, delete as usual).
+sidebar with the other items (rename, duplicate, delete as usual). Every Save and New form starts
+on a workspace about the item (`workspaces/model.ts` `defaultWorkspace`): the company's analysis
+project, else a folder whose name names it, else a new workspace named after it; a screen starts
+on the folder changed last. Never just the first workspace.
 
 - **Thesis** (`#/thesis/{id}`, `ThesisPage.tsx`, pure parts in `thesis/model.ts`): a title (the
   item's name), an optional company and a Markdown body (up to 100,000 characters). Write,
   Preview or Side by side (remembered per browser); Save or Ctrl/Cmd+S, with an "unsaved
   changes" mark and the browser's leave-page warning. "Embed a saved item…" inserts a
-  `[[embed:<item id>]]` line at the cursor for any chart, comps set, screen or model in the same
+  `[[embed:<item id>]]` line at the cursor (at the end until the user has placed one, never above
+  the title) for any chart, comps set, screen or model in the same
   workspace; the preview draws each one in place as reports do (`reports/Embeds.tsx`, the data
   read now as the viewer). A marker for anything else (another workspace's or user's item, a
   report, a malformed line) is dropped and the editor says how many don't resolve. The text is
@@ -266,8 +270,16 @@ sidebar with the other items (rename, duplicate, delete as usual).
   accession numbers stay plain text). Import .md reads a `.md`/`.txt` file in the browser (up to
   400 KB, refused if it isn't plain text), drops a front-matter header (its title becomes the
   thesis's if it is still "Untitled"), and replaces the text until you Save (Undo import).
-  Export .md downloads the thesis with a front-matter header (title, company, CIK, date) and each
-  embed as a readable line, `[Chart: NVDA revenue]`; it holds only your own item.
+  Export .md downloads the thesis with a front-matter header (title, company, CIK, date), each
+  embed as a readable block saying what it is and shows (`thesis/export.ts` `embedSummary`: a
+  chart's layers, comps' companies and columns, a screen's filters, a model's assumptions per
+  case) between `<!-- tributary:embed <id> -->` comments, and the last check (date, stale or not,
+  counts, each claim's status, explanation and filings: `checkSection`) between
+  `<!-- tributary:check -->` comments; it holds only your own items. Importing such a file turns
+  each embed block back into its `[[embed:<id>]]` line (live again in the same workspace) and
+  drops the check. **History** lists the versions earlier saves replaced (Query API, app
+  migration 014; the newest 30) and Restore puts one in the editor as unsaved changes, with Undo
+  restore; saving it keeps the one it replaces in turn.
 - **Check my thesis** (`thesis/CheckPanel.tsx`, `useThesisCheck.ts`, pure parts in
   `thesis/check.ts`; agent README, "Thesis checks"): the button checks the saved text (disabled
   while there are unsaved changes) through agent-api `/v1/thesis-checks` and counts as 4
@@ -397,7 +409,8 @@ per company, from its filings to a thesis that's checked after every filing. Rul
   then its `[[embed:<id>]]` line goes at the end of the chosen section (`appendToSection`; a
   missing section is added); a filing passage (Item 1, a what-changed paragraph; removed ones
   quote the earlier filing) goes in as a blockquote, escaped so it renders as written, with a
-  citation line: form, filed date, section, and the accession linked to EDGAR
+  citation line: form, the period it reports on ("10-Q for the quarter ended 2026-09-30", so
+  six-month wording reads in its filing), filed date, section, and the accession linked to EDGAR
   (`edgarFilingUrl`, built only from the company id and accession number the API returned). The
   project's thesis editor stays mounted and registers a handle (`bridge.ts`), so a pin lands in
   the text being edited: saved at once when there were no unsaved changes, else left as an

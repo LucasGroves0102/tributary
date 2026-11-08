@@ -111,11 +111,14 @@ it("saves a chart to a workspace as a chart item, and opens one in the chart bui
   await render();
   await act(async () => buttons("Save to workspace")[0]!.click());
   const form = container.querySelector<HTMLFormElement>("form.save-form")!;
+  // #119: not the first workspace ("Semis" says nothing of NVDA): a new one named after it
+  expect(form.querySelector("select")!.value).toBe("__new__");
+  expect(form.querySelectorAll("input")[1]!.value).toBe("NVDA");
   await act(async () => form.requestSubmit());
   for (let i = 0; i < 5; i++) await act(async () => new Promise((r) => setTimeout(r, 0)));
   expect(create).toHaveBeenCalledTimes(1);
   const [kind, name, state, target] = create.mock.calls[0]!;
-  expect([kind, name, target]).toEqual(["chart", "NVDA: revenue by business segment (TTM)", { workspaceId: "w1" }]);
+  expect([kind, name, target]).toEqual(["chart", "NVDA: revenue by business segment (TTM)", { newWorkspace: "NVDA" }]);
   const layers = (state as { layers: Record<string, unknown>[] }).layers;
   expect(layers.map((l) => [l.kind, l.members, l.type, l.transform])).toEqual([
     ["segment", [CN], "sbar", "ttm"], ["segment", [GR], "sbar", "ttm"],

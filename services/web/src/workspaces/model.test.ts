@@ -3,7 +3,10 @@ import { describe, expect, it } from "vitest";
 import { addLayer, emptyChart, type ChartState } from "../chart/model";
 import {
   canSave,
+  companyOf,
   currentFingerprint,
+  defaultWorkspace,
+  NEW_WORKSPACE,
   findWorkspace,
   fingerprint,
   itemRoute,
@@ -137,5 +140,44 @@ describe("names and open items", () => {
     const ok = { itemId: "i", workspaceId: "w", workspaceName: "W", name: "N", saved: "{}" };
     expect(restoreOpen({ chart: ok, comps: { ...ok, itemId: 3 }, notes: ok })).toEqual({ chart: ok });
     expect(restoreOpen("x")).toEqual({});
+  });
+});
+
+describe("defaultWorkspace (#119: it started on the first one, PepsiCo vs Coca-Cola for NVDA)", () => {
+  const ws = (workspace_id: string, name: string, updated_at: string, project: { companyId: string } | null = null) =>
+    ({ workspace_id, name, created_at: "", updated_at, items: [], project: project && { ...project, peers: [], notes: "", done: [] } });
+  const list = [
+    ws("pep", "PepsiCo vs Coca-Cola", "2026-11-01T00:00:00Z"),
+    ws("semis", "Semis", "2026-11-03T00:00:00Z"),
+    ws("vrt", "Vertiv", "2026-11-05T00:00:00Z", { companyId: "0001674101" }),
+  ];
+  const nvda = { id: NVDA, names: ["NVDA", "Nvidia"] };
+
+  it("a company's own analysis project first", () => {
+    expect(defaultWorkspace([...list, ws("nv", "My NVDA work", "2026-11-02T00:00:00Z", { companyId: NVDA })], nvda)).toBe("nv");
+  });
+
+  it("then a folder whose name names it, as whole words", () => {
+    expect(defaultWorkspace([...list, ws("ideas", "Nvidia ideas", "2026-10-01T00:00:00Z")], nvda)).toBe("ideas");
+    expect(defaultWorkspace([...list, ws("x", "NVDAX", "2026-10-01T00:00:00Z")], nvda)).toBe(NEW_WORKSPACE);
+  });
+
+  it("else a new workspace, never an unrelated one or another company's project", () => {
+    expect(defaultWorkspace(list, nvda)).toBe(NEW_WORKSPACE);
+    expect(defaultWorkspace(list, { id: AAPL, names: ["AAPL"] })).toBe(NEW_WORKSPACE);
+  });
+
+  it("without a company (a screen): the folder changed last, projects left out", () => {
+    expect(defaultWorkspace(list, null)).toBe("semis");
+    expect(defaultWorkspace([], null)).toBe(NEW_WORKSPACE);
+  });
+
+  it("knows the company of comps and a one-company chart, not of a screen or a mixed chart", () => {
+    expect(companyOf({ kind: "comps", compare: { target: NVDA, peers: [AAPL] } })).toBe(NVDA);
+    expect(companyOf({ kind: "screen", screen: {} })).toBeNull();
+    const one = addLayer(addLayer(emptyChart(), { kind: "metric", companyId: NVDA, metric: "revenue", axis: "L", transform: "ttm", type: "line" }), { kind: "metric", companyId: NVDA, metric: "net_income", axis: "L", transform: "ttm", type: "line" });
+    expect(companyOf({ kind: "chart", chart: one })).toBe(NVDA);
+    const two = addLayer(one, { kind: "metric", companyId: AAPL, metric: "revenue", axis: "L", transform: "ttm", type: "line" });
+    expect(companyOf({ kind: "chart", chart: two })).toBeNull();
   });
 });

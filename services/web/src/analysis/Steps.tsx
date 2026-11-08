@@ -127,7 +127,8 @@ export function Business({ token, companyId, name, project, onNotes, notesStatus
                     {p}{" "}
                     <PinButton compact what="passage" make={async () => quoteBlock({
                       text: p, companyId, accessionNo: section.citation.accession_no, form: section.citation.form,
-                      filed: section.citation.filed, section: section.title ? `Item 1. ${section.title.replace(/^item\s*1\.?\s*/i, "")}` : "Item 1",
+                      filed: section.citation.filed, period: section.citation.period_of_report ?? null,
+                      section: section.title ? `Item 1. ${section.title.replace(/^item\s*1\.?\s*/i, "")}` : "Item 1",
                     })} />
                   </p>
                 ))}
@@ -221,7 +222,7 @@ const changePassage = (companyId: string, c: Change, s: ChangedSection): Passage
   if (!cite || !text) return null;
   return {
     text, companyId, accessionNo: cite.accession_no, form: cite.form, filed: cite.filed,
-    section: s.title ?? `Item ${s.section_key}`, change: c.kind,
+    period: cite.period_of_report, section: s.title ?? `Item ${s.section_key}`, change: c.kind,
   };
 };
 

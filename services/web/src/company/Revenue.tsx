@@ -112,11 +112,11 @@ interface Common {
   label: (id: string) => string;
 }
 
-function ChartActions({ chart, saved, onOpenChart }: { chart: ChartState; saved: Saved | null; onOpenChart?: (s: ChartState) => void }) {
+function ChartActions({ chart, saved, onOpenChart, label }: { chart: ChartState; saved: Saved | null; onOpenChart?: (s: ChartState) => void; label: (id: string) => string }) {
   return (
     <div className="row wrap chart-actions">
       {onOpenChart && <button className="btn sm ghost" onClick={() => onOpenChart(chart)}>Open in Chart builder</button>}
-      {saved && <SaveChart saved={saved} chart={chart} />}
+      {saved && <SaveChart saved={saved} chart={chart} label={label} />}
     </div>
   );
 }
@@ -150,7 +150,7 @@ function AxisBlock({ t, view, token, companyId, ticker, saved, onOpenChart, labe
     <div className="rev-axis">
       <h3>{AXIS_TITLES[t.axis]}</h3>
       <ChartView token={token} chart={chart} name={chart.title} label={label} hasTtm={everyMetric} />
-      <ChartActions chart={chart} saved={saved} onOpenChart={onOpenChart} />
+      <ChartActions chart={chart} saved={saved} onOpenChart={onOpenChart} label={label} />
       <TableScroll label="Revenue by member">
         <table className="t">
           <thead>
@@ -233,7 +233,7 @@ function Decomposition({ rows, totals, ...c }: Common & { rows: SegmentRow[]; to
       ) : (
         <>
           <ChartView token={c.token} chart={chart} name={chart.title} label={c.label} hasTtm={everyMetric} />
-          <ChartActions chart={chart} saved={c.saved} onOpenChart={c.onOpenChart} />
+          <ChartActions chart={chart} saved={c.saved} onOpenChart={c.onOpenChart} label={c.label} />
           <TableScroll label="Growth decomposition">
             <table className="t decomposition">
               <thead>
@@ -299,7 +299,7 @@ function Quality({ rows, ...c }: Common & { rows: FinancialRow[] }) {
       ) : (
         <>
           <ChartView token={c.token} chart={chart} name={chart.title} label={c.label} hasTtm={everyMetric} />
-          <ChartActions chart={chart} saved={c.saved} onOpenChart={c.onOpenChart} />
+          <ChartActions chart={chart} saved={c.saved} onOpenChart={c.onOpenChart} label={c.label} />
           {flagged > 0 && (
             <p className="badge warn" role="status">
               ⚠ Receivables grew more than {QUALITY_FLAG_POINTS} points faster than revenue in {flagged} of the last {q.length} quarters

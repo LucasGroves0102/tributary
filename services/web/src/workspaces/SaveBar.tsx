@@ -3,10 +3,13 @@ import { useId, useState, type FormEvent } from "react";
 import { failureReason } from "../api";
 import {
   canSave,
+  companyOf,
   currentFingerprint,
+  defaultWorkspace,
   ITEM_NAME_MAX,
   KIND_LABELS,
   nameProblem,
+  NEW_WORKSPACE,
   suggestName,
   WORKSPACE_NAME_MAX,
   type Current,
@@ -20,7 +23,7 @@ interface Props {
   label: (companyId: string) => string;
 }
 
-const NEW = "__new__";
+const NEW = NEW_WORKSPACE;
 
 function message(e: unknown): string {
   return failureReason(e);
@@ -103,6 +106,7 @@ export function SaveBar({ current, saved, label }: Props) {
           saved={saved}
           initial={open ? `${open.name}` : suggestName(current, label)}
           defaultWorkspace={open?.workspaceId}
+          label={label}
           onDone={() => setForm(false)}
         />
       )}
@@ -114,20 +118,25 @@ function SaveForm({
   current,
   saved,
   initial,
-  defaultWorkspace,
+  defaultWorkspace: openIn,
+  label,
   onDone,
 }: {
   current: Current;
   saved: Saved;
   initial: string;
   defaultWorkspace?: string;
+  label: (companyId: string) => string;
   onDone: () => void;
 }) {
   const id = useId();
   const list = saved.list.state === "ok" ? saved.list.workspaces : [];
   const [name, setName] = useState(initial);
-  const [workspace, setWorkspace] = useState(defaultWorkspace ?? list[0]?.workspace_id ?? NEW);
-  const [newName, setNewName] = useState("");
+  // #119: the open item's workspace, else the company's project or folder, else a new workspace
+  // named after it; a screen goes to the folder changed last
+  const company = companyOf(current);
+  const [workspace, setWorkspace] = useState(() => openIn ?? defaultWorkspace(list, company ? { id: company, names: [label(company)] } : null));
+  const [newName, setNewName] = useState(() => (company ? label(company).slice(0, WORKSPACE_NAME_MAX) : ""));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

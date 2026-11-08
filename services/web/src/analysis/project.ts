@@ -286,6 +286,8 @@ export interface Passage {
   form: string;
   /** YYYY-MM-DD */
   filed: string;
+  /** the period the filing reports on (YYYY-MM-DD), so the quote reads in its period (H13) */
+  period?: string | null;
   /** "Item 1A. Risk Factors", "Item 1" */
   section: string;
   /** what-changed: "new", "rewritten" or "removed" (removed text is the earlier filing's) */
@@ -293,13 +295,19 @@ export interface Passage {
 }
 
 const CHANGE_NOTE = { new: "new in this filing", rewritten: "rewritten in this filing", removed: "removed since this filing" } as const;
+const PERIOD_WORD: Record<string, string> = { "10-Q": "quarter", "10-K": "fiscal year" };
+const ISO = /^\d{4}-\d{2}-\d{2}$/;
 
-/** A filing passage pinned into a thesis: a blockquote, then its citation (form, filed date,
- * section, the accession linked to EDGAR when the link can be built). */
+/** A filing passage pinned into a thesis: a blockquote, then its citation (form, the period it
+ * reports on when known, filed date, section, the accession linked to EDGAR when the link can be
+ * built). A 10-Q's MD&A can speak of six or nine months: the period says which filing it is. */
 export function quoteBlock(p: Passage): string {
   const url = edgarFilingUrl(p.companyId, p.accessionNo);
   const acc = url ? `[${p.accessionNo}](${url})` : p.accessionNo;
   const section = quoteText(p.section, 120);
   const note = p.change ? ` (${CHANGE_NOTE[p.change]})` : "";
-  return `> ${quoteText(p.text)}\n>\n> — ${p.form} filed ${p.filed}, ${section}${note} · ${acc}`;
+  const when = p.period && ISO.test(p.period)
+    ? `${p.form} for the ${PERIOD_WORD[p.form] ?? "period"} ended ${p.period}, filed ${p.filed}`
+    : `${p.form} filed ${p.filed}`;
+  return `> ${quoteText(p.text)}\n>\n> — ${when}, ${section}${note} · ${acc}`;
 }
