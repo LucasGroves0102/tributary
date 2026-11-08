@@ -148,3 +148,19 @@ def test_decimal_cells_need_a_stated_scale():
     unstated = json.dumps({"sections": [{"text": "Backlog 1,234.5 units"}]})
     assert statuses("Backlog was $1.23B.", [stated], set())[0] == {"$1.23B": "quoted"}
     assert statuses("Backlog was $1.23B.", [unstated], set())[0] == {"$1.23B": "unverified"}
+
+
+def test_sums_and_differences_only_of_comparable_periods():
+    """A thesis check reads forty TTM quarters: any two of them made coincidences (NVIDIA's TTM
+    operating income of July 2025 less April 2018's "verified" a $99.9B nobody reported). A
+    pair is one company's adjacent quarters or the same quarter a year apart, or two companies'
+    periods ending within 45 days."""
+    rows = financials(("operating_income", "2018-04-29", 10000000000, Q1),
+                      ("operating_income", "2025-07-27", 109900000000, Q2),
+                      ("operating_income", "2025-10-26", 120000000000, Q2),
+                      ("operating_income", "2026-07-26", 150000000000, Q2),
+                      ("operating_income", "2025-10-31", 125000000000, Q2))  # same quarter
+    figs, _ = statuses("$99.9B; up $10.1B on the quarter; up $40.1B on the year; $5.0B; $0.5B.",
+                       [rows])
+    assert figs == {"$99.9B": "unverified", "$10.1B": "derived", "$40.1B": "derived",
+                    "$5.0B": "unverified", "$0.5B": "unverified"}

@@ -4,8 +4,10 @@ A figure is, in this order:
 
 1. verified when it equals a returned value at the precision written ($96.2B for
    96,221,000,000);
-2. derived when it is the difference or sum of two returned values of one metric (across
-   quarters or companies);
+2. derived when it is the difference or sum of two returned values of one metric that can be
+   compared: one company's adjacent quarters or the same quarter a year apart, or two
+   companies' periods ending within 45 days (`_comparable`; any two of forty TTM quarters made
+   coincidences);
 3. quoted when it appears in returned filing text: as written ("$50.3 billion"), or as a table
    cell (a number with thousands separators, "82,886") read at the scale the text states;
 4. verified when it equals one of a derived metric's inputs (`inputs` on a /financials row:
@@ -28,6 +30,7 @@ tools returned.
 import json
 import re
 from dataclasses import asdict, dataclass, field
+from datetime import date, timedelta
 from itertools import combinations
 from typing import Any
 
@@ -159,10 +162,34 @@ def _by_metric(rows: list[dict]) -> dict[str, list[dict]]:
 def _pair(by_metric: dict[str, list[dict]], close: Any) -> dict | None:
     for metric, rs in by_metric.items():
         for a, b in combinations(rs, 2):
+            if not _comparable(a, b):
+                continue
             for combined in (a["value"] - b["value"], a["value"] + b["value"]):
                 if close(combined):
                     return {"metric": metric, "from": [_source(a), _source(b)]}
     return None
+
+
+def _end(r: dict) -> date | None:
+    try:
+        return date.fromisoformat(str(r.get("_end") or r.get("period_end")))
+    except ValueError:
+        return None
+
+
+def _comparable(a: dict, b: dict) -> bool:
+    """Two values a sum or difference can honestly come from: one company's adjacent quarters
+    (80-100 days apart: a change on the quarter, a half year) or the same period a year apart
+    (350-380 days), or two companies' periods ending within 45 days of each other. Any two of
+    forty TTM quarters made coincidences: NVIDIA's TTM operating income of July 2025 less April
+    2018's "verified" a $99.9B nobody reported."""
+    ea, eb = _end(a), _end(b)
+    if ea is None or eb is None:
+        return False
+    days = abs((ea - eb).days)
+    if a.get("company_id") != b.get("company_id"):
+        return days <= 45
+    return 80 <= days <= 100 or 350 <= days <= 380
 
 
 def _stated_scales(content: str) -> set[float]:
@@ -226,10 +253,14 @@ def _input_rows(content: str) -> list[dict]:
             if value is None:
                 continue
             year_ago = str(name).endswith("_year_ago")
-            out.append({"metric": str(name), "base": str(name).removesuffix("_year_ago"),
-                        "value": value, "company_id": company,
-                        "period_end": None if year_ago else r.get("period_end"),
-                        "citation": {} if year_ago else cite})
+            row = {"metric": str(name), "base": str(name).removesuffix("_year_ago"),
+                   "value": value, "company_id": company,
+                   "period_end": None if year_ago else r.get("period_end"),
+                   "citation": {} if year_ago else cite}
+            end = _end(r)
+            if year_ago and end is not None:  # a year before the row's: for pairing only
+                row["_end"] = (end - timedelta(days=364)).isoformat()
+            out.append(row)
     return out
 
 

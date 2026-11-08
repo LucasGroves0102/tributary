@@ -34,7 +34,11 @@ accession number against what the tools returned; the result is part of the answ
 growth rate's year-ago value, a TTM's quarters), and a filing table's cells are read at the scale
 its text states ("(In thousands)", "($ in millions)"; millions when it states none), decimals
 included. Those two came after the recorded suites and only apply to a figure the original rules
-left unverified; a figure that isn't in the data still fails.
+left unverified; a figure that isn't in the data still fails. A sum or difference pairs only
+values that can be compared: one company's adjacent quarters or the same quarter a year apart, or
+two companies' periods ending within 45 days (with forty TTM quarters in a thesis check, any two
+made coincidences: NVIDIA's TTM operating income of July 2025 less April 2018's "verified" a
+made-up $99.9B). Every derived figure in the recordings is such a pair, so they replay unchanged.
 
 ## agent-api
 
