@@ -73,6 +73,9 @@ people type: exact ticker first (`BRK.B` = `BRK-B`), then CIK, exact name, retir
 name, then prefix, a later word, and contained (3+ characters), with spaces ignored for `JP Morgan`
 → JPMorgan Chase. `silver.resolve_company` keeps its exact-match meaning for formulas and the
 sandbox. Reads all 33,000 aliases per call (25-38 ms on hermes); no index was needed.
+`044_company_search_order.sql` breaks ties within a rank by whether the company has figures here
+(`gold.financials_coverage`, public ids) and the normalized name's length, so "bank of" lists Bank
+of America before Bank of Chile (a 20-F filer) and isn't pushed down by an SEC suffix (`/DE/`).
 `035_value_readings.sql` is the one definition of how a figure may be read: `gold.not_meaningful`
 (thresholds from the data, in its header), `gold.not_applicable_metrics` (banks),
 `gold.period_status` ("stale", once: over 300 days behind the company's latest period is old, over

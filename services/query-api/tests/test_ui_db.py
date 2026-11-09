@@ -422,6 +422,31 @@ def test_search_name_prefix_word_and_contains(search_conn):
     assert found(search_conn, "zq gold") == [S_GS]  # spaces ignored
 
 
+def test_search_ranks_a_company_with_figures_and_a_short_name_first(conn):
+    """044: "bank of" found Bank of Chile (a 20-F filer, no figures here) and banks with shorter
+    raw names before BANK OF AMERICA CORP /DE/."""
+    rows = (("9100000071", "ZQBANK OF CHILE", False),
+            ("9100000072", "ZQBANK OF HAWAIIAN ISLES CORP", True),
+            ("9100000073", "ZQBANK OF AMERICA CORP /DE/", True))
+    for cid, name, figures in rows:
+        conn.execute("INSERT INTO silver.companies (company_id, name, current_cik,"
+                     " filer_categories, exchanges) VALUES (%s, %s, %s,"
+                     " ARRAY['Large accelerated filer'], ARRAY['NYSE'])", (cid, name, cid))
+        conn.execute("INSERT INTO silver.company_ciks (cik, company_id) VALUES (%s, %s)",
+                     (cid, cid))
+        conn.execute("INSERT INTO silver.company_aliases (company_id, cik, alias_type, alias,"
+                     " source) VALUES (%s, %s, 'name', %s, 'sec_submissions')", (cid, cid, name))
+        if figures:
+            acc = f"{cid}-26-000001"
+            conn.execute(
+                "INSERT INTO gold.quarterly_financials (company_id, metric, period_start,"
+                " period_end, value, unit, value_source, source_tag, accession_no, filed,"
+                " source_accessions, ingested_at) VALUES (%s, 'revenue', '2026-04-01',"
+                " '2026-06-30', 1, 'USD', 'reported', 'us-gaap:Revenues', %s, '2026-08-01',"
+                " ARRAY[%s], now())", (cid, acc, acc))
+    assert found(conn, "zqbank of") == ["9100000073", "9100000072", "9100000071"]
+
+
 def test_search_former_names_and_retired_tickers_rank_below_current(search_conn):
     rows = Store(OneConnection(search_conn)).search("t-free", "Zqfruit Computer", 25)
     assert [(r["company_id"], r["is_current"]) for r in rows] == [(S_APPLE, False)]
