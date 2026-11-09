@@ -762,6 +762,12 @@ added, and the page says why (Birkenstock files 20-F annual reports as a foreign
 IFRS; a company whose XBRL hasn't arrived yet; a fund with no annual report). A bank target's comps open
 on a bank's columns (net interest income, efficiency ratio, provision, loans, deposits, ROE, net margin)
 unless columns were chosen; the column picker offers a bank's lines only for a bank.
+When there is no business text to compare, peers are by SIC code and size, and every row's "Why" starts
+by saying so and why, from the API's `basis_reason` (`compare/peers.ts` `fallbackPart`, the full
+sentence in its hover and above the table: `fallbackSentence`): "by SIC and size (Intel's 10-K
+Business section is a cross-reference)", "no Business section found in Citigroup's 10-K", "no 10-K
+from the last three years", "filings text isn't in your plan", "isn't compared yet", "no close business
+match". An older API without `basis_reason` reads "by SIC and size", its `method` in the hover.
 
 Sectors (#136): the screener's filters have a Sector and an Industry within it (`/v1/sectors`,
 Tributary's own grouping of SIC codes, not GICS), and "Group by sector" sorts by sector and industry
@@ -779,7 +785,14 @@ tags it), ROE, revenue growth and net margin; Statements show a bank's income st
 income, noninterest income, net revenue, noninterest expense, provision, pretax and net income) and
 balance sheet (cash and due from banks, loans net of the allowance, total assets, deposits, total
 liabilities, equity, CET1). Both say what isn't shown and why: net interest margin, tangible book value
-per share and ROTCE (migration 048's header).
+per share and ROTCE (migration 048's header). Which companies are banks is the API's alone (migration
+058 added Schwab, American Express, Synchrony and Ally); nothing here lists one.
+
+Debt with a finance arm (`company/data.ts` `FINANCE_ARMS`, `financeArmNote`): Ford's and GM's debt and
+net debt are their consolidated balance sheets' (migration 055 sums each debt line's segment members),
+so they include Ford Credit's and GM Financial's borrowings. Overview (under Key stats, and in the Net
+debt stat's hover) and the Balance sheet say so. Keyed by company id; `data.test.ts` checks the ids
+against 055's company tags.
 
 Insider filings (#117; `company/Insiders.tsx`, wording in `company/insiders.ts`'s docstring; the
 Query API's `/v1/companies/{id}/insiders`, read from the SEC's XML, rules in its README "Insider

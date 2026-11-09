@@ -332,8 +332,18 @@ else by SIC and size (`basis: "sic"`). The ranking is specified in `query_api/pe
   `same_industry`, `same_filer_category`, `revenue_band`, `same_revenue_band`. `business` is the
   company's own profile (filing, its most distinctive terms). The old fields stay, so an older web app
   still reads `sic_level` and the bands.
-- **A bank** (035's rule) without `columns` gets bank columns: revenue, net interest income, efficiency
-  ratio, provision for credit losses, loans, deposits, ROE, net margin (migration 048).
+- **A bank** (035's rule, `gold.not_applicable_metrics`, read from the company's screener row: the same
+  rule as its readings and the web's bank template; 058 added Schwab, American Express, Synchrony and
+  Ally) without `columns` gets bank columns: revenue, net interest income, efficiency ratio, provision
+  for credit losses, loans, deposits, ROE, net margin (migration 048).
+- **`basis_reason`** (pre-ship; null by business) says why there was no business text to rank by,
+  from the company's latest 10-K stored in the last three years and its Item 1 as parsed
+  (`Store.business_text`: silver.filings by its CIKs, a primary-key probe of the document, the
+  section under RLS at `filings`; 2.4 ms for Intel on hermes): `filings_access` (your plan),
+  `no_annual_report`, `no_business_section` (Citigroup: its 10-K follows the annual report's own
+  layout and the parser finds no Item heading), `cross_reference` (Item 1 under 3,000 characters,
+  parser-peers' own threshold: Intel's "Business: ... Pages 3-5", GE's, McDonald's), `not_profiled`
+  (the weekly job hasn't read it yet), `no_close_peers`. `method` says the same in words.
 
 Measured on hermes' Item 1 texts of 2026-11-09 (run locally through this route; before = production's
 SIC and size answer the same day; the root README has the full table):
@@ -344,9 +354,10 @@ NVDA before Micron, Tigo Energy, Broadcom, Intel...; after AMD, Ambarella, Qualc
 Broadcom, Micron, Marvell. JPM before Bank of America, Wells Fargo, Citigroup...; after PNC, Morgan
 Stanley, Bank of America, U.S. Bancorp, Capital One, Huntington, Wells Fargo. Precision at 10 against
 hand-written lists for nine companies: 47 of 90 (services/parser README).
-Gaps: a 10-K whose Item 1 is a cross-reference (Intel, General Electric) or wasn't parsed
+Gaps: a 10-K whose Item 1 is a cross-reference (Intel, General Electric, McDonald's) or wasn't parsed
 (Citigroup) has no profile, so it is never suggested by business (NVIDIA's list loses Intel, TI and
-ADI; JPMorgan's loses Citigroup).
+ADI; JPMorgan's loses Citigroup), and its own peers are by SIC and size, with `basis_reason` saying
+which (owner's decision, 2026-11-09: no parser change for them).
 
 `GET /v1/companies/{id}/peers/check/{candidate}`: `require(financials)` on the comps' company, then
 public filing-index metadata about the candidate: `ok`, `reason` (`null`; `metadata_only`: it has

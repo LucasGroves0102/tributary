@@ -149,6 +149,15 @@ drift unnoticed, and the bases exist for shells and pre-revenue filers, which fi
 20-F's convenience dollars beside yen debt read as a scale slip). Catalog only, no rebuild; findings
 change at each company's next check. Backout `backout/currency_readings_057.sql` (tested: functions
 equal to a database at 056).
+`058_bank_holding_companies.sql` (pre-ship, owner's decision) adds Charles Schwab, American Express,
+Synchrony and Ally to the banks by company id in `gold.not_applicable_metrics` (049's body otherwise):
+bank holding companies the SEC files under brokers (6211) or finance services (6199), SICs whose other
+filers aren't banks (Ally's 6022 already counted; listed so a SIC change can't drop it). That function is
+the only list of banks: readings, the screener's `not_applicable`, the bank template and peers' bank
+columns all read it. Their next gold refresh drops the fallback debt tag (`LongTermDebt`) at a bank
+(039's rule), which is the only debt tag American Express and Synchrony use: long-term debt leaves their
+gold rows, as JPMorgan's did. Catalog only (one function, nothing locked on a table); backout
+`backout/banks_058.sql`.
 `059_fetch_outbox_insider_queue.sql` (pre-ship review B2, B3) is doc-fetcher's: `ops.document_outbox`
 (a live document's `documents.fetched` event is owed until Kafka confirms it; written in the
 document's own transaction, read by the crawl so it never counts an unannounced document as
