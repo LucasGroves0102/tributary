@@ -22,9 +22,13 @@ A run:
    item headings with the filings tier); a 10-K/10-Q's figures and red lines, after layer 1
    (`can`, OpenFGA) and through Store as that user (RLS). Never another user's access.
 4. Deliveries due (a new ready alert x each enabled webhook, and earlier failures whose backoff
-   ran out), through HttpsSender; each result in the delivery log. Email only with a provider
-   configured AND a verified address for the user (query_api/alert_email.py: neither exists
-   yet, so none is sent): one digest of the alerts that became ready.
+   ran out), through HttpsSender; each result in the delivery log. Sends come after every user's
+   alerts are made, users in a random order, at most SENDS_PER_USER each, a webhook that times out
+   or can't be reached skipped for the rest of the run, and none started after SEND_BUDGET seconds:
+   a slow or hostile endpoint delays only its owner's deliveries (they stay due for the next run).
+   Email only with a provider configured AND a verified address for the user
+   (query_api/alert_email.py: neither exists yet, so none is sent): one digest of the alerts that
+   became ready.
 5. alert_checks (the Monitor step's last check); notifications older than KEEP_DAYS deleted.
 
 One user's failure (OpenFGA down: fail closed) is logged and the run goes on; the next run
@@ -34,7 +38,9 @@ recorded (a crash in between) is sent again next run: receivers dedupe on `id`.
 
 import logging
 import os
+import random
 import sys
+import time
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime, timedelta
@@ -63,6 +69,9 @@ ET = ZoneInfo("America/New_York")
 CHUNK = 50          # followed companies per filing-index query (like /v1/filing-index's cap)
 MAX_NEW = 200       # new notifications per user per run (a first run after a long outage)
 DEFAULT_APP_URL = "https://tributary.lucasgroves.dev"
+SENDS_PER_USER = 10     # deliveries tried per user per run
+SEND_BUDGET = 240.0     # seconds of sending per run (the Job's deadline is 540)
+STALLED = frozenset({"timeout", "connect", "tls"})  # skip that webhook for the rest of the run
 SYSTEM = ""         # the filing index is public metadata: read without a user
 
 
@@ -176,15 +185,21 @@ def complete(n: dict, *, user_id: str, store: Any, can: Callable[[str, str, str]
 
 
 def deliver(alerts: AppAlerts, store: Any, sender: Sender, user_id: str, *, jwt_secret: str,
-            app_url: str, at: datetime) -> tuple[int, int]:
-    due = alerts.due(user_id, at)
+            app_url: str, at: datetime,
+            until: Callable[[], bool] = lambda: True) -> tuple[int, int]:
+    """Up to SENDS_PER_USER due deliveries while `until()` holds; a webhook that stalls is left
+    for the next run (its rows stay due, untouched)."""
+    due = alerts.due(user_id, at, SENDS_PER_USER)
     if not due:
         return 0, 0
     ids = sorted({d["company_id"] for d in due})
     names = store.profiles(user_id, ids)
     tickers = store.tickers(user_id, ids)
     results = []
+    stalled: set[str] = set()
     for d in due:
+        if d["webhook_id"] in stalled or not until():
+            continue
         cid = d["company_id"]
         name = (names.get(cid) or {}).get("name") or cid
         ticker = (tickers.get(cid) or [None])[0]
@@ -193,9 +208,10 @@ def deliver(alerts: AppAlerts, store: Any, sender: Sender, user_id: str, *, jwt_
         link = links(app_url, d)
         secret = webhook_secret(jwt_secret, d["webhook_id"], bytes(d["secret_salt"]))
         body = body_of(d["format"], event(d, company, link, at), message(d, label, link))
-        results.append((d["delivery_id"], d["attempts"],
-                        sender.send(d["url"], body, headers(secret, d["delivery_id"], "filing",
-                                                            body))))
+        sent = sender.send(d["url"], body, headers(secret, d["delivery_id"], "filing", body))
+        if sent.error in STALLED:
+            stalled.add(d["webhook_id"])
+        results.append((d["delivery_id"], d["attempts"], sent))
     alerts.record(user_id, results, at)
     ok = sum(1 for _, _, s in results if s.ok)
     return ok, len(results) - ok
@@ -221,7 +237,9 @@ def email_digest(alerts: AppAlerts, store: Any, email: EmailProvider, to: str, u
 def run(*, alerts: AppAlerts, store: Any, can: Callable[[str, str, str], bool], sender: Sender,
         jwt_secret: str, now: datetime, app_url: str = DEFAULT_APP_URL,
         users: list[str] | None = None, email: EmailProvider | None = None,
-        recipients: Callable[[str], str | None] = no_recipients) -> Report:
+        recipients: Callable[[str], str | None] = no_recipients,
+        monotonic: Callable[[], float] = time.monotonic,
+        shuffle: Callable[[list[str]], None] = random.shuffle) -> Report:
     report = Report()
     today = now.astimezone(ET).date()
     since = today - timedelta(days=LOOKBACK_DAYS)
@@ -263,15 +281,25 @@ def run(*, alerts: AppAlerts, store: Any, can: Callable[[str, str, str], bool], 
                     log.warning("alerts: email not sent: %s", type(e).__name__,
                                 extra={"user_id": user_id})
             report.skipped += sum(1 for u in updates if u["status"] == "skipped")
-            ok, failed = deliver(alerts, store, sender, user_id, jwt_secret=jwt_secret,
-                                 app_url=app_url, at=now)
-            report.delivered += ok
-            report.failed += failed
             alerts.checked(user_id, now, newest)
             alerts.prune(user_id, now - timedelta(days=KEEP_DAYS))
         except Exception as e:
             report.errors += 1
             log.warning("alerts: a user's run failed: %s", type(e).__name__,
+                        extra={"user_id": user_id})
+    # sending last, in a random order, within a budget (module docstring, step 4)
+    senders = [u for u, p in plans.items() if p["webhooks"]]
+    shuffle(senders)
+    deadline = monotonic() + SEND_BUDGET
+    for user_id in senders:
+        try:
+            ok, failed = deliver(alerts, store, sender, user_id, jwt_secret=jwt_secret,
+                                 app_url=app_url, at=now, until=lambda: monotonic() < deadline)
+            report.delivered += ok
+            report.failed += failed
+        except Exception as e:
+            report.errors += 1
+            log.warning("alerts: a user's deliveries failed: %s", type(e).__name__,
                         extra={"user_id": user_id})
     return report
 

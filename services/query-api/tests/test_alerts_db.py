@@ -395,3 +395,44 @@ def test_email_needs_a_provider_and_a_verified_address(conn, alerts):
     ((to, subject, text),) = outbox.sent
     assert to == "a@example.org" and subject == "Tributary: 2 new filing alerts"
     assert "NVIDIA (NVDA) filed an 8-K" in text and "Items: 2.02" in text
+
+
+def test_a_stalled_webhook_holds_up_only_its_owner(conn, alerts):
+    """A tarpit endpoint: after its first timeout the rest of its deliveries wait for the next run,
+    and another user's webhook is still sent within the run's budget."""
+    conn.execute("INSERT INTO watchlists (user_id, company_id, added_at) VALUES"
+                 " (%s, %s, '2026-11-10T12:00:00Z')", (B, NVDA))
+    slow = alerts.add_webhook(A, HOOK_URL, "json", b"s" * 16)
+    alerts.add_webhook(A, HOOK_URL + "-second", "json", b"t" * 16)
+    alerts.add_webhook(B, "https://hooks.example.org/b", "json", b"u" * 16)
+
+    class Tarpit:
+        def __init__(self):
+            self.sent = []
+
+        def send(self, url, body, headers):
+            self.sent.append(url)
+            return Sent(False, None, "timeout") if url.startswith(HOOK_URL) else Sent(True, 204)
+
+    sender = Tarpit()
+    order = []
+    report = run(alerts=alerts, store=JobStore(), can=FakeAuthorizer({}).can, sender=sender,
+                 jwt_secret=SECRET, now=NOW, users=[A, B],
+                 shuffle=lambda users: order.extend(users))
+    assert order == [A, B]
+    # each of A's two webhooks was tried once (then skipped for the run); B's got all three
+    assert sender.sent.count(HOOK_URL) == 1 and sender.sent.count(HOOK_URL + "-second") == 1
+    assert sender.sent.count("https://hooks.example.org/b") == 3
+    assert report.delivered == 3 and report.failed == 2
+    left = [d for d in alerts.deliveries(A, slow["webhook_id"], 10) if d["attempts"] == 0]
+    assert left and all(d["status"] == "pending" for d in left)  # still due next run
+
+
+def test_sends_stop_at_the_runs_budget(conn, alerts):
+    alerts.add_webhook(A, HOOK_URL, "json", b"s" * 16)
+    clock = iter([0.0, 1e6, 1e6, 1e6, 1e6])  # the budget is spent before the first send
+    sender = RecordingSender()
+    run(alerts=alerts, store=JobStore(), can=FakeAuthorizer({}).can, sender=sender,
+        jwt_secret=SECRET, now=NOW, users=[A], monotonic=lambda: next(clock))
+    assert sender.sent == []
+    assert {d["status"] for d in alerts.deliveries(A, None, 10)} == {"pending"}

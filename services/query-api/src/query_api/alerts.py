@@ -564,7 +564,7 @@ class AppAlerts:
                             {"u": user_id, "at": at, "ids": ready})
         return ready
 
-    def due(self, user_id: str, at: datetime, limit: int = 50) -> list[dict]:
+    def due(self, user_id: str, at: datetime, limit: int = 10) -> list[dict]:
         """Deliveries to make now, with their webhook (URL, format, salt) and notification."""
         with self._tx(user_id) as cur:
             cur.execute(
