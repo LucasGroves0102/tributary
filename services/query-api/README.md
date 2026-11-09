@@ -289,8 +289,8 @@ else by SIC and size (`basis: "sic"`). The ranking is specified in `query_api/pe
   falls back to SIC.
 - **Score** = similarity x SIC division (same SIC x1.15, same group x1.10, same division x1.0,
   another division x0.80: a maker vs its customers) x size (1 / (1 + 0.3 x |log10 revenue ratio|), only
-  when the caller reads both revenues) + 0.05 if this company's 10-K names it + 0.03 if it names this
-  company. Blank checks (SIC 6770) are never suggested for an operating company.
+  when the caller reads both revenues; no current revenue counts as $10M) + 0.05 if this company's
+  10-K names it + 0.03 if it names this company. Blank checks (SIC 6770) are never suggested for an operating company.
 - **`match`** says why: `similarity`, `terms` (the shared terms that add the most), `named_by_target` /
   `names_target` (the sentence: accession, section, offsets, to cite), `sic_level`, `same_sector`,
   `same_industry`, `same_filer_category`, `revenue_band`, `same_revenue_band`. `business` is the

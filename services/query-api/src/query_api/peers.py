@@ -17,7 +17,9 @@ Score = similarity x division x size + NAMED (named by the target) + NAMES (name
 * size: 1 / (1 + 0.3 x |log10(revenue ratio)|) on TTM revenue as the screener reads it (a value
   only when current or behind, never n/m or old), floored at $10M; a 10x gap costs 23%, 100x 38%.
   Only when the caller can read both companies' financials (an unreadable candidate's revenue
-  must not move its rank: that would be an oracle); a readable candidate without one x0.85.
+  must not move its rank: that would be an oracle). A readable candidate with no current revenue
+  counts as the floor: mostly pre-revenue companies, which a $300B company's peers shouldn't open
+  on (NVIDIA's had two in its top 10) and a small company's barely notice.
 
 No text on file for the company (no 10-K Item 1 in the last three years, or the caller can't read
 its filings): SIC and size, as before F4 (`basis` "sic"). Blank-check shells (SIC 6770) are never
@@ -35,7 +37,6 @@ NAMED = 0.05
 NAMES = 0.03
 SIZE_SLOPE = 0.3
 SIZE_FLOOR = Decimal(10_000_000)
-NO_REVENUE = 0.85
 DIVISION = {4: 1.15, 3: 1.10, 2: 1.10, 1: 1.0, 0: 0.80}
 NO_SIC = 0.90
 SHELL = "6770"
@@ -69,9 +70,7 @@ def sic_match(a: str | None, b: str | None) -> int | None:
 def size_factor(target: Decimal | None, peer: Decimal | None, readable: bool) -> float:
     if target is None or not readable:
         return 1.0
-    if peer is None:
-        return NO_REVENUE
-    ratio = max(peer, SIZE_FLOOR) / max(target, SIZE_FLOOR)
+    ratio = max(peer or SIZE_FLOOR, SIZE_FLOOR) / max(target, SIZE_FLOOR)
     return 1 / (1 + SIZE_SLOPE * abs(math.log10(ratio)))
 
 

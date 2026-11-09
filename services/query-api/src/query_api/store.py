@@ -353,8 +353,10 @@ class Store:
                                         ELSE '10-K' END AS kind,
                                    max(f.filing_date) AS latest
                             FROM silver.filings f
-                            WHERE f.cik IN (SELECT k.cik FROM silver.company_ciks k
-                                            WHERE k.company_id = %(c)s)
+                            -- = ANY(ARRAY(...)), not IN (subquery): the CIKs reach both branches
+                            -- of the UNION view as an index condition (hermes: 93 ms vs 4.2 s)
+                            WHERE f.cik = ANY(ARRAY(SELECT k.cik FROM silver.company_ciks k
+                                                    WHERE k.company_id = %(c)s))
                               AND f.form IN ('10-K', '10-K/A', '10-KT', '20-F', '20-F/A',
                                              '40-F', '40-F/A')
                             GROUP BY 1) a) AS annual

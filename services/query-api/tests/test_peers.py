@@ -39,7 +39,9 @@ def test_size_counts_only_where_both_revenues_are_readable():
     assert round(P.size_factor(big, Decimal("1.3e9"), True), 3) == round(1 / 1.3, 3)
     assert P.size_factor(big, small, False) == 1.0          # unreadable: no oracle
     assert P.size_factor(None, small, True) == 1.0          # target's own size unknown
-    assert P.size_factor(big, None, True) == P.NO_REVENUE    # readable, no figure
+    # readable with no current revenue: the floor (a pre-revenue company)
+    assert P.size_factor(big, None, True) == P.size_factor(big, P.SIZE_FLOOR, True)
+    assert P.size_factor(Decimal("2e7"), None, True) > 0.9  # a small company barely notices
     assert P.size_factor(big, Decimal(1), True) == P.size_factor(big, P.SIZE_FLOOR, True)
 
 
