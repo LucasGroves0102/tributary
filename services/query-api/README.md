@@ -1,8 +1,8 @@
 # query-api
 
-FR8, week 2. HTTP API over the gold tables, read-only except for the caller's own saved work,
-preferences and alert settings (app database); the [agent](../agent) and the [web](../web) app
-reach data only through it.
+FR8, week 2. HTTP API over the gold tables, read-only except for the caller's own rows in the app
+database (watchlist, saved work, preferences, alert settings, a market-data connection); the
+[agent](../agent) and the [web](../web) app reach data only through it.
 Every data route is permission-checked twice:
 
 1. **OpenFGA** (`authorizer.py`): `can_read_financials` / `can_read_filings` on the company,
@@ -40,7 +40,7 @@ request parameters. Dev tokens: `make token USER=alice`.
 | `GET /v1/auth/github/start` | `GITHUB_CLIENT_ID` + `GITHUB_CLIENT_SECRET` | 302 to GitHub's authorize page (no scopes) with a signed `state`, and the state's nonce in a short-lived cookie (404 when not configured; [GitHub sign-in](#github-sign-in)) |
 | `GET /v1/auth/github/callback?code=&state=` | `GITHUB_CLIENT_ID` + `GITHUB_CLIENT_SECRET` | GitHub's redirect back: 302 to `/#/signed-in?token=…&expires_in=…` (a 7-day JWT, in the URL fragment), or `/#/signed-in?error=<code>` |
 | `GET /v1/me` | token | `catalog`: `{public, tiers, companies}`, whether every catalog company is readable to the caller and with which tiers (`companies`: how many); `companies`: with the catalog public, only what the caller reads beyond it (private grants), else every company the caller can read, with tiers; `sandbox` (expiry, plan, assistant allowance) for a demo sandbox user; `github` (login, plan, the demo's company ids, assistant allowance) for a GitHub sign-in; `account` (username, plan, `agent_questions_per_day`) for a password account |
-| `GET /v1/companies/search?q=&access=&limit=` | token | tickers, CIKs and any part of a name, best match first (`silver.search_companies`, migration 034): public identity + caller's access; `limit` 1-25, default 5; `access=financials`: only companies you can read, narrowed before the limit |
+| `GET /v1/companies/search?q=&access=&limit=` | token | tickers, CIKs and any part of a name, best match first (`silver.search_companies`, migration 034; ties ordered by 044): public identity + caller's access; `limit` 1-25, default 5; `access=financials`: only companies you can read, narrowed before the limit |
 | `GET /v1/metrics` | | metric names served by `financials`: `silver.metrics` and `gold.derived_metrics`, read once |
 | `GET /v1/companies/{id}/financials?metrics=&quarters=&view=&basis=&format=&readings=&callouts=` | financials | values + citation + freshness; `quarters` 1-120 (every quarter there is, the Statements tab's Max); `format=csv`: one row per value with its source filing; `callouts=true` (view quarter): quarters far outside their series ([Statement callouts](#statement-callouts)); `currency` (only when not USD: the company's reporting currency, every amount is in it, migration 056) and `cadence: "annual"` (only for a filer whose figures are fiscal years, a 20-F/40-F filer: gold never splits a year into quarters; `Store.cadence`, under RLS: gold has years and no quarter in the last 800 days AND the company's latest 10-K/10-Q/20-F/40-F in the filing index is a 20-F or 40-F, or with none indexed gold never had a quarter. Never from staleness: a US filer whose figures stopped, EIDP's at 2019 though it files 10-Qs, has no `cadence` and its figures read as old) |
 | `GET /v1/companies/{id}/components?metric=&period_end=&view=` | financials | what one figure is made of: a derived figure's inputs, a TTM's quarters, a sum's parts, and the tags, values and filings behind each ([Reported vs standardised](#reported-vs-standardised)) |
@@ -58,7 +58,7 @@ request parameters. Dev tokens: `make token USER=alice`.
 | `GET /v1/companies/{id}/events` | filings | 8-K filings since the latest 10-Q/10-K period end, newest first: items (SEC title, kind), an excerpt of the 8-K's own words, the press release exhibit, `announced` (a completed deal or new financing read from a 7.01/8.01 announcement), and `stale`: figures at that period end an event after it may have changed ([Earnings and events](#earnings-and-events)) |
 | `GET /v1/companies/{id}/earnings?quarters=` | filings | each quarter's earnings release (8-K Item 2.02), newest first, `quarters` 1-8 (default 4): the release, its headline, outlook passages and management's adjustments (reconciliation tables, dollar notes), each with offsets into the release; no beat or miss ([Earnings and events](#earnings-and-events)) |
 | `GET /v1/companies/{id}/data-notes` | financials | data-quality and freshness notes: gaps, overlapping quarters, restatements, derived quarters, filings companyfacts doesn't carry yet, each with its filings ([Data notes](#data-notes)) |
-| `GET /v1/companies/{id}/annual-per-share?years=` | financials | EPS and weighted shares per fiscal year, as the 10-K states them (migration 036): per-share figures don't add, so quarters can't give them |
+| `GET /v1/companies/{id}/annual-per-share?years=` | financials | EPS and weighted shares per fiscal year, as the 10-K states them (migration 036; `years` 1-30, default 10): per-share figures don't add, so quarters can't give them |
 | `GET /v1/data-notes?limit=&company_id=` | financials (every company covered) | the newest notes across the caller's companies, or the named ones of them (at most 50), without derived-quarters notes ([Data notes](#data-notes)) |
 | `POST /v1/formulas/validate` | token | AST, unit and inputs, or errors with positions |
 | `POST /v1/formulas/evaluate` | financials, every company in the formula | series; each point cites every input's filing |
@@ -93,13 +93,16 @@ request parameters. Dev tokens: `make token USER=alice`.
 | `POST /v1/alerts/webhooks/{id}/test` | token, app DB | sends a signed test event to the caller's own webhook now (5 an hour), through the same checks; the result goes in the log |
 | `GET /v1/alerts/deliveries?webhook_id=&limit=` | token, app DB | the caller's delivery log: status, attempts, last HTTP status, a short error code, next try |
 
+Saved work (workspaces, items, versions, reports, recent), views, model runs and thesis checks
+have their own sections below.
+
 `{id}` is the canonical 10-digit `company_id`. Prometheus metrics are on `/metrics` (including
 `tributary_permission_checks_total{tier,result}`); the web proxy blocks it and `/docs` from the
 public. OpenAPI docs at `http://localhost:8000/docs`.
 
 ## Formulas
 
-Chart layers can be formulas (`formula/`, spec in `docs/design/spec.md` §6):
+Chart layers can be formulas (`formula/`; the grammar is in `grammar.py`'s docstring):
 `net_income / revenue`, `revenue / revenue[-4q] - 1`, `KO.revenue / PEP.revenue`,
 `ttm(revenue)`, `abs(free_cash_flow)`. Both routes take
 `{"formula", "default_company", "basis", "view", "from", "to"}`; `default_company` is the
@@ -248,7 +251,7 @@ and peers): `not_meaningful` (with `reason`): a margin on under $100K of revenue
 margin over 100%, any margin over ±1,000%, growth of over 1,000% from under $10M or from a base under
 $100K, debt over 100 times equity, debt or equity below zero, ROE or payout over ten times, a current
 ratio over 100x. `not_applicable` (with `reason`): a bank's gross and operating margin, FCF, FCF margin,
-net debt, debt to equity and current ratio, whether or not a value exists. `old`: more than 300 days
+net debt, cash and investments, debt to equity and current ratio, whether or not a value exists. `old`: more than 300 days
 before the company's `latest_period` (the newest of its revenue, net income and total assets, never a
 future date). `behind`: more than 45. `other_currency` (migration 056, with `reason` and `unit`): an
 amount or per-share figure in a currency other than the dollar (a 20-F filer's euros: `unit` "EUR" or
@@ -362,9 +365,10 @@ which (owner's decision, 2026-11-09: no parser change for them).
 
 `GET /v1/companies/{id}/peers/check/{candidate}`: `require(financials)` on the comps' company, then
 public filing-index metadata about the candidate: `ok`, `reason` (`null`; `metadata_only`: it has
-figures your plan doesn't cover; `foreign_filer`: its annual reports are 20-F/40-F, IFRS, which
-Tributary doesn't read, e.g. Birkenstock; `no_xbrl`: it files 10-Ks but no XBRL figures are here yet;
-`no_annual_report`), `annual_form`, `annual_filed`. The web app asks before adding a peer and says why.
+figures your plan doesn't cover; `foreign_filer`: it files 20-F/40-F annual reports and none of its
+figures are here (since migration 056 most foreign filers' are, in their own currency, and pass);
+`no_xbrl`: it files 10-Ks but no XBRL figures are here yet; `no_annual_report`), `annual_form`,
+`annual_filed`. The web app asks before adding a peer and says why.
 
 By SIC and size (`basis: "sic"`): companies with financials in the same 4-digit SIC, then the
 3- and 2-digit groups; within a level, the same TTM revenue size band first (only for
@@ -381,15 +385,17 @@ for that in a demo sandbox, which lists nothing else); the default ranks every c
 
 Workspaces are named folders of saved items in the app database (`workspace_api.py`,
 `workspaces.py`, app migrations 004 and 009): a chart builder state (`chart`: title, range,
-alignment, up to 12 layers: `metric`, `formula`, or `segment` (company, segment metric,
+alignment, up to 12 layers: `metric`, `formula`, `segment` (company, segment metric,
 `segmentAxis`, 1-20 `members` as XBRL QNames, transforms q / ttm / yoy / contrib; the web app's
-Revenue view saves these, and reads their values from `/segments`); a metric or formula layer may
+Revenue view saves these, and reads their values from `/segments`) or `price` (a company only,
+transforms q / yoy / idx; the web app reads the viewer's own prices, [Connect your
+data](#connect-your-data)); a metric or formula layer may
 say how a dimensionless value reads, `display`: percent, multiple or number), a comps set (`comps`: target, up to 20 peers, columns), a screener
 screen (`screen`: filters and sort), a thesis (`thesis`) or a model (`model`; both below).
 A workspace can also be an **analysis project** (app migration 012, the web app's Analysis
 tab): its `project` is `{companyId, peers (up to 20), notes (up to 4,000 characters, "How it
-makes money"), done (guided steps marked done: business, numbers, changes, peers, model,
-thesis, monitor)}`, validated strictly (`ProjectState`: unknown fields, a peer twice or the
+makes money"), done (guided steps marked done: business, numbers, earnings, changes, peers,
+model, thesis, monitor)}`, validated strictly (`ProjectState`: unknown fields, a peer twice or the
 company among its peers refused); every other workspace has `project: null` and works as
 before. `POST /v1/workspaces` takes `{name, project?}`; `PATCH /v1/workspaces/{id}` takes
 `{name?, project?}` (a project for a plain workspace is a 422: folders stay folders). A project's
@@ -420,11 +426,11 @@ first) and `PUT /v1/recent/filings` (the reader records what you open; the newes
 - **Demo sandboxes** start with the workspace "PepsiCo vs Coca-Cola" (`sandbox.py`
   `sandbox_workspaces`: a margins chart for PEP vs KO, comps for PEP vs KO, KDP, MNST), written
   in the sandbox's creation transaction; it is deleted with the sandbox user (ON DELETE CASCADE).
-- **Not streamed, no OpenFGA type yet.** Sharing (read-only by link, the roadmap's owner/viewer)
-  is the next step: a `workspace` type in `authz/model.fga` (`owner`, `viewer`) with model tests,
+- **Not streamed, no OpenFGA type.** Nothing is shared: a workspace is its owner's alone. Sharing
+  would need a `workspace` type in `authz/model.fga` (`owner`, `viewer`) with model tests,
   `workspaces` (+ a shares table) in Debezium's `table.include.list` with REPLICA IDENTITY FULL,
-  the authz-sync mapping to tuples, the setup image redeploying the model, and these routes
-  checking `viewer` through OpenFGA before reading (keeping the owner filter for writes).
+  the authz-sync mapping to tuples, and these routes checking `viewer` through OpenFGA before
+  reading (keeping the owner filter for writes).
 
 ## Theses and models
 
@@ -458,8 +464,9 @@ rename), owner-only and validated like every item:
   `fcfMargin` (-1000..100), absent meaning the default from history; `ytd: true` (year 1 is the
   current fiscal year's reported quarters plus the remainder, its growth and margin the
   remainder's); `adjustments` (up to 20 `{name (1-80), fy, quarter (1-4), kind: one_off |
-  acquired, amount (USD)}`, the user's own one-offs and acquired revenue); `price` (`{value > 0,
-  date}`, a price per share the user typed). Numbers in these are JSON numbers (a string or a
+  acquired, amount}`, the user's own one-offs and acquired revenue, applied to the company's
+  figures as they are, so in its reporting currency); `price` (`{value > 0, date, currency?}`, a
+  price per share the user typed; `currency` three capitals, absent = dollars). Numbers in these are JSON numbers (a string or a
   `"yes"` is refused). Only what the user typed is stored: every run reads the history again
   ([Models](#models-one-copy-of-the-maths)), as the caller, so a model of a company you can't
   read draws nothing (403 as always).
@@ -477,7 +484,7 @@ models, a full model's versions, projects and their 16 KiB check).
 `POST /v1/companies/{id}/model` (`model_api.py`) runs a model: the body is a model item's state
 (`ModelState` above, strict; its `companyId` must be the path's), the answer everything the model
 page shows. The maths exist only here, in `model_maths.py`, whose docstring is the spec: the web
-app's model page and thesis embeds, agent-api's thesis check, and later MCP all call this route
+app's model page and thesis embeds and agent-api's thesis check all call this route
 (before F2 they were two hand-kept copies, the web's `models/model.ts` and agent-api's
 `model_stats.py`). `require(financials)` comes first (the same 403 for any company you can't
 read), then `Store.model_inputs` reads in one session under RLS: TTM rows (40 quarters) and
@@ -646,6 +653,8 @@ make up-all                                       # in docker-compose, on http:/
 set -a; . ./.env; set +a; .venv/bin/query-api     # locally
 make token USER=alice                             # query-api-token: dev JWT for a user
 .venv/bin/query-api-account list                  # owner-created password accounts (below)
+.venv/bin/query-api-alerts                        # one run of the filing alerts job (Helm CronJob alerts)
+.venv/bin/query-api-demo-cleanup                  # delete expired demo sandboxes (Helm CronJob demo-cleanup)
 ```
 
 Config (env): `DATABASE_URL`, `FGA_API_URL`, `QUERY_API_JWT_SECRET` (all required; the secret
@@ -653,8 +662,12 @@ must be at least 32 bytes), `APP_DATABASE_URL` (the app database, for watchlists
 unset makes those routes answer 503), `FGA_API_TOKEN` (OpenFGA preshared key, when enabled),
 `DEMO_USERS` (comma-separated accounts allowed to sign in without a password; unset disables
 the demo routes), the demo sandbox settings below, `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` /
-`GITHUB_REDIRECT_URI` ([GitHub sign-in](#github-sign-in)), `PORT` (default 8000), `LOG_LEVEL`.
-Password accounts need no setting: their route exists whenever `APP_DATABASE_URL` is set.
+`GITHUB_REDIRECT_URI` ([GitHub sign-in](#github-sign-in)), `DATA_CONNECTIONS_KEY` ([Connect
+your data](#connect-your-data)), `PORT` (default 8000), `LOG_LEVEL`. Password accounts need no
+setting: their route exists whenever `APP_DATABASE_URL` is set. The alerts job reads
+`DATABASE_URL`, `APP_DATABASE_URL`, `FGA_API_URL`, `QUERY_API_JWT_SECRET` (webhook secrets),
+`PUBLIC_APP_URL` (where alert links point; default the public site) and the email settings in
+[Filing alerts](#filing-alerts).
 
 ## Demo sandboxes
 
@@ -845,7 +858,7 @@ nonce); the current master key wraps the data key (own nonce). Both use associat
 user's row (or provider) fails to decrypt. Stored: `key_id`, `wrapped_key`, `nonce`,
 `ciphertext`, `last4`. Rotation: put the new key first in `DATA_CONNECTIONS_KEY` and keep the
 old one listed; new saves use the new key, old rows still open (`Keyring.rewrap` re-wraps a row
-without touching the API key; a bulk rewrap job is not built yet). The key is decrypted only in
+without touching the API key; there is no bulk rewrap job). The key is decrypted only in
 process, into a `Secret` (repr `Secret(***)`), straight into the provider request's
 `Authorization` header: never into a URL (httpx logs request URLs), a log line, an exception
 message or a response. The `PUT` body is parsed by hand (FastAPI's 422 would echo the input):
@@ -893,7 +906,7 @@ total share count; the response lists them in `share_classes`.
 
 Outbound: the provider adapters' hosts only (today `api.tiingo.com`) over HTTPS (Helm
 `uses: market-data`). Metric: `tributary_market_data_calls_total{provider,kind,result}`.
-The agent has no price tool (deferred: its citation contract has no shape for licensed data).
+The agent has no price tool: its citation contract has no shape for licensed data.
 
 ## Tests
 
@@ -941,6 +954,20 @@ a stalled webhook not starving the user's others, stalls across runs, each user'
 send budget), `test_alert_filings_db.py` (the job's
 index query as query_api without a user) and `test_alert_email.py`.
 
+The rest, by feature: `test_catalog_queries.py` (no cross-company route passes a catalog-sized id
+list into SQL), `test_auth.py` (JWTs: signature, expiry, the secret's length) and
+`test_telemetry.py` (metrics, request ids, log fields), `test_sandbox.py` / `test_sandbox_db.py` (demo sandboxes and the assistant quota, with fakes and on
+the app schema), `test_views.py` (views with fakes; `test_views_db.py` on the app schema),
+`test_reports.py` (report routes), `test_research_api.py`, `test_changes.py` and
+`test_changes_api.py` (What changed and search; `test_changes.py` over production texts in
+`tests/fixtures/changes`), `test_events_api.py`, `test_releases.py` and `test_announcements.py`
+(earnings and events over real releases and 8-Ks), `test_notes_api.py` and `test_callouts.py`
+(data notes, statement callouts), `test_components.py` (reported vs standardised),
+`test_peers.py` and `test_sectors.py` (peers, the sector mapping against every SIC code),
+`test_insiders.py`, `test_text_kpis.py` (each rule on real text) and `test_readings_db.py` (035's
+readings, 036's annual per-share figures and the currency rules on real Postgres). Fixtures:
+[tests/fixtures](tests/fixtures/README.md).
+
 ## Filing alerts
 
 F6 (Phase 9 E, #154): when a company a user watches or analyses files a 10-K, a 10-Q or an 8-K
@@ -983,7 +1010,7 @@ migrations 016 and 017 (owner-only, forced RLS, not streamed).
   the database anyway, and it would need its own SCRAM user, ACL entry and a secret only the owner
   can create on hermes. Each run re-reads the last 3 days of the index and inserts with ON CONFLICT
   DO NOTHING (one alert per user, filing and company; one delivery per webhook and alert), so a
-  missed or repeated run loses or doubles nothing. Cost per run: one short app-DB transaction per
+  missed or repeated run loses or doubles nothing; alerts older than 180 days are deleted. Cost per run: one short app-DB transaction per
   user who follows something (a handful of statements), one filing-index query per 50 followed
   companies (13 ms on hermes for 50 companies, index scans only, measured 2026-11-09), then a recap
   and the red lines only for the filings that just arrived. One pod for a few seconds every 10
@@ -1021,7 +1048,8 @@ migrations 016 and 017 (owner-only, forced RLS, not streamed).
   to a URL of their choosing. The Helm network policy (443 to public addresses only) is a second
   layer under these checks.
 - **Email** (`alert_email.py`): a provider interface, off. `ALERT_SMTP_HOST` + `ALERT_SMTP_FROM`
-  (any SMTP relay, TLS) turn a provider on in the job, but a user also needs an address they
+  (any SMTP relay, TLS; `ALERT_SMTP_PORT` default 587, `ALERT_SMTP_USER`, `ALERT_SMTP_PASSWORD`)
+  turn a provider on in the job, but a user also needs an address they
   proved they own and none is stored yet, so nothing is sent; the settings say email isn't set up.
   The network policy opens only 443, so SMTP also needs `alertEmail.enabled` in the Helm values
   (`allow-smtp`, port 587 by default; deploy/helm/tributary README).
@@ -1110,7 +1138,9 @@ from `readable()` (financials) and passes them into the SQL (with the catalog pu
   `outlier`, `segment_sum_*`, `restatement`, `mistagged_fact`, `net_debt_gap`), with `severity`
   error / warning / info and `detail` as the check wrote it (dates, filings, relative sizes; never
   values). Migration 041: `mistagged_fact` is a fact gold leaves out (`rule`
-  `period_after_filing`, with `filed` and `periods`; `debt_above_liabilities`); `net_debt_gap` is
+  `period_after_filing`, with `filed` and `periods`; `debt_above_liabilities`; migration 050's
+  `debt_parts_scale`, current and noncurrent debt tagged at 1,000x the same filing's total, with
+  `factor`); `net_debt_gap` is
   the latest balance sheet with debt and cash but no net debt (`investments_end` when an investments
   series stopped, else debt that can't carry its interest); a `series_gap` with `repeated` is the same
   quarter missing that many years.
@@ -1166,7 +1196,8 @@ RLS), the excerpts and passages are section text under RLS on `silver.filing_sec
   the balance-sheet figures it can change, listed once each in `stale` as of that period end with
   the events behind them: 2.01 completed acquisition or disposition (cash, debt, net debt, total
   assets), 2.03 new debt and 2.04 accelerated debt (debt, net debt, debt to equity; 2.03 cash
-  too), 2.06 impairment (total assets, equity), 3.02 unregistered equity sale (shares, equity),
+  too), 2.06 impairment (total assets, equity, debt to equity), 3.02 unregistered equity sale
+  (shares, equity),
   1.03 bankruptcy and 4.02 non-reliance (`*`: every figure). A flag, never a recomputed figure.
 - **Announced under 7.01 / 8.01** (F1b, `announcements.py`, rules in its docstring): many
   companies announce a closed acquisition or a new financing in a Regulation FD or Other Events
@@ -1206,10 +1237,11 @@ RLS), the excerpts and passages are section text under RLS on `silver.filing_sec
   report (+7 days) and 28,866 (71%) a parsed EX-99. On 45 releases sampled across industries (one
   per two-digit SIC, Oct 15 - Nov 6, 2026), 33 had an Outlook or Guidance heading and the rules
   found 32 (the miss: a release whose text breaks every printed line); every block found was the
-  release's own outlook section, some opening with its disclaimer. 8-K items of operating companies: 111,113 8-Ks, 76,711 stored;
-  material event items are stored only when the document crawl took them (`CRAWL_8K_ITEMS`,
-  doc-fetcher README): an event whose 8-K isn't stored is still listed, from the index, with
-  its EDGAR link and no excerpt.
+  release's own outlook section, some opening with its disclaimer. Of operating companies'
+  111,113 8-Ks in that window, 76,711 were stored on 2026-11-08, when the crawl took only 2.02,
+  7.01 and 8.01; since 2026-11-09 the live fetcher and the crawl also store the material-event
+  items (`FETCH_8K_ITEMS`, `CRAWL_8K_ITEMS`, doc-fetcher README). An event whose 8-K isn't
+  stored is still listed, from the index, with its EDGAR link and no excerpt.
 - Per company, bounded: one company's 8-Ks (an index probe per CIK, 1.4 ms for NVIDIA's two
   years on hermes), the sections of at most 25 events or 8 releases. No catalog-wide form.
 
@@ -1305,7 +1337,7 @@ every figure is as filed. Per filing: `owners` (name, CIK, `roles`: Director, th
 `code_label` from the SEC's Form 4 codes, `shares`, `price`, `value` = shares x price for a priced
 transaction, `acquired_disposed`, `shares_after`, `direct_indirect`, `nature`, a derivative's exercise
 price and underlying), and a `citation` to the filing on EDGAR. Numbers are exact decimal strings.
-Amendments are listed as filed, never netted. Not an agent tool (yet): the recorded suites are
+Amendments are listed as filed, never netted. Not an agent tool: the recorded suites are
 unchanged. Pages: newest first by (filed, accession_no); with `has_more`, `next_cursor` is the page's
 last pair and `cursor=<it>` returns the filings after it, so a day split across two pages is never cut
 (`before=<day>` skips the rest of that day: it stays for older clients, not for paging).
@@ -1366,8 +1398,9 @@ and GE Vernova's wording is read today.
 ~2,000-character passage of every parsed section, `tsvector` with a GIN index; migration 021).
 With `company`, `require(filings)` on it; without, the companies `readable()` lists with the
 filings tier (no OpenFGA list entry → no query), or with the catalog public at that tier every
-company the read rule allows. The first stage is `gold.search_passages` (migration 032), which
-applies `authz.readable_companies('filings')` itself: `@@` isn't leakproof, so under RLS on
+company the read rule allows. The first stage is `gold.search_page` (migration 052: 032's
+`gold.search_passages` with an order and a total), which applies
+`authz.readable_companies('filings')` itself: `@@` isn't leakproof, so under RLS on
 `gold.section_search` the planner can't use the GIN index at all. It returns offsets and ranks,
 no text; the snippet's text is still read through RLS on `silver.filing_sections`.
 

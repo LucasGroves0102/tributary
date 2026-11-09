@@ -23,3 +23,16 @@
   ago. Both section texts from production's sections route (2026-11-09) and `stored`, the rows
   `gold.section_changes` holds for them (the parser's diff-1 over those texts; their counts equal
   production's). gzip because the texts are 26-42 KB each; `test_changes.py` reads them.
+- `model/`: the model route's inputs and the cases it is held to. `{nvda,deck,vrt}.json`:
+  NVIDIA's, Deckers' and Vertiv's Query API answers and `gold.latest_reading` rows from
+  production on 2026-11-09, in `Store.model_inputs`' shape. `b2-b7-cases.json`: the history
+  statistics, flags, scenario choices and run-rate defaults the web app and agent-api were held to
+  before the maths moved here (generated from agent-api's `model_stats.py`). `make_web_fixtures.py`
+  regenerates the web app's model-run fixtures (`services/web/src/models/fixtures`) from this route;
+  never hand-edit those. `test_model_maths.py` and `test_model_api.py` read them.
+- `text_kpis/*.txt`: trimmed sections of production 10-Ks, 10-Qs and EX-99.1 releases (Boeing,
+  Caterpillar, Emerson, Eaton, Lockheed Martin, Northrop Grumman, Vertiv), one per backlog or
+  orders rule; the file name is the company, form, filing date and section. `test_text_kpis.py`
+  reads them.
+- `sic_codes.csv`: the 399 SIC codes the SEC assigns and their titles (2026-11-09);
+  `test_sectors.py` checks every one falls in exactly one range of migration 046.

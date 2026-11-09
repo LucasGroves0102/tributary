@@ -1,6 +1,6 @@
 # web
 
-Chat and explore UI (React 19, TypeScript, Vite), served by nginx. It talks to the
+The research workspace UI (React 19, TypeScript, Vite), served by nginx. It talks to the
 [Query API](../query-api) and [agent-api](../agent) through same-origin paths, so it needs no
 CORS:
 
@@ -17,7 +17,7 @@ person knows it (`access.ts` `accountName`: "morgan", not the API's "pw-morgan")
 
 The shell follows prototype v3: a sidebar (screens with `g`-then-letter shortcuts, watchlist
 with revenue sparklines, next expected filings, freshness), a top bar (breadcrumb, Ctrl/Cmd-K
-command palette, theme, demo user) and the assistant drawer on every page (Ctrl/Cmd-J toggles,
+command palette, the filing alerts bell, theme, who is signed in) and the assistant drawer on every page (Ctrl/Cmd-J toggles,
 `/` focuses; the top bar's Assistant is the way in, closed until asked for and then remembered per
 browser). Dark is the default theme; the choice is kept per user in localStorage. Design
 tokens (colours for both themes, type scale, spacing) are in `src/tokens.css`.
@@ -52,8 +52,14 @@ Views (hash routes): `#/` Home (Start an analysis first, then the watchlist tabl
 last visit and data notes; the status strip, Continue and expected filings can be turned on in
 Customize); `#/alerts` filing alerts (below); `#/companies?<filters>` the screener (`/v1/screener`: filters kept in
 the URL, sortable, ungranted companies as metadata only, CSV export through the API);
-`#/company/<company_id>` 12-quarter chart and table, every value linked to its filing (a statement or segment value opens the filing in the reader at its financial statements, a 10-K's Item 8 or a 10-Q's Part I Item 1; the EDGAR link sits beside it on hover);
-`#/filing/<company_id>/<accession>[/<section>]` parsed filing reader; `#/chart` the chart
+`#/company/<company_id>[/<tab>]` the company tearsheet, with tabs Overview, Earnings, Statements,
+Revenue, Segments, Ratios, Filings, Data notes, Peers and Price (only when Connect your data is on,
+below; `route.ts` `COMPANY_TABS`), every statement or segment value linked to its
+filing (it opens the reader at the financial statements, a 10-K's Item 8 or a 10-Q's Part I Item 1;
+the EDGAR link sits beside it on hover);
+`#/filing/<company_id>/<accession>[/<section>]` parsed filing reader; `#/search` full-text search
+(below); `#/settings` filing alerts and Connect your data; `#/workspace/<id>`, `#/report/<id>`,
+`#/thesis/<id>`, `#/model/<id>` saved work (below); `#/chart` the chart
 builder (each layer a `/v1/formulas/evaluate` request; plain SVG; CSV, SVG and PNG export);
 `#/ask` the assistant full width, with streamed answers, the lookups it made and verified citation links
 (an answer's figures not found in the data are named under it, each a button that scrolls to and
@@ -295,8 +301,10 @@ ranked), NVIDIA's 10-K against the previous 10-K, at desktop and phone widths.
 
 Freshness has two clocks, labelled, explained on hover (`home/useFeedStatus.ts`): a filing is *listed*
 (`GET /v1/status`, the same time as Data status's "Newest filing listed here") minutes after EDGAR accepts
-it, and its text *parsed* (the newest in `/v1/filings/latest`) at once for tracked companies and
-within about 6 hours for the rest. They differ by hours, and neither stands in for the other.
+it, and its text *parsed* (the newest in `/v1/filings/latest`) later: within minutes for a tracked
+company's filings and, since 2026-11-09, an operating company's 10-K, 10-Q and material 8-K from the
+live feed; within the document crawl's next plan (about 6 hours) for the rest (doc-fetcher README).
+Neither clock stands in for the other.
 
 The assistant panel shows the questions left before one is spent (`assistant/useAllowance.ts`,
 agent-api `/v1/allowance`): per hour and, where the account has a cap, per day. What Tributary covers
@@ -356,7 +364,8 @@ a company or filing URL outside the demo shows one page, "<Name> isn't one of th
 in this demo.", instead of locked tabs, and the assistant suggests nothing about it. Already scoped by the API
 for everyone: the chart builder's companies (`access=financials`), Home's feed and expected
 filings (`/v1/filings/latest`, `scope=readable`/`watchlist`), the Search page's company filter
-(`access=financials`, `readableFor`). Named demo users and future signed-in users keep the full public index, with
+(`access=financials`, `readableFor`). Named demo users and regular accounts (an owner-issued link or
+a password: session kind `account`) get no such scope and keep the full public index, with
 ungranted companies as metadata only.
 
 The assistant's suggestions (`assistant/context.ts`) follow the page and are true for this user: the
@@ -372,7 +381,7 @@ it, reverses watchlist calls, deletes an item the assistant saved (`save_to_work
 also undoes every later action.
 
 Saved work (`src/workspaces/`, Query API `/v1/workspaces`): the sidebar's Workspaces are folders
-of saved charts, comps sets and screens. A folder's arrow folds it and its name opens the workspace
+of saved charts, comps sets and screens, and the theses, models and reports below. A folder's arrow folds it and its name opens the workspace
 (or the analysis) page, which has Rename, Duplicate and Delete in the open, for itself and for each
 item (`workspaces/Actions.tsx`); "⋯" on a sidebar row is the shortcut to the same actions, in a strip
 under the row, so a name never gives up room for them. Delete asks over the whole screen, with the
@@ -999,15 +1008,18 @@ npm run build     # tsc + vite build into dist/
 npm run e2e       # Playwright flows in e2e/ against dist/ (build first)
 ```
 
-The end-to-end flows (`e2e/app.spec.ts`: try the demo → Home, screener filter/sort/watch, a
-two-layer chart with a formula exported as CSV, comps, saving a chart to a workspace and
-reopening it, the assistant drawer with a streamed answer, the narrow-screen menu, no screen
-scrolling sideways on a phone, at 1024 or at 1440 with the panel open, workspace actions, formula
-autocomplete with annual frequency and deck output, Compare's side-by-side charts, the shortcut
-sheet and Ctrl+arrow table jumps, the limits page, data notes on Home and the tearsheet, writing
-a report from a workspace with a mocked SSE stream (embedded charts, the flagged figure, Markdown
-download, print styles), and customizing Home and the watchlist and screener columns) run
-against `vite preview` with every `/api/*` call answered by `e2e/mockApi.ts` (route
+The 18 end-to-end flows (`e2e/app.spec.ts`: try the demo → Home, screener filter/sort/watch, a
+two-layer chart with a formula exported as CSV, formula autocomplete with annual frequency and deck
+output, comps with the peer median as CSV and side-by-side charts, saving a chart to a workspace and reopening it, the
+assistant drawer with a streamed answer (closed on a first visit, nothing floating over the page),
+the narrow-screen menu, the shortcut sheet, Ctrl+arrow table jumps and the limits page, data notes on
+Home and the tearsheet, writing a report from a workspace with a mocked SSE stream (embedded charts,
+the flagged figure, Markdown download, print styles), customizing Home and the watchlist and screener
+columns, workspace actions, a clean console on Home, Companies, a company's Overview and Statements,
+Compare, the chart builder, Analysis, Alerts and Settings (#68), no screen scrolling sideways on a
+phone, at 1024 or at 1440 with the panel open, the screener's numbers under a frozen name with the
+panel open, and a company reporting in euros, labelled everywhere and never ranked or averaged with
+dollars) run against `vite preview` with every `/api/*` call answered by `e2e/mockApi.ts` (route
 interception), so no backend runs. One worker and one headless chromium
 (`npx playwright install chromium` once). CI runs them in the `e2e` job.
 
@@ -1066,12 +1078,17 @@ can't be opened yet; a Numbers chart line of a metric it doesn't know says it co
 F6: every `/v1/alerts` route answering 404 means no alerts yet: no bell, and the Alerts page, the
 Monitor step's lists and Settings' section say alerts aren't available on this server yet; an older
 API's notification without `filing_url` links EDGAR from the company id. The thesis's Write view and
-the comps table change no request, and Home's new default arrangement asks nothing new.
+the comps table change no request, and Home's new default arrangement asks nothing new. F1, F7b, F8b:
+`/earnings`, `/events`, `/insiders` and `/text-kpis` answering 404 read "not available here yet"
+(`api.ts` `orNullOn404`); a model's price currency is the user's work, so like F2's fields it is never
+stripped from a save an older API refuses.
 
 `Dockerfile` builds the bundle and serves it from `nginx-unprivileged` on port 8080
 (`deploy/nginx.conf`). nginx returns 404 for the APIs' `/docs`, `/redoc`, `/openapi.json` and
-`/metrics`, forwards a request ID, and passes Cloudflare's `CF-Connecting-IP` to agent-api as
-`X-Client-IP` for its per-IP limit. `deploy/headers.conf` sets CSP, HSTS, nosniff,
+`/metrics`, and for the Query API routes only agent-api may call (the demo's question quota, writing
+a report, storing a thesis check: browsers read those through the item routes); it forwards a request
+ID, and passes Cloudflare's `CF-Connecting-IP` to both APIs as `X-Client-IP` (agent-api's per-IP
+limit, the Query API's sandbox creation and password attempt limits). `deploy/headers.conf` sets CSP, HSTS, nosniff,
 Referrer-Policy and Permissions-Policy on every response. On k3s only the `cloudflared`
 namespace can reach it. The page itself goes out with `Cache-Control: no-transform`, so Cloudflare
 serves it as built: its Web Analytics "automatic setup" injected a beacon script from
