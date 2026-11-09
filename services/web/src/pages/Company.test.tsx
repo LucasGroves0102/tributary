@@ -91,6 +91,8 @@ const NOTES = {
 };
 
 let rowFor: (id: string) => ScreenerRow = () => nvdaRow();
+/** a test's own answer for a request, or null for the usual one */
+let override: ((u: URL) => Response | null) | null = null;
 
 function respond(url: string): Response {
   const u = new URL(url, "http://x");
@@ -116,6 +118,10 @@ function respond(url: string): Response {
     return Response.json({ as_of: "", forms, from: null, to: null, limit: 25, offset, has_more: offset === 0 && !forms.length, filings: rows });
   }
   if (ungranted) return Response.json({ detail: "not permitted" }, { status: 403 });
+  if (override) {
+    const r = override(u);
+    if (r) return r;
+  }
   if (p.endsWith("/financials")) {
     const view = u.searchParams.get("view");
     const metrics = u.searchParams.getAll("metrics");
@@ -164,6 +170,7 @@ beforeEach(() => {
   clearNewest();
   noMargin = false;
   morePeers = 0;
+  override = null;
   [onWatch, onChart, onChartMany, onAsk].forEach((f) => f.mockClear());
 });
 
@@ -321,9 +328,12 @@ it("statements: what's chosen comes from the address and goes back to it", async
   await render("statements", NVDA, null, { kind: "cf", period: "ttm", basis: "calendar", range: "5y" });
   const q = paths().find((u) => u.pathname.endsWith("/financials"))!;
   expect(q.searchParams.get("view")).toBe("ttm");
-  expect(q.searchParams.get("quarters")).toBe("20");
+  // 5y = 20 columns; cash flow asks for 4 more, for the cash at the start of the first (F5)
+  expect(q.searchParams.get("quarters")).toBe("24");
   expect(q.searchParams.get("basis")).toBe("calendar");
-  expect(q.searchParams.getAll("metrics")).toContain("capex");
+  expect(q.searchParams.getAll("metrics")).toEqual(expect.arrayContaining(["capex", "investing_cash_flow", "financing_cash_flow", "change_in_cash", "cash_and_restricted_cash"]));
+  // callouts are for quarters: a TTM view doesn't ask
+  expect(q.searchParams.get("callouts")).toBeNull();
   expect($('[aria-label="Range"] [aria-pressed="true"]')?.textContent).toBe("5y");
   await click(button("Max"));
   expect(window.location.hash).toBe(`#/company/${NVDA}/statements?kind=cf&period=ttm&basis=calendar&range=max`);
@@ -655,4 +665,109 @@ it("F4 #135: a company that files one combined 10-K with another says it isn't a
   expect($(".co-head .meta")?.textContent).toContain("Utilities · Multi-utilities · Electric & Other Services Combined (SIC 4931)");
   expect($(".joint-note")?.textContent).toContain("Not a duplicate: Pacific Gas & Electric and PG&E file one combined 10-K as separate SEC registrants");
   expect($(".joint-note a")?.getAttribute("href")).toBe(`#/company/${CORP}`);
+});
+
+// --- F5: the cash flow statement, its callouts, and a standardised line opened into its parts ---
+
+const cf = (metric: string, end: string, value: string, fiscal: string, start: string | null, over = {}) =>
+  fin(metric, end, value, fiscal, { period_start: start, ...over });
+const NVDA_CF = [
+  cf("cash_and_restricted_cash", "2026-01-25", "10605000000", "FY2026 Q4", null),
+  cf("operating_cash_flow", "2026-04-26", "50340000000", "FY2027 Q1", "2026-01-26"),
+  cf("change_in_cash", "2026-04-26", "-660000000", "FY2027 Q1", "2026-01-26"),
+  cf("cash_and_restricted_cash", "2026-04-26", "9945000000", "FY2027 Q1", null),
+  cf("dividends_paid", "2026-04-26", "243000000", "FY2027 Q1", "2026-01-26"),
+  cf("operating_cash_flow", "2026-07-26", "24080000000", "FY2027 Q2", "2026-04-27"),
+  cf("change_in_cash", "2026-07-26", "13477000000", "FY2027 Q2", "2026-04-27"),
+  cf("cash_and_restricted_cash", "2026-07-26", "23422000000", "FY2027 Q2", null),
+  cf("dividends_paid", "2026-07-26", "6047000000", "FY2027 Q2", "2026-04-27", { value_source: "derived" }),
+  cf("free_cash_flow", "2026-07-26", "21400000000", "FY2027 Q2", "2026-04-27",
+    { inputs: { operating_cash_flow: 24080000000, capex: 2680000000 }, citation: { ...fin("x", "2026-07-26", "1", "x").citation, xbrl_tag: null as unknown as string } }),
+];
+const DIVIDEND_CALLOUT = { metric: "dividends_paid", period_end: "2026-07-26", kind: "outlier", edge: true, value: 6047e6, factor: 24.9,
+  beside: [{ period_end: "2026-01-25", value: 242e6 }, { period_end: "2026-04-26", value: 243e6 }], seasonal: false };
+const COMPONENTS = {
+  company_id: NVDA, metric: "free_cash_flow", span: "quarter", period_end: "2026-07-26", how: "derived",
+  definition: "operating_cash_flow - capex", parts: [], facts: [],
+  figure: { metric: "free_cash_flow", period_start: "2026-04-27", period_end: "2026-07-26", fiscal_period: "FY2027 Q2", value: "21400000000",
+    unit: "USD", value_source: "computed", how: "derived", citation: { accession_no: ACC, form: "10-Q", filed: "2026-08-26", xbrl_tag: null, source_accessions: [ACC], filing_url: null } },
+  components: [
+    { metric: "operating_cash_flow", role: "+", value: "24080000000", used: true, note: null, parts: [],
+      figure: { metric: "operating_cash_flow", period_start: "2026-04-27", period_end: "2026-07-26", fiscal_period: "FY2027 Q2", value: "24080000000", unit: "USD",
+        value_source: "derived", how: "ytd", citation: { accession_no: ACC, form: "10-Q", filed: "2026-08-26", xbrl_tag: "us-gaap:NetCashProvidedByUsedInOperatingActivities", source_accessions: [ACC], filing_url: "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000075/" } },
+      facts: [] },
+    { metric: "capex", role: "-", value: "2680000000", used: true, note: null, parts: [],
+      figure: { metric: "capex", period_start: "2026-04-27", period_end: "2026-07-26", fiscal_period: "FY2027 Q2", value: "2680000000", unit: "USD",
+        value_source: "derived", how: "ytd", citation: { accession_no: ACC, form: "10-Q", filed: "2026-08-26", xbrl_tag: "us-gaap:PaymentsToAcquirePropertyPlantAndEquipment", source_accessions: [ACC], filing_url: null } },
+      facts: [
+        { tag: "PaymentsToAcquirePropertyPlantAndEquipment", taxonomy: "us-gaap", priority: 1, line: true, period_start: "2026-04-27",
+          period_end: "2026-07-26", value: "2680000000", accession_no: ACC, form: "10-Q", filed: "2026-08-26", filing_url: null, filings: 1, used: true },
+        { tag: "PaymentsToAcquireProductiveAssets", taxonomy: "us-gaap", priority: 2, line: true, period_start: "2026-04-27",
+          period_end: "2026-07-26", value: "2700000000", accession_no: ACC, form: "10-Q", filed: "2026-08-26", filing_url: null, filings: 1, used: false }] },
+  ],
+};
+
+it("F5: the cash flow statement has its subtotals, starts and ends with cash, and marks the dividends step", async () => {
+  override = (u) => (u.pathname.endsWith("/financials")
+    ? Response.json({ as_of: "", rows: NVDA_CF.filter((r) => u.searchParams.getAll("metrics").includes(r.metric)),
+      ...(u.searchParams.get("callouts") === "true" ? { callouts: [DIVIDEND_CALLOUT] } : {}) })
+    : null);
+  await render("statements", NVDA, null, { kind: "cf" });
+  const q = paths().find((x) => x.pathname.endsWith("/financials"))!;
+  expect(q.searchParams.get("callouts")).toBe("true");
+  expect(q.searchParams.get("quarters")).toBe("12");
+  const rows = [...container.querySelectorAll(".t.statement tbody tr")].map((tr) => tr.querySelector("td.first")!.textContent);
+  expect(rows).toEqual(["Net cash from operating activities", "Dividends paid", "Change in cash", "Cash at beginning of period",
+    "Cash at end of period", "Beginning + change = end?", "Free cash flow (operating cash flow less capex)"]);
+  const dividends = [...container.querySelectorAll(".t.statement tbody tr")].find((tr) => tr.textContent!.startsWith("Dividends paid"))!;
+  // one unit across a row (moneyRow); the quarter before the first only gives it its starting cash, here shown too
+  expect([...dividends.querySelectorAll("td.n")].map((td) => td.textContent)).toEqual(["·", "-$0.24B", "-$6.05B"]);
+  const called = dividends.querySelector("td.called")!;
+  expect(called.getAttribute("title")).toContain("Dividends paid, FY2027 Q2: -$6.05B, 25 times the two quarters before it");
+  expect($(".callouts")?.textContent).toContain("Worth a look");
+  expect($(".callouts a")?.getAttribute("href")).toBe(`#/filing/${NVDA}/${ACC}/I-1`);
+  expect(container.textContent).toContain("Outflows (capex, dividends, buybacks) are shown negative");
+  const ties = [...container.querySelectorAll("td.tone-ok")].map((td) => td.textContent);
+  expect(ties).toEqual(["✓ ties", "✓ ties"]);
+});
+
+it("F5: a standardised line opens into its lines across the periods and, below, what one period is made of", async () => {
+  override = (u) => {
+    if (u.pathname.endsWith("/financials")) return Response.json({ as_of: "", rows: NVDA_CF.filter((r) => u.searchParams.getAll("metrics").includes(r.metric)) });
+    if (u.pathname.endsWith("/components")) return Response.json(COMPONENTS);
+    return null;
+  };
+  await render("statements", NVDA, null, { kind: "cf" });
+  await click($(".open-row"));
+  for (let i = 0; i < 3; i++) await act(async () => {});
+  const asked = paths().find((x) => x.pathname.endsWith("/components"))!;
+  expect([asked.searchParams.get("metric"), asked.searchParams.get("period_end"), asked.searchParams.get("view")]).toEqual(["free_cash_flow", "2026-07-26", "quarter"]);
+  expect([...container.querySelectorAll("tr.input-line td.first")].map((td) => td.textContent)).toEqual(["+ Net cash from operating activities", "− Capital expenditure"]);
+  const panel = $(".components-panel")!;
+  expect(panel.textContent).toContain("What free cash flow (operating cash flow less capex) is made of");
+  expect(panel.textContent).toContain("Free cash flow (operating cash flow less capex), FY2027 Q2 (Jul 26, 2026): $21.40B");
+  expect(panel.textContent).toContain("us-gaap:PaymentsToAcquireProductiveAssets");
+  expect(panel.textContent).toContain("not used: PaymentsToAcquirePropertyPlantAndEquipment comes first");
+  expect([...panel.querySelectorAll("tr.comp-line td:nth-child(2)")].map((td) => td.textContent)).toEqual(["+", "−"]);
+  await click([...panel.querySelectorAll("button")].find((b) => b.textContent === "Close"));
+  expect($(".components-panel")).toBeNull();
+});
+
+it("F5: against an API older than 049 the statement asks again without its metrics, and a figure doesn't open", async () => {
+  override = (u) => {
+    if (u.pathname.endsWith("/financials")) {
+      const metrics = u.searchParams.getAll("metrics");
+      if (metrics.includes("change_in_cash")) return Response.json({ detail: "unknown metrics: ['change_in_cash']" }, { status: 422 });
+      return Response.json({ as_of: "", rows: NVDA_CF.filter((r) => metrics.includes(r.metric)) });
+    }
+    if (u.pathname.endsWith("/components")) return Response.json({ detail: "Not Found" }, { status: 404 });
+    return null;
+  };
+  await render("statements", NVDA, null, { kind: "cf" });
+  const asks = paths().filter((x) => x.pathname.endsWith("/financials"));
+  expect(asks.at(-1)!.searchParams.getAll("metrics")).not.toContain("change_in_cash");
+  expect(container.textContent).toContain("Net cash from operating activities");
+  await click($(".open-row"));
+  for (let i = 0; i < 3; i++) await act(async () => {});
+  expect($(".components-panel")?.textContent).toContain("Not available for this period, or not here yet");
 });

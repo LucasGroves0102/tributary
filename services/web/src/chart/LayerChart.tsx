@@ -184,6 +184,7 @@ export function LayerChart({ series, title, footnote, svgRef, markers = [], onOp
             <div className="h">
               {tick.period}
               {periodEnd && <span className="faint"> · to {day(periodEnd, true)}</span>}
+              {tick.partial && <span className="faint"> · the latest quarter, not a full year</span>}
             </div>
             {series.map((s, k) => {
               const p = pointAt(s, tick.key);
@@ -307,8 +308,12 @@ function Drawing({ lay, heading, subtitle, foot, onMarker, children }: {
               strokeDasharray={d.dashed ? "5 3" : undefined} strokeOpacity={d.faint ? FAINT : undefined} />
           )}
           {d.bars?.map((b, i) => (
-            <rect key={i} x={b.x} y={b.y} width={Math.max(1, b.w)} height={b.h} fill="currentColor" fillOpacity={0.85} />
+            b.partial
+              ? <rect key={i} className="ch-partial" x={b.x} y={b.y} width={Math.max(1, b.w)} height={b.h} fill="currentColor" />
+              : <rect key={i} x={b.x} y={b.y} width={Math.max(1, b.w)} height={b.h} fill="currentColor" fillOpacity={0.85} />
           ))}
+          {d.tail && <path d={d.tail} fill="none" stroke="currentColor" strokeWidth={2} strokeDasharray="3 3" strokeOpacity={d.faint ? FAINT : undefined} />}
+          {d.tailDot && <circle cx={d.tailDot.x} cy={d.tailDot.y} r={3.5} fill="none" stroke="currentColor" strokeWidth={1.5} />}
           {d.dots?.map((p) => (
             <circle key={p.x} cx={p.x} cy={p.y} r={2.5} fill="currentColor" fillOpacity={d.faint ? FAINT : undefined} />
           ))}
@@ -348,7 +353,8 @@ function Drawing({ lay, heading, subtitle, foot, onMarker, children }: {
  * "—"), one column per layer, each value with its period and source filing. */
 export function DataTable({ series, title, onOpen }: { series: Series[]; title: string; onOpen?: (s: Source) => void }) {
   const ticks = useMemo(() => xAxis(series).reverse().map((t) => [t.key, t.period] as const), [series]);
-  const yearly = ticks.length > 0 && !ticks.some(([, period]) => / Q[1-4]$/.test(period));
+  const partial = useMemo(() => new Set(xAxis(series).filter((t) => t.partial).map((t) => t.key)), [series]);
+  const yearly = ticks.length > 0 && !ticks.some(([key, period]) => !partial.has(key) && / Q[1-4]$/.test(period));
   return (
     <TableScroll label="Chart values">
       <table className="t">
@@ -366,7 +372,7 @@ export function DataTable({ series, title, onOpen }: { series: Series[]; title: 
         <tbody>
           {ticks.map(([key, period]) => (
             <tr key={key}>
-              <th className="first" scope="row">{period}</th>
+              <th className="first" scope="row">{partial.has(key) ? `${period} (latest quarter, not a full year)` : period}</th>
               {series.map((s) => {
                 const p = pointAt(s, key);
                 const src = newestSource(p);

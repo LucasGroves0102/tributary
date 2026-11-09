@@ -279,9 +279,12 @@ describe("quoting a filing", () => {
 describe("the Numbers step's charts", () => {
   const sets = numbersCharts(NVDA, "NVDA");
 
-  it("covers growth, margins, free cash flow, receivables vs revenue and debt", () => {
-    expect(sets.map((s) => s.key)).toEqual(["growth", "margins", "fcf", "receivables", "debt"]);
-    expect(sets.find((s) => s.key === "fcf")!.chart.layers.map((l) => l.metric)).toEqual(["operating_cash_flow", "capex", "free_cash_flow"]);
+  it("covers growth, margins, free cash flow, buybacks and dividends, shares, inventory, receivables, backlog and debt", () => {
+    expect(sets.map((s) => s.key)).toEqual(["growth", "margins", "fcf", "returns", "shares", "inventory", "receivables", "backlog", "debt"]);
+    // outflows below zero, as the cash flow statement prints them (F5)
+    expect(sets.find((s) => s.key === "fcf")!.chart.layers.map((l) => l.metric ?? l.formula)).toEqual(["operating_cash_flow", "-capex", "free_cash_flow"]);
+    expect(sets.find((s) => s.key === "returns")!.chart.layers.map((l) => l.metric ?? l.formula)).toEqual(["-share_buybacks", "-dividends_paid", "free_cash_flow"]);
+    expect(sets.find((s) => s.key === "backlog")!.chart.layers.map((l) => l.metric)).toEqual(["remaining_performance_obligations", "contract_liabilities_current", "revenue"]);
   });
 
   it("are chart builder states: they restore unchanged and ask the formula API for annual fiscal values", () => {

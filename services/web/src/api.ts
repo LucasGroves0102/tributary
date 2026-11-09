@@ -6,6 +6,8 @@ import type {
   AuthProviders,
   PasswordSignedIn,
   Calendar,
+  Callout,
+  Components,
   DataNotes,
   DataStatus,
   EarningsResponse,
@@ -541,6 +543,10 @@ export const peerCheck = (token: string, companyId: string, candidateId: string)
 /** The open sector grouping (migration 046); null from an older Query API (no sector filter). */
 export const sectors = (token: string) => orNullOn404(get<Sectors>(token, "/v1/sectors"));
 
+/** What one figure is made of (F5): null from an API older than the route, or no figure there. */
+export const components = (token: string, companyId: string, metric: string, periodEnd: string, view: "quarter" | "ttm") =>
+  orNullOn404(get<Components>(token, `/v1/companies/${companyId}/components`, { metric, period_end: periodEnd, view }));
+
 /** A 10-Q/10-K's metrics vs the prior quarter and the year-ago quarter. */
 export const recap = (token: string, accessionNo: string) =>
   get<Recap>(token, `/v1/filings/${accessionNo}/recap`);
@@ -626,9 +632,12 @@ export const financialsView = (
   basis: "fiscal" | "calendar" = "fiscal",
   /** ask why a ratio reads n/m (`not_meaningful` on each row, `not_meaningful_periods`) */
   readings = false,
+  /** view quarter: ask for the statement callouts (F5); an older API ignores it and sends none */
+  callouts = false,
 ) =>
-  withinOlderCap((older) => get<{ as_of: string; rows: FinancialRow[]; not_meaningful_periods?: NotMeaningfulPeriod[] }>(token, `/v1/companies/${companyId}/financials`, {
+  withinOlderCap((older) => get<{ as_of: string; rows: FinancialRow[]; not_meaningful_periods?: NotMeaningfulPeriod[]; callouts?: Callout[] }>(token, `/v1/companies/${companyId}/financials`, {
     ...(readings ? { readings: "true" } : {}),
+    ...(callouts ? { callouts: "true" } : {}),
     quarters: older ? OLDER_QUARTERS : quarters,
     metrics,
     view,

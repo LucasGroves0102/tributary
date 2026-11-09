@@ -201,6 +201,39 @@ migration 014; `filingHeadings`: on a newest-first page a heading only moves bac
 forms that get parsed. What changed sits under the table, so the table has the page's width; its
 actions stay in view on narrow pages (sticky) and long 8-K item lists wrap.
 
+Statements since F5 (migration 049; `company/data.ts` `STATEMENTS`, `cashBridges`, `company/callouts.ts`,
+`company/components.ts`, `company/Components.tsx`):
+
+- **Cash flow** reads as a statement: depreciation and stock pay (added back), then net cash from operating
+  activities; capex, then net cash from investing; dividends and buybacks, then net cash from financing;
+  "Exchange rates and other" (the change in cash less the three subtotals, shown only when it is more than
+  rounding: JPMorgan's -$14.6B in Q4 2024); the change in cash; the cash at the start of the period (the
+  end of the one before, so the request asks for four more quarters); the cash at its end (with restricted
+  cash, where the statement ends); and **Beginning + change = end?**, "✓ ties" or "off $X" with the gap
+  in the hover (within 0.5% or $100K: 15,620 of 16,062 quarters since 2019 tie on 613 companies rebuilt
+  with 049). **One sign convention**: outflows (capex, dividends, buybacks) are negative, as filings print
+  them, in the table, its CSV and the Numbers step's charts; the hover gives the amount the tag carries.
+  The chart builder and screener keep the API's metric, the amount paid.
+- **Balance sheet**: cash and short-term investments (049's derived line, net debt's own reading); under
+  current liabilities, accounts payable, contract liabilities (customer advances: Vertiv's $1.13B to
+  $4.12B beside current liabilities of $3.58B to $8.71B) and debt due within a year; contract liabilities
+  current and noncurrent; and remaining performance obligations (revenue under contract not yet
+  recognised, the nearest tagged figure to a backlog; Caterpillar $49.4B, NVIDIA $3.2B; Vertiv tags none).
+  A dotted label has its definition in the hover.
+- **Callouts** (Quarterly): a quarter the API calls out (`/financials?callouts=true`, query-api README
+  "Statement callouts") carries a dot before its figure, its sentence in the hover, and a line under the
+  table in **Worth a look** with a link to its filing: "Dividends paid, FY2027 Q2: -$6.05B, 25 times the two
+  quarters before it (-$242.00M and -$243.00M). The filing says why." A row whose sign changes in three or
+  more of the shown quarters is said once ("Net cash from operating activities changes sign in 6 of these
+  8 quarters, from -$251.84B to $147.76B"). The page never decides one; it never calls a figure wrong.
+- **Reported vs standardised**: a standardised line (a derived figure such as net debt, cash and
+  investments, free cash flow or a ratio; gross profit computed as revenue less cost; a line tagged as
+  parts) has ▸. Opened, its lines show under it across the periods (from each column's `inputs`, signed:
+  "+ Long-term debt", "− Cash"), and a panel below the table shows what one period is made of
+  (`/v1/companies/{id}/components`): each line's value, the tag the filing used, its filing (reader and
+  EDGAR), and the other tags with a value for that date and why gold didn't use them ("not used:
+  LongTermDebtNoncurrent comes first"). Ratios open the same way.
+
 What changed (F3; `company/Filings.tsx` `Changes`, wording in `company/changes.ts`'s docstring; the
 Query API's `/changes` with `view`, rules in its README, "Read for materiality"): a 10-Q opens
 against the **same quarter a year earlier** (Previous 10-Q one click away; a 10-K against the
@@ -468,11 +501,13 @@ per company, from its filings to a thesis that's checked after every filing. Rul
   everything typed; editors take `active` so only the visible one answers Ctrl+S.
 - **Steps**, each reusing a screen scoped to the company: 1 **Business**: "How it makes money"
   notes (saved in the project after a pause), the latest 10-K's Item 1 in paragraphs, and the
-  company page's Segments tables; 2 **Numbers**: five chart builder states (`charts.ts`: revenue
-  and YoY growth, gross and operating margin, free cash flow = operating cash flow − capex, ten
-  fiscal years annually; the Revenue tab's receivables vs revenue; long-term debt with debt to
-  equity), each drawn by `ChartView`, with Open in Chart builder, Save to project and Add to
-  thesis; 3 **Earnings**: the company page's Earnings view (below), every outlook block, note and
+  company page's Segments tables; 2 **Numbers**: nine chart builder states (`charts.ts`: revenue
+  and YoY growth, gross and operating margin, free cash flow = operating cash flow − capex,
+  buybacks and dividends against free cash flow, shares outstanding, inventory with days of
+  inventory, remaining performance obligations and customer advances against revenue, ten fiscal
+  years annually then the year in progress; the Revenue tab's receivables vs revenue; long-term debt
+  with debt to equity), each drawn by `ChartView`, with Open in Chart builder, Save to project and Add
+  to thesis. Outflows are drawn below zero (`-capex` formula layers); 3 **Earnings**: the company page's Earnings view (below), every outlook block, note and
   reconciliation pinnable; 4 **What changed**: "Since the last report" (the 8-Ks filed after the
   latest 10-Q/10-K period end, each excerpt pinnable, the balances they may have changed flagged),
   then the filing page's `Changes` for the latest 10-Q and 10-K (a 10-Q against a year earlier,
@@ -583,6 +618,12 @@ Overview, Revenue, Analysis Numbers, Compare, thesis and report embeds), SVG, PN
   "Reads as" overrides it (`display`, saved with the chart). Debt to equity is 1.91x here as in the tables,
   NVDA / MSFT a multiple, `receivables / revenue * 365` a number of days. A contribution to growth is
   in points on axis and tooltip alike.
+- **The year in progress on annual charts** (F5, `chart/series.ts` `annualPoints`): after the last
+  fiscal year end, the newest quarter stays as a last point labelled as that quarter and marked
+  ("FY2027 Q2*"): the trailing twelve months to it for a flow, its quarter end for a balance (every
+  input a balance). Its bar is lighter with a dashed edge, a line reaches it dashed to a hollow point,
+  the footnote says "* FY2027 Q2: the latest quarter, not a full fiscal year (...)", and it never makes
+  another layer "stop". A chart with no full year on file draws that point rather than nothing.
 - **Gaps are gaps** (`chart/series.ts` `xAxis`): the axis has every period between the first and the
   last, so a missing year is a shaded hole, lines and areas break there, a point alone gets a dot, the
   table and the CSV have its row. The legend lists only what is drawn. `chart/notes.ts` says the rest in
@@ -860,7 +901,10 @@ again, never every company; `/annual-per-share`, `readings` and agent-api's `/v1
 already optional. F4: `/peers/check` and `/v1/sectors` answering 404 mean no check (the peer is added
 as before) and no sector filter; a bank's statement or header columns refused (422) are asked again
 without the bank lines; a save refused for a comps table's bank columns or a screen's sector filter
-(an older strict model: "Input should be ..." or "Extra inputs") is saved again without them.
+(an older strict model: "Input should be ..." or "Extra inputs") is saved again without them. F5: a
+statement refused for 049's metrics (422) is asked again without them (no subtotals or reconciliation,
+as before); an older API ignores `callouts` (no marks); `/components` answering 404 says the figure
+can't be opened yet; a Numbers chart line of a metric it doesn't know says it couldn't be drawn (the rest draw).
 
 `Dockerfile` builds the bundle and serves it from `nginx-unprivileged` on port 8080
 (`deploy/nginx.conf`). nginx returns 404 for the APIs' `/docs`, `/redoc`, `/openapi.json` and

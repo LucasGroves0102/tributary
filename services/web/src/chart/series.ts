@@ -2,6 +2,7 @@
  * decimals stay strings (`raw`) for the CSV; `y` is the parsed number for drawing. */
 
 import type { FinancialRow, FormulaSeries } from "../types";
+import { POINT_IN_TIME } from "./metrics";
 import type { Axis, Display, LayerType, Transform } from "./model";
 
 export type { Axis };
@@ -25,6 +26,9 @@ export interface Point {
   /** the API's exact decimal, or the computed index for indexed layers */
   raw: string;
   sources: Source[];
+  /** an annual chart's latest point when it isn't a fiscal year end (F5): the trailing twelve months
+   * to the newest quarter ("ttm"), or that quarter's balance ("quarter"). Drawn lighter, marked "*". */
+  partial?: "ttm" | "quarter";
 }
 
 export interface Series {
@@ -51,9 +55,18 @@ export const COLORS = 8;
 /** Annual frequency: the fourth quarter of each year, labelled by the year ("FY2025 Q4" →
  * "FY2025"). With the TTM view that is the year's total for flows and the full-year ratio for
  * ratios; with the quarter view (balances) the year-end value. Years whose Q4 isn't in range
- * are left out rather than made up from fewer quarters. */
-export function annualPoints(points: Point[]): Point[] {
-  return points.filter((p) => / Q4$/.test(p.period)).map((p) => ({ ...p, period: p.period.replace(/ Q4$/, "") }));
+ * are left out rather than made up from fewer quarters.
+ *
+ * The year in progress (F5, T1's "no latest TTM or quarter on the annual charts"): when the newest
+ * point is a quarter after the last fiscal year end, it stays, keeping its quarter label ("FY2027
+ * Q2") and marked `partial`: the trailing twelve months to it with the TTM view, its balance with the
+ * quarter view. It is never called a year. */
+export function annualPoints(points: Point[], partial: "ttm" | "quarter" | null = null): Point[] {
+  const years = points.filter((p) => / Q4$/.test(p.period)).map((p) => ({ ...p, period: p.period.replace(/ Q4$/, "") }));
+  if (!partial) return years;
+  const newest = points.reduce<Point | null>((a, b) => (b.y !== null && (!a || b.key > a.key) ? b : a), null);
+  const lastYear = years.at(-1)?.key ?? -Infinity;
+  return newest && !/ Q4$/.test(newest.period) && newest.key > lastYear ? [...years, { ...newest, partial }] : years;
 }
 
 export function toSeries(
@@ -86,7 +99,11 @@ export function toSeries(
       sources: [...seen.values()],
     };
   });
-  if (frequency === "annual") points = annualPoints(points);
+  // the year in progress: TTM to the newest quarter, or its balance when every input is one
+  if (frequency === "annual") {
+    const flows = (data.view === "ttm" || /\bttm\(/.test(data.formula ?? "")) && data.inputs.some((i) => !POINT_IN_TIME.has(i.metric));
+    points = annualPoints(points, flows ? "ttm" : "quarter");
+  }
   let unit = layer.transform === "yoy" || layer.transform === "qoq" ? "pct"
     : layer.transform === "contrib" ? "pts"
     : data.unit === "ratio" ? readsAs(layer.display ?? data.display)
@@ -116,6 +133,8 @@ export interface Tick {
   period: string;
   /** on the axis only because periods either side are: no series has it */
   gap?: boolean;
+  /** an annual chart's year in progress (a `partial` point): not a fiscal year */
+  partial?: boolean;
 }
 
 const LABEL = /^(FY|CY)(\d{4})(?: Q([1-4]))?$/;
@@ -129,10 +148,18 @@ const MOST_TICKS = 400;
  * fiscal years, its FY2027E) aren't periods to fill. */
 export function xAxis(series: Series[]): Tick[] {
   const out = new Map<number, string>();
-  for (const s of series) for (const p of s.points) if (!out.has(p.key)) out.set(p.key, p.period);
-  const known = [...out.entries()].sort((a, b) => a[0] - b[0]).map(([key, period]): Tick => ({ key, period }));
+  const partial = new Set<number>();
+  for (const s of series) {
+    for (const p of s.points) {
+      if (!out.has(p.key)) out.set(p.key, p.period);
+      if (p.partial) partial.add(p.key);
+    }
+  }
+  const known = [...out.entries()].sort((a, b) => a[0] - b[0])
+    .map(([key, period]): Tick => (partial.has(key) ? { key, period, partial: true } : { key, period }));
   const parsed = known.map((t) => LABEL.exec(t.period));
-  const annual = parsed.every((m) => m && !m[3]);
+  // a year in progress keeps its quarter's label on an annual axis
+  const annual = parsed.every((m, i) => m && (!m[3] || known[i]!.partial));
   const periods = parsed.every((m, i) => m && Number(m[2]) * 4 + (m[3] ? Number(m[3]) - 1 : 3) === known[i]!.key);
   if (known.length < 2 || !periods) return known;
   const step = annual ? 4 : 1;
@@ -177,6 +204,18 @@ export function csvCell(v: string): string {
   if (NUMBER.test(v)) return v;
   const safe = /^[=+\-@\t\r]/.test(v) ? `'${v}` : v;
   return /[",\n\r]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
+}
+
+/** What an annual chart's year in progress is, for its footnote (F5): null without one. */
+export function partialNote(series: Series[]): string | null {
+  const points = series.flatMap((s) => s.points.filter((p) => p.partial));
+  if (!points.length) return null;
+  const periods = [...new Set(points.map((p) => p.period))].join(", ");
+  const kinds = new Set(points.map((p) => p.partial));
+  const what = kinds.size > 1
+    ? "flows are the trailing twelve months to it, balances its quarter end"
+    : kinds.has("ttm") ? "the trailing twelve months to it" : "its quarter end";
+  return `* ${periods}: the latest quarter, not a full fiscal year (${what}).`;
 }
 
 /** Period, then per layer its value (exact decimal from the API) and source accessions. */

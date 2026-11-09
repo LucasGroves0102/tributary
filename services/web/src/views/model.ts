@@ -4,7 +4,7 @@
  * missing or broken one is the default. Pure, tested without rendering. */
 
 import { WATCHLIST_COLUMNS } from "../api";
-import { metricLabel } from "../chart/metrics";
+import { metricLabel, POINT_IN_TIME } from "../chart/metrics";
 import { SCREEN_COLUMNS } from "../companies/screen";
 import { change, money, pct } from "../format";
 import type { ColumnInfo, HomeCardPref } from "../types";
@@ -101,9 +101,7 @@ const SHORT: Record<string, { label: string; long: string }> = {
 };
 const MULTIPLES = new Set(["debt_to_equity", "current_ratio"]);
 /** query_api POINT_IN_TIME, for a key the API's catalog hasn't answered for yet. */
-const BALANCES = new Set(["cash", "short_term_investments", "receivables", "inventory", "current_assets", "total_assets",
-  "current_liabilities", "long_term_debt_current", "long_term_debt", "total_liabilities", "stockholders_equity", "net_debt",
-  "shares_outstanding", "debt_to_equity", "current_ratio"]);
+const BALANCES = POINT_IN_TIME;
 
 /** A balance has no trailing twelve months: its _ttm column is its _q column under a false label, so
  * a picker doesn't offer it. A saved one still reads, as what it is. */

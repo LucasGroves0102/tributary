@@ -316,12 +316,15 @@ it("pins a chart from Numbers into the chosen section of the thesis, saving it",
   await render(`#/analysis/${PID}/numbers`, ".numbers-chart");
   expect([...container.querySelectorAll(".numbers-chart")].map((c) => c.getAttribute("aria-label"))).toEqual([
     "NVDA: revenue and growth", "NVDA: gross and operating margin", "NVDA: free cash flow (operating cash flow − capex)",
-    "NVDA: receivables vs revenue growth (YoY)", "NVDA: debt at year end"]);
+    "NVDA: buybacks and dividends against free cash flow", "NVDA: shares outstanding", "NVDA: inventory and days of inventory",
+    "NVDA: receivables vs revenue growth (YoY)", "NVDA: backlog proxy and customer advances against revenue",
+    "NVDA: debt at year end"]);
   const fcf = container.querySelectorAll<HTMLElement>(".numbers-chart")[2]!;
   await pinTo(fcf.querySelector<HTMLButtonElement>(".pin-btn")!, "Risks and mitigants");
   const chart = writes.find((w) => w.method === "POST" && w.path === `/v1/workspaces/${PID}/items`)!;
   expect(chart.body).toMatchObject({ kind: "chart", name: "NVDA: free cash flow (operating cash flow − capex)" });
-  expect((chart.body.state as { layers: { metric: string }[] }).layers.map((l) => l.metric)).toEqual(["operating_cash_flow", "capex", "free_cash_flow"]);
+  // capex is an outflow, drawn below zero (F5)
+  expect((chart.body.state as { layers: { metric?: string; formula?: string }[] }).layers.map((l) => l.metric ?? l.formula)).toEqual(["operating_cash_flow", "-capex", "free_cash_flow"]);
   const chartId = [...items.values()].find((i) => i.kind === "chart")!.item_id;
   const put = writes.find((w) => w.method === "PUT" && w.path === `/v1/workspace-items/${THESIS_ID}`)!;
   const md = String((put.body.state as { markdown: string }).markdown);

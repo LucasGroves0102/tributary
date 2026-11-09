@@ -5611,3 +5611,154 @@ details.routine summary {
 .bank-note {
   border-top: none;
 }
+
+/* F5: statement lines. A subtotal is bold, the items within one indented; an opened standardised line
+   lists the lines it is made of under it, and what one period is made of below the table. */
+.t.statement tr.total td {
+  font-weight: 600;
+}
+
+.t.statement tr.sub td.first,
+.t.statement tr.input-line td.first {
+  padding-left: 22px;
+}
+
+.t.statement tr.input-line td {
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+}
+
+.t.statement tr.opened td {
+  background: var(--accent-soft);
+}
+
+.t td.first .open-row {
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.t td.first .open-row .caret {
+  display: inline-block;
+  width: 12px;
+  color: var(--accent);
+}
+
+.t td.first .open-row .caret::before {
+  content: "▸";
+}
+
+.t td.first .open-row[aria-expanded="true"] .caret::before {
+  content: "▾";
+}
+
+/* a line with a definition: its hover says what the line is (a glyph here was an empty box on some systems) */
+.t td.first .defined {
+  text-decoration: underline dotted var(--text-3);
+  text-underline-offset: 3px;
+  cursor: help;
+}
+
+/* a quarter the API calls out: a dot in the cell's top-left corner, the sentence in the hover */
+.callout-mark {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--warn);
+  vertical-align: middle;
+}
+
+/* the mark sits just before the figure it is about */
+.t td.n.called > .callout-mark {
+  margin-right: 5px;
+  vertical-align: 1px;
+}
+
+.t td.n.tone-ok {
+  color: var(--pos);
+  font-style: normal;
+}
+
+.t td.n.tone-warn {
+  color: var(--warn);
+  font-style: normal;
+}
+
+.callouts {
+  padding-top: var(--sp-3);
+  padding-bottom: 0;
+}
+
+.callouts ul {
+  margin: var(--sp-2) 0;
+  padding-left: 0;
+  list-style: none;
+}
+
+.callouts li {
+  margin: 4px 0;
+  font-size: var(--fs-base);
+}
+
+.callouts .callout-link {
+  margin-left: 6px;
+  white-space: nowrap;
+}
+
+.components-panel {
+  margin: var(--sp-4) var(--sp-6);
+  padding: var(--sp-4);
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+
+.components-panel .comp-h {
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.components-panel h3 {
+  margin: 0;
+  font-size: var(--fs-base);
+}
+
+.components-panel .comp-head {
+  margin: var(--sp-3) 0 2px;
+}
+
+.t.comp-t td.first,
+.t.comp-t th.first {
+  background: var(--panel-2);
+}
+
+.t.comp-t td {
+  white-space: normal;
+}
+
+.t.comp-t tr.comp-fact td {
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+}
+
+.t.comp-t tr.comp-fact td.first {
+  padding-left: 22px;
+}
+
+.t.comp-t .co-sub-line {
+  display: block;
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+.t.comp-t .comp-filing {
+  white-space: nowrap;
+}
+
+/* the latest TTM or quarter on an annual chart (F5): not a full fiscal year, drawn lighter */
+.lchart-svg .ch-partial {
+  fill-opacity: 0.4;
+  stroke: currentColor;
+  stroke-dasharray: 3 2;
+}

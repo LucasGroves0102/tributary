@@ -533,6 +533,8 @@ export interface FinancialRow {
   value_source: "reported" | "derived";
   /** why this ratio reads n/m (asked for with `readings`) */
   not_meaningful?: string | null;
+  /** a derived figure's inputs (gold's `inputs`: the values its rule used), or a TTM's quarters */
+  inputs?: Record<string, number | string | null | { period_start?: string; period_end?: string; value?: number | string; accession_no?: string }[]>;
   citation: {
     accession_no: string;
     form: string;
@@ -542,6 +544,95 @@ export interface FinancialRow {
     filing_url: string | null;
   };
   freshness: { filed: string; ingested_at: string };
+}
+
+/** /financials with `callouts` (F5, query_api.notes): a quarter far outside its series (041's outlier
+ * test, against the quarters either side, or the newest against the two before it) or of the other
+ * sign from the quarters beside it. The API decides; `company/callouts.ts` only words it. */
+export interface Callout {
+  metric: string;
+  period_end: string;
+  kind: "outlier" | "sign";
+  /** the newest quarter, compared with the two before it */
+  edge: boolean;
+  value: number;
+  /** times the larger of the quarters beside it (outliers) */
+  factor: number | null;
+  beside: { period_end: string; value: number }[];
+  /** the same quarter peaks in other years too */
+  seasonal: boolean;
+}
+
+/** One fact behind a figure (gold.figure_facts, migration 049): a mapped tag's value for the period. */
+export interface ComponentFact {
+  tag: string;
+  taxonomy: string;
+  /** the tag's rank among the metric's tags (1 first) */
+  priority: number;
+  /** false: only ever part of a sum */
+  line: boolean;
+  period_start: string | null;
+  period_end: string;
+  value: string;
+  accession_no: string;
+  form: string | null;
+  filed: string;
+  filing_url: string | null;
+  /** how many filings stated it */
+  filings: number;
+  used: boolean;
+  /** a year-to-date difference's halves: "+" the later, "-" the earlier */
+  role?: "+" | "-";
+}
+
+export interface ComponentFigure {
+  metric: string;
+  period_start: string | null;
+  period_end: string;
+  fiscal_period: string | null;
+  value: string;
+  unit: string;
+  value_source: string;
+  how: ComponentsHow;
+  citation: { accession_no: string; form: string; filed: string; xbrl_tag: string | null; source_accessions: string[] | null; filing_url: string | null };
+}
+
+export type ComponentsHow = "derived" | "ttm" | "sum" | "computed" | "ytd" | "reported";
+
+/** /v1/companies/{id}/components (F5, query_api/components.py): what one figure is made of. */
+export interface Components {
+  company_id: string;
+  metric: string;
+  span: "quarter" | "ttm";
+  period_end: string;
+  figure: ComponentFigure;
+  how: ComponentsHow;
+  /** a derived metric's definition (gold.derived_metrics) */
+  definition: string | null;
+  components: {
+    metric: string;
+    role: "+" | "-" | "numerator" | "denominator" | "year_ago" | null;
+    value: string | null;
+    used: boolean;
+    /** an input the rule left out: counted inside cash, or not reported at that date */
+    note: "inside_cash" | "not_reported" | null;
+    figure?: ComponentFigure | null;
+    parts?: ComponentPart[];
+    facts?: ComponentFact[];
+  }[];
+  /** a TTM's quarters, a computed figure's revenue and cost */
+  parts: ComponentPart[];
+  facts: ComponentFact[];
+}
+
+export interface ComponentPart {
+  metric?: string;
+  period_start: string | null;
+  period_end: string;
+  value: string | null;
+  accession_no?: string;
+  role: "+" | "-";
+  citation?: ComponentFigure["citation"];
 }
 
 /** /financials with `readings`: a period a metric has no row for because the figure means nothing

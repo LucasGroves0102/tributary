@@ -209,8 +209,10 @@ export function Numbers({ token, companyId, name, ticker, label, saved, projectI
         );
       })}
       <p className="faint small">
-        Up to ten fiscal years of {name}, one point per year (flows are the year's total, balances the year end); receivables vs
-        revenue is quarterly. Values link to their filings. Charts you save here, or from the Chart builder into this project,
+        Up to ten fiscal years of {name}, one point per year (flows are the year's total, balances the year end), then the
+        latest quarter when the year isn't over, marked * and drawn lighter (the trailing twelve months for flows, the quarter
+        end for balances); receivables vs revenue is quarterly. Outflows (capex, buybacks, dividends) are drawn below zero, as
+        the cash flow statement prints them. Values link to their filings. Charts you save here, or from the Chart builder into this project,
         show under Charts in the project's workspace.
       </p>
     </>

@@ -390,8 +390,10 @@ it("custom range and annual frequency change what is asked", async () => {
   // quarterly revenue becomes the year's total: the TTM at each Q4
   expect(revenue()).toMatchObject({ view: "ttm", from: "2020-01-01" });
   expect([...container.querySelector<HTMLSelectElement>('select[aria-label="Transform"]')!.options].find((o) => o.value === "qoq")!.disabled).toBe(true);
-  // the mock has no fourth quarters, so there is no full year to draw
-  expect(container.textContent).toContain("No full year on file for these layers.");
+  // the mock has no fourth quarters: no full year, only the year in progress, marked partial (F5)
+  expect(container.textContent).not.toContain("No full year on file for these layers.");
+  expect(container.textContent).toContain("FY2027 Q2*");
+  expect(container.textContent).toContain("* FY2027 Q2: the latest quarter, not a full fiscal year (the trailing twelve months to it).");
 });
 
 it("deck output: light chart with subtitle, units and the source footnote", async () => {

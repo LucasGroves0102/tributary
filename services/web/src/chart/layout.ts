@@ -142,7 +142,10 @@ export interface Drawn {
   /** line/area: the path; area also gets `area` closed to the zero line (or the stack below) */
   path?: string;
   area?: string;
-  bars?: { x: number; y: number; w: number; h: number }[];
+  bars?: { x: number; y: number; w: number; h: number; partial?: boolean }[];
+  /** the line's last stretch into an annual chart's year in progress (dashed), and its point */
+  tail?: string;
+  tailDot?: { x: number; y: number };
   /** per tick: the y of the point's value (the top of its stack segment), null where none */
   ys: (number | null)[];
   /** a value with no neighbour either side: a line can't show it, so a dot does */
@@ -360,7 +363,7 @@ export function layout(input: Series[], title: boolean, markers: Marker[] = [], 
   const spacing = n > 1 ? (xs[n - 1]! - xs[0]!) / (n - 1) : room;
   const every = Math.max(1, Math.ceil(room / spacing));
   const xLabels = ticks.flatMap((tk, i) =>
-    (i % every === 0 && xs[n - 1]! - xs[i]! >= room) || i === n - 1 ? [{ x: xs[i]!, label: tk.period }] : [],
+    (i % every === 0 && xs[n - 1]! - xs[i]! >= room) || i === n - 1 ? [{ x: xs[i]!, label: tk.partial ? `${tk.period}*` : tk.period }] : [],
   );
 
   // bar slots: one per plain bar layer, one per stacked-bar group (axis)
@@ -386,22 +389,33 @@ export function layout(input: Series[], title: boolean, markers: Marker[] = [], 
           const hi = stacked(s.type) ? v[1] : v[1];
           const y0 = yOf(sc, lo);
           const y1 = yOf(sc, hi);
-          return [{ x: xs[i]! - (bw * slots.length) / 2 + bi * bw, y: Math.min(y0, y1), w: bw - 1, h: Math.abs(y0 - y1) }];
+          return [{ x: xs[i]! - (bw * slots.length) / 2 + bi * bw, y: Math.min(y0, y1), w: bw - 1, h: Math.abs(y0 - y1), ...(ticks[i]!.partial ? { partial: true } : {}) }];
         }),
       };
     }
     let path = "";
     let pen = false;
+    let tail: string | undefined;
+    let tailDot: { x: number; y: number } | undefined;
     ys.forEach((py, i) => {
       if (py === null) {
+        pen = false;
+        return;
+      }
+      if (ticks[i]!.partial) {
+        // the year in progress: a dashed stretch from the last year end, and a hollow point
+        const prev = i > 0 ? ys[i - 1] : null;
+        if (prev != null) tail = `M${xs[i - 1]!.toFixed(1)},${prev.toFixed(1)}L${xs[i]!.toFixed(1)},${py.toFixed(1)}`;
+        tailDot = { x: xs[i]!, y: py };
         pen = false;
         return;
       }
       path += `${pen ? "L" : "M"}${xs[i]!.toFixed(1)},${py.toFixed(1)}`;
       pen = true;
     });
-    const dots = ys.flatMap((py, i) => (py !== null && ys[i - 1] == null && ys[i + 1] == null ? [{ x: xs[i]!, y: py }] : []));
-    const out: Drawn = { ...base, ys, path, ...(dots.length ? { dots } : {}) };
+    // the year in progress has its own hollow point, and the dashed stretch shows the year end before it
+    const dots = ys.flatMap((py, i) => (py !== null && !ticks[i]!.partial && ys[i - 1] == null && ys[i + 1] == null ? [{ x: xs[i]!, y: py }] : []));
+    const out: Drawn = { ...base, ys, path, ...(dots.length ? { dots } : {}), ...(tail ? { tail } : {}), ...(tailDot ? { tailDot } : {}) };
     if (s.type === "area" || s.type === "sarea") {
       // one closed shape per run of values: an area doesn't bridge a gap either
       const zero = yOf(sc, Math.max(0, sc.lo));
