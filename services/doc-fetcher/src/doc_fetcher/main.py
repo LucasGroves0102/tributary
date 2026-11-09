@@ -1,4 +1,15 @@
-"""Consume filings.raw → fetch tracked 10-K/10-Q/8-K documents → bronze → documents.fetched."""
+"""Consume filings.raw → fetch 10-K/10-Q/8-K documents → bronze → documents.fetched.
+
+Which filings (`Coverage.scope`):
+- tracked companies: every 10-K, 10-Q and 8-K event, whatever its source (feed, daily index, seed);
+- every other operating company (gold financials, the document crawl's set): new filings from the
+  live feed, so they're stored within minutes instead of at the crawl's next plan (up to
+  CRAWL_PLAN_HOURS later, H10). 8-Ks only when one of their items (read from the filing index,
+  the first request anyway) is in `FETCH_8K_ITEMS`; an index that lists no items is fetched.
+
+Everything else (amendments, the daily index's late filings, the 8-Ks left out here, anything a
+fetch error dropped) is the document crawl's, which skips whatever this stored first.
+"""
 
 import json
 import logging
@@ -6,14 +17,22 @@ import os
 import signal
 import threading
 import time
+from collections.abc import Mapping
+from dataclasses import dataclass
 
 import httpx
 import psycopg
 from confluent_kafka import Consumer, KafkaError, KafkaException, Producer
 from prometheus_client import Counter
 
-from doc_fetcher.db import already_fetched, insert_document, insert_exhibit, tracked_ciks
-from doc_fetcher.index import parse_exhibits, parse_index
+from doc_fetcher.db import (
+    already_fetched,
+    insert_document,
+    insert_exhibit,
+    operating_ciks,
+    tracked_ciks,
+)
+from doc_fetcher.index import parse_exhibits, parse_index, parse_items
 from tributary_kafka import client_config
 from tributary_sec import sec_client
 from tributary_telemetry import CONSUMED, SKIPPED, configure_logging, count_delivery, serve_metrics
@@ -23,16 +42,65 @@ OUT_TOPIC = "documents.fetched"
 GROUP_ID = "doc-fetcher"
 FORMS = {"10-K", "10-Q", "8-K"}
 TRACKED_REFRESH_SECONDS = 300
+# Results, Reg FD and other events, and the material events (deals, debt, leadership,
+# impairments, auditor, non-reliance). Keep in step with the crawl's CRAWL_8K_ITEMS in
+# deploy/helm/tributary/values.yaml, so the live path and the crawl store the same 8-Ks.
+MATERIAL_8K_ITEMS = ("1.01", "1.02", "1.03", "1.05", "2.01", "2.02", "2.03", "2.04", "2.05",
+                     "2.06", "3.01", "3.02", "3.03", "4.01", "4.02", "5.01", "5.02", "5.03",
+                     "7.01", "8.01")
 
 log = logging.getLogger("doc_fetcher")
 
 DOCUMENTS = Counter("tributary_documents_fetched_total",
                     "Primary documents fetched and stored in bronze", ["form"])
+PASSED = Counter("tributary_documents_passed_total",
+                 "Filings of operating companies read but not stored: 8-Ks with none of the"
+                 " fetched items", ["form"])
+
+
+@dataclass(frozen=True)
+class Config:
+    operating: bool = True                            # FETCH_OPERATING
+    eight_k_items: frozenset[str] | None = frozenset(MATERIAL_8K_ITEMS)  # None: every 8-K
+
+    @classmethod
+    def from_env(cls, env: Mapping[str, str] = os.environ) -> "Config":
+        items = env.get("FETCH_8K_ITEMS", ",".join(MATERIAL_8K_ITEMS))
+        return cls(
+            operating=env.get("FETCH_OPERATING", "true").strip().lower()
+            not in ("false", "0", "no"),
+            eight_k_items=(None if items.strip().lower() == "all"
+                           else frozenset(i.strip() for i in items.split(",") if i.strip())),
+        )
+
+
+@dataclass(frozen=True)
+class Coverage:
+    """Which companies' filings this fetches; re-read every TRACKED_REFRESH_SECONDS."""
+    tracked: frozenset[str]
+    operating: frozenset[str]
+
+    @classmethod
+    def load(cls, conn: psycopg.Connection, config: Config) -> "Coverage":
+        return cls(frozenset(tracked_ciks(conn)),
+                   frozenset(operating_ciks(conn)) if config.operating else frozenset())
+
+    def scope(self, event: dict) -> str | None:
+        """'all': a tracked company's filing; 'live': another operating company's filing from
+        the live feed (8-Ks filtered by item); None: not ours (the crawl's, or nobody's)."""
+        if event["form_type"] not in FORMS:
+            return None
+        if event["cik"] in self.tracked:
+            return "all"
+        if event["cik"] in self.operating and event.get("source", "feed") == "feed":
+            return "live"
+        return None
 
 
 def main() -> None:
     configure_logging()
     dsn = os.environ["DATABASE_URL"]
+    config = Config.from_env()
 
     stop = threading.Event()
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
@@ -49,12 +117,13 @@ def main() -> None:
 
     with psycopg.connect(dsn, autocommit=True) as conn, \
             sec_client(os.environ["SEC_USER_AGENT"]) as client:
-        tracked, refreshed = tracked_ciks(conn), time.monotonic()
-        log.info("consuming %s; %d tracked CIKs", IN_TOPIC, len(tracked))
+        coverage, refreshed = Coverage.load(conn, config), time.monotonic()
+        log.info("consuming %s; %d tracked CIKs, %d operating CIKs", IN_TOPIC,
+                 len(coverage.tracked), len(coverage.operating))
         try:
             while not stop.is_set():
                 if time.monotonic() - refreshed > TRACKED_REFRESH_SECONDS:
-                    tracked, refreshed = tracked_ciks(conn), time.monotonic()
+                    coverage, refreshed = Coverage.load(conn, config), time.monotonic()
                 msg = consumer.poll(1.0)
                 if msg is None:
                     continue
@@ -65,8 +134,10 @@ def main() -> None:
                 CONSUMED.labels(IN_TOPIC).inc()
                 try:
                     event = json.loads(msg.value())
-                    if event["form_type"] in FORMS and event["cik"] in tracked:
-                        handle(conn, client, producer, event)
+                    scope = coverage.scope(event)
+                    if scope is not None:
+                        handle(conn, client, producer, event,
+                               eight_k_items=config.eight_k_items if scope == "live" else None)
                 except (ValueError, KeyError, httpx.HTTPError) as e:
                     # TODO: route to a dead-letter topic instead of dropping
                     reason = "sec" if isinstance(e, httpx.HTTPError) else "invalid"
@@ -79,12 +150,23 @@ def main() -> None:
     log.info("stopped")
 
 
-def handle(conn: psycopg.Connection, client: httpx.Client, producer: Producer, event: dict) -> None:
+def handle(conn: psycopg.Connection, client: httpx.Client, producer: Producer, event: dict,
+           eight_k_items: frozenset[str] | None = None) -> bool:
+    """Fetch, store and announce one filing; False when it was stored already or is an 8-K
+    with none of `eight_k_items` (None: every 8-K)."""
     accession, cik, form = event["accession_no"], event["cik"], event["form_type"]
     if already_fetched(conn, accession):
-        return
+        return False
     index_resp = client.get(event["url"])
     index_resp.raise_for_status()
+    if form == "8-K" and eight_k_items is not None:
+        items = parse_items(index_resp.content)
+        if items and not items & eight_k_items:
+            PASSED.labels(form).inc()
+            log.info("%s %s %s: items %s not fetched", cik, form, accession,
+                     ",".join(sorted(items)), extra={"cik": cik, "form": form,
+                                                     "accession_no": accession})
+            return False
     index = parse_index(index_resp.content, form)
     doc_resp = client.get(index.url)
     doc_resp.raise_for_status()
@@ -106,6 +188,7 @@ def handle(conn: psycopg.Connection, client: httpx.Client, producer: Producer, e
     log.info("%s %s %s: %d KB", cik, form, accession, len(doc_resp.content) // 1024,
              extra={"cik": cik, "form": form, "accession_no": accession,
                     "size_bytes": len(doc_resp.content)})
+    return True
 
 
 def fetch_exhibits(conn: psycopg.Connection, client: httpx.Client, accession: str,

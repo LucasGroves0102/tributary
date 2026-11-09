@@ -17,6 +17,16 @@ def tracked_ciks(conn: psycopg.Connection) -> set[str]:
     return {r[0] for r in rows}
 
 
+def operating_ciks(conn: psycopg.Connection) -> set[str]:
+    """CIKs of the operating companies: those with gold financials, the document crawl's set
+    (ops.doc_crawl_plan). ~6,000 companies, 60 ms on hermes (one index probe per CIK)."""
+    rows = conn.execute(
+        "SELECT k.cik FROM silver.company_ciks k WHERE EXISTS"
+        " (SELECT 1 FROM gold.quarterly_financials q WHERE q.company_id = k.company_id)"
+    ).fetchall()
+    return {r[0] for r in rows}
+
+
 def already_fetched(conn: psycopg.Connection, accession_no: str) -> bool:
     return conn.execute(
         "SELECT 1 FROM bronze.filing_documents WHERE accession_no = %s", (accession_no,)

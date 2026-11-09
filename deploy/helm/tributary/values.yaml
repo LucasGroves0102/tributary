@@ -120,6 +120,9 @@ services:
       POLL_INTERVAL_SECONDS: "30"
   bronze-loader:
     uses: [kafka, postgres]
+  # Live documents: every 10-K/10-Q/8-K of tracked companies, and every operating company's new
+  # 10-K, 10-Q and material 8-K from the feed (FETCH_OPERATING, FETCH_8K_ITEMS; services/doc-fetcher
+  # README), within minutes. SEC class live.
   doc-fetcher:
     uses: [kafka, postgres, sec]
   # image: parser-rs (Rust, live since 2026-10-20) or parser (the Python reference). Both consume
@@ -143,8 +146,8 @@ services:
   # filings every CRAWL_PLAN_HOURS. Pauses itself while the node has under CRAWL_MIN_FREE_GB free;
   # pause by hand with UPDATE ops.doc_crawl_control SET paused = true. Shipped stopped: start it and
   # parser-backfill with replicas: 1 in deploy/flux/releases/tributary.yaml (README), and keep both
-  # running after the backfill: doc-fetcher only covers tracked companies, so this is what keeps
-  # every other company's documents current.
+  # running after the backfill: it takes what doc-fetcher leaves (amendments, daily-index filings,
+  # 8-Ks outside doc-fetcher's items, fetch errors).
   doc-crawler:
     image: doc-fetcher
     command: [doc-crawler]

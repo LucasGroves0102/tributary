@@ -90,8 +90,9 @@ The document crawl (`doc-crawler` + `parser-backfill`, see
 (a service's `replicas` defaults to 1). Start it by setting both to 1 under `values.services` in
 `deploy/flux/releases/tributary.yaml`; `kubectl scale` would be undone by the next Helm upgrade.
 On hermes both run at 1 and stay on after the backfill: the crawler re-plans every
-`CRAWL_PLAN_HOURS` and is what fetches new filings of untracked companies, which doc-fetcher
-doesn't cover.
+`CRAWL_PLAN_HOURS` and fetches what the live doc-fetcher leaves (amendments, daily-index filings,
+8-Ks outside its items, fetch errors). Since 2026-11-09 doc-fetcher itself stores every operating
+company's new 10-K, 10-Q and material 8-K from the feed within minutes (`FETCH_OPERATING`).
 
 ## Components
 
