@@ -70,6 +70,27 @@ describe("#178: statements read as tables", () => {
   });
 });
 
+describe("#178: an MD&A's tables, one after another", () => {
+  // the same 10-K's Item 7 as stored: the summary, the percent-of-revenue table, then the two
+  // segment tables, each with its captions
+  const MDNA = readFileSync(`${process.cwd()}/src/reader/fixtures/nvda-10k-2026-item7-excerpt.txt`, "utf8");
+  const blocks = readerBlocks(MDNA);
+  const ts = tables(blocks);
+
+  it("reads a change written in words as a column", () => {
+    expect(row(ts[0]!, "Revenue")?.cells).toEqual(["$215,938", "$130,497", "Up", "65%"]);
+  });
+
+  it("three lines without figures end one table and caption the next, so each keeps its columns", () => {
+    expect(ts.map((t) => t.columns)).toEqual([4, 2, 4, 4]);
+    expect(row(ts[2]!, "Compute & Networking")?.cells).toEqual(["$193,479", "$116,193", "$77,286", "67%"]);
+    expect(row(ts[3]!, "Total")?.cells).toEqual(["$139,297", "$87,960", "$51,337", "58%"]);
+    // a caption more than four lines up stays a paragraph, between the two tables
+    const between = blocks.slice(blocks.indexOf(ts[2]!) + 1, blocks.indexOf(ts[3]!));
+    expect(between.map((b) => (b.kind === "p" ? b.text : "table"))).toEqual(["Operating Income by Reportable Segments", "Year Ended"]);
+  });
+});
+
 describe("#179: page debris", () => {
   it("drops page numbers and 'Table of Contents', and a sentence cut by a page rejoins", () => {
     const blocks = readerBlocks(RISKS);

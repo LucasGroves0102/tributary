@@ -10,8 +10,9 @@
  *     ends a sentence (. ! ? : ;) or there is no previous line. Both are dropped; text around them
  *     joins up again by rule 7 ("procure sufficient" / "foundry capacity").
  *  2. Cells: from a line's end, numeric cells: a number (1,234 / 4.93 / (259) / -3 / .5) with an
- *     optional "$" or "($" token before it and ")" or "%" tokens after it (the HTML often puts each in
- *     its own cell), or a dash (— – -) or n/a, nm. What is left in front is the label.
+ *     optional "$" or "($" token before it and ")", "%" or "pts" tokens after it (the HTML often puts
+ *     each in its own cell), or a dash (— – -), n/a, nm, or a change in words (Up, Down, Flat). What
+ *     is left in front is the label.
  *  3. A date heading: a line made of 1-6 dates ("Jan 25, 2026") or years ("2025"), possibly after a
  *     label of at most 40 characters ("Year Ended").
  *  4. Rows: a line whose next line is only cells (a label too long for its cell wraps the values onto
@@ -21,7 +22,9 @@
  *     label, is a row without a label.
  *  5. Tables: a run of rows, date headings, debris and short lines (at most 120 characters, not
  *     ending in "." and not a bullet) with at least 3 rows, ending at its last row; a short line or
- *     heading inside it must have a row after it before any other line. Up to 4 short lines or
+ *     heading inside it must have a row after it before any other line, and three lines in a row
+ *     without figures end it (an MD&A's next table and its captions; a statement's sub-headings come
+ *     in ones and twos: "Liabilities and Shareholders' Equity", "Current liabilities:"). Up to 4 short lines or
  *     headings straight before its first row belong to it (the statement's name, "(In millions)").
  *  6. Columns: the commonest number of cells among the table's rows (the larger on a tie). A row with
  *     more moves its first extra cells back into its label ("Balance at January 26, 2025 $ 1 $ 2" is
@@ -56,8 +59,8 @@ const PAGE = /^(?:(?:page\s+)?(?:[-–—]\s*)?(?:[A-Z]{1,2}-)?\d{1,3}(?:\s*[-�
 const LOWER_ROMAN = /^[ivx]{1,5}$/;
 const SENTENCE_END = /[.!?:;]["”’)]*$/;
 const NUMBER = /^\(?[-–—]?\$?\(?\d[\d,]*(?:\.\d+)?\)?%?$|^\(?\$?\.\d+\)?%?$/;
-const DASH = /^(?:[-–—]+|n\/?a|nm)$/i;
-const AFTER = /^(?:\)|%|\)%|%\))$/;
+const DASH = /^(?:[-–—]+|n\/?a|nm|up|down|flat)$/i;
+const AFTER = /^(?:\)|%|\)%|%\)|pts?)$/;
 const BEFORE = /^(?:\$|\(\$|\$\(|\()$/;
 const DATE = /(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s+\d{4}|\b(?:19|20)\d{2}\b/g;
 
@@ -89,7 +92,7 @@ export function splitCells(text: string): { label: string; cells: string[] } {
     if (j < 0) break;
     const t = tokens[j]!;
     if (!NUMBER.test(t) && !DASH.test(t)) break;
-    let cell = t + after;
+    let cell = t + (after.startsWith("pt") ? ` ${after}` : after);
     j--;
     // "$", "(" or both, each in its own cell before the number
     for (let k = 0; k < 2 && j >= 0 && BEFORE.test(tokens[j]!) && NUMBER.test(t); k++) cell = tokens[j--]! + cell;
@@ -164,12 +167,14 @@ export function readerBlocks(text: string): Block[] {
     if (items[i]!.t !== "row" || inTable[i]! >= 0) continue;
     let last = i;
     let rows = 0;
+    let between = 0; // lines without figures since the last row
     for (let j = i; j < items.length; j++) {
       const it = items[j]!;
       if (it.t === "row") {
         rows++;
         last = j;
-      } else if (it.t !== "short" && it.t !== "head") break;
+        between = 0;
+      } else if ((it.t !== "short" && it.t !== "head") || ++between >= 3) break;
     }
     if (rows < 3) continue;
     let first = i;
