@@ -27,8 +27,8 @@ class Store:
     def __init__(self):
         self.calls = []
 
-    def insider_filings(self, user_id, company_id, limit, before=None):
-        self.calls.append((user_id, company_id, limit, before))
+    def insider_filings(self, user_id, company_id, limit, before=None, after=None):
+        self.calls.append((user_id, company_id, limit, before) + ((after,) if after else ()))
         return [{"accession_no": KRESS, "issuer_cik": NVDA, "form": "4", "filed": date(2026, 9, 18),
                  "period_of_report": date(2026, 9, 16), "aff10b5_one": True,
                  "owners": [{"cik": "0001588670", "name": "Kress Colette", "director": False,
@@ -72,10 +72,27 @@ def test_insiders_without_filings_access_and_bad_input(token):
     c = client()
     # alice reads NVDA's financials only: insider filings are filing content
     assert c.get(f"/v1/companies/{NVDA}/insiders", headers=token("alice")).status_code == 403
-    for q in ("limit=0", "limit=101", "before=soon"):
+    for q in ("limit=0", "limit=101", "before=soon", "cursor=2026-09-18",
+              f"cursor=2026-02-30_{KRESS}", f"cursor=2026-09-18_{KRESS}' OR 1=1"):
         assert c.get(f"/v1/companies/{NVDA}/insiders?{q}", headers=token("bob")).status_code == 422
     assert c.get("/v1/companies/NVDA/insiders", headers=token("bob")).status_code == 422
     assert c.store.calls == []  # type: ignore[attr-defined]
+
+
+def test_the_next_page_starts_after_the_last_filing_not_the_next_day(token):
+    """Pre-ship review: `before=<the last filing's day>` skipped the rest of that day. The cursor
+    is the page's last (filed, accession_no); an older web that ignores it still pages as before."""
+    c = client()
+    body = c.get(f"/v1/companies/{NVDA}/insiders?limit=2", headers=token("bob")).json()
+    assert body["next_cursor"] == f"2026-09-18_{KRESS}"
+    r = c.get(f"/v1/companies/{NVDA}/insiders?limit=2&cursor={body['next_cursor']}",
+              headers=token("bob"))
+    assert r.status_code == 200, r.text
+    assert c.store.calls[-1] == ("bob", NVDA, 3, None, (date(2026, 9, 18), KRESS))  # type: ignore[attr-defined]
+    # the last page has no cursor
+    c.store.insider_filings = lambda *a: []  # type: ignore[attr-defined]
+    last = c.get(f"/v1/companies/{NVDA}/insiders?limit=2", headers=token("bob")).json()
+    assert last["has_more"] is False and last["next_cursor"] is None
 
 
 def test_roles_and_summary_rules():

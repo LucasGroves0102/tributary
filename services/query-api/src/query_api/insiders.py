@@ -11,6 +11,10 @@ Rules (the web app only words them):
 - `summary` per filing, for a filing index: the open-market purchases (P) and sales (S) and
   everything else, each as shares and value, so "sold 25,050 shares for $5.5M" needs no maths in
   the browser. Amendments (4/A) are listed as filed; nothing is netted against the original.
+- Pages: newest first by (filed, accession_no), both descending. `next_cursor` (only with
+  `has_more`) is the page's last pair; `cursor=` returns the filings after it, so a day's filings
+  split across two pages (a grant day brings dozens of Form 4s for one company) are all listed.
+  `before` (a day) stays for older clients: it skips the rest of that day by design.
 
 GET /v1/companies/{id}/insiders: require(filings) first (filing content), then Store under RLS.
 Per company and bounded (limit <= 100 filings): never catalog ids."""
@@ -20,7 +24,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Annotated, Any
 
-from fastapi import Depends, FastAPI, Path, Query
+from fastapi import Depends, FastAPI, HTTPException, Path, Query
 
 from query_api.store import Store
 
@@ -101,6 +105,23 @@ def summary(lines: list[dict]) -> dict:
             for k, v in out.items()}
 
 
+CURSOR = r"^\d{4}-\d{2}-\d{2}_\d{10}-\d{2}-\d{6}$"
+
+
+def cursor_of(f: dict) -> str:
+    """A page's last filing as the next page's cursor: its (filed, accession_no), the order's
+    key, so a day's remaining filings are never skipped (`before` alone would)."""
+    return f"{f['filed'].isoformat()}_{f['accession_no']}"
+
+
+def parse_cursor(cursor: str) -> tuple[date, str]:
+    day, accession = cursor.split("_", 1)
+    try:
+        return date.fromisoformat(day), accession
+    except ValueError:
+        raise HTTPException(422, "cursor: not one this route gave") from None
+
+
 def filing_url(cik: str, accession: str) -> str:
     return f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/{accession.replace('-', '')}/"
 
@@ -128,10 +149,19 @@ def add_insider_routes(app: FastAPI, *, store: Store, current_user: Callable[...
         user_id: User,
         limit: Annotated[int, Query(ge=1, le=100)] = 50,
         before: Annotated[date | None, Query(description="filed before this date")] = None,
+        cursor: Annotated[str | None, Query(
+            pattern=CURSOR, description="the previous page's next_cursor: the filings after it")
+        ] = None,
     ) -> dict[str, Any]:
         """A company's insider filings (Forms 3, 4, 5), newest first: owners and roles, each
-        line's code, shares, price, value and shares owned after; `summary` per filing."""
+        line's code, shares, price, value and shares owned after; `summary` per filing.
+        `next_cursor` (when `has_more`) asks for the next page; `before` is a day, not a page
+        boundary (a day can hold more filings than a page)."""
+        after = parse_cursor(cursor) if cursor else None
         require(user_id, "filings", company_id)
-        rows = store.insider_filings(user_id, company_id, limit + 1, before)
-        return {"company_id": company_id, "filings": [shape(f) for f in rows[:limit]],
-                "has_more": len(rows) > limit}
+        rows = store.insider_filings(user_id, company_id, limit + 1, before, after)
+        page = rows[:limit]
+        more = len(rows) > limit
+        return {"company_id": company_id, "filings": [shape(f) for f in page],
+                "has_more": more,
+                "next_cursor": cursor_of(page[-1]) if more and page else None}

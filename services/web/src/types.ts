@@ -768,6 +768,8 @@ export interface InsiderFilings {
   company_id: string;
   filings: InsiderFiling[];
   has_more: boolean;
+  /** the next page's cursor (with has_more; absent from an API older than the pre-ship batch) */
+  next_cursor?: string | null;
 }
 
 export interface SectionSearch {

@@ -82,7 +82,7 @@ export function Filings({ token, companyId, name, canRead, initialDiff, fiscalYe
 
   return (
     <>
-      {filter === "insider" && canRead && <InsiderTable load={insiders} />}
+      {filter === "insider" && canRead && <InsiderTable load={insiders} token={token} companyId={companyId} />}
       <section className="card">
         <div className="card-h wrap">
           <h2>Filings</h2>

@@ -45,7 +45,7 @@ request parameters. Dev tokens: `make token USER=alice`.
 | `GET /v1/companies/{id}/financials?metrics=&quarters=&view=&basis=&format=&readings=&callouts=` | financials | values + citation + freshness; `quarters` 1-120 (every quarter there is, the Statements tab's Max); `format=csv`: one row per value with its source filing; `callouts=true` (view quarter): quarters far outside their series ([Statement callouts](#statement-callouts)); `currency` (only when not USD: the company's reporting currency, every amount is in it, migration 056) and `cadence: "annual"` (only for a filer whose figures are fiscal years, a 20-F/40-F filer: gold never splits a year into quarters; `Store.cadence`, under RLS: gold has years and no quarter in the last 800 days AND the company's latest 10-K/10-Q/20-F/40-F in the filing index is a 20-F or 40-F, or with none indexed gold never had a quarter. Never from staleness: a US filer whose figures stopped, EIDP's at 2019 though it files 10-Qs, has no `cadence` and its figures read as old) |
 | `GET /v1/companies/{id}/components?metric=&period_end=&view=` | financials | what one figure is made of: a derived figure's inputs, a TTM's quarters, a sum's parts, and the tags, values and filings behind each ([Reported vs standardised](#reported-vs-standardised)) |
 | `GET /v1/companies/{id}/filings/{accession}/figures` | financials | what one filing itself says: its facts as gold reads them and the net debt, cash and investments and free cash flow computed from that filing alone; the thesis check's H2 guard reads it ([Reported vs standardised](#reported-vs-standardised)) |
-| `GET /v1/companies/{id}/insiders?limit=&before=` | filings | insider filings (Forms 3, 4, 5), newest first: owners and roles, each line's code (in words), shares, price, value and shares owned after, a per-filing summary ([Insider filings](#insider-filings)) |
+| `GET /v1/companies/{id}/insiders?limit=&cursor=&before=` | filings | insider filings (Forms 3, 4, 5), newest first: owners and roles, each line's code (in words), shares, price, value and shares owned after, a per-filing summary ([Insider filings](#insider-filings)) |
 | `GET /v1/companies/{id}/text-kpis?years=` | filings | backlog, orders and order growth as the filings state them in words (MD&A, the 10-K's Item 1, earnings releases), each value with the passages that state it; `years` 1-15, default 10 ([Backlog and orders from the text](#backlog-and-orders-from-the-text)) |
 | `GET /v1/companies/{id}/segments?axis=&metric=&quarters=&view=&basis=&format=` | financials | values per segment member (business segment, geography, product/service, reconciliation), exact decimal strings, citation per value ([Segments](#segments)) |
 | `GET /v1/companies/{id}/filings?limit=&accession_no=` | filings | recent parsed filings (or one) and their section outline, no text |
@@ -1302,7 +1302,9 @@ every figure is as filed. Per filing: `owners` (name, CIK, `roles`: Director, th
 transaction, `acquired_disposed`, `shares_after`, `direct_indirect`, `nature`, a derivative's exercise
 price and underlying), and a `citation` to the filing on EDGAR. Numbers are exact decimal strings.
 Amendments are listed as filed, never netted. Not an agent tool (yet): the recorded suites are
-unchanged.
+unchanged. Pages: newest first by (filed, accession_no); with `has_more`, `next_cursor` is the page's
+last pair and `cursor=<it>` returns the filings after it, so a day split across two pages is never cut
+(`before=<day>` skips the rest of that day: it stays for older clients, not for paging).
 
 ## Backlog and orders from the text
 

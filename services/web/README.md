@@ -803,7 +803,9 @@ shares signed by direction, price, value and shares owned after, each linking it
 In the filing index (Insider and All), an insider filing's row says who and what ("Kress Colette, EVP
 & Chief Financial Officer · sold 34,918 shares ($7.65M) · shares withheld for tax or exercise price:
 40,747 shares"). Needs filings access; an older API (404) says the details aren't available yet and
-the index stays as before. Every figure is the API's; nothing is summed or valued here.
+the index stays as before. Every figure is the API's; nothing is summed or valued here. The table
+starts with the 100 most recent filings; "Show older filings" asks for the next 100 with the API's
+`next_cursor` (an API without it shows no button: the 100 most recent, as before).
 
 Revenue view (the company page's Revenue tab, `src/company/Revenue.tsx`; rules in
 `company/revenue.ts`'s docstring): three sections, each chart an ordinary chart state, so "Save

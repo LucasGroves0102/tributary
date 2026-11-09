@@ -563,9 +563,10 @@ export const peerCheck = (token: string, companyId: string, candidateId: string)
 /** The open sector grouping (migration 046); null from an older Query API (no sector filter). */
 export const sectors = (token: string) => orNullOn404(get<Sectors>(token, "/v1/sectors"));
 
-/** A company's insider filings (#117, F7b); null from an API without the route (deploy window). */
-export const insiderFilings = (token: string, companyId: string, limit = 100) =>
-  orNullOn404(get<InsiderFilings>(token, `/v1/companies/${companyId}/insiders`, { limit }));
+/** A company's insider filings (#117, F7b); null from an API without the route (deploy window).
+ * `cursor`: a previous page's `next_cursor` (an API that gives none can't page). */
+export const insiderFilings = (token: string, companyId: string, limit = 100, cursor?: string) =>
+  orNullOn404(get<InsiderFilings>(token, `/v1/companies/${companyId}/insiders`, { limit, ...(cursor ? { cursor } : {}) }));
 
 /** What one figure is made of (F5): null from an API older than the route, or no figure there. */
 export const components = (token: string, companyId: string, metric: string, periodEnd: string, view: "quarter" | "ttm") =>

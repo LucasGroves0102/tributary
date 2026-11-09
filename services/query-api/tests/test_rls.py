@@ -730,6 +730,35 @@ def test_insider_filings_respect_rls(client, token):
     assert visible(conn, "t-reader", "SELECT company_id FROM silver.insider_filings") == [(B,)]
 
 
+def test_insider_pages_never_skip_the_rest_of_a_day(client, token):
+    """Pre-ship review: paging with before=<last day> lost the day's other filings. Five filings,
+    three on one day, two a page: the cursor walks all five once, newest first, under RLS."""
+    conn = client.app_conn
+    days = ["2026-09-18", "2026-09-17", "2026-09-17", "2026-09-17", "2026-09-10"]
+    accessions = [f"{A}-26-00002{n}" for n in range(5)]
+    for acc, day in zip(accessions, days, strict=True):
+        conn.execute("INSERT INTO bronze.ownership_documents (accession_no, cik, form, filed, url,"
+                     " xml, content_sha256) VALUES (%s, %s, '4', %s, 'u', %s, 'x')",
+                     (acc, A, day, INSIDER_XML.format(cik=A)))
+    conn.execute("SELECT silver.refresh_insider_filings(%s)", (accessions,))
+    seen, cursor, pages = [], None, 0
+    while True:
+        params = {"limit": 2, **({"cursor": cursor} if cursor else {})}
+        body = client.get(f"/v1/companies/{A}/insiders", params=params,
+                          headers=token("t-pro")).json()
+        seen += [(f["filed"], f["accession_no"]) for f in body["filings"]]
+        pages += 1
+        cursor = body["next_cursor"]
+        if not body["has_more"]:
+            break
+    assert pages == 3 and cursor is None
+    assert seen == sorted(zip(days, accessions, strict=True), reverse=True)
+    # the old way: before=<the first page's last day> skips that day's third filing
+    old = client.get(f"/v1/companies/{A}/insiders", params={"limit": 2, "before": "2026-09-17"},
+                     headers=token("t-pro")).json()
+    assert [f["filed"] for f in old["filings"]] == ["2026-09-10"]
+
+
 def test_filing_figures_say_their_currency(client, token):
     """057: gold.filing_figures returns each figure's unit: a euro filing's facts and the net
     debt computed from them are in EUR (the thesis check words them so)."""

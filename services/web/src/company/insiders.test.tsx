@@ -1,6 +1,6 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 
 import type { InsiderFilings } from "../types";
 import NVDA from "./fixtures/nvda-insiders.json";
@@ -45,4 +45,41 @@ it("#117: the insider table, and an older API's 404 says so instead of failing",
   expect(container.textContent).toContain("aren't available on this server yet");
   act(() => root.unmount());
   container.remove();
+});
+
+it("pre-ship: older filings page on the API's cursor (never a day), and an older API offers no button", async () => {
+  // the fixture split in two: the first page's three filings, the next page's two
+  const firstPage: InsiderFilings = { ...DATA, filings: DATA.filings.slice(0, 3), has_more: true, next_cursor: "2026-09-18_0001588670-26-000014" };
+  const nextPage: InsiderFilings = { ...DATA, filings: DATA.filings.slice(3), has_more: false, next_cursor: null };
+  const fetched: string[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    fetched.push(url);
+    return Response.json(nextPage);
+  }));
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  await act(async () => root.render(<InsiderTable load={{ state: "ok", data: firstPage }} token="t" companyId="0001045810" />));
+  expect(container.querySelector(".sub")!.textContent).toContain("3 most recent filings");
+  expect(container.textContent).not.toContain("STEVENS MARK A");
+  const button = [...container.querySelectorAll("button")].find((b) => b.textContent === "Show older filings")!;
+  await act(async () => button.click());
+  await act(async () => new Promise((r) => setTimeout(r, 0)));
+  expect(fetched).toHaveLength(1);
+  const asked = new URL(fetched[0]!, "http://x");
+  expect(asked.pathname).toBe("/api/query/v1/companies/0001045810/insiders");
+  expect(asked.searchParams.get("cursor")).toBe("2026-09-18_0001588670-26-000014");
+  expect(asked.searchParams.get("before")).toBeNull();
+  expect(container.textContent).toContain("STEVENS MARK A");
+  expect(container.querySelector(".sub")!.textContent).toContain("5 filings");
+  expect([...container.querySelectorAll("button")].some((b) => b.textContent === "Show older filings")).toBe(false);
+  // an API older than the cursor: has_more without next_cursor, so no button (it can't page)
+  const olderApi: InsiderFilings = { ...firstPage, next_cursor: undefined };
+  await act(async () => root.render(<InsiderTable load={{ state: "ok", data: olderApi }} token="t" companyId="0001045810" />));
+  expect(container.querySelector(".sub")!.textContent).toContain("3 most recent filings");
+  expect([...container.querySelectorAll("button")].some((b) => b.textContent === "Show older filings")).toBe(false);
+  act(() => root.unmount());
+  container.remove();
+  vi.unstubAllGlobals();
 });

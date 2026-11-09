@@ -683,10 +683,15 @@ class Store:
             return cur.fetchall()
 
     def insider_filings(self, user_id: str, company_id: str, limit: int,
-                        before: date | None = None) -> list[dict]:
-        """One company's insider filings (Forms 3/4/5, migration 054), newest first, at most
-        `limit`, each with its `lines` in document order. Under RLS (granted_filings): one
-        session, two index-backed reads; never more than `limit` accessions in the second."""
+                        before: date | None = None,
+                        after: tuple[date, str] | None = None) -> list[dict]:
+        """One company's insider filings (Forms 3/4/5, migration 054), newest first (filed, then
+        accession, both descending: a total order), at most `limit`, each with its `lines` in
+        document order. `before`: filed before that day. `after`: the page after that (filed,
+        accession_no), a stable cursor (a day can hold more filings than a page). Under RLS
+        (granted_filings): one session, two index-backed reads; never more than `limit`
+        accessions in the second."""
+        after_filed, after_accession = after if after else (None, None)
         with self._session(user_id) as cur:
             cur.execute(
                 """
@@ -695,9 +700,13 @@ class Store:
                 FROM silver.insider_filings f
                 WHERE f.company_id = %(company)s
                   AND (%(before)s::date IS NULL OR f.filed < %(before)s)
+                  AND (%(after_filed)s::date IS NULL
+                       OR (f.filed, f.accession_no) < (%(after_filed)s::date,
+                                                       %(after_accession)s::text))
                 ORDER BY f.filed DESC, f.accession_no DESC
                 LIMIT %(limit)s
-                """, {"company": company_id, "before": before, "limit": limit})
+                """, {"company": company_id, "before": before, "limit": limit,
+                      "after_filed": after_filed, "after_accession": after_accession})
             filings = cur.fetchall()
             if not filings:
                 return []
