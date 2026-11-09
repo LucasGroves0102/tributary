@@ -371,7 +371,8 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
             raise HTTPException(422, f"unknown metrics: {sorted(unknown)}")
         require(user_id, "financials", company_id)
         rows = store.financials(user_id, company_id, metrics or every, quarters, view, basis)
-        meta = {"company_id": company_id, "view": view, "basis": basis, "as_of": _now()}
+        meta: dict[str, Any] = {"company_id": company_id, "view": view, "basis": basis,
+                                "as_of": _now()}
         # equity's reasons (035): over a row's own, and where gold has no row (negative equity)
         by_equity: dict[tuple[str, date], str] = {}
         if readings and fmt == "json":
