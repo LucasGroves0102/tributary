@@ -16,10 +16,13 @@ and applies everything under `deploy/`; a merge to `main` is a deploy.
 
 ## Deploy flow
 
-1. CI builds every image on a push to `main`, and when all jobs pass tags each one
-   `main-<run number>-<sha>` (`.github/workflows/ci.yml`, `release` job).
-2. The `ImagePolicy` picks the highest run number; `ImageUpdateAutomation` rewrites the tag
-   setters in `releases/*.yaml` and pushes a "Deploy new images [skip ci]" commit to `main`.
+1. On a push to `main`, once the test and chart jobs pass, CI builds every image, then tags each
+   one `main-<run number>-<sha>` (`.github/workflows/ci.yml`, `images` and `release` jobs). The
+   Terraform check runs beside them and doesn't gate a deploy; a push that changes only Markdown
+   doesn't run CI at all.
+2. The `ImagePolicy` (it watches `tributary-query-api`; every image gets the same tag) picks the
+   highest run number; `ImageUpdateAutomation` rewrites the tag setters in `releases/*.yaml` and
+   pushes a "Deploy new images [skip ci]" commit to `main`.
 3. Flux reconciles the HelmReleases; failed upgrades are retried and rolled back
    (`remediation.retries: 3`).
 

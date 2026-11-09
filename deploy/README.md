@@ -6,7 +6,7 @@ the host and the public site behind a Cloudflare Tunnel. Local development uses
 
 | Path | What |
 |---|---|
-| [`helm/tributary/`](helm/tributary) | chart for the Tributary services, CronJobs, migrations hook, NetworkPolicies, PodMonitors (namespace `tributary`) |
+| [`helm/tributary/`](helm/tributary) | chart for the Tributary services, CronJobs, migrations hook, NetworkPolicies, PodMonitors and a read-only operator ServiceAccount (namespace `tributary`) |
 | [`helm/platform/`](helm/platform) | Kafka, Kafka Connect + Debezium, OpenFGA (namespace `platform`) |
 | [`helm/monitoring/`](helm/monitoring) | Prometheus, Alertmanager, Grafana, Loki, Alloy and exporters (namespace `monitoring`) |
 | [`platform-setup/`](platform-setup) | image for the platform chart's hooks: OpenFGA store + model, Debezium connector, Kafka SCRAM users + ACLs |
@@ -24,8 +24,10 @@ internet → Cloudflare (TLS, rate limit) → tunnel → cloudflared → web (ng
 
 Tributary, platform and cloudflared pods run as non-root, and those namespaces only allow the
 traffic their NetworkPolicies list. Kafka accepts only SASL/SCRAM (port 9094), each client as its
-own user limited by ACLs (`helm/platform/files/kafka-acls.yaml`). CI lints and renders all three charts, validates
-the Flux manifests with kubeconform, and checks Terraform formatting and validity. Its downloads
+own user limited by ACLs (`helm/platform/files/kafka-acls.yaml`). CI lints and renders all three charts
+(the tributary chart also with each switch on and off: Kafka SASL, the SEC limiter login, alert
+email egress; the platform chart in each Kafka SASL phase), validates them and the Flux manifests
+with kubeconform, and checks Terraform formatting and validity. Its downloads
 are cached so a flaky GitHub or registry doesn't fail a run: kubeconform's schemas, the monitoring
 chart's dependencies (per `Chart.lock`, fetched with three tries on a miss) and each Terraform
 module's providers (mirrored per `.terraform.lock.hcl` with three tries; `init -plugin-dir` then

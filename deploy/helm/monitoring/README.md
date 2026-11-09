@@ -19,17 +19,25 @@ rules are off.
 
 ## Tributary additions
 
-- `templates/rules.yaml`: `KafkaConsumerLagGrowing`, `FilingsNotArriving`,
-  `CompanyFactsBehindEdgar`, `PostgresBackupMissing`, `PostgresRestoreTestFailed`,
+- `templates/rules.yaml`: `KafkaConsumerLagGrowing`, `FilingsNotArriving` (no new
+  `filings.raw` message in 2 hours, weekdays 14:00-21:00 UTC), `CompanyFactsBehindEdgar` (needs
+  `opsDatabase.enabled`), `PostgresBackupMissing`, `PostgresRestoreTestFailed`,
   `PostgresRestoreTestMissing` (no passing weekly restore test in 8 days), `PostgresDown`,
-  `PostgresConnectionsHigh`, `DiskUsageHigh`, `DiskSpaceLow` (under 50 GB free), and for the
-  document crawl `DocCrawlPausedForDisk` and `DocCrawlStalled` (its `tributary_doc_crawl_*`
-  metrics). Alertmanager sends every alert to Discord
-  except `info` severity, `Watchdog` and `InfoInhibitor`.
+  `ReplicationSlotRetainingWal` (a slot holding over 10 GB of WAL), `PostgresConnectionsHigh`,
+  `DiskUsageHigh`, `DiskSpaceLow` (under 50 GB free), and for the document crawl
+  `DocCrawlPausedForDisk` and `DocCrawlStalled` (its `tributary_doc_crawl_*` metrics). Alertmanager
+  sends every alert to Discord except `info` severity, `Watchdog` and `InfoInhibitor`.
 - `dashboards/*.json`: loaded by the Grafana sidecar (`tributary-freshness.json`, FR11).
 - `templates/ops-database.yaml`: with `opsDatabase.enabled`, a Grafana Postgres datasource
   (uid `tributary`) on the `ops` views, used by the freshness dashboard, and the ops-exporter
-  queries (`tributary_doc_crawl_*{form}`: crawl progress from `ops.doc_crawl_progress`).
+  queries (`files/ops-exporter-queries.yaml`): `tributary_companyfacts_*{company}` from
+  `ops.companyfacts_lag`, `tributary_financials_quality_*{check_name,severity}` from
+  `ops.quality_summary`, and `tributary_doc_crawl_*{form}` from `ops.doc_crawl_progress`.
+  `opsDatabase.enabled` is off in the chart and in hermes' release (it needs the `grafana_reader`
+  login and the `grafana-postgres` secret, below), so on hermes those panels are empty and
+  `CompanyFactsBehindEdgar` has no data. The public Data status page (Query API
+  `GET /v1/status/data`) reports freshness, coverage and data quality from the `ops` schema
+  instead.
 
 ## Prerequisites
 

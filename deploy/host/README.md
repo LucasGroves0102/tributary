@@ -6,7 +6,7 @@ Files installed directly on the server, outside Kubernetes. Postgres 16 runs on 
 | File | Does |
 |---|---|
 | `pg-backup.sh` | logical backup as the `postgres` user: roles (`pg_dumpall --globals-only`) plus one custom-format dump per database, each checked with `pg_restore --list` before the backup directory is published, with `<db>.rowcounts` (every table's row count in the dump's own snapshot); deletes backups older than `KEEP_DAYS`; writes `pg_backup_last_success_timestamp_seconds` and `pg_backup_size_bytes` for node-exporter's textfile collector |
-| `pg-backup.service`, `pg-backup.timer` | systemd units: run `/usr/local/bin/pg-backup` nightly at 05:00 New York, after the nightly CronJobs, sandboxed to the backup and textfile directories |
+| `pg-backup.service`, `pg-backup.timer` | systemd units: run `/usr/local/bin/pg-backup` nightly at 05:00 New York, after the 02:00-04:00 CronJobs (`backfill`, `companies`, `financials`) and alongside the bulk loads that start at 05:00 and 05:30 (each dump is one consistent snapshot), sandboxed to the backup and textfile directories |
 | `pg-restore-test.sh` | restores the latest full backup (`--slim` or `RESTORE_FROM=slim`: the latest nightly) into a throwaway Postgres instance (initdb in a temp directory, socket only, never the live cluster): `globals.sql`, then each database; checks every table and its exact row count against `<db>.rowcounts` (tables in `<db>.schema-only-tables` must be empty); always stops and deletes the instance; writes `pg_restore_test_last_result`, `pg_restore_test_last_success_timestamp_seconds` and friends for node-exporter |
 | `pg-restore-test.service`, `pg-restore-test.timer` | systemd units: run `/usr/local/bin/pg-restore-test` every Sunday at 11:00 New York, six hours after the weekly full backup starts; sandboxed like the backup, writing only `/var/lib/postgresql/restore-test` (the throwaway instance) and the textfile directory |
 
@@ -19,8 +19,8 @@ Settings (env, with defaults): `BACKUP_DIR` (`/var/backups/postgres`), `KEEP_DAY
 `RESTORE_TEST_DIR` (`/var/lib/postgresql/restore-test`; the systemd unit's `ReadWritePaths` must
 match), `RESTORE_TEST_PORT` (54329) and `PG_BIN` (the highest `/usr/lib/postgresql/*/bin`).
 
-Nightly dumps are slim: the document crawl adds ~30-40 GB, and 14 full copies would not fit on
-the disk. Tributary's document subtree (`bronze.filing_documents` and every table with a foreign
+Nightly dumps are slim: the document crawl added ~30-40 GB over its first five years (more since
+its window became 11 years), and 14 full copies would not fit on the disk. Tributary's document subtree (`bronze.filing_documents` and every table with a foreign
 key to it, the search/diff/segment tables derived from them, and the crawl/index checkpoints) is
 dumped schema only; the tables are listed in each backup's `tributary.schema-only-tables`. Once a
 week a full dump goes to `$BACKUP_DIR/full`, and the newest `FULL_KEEP` (1) are kept; the old

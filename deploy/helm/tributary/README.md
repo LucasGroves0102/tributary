@@ -6,7 +6,9 @@ in the `platform` namespace; Postgres runs on the host.
 ## Prerequisites
 
 - Postgres reachable from pods at `hostAddress` (default `10.42.0.1`, the k3s bridge), with the
-  `tributary`, `app` and `openfga` databases and a `query_api` role granted to the login.
+  `tributary`, `app` and `openfga` databases, the `query_api`, `ops_reader` and `sec_limiter`
+  group roles (migrations 007, 010 and 022 create them only when the login may create roles; on
+  hermes the owner made them), and `query_api` granted to the login.
 - In the release namespace:
   - Secret `tributary` with keys `database-url`, `app-database-url`, `jwt-secret`,
     `anthropic-api-key`, `sec-user-agent`, `openfga-api-token` when `openfga.auth.enabled`,
@@ -39,10 +41,52 @@ kubectl -n tributary create job --from=cronjob/seed-documents seed-documents-1
 kubectl -n tributary create job --from=cronjob/insiders-backfill insiders-backfill-1  # Forms 3/4/5, last 90 days
 ```
 
-`financials-bulk` (every filer's XBRL facts) and `submissions` (every filer's filing history)
-also ship suspended; their comments in `values.yaml` describe the first run. So do `segments`
-and `section-index`, which read the crawled documents; on hermes both run hourly
-(`suspend: false` in the Flux release) since the crawl finished.
+## Deployments and CronJobs
+
+`services` become Deployments and `jobs` become CronJobs ([Components](#components)). On hermes,
+with the Flux release's overrides:
+
+| Deployment | Image (command) | Replicas | Does |
+|---|---|---|---|
+| `poller` | poller | 1 | EDGAR's latest-filings feed every 30 s → `filings.raw` |
+| `bronze-loader` | bronze-loader | 1 | `filings.raw` → `bronze.filings` |
+| `doc-fetcher` | doc-fetcher | 1 | tracked companies' 10-K/10-Q/8-K, every operating company's new 10-K, 10-Q and material 8-K, and Forms 3/4/5 → bronze, `documents.fetched` |
+| `parser` | parser-rs | 1 | `documents.fetched` → `silver.filing_sections` |
+| `doc-crawler` | doc-fetcher (`doc-crawler`) | 1 (chart default 0) | the document crawl (below) → bronze, `documents.backfill` |
+| `parser-backfill` | parser-rs | 1 (chart default 0) | `documents.backfill` → `silver.filing_sections` |
+| `authz-sync` | authz-sync | 1 | the app database's CDC topics → OpenFGA tuples and the `authz` tables |
+| `query-api` | query-api | 1 | the Query API, port 8000 |
+| `agent-api` | agent (`agent-api`) | 1 | the assistant, port 8001 |
+| `web` | web | 1 | nginx with the built web app, port 8080; the tunnel's only target |
+
+CronJob schedules are New York time (`timeZone`). Every job has `concurrencyPolicy: Forbid`,
+`backoffLimit: 2` and a deadline of `timeoutSeconds` (default 1 h); finished Jobs are kept 7 days.
+
+| CronJob | Image (command) | Schedule | On hermes | Does |
+|---|---|---|---|---|
+| `backfill` | poller (`poller-backfill --days 30`) | daily 02:00 | on | completeness check against 30 days of EDGAR's daily indexes; republishes missing filings (027) |
+| `companies` | company-loader | daily 03:00 | on | company identity: CIKs, tickers, former names |
+| `financials` | facts-fetcher | daily 04:00 | on | tracked companies' XBRL companyfacts → bronze, silver, gold |
+| `financials-bulk` | facts-fetcher (`facts-fetcher-bulk`) | daily 05:00 | on | every filer's XBRL facts from `companyfacts.zip`, in batches of 500 changed companies |
+| `submissions` | company-loader (`company-loader-submissions`) | daily 05:30 | on | every filer's filing history and metadata from `submissions.zip` |
+| `insiders-catchup` | doc-fetcher (`doc-fetcher-insiders`) | daily 08:45 | on | Forms 3/4/5 of the last 7 days the live doc-fetcher missed (059) |
+| `filing-facts` | facts-fetcher (`facts-fetcher-filings`) | daily 09:30 | suspended | filings companyfacts lacks, from their own XBRL (055) |
+| `demo-cleanup` | query-api (`query-api-demo-cleanup`) | hourly at :15 | on | deletes expired demo sandboxes |
+| `segments` | facts-fetcher (`facts-fetcher-segments`) | hourly at :20 | on (Flux release) | segment and KPI facts from the stored documents' inline XBRL (018) |
+| `section-index` | parser (`parser-index`) | hourly at :40 | on (Flux release) | search passages and section diffs (021) |
+| `alerts` | query-api (`query-api-alerts`) | every 10 minutes | on | filing alerts and webhooks (app migration 016) |
+| `business-peers` | parser (`parser-peers`) | Sundays 05:30 | on | peers by business (047) |
+| `financials-rebuild` | facts-fetcher (`facts-fetcher --rebuild`) | suspended | by hand | re-derives silver and gold from bronze |
+| `insiders-backfill` | doc-fetcher (`doc-fetcher-insiders`, 90 days) | suspended | by hand | Forms 3/4/5 history |
+| `seed-documents` | doc-fetcher (`doc-fetcher-seed`) | suspended | by hand | tracked companies' recent 10-K/10-Q/8-K → `filings.raw` |
+
+A suspended job keeps a placeholder schedule (January 1) and runs only when started with
+`kubectl -n tributary create job --from=cronjob/<name> <name>-1`.
+
+`financials-bulk` and `submissions` run nightly; their comments in `values.yaml` describe the
+first, long run. `segments` and `section-index`, which read the crawled documents, ship
+suspended; on hermes both run hourly (`suspend: false` in the Flux release) since the crawl
+finished.
 
 `insiders-catchup` (doc-fetcher image, `doc-fetcher-insiders`, migration 059) runs daily at 08:45,
 after the nightly `submissions` load, and is not suspended: the same command as `insiders-backfill`
@@ -113,14 +157,17 @@ On hermes both run at 1 and stay on after the backfill: the crawler re-plans eve
 `CRAWL_PLAN_HOURS` and fetches what the live doc-fetcher leaves (amendments, daily-index filings,
 8-Ks outside its items, fetch errors). Since 2026-11-09 doc-fetcher itself stores every operating
 company's new 10-K, 10-Q and material 8-K from the feed within minutes (`FETCH_OPERATING`).
-Documents before the 5-year window (F8b) are one env var on the crawler, `CRAWL_SINCE` (a date),
-set under `values.services.doc-crawler.env` in the Flux release; measured cost and steps in the
-doc-fetcher README, "Documents before 2021". Not set.
+The crawl's window is `CRAWL_YEARS` in `values.yaml`: 11 since 2026-11-09 (it was 5), so the plan
+reaches back to November 2015 for the documents of 2016 onward. `CRAWL_SINCE`, a fixed start date
+that can only reach further back, is not set; the measured cost of earlier years is in the
+doc-fetcher README, "Documents before 2021". `CRAWL_8K_ITEMS` takes the results, Reg FD and
+other-events items (2.02, 7.01, 8.01) plus the material events (deals, debt, leadership,
+impairments, auditor changes, non-reliance).
 
 ## Components
 
-`services` become Deployments and `jobs` become CronJobs. Each lists what it `uses`; that
-decides its environment variables, which Secret keys it can read, and its network access:
+Each service and job lists what it `uses`; that decides its environment variables, which Secret
+keys it can read, and its network access:
 
 | uses | Env | Network |
 |---|---|---|
@@ -266,8 +313,7 @@ git commit -m "Secrets: data-connections-key" deploy/secrets/tributary.yaml && g
 sudo k3s kubectl -n tributary rollout restart deployment/query-api
 ```
 
-Back the key up in the password manager next to the age key: losing it makes every stored API
-key unreadable (users would have to reconnect).
+hermes' `tributary` secret has no `data-connections-key`, so the feature is off there.
 
 Then `GET /api/query/v1/connections` with a token answers 200 instead of 404, and Settings →
 Connections appears in the web app. Keep the master key backed up with the age key: losing it
@@ -341,7 +387,7 @@ can only `EXECUTE` `ops.sec_take_token` / `ops.sec_report_throttle` (now `SECURI
 (`libs/sec/tests/test_sec_limiter_role.py`). With `secLimiter.dedicatedLogin: true`,
 `SEC_LIMITER_DATABASE_URL` comes from the `sec-limiter-database-url` key instead, and pods that
 use `sec` without `postgres` get no `database-url` at all (CI checks both renders with
-`tests/check_sec_limiter.py`).
+`tests/check_sec_limiter.py`). hermes' release doesn't set the flag: its pods use `database-url`.
 
 Owner steps, in this order (each step keeps the current deploy working):
 
