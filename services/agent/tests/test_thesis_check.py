@@ -968,6 +968,27 @@ def test_an_older_query_api_without_the_route_leaves_the_model_out_not_the_check
     assert result["assumptions"][0]["years"] == [] and result["claims"]
 
 
+def test_a_models_amounts_in_another_currency_say_so_in_the_check_data():
+    """Pre-ship review: the prompts say "write every dollar amount with $" (unchanged: that needs
+    a re-record), so every figure the model sees for a non-USD company must say its currency. The
+    check data's history amounts come from the model run, whose `currency` (057) is now beside
+    them; a dollar company's block is as before (no key)."""
+    _, messages, _ = run(FakeQueryApi(), *script())
+    assert "currency" not in check_data(messages)["models"][0]
+
+    class Euros(FakeQueryApi):
+        def __call__(self, request):
+            r = super().__call__(request)
+            if request.url.path.endswith("/model"):
+                return httpx.Response(200, json={**r.json(), "currency": "EUR"})
+            return r
+
+    _, messages, _ = run(Euros(), *script())
+    model = check_data(messages)["models"][0]
+    assert model["currency"] == "EUR" and model["history"][-1]["revenue"] is not None
+    assert list(model)[:4] == ["model", "name", "company_id", "currency"]  # before the amounts
+
+
 def quarter_rows(fy: int, values: list[tuple[int, float, float]]) -> list[dict]:
     return [{"metric": m, "fiscal_period": f"FY{fy} Q{q}", "period_end": f"{fy}-0{q * 3}-28",
              "value": str(int(v)), "citation": {"accession_no": ACC, "form": "10-Q",

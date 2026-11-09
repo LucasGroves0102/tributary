@@ -289,6 +289,7 @@ class Model:
     run: dict | None = None  # the run's TTM run rate, which the defaults start from
     user_set: list[bool] = field(default_factory=list)  # per year: not one of Tributary's defaults
     years: list[dict] = field(default_factory=list)  # the run's base-case years
+    currency: str | None = None  # the run's: every amount of the company is in it (056, 057)
 
 
 @dataclass
@@ -431,6 +432,7 @@ def read_history(api: Api, job: Job) -> None:
         m.history = [y for y in body.get("history") or [] if isinstance(y, dict)]
         m.check = base["check"]
         m.run = body.get("run_rate") if isinstance(body.get("run_rate"), dict) else None
+        m.currency = body.get("currency") if isinstance(body.get("currency"), str) else None
         m.user_set = [bool(x) for x in base.get("user_set") or []]
         m.years = [y for y in base.get("years") or [] if isinstance(y, dict)]
 
@@ -530,6 +532,10 @@ def data_block(job: Job) -> str:
     models = []
     for m in job.models:
         entry: dict[str, Any] = {"model": m.ref, "name": m.name, "company_id": m.company_id}
+        if m.currency not in (None, "USD"):
+            # every amount of this model is in it, not dollars; only when not USD (as
+            # /financials' `currency`), so a dollar company's block is unchanged
+            entry["currency"] = m.currency
         if m.error or m.check is None:
             entry["error"] = m.error or "no history"
         else:

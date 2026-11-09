@@ -87,7 +87,12 @@ figure quoted from a euro filing's text ("2,097 million" in a 20-F) still counts
 The thesis check's H2 guard (`filing_checks`) reads the cited filing's figures with their `unit`
 (057): a "$" figure never agrees with a figure in another currency, and its note words the
 filing's figure in it ("net debt of €10.9B"); the stored filing figure keeps its fields (no unit:
-query_api's `FilingFigure` is strict).
+query_api's `FilingFigure` is strict). Every amount the model reads for a non-USD company says its
+currency where it reads it: the `get_financials` answer (above), the thesis check's prefetched
+history (the same answer) and each model's history in `<check_data>` (`currency` beside the
+amounts, from the model run's own, only when not USD so a dollar company's block is unchanged).
+The other tools return no amounts of Tributary's (events, filings, search) or quote the filing's
+own text, its currency sign included (sections, changes, earnings releases).
 
 ## agent-api
 

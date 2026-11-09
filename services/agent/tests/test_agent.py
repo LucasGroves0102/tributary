@@ -364,6 +364,23 @@ def test_financials_view_and_basis_pass_through():
     assert (seen[0].url.params["view"], seen[0].url.params["basis"]) == ("ttm", "calendar")
 
 
+def test_a_non_dollar_companys_figures_reach_the_model_with_their_currency():
+    """Pre-ship review: the prompt says "write every dollar amount with $" (unchanged: that needs
+    a re-record), so a non-USD company's figures must say their currency where the model reads
+    them. /financials does (`currency` on the answer, `unit` on each row, 056/057); the tool
+    result is that JSON, first key to last, nothing dropped."""
+    body = {"company_id": NVDA, "view": "ttm", "basis": "fiscal", "as_of": "2026-11-09T00:00:00Z",
+            "currency": "JPY", "cadence": "annual",
+            "rows": [{"metric": "revenue", "period_end": "2026-03-31", "value": "48036704000000",
+                      "unit": "JPY", "citation": {"accession_no": "0001094517-26-000020",
+                                                  "form": "20-F"}}]}
+    api, _ = query_api(lambda r: httpx.Response(200, json=body))
+    content, is_error = api.run("get_financials", {"company_id": NVDA, "view": "ttm"})
+    assert not is_error
+    assert json.loads(content) == body
+    assert content.index('"currency":"JPY"') < content.index('"rows"')
+
+
 def financials_metrics(tools):
     tool = next(t for t in tools if t["name"] == "get_financials")
     return tool["input_schema"]["properties"]["metrics"]["items"].get("enum")
