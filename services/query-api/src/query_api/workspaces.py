@@ -24,7 +24,16 @@ from typing import Annotated, Any, Literal, Protocol
 import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    StrictFloat,
+    StrictInt,
+    field_validator,
+    model_validator,
+)
 
 MAX_WORKSPACES = 50
 MAX_ITEMS_PER_WORKSPACE = 100
@@ -37,6 +46,9 @@ MAX_THESIS_MARKDOWN = 100_000  # characters
 MAX_THESIS_BYTES = 120_000  # a thesis state as compact UTF-8 JSON (the table allows 131072)
 MAX_MODEL_YEARS = 10
 MAX_NOTE = 500
+MAX_MODEL_BYTES = 60_000  # a model state as compact UTF-8 JSON (the table allows 65536, 015)
+MAX_ADJUSTMENTS = 20
+MAX_ADJUSTMENT_NAME = 80
 MAX_PROJECT_PEERS = 20  # like a comps set (CompsState.peers)
 MAX_PROJECT_NOTES = 4_000  # "How it makes money", characters
 MAX_PROJECT_BYTES = 16_000  # a project as compact JSON (the column allows 16384)
@@ -51,8 +63,9 @@ KINDS = ("chart", "comps", "screen", "thesis", "model")
 Kind = Literal["chart", "comps", "screen", "thesis", "model"]
 REPORT = "report"
 LARGE = ("report", "thesis")  # kinds whose state the workspace listing leaves out
-# a save over a thesis keeps the version it replaced (app DB 014, item_versions), the newest these
-VERSIONED = ("thesis",)
+# a save over a thesis or a model keeps the version it replaced (app DB 014, item_versions; models
+# since F2), the newest these
+VERSIONED = ("thesis", "model")
 MAX_VERSIONS = 30
 
 CIK = r"^\d{10}$"
@@ -232,10 +245,18 @@ class ThesisState(_Strict):
 
 class ModelYear(_Strict):
     """One forecast year's assumptions, in percent: revenue growth over the year before, and
-    operating margin (operating income = revenue x margin)."""
+    operating margin (operating income = revenue x margin). In a `ytd` model the first year's
+    growth and margin are the remainder's (query_api.model_maths). F2 adds four optional rates;
+    absent means the default from history (model_maths, `defaulted`): interest and other as a
+    share of revenue, the tax rate on pretax income, the change in diluted shares, the FCF
+    margin."""
     growth: float = Field(ge=-100, le=1000)
     margin: float = Field(ge=-1000, le=100)
     note: str | None = Field(default=None, max_length=MAX_NOTE)
+    nonOperating: StrictFloat | None = Field(default=None, ge=-100, le=100)
+    taxRate: StrictFloat | None = Field(default=None, ge=-100, le=100)
+    shareChange: StrictFloat | None = Field(default=None, ge=-50, le=100)
+    fcfMargin: StrictFloat | None = Field(default=None, ge=-1000, le=100)
 
     @field_validator("note")
     @classmethod
@@ -249,21 +270,60 @@ class Scenarios(_Strict):
     bull: list[ModelYear] | None = Field(default=None, min_length=1, max_length=MAX_MODEL_YEARS)
 
 
+class Adjustment(_Strict):
+    """A one-off the user names (F2): `one_off` is an amount in a fiscal quarter's operating
+    income (positive raised it, negative is a charge), excluded from margins and growth;
+    `acquired` is revenue from acquisitions in that fiscal year, excluded from organic growth.
+    USD. The user's own figure, never data."""
+    name: str = Field(max_length=4 * MAX_ADJUSTMENT_NAME)
+    fy: StrictInt = Field(ge=1990, le=2100)
+    quarter: StrictInt = Field(ge=1, le=4)
+    kind: Literal["one_off", "acquired"] = "one_off"
+    amount: StrictFloat = Field(ge=-1e13, le=1e13)
+
+    @field_validator("name")
+    @classmethod
+    def _name(cls, v: str) -> str:
+        return clean_name(v, MAX_ADJUSTMENT_NAME)
+
+
+class Price(_Strict):
+    """A price per share the user typed and the day it's for (F2 valuation): nothing is fetched."""
+    value: StrictFloat = Field(gt=0, le=10_000_000)
+    date: str = Field(pattern=ISO_DATE)
+
+    @field_validator("date")
+    @classmethod
+    def _date(cls, v: str) -> str:
+        datetime.strptime(v, "%Y-%m-%d")  # a real day
+        return v
+
+
 class ModelState(_Strict):
     """models/model.ts ModelState: a company, how many fiscal years of history to show, and one
     set of assumptions per forecast year (the first is the year after the latest reported one).
-    The history itself is never stored: the web app reads it through the Query API.
+    The history itself is never stored: the Query API reads it on every run (model_maths).
 
     `assumptions` is the BASE scenario (a model saved before scenarios is base only, unchanged);
     `scenarios` optionally adds bear and bull assumptions for the same years. The thesis check
-    reads the base case (agent-api model_stats.scenario_assumptions)."""
+    reads the base case. F2: `ytd` builds year 1 from the current fiscal year's reported
+    quarters plus the remainder (absent: a full-year guess, as every model saved before F2),
+    `adjustments` the user's one-offs and acquired revenue, `price` the user's own price. All
+    three are optional, so older states validate and save unchanged."""
     companyId: str = Field(pattern=CIK)
     historyYears: int = Field(default=8, ge=3, le=10)
     assumptions: list[ModelYear] = Field(min_length=1, max_length=MAX_MODEL_YEARS)
     scenarios: Scenarios | None = None
+    ytd: StrictBool | None = None
+    adjustments: list[Adjustment] | None = Field(default=None, max_length=MAX_ADJUSTMENTS)
+    price: Price | None = None
 
     @model_validator(mode="after")
     def _same_years(self) -> ModelState:
+        if self.ytd is False:
+            self.ytd = None
+        if not self.adjustments:
+            self.adjustments = None
         if self.scenarios is None:
             return self
         for case in (self.scenarios.bear, self.scenarios.bull):
@@ -316,7 +376,8 @@ def validate_state(kind: str, raw: Any) -> dict:
         state = model.model_validate(raw).model_dump(exclude_none=True)
     except ValueError as e:  # pydantic's ValidationError is a ValueError
         raise StateError(str(e)) from None
-    cap = MAX_THESIS_BYTES if kind == "thesis" else MAX_STATE_BYTES
+    cap = (MAX_THESIS_BYTES if kind == "thesis" else MAX_MODEL_BYTES if kind == "model"
+           else MAX_STATE_BYTES)
     if len(json.dumps(state, separators=(",", ":"), ensure_ascii=False).encode()) > cap:
         raise StateError(f"state is larger than {cap} bytes")
     return state
@@ -580,7 +641,11 @@ class AppWorkspaces:
             if cur.fetchone() is None:
                 return None
             cur.execute("SELECT version_id::text, name, saved_at, replaced_at,"
-                        "       char_length(coalesce(state->>'markdown', '')) AS characters"
+                        "       char_length(coalesce(state->>'markdown', '')) AS characters,"
+                        # a model's (F2): its forecast years and whether it has bear/bull
+                        "       CASE WHEN jsonb_typeof(state->'assumptions') = 'array'"
+                        "            THEN jsonb_array_length(state->'assumptions') END AS years,"
+                        "       state ? 'scenarios' AS cases"
                         " FROM item_versions WHERE item_id = %s AND user_id = %s"
                         " ORDER BY replaced_at DESC, version_id DESC", (item_id, user_id))
             return cur.fetchall()

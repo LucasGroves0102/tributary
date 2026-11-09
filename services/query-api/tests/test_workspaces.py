@@ -17,6 +17,7 @@ from query_api.workspaces import (
     MAX_BODY_BYTES,
     MAX_ITEM_BODY,
     MAX_ITEMS_PER_WORKSPACE,
+    MAX_MODEL_BYTES,
     MAX_RECENT_FILINGS,
     MAX_THESIS_BYTES,
     MAX_VERSIONS,
@@ -196,7 +197,10 @@ class FakeWorkspaces:
         if not self._it(user_id, item_id):
             return None
         return [{k: v[k] for k in ("version_id", "name", "saved_at", "replaced_at")}
-                | {"characters": len(str(v["state"].get("markdown") or ""))}
+                | {"characters": len(str(v["state"].get("markdown") or "")),
+                   "years": len(v["state"]["assumptions"])
+                   if isinstance(v["state"].get("assumptions"), list) else None,
+                   "cases": "scenarios" in v["state"]}
                 for v in self.versions_of.get(item_id, [])]
 
     def version(self, user_id, item_id, version_id):
@@ -489,6 +493,24 @@ BAD_STATES = [
     ("model", {"companyId": NVDA, "historyYears": 11, "assumptions": [{"growth": 1,
                                                                        "margin": 1}]}),
     ("model", {**MODEL, "history": [{"revenue": 1}]}),  # history is never stored
+    # F2's fields are strict too
+    ("model", {**MODEL, "ytd": "yes"}),
+    ("model", {**MODEL, "assumptions": [{"growth": 1, "margin": 1, "taxRate": 101}]}),
+    ("model", {**MODEL, "assumptions": [{"growth": 1, "margin": 1, "shareChange": -51}]}),
+    ("model", {**MODEL, "assumptions": [{"growth": 1, "margin": 1, "fcfMargin": 101}]}),
+    ("model", {**MODEL, "assumptions": [{"growth": 1, "margin": 1, "nonOperating": "1"}]}),
+    ("model", {**MODEL, "adjustments": [{"name": "", "fy": 2027, "quarter": 2,
+                                         "amount": 1}]}),
+    ("model", {**MODEL, "adjustments": [{"name": "x", "fy": 2027, "quarter": 2,
+                                         "kind": "pro_forma", "amount": 1}]}),
+    ("model", {**MODEL, "adjustments": [{"name": "x", "fy": 2027, "quarter": 2,
+                                         "amount": 1, "line": "revenue"}]}),
+    ("model", {**MODEL, "adjustments": [{"name": "x", "fy": 2027, "quarter": 2,
+                                         "amount": 1}] * 21}),
+    ("model", {**MODEL, "price": {"value": -1, "date": "2026-11-06"}}),
+    ("model", {**MODEL, "price": {"value": 1, "date": "11/06/2026"}}),
+    ("model", {**MODEL, "price": {"value": 1, "date": "2026-11-06", "close": 1}}),
+    ("model", {**MODEL, "price": {"value": 1}}),
 ]
 
 
@@ -759,8 +781,8 @@ def test_versions_are_capped_and_only_the_owners(world, token):
     r = client.get(f"/v1/workspace-items/{other['item_id']}/versions/{vid}",
                    headers=token("alice"))
     assert r.status_code == 404 and r.json() == {"detail": "version not found"}
-    # only theses are versioned
-    assert VERSIONED == ("thesis",)
+    # theses and models are versioned (models since F2)
+    assert VERSIONED == ("thesis", "model")
     chart = new_item(client, token, wid)
     client.put(f"/v1/workspace-items/{chart['item_id']}", json={"state": SAVED_CHART | {
         "title": "other"}}, headers=token("alice"))
@@ -789,6 +811,72 @@ def test_model_state_as_stored():
         {"growth": -3.0, "margin": 48.0}]}  # a blank note is dropped
     assert validate_state("model", {"companyId": NVDA, "assumptions": [
         {"growth": 0, "margin": 0}]})["historyYears"] == 8
+
+
+F2_MODEL = {**MODEL, "ytd": True,
+            "assumptions": [{"growth": 25, "margin": 55.5, "taxRate": 16, "shareChange": -1,
+                             "nonOperating": -10, "fcfMargin": 45, "note": "H2 remainder"},
+                            {"growth": 12.5, "margin": 50}],
+            "adjustments": [{"name": "IEEPA refunds", "fy": 2027, "quarter": 2,
+                             "kind": "one_off", "amount": 46e6},
+                            {"name": "UIG", "fy": 2026, "quarter": 4, "kind": "acquired",
+                             "amount": 1.5e8}],
+            "price": {"value": 182.5, "date": "2026-11-06"}}
+WIDE = "\U0001f4c8"  # four bytes in UTF-8
+
+
+def test_f2_model_fields_as_stored():
+    saved = validate_state("model", F2_MODEL)
+    assert saved["ytd"] is True and saved["price"] == {"value": 182.5, "date": "2026-11-06"}
+    assert saved["assumptions"][0]["taxRate"] == 16 and "taxRate" not in saved["assumptions"][1]
+    assert saved["adjustments"][0] == {"name": "IEEPA refunds", "fy": 2027, "quarter": 2,
+                                       "kind": "one_off", "amount": 46e6}
+    # off and empty are absent, so a model without them saves exactly as before F2
+    plain = validate_state("model", {**MODEL, "ytd": False, "adjustments": []})
+    assert plain == validate_state("model", MODEL)
+    assert "ytd" not in plain and "adjustments" not in plain and "price" not in plain
+    # an adjustment's kind defaults to a one-off; its name is trimmed
+    one = validate_state("model", {**MODEL, "adjustments": [
+        {"name": " Charge ", "fy": 2026, "quarter": 1, "amount": -5}]})["adjustments"][0]
+    assert one == {"name": "Charge", "fy": 2026, "quarter": 1, "kind": "one_off", "amount": -5}
+
+
+def test_a_full_model_fits_its_cap():
+    """Every year of three cases with every rate and a full note, and 20 adjustments: over the
+    16 KiB other items get, inside a model's 60,000 bytes (app DB 015 allows 65,536)."""
+    year = {"growth": 12.34, "margin": 23.45, "nonOperating": -1.23, "taxRate": 21.5,
+            "shareChange": -3.25, "fcfMargin": 18.75, "note": "x" * 500}
+    full = {**MODEL, "ytd": True, "assumptions": [year] * 10,
+            "scenarios": {"bear": [year] * 10, "bull": [year] * 10},
+            "adjustments": [{"name": "y" * 80, "fy": 2026, "quarter": 1, "amount": 1.5e9}] * 20,
+            "price": {"value": 1234.56, "date": "2026-11-06"}}
+    size = len(json.dumps(validate_state("model", full), separators=(",", ":")))
+    assert 16_384 < size < MAX_MODEL_BYTES
+    wide = {**year, "note": WIDE * 500}
+    too_big = {**full, "assumptions": [wide] * 10,
+               "scenarios": {"bear": [wide] * 10, "bull": [wide] * 10}}
+    with pytest.raises(StateError, match="larger than"):
+        validate_state("model", too_big)
+
+
+def test_a_save_over_a_model_keeps_the_version_it_replaced(world, token):
+    """F2: any overwrite of a model is restorable, like a thesis's (app DB 014)."""
+    client, *_ = world
+    wid = new_workspace(client, token)
+    m = new_item(client, token, wid, kind="model", name="NVDA model", state=SCENARIOS)
+    url = f"/v1/workspace-items/{m['item_id']}"
+    alice = token("alice")
+    client.put(url, json={"state": F2_MODEL}, headers=alice)
+    client.put(url, json={"name": "renamed"}, headers=alice)  # a rename alone isn't versioned
+    listed = client.get(f"{url}/versions", headers=alice).json()["versions"]
+    assert [(v["name"], v["years"], v["cases"]) for v in listed] == [("NVDA model", 3, True)]
+    one = client.get(f"{url}/versions/{listed[0]['version_id']}", headers=alice).json()
+    assert one["state"] == validate_state("model", SCENARIOS)
+    # restoring is an ordinary save, which keeps the F2 model it replaces in turn
+    client.put(url, json={"state": one["state"]}, headers=alice)
+    listed = client.get(f"{url}/versions", headers=alice).json()["versions"]
+    assert [(v["years"], v["cases"]) for v in listed] == [(2, False), (3, True)]
+    assert client.get(f"{url}/versions", headers=token("bob")).status_code == 404
 
 
 @pytest.mark.parametrize("kind, state", [("thesis", THESIS), ("model", MODEL)])
