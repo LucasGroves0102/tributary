@@ -62,7 +62,7 @@ struct Heading {
     key: String,
     span: usize,
     title_part: Option<&'static str>, // rule 9 title heading: the Part its title belongs to
-    xref: bool, // Part heading followed by ",": "Part I, Item 2" (rule 9 ignores it)
+    xref: bool,       // Part heading followed by ",": "Part I, Item 2" (rule 9 ignores it)
     title_end: usize, // rule 10: byte offset where the title's line ends ('\n' or the text's end)
 }
 
