@@ -106,9 +106,10 @@ class FakeQueryApi:
     """The Query API as alice sees it: her thesis and model, NVDA and AMD readable, MSFT not
     (catalog closed); every request recorded with its token."""
 
-    def __init__(self, markdown=MARKDOWN, save_status=201, quarters=()):
+    def __init__(self, markdown=MARKDOWN, save_status=201, quarters=(), figures=None):
         self.markdown = markdown
         self.quarters = list(quarters)  # quarterly rows the model run reads (F2 ytd)
+        self.figures = figures  # accession -> /filings/{acc}/figures rows (None: an older API)
         self.save_status = save_status
         self.seen: list[httpx.Request] = []
         self.saved: list[dict] = []
@@ -158,6 +159,11 @@ class FakeQueryApi:
             return httpx.Response(200, json={"company_id": NVDA, "filings": [INDEX_ROW]})
         if path == f"/v1/companies/{NVDA}/sections/I-2":
             return httpx.Response(200, json=SECTION)
+        if path.startswith(f"/v1/companies/{NVDA}/filings/") and path.endswith("/figures") \
+                and self.figures is not None:
+            acc = path.split("/")[-2]
+            return httpx.Response(200, json={"company_id": NVDA, "accession_no": acc,
+                                             "figures": self.figures.get(acc, [])})
         if path.startswith("/v1/companies/"):
             return httpx.Response(403, json={"detail": "not permitted"})
         if path == f"/v1/thesis-checks/{THESIS}" and method == "POST":
@@ -810,6 +816,81 @@ def test_check_result_refuses_a_supported_claim_with_figures_not_in_the_data():
     result["claims"][0]["citations"][0]["figure_status"] = "unverified"
     with pytest.raises(ValueError, match="supported"):
         validate_check(result)
+
+
+# --- H2, #2: agreeing with the app's computed figure isn't agreeing with the filing ----------
+
+NET_DEBT_ROW = {"metric": "net_debt", "value": "10920000000", "period_end": "2026-07-26",
+                "fiscal_period": "FY2027 Q2",
+                "inputs": {"long_term_debt": 8466000000, "cash": 23422000000},
+                "citation": {"accession_no": ACC, "form": "10-Q", "filed": "2026-08-27",
+                             "xbrl_tag": "derived", "filing_url": URL}}
+NET_DEBT_CLAIM = {"quote": "Net debt was $10.92B.", "status": "supported",
+                  "explanation": "The 10-Q's figures give it.",
+                  "citations": [{"accession_no": ACC}]}
+
+
+def net_debt_check(monkeypatch, filing_value):
+    """Riley #2: Tributary's computed net debt ($10.92B) left out NVIDIA's $99.37B of marketable
+    securities; the claim matched it and was certified. The cited 10-Q's own figures say
+    otherwise."""
+    monkeypatch.setitem(globals(), "QUARTER", {**QUARTER,
+                                               "rows": [*QUARTER["rows"], NET_DEBT_ROW]})
+    figures = {ACC: [{"metric": "net_debt", "period_start": None, "period_end": "2026-07-26",
+                      "value": filing_value, "how": "computed"},
+                     {"metric": "cash", "period_start": None, "period_end": "2026-07-26",
+                      "value": "23422000000", "how": "reported"}]}
+    fake = FakeQueryApi(markdown=MARKDOWN + "\nNet debt was $10.92B.\n", figures=figures)
+    submission = {**SUBMISSION, "claims": [SUBMISSION["claims"][0], NET_DEBT_CLAIM]}
+    run(fake, *script(submission))
+    asked = [r.url.path for r in fake.seen if r.url.path.endswith("/figures")]
+    return validate_check(fake.saved[0]["result"])["claims"], asked
+
+
+def test_a_computed_figure_the_cited_filing_disagrees_with_isnt_supported(monkeypatch):
+    claims, asked = net_debt_check(monkeypatch, "-66003000000")
+    assert asked == [f"/v1/companies/{NVDA}/filings/{ACC}/figures"]  # once, revenue isn't guarded
+    revenue, net_debt = claims
+    assert revenue["status"] == "supported" and revenue["filing_figures"] == []
+    assert net_debt["status"] == "unverifiable" and net_debt["downgraded"]
+    assert net_debt["explanation"].endswith(
+        "(Marked unverifiable: the 10-Q filed 2026-08-27 gives net debt of -$66.0B at 2026-07-26 "
+        "from its own figures, not $10.92B: Tributary's computed figure doesn't match the "
+        "filing.)")
+    assert net_debt["filing_figures"] == [{
+        "metric": "net_debt", "period_end": "2026-07-26", "accession_no": ACC,
+        "figure": "$10.92B", "filing_value": "-66003000000", "agrees": False}]
+
+
+def test_a_computed_figure_the_filing_agrees_with_stays_supported(monkeypatch):
+    claims, _ = net_debt_check(monkeypatch, "10921000000")  # within the claim's rounding
+    assert claims[1]["status"] == "supported"
+    assert claims[1]["filing_figures"][0]["agrees"] is True
+
+
+def test_an_older_query_api_without_filing_figures_changes_nothing(monkeypatch):
+    monkeypatch.setitem(globals(), "QUARTER", {**QUARTER,
+                                               "rows": [*QUARTER["rows"], NET_DEBT_ROW]})
+    fake = FakeQueryApi(markdown=MARKDOWN + "\nNet debt was $10.92B.\n")  # the route 403s
+    run(fake, *script({**SUBMISSION, "claims": [NET_DEBT_CLAIM]}))
+    claim = validate_check(fake.saved[0]["result"])["claims"][0]
+    assert claim["status"] == "supported" and claim["filing_figures"] == []
+
+
+def test_check_result_refuses_a_supported_claim_the_filing_disagrees_with(monkeypatch):
+    """query_api.thesis_checks.CheckResult enforces it too (they change together)."""
+    monkeypatch.setitem(globals(), "QUARTER", {**QUARTER,
+                                               "rows": [*QUARTER["rows"], NET_DEBT_ROW]})
+    fake = FakeQueryApi(markdown=MARKDOWN + "\nNet debt was $10.92B.\n",
+                        figures={ACC: [{"metric": "net_debt", "period_start": None,
+                                        "period_end": "2026-07-26", "value": "10920000000",
+                                        "how": "computed"}]})
+    run(fake, *script({**SUBMISSION, "claims": [NET_DEBT_CLAIM]}))
+    fake_result = json.loads(json.dumps(fake.saved[0]["result"]))
+    assert fake_result["claims"][0]["status"] == "supported"
+    fake_result["claims"][0]["filing_figures"][0]["agrees"] = False
+    with pytest.raises(ValueError, match="filing"):
+        validate_check(fake_result)
 
 
 # --- #74: a model still at its defaults isn't the user's view --------------------------------

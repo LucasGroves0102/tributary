@@ -1049,3 +1049,42 @@ def test_components_and_figure_facts_read_only_what_the_rule_allows(client, toke
     assert [(f["tag"], f["used"]) for f in mine.json()["facts"]] == [("Revenues", True)]
     # layer 1 allows everything here: RLS alone hides B's figure
     assert client.get(f"/v1/companies/{B}{url}", headers=token("t-free")).status_code == 404
+
+
+def test_filing_figures_compute_from_one_filing_and_read_only_what_the_rule_allows(client, token):
+    """H2: gold.filing_figures (051) is SECURITY DEFINER over silver like 049's figure_facts. It
+    gives the cited filing's own net debt (NVIDIA's 10-Q: debt less cash less the securities a
+    computed figure left out); t-free reads A's, not B's, and no user reads nothing."""
+    conn = client.app_conn
+    for cid in (A, B):
+        for tag, metric, value in (
+                ("LongTermDebtNoncurrent", "long_term_debt", 33370),
+                ("CashAndCashEquivalentsAtCarryingValue", "cash", 11490),
+                ("ShortTermInvestments", "short_term_investments", 99370),
+                ("AssetsCurrent", "current_assets", 140000)):
+            conn.execute(
+                "INSERT INTO silver.financial_facts (cik, metric, tag, unit, period_start,"
+                " period_end, value, accession_no, form, filed) VALUES (%s, %s, %s, 'USD', NULL,"
+                " '2026-06-30', %s, %s, '10-Q', '2026-08-01')",
+                (cid, metric, tag, value, f"{cid}-26-000009"))
+    with conn.transaction(), conn.cursor() as cur:
+        cur.execute("SET LOCAL ROLE query_api")
+        cur.execute("SELECT set_config('app.user_id', 't-free', true)")
+        seen = {c: cur.execute(
+            "SELECT metric, value FROM gold.filing_figures(%s, %s) WHERE how = 'computed'"
+            " ORDER BY metric", (c, f"{c}-26-000009")).fetchall() for c in (A, B)}
+        cur.execute("SELECT set_config('app.user_id', '', true)")
+        nobody = cur.execute("SELECT count(*) FROM gold.filing_figures(%s, %s)",
+                             (A, f"{A}-26-000009")).fetchone()
+        cur.execute("RESET ROLE")
+    assert seen == {A: [("cash_and_investments", 11490 + 99370),
+                        ("net_debt", 33370 - 11490 - 99370)], B: []}
+    assert nobody == (0,)
+    mine = client.get(f"/v1/companies/{A}/filings/{A}-26-000009/figures", headers=token("t-free"))
+    assert mine.status_code == 200, mine.text
+    net = next(f for f in mine.json()["figures"] if f["metric"] == "net_debt")
+    assert net["value"] == "-77490" and net["inputs"]["short_term_investments"] == "99370"
+    # layer 1 allows everything here: the function's rule alone gives B nothing
+    theirs = client.get(f"/v1/companies/{B}/filings/{B}-26-000009/figures",
+                        headers=token("t-free"))
+    assert theirs.status_code == 200 and theirs.json()["figures"] == []

@@ -435,6 +435,18 @@ class Store:
             return {"row": row, "rows": rows, "facts": facts,
                     "definition": d["definition"] if d else None, "present": set(rows)}
 
+    def filing_figures(self, user_id: str, company_id: str, accession_no: str) -> list[dict]:
+        """What one filing itself says (gold.filing_figures, 051): its facts as gold reads them,
+        the best tag per metric and period, and the net debt, cash and investments and free cash
+        flow computed from that filing alone. In the caller's session: the function reads only a
+        company authz.readable_companies('financials') gives this user. One company, one filing."""
+        with self._session(user_id) as cur:
+            cur.execute(
+                "SELECT * FROM gold.filing_figures(%s, %s)"
+                " ORDER BY how DESC, metric, period_end, period_start NULLS FIRST",
+                (company_id, accession_no))
+            return cur.fetchall()
+
     def equity_readings(self, user_id: str, company_id: str, metrics: list[str], quarters: int,
                         view: str = "quarter", basis: str = "fiscal") -> list[dict]:
         """Why a metric reads n/m because of the company's stockholders' equity, at each of its

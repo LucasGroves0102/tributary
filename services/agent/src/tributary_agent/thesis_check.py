@@ -26,7 +26,11 @@ POST /v1/thesis-checks (server.py) with a thesis's item id:
    citation checked against the filings the tools returned (unknown ones flagged), every figure
    in every explanation through verify.py (unverified ones flagged), supported/contradicted
    claims without a usable citation downgraded to unverifiable, points not mentioned without
-   one dropped, quotes checked against the thesis text.
+   one dropped, quotes checked against the thesis text. A supported claim whose figure is one of
+   Tributary's computed figures (net debt, cash and investments, free cash flow: `GUARDED`) is
+   compared with the same figure computed from each cited filing's own facts
+   (`/v1/companies/{id}/filings/{accession}/figures`, read as the user, never a tool result); if
+   they disagree it can't stay supported: unverifiable, "the filing gives X" (H2, Riley #2).
 5. It is saved through the Query API (`POST /v1/thesis-checks/{id}`, user's token; nginx keeps
    it off the public site) with the thesis text's hash, so the web app shows when a check is
    stale, and `filings` (Revisit): per company in the scope, the newest 10-K/10-Q in the SEC
@@ -72,7 +76,7 @@ from tributary_agent.report import (
     tiers_of,
     user_access,
 )
-from tributary_agent.verify import verify
+from tributary_agent.verify import figures_in, verify
 
 CHECK_QUESTIONS = 4  # what one check counts against the assistant limits (README)
 CHECK_ROUNDS = 16
@@ -89,6 +93,13 @@ MAX_NOT_MENTIONED = 8
 MAX_CITATIONS = 6
 PERIODIC_FORMS = ("10-K", "10-Q")  # what "a newer filing since the check" means (Revisit)
 SUBMIT = "submit_check"
+# Tributary's computed dollar figures a claim may state; a supported one is compared with the
+# cited filing's own (H2). Margins aren't dollar figures (verify.py reads $ amounts only).
+GUARDED = frozenset({"net_debt", "cash_and_investments", "free_cash_flow"})
+GUARDED_LABEL = {"net_debt": "net debt", "cash_and_investments": "cash and investments",
+                 "free_cash_flow": "free cash flow"}
+FILING_TOLERANCE = 0.005  # beyond the claim's own rounding, a 0.5% difference is a disagreement
+MAX_FILING_FIGURES = 8
 STATUSES = ("supported", "contradicted", "unverifiable")
 FIGURE_STATUSES = ("verified", "derived", "quoted", "unverified")
 EMBED_LINE = re.compile(r"^\s*\[\[\s*embed\s*:\s*([0-9a-f-]{36})\s*\]\]\s*$", re.IGNORECASE)
@@ -158,6 +169,11 @@ with (the previous 10-Q or 10-K, or the same quarter a year earlier): the two ca
 - A balance-sheet figure as of the latest report's period end (cash, debt, net debt, assets, \
 equity) is out of date when get_events_since_report lists it under stale: say so and cite the \
 event. Never compute a figure after the event; the filings don't give it.
+- After you submit, a supported claim whose figure is one of Tributary's computed figures \
+(net debt, cash and investments, free cash flow) is compared with the same figure computed from \
+the cited filing's own statements; where they differ it is marked unverifiable with what the \
+filing gives. So cite the filing whose balance sheet or cash flow statement you checked the \
+inputs against.
 - In <check_data>, a forecast year with user_set false holds Tributary's default (the run rate \
 fading to the long run), not a number the user chose. Say the user hasn't set it; never call it \
 reasonable, supported or inside history because it matches history: a default does by \
@@ -678,10 +694,111 @@ class Evidence:
         return out
 
 
+FilingLookup = Callable[[str, str], list[dict] | None]
+
+
+def computed_rows(results: list[str]) -> list[dict]:
+    """The /financials rows of GUARDED metrics the tools returned, quarter view only (a TTM is
+    no one filing's figure): {company_id, metric, period_start, period_end, value}."""
+    out = []
+    for content in results:
+        try:
+            data = json.loads(content)
+        except ValueError:
+            continue
+        if not isinstance(data, dict) or not isinstance(data.get("rows"), list) \
+                or data.get("view") == "ttm" or not CIK.fullmatch(str(data.get("company_id"))):
+            continue
+        for r in data["rows"]:
+            if not isinstance(r, dict) or r.get("metric") not in GUARDED:
+                continue
+            inputs = r.get("inputs")
+            if isinstance(inputs, dict) and "quarters" in inputs:
+                continue
+            try:
+                value = float(r["value"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            end = str(r.get("period_end") or "")
+            if ISO_DATE.fullmatch(end):
+                out.append({"company_id": data["company_id"], "metric": r["metric"],
+                            "period_start": r.get("period_start"), "period_end": end,
+                            "value": value})
+    return out
+
+
+def filing_checks(texts: list[str], rows: list[dict], cites: list[dict],
+                  lookup: FilingLookup) -> list[dict]:
+    """Each figure in `texts` that is one of the computed `rows`, against the same figure
+    computed from each verified citation's own facts: [{metric, period_end, accession_no,
+    figure, filing_value, agrees}]. A filing that doesn't give that figure isn't compared."""
+    out: list[dict] = []
+    seen: set[tuple] = set()
+    for text in texts:
+        for written, value, step in figures_in(text):
+            tol = step / 2 * 1.0001
+            for row in rows:
+                if abs(abs(row["value"]) - abs(value)) > tol:
+                    continue
+                for c in cites:
+                    acc = c["accession_no"]
+                    if not c["verified"] or c.get("company_id", row["company_id"]) != \
+                            row["company_id"]:
+                        continue
+                    key = (row["metric"], row["period_end"], acc, written)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    mine = next((f for f in lookup(row["company_id"], acc) or []
+                                 if f.get("how") == "computed" and f.get("metric") == row["metric"]
+                                 and f.get("period_end") == row["period_end"]
+                                 and (f.get("period_start") or None)
+                                 == (row["period_start"] or None)), None)
+                    try:
+                        theirs = float(mine["value"]) if mine else None
+                    except (TypeError, ValueError):
+                        theirs = None
+                    if theirs is None:
+                        continue
+                    agrees = abs(abs(theirs) - abs(value)) <= max(tol, FILING_TOLERANCE
+                                                                  * abs(value))
+                    out.append({"metric": row["metric"], "period_end": row["period_end"],
+                                "accession_no": acc, "figure": written[:60],
+                                "filing_value": _decimal(mine["value"]), "agrees": agrees})
+    return out[:MAX_FILING_FIGURES]
+
+
+def _decimal(v: Any) -> str:
+    text = str(v)
+    return text if re.fullmatch(r"-?\d{1,20}(?:\.\d{1,10})?", text) else f"{float(v):.0f}"
+
+
+def _money(v: float) -> str:
+    sign = "-" if v < 0 else ""
+    v = abs(v)
+    for scale, unit in ((1e12, "T"), (1e9, "B"), (1e6, "M"), (1e3, "K")):
+        if v >= scale:
+            return f"{sign}${v / scale:,.1f}{unit}"
+    return f"{sign}${v:,.0f}"
+
+
+def _disagreement_note(wrong: list[dict], cites: list[dict]) -> str:
+    w = wrong[0]
+    cite = next((c for c in cites if c["accession_no"] == w["accession_no"]), {})
+    filing = f"the {cite.get('form') or 'filing'}" + (f" filed {cite['filed']}"
+                                                       if cite.get("filed") else "")
+    return (f" (Marked unverifiable: {filing} gives {GUARDED_LABEL[w['metric']]} of "
+            f"{_money(float(w['filing_value']))} at {w['period_end']} from its own figures, not "
+            f"{w['figure']}: Tributary's computed figure doesn't match the filing.)")
+
+
 def assemble(job: Job, submitted: dict, answer: Answer, results: list[str], now: datetime,
-             questions: int = CHECK_QUESTIONS) -> dict:
-    """The check's result to store (query_api/thesis_checks.py CheckResult)."""
+             questions: int = CHECK_QUESTIONS,
+             filing_figures: FilingLookup | None = None) -> dict:
+    """The check's result to store (query_api/thesis_checks.py CheckResult). `filing_figures`
+    (company_id, accession_no) → the filing's own figures, for the H2 guard; None skips it."""
     ev = Evidence(results)
+    guarded = computed_rows(results) if filing_figures is not None else []
     notes: list[str] = []
     if job.truncated:
         notes.append(f"Only the first {MAX_THESIS_CHARS:,} of {len(job.markdown):,} characters "
@@ -721,6 +838,18 @@ def assemble(job: Job, submitted: dict, answer: Answer, results: list[str], now:
                 explanation = (explanation + f" (Marked unverifiable: {shown} "
                                f"{'is' if len(missing) == 1 else 'are'} not in the data the "
                                "assistant read.)").strip()
+        if claim["status"] == "supported" and guarded and filing_figures is not None:
+            # a figure that matches Tributary's computed one is checked against the cited
+            # filing's own (H2): agreeing with the app's figure isn't agreeing with the filing
+            checked = filing_checks([quote, *(c.get("figure") or "" for c in cites)], guarded,
+                                    cites, filing_figures)
+            if checked:
+                claim["filing_figures"] = checked
+            wrong = [c for c in checked if not c["agrees"]]
+            if wrong:
+                claim["status"] = "unverifiable"
+                claim["downgraded"] = True
+                explanation = (explanation + _disagreement_note(wrong, cites)).strip()
         claim.update(explanation=explanation, citations=cites, figures=figures)
         claims.append(claim)
     if len(raw_claims) > MAX_CLAIMS:
@@ -805,6 +934,27 @@ def assemble(job: Job, submitted: dict, answer: Answer, results: list[str], now:
     return result
 
 
+def filing_lookup(api: Api) -> FilingLookup:
+    """The Query API's figures of one filing (/filings/{accession}/figures), as the user, cached
+    per check. Not a tool: its answer never joins tools.results (it would verify the model's
+    figures) and never reaches the model. None when it can't be read (no tier, an older API)."""
+    cache: dict[tuple[str, str], list[dict] | None] = {}
+
+    def lookup(company_id: str, accession_no: str) -> list[dict] | None:
+        if not CIK.fullmatch(company_id) or not ACCESSION.fullmatch(accession_no):
+            return None
+        key = (company_id, accession_no)
+        if key not in cache:
+            r = api.call("GET", f"/v1/companies/{company_id}/filings/{accession_no}/figures")
+            body = _json(r) if r is not None and r.status_code == 200 else None
+            figures = body.get("figures") if isinstance(body, dict) else None
+            cache[key] = [f for f in figures if isinstance(f, dict)] \
+                if isinstance(figures, list) else None
+        return cache[key]
+
+    return lookup
+
+
 def save(api: Api, job: Job, result: dict) -> dict:
     r = api.call("POST", f"/v1/thesis-checks/{job.item_id}", json_body={"result": result})
     if r is None:
@@ -853,7 +1003,8 @@ class Checker:
                     yield {"type": "error", "message": f"{why}, so there was nothing to save",
                            "cut_off": answer.stop == "max_tokens"}
                 else:
-                    result = assemble(job, tools.submitted, answer, tools.results, self._clock())
+                    result = assemble(job, tools.submitted, answer, tools.results, self._clock(),
+                                      filing_figures=filing_lookup(self._api))
                     try:
                         saved = save(self._api, job, result)
                     except CheckError as e:

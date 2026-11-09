@@ -231,6 +231,19 @@ result) or an `error` event if it couldn't be saved or the model never submitted
   in the data, in the thesis's own words, its explanation or a citation's figure (the note names
   them: "supported" certifies the numbers). A "not mentioned" point without a citation is dropped
   (and the notes say so). Quotes are checked against the thesis text (`quote_found`).
+- **A computed figure against the cited filing's own (H2).** Agreeing with Tributary's computed
+  figure isn't agreeing with the filing: Riley's "Net debt was $10.92B" matched a net debt that left
+  NVIDIA's $99.37B of securities out and was certified. A supported claim whose figure (in the quote
+  or a citation's `figure`) is one of the computed figures the tools returned (`GUARDED`: net debt,
+  cash and investments, free cash flow; quarter view) is compared with the same figure computed from
+  each verified citation's own facts (`GET /v1/companies/{id}/filings/{accession}/figures`, read as
+  the user, never a tool result, cached per check). A difference beyond the claim's rounding and
+  0.5% makes it unverifiable with what the filing gives ("the 10-Q filed ... gives net debt of
+  -$66.0B at ... from its own figures, not $10.92B"); each comparison is kept on the claim
+  (`filing_figures`). A filing that doesn't give the figure isn't compared; an older Query API
+  without the route changes nothing. `CHECK_RULES` tells the model so (cite the filing whose
+  statement you checked the inputs against); `CheckResult` refuses a supported claim with a
+  disagreeing filing figure.
 - **Saved with the thesis.** Through the Query API with the user's token
   (`POST /v1/thesis-checks/{id}`, off the public site), with the SHA-256 of the company id and
   the text it checked (`text_hash`), the model, rounds, token usage and estimated cost.

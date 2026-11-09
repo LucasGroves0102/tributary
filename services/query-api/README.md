@@ -44,6 +44,7 @@ request parameters. Dev tokens: `make token USER=alice`.
 | `GET /v1/metrics` | | metric names served by `financials`: `silver.metrics` and `gold.derived_metrics`, read once |
 | `GET /v1/companies/{id}/financials?metrics=&quarters=&view=&basis=&format=&readings=&callouts=` | financials | values + citation + freshness; `quarters` 1-120 (every quarter there is, the Statements tab's Max); `format=csv`: one row per value with its source filing; `callouts=true` (view quarter): quarters far outside their series ([Statement callouts](#statement-callouts)) |
 | `GET /v1/companies/{id}/components?metric=&period_end=&view=` | financials | what one figure is made of: a derived figure's inputs, a TTM's quarters, a sum's parts, and the tags, values and filings behind each ([Reported vs standardised](#reported-vs-standardised)) |
+| `GET /v1/companies/{id}/filings/{accession}/figures` | financials | what one filing itself says: its facts as gold reads them and the net debt, cash and investments and free cash flow computed from that filing alone; the thesis check's H2 guard reads it ([Reported vs standardised](#reported-vs-standardised)) |
 | `GET /v1/companies/{id}/segments?axis=&metric=&quarters=&view=&basis=&format=` | financials | values per segment member (business segment, geography, product/service, reconciliation), exact decimal strings, citation per value ([Segments](#segments)) |
 | `GET /v1/companies/{id}/filings?limit=&accession_no=` | filings | recent parsed filings (or one) and their section outline, no text |
 | `GET /v1/companies/{id}/filing-index?form=&from=&to=&limit=&offset=` | token | every filing in the SEC index (public metadata), newest first; `sections` count only where the caller can read filings (OpenFGA check, then RLS) |
@@ -529,7 +530,9 @@ checks"), one row per check in `thesis_checks`, kept with the thesis they checke
 - **Validated.** `CheckResult` is strict: a supported or contradicted claim and every "not
   mentioned" point cites at least one filing the agent's tools returned (`verified`); a
   supported claim has no figure that isn't in the data (none of its `figures` and no citation's
-  `figure_status` is `unverified`: the agent downgrades such a claim to unverifiable); citation
+  `figure_status` is `unverified`: the agent downgrades such a claim to unverifiable) and no
+  `filing_figures` entry (H2: a claimed computed figure against the cited filing's own, optional)
+  that disagrees with its filing; citation
   URLs only `https://www.sec.gov/`; accession numbers, section keys, the text hash and
   timestamps by pattern; numbers finite; at most 30 claims, 10 points, 4 models; the
   verification's `ok` recomputed. `filings` (Revisit, optional so older results still
@@ -997,6 +1000,16 @@ row built from facts, and the derived metric's definition. One company, one date
   `silver.financial_facts`) with `authz.readable_companies('financials')` as its only rule, like 036.
 - Values are exact decimal strings. 404 when gold has no figure there (or RLS hides it); 422 for a
   metric `/v1/metrics` doesn't list.
+
+`GET /v1/companies/{id}/filings/{accession}/figures` (F7a, H2): one filing's own figures.
+`require(financials)` first, then `Store.filing_figures`, `gold.filing_figures` (migration 051) in the
+caller's session: the filing's facts as `gold.usable_facts` reads them (signs, sums, a total's current
+portion, a co-registrant's filing), the best tag per metric and period (`how: reported`, `xbrl_tag`),
+and `how: computed` rows for `net_debt`, `cash_and_investments` (each balance-sheet date, 040's rule for
+investments inside cash) and `free_cash_flow` (each cash-flow period), with their `inputs`. Nothing
+from other filings, so it says what the cited filing gives, not what gold settled on. Empty when the
+filing has no facts for that company. Same SECURITY DEFINER rule as `figure_facts`. agent-api's thesis
+check compares a supported claim's computed figure with it (agent README, "Thesis checks").
 
 ## Segments
 

@@ -152,6 +152,16 @@ class ComponentsStore:
     def metric_names(self):
         return {"metrics": ["cash", "long_term_debt"], "derived_metrics": ["net_debt"]}
 
+    def filing_figures(self, user_id, company_id, accession_no):
+        self.calls.append((user_id, company_id, accession_no))
+        return [{"metric": "net_debt", "period_start": None, "period_end": END,
+                 "value": Decimal("-66003000000"), "how": "computed", "source_tag": None,
+                 "inputs": {"long_term_debt": Decimal("8466000000"), "cash": Decimal("23422000000"),
+                            "short_term_investments": Decimal("51047000000")}},
+                {"metric": "cash", "period_start": None, "period_end": END,
+                 "value": Decimal("23422000000"), "how": "reported",
+                 "source_tag": "us-gaap:CashAndCashEquivalentsAtCarryingValue", "inputs": None}]
+
     def components(self, user_id, company_id, span, metric, period_end):
         self.calls.append((user_id, company_id, span, metric, period_end))
         return {"row": NET_DEBT if self.found else None, "rows": {}, "facts": {},
@@ -196,3 +206,28 @@ def test_route_refuses_unknown_metrics_and_missing_figures(token):
     assert bad.status_code == 422 and c.store.calls == []
     assert c.get(URL + "2020-01-01", headers=token("alice")).status_code == 404
     assert c.get(URL + "2026-07-26").status_code == 401
+
+
+FIGURES = f"/v1/companies/{NVDA}/filings/{ACC}/figures"
+
+
+def test_filing_figures_require_the_financials_tier_before_the_store(token):
+    c = client(ok=False)
+    assert c.get(FIGURES, headers=token("alice")).status_code == 403 and c.store.calls == []
+    assert c.get(FIGURES).status_code == 401
+
+
+def test_filing_figures_say_what_the_filing_itself_gives(token):
+    c = client()
+    r = c.get(FIGURES, headers=token("alice"))
+    assert r.status_code == 200, r.text
+    assert c.store.calls == [("alice", NVDA, ACC)]
+    net_debt, cash = r.json()["figures"]
+    assert net_debt == {"metric": "net_debt", "period_start": None, "period_end": "2026-07-26",
+                        "value": "-66003000000", "how": "computed",
+                        "inputs": {"long_term_debt": "8466000000", "cash": "23422000000",
+                                   "short_term_investments": "51047000000"}}
+    assert cash["xbrl_tag"] == "us-gaap:CashAndCashEquivalentsAtCarryingValue"
+    assert "inputs" not in cash
+    bad = c.get(f"/v1/companies/{NVDA}/filings/0001045810/figures", headers=token("alice"))
+    assert bad.status_code == 422 and len(c.store.calls) == 1

@@ -35,6 +35,7 @@ from query_api.shapes import filing_url, period
 from query_api.store import Store
 
 CompanyId = Annotated[str, Path(pattern=r"^\d{10}$", description="canonical company_id")]
+Accession = Annotated[str, Path(pattern=r"^\d{10}-\d{2}-\d{6}$")]
 
 # each derived metric's inputs in the order a statement reads them, with their role
 ROLES: dict[str, list[tuple[str, str]]] = {
@@ -204,3 +205,23 @@ def add_components_routes(app: FastAPI, *, store: Store, current_user: Callable[
             raise HTTPException(404, "no figure for that period")
         return shape(company_id, metric, view, got["row"], got["rows"], got["facts"],
                      got["definition"], got["present"])
+
+    @app.get("/v1/companies/{company_id}/filings/{accession_no}/figures", response_model=dict)
+    def filing_figures(user_id: User, company_id: CompanyId, accession_no: Accession) -> dict:
+        """What one filing itself says: its facts as gold reads them (the best tag per metric
+        and period, `reported`) and the net debt, cash and investments and free cash flow
+        computed from that filing alone by gold's rules (`computed`, with their inputs). The
+        thesis check compares a claimed computed figure with these (H2). Empty when the
+        filing has no facts for this company. Needs the financials tier."""
+        require(user_id, "financials", company_id)
+        rows = store.filing_figures(user_id, company_id, accession_no)
+        return {"company_id": company_id, "accession_no": accession_no,
+                "figures": [filing_figure(r) for r in rows]}
+
+
+def filing_figure(r: dict) -> dict:
+    inputs = r.get("inputs") or {}
+    return {"metric": r["metric"], "period_start": r["period_start"],
+            "period_end": r["period_end"], "value": _num(r["value"]), "how": r["how"],
+            **({"xbrl_tag": r["source_tag"]} if r.get("source_tag") else {}),
+            **({"inputs": {k: _num(v) for k, v in inputs.items()}} if inputs else {})}

@@ -103,6 +103,23 @@ one figure for the Query API's `/components` (SECURITY DEFINER under `authz.read
 036). Tags and coverage measured on 599 random companies are in its header; on the 613-company sample
 rebuilt before and after it, every existing gold row was identical. Needs `financials-rebuild`;
 backout `backout/kpis_049.sql`.
+`050_filers_debt_signs.sql` (F7a) reads a filing's facts as the company's whose CIK the filing's own
+XBRL names (`bronze.filing_xbrl.entity_cik`) when that CIK filed it: since July 2026 the SEC's
+companyfacts files some multi-registrant 10-K/10-Qs only under a co-registrant (DTE Energy's under DTE
+Electric, Southern's under Mississippi Power; 91 filings in a year), so their gold had stopped and nine
+subsidiaries with gold of their own showed the parent's figures. `gold.usable_facts` takes those facts
+from the CIK's company (`lent`) and gives them to the named one (`borrowed`); `gold.companies_for_ciks`
+tells the facts loaders which companies a changed payload reaches; `gold.filed_by` is the filer test.
+Debt balances read as `abs(value)` like 043's interest expense; debt parts at 1,000 or 1,000,000 times
+the same filing's own total are left out (`mistagged_fact`, rule `debt_parts_scale`: Bank First's 2019
+10-K). Stock-based compensation keeps its sign (its negative quarters reconcile with the filings' year
+to date: forfeitures, remeasured liability awards); its `sign_flip` is severity `info`, rule `benefit`,
+unless another filing reports the quarter positive. Measurements in its header. Needs
+`financials-rebuild`; backout `backout/filers_debt_050.sql`.
+`051_filing_figures.sql` adds `gold.filing_figures(company, accession)`: one filing's facts as gold
+reads them and the net debt, cash and investments and free cash flow computed from that filing alone
+(040's rules), for the thesis check's H2 guard (Query API `/v1/companies/{id}/filings/{accession}/figures`).
+SECURITY DEFINER under `authz.readable_companies('financials')`, like 036 and 049. No rebuild.
 `045_filing_events.sql` lets the Query API read 8-K item numbers: a column grant on
 `bronze.submission_filings (accession_no, cik, items)` (filing-index metadata, public like
 `silver.filings`) and `silver.company_8ks(company, from)`, one company's 8-K and 8-K/A with their

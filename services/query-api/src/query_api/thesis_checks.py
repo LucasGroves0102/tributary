@@ -89,6 +89,19 @@ def _cited(citations: list[CheckCitation]) -> bool:
     return any(c.verified for c in citations)
 
 
+class FilingFigure(_Strict):
+    """H2: a claimed figure that is one of Tributary's computed ones (net debt, cash and
+    investments, free cash flow) against the same figure computed from a cited filing's own
+    facts (GET /v1/companies/{id}/filings/{accession}/figures). Optional: checks stored before
+    it validate as they were."""
+    metric: Literal["net_debt", "cash_and_investments", "free_cash_flow"]
+    period_end: str = Field(pattern=ISO_DATE)
+    accession_no: str = Field(pattern=ACCESSION)
+    figure: str = Field(min_length=1, max_length=60)  # as the claim writes it
+    filing_value: str = Field(pattern=r"^-?\d{1,20}(\.\d{1,10})?$")
+    agrees: bool
+
+
 class Claim(_Strict):
     quote: str = _text(600, 1)
     quote_found: bool  # the quote appears in the thesis text (the web app highlights it)
@@ -97,6 +110,7 @@ class Claim(_Strict):
     citations: list[CheckCitation] = Field(default=[], max_length=8)
     figures: list[ReportFigure] = Field(default=[], max_length=40)
     downgraded: bool = False  # the model said supported/contradicted without a usable citation
+    filing_figures: list[FilingFigure] = Field(default=[], max_length=8)
 
     @model_validator(mode="after")
     def _evidence(self) -> "Claim":
@@ -109,6 +123,9 @@ class Claim(_Strict):
                 any(f.status == "unverified" for f in self.figures)
                 or any(c.figure_status == "unverified" for c in self.citations)):
             raise ValueError("a supported claim has no figures that aren't in the data")
+        # nor one whose computed figure its cited filing's own figures disagree with (H2)
+        if self.status == "supported" and any(not f.agrees for f in self.filing_figures):
+            raise ValueError("a supported claim's computed figure agrees with the cited filing")
         return self
 
 
