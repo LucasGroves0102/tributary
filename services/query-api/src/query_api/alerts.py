@@ -47,7 +47,7 @@ exist get the same 404.
 import json
 import logging
 import re
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
@@ -325,7 +325,7 @@ class AppAlerts:
                         (user_id,))
             return {r["company_id"]: r["forms"] for r in cur.fetchall()}
 
-    def put_setting(self, user_id: str, company_id: str, forms: list[str]) -> None:
+    def put_setting(self, user_id: str, company_id: str, forms: Sequence[str]) -> None:
         try:
             with self._tx(user_id) as cur:
                 cur.execute("SELECT count(*) AS n FROM alert_settings WHERE user_id = %s"
@@ -340,7 +340,7 @@ class AppAlerts:
                             " VALUES (%s, %s, %s, statement_timestamp())"
                             " ON CONFLICT (user_id, company_id) DO UPDATE"
                             " SET forms = EXCLUDED.forms, updated_at = EXCLUDED.updated_at",
-                            (user_id, company_id, forms))
+                            (user_id, company_id, list(forms)))
         except psycopg.errors.ForeignKeyViolation:
             raise UnknownUser(user_id) from None
 
