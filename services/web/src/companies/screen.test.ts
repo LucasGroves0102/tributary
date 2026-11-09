@@ -177,3 +177,28 @@ describe("the month a fiscal year ends in", () => {
     expect(fyeMonth("1399")).toBeNull();
   });
 });
+
+describe("F4: sectors in a screen", () => {
+  it("parses, keeps and asks for a sector and an industry within it, and groups by sector", () => {
+    const f = parseScreen("sector=Technology&sector_industry=Semiconductors&sort=sector");
+    expect(f).toEqual({ sector: "Technology", sector_industry: "Semiconductors", sort: "sector" });
+    expect(screenQuery(f)).toBe("sector=Technology&sector_industry=Semiconductors&sort=sector");
+    const p = screenParams(f);
+    expect(p.sector).toEqual(["Technology"]);
+    expect(p.sector_industry).toEqual(["Semiconductors"]);
+    expect(p.sort).toBe("sector");
+    expect(activeFilters(f)).toBe(2);
+    expect(describeScreen(f)).toBe("Technology: Semiconductors");
+    expect(describeScreen({ sector: "Utilities" })).toBe("sector Utilities");
+  });
+
+  it("rows carry the sector and the companies they file one 10-K with", () => {
+    const r = screenRow({ ...entry(), filer_categories: null, state_of_incorporation: null, sector: "Utilities", sector_industry: "Multi-utilities",
+      co_registrants: [{ company_id: "0001004980", name: "PG&E Corp", accession_no: "a", filed: "2026-02-12", filed_by: "0001004980" }] } as ScreenerRow);
+    expect([r.sector, r.sectorIndustry]).toEqual(["Utilities", "Multi-utilities"]);
+    expect(r.coRegistrants).toEqual([{ company_id: "0001004980", name: "PG&E Corp", filed_by: "0001004980" }]);
+    // an older API: no sector, no co-registrants
+    const old = screenRow({ ...entry(), filer_categories: null, state_of_incorporation: null } as ScreenerRow);
+    expect([old.sector, old.coRegistrants]).toEqual([null, []]);
+  });
+});

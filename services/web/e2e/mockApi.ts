@@ -264,6 +264,13 @@ export async function mockApi(page: Page): Promise<Fake> {
         company_id: c.id, name: c.name, matched_on: "ticker", matched_alias: c.ticker, is_current: true, tickers: [c.ticker], access: ["financials", "filings"],
       })) });
     }
+    if (path === "/v1/sectors") {
+      return json({ note: "Tributary's own grouping of the SEC's SIC codes (not GICS)", sectors: [
+        { name: "Technology", companies: 2, industries: [{ name: "Semiconductors", sic: ["3674"], companies: 1 }] }] });
+    }
+    if (/^\/v1\/companies\/\d{10}\/peers\/check\/\d{10}$/.test(path)) {
+      return json({ company_id: path.split("/")[3], candidate_id: path.split("/").at(-1), ok: true, reason: null, annual_form: "10-K", annual_filed: "2026-02-25" });
+    }
     if (path === "/v1/screener/columns") {
       return json({
         columns: [

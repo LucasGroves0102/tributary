@@ -757,6 +757,26 @@ export interface ScreenerRow {
   latest_period?: string | null;
   /** metrics that don't describe this company, whatever a filing tags (banks) */
   not_applicable?: string[];
+  /** Tributary's open grouping over the SIC code (migration 046); absent from an older API */
+  sector?: string | null;
+  sector_industry?: string | null;
+  /** companies filing one combined 10-K with this one (#135): separate registrants */
+  co_registrants?: CoRegistrant[];
+}
+
+export interface CoRegistrant {
+  company_id: string;
+  name: string;
+  accession_no: string;
+  filed: string;
+  /** the company whose CIK the accession starts with (usually the parent); null: a filing agent */
+  filed_by: string | null;
+}
+
+/** /v1/sectors: the grouping, with each industry's SIC ranges and company count. */
+export interface Sectors {
+  sectors: { name: string; companies: number; industries: { name: string; sic: string[]; companies: number }[] }[];
+  note: string;
 }
 
 /** /v1/screener/columns: every column key, i.e. every formula metric with each span it has. */
@@ -842,22 +862,57 @@ export interface Screener {
   issue?: string;
 }
 
-/** /v1/companies/{id}/peers: suggested peers (same SIC first, then size), screener-style rows,
- * values only where the caller can read financials. */
+/** Where a 10-K's Item 1 names a competitor: the sentence, to open in the reader. */
+export interface MentionCite {
+  accession_no: string;
+  section_key: string;
+  char_start: number;
+  char_end: number;
+}
+
+/** Why a company was suggested. The first four come from any API; the rest only with
+ * `basis: "business"` (F4, query_api/peers.py). */
+export interface PeerMatch {
+  sic_level: number;
+  same_filer_category: boolean;
+  revenue_band: string | null;
+  same_revenue_band: boolean;
+  score?: number;
+  /** cosine similarity of the two 10-Ks' Business sections, 0-1 */
+  similarity?: number;
+  /** the shared terms that add the most */
+  terms?: string[];
+  /** this company's 10-K names the peer as a competitor */
+  named_by_target?: MentionCite | null;
+  /** the peer's 10-K names this company */
+  names_target?: MentionCite | null;
+  same_sector?: boolean;
+  same_industry?: boolean;
+}
+
+/** /v1/companies/{id}/peers: suggested peers, screener-style rows, values only where the caller
+ * can read financials. `basis` (absent from an API older than F4): "business" = by 10-K Item 1
+ * text, "sic" = by SIC and size. */
 export interface Peers {
   company_id: string;
   as_of: string;
   columns: ColumnInfo[];
   company: ScreenerRow & { revenue_band: string | null };
   method: string;
-  peers: (ScreenerRow & {
-    match: {
-      sic_level: number;
-      same_filer_category: boolean;
-      revenue_band: string | null;
-      same_revenue_band: boolean;
-    };
-  })[];
+  basis?: "business" | "sic";
+  /** the company's own Item 1 profile */
+  business?: { accession_no: string; section_key: string; filed: string; terms: string[]; computed_at: string | null } | null;
+  peers: (ScreenerRow & { match: PeerMatch })[];
+}
+
+/** /v1/companies/{id}/peers/check/{candidate}: may it join these comps, and if not why. */
+export interface PeerCheck {
+  company_id: string;
+  candidate_id: string;
+  ok: boolean;
+  reason: null | "metadata_only" | "foreign_filer" | "no_xbrl" | "no_annual_report";
+  annual_form: string | null;
+  annual_filed: string | null;
 }
 
 export interface RecapValue {

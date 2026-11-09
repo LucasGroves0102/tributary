@@ -5,7 +5,7 @@
  * widen access. */
 
 import { clean, type ScreenFilters } from "../companies/screen";
-import { cleanCompare, columnsOf, type CompareState } from "../compare/state";
+import { AGENT_COLUMNS, cleanCompare, columnsOf, type CompareState } from "../compare/state";
 import { metricLabel } from "../chart/metrics";
 import { addLayer, MAX_LAYERS, type ChartState, type Layer, chartTitle } from "../chart/model";
 import type { Route } from "../route";
@@ -109,7 +109,9 @@ export function uiContext(route: Route, chart: ChartState, name: (id: string) =>
   }
   if (route.view === "compare" && route.compare) {
     const c = route.compare;
-    ctx.compare = { ...(c.target ? { target: c.target } : {}), peers: c.peers ?? [], columns: columnsOf(c) };
+    // agent-api's CompareColumn knows the first eleven columns only (F4's bank columns aren't
+    // in it, and its UiContext is strict): send those
+    ctx.compare = { ...(c.target ? { target: c.target } : {}), peers: c.peers ?? [], columns: columnsOf(c).filter((k) => AGENT_COLUMNS.includes(k)) };
   }
   if (route.view === "search" && route.search) {
     ctx.query = route.search.q;
@@ -120,7 +122,12 @@ export function uiContext(route: Route, chart: ChartState, name: (id: string) =>
     if (route.section) ctx.section_key = route.section;
   }
   // agent-api's ScreenFilters is strict and doesn't know the status page's data-check filter
-  if (route.view === "companies" && route.screen) ctx.screen = { ...route.screen, page: undefined, issue: undefined } as UiContext["screen"];
+  // agent-api's ScreenFilters is strict: no data check, no sector filter or grouping (F4) there
+  if (route.view === "companies" && route.screen) {
+    const s = route.screen;
+    ctx.screen = { ...s, page: undefined, issue: undefined, sector: undefined, sector_industry: undefined,
+      sort: s.sort?.replace(/^-/, "") === "sector" ? undefined : s.sort } as UiContext["screen"];
+  }
   if (route.view === "chart") {
     // segment and price layers stay out: agent-api's context knows metric and formula layers
     // only (and a user's prices never go to the model)

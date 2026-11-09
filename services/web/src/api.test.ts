@@ -13,6 +13,8 @@ import {
   noDetail,
   NOT_ANSWERING,
   olderState,
+  peerCheck,
+  sectors,
   recentDataNotes,
   refusedByOlderApi,
   runModel,
@@ -166,6 +168,26 @@ describe("a Query API one release older (the minute of a deploy)", () => {
     expect(refusedByOlderApi(new ApiError("name: too long", 422))).toBe(false);
     older(() => Response.json({ detail: "not permitted to read financials for this company" }, { status: 403 }));
     await expect(runModel("t", "0001674101", {})).rejects.toMatchObject({ status: 403 });
+    vi.unstubAllGlobals();
+  });
+
+  it("F4: an older API's saves drop a comps table's bank columns and a screen's sectors; peer checks and sectors read as unavailable", async () => {
+    expect(olderState({ target: "0000019617", cols: ["revenue_ttm", "net_interest_income_ttm", "deposits_q"] }))
+      .toEqual({ target: "0000019617", cols: ["revenue_ttm"] });
+    expect(olderState({ target: "0000019617", cols: ["deposits_q"] })).toEqual({ target: "0000019617" });
+    expect(olderState({ q: "bank", sector: "Financials", sector_industry: "Banks & thrifts", sort: "-sector" })).toEqual({ q: "bank" });
+    expect(olderState({ target: "0000019617", cols: ["revenue_ttm"] })).toBeNull();
+    // a Literal an older strict model doesn't know is refused as "Input should be ...": saved again without it
+    const seen = older((s) => (Array.isArray((s.body as { state?: { cols?: string[] } }).state?.cols) && (s.body as { state: { cols: string[] } }).state.cols.includes("deposits_q")
+      ? Response.json({ detail: "invalid comps state: 1 validation error\ncols.1\n  Input should be 'revenue_ttm', 'revenue_growth_ttm'" }, { status: 422 })
+      : Response.json({ id: "i", kind: "comps", name: "n", state: (s.body as { state: object }).state })));
+    const saved = await addItem("t", "w", "comps", "n", { target: "0000019617", cols: ["revenue_ttm", "deposits_q"] });
+    expect(saved.state).toEqual({ target: "0000019617", cols: ["revenue_ttm"] });
+    expect(seen).toHaveLength(2);
+    vi.unstubAllGlobals();
+    older(() => Response.json({ detail: "Not Found" }, { status: 404 }));
+    expect(await peerCheck("t", "0001045810", "0001977102")).toBeNull();
+    expect(await sectors("t")).toBeNull();
     vi.unstubAllGlobals();
   });
 

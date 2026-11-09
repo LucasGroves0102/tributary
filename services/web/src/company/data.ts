@@ -48,9 +48,40 @@ export const KEY_STATS: { key: string; label: string; kind: Fmt }[] = [
   { key: "roe_ttm", label: "Return on equity", kind: "pct" },
 ];
 
+/** A bank's key stats (F4, #103; migration 048): what a bank is compared on. Net interest margin,
+ * tangible book value per share and ROTCE are left out: no standard tag carries their inputs
+ * quarterly (048's header; BANK_NOT_SHOWN says so on the page). */
+export const BANK_KEY_STATS: { key: string; label: string; kind: Fmt }[] = [
+  { key: "revenue_ttm", label: "Net revenue", kind: "usd" },
+  { key: "net_interest_income_ttm", label: "Net interest income", kind: "usd" },
+  { key: "efficiency_ratio_ttm", label: "Efficiency ratio", kind: "pct" },
+  { key: "provision_for_credit_losses_ttm", label: "Provision for credit losses", kind: "usd" },
+  { key: "net_income_ttm", label: "Net income", kind: "usd" },
+  { key: "eps_diluted_q", label: "EPS (diluted)", kind: "eps" },
+  { key: "loans_q", label: "Loans, net", kind: "usd" },
+  { key: "deposits_q", label: "Deposits", kind: "usd" },
+  { key: "cet1_ratio_q", label: "CET1 ratio", kind: "pct" },
+  { key: "roe_ttm", label: "Return on equity", kind: "pct" },
+  { key: "revenue_growth_ttm", label: "Revenue growth", kind: "growth" },
+  { key: "net_margin_ttm", label: "Net margin", kind: "pct" },
+];
+
+/** What a bank's page says about the bank figures it doesn't show. */
+export const BANK_NOT_SHOWN =
+  "Not shown: net interest margin (it needs average interest-earning assets, which banks don't tag " +
+  "in standard XBRL), and tangible book value per share and ROTCE (the largest banks tag goodwill " +
+  "every quarter but other intangible assets and preferred stock only in the 10-K or under their own " +
+  "tags, so a quarterly figure would mix definitions). Efficiency ratio = noninterest expense / (net " +
+  "interest income + noninterest income), lower is leaner.";
+
+/** A bank by migration 035's rule: the API marks the metrics that don't describe it. */
+export const isBankRow = (row: Pick<ScreenerRow, "not_applicable">): boolean => !!row.not_applicable?.length;
+
 /** Asked for with the key stats: the latest quarter's revenue names the filing to recap. */
 export const RECAP_COLUMN = "revenue_q";
 export const HEADER_COLUMNS = [...KEY_STATS.map((s) => s.key), RECAP_COLUMN];
+/** The header's columns with a bank's own (an older API refuses them: ask again without). */
+export const HEADER_COLUMNS_WITH_BANK = [...new Set([...HEADER_COLUMNS, ...BANK_KEY_STATS.map((s) => s.key)])];
 
 /** The header's listing line: the main ticker, then how many other classes and notes it has (their
  * tickers in the hover). A bank can have a dozen preferreds. */
@@ -86,7 +117,9 @@ function periodText(key: string, src: ValueSource): string {
 }
 
 export function keyStats(row: ScreenerRow): KeyStat[] {
-  return KEY_STATS.map(({ key, label, kind }) => {
+  // a bank's own set when the answer has its columns (an older API didn't send them)
+  const stats = isBankRow(row) && "net_interest_income_ttm" in row.values ? BANK_KEY_STATS : KEY_STATS;
+  return stats.map(({ key, label, kind }) => {
     const src = row.sources[key] ?? null;
     const f = readFigure({
       label,
@@ -201,6 +234,40 @@ export const STATEMENTS: Record<Statement, { label: string; rows: [string, strin
       ["share_buybacks", "Share buybacks", "usd"],
     ],
   },
+};
+
+/** A bank's statements (F4, migration 048): its own lines instead of the industrial ones that read
+ * n/a for a bank. Cash flow is the same statement. Revenue is net revenue (net interest income plus
+ * noninterest income: a bank's net revenue tag, or 038's sum). */
+export const BANK_STATEMENTS: Record<Statement, { label: string; rows: [string, string, Fmt][] }> = {
+  is: {
+    label: "Income statement",
+    rows: [
+      ["net_interest_income", "Net interest income", "usd"],
+      ["noninterest_income", "Noninterest income", "usd"],
+      ["revenue", "Net revenue", "usd"],
+      ["noninterest_expense", "Noninterest expense", "usd"],
+      ["provision_for_credit_losses", "Provision for credit losses", "usd"],
+      ["pretax_income", "Pretax income", "usd"],
+      ["income_tax", "Income tax", "usd"],
+      ["net_income", "Net income", "usd"],
+      ["eps_diluted", "EPS (diluted)", "eps"],
+      ["weighted_shares_diluted", "Diluted shares", "shares"],
+    ],
+  },
+  bs: {
+    label: "Balance sheet",
+    rows: [
+      ["cash", "Cash and due from banks", "usd"],
+      ["loans", "Loans, net of the allowance", "usd"],
+      ["total_assets", "Total assets", "usd"],
+      ["deposits", "Deposits", "usd"],
+      ["total_liabilities", "Total liabilities", "usd"],
+      ["stockholders_equity", "Stockholders' equity", "usd"],
+      ["cet1_ratio", "CET1 capital ratio (where tagged)", "pct"],
+    ],
+  },
+  cf: STATEMENTS.cf,
 };
 
 export const RATIOS: [string, string, Fmt][] = [

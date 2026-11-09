@@ -5545,3 +5545,69 @@ details.routine summary {
 .earnings-method {
   max-width: 900px;
 }
+
+/* F4: peers by business, sectors, co-registrants, bank template */
+
+/* a median's "3 of 4": how many peers it uses (hover: why the others are left out) */
+.t tr.agg .unit.count {
+  display: block;
+  font-weight: 500;
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+}
+
+/* Peers: what the company's own 10-K Business section is most distinctive for */
+.peers-basis {
+  margin: 0;
+  padding: var(--sp-3) var(--sp-4) 0;
+}
+
+.t.peers td.why {
+  min-width: 240px;
+}
+
+.t.peers .alike {
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+/* why a company can't join the comps (a foreign filer, no XBRL yet) */
+.notice {
+  margin: var(--sp-2) 0 0;
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--radius-sm);
+  background: var(--warn-soft);
+  color: var(--text);
+}
+
+/* the screener grouped by sector: a heading row per sector and industry */
+.t tr.group-head th {
+  position: static;
+  text-align: left;
+  padding-top: var(--sp-4);
+  background: var(--panel-2);
+  color: var(--text-2);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.sector-sub {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tag.joint {
+  margin-left: var(--sp-2);
+  border-style: dashed;
+}
+
+.joint-note {
+  margin: var(--sp-2) 0 0;
+  max-width: 900px;
+}
+
+.bank-note {
+  border-top: none;
+}

@@ -1,13 +1,16 @@
 import { useEffect, useState, type ReactNode } from "react";
 
-import { annualPerShare, financialsView, segments as fetchSegments } from "../api";
+import { annualPerShare, ApiError, financialsView, segments as fetchSegments } from "../api";
 import { NO_DATA, NO_DATA_TITLE, NOT_APPLICABLE, NOT_MEANINGFUL } from "../blanks";
 import { download } from "../download";
 import { change, day, pct } from "../format";
 import { newestPeriodic } from "../thesis/useRevisit";
 import type { FinancialRow, IndexedFiling } from "../types";
 import {
+  BANK_NOT_SHOWN,
+  BANK_STATEMENTS,
   financialsCsv,
+  type Fmt,
   metricTable,
   RANGE_QUARTERS,
   RATIOS,
@@ -190,16 +193,26 @@ export function Statements({ token, companyId, name, ticker, notApplicable = [],
   const set = (patch: StatementView) =>
     go({ view: "company", companyId, tab: "statements", statements: { ...view, ...patch } });
   const req = statementRequest(period, range);
-  const metrics = STATEMENTS[kind].rows;
+  // a bank (035's rule) gets its own lines (F4); an older API refuses their names (422): the
+  // standard statement then, as before
+  const bank = notApplicable.length > 0;
   const annual = period === "a" && kind === "is";
-  const load = useLoad(`${companyId}|${kind}|${period}|${basis}|${req.quarters}`, async (): Promise<{ rows: FinancialRow[] }> => {
+  const load = useLoad(`${companyId}|${kind}|${period}|${basis}|${req.quarters}|${bank}`, async (): Promise<{ rows: FinancialRow[]; metrics: [string, string, Fmt][] }> => {
+    const ask = (rows: [string, string, Fmt][]) => financialsView(token, companyId, req.quarters, rows.map(([m]) => m), req.view, basis);
     const [fin, perShare] = await Promise.all([
-      financialsView(token, companyId, req.quarters, metrics.map(([m]) => m), req.view, basis),
+      bank
+        ? ask(BANK_STATEMENTS[kind].rows).then((f) => ({ f, metrics: BANK_STATEMENTS[kind].rows }))
+          .catch((e) => {
+            if (e instanceof ApiError && e.status === 422) return ask(STATEMENTS[kind].rows).then((f) => ({ f, metrics: STATEMENTS[kind].rows }));
+            throw e;
+          })
+        : ask(STATEMENTS[kind].rows).then((f) => ({ f, metrics: STATEMENTS[kind].rows })),
       // a company with no annual per-share facts, or an older API, still has its statement
       annual ? annualPerShare(token, companyId).catch(() => ({ rows: [] as FinancialRow[] })) : { rows: [] as FinancialRow[] },
     ]);
-    return { rows: annual ? withAnnualPerShare(fin.rows, perShare.rows, basis) : fin.rows };
+    return { rows: annual ? withAnnualPerShare(fin.f.rows, perShare.rows, basis) : fin.f.rows, metrics: fin.metrics };
   });
+  const metrics = load?.state === "ok" ? load.data.metrics : (bank ? BANK_STATEMENTS : STATEMENTS)[kind].rows;
   const table = load?.state === "ok" ? withBridges(metricTable(load.data.rows, metrics, period, basis, notApplicable, RANGE_QUARTERS[range]), load.data.rows, kind) : null;
   // H9: a newer 10-K/10-Q in the index than the figures hold (public index, asked once per company)
   const [newest, setNewest] = useState<IndexedFiling | null>(null);
@@ -230,6 +243,9 @@ export function Statements({ token, companyId, name, ticker, notApplicable = [],
         <button className="btn sm" onClick={exportCsv} disabled={!table?.rows.length}>Export CSV</button>
       </div>
       {behind && <BehindNotice behind={behind} companyId={companyId} name={name} url={newest?.filing_url ?? null} />}
+      {bank && load?.state === "ok" && metrics !== STATEMENTS[kind].rows && (
+        <p className="foot bank-note">{name} is a bank, so it is shown with a bank's own lines. {BANK_NOT_SHOWN}</p>
+      )}
       <Gate load={load} name={name} what="Financials">
         {() =>
           table!.rows.length ? (

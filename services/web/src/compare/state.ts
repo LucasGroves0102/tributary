@@ -14,8 +14,10 @@ export const MAX_PEERS = 20;
 
 type Kind = "usd" | "pct" | "growth" | "x";
 
-/** Columns a comps table can show (agent-api ui.py COMPARE_COLUMNS mirrors the keys). */
-export const COMPARE_COLUMNS: { key: string; label: string; long: string; period: string; kind: Kind }[] = [
+/** Columns a comps table can show. agent-api ui.py COMPARE_COLUMNS mirrors the first eleven keys
+ * (AGENT_COLUMNS); `bank` ones (migration 048) are a bank's own lines, offered when the target is
+ * a bank, and query-api workspaces.py CompsState accepts them since F4. */
+export const COMPARE_COLUMNS: { key: string; label: string; long: string; period: string; kind: Kind; bank?: boolean }[] = [
   { key: "revenue_ttm", label: "Revenue", long: "Revenue", period: "TTM", kind: "usd" },
   { key: "revenue_growth_ttm", label: "Rev YoY", long: "Revenue growth, year over year", period: "TTM", kind: "growth" },
   { key: "gross_margin_ttm", label: "Gross mgn", long: "Gross margin", period: "TTM", kind: "pct" },
@@ -27,7 +29,15 @@ export const COMPARE_COLUMNS: { key: string; label: string; long: string; period
   { key: "debt_to_equity_q", label: "Debt/eq", long: "Debt to equity", period: "qtr end", kind: "x" },
   { key: "roe_ttm", label: "ROE", long: "Return on equity", period: "TTM", kind: "pct" },
   { key: "current_ratio_q", label: "Current ratio", long: "Current ratio", period: "qtr end", kind: "x" },
+  { key: "net_interest_income_ttm", label: "NII", long: "Net interest income", period: "TTM", kind: "usd", bank: true },
+  { key: "efficiency_ratio_ttm", label: "Efficiency", long: "Efficiency ratio (noninterest expense / net revenue; lower is leaner)", period: "TTM", kind: "pct", bank: true },
+  { key: "provision_for_credit_losses_ttm", label: "Provision", long: "Provision for credit losses", period: "TTM", kind: "usd", bank: true },
+  { key: "loans_q", label: "Loans", long: "Loans, net of the allowance", period: "qtr end", kind: "usd", bank: true },
+  { key: "deposits_q", label: "Deposits", long: "Deposits", period: "qtr end", kind: "usd", bank: true },
+  { key: "cet1_ratio_q", label: "CET1", long: "CET1 capital ratio (where the bank tags it)", period: "latest", kind: "pct", bank: true },
 ];
+/** The keys agent-api's UiContext knows (ui.py CompareColumn): uiContext sends only these. */
+export const AGENT_COLUMNS = COMPARE_COLUMNS.filter((c) => !c.bank).map((c) => c.key);
 const BY_KEY = new Map(COMPARE_COLUMNS.map((c) => [c.key, c]));
 
 export const DEFAULT_COLUMNS = [
@@ -40,6 +50,22 @@ export const DEFAULT_COLUMNS = [
   "net_debt_q",
   "debt_to_equity_q",
 ];
+
+/** A bank's comps when no columns were chosen (the Query API's BANK_PEER_COLUMNS, F4). */
+export const BANK_COLUMNS = [
+  "revenue_ttm",
+  "net_interest_income_ttm",
+  "efficiency_ratio_ttm",
+  "provision_for_credit_losses_ttm",
+  "loans_q",
+  "deposits_q",
+  "roe_ttm",
+  "net_margin_ttm",
+];
+
+/** A bank by migration 035's rule: the API marks metrics that don't describe it. */
+export const isBank = (row: { not_applicable?: string[] } | null | undefined): boolean =>
+  !!row?.not_applicable?.length;
 
 /** Read with the table so every row has a latest quarter even if a chosen column is empty. */
 const PERIOD_COLUMN = "revenue_q";
@@ -83,20 +109,23 @@ export function compareQuery(s: CompareState): string {
   return parts.join("&");
 }
 
-export function columnsOf(s: CompareState): string[] {
-  return s.cols?.length ? s.cols : DEFAULT_COLUMNS;
+/** The columns shown: the chosen ones, else a bank's or the standard set. */
+export function columnsOf(s: CompareState, bank = false): string[] {
+  return s.cols?.length ? s.cols : bank ? BANK_COLUMNS : DEFAULT_COLUMNS;
 }
 
 export function companiesOf(s: CompareState): string[] {
   return [...(s.target ? [s.target] : []), ...(s.peers ?? [])];
 }
 
-/** /v1/screener parameters for the table's companies. */
+/** /v1/screener parameters for the table's companies. With no columns chosen it asks for both
+ * default sets, so a bank target's own columns are there without a second request. */
 export function compareParams(s: CompareState): Record<string, string | number | string[]> {
   const ids = companiesOf(s);
+  const cols = s.cols?.length ? s.cols : [...new Set([...DEFAULT_COLUMNS, ...BANK_COLUMNS])];
   return {
     company_id: ids,
-    columns: [...columnsOf(s), PERIOD_COLUMN],
+    columns: [...cols, PERIOD_COLUMN],
     sort: "name",
     limit: Math.max(ids.length, 1),
   };
@@ -198,10 +227,10 @@ function latestOf(r: ScreenerRow): CompareRow["latest"] {
 }
 
 /** Rows in the state's order (target first), with companies the API didn't return (unknown
- * ids) left out. */
-export function compareRows(s: CompareState, rows: ScreenerRow[]): CompareRow[] {
+ * ids) left out. `bank`: the target is a bank (its default columns). */
+export function compareRows(s: CompareState, rows: ScreenerRow[], bank = false): CompareRow[] {
   const byId = new Map(rows.map((r) => [r.company_id, r]));
-  const cols = columnsOf(s);
+  const cols = columnsOf(s, bank);
   return companiesOf(s).flatMap((id) => {
     const r = byId.get(id);
     if (!r) return [];
@@ -252,34 +281,58 @@ export function median(values: number[]): number | null {
 
 export interface PeerStat {
   median: number | null;
+  /** peers whose figure counts in this column's median */
   n: number;
+  /** every peer in the table (the target excluded): the column reads "n of N" */
+  of: number;
   high: number | null;
   low: number | null;
-  /** readable bank peers left out of this column (the metric doesn't describe a bank) */
+  /** readable peers left out because the metric doesn't describe them (n/a: a bank) */
   banks: number;
   /** readable peers whose figure reads n/m or old, left out too */
   unusable: number;
+  /** readable peers whose filings give no figure (—) */
+  unreported: number;
+  /** peers shown with metadata only (the plan doesn't cover their financials) */
+  masked: number;
 }
 
-/** Per column: the peers' median, its count, and the high and low (the target excluded, and any
- * figure that reads n/a, n/m or old: its value is null). */
+/** Per column: the peers' median, how many of the peers it uses (n of N) and why the others are
+ * left out, and the high and low (the target excluded, and any figure that reads n/a, n/m or old:
+ * its value is null). */
 export function peerStats(rows: CompareRow[], cols: string[]) {
   const out: Record<string, PeerStat> = {};
+  const peers = rows.filter((r) => !r.isTarget);
   for (const key of cols) {
-    const peers = rows.filter((r) => !r.isTarget);
     const v = peers.map((r) => r.cells[key]?.value).filter((x): x is number => x != null);
-    const banks = peers.filter((r) => r.cells[key]?.status === "not_applicable").length;
-    const unusable = peers.filter((r) => r.cells[key]?.status === "not_meaningful" || r.cells[key]?.status === "old").length;
-    out[key] = { median: median(v), n: v.length, high: v.length ? Math.max(...v) : null, low: v.length ? Math.min(...v) : null, banks, unusable };
+    const readable = peers.filter((r) => r.readable);
+    const status = (r: CompareRow) => r.cells[key]?.status;
+    const banks = readable.filter((r) => status(r) === "not_applicable").length;
+    const unusable = readable.filter((r) => status(r) === "not_meaningful" || status(r) === "old").length;
+    const unreported = readable.filter((r) => r.cells[key]?.value == null && !status(r)).length;
+    out[key] = {
+      median: median(v), n: v.length, of: peers.length,
+      high: v.length ? Math.max(...v) : null, low: v.length ? Math.min(...v) : null,
+      banks, unusable, unreported, masked: peers.length - readable.length,
+    };
   }
   return out;
 }
 
-/** The peer-median cell's hover. */
+/** "3 of 4": how many peers a column's median uses. */
+export const countText = (s: PeerStat): string => `${s.n} of ${s.of}`;
+
+/** The peer-median cell's hover: what the median uses and why each other peer is left out, in the
+ * blanks vocabulary (blanks.ts). */
 export function medianTitle(s: PeerStat): string {
-  const banks = s.banks ? `; ${s.banks} ${s.banks === 1 ? "bank" : "banks"} left out (the metric doesn't describe a bank)` : "";
-  const unusable = s.unusable ? `; ${s.unusable} left out (not meaningful, or years old)` : "";
-  return `Median of ${s.n} peers' values; the target is excluded${banks}${unusable}`;
+  const why = [
+    s.unreported && `${s.unreported} not reported (—)`,
+    s.banks && `${s.banks} not applicable (n/a: the metric doesn't describe ${s.banks === 1 ? "a bank" : "banks"})`,
+    s.unusable && `${s.unusable} not meaningful or years old (n/m, dimmed)`,
+    s.masked && `${s.masked} metadata only (your plan doesn't cover ${s.masked === 1 ? "its" : "their"} financials)`,
+  ].filter(Boolean);
+  return `Median of ${s.n} of ${s.of} peers' values; the target is excluded` +
+    (why.length ? `. Left out: ${why.join("; ")}.` : ".");
 }
 
 export function statText(key: string, v: number | null): string {
@@ -290,8 +343,8 @@ export function statText(key: string, v: number | null): string {
 /** The table as CSV: exact values from the API, each with its period end and source
  * accession; ungranted companies with empty values and access "metadata only"; then the
  * peer median. */
-export function compareCsv(s: CompareState, rows: CompareRow[]): string {
-  const cols = columnsOf(s);
+export function compareCsv(s: CompareState, rows: CompareRow[], bank = false): string {
+  const cols = columnsOf(s, bank);
   const header = [
     "role", "company_id", "ticker", "company", "access", "latest_quarter_calendar",
     "latest_quarter_fiscal", "latest_period_end",
@@ -316,7 +369,7 @@ export function compareCsv(s: CompareState, rows: CompareRow[]): string {
   const med = ["peer median (excludes target)", "", "", "", "", "", "", "",
     ...cols.flatMap((k) => {
       const m = stats[k]!.median;
-      return [m === null ? "" : String(Number(m.toPrecision(12))), "", `${stats[k]!.n} peers`, ""];
+      return [m === null ? "" : String(Number(m.toPrecision(12))), "", `${countText(stats[k]!)} peers`, ""];
     })];
   return [header, ...lines, med].map((r) => r.map(csvCell).join(",")).join("\r\n") + "\r\n";
 }

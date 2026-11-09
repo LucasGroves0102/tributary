@@ -141,8 +141,11 @@ it("puts the peer median, without the target, under the table", async () => {
   await render(COMPS);
   const median = rows().find((r) => r.textContent?.startsWith("Peer median"))!;
   // only AAPL: TSLA is ungranted and NVDA is the target
-  expect([...median.querySelectorAll("td.n")].map((td) => td.textContent)).toEqual(["$400.00B", "30.0%", "-2.0%"]);
-  expect(median.textContent).toContain("1 readable");
+  // each median says how many of the peers it uses (n of N): AAPL of AAPL and TSLA
+  expect([...median.querySelectorAll("td.n")].map((td) => td.textContent)).toEqual(["$400.00B1 of 2", "30.0%1 of 2", "-2.0%1 of 2"]);
+  expect([...median.querySelectorAll("td.n .count")].map((td) => td.textContent)).toEqual(["1 of 2", "1 of 2", "1 of 2"]);
+  expect(median.querySelector("td.n")?.getAttribute("title")).toContain("Left out: 1 metadata only");
+  expect(median.textContent).toContain("n of N peers");
   expect($(".foot")?.textContent).toContain("1 company shows metadata only");
 });
 
@@ -173,6 +176,63 @@ it("adds a peer found by name or ticker", async () => {
   expect(calls().find((u) => u.pathname.endsWith("/search"))?.searchParams.get("q")).toBe("KO");
   await click($('.co-results button'));
   expect(window.location.hash).toBe(`#/compare?target=${NVDA}&peers=${KO}`);
+});
+
+it("F4: a company with no figures to compare isn't added, and the page says why; a valid one is", async () => {
+  const BIRK = "0001977102";
+  const base = vi.mocked(fetch).getMockImplementation()!;
+  vi.mocked(fetch).mockImplementation(async (url, init) => {
+    const u = new URL(String(url), "http://x");
+    if (u.pathname.endsWith("/v1/companies/search")) {
+      const q = u.searchParams.get("q");
+      return Response.json({ results: [q === "BIRK"
+        ? { company_id: BIRK, name: "Birkenstock Holding plc", matched_on: "ticker", matched_alias: "BIRK", is_current: true, access: [] }
+        : { company_id: KO, name: "COCA COLA CO", matched_on: "ticker", matched_alias: "KO", is_current: true, access: ["financials"] }] });
+    }
+    if (u.pathname.includes("/peers/check/")) {
+      const refused = u.pathname.endsWith(BIRK);
+      return Response.json({ company_id: NVDA, candidate_id: u.pathname.split("/").at(-1), ok: !refused,
+        reason: refused ? "foreign_filer" : null, annual_form: refused ? "20-F" : "10-K", annual_filed: "2025-12-10" });
+    }
+    return base(String(url), init);
+  });
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  await render({ target: NVDA });
+  const type = async (text: string) => {
+    const input = $('input[aria-label="Add peer"]') as HTMLInputElement;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, text);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => vi.advanceTimersByTime(250));
+    await act(async () => {});
+    await click($(".co-results button"));
+    await act(async () => {});
+  };
+  await type("BIRK");
+  expect(calls().some((u) => u.pathname === `/api/query/v1/companies/${NVDA}/peers/check/${BIRK}`)).toBe(true);
+  expect(window.location.hash).not.toContain(BIRK);
+  expect($(".notice")?.textContent).toContain("Birkenstock Holding can't be added: it files 20-F annual reports as a foreign private issuer");
+  await type("KO");
+  expect(window.location.hash).toBe(`#/compare?target=${NVDA}&peers=${KO}`);
+  expect($(".notice")).toBeNull();
+});
+
+it("F4: a bank target gets a bank's own columns unless some were chosen", async () => {
+  const JPM = "0000019617";
+  const bank = { ...row(entry({ company_id: JPM, name: "JPMorgan", tickers: ["JPM"], values: { revenue_ttm: "180000000000", net_interest_income_ttm: "102908000000", efficiency_ratio_ttm: "0.519" } })),
+    not_applicable: ["gross_margin", "operating_margin"] };
+  vi.mocked(fetch).mockImplementation(async (url) => new URL(String(url), "http://x").pathname.endsWith("/peers")
+    ? Response.json({ ...PEERS, peers: [] })
+    : Response.json({ as_of: "", total: 1, limit: 21, offset: 0, sort: "name", columns: [], rows: [bank] }));
+  await render({ target: JPM });
+  const asked = calls().find((u) => u.pathname.endsWith("/screener"))!.searchParams.getAll("columns");
+  expect(asked).toEqual(expect.arrayContaining(["gross_margin_ttm", "net_interest_income_ttm", "deposits_q"]));
+  const heads = [...container.querySelectorAll("table.comps thead th.n")].map((th) => th.querySelector("button")?.childNodes[0]?.textContent);
+  expect(heads.slice(0, 4)).toEqual(["Revenue", "NII", "Efficiency", "Provision"]);
+  expect(container.textContent).toContain("51.9%");
+  // the column picker offers a bank's lines for a bank
+  expect([...container.querySelectorAll(".chk")].map((l) => l.textContent)).toContain("Deposits");
 });
 
 it("exports the table as CSV and charts the readable companies", async () => {
@@ -222,8 +282,8 @@ it("shows a bank's operating margin as n/a and leaves it out of the median, with
   expect(cell.getAttribute("title")).toContain("This is a bank");
   const median = rows().find((r) => r.textContent?.startsWith("Peer median"))!;
   const m = [...median.querySelectorAll("td.n")][1]!;
-  expect(m.textContent).toBe("30.0% excl. banks");
-  expect(m.getAttribute("title")).toContain("1 bank left out");
+  expect(m.textContent).toBe("30.0%1 of 2");
+  expect(m.getAttribute("title")).toContain("1 not applicable (n/a: the metric doesn't describe a bank)");
   expect($(".foot")?.textContent).toContain("Banks show n/a for operating margin");
   // company rows are a keyboard-navigable list; the median rows aren't
   expect(container.querySelectorAll("table.comps tbody tr[data-nav]")).toHaveLength(3);

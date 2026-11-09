@@ -22,6 +22,7 @@ import type {
   MarketConnection,
   MarketConnections,
   Me,
+  PeerCheck,
   Peers,
   Prices,
   ProjectState,
@@ -32,6 +33,7 @@ import type {
   ScreenerColumns,
   SearchResult,
   Section,
+  Sectors,
   SectionChanges,
   SectionSearch,
   SegmentRow,
@@ -252,12 +254,34 @@ export const duplicateWorkspace = (token: string, id: string) =>
 
 /** The state without what this app saves that a Query API one release older refuses (its state
  * models are strict): a chart layer's `display`, a screen's `issue`. Null when there is none. */
+/** The comps columns a Query API older than F4 accepts (workspaces.py CompareColumn then). */
+const OLDER_COMPARE_COLUMNS = new Set(["revenue_ttm", "revenue_growth_ttm", "gross_margin_ttm", "operating_margin_ttm",
+  "net_margin_ttm", "free_cash_flow_ttm", "fcf_margin_ttm", "net_debt_q", "debt_to_equity_q", "roe_ttm", "current_ratio_q"]);
+
 export function olderState(state: object): object | null {
   const s = state as Record<string, unknown>;
   let changed = false;
   const out: Record<string, unknown> = { ...s };
   if ("issue" in out) {
     delete out.issue;
+    changed = true;
+  }
+  // a screen's sector filter and grouping (F4)
+  for (const k of ["sector", "sector_industry"]) {
+    if (k in out) {
+      delete out[k];
+      changed = true;
+    }
+  }
+  if (typeof out.sort === "string" && out.sort.replace(/^-/, "") === "sector") {
+    delete out.sort;
+    changed = true;
+  }
+  // a comps table's bank columns (F4): an older API knows only the first eleven
+  if (Array.isArray(s.cols) && s.cols.some((c) => !OLDER_COMPARE_COLUMNS.has(c as string))) {
+    const kept = (s.cols as string[]).filter((c) => OLDER_COMPARE_COLUMNS.has(c));
+    if (kept.length) out.cols = kept;
+    else delete out.cols;
     changed = true;
   }
   if (Array.isArray(s.layers)) {
@@ -278,7 +302,7 @@ async function tolerantSave<T>(save: (state: object) => Promise<T>, state: objec
   try {
     return await save(state);
   } catch (e) {
-    const older = e instanceof ApiError && e.status === 422 && /Extra inputs are not permitted/.test(e.message) ? olderState(state) : null;
+    const older = e instanceof ApiError && e.status === 422 && /Extra inputs are not permitted|Input should be/.test(e.message) ? olderState(state) : null;
     if (!older) throw e;
     return save(older);
   }
@@ -498,14 +522,24 @@ export const section = (token: string, companyId: string, key: string, accession
 export const latestFilings = (token: string, limit = 20) =>
   get<{ as_of: string; filings: LatestFiling[] }>(token, "/v1/filings/latest", { limit });
 
-/** Suggested peers of a company (same SIC, then size), with screener columns. readableOnly:
- * only companies the user can read (a demo sandbox). */
-export const peers = (token: string, companyId: string, columns: string[], limit = 10, readableOnly = false) =>
+/** Suggested peers of a company (by business since F4, else SIC and size), with screener columns.
+ * columns undefined: the API's choice (a bank's own columns for a bank; an older API's standard
+ * set): render from the answer's `columns`. readableOnly: only companies the user can read (a
+ * demo sandbox). */
+export const peers = (token: string, companyId: string, columns: string[] | undefined, limit = 10, readableOnly = false) =>
   get<Peers>(token, `/v1/companies/${companyId}/peers`, {
-    columns,
+    ...(columns ? { columns } : {}),
     limit,
     ...(readableOnly ? { access: "financials" } : {}),
   });
+
+/** May `candidateId` join the comps of `companyId`, and if not why (F4). null from an older
+ * Query API (no such route: the deploy window), then the peer is added as before. */
+export const peerCheck = (token: string, companyId: string, candidateId: string) =>
+  orNullOn404(get<PeerCheck>(token, `/v1/companies/${companyId}/peers/check/${candidateId}`));
+
+/** The open sector grouping (migration 046); null from an older Query API (no sector filter). */
+export const sectors = (token: string) => orNullOn404(get<Sectors>(token, "/v1/sectors"));
 
 /** A 10-Q/10-K's metrics vs the prior quarter and the year-ago quarter. */
 export const recap = (token: string, accessionNo: string) =>

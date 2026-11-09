@@ -6,7 +6,7 @@ import { financialSeries } from "../chart/series";
 import { day } from "../format";
 import { go, href } from "../route";
 import type { ScreenerRow, Tier } from "../types";
-import { keyStats, recapAccession } from "./data";
+import { BANK_NOT_SHOWN, isBankRow, keyStats, recapAccession } from "./data";
 import { ErrorPanel, sentence, Skeleton } from "../components/States";
 import { EventsCard } from "./Events";
 import { keyStatFlag, staleFlags } from "./events";
@@ -59,6 +59,9 @@ export function Overview({
           </div>
         ) : (
           <p className="empty locked">Financials for {name} aren't included in your access; its filings and metadata are public.</p>
+        )}
+        {canFin && isBankRow(row) && "net_interest_income_ttm" in row.values && (
+          <p className="foot bank-note">A bank's own figures. {BANK_NOT_SHOWN}</p>
         )}
       </section>
       {canRead && <EventsCard token={token} companyId={companyId} name={name} load={events} />}

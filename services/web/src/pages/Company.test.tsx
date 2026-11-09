@@ -486,11 +486,12 @@ it("the header keeps one main ticker, whatever else a company lists", async () =
   expect(container.querySelector(".co-head .mono")?.textContent).toBe("NVDA · Nasdaq");
 });
 
-it("peers: suggested by SIC and size, into Compare and the chart builder", async () => {
+it("peers: an older API's SIC and size suggestions still read, into Compare and the chart builder", async () => {
   await render("peers");
-  const body = [...container.querySelectorAll("tbody tr")];
+  const body = [...container.querySelectorAll("tbody tr:not(.agg)")];
   expect(body.map((r) => r.querySelector(".co b")?.textContent)).toEqual(["Nvidia", "Apple", "Tesla"]);
-  expect(body[1]!.textContent).toContain("same 3-digit SIC group, same size band, same filer category");
+  expect(body[1]!.textContent).toContain("same 3-digit SIC group; same filer category; similar size");
+  expect(container.querySelector(".card-h .sub")?.textContent).toBe("by SIC code and size");
   expect(body[2]!.className).toBe("masked");
   await click(button("Chart margins"));
   expect(onChartMany).toHaveBeenCalledWith([NVDA, AAPL], "operating_margin", "ttm");
@@ -500,7 +501,7 @@ it("peers: suggested by SIC and size, into Compare and the chart builder", async
 
 it("peers: sort by a column like Compare, then back to the suggested order", async () => {
   await render("peers");
-  const names = () => [...container.querySelectorAll("tbody tr")].map((r) => r.querySelector(".co b")?.textContent);
+  const names = () => [...container.querySelectorAll("tbody tr:not(.agg)")].map((r) => r.querySelector(".co b")?.textContent);
   const head = (label: string) => [...container.querySelectorAll<HTMLButtonElement>("thead .th-sort")].find((b) => b.textContent?.startsWith(label))!;
   await click(head("Company"));
   expect(names()).toEqual(["Apple", "Nvidia", "Tesla"]);
@@ -584,4 +585,74 @@ it("cuts the business description at a sentence", () => {
   expect(out.endsWith(". …")).toBe(true);
   expect(out.length).toBeLessThanOrEqual(104);
   expect(excerpt("Short.")).toBe("Short.");
+});
+
+it("F4 peers: by what they do, each with why, a named competitor linked to its sentence", async () => {
+  const cite = { accession_no: "0001045810-26-000021", section_key: "1", char_start: 4200, char_end: 4400 };
+  const base = vi.mocked(fetch).getMockImplementation()!;
+  vi.mocked(fetch).mockImplementation(async (url, init) => {
+    if (!new URL(String(url), "http://x").pathname.endsWith("/peers")) return base(String(url), init);
+    const r = await (await base(String(url), init)).json();
+    return Response.json({ ...r, basis: "business", method: "By business: how alike the two 10-Ks' Business sections are.",
+      columns: [{ key: "revenue_ttm", metric: "revenue", span: "ttm", unit: "USD", balance: false }],
+      business: { accession_no: cite.accession_no, section_key: "1", filed: "2026-02-25", terms: ["accelerated computing", "gpus"], computed_at: null },
+      peers: [{ ...r.peers[0], match: { ...r.peers[0].match, similarity: 0.25, terms: ["cpus", "gpus"], named_by_target: cite, names_target: null, same_industry: false } },
+        r.peers[1]] });
+  });
+  await render("peers");
+  expect(container.querySelector(".card-h .sub")?.textContent).toContain("by what they do");
+  expect($(".peers-basis")?.textContent).toContain("accelerated computing, gpus");
+  const apple = [...container.querySelectorAll("tbody tr:not(.agg)")][1]!;
+  const why = apple.querySelector("td.why")!;
+  expect(why.textContent).toBe("very similar · named as a competitor in Nvidia's 10-K · business: cpus, gpus · similar size (>=$100B)");
+  expect(why.querySelector("a")?.getAttribute("href")).toBe(`#/filing/${NVDA}/${cite.accession_no}/1?at=4200`);
+  // only the answer's columns: here just revenue, with its median's n of N
+  expect([...container.querySelectorAll("thead th.n")].map((th) => th.textContent)).toEqual(["Revenue TTM"]);
+  expect(container.querySelector("tr.agg .count")?.textContent).toBe("1 of 2");
+});
+
+it("F4 bank: a bank's statements and key stats are its own lines, and say what isn't shown", async () => {
+  const JPM = "0000019617";
+  rowFor = () => ({ ...nvdaRow({ ...entry({ company_id: JPM, name: "JPMorgan", tickers: ["JPM"] }) }), not_applicable: ["gross_margin", "operating_margin"],
+    values: { revenue_ttm: "180000000000", net_interest_income_ttm: "102908000000", efficiency_ratio_ttm: "0.519", deposits_q: "2780793000000", cet1_ratio_q: null } });
+  await render("overview", JPM);
+  const keys = [...container.querySelectorAll(".kv.stats .k")].map((k) => k.textContent);
+  expect(keys.slice(0, 4)).toEqual(["Net revenue", "Net interest income", "Efficiency ratio", "Provision for credit losses"]);
+  expect(container.textContent).toContain("51.9%");
+  expect($(".bank-note")?.textContent).toContain("Not shown: net interest margin");
+  const asked = paths().find((u) => u.pathname.endsWith("/screener"))!.searchParams.getAll("columns");
+  expect(asked).toEqual(expect.arrayContaining(["net_interest_income_ttm", "cet1_ratio_q", "gross_margin_ttm"]));
+  act(() => root.unmount());
+  await render("statements", JPM);
+  const metrics = paths().filter((u) => u.pathname.endsWith("/financials")).at(-1)!.searchParams.getAll("metrics");
+  expect(metrics.slice(0, 5)).toEqual(["net_interest_income", "noninterest_income", "revenue", "noninterest_expense", "provision_for_credit_losses"]);
+  expect($(".bank-note")?.textContent).toContain("is a bank, so it is shown with a bank's own lines");
+});
+
+it("F4 bank: an older API that refuses the bank metrics still shows the standard statement", async () => {
+  const JPM = "0000019617";
+  rowFor = () => ({ ...nvdaRow({ ...entry({ company_id: JPM, name: "JPMorgan", tickers: ["JPM"] }) }), not_applicable: ["gross_margin"] });
+  const base = vi.mocked(fetch).getMockImplementation()!;
+  vi.mocked(fetch).mockImplementation(async (url, init) => {
+    const u = new URL(String(url), "http://x");
+    const older = (u.pathname.endsWith("/financials") && u.searchParams.getAll("metrics").includes("net_interest_income"))
+      || (u.pathname.endsWith("/screener") && u.searchParams.getAll("columns").includes("net_interest_income_ttm"));
+    return older ? Response.json({ detail: "unknown metrics" }, { status: 422 }) : base(String(url), init);
+  });
+  await render("statements", JPM);
+  const asked = paths().filter((u) => u.pathname.endsWith("/financials")).map((u) => u.searchParams.getAll("metrics")[0]);
+  expect(asked).toEqual(["net_interest_income", "revenue"]);
+  expect($(".bank-note")).toBeNull();
+  expect(container.textContent).toContain("Revenue");
+});
+
+it("F4 #135: a company that files one combined 10-K with another says it isn't a duplicate", async () => {
+  const UTIL = "0000075488", CORP = "0001004980";
+  rowFor = () => ({ ...nvdaRow({ ...entry({ company_id: UTIL, name: "PACIFIC GAS & ELECTRIC Co", tickers: ["PCG-PA"] }) }),
+    sector: "Utilities", sector_industry: "Multi-utilities", sic: "4931", industry: "Electric & Other Services Combined",
+    co_registrants: [{ company_id: CORP, name: "PG&E Corp", accession_no: "0001004980-26-000009", filed: "2026-02-12", filed_by: CORP }] });
+  await render("overview", UTIL);
+  expect($(".co-head .meta")?.textContent).toContain("Utilities · Multi-utilities · Electric & Other Services Combined (SIC 4931)");
+  expect($(".joint-note")?.textContent).toContain("Not a duplicate: Pacific Gas & Electric and PG&E file one combined 10-K as separate SEC registrants");
+  expect($(".joint-note a")?.getAttribute("href")).toBe(`#/company/${CORP}`);
 });

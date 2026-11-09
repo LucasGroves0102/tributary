@@ -605,6 +605,40 @@ saved; it says so when the largest company is over 100 times the smallest). "Cha
 sorts by any column like Compare (`compare/state.ts` `nextSort`/`sortRows`: high first, again to reverse,
 a third time for the suggested order; empty cells last).
 
+Peers (F4, H6; the company page's Peers tab and Compare's suggestions): the Query API suggests peers by
+what companies do (their 10-K Business sections compared word by word, competitors either one names,
+then SIC division and size: Query API README "Peers"), and the page only words its answer
+(`compare/peers.ts`): each peer's "Why" says how alike the two Business sections read ("very similar",
+"similar", "somewhat similar"), the shared terms ("business: footwear, wholesale channel, dtc"), "named
+as a competitor in Vertiv's 10-K" or "its 10-K names Vertiv as a competitor" (a link that opens that
+sentence in the reader), the same industry and a similar size. Above the table, the company's own most
+distinctive terms. The columns are the answer's: a bank is compared on a bank's lines. Each median says
+how many of the peers it uses ("3 of 4"), and its hover why the others are left out, in the blanks
+vocabulary (not reported, not applicable, not meaningful or old, metadata only). Compare's medians do the
+same. Adding a peer on Compare asks `/peers/check` first: a company with no figures to compare isn't
+added, and the page says why (Birkenstock files 20-F annual reports as a foreign private issuer, under
+IFRS; a company whose XBRL hasn't arrived yet; a fund with no annual report). A bank target's comps open
+on a bank's columns (net interest income, efficiency ratio, provision, loans, deposits, ROE, net margin)
+unless columns were chosen; the column picker offers a bank's lines only for a bank.
+
+Sectors (#136): the screener's filters have a Sector and an Industry within it (`/v1/sectors`,
+Tributary's own grouping of SIC codes, not GICS), and "Group by sector" sorts by sector and industry
+with a heading row for each. The SIC label stays: the Industry column shows it with the sector's
+industry under it, and the company header reads "Technology · Semiconductors · Semiconductors & Related
+Devices (SIC 3674)".
+
+Co-registrants (#135): a company that files one combined 10-K with another (PG&E Corp and Pacific Gas
+& Electric) has a "combined 10-K" tag in the screener and a note on its page saying it isn't a
+duplicate: two SEC registrants, each with its own statements, a parent's including its subsidiaries'.
+
+A bank (#103; the API's `not_applicable` list): Key stats show net revenue, net interest income,
+efficiency ratio, provision for credit losses, net income, EPS, loans, deposits, CET1 (where the bank
+tags it), ROE, revenue growth and net margin; Statements show a bank's income statement (net interest
+income, noninterest income, net revenue, noninterest expense, provision, pretax and net income) and
+balance sheet (cash and due from banks, loans net of the allowance, total assets, deposits, total
+liabilities, equity, CET1). Both say what isn't shown and why: net interest margin, tangible book value
+per share and ROTCE (migration 048's header).
+
 Revenue view (the company page's Revenue tab, `src/company/Revenue.tsx`; rules in
 `company/revenue.ts`'s docstring): three sections, each chart an ordinary chart state, so "Save
 to workspace" (`workspaces/SaveChart.tsx`: name and workspace, through the same item route and
@@ -823,7 +857,10 @@ again, and a new model then starts at zeros in the older shape; versions answer 
 404; data notes asked for some
 companies keep only those; a data-check screen the API didn't echo (`issue`) is a failure with Try
 again, never every company; `/annual-per-share`, `readings` and agent-api's `/v1/allowance` were
-already optional.
+already optional. F4: `/peers/check` and `/v1/sectors` answering 404 mean no check (the peer is added
+as before) and no sector filter; a bank's statement or header columns refused (422) are asked again
+without the bank lines; a save refused for a comps table's bank columns or a screen's sector filter
+(an older strict model: "Input should be ..." or "Extra inputs") is saved again without them.
 
 `Dockerfile` builds the bundle and serves it from `nginx-unprivileged` on port 8080
 (`deploy/nginx.conf`). nginx returns 404 for the APIs' `/docs`, `/redoc`, `/openapi.json` and

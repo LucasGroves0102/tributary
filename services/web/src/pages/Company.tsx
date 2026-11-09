@@ -1,5 +1,5 @@
-import { expectedFilingsOf, screener } from "../api";
-import { header, HEADER_COLUMNS, listingLine } from "../company/data";
+import { ApiError, expectedFilingsOf, screener } from "../api";
+import { header, HEADER_COLUMNS, HEADER_COLUMNS_WITH_BANK, listingLine } from "../company/data";
 import { DataNotes } from "../company/DataNotes";
 import { EarningsView } from "../company/Earnings";
 import { Filings } from "../company/Filings";
@@ -18,6 +18,7 @@ import { COMPANY_TABS, go, href, type CompanyTab } from "../route";
 import { NewWork } from "../workspaces/NewWork";
 import type { Saved } from "../workspaces/useSaved";
 import { restoreProject } from "../analysis/project";
+import { coRegistrantNote } from "../compare/peers";
 
 interface Props {
   token: string;
@@ -41,7 +42,11 @@ interface Props {
  * filing index and expected dates are public; values need financials, text needs filings. */
 export function Company({ token, companyId, tab, statements, watched, onWatch, onChart, onChartMany, onOpenChart, onAsk, saved }: Props) {
   const meta = useLoad(companyId, () =>
-    screener(token, { company_id: [companyId], columns: HEADER_COLUMNS, sort: "name", limit: 1 }).then(
+    // a bank's key stats need its own columns (F4); an older API refuses them (422): the standard set
+    screener(token, { company_id: [companyId], columns: HEADER_COLUMNS_WITH_BANK, sort: "name", limit: 1 }).catch((e) => {
+      if (e instanceof ApiError && e.status === 422) return screener(token, { company_id: [companyId], columns: HEADER_COLUMNS, sort: "name", limit: 1 });
+      throw e;
+    }).then(
       (r) => r.rows.find((x) => x.company_id === companyId) ?? null,
     ),
   );
@@ -74,6 +79,7 @@ export function Company({ token, companyId, tab, statements, watched, onWatch, o
   const ticker = h.tickers[0] ?? h.name;
   const next = expected?.state === "ok" ? (expected.data.expected[0] ?? null) : null;
   const listing = listingLine(h.tickers, h.exchanges);
+  const joint = coRegistrantNote(h.name, row.co_registrants ?? [], companyId);
 
   return (
     <div className="page">
@@ -93,6 +99,7 @@ export function Company({ token, companyId, tab, statements, watched, onWatch, o
             </div>
             <div className="meta">
               {[
+                row.sector && `${row.sector} · ${row.sector_industry}`,
                 h.industry && `${h.industry}${h.sic ? ` (SIC ${h.sic})` : ""}`,
                 h.fye && `fiscal year ends ${h.fye}`,
                 h.filer && `${h.filer.toLowerCase()} filer`,
@@ -112,6 +119,17 @@ export function Company({ token, companyId, tab, statements, watched, onWatch, o
                 <span className="faint">no expected filing date</span>
               )}
             </div>
+            {joint && (
+              <p className="meta joint-note" role="note">
+                {joint}{" "}
+                {(row.co_registrants ?? []).map((c, i) => (
+                  <span key={c.company_id}>
+                    {i > 0 && " · "}
+                    <a href={href({ view: "company", companyId: c.company_id })}>Open {c.name}</a>
+                  </span>
+                ))}
+              </p>
+            )}
           </div>
           <div className="row wrap">
             {watched !== null && (

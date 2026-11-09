@@ -40,14 +40,23 @@ const NEEDS: Record<string, string> = {
   current_ratio: "current assets and current liabilities",
   roe: "net income and stockholders' equity",
   payout_ratio: "dividends and net income",
+  efficiency_ratio: "noninterest expense, net interest income and noninterest income",
+};
+
+/** Why a bank line is often blank (migration 048 measured every bank's tags). */
+const TAGGING: Record<string, string> = {
+  cet1_ratio: " Most banks tag their CET1 ratio only in the 10-K, and the largest (JPMorgan, Bank of America, Wells Fargo) only under their own XBRL tags, which Tributary doesn't read.",
+  loans: " Some banks (Wells Fargo) tag their loans only under their own XBRL tags.",
+  provision_for_credit_losses: "",
 };
 
 /** The hover of a — under a label like "Free cash flow". */
 export function notReportedTitle(label: string, key: string): string {
-  const needs = NEEDS[key.replace(/_(ttm|q)$/, "")];
+  const metric = key.replace(/_(ttm|q)$/, "");
+  const needs = NEEDS[metric];
   return needs
     ? `${label}: can't be computed. It needs ${needs}, and this company's filings don't give all of them.`
-    : `${label}: not reported. This company's filings don't give this figure.`;
+    : `${label}: not reported. This company's filings don't give this figure.${TAGGING[metric] ?? ""}`;
 }
 
 /** One figure as tables show it. `value` is what it ranks by: null unless it can be compared. */

@@ -57,8 +57,10 @@ export const SCREEN_COLUMNS: { key: string; label: string; period: string; kind:
   { key: "debt_to_equity_q", label: "Debt/eq", period: "qtr end", kind: "x" },
 ];
 
-/** Sorts on the Company and Industry columns; the value columns sort by their key. */
-const META_SORTS = new Set(["name", "sic", "fiscal_year_end"]);
+/** Sorts on the Company and Industry columns; the value columns sort by their key. "sector" is
+ * the grouping: by sector, then industry (migration 046). */
+const META_SORTS = new Set(["name", "sic", "fiscal_year_end", "sector"]);
+export const GROUP_SORT = "sector";
 const SORTS = new Set([...META_SORTS, ...SCREEN_COLUMNS.map((c) => c.key)]);
 export const DEFAULT_SORT = "-revenue_ttm";
 export const PAGE_SIZE = 50;
@@ -70,6 +72,9 @@ export interface ScreenFilters {
   industry?: string;
   /** one 4-digit SIC code (from clicking a row's industry) */
   sic?: string;
+  /** a sector of Tributary's open grouping over SIC (/v1/sectors), and an industry within it */
+  sector?: string;
+  sector_industry?: string;
   band?: Band;
   /** minimum revenue growth, TTM YoY, in percent */
   growth?: number;
@@ -88,8 +93,8 @@ export interface ScreenFilters {
   page?: number;
 }
 
-const KEYS = ["q", "industry", "sic", "band", "growth", "margin", "fye", "exchange", "filer", "issue",
-  "mine", "sort", "page"] as const;
+const KEYS = ["q", "industry", "sic", "sector", "sector_industry", "band", "growth", "margin", "fye",
+  "exchange", "filer", "issue", "mine", "sort", "page"] as const;
 
 function text(v: string | null, max = 100): string | undefined {
   const t = v?.trim();
@@ -113,6 +118,8 @@ export function parseScreen(query: string): ScreenFilters {
     q: text(p.get("q")),
     industry: text(p.get("industry")),
     sic: /^\d{4}$/.test(p.get("sic") ?? "") ? p.get("sic")! : undefined,
+    sector: text(p.get("sector"), 40),
+    sector_industry: text(p.get("sector_industry"), 60),
     band: (BANDS as readonly string[]).includes(p.get("band") ?? "") ? (p.get("band") as Band) : undefined,
     growth: num(p.get("growth"), -1000, 100000),
     margin: num(p.get("margin"), -1000, 100),
@@ -159,7 +166,7 @@ export function isEmpty(f: ScreenFilters): boolean {
 
 /** How many filters are set: the count on the collapsed filter band. */
 export function activeFilters(f: ScreenFilters): number {
-  return [f.q, f.industry, f.sic, f.band, f.growth, f.margin, f.fye, f.exchange, f.filer, f.issue, f.mine]
+  return [f.q, f.industry, f.sic, f.sector, f.sector_industry, f.band, f.growth, f.margin, f.fye, f.exchange, f.filer, f.issue, f.mine]
     .filter((v) => v !== undefined && v !== "" && v !== false).length;
 }
 
@@ -194,6 +201,8 @@ export function screenParams(f: ScreenFilters, columns: string[] = SCREEN_COLUMN
   if (f.q) p.q = f.q;
   if (f.industry) p.industry = f.industry;
   if (f.sic) p.sic = [f.sic];
+  if (f.sector) p.sector = [f.sector];
+  if (f.sector_industry) p.sector_industry = [f.sector_industry];
   if (f.band) p.revenue_band = f.band;
   if (f.fye) p.fiscal_year_end_month = f.fye;
   if (f.exchange) p.exchange = [f.exchange];
@@ -214,6 +223,7 @@ export function describe(f: ScreenFilters): string {
     f.q && `name or ticker "${f.q}"`,
     f.industry && `industry contains "${f.industry}"`,
     f.sic && `SIC ${f.sic}`,
+    f.sector_industry ? `${f.sector ? `${f.sector}: ` : ""}${f.sector_industry}` : f.sector && `sector ${f.sector}`,
     f.band && `revenue ${BAND_LABELS[f.band]}`,
     f.growth !== undefined && `revenue growth ≥ ${f.growth}%`,
     f.margin !== undefined && `operating margin ≥ ${f.margin}%`,
