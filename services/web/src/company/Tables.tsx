@@ -260,8 +260,9 @@ export function Statements({ token, companyId, name, ticker, notApplicable = [],
 }
 
 export function Ratios({ token, companyId, name, ticker, notApplicable = [] }: TableProps) {
-  // equity too: its dates are where the API says debt/equity and ROE read n/m on negative equity
-  // (`not_meaningful_periods`), not a gap
+  // with readings, the API says where debt/equity and ROE read n/m on negative equity
+  // (`not_meaningful_periods`, from the company's own equity periods), so those aren't gaps;
+  // equity comes along so its dates are columns
   const load = useLoad(companyId, () => financialsView(token, companyId, 8, [...RATIOS.map(([m]) => m), "stockholders_equity"], "ttm", "fiscal", true));
   const table = load?.state === "ok"
     ? metricTable(load.data.rows, RATIOS, "ttm", "fiscal", notApplicable, undefined, load.data.not_meaningful_periods)
