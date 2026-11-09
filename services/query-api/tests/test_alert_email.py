@@ -33,8 +33,9 @@ class FakeSmtp:
 def test_email_is_off_unless_configured():
     assert email_from_env({}) is None
     assert email_from_env({"ALERT_SMTP_HOST": "smtp.example.org"}) is None
-    on = email_from_env({"ALERT_SMTP_HOST": "smtp.example.org", "ALERT_SMTP_FROM": "alerts@example.org",
-                         "ALERT_SMTP_USER": "u", "ALERT_SMTP_PASSWORD": "not-a-real-password"})
+    on = email_from_env({"ALERT_SMTP_HOST": "smtp.example.org",
+                         "ALERT_SMTP_FROM": "alerts@example.org", "ALERT_SMTP_USER": "u",
+                         "ALERT_SMTP_PASSWORD": "not-a-real-password"})
     assert isinstance(on, SmtpEmail) and on.port == 587
     assert "not-a-real-password" not in repr(on)  # never printed with the provider
     assert no_recipients("anyone") is None

@@ -533,14 +533,14 @@ function Monitor(props: Parameters<typeof ThesisMonitor>[0] & { name: string }) 
         <div className="card-h wrap">
           <h3 id="monitor-alerts-h">New filings</h3>
           <span className="sub">
-            10-K, 10-Q and material 8-Ks of {name} since you started this analysis, checked every 10 minutes
+            10-K, 10-Q and material 8-Ks of {name} since you started following it, checked every 10 minutes
             {check ? ` · last checked ${new Date(check.checked_at).toLocaleString()}` : ""}
           </span>
           <span className="grow" />
           <a className="btn sm ghost" href={href({ view: "settings" })}>Alert settings</a>
         </div>
         <NotificationList token={token} companyId={companyId} limit={10} empty={
-          <>No new filings since you started this analysis. When {name} files a 10-K, 10-Q or a material 8-K it shows here, and in the bell
+          <>No new filings since you started following {name}. When it files a 10-K, 10-Q or a material 8-K it shows here, and in the bell
             at the top, with its key figures and your red lines below checked on it.</>
         } />
       </section>

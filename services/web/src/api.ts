@@ -829,11 +829,10 @@ export async function ask(
 /** The bell's count; null from an API without alerts. */
 export const alertsUnread = (token: string) => orNullOn404(get<AlertUnread>(token, "/v1/alerts/unread"));
 
-export const alertNotifications = (token: string, q: { companyId?: string; limit?: number; before?: string } = {}) =>
+export const alertNotifications = (token: string, q: { companyId?: string; limit?: number } = {}) =>
   orNullOn404(get<AlertNotifications>(token, "/v1/alerts/notifications", {
     ...(q.companyId ? { company_id: q.companyId } : {}),
     ...(q.limit ? { limit: q.limit } : {}),
-    ...(q.before ? { before: q.before } : {}),
   }));
 
 export const markAlertsRead = (token: string, which: { ids?: string[]; companyId?: string; all?: boolean }) =>

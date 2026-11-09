@@ -4157,6 +4157,16 @@ button.link.num {
   tab-size: 4;
 }
 
+.block-text.gap {
+  min-height: 1.9em;
+  opacity: 0.55;
+}
+
+.block-text.gap:focus,
+.block-text.gap:hover {
+  opacity: 1;
+}
+
 .block-card {
   border-radius: var(--radius);
   min-width: 0;
@@ -6022,13 +6032,38 @@ details.routine summary {
 }
 
 /* Home's first step (F6, #127) */
+.start-card {
+  border-left: 3px solid var(--accent);
+}
+
 .start-card .card-b {
   display: grid;
   gap: var(--sp-4);
+  padding: var(--sp-6) var(--sp-7);
+}
+
+.start-card .eyebrow {
+  color: var(--accent);
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 11px;
 }
 
 .start-card h2 {
-  margin: 0 0 var(--sp-2);
+  margin: 2px 0 var(--sp-2);
+  font-size: var(--fs-xl);
+}
+
+.start-label {
+  display: block;
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+  margin-bottom: 4px;
+}
+
+.start-pick .co-search {
+  width: 100%;
 }
 
 .start-main {

@@ -143,18 +143,20 @@ export function BlockEditor({ markdown, onChange, onRemoved, items, token, label
       {segments.map((s) => {
         if (s.kind === "run") {
           const text = runText(markdown, s.start, s.end);
+          // only blank lines between two cards: a slim box, there to type between them
+          const gap = text.trim() === "" && s !== firstRun;
           return (
             <textarea
               key={`run-${s.ordinal}`}
               ref={(el) => {
                 if (el) texts.current.set(s.ordinal, { el, start: s.start, end: s.end });
               }}
-              className="field block-text"
+              className={gap ? "field block-text gap" : "field block-text"}
               value={text}
-              rows={Math.max(2, text.split("\n").length)}
+              rows={gap ? 1 : Math.max(2, text.split("\n").length)}
               spellCheck
-              aria-label={s === firstRun ? "Thesis text" : "Thesis text, continued"}
-              placeholder={s === firstRun ? placeholder : undefined}
+              aria-label={s === firstRun ? "Thesis text" : gap ? "Text between two cards" : "Thesis text, continued"}
+              placeholder={s === firstRun ? placeholder : gap ? "Write here…" : undefined}
               onChange={(e) => {
                 cursor.current = { line: s.start, offset: e.target.selectionStart };
                 onChange(replaceRun(markdown, s.start, s.end, e.target.value));

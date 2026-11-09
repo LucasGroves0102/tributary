@@ -38,19 +38,22 @@ export function StartCard({ token, readable, workspaces, alerts, label }: {
       <div className="card-b">
         <div className="start-main">
           <div className="grow">
-            <h2 id="start-h">{analyses.length ? "Continue an analysis, or start one" : "Start an analysis"}</h2>
+            <span className="eyebrow">Start here</span>
+            <h2 id="start-h">Start an analysis</h2>
             <p className="muted small">
               One company in eight guided steps: what it sells, its numbers, the latest earnings and what changed, peers, a model,
               and your thesis checked against the filings. Then Tributary tells you when it files again.
             </p>
           </div>
           <div className="start-pick">
-            <CompanySearch token={token} label="Company to analyse" placeholder="Start an analysis: company or ticker" readable={readable}
+            <span className="start-label" aria-hidden="true">Which company?</span>
+            <CompanySearch token={token} label="Company to analyse" placeholder="Name or ticker, e.g. NVDA" readable={readable}
               onPick={(id) => go({ view: "analysis", start: id })} />
           </div>
         </div>
         {analyses.length > 0 && (
-          <ul className="start-projects" aria-label="Your analyses">
+          <ul className="start-projects" aria-label="Continue an analysis">
+            <li className="faint small">Continue:</li>
             {analyses.map((a) => (
               <li key={a.id}>
                 <a href={href({ view: "analysis", projectId: a.id })}>

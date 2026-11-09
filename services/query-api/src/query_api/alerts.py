@@ -345,16 +345,15 @@ class AppAlerts:
             raise UnknownUser(user_id) from None
 
     # notifications
-    def notifications(self, user_id: str, company_id: str | None, limit: int,
-                      before: datetime | None = None) -> list[dict]:
+    def notifications(self, user_id: str, company_id: str | None, limit: int) -> list[dict]:
+        """Newest filing first (a run noticing several at once inserts them in any order)."""
         with self._tx(user_id) as cur:
             cur.execute(
                 f"SELECT {NOTIFICATION_COLUMNS} FROM notifications"
                 " WHERE user_id = %(u)s AND status <> 'skipped'"
                 "   AND (%(c)s::text IS NULL OR company_id = %(c)s)"
-                "   AND (%(b)s::timestamptz IS NULL OR created_at < %(b)s)"
-                " ORDER BY created_at DESC, filed DESC, notification_id LIMIT %(n)s",
-                {"u": user_id, "c": company_id, "b": before, "n": limit})
+                " ORDER BY filed DESC, created_at DESC, notification_id LIMIT %(n)s",
+                {"u": user_id, "c": company_id, "n": limit})
             return cur.fetchall()
 
     def unread(self, user_id: str) -> dict:
@@ -755,11 +754,10 @@ def add_alert_routes(app: FastAPI, *, alerts: AppAlerts | None, store: Any,
         user_id: User,
         company_id: Annotated[str | None, Query(pattern=r"^\d{10}$")] = None,
         limit: Annotated[int, Query(ge=1, le=MAX_LIST)] = 50,
-        before: Annotated[datetime | None, Query(description="created before (paging)")] = None,
     ) -> dict:
-        """The caller's notifications, newest first (pending ones too: their figures or items
-        aren't in yet). Figures only for companies whose financials the caller reads now."""
-        rows = db().notifications(user_id, company_id, limit + 1, before)
+        """The caller's notifications, newest filing first (pending ones too: their figures or
+        items aren't in yet). Figures only for companies whose financials the caller reads now."""
+        rows = db().notifications(user_id, company_id, limit + 1)
         can = financials_readable(user_id) if rows else (lambda _c: False)
         return {"notifications": [notification_out(n, can(n["company_id"]))
                                   for n in rows[:limit]],

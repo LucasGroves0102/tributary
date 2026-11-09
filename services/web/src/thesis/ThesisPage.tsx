@@ -393,6 +393,11 @@ function ThesisEditor({ token, item, initial, items, saved, label, readable, onO
       return;
     }
     const before = { name, companyId, markdown };
+    if (r.markdown === markdown) {
+      // an export of this very text (#41): it reads back the same, so there's nothing to save
+      setNotice({ text: `Imported ${f.name}: the same text as the editor's, embeds and all.` });
+      return;
+    }
     setMarkdown(r.markdown);
     if (r.title && /^untitled/i.test(name.trim())) setName(r.title);
     setNotice({ text: `Imported ${f.name}. Save to keep it.`, ...(before.markdown ? { undo: { label: "Undo import", to: before } } : {}) });
