@@ -56,7 +56,6 @@ END
 $guard$;
 -- end guard
 
-
 CREATE OR REPLACE FUNCTION gold.not_applicable_metrics(p_company_id text, p_sic text) RETURNS text[]
 LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$
     SELECT CASE WHEN p_sic IN ('6021', '6022', '6029', '6035', '6036', '6099')

@@ -59,7 +59,6 @@ END
 $guard$;
 -- end guard
 
-
 CREATE OR REPLACE FUNCTION gold.latest_reading(p_company_id text, p_span text, p_metric text, p_sic text,
                                     p_latest date)
 RETURNS TABLE (period_end date, value numeric, accession_no text, form text, filed date,

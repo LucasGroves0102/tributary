@@ -39,7 +39,7 @@ CHAIN = [
     "gold_rules_038_041.sql",
 ]
 # Touch only functions no other backout touches: checked against their own migration's bodies.
-INDEPENDENT = ["segments_same_basis_053.sql"]
+INDEPENDENT = ["segments_same_basis_053.sql", "insider_queue_059.sql"]
 
 START = "-- guard (scripts/backout_guards.py writes it"
 END = "-- end guard"
@@ -157,7 +157,8 @@ def write(name: str, block: str) -> None:
     anchor = re.search(r"^SET LOCAL lock_timeout = '[^']+';\n", sql, re.M)
     if anchor is None:
         raise SystemExit(f"{name}: no SET LOCAL lock_timeout line to put the guard after")
-    path.write_text(sql[:anchor.end()] + "\n" + block + sql[anchor.end():])
+    rest = sql[anchor.end():].lstrip("\n")  # one blank line either side: rerunning changes nothing
+    path.write_text(sql[:anchor.end()] + "\n" + block + "\n" + rest)
 
 
 def main() -> None:

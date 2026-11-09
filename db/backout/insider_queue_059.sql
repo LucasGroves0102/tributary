@@ -18,8 +18,9 @@
 BEGIN;
 SET LOCAL lock_timeout = '10s';
 
--- guard (059's own; db/backout/README.md, Order). It refuses, changing nothing, unless both functions
--- are 059's (this backout hasn't run), the login owns them, and no documents.fetched event is owed.
+-- guard (scripts/backout_guards.py writes it; db/backout/README.md, Order). It refuses, changing
+-- nothing, unless every newer backout has run (newest first: none, this is the newest) and this one
+-- hasn't, and unless the login owns the functions (the migrate login; header).
 DO $guard$
 DECLARE
     w record;
@@ -36,17 +37,25 @@ BEGIN
                 current_user);
         END IF;
         IF w.want IS DISTINCT FROM (SELECT md5(p.prosrc) FROM pg_proc p WHERE p.oid = w.id) THEN
-            RAISE EXCEPTION USING MESSAGE = format('%s is not 059''s: this backout ran already, or '
-                'a later migration replaced it. Nothing was changed.', w.fn);
+            RAISE EXCEPTION USING MESSAGE = format('%s is not where this backout starts: run '
+                'the newer backouts first, newest first (%s), and this one only once. Nothing was '
+                'changed.', w.fn, 'none, this is the newest');
         END IF;
     END LOOP;
+END
+$guard$;
+-- end guard
+
+-- 059's own check (the generated guard above covers order, a second run and the login): dropping
+-- ops.document_outbox while it holds an owed documents.fetched event would lose the event.
+DO $outbox$
+BEGIN
     IF EXISTS (SELECT 1 FROM ops.document_outbox) THEN
         RAISE EXCEPTION USING MESSAGE = 'ops.document_outbox still holds owed documents.fetched '
             'events: let the current doc-fetcher send them first (header). Nothing was changed.';
     END IF;
 END
-$guard$;
--- end guard
+$outbox$;
 
 CREATE OR REPLACE FUNCTION silver.xml_date(v text) RETURNS date
 LANGUAGE sql IMMUTABLE AS $$

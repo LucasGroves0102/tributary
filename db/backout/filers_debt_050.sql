@@ -61,7 +61,6 @@ END
 $guard$;
 -- end guard
 
-
 CREATE OR REPLACE FUNCTION gold.companies_for_ciks(p_ciks text[]) RETURNS SETOF text
 LANGUAGE sql STABLE AS $$
     SELECT k.company_id FROM silver.company_ciks k WHERE k.cik = ANY(p_ciks)

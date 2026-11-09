@@ -39,7 +39,6 @@ END
 $guard$;
 -- end guard
 
-
 CREATE OR REPLACE FUNCTION gold.refresh_segment_financials(p_company_ids text[]) RETURNS integer
 LANGUAGE plpgsql AS $$
 DECLARE

@@ -62,7 +62,6 @@ END
 $guard$;
 -- end guard
 
-
 DELETE FROM silver.metric_sums WHERE metric = 'long_term_debt_current' AND priority = 7.5;
 DELETE FROM silver.metric_tags WHERE taxonomy = 'ifrs-full';
 DELETE FROM silver.financial_facts

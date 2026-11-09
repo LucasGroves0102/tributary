@@ -59,7 +59,6 @@ END
 $guard$;
 -- end guard
 
-
 -- Order (README): this file, then gold_rules_038_041.sql if that is wanted too; never this one after
 -- it. gold_rules_038_041.sql empties silver.metric_sums and removes 038's tags, and these bodies are
 -- 039's fact selection, which reads them: run after it, they'd bring 039 back with its sums gone.

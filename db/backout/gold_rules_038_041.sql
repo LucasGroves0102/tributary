@@ -60,7 +60,6 @@ END
 $guard$;
 -- end guard
 
-
 DELETE FROM silver.metric_sums;
 DELETE FROM silver.metric_tags WHERE (metric, tag) IN (
     ('short_term_investments', 'DebtSecuritiesAvailableForSaleExcludingAccruedInterestCurrent'),

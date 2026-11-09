@@ -65,7 +65,6 @@ END
 $guard$;
 -- end guard
 
-
 DELETE FROM gold.derived_financials
 WHERE metric IN ('cash_and_investments', 'investing_cash_flow', 'financing_cash_flow', 'change_in_cash',
                  'cash_and_restricted_cash', 'contract_liabilities_current', 'contract_liabilities',

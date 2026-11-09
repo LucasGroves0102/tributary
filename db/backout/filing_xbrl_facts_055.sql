@@ -57,7 +57,6 @@ END
 $guard$;
 -- end guard
 
-
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM silver.metric_tags WHERE taxonomy = 'ifrs-full') THEN

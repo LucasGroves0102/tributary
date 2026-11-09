@@ -16,6 +16,7 @@ removes the rows they added, and the rebuild job then rebuilds gold the old way.
 | [`currency_readings_057.sql`](currency_readings_057.sql) | 057: `gold.not_meaningful` back to 035's four arguments (the five-argument one dropped), `gold.latest_reading` to 056's, `gold.filing_figures` to 051's (no `unit`), `ops.check_financials` to 050's; `gold.amount_currency` dropped. Deploy the previous query-api image with it. Tested: 057 then this, those functions equal to a database at 056 | none (then `ops.check_financials` over every company for 050's debt findings) |
 | [`filing_xbrl_facts_055.sql`](filing_xbrl_facts_055.sql) | 055: every silver fact read from a filing's own XBRL deleted, the company tags and member sums removed, `gold.usable_facts` back to 050's body; the tables and functions stay, unused. Suspend the `filing-facts` CronJob first | `financials-rebuild` job |
 | [`banks_058.sql`](banks_058.sql) | 058: `gold.not_applicable_metrics` back to 049's body (Schwab, American Express and Synchrony no longer banks; Ally stays one by its SIC) | none for the readings; the `financials-rebuild` job puts their fallback debt tags back into gold |
+| [`insider_queue_059.sql`](insider_queue_059.sql) | 059: `silver.xml_date` and `silver.refresh_insider_filings` back to 054's bodies, `ops.document_outbox`, `ops.insider_queue` and `ops.insider_findings` dropped. Deploy the previous doc-fetcher image first, once the outbox is empty | none |
 | [`segments_same_basis_053.sql`](segments_same_basis_053.sql) | 053: `gold.refresh_segment_financials` back to 018's body (derived quarters from the latest filings again). Independent of the others. Tested on JPM, NVDA, DECK and VRT: gold equal to 018's row for row | the segments refresh (db/README "053") |
 
 ## Order
@@ -33,8 +34,10 @@ the rebuild its row names once, after the last file:
 8. `interest_expense_043.sql`
 9. `gold_rules_038_041.sql`
 
-`segments_same_basis_053.sql` stands apart: it replaces only `gold.refresh_segment_financials`, which no
-other file touches, so it runs at any point, once.
+Two stand apart, each replacing functions no other file touches, so each runs at any point, once:
+`segments_same_basis_053.sql` (`gold.refresh_segment_financials`) and `insider_queue_059.sql`
+(`silver.xml_date`, `silver.refresh_insider_filings`; it also refuses while `ops.document_outbox` still
+owes an event).
 
 Each file starts with a guard that refuses, changing nothing, unless the database is exactly where that
 file belongs: every function any file above replaces or drops must have the body (md5 of its source)

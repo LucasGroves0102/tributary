@@ -65,6 +65,10 @@ RESTORES = {
     },
     "segments_same_basis_053.sql": {
         "gold.refresh_segment_financials(text[])": "018_segments.sql"},
+    "insider_queue_059.sql": {
+        "silver.xml_date(text)": "054_insider_transactions.sql",
+        "silver.refresh_insider_filings(text[])": "054_insider_transactions.sql",
+    },
 }
 
 
