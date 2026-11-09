@@ -104,7 +104,13 @@ it("draws segments and geography over time, the growth decomposition and revenue
   // quality: receivables 25 vs 13 a year earlier (+92%) while revenue grew 43%: flagged
   const quality = container.querySelector("table.quality")!;
   expect(quality.querySelector("tr.flagged td")?.textContent).toBe("FY2027 Q2");
-  expect(container.textContent).toContain("Receivables grew more than 10 points faster than revenue in 1 of the last 6 quarters");
+  expect(container.textContent).toContain("Receivables grew more than 10 points faster than the quarter's revenue in 1 of the last 6 quarters");
+  // H3: receivables are read against the quarter's revenue, not a TTM
+  const fins = asked.filter((u) => u.pathname.endsWith("/financials"));
+  const withReceivables = fins.filter((u) => u.searchParams.getAll("metrics").includes("receivables"));
+  expect(withReceivables.map((u) => u.searchParams.get("view"))).toEqual(["quarter"]);
+  expect(withReceivables[0]!.searchParams.getAll("metrics")).toEqual(["revenue", "receivables"]);
+  expect(quality.querySelector("thead")?.textContent).toContain("Revenue (quarter)");
 });
 
 it("saves a chart to a workspace as a chart item, and opens one in the chart builder", async () => {

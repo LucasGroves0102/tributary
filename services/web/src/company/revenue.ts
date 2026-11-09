@@ -29,11 +29,16 @@
  * it. A period where the rest still change by more than revenue did has no contributions at all
  * (`blocked`), in the table and the chart: they overlap or changed basis, and it says so.
  *
- * Revenue quality: DSO = receivables at the quarter end / TTM revenue × 365. Flagged when
- * receivables grew more than QUALITY_FLAG_POINTS (10) percentage points faster than TTM revenue
- * over the same four quarters (receivables YoY − TTM revenue YoY > 10 pts): sales booked faster
- * than cash comes in, or customers paying later. A flag is a prompt to read the filing (MD&A,
- * the receivables note), not a verdict. */
+ * Revenue quality, like with like (H3): receivables at a quarter end are what that quarter's sales
+ * left unpaid, so they're read against that quarter's revenue, never a trailing twelve months (a
+ * company growing fast through the year has TTM growth well below its latest quarter's: Vertiv's
+ * receivables +55.8% against TTM revenue +35.3% looked alarming, against the quarter's +61.2% they
+ * aren't). DSO = receivables at the quarter end / the quarter's revenue × the quarter's days.
+ * Flagged when receivables grew more than QUALITY_FLAG_POINTS (10) percentage points faster than
+ * the same quarter's revenue a year earlier (receivables YoY − quarter revenue YoY > 10 pts), which
+ * is DSO rising by more than about a tenth: sales booked faster than cash comes in, or customers
+ * paying later. Same quarters a year apart, so seasons cancel (Deckers' December quarter). A flag
+ * is a prompt to read the filing (MD&A, the receivables note), not a verdict. */
 
 import type { ChartState, Layer } from "../chart/model";
 import { contributionPlan, SEGMENT_AXES, separateMembers, type SegmentAxisKind } from "../chart/segments";
@@ -320,25 +325,37 @@ export function decompositionChart(t: AxisTable, companyId: string, ticker: stri
 export interface QualityRow {
   label: string;
   end: string;
+  /** the quarter's revenue (not a TTM) */
   revenue: number;
   receivables: number;
+  /** receivables / the quarter's revenue × the quarter's days */
   dso: number;
   receivablesGrowth: number | null;
+  /** the quarter's revenue against the same quarter a year earlier */
   revenueGrowth: number | null;
   /** receivables growth − revenue growth, in points */
   gap: number | null;
   flagged: boolean;
 }
 
-/** Revenue quality per quarter (the latest `n`), from /financials TTM rows: revenue (TTM) and
- * receivables (quarter end). */
+const DAY_MS = 86_400_000;
+/** a quarter's length in days from its own dates (Costco's 16-week Q4 is 112), else a year's quarter */
+function quarterDays(r: FinancialRow | undefined): number {
+  const days = r?.period_start ? Math.round((Date.parse(r.period_end) - Date.parse(r.period_start)) / DAY_MS) + 1 : NaN;
+  return days >= 80 && days <= 120 ? days : 365 / 4;
+}
+
+/** Revenue quality per quarter (the latest `n`), from /financials QUARTER rows: the quarter's revenue
+ * and receivables at its end, each against the same quarter a year earlier (rules in the header). */
 export function revenueQuality(rows: FinancialRow[], n = PERIODS): QualityRow[] {
   const rev = totalsByKey(rows, "revenue");
   const ar = totalsByKey(rows, "receivables");
   const label = new Map<number, { label: string; end: string }>();
+  const revenueRow = new Map<number, FinancialRow>();
   for (const r of rows) {
     const k = periodKey(r.fiscal_period);
     if (k !== null && r.metric === "receivables") label.set(k, { label: r.fiscal_period!, end: r.period_end });
+    if (k !== null && r.metric === "revenue") revenueRow.set(k, r);
   }
   const keys = [...ar.keys()].filter((k) => rev.has(k) && (rev.get(k) ?? 0) > 0).sort((a, b) => a - b).slice(-n);
   return keys.map((k) => {
@@ -354,7 +371,7 @@ export function revenueQuality(rows: FinancialRow[], n = PERIODS): QualityRow[] 
       end: label.get(k)!.end,
       revenue: R,
       receivables: A,
-      dso: (A / R) * 365,
+      dso: (A / R) * quarterDays(revenueRow.get(k)),
       receivablesGrowth,
       revenueGrowth,
       gap,
@@ -363,13 +380,14 @@ export function revenueQuality(rows: FinancialRow[], n = PERIODS): QualityRow[] 
   });
 }
 
-/** Receivables vs revenue growth as a chart: both YoY lines from the formula API (receivables
- * at quarter ends, revenue TTM), the flag rule's two sides. */
+/** Receivables vs revenue growth as a chart, the flag rule's two sides: receivables at each quarter
+ * end and that quarter's revenue, each against the same quarter a year earlier (formula API, quarter
+ * view). */
 export function qualityChart(companyId: string, ticker: string): ChartState {
   return {
     title: `${ticker}: receivables vs revenue growth (YoY)`,
     layers: [
-      { id: 1, kind: "metric", companyId, metric: "revenue", transform: "yoy", type: "line", axis: "L", name: "Revenue growth (TTM YoY)", color: 0 },
+      { id: 1, kind: "formula", formula: "revenue / revenue[-4q] - 1", defaultCompany: companyId, transform: "q", type: "line", axis: "L", name: "Revenue growth (quarter YoY)", color: 0 },
       { id: 2, kind: "formula", formula: "receivables / receivables[-4q] - 1", defaultCompany: companyId, transform: "q", type: "line", axis: "L", name: "Receivables growth (YoY)", color: 2 },
     ],
     range: 3,

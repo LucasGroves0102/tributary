@@ -54,9 +54,11 @@ export function Revenue({ token, companyId, name, ticker, saved, onOpenChart }: 
   const ttm = useLoad(`${companyId}|ttm`, () =>
     Promise.all([
       segmentsOf(token, companyId, { metric: "revenue", quarters: QUARTERS, view: "ttm", basis: "fiscal" }),
-      financialsView(token, companyId, QUARTERS, ["revenue", "receivables"], "ttm"),
+      financialsView(token, companyId, QUARTERS, ["revenue"], "ttm"),
     ]),
   );
+  // revenue quality reads quarters, receivables against the quarter's own revenue (H3)
+  const quality = useLoad(`${companyId}|quality`, () => financialsView(token, companyId, QUARTERS, ["revenue", "receivables"], "quarter"));
   const quarter = useLoad(view === "quarter" ? `${companyId}|quarter` : null, () =>
     Promise.all([
       segmentsOf(token, companyId, { metric: "revenue", quarters: PERIODS, view: "quarter", basis: "fiscal" }),
@@ -90,13 +92,11 @@ export function Revenue({ token, companyId, name, ticker, saved, onOpenChart }: 
       <Gate load={ttm} name={name} what="Financials">
         {() => {
           const [seg, fin] = (ttm as { state: "ok"; data: [{ rows: SegmentRow[] }, { rows: FinancialRow[] }] }).data;
-          return (
-            <>
-              <Decomposition rows={seg.rows} totals={totalsByKey(fin.rows, "revenue")} {...{ companyId, ticker, name, saved, onOpenChart, token, label }} />
-              <Quality rows={fin.rows} {...{ companyId, ticker, name, saved, onOpenChart, token, label }} />
-            </>
-          );
+          return <Decomposition rows={seg.rows} totals={totalsByKey(fin.rows, "revenue")} {...{ companyId, ticker, name, saved, onOpenChart, token, label }} />;
         }}
+      </Gate>
+      <Gate load={quality} name={name} what="Financials">
+        {() => <Quality rows={(quality as { state: "ok"; data: { rows: FinancialRow[] } }).data.rows} {...{ companyId, ticker, name, saved, onOpenChart, token, label }} />}
       </Gate>
     </>
   );
@@ -292,7 +292,7 @@ function Quality({ rows, ...c }: Common & { rows: FinancialRow[] }) {
     <section className="card">
       <div className="card-h">
         <h2>Revenue quality: receivables vs revenue</h2>
-        <span className="sub">receivables at quarter ends · revenue TTM</span>
+        <span className="sub">receivables at each quarter end · that quarter's revenue · each against the same quarter a year earlier</span>
       </div>
       {!q.length ? (
         <p className="empty">No receivables reported for {c.name} in these periods (common for banks, insurers and some retailers).</p>
@@ -302,7 +302,7 @@ function Quality({ rows, ...c }: Common & { rows: FinancialRow[] }) {
           <ChartActions chart={chart} saved={c.saved} onOpenChart={c.onOpenChart} label={c.label} />
           {flagged > 0 && (
             <p className="badge warn" role="status">
-              ⚠ Receivables grew more than {QUALITY_FLAG_POINTS} points faster than revenue in {flagged} of the last {q.length} quarters
+              ⚠ Receivables grew more than {QUALITY_FLAG_POINTS} points faster than the quarter's revenue in {flagged} of the last {q.length} quarters
             </p>
           )}
           <TableScroll label="Revenue quality">
@@ -310,7 +310,7 @@ function Quality({ rows, ...c }: Common & { rows: FinancialRow[] }) {
               <thead>
                 <tr>
                   <th className="first">Quarter</th>
-                  <th className="n">Revenue (TTM)</th>
+                  <th className="n">Revenue (quarter)</th>
                   <th className="n">Receivables</th>
                   <th className="n">DSO (days)</th>
                   <th className="n">Revenue YoY</th>
@@ -327,7 +327,7 @@ function Quality({ rows, ...c }: Common & { rows: FinancialRow[] }) {
                     <td className="n">{r.dso.toFixed(0)}</td>
                     <td className="n">{r.revenueGrowth === null ? NO_DATA : change(r.revenueGrowth)}</td>
                     <td className="n">{r.receivablesGrowth === null ? NO_DATA : change(r.receivablesGrowth)}</td>
-                    <td className={r.flagged ? "n flag" : "n"} title={r.flagged ? `More than ${QUALITY_FLAG_POINTS} points faster than revenue` : undefined}>
+                    <td className={r.flagged ? "n flag" : "n"} title={r.flagged ? `More than ${QUALITY_FLAG_POINTS} points faster than the quarter's revenue` : undefined}>
                       {r.gap === null ? NO_DATA : `${points(r.gap)}${r.flagged ? " ⚠" : ""}`}
                     </td>
                   </tr>
@@ -336,10 +336,13 @@ function Quality({ rows, ...c }: Common & { rows: FinancialRow[] }) {
             </table>
           </TableScroll>
           <div className="foot">
-            DSO = receivables at the quarter end / TTM revenue × 365. A quarter is flagged when receivables grew more than
-            {" "}{QUALITY_FLAG_POINTS} percentage points faster than TTM revenue over the same four quarters: sales booked faster
-            than cash comes in, or customers paying later. A flag is a reason to read the 10-Q's MD&A and receivables note,
-            not a verdict.
+            Like with like: receivables at a quarter end are what that quarter's sales left unpaid, so they're compared with
+            that quarter's revenue, not a trailing twelve months (which lags a fast-growing company's latest quarter).
+            DSO = receivables at the quarter end / the quarter's revenue × its days. A quarter is flagged when receivables grew
+            more than {QUALITY_FLAG_POINTS} percentage points faster than the same quarter's revenue a year earlier, roughly
+            DSO up by a tenth: sales booked faster than cash comes in, or customers paying later. Comparing a quarter with the
+            same quarter a year earlier keeps seasons out of it. A flag is a reason to read the 10-Q's MD&A and receivables
+            note, not a verdict.
           </div>
         </>
       )}

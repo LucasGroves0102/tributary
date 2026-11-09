@@ -529,11 +529,16 @@ Values need financials access, like Statements.
   or the company changed the basis between the two years, as NVIDIA did with its geography) shows no
   contributions, in the table or the chart, and says which: a stack never overshoots the total.
   This is in `contrib` itself, so saved charts get it too.
-- **Revenue quality**: per quarter, TTM revenue, quarter-end receivables, DSO (receivables / TTM
-  revenue × 365), both YoY rates and their gap. A quarter is **flagged when receivables grew more
-  than 10 percentage points faster than TTM revenue** over the same four quarters (`QUALITY_FLAG_
-  POINTS`); the chart is two formula-API lines (`revenue` YoY over TTM, `receivables /
-  receivables[-4q] - 1`).
+- **Revenue quality**, like with like: per quarter, the quarter's revenue (`/financials`
+  view=quarter, never a TTM), quarter-end receivables, DSO (receivables / the quarter's revenue ×
+  the quarter's days), both YoY rates (each against the same quarter a year earlier) and their gap.
+  A quarter is **flagged when receivables grew more than 10 percentage points faster than the same
+  quarter's revenue** (`QUALITY_FLAG_POINTS`). Receivables at a quarter end are what that quarter's
+  sales left unpaid; a TTM lags a fast grower's latest quarter, which flagged Vertiv's receivables
+  (+55.8%) against TTM revenue (+35.3%) when the quarter's revenue grew +61.2% (H3). Deckers' September
+  2026 quarter still flags (+25.3% against +3.5%). The chart is the two sides as formula-API lines,
+  quarter view (`revenue / revenue[-4q] - 1`, `receivables / receivables[-4q] - 1`); the Analysis
+  Numbers step draws the same chart.
 
 Segment layers (`chart/segments.ts`, `chart/fetch.ts`): the Revenue view's segment charts are
 chart builder layers of kind `segment` (company, segment metric, axis, 1-20 members), read from

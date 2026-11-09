@@ -144,7 +144,7 @@ describe("revenueQuality", () => {
   it("DSO, both growth rates and the gap; flagged when receivables outgrow revenue by > 10 pts", () => {
     const q = revenueQuality(rows);
     expect(q.map((r) => r.label)).toEqual(Q.map(([f]) => f));
-    expect(q[0]!.dso).toBeCloseTo(36.5);
+    expect(q[0]!.dso).toBeCloseTo(9.125); // 10 / 100 × a quarter's 91.25 days (no dates on the row)
     expect(q[0]!.gap).toBeNull(); // no year-ago quarter
     const [q1, q2] = q.slice(-2);
     expect(q1!.gap).toBeCloseTo(0); // +10% and +10%
@@ -164,10 +164,36 @@ describe("revenueQuality", () => {
     expect(revenueQuality(rows.filter((r) => r.metric === "revenue"))).toEqual([]);
   });
 
-  it("its chart is two formula-API lines: TTM revenue YoY and receivables YoY", () => {
+  it("its chart is the rule's two sides: the quarter's revenue YoY and receivables YoY, both quarter view", () => {
     const c = qualityChart(NVDA, "NVDA");
     expect(c.layers.map((l) => [l.kind, l.metric ?? l.formula, l.transform])).toEqual([
-      ["metric", "revenue", "yoy"], ["formula", "receivables / receivables[-4q] - 1", "q"],
+      ["formula", "revenue / revenue[-4q] - 1", "q"], ["formula", "receivables / receivables[-4q] - 1", "q"],
     ]);
+  });
+
+  // production quarters, 2026-11-08 (/financials view=quarter), in millions
+  const quarters = (rev: number[], ar: number[], periods: [string, string, string][]) => [
+    ...rev.map((v, i) => fin("revenue", periods[i]![2], String(v * 1e6), periods[i]![0], { period_start: periods[i]![1] })),
+    ...ar.map((v, i) => fin("receivables", periods[i]![2], String(v * 1e6), periods[i]![0])),
+  ];
+
+  it("H3: Vertiv's receivables +55.8% against the quarter's revenue +61.2% isn't a flag (TTM's +35.3% made one)", () => {
+    const VRT: [string, string, string][] = [["FY2025 Q3", "2025-07-01", "2025-09-30"], ["FY2025 Q4", "2025-10-01", "2025-12-31"],
+      ["FY2026 Q1", "2026-01-01", "2026-03-31"], ["FY2026 Q2", "2026-04-01", "2026-06-30"], ["FY2026 Q3", "2026-07-01", "2026-09-30"]];
+    const latest = revenueQuality(quarters([2675.8, 2880.0, 2649.5, 3274.3, 4312.8], [2810.7, 3109.0, 3148.7, 3750.3, 4379.7], VRT)).at(-1)!;
+    expect(latest.receivablesGrowth).toBeCloseTo(0.558, 3);
+    expect(latest.revenueGrowth).toBeCloseTo(0.612, 3);
+    expect(latest.flagged).toBe(false);
+    expect(latest.dso).toBeCloseTo((4379.7 / 4312.8) * 92, 3); // July to September: 92 days
+  });
+
+  it("H3: Deckers' September quarter still flags: receivables +25.3% against the quarter's revenue +3.5%", () => {
+    const DECK: [string, string, string][] = [["FY2026 Q2", "2025-07-01", "2025-09-30"], ["FY2026 Q3", "2025-10-01", "2025-12-31"],
+      ["FY2026 Q4", "2026-01-01", "2026-03-31"], ["FY2027 Q1", "2026-04-01", "2026-06-30"], ["FY2027 Q2", "2026-07-01", "2026-09-30"]];
+    const q = revenueQuality(quarters([1430.84, 1957.549, 1119.369, 1019.531, 1480.554], [538.764, 344.325, 318.978, 378.348, 675.153], DECK));
+    const latest = q.at(-1)!;
+    expect(latest.receivablesGrowth).toBeCloseTo(0.253, 3);
+    expect(latest.revenueGrowth).toBeCloseTo(0.035, 3);
+    expect(latest.flagged).toBe(true);
   });
 });
