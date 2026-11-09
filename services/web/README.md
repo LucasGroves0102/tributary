@@ -591,8 +591,8 @@ Earnings, the reader and EDGAR; opening the list marks what it shows read. Setti
 (`AlertSettings.tsx`): 10-K / 10-Q / 8-K per followed company, saved at once; webhooks (the URL
 typed once and cleared, shown masked; the API's refusal sentence for anything but https to a
 public address; the signing secret shown once with Copy, kept only in the component's state;
-Send a test, New secret, Remove, on/off) and the delivery log in words ("Retrying: it answered
-500; tried 2 times"); email says it isn't set up. `alerts/alerts.ts` only words what the API
+Send a test, New secret, Remove, on/off; a demo sandbox is told webhooks need a permanent account)
+and the delivery log in words ("Retrying: it answered 500; tried 2 times"); email says it isn't set up. `alerts/alerts.ts` only words what the API
 decided.
 
 Customizable views (`src/views/`, Query API `/v1/views`): Home's "Customize" shows, hides and

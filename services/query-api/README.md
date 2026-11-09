@@ -83,7 +83,7 @@ request parameters. Dev tokens: `make token USER=alice`.
 | `POST /v1/alerts/red-lines` | token, app DB | `{company_id, label, formula, view, op, threshold}`: a formula-language rule (no ticker), checked like a chart formula; at most 10 per company |
 | `DELETE /v1/alerts/red-lines/{rule}` | token, app DB | the caller's own; another's is the same 404 as none |
 | `GET /v1/alerts/webhooks` | token, app DB | the caller's webhooks: masked URL, format, on/off, last delivery |
-| `POST /v1/alerts/webhooks` | token, app DB | `{"url", "format"?}` parsed by hand (a 422 never echoes the URL): https to a public address only (checked after DNS); answers the signing secret once; at most 3 |
+| `POST /v1/alerts/webhooks` | token (not a demo sandbox: 403), app DB | `{"url", "format"?}` parsed by hand (a 422 never echoes the URL): https to a public address only (checked after DNS); answers the signing secret once; at most 3 |
 | `PATCH /v1/alerts/webhooks/{id}` | token, app DB | `{"enabled": bool}` |
 | `POST /v1/alerts/webhooks/{id}/rotate` | token, app DB | a new signing secret, shown once |
 | `DELETE /v1/alerts/webhooks/{id}` | token, app DB | the webhook and its delivery log |
@@ -939,8 +939,13 @@ migration 016 (owner-only, forced RLS, not streamed).
   `timestamp.body` with the webhook's secret, which is derived from the JWT secret, the webhook id
   and a random salt (never stored, shown once on create or rotate, never logged; rotating the JWT
   secret changes them all). The URL is stored (forced RLS) and returned masked. Delivery log with
-  retries after 5 min, 30 min, 2 h and 6 h, then failed; errors are codes. The Helm network policy
-  (443 to public addresses only) is a second layer under these checks.
+  retries after 5 min, 30 min, 2 h and 6 h, then failed; errors are codes. The job sends after
+  every user's alerts are made, users in a random order, 10 deliveries per user per run, a webhook
+  that times out or can't be reached skipped for the rest of the run, nothing started after 240 s:
+  a slow or hostile endpoint delays only its owner. Webhooks need a permanent account (GitHub or a
+  password account): an anonymous demo sandbox gets a 403, so a visitor can't make the server post
+  to a URL of their choosing. The Helm network policy (443 to public addresses only) is a second
+  layer under these checks.
 - **Email** (`alert_email.py`): a provider interface, off. `ALERT_SMTP_HOST` + `ALERT_SMTP_FROM`
   (any SMTP relay, TLS) turn a provider on in the job, but a user also needs an address they
   proved they own and none is stored yet, so nothing is sent; the settings say email isn't set up.
