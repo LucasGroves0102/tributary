@@ -7,7 +7,7 @@ import { parseSearch, searchQuery, type SearchState } from "./search/state";
 import type { ProjectStep } from "./types";
 
 /** An analysis project's guided steps, in order (analysis/project.ts STEPS has their labels). */
-export const PROJECT_STEPS: readonly ProjectStep[] = ["business", "numbers", "changes", "peers", "model", "thesis", "monitor"];
+export const PROJECT_STEPS: readonly ProjectStep[] = ["business", "numbers", "earnings", "changes", "peers", "model", "thesis", "monitor"];
 const STEP_SET = new Set<string>(PROJECT_STEPS);
 /** steps whose saved item can be named in the route (#/analysis/{id}/model/{item}) */
 const ITEM_STEPS = new Set<string>(["model", "thesis"]);
@@ -15,6 +15,7 @@ const ITEM_STEPS = new Set<string>(["model", "thesis"]);
 /** The company page's tabs, in order, with their labels. */
 export const COMPANY_TABS = [
   ["overview", "Overview"],
+  ["earnings", "Earnings"],
   ["statements", "Statements"],
   ["revenue", "Revenue"],
   ["segments", "Segments"],

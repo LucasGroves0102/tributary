@@ -7,6 +7,8 @@ import type {
   Calendar,
   DataNotes,
   DataStatus,
+  EarningsResponse,
+  EventsResponse,
   ExpectedFilings,
   Filing,
   FilingIndex,
@@ -222,8 +224,21 @@ export const createWorkspace = (token: string, name: string, project?: ProjectSt
   sendJson<SavedWorkspace>(token, "POST", "/v1/workspaces", project ? { name, project } : { name });
 
 /** Saves an analysis project's state over (the Query API refuses it for a plain workspace). */
-export const updateProject = (token: string, id: string, project: ProjectState) =>
-  sendJson<SavedWorkspace>(token, "PATCH", `/v1/workspaces/${enc(id)}`, { project });
+/** Steps a Query API one release older refuses in `done` (its step list is strict). */
+const NEWER_STEPS: readonly string[] = ["earnings"];
+
+/** Saves a project; refused by an older Query API for a step it doesn't know yet (a deploy rolls the
+ * web app before it), saves it again without that tick, so the rest is kept. */
+export const updateProject = async (token: string, id: string, project: ProjectState) => {
+  const save = (p: ProjectState) => sendJson<SavedWorkspace>(token, "PATCH", `/v1/workspaces/${enc(id)}`, { project: p });
+  try {
+    return await save(project);
+  } catch (e) {
+    const older = project.done.filter((s) => !NEWER_STEPS.includes(s));
+    if (!(e instanceof ApiError && e.status === 422) || older.length === project.done.length) throw e;
+    return save({ ...project, done: older });
+  }
+};
 
 export const renameWorkspace = (token: string, id: string, name: string) =>
   sendJson<SavedWorkspace>(token, "PATCH", `/v1/workspaces/${enc(id)}`, { name });
@@ -494,6 +509,22 @@ export const peers = (token: string, companyId: string, columns: string[], limit
 /** A 10-Q/10-K's metrics vs the prior quarter and the year-ago quarter. */
 export const recap = (token: string, accessionNo: string) =>
   get<Recap>(token, `/v1/filings/${accessionNo}/recap`);
+
+/** null from a Query API one release older (no such route yet: the deploy window), else the answer. */
+function orNullOn404<T>(p: Promise<T>): Promise<T | null> {
+  return p.catch((e) => {
+    if (e instanceof ApiError && e.status === 404) return null;
+    throw e;
+  });
+}
+
+/** 8-Ks since the latest 10-Q/10-K period end, and the figures they may have made stale. */
+export const companyEvents = (token: string, companyId: string) =>
+  orNullOn404(get<EventsResponse>(token, `/v1/companies/${companyId}/events`));
+
+/** Each quarter's earnings release (8-K Item 2.02), its outlook and adjustments, newest first. */
+export const earnings = (token: string, companyId: string, quarters = 4) =>
+  orNullOn404(get<EarningsResponse>(token, `/v1/companies/${companyId}/earnings`, { quarters }));
 
 export const segments = (token: string, companyId: string, quarters = 8) =>
   get<{ as_of: string; rows: SegmentRow[] }>(token, `/v1/companies/${companyId}/segments`, { quarters });

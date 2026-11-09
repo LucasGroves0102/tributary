@@ -413,7 +413,7 @@ export interface SavedWorkspace {
 }
 
 /** The guided steps of an analysis project, in order (query_api.workspaces STEPS). */
-export type ProjectStep = "business" | "numbers" | "changes" | "peers" | "model" | "thesis" | "monitor";
+export type ProjectStep = "business" | "numbers" | "earnings" | "changes" | "peers" | "model" | "thesis" | "monitor";
 
 /** workspaces.project (query_api.workspaces ProjectState): the company the project studies,
  * its peers, the user's "How it makes money" notes and the steps they marked done. */
@@ -1193,4 +1193,110 @@ export interface Valuation extends PriceMeta {
   enterprise_value: { value: string; net_debt_period_end: string } | null;
   multiples: Partial<Record<"pe" | "ps" | "ev_ebit", ValuationMultiple>>;
   note: string | null;
+}
+
+// --- earnings and events (query_api/events.py, /v1/companies/{id}/events and /earnings) -------
+
+/** An 8-K item with the SEC's title and a kind ("deal", "debt", "earnings", "leadership", ...). */
+export interface EventItem {
+  item: string;
+  title: string;
+  kind: string;
+}
+
+/** Where a quoted 8-K passage sits: offsets into the section's document text when there is one. */
+export interface EventCitation {
+  accession_no: string;
+  form: string;
+  filed: string;
+  filing_url: string | null;
+  section_key?: string;
+  document_url?: string | null;
+  char_start?: number;
+  char_end?: number;
+}
+
+export interface FilingEvent {
+  accession_no: string;
+  form: string;
+  filed: string;
+  accepted_at: string | null;
+  /** the 8-K's date of report: the earliest event it reports */
+  event_date: string;
+  items: EventItem[];
+  /** the SEC filing index, or the item headings the parser found (a filing too new for it) */
+  items_from: "index" | "parsed" | null;
+  /** false when every item is routine (a shareholder vote, nominations, exhibits alone) */
+  material: boolean;
+  amendment: boolean;
+  /** metrics at the report's period end this event may have changed ("*": every figure) */
+  affects: string[];
+  sections_available: boolean;
+  excerpt: { item: string; text: string; citation: EventCitation } | null;
+  release: { section_key: string; title: string | null } | null;
+  filing_url: string | null;
+  document_url: string | null;
+}
+
+export interface StaleFigure {
+  metric: string;
+  as_of: string | null;
+  /** accession numbers of the events after `as_of` that may have changed it */
+  events: string[];
+}
+
+export interface EventsResponse {
+  company_id: string;
+  as_of: string;
+  latest_report: { accession_no: string; form: string; filed: string; period_end: string } | null;
+  since: string;
+  /** since_report: after the latest 10-K/10-Q period end; recent: the last 400 days */
+  window: "since_report" | "recent";
+  events: FilingEvent[];
+  more: boolean;
+  stale: StaleFigure[];
+  method: string;
+}
+
+/** A passage of an earnings release, quoted as the parser wrote its lines. */
+export interface ReleasePassage {
+  kind: "headline" | "outlook" | "reconciliation" | "note";
+  heading: string | null;
+  text: string;
+  char_start: number;
+  char_end: number;
+  truncated: boolean;
+  citation: EventCitation;
+}
+
+export interface EarningsRelease {
+  accession_no: string;
+  form: string;
+  filed: string;
+  accepted_at: string | null;
+  items: EventItem[];
+  section_key: string | null;
+  title: string | null;
+  total_chars: number | null;
+  document_url: string | null;
+  filing_url: string | null;
+}
+
+export interface EarningsQuarter {
+  period_end: string;
+  /** no 10-Q/10-K covers it yet: the quarter end is the expected one */
+  estimated: boolean;
+  report: { accession_no: string; form: string; filed: string } | null;
+  release: EarningsRelease | null;
+  headline: ReleasePassage | null;
+  outlook: ReleasePassage[];
+  adjustments: ReleasePassage[];
+  other_releases: { accession_no: string; filed: string; filing_url: string | null }[];
+}
+
+export interface EarningsResponse {
+  company_id: string;
+  as_of: string;
+  quarters: EarningsQuarter[];
+  method: string;
 }

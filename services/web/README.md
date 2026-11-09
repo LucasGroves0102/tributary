@@ -151,6 +151,41 @@ outline's legend says what its numbers are; only one kind shows at a time. The p
 filing of the same form (10-K, 10-Q, 8-K) open at the same section with the same search; one that
 isn't parsed links to EDGAR.
 
+Earnings and events (F1; `company/Earnings.tsx`, `company/Events.tsx`, wording in `company/events.ts`'s
+docstring; the Query API's `/earnings` and `/events`, rules in its README, "Earnings and events"):
+- **Earnings tab** (company page, after Overview; also the Analysis flow's Earnings step): a quarter
+  picker (quarters by their end date, the newest with a release first; "expected" until the 10-Q/10-K
+  covering it is filed), then the **earnings release** (8-K Item 2.02: its headline quoted, the 8-K's
+  items, Read the release in the reader, EDGAR), beside the quarter's **reported figures** from its
+  10-Q/10-K (the recap route: revenue, operating and net income, EPS, free cash flow, the three
+  margins, against the same quarter a year ago, n/m readings from the API; "not filed yet" or "not
+  in the figures yet" when that's the case); the **outlook stated in the release** (the blocks under
+  its own Outlook or Guidance headings, lines as written, each with Read it in the release at its
+  offset); **management's adjustments** (its reconciliation tables, folded, in monospace, and its
+  notes that state a dollar amount). Each says when the release has none ("no section headed Outlook
+  or Guidance ... read the release to be sure"). No beat or miss: Tributary has no estimates, and the
+  page says so. Pins: an outlook block or a note as `quoteLines` (its lines kept), a table as
+  `quoteTable` (a code block in the quote), each citing "8-K for the quarter ended …".
+- **Since the last report** (company Overview, below Key stats; the What changed step's first card):
+  the 8-Ks filed after the latest 10-Q/10-K period end, newest first: date, form, the items in the
+  reader's short labels (`EIGHT_K_ITEMS`; exhibits left out), "may change cash, debt, ..." on an
+  event the API says affects a balance, the 8-K's own opening words quoted (pinnable in a project),
+  Read the 8-K at that passage, Read the press release, EDGAR; one not stored here says so and links
+  EDGAR. Routine filings (votes, nominations, exhibits alone) fold under one line. Above them, the
+  figures as of the period end a later event may have changed, each with its event, and "no pro
+  forma": Tributary doesn't compute a figure after the event. The same flags sit on the Overview's
+  key stats (Cash, Net debt, Debt / equity; every stat for non-reliance or bankruptcy) when the
+  figure is as of that period end or earlier: "⚑ before the Oct 27, 2026 8-K (Acquisition or
+  disposition)", the figure itself unchanged. The Overview asks `/events` once for both.
+- An older Query API without the routes (404) reads as "not available here yet", never an error
+  (`api.ts` `orNullOn404`); e2e's mock answers both routes so the clean-console check holds.
+- Verified (2026-11-08) against production's data through a harness: the branch's routes over rows
+  read from hermes, every other read from production: Vertiv's Sep 30 cash, debt, net debt and total
+  assets flagged before the Oct 27 UIG acquisition (tester 1's missed 8-K) with its 8-K quoted;
+  Deckers' FY27 outlook ($7.80 to $7.95 EPS) and the $46.0M IEEPA refund note (tester 2's facts);
+  NVIDIA's Q3 FY27 outlook and its debt 8-K after the Jul 26 quarter end; a pinned guidance table
+  in a thesis citing "8-K for the quarter ended 2026-09-30".
+
 Company page (`pages/Company.tsx`): Statements keeps statement, period, basis and range in the
 address (`#/company/{id}/statements?kind=bs&period=ttm&range=5y`, `company/statementView.ts`, defaults
 left out, so a view can be linked), with a range control for Quarterly and TTM (8 quarters, 5y, 10y,
@@ -377,8 +412,8 @@ per company, from its filings to a thesis that's checked after every filing. Rul
   `access=financials` on the API too), suggested peers from `/peers` (readable ones, the first
   3 ticked), a name; it creates the workspace with its project and opens step 1.
 - **A project** (`#/analysis/{id}[/{step}[/{item}]]`, `ProjectPage.tsx`): a header with the
-  company (public identity), "n of 7 steps done" and tabs for the 7 steps under the rail's names
-  (each tab opens its own step); a rail of the 7 steps with a done marker each. Done means the
+  company (public identity), "n of 8 steps done" and tabs for the 8 steps under the rail's names
+  (each tab opens its own step); a rail of the 8 steps with a done marker each. Done means the
   user ticked it (`project.done`), never automatic and never locked: work in a step (notes, a
   saved chart, peers, a model, the Core thesis written, a check: `hasWork`) shows as a hint under
   the box ("1 chart saved here"). The rail's Monitor says "re-check" when the last check no longer
@@ -392,15 +427,27 @@ per company, from its filings to a thesis that's checked after every filing. Rul
   and YoY growth, gross and operating margin, free cash flow = operating cash flow − capex, ten
   fiscal years annually; the Revenue tab's receivables vs revenue; long-term debt with debt to
   equity), each drawn by `ChartView`, with Open in Chart builder, Save to project and Add to
-  thesis; 3 **What changed**: the filing page's `Changes` for the latest 10-Q and 10-K;
-  4 **Peers**: Compare with the target fixed and the peers saved in the project (`embedded`:
+  thesis; 3 **Earnings**: the company page's Earnings view (below), every outlook block, note and
+  reconciliation pinnable; 4 **What changed**: "Since the last report" (the 8-Ks filed after the
+  latest 10-Q/10-K period end, each excerpt pinnable, the balances they may have changed flagged),
+  then the filing page's `Changes` for the latest 10-Q and 10-K;
+  5 **Peers**: Compare with the target fixed and the peers saved in the project (`embedded`:
   changes come back instead of going to the URL), Save to project / Add to thesis for the comps;
-  5 **Model**: the project's models (ModelPage embedded, bear/base/bull), "Create the model"
-  from the company's history; 6 **Thesis**: ThesisPage embedded (no back link, no company
-  picker); 7 **Monitor**: Check my thesis (disabled while the thesis has unsaved changes or only
+  6 **Model**: the project's models (ModelPage embedded, bear/base/bull), "Create the model"
+  from the company's history; 7 **Thesis**: ThesisPage embedded (no back link, no company
+  picker); 8 **Monitor**: Check my thesis (disabled while the thesis has unsaved changes or only
   template text; checks run when the user asks), where the filings stand (Revisit's new-filing
   notice with a re-check, or which 10-K/10-Q the last check read), and the check panel (a quote
   opens the Thesis step and marks it).
+- **Why Earnings is a step and the 8-Ks sit in What changed** (F1, from the analyst tests: the
+  release and the acquisition after the quarter end were "the most decision-relevant filing
+  content" and came only from a lucky search and the check): the release is management's account
+  of the figures the Numbers step just showed (its outlook, its own adjustments), so it comes right
+  after them as a step of its own, with its own tick, impossible to miss; the 8-Ks filed since the
+  report are what changed after its period end, read beside the report's rewritten paragraphs.
+  Projects saved before F1 keep their ticks: Earnings starts unticked, so such a project opens at
+  it until it's ticked. An older Query API refuses `earnings` in `done`: `updateProject` saves again
+  without that tick (deploy window).
 - **Thesis template**: a project's thesis starts from `thesisTemplate`: `# Company: thesis`, then
   Core thesis, Variant perception, Pillars (with `### Pillar 1`), Catalysts (prefilled with the
   next expected 10-Q/10-K dates, `/expected-filings?periods=4`, labelled estimated), Risks and
@@ -414,7 +461,8 @@ per company, from its filings to a thesis that's checked after every filing. Rul
   others; a missing section is added); a filing passage (Item 1, a what-changed paragraph; removed ones
   quote the earlier filing) goes in as a blockquote, escaped so it renders as written, with a
   citation line: form, the period it reports on ("10-Q for the quarter ended 2026-09-30", so
-  six-month wording reads in its filing), filed date, section, and the accession linked to EDGAR
+  six-month wording reads in its filing; a release's passage "8-K for the quarter ended 2026-09-30",
+  the quarter the release reports), filed date, section, and the accession linked to EDGAR
   (`edgarFilingUrl`, built only from the company id and accession number the API returned). The
   project's thesis editor stays mounted and registers a handle (`bridge.ts`), so a pin lands in
   the text being edited: saved at once when there were no unsaved changes, else left as an

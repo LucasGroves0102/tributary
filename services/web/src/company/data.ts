@@ -64,6 +64,10 @@ export function listingLine(tickers: string[], exchanges: string[]): { text: str
 }
 
 export interface KeyStat {
+  /** the screener column (KEY_STATS) */
+  key: string;
+  /** the period the figure is as of (its source's period end), when it has one */
+  periodEnd: string | null;
   label: string;
   text: string;
   /** the period the value covers, e.g. "TTM to Jul 26, 2026" */
@@ -106,7 +110,7 @@ export function keyStats(row: ScreenerRow): KeyStat[] {
           : f.old
             ? `old · ${periodText(key, src)}`
             : periodText(key, src);
-    return { label, text: f.text, period, title: f.title, old: f.old };
+    return { key, periodEnd: src?.period_end ?? null, label, text: f.text, period, title: f.title, old: f.old };
   });
 }
 
@@ -524,9 +528,10 @@ function src(v: RecapValue | null): string {
 }
 
 /** Quarter values (TTM ones are for ratios the quarter lacks) vs the prior and year-ago
- * quarter; column labels from the values' fiscal periods. */
-export function recapRows(recap: Recap): { labels: [string, string, string]; rows: RecapRow[] } {
-  const quarter = recap.metrics.filter((m) => m.span === "quarter" && RECAP_LABELS[m.metric]);
+ * quarter; column labels from the values' fiscal periods. `only`: these metrics, in RECAP_LABELS
+ * order (the Earnings view's income-statement lines). */
+export function recapRows(recap: Recap, only?: readonly string[]): { labels: [string, string, string]; rows: RecapRow[] } {
+  const quarter = recap.metrics.filter((m) => m.span === "quarter" && RECAP_LABELS[m.metric] && (!only || only.includes(m.metric)));
   const first = quarter.find((m) => m.prior_quarter && m.year_ago) ?? quarter[0];
   const lab = (v: RecapValue | null | undefined, fallback: string) => v?.fiscal_period ?? (v ? calendarLabel(v.period_end) : fallback);
   const labels: [string, string, string] = [

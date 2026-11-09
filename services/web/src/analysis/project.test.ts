@@ -20,6 +20,8 @@ import {
   hasWork,
   nextStep,
   quoteBlock,
+  quoteLines,
+  quoteTable,
   quoteText,
   restoreProject,
   sectionText,
@@ -56,10 +58,10 @@ describe("projects", () => {
     const f: Facts = { charts: 1, models: 1, thesisWritten: true, checks: 2 };
     const notes = { ...P, notes: "Sells GPUs" };
     // peers suggested at creation, a chart, a model, a stub thesis, a check: work, not done
-    expect(STEPS.map((s) => hasWork(s.key, notes, f))).toEqual([true, true, false, true, true, true, true]);
-    expect(STEPS.map((s) => stepDone(s.key, notes))).toEqual([false, false, false, false, false, false, false]);
+    expect(STEPS.map((s) => hasWork(s.key, notes, f))).toEqual([true, true, false, false, true, true, true, true]);
+    expect(STEPS.map((s) => stepDone(s.key, notes))).toEqual([false, false, false, false, false, false, false, false]);
     expect(STEPS.map((s) => workHint(s.key, notes, f))).toEqual([
-      "Notes written", "1 chart saved here", null, "1 peer picked", "1 model here", "Core thesis written", "Checked 2 times"]);
+      "Notes written", "1 chart saved here", null, null, "1 peer picked", "1 model here", "Core thesis written", "Checked 2 times"]);
     const marked = { ...notes, done: ["numbers" as const] };
     expect(stepDone("numbers", marked)).toBe(true);
     expect(workHint("numbers", marked, f)).toBeNull(); // done: no hint
@@ -67,13 +69,20 @@ describe("projects", () => {
 
   it("opens at the first step the user hasn't marked done", () => {
     expect(firstOpenStep({ ...P, notes: "x" })).toBe("business"); // notes alone don't finish it
-    expect(firstOpenStep({ ...P, done: ["business", "numbers"] })).toBe("changes");
+    expect(firstOpenStep({ ...P, done: ["business", "numbers"] })).toBe("earnings");
+    // a project ticked before Earnings existed opens at it: the new step is undone, nothing else moves
+    expect(firstOpenStep({ ...P, done: ["business", "numbers", "changes", "peers"] })).toBe("earnings");
     expect(firstOpenStep({ ...P, done: STEPS.map((s) => s.key) })).toBe("monitor");
   });
 
   it("steps come in order, and Monitor promises only what it does (#154)", () => {
-    expect(STEPS.map((s) => s.label)).toEqual(["Business", "Numbers", "What changed", "Peers", "Model", "Thesis", "Monitor"]);
+    expect(STEPS.map((s) => s.label)).toEqual(["Business", "Numbers", "Earnings", "What changed", "Peers", "Model", "Thesis", "Monitor"]);
     expect(nextStep("business")).toBe("numbers");
+    expect(nextStep("numbers")).toBe("earnings");
+    expect(nextStep("earnings")).toBe("changes");
+    // F1: the release and the 8-Ks since the last report have their places in the flow
+    expect(STEPS.find((s) => s.key === "earnings")!.why).toMatch(/earnings release \(8-K Item 2\.02\)/);
+    expect(STEPS.find((s) => s.key === "changes")!.why).toMatch(/since its last 10-Q or 10-K/);
     expect(nextStep("monitor")).toBeNull();
     const monitor = STEPS.find((s) => s.key === "monitor")!.why;
     expect(monitor).toContain("when you choose");
@@ -234,6 +243,28 @@ describe("quoting a filing", () => {
     expect(at("10-K", "2026-03-31")).toMatch(/^> — 10-K for the fiscal year ended 2026-03-31, filed 2026-10-24,/);
     expect(at("10-Q", null)).toMatch(/^> — 10-Q filed 2026-10-24, Item 2/); // unknown: as before
     expect(at("10-Q", "<b>x</b>")).toMatch(/^> — 10-Q filed 2026-10-24,/); // only a date
+  });
+
+  it("F1: a release's outlook keeps its lines and says the quarter it reports; a table keeps its columns", () => {
+    const release = { companyId: "0001674101", accessionNo: "0001628280-26-067707", form: "8-K", filed: "2026-10-28",
+      period: "2026-09-30", periodWord: "quarter", section: "Earnings release (Exhibit 99.1), outlook: Fourth Quarter 2026 Guidance" };
+    const cite = "> — 8-K for the quarter ended 2026-09-30, filed 2026-10-28, Earnings release (Exhibit 99.1), outlook: Fourth Quarter 2026 Guidance · " +
+      "[0001628280-26-067707](https://www.sec.gov/Archives/edgar/data/1674101/000162828026067707/0001628280-26-067707-index.htm)";
+    const lines = quoteLines({ ...release, text: "Fourth Quarter 2026 Guidance\nNet sales $4,313M - $4,513M\n- 1. not a list\n<b>x</b> *y*" });
+    expect(lines).toBe(`> Fourth Quarter 2026 Guidance  \n> Net sales $4,313M - $4,513M  \n> \\- 1. not a list  \n> \\<b\\>x\\</b\\> \\*y\\*\n>\n${cite}`);
+    const html = renderMarkdown(lines);
+    expect(html).toContain("<blockquote>");
+    expect(html).toContain("Net sales $4,313M - $4,513M<br>");
+    expect(html).not.toContain("<b>x</b>");
+    expect(html).not.toContain("<li>");
+    const table = quoteTable({ ...release, text: "Reconciliation\nNet income $ 9,450 $ 8,788\nTax `effect` (2,581)" });
+    expect(table.split("\n").slice(0, 5)).toEqual(["> ```text", "> Reconciliation", "> Net income $ 9,450 $ 8,788", "> Tax 'effect' (2,581)", "> ```"]);
+    expect(table.endsWith(cite)).toBe(true);
+    expect(renderMarkdown(table)).toContain("<pre><code");
+    // long passages are cut, and say so
+    const many = Array.from({ length: 60 }, (_, i) => `Line ${i}`).join("\n");
+    expect(quoteTable({ ...release, text: many }).split("\n").filter((l) => l === "> …")).toHaveLength(1);
+    expect(quoteLines({ ...release, text: many }).split("  \n")).toHaveLength(41);
   });
 
   it("splits section text into paragraphs, joining short headings to what follows", () => {

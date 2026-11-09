@@ -1,0 +1,98 @@
+{
+ "company_id": "0001045810",
+ "as_of": "2026-11-09T05:37:02.421307+00:00",
+ "quarters": [
+  {
+   "period_end": "2026-07-26",
+   "estimated": false,
+   "report": {
+    "accession_no": "0001045810-26-000075",
+    "form": "10-Q",
+    "filed": "2026-08-26"
+   },
+   "release": {
+    "accession_no": "0001045810-26-000073",
+    "form": "8-K",
+    "filed": "2026-08-26",
+    "accepted_at": "2026-08-27T00:21:19Z",
+    "items": [
+     {
+      "item": "2.02",
+      "title": "Results of Operations and Financial Condition",
+      "kind": "earnings"
+     },
+     {
+      "item": "9.01",
+      "title": "Financial Statements and Exhibits",
+      "kind": "exhibits"
+     }
+    ],
+    "section_key": "EX-99.1",
+    "title": "Exhibit 99.1",
+    "total_chars": 22272,
+    "document_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000073/q2fy27pr.htm",
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000073/"
+   },
+   "headline": {
+    "kind": "headline",
+    "heading": null,
+    "text": "NVIDIA Announces Financial Results for Second Quarter Fiscal 2027",
+    "char_start": 0,
+    "char_end": 65,
+    "truncated": false,
+    "citation": {
+     "accession_no": "0001045810-26-000073",
+     "form": "8-K",
+     "filed": "2026-08-26",
+     "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000073/",
+     "section_key": "EX-99.1",
+     "document_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000073/q2fy27pr.htm",
+     "char_start": 0,
+     "char_end": 65
+    }
+   },
+   "outlook": [
+    {
+     "kind": "outlook",
+     "heading": "Outlook",
+     "text": "Outlook\nNVIDIA’s outlook for the third quarter of fiscal 2027 is as follows:\n•Revenue is expected to be $108.0 billion, plus or minus 2%. NVIDIA is not assuming any Data Center compute revenue from China in its outlook.\n•GAAP and non-GAAP gross margins are expected to be 74.0%, plus or minus 50 basis points.\n•GAAP and non-GAAP operating expenses are expected to be approximately $9.2 billion and $9.0 billion, respectively.\nFor the full year fiscal 2027, NVIDIA expects GAAP and non-GAAP tax rates to be between 16.0% and 18.0%, excluding any discrete items and material changes to NVIDIA’s tax environment.",
+     "char_start": 2349,
+     "char_end": 2958,
+     "truncated": false,
+     "citation": {
+      "accession_no": "0001045810-26-000073",
+      "form": "8-K",
+      "filed": "2026-08-26",
+      "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000073/",
+      "section_key": "EX-99.1",
+      "document_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000073/q2fy27pr.htm",
+      "char_start": 2349,
+      "char_end": 2958
+     }
+    }
+   ],
+   "adjustments": [
+    {
+     "kind": "reconciliation",
+     "heading": "RECONCILIATION OF GAAP TO NON-GAAP OUTLOOK",
+     "text": "RECONCILIATION OF GAAP TO NON-GAAP OUTLOOK\nQ3 FY2027 Outlook\n($ in billions)\nGAAP gross margin 74.0 %\nImpact of acquisition-related costs and other costs —\nNon-GAAP gross margin 74.0 %\nGAAP operating expenses $ 9.2\nAcquisition-related costs and other costs (0.2)\nNon-GAAP operating expenses $ 9.0",
+     "char_start": 21976,
+     "char_end": 22272,
+     "truncated": false,
+     "citation": {
+      "accession_no": "0001045810-26-000073",
+      "form": "8-K",
+      "filed": "2026-08-26",
+      "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000073/",
+      "section_key": "EX-99.1",
+      "document_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000073/q2fy27pr.htm",
+      "char_start": 21976,
+      "char_end": 22272
+     }
+    }
+   ],
+   "other_releases": []
+  }
+ ],
+ "method": "Each quarter's earnings release is the 8-K with Item 2.02 filed after that quarter's end (within 120 days, before the next quarter ends), the last one on or before the 10-Q/10-K for the quarter when there are several; its text is the first EX-99 exhibit. Outlook passages are the blocks under the release's own Outlook or Guidance headings; adjustments are its reconciliation tables and the notes under its figures that state a dollar amount. Quoted as written, found by fixed rules: a release without such a heading or table shows none. No beat or miss: Tributary holds no estimates."
+}

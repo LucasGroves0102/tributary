@@ -41,8 +41,9 @@ MAX_PROJECT_PEERS = 20  # like a comps set (CompsState.peers)
 MAX_PROJECT_NOTES = 4_000  # "How it makes money", characters
 MAX_PROJECT_BYTES = 16_000  # a project as compact JSON (the column allows 16384)
 # the guided steps of an analysis project, in order (web analysis/project.ts STEPS)
-STEPS = ("business", "numbers", "changes", "peers", "model", "thesis", "monitor")
-Step = Literal["business", "numbers", "changes", "peers", "model", "thesis", "monitor"]
+STEPS = ("business", "numbers", "earnings", "changes", "peers", "model", "thesis", "monitor")
+Step = Literal["business", "numbers", "earnings", "changes", "peers", "model", "thesis",
+               "monitor"]
 WORKSPACE_NAME = 100
 ITEM_NAME = 120
 # what users save (009 adds thesis and model); reports (005) only the agent writes

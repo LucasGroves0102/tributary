@@ -5,6 +5,8 @@ import {
   ApiError,
   askFailure,
   checkThesis,
+  companyEvents,
+  earnings,
   failureReason,
   financialsView,
   itemVersions,
@@ -16,6 +18,7 @@ import {
   section,
   SseParser,
   updateItem,
+  updateProject,
 } from "./api";
 
 describe("failureReason", () => {
@@ -91,6 +94,33 @@ describe("a Query API one release older (the minute of a deploy)", () => {
     await financialsView("t", "0001045810", 8, ["revenue"], "quarter");
     vi.unstubAllGlobals();
     expect(seen.map((s) => s.url.searchParams.get("quarters"))).toEqual(["120", "40", "8"]);
+  });
+
+  it("F1: earnings and events read as unavailable (null) from an API without the routes; other errors still throw", async () => {
+    older(() => Response.json({ detail: "Not Found" }, { status: 404 }));
+    expect(await companyEvents("t", "0001674101")).toBeNull();
+    expect(await earnings("t", "0001674101")).toBeNull();
+    older(() => Response.json({ detail: "not permitted to read filings for this company" }, { status: 403 }));
+    await expect(companyEvents("t", "0001674101")).rejects.toMatchObject({ status: 403 });
+    vi.unstubAllGlobals();
+  });
+
+  it("F1: a project ticked Earnings is saved without the tick by an API that doesn't know the step yet", async () => {
+    const seen = older((s) => {
+      const done = (s.body as { project: { done: string[] } }).project.done;
+      return done.includes("earnings")
+        ? Response.json({ detail: [{ type: "literal_error", loc: ["body", "project", "done", 1] }] }, { status: 422 })
+        : Response.json({ workspace_id: "w", project: (s.body as { project: object }).project, items: [] });
+    });
+    const p = { companyId: "0001674101", peers: [], notes: "", done: ["business", "earnings"] as ("business" | "earnings")[] };
+    await updateProject("t", "w", p);
+    await updateProject("t", "w", { ...p, done: ["business"] });
+    vi.unstubAllGlobals();
+    expect(seen.map((s) => (s.body as { project: { done: string[] } }).project.done)).toEqual([["business", "earnings"], ["business"], ["business"]]);
+    // a refusal for anything else is the user's to see
+    older(() => Response.json({ detail: "notes too long" }, { status: 422 }));
+    await expect(updateProject("t", "w", { ...p, done: ["business"] })).rejects.toThrow("notes too long");
+    vi.unstubAllGlobals();
   });
 
   it("a save refused for a field the API doesn't know yet is saved without it", async () => {

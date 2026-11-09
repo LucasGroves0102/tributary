@@ -237,6 +237,14 @@ export async function mockApi(page: Page): Promise<Fake> {
       return json({ as_of: "", forms: [], from: null, to: null, limit: 25, offset: 0, has_more: false, filings: [] });
     }
     if (/^\/v1\/companies\/\d{10}\/financials$/.test(path)) return json({ as_of: "", rows: [] });
+    // F1: the Overview asks for the 8-Ks since the last report; the Earnings tab for its releases
+    m = path.match(/^\/v1\/companies\/(\d{10})\/events$/);
+    if (m) {
+      return json({ company_id: m[1], as_of: "", since: "2026-06-30", window: "since_report", events: [], more: false, stale: [], method: "",
+        latest_report: { accession_no: `${m[1]}-26-000040`, form: "10-Q", filed: "2026-07-30", period_end: "2026-06-30" } });
+    }
+    m = path.match(/^\/v1\/companies\/(\d{10})\/earnings$/);
+    if (m) return json({ company_id: m[1], as_of: "", quarters: [], method: "" });
     m = path.match(/^\/v1\/companies\/(\d{10})\/data-notes$/);
     if (m || path === "/v1/data-notes") {
       const id = m?.[1] ?? PEP;

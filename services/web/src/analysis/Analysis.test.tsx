@@ -7,6 +7,8 @@ import { clearChartCache } from "../chart/cache";
 import { entry, fin, NVDA, nvdaRow } from "../fixtures";
 import { forgetVisits } from "../home/lastVisit";
 import { clearNewest } from "../thesis/useRevisit";
+import NVDA_EARNINGS from "../company/fixtures/nvda-earnings.json";
+import NVDA_EVENTS from "../company/fixtures/nvda-events.json";
 import { draftKey } from "./bridge";
 import { catalystLines, thesisTemplate } from "./project";
 
@@ -89,6 +91,8 @@ function respond(url: string, init?: RequestInit): Response {
     ] });
   }
   if (p === `/v1/companies/${NVDA}/filings/${ACC}/changes`) return Response.json(CHANGES);
+  if (p === `/v1/companies/${NVDA}/earnings`) return Response.json(NVDA_EARNINGS);
+  if (p === `/v1/companies/${NVDA}/events`) return Response.json(NVDA_EVENTS);
   if (p.endsWith("/segments")) return Response.json({ as_of: "", rows: [] });
   if (/^\/v1\/workspace-items\/[^/]+\/checks$/.test(p)) return Response.json({ item_id: "", checks: [] });
   if (p === "/v1/workspaces" && method === "GET") {
@@ -244,7 +248,7 @@ it("L5: a company page's Start an analysis opens New analysis on that company, s
   const form = container.querySelector<HTMLFormElement>('form[aria-label="New analysis"]')!;
   expect(form.querySelector('input[aria-label="Company to analyse"]')).toBeNull(); // already chosen
   expect(button("Start the analysis", form).disabled).toBe(false);
-  expect(form.textContent).toContain("seven guided steps");
+  expect(form.textContent).toContain("eight guided steps");
   expect(form.textContent).toContain("New thesis or New model is a single item in a folder");
 });
 
@@ -266,10 +270,10 @@ it("switches steps from the rail and the header's tabs without losing an unsaved
   const head = container.querySelector(".project-head")!;
   expect(head.querySelector("h1")?.textContent).toBe("Nvidia");
   // #153: the tabs are the rail's steps, under the same names
-  const labels = ["Business", "Numbers", "What changed", "Peers", "Model", "Thesis", "Monitor"];
+  const labels = ["Business", "Numbers", "Earnings", "What changed", "Peers", "Model", "Thesis", "Monitor"];
   expect([...head.querySelectorAll(".tabs a")].map((a) => a.textContent)).toEqual(labels);
   expect([...head.querySelectorAll<HTMLAnchorElement>(".tabs a")].map((a) => a.getAttribute("href")!.split("/").pop())).toEqual(
-    ["business", "numbers", "changes", "peers", "model", "thesis", "monitor"]);
+    ["business", "numbers", "earnings", "changes", "peers", "model", "thesis", "monitor"]);
   // #71: a peer and a model exist, but nothing is done until the user says so
   expect([...container.querySelectorAll(".step-rail a")].map((a) => a.textContent?.replace(/,.*$/, ""))).toEqual(
     labels.map((l, i) => `${i + 1}${l}`));
@@ -433,8 +437,46 @@ it("saves the business notes and marks steps done by hand", async () => {
   const mark = visible(".step-done input") as HTMLInputElement;
   await click(mark);
   expect(writes.filter((w) => w.method === "PATCH").at(-1)!.body).toMatchObject({ project: { done: ["business", "changes"] } });
-  expect(container.querySelector(".project-progress")?.getAttribute("aria-label")).toBe("2 of 7 steps done");
+  expect(container.querySelector(".project-progress")?.getAttribute("aria-label")).toBe("2 of 8 steps done");
   // and unticked again: nothing locks
   await click(visible(".step-done input") as HTMLInputElement);
   expect(writes.filter((w) => w.method === "PATCH").at(-1)!.body).toMatchObject({ project: { done: ["business"] } });
+});
+
+it("F1: the Earnings step quotes the release, and a pinned outlook states its quarter (H13)", async () => {
+  await render(`#/analysis/${PID}/earnings`, ".release-block");
+  const pane = visible(".step-pane:not([hidden])");
+  expect(pane.querySelector("h2")?.textContent).toBe("Earnings");
+  expect(pane.querySelector(".step-n")?.textContent).toBe("Step 3 of 8");
+  expect(pane.querySelector(".release-headline")?.textContent).toBe("NVIDIA Announces Financial Results for Second Quarter Fiscal 2027");
+  const outlook = pane.querySelector<HTMLElement>(".release-block")!;
+  expect(outlook.querySelector(".rl.heading")?.textContent).toBe("Outlook");
+  await pinTo(outlook.querySelector<HTMLButtonElement>(".pin-btn")!, "Pillars › Pillar 1");
+  const put = writes.find((w) => w.method === "PUT" && w.path === `/v1/workspace-items/${THESIS_ID}`)!;
+  const md = String((put.body.state as { markdown: string }).markdown);
+  // the release's lines kept, then the citation with the quarter it reports
+  expect(md).toContain("> Outlook  \n> NVIDIA’s outlook for the third quarter of fiscal 2027 is as follows:  \n> •Revenue is expected to be $108.0 billion, plus or minus 2%.");
+  expect(md).toContain("> — 8-K for the quarter ended 2026-07-26, filed 2026-08-26, Earnings release (Exhibit 99.1), outlook: Outlook · " +
+    "[0001045810-26-000073](https://www.sec.gov/Archives/edgar/data/1045810/000104581026000073/0001045810-26-000073-index.htm)");
+  expect(md.indexOf("> Outlook")).toBeGreaterThan(md.indexOf("### Pillar 1"));
+  expect(container.querySelector(".pin-toast")?.textContent).toContain("Pinned the outlook passage under Pillars, Pillar 1");
+  // the step is ticked by the user only (Batch 7)
+  expect(pane.querySelector<HTMLInputElement>(".step-done input")!.checked).toBe(false);
+});
+
+it("F1: What changed opens with the 8-Ks since the last report, the debt after the quarter end flagged", async () => {
+  await render(`#/analysis/${PID}/changes`, ".events-card li.event");
+  const pane = visible(".step-pane:not([hidden])");
+  expect(pane.querySelector(".events-card h2")?.textContent).toBe("Since the last report");
+  expect([...pane.querySelectorAll(".stale-box li")].map((l) => l.textContent)).toEqual([
+    "Debt: before the Aug 17, 2026 8-K (Material agreement)", "Net debt: before the Aug 17, 2026 8-K (Material agreement)",
+    "Debt / equity: before the Aug 17, 2026 8-K (Material agreement)", "Cash: before the Aug 17, 2026 8-K (Material agreement)"]);
+  // the filing text diffs are still there, below
+  expect(pane.querySelector(".events-card")!.compareDocumentPosition(pane.querySelector(".diff")!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  const debt = [...pane.querySelectorAll<HTMLElement>("li.event")].find((li) => li.querySelector(".event-date")?.textContent === "Aug 17, 2026")!;
+  await pinTo(debt.querySelector<HTMLButtonElement>(".pin-btn")!, "Risks and mitigants");
+  const put = writes.find((w) => w.method === "PUT" && w.path === `/v1/workspace-items/${THESIS_ID}`)!;
+  const md = String((put.body.state as { markdown: string }).markdown);
+  expect(md).toContain("> On August 17, 2026, NVIDIA Corporation");
+  expect(md).toContain("> — 8-K filed 2026-08-17, Item 1.01 Material agreement, event of 2026-08-17 · [0001045810-26-000069]");
 });

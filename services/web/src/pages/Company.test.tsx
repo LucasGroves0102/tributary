@@ -230,7 +230,7 @@ it("heads the page with public metadata, the next expected filing and the tabs",
   expect(head).toContain("Semiconductors & Related Devices (SIC 3674) · fiscal year ends January · large accelerated filer · incorporated in DE");
   expect(head).toContain("next 10-Q for the period ending Oct 25, 2026 expected ~Nov 19, 2026");
   expect([...container.querySelectorAll(".tabs a")].map((a) => [a.textContent, a.getAttribute("href")])).toEqual([
-    ["Overview", `#/company/${NVDA}`], ["Statements", `#/company/${NVDA}/statements`], ["Revenue", `#/company/${NVDA}/revenue`],
+    ["Overview", `#/company/${NVDA}`], ["Earnings", `#/company/${NVDA}/earnings`], ["Statements", `#/company/${NVDA}/statements`], ["Revenue", `#/company/${NVDA}/revenue`],
     ["Segments", `#/company/${NVDA}/segments`],
     ["Ratios", `#/company/${NVDA}/ratios`], ["Filings", `#/company/${NVDA}/filings`], ["Data notes", `#/company/${NVDA}/notes`],
     ["Peers", `#/company/${NVDA}/peers`],

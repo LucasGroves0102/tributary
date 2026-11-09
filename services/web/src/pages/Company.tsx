@@ -1,6 +1,7 @@
 import { expectedFilingsOf, screener } from "../api";
 import { header, HEADER_COLUMNS, listingLine } from "../company/data";
 import { DataNotes } from "../company/DataNotes";
+import { EarningsView } from "../company/Earnings";
 import { Filings } from "../company/Filings";
 import { Overview } from "../company/Overview";
 import { Peers } from "../company/Peers";
@@ -138,6 +139,10 @@ export function Company({ token, companyId, tab, statements, watched, onWatch, o
       </section>
 
       {tab === "overview" && <Overview token={token} companyId={companyId} name={h.name} row={row} access={row.access} />}
+      {tab === "earnings" && (
+        <EarningsView token={token} companyId={companyId} name={h.name} canReadFilings={row.access.includes("filings")}
+          canReadFinancials={row.access.includes("financials")} />
+      )}
       {tab === "statements" && <Statements token={token} companyId={companyId} name={h.name} ticker={ticker} notApplicable={row.not_applicable} view={statements} />}
       {tab === "revenue" && (
         <Revenue token={token} companyId={companyId} name={h.name} ticker={ticker} saved={saved ?? null} onOpenChart={onOpenChart} />
@@ -160,12 +165,12 @@ function AnalysisLink({ saved, companyId, ticker }: { saved: Saved; companyId: s
   const project = list.find((w) => restoreProject(w.project)?.companyId === companyId);
   return project ? (
     <a className="btn" href={href({ view: "analysis", projectId: project.workspace_id })}
-      title={`Your guided analysis of ${ticker}: business, numbers, what changed, peers, model, thesis and monitor`}>
+      title={`Your guided analysis of ${ticker}: business, numbers, earnings, what changed, peers, model, thesis and monitor`}>
       Open analysis
     </a>
   ) : (
     <a className="btn" href={href({ view: "analysis", start: companyId })}
-      title={`Seven guided steps for ${ticker} (business, numbers, what changed, peers, model, thesis, monitor), with its thesis and model inside. New thesis and New model make a single item instead.`}>
+      title={`Eight guided steps for ${ticker} (business, numbers, earnings, what changed, peers, model, thesis, monitor), with its thesis and model inside. New thesis and New model make a single item instead.`}>
       Start an analysis
     </a>
   );

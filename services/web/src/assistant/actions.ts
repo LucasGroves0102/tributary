@@ -102,9 +102,10 @@ export function uiContext(route: Route, chart: ChartState, name: (id: string) =>
   };
   if (route.view === "company" || route.view === "filing") ctx.company_id = route.companyId;
   // agent-api's tabs predate Revenue: it is reported as the segments tab (same data family);
-  // the Price tab ("Connect your data") as the overview (the agent can't read prices)
+  // the Price tab ("Connect your data") as the overview (the agent can't read prices); Earnings
+  // as filings (the release is an 8-K)
   if (route.view === "company" && route.tab) {
-    ctx.tab = route.tab === "revenue" ? "segments" : route.tab === "price" ? "overview" : route.tab;
+    ctx.tab = route.tab === "revenue" ? "segments" : route.tab === "price" ? "overview" : route.tab === "earnings" ? "filings" : route.tab;
   }
   if (route.view === "compare" && route.compare) {
     const c = route.compare;

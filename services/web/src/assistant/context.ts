@@ -8,6 +8,11 @@ const COMPANY_SUGGESTIONS: Record<CompanyTab, (n: string) => string[]> = {
     `What drove ${n}'s revenue change versus a year ago?`,
     `What changed in ${n}'s risk factors in its latest 10-K?`,
   ],
+  earnings: (n) => [
+    `What guidance did ${n} give in its latest earnings release?`,
+    `What adjustments does ${n} make to reach its adjusted figures?`,
+    `What has ${n} filed since its last 10-Q?`,
+  ],
   statements: (n) => [
     `How has ${n}'s operating margin moved over the last 8 quarters?`,
     `Chart ${n}'s revenue and operating income`,

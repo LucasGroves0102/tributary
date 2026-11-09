@@ -942,6 +942,12 @@ def test_project_as_stored():
                                                      "notes": "", "done": []}
 
 
+def test_the_earnings_step_can_be_ticked():
+    """F1 adds Earnings after Numbers (web analysis/project.ts STEPS): every step at once fits."""
+    every = ["business", "numbers", "earnings", "changes", "peers", "model", "thesis", "monitor"]
+    assert validate_project({"companyId": NVDA, "done": every})["done"] == every
+
+
 def test_model_scenarios_as_stored():
     saved = validate_state("model", SCENARIOS)
     assert saved["assumptions"] == validate_state("model", MODEL)["assumptions"]  # the base

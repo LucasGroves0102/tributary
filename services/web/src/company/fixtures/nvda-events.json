@@ -1,0 +1,180 @@
+{
+ "company_id": "0001045810",
+ "as_of": "2026-11-09T05:42:55.554387+00:00",
+ "latest_report": {
+  "accession_no": "0001045810-26-000075",
+  "form": "10-Q",
+  "filed": "2026-08-26",
+  "period_end": "2026-07-26"
+ },
+ "since": "2026-07-26",
+ "window": "since_report",
+ "events": [
+  {
+   "accession_no": "0001045810-26-000078",
+   "form": "8-K",
+   "filed": "2026-09-03",
+   "accepted_at": "2026-09-03T16:03:56Z",
+   "event_date": "2026-09-02",
+   "items": [
+    {
+     "item": "8.01",
+     "title": "Other Events",
+     "kind": "other_events"
+    }
+   ],
+   "items_from": "index",
+   "material": true,
+   "amendment": false,
+   "affects": [],
+   "sections_available": true,
+   "excerpt": {
+    "item": "8.01",
+    "text": "On September 2, 2026, NVIDIA Corporation (“NVIDIA”) entered into a definitive agreement to acquire Hugging Face, Inc. (“Hugging Face”). Hugging Face operates a platform and community for developing, sharing and deploying open-source models, datasets and applications.",
+    "citation": {
+     "accession_no": "0001045810-26-000078",
+     "form": "8-K",
+     "filed": "2026-09-03",
+     "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000078/",
+     "section_key": "8.01",
+     "document_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000078/nvda-20260902.htm",
+     "char_start": 2021,
+     "char_end": 3196
+    }
+   },
+   "release": null,
+   "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000078/",
+   "document_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000078/nvda-20260902.htm"
+  },
+  {
+   "accession_no": "0001045810-26-000073",
+   "form": "8-K",
+   "filed": "2026-08-26",
+   "accepted_at": "2026-08-27T00:21:19Z",
+   "event_date": "2026-08-26",
+   "items": [
+    {
+     "item": "2.02",
+     "title": "Results of Operations and Financial Condition",
+     "kind": "earnings"
+    },
+    {
+     "item": "9.01",
+     "title": "Financial Statements and Exhibits",
+     "kind": "exhibits"
+    }
+   ],
+   "items_from": "index",
+   "material": true,
+   "amendment": false,
+   "affects": [],
+   "sections_available": true,
+   "excerpt": {
+    "item": "2.02",
+    "text": "On August 26, 2026, NVIDIA Corporation, or the Company, issued a press release announcing its results for the quarter ended July 26, 2026. The press release is attached as Exhibit 99.1 and is incorporated herein by reference. Attached hereto as Exhibit 99.2 and incorporated by reference herein is financial information and commentary by Colette M.",
+    "citation": {
+     "accession_no": "0001045810-26-000073",
+     "form": "8-K",
+     "filed": "2026-08-26",
+     "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000073/",
+     "section_key": "2.02",
+     "document_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000073/nvda-20260826.htm",
+     "char_start": 2051,
+     "char_end": 3194
+    }
+   },
+   "release": {
+    "section_key": "EX-99.1",
+    "title": "Exhibit 99.1"
+   },
+   "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000073/",
+   "document_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000073/nvda-20260826.htm"
+  },
+  {
+   "accession_no": "0001045810-26-000069",
+   "form": "8-K",
+   "filed": "2026-08-17",
+   "accepted_at": "2026-08-17T16:41:33Z",
+   "event_date": "2026-08-17",
+   "items": [
+    {
+     "item": "1.01",
+     "title": "Entry into a Material Definitive Agreement",
+     "kind": "agreement"
+    },
+    {
+     "item": "2.03",
+     "title": "Creation of a Direct Financial Obligation or an Obligation under an Off-Balance Sheet Arrangement of a Registrant",
+     "kind": "debt"
+    },
+    {
+     "item": "7.01",
+     "title": "Regulation FD Disclosure",
+     "kind": "disclosure"
+    }
+   ],
+   "items_from": "index",
+   "material": true,
+   "amendment": false,
+   "affects": [
+    "long_term_debt",
+    "net_debt",
+    "debt_to_equity",
+    "cash"
+   ],
+   "sections_available": true,
+   "excerpt": {
+    "item": "1.01",
+    "text": "On August 17, 2026, NVIDIA Corporation (“NVIDIA”) announced a multi-year partnership with SB Energy Corp. (collectively with its affiliates, “SB Energy”) to advance the development of the PORTS Technology Campus, a large-scale AI data center campus in Pike County, Ohio (the “Portsmouth Site”).",
+    "citation": {
+     "accession_no": "0001045810-26-000069",
+     "form": "8-K",
+     "filed": "2026-08-17",
+     "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000069/",
+     "section_key": "1.01",
+     "document_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000069/nvda-20260817.htm",
+     "char_start": 2048,
+     "char_end": 3194
+    }
+   },
+   "release": {
+    "section_key": "EX-99.1",
+    "title": "Exhibit 99.1"
+   },
+   "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000069/",
+   "document_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000069/nvda-20260817.htm"
+  }
+ ],
+ "more": false,
+ "stale": [
+  {
+   "metric": "long_term_debt",
+   "as_of": "2026-07-26",
+   "events": [
+    "0001045810-26-000069"
+   ]
+  },
+  {
+   "metric": "net_debt",
+   "as_of": "2026-07-26",
+   "events": [
+    "0001045810-26-000069"
+   ]
+  },
+  {
+   "metric": "debt_to_equity",
+   "as_of": "2026-07-26",
+   "events": [
+    "0001045810-26-000069"
+   ]
+  },
+  {
+   "metric": "cash",
+   "as_of": "2026-07-26",
+   "events": [
+    "0001045810-26-000069"
+   ]
+  }
+ ],
+ "method": "8-K and 8-K/A filings from the SEC filing index filed after the period end of the latest 10-K or 10-Q, newest first, with their items (the SEC's submissions history; a filing too new for it shows the items the parser found). Figures as of that period end that an event after it may have changed are listed in `stale`: completed acquisitions or dispositions (2.01), new or accelerated debt (2.03, 2.04), impairments (2.06), unregistered equity sales (3.02), and bankruptcy or non-reliance on past statements (1.03, 4.02: every figure). A flag, not a recomputed figure."
+}

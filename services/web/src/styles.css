@@ -5141,3 +5141,140 @@ button.chip.on {
     font-size: var(--fs-xs);
   }
 }
+
+/* Earnings and events (F1): the release beside its figures, 8-Ks since the last report. */
+.kv .p.stale-flag {
+  color: var(--warn);
+  margin-top: var(--sp-1);
+}
+
+.stale-box {
+  background: var(--warn-soft);
+  border-left: 3px solid var(--warn);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-5) var(--sp-6);
+  margin-bottom: var(--sp-6);
+  line-height: 1.5;
+}
+
+.stale-box ul {
+  margin: var(--sp-3) 0;
+  padding-left: 18px;
+}
+
+.stale-box p {
+  margin: 0;
+}
+
+ol.events {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+li.event {
+  border-top: 1px solid var(--line);
+  padding: var(--sp-5) 0;
+  display: grid;
+  gap: var(--sp-3);
+}
+
+li.event:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.row.event-head {
+  gap: var(--sp-3);
+  align-items: center;
+}
+
+.event-head .tag.warn {
+  margin-left: 0;
+}
+
+.event-date {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.event-excerpt {
+  margin: 0;
+  line-height: 1.55;
+  max-width: 900px;
+}
+
+.row.event-links {
+  gap: var(--sp-6);
+  font-size: var(--fs-sm);
+}
+
+details.routine {
+  margin-top: var(--sp-5);
+}
+
+details.routine summary {
+  cursor: pointer;
+}
+
+.row.earnings-pick {
+  margin-bottom: var(--sp-6);
+  gap: var(--sp-6);
+}
+
+.release-headline {
+  margin: 0 0 var(--sp-5);
+  padding-left: var(--sp-6);
+  border-left: 3px solid var(--accent);
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.release-blocks {
+  display: grid;
+  gap: var(--sp-8);
+}
+
+.release-block {
+  border-left: 3px solid var(--line-2);
+  padding-left: var(--sp-6);
+  display: grid;
+  gap: var(--sp-3);
+}
+
+.release-lines p.rl {
+  margin: 0;
+  line-height: 1.5;
+  max-width: 900px;
+}
+
+.release-lines p.rl.heading {
+  font-weight: 600;
+  margin-bottom: var(--sp-2);
+}
+
+.release-lines p.rl.sub {
+  padding-left: var(--sp-8);
+}
+
+.release-table-box summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.release-table {
+  font-family: var(--mono);
+  font-size: var(--fs-sm);
+  white-space: pre;
+  overflow: auto;
+  max-height: 420px;
+  max-width: 100%;
+  background: var(--panel-2);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-5);
+  margin: var(--sp-4) 0;
+}
+
+.earnings-method {
+  max-width: 900px;
+}

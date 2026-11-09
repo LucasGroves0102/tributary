@@ -1,21 +1,24 @@
 import { useRef } from "react";
 
-import { financials, latestSection, recap as fetchRecap } from "../api";
+import { companyEvents, financials, latestSection, recap as fetchRecap } from "../api";
 import { LayerChart } from "../chart/LayerChart";
 import { financialSeries } from "../chart/series";
 import { day } from "../format";
 import { go, href } from "../route";
 import type { ScreenerRow, Tier } from "../types";
-import { keyStats, recapAccession, recapRows } from "./data";
+import { keyStats, recapAccession } from "./data";
 import { ErrorPanel, sentence, Skeleton } from "../components/States";
+import { EventsCard } from "./Events";
+import { keyStatFlag, staleFlags } from "./events";
+import { RecapTable } from "./RecapTable";
 import { Gate } from "./Tables";
 import { useLoad } from "./useLoad";
-import { TableScroll } from "../components/TableScroll";
 
 const EXCERPT_CHARS = 1500;
 
-/** Key stats, the latest quarter vs the prior and year-ago quarters, the business description
- * (10-K Item 1) and quarterly revenue. */
+/** Key stats (a balance a later 8-K may have changed is flagged, never recomputed), what the
+ * company filed since its last report, the latest quarter vs the prior and year-ago quarters, the
+ * business description (10-K Item 1) and quarterly revenue. */
 export function Overview({
   token,
   companyId,
@@ -30,6 +33,9 @@ export function Overview({
   access: Tier[];
 }) {
   const canFin = access.includes("financials");
+  const canRead = access.includes("filings");
+  const events = useLoad(canRead ? `${companyId}|events` : null, () => companyEvents(token, companyId));
+  const flags = staleFlags(events?.state === "ok" ? events.data : null);
   return (
     <>
       <section className="card">
@@ -39,18 +45,23 @@ export function Overview({
         </div>
         {canFin ? (
           <div className="kv stats">
-            {keyStats(row).map((s) => (
-              <div key={s.label} title={s.title} className={s.old ? "old" : undefined}>
-                <div className="k">{s.label}</div>
-                <div className="v">{s.text}</div>
-                <div className="p">{s.period}</div>
-              </div>
-            ))}
+            {keyStats(row).map((s) => {
+              const flag = keyStatFlag(s.key, s.periodEnd, flags);
+              return (
+                <div key={s.label} title={flag ? `${s.title}\n\n${flag.text}` : s.title} className={s.old ? "old" : undefined}>
+                  <div className="k">{s.label}</div>
+                  <div className="v">{s.text}</div>
+                  <div className="p">{s.period}</div>
+                  {flag && <div className="p stale-flag">⚑ before {flag.short}</div>}
+                </div>
+              );
+            })}
           </div>
         ) : (
           <p className="empty locked">Financials for {name} aren't included in your access; its filings and metadata are public.</p>
         )}
       </section>
+      {canRead && <EventsCard token={token} companyId={companyId} name={name} load={events} />}
       <div className="grid2">
         <Recap token={token} companyId={companyId} name={name} accession={canFin ? recapAccession(row) : null} canFin={canFin} />
         <section className="card">
@@ -69,7 +80,6 @@ export function Overview({
 function Recap({ token, companyId, name, accession, canFin }: { token: string; companyId: string; name: string; accession: string | null; canFin: boolean }) {
   const load = useLoad(accession, () => fetchRecap(token, accession!));
   const data = load?.state === "ok" ? load.data : null;
-  const table = data ? recapRows(data) : null;
   return (
     <section className="card">
       <div className="card-h">
@@ -87,32 +97,7 @@ function Recap({ token, companyId, name, accession, canFin }: { token: string; c
         <Gate load={load} name={name} what="Financials">
           {() => (
             <>
-              <TableScroll label="Latest quarter">
-                <table className="t">
-                  <thead>
-                    <tr>
-                      <th className="first">Metric</th>
-                      <th className="n">{table!.labels[0]}</th>
-                      <th className="n">{table!.labels[1]}</th>
-                      <th className="n">QoQ</th>
-                      <th className="n">{table!.labels[2]}</th>
-                      <th className="n">YoY</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {table!.rows.map((r) => (
-                      <tr key={r.label} title={r.title}>
-                        <td className="first">{r.label}</td>
-                        <td className="n"><b>{r.current}</b></td>
-                        <td className="n">{r.prior}</td>
-                        <td className={`n ${!r.qoq ? "faint" : r.qoq.sign >= 0 ? "pos" : "neg"}`}>{r.qoq?.text ?? "—"}</td>
-                        <td className="n">{r.yearAgo}</td>
-                        <td className={`n ${!r.yoy ? "faint" : r.yoy.sign >= 0 ? "pos" : "neg"}`}>{r.yoy?.text ?? "—"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </TableScroll>
+              <RecapTable data={data!} label="Latest quarter" />
               {data!.flags && data!.flags.length > 0 && (
                 <div className="card-b">
                   <b>Flagged in the filing text</b>

@@ -1,0 +1,193 @@
+{
+ "company_id": "0001674101",
+ "as_of": "2026-11-09T05:42:55.436675+00:00",
+ "latest_report": {
+  "accession_no": "0001628280-26-067893",
+  "form": "10-Q",
+  "filed": "2026-10-28",
+  "period_end": "2026-09-30"
+ },
+ "since": "2026-09-30",
+ "window": "since_report",
+ "events": [
+  {
+   "accession_no": "0001628280-26-067707",
+   "form": "8-K",
+   "filed": "2026-10-28",
+   "accepted_at": "2026-10-28T10:02:00Z",
+   "event_date": "2026-10-28",
+   "items": [
+    {
+     "item": "2.02",
+     "title": "Results of Operations and Financial Condition",
+     "kind": "earnings"
+    },
+    {
+     "item": "7.01",
+     "title": "Regulation FD Disclosure",
+     "kind": "disclosure"
+    },
+    {
+     "item": "9.01",
+     "title": "Financial Statements and Exhibits",
+     "kind": "exhibits"
+    }
+   ],
+   "items_from": "index",
+   "material": true,
+   "amendment": false,
+   "affects": [],
+   "sections_available": true,
+   "excerpt": {
+    "item": "2.02",
+    "text": "On October 28, 2026, Vertiv Holdings Co (the “Company”) issued a press release announcing its financial results for the three and nine months ended September 30, 2026. A copy of the press release is furnished herewith as Exhibit 99.1 and is incorporated herein by reference in its entirety.",
+    "citation": {
+     "accession_no": "0001628280-26-067707",
+     "form": "8-K",
+     "filed": "2026-10-28",
+     "filing_url": "https://www.sec.gov/Archives/edgar/data/1674101/000162828026067707/",
+     "section_key": "2.02",
+     "document_url": "https://www.sec.gov/Archives/edgar/data/1674101/000162828026067707/vrt-20261028.htm",
+     "char_start": 1962,
+     "char_end": 2659
+    }
+   },
+   "release": {
+    "section_key": "EX-99.1",
+    "title": "Exhibit 99.1"
+   },
+   "filing_url": "https://www.sec.gov/Archives/edgar/data/1674101/000162828026067707/",
+   "document_url": "https://www.sec.gov/Archives/edgar/data/1674101/000162828026067707/vrt-20261028.htm"
+  },
+  {
+   "accession_no": "0001628280-26-067393",
+   "form": "8-K",
+   "filed": "2026-10-27",
+   "accepted_at": "2026-10-27T10:34:09Z",
+   "event_date": "2026-10-27",
+   "items": [
+    {
+     "item": "2.01",
+     "title": "Completion of Acquisition or Disposition of Assets",
+     "kind": "deal"
+    },
+    {
+     "item": "7.01",
+     "title": "Regulation FD Disclosure",
+     "kind": "disclosure"
+    },
+    {
+     "item": "9.01",
+     "title": "Financial Statements and Exhibits",
+     "kind": "exhibits"
+    }
+   ],
+   "items_from": "index",
+   "material": true,
+   "amendment": false,
+   "affects": [
+    "cash",
+    "long_term_debt",
+    "net_debt",
+    "total_assets"
+   ],
+   "sections_available": true,
+   "excerpt": {
+    "item": "2.01",
+    "text": "On October 27, 2026 (the “Closing Date”) Vertiv Corporation, an Ohio corporation (“Buyer”) and subsidiary of Vertiv Holdings Co, a Delaware corporation (the “Company”) completed the acquisition (the “Acquisition”) of Utility Innovation Holdings, Inc., a Delaware corporation (“UIG”), pursuant to the merger of Vultra Merger Sub, Inc.",
+    "citation": {
+     "accession_no": "0001628280-26-067393",
+     "form": "8-K",
+     "filed": "2026-10-27",
+     "filing_url": "https://www.sec.gov/Archives/edgar/data/1674101/000162828026067393/",
+     "section_key": "2.01",
+     "document_url": "https://www.sec.gov/Archives/edgar/data/1674101/000162828026067393/vrt-20261027.htm",
+     "char_start": 1966,
+     "char_end": 3105
+    }
+   },
+   "release": {
+    "section_key": "EX-99.1",
+    "title": "Exhibit 99.1"
+   },
+   "filing_url": "https://www.sec.gov/Archives/edgar/data/1674101/000162828026067393/",
+   "document_url": "https://www.sec.gov/Archives/edgar/data/1674101/000162828026067393/vrt-20261027.htm"
+  },
+  {
+   "accession_no": "0001628280-26-067127",
+   "form": "8-K",
+   "filed": "2026-10-26",
+   "accepted_at": "2026-10-26T10:40:00Z",
+   "event_date": "2026-10-26",
+   "items": [
+    {
+     "item": "7.01",
+     "title": "Regulation FD Disclosure",
+     "kind": "disclosure"
+    },
+    {
+     "item": "9.01",
+     "title": "Financial Statements and Exhibits",
+     "kind": "exhibits"
+    }
+   ],
+   "items_from": "index",
+   "material": true,
+   "amendment": false,
+   "affects": [],
+   "sections_available": true,
+   "excerpt": {
+    "item": "7.01",
+    "text": "On October 26, 2026, Vertiv Holdings Co., a Delaware corporation (the “Company”), issued a press release announcing the closing, by one of its wholly-owned subsidiaries, of the acquisition of King Environmental Services Ltd. (the “Acquisition”). The press release announcing the closing of the Acquisition is furnished as Exhibit 99.1 to this Form 8-K.",
+    "citation": {
+     "accession_no": "0001628280-26-067127",
+     "form": "8-K",
+     "filed": "2026-10-26",
+     "filing_url": "https://www.sec.gov/Archives/edgar/data/1674101/000162828026067127/",
+     "section_key": "7.01",
+     "document_url": "https://www.sec.gov/Archives/edgar/data/1674101/000162828026067127/vrt-20261026.htm",
+     "char_start": 1929,
+     "char_end": 2820
+    }
+   },
+   "release": {
+    "section_key": "EX-99.1",
+    "title": "Exhibit 99.1"
+   },
+   "filing_url": "https://www.sec.gov/Archives/edgar/data/1674101/000162828026067127/",
+   "document_url": "https://www.sec.gov/Archives/edgar/data/1674101/000162828026067127/vrt-20261026.htm"
+  }
+ ],
+ "more": false,
+ "stale": [
+  {
+   "metric": "cash",
+   "as_of": "2026-09-30",
+   "events": [
+    "0001628280-26-067393"
+   ]
+  },
+  {
+   "metric": "long_term_debt",
+   "as_of": "2026-09-30",
+   "events": [
+    "0001628280-26-067393"
+   ]
+  },
+  {
+   "metric": "net_debt",
+   "as_of": "2026-09-30",
+   "events": [
+    "0001628280-26-067393"
+   ]
+  },
+  {
+   "metric": "total_assets",
+   "as_of": "2026-09-30",
+   "events": [
+    "0001628280-26-067393"
+   ]
+  }
+ ],
+ "method": "8-K and 8-K/A filings from the SEC filing index filed after the period end of the latest 10-K or 10-Q, newest first, with their items (the SEC's submissions history; a filing too new for it shows the items the parser found). Figures as of that period end that an event after it may have changed are listed in `stale`: completed acquisitions or dispositions (2.01), new or accelerated debt (2.03, 2.04), impairments (2.06), unregistered equity sales (3.02), and bankruptcy or non-reliance on past statements (1.03, 4.02: every figure). A flag, not a recomputed figure."
+}

@@ -1,11 +1,14 @@
 /** Analysis projects (the Analysis tab): one workspace bound to one company, with the guided
- * steps an analyst takes from filings to a thesis (business → numbers → what changed → peers →
- * model → thesis → monitor). The project itself is `workspaces.project` (app DB 012, validated
+ * steps an analyst takes from filings to a thesis (business → numbers → earnings → what changed →
+ * peers → model → thesis → monitor). The project itself is `workspaces.project` (app DB 012, validated
  * by query_api/workspaces.py ProjectState): `{companyId, peers, notes, done}`; its charts,
  * models and thesis are ordinary items in the workspace. Pure, tested without rendering.
  *
  * - Steps: STEPS (order, labels, guidance). The project header's tabs and the rail are the same
- *   seven steps under the same names (a tab always opens its own step).
+ *   eight steps under the same names (a tab always opens its own step). Earnings (F1) sits after
+ *   Numbers: the release is management's account of the figures just read (its outlook, its own
+ *   adjustments). The 8-Ks filed since the last report open What changed: they are what changed
+ *   after the report's period end, read beside the filing's rewritten paragraphs.
  * - Done: a step is done only when the user marked it (`done`): a box they can always tick and
  *   untick. Work in a step (`hasWork`: Business = notes written; Numbers = a chart saved in the
  *   project; Peers = at least one peer; Model = a model in the project; Thesis = the saved
@@ -20,8 +23,10 @@
  * - Pins ("📌 Add to thesis"): `appendToSection` puts a block at the end of a section (before
  *   the next heading of the same or a higher level), creating the section if it's gone; a chart
  *   is pinned as its `[[embed:<item id>]]` line (the chart is saved in the project first), a
- *   filing passage as `quoteBlock`: a Markdown blockquote and a citation line (form, filed
- *   date, section, and an EDGAR link built only from the accession number the API returned). */
+ *   filing passage as `quoteBlock`: a Markdown blockquote and a citation line (form, the period
+ *   it reports on, filed date, section, and an EDGAR link built only from the accession number the
+ *   API returned); a release's table (a guidance table, a reconciliation) as `quoteTable`, its
+ *   lines kept in a code block inside the quote. */
 
 import type { ExpectedFiling, ProjectState, ProjectStep } from "../types";
 
@@ -35,7 +40,8 @@ export interface StepInfo {
 export const STEPS: StepInfo[] = [
   { key: "business", label: "Business", why: "What the company sells, to whom, and how it makes money: the 10-K's Item 1 and its segments." },
   { key: "numbers", label: "Numbers", why: "Five to ten years of revenue and growth, margins, free cash flow, receivables against revenue, and debt." },
-  { key: "changes", label: "What changed", why: "New, removed and rewritten paragraphs in Risk Factors and MD&A since the previous 10-K or 10-Q." },
+  { key: "earnings", label: "Earnings", why: "Management's own account of each quarter: the earnings release (8-K Item 2.02) beside the reported figures, the outlook it states and the adjustments it makes." },
+  { key: "changes", label: "What changed", why: "What the company filed since its last 10-Q or 10-K (deals, debt, leadership, guidance), and new, removed and rewritten paragraphs in Risk Factors and MD&A." },
   { key: "peers", label: "Peers", why: "The same numbers for comparable companies: is this business better or worse than its peers?" },
   { key: "model", label: "Model", why: "Revenue and operating income forward: base, bear and bull cases next to the company's own history." },
   { key: "thesis", label: "Thesis", why: "Your argument in plain words: core thesis, what the market misses, pillars with evidence, risks." },
@@ -89,6 +95,7 @@ export function hasWork(step: ProjectStep, p: ProjectState, f: Facts): boolean {
       return p.notes.trim().length > 0;
     case "numbers":
       return f.charts > 0;
+    case "earnings":
     case "changes":
       return false;
     case "peers":
@@ -121,6 +128,7 @@ export function workHint(step: ProjectStep, p: ProjectState, f: Facts): string |
       return "Core thesis written";
     case "monitor":
       return `Checked ${f.checks} time${f.checks === 1 ? "" : "s"}`;
+    case "earnings":
     case "changes":
       return null;
   }
@@ -347,6 +355,9 @@ export interface Passage {
   filed: string;
   /** the period the filing reports on (YYYY-MM-DD), so the quote reads in its period (H13) */
   period?: string | null;
+  /** what `period` ends ("quarter" for an 8-K earnings release); else the form's (10-Q quarter,
+   * 10-K fiscal year) */
+  periodWord?: string;
   /** "Item 1A. Risk Factors", "Item 1" */
   section: string;
   /** what-changed: "new", "rewritten" or "removed" (removed text is the earlier filing's) */
@@ -361,12 +372,50 @@ const ISO = /^\d{4}-\d{2}-\d{2}$/;
  * reports on when known, filed date, section, the accession linked to EDGAR when the link can be
  * built). A 10-Q's MD&A can speak of six or nine months: the period says which filing it is. */
 export function quoteBlock(p: Passage): string {
+  return `> ${quoteText(p.text)}\n>\n> — ${citationLine(p)}`;
+}
+
+function citationLine(p: Passage): string {
   const url = edgarFilingUrl(p.companyId, p.accessionNo);
   const acc = url ? `[${p.accessionNo}](${url})` : p.accessionNo;
   const section = quoteText(p.section, 120);
   const note = p.change ? ` (${CHANGE_NOTE[p.change]})` : "";
+  const word = p.periodWord ?? PERIOD_WORD[p.form] ?? "period";
   const when = p.period && ISO.test(p.period)
-    ? `${p.form} for the ${PERIOD_WORD[p.form] ?? "period"} ended ${p.period}, filed ${p.filed}`
+    ? `${p.form} for the ${word} ended ${p.period}, filed ${p.filed}`
     : `${p.form} filed ${p.filed}`;
-  return `> ${quoteText(p.text)}\n>\n> — ${when}, ${section}${note} · ${acc}`;
+  return `${when}, ${section}${note} · ${acc}`;
+}
+
+export const MAX_TABLE_LINES = 40;
+
+/** A passage of several lines (a release's outlook: its bullets, a small table of ranges) as a
+ * blockquote that keeps its lines (hard breaks), each line escaped like quoteText and kept from
+ * reading as a Markdown list; at most MAX_TABLE_LINES lines and twice MAX_QUOTE characters, "…"
+ * when cut. Then the citation line, as quoteBlock. */
+export function quoteLines(p: Passage): string {
+  const out: string[] = [];
+  let total = 0;
+  for (const raw of p.text.replace(/\r\n?/g, "\n").split("\n")) {
+    const line = raw.replace(/\s+/g, " ").trim();
+    if (!line) continue;
+    if (out.length === MAX_TABLE_LINES || total + line.length > MAX_QUOTE * 2) {
+      out.push("…");
+      break;
+    }
+    out.push(quoteText(line, 400).replace(/^([-+]|\d+[.)])(\s)/, "\\$1$2"));
+    total += line.length;
+  }
+  return `${out.map((l) => `> ${l}`).join("  \n")}\n>\n> — ${citationLine(p)}`;
+}
+
+/** A table pinned from a filing (a release's guidance or reconciliation): its lines as written,
+ * in a code block inside the quote so columns and minus signs stay as they are, then the same
+ * citation line as quoteBlock. Backticks become quotes (they could close the block), at most
+ * MAX_TABLE_LINES lines of up to 200 characters, and "…" says when it was cut. */
+export function quoteTable(p: Passage): string {
+  const all = p.text.replace(/\r\n?/g, "\n").split("\n").map((l) => l.replace(/`/g, "'").replace(/\s+/g, " ").trim()).filter(Boolean);
+  const lines = all.slice(0, MAX_TABLE_LINES).map((l) => (l.length > 200 ? `${l.slice(0, 199)}…` : l));
+  if (all.length > MAX_TABLE_LINES) lines.push("…");
+  return ["> ```text", ...lines.map((l) => `> ${l}`), "> ```", ">", `> — ${citationLine(p)}`].join("\n");
 }

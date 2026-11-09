@@ -44,7 +44,7 @@ import {
   type Facts,
   type PinTarget,
 } from "./project";
-import { Business, Numbers, PeersStep, WhatChanged } from "./Steps";
+import { Business, EarningsStep, Numbers, PeersStep, WhatChanged } from "./Steps";
 
 interface Props {
   token: string;
@@ -261,6 +261,7 @@ function Project({ token, user, projectId, step: asked, itemId, saved, readable,
   const modelId = (itemId && models.some((m) => m.item_id === itemId) ? itemId : models[0]?.item_id) ?? null;
   // the header row says what the viewer reads; until it arrives, ask (the API decides: 403 shows as no access)
   const canFilings = row ? access.includes("filings") : true;
+  const canFinancials = row ? access.includes("financials") : true;
   const common = { token, companyId, name, ticker, label };
 
   const pane = (key: ProjectStep, body: ReactNode) => {
@@ -366,6 +367,7 @@ function Project({ token, user, projectId, step: asked, itemId, saved, readable,
             {pane("numbers", (
               <Numbers {...common} saved={saved} projectId={projectId} charts={charts} onOpenChart={onOpenChart} onSaved={itemsChanged} />
             ))}
+            {pane("earnings", <EarningsStep {...common} canReadFilings={canFilings} canReadFinancials={canFinancials} />)}
             {pane("changes", <WhatChanged {...common} canReadFilings={canFilings} />)}
             {pane("peers", (
               <PeersStep {...common} project={project} saved={saved} projectId={projectId} onSaved={itemsChanged}

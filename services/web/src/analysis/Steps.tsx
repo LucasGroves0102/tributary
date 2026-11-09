@@ -1,7 +1,8 @@
 /** The guided steps' bodies inside an analysis project. Each reuses the screens it comes from,
  * scoped to the project's company: the 10-K's Item 1 and the Segments tables (Business), the
- * chart builder's charts drawn by ChartView (Numbers), the filing page's What changed view
- * (What changed), Compare (Peers). Data is read through the Query API as the viewer, like on
+ * chart builder's charts drawn by ChartView (Numbers), the company page's Earnings view
+ * (Earnings), its "Since the last report" 8-Ks and the filing page's What changed view (What
+ * changed), Compare (Peers). Data is read through the Query API as the viewer, like on
  * those screens; the project grants nothing. */
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
@@ -9,6 +10,8 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { filingIndex, latestSection } from "../api";
 import { stateOf } from "../workspaces/model";
 import type { ChartState } from "../chart/model";
+import { EarningsView } from "../company/Earnings";
+import { EventsCard } from "../company/Events";
 import { Changes, type Change, type ChangedSection } from "../company/Filings";
 import { Gate, Segments } from "../company/Tables";
 import { useLoad } from "../company/useLoad";
@@ -213,7 +216,17 @@ export function Numbers({ token, companyId, name, ticker, label, saved, projectI
   );
 }
 
-// --- 3 What changed ----------------------------------------------------------------------------
+// --- 3 Earnings --------------------------------------------------------------------------------
+
+/** The quarter's earnings release beside its figures, its outlook and adjustments (pinnable). */
+export function EarningsStep({ token, companyId, name, canReadFilings, canReadFinancials }: StepCommon & {
+  canReadFilings: boolean;
+  canReadFinancials: boolean;
+}) {
+  return <EarningsView token={token} companyId={companyId} name={name} canReadFilings={canReadFilings} canReadFinancials={canReadFinancials} />;
+}
+
+// --- 4 What changed ----------------------------------------------------------------------------
 
 const changePassage = (companyId: string, c: Change, s: ChangedSection): Passage | null => {
   const removed = c.kind === "removed";
@@ -236,6 +249,8 @@ export function WhatChanged({ token, companyId, name, canReadFilings }: StepComm
   const shown = choices.find((f) => f.accession_no === pick) ?? choices[0] ?? null;
   if (!canReadFilings) return <p className="empty locked card">What changed compares filing text, which your plan doesn't include for {name}.</p>;
   return (
+    <>
+    <EventsCard token={token} companyId={companyId} name={name} />
     <section className="card">
       <div className="card-h wrap">
         <h3>Risk Factors and MD&amp;A, paragraph by paragraph</h3>
@@ -262,10 +277,11 @@ export function WhatChanged({ token, companyId, name, canReadFilings }: StepComm
         )}
       </Gate>
     </section>
+    </>
   );
 }
 
-// --- 4 Peers ---------------------------------------------------------------------------------
+// --- 5 Peers ---------------------------------------------------------------------------------
 
 export function PeersStep({ token, companyId, project, onPeers, onChart, saved, projectId, onSaved }: StepCommon & {
   project: ProjectState;
