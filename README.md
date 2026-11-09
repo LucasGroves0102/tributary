@@ -196,13 +196,20 @@ also work on their own:
   revenue growth in percentage points, and receivables against revenue (DSO, flagged when
   receivables grow more than 10 points faster than revenue). Each chart saves to a workspace so
   a thesis can embed it.
-- **Model**: a revenue-first forecast for one company. Its fiscal-year revenue and operating
-  income come live from the filings (as you, through the permission-checked API); you type
-  growth and operating margin for each forecast year (1-10 years) with a note on why, each shown
-  beside the company's own 5-year revenue CAGR and average margin. The chart draws history solid
-  and your forecast dashed; the table labels every year Reported or Forecast. Add **bear and
-  bull** cases beside the base one: the chart draws all three (bear and bull lighter), the table
-  the one you pick. Only your assumptions are saved.
+- **Model**: a forecast for one company, from revenue down to EPS and free cash flow. Its
+  history comes live from the filings (as you, through the permission-checked API), and the
+  current fiscal year starts from its reported quarters: Vertiv's FY2026 is Q1-Q3 as reported
+  plus the Q4 you set, Deckers' FY2027 is H1 plus H2. Per forecast year (1-10) you type growth
+  and operating margin, and optionally interest, tax rate, share change (buybacks) and FCF
+  margin; anything left blank follows the company's own history, and one line per default says
+  how. Name one-off adjustments (Deckers' $46M of tariff refunds) to see margins reported and
+  adjusted, and acquired revenue for organic growth. The company's latest outlook sits beside the
+  year it covers, quoted with its 8-K. Type a price and its date to get market cap, P/E,
+  EV/Revenue, EV/EBIT and FCF yield on history and every case; it's your price, nothing is
+  fetched. **Bear, base and bull** sit side by side in one table, every line, and on one chart.
+  Every save keeps the version it replaced. Only your inputs are saved; the maths run in one
+  place, the Query API (`POST /v1/companies/{id}/model`), for the page, the thesis check and
+  later MCP.
 - **Thesis**: your Markdown about a company, with any chart, comps table, screen or model from
   the same workspace embedded where you put it, drawn live. Write, preview or both side by side;
   import a `.md` file and export one (embeds become `[Chart: name]` lines). Rendered through the
@@ -245,7 +252,8 @@ without losing anything you typed:
    guidance), then new, removed and rewritten Risk Factors and MD&A paragraphs in the latest
    10-K and 10-Q.
 5. **Peers**: the comps table for the company and its peers.
-6. **Model**: the revenue model with bear, base and bull cases.
+6. **Model**: the model, this year from its reported quarters, with bear, base and bull side by
+   side.
 7. **Thesis**: starts from a template: core thesis (3-5 sentences), variant perception
    (what the market misses), pillars with evidence, catalysts (the next expected filings
    prefilled), risks and mitigants, what would prove you wrong, and KPIs to watch.
