@@ -32,7 +32,12 @@ page. Every data table is a `components/TableScroll`: a table that doesn't fit s
 are off screen on each side and moves to them, shows a shadow on an edge with more beyond it and on a
 frozen name column once something is under it, blanks a column showing only in part (a number is
 never read with digits missing), and takes arrow keys once focused; a statement opens at its newest
-periods. Numeric headers stack their label over their unit, so a column is as wide as
+periods. A long table's header row stays under the top bar while the page scrolls past it: the
+table scrolls sideways, so a `position: sticky` header could only stick inside that scroller, and a
+bounded-height scroller would trap the wheel on pages with several tables; instead the real header
+row moves down (`headerShift`, a `--tw-head-y` variable set through the CSSOM, which the CSP allows),
+so its sort buttons, the frozen first column and the sideways scroll work unchanged and there is no
+copy to keep in step. Numeric headers stack their label over their unit, so a column is as wide as
 its numbers, and as a table narrows the wordy columns give way first (the screener's industry and
 Peers' "Why" move under the name; the watchlist's period end and Compare's fiscal label go to the
 hover). Dollars in a statement, segment or revenue row share the largest value's unit (`format.ts`

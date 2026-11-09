@@ -977,6 +977,18 @@ table.t {
   z-index: 2;
 }
 
+/* the header moved down to stay under the top bar while the page scrolls past the table
+   (TableScroll headerShift): over the rows, with a shadow so it reads as lifted */
+.tw[data-head-moved] .t thead th {
+  transform: translateY(var(--tw-head-y, 0px));
+  z-index: 2;
+  box-shadow: 0 1px 0 var(--line), 0 6px 6px -6px var(--edge-shadow);
+}
+
+.tw[data-head-moved] .t thead th.first {
+  z-index: 3;
+}
+
 /* frozen: a line while the table scrolls, a shadow once a column has gone under it */
 .tw-port.scrolls .t .first {
   border-right: 1px solid var(--line);

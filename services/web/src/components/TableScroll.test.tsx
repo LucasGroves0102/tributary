@@ -2,7 +2,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { columnsOff, cutColumns, TableScroll } from "./TableScroll";
+import { columnsOff, cutColumns, headerShift, TableScroll } from "./TableScroll";
 
 describe("columnsOff", () => {
   const cell = (left: number, right: number, frozen = false) => ({ left, right, width: right - left, frozen });
@@ -123,5 +123,65 @@ describe("TableScroll", () => {
     layout(800, 300);
     act(() => root.render(<TableScroll atEnd>{table}</TableScroll>));
     expect(container.querySelector(".tw")!.scrollLeft).toBe(800);
+  });
+});
+
+describe("headerShift (the header stays in view)", () => {
+  it("stays put while the table's top is below the top bar", () => {
+    expect(headerShift({ top: 120, height: 900 }, 40, 48)).toBe(0);
+    expect(headerShift({ top: 48, height: 900 }, 40, 48)).toBe(0);
+  });
+
+  it("moves down with the page once the table's top has gone under the top bar", () => {
+    expect(headerShift({ top: -300, height: 900 }, 40, 48)).toBe(348);
+  });
+
+  it("never leaves its own table: at the last row it goes up with it", () => {
+    expect(headerShift({ top: -2000, height: 900 }, 40, 48)).toBe(860);
+    expect(headerShift({ top: -2000, height: 30 }, 40, 48)).toBe(0);
+  });
+});
+
+describe("TableScroll's header on a scrolled page", () => {
+  afterEach(() => {
+    document.body.innerHTML = "";
+    delete (Element.prototype as { getBoundingClientRect?: unknown }).getBoundingClientRect;
+    delete (HTMLElement.prototype as { offsetHeight?: number }).offsetHeight;
+  });
+
+  const rows = (cell: string) => (
+    <TableScroll>
+      <table>
+        <thead><tr><th className="first"><button>Company</button></th><th>A</th></tr></thead>
+        <tbody><tr><td className="first">{cell}</td><td>1</td></tr></tbody>
+      </table>
+    </TableScroll>
+  );
+
+  it("moves the real header (sort buttons and all) under the top bar, and back when scrolled up", () => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    let tableTop = -300;
+    Element.prototype.getBoundingClientRect = function (this: Element) {
+      if (this.classList.contains("top")) return { top: 0, bottom: 48, left: 0, right: 1000 } as DOMRect;
+      if (this.tagName === "TABLE") return { top: tableTop, bottom: tableTop + 900, height: 900, left: 0, right: 1000, width: 1000 } as DOMRect;
+      return { top: 0, bottom: 0, left: 0, right: 1000, width: 1000, height: 0 } as DOMRect;
+    };
+    Object.defineProperty(HTMLElement.prototype, "offsetHeight", { configurable: true, get: () => 40 });
+    const bar = document.createElement("header");
+    bar.className = "top";
+    const container = document.createElement("div");
+    document.body.append(bar, container);
+    const root = createRoot(container);
+    act(() => root.render(rows("x")));
+    const tw = container.querySelector<HTMLElement>(".tw")!;
+    expect(tw.style.getPropertyValue("--tw-head-y")).toBe("348px");
+    expect(tw.hasAttribute("data-head-moved")).toBe(true);
+    // the same header element: nothing copied
+    expect(container.querySelectorAll("thead").length).toBe(1);
+    tableTop = 200;
+    act(() => root.render(rows("y")));
+    expect(tw.style.getPropertyValue("--tw-head-y")).toBe("");
+    expect(tw.hasAttribute("data-head-moved")).toBe(false);
+    act(() => root.unmount());
   });
 });
