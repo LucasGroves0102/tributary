@@ -1376,7 +1376,7 @@ of sections (CAT, 3.4M characters: 68 ms).
 Measured by hand on 2026-11-09, on production's sections (2021-2026), every kept value checked against
 its passage. Built on 21 companies: Vertiv, Caterpillar, GE Vernova, Boeing, Lockheed Martin, Eaton,
 Northrop Grumman, General Dynamics, RTX, Honeywell, Emerson, Rockwell, Parker-Hannifin, Flowserve,
-Hubbell, Xylem, Deere, and NVIDIA, Coca-Cola, Deckers, Sprouts (which state none): 174 values at 13
+Hubbell, Xylem, Deere, and NVIDIA, Coca-Cola, Deckers (which state none): 174 values at 13
 companies (161 backlog, 1 orders, 12 order growth), all correct after the rules above; the errors found
 on the way, each now a rule and a test: General Dynamics' segment sentences (15 wrong values),
 Northrop's funded column (15), Emerson's table with last year first (5), Honeywell's segment "Orders
