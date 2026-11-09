@@ -323,8 +323,10 @@ class HttpsSender:
             return Sent(False, None, "connect")
         finally:
             conn.close()
+        if not 100 <= status <= 599:  # not an HTTP status: nothing of it is kept
+            return Sent(False, None, "bad_response")
         if 200 <= status < 300:
             return Sent(True, status)
         if 300 <= status < 400:
             return Sent(False, status, "redirect")
-        return Sent(False, status, f"http_{status}" if 100 <= status <= 599 else "bad_response")
+        return Sent(False, status, f"http_{status}")

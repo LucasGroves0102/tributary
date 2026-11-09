@@ -191,6 +191,14 @@ def test_an_error_status_fails_with_a_code(status, code):
     assert sender.send("https://hooks.example.com/x", b"{}", {}) == Sent(False, status, code)
 
 
+@pytest.mark.parametrize("status", [999, 600, 42])
+def test_a_status_outside_http_is_kept_as_nothing(status):
+    # the delivery log's CHECK takes 100-599: anything else would fail the write and retry forever
+    sender = HttpsSender(resolver=answers("93.184.216.34"), opener=opener(status))
+    assert sender.send("https://hooks.example.com/x", b"{}", {}) == Sent(False, None,
+                                                                         "bad_response")
+
+
 @pytest.mark.parametrize("error, code", [(TimeoutError(), "timeout"),
                                          (ConnectionRefusedError(), "connect")])
 def test_connection_failures_are_codes(error, code):
