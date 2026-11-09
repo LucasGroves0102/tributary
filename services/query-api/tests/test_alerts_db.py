@@ -5,6 +5,7 @@ filing index: follows, forms, pending then ready, red lines, routine 8-Ks, idemp
 deliveries with retries. Skipped unless APP_TEST_DATABASE_URL is set; every test is rolled back.
 Never calls the network: the resolver and the sender are fakes."""
 
+import json
 import logging
 import os
 from contextlib import contextmanager
@@ -15,7 +16,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from query_api.alert_job import run
-from query_api.alerts import AppAlerts
+from query_api.alerts import MAX_RED_LINES_TOTAL, AppAlerts
 from query_api.app import create_app
 from query_api.webhooks import Sent, signature, webhook_secret
 
@@ -419,7 +420,7 @@ def test_a_stalled_webhook_holds_up_only_its_owner(conn, alerts):
     report = run(alerts=alerts, store=JobStore(), can=FakeAuthorizer({}).can, sender=sender,
                  jwt_secret=SECRET, now=NOW, users=[A, B],
                  shuffle=lambda users: order.extend(users))
-    assert order == [A, B]
+    assert order == [A, B, A, B]  # making, then sending
     # each of A's two webhooks was tried once (then skipped for the run); B's got all three
     assert sender.sent.count(HOOK_URL) == 1 and sender.sent.count(HOOK_URL + "-second") == 1
     assert sender.sent.count("https://hooks.example.org/b") == 3
@@ -430,9 +431,54 @@ def test_a_stalled_webhook_holds_up_only_its_owner(conn, alerts):
 
 def test_sends_stop_at_the_runs_budget(conn, alerts):
     alerts.add_webhook(A, HOOK_URL, "json", b"s" * 16)
-    clock = iter([0.0, 1e6, 1e6, 1e6, 1e6])  # the budget is spent before the first send
+    # making starts at 0 and reaches A at 1; sending starts at 1e6 and is past its budget by the
+    # first send
+    clock = iter([0.0, 1.0, 1e6, 3e6, 3e6, 3e6])
     sender = RecordingSender()
     run(alerts=alerts, store=JobStore(), can=FakeAuthorizer({}).can, sender=sender,
         jwt_secret=SECRET, now=NOW, users=[A], monotonic=lambda: next(clock))
     assert sender.sent == []
     assert {d["status"] for d in alerts.deliveries(A, None, 10)} == {"pending"}
+
+
+def test_an_upper_case_scheme_is_stored_in_lower_case(conn, alerts, token):
+    # it used to pass the check and fail the table's https:// CHECK, with the URL in the error
+    c = api(alerts, RecordingSender())
+    r = c.post("/v1/alerts/webhooks", headers=token(A),
+               json={"url": "HTTPS://Hooks.Example.com/tributary/" + "t" * 32})
+    assert r.status_code == 200, r.text
+    (row,) = conn.execute("SELECT url FROM webhooks WHERE user_id = %s", (A,)).fetchall()
+    assert row[0] == "https://hooks.example.com/tributary/" + "t" * 32
+
+
+def test_red_lines_are_capped_per_user_and_only_followed_ones_are_planned(conn, alerts):
+    for i in range(MAX_RED_LINES_TOTAL):
+        conn.execute("INSERT INTO red_lines (user_id, company_id, label, formula, view, op,"
+                     " threshold) VALUES (%s, %s, 'x', 'revenue', 'ttm', '<', 1)",
+                     (A, f"{9000000000 + i // 10:010d}"))
+    assert alerts.add_red_line(A, NVDA, "GM", "gross_margin", "ttm", "<", Decimal(1)) is None
+    plan = alerts.plan(A)
+    assert set(plan["red_lines"]) == set()  # A follows NVDA only, and has no rule for it
+    assert len(alerts.red_lines(A, None)) == MAX_RED_LINES_TOTAL
+
+
+def test_old_test_sends_are_pruned(conn, alerts):
+    hook = alerts.add_webhook(A, HOOK_URL, "json", b"s" * 16)
+    alerts.record_test(A, hook["webhook_id"], Sent(True, 204), NOW - timedelta(days=200))
+    conn.execute("UPDATE webhook_deliveries SET created_at = %s", (NOW - timedelta(days=200),))
+    alerts.prune(A, NOW - timedelta(days=180))
+    assert alerts.deliveries(A, None, 10) == []
+
+
+def test_figures_go_out_only_while_the_company_is_readable(conn, alerts):
+    """A delivery retried after the user lost access sends no figures (layer 1 at send time)."""
+    alerts.add_webhook(A, HOOK_URL, "json", b"s" * 16)
+    store = JobStore()
+    store.filings = [f for f in store.filings if f["accession_no"] == Q3]
+    store.recaps[Q3] = recap_rows(Q3)
+    failing = RecordingSender([Sent(False, 500, "http_500"), Sent(True, 200)])
+    run_job(alerts, store, failing)  # ready with figures; the send fails
+    run_job(alerts, store, failing, grants={A: {}}, now=NOW + timedelta(minutes=6))
+    first, second = (json.loads(b) for _, b, _ in failing.sent)
+    assert first["figures"] and second["figures"] is None and second["red_lines"] == []
+    assert second["figures_status"] == "no_access"

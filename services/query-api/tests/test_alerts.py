@@ -214,3 +214,24 @@ def test_a_demo_sandbox_cant_add_a_webhook(token):
     r = client().post("/v1/alerts/webhooks", headers=token("demo-0123456789abcdef"),
                       json={"url": "https://discord.com/api/webhooks/1/x"})
     assert r.status_code == 403 and r.json()["code"] == "permanent_account"
+
+
+@pytest.mark.parametrize("field, value", [("label", "GM\x01 floor"), ("label", "GM\x85"),
+                                          ("formula", "gross_margin\x1c"),
+                                          ("formula", "gross_margin\u3000")])
+def test_red_lines_refuse_control_characters(token, field, value):
+    body = {"company_id": NVDA, "label": "GM floor", "formula": "gross_margin", "op": "<",
+            "threshold": "0.5", field: value}
+    assert client().post("/v1/alerts/red-lines", headers=token("alice"), json=body).status_code \
+        == 422
+
+
+def test_webhook_attempts_are_rate_limited_before_any_lookup(token):
+    c = client()  # the resolver answers a private address: each attempt is a refusal
+    codes = [c.post("/v1/alerts/webhooks", headers=token("alice"),
+                    json={"url": "https://hooks.example.com/x"}).json()["code"]
+             for _ in range(21)]
+    assert codes[:20] == ["private_address"] * 20 and codes[20] == "rate_limited"
+    # what needs no lookup is still refused for what it is
+    r = c.post("/v1/alerts/webhooks", headers=token("alice"), json={"url": "http://x.example.com"})
+    assert r.json()["code"] == "scheme"

@@ -4,20 +4,26 @@ this module is SSRF-sensitive; everything that sends goes through `HttpsSender`,
 
 Rules (the spec; README "Filing alerts"; test_webhooks.py):
 
-- URL: `https://` only; a host name or a literal address, no user info, no fragment, port 443
-  only, at most MAX_URL characters. Names that only make sense inside a network (localhost and
-  `*.localhost`, `*.local`, `*.internal`, `*.lan`, `*.home.arpa`, `*.svc`, `*.cluster.local`, a
-  name without a dot) are refused before any lookup.
-- Addresses: the name is resolved (every A and AAAA answer) and refused when ANY answer isn't a
-  public address: private, loopback, link-local (169.254.0.0/16 and fe80::/10, where cloud
-  metadata lives: 169.254.169.254), shared (100.64.0.0/10), reserved, multicast, unspecified,
-  IPv4-mapped or -compatible IPv6 of any of those, NAT64 (64:ff9b::/96), 6to4 (2002::/16) and
-  Teredo (2001::/32). Checked when the webhook is saved and again before every send; the
+- URL: `https://` only; a host name or a literal address (no IPv6 zone), no user info, no
+  fragment, port 443 only, an ASCII path and query (percent-encode the rest), at most MAX_URL
+  characters; stored as `normalized` (scheme and host in lower case). Names that only make sense
+  inside a network (localhost and `*.localhost`, `*.local`, `*.internal`, `*.lan`, `*.home.arpa`,
+  `*.svc`, `*.cluster.local`, a name without a dot) are refused before any lookup.
+- Addresses: the name is resolved as an absolute name (a trailing dot: the pod's search
+  domains never apply, so a cluster service's short name doesn't resolve), every A and AAAA
+  answer, and refused when ANY answer isn't a public address: private, loopback, link-local
+  (169.254.0.0/16 and fe80::/10, where cloud metadata lives: 169.254.169.254), shared
+  (100.64.0.0/10), reserved, multicast, unspecified, site-local (fec0::/10), IPv4-mapped or
+  -compatible IPv6 of any of those, NAT64 (64:ff9b::/96), 6to4 (2002::/16) and Teredo
+  (2001::/32). Checked when the webhook is saved and again before every send; the
   connection then goes to the address just checked (no second lookup, so a name can't answer
   public once and private the next time: DNS rebinding). TLS is verified against the name.
 - Redirects are never followed: a 3xx is a failed delivery ("redirect"). Delivered = a 2xx.
 - Size and time: a request body of at most MAX_BODY bytes; at most MAX_RESPONSE bytes of the
-  answer are read (and dropped); CONNECT_TIMEOUT for the connection, TOTAL_TIMEOUT for the send.
+  answer are read (and dropped); CONNECT_TIMEOUT for each socket operation, and a hard
+  TOTAL_TIMEOUT for the whole send: the exchange runs on a worker thread and the socket is shut
+  down when time is up, so an endpoint trickling bytes or endless 100 Continues can't hold a
+  thread longer. Any failure is a short code; nothing raises out of `send`.
 - Signed: `X-Tributary-Signature: v1=<hex HMAC-SHA256(secret, "<timestamp>.<body>")>` with
   `X-Tributary-Timestamp` (Unix seconds), `X-Tributary-Delivery` (the delivery's id) and
   `X-Tributary-Event`. A receiver recomputes it with its secret and rejects old timestamps.
@@ -39,12 +45,13 @@ import re
 import secrets
 import socket
 import ssl
+import threading
 import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Protocol
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 
 MAX_URL = 2048
 MAX_BODY = 16 * 1024
@@ -101,6 +108,10 @@ def parse_url(url: str) -> Target:
         raise WebhookRefused("url", "the URL can't have a #fragment")
     if port not in (None, PORT):
         raise WebhookRefused("port", "alerts are sent to port 443 only")
+    if "%" in parts.netloc:
+        raise WebhookRefused("host", "the host can't carry a % (an IPv6 zone)")
+    if not (parts.path + parts.query).isascii():
+        raise WebhookRefused("url", "percent-encode the URL's path (it has non-ASCII characters)")
     host = (parts.hostname or "").rstrip(".")
     if not host:
         raise WebhookRefused("host", "the URL has no host")
@@ -125,10 +136,18 @@ def parse_url(url: str) -> Target:
     return Target(host, PORT, path)
 
 
+def normalized(url: str) -> str:
+    """The URL as stored and sent: scheme and host in lower case, path and query as given."""
+    parts = urlsplit(url)
+    return urlunsplit(("https", parts.netloc.lower(), parts.path, parts.query, ""))
+
+
 def public(address: str) -> bool:
     """Whether an address may be sent to: a public unicast address (the rules above)."""
+    if "%" in address:  # a zone: link-scoped by definition
+        return False
     try:
-        ip = ipaddress.ip_address(address.split("%", 1)[0])
+        ip = ipaddress.ip_address(address)
     except ValueError:
         return False
     if isinstance(ip, ipaddress.IPv6Address):
@@ -139,6 +158,8 @@ def public(address: str) -> bool:
             mapped = ipaddress.IPv4Address(ip.packed[12:])  # ::a.b.c.d (IPv4-compatible)
         if mapped is not None:
             return public(str(mapped))
+        if ip.is_site_local:
+            return False
     return bool(ip.is_global and not (ip.is_private or ip.is_loopback or ip.is_link_local
                                       or ip.is_multicast or ip.is_reserved
                                       or ip.is_unspecified))
@@ -161,8 +182,8 @@ def resolve(target: Target, resolver: Resolver = socket.getaddrinfo) -> list[str
         ipaddress.ip_address(target.host)
         addresses = [target.host]
     except ValueError:
-        try:
-            infos = resolver(target.host, target.port, type=socket.SOCK_STREAM)
+        try:  # absolute: no search domain (a cluster's service names) is ever tried
+            infos = resolver(target.host + ".", target.port, type=socket.SOCK_STREAM)
         except (OSError, UnicodeError):
             raise WebhookRefused("unresolvable", "that host name doesn't resolve") from None
         addresses = list(dict.fromkeys(str(i[4][0]) for i in infos))
@@ -275,6 +296,7 @@ class _PinnedHTTPS(http.client.HTTPSConnection):
 
     def connect(self) -> None:
         sock = socket.create_connection((self._address, self.port), self.timeout)
+        self.raw = sock  # so a deadline can cut the TLS handshake too
         self.sock = self._ctx.wrap_socket(sock, server_hostname=self.host)
 
 
@@ -285,13 +307,24 @@ def _open(target: Target, address: str, timeout: float) -> http.client.HTTPConne
     return _PinnedHTTPS(target.host, address, target.port, timeout, ssl.create_default_context())
 
 
+def _abort(conn: http.client.HTTPConnection) -> None:
+    """Cut a send that ran out of time: shut the sockets down so the worker's blocked read ends."""
+    for sock in (getattr(conn, "raw", None), conn.sock):
+        if sock is not None:
+            try:
+                sock.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+    conn.close()
+
+
 class HttpsSender:
     """The one way a webhook is called (the rules above). `resolver` and `opener` are injected
     in tests; nothing here retries (the job's delivery log does, with backoff)."""
 
     def __init__(self, resolver: Resolver = socket.getaddrinfo, opener: Opener = _open,
-                 monotonic: Callable[[], float] = time.monotonic) -> None:
-        self._resolve, self._open, self._now = resolver, opener, monotonic
+                 total_timeout: float = TOTAL_TIMEOUT) -> None:
+        self._resolve, self._open, self._total = resolver, opener, total_timeout
 
     def send(self, url: str, body: bytes, headers: dict[str, str]) -> Sent:
         if len(body) > MAX_BODY:
@@ -300,33 +333,46 @@ class HttpsSender:
             target, address = vet(url, self._resolve)
         except WebhookRefused as e:
             return Sent(False, None, e.code)
-        start = self._now()
         conn = self._open(target, address, CONNECT_TIMEOUT)
-        try:
-            conn.connect()
-            remaining = TOTAL_TIMEOUT - (self._now() - start)
-            if remaining <= 0:
-                return Sent(False, None, "timeout")
-            if conn.sock is not None:
-                conn.sock.settimeout(remaining)
-            conn.request("POST", target.path, body=body, headers=headers)
-            response = conn.getresponse()
-            status = response.status
-            response.read(MAX_RESPONSE)  # bounded; the rest is never read
-        except TimeoutError:
+        box: list[Sent] = []
+        worker = threading.Thread(target=lambda: box.append(_exchange(conn, target, body, headers)),
+                                  name="webhook-send", daemon=True)
+        worker.start()
+        worker.join(self._total)
+        if worker.is_alive() or not box:
+            _abort(conn)
+            worker.join(1.0)
             return Sent(False, None, "timeout")
-        except ssl.SSLError:
-            return Sent(False, None, "tls")
-        except http.client.HTTPException:
-            return Sent(False, None, "bad_response")
-        except OSError:
-            return Sent(False, None, "connect")
-        finally:
-            conn.close()
-        if not 100 <= status <= 599:  # not an HTTP status: nothing of it is kept
-            return Sent(False, None, "bad_response")
-        if 200 <= status < 300:
-            return Sent(True, status)
-        if 300 <= status < 400:
-            return Sent(False, status, "redirect")
-        return Sent(False, status, f"http_{status}")
+        return box[0]
+
+
+def _exchange(conn: http.client.HTTPConnection, target: Target, body: bytes,
+              headers: dict[str, str]) -> Sent:
+    """One POST and its status (on HttpsSender's worker thread); never raises."""
+    try:
+        conn.connect()
+        conn.request("POST", target.path, body=body, headers=headers)
+        response = conn.getresponse()
+        status = response.status
+        response.read(MAX_RESPONSE)  # bounded; the rest is never read
+    except TimeoutError:
+        return Sent(False, None, "timeout")
+    except ssl.SSLError:
+        return Sent(False, None, "tls")
+    except http.client.HTTPException:
+        return Sent(False, None, "bad_response")
+    except OSError:
+        return Sent(False, None, "connect")
+    except (UnicodeError, ValueError):
+        return Sent(False, None, "bad_url")
+    except Exception:
+        return Sent(False, None, "send_failed")
+    finally:
+        conn.close()
+    if not 100 <= status <= 599:  # not an HTTP status: nothing of it is kept
+        return Sent(False, None, "bad_response")
+    if 200 <= status < 300:
+        return Sent(True, status)
+    if 300 <= status < 400:
+        return Sent(False, status, "redirect")
+    return Sent(False, status, f"http_{status}")

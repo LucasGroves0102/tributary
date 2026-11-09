@@ -29,7 +29,8 @@ Rules (the spec; README "Filing alerts"; test_alerts.py):
   (quarter or ttm), an operator (< <= > >=) and a constant. `crossed` is the comparison's truth
   at the filing's period (the formula's point whose period end is within 7 days of it); no
   such point is `no_value`. A red line describes the trouble ("gross margin < 0.55"), so
-  crossed = the alert says so. At most MAX_RED_LINES per company.
+  crossed = the alert says so. At most MAX_RED_LINES per company, MAX_RED_LINES_TOTAL per user;
+  labels and formulas without control characters, formulas printable ASCII (the language is).
 - Idempotent on the filing: one notification per (user, accession, company), inserted with ON
   CONFLICT DO NOTHING, so a run seeing a filing again (each run reads the last LOOKBACK_DAYS)
   changes nothing. A delivery is one per (webhook, notification). Notifications older than
@@ -78,6 +79,8 @@ from query_api.webhooks import (
     headers,
     mask,
     new_salt,
+    normalized,
+    parse_url,
     suggest_format,
     vet,
     webhook_secret,
@@ -91,6 +94,8 @@ LOOKBACK_DAYS = 3        # each run reads filings filed in the last 3 days (ET)
 PENDING_DAYS = 3         # a filing waits this long for its figures or items
 KEEP_DAYS = 180          # notifications older than this are deleted by the job
 MAX_RED_LINES = 10       # per company
+MAX_RED_LINES_TOTAL = 200  # per user
+WEBHOOK_ADDS_PER_HOUR = 20  # attempts (each resolves a name)
 MAX_WEBHOOKS = 3         # per user
 MAX_SETTINGS = 1000      # per user
 MAX_LIST = 100
@@ -383,20 +388,22 @@ class AppAlerts:
             cur.execute("SELECT rule_id::text, company_id, label, formula, view, op, threshold,"
                         "       created_at FROM red_lines"
                         " WHERE user_id = %(u)s AND (%(c)s::text IS NULL OR company_id = %(c)s)"
-                        " ORDER BY company_id, created_at, rule_id",
-                        {"u": user_id, "c": company_id})
+                        " ORDER BY company_id, created_at, rule_id LIMIT %(n)s",
+                        {"u": user_id, "c": company_id, "n": MAX_RED_LINES_TOTAL})
             return cur.fetchall()
 
     def add_red_line(self, user_id: str, company_id: str, label: str, formula: str, view: str,
                      op: str, threshold: Decimal) -> dict | None:
-        """None: the company has MAX_RED_LINES already."""
+        """None: the company has MAX_RED_LINES, or the user MAX_RED_LINES_TOTAL, already."""
         try:
             with self._tx(user_id) as cur:
                 cur.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
                             ("red_lines:" + user_id,))
-                cur.execute("SELECT count(*) AS n FROM red_lines WHERE user_id = %s"
-                            " AND company_id = %s", (user_id, company_id))
-                if (cur.fetchone() or {"n": 0})["n"] >= MAX_RED_LINES:
+                cur.execute("SELECT count(*) FILTER (WHERE company_id = %s) AS here,"
+                            "       count(*) AS total FROM red_lines WHERE user_id = %s",
+                            (company_id, user_id))
+                n = cur.fetchone() or {"here": 0, "total": 0}
+                if n["here"] >= MAX_RED_LINES or n["total"] >= MAX_RED_LINES_TOTAL:
                     return None
                 cur.execute("INSERT INTO red_lines (user_id, company_id, label, formula, view, op,"
                             " threshold) VALUES (%s, %s, %s, %s, %s, %s, %s)"
@@ -499,16 +506,17 @@ class AppAlerts:
             return [r[0] for r in cur.fetchall()]
 
     def plan(self, user_id: str) -> dict:
-        """What the job needs for a user, in one transaction: follows, settings, red lines,
-        whether a webhook is on, pending notifications."""
+        """What the job needs for a user: follows, and for the followed companies only their
+        settings and red lines; how many webhooks are on."""
         follows = self.follows(user_id)
+        ids = [f["company_id"] for f in follows]
         with self._tx(user_id) as cur:
-            cur.execute("SELECT company_id, forms FROM alert_settings WHERE user_id = %s",
-                        (user_id,))
+            cur.execute("SELECT company_id, forms FROM alert_settings WHERE user_id = %s"
+                        " AND company_id = ANY(%s)", (user_id, ids))
             settings = {r["company_id"]: r["forms"] for r in cur.fetchall()}
             cur.execute("SELECT rule_id::text, company_id, label, formula, view, op, threshold"
-                        " FROM red_lines WHERE user_id = %s ORDER BY created_at, rule_id",
-                        (user_id,))
+                        " FROM red_lines WHERE user_id = %s AND company_id = ANY(%s)"
+                        " ORDER BY created_at, rule_id", (user_id, ids))
             rules: dict[str, list[dict]] = {}
             for r in cur.fetchall():
                 rules.setdefault(r["company_id"], []).append(r)
@@ -612,10 +620,14 @@ class AppAlerts:
                         (user_id, at, through))
 
     def prune(self, user_id: str, before: datetime) -> int:
+        """Notifications (and their deliveries, by cascade) and test sends older than `before`."""
         with self._tx(user_id) as cur:
             cur.execute("DELETE FROM notifications WHERE user_id = %s AND created_at < %s",
                         (user_id, before))
-            return cur.rowcount
+            n = cur.rowcount
+            cur.execute("DELETE FROM webhook_deliveries WHERE user_id = %s"
+                        " AND notification_id IS NULL AND created_at < %s", (user_id, before))
+            return n
 
 
 # --- shapes -----------------------------------------------------------------------------------
@@ -706,9 +718,18 @@ class RedLineBody(_Strict):
     @field_validator("label")
     @classmethod
     def _label(cls, v: str) -> str:
+        if any(ord(c) < 32 or 127 <= ord(c) < 160 for c in v):
+            raise ValueError("no control characters")
         v = " ".join(v.split())
         if not v:
             raise ValueError("a short name for the red line")
+        return v
+
+    @field_validator("formula")
+    @classmethod
+    def _formula(cls, v: str) -> str:
+        if not re.fullmatch(r"[ -~]+", v):
+            raise ValueError("metrics, numbers and + - * / ( ) [ ] only")
         return v
 
 
@@ -734,6 +755,7 @@ def add_alert_routes(app: FastAPI, *, alerts: AppAlerts | None, store: Any,
     User = Annotated[str, Depends(current_user)]
     send = sender or HttpsSender()
     limiter = test_sends or Limiter(TEST_SENDS_PER_HOUR)
+    adds = Limiter(WEBHOOK_ADDS_PER_HOUR)
 
     def db() -> AppAlerts:
         if alerts is None:
@@ -839,7 +861,8 @@ def add_alert_routes(app: FastAPI, *, alerts: AppAlerts | None, store: Any,
         except UnknownUser:
             raise HTTPException(409, "no account to save red lines to") from None
         if row is None:
-            raise HTTPException(409, f"a company has at most {MAX_RED_LINES} red lines")
+            raise HTTPException(409, f"at most {MAX_RED_LINES} red lines a company and "
+                                     f"{MAX_RED_LINES_TOTAL} in all")
         return {"red_line": {**row, "threshold": str(row["threshold"]),
                              "display": display_of(row["formula"], row["view"])}}
 
@@ -886,16 +909,25 @@ def add_alert_routes(app: FastAPI, *, alerts: AppAlerts | None, store: Any,
             return _bad(422, "invalid", 'send {"url": "https://...", "format": "json", "discord"'
                                         ' or "slack"}')
         url = url.strip()
+        try:  # what needs no lookup first, then at most WEBHOOK_ADDS_PER_HOUR lookups
+            parse_url(url)
+        except WebhookRefused as e:
+            return _bad(422, e.code, str(e))
+        if not adds.take(user_id):
+            return _bad(429, "rate_limited", "too many webhooks tried; try again in an hour")
         try:
             await run_in_threadpool(vet, url, *((resolver,) if resolver else ()))
         except WebhookRefused as e:
             return _bad(422, e.code, str(e))
         salt = new_salt()
         try:
-            row = await run_in_threadpool(db().add_webhook, user_id, url,
+            row = await run_in_threadpool(db().add_webhook, user_id, normalized(url),
                                           fmt or suggest_format(url), salt)
         except UnknownUser:
             return _bad(409, "unknown_user", "no account to save a webhook to")
+        except psycopg.Error as e:  # its message can quote the row, URL and all: never logged
+            log.warning("webhook not saved: %s", type(e).__name__, extra={"user_id": user_id})
+            return _bad(500, "not_saved", "couldn't save the webhook")
         if row is None:
             return _bad(409, "limit", f"at most {MAX_WEBHOOKS} webhooks")
         log.info("webhook added", extra={"user_id": user_id, "webhook_id": row["webhook_id"]})

@@ -4,8 +4,11 @@ rules. No network: the resolver and the connection are injected."""
 
 import hashlib
 import hmac
+import http.client
 import json
 import socket
+import threading
+import time
 
 import pytest
 
@@ -19,6 +22,7 @@ from query_api.webhooks import (
     body_of,
     headers,
     mask,
+    normalized,
     parse_url,
     public,
     resolve,
@@ -71,6 +75,9 @@ def answers(*addresses):
     ("https://hooks.example.com/x#frag", "url"),
     ("https://hooks.exa mple.com/x", "url"),
     ("https://", "host"),
+    ("https://[2606:4700::1111%251]/x", "host"),
+    ("https://example.com/caf\u00e9", "url"),
+    ("https://[fec0::1]/x", "private_address"),
     ("https://" + "a" * 2050 + ".com/", "url"),
 ])
 def test_urls_refused_before_any_lookup(url, code):
@@ -251,3 +258,65 @@ def test_formats_and_bodies():
     slack = json.loads(body_of("slack", {"a": 1}, "<!channel> & co"))
     assert slack["text"] == "&lt;!channel&gt; &amp; co"
     assert json.loads(body_of("json", {"a": 1}, "ignored")) == {"a": 1}
+
+
+def test_names_resolve_as_absolute_names():
+    # a trailing dot: the pod's search domains (a cluster's short service names) never apply
+    asked = []
+
+    def resolver(host, port, type=None):
+        asked.append(host)
+        return [(2, 1, 6, "", ("93.184.216.34", port))]
+    vet("https://hooks.example.com/x", resolver)
+    assert asked == ["hooks.example.com."]
+
+
+def test_a_url_is_stored_with_its_scheme_and_host_in_lower_case():
+    url = "HTTPS://Discord.COM/api/webhooks/1/AbC?wait=true"
+    assert parse_url(url).host == "discord.com"
+    assert normalized(url) == "https://discord.com/api/webhooks/1/AbC?wait=true"
+
+
+def test_any_error_in_the_exchange_is_a_code():
+    def boom(target, address, timeout):
+        conn = FakeConnection(target, address, timeout)
+        def request(*_a, **_k):
+            raise UnicodeEncodeError("ascii", "é", 0, 1, "not ascii")
+        conn.request = request
+        return conn
+    sender = HttpsSender(resolver=answers("93.184.216.34"), opener=boom)
+    assert sender.send("https://hooks.example.com/x", b"{}", {}) == Sent(False, None, "bad_url")
+
+
+def test_a_trickling_endpoint_is_cut_at_the_total_deadline():
+    """A real socket: the server answers one byte every 0.3 s, forever. Each read is well inside
+    the per-read timeout, so only the hard deadline ends it (the review's 27 s against 8 s)."""
+    server, client = socket.socketpair()
+    stop = threading.Event()
+
+    def trickle():
+        server.recv(65536)  # the request
+        for b in b"HTTP/1.1 200 OK\r\nX-Slow: " + b"a" * 1000:
+            if stop.is_set():
+                return
+            try:
+                server.send(bytes([b]))
+            except OSError:
+                return
+            time.sleep(0.3)
+    threading.Thread(target=trickle, daemon=True).start()
+
+    class OverSocket(http.client.HTTPConnection):
+        def connect(self):
+            self.sock = client
+
+    sender = HttpsSender(resolver=answers("93.184.216.34"), total_timeout=1.0,
+                         opener=lambda target, address, timeout: OverSocket("hooks.example.com",
+                                                                            timeout=timeout))
+    start = time.monotonic()
+    sent = sender.send("https://hooks.example.com/x", b"{}", {})
+    took = time.monotonic() - start
+    stop.set()
+    server.close()
+    assert sent == Sent(False, None, "timeout")
+    assert took < 2.5

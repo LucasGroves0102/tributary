@@ -18,14 +18,18 @@ A run:
 1. Every user's follows, settings and red lines, as that user (forced RLS).
 2. The followed companies' 10-K/10-Q/8-K filed since LOOKBACK_DAYS ago, CHUNK companies a query,
    from the public filing index (Store.alert_filings).
-3. Per user: new notifications, then each pending one: an 8-K's items (index, else the parsed
-   item headings with the filings tier); a 10-K/10-Q's figures and red lines, after layer 1
-   (`can`, OpenFGA) and through Store as that user (RLS). Never another user's access.
+3. Per user (in a random order, none started after MAKE_BUDGET seconds: a user not reached
+   waits for the next run, inside the 3-day window): new notifications, then each pending one:
+   an 8-K's items (index, else the parsed item headings with the filings tier); a 10-K/10-Q's
+   figures and red lines, after layer 1 (`can`, OpenFGA) and through Store as that user (RLS).
+   Never another user's access.
 4. Deliveries due (a new ready alert x each enabled webhook, and earlier failures whose backoff
    ran out), through HttpsSender; each result in the delivery log. Sends come after every user's
    alerts are made, users in a random order, at most SENDS_PER_USER each, a webhook that times out
    or can't be reached skipped for the rest of the run, and none started after SEND_BUDGET seconds:
    a slow or hostile endpoint delays only its owner's deliveries (they stay due for the next run).
+   Each send is recorded as soon as it's made, and its figures go out only while the user can
+   still read the company's financials (layer 1 again at send time).
    Email only with a provider configured AND a verified address for the user
    (query_api/alert_email.py: neither exists yet, so none is sent): one digest of the alerts that
    became ready.
@@ -36,6 +40,7 @@ retries it. Sends happen outside any database transaction. A send that succeeded
 recorded (a crash in between) is sent again next run: receivers dedupe on `id`.
 """
 
+import json
 import logging
 import os
 import random
@@ -70,6 +75,8 @@ CHUNK = 50          # followed companies per filing-index query (like /v1/filing
 MAX_NEW = 200       # new notifications per user per run (a first run after a long outage)
 DEFAULT_APP_URL = "https://tributary.lucasgroves.dev"
 SENDS_PER_USER = 10     # deliveries tried per user per run
+MAKE_BUDGET = 240.0     # seconds of making alerts per run
+MAX_DETAIL = 15_000     # bytes of a notification's detail (the table allows 16384)
 SEND_BUDGET = 240.0     # seconds of sending per run (the Job's deadline is 540)
 STALLED = frozenset({"timeout", "connect", "tls"})  # skip that webhook for the rest of the run
 SYSTEM = ""         # the filing index is public metadata: read without a user
@@ -86,6 +93,7 @@ class Report:
     delivered: int = 0
     failed: int = 0
     emailed: int = 0
+    deferred: int = 0
     errors: int = 0
 
 
@@ -180,27 +188,39 @@ def complete(n: dict, *, user_id: str, store: Any, can: Callable[[str, str, str]
                         extra={"user_id": user_id, "rule_id": rule["rule_id"]})
             lines.append({**evaluate(rule, [], period), "status": "invalid"})
     detail.update(figures=figures, figures_status="ready", red_lines=lines)
+    if len(json.dumps(detail, default=str)) > MAX_DETAIL:  # long labels and formulas: shortened
+        for r in lines:
+            r["formula"], r["label"] = r["formula"][:80], r["label"][:60]
     return {"notification_id": n["notification_id"], "items": None, "detail": detail,
             "status": "ready"}
 
 
 def deliver(alerts: AppAlerts, store: Any, sender: Sender, user_id: str, *, jwt_secret: str,
-            app_url: str, at: datetime,
+            app_url: str, at: datetime, can: Callable[[str, str, str], bool],
             until: Callable[[], bool] = lambda: True) -> tuple[int, int]:
-    """Up to SENDS_PER_USER due deliveries while `until()` holds; a webhook that stalls is left
-    for the next run (its rows stay due, untouched)."""
+    """Up to SENDS_PER_USER due deliveries while `until()` holds, each recorded once made; a
+    webhook that stalls is left for the next run (its rows stay due, untouched). Figures and red
+    lines go out only if the user can still read the company's financials."""
     due = alerts.due(user_id, at, SENDS_PER_USER)
     if not due:
         return 0, 0
     ids = sorted({d["company_id"] for d in due})
     names = store.profiles(user_id, ids)
     tickers = store.tickers(user_id, ids)
-    results = []
+    ok = failed = 0
     stalled: set[str] = set()
+    readable: dict[str, bool] = {}
     for d in due:
         if d["webhook_id"] in stalled or not until():
             continue
         cid = d["company_id"]
+        detail = d.get("detail") or {}
+        if detail.get("figures") or detail.get("red_lines"):
+            if cid not in readable:
+                readable[cid] = can(user_id, "financials", cid)
+            if not readable[cid]:
+                d = {**d, "detail": {**detail, "figures": None, "red_lines": [],
+                                     "figures_status": "no_access"}}
         name = (names.get(cid) or {}).get("name") or cid
         ticker = (tickers.get(cid) or [None])[0]
         company = {"company_id": cid, "name": name, "ticker": ticker}
@@ -211,10 +231,9 @@ def deliver(alerts: AppAlerts, store: Any, sender: Sender, user_id: str, *, jwt_
         sent = sender.send(d["url"], body, headers(secret, d["delivery_id"], "filing", body))
         if sent.error in STALLED:
             stalled.add(d["webhook_id"])
-        results.append((d["delivery_id"], d["attempts"], sent))
-    alerts.record(user_id, results, at)
-    ok = sum(1 for _, _, s in results if s.ok)
-    return ok, len(results) - ok
+        alerts.record(user_id, [(d["delivery_id"], d["attempts"], sent)], at)
+        ok, failed = (ok + 1, failed) if sent.ok else (ok, failed + 1)
+    return ok, failed
 
 
 def email_digest(alerts: AppAlerts, store: Any, email: EmailProvider, to: str, user_id: str,
@@ -257,9 +276,16 @@ def run(*, alerts: AppAlerts, store: Any, can: Callable[[str, str, str], bool], 
     filings = followed_filings(store, companies, since)
     report.filings = sum(len(v) for v in filings.values())
     index_items = {r["accession_no"]: r["items"] for rows in filings.values() for r in rows}
-    for user_id, plan in plans.items():
+    order = list(plans)
+    shuffle(order)
+    make_until = monotonic() + MAKE_BUDGET
+    for user_id in order:
+        plan = plans[user_id]
         if not plan["follows"] and not plan["webhooks"]:
             continue  # nothing to alert and nothing to send: no writes for this user
+        if monotonic() > make_until:
+            report.deferred += 1
+            continue
         try:
             rows, newest = new_rows(plan, filings)
             report.created += alerts.add_notifications(user_id, rows)
@@ -294,7 +320,8 @@ def run(*, alerts: AppAlerts, store: Any, can: Callable[[str, str, str], bool], 
     for user_id in senders:
         try:
             ok, failed = deliver(alerts, store, sender, user_id, jwt_secret=jwt_secret,
-                                 app_url=app_url, at=now, until=lambda: monotonic() < deadline)
+                                 app_url=app_url, at=now, can=can,
+                                 until=lambda: monotonic() < deadline)
             report.delivered += ok
             report.failed += failed
         except Exception as e:
