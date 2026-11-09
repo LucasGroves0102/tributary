@@ -3,8 +3,10 @@ that list comes from authz.public_access, which RLS reads anyway, so it filters 
 queries around it timed out (hermes, 2026-11-02; migration 032). Fails if a route goes back to it.
 Also: layer 1 still blanks what it doesn't allow when no id list reaches the query."""
 
+import json
 from datetime import date, timedelta
 from decimal import Decimal
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -36,7 +38,19 @@ ROUTES = ["/v1/screener?limit=50", "/v1/screener?limit=50&access=financials",
           # F7b: one company's insider filings (#117)
           f"/v1/companies/{NVDA}/insiders?limit=100",
           # F8b: one company's backlog and orders from its filings' text (H11)
-          f"/v1/companies/{NVDA}/text-kpis?years=15"]
+          f"/v1/companies/{NVDA}/text-kpis?years=15", f"/v1/companies/{NVDA}/text-kpis",
+          # pre-ship review: the routes F2-F8 added that weren't here yet
+          f"/v1/companies/{NVDA}/filings/0001045810-26-000021/figures",
+          f"/v1/companies/{NVDA}/peers/check/{TSLA}", "/v1/sectors",
+          "/v1/search?q=supply+chain&from=2025-11-01&to=2026-11-01&window=exact",
+          "/v1/search?q=supply+chain&window=exact&sort=date",
+          f"/v1/companies/{NVDA}/insiders?limit=100&cursor=2026-09-18_0001588670-26-000014"]
+# POST routes: path, body
+POSTS = [(f"/v1/companies/{NVDA}/model",
+          {"companyId": NVDA, "historyYears": 8, "ytd": True,
+           "assumptions": [{"growth": 30, "margin": 55}, {"growth": 20, "margin": 50}],
+           "price": {"value": 180, "date": "2026-11-06"}})]
+MODEL_INPUTS = Path(__file__).parent / "fixtures" / "model" / "nvda.json"
 
 
 def meta(cid):
@@ -144,6 +158,13 @@ class RecordingStore:
         return {c: {"sic": "3674", "sector": "Technology", "sector_industry": "Semiconductors",
                     "filer_category": "large_accelerated", "revenue": Decimal(5)} for c in ids}
 
+    def answer_annual_reports(self, *_):
+        return {"sic": "3711", "annual": {"10-K": date(2026, 1, 29)}, "has_financials": True}
+
+    def answer_model_inputs(self, *_):
+        """NVIDIA's production inputs (fixtures/model/nvda.json, Store shape)."""
+        return json.loads(MODEL_INPUTS.read_text())
+
 
 class Watchlist:
     def list(self, user_id):
@@ -185,6 +206,18 @@ def long_lists(value: Any) -> list[int]:
 def test_no_route_passes_the_catalog_ids_into_sql(token, route):
     c = app()
     r = c.get(route, headers=token("carol"))
+    assert r.status_code == 200, r.text
+    assert c.store.calls, "the route should have queried"
+    for name, args, kwargs in c.store.calls:
+        if name == "catalog_companies":
+            continue
+        assert not long_lists([args, kwargs]), f"{route}: {name} got a catalog-sized list"
+
+
+@pytest.mark.parametrize(("route", "body"), POSTS)
+def test_no_post_route_passes_the_catalog_ids_into_sql(token, route, body):
+    c = app()
+    r = c.post(route, json=body, headers=token("carol"))
     assert r.status_code == 200, r.text
     assert c.store.calls, "the route should have queried"
     for name, args, kwargs in c.store.calls:
