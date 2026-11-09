@@ -75,6 +75,25 @@ export const BANK_NOT_SHOWN =
   "tags, so a quarterly figure would mix definitions). Efficiency ratio = noninterest expense / (net " +
   "interest income + noninterest income), lower is leaner.";
 
+/** Companies whose debt, and so net debt, includes a captive finance arm's borrowings: migration 055
+ * sums each debt line's segment members (Ford's CompanyExcludingFordCredit + FordCredit, GM's
+ * Automotive + GmFinancial), which is the consolidated balance sheet's figure, kept as built. Their
+ * pages say so. Keyed by company id; data.test.ts checks the ids against 055's company tags. */
+export const FINANCE_ARMS: Record<string, string> = {
+  "0000037996": "Ford Credit",
+  "0001467858": "GM Financial",
+};
+
+/** The note for a company in FINANCE_ARMS, or null. */
+export function financeArmNote(companyId: string, name: string): string | null {
+  const arm = FINANCE_ARMS[companyId];
+  if (!arm) return null;
+  const owner = /s$/i.test(name) ? `${name}'` : `${name}'s`;
+  return `${owner} debt and net debt are consolidated: they include ${arm}'s borrowings, which fund its loans and ` +
+    `leases to dealers and customers, as well as the automotive business's own debt. The 10-K shows the two ` +
+    `separately in its segment information.`;
+}
+
 /** A bank by migration 035's rule: the API marks the metrics that don't describe it. */
 export const isBankRow = (row: Pick<ScreenerRow, "not_applicable">): boolean => !!row.not_applicable?.length;
 

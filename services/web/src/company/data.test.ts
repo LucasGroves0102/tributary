@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 
 import { ACC, fin, NVDA, nvdaRow } from "../fixtures";
@@ -5,6 +7,8 @@ import type { Recap, RecapValue, SegmentRow } from "../types";
 import {
   eightKItems,
   figuresBehind,
+  FINANCE_ARMS,
+  financeArmNote,
   filingHeadings,
   fiscalYear,
   parsedNote,
@@ -520,5 +524,21 @@ describe("what a statement's own lines can't say", () => {
     const csv = financialsCsv(rows, table(rows, "is"), "quarter");
     expect(csv).not.toContain("other_items");
     expect(csv).toContain("net_income");
+  });
+});
+
+describe("debt that includes a finance arm (migration 055)", () => {
+  it("Ford's and GM's pages say their net debt includes Ford Credit's and GM Financial's", () => {
+    expect(financeArmNote("0000037996", "Ford Motor")).toBe("Ford Motor's debt and net debt are consolidated: they include " +
+      "Ford Credit's borrowings, which fund its loans and leases to dealers and customers, as well as the automotive " +
+      "business's own debt. The 10-K shows the two separately in its segment information.");
+    expect(financeArmNote("0001467858", "General Motors")).toContain("they include GM Financial's borrowings");
+    expect(financeArmNote(NVDA, "Nvidia")).toBeNull();
+  });
+
+  it("names exactly the companies whose debt 055 sums with a finance member", () => {
+    const sql = readFileSync(`${process.cwd()}/../../db/migrations/055_filing_xbrl_facts.sql`, "utf8");
+    const summed = new Set([...sql.matchAll(/\('(\d{10})', '(?:DebtCurrent|LongTermDebt\w*)\[[^\]]*(?:FordCredit|GmFinancial)Member/g)].map((m) => m[1]));
+    expect([...summed].sort()).toEqual(Object.keys(FINANCE_ARMS).sort());
   });
 });

@@ -6,7 +6,7 @@ import { financialSeries } from "../chart/series";
 import { day } from "../format";
 import { go, href } from "../route";
 import type { ScreenerRow, Tier } from "../types";
-import { BANK_NOT_SHOWN, header, isBankRow, keyStats, recapAccession } from "./data";
+import { BANK_NOT_SHOWN, financeArmNote, header, isBankRow, keyStats, recapAccession } from "./data";
 import { ErrorPanel, sentence, Skeleton } from "../components/States";
 import { EventsCard } from "./Events";
 import { keyStatFlag, staleFlags } from "./events";
@@ -38,6 +38,8 @@ export function Overview({
   const canRead = access.includes("filings");
   const events = useLoad(canRead ? `${companyId}|events` : null, () => companyEvents(token, companyId));
   const flags = staleFlags(events?.state === "ok" ? events.data : null);
+  // Ford's and GM's debt includes their finance arms' (migration 055, consolidated as built)
+  const armNote = financeArmNote(companyId, name);
   return (
     <>
       <section className="card">
@@ -49,8 +51,9 @@ export function Overview({
           <div className="kv stats">
             {keyStats(row).map((s) => {
               const flag = keyStatFlag(s.key, s.periodEnd, flags);
+              const title = [s.title, s.key === "net_debt_q" ? armNote : null, flag?.text].filter(Boolean).join("\n\n");
               return (
-                <div key={s.label} title={flag ? `${s.title}\n\n${flag.text}` : s.title} className={s.old ? "old" : undefined}>
+                <div key={s.label} title={title} className={s.old ? "old" : undefined}>
                   <div className="k">{s.label}</div>
                   <div className="v">{s.text}</div>
                   <div className="p">{s.period}</div>
@@ -65,6 +68,7 @@ export function Overview({
         {canFin && isBankRow(row) && "net_interest_income_ttm" in row.values && (
           <p className="foot bank-note">A bank's own figures. {BANK_NOT_SHOWN}</p>
         )}
+        {canFin && armNote && <p className="foot debt-note" role="note">{armNote}</p>}
       </section>
       {canRead && <EventsCard token={token} companyId={companyId} name={name} load={events} />}
       <div className="grid2">

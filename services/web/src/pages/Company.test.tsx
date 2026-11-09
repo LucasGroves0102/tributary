@@ -289,6 +289,24 @@ it("overview: without flags the recap still renders and says why", async () => {
   expect(container.textContent).toContain("One-time-item flags couldn't be read just now.");
 });
 
+it("overview and balance sheet: Ford's net debt says it includes Ford Credit's borrowings (055, consolidated)", async () => {
+  const FORD = "0000037996";
+  rowFor = () => nvdaRow({ ...entry({ company_id: FORD, name: "Ford Motor", tickers: ["F"] }), access: ["filings", "financials"] });
+  await render("overview", FORD);
+  expect($(".debt-note")?.textContent).toContain("include Ford Credit's borrowings");
+  const stat = [...container.querySelectorAll(".kv > div")].find((d) => d.querySelector(".k")?.textContent === "Net debt")!;
+  expect(stat.getAttribute("title")).toContain("include Ford Credit's borrowings");
+  await act(async () => root.unmount());
+  container.remove();
+  await render("statements", FORD, null, { kind: "bs" });
+  expect($(".debt-note")?.getAttribute("role")).toBe("note");
+  await act(async () => root.unmount());
+  container.remove();
+  rowFor = () => nvdaRow({ access: ["filings", "financials"] });
+  await render("overview");
+  expect($(".debt-note")).toBeNull();  // NVIDIA has no finance arm
+});
+
 it("overview: key stats with periods, the latest quarter recap with flags, and Item 1", async () => {
   await render();
   const stat = [...container.querySelectorAll(".kv > div")].find((d) => d.querySelector(".k")?.textContent === "Revenue")!;

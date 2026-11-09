@@ -13,6 +13,7 @@ import {
   BANK_NOT_SHOWN,
   BANK_STATEMENTS,
   F5_METRICS,
+  financeArmNote,
   financialsCsv,
   type Line,
   metricTable,
@@ -369,6 +370,9 @@ export function Statements({ token, companyId, name, ticker, notApplicable = [],
       )}
       {bank && load?.state === "ok" && metrics !== STATEMENTS[kind].rows && (
         <p className="foot bank-note">{name} is a bank, so it is shown with a bank's own lines. {BANK_NOT_SHOWN}</p>
+      )}
+      {kind === "bs" && load?.state === "ok" && financeArmNote(companyId, name) && (
+        <p className="foot debt-note" role="note">{financeArmNote(companyId, name)}</p>
       )}
       <Gate load={load} name={name} what="Financials">
         {() =>
