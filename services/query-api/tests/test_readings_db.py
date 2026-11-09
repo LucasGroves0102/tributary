@@ -530,6 +530,59 @@ def test_an_impossible_future_date_doesnt_make_everything_else_old(conn, token):
         cur.execute("RESET ROLE")
 
 
+EURO = "9200000010"
+
+
+def euro_co(conn):
+    """Birkenstock's shape (migration 056): figures in euros, only fiscal years and balances."""
+    conn.execute("INSERT INTO silver.companies (company_id, name, current_cik, sic,"
+                 " sic_description) VALUES (%s, 'Euro Co', %s, '3021', 'Footwear')", (EURO, EURO))
+    conn.execute("INSERT INTO silver.company_ciks (cik, company_id) VALUES (%s, %s)", (EURO, EURO))
+    conn.execute("INSERT INTO authz.public_access (company_id, tier) VALUES (%s, 'financials')",
+                 (EURO,))
+    conn.execute(
+        "INSERT INTO gold.quarterly_financials (company_id, metric, period_start, period_end,"
+        " value, unit, value_source, source_tag, accession_no, form, filed, source_accessions,"
+        " ingested_at) VALUES (%s, 'total_assets', NULL, %s, 4942120000, 'EUR', 'reported',"
+        " 'ifrs-full:Assets', '0001977102-25-000001', '20-F', %s, '{0001977102-25-000001}', now())",
+        (EURO, LATEST, LATEST + timedelta(days=60)))
+    derived(conn, EURO, "revenue", LATEST, 9_000_000_000_000, {"quarters": []}, unit="EUR")
+    derived(conn, EURO, "gross_margin", LATEST, Decimal("0.99"), {"revenue": 2e9})
+
+
+def test_an_amount_in_another_currency_is_shown_in_it_but_never_ranked_with_dollars(conn, token):
+    euro_co(conn)
+    body = screen(conn, token, columns=["revenue_ttm", "gross_margin_ttm"], sort="-revenue_ttm",
+                  limit=50)
+    assert names(body)[0] != "Euro Co"  # 9 trillion euros doesn't top a dollar sort
+    euro = row_of(body, "Euro Co")
+    assert Decimal(str(euro["values"]["revenue_ttm"])) == 9_000_000_000_000
+    reading = euro["readings"]["revenue_ttm"]
+    assert reading["status"] == "other_currency" and reading["unit"] == "EUR"
+    assert reading["reason"].startswith("reported in EUR")
+    # a ratio has no currency: it ranks with everyone's
+    assert "gross_margin_ttm" not in euro["readings"]
+    assert names(screen(conn, token, columns=["gross_margin_ttm"], sort="-gross_margin_ttm",
+                        limit=50))[0] == "Euro Co"
+    # nor does a filter take it
+    over = screen(conn, token, columns=["revenue_ttm"], where=["revenue_ttm:gt:1"], sort="name",
+                  limit=50)
+    assert "Euro Co" not in names(over)
+    # a dollar company's readings say nothing new
+    assert "revenue_ttm" not in row_of(body, "Normal Co")["readings"]
+
+
+def test_financials_say_their_currency_and_that_they_are_years(conn, token):
+    euro_co(conn)
+    c = api(conn)
+    body = c.get(f"/v1/companies/{EURO}/financials", headers=token(USER),
+                 params={"view": "ttm", "metrics": ["revenue"]}).json()
+    assert (body["currency"], body["cadence"]) == ("EUR", "annual")
+    usd = c.get(f"/v1/companies/{NORMAL}/financials", headers=token(USER),
+                params={"view": "ttm", "metrics": ["revenue"]}).json()
+    assert "currency" not in usd and "cadence" not in usd  # a dollar filer's JSON is as before
+
+
 def test_latest_reading_stays_inlinable(conn):
     """The screener's plan depends on it, like 032's gold.latest_value (no SET, not DEFINER, a
     single SQL statement, not volatile)."""

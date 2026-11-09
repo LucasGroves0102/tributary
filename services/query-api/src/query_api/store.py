@@ -368,6 +368,25 @@ class Store:
                 """, {"c": company_id})
             return cur.fetchone() or {}
 
+    def cadence(self, user_id: str, company_id: str) -> str | None:
+        """How often the company's figures come (migration 056): 'quarterly' when gold has a
+        quarter (a duration of 80-120 days) ending in the last 800 days, 'annual' when it has
+        only years (a 20-F or 40-F filer: gold never makes a quarter out of a year or a half),
+        None without figures. Under RLS, like the figures."""
+        with self._session(user_id) as cur:
+            cur.execute(
+                """
+                SELECT CASE
+                    WHEN EXISTS (SELECT 1 FROM gold.quarterly_financials q
+                                 WHERE q.company_id = %(c)s AND q.period_start IS NOT NULL
+                                   AND q.period_end >= current_date - 800) THEN 'quarterly'
+                    WHEN EXISTS (SELECT 1 FROM gold.derived_financials d
+                                 WHERE d.company_id = %(c)s AND d.span = 'ttm') THEN 'annual'
+                END AS cadence
+                """, {"c": company_id})
+            row = cur.fetchone()
+            return row["cadence"] if row else None
+
     def financials(self, user_id: str, company_id: str, metrics: list[str], quarters: int,
                    view: str = "quarter", basis: str = "fiscal") -> list[dict]:
         """view: quarter | ttm. basis: fiscal (every fiscal period) | calendar (one row per

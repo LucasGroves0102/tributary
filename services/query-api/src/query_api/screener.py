@@ -12,6 +12,8 @@ how to read it: not applicable, not meaningful, old, or just behind the company'
 The rules are in 035, once; this module only asks. Sorts and range filters take the comparable
 value, `k<i>`, which is NULL for all of them but "behind": the exact figure stays in `v<i>`, so a
 209,828% gross margin is still returned, with its reason, and doesn't win a sort or pass a filter.
+An amount in a currency other than the dollar reads `other_currency` (migration 056) and says its
+unit: shown in that currency, never sorted, filtered or averaged with dollar figures.
 
 The query has two stages, so its cost follows what the screen asks for and not how many
 companies the caller can read: the values filters and the sort need are read for every company
@@ -177,7 +179,7 @@ def _values(slots: dict[str, int], company: str, sic: str, latest: str,
                     f"CASE WHEN x{i}.period_end IS NOT NULL THEN jsonb_build_object("
                     f"'period_end', x{i}.period_end, 'accession_no', x{i}.accession_no,"
                     f" 'form', x{i}.form, 'filed', x{i}.filed) END AS src{i}",
-                    f"x{i}.status AS st{i}", f"x{i}.reason AS why{i}",
+                    f"x{i}.status AS st{i}", f"x{i}.reason AS why{i}", f"x{i}.unit AS u{i}",
                     f"CASE WHEN x{i}.status IS NULL OR x{i}.status = 'behind'"
                     f" THEN x{i}.value END AS k{i}"]
         joins.append(f"LEFT JOIN LATERAL gold.latest_reading({company}, %(s{i})s, %(m{i})s,"
@@ -297,9 +299,10 @@ def compile_screen(s: Screen, granted: list[str] | None) -> Compiled:
     direction = "DESC" if descending else "ASC"
     order = f"v.k{slots[sort_key]}" if sort_key in COLUMNS else META_SORT[sort_key]
     final = order.replace("v.k", "r.k").replace("b.", "r.")
-    ranked_outputs = "".join(f", v.v{i}, v.src{i}, v.st{i}, v.why{i}, v.k{i}"
+    ranked_outputs = "".join(f", v.v{i}, v.src{i}, v.st{i}, v.why{i}, v.u{i}, v.k{i}"
                              for i in ranked.values())
-    page_outputs = "".join(f", w.v{i}, w.src{i}, w.st{i}, w.why{i}" for i in page.values())
+    page_outputs = "".join(f", w.v{i}, w.src{i}, w.st{i}, w.why{i}, w.u{i}"
+                           for i in page.values())
     # the latest period is read once per row: for every company when a sort or filter needs it,
     # else only for the page
     early = bool(ranked)
@@ -348,9 +351,12 @@ def shape(row: dict, compiled: Compiled, financials: bool) -> dict:
                      for k in compiled.columns}
     out["sources"] = {k: row[f"src{compiled.slots[k]}"] if financials else None
                       for k in compiled.columns}
-    # additive: how to read each value, only where there's something to say (035)
+    # additive: how to read each value, only where there's something to say (035); an amount in
+    # another currency (056) also says which, so it can be shown in it
     out["readings"] = {} if not financials else {
-        k: {"status": row[f"st{compiled.slots[k]}"], "reason": row.get(f"why{compiled.slots[k]}")}
+        k: {"status": row[f"st{compiled.slots[k]}"], "reason": row.get(f"why{compiled.slots[k]}"),
+            **({"unit": row.get(f"u{compiled.slots[k]}")}
+               if row[f"st{compiled.slots[k]}"] == "other_currency" else {})}
         for k in compiled.columns if row.get(f"st{compiled.slots[k]}")}
     out["latest_period"] = row.get("latest_period") if financials else None
     # from the public SIC, so also for a company the caller can't read

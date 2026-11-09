@@ -42,6 +42,9 @@ class FakeStore:
         self.metric_reads += 1
         return {"metrics": ["eps_diluted", "revenue"], "derived_metrics": ["gross_margin", "roe"]}
 
+    def cadence(self, user_id, company_id):
+        return "quarterly"
+
     def financials(self, user_id, company_id, metrics, quarters, view, basis):
         self.calls.append(("financials", user_id, company_id))
         self.financials_args = (metrics, quarters, view, basis)

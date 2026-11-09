@@ -2,6 +2,7 @@
 OpenFGA first (layer 1), then Postgres row-level security (layer 2, in Store)."""
 
 import logging
+import re
 import time
 from collections.abc import Callable
 from datetime import UTC, date, datetime
@@ -400,6 +401,14 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
         rows = store.financials(user_id, company_id, metrics or every, quarters, view, basis)
         meta: dict[str, Any] = {"company_id": company_id, "view": view, "basis": basis,
                                 "as_of": _now()}
+        # additive, only when not the usual (migration 056): the currency the company's amounts
+        # are in, and that its figures are fiscal years (a 20-F/40-F filer), never quarters
+        currency = next((r["unit"] for r in rows
+                         if re.fullmatch(r"[A-Z]{3}", r["unit"] or "")), "USD")
+        if currency != "USD":
+            meta["currency"] = currency
+        if fmt == "json" and store.cadence(user_id, company_id) == "annual":
+            meta["cadence"] = "annual"
         # equity's reasons (035): over a row's own, and where gold has no row (negative equity)
         by_equity: dict[tuple[str, date], str] = {}
         if readings and fmt == "json":

@@ -42,7 +42,7 @@ request parameters. Dev tokens: `make token USER=alice`.
 | `GET /v1/me` | token | `catalog`: `{public, tiers, companies}`, whether every catalog company is readable to the caller and with which tiers (`companies`: how many); `companies`: with the catalog public, only what the caller reads beyond it (private grants), else every company the caller can read, with tiers; `sandbox` (expiry, plan, assistant allowance) for a demo sandbox user; `github` (login, plan, the demo's company ids, assistant allowance) for a GitHub sign-in; `account` (username, plan, `agent_questions_per_day`) for a password account |
 | `GET /v1/companies/search?q=&access=&limit=` | token | tickers, CIKs and any part of a name, best match first (`silver.search_companies`, migration 034): public identity + caller's access; `limit` 1-25, default 5; `access=financials`: only companies you can read, narrowed before the limit |
 | `GET /v1/metrics` | | metric names served by `financials`: `silver.metrics` and `gold.derived_metrics`, read once |
-| `GET /v1/companies/{id}/financials?metrics=&quarters=&view=&basis=&format=&readings=&callouts=` | financials | values + citation + freshness; `quarters` 1-120 (every quarter there is, the Statements tab's Max); `format=csv`: one row per value with its source filing; `callouts=true` (view quarter): quarters far outside their series ([Statement callouts](#statement-callouts)) |
+| `GET /v1/companies/{id}/financials?metrics=&quarters=&view=&basis=&format=&readings=&callouts=` | financials | values + citation + freshness; `quarters` 1-120 (every quarter there is, the Statements tab's Max); `format=csv`: one row per value with its source filing; `callouts=true` (view quarter): quarters far outside their series ([Statement callouts](#statement-callouts)); `currency` (only when not USD: the company's reporting currency, every amount is in it, migration 056) and `cadence: "annual"` (only for a filer whose figures are fiscal years, a 20-F/40-F filer: gold never splits a year into quarters; `Store.cadence`, under RLS) |
 | `GET /v1/companies/{id}/components?metric=&period_end=&view=` | financials | what one figure is made of: a derived figure's inputs, a TTM's quarters, a sum's parts, and the tags, values and filings behind each ([Reported vs standardised](#reported-vs-standardised)) |
 | `GET /v1/companies/{id}/filings/{accession}/figures` | financials | what one filing itself says: its facts as gold reads them and the net debt, cash and investments and free cash flow computed from that filing alone; the thesis check's H2 guard reads it ([Reported vs standardised](#reported-vs-standardised)) |
 | `GET /v1/companies/{id}/insiders?limit=&before=` | filings | insider filings (Forms 3, 4, 5), newest first: owners and roles, each line's code (in words), shares, price, value and shares owned after, a per-filing summary ([Insider filings](#insider-filings)) |
@@ -240,9 +240,12 @@ $100K, debt over 100 times equity, debt or equity below zero, ROE or payout over
 ratio over 100x. `not_applicable` (with `reason`): a bank's gross and operating margin, FCF, FCF margin,
 net debt, debt to equity and current ratio, whether or not a value exists. `old`: more than 300 days
 before the company's `latest_period` (the newest of its revenue, net income and total assets, never a
-future date). `behind`: more than 45. `values` keeps the exact figure in every case, but all except
-`behind` sort after real values and never pass a `where` or a size band: sorting by gross margin
-doesn't open on 209,828%. `/financials?readings=true` adds the row's `not_meaningful` (debt/equity and
+future date). `behind`: more than 45. `other_currency` (migration 056, with `reason` and `unit`): an
+amount or per-share figure in a currency other than the dollar (a 20-F filer's euros: `unit` "EUR" or
+"EUR/shares"); ratios have no currency and read as anyone's. `values` keeps the exact figure in every
+case, but all except `behind` sort after real values and never pass a `where` or a size band: sorting
+by gross margin doesn't open on 209,828%, and a euro revenue is never ranked, filtered, banded or
+averaged with dollars. `/financials?readings=true` adds the row's `not_meaningful` (debt/equity and
 ROE on that period's negative equity first) and `not_meaningful_periods: [{metric, period_end,
 reason}]`, the periods a requested metric has no row because of the company's equity there (gold has
 no debt/equity or ROE on negative equity), taken from the company's own latest `quarters` equity
