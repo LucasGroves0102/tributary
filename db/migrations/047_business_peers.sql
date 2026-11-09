@@ -81,7 +81,7 @@ CREATE POLICY granted_filings ON gold.business_mentions FOR SELECT TO query_api
 CREATE FUNCTION silver.co_registrants()
 RETURNS TABLE (company_id text, other_id text, accession_no text, filing_date date,
                filed_by text)
-LANGUAGE sql STABLE AS $$
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
     WITH recent AS (
         SELECT s.accession_no, s.cik, s.filing_date FROM bronze.submission_filings s
         WHERE s.form = '10-K' AND s.filing_date > current_date - 400
@@ -104,9 +104,9 @@ LANGUAGE sql STABLE AS $$
     WHERE other <> me
     ORDER BY me, other, s.filing_date DESC, s.accession_no DESC
 $$;
--- SECURITY INVOKER: query_api reads bronze.filings and bronze.submission_filings' columns through
--- the grants below (public index metadata, like silver.filings and 045's column grant). GRANT
--- updates the catalog only: no lock that blocks readers or the loaders.
-GRANT SELECT (accession_no, cik, form_type, filed_at) ON bronze.filings TO query_api;
-GRANT SELECT (accession_no, cik, form, filing_date) ON bronze.submission_filings TO query_api;
+-- SECURITY DEFINER, like 026/028's public status functions: query_api must still not read
+-- bronze.filings (the Kafka payloads; test_ui_db asserts it), so it gets this function, not the table.
+-- It returns only public filing-index facts (which companies filed which 10-K accession); search_path
+-- pinned, EXECUTE revoked from PUBLIC. A CREATE OR REPLACE must re-issue the REVOKE/GRANT.
+REVOKE EXECUTE ON FUNCTION silver.co_registrants() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION silver.co_registrants() TO query_api;

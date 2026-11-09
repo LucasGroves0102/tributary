@@ -84,7 +84,8 @@ header), and the view `silver.company_sectors`. `047_business_peers.sql` adds wh
 weekly `parser-peers` job derives from 10-K Item 1 text: `gold.business_profiles`, `gold.business_peers`
 (cosine similarity, shared terms) and `gold.business_mentions` (competitors named, with the sentence's
 offsets), all under RLS at `filings` (a peer row needs both companies readable), and
-`silver.co_registrants()`, companies filing one combined 10-K (PG&E Corp and Pacific Gas & Electric).
+`silver.co_registrants()` (SECURITY DEFINER: query_api still reads no `bronze.filings`), companies filing
+one combined 10-K (PG&E Corp and Pacific Gas & Electric).
 `048_bank_metrics.sql` adds a bank's own lines: `net_interest_income`, `noninterest_income`,
 `noninterest_expense`, `provision_for_credit_losses`, `loans` (net of the allowance), `deposits`,
 `cet1_ratio` (where tagged) and the derived `efficiency_ratio`; its header has the tags measured on
