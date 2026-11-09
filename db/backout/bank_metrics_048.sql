@@ -5,13 +5,62 @@
 -- with 038's bank revenue sum, InterestIncomeExpenseNet and NoninterestIncome, if silver had kept
 -- them under the new metrics):
 --
---   sudo -u postgres psql -d tributary -v ON_ERROR_STOP=1 -1 -f bank_metrics_048.sql
+--   sudo -u postgres psql -d tributary -v ON_ERROR_STOP=1 -1 -c 'SET ROLE tributary' -f bank_metrics_048.sql
 --   kubectl -n tributary create job --from=cronjob/financials-rebuild financials-rebuild-2
 --
 -- Independent of the other files here (048 touches no function they restore). Generated from 040 by a
 -- script (the function's text exactly).
+--
+-- Run it as the migration owner, the migrate login `tributary` (SET ROLE as below): run as postgres,
+-- a function it drops and re-creates would belong to postgres, and the non-superuser migrate login
+-- could never replace it again. The guard below refuses any login that doesn't own the functions,
+-- and any database where a newer backout hasn't run yet (README.md, Order).
 
 SET LOCAL lock_timeout = '30s';
+
+-- guard (scripts/backout_guards.py writes it; db/backout/README.md, Order). It refuses, changing
+-- nothing, unless every newer backout has run (newest first: banks_058.sql,
+-- currency_readings_057.sql, ifrs_currencies_056.sql, filing_xbrl_facts_055.sql,
+-- filers_debt_050.sql, kpis_049.sql) and this one hasn't, and unless the login owns the functions
+-- (the migrate login; header).
+DO $guard$
+DECLARE
+    w record;
+    fn_owner text;
+BEGIN
+    FOR w IN SELECT v.fn, v.want, to_regprocedure(v.fn) AS id FROM (VALUES
+        ('gold.amount_currency(text)', NULL),
+        ('gold.annual_per_share(text,integer)', '7c5af423f8d31e10da7db51ee87018b3'),
+        ('gold.companies_for_ciks(text[])', '71eb935f94130a3bfba07359561a5c8f'),
+        ('gold.figure_facts(text,text,date)', '44aa5118a18f693837d60aaa72b243d4'),
+        ('gold.filing_figures(text,text)', '29ad18c630f986e62b947fa423f2566a'),
+        ('gold.latest_reading(text,text,text,text,date)', '2b1ce5dae3700a2524e6eed6466f2903'),
+        ('gold.not_applicable_metrics(text,text)', '643329a0af9f702ea97b413431b4aa8d'),
+        ('gold.not_meaningful(text,numeric,jsonb,numeric)', 'f314a4ec94a8dcb54f6644bc0933a6e4'),
+        ('gold.not_meaningful(text,numeric,jsonb,numeric,text)', NULL),
+        ('gold.refresh_derived_financials(text[])', '18d51d59ce10407632f72445c5509d7b'),
+        ('gold.refresh_quarterly_financials(text[])', '84ce53d8fc3987c84012b4360b69fed4'),
+        ('gold.usable_facts(text[])', 'c3fec536a845fce4b98f1239b85760c7'),
+        ('ops.check_financials(text[])', '40644268e3fce350dde68de157bacd60'),
+        ('silver.refresh_filing_facts(text[])', '2f5e5eeefb1edf917bfb879e7071190d'),
+        ('silver.refresh_financial_facts(text[])', 'b407aac7dbda2938ba7ebed789e3f2e3')
+    ) v(fn, want) LOOP
+        SELECT pg_get_userbyid(p.proowner) INTO fn_owner FROM pg_proc p WHERE p.oid = w.id;
+        IF fn_owner IS NOT NULL AND fn_owner <> current_user THEN
+            RAISE EXCEPTION USING MESSAGE = format('run this as %s, the owner of %s (the '
+                'migrate login), not as %s: see the header. Nothing was changed.', fn_owner, w.fn,
+                current_user);
+        END IF;
+        IF w.want IS DISTINCT FROM (SELECT md5(p.prosrc) FROM pg_proc p WHERE p.oid = w.id) THEN
+            RAISE EXCEPTION USING MESSAGE = format('%s is not where this backout starts: run '
+                'the newer backouts first, newest first (%s), and this one only once. Nothing was '
+                'changed.', w.fn, 'banks_058.sql, currency_readings_057.sql, ifrs_currencies_056.sql, filing_xbrl_facts_055.sql, filers_debt_050.sql, kpis_049.sql');
+        END IF;
+    END LOOP;
+END
+$guard$;
+-- end guard
+
 
 DELETE FROM gold.derived_financials
 WHERE metric IN ('efficiency_ratio', 'net_interest_income', 'noninterest_income', 'noninterest_expense',

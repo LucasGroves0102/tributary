@@ -1,9 +1,44 @@
 -- Backout of 053_segment_same_basis.sql: gold.refresh_segment_financials as 018 defined it (its
 -- body copied unchanged by a script). Run as the migrate login, then the segments refresh again
 -- (db/README.md "053"). Not a migration: never add it to db/migrations.
+--
+-- Run it as the migration owner, the migrate login `tributary` (SET ROLE as below): run as postgres,
+-- a function it drops and re-creates would belong to postgres, and the non-superuser migrate login
+-- could never replace it again. The guard below refuses any login that doesn't own the functions,
+-- and any database where a newer backout hasn't run yet (README.md, Order).
+--
+--   sudo -u postgres psql -d tributary -v ON_ERROR_STOP=1 -1 -c 'SET ROLE tributary' -f segments_same_basis_053.sql
 
 BEGIN;
 SET LOCAL lock_timeout = '30s';
+
+-- guard (scripts/backout_guards.py writes it; db/backout/README.md, Order). It refuses, changing
+-- nothing, unless every newer backout has run (newest first: none, this is the newest) and this one
+-- hasn't, and unless the login owns the functions (the migrate login; header).
+DO $guard$
+DECLARE
+    w record;
+    fn_owner text;
+BEGIN
+    FOR w IN SELECT v.fn, v.want, to_regprocedure(v.fn) AS id FROM (VALUES
+        ('gold.refresh_segment_financials(text[])', 'c7073ac071aa24b884dfab187e889472')
+    ) v(fn, want) LOOP
+        SELECT pg_get_userbyid(p.proowner) INTO fn_owner FROM pg_proc p WHERE p.oid = w.id;
+        IF fn_owner IS NOT NULL AND fn_owner <> current_user THEN
+            RAISE EXCEPTION USING MESSAGE = format('run this as %s, the owner of %s (the '
+                'migrate login), not as %s: see the header. Nothing was changed.', fn_owner, w.fn,
+                current_user);
+        END IF;
+        IF w.want IS DISTINCT FROM (SELECT md5(p.prosrc) FROM pg_proc p WHERE p.oid = w.id) THEN
+            RAISE EXCEPTION USING MESSAGE = format('%s is not where this backout starts: run '
+                'the newer backouts first, newest first (%s), and this one only once. Nothing was '
+                'changed.', w.fn, 'none, this is the newest');
+        END IF;
+    END LOOP;
+END
+$guard$;
+-- end guard
+
 
 CREATE OR REPLACE FUNCTION gold.refresh_segment_financials(p_company_ids text[]) RETURNS integer
 LANGUAGE plpgsql AS $$

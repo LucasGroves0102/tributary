@@ -228,8 +228,9 @@ until the check runs again (`make segments-rebuild`, or `SELECT ops.check_segmen
 company_id)) FROM gold.segment_financials`).
 `038_metric_tags_moved.sql` to `041_quality_findings.sql` change which facts gold believes and what it
 computes from them; they need one `facts-fetcher --rebuild` (the `financials-rebuild` job) to reach
-existing rows, and `backout/` undoes them ([backout/README.md](backout/README.md)). Each file's header
-has the measurements behind its thresholds.
+existing rows, and `backout/` undoes them ([backout/README.md](backout/README.md): newest first, as the
+migrate login; each file's guard refuses any other order or login and changes nothing). Each file's
+header has the measurements behind its thresholds.
 - 038: tags a line moved to (Nike's investments to
   `DebtSecuritiesAvailableForSaleExcludingAccruedInterestCurrent`, DTE's and Xcel's revenue to
   `RegulatedAndUnregulatedOperatingRevenue`, Tesla's, Adobe's, Lennar's and Oracle's debt to

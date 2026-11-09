@@ -7,9 +7,58 @@
 -- Generated from those migrations by a script. Deploy the previous query-api image with it: from
 -- 057 on the Query API calls the five-argument gold.not_meaningful, gold.amount_currency and reads
 -- `unit` from gold.filing_figures.
+--
+-- Run it as the migration owner, the migrate login `tributary` (SET ROLE as below): run as postgres,
+-- a function it drops and re-creates would belong to postgres, and the non-superuser migrate login
+-- could never replace it again. The guard below refuses any login that doesn't own the functions,
+-- and any database where a newer backout hasn't run yet (README.md, Order).
+--
+--   sudo -u postgres psql -d tributary -v ON_ERROR_STOP=1 -1 -c 'SET ROLE tributary' -f currency_readings_057.sql
 
 BEGIN;
 SET LOCAL lock_timeout = '10s';
+
+-- guard (scripts/backout_guards.py writes it; db/backout/README.md, Order). It refuses, changing
+-- nothing, unless every newer backout has run (newest first: banks_058.sql) and this one hasn't,
+-- and unless the login owns the functions (the migrate login; header).
+DO $guard$
+DECLARE
+    w record;
+    fn_owner text;
+BEGIN
+    FOR w IN SELECT v.fn, v.want, to_regprocedure(v.fn) AS id FROM (VALUES
+        ('gold.amount_currency(text)', '84308633b72bc99f52616793528f7ebd'),
+        ('gold.annual_per_share(text,integer)', '663430e80a6341f8a0e4227e1491e657'),
+        ('gold.companies_for_ciks(text[])', '5f02b9f1e395d7f743635d0a399f8f6c'),
+        ('gold.figure_facts(text,text,date)', '6789892e97611dd6c0260a25f695d7fc'),
+        ('gold.filing_figures(text,text)', '51376508ac8a1a66d7e42cc92852346f'),
+        ('gold.latest_reading(text,text,text,text,date)', 'e8ecccdc7e77be5929165e9f36767827'),
+        ('gold.not_applicable_metrics(text,text)', 'b0145e9727c704f359b95047071fe193'),
+        ('gold.not_meaningful(text,numeric,jsonb,numeric)', '472cb5abb2f6cb3ad0cbf64734468ee4'),
+        ('gold.not_meaningful(text,numeric,jsonb,numeric,text)', '90812eb486b8ef14081bf2fea5ab1890'),
+        ('gold.refresh_derived_financials(text[])', 'daf9fa4950728307efdbdefa793ec6d0'),
+        ('gold.refresh_quarterly_financials(text[])', '84ce53d8fc3987c84012b4360b69fed4'),
+        ('gold.usable_facts(text[])', '0b0c7a112a9761106084a4fd15dd2a56'),
+        ('ops.check_financials(text[])', '510eaedc79ece7e71f7b8b0fb0b6a339'),
+        ('silver.refresh_filing_facts(text[])', '566a561f85a949551ee2cdef2cf576f3'),
+        ('silver.refresh_financial_facts(text[])', '3b47cf049eeb9714470d25212df6ec05')
+    ) v(fn, want) LOOP
+        SELECT pg_get_userbyid(p.proowner) INTO fn_owner FROM pg_proc p WHERE p.oid = w.id;
+        IF fn_owner IS NOT NULL AND fn_owner <> current_user THEN
+            RAISE EXCEPTION USING MESSAGE = format('run this as %s, the owner of %s (the '
+                'migrate login), not as %s: see the header. Nothing was changed.', fn_owner, w.fn,
+                current_user);
+        END IF;
+        IF w.want IS DISTINCT FROM (SELECT md5(p.prosrc) FROM pg_proc p WHERE p.oid = w.id) THEN
+            RAISE EXCEPTION USING MESSAGE = format('%s is not where this backout starts: run '
+                'the newer backouts first, newest first (%s), and this one only once. Nothing was '
+                'changed.', w.fn, 'banks_058.sql');
+        END IF;
+    END LOOP;
+END
+$guard$;
+-- end guard
+
 
 CREATE OR REPLACE FUNCTION gold.latest_reading(p_company_id text, p_span text, p_metric text, p_sic text,
                                     p_latest date)
