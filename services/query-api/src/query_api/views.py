@@ -93,8 +93,12 @@ class WatchlistView(_Strict):
 
 MODELS: dict[str, type[BaseModel]] = {"home": HomeView, "screener": ScreenerView,
                                       "watchlist": WatchlistView}
+# Home with nothing saved (F6, #127): the watchlist, new filings and data notes; the status strip,
+# Continue and Expected filings off (web views/model.ts DEFAULT_HOME, which the web app applies)
+DEFAULT_HOME = [("watchlist", False), ("filings", False), ("notes", False), ("recent", True),
+                ("status", True), ("expected", True)]
 DEFAULTS: dict[str, dict] = {
-    "home": {"cards": [{"id": c, "hidden": False} for c in HOME_CARDS]},
+    "home": {"cards": [{"id": c, "hidden": h} for c, h in DEFAULT_HOME]},
     "screener": {"columns": DEFAULT_SCREENER},
     "watchlist": {"columns": DEFAULT_WATCHLIST},
 }

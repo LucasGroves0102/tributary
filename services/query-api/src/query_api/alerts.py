@@ -66,6 +66,7 @@ from query_api.authorizer import Readable
 from query_api.connections import Limiter
 from query_api.formula import FormulaError, analyze, compile_formula, parse
 from query_api.formula.check import PERCENT
+from query_api.shapes import filing_url
 from query_api.webhooks import (
     FORMATS,
     HttpsSender,
@@ -631,6 +632,7 @@ def notification_out(n: dict, can_read_financials: bool) -> dict:
     return {
         "id": n["notification_id"], "company_id": n["company_id"],
         "accession_no": n["accession_no"], "form": n["form"], "filed": n["filed"],
+        "filing_url": filing_url(detail.get("cik") or n["company_id"], n["accession_no"]),
         "period_end": n["period_end"], "items": item_info(n["items"]),
         "items_known": n["items"] is not None, "sources": n["sources"], "status": n["status"],
         "figures": figures, "figures_status": figures_status, "red_lines": red_lines,
