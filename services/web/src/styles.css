@@ -5829,3 +5829,243 @@ details.routine summary {
   stroke: currentColor;
   stroke-dasharray: 3 2;
 }
+
+/* Filing alerts (F6): the top bar's bell, the Alerts page and the Monitor step, Settings */
+.bell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-decoration: none;
+}
+
+.bell .count {
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 18px;
+  text-align: center;
+}
+
+.bell[aria-current="page"] {
+  background: var(--panel-2);
+}
+
+.alert-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.alert-item {
+  padding: var(--sp-4) var(--sp-5);
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: var(--sp-2);
+}
+
+.alert-item:first-child {
+  border-top: 0;
+}
+
+.alert-item.unread {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.alert-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-2) var(--sp-3);
+}
+
+.alert-co {
+  font-weight: 650;
+}
+
+.tag.new {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: transparent;
+}
+
+.tag.crossed {
+  background: var(--neg-soft);
+  color: var(--neg);
+  border-color: transparent;
+}
+
+.alert-items {
+  margin: 0;
+  padding-left: var(--sp-6);
+  font-size: var(--fs-sm);
+}
+
+.alert-figures {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-7);
+  margin: 0;
+}
+
+.alert-figures dt {
+  font-size: var(--fs-sm);
+  color: var(--text-3);
+}
+
+.alert-figures dd {
+  margin: 0;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.alert-redlines,
+.redline-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-2);
+}
+
+.alert-redlines .redline.crossed b {
+  color: var(--neg);
+}
+
+.alert-redlines .redline.clear b {
+  color: var(--pos);
+}
+
+.redline-list > li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.redline-state {
+  display: inline-block;
+  min-width: 92px;
+  font-size: 12px;
+  font-weight: 650;
+  border-radius: var(--radius-sm);
+  padding: 2px 8px;
+  text-align: center;
+  background: var(--panel-2);
+  color: var(--text-2);
+}
+
+.redline-state.crossed {
+  background: var(--neg-soft);
+  color: var(--neg);
+}
+
+.redline-state.clear {
+  background: var(--pos-soft);
+  color: var(--pos);
+}
+
+.redline-form {
+  display: grid;
+  gap: var(--sp-3);
+  margin-top: var(--sp-4);
+}
+
+.redline-form .row > label {
+  min-width: 110px;
+}
+
+.monitor-alerts .alert-list,
+.alerts-page .alert-list {
+  margin: 0;
+}
+
+.webhook-list {
+  list-style: none;
+  margin: 0 0 var(--sp-4);
+  padding: 0;
+  display: grid;
+  gap: var(--sp-2);
+}
+
+.webhook-list > li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.webhook-list > li.off {
+  opacity: 0.7;
+}
+
+.webhook-form .field.grow {
+  min-width: min(100%, 360px);
+}
+
+.secret-once code.secret {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+  word-break: break-all;
+  user-select: all;
+}
+
+.t.alert-forms td.n {
+  text-align: center;
+}
+
+/* Home's first step (F6, #127) */
+.start-card .card-b {
+  display: grid;
+  gap: var(--sp-4);
+}
+
+.start-card h2 {
+  margin: 0 0 var(--sp-2);
+}
+
+.start-main {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4) var(--sp-7);
+  align-items: center;
+}
+
+.start-main p {
+  margin: 0;
+  max-width: 62ch;
+}
+
+.start-pick {
+  flex: 1 1 320px;
+  max-width: 460px;
+}
+
+.start-pick .field {
+  width: 100%;
+}
+
+.start-projects {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-6);
+  align-items: baseline;
+}
+
+.start-more {
+  margin: 0;
+}
+
+.start-alerts {
+  font-weight: 650;
+}

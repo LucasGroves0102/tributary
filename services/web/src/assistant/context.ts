@@ -218,6 +218,8 @@ export function pageContext(
       return { label: "Data status", suggestions: [] };
     case "settings":
       return { label: "Settings", suggestions: [] };
+    case "alerts":
+      return { label: "Alerts", suggestions: general(watched).slice(0, 2) };
     case "workspace":
       return { label: "Workspace", suggestions: general(watched).slice(0, 2) };
     case "report":

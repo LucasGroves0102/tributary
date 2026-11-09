@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import type { Readable } from "../access";
+import { NotificationList } from "../alerts/Notifications";
+import { RedLines } from "../alerts/RedLines";
+import { useAlertsUnread } from "../alerts/useAlerts";
 import { ApiError, expectedFilingsOf, failureReason, getItem, screener, updateProject, workspace as fetchWorkspace } from "../api";
 import type { ChartState } from "../chart/model";
 import { header, HEADER_COLUMNS, listingLine } from "../company/data";
@@ -390,7 +393,7 @@ function Project({ token, user, projectId, step: asked, itemId, saved, readable,
               }} />
             ))}
             {pane("monitor", (
-              <Monitor token={token} companyId={companyId} projectId={projectId} thesisId={thesisId} status={thesisStatus}
+              <Monitor token={token} companyId={companyId} name={name} projectId={projectId} thesisId={thesisId} status={thesisStatus}
                 checks={checks} label={label} onQuote={(q) => {
                   goStep("thesis");
                   window.setTimeout(() => bridge.current?.showQuote(q), 0);
@@ -515,10 +518,49 @@ function useRecheckReason(token: string, companyId: string, checks: ReturnType<t
   return null;
 }
 
-/** Step 7: Check my thesis (the shared check, beside the project's thesis) and where the last
- * check stands against the filing index (Revisit): a newer 10-K/10-Q offers a re-check, and
- * otherwise the step says which filing the last check read. Checks run when the user asks. */
-function Monitor({ token, companyId, projectId, thesisId, status, checks, label, onQuote }: {
+/** Step 8: what the company files from now on and whether it crosses the user's red lines (F6,
+ * #154: the filing alerts the guide promised, for this company, with the alerts job's last check),
+ * then Check my thesis (the shared check, beside the project's thesis) and where the last check
+ * stands against the filing index (Revisit): a newer 10-K/10-Q offers a re-check. Checks run when
+ * the user asks; alerts arrive by themselves. */
+function Monitor(props: Parameters<typeof ThesisMonitor>[0] & { name: string }) {
+  const { token, companyId, name } = props;
+  const unread = useAlertsUnread(token);
+  const check = unread?.last_check ?? null;
+  return (
+    <>
+      <section className="card monitor-alerts" aria-labelledby="monitor-alerts-h">
+        <div className="card-h wrap">
+          <h3 id="monitor-alerts-h">New filings</h3>
+          <span className="sub">
+            10-K, 10-Q and material 8-Ks of {name} since you started this analysis, checked every 10 minutes
+            {check ? ` · last checked ${new Date(check.checked_at).toLocaleString()}` : ""}
+          </span>
+          <span className="grow" />
+          <a className="btn sm ghost" href={href({ view: "settings" })}>Alert settings</a>
+        </div>
+        <NotificationList token={token} companyId={companyId} limit={10} empty={
+          <>No new filings since you started this analysis. When {name} files a 10-K, 10-Q or a material 8-K it shows here, and in the bell
+            at the top, with its key figures and your red lines below checked on it.</>
+        } />
+      </section>
+      <section className="card monitor-redlines" aria-labelledby="monitor-redlines-h">
+        <div className="card-h wrap">
+          <h3 id="monitor-redlines-h">Red lines</h3>
+          <span className="sub">your rules on {name}'s figures: shown now on the latest figures, and checked on each new 10-K and 10-Q</span>
+        </div>
+        <div className="card-b">
+          <RedLines token={token} companyId={companyId} name={name} />
+        </div>
+      </section>
+      <h3 className="step-sub">Thesis check</h3>
+      <ThesisMonitor {...props} />
+    </>
+  );
+}
+
+/** Check my thesis against the filings, with the Revisit notice (B7). */
+function ThesisMonitor({ token, companyId, projectId, thesisId, status, checks, label, onQuote }: {
   token: string;
   companyId: string;
   projectId: string;
@@ -548,7 +590,7 @@ function Monitor({ token, companyId, projectId, thesisId, status, checks, label,
   if (!thesisId) {
     return (
       <p className="empty card">
-        Nothing to monitor yet: <a href={href({ view: "analysis", projectId, step: "thesis" })}>write the thesis</a> first. Then
+        No thesis to check yet: <a href={href({ view: "analysis", projectId, step: "thesis" })}>write the thesis</a> first. Then
         check it here; when the company files a newer 10-K or 10-Q than your last check read, this step says so.
       </p>
     );

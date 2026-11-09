@@ -2,6 +2,10 @@ import { displayNames } from "./format";
 import type { ModelRun } from "./models/model";
 import type {
   AgentEvent,
+  AlertForm,
+  AlertNotifications,
+  AlertSettings,
+  AlertUnread,
   Allowance,
   AuthProviders,
   PasswordSignedIn,
@@ -53,6 +57,13 @@ import type {
   UiContext,
   Valuation,
   Watchlist,
+  RedLine,
+  RedLineOp,
+  RedLines,
+  Webhook,
+  WebhookCreated,
+  WebhookDelivery,
+  WebhookFormat,
 } from "./types";
 
 const QUERY = "/api/query";
@@ -810,3 +821,57 @@ export async function ask(
   });
   await stream(r, onEvent);
 }
+
+// --- filing alerts (F6) ------------------------------------------------------------------------
+// An older Query API has no /v1/alerts routes (the deploy window): the bell and the pages read a
+// 404 as "not here yet" (null), never as an error.
+
+/** The bell's count; null from an API without alerts. */
+export const alertsUnread = (token: string) => orNullOn404(get<AlertUnread>(token, "/v1/alerts/unread"));
+
+export const alertNotifications = (token: string, q: { companyId?: string; limit?: number; before?: string } = {}) =>
+  orNullOn404(get<AlertNotifications>(token, "/v1/alerts/notifications", {
+    ...(q.companyId ? { company_id: q.companyId } : {}),
+    ...(q.limit ? { limit: q.limit } : {}),
+    ...(q.before ? { before: q.before } : {}),
+  }));
+
+export const markAlertsRead = (token: string, which: { ids?: string[]; companyId?: string; all?: boolean }) =>
+  sendJson<{ marked: number }>(token, "POST", "/v1/alerts/notifications/read", {
+    ...(which.ids ? { ids: which.ids } : {}),
+    ...(which.companyId ? { company_id: which.companyId } : {}),
+    ...(which.all ? { all: true } : {}),
+  });
+
+export const alertSettings = (token: string) => orNullOn404(get<AlertSettings>(token, "/v1/alerts/settings"));
+
+export const putAlertForms = (token: string, companyId: string, forms: AlertForm[]) =>
+  sendJson<{ company_id: string; forms: AlertForm[] }>(token, "PUT", `/v1/alerts/settings/${companyId}`, { forms });
+
+export const redLines = (token: string, companyId: string, evaluate = false) =>
+  orNullOn404(get<RedLines>(token, "/v1/alerts/red-lines", { company_id: companyId, ...(evaluate ? { evaluate: "true" } : {}) }));
+
+export const addRedLine = (token: string, body: { company_id: string; label: string; formula: string; view: "quarter" | "ttm"; op: RedLineOp; threshold: string }) =>
+  sendJson<{ red_line: RedLine }>(token, "POST", "/v1/alerts/red-lines", body);
+
+export const deleteRedLine = (token: string, ruleId: string) =>
+  sendJson<{ deleted: boolean }>(token, "DELETE", `/v1/alerts/red-lines/${enc(ruleId)}`);
+
+/** The URL goes only in this request's body; the answer carries the signing secret this once. */
+export const addWebhook = (token: string, url: string, format?: WebhookFormat) =>
+  sendJson<WebhookCreated>(token, "POST", "/v1/alerts/webhooks", { url, ...(format ? { format } : {}) });
+
+export const setWebhookEnabled = (token: string, id: string, enabled: boolean) =>
+  sendJson<{ webhook: Webhook }>(token, "PATCH", `/v1/alerts/webhooks/${enc(id)}`, { enabled });
+
+export const rotateWebhook = (token: string, id: string) =>
+  sendJson<WebhookCreated>(token, "POST", `/v1/alerts/webhooks/${enc(id)}/rotate`);
+
+export const deleteWebhook = (token: string, id: string) =>
+  sendJson<{ deleted: boolean }>(token, "DELETE", `/v1/alerts/webhooks/${enc(id)}`);
+
+export const testWebhook = (token: string, id: string) =>
+  sendJson<{ delivery: WebhookDelivery | null; ok: boolean }>(token, "POST", `/v1/alerts/webhooks/${enc(id)}/test`);
+
+export const webhookDeliveries = (token: string, webhookId?: string) =>
+  get<{ deliveries: WebhookDelivery[]; retries: number[] }>(token, "/v1/alerts/deliveries", webhookId ? { webhook_id: webhookId } : {});

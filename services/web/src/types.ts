@@ -1505,3 +1505,160 @@ export interface EarningsResponse {
   quarters: EarningsQuarter[];
   method: string;
 }
+
+// --- filing alerts (F6; Query API /v1/alerts, query_api/alerts.py) ---------------------------
+
+export type AlertForm = "10-K" | "10-Q" | "8-K";
+export type AlertSource = "watchlist" | "analysis";
+
+/** A key figure of a 10-K/10-Q alert, as read for this user when it became ready. Decimal
+ * strings, exact; `pct_change` is null for ratios (their `change` is in ratio points). */
+export interface AlertFigure {
+  metric: string;
+  label: string;
+  span: "quarter" | "ttm";
+  period_end: string;
+  value: string;
+  unit: string;
+  not_meaningful: string | null;
+  year_ago: string | null;
+  change: string | null;
+  pct_change: string | null;
+}
+
+export type RedLineOp = "<" | "<=" | ">" | ">=";
+
+/** A red line evaluated at a filing's period (or, on demand, at the latest figures). */
+export interface RedLineResult {
+  rule_id: string;
+  label: string;
+  formula: string;
+  view: "quarter" | "ttm";
+  op: RedLineOp;
+  threshold: string;
+  /** how a dimensionless result reads (formula/check.py): percent, multiple or number */
+  display: string | null;
+  value: string | null;
+  period_end: string | null;
+  /** true: the red line is crossed (the trouble it describes is there) */
+  crossed: boolean | null;
+  status: "ok" | "no_value" | "invalid";
+}
+
+export interface AlertNotification {
+  id: string;
+  company_id: string;
+  accession_no: string;
+  form: AlertForm;
+  filed: string;
+  /** the filing's index on EDGAR, from the filer's CIK (absent from an API before it said so) */
+  filing_url?: string | null;
+  period_end: string | null;
+  items: { item: string; title: string; kind: string }[];
+  /** false: an 8-K whose items aren't known yet */
+  items_known: boolean;
+  sources: AlertSource[];
+  status: "pending" | "ready";
+  figures: AlertFigure[] | null;
+  /** pending: not in yet; no_access: not on your plan; not_in_data: the figures never came */
+  figures_status: "ready" | "pending" | "no_access" | "not_in_data" | null;
+  red_lines: RedLineResult[];
+  crossed: number;
+  created_at: string;
+  ready_at: string | null;
+  read_at: string | null;
+}
+
+export interface AlertNotifications {
+  notifications: AlertNotification[];
+  has_more: boolean;
+  lookback_days: number;
+  pending_days: number;
+}
+
+export interface AlertCheck {
+  checked_at: string;
+  filings_through: string | null;
+}
+
+export interface AlertUnread {
+  unread: number;
+  latest: string | null;
+  last_check: AlertCheck | null;
+}
+
+export interface AlertCompany {
+  company_id: string;
+  sources: AlertSource[];
+  /** the day it was first followed: filings from then on alert */
+  since: string;
+  forms: AlertForm[];
+}
+
+export type WebhookFormat = "json" | "discord" | "slack";
+
+export interface WebhookDelivery {
+  id: string;
+  webhook_id: string;
+  notification_id: string | null;
+  test: boolean;
+  status: "pending" | "delivered" | "failed";
+  attempts: number;
+  next_attempt_at: string | null;
+  last_attempt_at: string | null;
+  last_status: number | null;
+  /** a short code: timeout, redirect, private_address, http_500, ... */
+  last_error: string | null;
+  created_at: string;
+  delivered_at: string | null;
+}
+
+export interface Webhook {
+  id: string;
+  /** masked: scheme, host and the last four characters (a webhook URL carries its token) */
+  url: string;
+  format: WebhookFormat;
+  enabled: boolean;
+  created_at: string;
+  rotated_at: string | null;
+  last_delivery: { status: string; last_status: number | null; last_error: string | null; at: string } | null;
+}
+
+export interface AlertSettings {
+  forms: AlertForm[];
+  companies: AlertCompany[];
+  webhooks: Webhook[];
+  formats: WebhookFormat[];
+  max_webhooks: number;
+  email: { available: boolean };
+  last_check: AlertCheck | null;
+  schedule: string;
+  lookback_days: number;
+  pending_days: number;
+}
+
+/** A new or rotated webhook: the signing secret, shown this once. */
+export interface WebhookCreated {
+  webhook: Webhook;
+  secret: string;
+  secret_shown_once: true;
+}
+
+export interface RedLine {
+  rule_id: string;
+  company_id: string;
+  label: string;
+  formula: string;
+  view: "quarter" | "ttm";
+  op: RedLineOp;
+  threshold: string;
+  display: string | null;
+  created_at: string;
+}
+
+export interface RedLines {
+  red_lines: RedLine[];
+  max_per_company: number;
+  evaluation?: RedLineResult[];
+  evaluated_at?: string;
+}

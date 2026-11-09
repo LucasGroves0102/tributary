@@ -7,6 +7,7 @@
 
 import { useState, type FormEvent } from "react";
 
+import { AlertSettingsSection } from "../alerts/AlertSettings";
 import { connectMarketData, disconnectMarketData, failureReason } from "../api";
 import { Skeleton } from "../components/States";
 import { day } from "../format";
@@ -18,6 +19,7 @@ export function Settings({ token }: { token: string }) {
   return (
     <div className="page settings-page">
       <h1>Settings</h1>
+      <AlertSettingsSection token={token} />
       <section className="card" aria-label="Connections">
         <div className="card-h">
           <h2 className="grow">Connections</h2>

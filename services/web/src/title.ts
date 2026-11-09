@@ -37,6 +37,8 @@ function what(route: Route, k: Known): string {
       return "Data status";
     case "settings":
       return "Settings";
+    case "alerts":
+      return "Alerts";
     case "workspace":
       return k.saved?.(route.workspaceId) ?? "Workspace";
     case "report":

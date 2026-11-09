@@ -26,6 +26,8 @@ interface Props {
   tab: CompanyTab;
   /** the Statements tab's choices from the address */
   statements?: StatementView;
+  /** the Filings tab opens What changed on this 10-K/10-Q (an alert's link) */
+  changes?: string;
   /** null while the watchlist loads or is unavailable */
   watched: boolean | null;
   onWatch: (watch: boolean) => Promise<void>;
@@ -40,7 +42,7 @@ interface Props {
 
 /** The tearsheet: who the company is (public metadata), then its data by tab. Identity, the
  * filing index and expected dates are public; values need financials, text needs filings. */
-export function Company({ token, companyId, tab, statements, watched, onWatch, onChart, onChartMany, onOpenChart, onAsk, saved }: Props) {
+export function Company({ token, companyId, tab, statements, changes, watched, onWatch, onChart, onChartMany, onOpenChart, onAsk, saved }: Props) {
   const meta = useLoad(companyId, () =>
     // a bank's key stats need its own columns (F4); an older API refuses them (422): the standard set
     screener(token, { company_id: [companyId], columns: HEADER_COLUMNS_WITH_BANK, sort: "name", limit: 1 }).catch((e) => {
@@ -167,7 +169,7 @@ export function Company({ token, companyId, tab, statements, watched, onWatch, o
       )}
       {tab === "segments" && <Segments token={token} companyId={companyId} name={h.name} />}
       {tab === "ratios" && <Ratios token={token} companyId={companyId} name={h.name} ticker={ticker} notApplicable={row.not_applicable} />}
-      {tab === "filings" && <Filings token={token} companyId={companyId} name={h.name} canRead={row.access.includes("filings")} fiscalYearEnd={row.fiscal_year_end} />}
+      {tab === "filings" && <Filings key={changes ?? ""} token={token} companyId={companyId} name={h.name} canRead={row.access.includes("filings")} fiscalYearEnd={row.fiscal_year_end} initialDiff={changes} />}
       {tab === "notes" && <DataNotes token={token} companyId={companyId} name={h.name} canReadFilings={row.access.includes("filings")} />}
       {tab === "peers" && <Peers token={token} companyId={companyId} name={h.name} onChart={onChartMany} />}
       {tab === "price" && <Price token={token} companyId={companyId} name={h.name} />}

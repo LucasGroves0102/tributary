@@ -76,6 +76,8 @@ function respond(url: string, init?: RequestInit): Response {
     connections = { providers: PROVIDERS, connections: [] };
     return Response.json({ deleted: true });
   }
+  // Settings also lists filing alerts (F6); an API without them answers 404 and the section says so
+  if (path.startsWith("/api/query/v1/alerts")) return Response.json({ detail: "Not Found" }, { status: 404 });
   if (path.endsWith("/prices")) return Response.json({ ...META, rows: ROWS } satisfies Prices);
   if (path.endsWith("/valuation")) return Response.json(VALUATION);
   return Response.json({ detail: "unexpected" }, { status: 500 });

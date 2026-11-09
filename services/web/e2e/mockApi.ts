@@ -357,6 +357,16 @@ export async function mockApi(page: Page): Promise<Fake> {
     if (path === "/v1/recent/filings") return json({ recorded: true });
     // Connect your data off: the API offers no providers (not a 404)
     if (path === "/v1/connections" && method === "GET") return json({ providers: [], connections: [] });
+    // filing alerts (F6): nothing new yet; the bell asks on every load, Settings and Monitor list them
+    if (path === "/v1/alerts/unread") return json({ unread: 0, latest: null, last_check: { checked_at: now(), filings_through: "2026-10-21" } });
+    if (path === "/v1/alerts/notifications") return json({ notifications: [], has_more: false, lookback_days: 3, pending_days: 3 });
+    if (path === "/v1/alerts/settings") {
+      return json({ forms: ["10-K", "10-Q", "8-K"], companies: [...fake.watched].map((c) => ({ company_id: c, sources: ["watchlist"], since: "2026-10-01", forms: ["10-K", "10-Q", "8-K"] })),
+        webhooks: [], formats: ["json", "discord", "slack"], max_webhooks: 3, email: { available: false }, last_check: null,
+        schedule: "every 10 minutes", lookback_days: 3, pending_days: 3 });
+    }
+    if (path === "/v1/alerts/deliveries") return json({ deliveries: [], retries: [300, 1800, 7200, 21600] });
+    if (path === "/v1/alerts/red-lines") return json({ red_lines: [], max_per_company: 10, evaluation: [], evaluated_at: now() });
     if (path === "/v1/status") return json({ last_accepted_at: now(), last_ingested_at: now() });
     m = path.match(/^\/v1\/companies\/(\d{10})\/expected-filings$/);
     if (m) return json({ company_id: m[1], as_of: "", method: "", expected: [] });

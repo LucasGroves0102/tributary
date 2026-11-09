@@ -45,7 +45,7 @@ export const STEPS: StepInfo[] = [
   { key: "peers", label: "Peers", why: "The same numbers for comparable companies: is this business better or worse than its peers?" },
   { key: "model", label: "Model", why: "Revenue and operating income forward: base, bear and bull cases next to the company's own history." },
   { key: "thesis", label: "Thesis", why: "Your argument in plain words: core thesis, what the market misses, pillars with evidence, risks." },
-  { key: "monitor", label: "Monitor", why: "Check your thesis against the filings when you choose; when the company files a newer 10-K or 10-Q than your last check read, this step says so and offers a re-check." },
+  { key: "monitor", label: "Monitor", why: "New 10-K, 10-Q and material 8-K filings as they arrive, with their key figures and your red lines checked on each; and your thesis checked against the filings when you choose." },
 ];
 
 export const STEP_KEYS = STEPS.map((s) => s.key);

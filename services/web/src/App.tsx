@@ -1,6 +1,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { ApiError, demoUsers, login, me as fetchMe, watchlistCsv } from "./api";
+import { useAlertsUnread } from "./alerts/useAlerts";
 import { AssistantPanel } from "./assistant/AssistantPanel";
 import { metricLabel } from "./chart/metrics";
 import { chartTitle, companiesChart, companyChart, emptyChart, MAX_COMPANY_LINES, type ChartState, type Transform } from "./chart/model";
@@ -21,11 +22,13 @@ import { TopBar } from "./components/TopBar";
 import { download } from "./download";
 import { lastIngested, watchColumns } from "./home/data";
 import { RecentNotes } from "./home/RecentNotes";
+import { StartCard } from "./home/StartCard";
 import { useFeedStatus } from "./home/useFeedStatus";
 import { useWorkspace } from "./home/useWorkspace";
 import { Home } from "./pages/Home";
 import {
   About,
+  AlertsPage,
   AnalysisPage,
   ChartBuilder,
   Companies,
@@ -145,6 +148,8 @@ export function App(props: Props = {}) {
   const saved = useSaved(token, user);
   // "Connect your data": offered only when the server has it on (useMarketData's docstring)
   const market = useMarketData(token);
+  // F6: the bell's count (null: no alerts on this server, so no bell)
+  const alertCount = useAlertsUnread(token);
   const reload = saved.reload;
   // a report saved: refresh the lists, and show it if its workspace is still on screen
   const writer = useReportWriter(token, user, useCallback((itemId: string, workspaceId: string) => {
@@ -635,6 +640,7 @@ export function App(props: Props = {}) {
             onSearch={() => setPalette("")}
             onTheme={toggleTheme}
             onAssistant={() => (drawerOpen ? setDrawer(false) : focusAssistant())}
+            alerts={alertCount}
           />
           {session?.kind === "sandbox" && (
             <div className="sandbox-banner" role="note">
@@ -666,6 +672,8 @@ export function App(props: Props = {}) {
                 onExport={exportWatchlist}
                 readableCompanies={me ? readableTotal(me) : 0}
                 onNewChart={newChart}
+                start={<StartCard token={token} readable={financialsFor} workspaces={saved.list.state === "ok" ? saved.list.workspaces : null}
+                  alerts={alertCount} label={companyLabel} />}
                 recent={saved.list.state === "unavailable" ? null : <Recent recent={saved.recent} onOpen={openSaved} />}
                 notes={<RecentNotes token={token} name={companyLabel} filingsFor={filingsFor} catalogOpen={catalogOpen(me, "financials")} companies={ownCompanies} />}
                 layout={views.home}
@@ -727,6 +735,7 @@ export function App(props: Props = {}) {
                 companyId={route.companyId}
                 tab={route.tab ?? "overview"}
                 statements={route.statements}
+                changes={route.changes}
                 watched={watched ? watched.has(route.companyId) : null}
                 onWatch={(on) =>
                   (on ? workspace.watch(route.companyId) : workspace.unwatch(route.companyId)).catch(() =>
@@ -798,6 +807,8 @@ export function App(props: Props = {}) {
               <About allowance={allowance} open={catalogOpen(me, "financials")} />
             ) : route.view === "settings" ? (
               <Settings key={user} token={token} />
+            ) : route.view === "alerts" ? (
+              <AlertsPage key={user} token={token} />
             ) : route.view === "workspace" ? (
               <WorkspacePage
                 key={`${user}-${route.workspaceId}`}
