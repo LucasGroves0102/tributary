@@ -166,8 +166,9 @@ function adjustments(raw: unknown): Adjustment[] {
 function price(raw: unknown): Price | null {
   if (!isObject(raw)) return null;
   const value = num(raw.value);
+  const currency = typeof raw.currency === "string" && /^[A-Z]{3}$/.test(raw.currency) ? raw.currency : undefined;
   return value !== null && value > 0 && value <= PRICE_MAX && typeof raw.date === "string" && ISO_DAY.test(raw.date)
-    ? { value, date: raw.date }
+    ? { value, date: raw.date, ...(currency ? { currency } : {}) }
     : null;
 }
 
@@ -217,7 +218,7 @@ export function modelState(m: ModelState): Record<string, unknown> {
     ...(m.adjustments?.length
       ? { adjustments: m.adjustments.map((a) => ({ name: a.name.trim(), fy: a.fy, quarter: a.quarter, kind: a.kind, amount: Math.round(a.amount) })) }
       : {}),
-    ...(m.price ? { price: { value: round2(m.price.value), date: m.price.date } } : {}),
+    ...(m.price ? { price: { value: round2(m.price.value), date: m.price.date, ...(m.price.currency ? { currency: m.price.currency } : {}) } } : {}),
   };
 }
 

@@ -58,7 +58,7 @@ function Body({ data, companyId, name, compact }: { data: TextKpis | null; compa
           “our backlog was $X billion at December 31” or “orders of $X billion in the quarter”, or a table's “Total backlog” row, in MD&A,
           the 10-K's Item 1 or an earnings release. A company can state them otherwise, or only by segment; the Filings tab has the full text.
         </p>
-        <p className="foot">{data.read.filings} filings read. {data.method}</p>
+        <p className="foot">{data.read.filings} filings mention backlog or orders; none states them in these ways. {data.method}</p>
       </div>
     );
   }
@@ -73,13 +73,14 @@ function Body({ data, companyId, name, compact }: { data: TextKpis | null; compa
   return (
     <div className="card-b">
       {points >= 2 && (
-        <LayerChart series={series} title="" footnote={[]} svgRef={svg} onOpen={opened} />
+        // sparse by nature (a figure when a filing states one): no gap notes under the chart
+        <LayerChart series={series} title="" footnote={[]} svgRef={svg} onOpen={opened} notes={false} />
       )}
       {TEXT_KPI_ORDER.map((m) => data.metrics[m].points.length > 0 && (
         <Figures key={m} metric={m} series={data.metrics[m]} companyId={companyId} shown={compact ? 4 : SHOWN} />
       ))}
       <p className="foot">
-        {from ? `Read from ${data.read.filings} filings since ${from}. ` : ""}
+        {from ? `Read from the ${data.read.filings} filings since ${from} that mention backlog or orders. ` : ""}
         {note ? `${note} ` : ""}{data.method}
       </p>
     </div>

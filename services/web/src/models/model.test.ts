@@ -132,6 +132,14 @@ describe("drafts: what the fields hold as typed", () => {
     expect(parsePriceDraft({ value: "182.50", date: "2026-11-06", currency: "" })).toEqual({ value: 182.5, date: "2026-11-06" });
   });
 
+  it("keeps a price's currency through restore and save (057), and none for a dollar one", () => {
+    const m = restoreModel({ companyId: "0001674101", assumptions: [{ growth: 1, margin: 2 }], price: { value: 150, date: "2026-11-06", currency: "EUR" } })!;
+    expect(m.price).toEqual({ value: 150, date: "2026-11-06", currency: "EUR" });
+    expect(modelState(m).price).toEqual({ value: 150, date: "2026-11-06", currency: "EUR" });
+    const usd = restoreModel({ companyId: "0001674101", assumptions: [{ growth: 1, margin: 2 }], price: { value: 150, date: "2026-11-06", currency: "euros" } })!;
+    expect(modelState(usd).price).toEqual({ value: 150, date: "2026-11-06" });
+  });
+
   it("words a euro filer's amounts in euros, and a price in another currency blocks EV (057)", () => {
     expect(amountUnit({})).toBe("USD");
     expect(amountUnit({ currency: "EUR" })).toBe("EUR");
