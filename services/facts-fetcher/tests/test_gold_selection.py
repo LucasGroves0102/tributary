@@ -39,6 +39,7 @@ METRICS = {
     "PaymentsToAcquireProductiveAssets": "capex",
     "PaymentsOfDividends": "dividends_paid",
     "InterestExpense": "interest_expense",
+    "InterestExpenseNonoperating": "interest_expense",
     "EarningsPerShareBasic": "eps_basic",
     "EarningsPerShareDiluted": "eps_diluted",
     "CashAndCashEquivalentsAtCarryingValue": "cash",
@@ -1034,6 +1035,75 @@ def test_a_one_off_gap_is_as_before(conn):
     put(conn, rows)
     ((_, end, detail),) = findings(conn, "series_gap")
     assert end == date(2026, 6, 30) and "repeated" not in detail
+
+
+# --- interest expense's sign (043) ---------------------------------------------------------------
+
+
+def test_a_year_tagged_negative_still_derives_its_fourth_quarter(conn):
+    # Disney's FY2025 10-K tags InterestExpense -1,812M; its 10-Qs +487M, +958M and +1,396M year
+    # to date. The fourth quarter was -3,208M; it's 1,812 - 1,396 = 416M.
+    put(
+        conn,
+        [
+            ("InterestExpense", "2024-09-29", "2024-12-28", 487000000, "q1", "2025-02-05"),
+            ("InterestExpense", "2024-09-29", "2025-03-29", 958000000, "q2", "2025-05-07"),
+            ("InterestExpense", "2024-09-29", "2025-06-28", 1396000000, "q3", "2025-08-06"),
+            ("InterestExpense", "2024-09-29", "2025-09-27", -1812000000, "k", "2025-11-13", "10-K"),
+        ],
+    )
+    assert gold(conn, "interest_expense", "2025-09-27") == (416000000, "InterestExpense")
+    assert gold(conn, "interest_expense", "2025-06-28") == (438000000, "InterestExpense")
+
+
+def test_a_quarter_tagged_negative_reads_as_the_cost(conn):
+    # UDR tags some first quarters -32,884K among +31,000K quarters
+    put(
+        conn,
+        [
+            ("InterestExpense", *Q1, -32884000, "q1", "2026-05-01"),
+            ("InterestExpense", *Q2, 31691000, "q2", "2026-08-01"),
+        ],
+    )
+    assert gold(conn, "interest_expense", "2026-03-31") == (32884000, "InterestExpense")
+    assert gold(conn, "interest_expense", "2026-06-30") == (31691000, "InterestExpense")
+
+
+def test_a_derived_quarter_still_negative_is_left_out(conn):
+    # Sphere's FY2022: a 10-KT filed in 2025 restates the year's interest to 0 after a spin-off,
+    # against nine months of 23.2M in the older 10-Qs. 0 - 23.2M isn't a quarter.
+    put(
+        conn,
+        [
+            ("InterestExpense", "2021-07-01", "2021-09-30", 9248000, "q1", "2021-11-09"),
+            ("InterestExpense", "2021-07-01", "2021-12-31", 17415000, "q2", "2022-02-09"),
+            ("InterestExpense", "2021-07-01", "2022-03-31", 23246000, "q3", "2022-05-09"),
+            ("InterestExpense", "2021-07-01", "2022-06-30", 27155000, "k", "2022-08-19", "10-K"),
+            ("InterestExpenseNonoperating", "2021-07-01", "2022-06-30", 0, "kt", "2025-03-03", "10-KT"),
+        ],
+    )
+    assert gold(conn, "interest_expense", "2022-06-30") is None
+    assert gold(conn, "interest_expense", "2022-03-31") == (5831000, "InterestExpense")
+
+
+def test_no_interest_expense_reaches_gold_negative(conn):
+    put(
+        conn,
+        [
+            ("InterestExpense", *Q1, -5000000, "q1", "2026-05-01"),
+            ("InterestExpense", "2026-01-01", "2026-06-30", 9000000, "q2", "2026-08-01"),
+            ("InterestExpense", "2026-01-01", "2026-09-30", -14000000, "q3", "2026-11-02"),
+        ],
+    )
+    values = [
+        r[0]
+        for r in conn.execute(
+            "SELECT value FROM gold.quarterly_financials"
+            " WHERE company_id = %s AND metric = 'interest_expense'",
+            (CO,),
+        ).fetchall()
+    ]
+    assert sorted(values) == [4000000, 5000000, 5000000]
 
 
 # --- the fiscal month ---------------------------------------------------------------------------

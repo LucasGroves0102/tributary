@@ -121,6 +121,12 @@ has the measurements behind its thresholds.
   years); `ops.quality_summary` lists them.
 - `042_fiscal_year_end_month.sql`: `silver.fiscal_year_end_month(mmdd)`, the month a 52/53-week year
   belongs to (a day of 1-7 is the month before). The screener's filter and sort; labels unchanged.
+- 043: interest expense is a cost, so `gold.usable_facts` reads it as `abs(value)` under every tag
+  (filings flip its sign between filings and in comparatives: Disney's FY2025 10-K -1,812M against
+  +1,396M nine months in its 10-Qs made Q4 -3,208M; it's 416M), and a derived interest expense
+  quarter that is still negative is left out, like 029's other costs. On hermes before: 2,951
+  negative quarters at 986 companies, 1,096 `sign_flip` findings. Silver keeps the filing's figure.
+  Needs `financials-rebuild`; backout `backout/interest_expense_043.sql`.
 `026_feed_status.sql` adds `ops.feed_status()`: when the newest filing was accepted by EDGAR and
 when it reached bronze, two timestamps and nothing else. It is SECURITY DEFINER (query_api still
 can't read `bronze.filings`) and backs the Query API's public `/v1/status`, which the
