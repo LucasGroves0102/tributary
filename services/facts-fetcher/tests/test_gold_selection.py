@@ -1079,7 +1079,10 @@ def test_a_derived_quarter_still_negative_is_left_out(conn):
             ("InterestExpense", "2021-07-01", "2021-12-31", 17415000, "q2", "2022-02-09"),
             ("InterestExpense", "2021-07-01", "2022-03-31", 23246000, "q3", "2022-05-09"),
             ("InterestExpense", "2021-07-01", "2022-06-30", 27155000, "k", "2022-08-19", "10-K"),
-            ("InterestExpenseNonoperating", "2021-07-01", "2022-06-30", 0, "kt", "2025-03-03", "10-KT"),
+            (
+                "InterestExpenseNonoperating", "2021-07-01", "2022-06-30", 0, "kt", "2025-03-03",
+                "10-KT",
+            ),
         ],
     )
     assert gold(conn, "interest_expense", "2022-06-30") is None
