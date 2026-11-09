@@ -1,0 +1,14 @@
+{
+ "accession_no": "0001193125-26-379306",
+ "company_id": "0001674101",
+ "filed": "2026-09-02",
+ "items": [
+  "1.01",
+  "7.01",
+  "9.01"
+ ],
+ "heads": {
+  "7.01": "Item 7.01\nRegulation FD\nThe following information is furnished pursuant to Item 7.01, “Regulation FD Disclosure.” This information, including Exhibit 99.1 attached hereto, shall not be deemed filed for purposes of Section 18 of the Securities Exchange Act of 1934, as amended (the “Exchange Act”), or incorporated by reference into any filing under the Securities Act of 1933, as amended, or the Exchange Act, except as shall be expressly set forth by specific reference in such filing. On September 2, 2026, the Company issued a press release announcing that Buyer had entered into the Acquisition Agreement. The press release is furnished as Exhibit 99.1 to this Form 8-K.",
+  "EX-99.1": "Exhibit 99.1\nFor Immediate Release:\nVertiv Announces Agreement to Acquire UtilityInnovation Group to Accelerate Time to Power for AI Data Centers\n~$1.45 billion acquisition expected to expand Vertiv’s addressable opportunity in power-constrained data centers\n•\nAdds microgrid controls, onsite generation orchestration, microgrid-specific switchgear and behind-the-meter power architecture to Vertiv’s portfolio\n•\nExtends Vertiv’s power and cooling portfolio from grid interconnect to chip, independent of any single\ngeneration technology or supplier\n•\nUIG’s proven team and proprietary technology expected to help customers accelerate time to power through\ngrid-connected or grid-independent architectures\nColumbus, Ohio (September 2, 2026) – Vertiv Holdings Co. (NYSE: VRT)\n(“Vertiv”), a global leader in critical digital infrastructure, today announced its wholly-owned subsidiary, Vertiv Corporation, has entered into an agreement and plan of merger to acquire Utility Innovation Holdings, Inc., which\noperates as UtilityInnovation Group (“UIG”), a leader in microgrid solutions, advanced power controls and behind-the-meter power architecture design for data centers, for approximately\n$1.45 bill"
+ }
+}

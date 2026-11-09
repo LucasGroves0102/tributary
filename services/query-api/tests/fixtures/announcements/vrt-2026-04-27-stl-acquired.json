@@ -1,0 +1,13 @@
+{
+ "accession_no": "0001628280-26-027297",
+ "company_id": "0001674101",
+ "filed": "2026-04-27",
+ "items": [
+  "7.01",
+  "9.01"
+ ],
+ "heads": {
+  "7.01": "Item 7.01 Regulation FD\nOn April 27, 2026, Vertiv Holdings Co., a Delaware corporation (the “Company”), issued a press release announcing the closing, by one of its wholly-owned subsidiaries, of the acquisition of Strategic Thermal Labs, LLC (the “Acquisition”).\nThe press release announcing the closing of the Acquisition is furnished as Exhibit 99.1 to this Form 8-K.\nThe information set forth in Item 7.01, including Exhibit 99.1, is being furnished and shall not be deemed “filed” for purposes of Section 18 of the Securities Exchange Act of 1934, as amended (the “Exchange Act”), or otherwise subject to the liabilities of that Section. The information in this Item 7.01, including Exhibit 99.1, shall not be deemed incorporated by reference into any filing under the Securities Act of 1933, as amended, or the Exchange Act, except as shall be expressly set forth by specific reference in such a filing.",
+  "EX-99.1": "Vertiv Strengthens Liquid-Cooling System Capability with Acquisition of\nStrategic Thermal Labs\nAcquisition enhances engineering expertise for cold-plate design, server‑side liquid cooling and high-density thermal validation to improve system‑level performance, reliability, and lifecycle outcomes\nCOLUMBUS, Ohio April 27, 2026-- Vertiv Holdings Co (NYSE: VRT), a global leader in critical digital infrastructure and continuity solutions, today announced it has acquired Strategic Thermal Labs LLC (STL), a specialist in advanced liquid-cooling technologies. The acquisition extends Vertiv’s thermal-chain strategy by strengthening engineering capability at the interface between server-side liquid cooling and supporting infrastructure—an increasingly critical factor in high-density, liquid-cooled environments supporting AI and high-performance computing workloads.\nAs compute requirements continue to intensify, the interaction between server-side liquid cooling and supporting infrastructure increasingly influences broader system performance, including flow, balance, controls behavior, serviceability, and lifecycle reliability. Strategic Thermal Labs adds proven cold-plate design, server-side"
+ }
+}

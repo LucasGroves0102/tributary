@@ -50,7 +50,7 @@ request parameters. Dev tokens: `make token USER=alice`.
 | `GET /v1/companies/{id}/sections/{key}?form=&accession_no=&limit=&max_chars=` | filings | section text + citation; `max_chars` default 8,000, up to 1,000,000 (the reader asks for the whole section) |
 | `GET /v1/companies/{id}/filings/{accession}/changes?section=&basis=&kind=` | filings | new / removed / rewritten Risk Factors and MD&A paragraphs vs the comparable earlier filing, word diffs, citations in both filings ([What changed](#what-changed)) |
 | `GET /v1/search?q=&company=&form=&section=&from=&to=&limit=&offset=` | filings (every company searched) | best passage per section, ranked, with snippet and citation ([Search](#search)) |
-| `GET /v1/companies/{id}/events` | filings | 8-K filings since the latest 10-Q/10-K period end, newest first: items (SEC title, kind), an excerpt of the 8-K's own words, the press release exhibit, and `stale`: figures at that period end an event after it may have changed ([Earnings and events](#earnings-and-events)) |
+| `GET /v1/companies/{id}/events` | filings | 8-K filings since the latest 10-Q/10-K period end, newest first: items (SEC title, kind), an excerpt of the 8-K's own words, the press release exhibit, `announced` (a completed deal or new financing read from a 7.01/8.01 announcement), and `stale`: figures at that period end an event after it may have changed ([Earnings and events](#earnings-and-events)) |
 | `GET /v1/companies/{id}/earnings?quarters=` | filings | each quarter's earnings release (8-K Item 2.02), newest first, `quarters` 1-8 (default 4): the release, its headline, outlook passages and management's adjustments (reconciliation tables, dollar notes), each with offsets into the release; no beat or miss ([Earnings and events](#earnings-and-events)) |
 | `GET /v1/companies/{id}/data-notes` | financials | data-quality and freshness notes: gaps, overlapping quarters, restatements, derived quarters, filings companyfacts doesn't carry yet, each with its filings ([Data notes](#data-notes)) |
 | `GET /v1/companies/{id}/annual-per-share?years=` | financials | EPS and weighted shares per fiscal year, as the 10-K states them (migration 036): per-share figures don't add, so quarters can't give them |
@@ -883,6 +883,28 @@ RLS), the excerpts and passages are section text under RLS on `silver.filing_sec
   assets), 2.03 new debt and 2.04 accelerated debt (debt, net debt, debt to equity; 2.03 cash
   too), 2.06 impairment (total assets, equity), 3.02 unregistered equity sale (shares, equity),
   1.03 bankruptcy and 4.02 non-reliance (`*`: every figure). A flag, never a recomputed figure.
+- **Announced under 7.01 / 8.01** (F1b, `announcements.py`, rules in its docstring): many
+  companies announce a closed acquisition or a new financing in a Regulation FD or Other Events
+  8-K with a press release, without Item 2.01 or 2.03. Such an 8-K (7.01 or 8.01, never one with
+  2.02: an earnings release recaps its quarter) is read at the opening of its press release and
+  item text, sentence by sentence, by fixed phrases: a **completed** acquisition or disposition
+  ("Completes Acquisition", "has acquired", "closed the sale of", not "agreement to acquire",
+  "expected to close", "upon completion") flags 2.01's figures; a **new financing** (notes priced
+  or issued, a credit facility or term loan entered, a term loan drawn; not a proposed or launched
+  offering, an amendment, a buyback, a dividend or guidance) flags 2.03's. `announced` on the
+  event says what was read: `kind` (deal, financing), `item` (7.01 or 8.01), `words` (the phrase
+  that matched, as written), `sentence` and a `citation` with offsets into the section it came
+  from. Checked on real 8-Ks (`tests/fixtures/announcements`, from production): Vertiv's Oct 26,
+  2026 7.01 8-K ("Vertiv Completes Acquisition of King Environmental Services") flags; its Sep 24
+  agreement to acquire the same company, its UIG agreement and plan of merger, its Oct 28 earnings
+  release, United Therapeutics' $2B buyback, a dividend, BWX's launched notes offering and National
+  Fuel's planned separation don't; Blackstone's, Las Vegas Sands' and TKO's priced notes do. Of
+  50 more 8-Ks sampled from production's search (7.01 and 8.01 sections, Oct 1 - Nov 6, 2026), 38
+  are read (7.01 or 8.01, no 2.02) and 2 flag, both rightly (Peoples Bancorp "Completes
+  Acquisition of Citizens National", TKO's priced notes). Reading the other 36's completion,
+  pricing and credit sentences by hand, none announces a completed deal or a new financing the
+  rules missed, except a "pricing of the Offering" whose 8-K never says what was offered (two
+  more completions there are 2.01 8-Ks, flagged by their item).
 - **Earnings releases.** A quarter's release is the 8-K with Item 2.02 filed after its end (within
   120 days, the latest quarter end before the filing), the last one on or before the quarter's
   10-Q/10-K when there are several (`other_releases` lists the rest); a quarter whose 10-Q isn't

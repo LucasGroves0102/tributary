@@ -285,6 +285,10 @@ Deckers' release.
   officer change, 4.02 non-reliance, ...), each quoting the 8-K's own words. A balance that an
   event after the period end may have changed (cash, debt, net debt, total assets) is flagged as
   of that period end, with the event beside it, on the key stats too: a flag, never a pro forma.
+  A closed acquisition or a new financing announced only in a 7.01 or 8.01 press release (Vertiv
+  closed KES that way on Oct 26, 2026) is flagged too, read by fixed phrases from the release, with
+  the words that triggered it shown; an agreement to acquire, an earnings release or a buyback is
+  not.
 - The assistant has both as tools (`get_earnings_release`, `get_events_since_report`), and Check
   my thesis reads them for what the thesis leaves out; neither changed the recorded suites (97
   replays pass, 0 leaks), and the adversarial harness counts their results like any filings

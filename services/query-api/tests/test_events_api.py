@@ -2,6 +2,7 @@
 quarter and event rules of query_api/events.py, shapes. Store rows mirror Store's (real 8-K
 items and release texts of Vertiv and Deckers, fixtures/releases)."""
 
+import json
 from datetime import UTC, date, datetime
 from pathlib import Path
 
@@ -29,7 +30,8 @@ VRT = "0001674101"
 DECK = "0000910521"
 GRANTS = {"bob": {VRT: {"financials", "filings"}, DECK: {"financials", "filings"}},
           "alice": {VRT: {"financials"}, DECK: {"financials"}}}
-RELEASES = Path(__file__).parent / "fixtures" / "releases"
+FIXTURES = Path(__file__).parent / "fixtures"
+RELEASES = FIXTURES / "releases"
 
 
 def report(acc, form, filed, end):
@@ -277,6 +279,47 @@ def test_events_since_the_last_report_flag_the_figures_they_make_stale(token):
     # the earnings release and the Reg FD 8-K change no figure
     assert body["events"][0]["affects"] == [] and body["events"][2]["affects"] == []
     assert body["events"][2]["excerpt"] is None and not body["events"][2]["sections_available"]
+
+
+def test_a_reg_fd_8k_announcing_a_closed_acquisition_flags_like_2_01(token):
+    """F1b: Vertiv's 8-K of Oct 26, 2026 is Item 7.01 only; its press release says the KES
+    acquisition is complete, so it flags 2.01's figures and quotes the words that did it. The
+    earnings release (2.02 + 7.01) beside it is never read."""
+    kes = json.loads((FIXTURES / "announcements" / "vrt-2026-10-26-kes-completed.json")
+                     .read_text())
+    heads = Store().heads | {kes["accession_no"]: [
+        section(k, h, start=500 * i) for i, (k, h) in enumerate(kes["heads"].items())]}
+    body = client(Store(heads=heads)).get(f"/v1/companies/{VRT}/events",
+                                          headers=token("bob")).json()
+    release, uig, event = body["events"][:3]
+    assert event["accession_no"] == kes["accession_no"]
+    assert [i["item"] for i in event["items"]] == ["7.01", "9.01"]
+    assert event["affects"] == ["cash", "long_term_debt", "net_debt", "total_assets"]
+    [a] = event["announced"]
+    assert (a["kind"], a["item"], a["section_key"], a["words"]) == (
+        "deal", "7.01", "EX-99.1", "Completes Acquisition")
+    assert a["sentence"].startswith("Vertiv Completes Acquisition of King Environmental")
+    head = kes["heads"]["EX-99.1"]
+    assert a["citation"]["section_key"] == "EX-99.1"
+    assert a["citation"]["char_start"] == 500  # the section's start + the sentence's offset
+    assert a["citation"]["char_end"] == 500 + head.index("\n")
+    assert body["stale"][0] == {"metric": "cash", "as_of": "2026-09-30",
+                                "events": [UIG, kes["accession_no"]]}
+    assert release["announced"] == [] and release["affects"] == []
+    assert uig["announced"] == []  # 2.01 already flags it
+    assert "7.01 or 8.01" in body["method"]
+
+
+def test_an_announcement_before_the_period_end_flags_nothing(token):
+    kes = json.loads((FIXTURES / "announcements" / "vrt-2026-10-26-kes-completed.json")
+                     .read_text())
+    rows = [eight_k(kes["accession_no"], date(2026, 9, 28), ["7.01", "9.01"])]
+    heads = {kes["accession_no"]: [section(k, h) for k, h in kes["heads"].items()]}
+    store = Store(reports=VRT_REPORTS, rows=rows, heads=heads)
+    store.company_8ks = lambda user_id, company_id, since: rows  # type: ignore[method-assign]
+    body = client(store).get(f"/v1/companies/{VRT}/events", headers=token("bob")).json()
+    [event] = body["events"]
+    assert event["affects"] == [] and event["announced"] == [] and body["stale"] == []
 
 
 def test_events_without_a_recent_report_cover_the_last_400_days(token):

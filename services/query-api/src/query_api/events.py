@@ -20,6 +20,13 @@ date) is after the period end counts: an amendment re-reports an earlier event, 
 dated on or before the period end is in that balance sheet already. A filing whose items are
 all ROUTINE (5.07 votes, 5.08 nominations, 9.01 exhibits alone) is listed as not material.
 
+Announced (F1b). Such an 8-K with item 7.01 or 8.01 (and not 2.02, an earnings release) whose
+press release or item text announces a completed acquisition or disposition flags 2.01's
+figures, and one announcing a new financing (notes priced or issued, a credit facility entered,
+a term loan drawn) flags 2.03's, unless the 8-K has that item itself. The words are read by
+query_api.announcements (its docstring is the spec); `announced` lists what was read: the kind,
+the item, the words that matched and their sentence with a citation.
+
 Since the last report. `since` is the period end of the company's latest original 10-K or 10-Q
 (10-KT/10-QT too) in the filing index; events are its 8-K and 8-K/A filed after it, newest first,
 at most MAX_EVENTS. With no such report, or one more than RECENT_DAYS old, the window is the last
@@ -50,6 +57,7 @@ from typing import Annotated
 
 from fastapi import Depends, FastAPI, Path, Query
 
+from query_api import announcements
 from query_api.releases import read_release
 from query_api.shapes import document_url, filing_url
 from query_api.store import Store
@@ -132,8 +140,11 @@ METHOD_EVENTS = (
     "new for it shows the items the parser found). Figures as of that period end that an event "
     "after it may have changed are listed in `stale`: completed acquisitions or dispositions "
     "(2.01), new or accelerated debt (2.03, 2.04), impairments (2.06), unregistered equity sales "
-    "(3.02), and bankruptcy or non-reliance on past statements (1.03, 4.02: every figure). A "
-    "flag, not a recomputed figure.")
+    "(3.02), and bankruptcy or non-reliance on past statements (1.03, 4.02: every figure). An "
+    "8-K under Item 7.01 or 8.01 whose press release or text says an acquisition or disposition "
+    "was completed, or notes were priced or issued, a credit facility entered or a term loan "
+    "drawn, flags the same figures as 2.01 or 2.03; `announced` quotes the words. A flag, not a "
+    "recomputed figure.")
 METHOD_EARNINGS = (
     "Each quarter's earnings release is the 8-K with Item 2.02 filed after that quarter's end "
     f"(within {RELEASE_WINDOW_DAYS} days, before the next quarter ends), the last one on or "
@@ -172,6 +183,25 @@ def affects(items: list[str], form: str, event_date: date, period_end: date | No
     out: list[str] = []
     for i in items:
         for m in AFFECTS.get(i, ()):
+            if m not in out:
+                out.append(m)
+    return [EVERY_FIGURE] if EVERY_FIGURE in out else out
+
+
+def announced(items: list[str], form: str, event_date: date, period_end: date | None,
+              sections: list[dict]) -> list[announcements.Announcement]:
+    """What an original 8-K after the period end announces under 7.01 / 8.01 (F1b), read from
+    its sections' heads."""
+    if form != "8-K" or period_end is None or event_date <= period_end:
+        return []
+    return announcements.read(items, {s["section_key"]: s["head"] for s in sections})
+
+
+def with_announced(hit: list[str], found: list[announcements.Announcement]) -> list[str]:
+    """`hit` plus the figures of the item each announcement stands for (2.01, 2.03)."""
+    out = list(hit)
+    for a in found:
+        for m in AFFECTS[announcements.ALREADY[a.kind]]:
             if m not in out:
                 out.append(m)
     return [EVERY_FIGURE] if EVERY_FIGURE in out else out
@@ -271,7 +301,8 @@ def shape_events(company_id: str, report: dict | None, since: date, window: str,
         secs = sections.get(r["accession_no"], [])
         by_key = {s["section_key"]: s for s in secs}
         event_date = r.get("report_date") or r["filing_date"]
-        hit = affects(items, r["form"], event_date, period_end)
+        found = announced(items, r["form"], event_date, period_end, secs)
+        hit = with_announced(affects(items, r["form"], event_date, period_end), found)
         quoted, start = excerpt_section(items, secs)
         rel = release_section(list(by_key))
         events.append({
@@ -279,6 +310,9 @@ def shape_events(company_id: str, report: dict | None, since: date, window: str,
             "accepted_at": r.get("accepted_at"), "event_date": event_date,
             "items": [item_info(i) for i in items], "items_from": source,
             "material": material(items), "amendment": r["form"] != "8-K", "affects": hit,
+            "announced": [a.to_dict() | {"citation": _citation(company_id, r.get("cik"), r,
+                                                               by_key[a.section_key], a.start,
+                                                               a.end)} for a in found],
             "sections_available": bool(secs),
             "excerpt": {"item": quoted["section_key"], "text": excerpt(quoted["head"][start:]),
                         "citation": _citation(company_id, r.get("cik"), r, quoted, start,

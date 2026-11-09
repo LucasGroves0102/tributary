@@ -23,7 +23,9 @@ as tool errors the model must report.
 `get_earnings_release` and `get_events_since_report` (Query API README, "Earnings and events") give
 the quarterly earnings release (its headline, the outlook it states, management's reconciliation
 tables and dollar notes, each quoted with its citation) and the 8-Ks filed since the latest
-10-Q/10-K period end, with the balance-sheet figures an event after it may have changed. They were
+10-Q/10-K period end, with the balance-sheet figures an event after it may have changed (an event
+flagged from its 7.01/8.01 announcement carries `announced`: the words that matched, quoted with a
+citation, so the model can say so). They were
 added without re-recording: the recorded suites don't depend on the tool list, and the chat and
 report prompts and existing tools are unchanged (`tests/adversarial`, `tests/citations` still 97
 passing). Both need the `filings` tier, so the adversarial harness counts a result for a company
