@@ -6,8 +6,8 @@ Spec (the Query API's peer ranking reads what this writes; query_api/peers.py ha
    in the last MAX_AGE_DAYS that has a usable one, the first TEXT_CHARS characters (the overview,
    products, markets and competition come first; the long tail is regulation and human capital).
    Usable: at least MIN_CHARS long (Intel's, GE's and McDonald's Item 1 is a cross-reference,
-   "Item 1. Business: Pages 3-5") and not titled financial statements (a mis-parse: Microchip's held its
-   balance sheet). 74 of 4,983 latest 10-Ks failed this on 2026-11-09.
+   "Item 1. Business: Pages 3-5") and not titled financial statements (a mis-parse: Microchip's
+   held its balance sheet). 74 of 4,983 latest 10-Ks failed this on 2026-11-09.
 2. Terms. Lowercased letters-only words of 3+ letters, cut into runs at anything else (digits,
    punctuation, line breaks), each word made a simple singular (`normal`). Stop words (English,
    filing furniture, places: being based in Ohio says nothing about what a company does) end a
