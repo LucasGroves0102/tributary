@@ -60,16 +60,24 @@ Defaults (B7, per year; Reset sets them): growth and operating margin start at t
 close FADE of the gap each year to the long run (growth: the 5-year CAGR held in [0,
 LONG_RUN_GROWTH_CAP]; margin: the 5-year average); FCF margin the same way to its 5-year
 average; interest and other, tax rate and share change held at the run rate. With `ytd` and
-quarters reported, year 1's remainder: growth = the year-to-date growth over the same quarters
-a year earlier; margin = the same remaining quarters a year earlier, moved by this year's change
-in margin so far; FCF margin = those quarters' a year earlier. Bear and bull start from the base
-case moved by SCENARIO_SPREAD (half the growth, at least 5 points; a fifth of the margin, at least
-3), the other rates as the base case's.
+quarters reported, year 1's remainder starts where any year 1 does, from the trailing twelve
+months (owner's decision, 2026-11-09): growth = the run rate's (the newest TTM over the TTM a year
+earlier), applied to the same remaining quarters a year earlier; margin = the newest TTM's
+operating margin. Not last year's remaining quarters moved by this year's change, which carried
+one strong half forward: NVIDIA's H2 FY2027 read 75.0% (H2 FY2026's 64.2% + this year's +10.8
+points) against a TTM of 65.2%. The remainder's FCF margin stays those quarters' a year earlier:
+working capital is seasonal (Deckers' H1 FY2027 -1.9%, H2 FY2026 35.7%, TTM 18.9%), and the owner's
+decision named growth and margin only. Bear and bull start from the base case moved by
+SCENARIO_SPREAD (half the growth, at least 5 points; a fifth of the margin, at least 3), the other
+rates as the base case's.
 
 Check (B2, the thesis check reads it for the base case): each forecast year's full-year growth
 more than GROWTH_FLAG_POINTS above or below the CAGR, or its full-year margin outside [min, max];
 `user_set` says per year whether growth and margin differ from both the run-rate default and the
 pre-B7 flat one (5-year CAGR and margin), so the check never endorses a default as the user's view.
+F2's first remainder rule (last year's quarters moved by this year's change) is not a third
+default here: it never reached production (F2 ships with the TTM rule), so no saved model holds
+it; models saved before F2 have no `ytd` and no remainder.
 
 Valuation (only with the user's own `price`; nothing is fetched or stored beyond what they typed):
 market cap = price x the latest shares outstanding (else the latest diluted weighted shares,
@@ -525,8 +533,9 @@ def _fade(start: float, long: float, k: int) -> float:
 
 
 def defaults(st: dict, run: dict, n: int, current: dict | None = None) -> list[dict]:
-    """The base case's defaults for n forecast years (percent, rounded to 0.1). `current` (a
-    ytd model's current year) gives year 1 the remainder's defaults."""
+    """The base case's defaults for n forecast years (percent, rounded to 0.1). Year 1's growth
+    and margin are the run rate's (the TTM's) with or without `current`; `current` (a ytd
+    model's current year) gives year 1 its remainder's FCF margin."""
     g0 = _first(run.get("growth"), st["last_growth"], st["cagr"])
     m0 = _first(run.get("margin"), st["last_margin"], st["avg_margin"])
     g0 = 0.0 if g0 is None else g0 * 100
@@ -554,20 +563,16 @@ def defaults(st: dict, run: dict, n: int, current: dict | None = None) -> list[d
 
 
 def remainder_defaults(current: dict | None) -> dict | None:
-    """Year 1's remainder (a ytd model with quarters reported): growth at the year to date's,
-    margin as the same quarters a year earlier moved by this year's change so far, FCF margin
-    as those quarters' a year earlier. None when a figure is missing."""
+    """Year 1's remainder (a ytd model with quarters reported) differs from the run-rate year 1
+    only in its FCF margin: those quarters' a year earlier (seasonal working capital). Growth and
+    margin are the TTM's like any year 1 (the module docstring, Defaults). None when there is
+    nothing to change."""
     if not current or not current["quarters"] or not current["actual"]:
         return None
-    a, p, r = current["actual"], current["prior"], current["remainder_prior"]
-    if a["growth"] is None or None in (a["margin"], p["margin"], r["margin"]):
+    r = current["remainder_prior"]
+    if r is None or r["fcf_margin"] is None:
         return None
-    out = {"growth": _round1(_clamp(a["growth"] * 100, GROWTH_RANGE)),
-           "margin": _round1(_clamp((r["margin"] + a["margin"] - p["margin"]) * 100,
-                                    MARGIN_RANGE))}
-    if r["fcf_margin"] is not None:
-        out["fcfMargin"] = _round1(_clamp(r["fcf_margin"] * 100, FCF_RANGE))
-    return out
+    return {"fcfMargin": _round1(_clamp(r["fcf_margin"] * 100, FCF_RANGE))}
 
 
 def old_default(st: dict) -> dict:

@@ -75,7 +75,7 @@ def test_bear_and_bull_start_from_the_base_case_by_b7s_spread():
 
 def test_vertiv_fy2026_is_nine_months_reported_plus_q4():
     """Tester 1: FY26 as nine months actual plus Q4. The remainder's defaults: Q4 FY2025's
-    revenue grown at the year to date's growth, its margin moved by this year's change so far."""
+    revenue grown at the TTM's growth, at the TTM's operating margin (owner, 2026-11-09)."""
     out = run(real("vrt"), model(VRT, [{"growth": 50, "margin": 25}], ytd=True))
     cur = out["current"]
     assert (out["base_fy"], cur["fy"], cur["quarters"], cur["through"]) == (
@@ -85,10 +85,13 @@ def test_vertiv_fy2026_is_nine_months_reported_plus_q4():
     assert cur["actual"]["growth"] == pytest.approx(0.393, abs=1e-3)
     assert cur["remainder_prior"]["revenue"] == pytest.approx(2880e6, rel=1e-3)
     d = out["cases"]["base"]["defaults"][0]
-    assert d["growth"] == 39.3
-    assert d["margin"] == pytest.approx(
-        round((cur["remainder_prior"]["margin"] + cur["actual"]["margin"]
-               - cur["prior"]["margin"]) * 100, 1))
+    rr = out["run_rate"]
+    assert rr["period"] == "FY2026 Q3"
+    assert (d["growth"], d["margin"]) == (35.3, 20.1)
+    assert (d["growth"], d["margin"]) == (round(rr["growth"] * 100, 1),
+                                          round(rr["margin"] * 100, 1))
+    # the year to date's 39.3% and last Q4's margin moved by this year's change aren't it
+    assert cur["actual"]["growth"] * 100 == pytest.approx(39.3, abs=0.05)
     y = out["cases"]["base"]["years"][0]
     assert y["actual"]["quarters"] == 3 and y["remainder"]["quarters"] == 1
     q4 = cur["remainder_prior"]["revenue"] * 1.5
@@ -111,6 +114,42 @@ def test_deckers_fy2027_is_half_known():
     # H2 FY2026 (the base year less its H1) is what the remainder grows from
     assert out["current"]["remainder_prior"]["revenue"] == pytest.approx(
         5471.5e6 - (964.5e6 + 1431.2e6), rel=2e-3)
+    # growth and margin from the TTM to FY2027 Q2; FCF margin H2 FY2026's: working capital is
+    # seasonal (H1 -1.9%, H2 35.7%, the TTM 18.9%)
+    d = out["cases"]["base"]["defaults"][0]
+    assert (d["growth"], d["margin"], d["fcfMargin"]) == (6.3, 23.6, 35.7)
+    assert round(out["run_rate"]["fcf_margin"] * 100, 1) == 18.9
+
+
+def test_nvidia_remainder_defaults_to_the_trailing_twelve_months():
+    """Owner, 2026-11-09: H2 FY2027's default margin was 75.0% (H2 FY2026's 64.2% moved by this
+    year's +10.8 points), above any quarter NVIDIA reported. It now starts from the TTM to FY2027
+    Q2 like any first year: +83.4% growth, a 65.2% operating margin."""
+    out = run(real("nvda"), model(NVDA, years(3), ytd=True))
+    cur, rr = out["current"], out["run_rate"]
+    assert (out["base_fy"], cur["fy"], cur["quarters"], rr["period"]) == (
+        2026, 2027, 2, "FY2027 Q2")
+    d = out["cases"]["base"]["defaults"]
+    assert (d[0]["growth"], d[0]["margin"]) == (83.4, 65.2)
+    assert (d[0]["growth"], d[0]["margin"]) == (round(rr["growth"] * 100, 1),
+                                                round(rr["margin"] * 100, 1))
+    # not the old rule's numbers: the year to date's growth, last H2's margin + this year's change
+    old_margin = (cur["remainder_prior"]["margin"] + cur["actual"]["margin"]
+                  - cur["prior"]["margin"]) * 100
+    assert round(old_margin, 1) == 75.0 and d[0]["margin"] < old_margin - 9
+    assert round(cur["actual"]["growth"] * 100, 1) == 95.8 != d[0]["growth"]
+    # the FCF margin is still H2 FY2026's; years 2 and on fade from the same TTM as before
+    assert d[0]["fcfMargin"] == round(cur["remainder_prior"]["fcf_margin"] * 100, 1) == 45.6
+    assert [(y["growth"], y["margin"]) for y in d[1:]] == [(44.2, 55.6), (24.6, 50.8)]
+    # Reset's year 1, projected: H1 as reported plus H2 at the TTM's rates; the full year's margin
+    # lies between the two halves'
+    y = run(real("nvda"), model(NVDA, d, ytd=True))["cases"]["base"]["years"][0]
+    assert y["remainder"]["margin"] == pytest.approx(0.652)
+    assert y["remainder"]["revenue"] == pytest.approx(cur["remainder_prior"]["revenue"] * 1.834)
+    assert 0.652 < y["margin"] < cur["actual"]["margin"]
+    assert out["cases"]["base"]["user_set"] == [True, True, True]
+    assert run(real("nvda"), model(NVDA, d, ytd=True))["cases"]["base"]["user_set"] == [
+        False, False, False]
 
 
 def test_a_model_saved_before_f2_keeps_year_one_a_full_year_guess():
@@ -194,7 +233,7 @@ def test_a_one_off_is_excluded_from_margins_and_growth():
     assert a["operating_income"] == p["operating_income"]  # reported stays reported
     assert a["operating_income_adjusted"] == pytest.approx(p["operating_income"] - 46e6)
     assert a["margin"] < p["margin"]
-    # the remainder's default margin moves with the clean year to date
+    # the remainder's default margin is the clean TTM's (the refund's Q2 is inside it)
     assert out["cases"]["base"]["defaults"][0]["margin"] < \
         plain["cases"]["base"]["defaults"][0]["margin"]
     y = out["cases"]["base"]["years"][0]

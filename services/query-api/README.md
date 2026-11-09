@@ -501,8 +501,13 @@ price's currency (`market_cap_currency`), but EV and every multiple are left out
 
 Measured on the real inputs in `tests/fixtures/model` (production answers of 2026-11-09):
 Vertiv's FY2026 is Q1-Q3 reported ($10.24B, 39.3% over the same nine months) plus a Q4 whose
-default grows Q4 FY2025's $2.88B at that 39.3%, at Q4 FY2025's margin moved by this year's
-change so far (23.3%); Deckers' FY2027 is H1 reported plus H2, with diluted shares down 8.4% a
+default grows Q4 FY2025's $2.88B at the trailing twelve months' 35.3% growth, at their 20.1%
+operating margin. The remainder of the current year starts from the TTM like any first year
+(owner's decision, 2026-11-09): last year's remaining quarters moved by this year's change in
+margin carried one strong half forward, so NVIDIA's H2 FY2027 read 75.0% (H2 FY2026's 64.2% +10.8
+points) and +95.8%; it now reads the TTM's 65.2% and +83.4%, a full year of 65.5%. The remainder's
+FCF margin stays those quarters' a year earlier, since working capital is seasonal (Deckers: H1
+FY2027 -1.9%, H2 FY2026 35.7%, the TTM 18.9%). Deckers' FY2027 is H1 reported plus H2, with diluted shares down 8.4% a
 year (FY2027 Q2 against FY2026 Q2) as the default share change, and a $46M one-off in Q2 FY2027
 taking the year-to-date margin from 21.8% to 19.9%; Deckers' latest net debt reading is from
 2014 (`old`), so its EV multiples stay blank with that reason. B2 and B7's shared cases

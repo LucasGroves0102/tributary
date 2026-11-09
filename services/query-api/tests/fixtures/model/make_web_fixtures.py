@@ -62,13 +62,13 @@ REAL = {
     "vrt-old-run": {"companyId": IDS["vrt"], "historyYears": 8,
                     "assumptions": [{"growth": 40, "margin": 21}, {"growth": 15, "margin": 20}]},
     "deck-run": {"companyId": IDS["deck"], "historyYears": 6, "ytd": True,
-                 "assumptions": [{"growth": 4.4, "margin": 24.5},
+                 "assumptions": [{"growth": 6.3, "margin": 22.8},
                                  {"growth": 5, "margin": 22, "shareChange": -6}],
                  "adjustments": [{"name": "IEEPA refunds", "fy": 2027, "quarter": 2,
                                   "kind": "one_off", "amount": 46e6}],
                  "price": {"value": 100, "date": "2026-11-06"}},
     "nvda-run": {"companyId": IDS["nvda"], "historyYears": 8, "ytd": True,
-                 "assumptions": [{"growth": 95.8, "margin": 75},
+                 "assumptions": [{"growth": 83.4, "margin": 65.2},
                                  {"growth": 44.2, "margin": 55.6}]},
 }
 
