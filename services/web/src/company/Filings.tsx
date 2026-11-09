@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 
-import { filingIndex, filings as fetchFilings, sectionChanges } from "../api";
+import { filingIndex, filings as fetchFilings, insiderFilings, sectionChanges } from "../api";
 import { day } from "../format";
 import { href } from "../route";
 import type { IndexedFiling, SectionChanges } from "../types";
@@ -16,6 +16,8 @@ import { eightKItems, filingHeadings, FORM_FILTERS, formsOf, formTag, parsedNote
 import { Gate } from "./Tables";
 import { useLoad } from "./useLoad";
 import { TableScroll } from "../components/TableScroll";
+import { InsiderTable } from "./Insiders";
+import { filingLine } from "./insiders";
 
 export const INDEX_PAGE = 25;
 
@@ -53,6 +55,12 @@ export function Filings({ token, companyId, name, canRead, initialDiff, fiscalYe
   const items = new Map(
     parsed?.state === "ok" ? parsed.data.map((f) => [f.accession_no, eightKItems(f.sections.map((s) => s.section_key))]) : [],
   );
+  // #117: insider filings read from their XML (filings access); null from an older API
+  const insiders = useLoad(canRead && (filter === "insider" || filter === "all") ? `${companyId}|insiders` : null,
+    () => insiderFilings(token, companyId));
+  const insiderLines = new Map(
+    insiders?.state === "ok" && insiders.data ? insiders.data.filings.map((f) => [f.accession_no, filingLine(f)]) : [],
+  );
   const [diffFiling, setDiffFiling] = useState<IndexedFiling | null>(null);
   const closeDiff = () => {
     setDiff(null);
@@ -74,6 +82,7 @@ export function Filings({ token, companyId, name, canRead, initialDiff, fiscalYe
 
   return (
     <>
+      {filter === "insider" && canRead && <InsiderTable load={insiders} />}
       <section className="card">
         <div className="card-h wrap">
           <h2>Filings</h2>
@@ -146,6 +155,8 @@ export function Filings({ token, companyId, name, canRead, initialDiff, fiscalYe
                           <td className="muted items">
                             {eightK.length
                               ? eightK.join(" · ")
+                              : insiderLines.has(f.accession_no)
+                                ? insiderLines.get(f.accession_no)
                               : f.sections
                                 ? note
                                 : note && <span className="faint">{note}</span>}

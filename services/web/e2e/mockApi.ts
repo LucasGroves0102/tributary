@@ -245,6 +245,9 @@ export async function mockApi(page: Page): Promise<Fake> {
     }
     m = path.match(/^\/v1\/companies\/(\d{10})\/earnings$/);
     if (m) return json({ company_id: m[1], as_of: "", quarters: [], method: "" });
+    // F7b: the Filings tab's insider filings (Insider and All)
+    m = path.match(/^\/v1\/companies\/(\d{10})\/insiders$/);
+    if (m) return json({ company_id: m[1], filings: [], has_more: false });
     m = path.match(/^\/v1\/companies\/(\d{10})\/data-notes$/);
     if (m || path === "/v1/data-notes") {
       const id = m?.[1] ?? PEP;

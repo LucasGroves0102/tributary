@@ -726,6 +726,50 @@ export interface SectionHit {
   freshness: { filed: string; ingested_at: string };
 }
 
+/** One line of an insider filing's tables (Query API /v1/companies/{id}/insiders, migration 054).
+ * Numbers are strings, exact as filed. */
+export interface InsiderLine {
+  line: number;
+  kind: "transaction" | "holding";
+  derivative: boolean;
+  security_title: string | null;
+  transaction_date: string | null;
+  code: string | null;
+  /** the SEC's transaction code in words, from the API */
+  code_label: string | null;
+  equity_swap: boolean | null;
+  shares: string | null;
+  price: string | null;
+  /** shares x price, from the API; null for a holding or an unpriced line */
+  value: string | null;
+  acquired_disposed: "A" | "D" | null;
+  shares_after: string | null;
+  direct_indirect: string | null;
+  nature: string | null;
+  exercise_price: string | null;
+  underlying_title: string | null;
+  underlying_shares: string | null;
+}
+
+export interface InsiderFiling {
+  accession_no: string;
+  form: string;
+  filed: string;
+  period_of_report: string | null;
+  aff10b5_one: boolean | null;
+  owners: { cik: string | null; name: string | null; roles: string[] }[];
+  /** per kind of trade: open-market purchases, sales, everything else (awards, withholding, gifts) */
+  summary: Partial<Record<"bought" | "sold" | "other", { shares: string; value: string | null }>>;
+  lines: InsiderLine[];
+  citation: { accession_no: string; form: string; filed: string; filing_url: string };
+}
+
+export interface InsiderFilings {
+  company_id: string;
+  filings: InsiderFiling[];
+  has_more: boolean;
+}
+
 export interface SectionSearch {
   query: string;
   as_of: string;

@@ -2508,6 +2508,13 @@ button.chip:disabled {
   font-style: italic;
 }
 
+/* insider transactions (company/Insiders.tsx, #117): the insider's name and role wrap */
+.t.insider-t td.first {
+  white-space: normal;
+  min-width: 12em;
+  max-width: 22em;
+}
+
 /* one line saying what a company tab is for, and where the rest is (#115) */
 .tab-purpose {
   margin: 0 0 var(--sp-5);

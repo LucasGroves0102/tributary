@@ -756,6 +756,17 @@ balance sheet (cash and due from banks, loans net of the allowance, total assets
 liabilities, equity, CET1). Both say what isn't shown and why: net interest margin, tangible book value
 per share and ROTCE (migration 048's header).
 
+Insider filings (#117; `company/Insiders.tsx`, wording in `company/insiders.ts`'s docstring; the
+Query API's `/v1/companies/{id}/insiders`, read from the SEC's XML, rules in its README "Insider
+filings"): on the Filings tab's Insider filter, an "Insider transactions" table lists every trade of
+the company's Forms 3, 4 and 5, newest first: the insider and their role, the date, the transaction
+(the SEC's code in words, a derivative's security, an indirect holding's nature, a 10b5-1 plan), the
+shares signed by direction, price, value and shares owned after, each linking its filing on EDGAR.
+In the filing index (Insider and All), an insider filing's row says who and what ("Kress Colette, EVP
+& Chief Financial Officer · sold 34,918 shares ($7.65M) · shares withheld for tax or exercise price:
+40,747 shares"). Needs filings access; an older API (404) says the details aren't available yet and
+the index stays as before. Every figure is the API's; nothing is summed or valued here.
+
 Revenue view (the company page's Revenue tab, `src/company/Revenue.tsx`; rules in
 `company/revenue.ts`'s docstring): three sections, each chart an ordinary chart state, so "Save
 to workspace" (`workspaces/SaveChart.tsx`: name and workspace, through the same item route and
