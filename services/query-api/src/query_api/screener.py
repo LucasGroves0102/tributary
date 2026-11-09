@@ -307,16 +307,25 @@ def compile_screen(s: Screen, granted: list[str] | None) -> Compiled:
     # else only for the page
     early = bool(ranked)
     page_latest = "r.latest_period" if early else "a.latest"
+    # 046's sector, by range of SIC codes: for every company only when a sector filter or sort
+    # needs it, else for the page's rows after the LIMIT. Joined for the whole catalog it cost
+    # ~70 ms a call, and the range join's estimate (19 rows a company) misled the plan above it.
+    sector_early = bool(s.sectors or s.sector_industries or sort_key == "sector")
+    sector_cols = ", ss.sector, ss.industry AS sector_industry"
+    sector_join = "LEFT JOIN silver.sic_sectors ss ON {}.sic BETWEEN ss.sic_from AND ss.sic_to"
+    base_sector, base_join = ((sector_cols, sector_join.format("c")) if sector_early
+                              else ("", ""))
+    page_sector, page_join = (("", "") if sector_early
+                              else (sector_cols, sector_join.format("r")))
     sql = f"""
 WITH base AS (
     SELECT c.company_id, c.name, c.tickers, c.exchanges, c.sic,
            c.sic_description AS industry, c.fiscal_year_end,
            gold.filer_category(c.filer_categories) AS filer_category, c.filer_categories,
            c.state_of_incorporation,
-           gold.not_applicable_metrics(c.company_id, c.sic) AS not_applicable,
-           ss.sector, ss.industry AS sector_industry
+           gold.not_applicable_metrics(c.company_id, c.sic) AS not_applicable{base_sector}
     FROM silver.companies c
-    LEFT JOIN silver.sic_sectors ss ON c.sic BETWEEN ss.sic_from AND ss.sic_to
+    {base_join}
     WHERE {' AND '.join(meta)}
 ),
 ranked AS (
@@ -329,10 +338,11 @@ ranked AS (
     ORDER BY {order} {direction} NULLS LAST, b.company_id
     LIMIT %(limit)s OFFSET %(offset)s
 )
-SELECT r.*{'' if early else ', a.latest AS latest_period'}{page_outputs}
+SELECT r.*{'' if early else ', a.latest AS latest_period'}{page_outputs}{page_sector}
 FROM ranked r
 {'' if early else _latest('r.company_id', granted)}
 LEFT JOIN LATERAL {_values(page, 'r.company_id', 'r.sic', page_latest, granted)} w ON true
+{page_join}
 ORDER BY {final} {direction} NULLS LAST, r.company_id
 """
     return Compiled(sql, params, list(dict.fromkeys(s.columns)), slots)

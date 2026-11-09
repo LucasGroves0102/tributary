@@ -431,6 +431,21 @@ def test_industry_sorts_by_the_name_shown_not_the_code(conn, token):
     assert industries[0] == "Agricultural Production"
 
 
+def test_sectors_read_the_same_joined_for_the_page_or_for_every_company(conn, token):
+    """Pre-ship review: 046's sector is joined after the LIMIT unless a filter or sort needs it;
+    the rows say the same either way."""
+    every = {r["name"]: (r["sector"], r["sector_industry"])
+             for r in screen(conn, token, columns=["revenue_ttm"], sort="name", limit=50)["rows"]}
+    assert every["Normal Co"] == ("Technology", "Semiconductors")
+    assert every["Bank Co"] == ("Financials", "Banks & thrifts")
+    tech = screen(conn, token, columns=["revenue_ttm"], sector=["Technology"], sort="name")
+    assert [r["name"] for r in tech["rows"]] == ["Absurd Co", "Normal Co"]
+    assert all(every[r["name"]] == (r["sector"], r["sector_industry"]) for r in tech["rows"])
+    grouped = screen(conn, token, columns=["revenue_ttm"], sort="sector", limit=50)["rows"]
+    keys = [f"{r['sector']} / {r['sector_industry']}".lower() for r in grouped if r["sector"]]
+    assert keys == sorted(keys) and len(keys) == sum(1 for v in every.values() if v[0])
+
+
 def test_financials_reads_not_meaningful_only_when_asked(conn, token):
     c = api(conn)
     plain = c.get(

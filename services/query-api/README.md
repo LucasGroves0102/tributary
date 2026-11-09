@@ -232,7 +232,8 @@ column. `balance`: a point in time, so its `_ttm` column is the same number as i
 `silver.sic_sectors`; the judgment calls (Alphabet's 7370 stays Technology, Walmart's 5331 is
 Consumer Staples retail, UnitedHealth's 6324 Health Care, blank checks and commodity trusts "Funds &
 Vehicles") are listed in the migration's header. Rows carry `sector` and `sector_industry` beside the
-SIC `industry`, which stays the filing's own label.
+SIC `industry`, which stays the filing's own label. The screener looks the sector up for every company
+only when a sector filter or the sector sort needs it, otherwise for the page's rows alone.
 
 **Co-registrants** (#135, migration 047): some companies file one combined 10-K as separate
 registrants, a parent and its subsidiary (PG&E Corp and Pacific Gas & Electric, Southern Co and
