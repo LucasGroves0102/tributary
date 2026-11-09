@@ -80,7 +80,8 @@ def main() -> None:
                             new.append(cik)
                     if new:
                         facts = refresh_silver(conn, new)
-                        rows = refresh_gold(conn, [company_id])
+                        rows = refresh_gold(
+                            conn, sorted({company_id, *company_ids(conn, new)}))
                         log.info("%s: %d new facts, %d gold rows", company_id, facts, rows)
                     else:
                         log.info("%s: unchanged", company_id)

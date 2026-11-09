@@ -122,8 +122,10 @@ def set_facts(conn: psycopg.Connection, cik: str, sha256: str, facts_json: str) 
 
 
 def company_ids(conn: psycopg.Connection, ciks: Sequence[str]) -> list[str]:
+    """The companies whose gold reads these CIKs' facts: their own, and any whose filing the SEC
+    filed under one of them (a co-registrant; gold.companies_for_ciks, migration 050)."""
     rows = conn.execute(
-        "SELECT DISTINCT company_id FROM silver.company_ciks WHERE cik = ANY(%s) ORDER BY 1",
+        "SELECT DISTINCT c FROM gold.companies_for_ciks(%s::text[]) c ORDER BY 1",
         (list(ciks),),
     ).fetchall()
     return [r[0] for r in rows]
