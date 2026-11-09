@@ -215,7 +215,8 @@ export function partialNote(series: Series[]): string | null {
   const what = kinds.size > 1
     ? "flows are the trailing twelve months to it, balances its quarter end"
     : kinds.has("ttm") ? "the trailing twelve months to it" : "its quarter end";
-  return `* ${periods}: the latest quarter, not a full fiscal year (${what}).`;
+  const year = points.every((p) => p.period.startsWith("CY")) ? "calendar year" : "fiscal year";
+  return `* ${periods}: the latest quarter, not a full ${year} (${what}).`;
 }
 
 /** Period, then per layer its value (exact decimal from the API) and source accessions. */

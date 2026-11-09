@@ -111,15 +111,17 @@ test("chart builder: formula autocomplete, annual frequency and deck output", as
   await expect(page.locator(".lchart-svg .ch-legend text")).toHaveCount(2);
 
   await page.getByRole("button", { name: "Annual" }).click();
-  await expect(page.locator(".lchart-svg .ch-axis text")).toHaveText(["CY2025"]); // the mock's one full calendar year
+  // the mock's one full calendar year, then the year in progress, marked (F5)
+  await expect(page.locator(".lchart-svg .ch-axis text")).toHaveText(["CY2025", "CY2026 Q2*"]);
   await page.getByLabel("Deck output").check();
   await expect(page.locator(".lchart.deck")).toBeVisible();
-  await expect(page.locator(".lchart-svg .ch-sub")).toHaveText(/^Calendar years, CY2025 · USD \(left\), % \(right\)$/);
+  await expect(page.locator(".lchart-svg .ch-sub")).toHaveText(/^Calendar years, CY2025–CY2026 Q2\* · USD \(left\), % \(right\)$/);
   await expect(page.locator(".ch-foot").first()).toContainText("Source: SEC filings via Tributary; 10-Q for NVDA; latest NVDA 10-Q filed Jul 30, 2026; as of Oct 21, 2026.");
   const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Export SVG" }).click()]);
   const svg = readFileSync((await download.path())!, "utf8");
   expect(svg).toContain("Source: SEC filings via Tributary");
-  expect(svg).toContain("Calendar years, CY2025");
+  expect(svg).toContain("Calendar years, CY2025–CY2026 Q2*");
+  expect(svg).toContain("* CY2026 Q2: the latest quarter, not a full calendar year");
 });
 
 test("comps: target and peers with the peer median, exported as CSV", async ({ page }) => {

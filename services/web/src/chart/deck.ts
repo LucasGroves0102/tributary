@@ -13,7 +13,9 @@ export function autoSubtitle(series: Series[], frequency: Frequency, basis: Alig
   const what = frequency === "annual"
     ? basis === "fiscal" ? "Fiscal years" : "Calendar years"
     : basis === "fiscal" ? "Fiscal quarters" : "Calendar quarters";
-  const span = ticks.length ? `, ${ticks[0]!.period}${ticks.length > 1 ? `–${ticks.at(-1)!.period}` : ""}` : "";
+  // the year in progress keeps its mark (series.ts annualPoints)
+  const last = ticks.at(-1);
+  const span = ticks.length ? `, ${ticks[0]!.period}${ticks.length > 1 ? `–${last!.period}${last!.partial ? "*" : ""}` : ""}` : "";
   const { left, right } = planAxes(series);
   const unitText = right
     ? `${left || "—"} (left), ${right} (right)`
