@@ -2797,6 +2797,40 @@ mark {
   padding: 4px 8px;
 }
 
+/* a table in the filing's text, read back from its rows (reader/blocks.ts, #178): figures in
+   columns, the label column wraps instead of widening the table */
+.section-text .filing-table {
+  margin: var(--sp-5) 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font-size: var(--fs-base);
+  line-height: 1.4;
+}
+
+.section-text .filing-table.hit {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.ftable td.first,
+.ftable th.first {
+  white-space: normal;
+  min-width: 14em;
+  max-width: 32em;
+}
+
+.ftable td.n,
+.ftable th.n {
+  font-variant-numeric: tabular-nums;
+}
+
+.ftable tr.label-row td {
+  white-space: normal;
+  font-weight: 600;
+  color: var(--text-2);
+  padding-top: 8px;
+}
+
 .section-h h2 {
   margin: 0;
 }

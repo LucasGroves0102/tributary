@@ -43,10 +43,18 @@ export function headerShift(table: { top: number; height: number }, head: number
 }
 
 /** The line a table's header sticks to: the bottom of the app's sticky top bar (`.top`), or the
- * window's top on a page without one (the public status page). */
-function stickyTop(): number {
-  const bar = document.querySelector(".top");
-  return bar ? Math.max(0, bar.getBoundingClientRect().bottom) : 0;
+ * window's top on a page without one (the public status page); lower when the table sits in a
+ * `[data-sticky-scope]` whose own `[data-sticky-bar]` is stuck under it (the reader's section
+ * heading with next and previous match). */
+function stickyTop(table: Element): number {
+  const top = document.querySelector(".top");
+  let line = top ? Math.max(0, top.getBoundingClientRect().bottom) : 0;
+  const bar = table.closest("[data-sticky-scope]")?.querySelector("[data-sticky-bar]");
+  if (bar) {
+    const r = bar.getBoundingClientRect();
+    if (r.top <= line + 1) line = Math.max(line, r.bottom);
+  }
+  return line;
 }
 
 interface Props {
@@ -109,7 +117,7 @@ export function TableScroll({ children, atEnd = false, resetKey, label = "Table"
     const head = table?.tHead;
     if (!el || !table || !head) return;
     const r = table.getBoundingClientRect();
-    const y = headerShift({ top: r.top, height: r.height }, head.offsetHeight, stickyTop());
+    const y = headerShift({ top: r.top, height: r.height }, head.offsetHeight, stickyTop(table));
     if (y > 0) {
       el.style.setProperty("--tw-head-y", `${y}px`);
       el.dataset.headMoved = "";

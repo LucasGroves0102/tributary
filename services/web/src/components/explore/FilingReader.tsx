@@ -15,21 +15,27 @@ import { ErrorPanel, Skeleton } from "../States";
 import { day, periodPhrase } from "../../format";
 import {
   comparableForm,
-  countMatches,
-  firstMatchFrom,
   highlight,
   nextComparable,
   outlineGroups,
-  paragraphAt,
-  paragraphs,
   priorComparable,
   searchTerms,
   snippetRuns,
   steppedForm,
   type Run,
 } from "../../reader/text";
+import { blockAt, blockMatches, firstBlockMatch, readerBlocks, type Block } from "../../reader/blocks";
 import { go, href } from "../../route";
 import { asPhrase, isPhrase } from "../../search/state";
+import { TableScroll } from "../TableScroll";
+
+/** A loaded section's blocks, read once per answer (the match count is worked out on every render). */
+const BLOCKS = new WeakMap<object, Block[]>();
+function blocksOf(section: { text: string }): Block[] {
+  let b = BLOCKS.get(section);
+  if (!b) BLOCKS.set(section, (b = readerBlocks(section.text)));
+  return b;
+}
 import type { IndexedFiling, SectionChanges, SectionHit } from "../../types";
 import { type Basis, comparisonLabel, defaultBasis, fallBack, periodLabel } from "../../company/changes";
 
@@ -167,7 +173,7 @@ export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q,
   const diffOn = !!active && diffFor === active.section_key;
   const hitsBySection = new Map<string, SectionHit>(hits?.state === "ok" ? hits.data.map((h) => [h.section_key, h]) : []);
   const sectionText = text?.state === "ok" ? text.data : null;
-  const matches = terms.length && sectionText ? countMatches(sectionText.text, terms) : 0;
+  const matches = terms.length && sectionText ? blocksOf(sectionText).reduce((n, b) => n + blockMatches(b, terms), 0) : 0;
   const step = (by: 1 | -1) => matches > 0 && setMatch((m) => ((m < 0 ? (by > 0 ? -1 : 0) : m) + by + matches) % matches);
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -275,13 +281,13 @@ export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q,
             </div>
           ))}
         </nav>
-        <article className="section-text">
+        <article className="section-text" data-sticky-scope="">
           {sectionKey && active && active.section_key !== sectionKey && (
             <p className="faint small">This filing has no section {sectionKey}; showing {active.section_key}.</p>
           )}
           {active === null && <p className="empty">This filing has no parsed sections.</p>}
           {active && (
-            <div className="row wrap section-h">
+            <div className="row wrap section-h" data-sticky-bar="">
               <h2 className="grow">
                 {active.section_key} · {active.title ?? "Untitled"}
               </h2>
@@ -364,21 +370,29 @@ function SectionBody({ load, terms, at, current, onOpen }: {
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const section = load?.state === "ok" ? load.data : null;
-  const ps = useMemo(() => (section ? paragraphs(section.text) : []), [section]);
+  // #178/#179: paragraphs and tables, page debris left out (reader/blocks.ts)
+  const blocks = useMemo(() => (section ? blocksOf(section) : []), [section]);
   const start = section?.citation.char_start;
-  const target = at !== undefined && start !== undefined ? paragraphAt(ps, at - start) : -1;
+  const target = at !== undefined && start !== undefined ? blockAt(blocks, at - start) : -1;
   const beyond = section && at !== undefined && start !== undefined && at - start >= section.text.length;
   const hasTerms = terms.length > 0;
   // opening a section with a search: the first highlight, or the first at the cited passage
   useEffect(() => {
-    if (section && hasTerms && current < 0) onOpen(firstMatchFrom(ps, terms, target));
-  }, [section, hasTerms, current, ps, terms, target, onOpen]);
+    if (section && hasTerms && current < 0) onOpen(firstBlockMatch(blocks, terms, target));
+  }, [section, hasTerms, current, blocks, terms, target, onOpen]);
   useEffect(() => {
     if (!section) return;
     const el = ref.current?.querySelector(current >= 0 ? "mark.cur" : ".hit") ?? ref.current?.querySelector(".hit");
     el?.scrollIntoView?.({ block: "center" });
   }, [section, target, current]);
   let marks = 0;
+  // highlights numbered in blockUnits' order, so next/previous and the count agree
+  const marked = (s: string) =>
+    highlight(s, terms).map((r, j) => {
+      if (typeof r === "string") return r;
+      const n = marks++;
+      return <mark key={j} className={n === current ? "cur" : undefined}>{r.mark}</mark>;
+    });
 
   if (!load || load.state === "loading") return <Skeleton lines={6} label="Loading the section" />;
   if (load.state === "denied") return <p className="empty locked">This section isn't included in your access.</p>;
@@ -387,15 +401,40 @@ function SectionBody({ load, terms, at, current, onOpen }: {
   }
   return (
     <div ref={ref}>
-      {ps.map((p, i) => (
-        <p key={p.start} className={i === target ? "hit" : undefined}>
-          {highlight(p.text, terms).map((r, j) => {
-            if (typeof r === "string") return r;
-            const n = marks++;
-            return <mark key={j} className={n === current ? "cur" : undefined}>{r.mark}</mark>;
-          })}
-        </p>
-      ))}
+      {blocks.map((b, i) =>
+        b.kind === "p" ? (
+          <p key={b.start} className={i === target ? "hit" : undefined}>{marked(b.text)}</p>
+        ) : (
+          <div key={b.start} className={i === target ? "hit filing-table" : "filing-table"}>
+            <TableScroll label="A table in the filing">
+              <table className="t ftable">
+                {b.heads && (
+                  <thead>
+                    <tr>
+                      <th className="first">{marked(b.heads.label)}</th>
+                      {b.heads.cells.map((c, k) => <th key={k} className="n">{marked(c)}</th>)}
+                    </tr>
+                  </thead>
+                )}
+                <tbody>
+                  {b.rows.map((r) =>
+                    r.cells.length ? (
+                      <tr key={r.start}>
+                        <td className="first">{marked(r.label)}</td>
+                        {r.cells.map((c, k) => <td key={k} className="n">{marked(c)}</td>)}
+                      </tr>
+                    ) : (
+                      <tr key={r.start} className="label-row">
+                        <td colSpan={b.columns + 1}>{marked(r.label)}</td>
+                      </tr>
+                    ),
+                  )}
+                </tbody>
+              </table>
+            </TableScroll>
+          </div>
+        ),
+      )}
       {section.truncated && (
         <p className="muted small">
           Showing the first {section.text.length.toLocaleString()} of {section.total_chars.toLocaleString()} characters

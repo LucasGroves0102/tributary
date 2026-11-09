@@ -79,6 +79,25 @@ Config (env): `DATABASE_URL` (required), `KAFKA_BOOTSTRAP_SERVERS` (default `loc
 `parser-backfill` for the [document crawl](../doc-fetcher/README.md#document-crawl), so crawled
 documents are parsed by a separate consumer and never queue ahead of live filings.
 
+## Tables in the text
+
+`html_to_text` (rule 1) ends every block element, `<tr>` included, with a newline and every cell with
+a space, so a table row is one line ("Total assets $ 206,803 $ 111,601"; a label whose `<td>` holds a
+`<p>` puts its figures on the next line). The web reader reads tables back from that
+(`services/web/src/reader/blocks.ts`), and leaves out page numbers and "Table of Contents" lines,
+without a reparse. Changing how cells or rows are written changes every stored offset (citations,
+the search index, diffs, peers' mentions): don't, unless all of them are rebuilt.
+
+What a parser-side change could add, if it's ever wanted (F7b measured, not done): marking cell
+boundaries with a tab instead of a space keeps every offset (one character for one) and would let the
+reader split cells exactly, but needs `make reparse` of all ~340,000 stored documents (both parsers;
+production serves parser-rs rows, so the Rust build must match first), then `parser-index` to rebuild
+the search index and diffs and `parser-peers` for mentions; dropping page debris from the text would
+change offsets and needs the same. Parsing itself is cheap (parser-rs README benchmark: a 10-K 8 ms
+median in Rust, 71 ms in Python, parse only); the cost is reading and gunzipping ~338,000 documents
+(~1.3 GB stored at the crawl's ratios), rewriting ~2M section rows and rebuilding the search index
+(~12M passages) and diffs: hours on hermes, and every cached citation offset moves.
+
 ## Section diffs and search index (`parser-index`)
 
 A batch job in the same image (`filing_parser/index.py`, migration 021) that turns parsed

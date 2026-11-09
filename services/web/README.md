@@ -157,6 +157,18 @@ API), the heading also *highlights* (each word marked, what next and previous st
 outline's legend says what its numbers are; only one kind shows at a time. The previous and next
 filing of the same form (10-K, 10-Q, 8-K) open at the same section with the same search; one that
 isn't parsed links to EDGAR.
+The section shows as paragraphs and tables (`reader/blocks.ts`, rules in its docstring; #178, #179),
+read back from the stored text without a reparse: the parser writes one table row per line with its
+cells joined by a space, so a run of lines ending in figures ("Cash and cash equivalents $ 10,605
+$ 8,589") becomes a table with a label column, its date heads ("Jan 25, 2026 Jan 26, 2025") and
+sub-headings, and a label whose figures wrapped onto the next line is joined back to them. Page
+numbers and "Table of Contents" lines are left out, and a sentence a page break cut rejoins. Display
+only: offsets are the stored text's, so citations, cited passages and highlights land as before
+(highlights are counted per table cell, the same pieces next/previous step through). What it can't
+do: a table whose cells hold words (a list of directors) stays text; cells merged across columns in
+the HTML can't be told apart; and the search index still holds the debris, so a phrase across a page
+break isn't found (a parser-side change and reindex would fix that; services/parser README "Tables in
+the text").
 
 Earnings and events (F1; `company/Earnings.tsx`, `company/Events.tsx`, wording in `company/events.ts`'s
 docstring; the Query API's `/earnings` and `/events`, rules in its README, "Earnings and events"):
