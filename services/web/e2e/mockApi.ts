@@ -357,8 +357,9 @@ export async function mockApi(page: Page): Promise<Fake> {
     if (path === "/v1/recent/filings") return json({ recorded: true });
     // Connect your data off: the API offers no providers (not a 404)
     if (path === "/v1/connections" && method === "GET") return json({ providers: [], connections: [] });
-    // filing alerts (F6): nothing new yet; the bell asks on every load, Settings and Monitor list them
-    if (path === "/v1/alerts/unread") return json({ unread: 0, latest: null, last_check: { checked_at: now(), filings_through: "2026-10-21" } });
+    // filing alerts (F6): the bell asks on every load (a count, so the phone layout test sees the
+    // widest bell); Settings and Monitor list them
+    if (path === "/v1/alerts/unread") return json({ unread: 12, latest: now(), last_check: { checked_at: now(), filings_through: "2026-10-21" } });
     if (path === "/v1/alerts/notifications") return json({ notifications: [], has_more: false, lookback_days: 3, pending_days: 3 });
     if (path === "/v1/alerts/settings") {
       return json({ forms: ["10-K", "10-Q", "8-K"], companies: [...fake.watched].map((c) => ({ company_id: c, sources: ["watchlist"], since: "2026-10-01", forms: ["10-K", "10-Q", "8-K"] })),

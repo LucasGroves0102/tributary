@@ -5404,7 +5404,8 @@ button.chip.on {
   }
 
   .top .crumb,
-  .top .who {
+  .top .who,
+  .top .bell-word {
     display: none;
   }
 
