@@ -42,6 +42,9 @@ every company with gold financials (the operating companies, ~6,000) for the las
 years, into the same bronze tables, in the same gzip format the live doc-fetcher writes and
 both parsers read. 8-Ks only with an item in `CRAWL_8K_ITEMS` (default `2.02,7.01,8.01`:
 results, Reg FD and other events, where the press releases are; `all` for every 8-K).
+Production also takes the material-event items (1.01-1.03, 1.05, 2.01, 2.03-2.06, 3.01-3.03, 4.01,
+4.02, 5.01-5.03: deals, debt, leadership, impairments, auditor changes, non-reliance), set in the
+Helm values: about 65,000 more 8-Ks over the 5 years, about 1.2 GB.
 
 | | |
 |---|---|
