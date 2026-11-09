@@ -76,8 +76,9 @@ facts. A run:
    silver once, from one source.
 2. **Gaps**: 10-K and 10-Q filings with XBRL, filed from `--since` (default 400 days back) to
    `--after-days` ago (default 3; companyfacts normally has a filing within a day), at a company
-   here, with no fact in silver under any CIK. Amendments only when their stored document has been
-   extracted (most are Part III alone). The stored document's extract (`bronze.filing_xbrl.raw_gzip`,
+   here, with no fact in silver under any CIK. Not amendments: 1,830 of the 2,051 filings since 2019
+   companyfacts lacks are 10-K/As and 10-Q/As, nearly all Part III alone (name one with `--accessions`
+   if it restates the statements). The stored document's extract (`bronze.filing_xbrl.raw_gzip`,
    every numeric fact, from the segments job) when it has at least 10 undimensioned facts of mapped
    tags, else the filing's **instance**: the folder's `index.json`, then `<document>_htm.xml` (EDGAR's
    extract of an inline filing, which holds every document's facts: Clorox's statements are in its
@@ -123,9 +124,9 @@ kubectl -n tributary create job --from=cronjob/filing-facts filing-facts-1 \
   | kubectl apply -f -
 ```
 
-Measured for that run on hermes (2026-11-09): 217 10-K/10-Qs since 2019 at companies here with no
-companyfacts fact, 143 with a usable extract; about 75 instance fetches (≤ 150 requests) plus
-NVIDIA's 2 (4 requests). Then a day's run reads a handful of new gaps. Config (env):
+Measured for that run on hermes (2026-11-09): 221 original 10-K/10-Qs since 2019 at companies here
+with no fact in silver, 183 of them with a stored extract (a handful of which, like Clorox's, lack
+the statements); about 45 instance fetches (about 90 requests) plus NVIDIA's 2 (4 requests). Then a day's run reads a handful of new gaps. Config (env):
 `FILING_FACTS_SINCE`, `FILING_FACTS_AFTER_DAYS`, `FILING_FACTS_LIMIT` (500 gaps and 500 extras per
 run), `FILING_FACTS_ACCESSIONS`.
 

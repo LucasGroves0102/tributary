@@ -11,8 +11,9 @@ document, fetched from EDGAR once and stored (bronze.filing_instances). A run:
    silver again and the companies' gold rebuilt. No SEC request.
 2. Gaps: 10-K and 10-Q filings with XBRL, filed between --since (default 400 days back) and
    --after-days ago (default 3: companyfacts normally has a filing within a day), at a company here,
-   with no fact in silver under any CIK. Amendments only when their stored document has statement
-   facts (most are Part III alone). The stored extract when it has at least MIN_STATEMENT_FACTS
+   with no fact in silver under any CIK. Not amendments: of the 2,051 since 2019 companyfacts
+   lacks, 1,830 are amendments, nearly all Part III alone (an amendment with statements can be
+   named with --accessions). The stored extract when it has at least MIN_STATEMENT_FACTS
    undimensioned facts of mapped tags, else the instance: two SEC requests (the folder's index.json
    and the instance), through libs/sec's shared rate limit.
 3. Extras: the stored documents of companies with their own tags or member sums (silver.metric_tags
@@ -51,7 +52,6 @@ from tributary_telemetry import configure_logging
 log = logging.getLogger("facts_fetcher.filings")
 
 GAP_FORMS = ("10-K", "10-Q")
-AMENDMENTS = ("10-K/A", "10-Q/A")
 SINCE_DAYS = 400
 AFTER_DAYS = 3
 LIMIT = 500             # filings per run
@@ -207,14 +207,11 @@ def gaps(conn: psycopg.Connection, since: date, after_days: int, limit: int) -> 
           AND EXISTS (SELECT 1 FROM bronze.submission_filings z
                       JOIN silver.company_ciks k ON k.cik = z.cik
                       WHERE z.accession_no = s.accession_no)
-          AND (s.form = ANY(%(originals)s)
-               OR EXISTS (SELECT 1 FROM bronze.filing_xbrl x
-                          WHERE x.accession_no = s.accession_no AND x.status = 'ok'))
         ORDER BY s.filing_date, s.accession_no
         LIMIT %(limit)s
         """,
-        {"forms": list(GAP_FORMS + AMENDMENTS), "originals": list(GAP_FORMS), "since": since,
-         "after": after_days, "limit": limit}).fetchall()
+        {"forms": list(GAP_FORMS), "since": since, "after": after_days,
+         "limit": limit}).fetchall()
     return [Filing(a, c, f, d, True) for a, c, f, d in rows]
 
 
@@ -366,8 +363,6 @@ def read_filing(conn: psycopg.Connection, filing: Filing, m: Mapping, fetch: Fet
         if not filing.gap or statement_facts(projected, m) >= MIN_STATEMENT_FACTS:
             return Row(filing.accession_no, cik, filing.form, filing.filed, "ixbrl", document,
                        filing.gap, projected, len(facts))
-    if filing.form and filing.form.endswith("/A") and stored is None:
-        return None  # an amendment without a stored document: rarely statements, never fetched
     with conn.transaction():
         got = stored_instance(conn, filing.accession_no)
     if got is None and fetch is not None:
