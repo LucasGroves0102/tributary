@@ -408,7 +408,7 @@ on the folder changed last. Never just the first workspace.
   Embedded in a thesis or report (`ModelEmbed`), a model is run from its saved state and drawn the
   same way. Tests: `model.test.ts` on real run answers (`models/fixtures/*-run.json`: the branch's
   route over production inputs of 2026-11-09; `synthetic-runs.json` for the UI tests' history),
-  regenerated, not hand-edited.
+  regenerated with `services/query-api/tests/fixtures/model/make_web_fixtures.py`, not hand-edited.
 
 Analysis (`src/analysis/`, `#/analysis`, sidebar "Analysis", `g p`): a guided research project
 per company, from its filings to a thesis that's checked after every filing. Rules are in

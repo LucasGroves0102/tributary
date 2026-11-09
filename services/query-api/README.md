@@ -408,7 +408,9 @@ taking the year-to-date margin from 21.8% to 19.9%; Deckers' latest net debt rea
 2014 (`old`), so its EV multiples stay blank with that reason. B2 and B7's shared cases
 (`fixtures/model/b2-b7-cases.json`) give the same statistics, flags, run rates, defaults and
 `user_set` as before. Tests: `test_model_maths.py`, `test_model_api.py` (403 first and the same
-for any company, strict states, body cap), `test_rls.py` (the Store read under RLS alone).
+for any company, strict states, body cap), `test_rls.py` (the Store read under RLS alone). The web
+app's run fixtures are this route's answers: `fixtures/model/make_web_fixtures.py` regenerates
+them.
 
 ## Reports
 
