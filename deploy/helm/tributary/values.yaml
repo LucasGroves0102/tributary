@@ -105,7 +105,8 @@ resources:
 # uses: postgres, app-postgres (APP_DATABASE_URL), kafka, openfga, sec (SEC_USER_AGENT + HTTPS
 # out, and the shared SEC rate limit in host Postgres), anthropic (API key + HTTPS out), github
 # (GitHub OAuth app keys, optional, + HTTPS out), market-data (data-connections-key, optional,
-# + HTTPS out to users' market-data providers), jwt, query-api, demo. Each adds the env vars
+# + HTTPS out to users' market-data providers), webhooks (HTTPS out to users' alert webhooks;
+# query_api/webhooks.py refuses private addresses), jwt, query-api, demo. Each adds the env vars
 # and network access it needs.
 # kafkaUser: the Kafka SCRAM user with kafka.sasl.enabled (default: the service/job name).
 # secClass: priority in the shared SEC rate limit (SEC_CALLER_CLASS): live, batch or bulk.
@@ -183,7 +184,8 @@ services:
     uses: [kafka, postgres, openfga]
   query-api:
     port: 8000
-    uses: [postgres, app-postgres, openfga, jwt, demo, github, market-data]
+    # webhooks: the alert settings' "Send a test" (query_api/alerts.py, 5 an hour per user)
+    uses: [postgres, app-postgres, openfga, jwt, demo, github, market-data, webhooks]
     from: [web, agent-api]
     resources:
       requests:
@@ -333,6 +335,21 @@ jobs:
       SEGMENTS_BATCH: "25"
       SEGMENTS_ROUNDS: "40"
       SEGMENTS_PAUSE_SECONDS: "0"
+  # Filing alerts (query_api/alert_job.py, app migration 016): every 10 minutes, the 10-K, 10-Q
+  # and material 8-K filings of each user's watched and analysed companies in the last 3 days
+  # (public filing index), as in-app notifications with their key figures and the user's red
+  # lines (read as that user: OpenFGA, then RLS), sent on to users' webhooks with retries.
+  # Idempotent on the filing, so a missed or repeated run loses or doubles nothing. postgres +
+  # app-postgres + openfga = the reads; jwt = webhook signing secrets (derived, never stored);
+  # webhooks = HTTPS out to public addresses only. No Kafka client, no SEC requests.
+  alerts:
+    image: query-api
+    command: [query-api-alerts]
+    schedule: "*/10 * * * *"
+    timeoutSeconds: 540
+    uses: [postgres, app-postgres, openfga, jwt, webhooks]
+    env:
+      PUBLIC_APP_URL: https://tributary.lucasgroves.dev
   # Deletes demo sandbox users past their expiry (query_api/sandbox.py). The deletion reaches
   # OpenFGA and authz.user_access through CDC like any user's; watchlists and usage go too.
   demo-cleanup:
