@@ -80,6 +80,15 @@ github:
 
 logLevel: INFO
 
+# Filing alerts by email (query_api/alert_email.py): off. allow-internet opens only 443, so SMTP
+# needs this too: `enabled: true` adds allow-smtp, TCP `port` to public addresses for pods that
+# `uses: email` (the alerts job). Turning email on = this, plus ALERT_SMTP_HOST / ALERT_SMTP_FROM
+# (and ALERT_SMTP_PORT when not 587, the same number as `port`) in the alerts job's env and
+# ALERT_SMTP_USER / ALERT_SMTP_PASSWORD from the secret.
+alertEmail:
+  enabled: false
+  port: 587
+
 # Prometheus (deploy/helm/monitoring) scrapes /metrics from each service through a PodMonitor:
 # on `port` for HTTP services, on `metrics.port` for workers. `metrics: false` opts a service out.
 metrics:
@@ -328,17 +337,34 @@ jobs:
   # INSIDERS_DAYS days that bronze.ownership_documents doesn't have, newest first, one SEC request
   # each at the bulk class, stored and parsed into silver. The live doc-fetcher stores new ones from
   # the feed. Run once after the deploy: kubectl create job --from=cronjob/insiders-backfill ins-1
-  # (~179,000 filings a year: 90 days is ~45,000 requests, about 2 h when the bulk class is idle).
+  # (~179,000 filings a year: 90 days is ~45,000 requests, about 2 h when the bulk class is idle,
+  # up to ~15 h while the document crawl takes most of it). A run cut off at the deadline loses
+  # nothing: the next one takes only what is still missing.
   insiders-backfill:
     image: doc-fetcher
     command: [doc-fetcher-insiders]
     schedule: "0 0 1 1 *"
     suspend: true
+    timeoutSeconds: 61200
     uses: [postgres, sec]
     secClass: bulk
     env:
       INSIDERS_DAYS: "90"
       INSIDERS_LIMIT: "60000"
+  # The daily catch-up: the same job over the last 7 days, after the nightly submissions load
+  # (05:30), for insider filings the live feed missed (a doc-fetcher outage, a feed gap). Filings
+  # kept as failed in ops.insider_queue (gone, no XML, refused) are never fetched again. Usually a
+  # handful of requests; a week of total outage is ~3,500 (~10 min at the bulk class).
+  insiders-catchup:
+    image: doc-fetcher
+    command: [doc-fetcher-insiders]
+    schedule: "45 8 * * *"
+    timeoutSeconds: 7200
+    uses: [postgres, sec]
+    secClass: bulk
+    env:
+      INSIDERS_DAYS: "7"
+      INSIDERS_LIMIT: "5000"
   # Run once to fill a new database: kubectl create job --from=cronjob/seed-documents seed-1
   seed-documents:
     image: doc-fetcher
@@ -387,7 +413,8 @@ jobs:
     command: [query-api-alerts]
     schedule: "*/10 * * * *"
     timeoutSeconds: 540
-    uses: [postgres, app-postgres, openfga, jwt, webhooks]
+    # email: SMTP out, only once alertEmail.enabled (off: the label opens nothing)
+    uses: [postgres, app-postgres, openfga, jwt, webhooks, email]
     env:
       PUBLIC_APP_URL: https://tributary.lucasgroves.dev
   # Deletes demo sandbox users past their expiry (query_api/sandbox.py). The deletion reaches

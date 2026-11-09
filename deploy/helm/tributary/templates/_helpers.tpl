@@ -28,6 +28,7 @@ app.kubernetes.io/instance: {{ .root.Release.Name }}
 {{- else if eq . "github" }}{{ $_ := set $labels "internet" "true" }}
 {{- else if eq . "market-data" }}{{ $_ := set $labels "internet" "true" }}
 {{- else if eq . "webhooks" }}{{ $_ := set $labels "internet" "true" }}
+{{- else if eq . "email" }}{{ $_ := set $labels "smtp" "true" }}
 {{- else if eq . "app-postgres" }}{{ $_ := set $labels "postgres" "true" }}
 {{- else if has . (list "postgres" "kafka" "openfga") }}{{ $_ := set $labels . "true" }}
 {{- end }}
