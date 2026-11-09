@@ -303,6 +303,27 @@ def test_peers_rank_by_sic_then_size_band(peer_conn, token):
         (P2, 4, True, "150"), (P4, 4, False, None), (P3, 3, True, "210")]
 
 
+def test_a_peers_old_revenue_gives_no_size_band(peer_conn, token):
+    """An old TTM (over 300 days behind the company's own latest period, 035) is no size: P2's
+    revenue stops in 2024 while its balance sheet goes on, so it isn't 'same size band'."""
+    peer_conn.execute("UPDATE gold.derived_financials SET period_start = '2023-07-01',"
+                      " period_end = '2024-06-30' WHERE company_id = %s AND metric = 'revenue'",
+                      (P2,))
+    peer_conn.execute("UPDATE gold.quarterly_financials SET period_start = '2024-04-01',"
+                      " period_end = '2024-06-30' WHERE company_id = %s AND metric = 'revenue'",
+                      (P2,))
+    acc = f"{P2}-26-000002"
+    peer_conn.execute(
+        "INSERT INTO gold.quarterly_financials (company_id, metric, period_start, period_end,"
+        " value, unit, value_source, source_tag, accession_no, filed, source_accessions,"
+        " ingested_at) VALUES (%s, 'total_assets', NULL, '2026-06-30', 900, 'USD',"
+        " 'reported', 'us-gaap:Assets', %s, '2026-08-01', ARRAY[%s], now())", (P2, acc, acc))
+    body = peers(peer_conn, token, "t-free")
+    p2 = next(p for p in body["peers"] if p["company_id"] == P2)
+    assert p2["match"]["revenue_band"] is None and p2["match"]["same_revenue_band"] is False
+    assert next(p for p in body["peers"] if p["company_id"] == P3)["match"]["same_revenue_band"]
+
+
 def test_peers_without_access_rank_by_public_metadata_only(peer_conn, token):
     body = peers(peer_conn, token, "t-nobody")
     assert body["company"]["revenue_band"] is None

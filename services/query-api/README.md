@@ -252,7 +252,10 @@ explains a plan without `filings`).
 `GET /v1/companies/{id}/peers`: companies with financials in the same 4-digit SIC, then the
 3- and 2-digit groups; within a level, the same TTM revenue size band first (only for
 companies you can read, and only if you can read the company's own revenue), then the same
-filer category, revenue closeness and name. Each peer has screener-style metadata, `values`
+filer category, revenue closeness and name. A revenue is read as the screener sorts it
+(`gold.latest_reading`, migration 035): a TTM over 300 days behind the company's own latest period,
+or not meaningful, gives no band and no closeness, for a peer or the company itself (a peer whose
+revenue stopped in 2024 isn't "same size band"). Each peer has screener-style metadata, `values`
 where permitted and `match` (`sic_level`, `same_filer_category`, `revenue_band`,
 `same_revenue_band`). `access=financials` ranks only companies you can read (the web app asks
 for that in a demo sandbox, which lists nothing else); the default ranks every company.

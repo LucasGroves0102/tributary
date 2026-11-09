@@ -232,9 +232,11 @@ class Store:
               revenue: Decimal | None, limit: int, granted_only: bool = False) -> list[dict]:
         """Ranked peer candidates (gold.peer_candidates): SIC level, then the same revenue size
         band as `revenue` (only companies in `granted` have one; RLS applies too), then the
-        same filer category, then revenue closeness, then name. granted_only: only candidates
-        in `granted`. granted None: the catalog is public at this tier, RLS alone bounds the
-        revenue (query_api.authorizer.Readable)."""
+        same filer category, then revenue closeness, then name. A candidate's revenue is read as
+        the screener sorts it (gold.latest_reading, 035): a TTM over 300 days behind the
+        company's own latest period, or not meaningful, gives no band and no closeness.
+        granted_only: only candidates in `granted`. granted None: the catalog is public at this
+        tier, RLS alone bounds the revenue (query_api.authorizer.Readable)."""
         gate = "" if granted is None else "WHERE p.company_id = ANY(%(granted)s)"
         only = ("p.company_id IN (SELECT x FROM authz.readable_companies('financials') x)"
                 if granted is None else "p.company_id = ANY(%(granted)s)")
@@ -246,7 +248,11 @@ class Store:
                 FROM gold.peer_candidates(%(company)s) p
                 JOIN silver.companies c ON c.company_id = p.company_id
                 LEFT JOIN LATERAL (
-                    SELECT x.value FROM gold.latest_value(p.company_id, 'ttm', 'revenue') x
+                    SELECT CASE WHEN x.status IS NULL OR x.status = 'behind'
+                                THEN x.value END AS value
+                    FROM gold.latest_period(p.company_id) lp
+                    CROSS JOIN LATERAL gold.latest_reading(p.company_id, 'ttm', 'revenue',
+                                                           c.sic, lp.latest) x
                     {gate}
                 ) r ON true
                 WHERE NOT %(granted_only)s OR {only}

@@ -413,13 +413,20 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
                                                   coverage=False, sort="name", limit=1), access)
         if not target:
             raise HTTPException(404, "unknown company")
-        revenue = target[0]["values"].get("revenue_ttm") if "revenue_ttm" in cols else None
+        def current(row: dict) -> Decimal | None:
+            # the size band's revenue is read as the screener sorts it (035): an old or not
+            # meaningful TTM has no band, like a peer's (Store.peers)
+            reading = row.get("readings", {}).get("revenue_ttm") or {}
+            return None if reading.get("status") not in (None, "behind") \
+                else row["values"].get("revenue_ttm")
+
+        revenue = current(target[0]) if "revenue_ttm" in cols else None
         granted = access.ids("financials")
-        if revenue is None and "financials" in access.get(company_id, set()):
+        if "revenue_ttm" not in cols and "financials" in access.get(company_id, set()):
             _, own, _ = run_screen(user_id, Screen(columns=["revenue_ttm"],
                                                    company_ids=[company_id], coverage=False,
                                                    sort="name", limit=1), access)
-            revenue = own[0]["values"]["revenue_ttm"] if own else None
+            revenue = current(own[0]) if own else None
         ranked = store.peers(user_id, company_id, granted, revenue, limit,
                              granted_only=access_filter == "financials")
         ids = [p["company_id"] for p in ranked]
