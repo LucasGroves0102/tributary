@@ -116,9 +116,48 @@ Cost on a sample of 78 real filings (10 companies, 12.8 MB of section text): 3 s
 section text when the GIN index is freshly built (tsvectors ~1x, GIN 0.25x, b-trees 0.04x); the
 GIN index grows to ~0.5-0.7x under incremental inserts, so REINDEX it after a bulk load.
 
+## Peers by business (`parser-peers`)
+
+A weekly batch job in the same image (`filing_parser/business.py`, its docstring is the spec;
+migration 047) that compares what companies say they do. For every company with financials it
+reads Item 1 (Business) of its latest 10-K from the last three years that has a usable one (at
+least 3,000 characters and not mis-parsed: Intel's and IBM's are cross-references, so no profile),
+turns the first 80,000 characters into words and two-word phrases (stop words, places and
+human-capital words removed, simple singulars), and weights them TF-IDF: terms in 20 to 25% of the
+documents, the company's own name and corporate-structure phrases (SPAC mergers, share classes)
+dropped, the 400 heaviest kept and normalised. Then:
+
+- `gold.business_profiles`: the filing and section each profile came from, its most distinctive terms;
+- `gold.business_peers`: each company's 60 most similar companies (cosine), with the shared terms
+  that add the most, so the [Query API](../query-api/README.md#peers) can say why;
+- `gold.business_mentions`: other companies its Item 1 names in a sentence about competition (SEC
+  names and former names, normalised like `silver.normalize_name`; a one-word name counts only
+  capitalised and when it isn't an ordinary word), with the sentence's offsets to cite. Vertiv's
+  names Eaton and Johnson Controls.
+
+Everything is replaced in one transaction per run (readers see old or new); one run at a time
+(advisory lock). Cost on hermes' 4,888 usable Item 1s of 2026-11-09, run locally: 79 s, 406 MB
+peak, 293,280 peer rows and 4,166 mentions, 60 MB with indexes; the read itself took 6 s on hermes.
+No TF-IDF library: the standard library only, no paid embeddings, no external calls.
+
+How the settings were chosen: precision at 10 against hand-written peer lists for nine companies
+(VRT, DECK, NVDA, JPM, RCKY, KO, UNH, HD, XOM), on the full corpus, through the Query API's ranking.
+A minimum document frequency of 20 scored 47 of 90, 10 scored 45, 5 scored 44; 250 vs 400 terms and
+40,000 vs 80,000 characters moved it by at most one. XOM scores 1: Exxon's Item 1 is a
+cross-reference, so it has no profile.
+
+```bash
+parser-peers   # DATABASE_URL; no options
+```
+
+Helm: CronJob `business-peers` (Sundays 05:30); run it once after the deploy that adds migration 047.
+
 ## Tests
 
-`pytest services/parser`: `test_sections.py` parses real NVIDIA 10-K, 10-Q and 8-K documents
+`pytest services/parser`: `test_business.py` runs the peers rules on the openings of ten real 10-K
+Item 1 sections (`tests/fixtures/business`, hermes 2026-11-09: Vertiv, Eaton, nVent, Deckers, Crocs,
+Nike, JPMorgan, Bank of America, Intel's cross-reference, Microchip's mis-parse);
+`test_business_db.py` runs `parser-peers` on them in Postgres (rerun replaces, stub skipped, RLS); `test_sections.py` parses real NVIDIA 10-K, 10-Q and 8-K documents
 (`tests/fixtures/*.htm.gz`), three real Q3 2026 10-Qs with titled but unnumbered items for rule 9
 (`moh-`, `eix-`, `tnet-10-Q.htm.gz`: Molina, Edison International, TriNet; the hidden inline-XBRL
 header is emptied to save space, the extracted text is unchanged), plus small synthetic cases for

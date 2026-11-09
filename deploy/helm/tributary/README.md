@@ -43,6 +43,12 @@ also ship suspended; their comments in `values.yaml` describe the first run. So 
 and `section-index`, which read the crawled documents; on hermes both run hourly
 (`suspend: false` in the Flux release) since the crawl finished.
 
+`business-peers` (parser image, `parser-peers`, migration 047) runs weekly (Sundays 05:30) and is
+not suspended: it reads each company's latest 10-K Item 1 and replaces the peers-by-business tables
+in one transaction (79 s, 406 MB on 2026-11-09's 4,888 documents; limit 1 GiB). Until its first run
+the Query API suggests peers by SIC and size; start one by hand after the deploy:
+`kubectl -n tributary create job --from=cronjob/business-peers business-peers-1`.
+
 `financials-rebuild` ships suspended and never runs on a schedule: it re-derives silver and gold from
 the payloads already in bronze (`facts-fetcher --rebuild`, no SEC requests, only `uses: postgres`),
 after a change to `silver.metric_tags` or to gold's SQL rules. Run it once by hand after such a
