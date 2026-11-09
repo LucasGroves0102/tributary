@@ -78,6 +78,12 @@ sandbox. Reads all 33,000 aliases per call (25-38 ms on hermes); no index was ne
 `044_company_search_order.sql` breaks ties within a rank by whether the company has figures here
 (`gold.financials_coverage`, public ids) and the normalized name's length, so "bank of" lists Bank
 of America before Bank of Chile (a 20-F filer) and isn't pushed down by an SEC suffix (`/DE/`).
+`045_filing_events.sql` lets the Query API read 8-K item numbers: a column grant on
+`bronze.submission_filings (accession_no, cik, items)` (filing-index metadata, public like
+`silver.filings`) and `silver.company_8ks(company, from)`, one company's 8-K and 8-K/A with their
+items as an array (NULL until the nightly submissions load has the filing). The earnings and
+events routes read it ([query-api](../services/query-api/README.md), "Earnings and events").
+Catalog changes only: the GRANT takes no lock on the table.
 `035_value_readings.sql` is the one definition of how a figure may be read: `gold.not_meaningful`
 (thresholds from the data, in its header), `gold.not_applicable_metrics` (banks),
 `gold.period_status` ("stale", once: over 300 days behind the company's latest period is old, over
