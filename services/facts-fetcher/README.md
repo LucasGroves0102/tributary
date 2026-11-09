@@ -48,6 +48,20 @@ CIKs' own companies plus any whose filing the SEC put under them. The named enti
 document's extract (`bronze.filing_xbrl.entity_cik`, the segments job), so it applies to filings the
 document crawl and doc-fetcher store.
 
+## Foreign filers and currencies
+
+Migration 056 maps the core IFRS tags (`ifrs-full:Revenue`, `ProfitLossFromOperatingActivities`,
+`ProfitLoss`, `Assets`, `Equity`, `CashAndCashEquivalents`, `LongtermBorrowings`,
+`CashFlowsFromUsedInOperatingActivities`, `PurchaseOfPropertyPlantAndEquipment...`, EPS and the rest)
+and lets silver keep amounts in any currency, so a 20-F or 40-F filer's companyfacts reach gold: the
+`financials-rebuild` job re-projects every stored payload with the new tags (`payload.project` keeps
+the (taxonomy, tag) pairs of `silver.metric_tags`; no SEC request). Each company is read in its
+reporting currency only (`gold.usable_facts`), and gold never splits a year or a half into quarters,
+so a filer of annual reports has fiscal years and year-end balances, and one whose 6-Ks tag quarters
+has those. Rebuilt from production's payloads of the 517 listed 20-F/40-F filers without gold: 490
+get figures (74 s locally), Birkenstock's FY2025 revenue €2,097.4M and its December 2025 quarter's
+€401.9M among them.
+
 ## Filings companyfacts lacks
 
 **`facts-fetcher-filings`** (`filings.py`, `instance.py`; migration `055_filing_xbrl_facts.sql`):
@@ -216,7 +230,8 @@ revenue, NVIDIA's securities and dividends, Ford's debt, Legacy Housing's 2033 d
 companyfacts payloads in `tests/fixtures/` (`test_pipeline.py`; shared `conn` / `loaded`
 fixtures in `conftest.py`), and the bulk loader on small zips. `test_filings.py`: instances (trimmed real
 ones in `tests/fixtures/instance/`, made with `tests/trim_instance.py`), projection, and with a database the
-gap, catch-up, instance, extension-tag and member-sum paths. `test_golden_10k.py` checks gold
+gap, catch-up, instance, extension-tag and member-sum paths; `test_ifrs.py`: IFRS filers, currencies, half years and
+borrowings (056). `test_golden_10k.py` checks gold
 against 149 figures printed in five companies' 10-Ks, loading their companyfacts from
 `tests/fixtures/golden/` ([tests/golden](../../tests/golden/README.md)). Database tests
 need `TEST_DATABASE_URL`.

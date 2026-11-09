@@ -116,6 +116,26 @@ the same filing's own total are left out (`mistagged_fact`, rule `debt_parts_sca
 to date: forfeitures, remeasured liability awards); its `sign_flip` is severity `info`, rule `benefit`,
 unless another filing reports the quarter positive. Measurements in its header. Needs
 `financials-rebuild`; backout `backout/filers_debt_050.sql`.
+`056_ifrs_currencies.sql` (F8a, H12) reads foreign filers: 984 of the 6,066 listed companies had no
+financials, 525 of them 20-F/40-F filers whose companyfacts carry ifrs-full tags (486) or US GAAP in
+their own currency, which silver never read (us-gaap only, USD only). `silver.metric_tags` gains the
+core IFRS tags (revenue, operating profit, profit, EPS, assets, equity, cash, borrowings, operating
+cash flow, capex...: counts and the borrowings evidence in its header), after each metric's us-gaap
+ones. `silver.unit_fits` lets silver keep an amount in any ISO currency; `gold.usable_facts` reads
+each company in one currency, its reporting currency (the one most of the monetary facts of its
+latest report are in, so a 20-F's convenience translation drops out), and computed amounts take it
+too. `gold.latest_reading` gives an amount in another currency the status `other_currency` with its
+`unit` (DROP and CREATE: one more column), so the screener, size bands and the web's medians never
+put it beside dollars; ratios compare as before. A year or a half-year is never split into quarters
+(gold derives a quarter only from year-to-date figures 80-120 days apart): a 20-F filer has fiscal
+years (040's stated-year TTM) and year-end balances; one whose 6-Ks tag quarters (Birkenstock) has
+them. On the 517 such companies with a payload, rebuilt locally from production's payloads: 490 get
+gold (revenue 426, net income 487, total assets 484, operating cash flow 477), 113 of them with
+quarters since 2024, none with two currencies; about 200 companies with gold today (Alibaba, Toyota,
+ASML, Canadian National...) move from scraps of convenience-translated dollars to their own
+currency. Every gold row of the 46-company replica (all USD) was identical. Needs the
+financials-rebuild job (re-projects the stored payloads with the IFRS tags, no SEC requests).
+Catalog changes and small inserts only.
 `055_filing_xbrl_facts.sql` (F8a) reads a filing's own XBRL where SEC companyfacts doesn't carry it:
 the filings companyfacts never received (52 of 12,006 10-K/10-Qs in 200 days: Citigroup's 2026 10-Qs,
 Clorox's FY2026 10-K), a company's own tags proven to be a standard line (NVIDIA's 10-K capex tag,
