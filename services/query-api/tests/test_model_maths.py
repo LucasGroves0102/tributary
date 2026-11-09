@@ -247,6 +247,48 @@ def test_a_typed_price_gives_multiples_on_history_and_each_case():
     assert v["cases"]["bull"][1]["fcf_yield"] == pytest.approx(bull["fcf"] / v["market_cap"])
 
 
+def as_euros(inputs: dict) -> dict:
+    """Vertiv's inputs as a euro filer's would read after 056: every amount row in EUR (the
+    fixture's rows were captured without their unit, which is USD)."""
+    out = json.loads(json.dumps(inputs))
+    for key in ("ttm", "quarters", "annual"):
+        for r in out[key]:
+            r["unit"] = ("shares" if "shares" in r["metric"] else
+                         "EUR/shares" if r["metric"].startswith("eps") else "EUR")
+    return out
+
+
+def test_a_price_in_another_currency_than_the_figures_gives_no_multiple():
+    """057: a dollar price beside euro EPS divides nothing; the run says both currencies. A
+    price saved before (no currency) is a dollar one. Typed in euros, the multiples are there."""
+    euros = as_euros(real("vrt"))
+    assert run(real("vrt"), model(VRT, years(1)))["currency"] == "USD"
+    for price in ({"value": 150, "date": "2026-11-06"},
+                  {"value": 150, "date": "2026-11-06", "currency": "USD"}):
+        out = run(euros, model(VRT, years(2), price=price))
+        v = out["valuation"]
+        assert out["currency"] == "EUR"
+        assert v["currency_mismatch"] == {"price": "USD", "figures": "EUR"}
+        assert v["market_cap"] == pytest.approx(150 * 385027873)
+        assert v["market_cap_currency"] == "USD"
+        assert v["enterprise_value"] is None and v["ev_note"] == "currency"
+        assert v["history"] == [] and v["ttm"] is None and v["cases"] == {}
+    v = run(euros, model(VRT, years(2), price={"value": 150, "date": "2026-11-06",
+                                               "currency": "EUR"}))["valuation"]
+    assert "currency_mismatch" not in v and v["market_cap_currency"] == "EUR"
+    assert v["history"][-1]["pe"] is not None and v["enterprise_value"] is not None
+    # and a dollar company's run is as before, with the same multiples
+    usd = run(real("vrt"), model(VRT, years(2), price={"value": 150, "date": "2026-11-06"}))
+    assert "currency_mismatch" not in usd["valuation"]
+    assert usd["valuation"]["history"] == v["history"]
+
+
+def test_a_price_currency_is_three_capitals():
+    for bad in ("usd", "EURO", "€"):
+        with pytest.raises(Exception, match="currency"):
+            model(VRT, years(1), price={"value": 1.0, "date": "2026-11-06", "currency": bad})
+
+
 def test_ev_needs_a_current_net_debt():
     """Deckers' latest net debt is from 2014 (old, 035): no EV, and why."""
     v = run(real("deck"), model(DECK, years(1), price={"value": 100, "date": "2026-11-06"}))[

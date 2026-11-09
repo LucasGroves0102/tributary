@@ -134,10 +134,18 @@ company_id of metrics written without a ticker.
 - **n/m** (F7a): each input row carries migration 035's `gold.not_meaningful` reason, the tables'
   rule, and a point built from one says `not_meaningful` (the reason; with several inputs, which
   one: "PEP.operating_margin: ..."). `value` stays the exact figure, so an older web app draws what
-  it drew; the web app leaves the point as a gap and says why under the chart.
+  it drew; the web app leaves the point as a gap and says why under the chart. The rule gets each
+  input company's currency (057: `gold.amount_currency`), so a yen company's margin isn't n/m for a
+  "$100K" base that is ¥100K.
+- **Currency** (057): amounts are in each company's reporting currency (056), and each input row
+  carries its `unit`. A series whose money isn't in dollars says so: `currency` ("CNY") beside the
+  catalog's `unit` ("USD" = an amount, "USD/shares" = per share), and per input; a dollar series'
+  JSON is as before (no `currency`). Inputs in two currencies (SAP's euros and NVIDIA's dollars,
+  added or divided) are refused, 422 code `currency`: Tributary converts none. One company's own
+  ratio has no currency and is drawn as before.
 - **Errors**: `{"code", "message", "pos", "length", "hint"}`. `validate` returns them with
-  200 and `valid: false`; `evaluate` returns 422 (formula) or 403 (company) with
-  `{"detail": {"errors": [...]}}`.
+  200 and `valid: false`; `evaluate` returns 422 (formula, or `currency` when its data mixes
+  currencies) or 403 (company) with `{"detail": {"errors": [...]}}`.
 
 `evaluate` checks `can_read_financials` for every company the formula references before the
 query, which runs through `Store` under RLS like every other route. Each point has `period`
@@ -316,7 +324,8 @@ else by SIC and size (`basis: "sic"`). The ranking is specified in `query_api/pe
   falls back to SIC.
 - **Score** = similarity x SIC division (same SIC x1.15, same group x1.10, same division x1.0,
   another division x0.80: a maker vs its customers) x size (1 / (1 + 0.3 x |log10 revenue ratio|), only
-  when the caller reads both revenues; no current revenue counts as $10M) + 0.05 if this company's
+  when the caller reads both revenues; no current revenue counts as $10M; a revenue in another
+  currency is an unknown size, x1, 057) + 0.05 if this company's
   10-K names it + 0.03 if it names this company. Blank checks (SIC 6770) are never suggested for an operating company.
 - **`match`** says why: `similarity`, `terms` (the shared terms that add the most), `named_by_target` /
   `names_target` (the sentence: accession, section, offsets, to cite), `sic_level`, `same_sector`,
@@ -484,7 +493,11 @@ after the reported quarters, which the web app offers to rebuild year 1 from wit
 `valuation`: market cap (price x latest shares outstanding), net debt with its date and reading,
 EV (only when net debt is current or merely behind; `ev_note` says why not: `old`, `absent`, ...)
 and P/E, EV/Revenue, EV/EBIT and FCF yield for every history year, the TTM and each case's years;
-`"n/m"` over losses.
+`"n/m"` over losses. Currency (057): the run says the company's (`currency`, the unit of its rows;
+every amount is in it) and the price says its own (`price.currency`, three capitals; a price saved
+without one is in dollars, as before). When they differ, market cap is still price x shares, in the
+price's currency (`market_cap_currency`), but EV and every multiple are left out (`ev_note`
+"currency", `currency_mismatch: {price, figures}`): a dollar price never divides euro EPS.
 
 Measured on the real inputs in `tests/fixtures/model` (production answers of 2026-11-09):
 Vertiv's FY2026 is Q1-Q3 reported ($10.24B, 39.3% over the same nine months) plus a Q4 whose
@@ -929,7 +942,9 @@ migration 016 (owner-only, forced RLS, not streamed).
   filing's period on each 10-K/10-Q, and on demand on the latest figures (`?evaluate=true`). A red
   line describes trouble: crossed means the alert says so. Example, measured on the screenshot
   harness: `(receivables / receivables[-4q] - 1) - (revenue / revenue[-4q] - 1) > 0.10` on NVIDIA-like
-  figures gives 26.2 points, crossed; `gross_margin < 0.70` (TTM 71.2%) clear.
+  figures gives 26.2 points, crossed; `gross_margin < 0.70` (TTM 71.2%) clear. A red line on an
+  amount says its `unit` in the company's currency (057: "CNY"), so messages and the web word it
+  "CNY 996.3B", never "$"; key figures in a message are in their unit too ("€2.1B", "€1.22 a share").
 - **How alerts are made: a database poll, not a Kafka consumer.** `query-api-alerts`
   (`alert_job.py`) is a CronJob every 10 minutes. A filing reaches `silver.filings` within seconds
   of the feed, but what an alert says arrives later from elsewhere (an 8-K's items with the nightly

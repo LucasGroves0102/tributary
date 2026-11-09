@@ -45,6 +45,18 @@ def test_size_counts_only_where_both_revenues_are_readable():
     assert P.size_factor(big, Decimal(1), True) == P.size_factor(big, P.SIZE_FLOOR, True)
 
 
+def test_a_revenue_in_another_currency_is_an_unknown_size_not_a_small_one():
+    """057: Store.peer_facts gives no value for a yuan revenue (056: never compared with
+    dollars); it was read as the $10M floor, a 38% cut beside a $100B target. Unknown is x1."""
+    big = Decimal("1e11")
+    yuan = cand(OTHER, sim=0.14, revenue=None, readable=True, size_unknown=True)
+    tiny = cand(TINY, sim=0.14, revenue=None, readable=True)
+    ranked = P.rank("3674", big, [yuan, tiny])
+    assert [c.company_id for c in ranked] == [OTHER, TINY]
+    assert ranked[0].score == pytest.approx(0.14 * 1.15)
+    assert ranked[1].score == pytest.approx(0.14 * 1.15 / (1 + 0.3 * 4))
+
+
 def test_competitors_named_lift_a_peer_and_shells_never_appear():
     ranked = P.rank("3674", Decimal("1e11"), [
         cand(AMD, sim=0.12, named_by_target=True, revenue=Decimal("4e10"), readable=True),

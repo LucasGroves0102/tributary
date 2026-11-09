@@ -19,7 +19,9 @@ Score = similarity x division x size + NAMED (named by the target) + NAMES (name
   Only when the caller can read both companies' financials (an unreadable candidate's revenue
   must not move its rank: that would be an oracle). A readable candidate with no current revenue
   counts as the floor: mostly pre-revenue companies, which a $300B company's peers shouldn't open
-  on (NVIDIA's had two in its top 10) and a small company's barely notice.
+  on (NVIDIA's had two in its top 10) and a small company's barely notice. A candidate whose
+  revenue is in another currency (056) has an unknown size, not a small one: x1, as when the
+  target's own revenue isn't in dollars (057; Tributary converts no currency).
 
 No text on file for the company (no 10-K Item 1 in the last three years, or the caller can't read
 its filings): SIC and size, as before F4 (`basis` "sic"). Blank-check shells (SIC 6770) are never
@@ -84,6 +86,8 @@ class Candidate:
     names_target: bool = False
     revenue: Decimal | None = None
     readable: bool = False  # the caller reads its financials (its revenue may count)
+    # its revenue is in another currency (057): its size is unknown, not the $10M floor
+    size_unknown: bool = False
     score: float = 0.0
 
 
@@ -96,7 +100,8 @@ def rank(target_sic: str | None, target_revenue: Decimal | None,
             continue
         match = sic_match(target_sic, c.sic)
         div = NO_SIC if match is None else DIVISION[match]
-        c.score = (c.similarity * div * size_factor(target_revenue, c.revenue, c.readable)
+        sized = c.readable and not c.size_unknown
+        c.score = (c.similarity * div * size_factor(target_revenue, c.revenue, sized)
                    + (NAMED if c.named_by_target else 0.0) + (NAMES if c.names_target else 0.0))
         out.append(c)
     return sorted(out, key=lambda c: (-c.score, c.company_id))

@@ -224,4 +224,6 @@ def filing_figure(r: dict) -> dict:
     return {"metric": r["metric"], "period_start": r["period_start"],
             "period_end": r["period_end"], "value": _num(r["value"]), "how": r["how"],
             **({"xbrl_tag": r["source_tag"]} if r.get("source_tag") else {}),
-            **({"inputs": {k: _num(v) for k, v in inputs.items()}} if inputs else {})}
+            **({"inputs": {k: _num(v) for k, v in inputs.items()}} if inputs else {}),
+            # 057: the figure's unit ("USD", "EUR", "EUR/shares"), so a reader says the currency
+            **({"unit": r["unit"]} if r.get("unit") else {})}

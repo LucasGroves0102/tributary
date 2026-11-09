@@ -730,6 +730,23 @@ def test_insider_filings_respect_rls(client, token):
     assert visible(conn, "t-reader", "SELECT company_id FROM silver.insider_filings") == [(B,)]
 
 
+def test_filing_figures_say_their_currency(client, token):
+    """057: gold.filing_figures returns each figure's unit: a euro filing's facts and the net
+    debt computed from them are in EUR (the thesis check words them so)."""
+    conn = client.app_conn
+    for tag, metric, value in (("LongTermDebtNoncurrent", "long_term_debt", 1128010000),
+                               ("CashAndCashEquivalentsAtCarryingValue", "cash", 329067000)):
+        conn.execute(
+            "INSERT INTO silver.financial_facts (cik, metric, tag, unit, period_start, period_end,"
+            " value, accession_no, form, filed) VALUES (%s, %s, %s, 'EUR', NULL, '2026-09-30',"
+            " %s, %s, '20-F', '2026-12-01')", (A, metric, tag, value, f"{A}-26-000010"))
+    r = client.get(f"/v1/companies/{A}/filings/{A}-26-000010/figures", headers=token("t-free"))
+    assert r.status_code == 200, r.text
+    units = {f["metric"]: f["unit"] for f in r.json()["figures"]}
+    assert {"long_term_debt", "cash", "net_debt", "cash_and_investments"} <= set(units)
+    assert set(units.values()) == {"EUR"}
+
+
 def test_text_kpis_respect_rls(client, token):
     """F8b (H11): the backlog read from a 10-K's MD&A is section text, the filings tier; the
     allow-all authorizer lets every call through, RLS alone hides B's and the free plan's."""

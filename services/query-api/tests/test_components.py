@@ -231,3 +231,13 @@ def test_filing_figures_say_what_the_filing_itself_gives(token):
     assert "inputs" not in cash
     bad = c.get(f"/v1/companies/{NVDA}/filings/0001045810/figures", headers=token("alice"))
     assert bad.status_code == 422 and len(c.store.calls) == 1
+
+
+def test_filing_figures_say_their_unit_from_057(token):
+    """057's gold.filing_figures returns each figure's unit; the route passes it on (the thesis
+    check words a euro filing's net debt in euros). An older database's rows have none."""
+    c = client()
+    rows = c.store.filing_figures("x", NVDA, ACC)
+    c.store.filing_figures = lambda *_: [{**rows[0], "unit": "EUR"}, rows[1]]
+    net_debt, cash = c.get(FIGURES, headers=token("alice")).json()["figures"]
+    assert net_debt["unit"] == "EUR" and "unit" not in cash

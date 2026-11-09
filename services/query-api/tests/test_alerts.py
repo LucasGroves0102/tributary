@@ -118,6 +118,26 @@ def test_a_red_line_at_the_filings_period():
     assert evaluate(rule("<", "1"), [], None)["status"] == "no_value"
 
 
+def test_amounts_in_another_currency_say_it():
+    """057: a euro or yuan filer's figures in a message are in their currency, never "$" and
+    never a bare number; a red line on an amount says its currency, a ratio's says none."""
+    assert plain_value("2097429000", "EUR") == "€2.1B"
+    assert plain_value("996347000000", "CNY") == "CNY 996.3B"
+    assert plain_value("1.22", "EUR/shares") == "€1.22 a share"
+    assert plain_value("120.5", "JPY/shares") == "¥120.50 a share"
+    assert plain_value("0.735", "ratio") == "73.5%"
+    yuan = [{"period_end": date(2026, 9, 30), "value": Decimal("996347000000"),
+             "inputs": [{"input": 0, "unit": "CNY"}]}]
+    out = evaluate(rule("<", "1000000000000", formula="revenue"), yuan, None)
+    assert out["unit"] == "CNY" and out["crossed"] is True
+    text = message(notification(detail={"figures": [], "red_lines": [
+        {**out, "label": "Revenue floor"}]}), "Alibaba", {})
+    assert "Red line Revenue floor: CROSSED (CNY 996.3B)" in text
+    assert "unit" not in evaluate(rule("<", "0.75"), POINTS, None)  # a ratio: no currency
+    dollars = [{**yuan[0], "inputs": [{"input": 0, "unit": "USD"}]}]
+    assert evaluate(rule("<", "1", formula="revenue"), dollars, None)["unit"] == "USD"
+
+
 def test_crossed_operators():
     assert crossed(Decimal(1), "<", Decimal(2)) and crossed(Decimal(2), "<=", Decimal(2))
     assert crossed(Decimal(3), ">", Decimal(2)) and crossed(Decimal(2), ">=", Decimal(2))

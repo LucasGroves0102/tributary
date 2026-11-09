@@ -406,8 +406,8 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
                                 "as_of": _now()}
         # additive, only when not the usual (migration 056): the currency the company's amounts
         # are in, and that its figures are fiscal years (a 20-F/40-F filer), never quarters
-        currency = next((r["unit"] for r in rows
-                         if re.fullmatch(r"[A-Z]{3}", r["unit"] or "")), "USD")
+        # any amount's, per-share ones too ("EUR/shares": a request for EPS alone, 057)
+        currency = next((c for r in rows if (c := currency_of(r["unit"])) is not None), "USD")
         if currency != "USD":
             meta["currency"] = currency
         if fmt == "json" and store.cadence(user_id, company_id) == "annual":
@@ -662,11 +662,21 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
             raise HTTPException(403, {"errors": not_yours(user_id, denied)})
         compiled = compile_formula(ast, a, companies, body.basis, body.start, body.end)
         rows = store.formula(user_id, compiled)
+        # 057: amounts are in each company's own currency (056). Inputs in two currencies can't be
+        # added, subtracted or divided: Tributary converts none. One currency: the series' money is
+        # in it (`currency`, only when not USD, so a dollar formula's JSON is as before).
+        currencies = _input_currencies(rows)
+        mixed = sorted(set().union(*currencies.values())) if currencies else []
+        if len(mixed) > 1:
+            raise HTTPException(422, {"errors": [_mixed_currencies(body.formula, a,
+                                                                   currencies).to_dict()]})
+        currency = mixed[0] if mixed else "USD"
         return {
             "formula": body.formula, "unit": a.unit, "display": a.display,
+            **({"currency": currency} if currency != "USD" and a.unit in MONEY_UNITS else {}),
             "basis": body.basis, "view": body.view,
             "alignment": compiled.alignment, "as_of": _now(),
-            "inputs": _inputs(a, companies),
+            "inputs": _inputs(a, companies, currencies),
             "points": [_point(r, compiled.alignment, [i.ref for i in a.inputs]) for r in rows],
         }
 
@@ -678,10 +688,45 @@ def _no_default(at: tuple[int, int]) -> FormulaError:
                         "Choose a default company, or write TICKER.metric", code="company")
 
 
-def _inputs(a: Analysis, companies: dict[str | None, str | None]) -> list[dict]:
+MONEY_UNITS = ("USD", "USD/shares")
+
+
+def currency_of(unit: str | None) -> str | None:
+    """The currency of a unit: "EUR" of "EUR" and "EUR/shares"; None for shares and ratios."""
+    code = (unit or "").split("/")[0]
+    return code if re.fullmatch(r"[A-Z]{3}", code) else None
+
+
+def _input_currencies(rows: list[dict]) -> dict[int, set[str]]:
+    """input index -> the currencies of its rows' amounts (057; each company has one: 056)."""
+    out: dict[int, set[str]] = {}
+    for r in rows:
+        for x in r["inputs"]:
+            c = currency_of(x.get("unit"))
+            if c is not None:
+                out.setdefault(x["input"], set()).add(c)
+    return out
+
+
+def _mixed_currencies(formula: str, a: Analysis, currencies: dict[int, set[str]]) -> FormulaError:
+    said = "; ".join(f"{a.inputs[i].ref} is in {', '.join(sorted(cs))}"
+                     for i, cs in sorted(currencies.items()))
+    return FormulaError(f"These figures are in different currencies ({said}): Tributary doesn't "
+                        "convert currencies, so a formula can't combine them", 0,
+                        max(1, len(formula)),
+                        "Chart each company on its own, or compare ratios such as margins and "
+                        "growth, which have no currency", code="currency")
+
+
+def _inputs(a: Analysis, companies: dict[str | None, str | None],
+            currencies: dict[int, set[str]] | None = None) -> list[dict]:
+    def currency(i: int) -> dict:
+        cs = (currencies or {}).get(i, set())
+        return {"currency": next(iter(cs))} if len(cs) == 1 and cs != {"USD"} else {}
+
     return [{"input": i, "ref": inp.ref, "ticker": inp.ticker,
              "company_id": companies.get(inp.ticker), "metric": inp.metric, "span": inp.span,
-             "lag_quarters": inp.lag, "unit": CATALOG[inp.metric][0]}
+             "lag_quarters": inp.lag, "unit": CATALOG[inp.metric][0], **currency(i)}
             for i, inp in enumerate(a.inputs)]
 
 

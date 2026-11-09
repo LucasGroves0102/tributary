@@ -77,7 +77,14 @@ said so); EV = market cap + net debt, only when net debt's reading is current or
 (035: an old, not meaningful, not applicable or absent net debt leaves EV blank, with the reason);
 per column: P/E = price / adjusted diluted EPS (TTM: market cap / adjusted TTM net income),
 EV/Revenue, EV/EBIT (adjusted operating income), FCF yield = FCF / market cap. A multiple over
-zero or negative earnings, revenue or EBIT is not meaningful."""
+zero or negative earnings, revenue or EBIT is not meaningful.
+
+Currency (057): every amount is in the company's reporting currency (056), `currency` on the run
+(the unit of its rows: "EUR" for a euro filer, USD when none says otherwise). The price is in the
+currency the user says (`price.currency`; a price saved without one is in dollars, as every price
+was before). When the two differ nothing divides one by the other: market cap is still price x
+shares (in the price's currency, `market_cap_currency`), but enterprise value and every multiple
+are left out and `currency_mismatch` says which two, since Tributary converts no currency."""
 
 from __future__ import annotations
 
@@ -756,11 +763,24 @@ def _multiples(col: dict, price: float, cap: float, ev: float | None, ttm: bool 
             "fcf_yield": None if col.get("fcf") is None or cap <= 0 else col["fcf"] / cap}
 
 
+def currency_of(inputs: dict) -> str:
+    """The company's reporting currency: the unit of its amount rows (one per company since 056;
+    "EUR/shares" reads "EUR"), USD when none says."""
+    for key in ("ttm", "quarters", "annual"):
+        for r in inputs.get(key) or []:
+            code = str(r.get("unit") or "").split("/")[0]
+            if re.fullmatch(r"[A-Z]{3}", code):
+                return code
+    return "USD"
+
+
 def valuation(price: dict | None, latest: dict, years: list[dict], ttm: dict | None,
-              cases: dict[str, list[dict]], latest_shares: float | None) -> dict | None:
+              cases: dict[str, list[dict]], latest_shares: float | None,
+              currency: str = "USD") -> dict | None:
     if not price:
         return None
     p = float(price["value"])
+    price_currency = price.get("currency") or "USD"
     shares = _reading(latest.get("shares_outstanding"))
     debt = _reading(latest.get("net_debt"))
     out: dict[str, Any] = {"price": p, "date": price["date"], "shares_outstanding": shares,
@@ -776,6 +796,12 @@ def valuation(price: dict | None, latest: dict, years: list[dict], ttm: dict | N
         return out
     cap = p * count
     out["market_cap"] = cap
+    out["market_cap_currency"] = price_currency
+    if price_currency != currency:
+        # a dollar price against euro EPS (or the reverse): no EV, no multiple (header, Currency)
+        out["currency_mismatch"] = {"price": price_currency, "figures": currency}
+        out["ev_note"] = "currency"
+        return out
     debt_value = None if debt is None else debt["value"]
     if debt is None or debt_value is None and debt["status"] is None:
         out["ev_note"] = "absent"
@@ -849,8 +875,9 @@ def run(inputs: dict, state: dict) -> dict:
             "fcf_margin": None if st["avg_fcf_margin"] is None else st["avg_fcf_margin"] * 100},
         "cases": cases,
         "adjustments": adjustments,
+        "currency": currency_of(inputs),
         "valuation": valuation(state.get("price"), inputs.get("latest") or {}, years, ttm,
-                               projected, latest_shares),
+                               projected, latest_shares, currency_of(inputs)),
     }
 
 

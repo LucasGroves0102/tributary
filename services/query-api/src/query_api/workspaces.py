@@ -296,9 +296,11 @@ class Adjustment(_Strict):
 
 
 class Price(_Strict):
-    """A price per share the user typed and the day it's for (F2 valuation): nothing is fetched."""
+    """A price per share the user typed, the day it's for and its currency (F2 valuation; 057:
+    absent means dollars, as every price saved before): nothing is fetched or converted."""
     value: StrictFloat = Field(gt=0, le=10_000_000)
     date: str = Field(pattern=ISO_DATE)
+    currency: str | None = Field(default=None, pattern=r"^[A-Z]{3}$")
 
     @field_validator("date")
     @classmethod

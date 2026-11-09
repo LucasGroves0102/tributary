@@ -507,7 +507,8 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
                     named_by_target=any(m["company_id"] == company_id and m["named_id"] == cid
                                         for m in mentions),
                     names_target=any(m["company_id"] == cid for m in mentions),
-                    revenue=f["revenue"] if can_read else None, readable=can_read))
+                    revenue=f["revenue"] if can_read else None, readable=can_read,
+                    size_unknown=can_read and bool(f.get("revenue_other_currency"))))
             target_sic = target[0]["sic"]
             ranked_business = rank_peers(target_sic, revenue, candidates)[:limit]
             for c in ranked_business:

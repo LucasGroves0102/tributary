@@ -213,7 +213,8 @@ class Store:
                        gold.not_meaningful(r.metric, r.value, (
                            SELECT d.inputs FROM gold.derived_financials d
                            WHERE d.company_id = %(company)s AND d.span = r.span
-                             AND d.metric = r.metric AND d.period_end = r.period_end))
+                             AND d.metric = r.metric AND d.period_end = r.period_end),
+                           NULL, gold.amount_currency(%(company)s))  -- 057
                            AS not_meaningful
                 FROM gold.filing_recap(
                     %(company)s,
@@ -296,18 +297,23 @@ class Store:
     def peer_facts(self, user_id: str, company_ids: list[str],
                    granted: list[str] | None) -> dict[str, dict]:
         """company_id -> sic, sector, filer category, and TTM revenue read like Store.peers (only
-        for `granted`; None: RLS alone). For at most a page of candidates, never the catalog."""
+        for `granted`; None: RLS alone), and whether that revenue is in another currency (then no
+        value: its size is unknown, not small). For at most a page of candidates, never the
+        catalog."""
         gate = "" if granted is None else "WHERE c.company_id = ANY(%(granted)s)"
         with self._session(user_id) as cur:
             cur.execute(
                 f"""
                 SELECT c.company_id, c.sic, s.sector, s.industry AS sector_industry,
-                       gold.filer_category(c.filer_categories) AS filer_category, r.value AS revenue
+                       gold.filer_category(c.filer_categories) AS filer_category,
+                       r.value AS revenue,
+                       coalesce(r.other_currency, false) AS revenue_other_currency
                 FROM silver.companies c
                 LEFT JOIN silver.sic_sectors s ON c.sic BETWEEN s.sic_from AND s.sic_to
                 LEFT JOIN LATERAL (
                     SELECT CASE WHEN x.status IS NULL OR x.status = 'behind'
-                                THEN x.value END AS value
+                                THEN x.value END AS value,
+                           x.status = 'other_currency' AS other_currency  -- 056/057
                     FROM gold.latest_period(c.company_id) lp
                     CROSS JOIN LATERAL gold.latest_reading(c.company_id, 'ttm', 'revenue',
                                                            c.sic, lp.latest) x
@@ -397,7 +403,10 @@ class Store:
                 SELECT metric, period_start, period_end, fiscal_year, fiscal_quarter,
                        calendar_year, calendar_quarter, value, unit, value_source,
                        source_tag, inputs, accession_no, form, filed, source_accessions,
-                       ingested_at, gold.not_meaningful(metric, value, inputs) AS not_meaningful,
+                       ingested_at,
+                       -- 057: the dollar bases only for a company whose amounts are dollars
+                       gold.not_meaningful(metric, value, inputs, NULL, cu.currency)
+                           AS not_meaningful,
                        (SELECT f.cik FROM silver.financial_facts f
                         WHERE f.accession_no = q.accession_no LIMIT 1) AS filer_cik
                 FROM (
@@ -406,9 +415,10 @@ class Store:
                     WHERE company_id = %s AND span = %s AND metric = ANY(%s)
                       AND (%s = 'fiscal' OR calendar_primary)
                 ) q
+                CROSS JOIN (SELECT gold.amount_currency(%s) AS currency) cu
                 WHERE row_number <= %s
                 ORDER BY metric, period_end DESC
-                """, (company_id, view, metrics, basis, quarters))
+                """, (company_id, view, metrics, basis, company_id, quarters))
             return cur.fetchall()
 
     FIGURE = """

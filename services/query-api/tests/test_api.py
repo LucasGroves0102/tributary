@@ -357,6 +357,23 @@ def test_catalog_list_is_cached_briefly(token):
     assert c.store.catalog_reads == 2
 
 
+def test_financials_say_the_currency_of_per_share_figures_too(token):
+    """057: `currency` came from the first exactly-three-letter unit, so a euro company's EPS
+    alone ("EUR/shares") read as dollars. Any amount's unit says it now; dollars stay unsaid."""
+    unit = {"value": "EUR/shares"}
+
+    class Store(FakeStore):
+        def financials(self, *args):
+            return [{**super().financials(*args)[0], "metric": "eps_diluted", "value": 1.22,
+                     "unit": unit["value"]}]
+
+    c = TestClient(create_app(FakeAuthorizer(GRANTS), Store(), SECRET))
+    url = f"/v1/companies/{NVDA}/financials?metrics=eps_diluted"
+    assert c.get(url, headers=token("alice")).json()["currency"] == "EUR"
+    unit["value"] = "USD/shares"
+    assert "currency" not in c.get(url, headers=token("alice")).json()
+
+
 def test_financials_link_to_the_filing(token):
     class Store(FakeStore):
         def financials(self, *args):

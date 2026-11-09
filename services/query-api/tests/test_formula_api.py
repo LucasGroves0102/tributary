@@ -236,6 +236,36 @@ def test_validate_errors(client, token, formula, message, pos):
     assert (body["errors"][0]["message"], body["errors"][0]["pos"]) == (message, pos)
 
 
+def in_units(*units):
+    """ROW with its inputs' units (057: the compiled query returns each row's own)."""
+    return {**ROW, "inputs": [{**x, "unit": u} for x, u in zip(ROW["inputs"], units, strict=True)]}
+
+
+def test_a_series_says_its_currency_and_two_currencies_dont_mix(client, token):
+    """057: Alibaba's yuan revenue isn't "$996B": the answer says CNY. A dollar series says
+    nothing (its JSON is as before). One company's own ratio has no currency; two companies'
+    amounts in different currencies are refused, whatever the formula does with them."""
+    client.store.formula = lambda user_id, compiled: [in_units("CNY", "CNY")]
+    one = evaluate(client, token, "bob", formula="PEP.revenue").json()
+    assert one["currency"] == "CNY" and one["unit"] == "USD"
+    assert one["inputs"][0]["currency"] == "CNY"
+    per_share = evaluate(client, token, "bob", formula="PEP.eps_diluted").json()
+    assert per_share["currency"] == "CNY" and per_share["unit"] == "USD/shares"
+    ratio = evaluate(client, token, "bob", formula="PEP.revenue / KO.revenue").json()
+    assert "currency" not in ratio  # dimensionless
+    client.store.formula = lambda user_id, compiled: [in_units("USD", "USD")]
+    dollars = evaluate(client, token, "bob", formula="PEP.revenue").json()
+    assert "currency" not in dollars and "currency" not in dollars["inputs"][0]
+    client.store.formula = lambda user_id, compiled: [in_units("EUR", "USD")]
+    for formula in ("PEP.revenue - KO.revenue", "PEP.revenue / KO.revenue"):
+        r = evaluate(client, token, "bob", formula=formula)
+        assert r.status_code == 422
+        [e] = r.json()["detail"]["errors"]
+        assert e["code"] == "currency"
+        assert e["message"].startswith("These figures are in different currencies "
+                                       "(PEP.revenue is in EUR; KO.revenue is in USD)")
+
+
 def test_a_point_built_from_a_ratio_that_reads_nm_says_why(client, token):
     """F7a item 7: the chart's points carry the tables' n/m reading (migration 035) per input;
     value stays the exact figure, so an older web app draws what it always drew."""

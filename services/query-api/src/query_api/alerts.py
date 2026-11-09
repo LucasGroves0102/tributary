@@ -181,6 +181,21 @@ def check_formula(formula: str, view: str) -> str | None:
     return None
 
 
+def money_unit(formula: str, view: str, point: dict) -> str | None:
+    """A red line's amount unit in the company's currency ("EUR", "EUR/shares"; 057), from the
+    point's input rows; None for a ratio or a formula that doesn't parse."""
+    try:
+        unit = analyze(parse(formula), view).unit
+    except FormulaError:
+        return None
+    if unit not in ("USD", "USD/shares"):
+        return None
+    codes = [u.split("/")[0] for x in point.get("inputs") or []
+             if isinstance(x, dict) and (u := x.get("unit"))]
+    code = next((c for c in codes if len(c) == 3 and c.isalpha() and c.isupper()), "USD")
+    return unit.replace("USD", code, 1)
+
+
 def display_of(formula: str, view: str) -> str | None:
     """percent / multiple / number for a dimensionless formula (formula/check.py), else None."""
     try:
@@ -210,8 +225,10 @@ def evaluate(rule: dict, points: list[dict], period_end: date | None) -> dict:
     if point is None or point["value"] is None:
         return out
     value = Decimal(point["value"])
+    unit = money_unit(rule["formula"], rule["view"], point)
     return {**out, "value": str(value), "period_end": point["period_end"].isoformat(),
-            "crossed": crossed(value, rule["op"], Decimal(rule["threshold"])), "status": "ok"}
+            "crossed": crossed(value, rule["op"], Decimal(rule["threshold"])), "status": "ok",
+            **({"unit": unit} if unit else {})}
 
 
 def red_line_points(store: Any, user_id: str, company_id: str, rule: dict) -> list[dict]:
@@ -225,22 +242,35 @@ def red_line_points(store: Any, user_id: str, company_id: str, rule: dict) -> li
     return store.formula(user_id, compiled)
 
 
+CURRENCY_SYMBOLS = {"USD": "$", "EUR": "€", "GBP": "£", "JPY": "¥"}
+
+
+def money_prefix(code: str) -> str:
+    """$ for dollars, €, £, ¥; any other currency by its code ("CAD 1.2B", "CNY 996.3B")."""
+    return CURRENCY_SYMBOLS.get(code, f"{code} ")
+
+
 def plain_value(value: str | None, unit: str | None, display: str | None = None) -> str:
-    """A figure for a message: $39.3B, 75.0%, $1.25 a share."""
+    """A figure for a message: $39.3B, 75.0%, $1.25 a share; an amount in another currency in it
+    (056/057: €2.1B, CNY 996.3B, ¥120.50 a share), never as dollars or a bare number."""
     if value is None:
         return "n/a"
     v = Decimal(value)
     if unit == "ratio" or display == PERCENT:
         return f"{v * 100:.1f}%"
-    if unit == "USD/shares":
-        return f"${v:,.2f} a share"
-    if unit == "USD":
-        for size, suffix in ((Decimal(10) ** 12, "T"), (Decimal(10) ** 9, "B"),
-                             (Decimal(10) ** 6, "M")):
-            if abs(v) >= size:
-                return f"${v / size:,.1f}{suffix}"
-        return f"${v:,.0f}"
-    return f"{v:,.2f}"
+    code, _, per = (unit or "").partition("/")
+    if len(code) != 3 or not code.isalpha() or not code.isupper():
+        return f"{v:,.2f}"
+    p = money_prefix(code)
+    if per == "shares":
+        return f"{p}{v:,.2f} a share"
+    if per:
+        return f"{v:,.2f}"
+    for size, suffix in ((Decimal(10) ** 12, "T"), (Decimal(10) ** 9, "B"),
+                         (Decimal(10) ** 6, "M")):
+        if abs(v) >= size:
+            return f"{p}{v / size:,.1f}{suffix}"
+    return f"{p}{v:,.0f}"
 
 
 def message(n: dict, company: str, links: dict[str, str]) -> str:
@@ -265,7 +295,7 @@ def message(n: dict, company: str, links: dict[str, str]) -> str:
         if r["status"] == "ok":
             state = "CROSSED" if r["crossed"] else "clear"
             lines.append(f"Red line {r['label']}: {state} "
-                         f"({plain_value(r['value'], None, r.get('display'))})")
+                         f"({plain_value(r['value'], r.get('unit'), r.get('display'))})")
     lines += [f"{k}: {v}" for k, v in links.items()]
     return "\n".join(lines)
 
