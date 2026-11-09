@@ -125,8 +125,11 @@ def test_a_model_saved_before_f2_keeps_year_one_a_full_year_guess():
     assert y["revenue"] == pytest.approx(out["history"][-1]["revenue"] * 1.4)
     assert [c["growth"] for c in out["cases"]["base"]["check"]["years"]] == [40, 20]
     # what it would be built from actuals without changing the year
-    implied = out["implied_remainder"]
+    implied = out["cases"]["base"]["implied_remainder"]
     rebuilt = run(real("vrt"), model(VRT, [implied, {"growth": 20, "margin": 21}], ytd=True))
+    # each case has its own (bear and bull previewed here)
+    assert out["cases"]["bear"]["implied_remainder"]["growth"] < implied["growth"]
+    assert "implied_remainder" not in rebuilt["cases"]["base"]
     assert rebuilt["cases"]["base"]["years"][0]["revenue"] == pytest.approx(y["revenue"])
     assert rebuilt["cases"]["base"]["years"][0]["margin"] == pytest.approx(0.21)
 
@@ -280,3 +283,27 @@ def test_no_history_projects_nothing():
     assert out["history"] == [] and out["base_fy"] is None and out["current"] is None
     assert out["cases"]["base"]["years"] == []
     assert [d["growth"] for d in out["cases"]["base"]["defaults"]] == [0.0, 0.0]
+
+
+def test_a_split_or_merger_breaks_the_share_history_rather_than_reading_as_buybacks():
+    """Deckers' 6-for-1 (2024): its FY2023 10-K count is restated, FY2021-22 aren't. NVIDIA's
+    4- and 10-for-1 the same. No +476% share change, no -80% EPS growth, no pre-split P/E."""
+    out = run(real("deck"), model(DECK, years(1), price={"value": 100, "date": "2026-11-06"}))
+    by = {y["fy"]: y for y in out["history"]}
+    assert by[2023]["share_break"] and by[2023]["share_change"] is None
+    assert by[2023]["eps_growth"] is None
+    assert by[2022]["earlier_share_basis"] == 2023 and by[2024]["earlier_share_basis"] is None
+    assert by[2024]["share_change"] == pytest.approx(156.285 / 160.111 - 1, rel=1e-4)
+    pe = {m["fy"]: m["pe"] for m in out["valuation"]["history"]}
+    assert pe[2022] is None and pe[2024] == pytest.approx(100 / 4.86)
+    nvda = {y["fy"]: y for y in run(real("nvda"), model(NVDA, years(1)))["history"]}
+    assert [fy for fy, y in nvda.items() if y["share_break"]] == [2020, 2023]
+    # the run rate's share change was never fooled: the latest quarter against a year earlier
+    assert out["run_rate"]["share_change"] == pytest.approx(135.3 / 147.709 - 1, rel=1e-2)
+
+
+def test_the_year_to_dates_adjusted_net_income_takes_the_one_off_off_after_tax():
+    a = run(real("deck"), model(DECK, years(1), ytd=True, adjustments=[REFUND]))["current"][
+        "actual"]
+    rate = a["income_tax"] / a["pretax_income"]
+    assert a["net_income_adjusted"] == pytest.approx(a["net_income"] - 46e6 * (1 - rate))

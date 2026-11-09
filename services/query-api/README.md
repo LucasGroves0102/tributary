@@ -381,14 +381,19 @@ refused before they are read.
 
 The answer: `history` (fiscal years: reported and adjusted operating income and margin, interest
 and other, tax rate, net income, the 10-K's diluted EPS and shares, share change, operating cash
-flow, capex, FCF and its margin, buybacks, each figure's filing), `ttm` (the latest TTM when it
+flow, capex, FCF and its margin, buybacks, each figure's filing; a diluted share count that moves
+by more than half in a year is a split or a merger, not buybacks, so that year has no share change
+or EPS growth and the years before it no P/E: Deckers' 6-for-1, NVIDIA's 4- and 10-for-1,
+Vertiv's SPAC merger), `ttm` (the latest TTM when it
 isn't a fiscal year end), `current` (the current fiscal year's reported quarters and the same
 quarters a year earlier), `stats` and `run_rate` (B2 and B7's, unchanged), and per case (`bear`,
 `base`, `bull`; bear and bull `preview`ed from the base case until the user adds them) the
 `defaults` (what Reset sets, per year) and the projected `years` (revenue, growth, organic growth,
 operating income reported and adjusted, margin, pretax and net income, shares, EPS and its
 growth, FCF; which rates were `defaulted`; for a `ytd` year 1 its `actual` and `remainder`). The
-base case also has the B2 `check` and `user_set` the thesis check reads. With a `price`,
+base case also has the B2 `check` and `user_set` the thesis check reads. A model saved before F2
+(no `ytd`) gets, per case, the `implied_remainder`: the remainder its full-year year 1 implies
+after the reported quarters, which the web app offers to rebuild year 1 from without changing it. With a `price`,
 `valuation`: market cap (price x latest shares outstanding), net debt with its date and reading,
 EV (only when net debt is current or merely behind; `ev_note` says why not: `old`, `absent`, ...)
 and P/E, EV/Revenue, EV/EBIT and FCF yield for every history year, the TTM and each case's years;

@@ -15,7 +15,10 @@ net income, operating cash flow, capex, free cash flow, buybacks (TTM sums), and
 diluted EPS and diluted weighted shares for the year ending within 7 days of that Q4. Ratios:
 growth (consecutive years, prior revenue > 0), operating margin, interest and other (operating
 income less pretax income, over revenue: negative is net income from it), tax rate (tax over
-pretax income, pretax > 0), share change, FCF margin. `ttm` is the newest TTM when its quarter
+pretax income, pretax > 0), share change, FCF margin. A diluted share count that moves by
+more than half in a year is a split or a merger, not buybacks (the 10-Ks state those years on
+different share bases): that year has no share change or EPS growth (`share_break`), and the
+years before it no P/E (`earlier_share_basis`). `ttm` is the newest TTM when its quarter
 isn't a fiscal Q4 (else the newest year is the TTM): the same lines, the latest quarter's diluted
 weighted shares, no EPS (per-share figures don't add across quarters).
 
@@ -264,6 +267,10 @@ def history(inputs: dict, adjustments: list[dict]) -> list[dict]:
                          _year_sum(acquired, fy) if acquired else None))
     for prev, cur in zip([None, *out], out, strict=False):
         _link(prev, cur)
+    # per-share figures before the latest break are on the old share basis: no P/E on them
+    breaks = [i for i, y in enumerate(out) if y.get("share_break")]
+    for y in out[:breaks[-1]] if breaks else []:
+        y["earlier_share_basis"] = out[breaks[-1]]["fy"]
     return out
 
 
@@ -291,19 +298,26 @@ def _year(fy: int, period_end: str, v: dict, src: dict, one_off: float,
         "operating_cash_flow": v.get("operating_cash_flow"), "capex": v.get("capex"),
         "fcf": fcf, "fcf_margin": _div(fcf, rev), "buybacks": v.get("share_buybacks"),
         "growth": None, "organic_growth": None, "share_change": None, "eps_growth": None,
-        "sources": src,
+        "share_break": False, "earlier_share_basis": None, "sources": src,
     }
 
 
 def _link(prev: dict | None, cur: dict) -> None:
-    """Year-over-year ratios, only between consecutive years."""
+    """Year-over-year ratios, only between consecutive years. A diluted share count that moves
+    by more than SPLIT_CHANGE in a year is a split or a merger (Deckers' 6-for-1, NVIDIA's 4- and
+    10-for-1, Vertiv's SPAC merger): the 10-Ks state the years on different share bases, so that
+    year has no share change or EPS growth (`share_break`)."""
     if prev is None or prev["fy"] != cur["fy"] - 1:
         return
     cur["growth"] = _growth(prev["revenue"], cur["revenue"])
     if cur.get("acquired_revenue") is not None and cur["revenue"] is not None:
         cur["organic_growth"] = _growth(prev["revenue"], cur["revenue"] - cur["acquired_revenue"])
     if prev["shares"] and cur["shares"] is not None:
-        cur["share_change"] = cur["shares"] / prev["shares"] - 1
+        change = cur["shares"] / prev["shares"] - 1
+        if abs(change) > SPLIT_CHANGE:
+            cur["share_break"] = True
+            return
+        cur["share_change"] = change
     cur["eps_growth"] = _growth(prev.get("eps_adjusted"), cur.get("eps_adjusted"))
 
 
@@ -383,8 +397,8 @@ def run_rate(inputs: dict, adjustments: list[dict], years: list[dict]) -> dict:
     with_rev = [k for k, lines in ttm.items() if "revenue" in lines]
     tax_5y = _five_year_tax(years)
     if not with_rev:
-        out["tax_rate"], out["tax_source"] = (tax_5y, "five_year") if tax_5y is not None \
-            else (TAX_FALLBACK, "statutory")
+        out["tax_rate"], out["tax_source"] = (tax_5y / 100, "five_year") if tax_5y is not None \
+            else (TAX_FALLBACK / 100, "statutory")
         return out
     key = max(with_rev, key=lambda k: (str(ttm[k]["revenue"][1].get("period_end")), k))
     lines = {m: val for m, (val, _) in ttm[key].items()}
@@ -400,11 +414,11 @@ def run_rate(inputs: dict, adjustments: list[dict], years: list[dict]) -> dict:
     out["non_operating"] = nonop / rev if nonop is not None and rev > 0 else None
     t = _tax_rate(lines.get("income_tax"), lines.get("pretax_income"))
     if t is not None:
-        out["tax_rate"], out["tax_source"] = t, "ttm"
+        out["tax_rate"], out["tax_source"] = t / 100, "ttm"
     elif tax_5y is not None:
-        out["tax_rate"], out["tax_source"] = tax_5y, "five_year"
+        out["tax_rate"], out["tax_source"] = tax_5y / 100, "five_year"
     else:
-        out["tax_rate"], out["tax_source"] = TAX_FALLBACK, "statutory"
+        out["tax_rate"], out["tax_source"] = TAX_FALLBACK / 100, "statutory"
     fcf = lines.get("free_cash_flow")
     out["fcf_margin"] = fcf / rev if fcf is not None and rev > 0 else None
     out["share_change"], out["share_source"] = _share_change(inputs, years)
@@ -477,6 +491,9 @@ def current_year(inputs: dict, adjustments: list[dict], years: list[dict]) -> di
         "fcf": total(fy, "free_cash_flow"),
     }
     a = out["actual"]
+    tax_used = _first(_tax_rate(a["income_tax"], a["pretax_income"]), TAX_FALLBACK)
+    a["net_income_adjusted"] = None if a["net_income"] is None else (
+        a["net_income"] - actual_off * (1 - tax_used / 100))
     a["margin"] = _div(a["operating_income_adjusted"], rev)
     a["fcf_margin"] = _div(a["fcf"], rev)
     a["growth"] = _growth(p_rev, rev)
@@ -510,7 +527,7 @@ def defaults(st: dict, run: dict, n: int, current: dict | None = None) -> list[d
     f0 = 0.0 if f0 is None else f0 * 100
     f_long = st["avg_fcf_margin"] * 100 if st["avg_fcf_margin"] is not None else f0
     nonop = (run.get("non_operating") or 0.0) * 100
-    tax = run.get("tax_rate") if run.get("tax_rate") is not None else TAX_FALLBACK
+    tax = run["tax_rate"] * 100 if run.get("tax_rate") is not None else TAX_FALLBACK
     shares = (run.get("share_change") or 0.0) * 100
     out = []
     for k in range(max(1, n)):
@@ -727,6 +744,8 @@ def _multiples(col: dict, price: float, cap: float, ev: float | None, ttm: bool 
 
     if ttm:
         pe = nm(cap, col.get("net_income_adjusted"))
+    elif col.get("earlier_share_basis"):
+        pe = None  # EPS on the share basis before a split: today's price doesn't divide by it
     else:
         pe = nm(price, col.get("eps_adjusted"))
     return {"pe": pe, "ev_revenue": nm(ev, col.get("revenue")) if ev is not None else None,
@@ -800,15 +819,16 @@ def run(inputs: dict, state: dict) -> dict:
         proj = project(years, ys, case_defs, adjustments, cur if ytd else None, rr)
         projected[case] = proj
         entry: dict[str, Any] = {"preview": preview, "years": proj, "defaults": case_defs}
+        if not ytd and cur and cur["quarters"] and ys:
+            # a model saved before F2: the remainder its year 1 implies, so it can be rebuilt
+            # from the reported quarters without changing the year
+            entry["implied_remainder"] = _implied_remainder(cur, base, ys[0])
         if case == "base":
             entry["check"] = check(st, base["fy"] if base else None, proj, ys)
             entry["user_set"] = user_set(st, ys, defs)
         cases[case] = entry
     ttm = ttm_column(inputs, adjustments)
     rr_out = {k: v for k, v in rr.items() if not k.startswith("_")}
-    implied = None
-    if not ytd and cur and cur["quarters"] and base_years:
-        implied = _implied_remainder(cur, base, base_years[0])
     return {
         "company_id": state.get("companyId"),
         "base_fy": base["fy"] if base else None,
@@ -816,7 +836,6 @@ def run(inputs: dict, state: dict) -> dict:
         "history": years,
         "ttm": ttm,
         "current": cur,
-        "implied_remainder": implied,
         "stats": st,
         "run_rate": rr_out,
         "long_run": {
