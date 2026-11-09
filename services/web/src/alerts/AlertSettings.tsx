@@ -27,7 +27,7 @@ import { TableScroll } from "../components/TableScroll";
 import { day, localDay } from "../format";
 import { href } from "../route";
 import type { AlertForm, AlertSettings, Webhook, WebhookDelivery, WebhookFormat } from "../types";
-import { deliveryText, FORM_WORDS, FORMS, SOURCE_WORDS } from "./alerts";
+import { deliveryText, FORM_WORDS, FORMS, SOURCE_WORDS, stallNote } from "./alerts";
 
 type Load = { state: "loading" } | { state: "ok"; data: AlertSettings } | { state: "off" } | { state: "error"; message: string };
 
@@ -66,7 +66,10 @@ export function AlertSettingsSection({ token }: { token: string }) {
               <p className="small muted">
                 Tributary checks {load.data.schedule} for new filings of the companies on your watchlist and the companies you're
                 analysing. A 10-K or 10-Q alerts with its key figures and your red lines once the SEC's XBRL data has them; an 8-K when
-                it reports a material item (votes and exhibits alone don't). See them under <a href={href({ view: "alerts" })}>Alerts</a>.
+                it reports a material event: results (2.02), a deal, debt, a leadership change, an impairment, a restatement and the like
+                (votes and exhibits alone don't).
+                {load.data.other_8k_items ? " An 8-K filed only under 7.01 (Regulation FD: presentations, press releases) or 8.01 (Other events) alerts only for the companies you tick under 7.01 / 8.01." : ""}
+                {" "}See them under <a href={href({ view: "alerts" })}>Alerts</a>.
                 {load.data.last_check ? ` Last checked ${new Date(load.data.last_check.checked_at).toLocaleString()}.` : " Not checked yet."}
               </p>
               <Companies token={token} settings={load.data} />
@@ -84,18 +87,27 @@ export function AlertSettingsSection({ token }: { token: string }) {
 
 function Companies({ token, settings }: { token: string; settings: AlertSettings }) {
   const directory = useDirectory(token);
+  // the 7.01 / 8.01 choice only when the API offers it (an older API refuses the key)
+  const offersOther = !!settings.other_8k_items;
   const [forms, setForms] = useState<Record<string, AlertForm[]>>(() =>
     Object.fromEntries(settings.companies.map((c) => [c.company_id, c.forms])));
+  const [other, setOther] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(settings.companies.map((c) => [c.company_id, !!c.other_8ks])));
   const [error, setError] = useState<string | null>(null);
-  const toggle = (companyId: string, form: AlertForm) => {
-    const before = forms[companyId] ?? FORMS;
-    const next = FORMS.filter((f) => (f === form ? !before.includes(f) : before.includes(f)));
+  const save = (companyId: string, next: AlertForm[], nextOther: boolean) => {
+    const before = { forms: forms[companyId] ?? FORMS, other: !!other[companyId] };
     setForms((m) => ({ ...m, [companyId]: next }));
+    setOther((m) => ({ ...m, [companyId]: nextOther }));
     setError(null);
-    putAlertForms(token, companyId, next).catch((e) => {
-      setForms((m) => ({ ...m, [companyId]: before }));
+    putAlertForms(token, companyId, next, offersOther ? nextOther : undefined).catch((e) => {
+      setForms((m) => ({ ...m, [companyId]: before.forms }));
+      setOther((m) => ({ ...m, [companyId]: before.other }));
       setError(`Couldn't save that: ${failureReason(e)}.`);
     });
+  };
+  const toggle = (companyId: string, form: AlertForm) => {
+    const before = forms[companyId] ?? FORMS;
+    save(companyId, FORMS.filter((f) => (f === form ? !before.includes(f) : before.includes(f))), !!other[companyId]);
   };
   if (!settings.companies.length) {
     return (
@@ -114,6 +126,7 @@ function Companies({ token, settings }: { token: string; settings: AlertSettings
               <th className="first">Company</th>
               <th>Why</th>
               {FORMS.map((f) => <th key={f} className="n" title={FORM_WORDS[f]}>{f}</th>)}
+              {offersOther && <th className="n" title="8-Ks filed only under 7.01 (Regulation FD) or 8.01 (Other events)">7.01 / 8.01</th>}
             </tr>
           </thead>
           <tbody>
@@ -127,6 +140,13 @@ function Companies({ token, settings }: { token: string; settings: AlertSettings
                       aria-label={`${f} alerts for ${directory.label(c.company_id)}`} onChange={() => toggle(c.company_id, f)} />
                   </td>
                 ))}
+                {offersOther && (
+                  <td className="n">
+                    <input type="checkbox" checked={!!other[c.company_id]} disabled={!(forms[c.company_id] ?? FORMS).includes("8-K")}
+                      aria-label={`8-Ks under 7.01 or 8.01 alone for ${directory.label(c.company_id)}`}
+                      onChange={() => save(c.company_id, forms[c.company_id] ?? FORMS, !other[c.company_id])} />
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -213,6 +233,7 @@ function Webhooks({ token, settings, onChanged }: { token: string; settings: Ale
                 {w.last_delivery && (
                   <span className="faint small"> · last: {w.last_delivery.status}{w.last_delivery.last_status ? ` (${w.last_delivery.last_status})` : ""}</span>
                 )}
+                {stallNote(w) && <span className="small muted webhook-stalled"> · {stallNote(w)}</span>}
               </span>
               <label className="chk small">
                 <input type="checkbox" checked={w.enabled} onChange={() => void act(() => setWebhookEnabled(token, w.id, !w.enabled))} />

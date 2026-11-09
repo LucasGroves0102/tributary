@@ -13,7 +13,7 @@
 
 import { change, day, money, pct } from "../format";
 import { href } from "../route";
-import type { AlertFigure, AlertForm, AlertNotification, AlertSource, RedLineOp, RedLineResult, WebhookDelivery } from "../types";
+import type { AlertFigure, AlertForm, AlertNotification, AlertSource, RedLineOp, RedLineResult, Webhook, WebhookDelivery } from "../types";
 
 export const FORMS: AlertForm[] = ["10-K", "10-Q", "8-K"];
 export const FORM_WORDS: Record<AlertForm, string> = {
@@ -131,6 +131,7 @@ export function alertLinks(n: Pick<AlertNotification, "company_id" | "accession_
 
 const ERRORS: Record<string, string> = {
   timeout: "no answer in time",
+  dns_timeout: "its host name took too long to resolve",
   connect: "couldn't connect",
   tls: "the secure connection failed",
   redirect: "it answered with a redirect, which isn't followed",
@@ -150,6 +151,17 @@ export function deliveryText(d: WebhookDelivery): string {
   if (d.status === "delivered") return `Delivered${d.last_status ? ` (${d.last_status})` : ""}${tries}`;
   if (d.status === "pending") return d.attempts ? `Retrying: ${why ?? "it failed"}${tries}` : "Waiting to send";
   return `Failed: ${why ?? "it didn't accept it"}${tries}`;
+}
+
+/** Why a webhook isn't being sent to for now (the alerts job leaves one out after consecutive
+ * stalls: no answer in time, a name that doesn't resolve, no connection), or null. Clears itself
+ * when it answers again; "Send a test" that arrives, or turning it off and on, clears it too. */
+export function stallNote(w: Pick<Webhook, "stalls" | "stalled_until">, now: Date = new Date()): string | null {
+  if (!w.stalls || !w.stalled_until) return null;
+  const until = new Date(w.stalled_until);
+  if (!(until.getTime() > now.getTime())) return null;
+  const when = until.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return `Not reachable on its last ${w.stalls} tries: alerts wait until ${when}, then it's tried again`;
 }
 
 /** The bell's words for screen readers and its hover. */

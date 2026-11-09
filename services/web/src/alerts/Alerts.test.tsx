@@ -199,6 +199,42 @@ it("Settings: forms per company, and a webhook refused for plain http, then adde
   expect(container.textContent).not.toContain(SECRET);
 });
 
+it("Settings: 8-Ks under 7.01 / 8.01 alone are a per-company choice when the API offers it; a stalled webhook says so", async () => {
+  hooks = [{ id: HOOK, url: "https://hooks.example.com/…abcd", format: "json", enabled: true, created_at: "2026-11-19T22:00:00Z", rotated_at: null,
+    last_delivery: null, stalls: 2, stalled_until: "2999-01-01T12:30:00Z" }];
+  vi.mocked(fetch).mockImplementation(async (url: string | URL | Request, init?: RequestInit) => {
+    const r = respond(String(url), init);
+    if (!String(url).endsWith("/v1/alerts/settings")) return r;
+    const data = await r.json();
+    return Response.json({ ...data, other_8k_items: ["7.01", "8.01"], companies: data.companies.map((c: object) => ({ ...c, other_8ks: false })) });
+  });
+  await render("#/settings", "table.alert-forms");
+  expect(container.querySelector("table.alert-forms thead")?.textContent).toContain("7.01 / 8.01");
+  expect(container.textContent).toContain("alerts only for the companies you tick under 7.01 / 8.01");
+  const other = container.querySelector<HTMLInputElement>('input[aria-label="8-Ks under 7.01 or 8.01 alone for Nvidia (NVDA)"]')!;
+  expect(other.checked).toBe(false);
+  await act(async () => other.click());
+  await settle();
+  expect(writes).toContainEqual({ method: "PUT", path: `/v1/alerts/settings/${NVDA}`, body: { forms: ["10-K", "10-Q", "8-K"], other_8ks: true } });
+  expect(other.checked).toBe(true);
+  // without 8-Ks at all the choice means nothing: off to the touch, and the saved choice is sent as it is
+  await act(async () => container.querySelector<HTMLInputElement>('input[aria-label="8-K alerts for Nvidia (NVDA)"]')!.click());
+  await settle();
+  expect(writes.at(-1)).toEqual({ method: "PUT", path: `/v1/alerts/settings/${NVDA}`, body: { forms: ["10-K", "10-Q"], other_8ks: true } });
+  expect(other.disabled).toBe(true);
+  expect(container.querySelector(".webhook-stalled")?.textContent).toContain("Not reachable on its last 2 tries: alerts wait until");
+});
+
+it("an older API without the 7.01 / 8.01 choice: no column, and saves send the forms only", async () => {
+  await render("#/settings", "table.alert-forms");
+  expect(container.querySelector("table.alert-forms thead")?.textContent).not.toContain("7.01");
+  expect(container.querySelector('input[aria-label^="8-Ks under 7.01"]')).toBeNull();
+  await act(async () => container.querySelector<HTMLInputElement>('input[aria-label="10-K alerts for Nvidia (NVDA)"]')!.click());
+  await settle();
+  expect(writes.at(-1)).toEqual({ method: "PUT", path: `/v1/alerts/settings/${NVDA}`, body: { forms: ["10-Q", "8-K"] } });
+  expect(container.querySelector(".webhook-stalled")).toBeNull();
+});
+
 it("a demo sandbox sees why it can't add a webhook", async () => {
   vi.mocked(fetch).mockImplementation(async (url: string | URL | Request, init?: RequestInit) => {
     const r = respond(String(url), init);

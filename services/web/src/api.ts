@@ -862,8 +862,11 @@ export const markAlertsRead = (token: string, which: { ids?: string[]; companyId
 
 export const alertSettings = (token: string) => orNullOn404(get<AlertSettings>(token, "/v1/alerts/settings"));
 
-export const putAlertForms = (token: string, companyId: string, forms: AlertForm[]) =>
-  sendJson<{ company_id: string; forms: AlertForm[] }>(token, "PUT", `/v1/alerts/settings/${companyId}`, { forms });
+/** A company's alert forms; `other8ks` only when the API offers it (`other_8k_items`): an older,
+ * strict API refuses a key it doesn't know. */
+export const putAlertForms = (token: string, companyId: string, forms: AlertForm[], other8ks?: boolean) =>
+  sendJson<{ company_id: string; forms: AlertForm[]; other_8ks?: boolean }>(token, "PUT", `/v1/alerts/settings/${companyId}`,
+    other8ks === undefined ? { forms } : { forms, other_8ks: other8ks });
 
 export const redLines = (token: string, companyId: string, evaluate = false) =>
   orNullOn404(get<RedLines>(token, "/v1/alerts/red-lines", { company_id: companyId, ...(evaluate ? { evaluate: "true" } : {}) }));

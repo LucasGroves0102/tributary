@@ -1043,6 +1043,8 @@ export interface PeerMatch {
 /** /v1/companies/{id}/peers: suggested peers, screener-style rows, values only where the caller
  * can read financials. `basis` (absent from an API older than F4): "business" = by 10-K Item 1
  * text, "sic" = by SIC and size. */
+export type PeerFallback = "filings_access" | "no_annual_report" | "no_business_section" | "cross_reference" | "not_profiled" | "no_close_peers";
+
 export interface Peers {
   company_id: string;
   as_of: string;
@@ -1050,6 +1052,8 @@ export interface Peers {
   company: ScreenerRow & { revenue_band: string | null };
   method: string;
   basis?: "business" | "sic";
+  /** why peers are by SIC and size (query_api/peers.py); absent from an older API, null by business */
+  basis_reason?: PeerFallback | null;
   /** the company's own Item 1 profile */
   business?: { accession_no: string; section_key: string; filed: string; terms: string[]; computed_at: string | null } | null;
   peers: (ScreenerRow & { match: PeerMatch })[];
@@ -1713,6 +1717,8 @@ export interface AlertCompany {
   /** the day it was first followed: filings from then on alert */
   since: string;
   forms: AlertForm[];
+  /** 8-Ks whose only items are 7.01/8.01 alert too (app migration 017; absent from an older API) */
+  other_8ks?: boolean;
 }
 
 export type WebhookFormat = "json" | "discord" | "slack";
@@ -1742,10 +1748,15 @@ export interface Webhook {
   created_at: string;
   rotated_at: string | null;
   last_delivery: { status: string; last_status: number | null; last_error: string | null; at: string } | null;
+  /** consecutive sends that stalled, and until when the alerts job leaves it out (absent from an older API) */
+  stalls?: number;
+  stalled_until?: string | null;
 }
 
 export interface AlertSettings {
   forms: AlertForm[];
+  /** the 8-K items that alert only when a company's `other_8ks` is on; absent: an older API without the choice */
+  other_8k_items?: string[];
   companies: AlertCompany[];
   webhooks: Webhook[];
   formats: WebhookFormat[];

@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { NVDA } from "../fixtures";
 import { parse } from "../route";
@@ -14,6 +14,7 @@ import {
   inDisplay,
   redLineState,
   ruleText,
+  stallNote,
   thresholdFromInput,
 } from "./alerts";
 
@@ -96,4 +97,19 @@ it("words deliveries and the bell", () => {
   expect(deliveryText(d({ status: "failed", last_status: 302, last_error: "redirect" }))).toBe("Failed: it answered with a redirect, which isn't followed");
   expect(bellLabel(3)).toBe("Alerts: 3 new filings");
   expect(bellLabel(0)).toBe("Alerts: nothing new");
+});
+
+describe("stalled webhooks", () => {
+  const now = new Date("2026-11-20T15:00:00Z");
+  it("say so only while the job leaves them out", () => {
+    expect(stallNote({ stalls: 0, stalled_until: null }, now)).toBeNull();
+    expect(stallNote({}, now)).toBeNull(); // an older API
+    expect(stallNote({ stalls: 1, stalled_until: "2026-11-20T15:00:00Z" }, now)).toBeNull(); // only this run
+    expect(stallNote({ stalls: 3, stalled_until: "2026-11-20T17:00:00Z" }, now)).toMatch(/^Not reachable on its last 3 tries: alerts wait until .+, then it's tried again$/);
+  });
+  it("a slow lookup has its own words", () => {
+    expect(deliveryText({ id: "d", webhook_id: "w", notification_id: "n", test: false, status: "pending", attempts: 1, next_attempt_at: null,
+      last_attempt_at: null, last_status: null, last_error: "dns_timeout", created_at: "", delivered_at: null }))
+      .toBe("Retrying: its host name took too long to resolve");
+  });
 });
