@@ -166,54 +166,75 @@ def test_sums_and_differences_only_of_comparable_periods():
                     "$5.0B": "unverified", "$0.5B": "unverified"}
 
 
-# --- review: one scale per cell, like with like, the search echo ------------------------------
-# A 10-Q's statements "(In millions)" and, further down the same section, a share note "(in
-# thousands)" and a debt table "(in billions)".
-MIXED = json.dumps({"company_id": NVDA, "sections": [{
-    "section_key": "I-1", "title": "Financial Statements",
-    "text": "Condensed Consolidated Statements of Income\n(In millions, except per share data)\n"
-            "Revenue $ 96,221 $ 81,615\nCost of revenue 23,450 20,111\n"
-            "Note 3. Earnings per share\n(Shares in thousands)\nDiluted shares 24,532 24,611\n"
-            "Note 9. Debt\n(Dollars in billions)\nSenior notes 8,500.5"}]})
+# --- review: scales per section, like with like, the search echo ------------------------------
+# A section stating no scale reads in millions; one scale, its cells after the note at that scale
+# (before it in millions); more than one scale, in millions only: never looser than millions alone.
 
 
-def test_a_cell_is_read_only_at_the_scale_that_governs_it():
-    """Before: every number in the result was read at every scale stated anywhere in it, so
-    "$96.2 million" (96,221 read in thousands) and "$96.2 trillion" (in billions) were quoted."""
-    figs, _ = statuses("Revenue was $96.2B, not $96.2 million or $96.2 trillion; diluted shares "
-                       "$24.5M (sic); notes $8.5T, not $8.5B.", [MIXED], set())
+def section(*texts):
+    return json.dumps({"company_id": NVDA, "sections": [
+        {"section_key": f"I-{i + 1}", "title": "t", "text": t} for i, t in enumerate(texts)]})
+
+
+# a 10-Q's statements "(In millions)", then a share note "(in thousands)", then a segment table
+# with no note of its own (the re-review's first layout)
+LATER_TABLE = section("(In millions, except per share data)\nRevenue $ 96,221 $ 81,615\n"
+                      "Note 3. Earnings per share\n(Shares in thousands)\nDiluted 24,532\n"
+                      "Note 17. Segments\nCompute 80,000 Graphics 16,221 Total 96,221")
+# a prose "(in billions)" before the statement table (the second)
+PROSE_BILLIONS = section("(In millions)\nWe returned cash (in billions) of 12.3 to "
+                         "shareholders.\nRevenue 96,221 Cost of revenue 24,111")
+# a statement table with no note, then a "(in thousands)" option table (the third)
+NOTE_AFTER = section("Revenue 96,221 Cost 24,111\nStock options (in thousands) 1,234")
+
+
+@pytest.mark.parametrize(("layout", "wrong"), [
+    (LATER_TABLE, "$96.2 million"),  # before: quoted, read at the share note's thousands
+    (PROSE_BILLIONS, "$96.2 trillion"),  # before: quoted, read at the prose's billions
+    (NOTE_AFTER, "$96.2 million"),  # before: quoted, read at the later note's thousands
+], ids=["later_table", "prose_billions", "note_after"])
+def test_a_section_with_mixed_or_late_notes_reads_no_cell_1000_times_off(layout, wrong):
+    """The re-review's three layouts: the wrong figure is unverified, and the right one is
+    quoted, as before any of the scale rules (main)."""
+    figs, _ = statuses(f"Revenue was {wrong}; it was $96.2 billion.", [layout], set())
+    assert figs == {wrong: "unverified", "$96.2 billion": "quoted"}
+
+
+def test_a_section_stating_several_scales_reads_in_millions_only():
+    """The first review's attack, and what a mixed section gives up: its thousands cells read
+    in millions only (as they always did), and its decimals aren't read."""
+    mixed = section("(In millions)\nRevenue $ 96,221\n(Shares in thousands)\nDiluted 24,532\n"
+                    "(Dollars in billions)\nSenior notes 8,500.5")
+    figs, _ = statuses("$96.2B, not $96.2 million or $96.2 trillion; shares $24.5M; notes $8.5T.",
+                       [mixed], set())
     assert figs == {"$96.2B": "quoted", "$96.2 million": "unverified",
-                    "$96.2 trillion": "unverified", "$24.5M": "quoted", "$8.5T": "quoted",
-                    "$8.5B": "unverified"}
+                    "$96.2 trillion": "unverified", "$24.5M": "unverified", "$8.5T": "unverified"}
 
 
-def test_no_cell_verifies_a_thousandfold_error():
-    cells = {"96,221": 96.221e9, "81,615": 81.615e9, "23,450": 23.45e9, "20,111": 20.111e9,
-             "24,532": 24.532e6, "24,611": 24.611e6, "8,500.5": 8.5005e12}
-    for value in cells.values():
-        for wrong in (value * 1000, value / 1000, value * 1e6, value / 1e6):
-            answer = f"It was ${wrong:,.0f}." if wrong >= 1 else f"It was ${wrong:.6f}."
-            figs, _ = statuses(answer, [MIXED], set())
-            assert set(figs.values()) == {"unverified"}, answer
+def test_a_section_stating_one_scale_reads_its_cells_after_the_note_at_it():
+    """A filer in thousands: its cells after the note are read in thousands only (46,743 is
+    $46.7M, never $46.7B); a cell before the note reads in millions, as with no note."""
+    thousands = section("Net sales 1,425,123\n(in thousands)\nNet sales 46,743 Backlog 1,234.5")
+    figs, _ = statuses("$1.43T; $1.43B; $46.7M; $46.7B; $1.23M.", [thousands], set())
+    assert figs == {"$1.43T": "quoted", "$1.43B": "unverified", "$46.7M": "quoted",
+                    "$46.7B": "unverified", "$1.23M": "quoted"}
+    for wrong in (46.743e3, 46.743e9, 1.2345e3, 1.2345e9):
+        figs, _ = statuses(f"It was ${wrong:,.0f}.", [thousands], set())
+        assert set(figs.values()) == {"unverified"}, wrong
 
 
-def test_a_section_without_a_note_beside_one_in_thousands_isnt_read():
-    """Which scale a note-less section is in can't be told when the same result states another
-    scale elsewhere; a result that states none (or only millions) still reads in millions."""
+def test_a_section_without_a_note_reads_in_millions_whatever_the_others_say():
     two = json.dumps({"sections": [
         {"section_key": "7", "text": "(in thousands)\nNet sales 1,425,123"},
         {"section_key": "1A", "text": "a backlog of 46,743 at year end"}]})
     figs, _ = statuses("Sales $1.43B; backlog $46.7B; backlog $46.7M.", [two], set())
-    assert figs == {"$1.43B": "quoted", "$46.7B": "unverified", "$46.7M": "unverified"}
-    plain = json.dumps({"sections": [{"section_key": "1A", "text": "a backlog of 46,743"}]})
-    assert statuses("Backlog $46.7B.", [plain], set())[0] == {"$46.7B": "quoted"}
+    assert figs == {"$1.43B": "quoted", "$46.7B": "quoted", "$46.7M": "unverified"}
 
 
-def test_cells_before_a_sections_first_note_read_at_that_note():
-    section = json.dumps({"sections": [{"section_key": "7", "text":
-                                        "Net sales 1,425,123\n(in thousands)\n46,743"}]})
-    figs, _ = statuses("$1.43B; $1.43T; $46.7M.", [section], set())
-    assert figs == {"$1.43B": "quoted", "$1.43T": "unverified", "$46.7M": "quoted"}
+def test_a_figure_without_a_unit_isnt_quoted_from_a_scaled_section():
+    assert statuses("It was $96,221.", [LATER_TABLE], set())[0] == {"$96,221": "unverified"}
+    plain = section("Revenue 96,221")  # no note: as before, the text holds it
+    assert statuses("It was $96,221.", [plain], set())[0] == {"$96,221": "quoted"}
 
 
 def test_a_ttm_never_pairs_with_one_of_its_own_quarters():

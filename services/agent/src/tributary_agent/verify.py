@@ -16,14 +16,18 @@ A figure is, in this order:
    from them as in 2;
 5. unverified otherwise.
 
-Table cells: each is read at one scale only, the one that governs it: the nearest scale note
-("(in thousands" / "(in millions" / "(in billions", also "($ in millions)", "(Dollars in
-thousands)") before it in its section; before a section's first note, that note's. A section
-that states none is read in millions (SEC filings mostly are), unless another section of the
-same result states another scale (then it isn't read). So an income statement "(In millions)"
-beside a share note "(in thousands)" reads its 96,221 as $96.2B only, and a figure 1,000 times
-off never verifies. A cell may carry decimals ("1,234.5") at a stated scale. /v1/search's echo
-of the query is never evidence (the model's own words); its snippets are, without the « » marks.
+Table cells, per section of a sections result (scale notes: "(in thousands" / "(in millions" /
+"(in billions", also "($ in millions)", "(Dollars in thousands)"): a section that states no
+scale reads its cells in millions (SEC filings mostly are); one that states exactly one scale
+reads its cells after that note at that scale, decimals ("1,234.5") too, and cells before it in
+millions; one that states more than one reads its cells in millions only. So a section is never
+read more loosely than in millions alone: an income statement "(In millions)" beside a share
+note "(in thousands)" reads 96,221 as $96.2B only, and a prose "(in billions)" doesn't make it
+$96.2T. What this can't do: in a section with several scales, a cell that really is in
+thousands still reads in millions, so a figure 1,000 times off that cell can be quoted (as it
+always could). A figure written without a unit ("$96,221") is never quoted from a section that
+states a scale. /v1/search's echo of the query is never evidence (the model's own words); its
+snippets are, without the « » marks.
 
 Rule 4 and the decimal and stated-scale cells came after the recorded suites (tests/adversarial,
 tests/citations): they run only for a figure 1-3 left unverified, so a recorded answer verifies
@@ -100,11 +104,11 @@ def figures_in(text: str) -> list[tuple[str, float, float]]:
 class _Evidence:
     rows: list[dict]
     texts: list[str]
-    # texts for a figure written without a unit ("$96,221"): cells under a scale note masked,
-    # since that number is a multiple of dollars, never dollars
+    # texts for a figure written without a unit ("$96,221"): the cells of a section that states
+    # a scale masked, since such a number is a multiple of dollars, never dollars
     plain_texts: list[str]
-    cells: list[float]  # table cells in millions where no other scale is stated (rule 3)
-    scaled: list[float]  # cells at a stated scale, decimals too (rule 3, after the suites)
+    cells: list[float]  # table cells read in millions (rule 3, see _cells)
+    scaled: list[float]  # at their section's one stated scale, decimals too (after the suites)
     inputs: list[dict]  # derived metrics' inputs (rule 4)
 
 
@@ -213,38 +217,45 @@ class _Cell:
     end: int
     value: float  # at its scale
     scale: float
-    stated: bool  # a scale note governs it (else millions by default)
+    stated: bool  # read at its section's one stated scale (else millions, as the suites were)
     decimal: bool
+    noted: bool  # its section states a scale: the number is a multiple of dollars
 
 
 def _cells(content: str) -> list[_Cell]:
-    """Every table cell of a sections result, each read at the one scale that governs it: the
-    nearest scale note before it in its section (before the section's first note, that first
-    note's). A section with no note reads in millions, unless another section of the result
-    states a scale other than millions: then nobody can say which, and its cells aren't read.
-    Decimal cells need a stated scale."""
+    """Every table cell of a sections result, read per section (the text between one
+    `"section_key":` and the next; escaped JSON text holds no bare quote):
+    - no scale note: in millions, as before any of this (SEC filings mostly are);
+    - one scale, stated once or more: a cell after its first note at that scale, decimals
+      too; a cell before it in millions, as a note-less section (a statement printed before a
+      "(in thousands)" share note is not in thousands);
+    - more than one scale: in millions only, as before, never looser than that (which note
+      governs a cell can't be told: a share note, a prose "(in billions)", a later table with
+      no note of its own all broke "the nearest note before it").
+    Decimal cells only at a stated scale."""
     starts = [0, *(m.start() for m in SECTION_START.finditer(content)), len(content)]
-    other_scale = any(SCALES[m.lower()] != 1e6 for m in SCALE_NOTE.findall(content))
     out = []
     for a, b in zip(starts, starts[1:], strict=False):
         notes = [(m.start(), SCALES[m.group(1).lower()])
                  for m in SCALE_NOTE.finditer(content, a, b)]
+        one = notes[0] if notes and len({s for _, s in notes}) == 1 else None
         for pattern, decimal in ((TABLE_CELL, False), (DECIMAL_CELL, True)):
             for m in pattern.finditer(content, a, b):
-                before = [scale for at, scale in notes if at < m.start()]
-                scale = before[-1] if before else notes[0][1] if notes else None
-                if scale is None and (decimal or other_scale):
+                stated = one is not None and m.start() > one[0]
+                if decimal and not stated:
                     continue
+                scale = one[1] if stated and one is not None else 1e6
                 number = float(m.group(0).replace(",", ""))
-                out.append(_Cell(m.start(), m.end(), number * (scale or 1e6), scale or 1e6,
-                                 scale is not None, decimal))
+                out.append(_Cell(m.start(), m.end(), number * scale, scale, stated, decimal,
+                                 bool(notes)))
     return out
 
 
 def _masked(content: str, cells: list[_Cell]) -> str:
-    """The content with every cell under a scale note blanked (see _Evidence.plain_texts)."""
+    """The content with every cell of a section that states a scale blanked (see
+    _Evidence.plain_texts)."""
     out, at = [], 0
-    for c in sorted((c for c in cells if c.stated), key=lambda c: c.start):
+    for c in sorted((c for c in cells if c.noted), key=lambda c: c.start):
         out.append(content[at:c.start] + "#")
         at = c.end
     return "".join(out) + content[at:]

@@ -33,12 +33,15 @@ accession number against what the tools returned; the result is part of the answ
 `verification`. A derived metric's `inputs` count as returned values (net debt's cash and debt, a
 growth rate's year-ago value, a TTM's quarters), and a filing table's cells are read at the scale
 that governs them, decimals included. Those two came after the recorded suites and only apply to a
-figure the original rules left unverified; a figure that isn't in the data still fails. A cell is
-read at one scale only: the nearest scale note ("(In thousands)", "($ in millions)") before it in
-its section, so a share note "(in thousands)" below statements "(In millions)" doesn't make the
-statements' 96,221 read as $96.2M too; a section that states none reads in millions, unless
-another section of the same result states another scale; a figure written without a unit
-("$96,221") isn't quoted from a cell under a scale note. A figure 1,000 times off doesn't verify.
+figure the original rules left unverified; a figure that isn't in the data still fails. Cells are
+read per section: a section stating no scale note ("(In thousands)", "($ in millions)") reads in
+millions; one stating exactly one scale reads its cells after that note at that scale (before it,
+in millions); one stating several reads in millions only. So no section is read more loosely than
+millions alone: a share note "(in thousands)" below statements "(In millions)", a prose "(in
+billions)" or a later note no longer makes the statements' 96,221 read as $96.2M or $96.2T. What
+it can't do: in a section with several scales, a cell that really is in thousands still reads in
+millions, as it always did. A figure written without a unit ("$96,221") isn't quoted from a
+section that states a scale.
 A sum or difference pairs only values that can be compared: like with like (quarters with
 quarters, TTMs with TTMs: a TTM plus one of its own quarters is reported nowhere), one company's
 adjacent quarters or the same quarter a year apart, or two companies' periods ending within 45
