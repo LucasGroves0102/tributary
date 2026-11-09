@@ -339,6 +339,43 @@ def test_goldman_is_a_bank_by_name_though_the_sec_files_it_under_brokers(conn):
     assert "free_cash_flow" in rows[0] and rows[1] == []
 
 
+# 058: bank holding companies under SICs whose other filers aren't banks (silver.companies' ids)
+SCHWAB, AMEX, SYNCHRONY, ALLY = "0000316709", "0000004962", "0001601712", "0000040729"
+
+
+@pytest.mark.parametrize("cid,sic", [(SCHWAB, "6211"), (AMEX, "6199"), (SYNCHRONY, "6199"),
+                                     (ALLY, "6022"), (ALLY, "6199")])
+def test_bank_holding_companies_are_banks_by_id(conn, cid, sic):
+    banks = conn.execute("SELECT gold.not_applicable_metrics(%s, %s)", (cid, sic)).fetchone()[0]
+    assert {"net_debt", "free_cash_flow", "debt_to_equity", "cash_and_investments"} <= set(banks)
+    # their SICs alone don't make a bank: another broker or card lender isn't one
+    assert conn.execute("SELECT gold.not_applicable_metrics('9999999999', %s)",
+                        (sic,)).fetchone()[0] == ([] if sic != "6022" else banks)
+
+
+def test_one_rule_gives_a_bank_its_readings_page_template_and_peer_columns(conn, token):
+    """American Express (SIC 6199) is a bank through gold.not_applicable_metrics alone: the
+    screener's `not_applicable` (the web's bank template reads it) and the peers' bank columns."""
+    conn.execute("INSERT INTO silver.companies (company_id, name, current_cik, sic,"
+                 " sic_description) VALUES (%s, 'American Express', %s, '6199',"
+                 " 'Finance Services')", (AMEX, AMEX))
+    conn.execute("INSERT INTO silver.company_ciks (cik, company_id) VALUES (%s, %s)", (AMEX, AMEX))
+    conn.execute("INSERT INTO authz.public_access (company_id, tier) VALUES (%s, 'financials')",
+                 (AMEX,))
+    reported(conn, AMEX, "revenue", LATEST, 70_000_000_000)
+    derived(conn, AMEX, "free_cash_flow", LATEST, 14_000_000_000, {"capex": 1}, unit="USD")
+    body = api(conn).get("/v1/screener", params={"columns": ["free_cash_flow_ttm"],
+                                                 "company_id": [AMEX]},
+                         headers=token(USER)).json()
+    (row,) = body["rows"]
+    assert "net_debt" in row["not_applicable"]
+    assert row["readings"]["free_cash_flow_ttm"]["status"] == "not_applicable"
+    peers = api(conn).get(f"/v1/companies/{AMEX}/peers", headers=token(USER))
+    assert peers.status_code == 200, peers.text
+    keys = [c["key"] for c in peers.json()["columns"]]
+    assert keys[:3] == ["revenue_ttm", "net_interest_income_ttm", "efficiency_ratio_ttm"]
+
+
 def test_negative_equity_is_said_outright_not_read_from_an_old_quarter(conn, token):
     body = screen(conn, token, columns=["debt_to_equity_q"], sort="-debt_to_equity_q")
     negative = row_of(body, "Negative Equity Co")
