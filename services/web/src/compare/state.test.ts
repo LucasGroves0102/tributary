@@ -13,6 +13,7 @@ import {
   DEFAULT_COLUMNS,
   fiscalLabel,
   median,
+  countText,
   medianTitle,
   parseCompare,
   nextSort,
@@ -99,7 +100,11 @@ describe("the table", () => {
     expect(rows[1]!.cells.revenue_ttm!.title).toContain("doesn't cover");
     const stats = peerStats(rows, s.cols);
     // peers: TSLA (no values) and AAPL; NVDA is the target and doesn't count
-    expect(stats.operating_margin_ttm).toEqual({ median: 0.3, n: 1, high: 0.3, low: 0.3, banks: 0, unusable: 0 });
+    // n of N: one of the two peers (TSLA is metadata only, and says so)
+    expect(stats.operating_margin_ttm).toEqual({ median: 0.3, n: 1, of: 2, high: 0.3, low: 0.3, banks: 0, unusable: 0, currency: 0, unreported: 0, masked: 1 });
+    expect(countText(stats.operating_margin_ttm!)).toBe("1 of 2");
+    expect(medianTitle(stats.operating_margin_ttm!)).toBe(
+      "Median of 1 of 2 peers' values; the target is excluded. Left out: 1 metadata only (your plan doesn't cover its financials).");
   });
 
   it("medians of even and odd counts", () => {
@@ -117,7 +122,13 @@ describe("the table", () => {
     );
     expect(csv[1]).toContain(`target,${NVDA},NVDA,Nvidia,financials,CY2026 Q2,FY2027 Q2,2026-07-26,130497000000,2026-07-26,`);
     expect(csv[2]).toBe(`peer,${TSLA},TSLA,Tesla,metadata only,,,,,,,,,,,`);
-    expect(csv[4]).toBe("peer median (excludes target),,,,,,,,400000000000,,1 peers,,0.3,,1 peers,");
+    expect(csv[4]).toBe("peer median (excludes target),,,,,,,,400000000000,,1 of 2 peers,,0.3,,1 of 2 peers,");
+  });
+
+  it("names a company without a name as the directory does, never by its CIK", () => {
+    const [r] = compareRows({ target: NVDA }, [row(entry({ name: null }))]);
+    expect(r!.name).toBe("Company");
+    expect(compareCsv({ target: NVDA }, [r!])).not.toContain(`,${NVDA},${NVDA}`);
   });
 
   it("guards the CSV against spreadsheet formulas in names", () => {
@@ -153,7 +164,7 @@ describe("what can't be compared", () => {
       const stats = peerStats(rows, s.cols);
       expect(stats.operating_margin_ttm).toMatchObject({ median: 0.3, n: 1, banks: 1 });
       expect(stats.revenue_ttm).toMatchObject({ n: 2, banks: 0 });
-      expect(medianTitle(stats.operating_margin_ttm!)).toContain("1 bank left out");
+      expect(medianTitle(stats.operating_margin_ttm!)).toContain("1 not applicable (n/a: the metric doesn't describe a bank)");
     }
   });
 
@@ -168,9 +179,29 @@ describe("what can't be compared", () => {
     expect(tesla).toMatchObject({ text: "50.0%", value: null, old: true, asOf: "Dec '18" });
     const stats = peerStats(rows, margin.cols).operating_margin_ttm!;
     expect(stats).toMatchObject({ median: null, n: 0, high: null, unusable: 2 });
-    expect(medianTitle(stats)).toContain("2 left out (not meaningful, or years old)");
+    expect(medianTitle(stats)).toContain("Median of 0 of 2 peers");
+    expect(medianTitle(stats)).toContain("2 not meaningful or years old");
     expect(sortRows(rows, { key: "operating_margin_ttm", desc: true })[0]!.companyId).toBe(NVDA);
     expect(compareCsv(margin, rows)).toMatch(/10\.47,[^,]*,[^,]*,not meaningful/);
+  });
+
+  it("an amount in euros shows in euros and stays out of a dollar median; its margin counts (056)", () => {
+    const cols = { target: NVDA, peers: [AAPL, TSLA], cols: ["revenue_ttm", "operating_margin_ttm"] };
+    const euro: ScreenerRow = {
+      ...APPLE("0.26"), values: { revenue_ttm: "2097429000", operating_margin_ttm: "0.26" },
+      readings: { revenue_ttm: { status: "other_currency", unit: "EUR", reason: "reported in EUR, so it isn't sorted, filtered or averaged with US-dollar figures" } },
+    };
+    const dollars: ScreenerRow = { ...row(TESLA), access: ["financials"], values: { revenue_ttm: "97000000000", operating_margin_ttm: "0.08" } };
+    const rows = compareRows(cols, [row(entry()), euro, dollars]);
+    const cell = rows.find((r) => r.companyId === AAPL)!.cells.revenue_ttm!;
+    expect(cell).toMatchObject({ text: "€2.10B", value: null, status: "other_currency" });
+    expect(cell.title).toContain("reported in EUR");
+    expect(cell.title).toContain("Left out of the peer median");
+    const stats = peerStats(rows, cols.cols);
+    expect(stats.revenue_ttm).toMatchObject({ n: 1, currency: 1, median: 97000000000 });
+    expect(medianTitle(stats.revenue_ttm!)).toContain("1 in another currency");
+    expect(stats.operating_margin_ttm).toMatchObject({ n: 2, currency: 0 });
+    expect(sortRows(rows, { key: "revenue_ttm", desc: true })[0]!.companyId).not.toBe(AAPL);
   });
 });
 

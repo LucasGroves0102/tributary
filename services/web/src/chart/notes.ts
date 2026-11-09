@@ -6,7 +6,7 @@
 
 import { hasValues, planAxes } from "./axes";
 import { unitLabel } from "./metrics";
-import { xAxis, type Series, type Tick } from "./series";
+import { partialNote, xAxis, type Series, type Tick } from "./series";
 
 const SHOWN = 3;
 const DAY = 86400000;
@@ -38,7 +38,9 @@ export function chartNotes(series: Series[], opts: {
   const plan = planAxes(series);
   const plotted = series.filter((_, i) => plan.axes[i] !== null);
   const ticks = xAxis(plotted);
-  const annual = ticks.length > 0 && !ticks.some((t) => / Q[1-4]$/.test(t.period));
+  const annual = ticks.length > 0 && !ticks.some((t) => !t.partial && / Q[1-4]$/.test(t.period));
+  // a year in progress isn't where a series "stops": not every layer has a quarter after the year end
+  const full = annual ? ticks.filter((t) => !t.partial).length : ticks.length;
   const out: string[] = [];
 
   for (const s of series.filter((_, i) => plan.axes[i] === null)) {
@@ -53,7 +55,8 @@ export function chartNotes(series: Series[], opts: {
   // what each series is missing against the chart's own axis
   const remarks: string[] = [];
   for (const s of plotted.filter(hasValues)) {
-    const at = ticks.map((t) => s.points.some((p) => p.key === t.key && p.y !== null));
+    // a point that reads n/m has its own sentence (series.ts notMeaningfulNote), not "no value"
+    const at = ticks.map((t) => s.points.some((p) => p.key === t.key && (p.y !== null || !!p.notMeaningful)));
     const first = at.indexOf(true);
     const last = at.lastIndexOf(true);
     const parts: string[] = [];
@@ -61,7 +64,7 @@ export function chartNotes(series: Series[], opts: {
     const inner = at.flatMap((has, i) => (!has && i > first && i < last ? [i] : []));
     if (inner.length) parts.push(`no value for ${periods(inner, ticks)}`);
     // companies file at different times: one quarter behind the others is not a gap
-    if (ticks.length - 1 - last >= (annual ? 1 : 2)) parts.push(`stops at ${ticks[last]!.period}`);
+    if (full - 1 - last >= (annual ? 1 : 2)) parts.push(`stops at ${ticks[last]!.period}`);
     if (parts.length) remarks.push(`${s.name}: ${parts.join(", ")}`);
   }
   if (remarks.length) {
@@ -77,6 +80,8 @@ export function chartNotes(series: Series[], opts: {
   }
 
   for (const s of series) if (s.note) out.push(s.note);
+  const partial = partialNote(plotted);
+  if (partial) out.push(partial);
 
   if (!opts.brief && remarks.length) {
     out.push("A gap is a period with no value on file (a TTM needs all four quarters, a YoY the year before, a formula every input); nothing is filled in.");

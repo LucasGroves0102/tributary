@@ -70,7 +70,7 @@ export function RecentNotes({ token, name, filingsFor, catalogOpen = false, comp
       )}
       {load?.state === "ok" && load.data.notes.length > 0 && (
         <div className="foot">
-          The newest notes first; each company's full list is on its{" "}
+          What needs attention first, then the newest; each company's full list is on its{" "}
           <a href={href({ view: "company", companyId: load.data.notes[0]!.company_id, tab: "notes" })}>Data notes</a> tab.
         </div>
       )}

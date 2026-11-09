@@ -174,9 +174,10 @@ curl "localhost:8000/v1/companies/0001045810/financials?metrics=revenue" # 401: 
 
 ### Web app
 
-`services/web` (React, TypeScript, Vite): a research workspace with Home (watchlist, new and
-expected filings), guided [Analysis](#analysis) projects from filings to a checked thesis, a screener over every company, company tearsheets (statements, revenue,
-segments, ratios, filings, peers), a chart builder with formula layers, comps tables, a filing reader
+`services/web` (React, TypeScript, Vite): a research workspace with Home (start an analysis, the
+watchlist, new filings, data notes), [filing alerts](#filing-alerts) for the companies you follow,
+guided [Analysis](#analysis) projects from filings to a checked thesis, a screener over every company, company tearsheets (statements, revenue,
+segments, ratios, filings, peers, [earnings releases and the 8-Ks since the last report](#earnings-and-events)), a chart builder with formula layers, comps tables, a filing reader
 with "what changed" diffs, and full-text search. The assistant sits on every screen, sees what
 you're looking at, and can build charts, screens and comps for you, with Undo. Model output is
 sanitized and served under a strict Content-Security-Policy. `make web` runs the dev server on
@@ -196,17 +197,27 @@ also work on their own:
   revenue growth in percentage points, and receivables against revenue (DSO, flagged when
   receivables grow more than 10 points faster than revenue). Each chart saves to a workspace so
   a thesis can embed it.
-- **Model**: a revenue-first forecast for one company. Its fiscal-year revenue and operating
-  income come live from the filings (as you, through the permission-checked API); you type
-  growth and operating margin for each forecast year (1-10 years) with a note on why, each shown
-  beside the company's own 5-year revenue CAGR and average margin. The chart draws history solid
-  and your forecast dashed; the table labels every year Reported or Forecast. Add **bear and
-  bull** cases beside the base one: the chart draws all three (bear and bull lighter), the table
-  the one you pick. Only your assumptions are saved.
-- **Thesis**: your Markdown about a company, with any chart, comps table, screen or model from
-  the same workspace embedded where you put it, drawn live. Write, preview or both side by side;
-  import a `.md` file and export one (embeds become `[Chart: name]` lines). Rendered through the
-  same sanitizer as model output.
+- **Model**: a forecast for one company, from revenue down to EPS and free cash flow. Its
+  history comes live from the filings (as you, through the permission-checked API), and the
+  current fiscal year starts from its reported quarters: Vertiv's FY2026 is Q1-Q3 as reported
+  plus the Q4 you set, Deckers' FY2027 is H1 plus H2. Per forecast year (1-10) you type growth
+  and operating margin, and optionally interest, tax rate, share change (buybacks) and FCF
+  margin; anything left blank follows the company's own history, and one line per default says
+  how. Name one-off adjustments (Deckers' $46M of tariff refunds) to see margins reported and
+  adjusted, and acquired revenue for organic growth. The company's latest outlook sits beside the
+  year it covers, quoted with its 8-K. Type a price and its date to get market cap, P/E,
+  EV/Revenue, EV/EBIT and FCF yield on history and every case; it's your price, nothing is
+  fetched. **Bear, base and bull** sit side by side in one table, every line, and on one chart.
+  Every save keeps the version it replaced. Only your inputs are saved; the maths run in one
+  place, the Query API (`POST /v1/companies/{id}/model`), for the page, the thesis check and
+  later MCP.
+- **Thesis**: your argument about a company, with any chart, comps table, screen or model from
+  the same workspace embedded where you put it, drawn live, and the filing passages you pinned.
+  Write shows them as cards you move (buttons or Alt+↑/↓) and remove (with Undo), never as
+  `[[embed:…]]` lines; a comps set stays its table; a quote says its form and the period it reports
+  on. Underneath it is still Markdown, so export and import round-trip byte for byte (tested on a
+  pinned thesis, and shown in the screenshot harness) and versions and drafts work as before; a
+  Markdown view shows the text as saved. Rendered through the same sanitizer as model output.
 - **Check my thesis**: the agent reads your saved thesis as you, marks each factual claim
   Supported, Contradicted (with what the filing says) or Can't verify, each with citations that
   open the filing; compares each embedded model's growth and margin per year (its base case)
@@ -230,30 +241,131 @@ as the viewer, so it shows only what you may read.
 #### Analysis
 
 The Analysis tab is one guided project per company, the way an analyst builds a thesis from
-filings. "New analysis" picks a company you can read and its peers (suggested from the same
-industry and size); the project then walks seven steps, each with a done marker, under a header
+filings. "New analysis" picks a company you can read and its peers (suggested by what they do,
+[below](#peers-by-business)); the project then walks eight steps, each with a done marker, under a header
 with the company and tabs (Company · Charts · Model · Thesis · Monitor) that switch instantly
 without losing anything you typed:
 
 1. **Business**: the latest 10-K's Item 1, the segments, and your "how it makes money" notes.
 2. **Numbers**: ten fiscal years of revenue and growth, gross and operating margin, free cash
-   flow (operating cash flow − capex), receivables against revenue, and debt; each chart opens
-   in the chart builder or saves to the project.
-3. **What changed**: new, removed and rewritten Risk Factors and MD&A paragraphs in the latest
-   10-K and 10-Q.
-4. **Peers**: the comps table for the company and its peers.
-5. **Model**: the revenue model with bear, base and bull cases.
-6. **Thesis**: starts from a template: core thesis (3-5 sentences), variant perception
+   flow (operating cash flow − capex), buybacks and dividends, shares outstanding, inventory,
+   receivables against revenue, a backlog proxy and customer advances, and debt, each ending with
+   the year in progress (the latest TTM or quarter, marked as partial); each chart opens in the
+   chart builder or saves to the project.
+3. **Earnings**: each quarter's earnings release beside its reported figures, the outlook it
+   states and management's adjustments ([below](#earnings-and-events)).
+4. **What changed**: the 8-Ks filed since the last 10-Q or 10-K (deals, debt, leadership,
+   guidance), then new, removed and rewritten Risk Factors and MD&A paragraphs in the latest
+   10-K and 10-Q, a 10-Q against the same quarter a year earlier, the most material first, with
+   a topic filter ([What changed](#what-changed)).
+5. **Peers**: the comps table for the company and its peers; each median says how many of them it
+   uses ("3 of 4") and why the others are left out.
+6. **Model**: the model, this year from its reported quarters, with bear, base and bull side by
+   side.
+7. **Thesis**: starts from a template: core thesis (3-5 sentences), variant perception
    (what the market misses), pillars with evidence, catalysts (the next expected filings
    prefilled), risks and mitigants, what would prove you wrong, and KPIs to watch.
-7. **Monitor**: Check my thesis and the new-filing notice; KPIs with red lines checked after
-   every filing come next.
+8. **Monitor**: the company's new filings as alerts arrive, your red lines on its figures (each
+   Clear or Crossed now, and checked on every new 10-K and 10-Q), and Check my thesis with the
+   new-filing notice.
 
 **Add to thesis** on any step pins the evidence into a section you pick: a chart or comps
-table is saved in the project and embedded, a filing passage is quoted with its form, date,
-section and an EDGAR link. Unsaved thesis edits are kept in the browser until you save. A
+table is saved in the project and embedded, a filing passage is quoted with its form, the period
+it reports on, date, section and an EDGAR link (a release's guidance table keeps its lines). Unsaved thesis edits are kept in the browser until you save. A
 project is a workspace with its company and peers on it (app database migration 012), so its
 charts, model and thesis are ordinary saved items: owner-only in both layers, granting nothing.
+
+#### Earnings and events
+
+Between 10-Qs the filings an analyst reads are 8-Ks: the quarterly earnings release and whatever
+the company did since the quarter ended. Both testers of the guided flow missed one: an
+acquisition that closed after Vertiv's balance sheet date, and the guidance and refund figures in
+Deckers' release.
+
+- **Earnings tab** (and the Analysis flow's Earnings step): each quarter's release (the 8-K with
+  Item 2.02, its first EX-99 exhibit) beside the quarter's figures from its 10-Q against a year
+  ago; the outlook quoted from the release's own Outlook or Guidance sections; management's
+  adjustments (its non-GAAP reconciliation tables and the notes that state a dollar amount). Each
+  passage links to its place in the filing reader and pins into a thesis with its quarter. Found by
+  fixed rules, not a model: where a release has no such section the page says so. No beat or miss:
+  Tributary holds no consensus estimates.
+- **Since the last report** (company Overview, top of What changed): the 8-Ks filed after the
+  latest 10-Q/10-K period end with their items (2.01 acquisition completed, 2.03 new debt, 5.02
+  officer change, 4.02 non-reliance, ...), each quoting the 8-K's own words. A balance that an
+  event after the period end may have changed (cash, debt, net debt, total assets) is flagged as
+  of that period end, with the event beside it, on the key stats too: a flag, never a pro forma.
+  A closed acquisition or a new financing announced only in a 7.01 or 8.01 press release (Vertiv
+  closed KES that way on Oct 26, 2026) is flagged too, read by fixed phrases from the release, with
+  the words that triggered it shown; an agreement to acquire, an earnings release or a buyback is
+  not.
+- The assistant has both as tools (`get_earnings_release`, `get_events_since_report`), and Check
+  my thesis reads them for what the thesis leaves out; neither changed the recorded suites (97
+  replays pass, 0 leaks), and the adversarial harness counts their results like any filings
+  tool's.
+
+Measured on production (2026-11-08): every 8-K filed since October 2024 has its items in the SEC
+index here (140,884 of 140,884, all filers); for operating companies over the last two years,
+32,188 earnings 8-Ks from 3,994 companies, all stored, 95% with a parsed EX-99.1, and 71% of
+40,588 company-quarters with a parsed release. On 45
+releases sampled across industries, the outlook rules found 32 of the 33 that have an Outlook or
+Guidance section, and nothing in the others. Rules and numbers:
+[query-api](services/query-api/README.md#earnings-and-events), [web](services/web/README.md).
+
+#### Filing alerts
+
+When a company on your watchlist or in one of your analyses files a 10-K, a 10-Q or an 8-K with a
+material item, a bell counts it and the Alerts page lists it: the form, the period, an 8-K's items,
+a 10-K or 10-Q's revenue, margin and EPS against a year earlier once the SEC's XBRL data has them,
+your red lines evaluated on it, and links to What changed, the earnings view, the reader and EDGAR.
+You choose the forms per company, and can send alerts on to a Discord, Slack or any https webhook,
+signed with a secret shown once. The webhook is SSRF-safe by construction: https to public
+addresses only, checked after DNS and again before each send on the address actually connected to,
+no redirects, short timeouts and size caps; `http://169.254.169.254` and every private, loopback,
+link-local or metadata address are refused (tests and the settings page show it). A red line is a
+rule in the chart formula language ("gross margin below 70%", "receivables growth over revenue
+growth by more than 10 points"), compiled with bound parameters only. Alerts are made by a database
+poll every 10 minutes, not a Kafka consumer (what an alert says arrives later than the filing, and
+a consumer needs credentials only the owner can create); each run re-reads three days of the index
+and is idempotent on the filing, at about 13 ms per 50 followed companies on hermes. Everything is
+owner-only with forced row-level security, and a user can't read, mark, test or see the deliveries
+of another's alerts or webhooks (tested on the real tables). Email is behind a provider interface
+and off: no provider is chosen. Rules and numbers: [query-api](services/query-api/README.md#filing-alerts),
+[web](services/web/README.md).
+
+#### Statements: cash flow, KPIs, reported vs standardised
+
+The cash flow statement shows its operating, investing and financing subtotals, exchange rates and
+other, the change in cash, the cash it starts and ends with, and whether start + change = end; outflows
+are negative, as filings print them. Measured on 613 companies rebuilt with migration 049: 15,620 of
+16,062 quarters since 2019 tie within 0.5%, and where one doesn't the page says by how much. The
+balance sheet adds customer advances (contract liabilities: Vertiv's $1.13B to $4.12B in a year, beside
+current liabilities of $3.58B to $8.71B), accounts payable, remaining performance obligations (the
+nearest tagged figure to a backlog: Caterpillar $49.4B) and cash and short-term investments, read by net
+debt's own rule. A quarter far outside its series (NVIDIA's dividends: $6.05B after $243M) or of the
+other sign (JPMorgan's operating cash flow, six sign changes in eight quarters) is marked, with its
+filing, by the same tests as the data notes. A standardised line (net debt, free cash flow, a computed
+gross profit, a line tagged as parts) opens into what it is made of: each part's value, the tag the
+filing used, its filing, and the other tags reported for that date. Existing figures didn't move: the
+same 613 companies rebuilt before and after the migration gave identical rows. Rules and numbers:
+[db](db/README.md), [query-api](services/query-api/README.md#statement-callouts),
+[web](services/web/README.md).
+
+#### What changed
+
+Both testers read filing diffs before earnings and both found them noisy: Deckers' Q2 10-Q against
+its Q1 10-Q had 121 changes, half of them fragments of paragraphs a page break split, its
+three-month text diffed against six-month text; Vertiv's showed "second" becoming "third" quarter.
+What changed now compares a 10-Q with the same quarter a year earlier by default and reads the
+stored diff a second time, at query time (nothing is rebuilt): split paragraphs are joined, page
+furniture dropped, calendar rollovers, figure-only table rows and minor edits hidden and counted,
+and a quarter's passage is never paired with a year-to-date one. Each change says its period, the
+figures it adds or drops, and why it ranks where it does (new figures, how far a figure moved, new
+risk wording, Risk Factors and Liquidity above boilerplate); a topic ("tariffs") and "only passages
+with new figures" filter it. Measured on production's texts: Deckers' Q2 FY27 10-Q 147 changes
+against a year ago before, 91 after, 10 about tariffs (the $46.0M IEEPA refund second); Vertiv's Q3
+10-Q against Q2 39 → 22, nine of the hidden ones calendar rollovers; Deckers' 10-K 379 → 264. The
+assistant asks for the same view with `get_material_changes`. Rules and numbers:
+[query-api](services/query-api/README.md#what-changed), [web](services/web/README.md).
 
 #### Connect your data
 
@@ -273,6 +385,33 @@ security). Disconnecting deletes the key and every price fetched with it.
 **Off until configured:** the feature exists only when the deployment has the
 `data-connections-key` secret ([deploy/helm/tributary](deploy/helm/tributary/README.md#connect-your-data));
 without it the routes are absent and the UI hides it. The assistant has no price tool yet.
+
+### Peers by business
+
+Suggested peers come from what companies say they do, not their SIC code: each company's latest
+10-K Business section (Item 1) as a TF-IDF term vector (words and two-word phrases, standard
+library only, no paid embeddings or external calls), cosine similarity between them, and the
+competitors either 10-K names in a sentence about competition; SIC division and size count a little.
+A weekly job in the parser image computes it for every company (79 s, 410 MB peak on 4,888 Item 1
+sections; `services/parser` README). Each suggestion says why, and a named competitor links to the
+sentence. Measured on the testers' companies, top 10 before (SIC and size) and after:
+
+| Company | Before | After |
+|---|---|---|
+| Vertiv (VRT) | LG Display, Advanced Energy, Vicor, Impinj, Varex Imaging, ... | Eaton and Johnson Controls (named in Vertiv's 10-K), AAON, nVent, Forgent Power, Super Micro, Ciena, Flex, Amphenol |
+| Deckers (DECK) | Crocs, Nike, Silverton Energy, Carlisle, Newell, AptarGroup, Entegris, ... | Crocs, Columbia, Steve Madden, Under Armour, Nike, Kontoor, Wolverine, Levi Strauss, Tapestry, VF |
+| NVIDIA (NVDA) | Micron, Tigo Energy, Broadcom, Intel, AMD, Applied Materials, TI, ADI, NXP, ST | AMD, Ambarella, Qualcomm, Super Micro, Broadcom, Micron, Marvell, HPE, Arista, GSI Technology |
+| JPMorgan (JPM) | Bank of America, Wells Fargo, Citigroup, Capital One, U.S. Bancorp, PNC, Truist, Shinhan, ... | PNC, Morgan Stanley, Bank of America, U.S. Bancorp, Capital One, Huntington, Wells Fargo, Truist, KeyCorp, Citizens |
+
+A company whose 10-K Item 1 is only a cross-reference (Intel, General Electric, McDonald's) or
+wasn't parsed (Citigroup) has no profile, so it is never suggested by business; the NVIDIA and
+JPMorgan lists lose Intel and Citigroup for that reason.
+A bank is compared on a bank's own lines (net interest income, efficiency ratio, provision for
+credit losses, loans, deposits, CET1 where tagged: migration 048, whose header has the tags measured
+on every bank's XBRL and why net interest margin and tangible book value are left out). The screener
+groups companies into 12 sectors and 88 industries over SIC (Tributary's own open mapping, not GICS;
+the SIC label stays), and a company filing one combined 10-K with another (PG&E Corp and Pacific Gas &
+Electric) says it isn't a duplicate.
 
 ### Agent
 

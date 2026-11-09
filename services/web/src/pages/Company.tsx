@@ -1,6 +1,7 @@
-import { expectedFilingsOf, screener } from "../api";
-import { header, HEADER_COLUMNS, listingLine } from "../company/data";
+import { ApiError, expectedFilingsOf, screener } from "../api";
+import { header, HEADER_COLUMNS, HEADER_COLUMNS_WITH_BANK, listingLine } from "../company/data";
 import { DataNotes } from "../company/DataNotes";
+import { EarningsView } from "../company/Earnings";
 import { Filings } from "../company/Filings";
 import { Overview } from "../company/Overview";
 import { Peers } from "../company/Peers";
@@ -17,6 +18,7 @@ import { COMPANY_TABS, go, href, type CompanyTab } from "../route";
 import { NewWork } from "../workspaces/NewWork";
 import type { Saved } from "../workspaces/useSaved";
 import { restoreProject } from "../analysis/project";
+import { coRegistrantNote } from "../compare/peers";
 
 interface Props {
   token: string;
@@ -24,6 +26,8 @@ interface Props {
   tab: CompanyTab;
   /** the Statements tab's choices from the address */
   statements?: StatementView;
+  /** the Filings tab opens What changed on this 10-K/10-Q (an alert's link) */
+  changes?: string;
   /** null while the watchlist loads or is unavailable */
   watched: boolean | null;
   onWatch: (watch: boolean) => Promise<void>;
@@ -38,9 +42,13 @@ interface Props {
 
 /** The tearsheet: who the company is (public metadata), then its data by tab. Identity, the
  * filing index and expected dates are public; values need financials, text needs filings. */
-export function Company({ token, companyId, tab, statements, watched, onWatch, onChart, onChartMany, onOpenChart, onAsk, saved }: Props) {
+export function Company({ token, companyId, tab, statements, changes, watched, onWatch, onChart, onChartMany, onOpenChart, onAsk, saved }: Props) {
   const meta = useLoad(companyId, () =>
-    screener(token, { company_id: [companyId], columns: HEADER_COLUMNS, sort: "name", limit: 1 }).then(
+    // a bank's key stats need its own columns (F4); an older API refuses them (422): the standard set
+    screener(token, { company_id: [companyId], columns: HEADER_COLUMNS_WITH_BANK, sort: "name", limit: 1 }).catch((e) => {
+      if (e instanceof ApiError && e.status === 422) return screener(token, { company_id: [companyId], columns: HEADER_COLUMNS, sort: "name", limit: 1 });
+      throw e;
+    }).then(
       (r) => r.rows.find((x) => x.company_id === companyId) ?? null,
     ),
   );
@@ -73,6 +81,7 @@ export function Company({ token, companyId, tab, statements, watched, onWatch, o
   const ticker = h.tickers[0] ?? h.name;
   const next = expected?.state === "ok" ? (expected.data.expected[0] ?? null) : null;
   const listing = listingLine(h.tickers, h.exchanges);
+  const joint = coRegistrantNote(h.name, row.co_registrants ?? [], companyId);
 
   return (
     <div className="page">
@@ -92,10 +101,12 @@ export function Company({ token, companyId, tab, statements, watched, onWatch, o
             </div>
             <div className="meta">
               {[
+                row.sector && `${row.sector} · ${row.sector_industry}`,
                 h.industry && `${h.industry}${h.sic ? ` (SIC ${h.sic})` : ""}`,
                 h.fye && `fiscal year ends ${h.fye}`,
                 h.filer && `${h.filer.toLowerCase()} filer`,
                 h.state && `incorporated in ${h.state}`,
+                h.currency && `figures in ${h.currency}`,
                 `CIK ${companyId}`,
               ].filter(Boolean).join(" · ")}
             </div>
@@ -111,6 +122,17 @@ export function Company({ token, companyId, tab, statements, watched, onWatch, o
                 <span className="faint">no expected filing date</span>
               )}
             </div>
+            {joint && (
+              <p className="meta joint-note" role="note">
+                {joint}{" "}
+                {(row.co_registrants ?? []).map((c, i) => (
+                  <span key={c.company_id}>
+                    {i > 0 && " · "}
+                    <a href={href({ view: "company", companyId: c.company_id })}>Open {c.name}</a>
+                  </span>
+                ))}
+              </p>
+            )}
           </div>
           <div className="row wrap">
             {watched !== null && (
@@ -138,13 +160,17 @@ export function Company({ token, companyId, tab, statements, watched, onWatch, o
       </section>
 
       {tab === "overview" && <Overview token={token} companyId={companyId} name={h.name} row={row} access={row.access} />}
+      {tab === "earnings" && (
+        <EarningsView token={token} companyId={companyId} name={h.name} canReadFilings={row.access.includes("filings")}
+          canReadFinancials={row.access.includes("financials")} />
+      )}
       {tab === "statements" && <Statements token={token} companyId={companyId} name={h.name} ticker={ticker} notApplicable={row.not_applicable} view={statements} />}
       {tab === "revenue" && (
         <Revenue token={token} companyId={companyId} name={h.name} ticker={ticker} saved={saved ?? null} onOpenChart={onOpenChart} />
       )}
       {tab === "segments" && <Segments token={token} companyId={companyId} name={h.name} />}
       {tab === "ratios" && <Ratios token={token} companyId={companyId} name={h.name} ticker={ticker} notApplicable={row.not_applicable} />}
-      {tab === "filings" && <Filings token={token} companyId={companyId} name={h.name} canRead={row.access.includes("filings")} fiscalYearEnd={row.fiscal_year_end} />}
+      {tab === "filings" && <Filings key={changes ?? ""} token={token} companyId={companyId} name={h.name} canRead={row.access.includes("filings")} fiscalYearEnd={row.fiscal_year_end} initialDiff={changes} />}
       {tab === "notes" && <DataNotes token={token} companyId={companyId} name={h.name} canReadFilings={row.access.includes("filings")} />}
       {tab === "peers" && <Peers token={token} companyId={companyId} name={h.name} onChart={onChartMany} />}
       {tab === "price" && <Price token={token} companyId={companyId} name={h.name} />}
@@ -160,12 +186,12 @@ function AnalysisLink({ saved, companyId, ticker }: { saved: Saved; companyId: s
   const project = list.find((w) => restoreProject(w.project)?.companyId === companyId);
   return project ? (
     <a className="btn" href={href({ view: "analysis", projectId: project.workspace_id })}
-      title={`Your guided analysis of ${ticker}: business, numbers, what changed, peers, model, thesis and monitor`}>
+      title={`Your guided analysis of ${ticker}: business, numbers, earnings, what changed, peers, model, thesis and monitor`}>
       Open analysis
     </a>
   ) : (
     <a className="btn" href={href({ view: "analysis", start: companyId })}
-      title={`Seven guided steps for ${ticker} (business, numbers, what changed, peers, model, thesis, monitor), with its thesis and model inside. New thesis and New model make a single item instead.`}>
+      title={`Eight guided steps for ${ticker} (business, numbers, earnings, what changed, peers, model, thesis, monitor), with its thesis and model inside. New thesis and New model make a single item instead.`}>
       Start an analysis
     </a>
   );

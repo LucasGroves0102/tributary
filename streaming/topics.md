@@ -8,6 +8,8 @@
 
 `filings.raw` has one event per filer, so a Form 4 produces two events (Reporting + Issuer)
 with the same accession number. Consumers must be idempotent on `(accession_no, cik)`.
+doc-fetcher stores a Form 3/4/5 once, from the event that isn't the reporting owner's, when that
+CIK is a tracked or operating company's (insider filings, migration 054); the shape is unchanged.
 
 `source` is `feed` (live poller; `filed_at` is the exact acceptance time), `daily-index`
 (backfill; `filed_at` is midnight US Eastern and `role` is `Unknown`) or `seed`
@@ -25,6 +27,10 @@ so the live parser never has crawled documents queued ahead of a new filing, its
 `KafkaConsumerLagGrowing` alert keeps meaning "live parsing is behind", and a document that stops
 a parser stops only the backfill one. Both parsers write the same rows and are idempotent per
 accession, so an event published twice (the crawl republishes unconfirmed ones) is harmless.
+doc-fetcher works the same way since migration 059: a document, its exhibits and its owed event
+(`ops.document_outbox`) commit together, and an event Kafka didn't confirm is sent again within a
+minute. A document the live side stored (its event sent, or still owed) gets no
+`documents.backfill` event from the crawl, so it is parsed once.
 
 Each producer and consumer above is a Kafka principal with ACLs for exactly these topics and its
 group (Kafka SASL is on in production; `deploy/helm/platform/files/kafka-acls.yaml`: `poller`,

@@ -27,13 +27,13 @@ const COMPANIES: Co[] = [
   { id: PEP, ticker: "PEP", name: "PEPSICO INC", industry: "Beverages", sic: "2080", fye: "1231", revenue: 91.9e9, growth: 0.01, margin: 0.13 },
   { id: KO, ticker: "KO", name: "COCA COLA CO", industry: "Beverages", sic: "2080", fye: "1231", revenue: 47.1e9, growth: 0.03, margin: 0.29 },
 ];
-const byId = new Map(COMPANIES.map((c) => [c.id, c]));
+export const byId = new Map(COMPANIES.map((c) => [c.id, c]));
 const byTicker = new Map(COMPANIES.map((c) => [c.ticker, c]));
 
 const SRC = (c: Co) => ({ period_end: "2026-06-30", accession_no: `${c.id}-26-000040`, form: "10-Q", filed: "2026-07-30" });
 const HOUR = 3_600_000;
 
-function screenerRow(c: Co) {
+export function screenerRow(c: Co) {
   const values: Record<string, string | null> = {
     revenue_ttm: String(c.revenue),
     revenue_growth_ttm: String(c.growth),
@@ -237,6 +237,26 @@ export async function mockApi(page: Page): Promise<Fake> {
       return json({ as_of: "", forms: [], from: null, to: null, limit: 25, offset: 0, has_more: false, filings: [] });
     }
     if (/^\/v1\/companies\/\d{10}\/financials$/.test(path)) return json({ as_of: "", rows: [] });
+    // F1: the Overview asks for the 8-Ks since the last report; the Earnings tab for its releases
+    m = path.match(/^\/v1\/companies\/(\d{10})\/events$/);
+    if (m) {
+      return json({ company_id: m[1], as_of: "", since: "2026-06-30", window: "since_report", events: [], more: false, stale: [], method: "",
+        latest_report: { accession_no: `${m[1]}-26-000040`, form: "10-Q", filed: "2026-07-30", period_end: "2026-06-30" } });
+    }
+    m = path.match(/^\/v1\/companies\/(\d{10})\/earnings$/);
+    if (m) return json({ company_id: m[1], as_of: "", quarters: [], method: "" });
+    // F8b: the Overview's and Numbers' backlog and orders from the filings' text
+    m = path.match(/^\/v1\/companies\/(\d{10})\/text-kpis$/);
+    if (m) {
+      const none = { points: [], conflicts: [] };
+      return json({ company_id: m[1], as_of: "", since: "2016-11-09", method: "", read: { sections: 0, filings: 0, from: null },
+        metrics: { backlog: { label: "Backlog", unit: "USD", span: "instant", ...none },
+          orders: { label: "Orders in the quarter", unit: "USD", span: "quarter", ...none },
+          orders_growth: { label: "Order growth in the quarter, year on year", unit: "percent", span: "quarter", ...none } } });
+    }
+    // F7b: the Filings tab's insider filings (Insider and All)
+    m = path.match(/^\/v1\/companies\/(\d{10})\/insiders$/);
+    if (m) return json({ company_id: m[1], filings: [], has_more: false });
     m = path.match(/^\/v1\/companies\/(\d{10})\/data-notes$/);
     if (m || path === "/v1/data-notes") {
       const id = m?.[1] ?? PEP;
@@ -255,6 +275,13 @@ export async function mockApi(page: Page): Promise<Fake> {
       return json({ results: COMPANIES.filter((c) => c.ticker.startsWith(s) || c.name.includes(s)).map((c) => ({
         company_id: c.id, name: c.name, matched_on: "ticker", matched_alias: c.ticker, is_current: true, tickers: [c.ticker], access: ["financials", "filings"],
       })) });
+    }
+    if (path === "/v1/sectors") {
+      return json({ note: "Tributary's own grouping of the SEC's SIC codes (not GICS)", sectors: [
+        { name: "Technology", companies: 2, industries: [{ name: "Semiconductors", sic: ["3674"], companies: 1 }] }] });
+    }
+    if (/^\/v1\/companies\/\d{10}\/peers\/check\/\d{10}$/.test(path)) {
+      return json({ company_id: path.split("/")[3], candidate_id: path.split("/").at(-1), ok: true, reason: null, annual_form: "10-K", annual_filed: "2026-02-25" });
     }
     if (path === "/v1/screener/columns") {
       return json({
@@ -342,6 +369,17 @@ export async function mockApi(page: Page): Promise<Fake> {
     if (path === "/v1/recent/filings") return json({ recorded: true });
     // Connect your data off: the API offers no providers (not a 404)
     if (path === "/v1/connections" && method === "GET") return json({ providers: [], connections: [] });
+    // filing alerts (F6): the bell asks on every load (a count, so the phone layout test sees the
+    // widest bell); Settings and Monitor list them
+    if (path === "/v1/alerts/unread") return json({ unread: 12, latest: now(), last_check: { checked_at: now(), filings_through: "2026-10-21" } });
+    if (path === "/v1/alerts/notifications") return json({ notifications: [], has_more: false, lookback_days: 3, pending_days: 3 });
+    if (path === "/v1/alerts/settings") {
+      return json({ forms: ["10-K", "10-Q", "8-K"], companies: [...fake.watched].map((c) => ({ company_id: c, sources: ["watchlist"], since: "2026-10-01", forms: ["10-K", "10-Q", "8-K"] })),
+        webhooks: [], formats: ["json", "discord", "slack"], max_webhooks: 3, email: { available: false }, last_check: null,
+        schedule: "every 10 minutes", lookback_days: 3, pending_days: 3 });
+    }
+    if (path === "/v1/alerts/deliveries") return json({ deliveries: [], retries: [300, 1800, 7200, 21600] });
+    if (path === "/v1/alerts/red-lines") return json({ red_lines: [], max_per_company: 10, evaluation: [], evaluated_at: now() });
     if (path === "/v1/status") return json({ last_accepted_at: now(), last_ingested_at: now() });
     m = path.match(/^\/v1\/companies\/(\d{10})\/expected-filings$/);
     if (m) return json({ company_id: m[1], as_of: "", method: "", expected: [] });

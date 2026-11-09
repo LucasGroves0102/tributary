@@ -6,6 +6,7 @@ import httpx
 import uvicorn
 from psycopg_pool import ConnectionPool
 
+from query_api.alerts import AppAlerts
 from query_api.app import create_app
 from query_api.auth import check_secret
 from query_api.authorizer import FgaAuthorizer
@@ -56,6 +57,8 @@ def build_app():
         market_data=market_data,
         # owner-created accounts (query-api-account); sign-in needs the app database
         password_accounts=AppPasswordAccounts(app_pool) if app_pool else None,
+        # filing alerts (query-api-alerts makes them; the routes read them and the settings)
+        alerts=AppAlerts(app_pool) if app_pool else None,
     )
 
 

@@ -1,16 +1,21 @@
 /** The guided steps' bodies inside an analysis project. Each reuses the screens it comes from,
  * scoped to the project's company: the 10-K's Item 1 and the Segments tables (Business), the
- * chart builder's charts drawn by ChartView (Numbers), the filing page's What changed view
- * (What changed), Compare (Peers). Data is read through the Query API as the viewer, like on
+ * chart builder's charts drawn by ChartView (Numbers), the company page's Earnings view
+ * (Earnings), its "Since the last report" 8-Ks and the filing page's What changed view (What
+ * changed), Compare (Peers). Data is read through the Query API as the viewer, like on
  * those screens; the project grants nothing. */
 
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { filingIndex, latestSection } from "../api";
 import { stateOf } from "../workspaces/model";
 import type { ChartState } from "../chart/model";
+import { EarningsView } from "../company/Earnings";
+import { EventsCard } from "../company/Events";
+import { periodLabel } from "../company/changes";
 import { Changes, type Change, type ChangedSection } from "../company/Filings";
 import { Gate, Segments } from "../company/Tables";
+import { TextKpisCard } from "../company/TextKpis";
 import { useLoad } from "../company/useLoad";
 import { day } from "../format";
 import { Compare } from "../pages/Compare";
@@ -155,7 +160,9 @@ export function Business({ token, companyId, name, project, onNotes, notesStatus
 
 // --- 2 Numbers ---------------------------------------------------------------------------------
 
-export function Numbers({ token, companyId, name, ticker, label, saved, projectId, charts, onOpenChart, onSaved }: StepCommon & {
+export function Numbers({ token, companyId, name, ticker, label, saved, projectId, charts, onOpenChart, onSaved, canReadFilings = false }: StepCommon & {
+  /** the filings tier: backlog and orders from the filings' text (F8b) */
+  canReadFilings?: boolean;
   saved: Saved;
   projectId: string;
   /** the project's saved charts */
@@ -182,8 +189,13 @@ export function Numbers({ token, companyId, name, ticker, label, saved, projectI
       {sets.map((s) => {
         const state = done[s.key];
         const already = state === "saved" || savedNames.has(s.chart.title);
+        // F8b: after the backlog proxy, what the filings state in words
+        const text = s.key === "backlog" ? (
+          <TextKpisCard token={token} companyId={companyId} name={name} canRead={canReadFilings} compact />
+        ) : null;
         return (
-          <section key={s.key} className="card numbers-chart" aria-label={s.chart.title}>
+          <Fragment key={s.key}>
+          <section className="card numbers-chart" aria-label={s.chart.title}>
             <div className="card-b">
               <ChartView token={token} chart={s.chart} name={s.chart.title} label={label} hasTtm={everyMetric} />
               <p className="small muted read-hint">{s.read}</p>
@@ -202,27 +214,44 @@ export function Numbers({ token, companyId, name, ticker, label, saved, projectI
               </div>
             </div>
           </section>
+          {text}
+          </Fragment>
         );
       })}
       <p className="faint small">
-        Up to ten fiscal years of {name}, one point per year (flows are the year's total, balances the year end); receivables vs
-        revenue is quarterly. Values link to their filings. Charts you save here, or from the Chart builder into this project,
+        Up to ten fiscal years of {name}, one point per year (flows are the year's total, balances the year end), then the
+        latest quarter when the year isn't over, marked * and drawn lighter (the trailing twelve months for flows, the quarter
+        end for balances); receivables vs revenue is quarterly. Outflows (capex, buybacks, dividends) are drawn below zero, as
+        the cash flow statement prints them. Values link to their filings. Charts you save here, or from the Chart builder into this project,
         show under Charts in the project's workspace.
       </p>
     </>
   );
 }
 
-// --- 3 What changed ----------------------------------------------------------------------------
+// --- 3 Earnings --------------------------------------------------------------------------------
+
+/** The quarter's earnings release beside its figures, its outlook and adjustments (pinnable). */
+export function EarningsStep({ token, companyId, name, canReadFilings, canReadFinancials }: StepCommon & {
+  canReadFilings: boolean;
+  canReadFinancials: boolean;
+}) {
+  return <EarningsView token={token} companyId={companyId} name={name} canReadFilings={canReadFilings} canReadFinancials={canReadFinancials} />;
+}
+
+// --- 4 What changed ----------------------------------------------------------------------------
 
 const changePassage = (companyId: string, c: Change, s: ChangedSection): Passage | null => {
   const removed = c.kind === "removed";
   const cite = removed ? c.prior_citation : c.citation;
   const text = removed ? c.prior_text : c.text;
   if (!cite || !text) return null;
+  // F3: a 10-Q passage says which period it describes ("MD&A (6 months, year to date)")
+  const period = periodLabel(c.period);
+  const section = s.title ?? `Item ${s.section_key}`;
   return {
     text, companyId, accessionNo: cite.accession_no, form: cite.form, filed: cite.filed,
-    period: cite.period_of_report, section: s.title ?? `Item ${s.section_key}`, change: c.kind,
+    period: cite.period_of_report, section: period ? `${section} (${period})` : section, change: c.kind,
   };
 };
 
@@ -236,6 +265,8 @@ export function WhatChanged({ token, companyId, name, canReadFilings }: StepComm
   const shown = choices.find((f) => f.accession_no === pick) ?? choices[0] ?? null;
   if (!canReadFilings) return <p className="empty locked card">What changed compares filing text, which your plan doesn't include for {name}.</p>;
   return (
+    <>
+    <EventsCard token={token} companyId={companyId} name={name} />
     <section className="card">
       <div className="card-h wrap">
         <h3>Risk Factors and MD&amp;A, paragraph by paragraph</h3>
@@ -248,24 +279,25 @@ export function WhatChanged({ token, companyId, name, canReadFilings }: StepComm
             ))}
           </span>
         )}
-        <span className="sub">vs the previous filing of the same type · pin a paragraph to quote it in your thesis</span>
+        <span className="sub">pin a paragraph to quote it in your thesis</span>
       </div>
       <Gate load={index} name={name} what="Filings">
         {() => !shown ? (
           <p className="empty">No parsed 10-K or 10-Q for {name} yet, so there's nothing to compare.</p>
         ) : (
           <Changes key={shown.accession_no} token={token} companyId={companyId} accessionNo={shown.accession_no} name={name}
-            pin={(c, s) => {
+            form={shown.form} pin={(c, s) => {
               const p = changePassage(companyId, c, s);
               return p ? <PinButton compact what="passage" make={async () => quoteBlock(p)} /> : null;
             }} />
         )}
       </Gate>
     </section>
+    </>
   );
 }
 
-// --- 4 Peers ---------------------------------------------------------------------------------
+// --- 5 Peers ---------------------------------------------------------------------------------
 
 export function PeersStep({ token, companyId, project, onPeers, onChart, saved, projectId, onSaved }: StepCommon & {
   project: ProjectState;

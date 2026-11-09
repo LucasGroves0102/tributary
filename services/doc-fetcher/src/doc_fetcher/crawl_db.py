@@ -53,13 +53,16 @@ def already_stored(conn: psycopg.Connection, accessions: list[str]) -> set[str]:
 
 
 def mark_already_stored(conn: psycopg.Connection, accessions: list[str]) -> None:
-    """Stored by someone else (the live doc-fetcher), who also published its event."""
+    """Stored by someone else (the live doc-fetcher), whose documents.fetched event announces it:
+    sent, or still owed in ops.document_outbox (migration 059), which the live consumer sends
+    again until Kafka confirms it. So it counts as published here and the crawl sends no
+    documents.backfill for it: one parse, not two (pre-ship review)."""
     conn.execute(
         """
-        UPDATE ops.doc_crawl_targets
-        SET status = 'done', finished_at = now(), published_at = now(), files = 0,
-            last_error = 'already stored'
-        WHERE accession_no = ANY(%s)
+        UPDATE ops.doc_crawl_targets t
+        SET status = 'done', finished_at = now(), files = 0, last_error = 'already stored',
+            published_at = now()
+        WHERE t.accession_no = ANY(%s)
         """,
         (accessions,),
     )
@@ -119,16 +122,30 @@ def release(conn: psycopg.Connection, accessions: list[str]) -> None:
 
 
 def unpublished(conn: psycopg.Connection, limit: int) -> list[dict]:
-    """documents.backfill events for done targets whose event isn't confirmed yet."""
+    """documents.backfill events for done targets whose event isn't confirmed yet. A target the
+    live doc-fetcher owes a documents.fetched event for (it stored the filing too, in a race
+    with this crawl) is marked published here instead: its own outbox announces it, and both
+    events would parse it twice."""
     rows = conn.execute(
         """
-        SELECT d.accession_no, d.cik, d.form, d.document_name, d.url, d.content_sha256,
-               d.size_bytes
-        FROM ops.doc_crawl_targets t
-        JOIN bronze.filing_documents d USING (accession_no)
-        WHERE t.status = 'done' AND t.published_at IS NULL
-        ORDER BY t.finished_at
-        LIMIT %s
+        WITH batch AS (
+            SELECT d.accession_no, d.cik, d.form, d.document_name, d.url, d.content_sha256,
+                   d.size_bytes, t.finished_at,
+                   EXISTS (SELECT 1 FROM ops.document_outbox o
+                           WHERE o.accession_no = t.accession_no) AS owed
+            FROM ops.doc_crawl_targets t
+            JOIN bronze.filing_documents d USING (accession_no)
+            WHERE t.status = 'done' AND t.published_at IS NULL
+            ORDER BY t.finished_at
+            LIMIT %s
+        ), live AS (
+            UPDATE ops.doc_crawl_targets t SET published_at = now()
+            FROM batch b WHERE b.owed AND t.accession_no = b.accession_no
+        )
+        SELECT accession_no, cik, form, document_name, url, content_sha256, size_bytes
+        FROM batch
+        WHERE NOT owed
+        ORDER BY finished_at
         """,
         (limit,),
     ).fetchall()

@@ -1,13 +1,21 @@
 import { useEffect, useState, type ReactNode } from "react";
 
-import { annualPerShare, financialsView, segments as fetchSegments } from "../api";
+import { annualPerShare, ApiError, financialsView, segments as fetchSegments } from "../api";
 import { NO_DATA, NO_DATA_TITLE, NOT_APPLICABLE, NOT_MEANINGFUL } from "../blanks";
 import { download } from "../download";
-import { change, day, pct } from "../format";
+import { change, day, moneyRow, pct } from "../format";
 import { newestPeriodic } from "../thesis/useRevisit";
-import type { FinancialRow, IndexedFiling } from "../types";
+import type { Callout, FinancialRow, IndexedFiling } from "../types";
+import { calloutLines, calloutText } from "./callouts";
+import { ComponentsPanel } from "./Components";
+import { INPUT_ROLES, inputLabel, partName } from "./components";
 import {
+  BANK_NOT_SHOWN,
+  BANK_STATEMENTS,
+  F5_METRICS,
+  financeArmNote,
   financialsCsv,
+  type Line,
   metricTable,
   RANGE_QUARTERS,
   RATIOS,
@@ -87,15 +95,18 @@ export function cellLinks(cell: TableCell, companyId: string): { reader: string 
   return { reader, edgar: cell.url?.startsWith("https://www.sec.gov/") ? cell.url : null };
 }
 
-function Cell({ cell, blank = NO_DATA_CELL, companyId }: { cell: TableCell | null; blank?: BlankCell; companyId: string }) {
+function Cell({ cell, blank = NO_DATA_CELL, companyId, note }: { cell: TableCell | null; blank?: BlankCell; companyId: string; note?: string }) {
   if (!cell) return <td className="n faint" title={blank.title}>{blank.text}</td>;
   if (cell.text === NOT_MEANINGFUL || cell.text.startsWith(NOT_APPLICABLE)) {
     return <td className="n faint" title={cell.title}>{cell.text}</td>;
   }
   const { reader, edgar } = cellLinks(cell, companyId);
   const form = cell.source?.form ?? "filing";
+  const classes = ["n", cell.derived && "derived", cell.callout && "called", cell.tone && `tone-${cell.tone}`].filter(Boolean).join(" ");
   return (
-    <td className={cell.derived ? "n derived" : "n"} title={cell.title}>
+    <td className={classes} title={note ? `${note}\n\n${cell.title}` : cell.title}>
+      {/* a callout's mark: the sentence is in the hover and listed under the table */}
+      {cell.callout && <span className="callout-mark" aria-hidden="true" />}
       {reader ? (
         <a href={reader} aria-label={`${cell.text}: open the ${form} in Tributary's reader`}>{cell.text}</a>
       ) : edgar ? (
@@ -112,10 +123,37 @@ function Cell({ cell, blank = NO_DATA_CELL, companyId }: { cell: TableCell | nul
   );
 }
 
+type TableRow = MetricTable["rows"][number];
+
+/** The lines an opened derived row reads across its columns: its cells' `inputs` (F5), in the order
+ * and with the signs of INPUT_ROLES, then any other key. */
+function inputLines(row: TableRow): [string, string | undefined][] {
+  const keys = new Set<string>();
+  for (const c of [...row.cells].reverse()) for (const k of Object.keys(c?.inputs ?? {})) if (!k.endsWith("_year_ago")) keys.add(k);
+  const order = INPUT_ROLES[row.metric] ?? [];
+  const known = order.filter(([k]) => keys.has(k));
+  return [...known, ...[...keys].filter((k) => !order.some(([m]) => m === k)).sort().map((k): [string, undefined] => [k, undefined])];
+}
+
 /** A metric × period table; every cell's hover names its filing, the value opens it in the
  * reader and "↗" on EDGAR. Columns run oldest to newest, as statements read, so a wide one opens
- * at its newest end. */
-export function MetricTableView({ table, first, companyId }: { table: MetricTable; first: string; companyId: string }) {
+ * at its newest end. A row that is a standardised figure (F5: derived, computed or a sum of tags)
+ * opens: its lines across the periods, and under the table what one period is made of. A quarter the
+ * API calls out carries a mark, its sentence in the hover and in the list under the table. */
+export function MetricTableView({ table, first, companyId, open = null, onOpen }: {
+  table: MetricTable;
+  first: string;
+  companyId: string;
+  /** the opened row's metric */
+  open?: string | null;
+  onOpen?: (metric: string | null) => void;
+}) {
+  const notes = new Map<string, string>();
+  for (const r of table.rows) {
+    r.cells.forEach((c, i) => {
+      if (c?.callout) notes.set(`${r.metric}|${i}`, calloutText(c.callout, r.label, table.columns[i]!.label, r.opts?.outflow ? -1 : 1));
+    });
+  }
   return (
     <TableScroll atEnd resetKey={table.columns.length} label={first}>
       <table className="t statement">
@@ -131,17 +169,74 @@ export function MetricTableView({ table, first, companyId }: { table: MetricTabl
           </tr>
         </thead>
         <tbody>
-          {table.rows.map((r) => (
-            <tr key={r.metric}>
-              <td className="first">{r.label}</td>
-              {r.cells.map((c, i) => (
-                <Cell key={table.columns[i]!.periodEnd} cell={c} blank={r.blanks[i]} companyId={companyId} />
-              ))}
-            </tr>
-          ))}
+          {table.rows.map((r) => {
+            const opens = !!onOpen && r.cells.some((c) => c?.opens);
+            const isOpen = opens && open === r.metric;
+            const lines = isOpen ? inputLines(r) : [];
+            return [
+              <tr key={r.metric} className={[r.opts?.sub && "sub", r.opts?.total && "total", isOpen && "opened"].filter(Boolean).join(" ") || undefined}>
+                <td className="first" title={r.opts?.define}>
+                  {opens ? (
+                    <button className="link open-row" aria-expanded={isOpen} onClick={() => onOpen!(isOpen ? null : r.metric)}
+                      title={isOpen ? "Close" : `Open ${r.label}: what it is made of, with the tags and filings behind it`}>
+                      {/* the caret is CSS: the cell's text stays the label (copied tables, tests) */}
+                      <span className="caret" aria-hidden="true" />{r.label}
+                    </button>
+                  ) : r.opts?.define ? <span className="defined">{r.label}</span> : r.label}
+                </td>
+                {r.cells.map((c, i) => (
+                  <Cell key={table.columns[i]!.periodEnd} cell={c} blank={r.blanks[i]} companyId={companyId} note={notes.get(`${r.metric}|${i}`)} />
+                ))}
+              </tr>,
+              ...lines.map(([k, role]) => {
+                const values = r.cells.map((c) => (c?.inputs && k in c.inputs ? c.inputs[k]! : null));
+                // one unit across the line, as every statement row
+                const texts = moneyRow(values);
+                return (
+                  <tr key={`${r.metric}|${k}`} className="input-line">
+                    <td className="first">{inputLabel(k, role)}</td>
+                    {texts.map((t, i) => (
+                      <td key={table.columns[i]!.periodEnd} className={t === null ? "n faint" : "n"}
+                        title={t === null ? `${partName(k)}: not in this period's figure` : `${partName(k)}, ${table.columns[i]!.label}: ${t}, as ${r.label.toLowerCase()} read it`}>
+                        {t ?? "·"}
+                      </td>
+                    ))}
+                  </tr>
+                );
+              }),
+            ];
+          })}
         </tbody>
       </table>
     </TableScroll>
+  );
+}
+
+/** "Worth a look": the table's callouts in words, each with its filing (F5, #106, #112). */
+export function CalloutList({ table, companyId }: { table: MetricTable; companyId: string }) {
+  const lines = calloutLines(table);
+  if (!lines.length) return null;
+  return (
+    <div className="callouts card-b" role="note" aria-label="Worth a look">
+      <b className="small">Worth a look</b>
+      <ul>
+        {lines.map((l) => (
+          <li key={l.key}>
+            <span className="callout-mark" aria-hidden="true" /> {l.text}{" "}
+            {l.cells.map(({ label, cell }) => {
+              const { reader, edgar } = cellLinks(cell, companyId);
+              const link = reader ?? edgar;
+              return link ? (
+                <a key={label} className="callout-link" href={link} {...(reader ? {} : { target: "_blank", rel: "noopener noreferrer" })}>
+                  {l.cells.length > 1 ? label : `read the ${cell.source?.form ?? "filing"}`}
+                </a>
+              ) : null;
+            })}
+          </li>
+        ))}
+      </ul>
+      <p className="small muted">Figures are as filed. A mark means a quarter far from the ones beside it, or of the other sign: something to read, not an error.</p>
+    </div>
   );
 }
 
@@ -189,18 +284,48 @@ export function Statements({ token, companyId, name, ticker, notApplicable = [],
   const range: StatementRange = view.range ?? "8q";
   const set = (patch: StatementView) =>
     go({ view: "company", companyId, tab: "statements", statements: { ...view, ...patch } });
-  const req = statementRequest(period, range);
-  const metrics = STATEMENTS[kind].rows;
+  const req = statementRequest(period, range, kind);
+  // a bank (035's rule) gets its own lines (F4); an older API refuses their names (422): the
+  // standard statement then, as before
+  const bank = notApplicable.length > 0;
   const annual = period === "a" && kind === "is";
-  const load = useLoad(`${companyId}|${kind}|${period}|${basis}|${req.quarters}`, async (): Promise<{ rows: FinancialRow[] }> => {
+  const load = useLoad(`${companyId}|${kind}|${period}|${basis}|${req.quarters}|${bank}`, async (): Promise<{ rows: FinancialRow[]; metrics: Line[]; callouts: Callout[]; annualOnly: boolean }> => {
+    const once = (rows: Line[]) => financialsView(token, companyId, req.quarters, rows.map(([m]) => m), req.view, basis, false, period === "q")
+      .then((f) => ({ f, metrics: rows }));
+    // an API older than migration 049 refuses its metrics (422): the statement without them
+    const ask = (rows: Line[]) => once(rows).catch((e) => {
+      const older = rows.filter(([m]) => !F5_METRICS.has(m));
+      if (e instanceof ApiError && e.status === 422 && older.length < rows.length) return once(older);
+      throw e;
+    });
     const [fin, perShare] = await Promise.all([
-      financialsView(token, companyId, req.quarters, metrics.map(([m]) => m), req.view, basis),
+      bank
+        ? ask(BANK_STATEMENTS[kind].rows)
+          .catch((e) => {
+            if (e instanceof ApiError && e.status === 422) return ask(STATEMENTS[kind].rows);
+            throw e;
+          })
+        : ask(STATEMENTS[kind].rows),
       // a company with no annual per-share facts, or an older API, still has its statement
       annual ? annualPerShare(token, companyId).catch(() => ({ rows: [] as FinancialRow[] })) : { rows: [] as FinancialRow[] },
     ]);
-    return { rows: annual ? withAnnualPerShare(fin.rows, perShare.rows, basis) : fin.rows };
+    return { rows: annual ? withAnnualPerShare(fin.f.rows, perShare.rows, basis) : fin.f.rows, metrics: fin.metrics, callouts: fin.f.callouts ?? [],
+      // a 20-F/40-F filer's figures are years (migration 056); an older API doesn't say
+      annualOnly: fin.f.cadence === "annual" };
   });
-  const table = load?.state === "ok" ? withBridges(metricTable(load.data.rows, metrics, period, basis, notApplicable, RANGE_QUARTERS[range]), load.data.rows, kind) : null;
+  const metrics = load?.state === "ok" ? load.data.metrics : (bank ? BANK_STATEMENTS : STATEMENTS)[kind].rows;
+  const table = load?.state === "ok"
+    ? withBridges(metricTable(load.data.rows, metrics, period, basis, notApplicable, RANGE_QUARTERS[range], [], load.data.callouts), load.data.rows, kind)
+    : null;
+  // F5: a standardised line opened into its parts; the panel shows one period of it
+  const [opened, setOpened] = useState<{ metric: string; periodEnd: string } | null>(null);
+  useEffect(() => setOpened(null), [companyId, kind, period, basis]);
+  const openRow = (metric: string | null) => {
+    const row = table?.rows.find((r) => r.metric === metric);
+    const newest = row ? [...row.cells].map((c, i) => (c?.opens ? table!.columns[i]!.periodEnd : null)).filter(Boolean).at(-1) : null;
+    setOpened(metric && newest ? { metric, periodEnd: newest } : null);
+  };
+  const openedRow = opened ? table?.rows.find((r) => r.metric === opened.metric) : undefined;
   // H9: a newer 10-K/10-Q in the index than the figures hold (public index, asked once per company)
   const [newest, setNewest] = useState<IndexedFiling | null>(null);
   useEffect(() => {
@@ -225,15 +350,42 @@ export function Statements({ token, companyId, name, ticker, notApplicable = [],
           off={kind === "bs" ? { ttm: BALANCE_NOT_TTM } : undefined} />
         {period !== "a" && <Seg label="Range" value={range} set={(r) => set({ range: r })} options={RANGES} />}
         <Seg label="Basis" value={basis} set={(b) => set({ basis: b })} options={BASES} />
-        <span className="sub">{basis === "calendar" ? "calendar quarters" : "fiscal periods"} · USD · hover a value for its filing</span>
+        <span className="sub">{basis === "calendar" ? "calendar quarters" : "fiscal periods"} · {table?.currency ?? "USD"} · hover a value for its filing</span>
         <span className="grow" />
         <button className="btn sm" onClick={exportCsv} disabled={!table?.rows.length}>Export CSV</button>
       </div>
       {behind && <BehindNotice behind={behind} companyId={companyId} name={name} url={newest?.filing_url ?? null} />}
+      {load?.state === "ok" && load.data.annualOnly && (
+        <p className="foot" role="note">
+          {name} reports once a year (an annual report on Form 20-F or 40-F), so its figures are fiscal years and the
+          balance sheets at their ends. A year is never split into quarters here.
+          {period !== "a" && <> <button className="btn sm" onClick={() => set({ period: "a" })}>Show Annual</button></>}
+        </p>
+      )}
+      {load?.state === "ok" && table?.currency && (
+        <p className="foot" role="note">
+          Figures in {table.currency}, as {name} reports them. They aren't converted, and screens and peer medians leave
+          them out of US-dollar comparisons.
+        </p>
+      )}
+      {bank && load?.state === "ok" && metrics !== STATEMENTS[kind].rows && (
+        <p className="foot bank-note">{name} is a bank, so it is shown with a bank's own lines. {BANK_NOT_SHOWN}</p>
+      )}
+      {kind === "bs" && load?.state === "ok" && financeArmNote(companyId, name) && (
+        <p className="foot debt-note" role="note">{financeArmNote(companyId, name)}</p>
+      )}
       <Gate load={load} name={name} what="Financials">
         {() =>
           table!.rows.length ? (
-            <MetricTableView table={table!} first={STATEMENTS[kind].label} companyId={companyId} />
+            <>
+              <MetricTableView table={table!} first={STATEMENTS[kind].label} companyId={companyId} open={opened?.metric ?? null} onOpen={openRow} />
+              {opened && openedRow && (
+                <ComponentsPanel token={token} companyId={companyId} metric={opened.metric} label={openedRow.label}
+                  view={req.view} columns={table!.columns.filter((_, i) => openedRow.cells[i]?.opens)} periodEnd={opened.periodEnd}
+                  onPeriod={(periodEnd) => setOpened({ ...opened, periodEnd })} onClose={() => setOpened(null)} />
+              )}
+              {period === "q" && <CalloutList table={table!} companyId={companyId} />}
+            </>
           ) : (
             <p className="empty">
               No {STATEMENTS[kind].label.toLowerCase()} values for these periods. Try{" "}
@@ -252,6 +404,10 @@ export function Statements({ token, companyId, name, ticker, notApplicable = [],
             : kind === "is"
               ? "EPS and diluted shares have no fiscal Q4: a 10-K states the year, and the year less nine months isn't the quarter when the share count changes. "
               : ""}
+        {kind === "cf" && "Outflows (capex, dividends, buybacks) are shown negative, as the cash flow statement prints them; the CSV too. Their XBRL tags carry the amount paid, so the chart builder and screener list them as positive amounts. "}
+        {kind === "cf" && "Cash at the start of a period is the end of the period before; the reconciliation checks start + change = end. "}
+        {period === "q" && "A marked quarter is far from the quarters beside it, or of the other sign (listed under the table). "}
+        {"A line with ▸ opens into what it is made of, with the tags and filings behind it. "}
         Italic values are derived (e.g. Q4 = the 10-K's year minus nine months year-to-date),
         the rest are reported. A value opens its filing in the reader; ↗ beside it (on hover) is the filing on EDGAR. {NO_DATA} no data in this period, — not reported, $0 a real zero.
       </div>
@@ -260,6 +416,7 @@ export function Statements({ token, companyId, name, ticker, notApplicable = [],
 }
 
 export function Ratios({ token, companyId, name, ticker, notApplicable = [] }: TableProps) {
+  const [opened, setOpened] = useState<{ metric: string; periodEnd: string } | null>(null);
   // with readings, the API says where debt/equity and ROE read n/m on negative equity
   // (`not_meaningful_periods`, from the company's own equity periods), so those aren't gaps;
   // equity comes along so its dates are columns
@@ -283,7 +440,25 @@ export function Ratios({ token, companyId, name, ticker, notApplicable = [] }: T
         </button>
       </div>
       <Gate load={load} name={name} what="Financials">
-        {() => (table!.rows.length ? <MetricTableView table={table!} first="Ratio" companyId={companyId} /> : <p className="empty">No ratios for these periods yet: they come from 10-Q and 10-K XBRL values. Statements shows what {name} reports.</p>)}
+        {() => {
+          if (!table!.rows.length) return <p className="empty">No ratios for these periods yet: they come from 10-Q and 10-K XBRL values. Statements shows what {name} reports.</p>;
+          const row = opened ? table!.rows.find((r) => r.metric === opened.metric) : undefined;
+          const openRow = (metric: string | null) => {
+            const r = table!.rows.find((x) => x.metric === metric);
+            const newest = r ? r.cells.map((c, i) => (c?.opens ? table!.columns[i]!.periodEnd : null)).filter(Boolean).at(-1) : null;
+            setOpened(metric && newest ? { metric, periodEnd: newest } : null);
+          };
+          return (
+            <>
+              <MetricTableView table={table!} first="Ratio" companyId={companyId} open={opened?.metric ?? null} onOpen={openRow} />
+              {opened && row && (
+                <ComponentsPanel token={token} companyId={companyId} metric={opened.metric} label={row.label} view="ttm"
+                  columns={table!.columns.filter((_, i) => row.cells[i]?.opens)} periodEnd={opened.periodEnd}
+                  onPeriod={(periodEnd) => setOpened({ ...opened, periodEnd })} onClose={() => setOpened(null)} />
+              )}
+            </>
+          );
+        }}
       </Gate>
     </section>
   );
@@ -297,8 +472,10 @@ export function Segments({ token, companyId, name }: { token: string; companyId:
   const load = useLoad(companyId, async () => {
     const [seg, fin] = await Promise.all([
       fetchSegments(token, companyId, 8),
-      // shares are of consolidated revenue; without it the table says what they're of instead
-      financialsView(token, companyId, 8, ["revenue"], "quarter").catch(() => ({ rows: [] as FinancialRow[] })),
+      // shares are of consolidated revenue; without it the table says what they're of instead. Gross
+      // profit and operating income: the totals an "All other" row must tie to (#171)
+      financialsView(token, companyId, 8, ["revenue", "gross_profit", "operating_income"], "quarter")
+        .catch(() => ({ rows: [] as FinancialRow[] })),
     ]);
     return { rows: seg.rows, revenue: fin.rows };
   });
@@ -317,6 +494,13 @@ export function Segments({ token, companyId, name }: { token: string; companyId:
           </section>
         ) : (
           <>
+            {/* #115: what this tab is for, against Revenue */}
+            <p className="tab-purpose muted">
+              {name}'s segments quarter by quarter, as filed: revenue, gross profit and operating income by segment, with
+              each segment's share of revenue and its growth on the same quarter a year earlier. Three-year trends, what
+              drove growth and revenue quality are on{" "}
+              <a href={href({ view: "company", companyId, tab: "revenue" })}>Revenue</a>.
+            </p>
             {tables.map((t) => (
               <section key={`${t.axis}|${t.metric}`} className="card">
                 <div className="card-h">
@@ -339,8 +523,10 @@ export function Segments({ token, companyId, name }: { token: string; companyId:
                     </thead>
                     <tbody>
                       {t.rows.map((r) => (
-                        <tr key={r.member} className={r.until ? "retired" : undefined}>
-                          <td className="first" title={r.until ? `${r.member}: last reported for ${r.until}` : r.member}>
+                        <tr key={r.member} className={r.until ? "retired" : r.reconciling ? "reconciling" : undefined}>
+                          <td className="first" title={r.until ? `${r.member}: last reported for ${r.until}`
+                            : r.reconciling ? "What the company reports outside its segments (corporate costs, items it doesn't allocate), shown for the quarters where it and the segments come to the reported total"
+                            : r.member}>
                             {r.label}
                             {r.until && <span className="until">until {r.until}</span>}
                           </td>
@@ -371,6 +557,13 @@ export function Segments({ token, companyId, name }: { token: string; companyId:
                 </TableScroll>
                 {t.overlapNote && <p className="small muted card-b">{t.overlapNote}</p>}
                 {t.retiredNote && <p className="small muted card-b">{t.retiredNote}</p>}
+                {t.rows.some((r) => r.reconciling) && (
+                  <p className="small muted card-b">
+                    All other: what the company reports outside its segments, as it files it, shown only for quarters where
+                    the segments and it add up to the reported {t.metric === "revenue" ? "revenue" : t.metric === "gross_profit" ? "gross profit" : "operating income"}
+                    {" "}(“{NO_DATA}” elsewhere); it's not a segment, so it has no share or growth rate.
+                  </p>
+                )}
                 {t.metric === "revenue" && t.shareOf === "none" && (
                   <p className="small muted card-b">No shares: consolidated revenue isn't known for this quarter, and these lines overlap, so their sum isn't a total either.</p>
                 )}

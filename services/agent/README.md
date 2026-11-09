@@ -16,7 +16,33 @@ as tool errors the model must report.
 | `list_filings` | `GET /v1/companies/{id}/filings` |
 | `get_section` | `GET /v1/companies/{id}/sections/{key}` |
 | `get_section_changes` | `GET /v1/companies/{id}/filings/{accession}/changes` (keeps the first `max_changes`, default 20, max 50; says how many it left out) |
+| `get_material_changes` | `GET /v1/companies/{id}/filings/{accession}/changes?view=ranked` (`topic` → `q`, `new_figures` → `numbers=new`; keeps the `max_changes` highest scores across sections, default 15, max 50, says how many it left out, and drops the echoed filters) |
 | `search_filings` | `GET /v1/search` |
+| `get_earnings_release` | `GET /v1/companies/{id}/earnings` (`quarters` 1-4, default 1; a quarter's quoted adjustments whole up to 6,000 characters, the rest keep heading and citation and say to read them with `get_section`) |
+| `get_events_since_report` | `GET /v1/companies/{id}/events` |
+
+`get_earnings_release` and `get_events_since_report` (Query API README, "Earnings and events") give
+the quarterly earnings release (its headline, the outlook it states, management's reconciliation
+tables and dollar notes, each quoted with its citation) and the 8-Ks filed since the latest
+10-Q/10-K period end, with the balance-sheet figures an event after it may have changed (an event
+flagged from its 7.01/8.01 announcement carries `announced`: the words that matched, quoted with a
+citation, so the model can say so). They were
+added without re-recording: the recorded suites don't depend on the tool list, and the chat and
+report prompts and existing tools are unchanged (`tests/adversarial`, `tests/citations` still 97
+passing). Both need the `filings` tier, so the adversarial harness counts a result for a company
+the user can't read filings for as a leak, as it does for `search_filings`.
+
+`get_material_changes` (F3) reads What changed for materiality (Query API README, "Read for
+materiality"): a 10-Q against the same quarter a year earlier unless the model asks for `prior`,
+split paragraphs, calendar rollovers and figure-only rows left out and counted, each change with
+its period, new and removed figures, a score and why. It is a new tool, not new parameters on
+`get_section_changes` (whose schema and answer are unchanged): no re-recording (97 replays pass),
+in `report.COMPANY_TOOLS` and in the harness's TOOL_TIER as `filings`. The answer drops the
+echoed `filters`: a topic is the model's own words, never evidence for a figure it writes
+(verify.py). Check my thesis lists it beside `get_section_changes` and, when it calls a risk
+factor new, says what the filing was compared with (tester 1 saw the check call a covenant
+"new" while What changed, against the prior 10-Q, showed nothing new: against a year ago,
+Vertiv's covenant risk factors are new).
 
 `get_financials`' metric names come from `GET /v1/metrics` (`MetricTools`, fetched once; until
 the Query API answers, the tool lists no names and the API rejects unknown ones).
@@ -50,6 +76,23 @@ income of July 2025 less April 2018's "verified" a made-up $99.9B). `/v1/search`
 query is never evidence (a searched figure would quote itself); its snippets are filing text,
 read without the « » marks. Every verdict in the recordings is unchanged, so they replay as
 recorded.
+Currencies (F8b): since migration 056 a foreign filer's figures are in its own currency, and
+`get_financials` says so per row (`unit` "EUR", "EUR/shares") and on the answer (`currency`, only
+when not USD). The system prompt still says to write dollars (changing it needs a re-record), so
+`verify.py` guards the other side: a figure written with "$" that the rules verified or derived from
+a row or input in another currency is checked again with dollar rows only, and is unverified unless
+those verify it ("$2,097M" about Birkenstock's €2,097M fails; "2,097 million" still matches). Every
+row in the recordings is in USD (a test reads them), so they replay as recorded. Not covered: a "$"
+figure quoted from a euro filing's text ("2,097 million" in a 20-F) still counts as quoted.
+The thesis check's H2 guard (`filing_checks`) reads the cited filing's figures with their `unit`
+(057): a "$" figure never agrees with a figure in another currency, and its note words the
+filing's figure in it ("net debt of €10.9B"); the stored filing figure keeps its fields (no unit:
+query_api's `FilingFigure` is strict). Every amount the model reads for a non-USD company says its
+currency where it reads it: the `get_financials` answer (above), the thesis check's prefetched
+history (the same answer) and each model's history in `<check_data>` (`currency` beside the
+amounts, from the model run's own, only when not USD so a dollar company's block is unchanged).
+The other tools return no amounts of Tributary's (events, filings, search) or quote the filing's
+own text, its currency sign included (sections, changes, earnings releases).
 
 ## agent-api
 
@@ -155,34 +198,41 @@ result) or an `error` event if it couldn't be saved or the model never submitted
   and nothing is spent; an empty thesis is a 422. The models it embeds (`[[embed:<id>]]` lines
   naming `model` items of its workspace, first 4) come from `GET /v1/workspaces/{id}`.
 - **Assumptions computed, not written by the model.** For each model, its company's history is
-  read as the user (`get_financials`, TTM, 40 quarters, as the web app's model page) and
-  `model_stats.py`, a port of the web app's `models/model.ts`, computes the 5-fiscal-year revenue
-  CAGR, mean operating margin and its [min, max], each forecast year's growth minus the CAGR and
-  two flags: **growth more than 10 percentage points above or below the CAGR, or a margin
-  outside the 5-year [min, max]** (`GROWTH_FLAG_POINTS`). The numbers go to the model as data;
-  it only writes the commentary. `services/web/src/models/stats-fixture.json` holds the same
-  inputs and expected numbers for both test suites. Each forecast year also says whether the
-  user set it (`user_set`): a year equal to a default a new model starts from (the run-rate rule
-  below, or the flat 5-year CAGR and average margin of models made before it) is Tributary's, not
-  the user's view, and `CHECK_RULES` tells the model not to endorse it as such. The data also
-  carries the TTM run rate (`ttm_growth_pct`, `ttm_margin_pct`).
-- **Model defaults** (`model_stats.default_assumptions`, port of web `defaultAssumptions`): year 1
-  at the trailing-twelve-month run rate (the newest TTM revenue against the TTM a year earlier,
-  and its operating margin; else the latest fiscal year's), then each year closes half the gap
-  to the long run: growth to the 5-year CAGR held between 0% and 5%, margin to the 5-year
-  average. NVIDIA (TTM +83.4%, 65.2%) starts 83.4 / 44.2 / 24.6% growth at 65.2 / 55.6 / 50.8%;
-  Deckers starts at its 6.3%, not its 16.5% CAGR. The fixture's `default_cases` hold real TTM
-  rows of four shapes (hyper-growth, accelerating, steady, shrinking).
+  read as the user (`get_financials`, TTM, 40 quarters: the evidence its figures verify against)
+  and the model is **run by the Query API** (`model_stats.run_model`: `POST
+  /v1/companies/{id}/model` with the saved state, as the user). Since F2 that route is the one
+  copy of a model's maths (Query API README, "Models: one copy of the maths"); agent-api no
+  longer ports the web app's. The run gives the 5-fiscal-year revenue CAGR, mean operating margin
+  and its [min, max], each forecast year's full-year growth minus the CAGR and two flags:
+  **growth more than 10 percentage points above or below the CAGR, or a margin outside the
+  5-year [min, max]**. The numbers go to the model as data; it only writes the commentary. Each
+  forecast year also says whether the user set it (`user_set`): a year equal to a default a new
+  model starts from (the run-rate rule, or the flat 5-year CAGR and average margin of models made
+  before it) is Tributary's, not the user's view, and `CHECK_RULES` tells the model not to endorse
+  it as such; the rates a year leaves at their defaults are listed (`defaulted`: tax rate,
+  interest and other, share change, FCF margin) under the same rule. The data also carries the
+  TTM run rate (`ttm_growth_pct`, `ttm_margin_pct`), each year's net income, diluted EPS and its
+  growth, share change and FCF margin, and `reported_quarters`: a model built from the current
+  year's reported quarters (F2 `ytd`) is checked on its full year, and `CHECK_RULES` says the
+  reported part isn't an assumption. If the run fails (no access, or an older Query API during a
+  deploy: "the Query API can't run models yet"), that model carries the error and the claims are
+  still checked.
 - **The base case.** A model with bear / base / bull scenarios (the Analysis tab) is checked on
   its **base** case only: `assumptions` in the saved state, which is all a model saved before
-  scenarios holds (`model_stats.scenario_assumptions`, ported from `models/model.ts`
-  `scenarioAssumptions`; the fixture's `scenario_cases` pin which assumptions each case uses).
-  The bear and bull cases never reach the data or the flags; the result's shape is unchanged.
+  scenarios holds (`model_stats.scenario_assumptions` reads it; the Query API's shared fixture's
+  `scenario_cases` pin which assumptions each case uses). The bear and bull cases never reach
+  the data or the flags; the result's shape is unchanged.
 - **The thesis is data.** The first 30,000 characters (`MAX_THESIS_CHARS`; the result says
   when the rest wasn't checked) go in a `<thesis>` block as a JSON string with `<`/`>` escaped,
   so nothing in it can close the block; Tributary's numbers in a `<check_data>` block. The chat
   rules apply unchanged, plus `CHECK_RULES` (the thesis is material to check, never
   instructions).
+- **Since the last report.** `CHECK_RULES` sends the model to the latest earnings release
+  (`get_earnings_release`: its outlook and adjustments) and the 8-Ks after the latest report's
+  period end (`get_events_since_report`) for the points the thesis doesn't address, and says a
+  balance-sheet figure from that period end is out of date when an event in `stale` follows it:
+  say so and cite the event, never compute a figure after it (tester 1's acquisition after the
+  quarter end came only from the check; C11).
 - **Only the thesis's companies.** The tools are the chat tools as the user, limited
   (`report.ScopedTools`) to the thesis's company, its models' companies and companies it names
   by ticker (`$NVDA`, `(NASDAQ: NVDA)`, bare upper-case tickers outside a stop list; at most 8
@@ -198,6 +248,19 @@ result) or an `error` event if it couldn't be saved or the model never submitted
   in the data, in the thesis's own words, its explanation or a citation's figure (the note names
   them: "supported" certifies the numbers). A "not mentioned" point without a citation is dropped
   (and the notes say so). Quotes are checked against the thesis text (`quote_found`).
+- **A computed figure against the cited filing's own (H2).** Agreeing with Tributary's computed
+  figure isn't agreeing with the filing: Riley's "Net debt was $10.92B" matched a net debt that left
+  NVIDIA's $99.37B of securities out and was certified. A supported claim whose figure (in the quote
+  or a citation's `figure`) is one of the computed figures the tools returned (`GUARDED`: net debt,
+  cash and investments, free cash flow; quarter view) is compared with the same figure computed from
+  each verified citation's own facts (`GET /v1/companies/{id}/filings/{accession}/figures`, read as
+  the user, never a tool result, cached per check). A difference beyond the claim's rounding and
+  0.5% makes it unverifiable with what the filing gives ("the 10-Q filed ... gives net debt of
+  -$66.0B at ... from its own figures, not $10.92B"); each comparison is kept on the claim
+  (`filing_figures`). A filing that doesn't give the figure isn't compared; an older Query API
+  without the route changes nothing. `CHECK_RULES` tells the model so (cite the filing whose
+  statement you checked the inputs against); `CheckResult` refuses a supported claim with a
+  disagreeing filing figure.
 - **Saved with the thesis.** Through the Query API with the user's token
   (`POST /v1/thesis-checks/{id}`, off the public site), with the SHA-256 of the company id and
   the text it checked (`text_hash`), the model, rounds, token usage and estimated cost.
@@ -260,6 +323,7 @@ Config (env):
 
 `pytest services/agent`: the tool loop runs against a scripted fake model and a mocked Query API transport;
 no API key needed. `test_thesis_check.py` includes the adversarial cases (injection in the
-thesis, another user's thesis, forged citations and figures); `test_model_stats.py` checks the
-shared fixture (statistics, flags and which assumptions each scenario uses). The live suites are [tests/adversarial](../../tests/adversarial) (leaks)
+thesis, another user's thesis, forged citations and figures; its fake Query API answers the
+model route with the Query API's own `model_maths.run`); `test_model_stats.py` checks which
+assumptions each scenario uses and how a failed run is worded. The live suites are [tests/adversarial](../../tests/adversarial) (leaks)
 and [tests/citations](../../tests/citations) (citation accuracy); CI replays their recordings.

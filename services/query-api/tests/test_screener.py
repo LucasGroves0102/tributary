@@ -49,6 +49,11 @@ class ScreenStore:
             rows.append(row)
         return rows
 
+    def co_registrants(self, user_id):
+        """PG&E Corp and its utility file one 10-K (silver.co_registrants, migration 047)."""
+        return [{"company_id": NVDA, "other_id": TSLA, "accession_no": "0001004980-26-000009",
+                 "filing_date": "2026-02-12", "filed_by": NVDA, "other_name": "Tesla, Inc."}]
+
 
 @pytest.fixture
 def client():
@@ -110,6 +115,27 @@ def test_the_latest_period_is_read_once_per_row():
     named = compile_screen(Screen(columns=["revenue_ttm"], sort="name"), None)
     assert named.sql.count("gold.latest_period(") == 1
     assert "r.sic, a.latest" in named.sql
+
+
+@pytest.mark.parametrize(
+    ("screen", "early"),
+    [
+        (Screen(columns=["revenue_ttm"], sort="-revenue_ttm"), False),
+        (Screen(sort="name", hide_blank=True, columns=["revenue_ttm"]), False),
+        (Screen(sort="sector"), True),
+        (Screen(sectors=["Energy"]), True),
+        (Screen(sector_industries=["Banks"], sort="-revenue_ttm"), True),
+    ],
+)
+def test_the_sector_is_joined_for_the_page_unless_a_filter_or_sort_needs_it(screen, early):
+    """Pre-ship review: the range join over every company cost ~70 ms a full-catalog call (and
+    its 19-rows-a-company estimate misled the plan above it); a page needs 50 lookups."""
+    sql = compile_screen(screen, None).sql
+    base, page = sql.split("ranked AS (")[0], sql.split("SELECT r.*")[1]
+    assert sql.count("silver.sic_sectors") == 1
+    assert ("silver.sic_sectors" in base) is early and ("silver.sic_sectors" in page) is not early
+    assert ("ss.sector" in base) is early
+    assert ("ss.industry AS sector_industry" in page) is not early
 
 
 def test_industry_sorts_by_its_name():

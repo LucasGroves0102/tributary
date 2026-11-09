@@ -6,11 +6,13 @@ POST /v1/thesis-checks (server.py) with a thesis's item id:
    (`GET /v1/workspace-items/{id}`: another user's item, a missing one and an item that isn't
    a thesis are the same 404) and its workspace (`GET /v1/workspaces/{id}`) for the models the
    thesis embeds (`[[embed:<id>]]` lines naming `model` items there, the first MAX_MODELS).
-   For each model it reads the company's history as the user
-   (`get_financials`, TTM, 40 quarters: what the web app's model page reads) and computes the
-   statistics and flags in Python (`model_stats.py`, the web app's `models/model.ts` port).
-   A model with bear / base / bull scenarios is checked on its BASE case (`assumptions`;
-   `model_stats.scenario_assumptions`), so models saved before scenarios check the same.
+   For each model it reads the company's history as the user (`get_financials`, TTM, 40
+   quarters: the evidence its figures are verified against) and runs the model through the
+   Query API (`POST /v1/companies/{id}/model`, `model_stats.run_model`: the one copy of the
+   maths, query_api/model_maths.py), which returns the statistics, flags and defaults. A model
+   with bear / base / bull scenarios is checked on its BASE case, so models saved before
+   scenarios check the same; a year built from reported quarters (F2 `ytd`) is checked on its
+   full year.
    The scope: the thesis's company, the models' companies, and companies the thesis names by
    ticker that the user can read (`/v1/me`), at most MAX_SCOPE. Nothing is spent before this
    succeeds.
@@ -24,7 +26,11 @@ POST /v1/thesis-checks (server.py) with a thesis's item id:
    citation checked against the filings the tools returned (unknown ones flagged), every figure
    in every explanation through verify.py (unverified ones flagged), supported/contradicted
    claims without a usable citation downgraded to unverifiable, points not mentioned without
-   one dropped, quotes checked against the thesis text.
+   one dropped, quotes checked against the thesis text. A supported claim whose figure is one of
+   Tributary's computed figures (net debt, cash and investments, free cash flow: `GUARDED`) is
+   compared with the same figure computed from each cited filing's own facts
+   (`/v1/companies/{id}/filings/{accession}/figures`, read as the user, never a tool result); if
+   they disagree it can't stay supported: unverifiable, "the filing gives X" (H2, Riley #2).
 5. It is saved through the Query API (`POST /v1/thesis-checks/{id}`, user's token; nginx keeps
    it off the public site) with the thesis text's hash, so the web app shows when a check is
    stale, and `filings` (Revisit): per company in the scope, the newest 10-K/10-Q in the SEC
@@ -48,14 +54,8 @@ from tributary_agent.agent import Agent, Answer, _collect_citations
 from tributary_agent.model_stats import (
     HISTORY_METRICS,
     HISTORY_QUARTERS,
-    MAX_HISTORY,
-    RunRate,
-    annual_history,
-    check_assumptions,
-    history_stats,
-    run_rate,
+    run_model,
     scenario_assumptions,
-    user_set,
 )
 from tributary_agent.report import (
     ACCESSION,
@@ -76,7 +76,7 @@ from tributary_agent.report import (
     tiers_of,
     user_access,
 )
-from tributary_agent.verify import verify
+from tributary_agent.verify import figures_in, verify
 
 CHECK_QUESTIONS = 4  # what one check counts against the assistant limits (README)
 CHECK_ROUNDS = 16
@@ -93,6 +93,13 @@ MAX_NOT_MENTIONED = 8
 MAX_CITATIONS = 6
 PERIODIC_FORMS = ("10-K", "10-Q")  # what "a newer filing since the check" means (Revisit)
 SUBMIT = "submit_check"
+# Tributary's computed dollar figures a claim may state; a supported one is compared with the
+# cited filing's own (H2). Margins aren't dollar figures (verify.py reads $ amounts only).
+GUARDED = frozenset({"net_debt", "cash_and_investments", "free_cash_flow"})
+GUARDED_LABEL = {"net_debt": "net debt", "cash_and_investments": "cash and investments",
+                 "free_cash_flow": "free cash flow"}
+FILING_TOLERANCE = 0.005  # beyond the claim's own rounding, a 0.5% difference is a disagreement
+MAX_FILING_FIGURES = 8
 STATUSES = ("supported", "contradicted", "unverifiable")
 FIGURE_STATUSES = ("verified", "derived", "quoted", "unverified")
 EMBED_LINE = re.compile(r"^\s*\[\[\s*embed\s*:\s*([0-9a-f-]{36})\s*\]\]\s*$", re.IGNORECASE)
@@ -124,16 +131,21 @@ refute (figures, growth, margins, segment mix, what management said, risks, even
 forecasts and valuation views are unverifiable. At most 20 claims, the most material first.
 2. Check each with the tools: get_financials (view ttm for annual or trailing figures), \
 list_filings, get_section (MD&A "7" or "I-2", risk factors "1A" or "II-1A"), \
-get_section_changes, search_filings. Status: supported (the data agrees), contradicted (the \
+get_section_changes, get_material_changes (what changed, ranked by materiality: a 10-Q against \
+the same quarter a year earlier), search_filings, get_earnings_release (what the latest release \
+says: its outlook and management's adjustments), get_events_since_report (8-Ks filed after the \
+latest 10-K or 10-Q period end). Status: supported (the data agrees), contradicted (the \
 data disagrees: say what it shows), unverifiable (an opinion, or not in the data). A \
 supported or contradicted claim cites the filing it rests on: its accession number from a tool \
 result, and the section key for text or the figure for a number.
 3. For each model in <check_data>, one or two sentences per forecast year on its growth and \
 margin against the history given there (use its CAGR, average and range as given; don't \
 recompute them), citing MD&A or results that bear on it. Flagged years matter most.
-4. Up to 5 material points from the company's latest 10-K or 10-Q that the thesis doesn't \
-address: new or rewritten risk factors (get_section_changes), MD&A trends. Each cites its \
-filing and section.
+4. Up to 5 material points the thesis doesn't address, from the company's latest 10-K or 10-Q \
+(new or rewritten risk factors with get_material_changes, MD&A trends), its latest earnings \
+release (the outlook it states, its adjustments: get_earnings_release) and its 8-Ks since that \
+report's period end (deals, new debt, impairments, leadership changes: \
+get_events_since_report). Each cites its filing and section.
 5. Call submit_check once with all of it, then reply with one short line.
 
 Quote each claim exactly as the thesis writes it: one sentence or phrase, copied character for \
@@ -151,12 +163,25 @@ the inputs against the filing you cite: net debt is total debt less cash, cash e
 marketable securities, so if the filing's balance sheet shows debt or investments the inputs \
 leave out, the claim is contradicted or unverifiable; say what's missing. Never call a figure \
 supported when the filing you cite shows something else.
-- Call a risk factor or disclosure new or rewritten only when get_section_changes shows it new \
-or rewritten in that filing.
+- Call a risk factor or disclosure new or rewritten only when get_section_changes or \
+get_material_changes shows it new or rewritten in that filing, and say what it was compared \
+with (the previous 10-Q or 10-K, or the same quarter a year earlier): the two can differ.
+- A balance-sheet figure as of the latest report's period end (cash, debt, net debt, assets, \
+equity) is out of date when get_events_since_report lists it under stale: say so and cite the \
+event. Never compute a figure after the event; the filings don't give it.
+- After you submit, a supported claim whose figure is one of Tributary's computed figures \
+(net debt, cash and investments, free cash flow) is compared with the same figure computed from \
+the cited filing's own statements; where they differ it is marked unverifiable with what the \
+filing gives. So cite the filing whose balance sheet or cash flow statement you checked the \
+inputs against.
 - In <check_data>, a forecast year with user_set false holds Tributary's default (the run rate \
 fading to the long run), not a number the user chose. Say the user hasn't set it; never call it \
 reasonable, supported or inside history because it matches history: a default does by \
-construction."""
+construction. The same goes for the rates a year lists under defaulted (tax rate, interest and \
+other, share change, FCF margin).
+- A forecast year with reported_quarters above 0 is the current fiscal year: those quarters are \
+reported results, and only the remainder is the user's assumption. Comment on the full year \
+given there; never call the reported part an assumption."""
 
 CHECK_QUESTION = ("Check this thesis following the check rules, then call submit_check with "
                   "the result.")
@@ -256,12 +281,15 @@ class Model:
     item_id: str
     name: str
     company_id: str
-    assumptions: list[dict]
-    history: list = field(default_factory=list)  # model_stats.HistoryYear
-    check: dict | None = None  # model_stats.check_assumptions
+    assumptions: list[dict]  # the base case as typed (model_stats.scenario_assumptions)
+    state: dict = field(default_factory=dict)  # the saved state, what the run is asked with
+    history: list[dict] = field(default_factory=list)  # the run's fiscal years
+    check: dict | None = None  # the run's cases.base.check (B2)
     error: str | None = None
-    run: RunRate | None = None  # the TTM run rate the defaults start from
+    run: dict | None = None  # the run's TTM run rate, which the defaults start from
     user_set: list[bool] = field(default_factory=list)  # per year: not one of Tributary's defaults
+    years: list[dict] = field(default_factory=list)  # the run's base-case years
+    currency: str | None = None  # the run's: every amount of the company is in it (056, 057)
 
 
 @dataclass
@@ -345,7 +373,7 @@ def _models(api: Api, job: Job) -> None:
             continue
         job.models.append(Model(ref=f"model-{n}", item_id=item["item_id"],
                                 name=_clean(str(item.get("name") or "Model"), 120),
-                                company_id=cid, assumptions=assumptions))
+                                company_id=cid, assumptions=assumptions, state=s))
 
 
 def named_tickers(markdown: str) -> list[str]:
@@ -384,8 +412,9 @@ def build_scope(api: Api, job: Job) -> None:
         job.companies[cid] = {"name": names.get(cid), "access": tiers_of(readable, everyone, cid)}
 
 
-def read_history(api: ToolRunner, job: Job) -> None:
-    """Each model's fiscal-year history, read as the user, and its assumptions against it."""
+def read_history(api: Api, job: Job) -> None:
+    """Each model's fiscal-year history, read as the user (the evidence), and the model run
+    through the Query API (the numbers)."""
     for m in job.models:
         content, is_error = api.run("get_financials", {
             "company_id": m.company_id, "metrics": HISTORY_METRICS,
@@ -395,12 +424,17 @@ def read_history(api: ToolRunner, job: Job) -> None:
                 "permission denied") else "couldn't read this company's history")
             continue
         job.prefetched.append(content)
-        body = json.loads(content)
-        rows = body.get("rows") or []
-        m.history = annual_history(rows, MAX_HISTORY)
-        m.check = check_assumptions(m.history, m.assumptions)
-        m.run = run_rate(rows)
-        m.user_set = user_set(history_stats(m.history), m.run, m.assumptions)
+        body, error = run_model(api, m.company_id, m.state)
+        if body is None:
+            m.error = error
+            continue
+        base = body["cases"]["base"]
+        m.history = [y for y in body.get("history") or [] if isinstance(y, dict)]
+        m.check = base["check"]
+        m.run = body.get("run_rate") if isinstance(body.get("run_rate"), dict) else None
+        m.currency = body.get("currency") if isinstance(body.get("currency"), str) else None
+        m.user_set = [bool(x) for x in base.get("user_set") or []]
+        m.years = [y for y in base.get("years") or [] if isinstance(y, dict)]
 
 
 def _filing_ref(row: Any, forms: tuple[str, ...] | None = None) -> dict | None:
@@ -474,19 +508,46 @@ def _pct(v: float | None) -> float | None:
     return None if v is None else round(v * 100, 2)
 
 
+def _round(v: float) -> float:
+    """A percent the user typed stays as typed (25 is 25); a computed full year to 2 places."""
+    return v if float(v).is_integer() else round(v, 2)
+
+
+def _lines(year: dict) -> dict:
+    """A forecast year's lines below operating income, from the run, for the check's data."""
+    if not year:
+        return {}
+    actual = year.get("actual") or {}
+    out = {"net_income": year.get("net_income"), "eps_diluted": year.get("eps"),
+           "eps_growth_pct": _pct(year.get("eps_growth")),
+           "share_change_pct": _pct(year.get("share_change")),
+           "fcf_margin_pct": _pct(year.get("fcf_margin")),
+           "defaulted": year.get("defaulted") or [],
+           "reported_quarters": actual.get("quarters") or 0}
+    return {k: (round(v, 2) if isinstance(v, float) else v) for k, v in out.items()}
+
+
 def data_block(job: Job) -> str:
     """Tributary's numbers for the check: the scope and each model against its history."""
     models = []
     for m in job.models:
         entry: dict[str, Any] = {"model": m.ref, "name": m.name, "company_id": m.company_id}
+        if m.currency not in (None, "USD"):
+            # every amount of this model is in it, not dollars; only when not USD (as
+            # /financials' `currency`), so a dollar company's block is unchanged
+            entry["currency"] = m.currency
         if m.error or m.check is None:
             entry["error"] = m.error or "no history"
         else:
             s = m.check["stats"]
             entry.update({
-                "history": [{"fiscal_year": y.fy, "period_end": y.period_end,
-                             "revenue": y.revenue, "operating_income": y.operating_income,
-                             "accession_no": y.revenue_accession} for y in m.history],
+                "history": [{"fiscal_year": y.get("fy"), "period_end": y.get("period_end"),
+                             "revenue": y.get("revenue"),
+                             "operating_income": y.get("operating_income"),
+                             "net_income": y.get("net_income"), "eps_diluted": y.get("eps"),
+                             "free_cash_flow": y.get("fcf"),
+                             "accession_no": ((y.get("sources") or {}).get("revenue") or {})
+                             .get("accession_no")} for y in m.history],
                 "revenue_cagr_pct": _pct(s["cagr"]), "cagr_years": s["cagr_years"],
                 "avg_operating_margin_pct": _pct(s["avg_margin"]),
                 "margin_years": s["margin_years"],
@@ -494,11 +555,11 @@ def data_block(job: Job) -> str:
                 "margin_max_pct": _pct(m.check["margin_max"]),
                 "latest_growth_pct": _pct(s["last_growth"]),
                 "latest_margin_pct": _pct(s["last_margin"]),
-                "ttm_growth_pct": _pct(m.run.growth if m.run else None),
-                "ttm_margin_pct": _pct(m.run.margin if m.run else None),
-                "ttm_period": m.run.period if m.run else None,
-                "forecast": [{"fiscal_year": y["fy"], "growth_pct": y["growth"],
-                              "margin_pct": y["margin"],
+                "ttm_growth_pct": _pct((m.run or {}).get("growth")),
+                "ttm_margin_pct": _pct((m.run or {}).get("margin")),
+                "ttm_period": (m.run or {}).get("period"),
+                "forecast": [{"fiscal_year": y["fy"], "growth_pct": _round(y["growth"]),
+                              "margin_pct": _round(y["margin"]),
                               "growth_vs_cagr_points": None if y["growth_vs_cagr"] is None
                               else round(y["growth_vs_cagr"], 2),
                               "flags": [f for f in (
@@ -506,10 +567,12 @@ def data_block(job: Job) -> str:
                                   y["margin_flag"] and f"margin {y['margin_flag']} history")
                                   if f],
                               "user_set": mine,
-                              "user_note": a.get("note")}
-                             for y, a, mine in zip(m.check["years"], m.assumptions,
-                                                   m.user_set or [True] * len(m.assumptions),
-                                                   strict=True)],
+                              "user_note": a.get("note"),
+                              **_lines(p)}
+                             for y, a, mine, p in zip(
+                                 m.check["years"], m.assumptions,
+                                 m.user_set or [True] * len(m.assumptions),
+                                 m.years or [{}] * len(m.assumptions), strict=True)],
             })
         models.append(entry)
     data = {
@@ -637,10 +700,124 @@ class Evidence:
         return out
 
 
+FilingLookup = Callable[[str, str], list[dict] | None]
+
+
+def computed_rows(results: list[str]) -> list[dict]:
+    """The /financials rows of GUARDED metrics the tools returned, quarter view only (a TTM is
+    no one filing's figure): {company_id, metric, period_start, period_end, value}."""
+    out = []
+    for content in results:
+        try:
+            data = json.loads(content)
+        except ValueError:
+            continue
+        if not isinstance(data, dict) or not isinstance(data.get("rows"), list) \
+                or data.get("view") == "ttm" or not CIK.fullmatch(str(data.get("company_id"))):
+            continue
+        for r in data["rows"]:
+            if not isinstance(r, dict) or r.get("metric") not in GUARDED:
+                continue
+            inputs = r.get("inputs")
+            if isinstance(inputs, dict) and "quarters" in inputs:
+                continue
+            try:
+                value = float(r["value"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            end = str(r.get("period_end") or "")
+            if ISO_DATE.fullmatch(end):
+                out.append({"company_id": data["company_id"], "metric": r["metric"],
+                            "period_start": r.get("period_start"), "period_end": end,
+                            "value": value})
+    return out
+
+
+def filing_checks(texts: list[str], rows: list[dict], cites: list[dict],
+                  lookup: FilingLookup) -> list[dict]:
+    """Each figure in `texts` that is one of the computed `rows`, against the same figure
+    computed from each verified citation's own facts: [{metric, period_end, accession_no,
+    figure, filing_value, agrees, unit}]. A filing that doesn't give that figure isn't compared.
+    A figure written in dollars ("$2,097M") never agrees with a filing's figure in another
+    currency (057's `unit`: €2,097M is not $2,097M). `unit` is for the note; it isn't stored
+    (query_api FilingFigure is strict)."""
+    out: list[dict] = []
+    seen: set[tuple] = set()
+    for text in texts:
+        for written, value, step in figures_in(text):
+            tol = step / 2 * 1.0001
+            for row in rows:
+                if abs(abs(row["value"]) - abs(value)) > tol:
+                    continue
+                for c in cites:
+                    acc = c["accession_no"]
+                    if not c["verified"] or c.get("company_id", row["company_id"]) != \
+                            row["company_id"]:
+                        continue
+                    key = (row["metric"], row["period_end"], acc, written)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    mine = next((f for f in lookup(row["company_id"], acc) or []
+                                 if f.get("how") == "computed" and f.get("metric") == row["metric"]
+                                 and f.get("period_end") == row["period_end"]
+                                 and (f.get("period_start") or None)
+                                 == (row["period_start"] or None)), None)
+                    if mine is None:
+                        continue
+                    try:
+                        theirs = float(mine["value"])
+                    except (KeyError, TypeError, ValueError):
+                        continue
+                    unit = str(mine.get("unit") or "USD")
+                    agrees = abs(abs(theirs) - abs(value)) <= max(tol, FILING_TOLERANCE
+                                                                  * abs(value)) \
+                        and not (written.lstrip().startswith("$") and not unit.startswith("USD"))
+                    out.append({"metric": row["metric"], "period_end": row["period_end"],
+                                "accession_no": acc, "figure": written[:60],
+                                "filing_value": _decimal(mine["value"]), "agrees": agrees,
+                                "unit": unit})
+    return out[:MAX_FILING_FIGURES]
+
+
+def _decimal(v: Any) -> str:
+    text = str(v)
+    return text if re.fullmatch(r"-?\d{1,20}(?:\.\d{1,10})?", text) else f"{float(v):.0f}"
+
+
+CURRENCY_SYMBOLS = {"USD": "$", "EUR": "€", "GBP": "£", "JPY": "¥"}
+
+
+def _money(v: float, unit: str = "USD") -> str:
+    """$2.1B; in another currency its own symbol or code (€2.1B, CNY 996.3B; 057)."""
+    code = unit.split("/")[0] or "USD"
+    prefix = CURRENCY_SYMBOLS.get(code, f"{code} ")
+    sign = "-" if v < 0 else ""
+    v = abs(v)
+    for scale, suffix in ((1e12, "T"), (1e9, "B"), (1e6, "M"), (1e3, "K")):
+        if v >= scale:
+            return f"{sign}{prefix}{v / scale:,.1f}{suffix}"
+    return f"{sign}{prefix}{v:,.0f}"
+
+
+def _disagreement_note(wrong: list[dict], cites: list[dict]) -> str:
+    w = wrong[0]
+    cite = next((c for c in cites if c["accession_no"] == w["accession_no"]), {})
+    filing = f"the {cite.get('form') or 'filing'}" + (f" filed {cite['filed']}"
+                                                       if cite.get("filed") else "")
+    return (f" (Marked unverifiable: {filing} gives {GUARDED_LABEL[w['metric']]} of "
+            f"{_money(float(w['filing_value']), w.get('unit') or 'USD')} at {w['period_end']} "
+            "from its own figures, not "
+            f"{w['figure']}: Tributary's computed figure doesn't match the filing.)")
+
+
 def assemble(job: Job, submitted: dict, answer: Answer, results: list[str], now: datetime,
-             questions: int = CHECK_QUESTIONS) -> dict:
-    """The check's result to store (query_api/thesis_checks.py CheckResult)."""
+             questions: int = CHECK_QUESTIONS,
+             filing_figures: FilingLookup | None = None) -> dict:
+    """The check's result to store (query_api/thesis_checks.py CheckResult). `filing_figures`
+    (company_id, accession_no) → the filing's own figures, for the H2 guard; None skips it."""
     ev = Evidence(results)
+    guarded = computed_rows(results) if filing_figures is not None else []
     notes: list[str] = []
     if job.truncated:
         notes.append(f"Only the first {MAX_THESIS_CHARS:,} of {len(job.markdown):,} characters "
@@ -680,6 +857,19 @@ def assemble(job: Job, submitted: dict, answer: Answer, results: list[str], now:
                 explanation = (explanation + f" (Marked unverifiable: {shown} "
                                f"{'is' if len(missing) == 1 else 'are'} not in the data the "
                                "assistant read.)").strip()
+        if claim["status"] == "supported" and guarded and filing_figures is not None:
+            # a figure that matches Tributary's computed one is checked against the cited
+            # filing's own (H2): agreeing with the app's figure isn't agreeing with the filing
+            checked = filing_checks([quote, *(c.get("figure") or "" for c in cites)], guarded,
+                                    cites, filing_figures)
+            if checked:
+                claim["filing_figures"] = [{k: v for k, v in c.items() if k != "unit"}
+                                           for c in checked]
+            wrong = [c for c in checked if not c["agrees"]]
+            if wrong:
+                claim["status"] = "unverifiable"
+                claim["downgraded"] = True
+                explanation = (explanation + _disagreement_note(wrong, cites)).strip()
         claim.update(explanation=explanation, citations=cites, figures=figures)
         claims.append(claim)
     if len(raw_claims) > MAX_CLAIMS:
@@ -764,6 +954,27 @@ def assemble(job: Job, submitted: dict, answer: Answer, results: list[str], now:
     return result
 
 
+def filing_lookup(api: Api) -> FilingLookup:
+    """The Query API's figures of one filing (/filings/{accession}/figures), as the user, cached
+    per check. Not a tool: its answer never joins tools.results (it would verify the model's
+    figures) and never reaches the model. None when it can't be read (no tier, an older API)."""
+    cache: dict[tuple[str, str], list[dict] | None] = {}
+
+    def lookup(company_id: str, accession_no: str) -> list[dict] | None:
+        if not CIK.fullmatch(company_id) or not ACCESSION.fullmatch(accession_no):
+            return None
+        key = (company_id, accession_no)
+        if key not in cache:
+            r = api.call("GET", f"/v1/companies/{company_id}/filings/{accession_no}/figures")
+            body = _json(r) if r is not None and r.status_code == 200 else None
+            figures = body.get("figures") if isinstance(body, dict) else None
+            cache[key] = [f for f in figures if isinstance(f, dict)] \
+                if isinstance(figures, list) else None
+        return cache[key]
+
+    return lookup
+
+
 def save(api: Api, job: Job, result: dict) -> dict:
     r = api.call("POST", f"/v1/thesis-checks/{job.item_id}", json_body={"result": result})
     if r is None:
@@ -812,7 +1023,8 @@ class Checker:
                     yield {"type": "error", "message": f"{why}, so there was nothing to save",
                            "cut_off": answer.stop == "max_tokens"}
                 else:
-                    result = assemble(job, tools.submitted, answer, tools.results, self._clock())
+                    result = assemble(job, tools.submitted, answer, tools.results, self._clock(),
+                                      filing_figures=filing_lookup(self._api))
                     try:
                         saved = save(self._api, job, result)
                     except CheckError as e:

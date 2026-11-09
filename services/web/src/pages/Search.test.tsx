@@ -56,23 +56,76 @@ async function render(search?: SearchState, companies = COMPANIES) {
 
 const calls = () => vi.mocked(fetch).mock.calls.map(([u]) => new URL(String(u), "http://x"));
 
-it("says how far back the ranking goes when the API searched a recent window", async () => {
-  reply = () => Response.json({ query: "", as_of: "2026-10-21T10:00:00Z", limit: 20, offset: 0, has_more: false, results: HITS, searched_from: "2026-09-21" });
+it("#81: says up front how far back the ranking goes when the API searched a recent window, and widens it", async () => {
+  reply = () => Response.json({ query: "", as_of: "2026-10-21T10:00:00Z", limit: 20, offset: 0, has_more: false, results: HITS,
+    searched_from: "2026-09-21", total: 4, sort: "relevance", window: "auto" });
   await render({ q: "supply chain", page: 0 });
-  expect(container.querySelector(".searched-from")?.textContent).toContain("since");
-  expect(container.querySelector(".searched-from")?.textContent).toContain("Pick a company or");
+  const scope = container.querySelector(".search-scope")!;
+  expect(scope.textContent).toContain("4 sections in every company's filings filed since Sep 21, 2026 match, best match first.");
+  await act(async () => [...scope.querySelectorAll("button")].find((b) => b.textContent === "All dates")!.click());
+  expect(parseSearch(window.location.hash.split("?")[1]!)).toEqual({ q: "supply chain", allDates: true });
+  await act(async () => [...scope.querySelectorAll("button")].find((b) => b.textContent === "The past year")!.click());
+  expect(parseSearch(window.location.hash.split("?")[1]!)).toEqual({ q: "supply chain", from: "2025-10-21" });
 });
 
-it("says nothing about a window when the whole index was searched", async () => {
-  await render({ q: "supply chain", page: 0 });
-  expect(container.querySelector(".searched-from")).toBeNull();
+it("#81: an older API's answer is described as it is: no count, no order it didn't use, no window offered", async () => {
+  await render({ q: "supply chain", page: 0, sort: "date" });
+  const scope = container.querySelector(".search-scope")!;
+  expect(scope.textContent).toBe("Sections in every company's filings of any date match, best match first.");
+  expect(scope.querySelector("button")).toBeNull();
+  expect(container.querySelector(".pager")?.textContent).toContain("1–4");
+  expect(container.querySelector(".pager")?.textContent).not.toContain(" of ");
+});
+
+it("#81: a chosen company is searched over every date, and the line says so", async () => {
+  reply = () => Response.json({ query: "", as_of: "2026-10-21T10:00:00Z", limit: 20, offset: 0, has_more: false, results: HITS,
+    total: 1, sort: "relevance", window: "exact" });
+  await render({ q: "groq", company: NVDA });
+  expect(Object.fromEntries(calls()[0]!.searchParams)).toEqual({ q: "groq", company: NVDA, limit: "20", offset: "0" });
+  expect(container.querySelector(".search-scope")?.textContent).toMatch(/^1 section in .*'s filings of any date matches, best match first\.$/);
+});
+
+it("#145: a total, and Newest first asks the API for date order and keeps the list in that order", async () => {
+  const dated = [hit(NVDA, "Nvidia", ACC, "II-1A"), hit(MSFT, "Microsoft", "0000789019-26-000010", "1A", "10-K"), hit(NVDA, "Nvidia", K_ACC, "1A", "10-K")];
+  reply = () => Response.json({ query: "", as_of: "2026-10-21T10:00:00Z", limit: 20, offset: 0, has_more: true, results: dated,
+    total: 347, sort: "date", window: "exact" });
+  await render({ q: "tariffs", sort: "date", allDates: true });
+  expect(Object.fromEntries(calls()[0]!.searchParams)).toEqual({ q: "tariffs", limit: "20", offset: "0", sort: "date", window: "exact" });
+  // Nvidia twice: newest first is a list, not a grouping by company
+  expect([...container.querySelectorAll(".result-co h2")].map((h) => h.textContent)).toEqual(["Nvidia", "Microsoft", "Nvidia"]);
+  expect(container.querySelector(".pager")?.textContent).toContain("1–3 of 347");
+  expect(container.querySelector(".search-scope")?.textContent).toContain("347 sections in every company's filings of any date match, newest first.");
+  const order = container.querySelector<HTMLSelectElement>('select[aria-label="Order"]')!;
+  expect(order.value).toBe("date");
+  await act(async () => {
+    order.value = "";
+    order.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  expect(parseSearch(window.location.hash.split("?")[1]!)).toEqual({ q: "tariffs", allDates: true });
+});
+
+it("#80: Exact phrase quotes the words, and a phrase's snippet marks the phrase only", async () => {
+  reply = () => Response.json({ query: "", as_of: "2026-10-21T10:00:00Z", limit: 20, offset: 0, has_more: false, total: 1,
+    results: [{ ...HITS[0]!, snippet: "the «export» «control» rules … «controls» to restrict … «export» licences" }] });
+  await render({ q: "export controls" });
+  // unquoted, the API's own marks: every word
+  expect([...container.querySelectorAll(".snippet mark")].map((m) => m.textContent)).toEqual(["export", "control", "controls", "export"]);
+  const box = container.querySelector<HTMLInputElement>(".search-form input[type=checkbox]")!;
+  expect(box.checked).toBe(false);
+  await act(async () => box.click());
+  expect(parseSearch(window.location.hash.split("?")[1]!)).toEqual({ q: '"export controls"' });
+  act(() => root.unmount());
+  await render({ q: '"export controls"' });
+  expect(container.querySelector<HTMLInputElement>(".search-form input[type=checkbox]")!.checked).toBe(true);
+  expect([...container.querySelectorAll(".snippet mark")].map((m) => m.textContent)).toEqual(["export control"]);
 });
 
 it("groups ranked passages by company and filing, each opening the reader at the passage", async () => {
   await render({ q: "export controls", form: "10-Q", from: "2026-01-01", page: 1 });
   const u = calls()[0]!;
   expect(u.pathname).toBe("/api/query/v1/search");
-  expect(Object.fromEntries(u.searchParams)).toEqual({ q: "export controls", form: "10-Q", from: "2026-01-01", limit: "20", offset: "20" });
+  // the dates picked are the dates searched, across every company (#81)
+  expect(Object.fromEntries(u.searchParams)).toEqual({ q: "export controls", form: "10-Q", from: "2026-01-01", limit: "20", offset: "20", window: "exact" });
   expect([...container.querySelectorAll(".result-co h2")].map((h) => h.textContent)).toEqual(["Nvidia", "Microsoft"]);
   const nvda = container.querySelector(".result-co")!;
   const filings = [...nvda.querySelectorAll(".result-filing")];
@@ -175,9 +228,9 @@ it("says why there are no results: too broad, no access, nothing matched", async
 });
 
 it("keeps only valid search state in the address", () => {
-  const s: SearchState = { q: "a & b?", form: "10-K", from: "2025-01-01", to: "2026-01-01", company: NVDA, page: 3 };
+  const s: SearchState = { q: "a & b?", form: "10-K", from: "2025-01-01", to: "2026-01-01", company: NVDA, sort: "date", allDates: true, page: 3 };
   expect(parseSearch(searchQuery(s))).toEqual(s);
-  expect(parseSearch("q=x&form=S-1&from=yesterday&company=NVDA&page=-1")).toEqual({ q: "x" });
+  expect(parseSearch("q=x&form=S-1&from=yesterday&company=NVDA&page=-1&sort=rank&dates=some")).toEqual({ q: "x" });
   expect(parseSearch("q=%20%20")).toBeNull();
   expect(parseSearch("page=99&q=x")).toEqual({ q: "x" });
   expect(groupHits(HITS).map((c) => [c.name, c.filings.map((f) => f.hits.length)])).toEqual([

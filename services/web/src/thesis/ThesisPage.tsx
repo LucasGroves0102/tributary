@@ -22,6 +22,7 @@ import { ITEM_NAME_MAX, KIND_LABELS, nameProblem } from "../workspaces/model";
 import { useEditorKeys } from "../workspaces/useEditor";
 import type { Saved } from "../workspaces/useSaved";
 import { clearHighlights, findQuote, highlightQuote, textHash } from "./check";
+import { BlockEditor, type BlockEditorHandle } from "./BlockEditor";
 import { CheckPanel } from "./CheckPanel";
 import { checkSection, embedSummary } from "./export";
 import {
@@ -71,17 +72,20 @@ type Loaded =
   | { state: "ok"; item: SavedItemFull; thesis: Thesis; items: EmbedItem[] }
   | { state: "error"; message: string; notFound: boolean };
 
-export type Mode = "write" | "preview" | "split";
+/** write: the text with its charts, comps, models and quotes as cards (BlockEditor); markdown: the
+ * same text as saved, embed lines and all; preview: rendered; split: write beside preview. */
+export type Mode = "write" | "markdown" | "preview" | "split";
 const MODE_KEY = "tributary.thesis.mode";
-const MODES: [Mode, string][] = [
-  ["write", "Write"],
-  ["preview", "Preview"],
-  ["split", "Side by side"],
+const MODES: [Mode, string, string][] = [
+  ["write", "Write", "Your text, with charts, comps, models and quotes as cards you can move and remove"],
+  ["markdown", "Markdown", "The text as it is saved and exported, embed lines and all"],
+  ["preview", "Preview", "The thesis as it reads"],
+  ["split", "Side by side", "Write beside the preview"],
 ];
 
 function storedMode(): Mode {
   const m = load(MODE_KEY);
-  if (m === "write" || m === "preview" || m === "split") return m;
+  if (m === "write" || m === "markdown" || m === "preview" || m === "split") return m;
   return typeof window !== "undefined" && window.innerWidth >= 1280 ? "split" : "write";
 }
 
@@ -186,6 +190,7 @@ function ThesisEditor({ token, item, initial, items, saved, label, readable, onO
   // #62: where the user put the cursor; until they do, an embed goes at the end, not above the title
   const placed = useRef(false);
   const text = useRef<HTMLTextAreaElement>(null);
+  const blocks = useRef<BlockEditorHandle>(null);
   const file = useRef<HTMLInputElement>(null);
   const cursor = useRef<number | null>(null);
   const hasTtm = useHasTtm(token);
@@ -282,7 +287,7 @@ function ThesisEditor({ token, item, initial, items, saved, label, readable, onO
   /** A claim's quote: highlighted in the preview when it shows, else selected in the editor. */
   const showQuoteRef = useRef<(q: string) => void>(() => undefined);
   const showQuote = (quote: string) => {
-    if (mode !== "write") {
+    if (mode === "preview" || mode === "split") {
       setHighlight((h) => ({ quote, n: (h?.n ?? 0) + 1 }));
       return;
     }
@@ -291,7 +296,13 @@ function ThesisEditor({ token, item, initial, items, saved, label, readable, onO
   showQuoteRef.current = showQuote;
   const selectQuote = (quote: string) => {
     const at = findQuote(markdown, quote);
-    if (!at || !text.current) return;
+    if (!at) return;
+    if (mode !== "markdown") {
+      if (mode === "preview") setMode("write");
+      window.setTimeout(() => blocks.current?.select(at.start, at.end), 0);
+      return;
+    }
+    if (!text.current) return;
     text.current.focus();
     text.current.setSelectionRange(at.start, at.end);
   };
@@ -342,17 +353,24 @@ function ThesisEditor({ token, item, initial, items, saved, label, readable, onO
 
   const embed = (itemId: string) => {
     if (!itemId) return;
-    const at = placed.current && mode !== "preview" && text.current ? text.current.selectionStart : markdown.length;
-    placed.current = true; // the cursor goes after the marker
+    // #62: until the user puts the cursor somewhere, an embed goes at the end
+    const at = mode === "markdown" ? (placed.current && text.current ? text.current.selectionStart : markdown.length)
+      : mode === "preview" ? markdown.length
+      : blocks.current?.cursor() ?? markdown.length;
     const r = insertEmbed(markdown, at, itemId);
     if (r.text.length > MAX_MARKDOWN) {
       setNotice({ text: `A thesis holds up to ${MAX_MARKDOWN.toLocaleString("en-US")} characters.`, error: true });
       return;
     }
-    cursor.current = r.cursor;
+    if (mode === "markdown") {
+      placed.current = true; // the cursor goes after the marker
+      cursor.current = r.cursor;
+    }
     setMarkdown(r.text);
     if (mode === "preview") setMode("write");
   };
+  const removed = (what: string, before: string) =>
+    setNotice({ text: `Removed the ${what}. Save to keep it that way.`, undo: { label: "Undo", to: { name, companyId, markdown: before } } });
 
   const onFile = async (e: ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -375,6 +393,11 @@ function ThesisEditor({ token, item, initial, items, saved, label, readable, onO
       return;
     }
     const before = { name, companyId, markdown };
+    if (r.markdown === markdown) {
+      // an export of this very text (#41): it reads back the same, so there's nothing to save
+      setNotice({ text: `Imported ${f.name}: the same text as the editor's, embeds and all.` });
+      return;
+    }
     setMarkdown(r.markdown);
     if (r.title && /^untitled/i.test(name.trim())) setName(r.title);
     setNotice({ text: `Imported ${f.name}. Save to keep it.`, ...(before.markdown ? { undo: { label: "Undo import", to: before } } : {}) });
@@ -434,6 +457,11 @@ function ThesisEditor({ token, item, initial, items, saved, label, readable, onO
           {markdown.length.toLocaleString("en-US")} / {MAX_MARKDOWN.toLocaleString("en-US")}
         </span>
       </div>
+      {mode !== "markdown" ? (
+        <BlockEditor markdown={markdown} onChange={setMarkdown} onRemoved={removed} items={items} token={token} label={label}
+          readable={readable} hasTtm={hasTtm} onOpenChart={onOpenChart} handle={blocks}
+          placeholder={"# The thesis in one line\n\nWhy now, what the filings show, what would prove it wrong.\n\nPick “Embed a saved item” to draw a chart or model here."} />
+      ) : (<>
       <label className="visually-hidden" htmlFor={`${id}-md`}>Thesis, in Markdown</label>
       <textarea
         id={`${id}-md`}
@@ -454,9 +482,11 @@ function ThesisEditor({ token, item, initial, items, saved, label, readable, onO
           if (e.key !== "Tab") placed.current = true; // tabbing in places nothing
         }}
       />
+      </>)}
       <p className="faint small">
-        Markdown: # headings, **bold**, lists, tables, links. An embed is a line of its own; items from other workspaces
-        aren't drawn.
+        {mode === "markdown"
+          ? "The text as saved: # headings, **bold**, lists, tables, links. An embed is a line of its own; items from other workspaces aren't drawn."
+          : "Markdown in the boxes: # headings, **bold**, lists, links. Charts, comps, models and quotes are cards: ↑ ↓ move one past the paragraph beside it (Alt+↑ / Alt+↓ on the card), ✕ removes it. Markdown shows the text as saved."}
         {missing > 0 && <span className="editor-warn"> {missing} embed{missing === 1 ? " points" : "s point"} at an item no longer in this workspace (skipped).</span>}
       </p>
     </div>
@@ -596,8 +626,8 @@ function ThesisEditor({ token, item, initial, items, saved, label, readable, onO
         </div>}
       </div>
       <div className="seg no-print" role="group" aria-label="View">
-        {MODES.map(([m, l]) => (
-          <button key={m} className={mode === m ? "on" : undefined} aria-pressed={mode === m} onClick={() => setMode(m)}>
+        {MODES.map(([m, l, t]) => (
+          <button key={m} className={mode === m ? "on" : undefined} aria-pressed={mode === m} title={t} onClick={() => setMode(m)}>
             {l}
           </button>
         ))}

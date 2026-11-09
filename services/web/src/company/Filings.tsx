@@ -1,18 +1,23 @@
-import { Fragment, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 
-import { filingIndex, filings as fetchFilings, sectionChanges } from "../api";
+import { filingIndex, filings as fetchFilings, insiderFilings, sectionChanges } from "../api";
 import { day } from "../format";
 import { href } from "../route";
 import type { IndexedFiling, SectionChanges } from "../types";
+import {
+  type Basis, type Change, type ChangedSection, comparedWith, comparisonLabel, countLine, defaultBasis, fallBack,
+  hiddenLine, isMaterial, marks, periodLabel, placed, sectionShort,
+} from "./changes";
 
-export type ChangedSection = SectionChanges["sections"][number];
-export type Change = ChangedSection["changes"][number];
+export type { Change, ChangedSection } from "./changes";
 /** "📌 Add to thesis" beside each changed paragraph (the Analysis tab's What changed step) */
 export type PinChange = (change: Change, section: ChangedSection) => ReactNode;
 import { eightKItems, filingHeadings, FORM_FILTERS, formsOf, formTag, parsedNote, type FormFilter } from "./data";
 import { Gate } from "./Tables";
 import { useLoad } from "./useLoad";
 import { TableScroll } from "../components/TableScroll";
+import { InsiderTable } from "./Insiders";
+import { filingLine } from "./insiders";
 
 export const INDEX_PAGE = 25;
 
@@ -50,6 +55,12 @@ export function Filings({ token, companyId, name, canRead, initialDiff, fiscalYe
   const items = new Map(
     parsed?.state === "ok" ? parsed.data.map((f) => [f.accession_no, eightKItems(f.sections.map((s) => s.section_key))]) : [],
   );
+  // #117: insider filings read from their XML (filings access); null from an older API
+  const insiders = useLoad(canRead && (filter === "insider" || filter === "all") ? `${companyId}|insiders` : null,
+    () => insiderFilings(token, companyId));
+  const insiderLines = new Map(
+    insiders?.state === "ok" && insiders.data ? insiders.data.filings.map((f) => [f.accession_no, filingLine(f)]) : [],
+  );
   const [diffFiling, setDiffFiling] = useState<IndexedFiling | null>(null);
   const closeDiff = () => {
     setDiff(null);
@@ -71,6 +82,7 @@ export function Filings({ token, companyId, name, canRead, initialDiff, fiscalYe
 
   return (
     <>
+      {filter === "insider" && canRead && <InsiderTable load={insiders} token={token} companyId={companyId} />}
       <section className="card">
         <div className="card-h wrap">
           <h2>Filings</h2>
@@ -143,6 +155,10 @@ export function Filings({ token, companyId, name, canRead, initialDiff, fiscalYe
                           <td className="muted items">
                             {eightK.length
                               ? eightK.join(" · ")
+                              : insiderLines.has(f.accession_no)
+                                ? insiderLines.get(f.accession_no)
+                              : insiderLines.size && /^[345](\/A)?$/.test(f.form)
+                                ? <span className="faint">details not read yet</span>
                               : f.sections
                                 ? note
                                 : note && <span className="faint">{note}</span>}
@@ -199,18 +215,19 @@ export function Filings({ token, companyId, name, canRead, initialDiff, fiscalYe
           <h2>What changed</h2>
           {diff && (
             <span className="sub" title={`Accession ${diff}`}>
-              {diffFiling ? `${diffFiling.form} filed ${day(diffFiling.filed, true)}, against the previous ${diffFiling.form}` : "the filing you chose, against the previous one of its type"}
+              {diffFiling ? `${diffFiling.form} filed ${day(diffFiling.filed, true)}` : "the filing you chose"}
             </span>
           )}
           {diff && <span className="grow" />}
           {diff && <button className="btn sm ghost" onClick={closeDiff}>Close</button>}
         </div>
         {diff ? (
-          <Changes key={diff} token={token} companyId={companyId} accessionNo={diff} name={name} />
+          <Changes key={diff} token={token} companyId={companyId} accessionNo={diff} name={name} form={diffFiling?.form ?? null} />
         ) : (
           <p className="empty">
             Choose What changed on a 10-K or 10-Q to see the Risk Factors and MD&amp;A paragraphs
-            that are new, removed or rewritten since the previous filing of the same type.
+            that are new, removed or rewritten: a 10-Q against the same quarter a year earlier, a
+            10-K against the previous 10-K, the most material first.
           </p>
         )}
       </section>
@@ -218,15 +235,220 @@ export function Filings({ token, companyId, name, canRead, initialDiff, fiscalYe
   );
 }
 
-/** What changed in one 10-K/10-Q's Risk Factors and MD&A (the Query API's /changes). `pin`
- * renders an action beside each changed paragraph. */
-export function Changes({ token, companyId, accessionNo, name, pin }: { token: string; companyId: string; accessionNo: string; name: string; pin?: PinChange }) {
-  const load = useLoad(accessionNo, () => sectionChanges(token, companyId, accessionNo));
-  if (load?.state === "ok") return <ChangeList data={load.data} companyId={companyId} pin={pin} />;
+/** The sections a form's What changed compares, for the section filter. */
+const COMPARED: Record<string, [string, string][]> = {
+  "10-Q": [["II-1A", "Risk Factors"], ["I-2", "MD&A"]],
+  "10-K": [["1A", "Risk Factors"], ["7", "MD&A"]],
+};
+
+/** How many changes a list shows before "Show all". */
+export const CHANGES_SHOWN = 30;
+
+/** What changed in one 10-K/10-Q's Risk Factors and MD&A (the Query API's /changes, read for
+ * materiality: F3, wording in `changes.ts`). A 10-Q opens against the same quarter a year earlier,
+ * the most material first, with the topic, new-figures and section filters; an older API that
+ * answers without `view` gets the plain list it always had. `pin` renders an action beside each
+ * changed paragraph. */
+export function Changes({ token, companyId, accessionNo, name, pin, form = null }: {
+  token: string;
+  companyId: string;
+  accessionNo: string;
+  name: string;
+  pin?: PinChange;
+  /** the filing's form: a 10-Q is compared with a year earlier by default */
+  form?: string | null;
+}) {
+  const [basis, setBasis] = useState<Basis>(defaultBasis(form));
+  const [chosen, setChosen] = useState(false);
+  const [fellBack, setFellBack] = useState(false);
+  const [view, setView] = useState<"ranked" | "reading">("ranked");
+  const [draft, setDraft] = useState("");
+  const [topic, setTopic] = useState("");
+  const [newFigures, setNewFigures] = useState(false);
+  const [section, setSection] = useState("");
+  const [all, setAll] = useState(false);
+  const load = useLoad([accessionNo, basis, view, topic, newFigures, section].join("|"), () =>
+    sectionChanges(token, companyId, accessionNo, {
+      basis, view, q: topic || undefined, numbers: newFigures ? "new" : undefined, section: section || undefined,
+    }),
+  );
+  const data = load?.state === "ok" ? load.data : null;
+  useEffect(() => {
+    if (data && fallBack(data, basis, chosen)) {
+      setBasis("prior");
+      setFellBack(true);
+    }
+  }, [data]);
+  const quarterly = !!form?.startsWith("10-Q");
+  const material = data ? isMaterial(data) : true;
+  const compared = data?.comparisons?.find((c) => c.basis === data.basis) ?? data?.sections[0]?.compared_to ?? null;
+  const pick = (b: Basis) => {
+    setBasis(b);
+    setChosen(true);
+    setFellBack(false);
+    setAll(false);
+  };
+  const applyTopic = (t: string) => {
+    setTopic(t.trim().length >= 2 ? t.trim() : "");
+    setAll(false);
+  };
+  const hidden = data && material ? hiddenLine(data) : null;
   return (
-    <Gate load={load} name={name} what="Filings">
-      {() => null}
-    </Gate>
+    <div className="changes">
+      <div className="row wrap changes-tools">
+        {quarterly && (
+          <span className="seg" role="group" aria-label="Compare with">
+            {(["year_ago", "prior"] as const).map((b) => (
+              <button key={b} className={basis === b ? "on" : undefined} aria-pressed={basis === b} onClick={() => pick(b)}>
+                {comparisonLabel(b, form)}
+              </button>
+            ))}
+          </span>
+        )}
+        {material && (
+          <span className="seg" role="group" aria-label="Order">
+            {(["ranked", "reading"] as const).map((v) => (
+              <button key={v} className={view === v ? "on" : undefined} aria-pressed={view === v} onClick={() => setView(v)}>
+                {v === "ranked" ? "Most material first" : "Reading order"}
+              </button>
+            ))}
+          </span>
+        )}
+        {material && (
+          <form className="row changes-topic" role="search" onSubmit={(e) => {
+            e.preventDefault();
+            applyTopic(draft);
+          }}>
+            <input type="search" className="field" aria-label="Topic" placeholder="Topic, e.g. tariffs" maxLength={100}
+              value={draft} onChange={(e) => setDraft(e.target.value)} />
+            <button className="btn sm" type="submit">Filter</button>
+            {topic && (
+              <button className="btn sm ghost" type="button" onClick={() => {
+                setDraft("");
+                applyTopic("");
+              }}>
+                Clear
+              </button>
+            )}
+          </form>
+        )}
+        {material && (
+          <label className="row changes-check">
+            <input type="checkbox" checked={newFigures} onChange={(e) => {
+              setNewFigures(e.target.checked);
+              setAll(false);
+            }} />
+            Only passages with new figures
+          </label>
+        )}
+        {material && form && COMPARED[form.slice(0, 4)] && (
+          <select className="field narrow" aria-label="Section" value={section} onChange={(e) => {
+            setSection(e.target.value);
+            setAll(false);
+          }}>
+            <option value="">Risk Factors and MD&amp;A</option>
+            {COMPARED[form.slice(0, 4)]!.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+          </select>
+        )}
+      </div>
+      {data && compared && (
+        <p className="changes-basis small">
+          Compared with {comparedWith(compared)}
+          {fellBack ? ": no 10-Q from a year earlier is indexed, so the previous one." : "."}
+        </p>
+      )}
+      {data && material && view === "ranked" && data.ranking && <p className="faint small changes-why">{data.ranking}</p>}
+      {hidden && <p className="faint small changes-hidden">{hidden}</p>}
+      {data ? (
+        material ? (
+          <MaterialList data={data} companyId={companyId} pin={pin} view={view} all={all} onAll={() => setAll(true)} />
+        ) : (
+          <ChangeList data={data} companyId={companyId} pin={pin} />
+        )
+      ) : (
+        <Gate load={load} name={name} what="Filings">
+          {() => null}
+        </Gate>
+      )}
+    </div>
+  );
+}
+
+const KIND: Record<Change["kind"], string> = { new: "New", removed: "Removed", rewritten: "Rewritten" };
+
+/** The materiality view's list: one list across sections (ranked) or section by section, each
+ * change with its section, period, what made it rank and where it sits in the filing. */
+function MaterialList({ data, companyId, pin, view, all, onAll }: {
+  data: SectionChanges;
+  companyId: string;
+  pin?: PinChange;
+  view: "ranked" | "reading";
+  all: boolean;
+  onAll: () => void;
+}) {
+  if (!data.sections.length) return <p className="empty">{data.note ?? "No comparable earlier filing is indexed yet."}</p>;
+  const stale = data.sections.filter((s) => s.stale);
+  const list = placed(data, view);
+  const shown = all ? list : list.slice(0, CHANGES_SHOWN);
+  const terms = data.filters?.terms ?? [];
+  const text = (t: string) => marks(t, terms).map(([run, hit], i) => (hit ? <mark key={i}>{run}</mark> : <Fragment key={i}>{run}</Fragment>));
+  return (
+    <div className="card-b diff">
+      <div className="faint small changes-count">{countLine(data, shown.length)}</div>
+      {stale.map((s) => (
+        <p key={s.section_key} className="faint">
+          {s.title ?? s.section_key} was re-parsed since the comparison was made; it will be recomputed.
+        </p>
+      ))}
+      {list.length === 0 && !stale.length && (
+        <p className="empty">
+          {data.filters?.q || data.filters?.numbers ? "No change matches these filters." : "No substantive paragraph changes in these sections."}
+        </p>
+      )}
+      {shown.map(({ change: c, section: s }, i) => {
+        const period = periodLabel(c.period);
+        return (
+          <p key={i} className={c.kind}>
+            <span className="row wrap change-head">
+              <b>{KIND[c.kind]}</b>
+              <span className="tag">{sectionShort(s.section_key)}</span>
+              {period && <span className="tag period" title="The period this passage describes">{period}</span>}
+            </span>
+            <span className="change-body">
+              {c.kind === "rewritten" && c.words
+                ? c.words.map(([op, t], j) =>
+                    op === "+" ? <ins key={j}>{text(t)} </ins> : op === "-" ? <del key={j}>{text(t)} </del> : <span key={j}>{text(t)} </span>,
+                  )
+                : text(c.text ?? c.prior_text ?? "")}
+            </span>
+            {c.why && c.why.length > 0 && (
+              <span className="change-why faint small">
+                Why {view === "ranked" ? "it ranks here" : "it matters"}: {c.why.join(" · ")}
+              </span>
+            )}
+            <span className="change-links small">
+              {c.citation && (
+                <a href={href({ view: "filing", companyId, accessionNo: c.citation.accession_no, section: c.citation.section_key, at: c.citation.char_start })}>
+                  Read it in the filing
+                </a>
+              )}
+              {!c.citation && c.prior_citation && (
+                <a href={href({ view: "filing", companyId, accessionNo: c.prior_citation.accession_no, section: c.prior_citation.section_key, at: c.prior_citation.char_start })}>
+                  Read it in the earlier filing
+                </a>
+              )}
+              {pin && <> {pin(c, s)}</>}
+            </span>
+          </p>
+        );
+      })}
+      {shown.length < list.length && (
+        <button className="btn sm" onClick={onAll}>Show all {list.length}</button>
+      )}
+      <div className="faint small">
+        Paragraph-level comparison of Risk Factors and MD&amp;A; a paragraph whose figures alone changed is not shown.
+      </div>
+    </div>
   );
 }
 
@@ -246,7 +468,7 @@ function ChangeList({ data, companyId, pin }: { data: SectionChanges; companyId:
             <span className="tag q">{s.summary.new} new</span>
             <span className="tag e">{s.summary.rewritten} rewritten</span>
             <span className="tag warn">{s.summary.removed} removed</span>
-            <span className="faint">· {s.summary.unchanged + s.summary.minor_edits + s.summary.numbers_only} unchanged or minor, hidden</span>
+            <span className="faint">· {s.summary.unchanged} unchanged or minor, hidden</span>
           </div>
           {s.stale ? (
             <p className="faint">This filing was re-parsed since the comparison was made; it will be recomputed.</p>

@@ -13,9 +13,10 @@
  * Whether a value is n/m, n/a or old is decided once, in the database (migration 035), so sorts,
  * filters and the agent's data can't disagree with the screen: the API sends `readings` and this
  * module only words them. A value marked old also shows, dimmed, with its date, and leaves sorts,
- * range filters and medians; one merely behind shows its date and still counts. */
+ * range filters and medians; one merely behind shows its date and still counts. An amount in
+ * another currency (056: a 20-F filer's euros) shows in that currency and leaves them too. */
 
-import { day, quarter } from "./format";
+import { currencyOf, day, money, quarter } from "./format";
 import type { Num, ValueReading, ValueSource } from "./types";
 
 export const NOT_REPORTED = "—";
@@ -40,14 +41,23 @@ const NEEDS: Record<string, string> = {
   current_ratio: "current assets and current liabilities",
   roe: "net income and stockholders' equity",
   payout_ratio: "dividends and net income",
+  efficiency_ratio: "noninterest expense, net interest income and noninterest income",
+};
+
+/** Why a bank line is often blank (migration 048 measured every bank's tags). */
+const TAGGING: Record<string, string> = {
+  cet1_ratio: " Most banks tag their CET1 ratio only in the 10-K, and the largest (JPMorgan, Bank of America, Wells Fargo) only under their own XBRL tags, which Tributary doesn't read.",
+  loans: " Some banks (Wells Fargo) tag their loans only under their own XBRL tags.",
+  provision_for_credit_losses: "",
 };
 
 /** The hover of a — under a label like "Free cash flow". */
 export function notReportedTitle(label: string, key: string): string {
-  const needs = NEEDS[key.replace(/_(ttm|q)$/, "")];
+  const metric = key.replace(/_(ttm|q)$/, "");
+  const needs = NEEDS[metric];
   return needs
     ? `${label}: can't be computed. It needs ${needs}, and this company's filings don't give all of them.`
-    : `${label}: not reported. This company's filings don't give this figure.`;
+    : `${label}: not reported. This company's filings don't give this figure.${TAGGING[metric] ?? ""}`;
 }
 
 /** One figure as tables show it. `value` is what it ranks by: null unless it can be compared. */
@@ -107,6 +117,16 @@ export function readFigure({ label, columnKey, raw, reading, source, latestPerio
         asOf: source ? quarter(source.period_end) : null,
         title: `${sourceTitle} This company's latest period is ${latestPeriod ? day(latestPeriod, true) : "later"}.`,
       };
+    case "other_currency": {
+      // an amount in the company's own currency (migration 056): shown in it, labelled, and never
+      // ranked or averaged with dollars
+      const unit = reading?.unit ?? "";
+      const inIt = exact === null ? null : money(exact, unit);
+      return {
+        value: null, text: inIt ?? NOT_REPORTED, asOf: null, old: false, status,
+        title: `${label}: ${inIt ? `${inIt}, ` : ""}reported in ${currencyOf(unit)}, so it isn't sorted, filtered or averaged with US-dollar figures.${source_}`,
+      };
+    }
     default:
       return exact === null
         ? { value: null, text: NOT_REPORTED, title: notReportedTitle(label, columnKey), asOf: null, old: false, status: null }

@@ -213,6 +213,8 @@ it("a signed-in reader can follow a check to the screener; signed out, the page 
   await act(async () => root.render(<Status load={async () => status()} now={() => NOW} signedOut />));
   for (let i = 0; i < 2; i++) await act(async () => {});
   expect(container.querySelector('a[href^="#/companies"]')).toBeNull();
+  // #55: signed out, the page says how to get the list instead of a dead number
+  expect(container.querySelector(".card-note")?.textContent).toContain("Sign in to list the companies behind each count");
   act(() => root.unmount());
   container.remove();
 });

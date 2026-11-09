@@ -339,6 +339,43 @@ def test_goldman_is_a_bank_by_name_though_the_sec_files_it_under_brokers(conn):
     assert "free_cash_flow" in rows[0] and rows[1] == []
 
 
+# 058: bank holding companies under SICs whose other filers aren't banks (silver.companies' ids)
+SCHWAB, AMEX, SYNCHRONY, ALLY = "0000316709", "0000004962", "0001601712", "0000040729"
+
+
+@pytest.mark.parametrize("cid,sic", [(SCHWAB, "6211"), (AMEX, "6199"), (SYNCHRONY, "6199"),
+                                     (ALLY, "6022"), (ALLY, "6199")])
+def test_bank_holding_companies_are_banks_by_id(conn, cid, sic):
+    banks = conn.execute("SELECT gold.not_applicable_metrics(%s, %s)", (cid, sic)).fetchone()[0]
+    assert {"net_debt", "free_cash_flow", "debt_to_equity", "cash_and_investments"} <= set(banks)
+    # their SICs alone don't make a bank: another broker or card lender isn't one
+    assert conn.execute("SELECT gold.not_applicable_metrics('9999999999', %s)",
+                        (sic,)).fetchone()[0] == ([] if sic != "6022" else banks)
+
+
+def test_one_rule_gives_a_bank_its_readings_page_template_and_peer_columns(conn, token):
+    """American Express (SIC 6199) is a bank through gold.not_applicable_metrics alone: the
+    screener's `not_applicable` (the web's bank template reads it) and the peers' bank columns."""
+    conn.execute("INSERT INTO silver.companies (company_id, name, current_cik, sic,"
+                 " sic_description) VALUES (%s, 'American Express', %s, '6199',"
+                 " 'Finance Services')", (AMEX, AMEX))
+    conn.execute("INSERT INTO silver.company_ciks (cik, company_id) VALUES (%s, %s)", (AMEX, AMEX))
+    conn.execute("INSERT INTO authz.public_access (company_id, tier) VALUES (%s, 'financials')",
+                 (AMEX,))
+    reported(conn, AMEX, "revenue", LATEST, 70_000_000_000)
+    derived(conn, AMEX, "free_cash_flow", LATEST, 14_000_000_000, {"capex": 1}, unit="USD")
+    body = api(conn).get("/v1/screener", params={"columns": ["free_cash_flow_ttm"],
+                                                 "company_id": [AMEX]},
+                         headers=token(USER)).json()
+    (row,) = body["rows"]
+    assert "net_debt" in row["not_applicable"]
+    assert row["readings"]["free_cash_flow_ttm"]["status"] == "not_applicable"
+    peers = api(conn).get(f"/v1/companies/{AMEX}/peers", headers=token(USER))
+    assert peers.status_code == 200, peers.text
+    keys = [c["key"] for c in peers.json()["columns"]]
+    assert keys[:3] == ["revenue_ttm", "net_interest_income_ttm", "efficiency_ratio_ttm"]
+
+
 def test_negative_equity_is_said_outright_not_read_from_an_old_quarter(conn, token):
     body = screen(conn, token, columns=["debt_to_equity_q"], sort="-debt_to_equity_q")
     negative = row_of(body, "Negative Equity Co")
@@ -392,6 +429,21 @@ def test_industry_sorts_by_the_name_shown_not_the_code(conn, token):
     # Agricultural Production's SIC here is 1311, Semiconductors' 3674: a code sort reads otherwise
     assert industries == sorted(industries, key=str.lower)
     assert industries[0] == "Agricultural Production"
+
+
+def test_sectors_read_the_same_joined_for_the_page_or_for_every_company(conn, token):
+    """Pre-ship review: 046's sector is joined after the LIMIT unless a filter or sort needs it;
+    the rows say the same either way."""
+    every = {r["name"]: (r["sector"], r["sector_industry"])
+             for r in screen(conn, token, columns=["revenue_ttm"], sort="name", limit=50)["rows"]}
+    assert every["Normal Co"] == ("Technology", "Semiconductors")
+    assert every["Bank Co"] == ("Financials", "Banks & thrifts")
+    tech = screen(conn, token, columns=["revenue_ttm"], sector=["Technology"], sort="name")
+    assert [r["name"] for r in tech["rows"]] == ["Absurd Co", "Normal Co"]
+    assert all(every[r["name"]] == (r["sector"], r["sector_industry"]) for r in tech["rows"])
+    grouped = screen(conn, token, columns=["revenue_ttm"], sort="sector", limit=50)["rows"]
+    keys = [f"{r['sector']} / {r['sector_industry']}".lower() for r in grouped if r["sector"]]
+    assert keys == sorted(keys) and len(keys) == sum(1 for v in every.values() if v[0])
 
 
 def test_financials_reads_not_meaningful_only_when_asked(conn, token):
@@ -528,6 +580,232 @@ def test_an_impossible_future_date_doesnt_make_everything_else_old(conn, token):
         cur.execute("SELECT latest FROM gold.latest_period(%s)", (NORMAL,))
         assert cur.fetchone()[0] == LATEST
         cur.execute("RESET ROLE")
+
+
+EURO = "9200000010"
+
+
+def euro_co(conn):
+    """Birkenstock's shape (migration 056): figures in euros, only fiscal years and balances."""
+    conn.execute("INSERT INTO silver.companies (company_id, name, current_cik, sic,"
+                 " sic_description) VALUES (%s, 'Euro Co', %s, '3021', 'Footwear')", (EURO, EURO))
+    conn.execute("INSERT INTO silver.company_ciks (cik, company_id) VALUES (%s, %s)", (EURO, EURO))
+    conn.execute("INSERT INTO authz.public_access (company_id, tier) VALUES (%s, 'financials')",
+                 (EURO,))
+    conn.execute(
+        "INSERT INTO gold.quarterly_financials (company_id, metric, period_start, period_end,"
+        " value, unit, value_source, source_tag, accession_no, form, filed, source_accessions,"
+        " ingested_at) VALUES (%s, 'total_assets', NULL, %s, 4942120000, 'EUR', 'reported',"
+        " 'ifrs-full:Assets', '0001977102-25-000001', '20-F', %s, '{0001977102-25-000001}', now())",
+        (EURO, LATEST, LATEST + timedelta(days=60)))
+    derived(conn, EURO, "revenue", LATEST, 9_000_000_000_000, {"quarters": []}, unit="EUR")
+    derived(conn, EURO, "gross_margin", LATEST, Decimal("0.99"), {"revenue": 2e9})
+
+
+def test_an_amount_in_another_currency_is_shown_in_it_but_never_ranked_with_dollars(conn, token):
+    euro_co(conn)
+    body = screen(conn, token, columns=["revenue_ttm", "gross_margin_ttm"], sort="-revenue_ttm",
+                  limit=50)
+    assert names(body)[0] != "Euro Co"  # 9 trillion euros doesn't top a dollar sort
+    euro = row_of(body, "Euro Co")
+    assert Decimal(str(euro["values"]["revenue_ttm"])) == 9_000_000_000_000
+    reading = euro["readings"]["revenue_ttm"]
+    assert reading["status"] == "other_currency" and reading["unit"] == "EUR"
+    assert reading["reason"].startswith("reported in EUR")
+    # a ratio has no currency: it ranks with everyone's
+    assert "gross_margin_ttm" not in euro["readings"]
+    assert names(screen(conn, token, columns=["gross_margin_ttm"], sort="-gross_margin_ttm",
+                        limit=50))[0] == "Euro Co"
+    # nor does a filter take it
+    over = screen(conn, token, columns=["revenue_ttm"], where=["revenue_ttm:gt:1"], sort="name",
+                  limit=50)
+    assert "Euro Co" not in names(over)
+    # a dollar company's readings say nothing new
+    assert "revenue_ttm" not in row_of(body, "Normal Co")["readings"]
+
+
+def test_financials_say_their_currency_and_that_they_are_years(conn, token):
+    euro_co(conn)
+    c = api(conn)
+    body = c.get(f"/v1/companies/{EURO}/financials", headers=token(USER),
+                 params={"view": "ttm", "metrics": ["revenue"]}).json()
+    assert (body["currency"], body["cadence"]) == ("EUR", "annual")
+    usd = c.get(f"/v1/companies/{NORMAL}/financials", headers=token(USER),
+                params={"view": "ttm", "metrics": ["revenue"]}).json()
+    assert "currency" not in usd and "cadence" not in usd  # a dollar filer's JSON is as before
+
+
+EIDP_LIKE, SIX_K = "9200000021", "9200000022"
+
+
+def periodic(conn, cid, form, filed, n):
+    conn.execute("INSERT INTO bronze.submission_filings (accession_no, cik, form, filing_date,"
+                 " report_date) VALUES (%s, %s, %s, %s, %s)",
+                 (f"{cid}-26-{n:06d}", cid, form, filed, filed - timedelta(days=40)))
+
+
+def listed(conn, cid, name):
+    conn.execute("INSERT INTO silver.companies (company_id, name, current_cik, sic)"
+                 " VALUES (%s, %s, %s, '2800')", (cid, name, cid))
+    conn.execute("INSERT INTO silver.company_ciks (cik, company_id) VALUES (%s, %s)", (cid, cid))
+    for tier in ("financials", "filings"):
+        conn.execute("INSERT INTO authz.public_access (company_id, tier) VALUES (%s, %s)",
+                     (cid, tier))
+
+
+def test_a_us_filer_whose_figures_stopped_is_old_not_once_a_year(conn, token):
+    """B1 (pre-ship review): EIDP files 10-Qs but its figures end in 2019. The old rule (no
+    quarter in 800 days, TTM rows) called it a 20-F/40-F filer; ~96 US filers on hermes."""
+    listed(conn, EIDP_LIKE, "Stale US Co")
+    reported(conn, EIDP_LIKE, "revenue", date(2019, 3, 31), 5_000_000_000)
+    derived(conn, EIDP_LIKE, "revenue", date(2019, 3, 31), 21_000_000_000, {"quarters": []},
+            unit="USD")
+    periodic(conn, EIDP_LIKE, "10-K", date(2026, 2, 10), 1)
+    periodic(conn, EIDP_LIKE, "10-Q", date(2026, 7, 31), 2)
+    # a 20-F filer whose quarters come in gold too (ICON, Arm: 6-Ks): quarters
+    listed(conn, SIX_K, "Six-K Co")
+    recent = date.today() - timedelta(days=120)
+    reported(conn, SIX_K, "revenue", recent, 2_000_000_000)
+    derived(conn, SIX_K, "revenue", recent, 8_000_000_000, {"quarters": []}, unit="USD")
+    periodic(conn, SIX_K, "20-F", date.today() - timedelta(days=200), 1)
+    # Birkenstock's, now with its 20-F in the index: once a year
+    euro_co(conn)
+    periodic(conn, EURO, "20-F", LATEST + timedelta(days=60), 1)
+    c = api(conn)
+    for cid, cadence in ((EIDP_LIKE, None), (SIX_K, None), (EURO, "annual")):
+        body = c.get(f"/v1/companies/{cid}/financials", headers=token(USER),
+                     params={"view": "ttm", "metrics": ["revenue"]}).json()
+        assert body.get("cadence") == cadence, cid
+    store = Store(OneConnection(conn))
+    assert store.cadence(USER, EIDP_LIKE) == "quarterly"
+    assert store.cadence(USER, SIX_K) == "quarterly"
+    assert store.cadence(USER, EURO) == "annual"
+    # a 20-F filer who later files 10-Qs is quarterly again; one who files 20-Fs after its
+    # 10-Qs is annual (the latest report decides)
+    periodic(conn, EURO, "10-Q", LATEST + timedelta(days=120), 2)
+    assert store.cadence(USER, EURO) == "quarterly"
+    periodic(conn, EIDP_LIKE, "20-F", date(2026, 10, 1), 3)
+    assert store.cadence(USER, EIDP_LIKE) == "annual"
+
+
+@pytest.mark.parametrize(
+    ("metric", "value", "inputs", "currency", "says"),
+    [
+        # the dollar bases (035) only for dollar amounts; every ratio bound for every currency
+        ("gross_margin", "0.4", {"revenue": 5e4}, "USD", "under $100K"),
+        ("gross_margin", "0.4", {"revenue": 5e4}, "JPY", None),  # ¥50,000 is $330
+        ("gross_margin", "0.4", {"revenue": 5e4}, None, "under $100K"),  # unknown: dollars
+        ("gross_margin", "1.2", {"revenue": 5e4}, "JPY", "larger than revenue"),
+        ("operating_margin", "12", {"revenue": 5e4}, "KRW", "larger than revenue"),
+        ("net_margin", "-11", {"revenue": 5e10}, "JPY", "ten times revenue"),
+        ("revenue_growth", "22.7", {"revenue_year_ago": 4.9e6}, "USD", "under $10M"),
+        ("revenue_growth", "22.7", {"revenue_year_ago": 4.9e6}, "JPY", None),
+        ("revenue_growth", "0.5", {"revenue_year_ago": 5e4}, "EUR", None),
+        ("revenue_growth", "-1.4", {"revenue_year_ago": 5e8}, "JPY", "negative"),
+        ("net_income_growth", "15", {"net_income_year_ago": 9e6}, "KRW", None),
+        ("net_income_growth", "-3", {"net_income_year_ago": 5e8}, "KRW", "profit to a loss"),
+        ("debt_to_equity", "563", {}, "JPY", "over 100 times"),
+    ],
+)
+def test_the_dollar_bases_apply_only_to_dollars(conn, metric, value, inputs, currency, says):
+    """057: 035's absolute bases are in dollars; against yen or won they never fired (¥100K is
+    $650), so they apply only to dollar amounts and the ratio bounds to every currency. The
+    four-argument form (an older Query API) reads as dollars, as before."""
+    got = conn.execute(
+        "SELECT gold.not_meaningful(%s, %s::numeric, %s::jsonb, NULL, %s)",
+        (metric, value, json.dumps(inputs), currency),
+    ).fetchone()[0]
+    if says is None:
+        assert got is None
+    else:
+        assert says in got
+    if currency in (None, "USD"):
+        four = conn.execute("SELECT gold.not_meaningful(%s, %s::numeric, %s::jsonb)",
+                            (metric, value, json.dumps(inputs))).fetchone()[0]
+        assert four == got
+
+
+YEN = "9200000011"
+
+
+def yen_co(conn, revenue):
+    """Toyota's shape after 056: every amount in yen, here a ¥50,000 revenue (a small base in
+    dollars it isn't) with a 40% margin and +2,270% growth from ¥4.9M."""
+    conn.execute("INSERT INTO silver.companies (company_id, name, current_cik, sic,"
+                 " sic_description) VALUES (%s, 'Yen Co', %s, '3711', 'Motor Vehicles')",
+                 (YEN, YEN))
+    conn.execute("INSERT INTO silver.company_ciks (cik, company_id) VALUES (%s, %s)", (YEN, YEN))
+    conn.execute("INSERT INTO authz.public_access (company_id, tier) VALUES (%s, 'financials')",
+                 (YEN,))
+    reported(conn, YEN, "revenue", LATEST, revenue, unit="JPY")
+    derived(conn, YEN, "gross_margin", LATEST, Decimal("0.4"), {"revenue": revenue})
+    derived(conn, YEN, "revenue_growth", LATEST, Decimal("22.7"), {"revenue_year_ago": 4.9e6})
+
+
+def test_a_yen_companys_small_base_is_not_a_dollar_one(conn, token):
+    """057 through every reader: the screener's reading, /financials with readings and a chart's
+    point read a yen company's margin and growth as figures; a dollar company with the same
+    numbers reads n/m, as before."""
+    yen_co(conn, 50_000)
+    reported(conn, BLANK, "revenue", LATEST, 50_000)
+    derived(conn, BLANK, "gross_margin", LATEST, Decimal("0.4"), {"revenue": 50_000})
+    with conn.cursor() as cur:
+        cur.execute("SET LOCAL ROLE query_api")
+        cur.execute("SELECT set_config('app.user_id', %s, true)", (USER,))
+        for cid, expect in ((YEN, None), (BLANK, "not_meaningful")):
+            cur.execute("SELECT x.status FROM gold.latest_period(%s) lp, gold.latest_reading("
+                        "%s, 'ttm', 'gross_margin', NULL, lp.latest) x", (cid, cid))
+            assert cur.fetchone()[0] == expect, cid
+        cur.execute("SELECT gold.amount_currency(%s), gold.amount_currency(%s)", (YEN, BLANK))
+        assert cur.fetchone() == ("JPY", "USD")
+        cur.execute("RESET ROLE")
+    c = api(conn)
+    rows = c.get(f"/v1/companies/{YEN}/financials", headers=token(USER),
+                 params={"view": "ttm", "metrics": ["gross_margin", "revenue_growth"],
+                         "readings": "true"}).json()["rows"]
+    assert [r["not_meaningful"] for r in rows] == [None, None]
+    usd = c.get(f"/v1/companies/{BLANK}/financials", headers=token(USER),
+                params={"view": "ttm", "metrics": ["gross_margin"], "readings": "true"}).json()
+    assert "under $100K" in usd["rows"][0]["not_meaningful"]
+    point = c.post("/v1/formulas/evaluate", headers=token(USER),
+                   json={"formula": "gross_margin", "view": "ttm", "default_company": YEN}).json()
+    assert point["points"] and "not_meaningful" not in point["points"][-1]
+
+
+def test_an_annual_only_yen_filers_currency_is_yen(conn, token):
+    """060: a 20-F filer reports no quarters; its revenue and net income are stated years, kept
+    only as TTM rows of gold.derived_financials. 057's gold.amount_currency and latest_reading's
+    base lookup read quarterly rows alone, so such a yen filer read USD and its ¥50,000 base got
+    the dollar rule ("revenue is under $100K"). Both now read the TTM rows."""
+    conn.execute("INSERT INTO silver.companies (company_id, name, current_cik, sic,"
+                 " sic_description) VALUES (%s, 'Yen 20-F Co', %s, '3711', 'Motor Vehicles')",
+                 (YEN, YEN))
+    conn.execute("INSERT INTO silver.company_ciks (cik, company_id) VALUES (%s, %s)", (YEN, YEN))
+    conn.execute("INSERT INTO authz.public_access (company_id, tier) VALUES (%s, 'financials')",
+                 (YEN,))
+    reported(conn, YEN, "total_assets", LATEST, 9_000_000, unit="JPY")  # no quarterly P&L
+    derived(conn, YEN, "revenue", LATEST, 50_000, None, unit="JPY")
+    derived(conn, YEN, "net_income", LATEST, 20_000, None, unit="JPY")
+    derived(conn, YEN, "gross_margin", LATEST, Decimal("0.4"), {"revenue": 50_000})
+    derived(conn, YEN, "net_income_growth", LATEST, Decimal("22.7"),
+            {"net_income_year_ago": 4.9e6 / 5})
+    with conn.cursor() as cur:
+        cur.execute("SET LOCAL ROLE query_api")
+        cur.execute("SELECT set_config('app.user_id', %s, true)", (USER,))
+        cur.execute("SELECT gold.amount_currency(%s)", (YEN,))
+        assert cur.fetchone() == ("JPY",)  # 057: USD
+        for metric in ("gross_margin", "net_income_growth"):
+            cur.execute("SELECT x.status, x.reason FROM gold.latest_period(%s) lp,"
+                        " gold.latest_reading(%s, 'ttm', %s, NULL, lp.latest) x",
+                        (YEN, YEN, metric))
+            assert cur.fetchone() == (None, None), metric  # 057: not_meaningful, in dollars
+        cur.execute("RESET ROLE")
+    rows = api(conn).get(f"/v1/companies/{YEN}/financials", headers=token(USER),
+                         params={"view": "ttm", "metrics": ["revenue", "gross_margin"],
+                                 "readings": "true"}).json()
+    assert rows["currency"] == "JPY"
+    assert {r["metric"]: r["not_meaningful"] for r in rows["rows"]} == {
+        "revenue": None, "gross_margin": None}
 
 
 def test_latest_reading_stays_inlinable(conn):

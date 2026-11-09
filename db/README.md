@@ -78,6 +78,158 @@ sandbox. Reads all 33,000 aliases per call (25-38 ms on hermes); no index was ne
 `044_company_search_order.sql` breaks ties within a rank by whether the company has figures here
 (`gold.financials_coverage`, public ids) and the normalized name's length, so "bank of" lists Bank
 of America before Bank of Chile (a 20-F filer) and isn't pushed down by an SEC suffix (`/DE/`).
+`046_sectors.sql` (F4) adds `silver.sic_sectors`, Tributary's own open grouping of the SEC's SIC
+codes into 12 sectors and 88 industries (ranges, never overlapping; the judgment calls are in its
+header), and the view `silver.company_sectors`. `047_business_peers.sql` adds what the parser image's
+weekly `parser-peers` job derives from 10-K Item 1 text: `gold.business_profiles`, `gold.business_peers`
+(cosine similarity, shared terms) and `gold.business_mentions` (competitors named, with the sentence's
+offsets), all under RLS at `filings` (a peer row needs both companies readable), and
+`silver.co_registrants()` (SECURITY DEFINER: query_api still reads no `bronze.filings`), companies filing
+one combined 10-K (PG&E Corp and Pacific Gas & Electric).
+`048_bank_metrics.sql` adds a bank's own lines: `net_interest_income`, `noninterest_income`,
+`noninterest_expense`, `provision_for_credit_losses`, `loans` (net of the allowance), `deposits`,
+`cet1_ratio` (where tagged) and the derived `efficiency_ratio`; its header has the tags measured on
+every bank's companyfacts and why net interest margin, tangible book value and ROTCE are left out.
+Needs `make financials-rebuild` (production: the `financials-rebuild` job) to fill gold.
+`049_kpis_cash_flow.sql` (F5) maps what the analysts asked for that filings tag but gold didn't read:
+the cash flow statement's `investing_cash_flow`, `financing_cash_flow`, `change_in_cash` and its ending
+`cash_and_restricted_cash` (what the change reconciles to; `cash` stays the balance sheet's line),
+`contract_liabilities_current` (customer advances and billings ahead of revenue), `contract_liabilities`
+(the total, or current + noncurrent as a 038 sum), `remaining_performance_obligations` (revenue under
+contract not yet recognised: the nearest us-gaap element to a backlog) and `accounts_payable`; plus the
+derived `cash_and_investments` (cash and short-term investments by net debt's own reading, so net debt =
+debt - cash and investments; n/a for a bank, like net debt) and `gold.figure_facts`, the facts behind
+one figure for the Query API's `/components` (SECURITY DEFINER under `authz.readable_companies`, like
+036). Tags and coverage measured on 599 random companies are in its header; on the 613-company sample
+rebuilt before and after it, every existing gold row was identical. Needs `financials-rebuild`;
+backout `backout/kpis_049.sql`.
+`050_filers_debt_signs.sql` (F7a) reads a filing's facts as the company's whose CIK the filing's own
+XBRL names (`bronze.filing_xbrl.entity_cik`) when that CIK filed it: since July 2026 the SEC's
+companyfacts files some multi-registrant 10-K/10-Qs only under a co-registrant (DTE Energy's under DTE
+Electric, Southern's under Mississippi Power; 91 filings in a year), so their gold had stopped and nine
+subsidiaries with gold of their own showed the parent's figures. `gold.usable_facts` takes those facts
+from the CIK's company (`lent`) and gives them to the named one (`borrowed`); `gold.companies_for_ciks`
+tells the facts loaders which companies a changed payload reaches; `gold.filed_by` is the filer test.
+Debt balances read as `abs(value)` like 043's interest expense; debt parts at 1,000 or 1,000,000 times
+the same filing's own total are left out (`mistagged_fact`, rule `debt_parts_scale`: Bank First's 2019
+10-K). Stock-based compensation keeps its sign (its negative quarters reconcile with the filings' year
+to date: forfeitures, remeasured liability awards); its `sign_flip` is severity `info`, rule `benefit`,
+unless another filing reports the quarter positive. Measurements in its header. Needs
+`financials-rebuild`; backout `backout/filers_debt_050.sql`.
+`056_ifrs_currencies.sql` (F8a, H12) reads foreign filers: 984 of the 6,066 listed companies had no
+financials, 525 of them 20-F/40-F filers whose companyfacts carry ifrs-full tags (486) or US GAAP in
+their own currency, which silver never read (us-gaap only, USD only). `silver.metric_tags` gains the
+core IFRS tags (revenue, operating profit, profit, EPS, assets, equity, cash, borrowings, operating
+cash flow, capex...: counts and the borrowings evidence in its header), after each metric's us-gaap
+ones. `silver.unit_fits` lets silver keep an amount in any ISO currency; `gold.usable_facts` reads
+each company in one currency, its reporting currency (the one most of the monetary facts of its
+latest report are in, so a 20-F's convenience translation drops out), and computed amounts take it
+too. `gold.latest_reading` gives an amount in another currency the status `other_currency` with its
+`unit` (DROP and CREATE: one more column), so the screener, size bands and the web's medians never
+put it beside dollars; ratios compare as before. A year or a half-year is never split into quarters
+(gold derives a quarter only from year-to-date figures 80-120 days apart): a 20-F filer has fiscal
+years (040's stated-year TTM) and year-end balances; one whose 6-Ks tag quarters (Birkenstock) has
+them. On the 517 such companies with a payload, rebuilt locally from production's payloads: 490 get
+gold (revenue 426, net income 487, total assets 484, operating cash flow 477), 113 of them with
+quarters since 2024, none with two currencies; about 200 companies with gold today (Alibaba, Toyota,
+ASML, Canadian National...) move from scraps of convenience-translated dollars to their own
+currency. Every gold row of the 46-company replica (all USD) was identical. Needs the
+financials-rebuild job (re-projects the stored payloads with the IFRS tags, no SEC requests).
+Catalog changes and small inserts only.
+`057_currency_readings.sql` (F8b) reads the ~700 companies in their own currency where 056 still read
+dollars. `gold.amount_currency(company)`: its amounts' currency (the latest revenue row's unit, else
+net income's, else USD). 035's not-meaningful rules gain a currency (`gold.not_meaningful`'s fifth
+argument): the absolute bases (revenue under $100K, growth over 1,000% from under $10M) apply only to
+dollar amounts, the ratio bounds to every currency; the four-argument form reads as dollars (an older
+Query API). Why not per-currency equivalents: there are no exchange rates here, a fixed table would
+drift unnoticed, and the bases exist for shells and pre-revenue filers, which file in dollars.
+`gold.latest_reading` passes the base's currency (one PK probe, six metrics only; still inlinable).
+`gold.filing_figures` (051) returns each figure's `unit` (DROP and CREATE, 051's grants).
+`ops.check_financials` (050's body) compares a debt fact with liabilities and assets in its own unit (a
+20-F's convenience dollars beside yen debt read as a scale slip). Catalog only, no rebuild; findings
+change at each company's next check. Backout `backout/currency_readings_057.sql` (tested: functions
+equal to a database at 056).
+`058_bank_holding_companies.sql` (pre-ship, owner's decision) adds Charles Schwab, American Express,
+Synchrony and Ally to the banks by company id in `gold.not_applicable_metrics` (049's body otherwise):
+bank holding companies the SEC files under brokers (6211) or finance services (6199), SICs whose other
+filers aren't banks (Ally's 6022 already counted; listed so a SIC change can't drop it). That function is
+the only list of banks: readings, the screener's `not_applicable`, the bank template and peers' bank
+columns all read it. Their next gold refresh drops the fallback debt tag (`LongTermDebt`) at a bank
+(039's rule), which is the only debt tag American Express and Synchrony use: long-term debt leaves their
+gold rows, as JPMorgan's did. Catalog only (one function, nothing locked on a table); backout
+`backout/banks_058.sql`.
+`059_fetch_outbox_insider_queue.sql` (pre-ship review B2, B3) is doc-fetcher's: `ops.document_outbox`
+(a live document's `documents.fetched` event is owed until Kafka confirms it; written in the
+document's own transaction; the crawl sends no `documents.backfill` for a document the live side
+announces, sent or owed), `ops.insider_queue` (feed Forms 3/4/5 waiting for an idle consumer, or
+kept as `failed` with the error: the live queue leaves those, the daily catch-up retakes them once a
+run; a transient error never fails one) and `ops.insider_findings` (what parsing one noticed:
+`bad_date`, `several_values`, `not_well_formed`, `parse_failed`). `silver.xml_date` returns NULL for
+a date that doesn't exist (it raised, and one bad Form 4 crash-looped the live consumer);
+`silver.refresh_insider_filings` (054's body, edits marked "059") takes the first node of every
+column path (a repeated element raised) and records both as findings. No FK to
+`bronze.filing_documents` (the nightly slim dump). Locks: three new tables and two replaced
+functions only (054's, used by doc-fetcher alone).
+`060_annual_filer_currency.sql` (pre-ship review): `gold.amount_currency` also reads a company's
+latest TTM revenue, then net income, in `gold.derived_financials` when it has no quarterly one: a
+20-F or 40-F filer's revenue and net income are only its stated years there, so 057 read Toyota's yen
+or a euro filer as dollars and gave its readings the dollar bases. `gold.latest_reading` takes its
+base's currency from `gold.amount_currency` (057's body otherwise). Locks: two functions replaced, a
+catalog change only (no table locked or read, no rebuild); backout `backout/annual_currency_060.sql`.
+`055_filing_xbrl_facts.sql` (F8a) reads a filing's own XBRL where SEC companyfacts doesn't carry it:
+the filings companyfacts never received (52 of 12,006 10-K/10-Qs in 200 days: Citigroup's 2026 10-Qs,
+Clorox's FY2026 10-K), a company's own tags proven to be a standard line (NVIDIA's 10-K capex tag,
+FY2016-22) and balance sheet lines filed only by segment member (Ford's and GM's debt, summed where
+the members are lines of the consolidated balance sheet). `silver.financial_facts` gains `taxonomy` and
+`source` (`companyfacts`, `filing`: the filing's own XBRL while companyfacts lacks it, `filing_extra`:
+what companyfacts never carries); `silver.metric_tags` gains `company_id` (a company's own tag) and a
+primary key with the taxonomy; `silver.member_sums` names each sum. `bronze.filing_instances` keeps
+instance documents fetched from EDGAR, `bronze.filing_facts` each filing's facts as read (with where
+from), `silver.refresh_filing_facts` maps them into silver, `silver.filing_facts_caught_up` and
+`silver.supersede_filing_facts` hand a filing back to companyfacts once it has it, so a filing's
+facts are never in silver twice. `gold.usable_facts` joins tags by taxonomy and company. Filled by
+facts-fetcher's `facts-fetcher-filings` ([README](../services/facts-fetcher/README.md), "Filings
+companyfacts lacks"); measurements and the proofs in its header. Locks: two ADD COLUMNs with constant
+defaults and a NOT VALID CHECK on `silver.financial_facts` in one statement (no rewrite, an instant of
+ACCESS EXCLUSIVE; lock_timeout 3 s), the primary key of the 122-row `silver.metric_tags` rebuilt.
+`054_insider_transactions.sql` adds insider filings (#117): `bronze.ownership_documents` (each Form
+3/4/5's ownershipDocument XML as filed, from doc-fetcher), `silver.insider_filings` (issuer company,
+form, period, reporting owners with their relationship as jsonb) and `silver.insider_transactions`
+(each line of the non-derivative and derivative tables in document order), filled by
+`silver.refresh_insider_filings(accessions)`: XMLTABLE in Postgres, delete then insert, idempotent on
+the accession; a document that isn't well formed XML, or whose issuer isn't a company here, gets no
+silver rows. Both silver tables: GRANT SELECT to query_api, RLS `granted_filings` on company_id (030's
+form). New tables and functions only: nothing existing is locked. Volume and cost in the doc-fetcher
+README ("Insider filings").
+`053_segment_same_basis.sql` replaces `gold.refresh_segment_financials` (018's body + edits marked
+"053"): a segment quarter derived as a year-to-date difference (Q4 = FY - 9 months) whose later value
+was restated after it was first reported takes that value from the first filing on or after the
+earlier value's filing, so both come from one reporting cycle and one segment basis (Riley #88:
+JPMorgan's FY2022 Q4 CIB was its FY2024 10-K's recast year, with Commercial Banking, less the old
+nine months: $22.13B beside $12B quarters, and the TTM fell 10% when it left the window). Measured on
+production's segment facts of JPM, NVDA, DECK and VRT, both bodies run on a throwaway copy: 13 of 1,034
+quarters change (and the TTMs over them), each now in line with its neighbours and the reported
+totals: JPM CIB FY2022 Q4 $22.13B -> $10.60B; NVIDIA's FY2024 geography TTMs now equal its FY2024
+10-K (US $26.966B, Taiwan $13.405B, China $10.306B) and its FY2024/FY2025 Q4 "Corporate" operating
+income -$1.35B/-$1.84B instead of $41.4B/$92.6B; Vertiv's FY2021 Q4 regions sum to $1,411M against
+$1,410M of revenue (was $1,580M) and its FY2020 Q4 products/services to $1,020M/$285M (was $780M/$525M);
+Deckers unchanged. A year reported once differently but later as first reported (Vertiv's FY2023
+10-K on FY2022) isn't "restated": the latest value, as before. Needs the segments refresh after the
+deploy, then `ops.check_segments`; backout `backout/segments_same_basis_053.sql`. Catalog only.
+`052_search_sort_total.sql` adds `gold.search_page`: 032's `search_passages` with an order (`relevance`
+or `date`) and a `total` of the matching sections, for the search page's count and "Newest first"
+(#145). Same SECURITY DEFINER read rule; `search_passages` stays for an API pod from before it.
+Catalog only: no table is locked.
+`051_filing_figures.sql` adds `gold.filing_figures(company, accession)`: one filing's facts as gold
+reads them and the net debt, cash and investments and free cash flow computed from that filing alone
+(040's rules), for the thesis check's H2 guard (Query API `/v1/companies/{id}/filings/{accession}/figures`).
+SECURITY DEFINER under `authz.readable_companies('financials')`, like 036 and 049. No rebuild.
+`045_filing_events.sql` lets the Query API read 8-K item numbers: a column grant on
+`bronze.submission_filings (accession_no, cik, items)` (filing-index metadata, public like
+`silver.filings`) and `silver.company_8ks(company, from)`, one company's 8-K and 8-K/A with their
+items as an array (NULL until the nightly submissions load has the filing). The earnings and
+events routes read it ([query-api](../services/query-api/README.md), "Earnings and events").
+Catalog changes only: the GRANT takes no lock on the table.
 `035_value_readings.sql` is the one definition of how a figure may be read: `gold.not_meaningful`
 (thresholds from the data, in its header), `gold.not_applicable_metrics` (banks),
 `gold.period_status` ("stale", once: over 300 days behind the company's latest period is old, over
@@ -92,8 +244,9 @@ until the check runs again (`make segments-rebuild`, or `SELECT ops.check_segmen
 company_id)) FROM gold.segment_financials`).
 `038_metric_tags_moved.sql` to `041_quality_findings.sql` change which facts gold believes and what it
 computes from them; they need one `facts-fetcher --rebuild` (the `financials-rebuild` job) to reach
-existing rows, and `backout/` undoes them ([backout/README.md](backout/README.md)). Each file's header
-has the measurements behind its thresholds.
+existing rows, and `backout/` undoes them ([backout/README.md](backout/README.md): newest first, as the
+migrate login; each file's guard refuses any other order or login and changes nothing). Each file's
+header has the measurements behind its thresholds.
 - 038: tags a line moved to (Nike's investments to
   `DebtSecuritiesAvailableForSaleExcludingAccruedInterestCurrent`, DTE's and Xcel's revenue to
   `RegulatedAndUnregulatedOperatingRevenue`, Tesla's, Adobe's, Lennar's and Oracle's debt to

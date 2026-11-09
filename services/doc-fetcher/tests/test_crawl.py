@@ -12,7 +12,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from doc_fetcher.crawl import Config, Crawler, classify, years_before
+from doc_fetcher.crawl import Config, Crawler, classify, window_start, years_before
 from doc_fetcher.crawl_db import Control
 from doc_fetcher.crawl_fetch import Fetched, Target, Unusable, download, fetch_target, needs_index
 from doc_fetcher.db import Blob
@@ -135,6 +135,21 @@ def test_config_from_env():
 
 def test_years_before_handles_leap_days():
     assert years_before(date(2028, 2, 29), 5) == date(2023, 2, 28)
+
+
+def test_a_fixed_start_reaches_back_but_never_shortens_the_window():
+    """F8b: CRAWL_SINCE=2013-01-01 is the backfill to 2013 as one setting (CRAWL_YEARS=14 would
+    reach November 2012 today and move every day); a start inside the rolling years changes
+    nothing."""
+    c = Config.from_env({"CRAWL_SINCE": "2013-01-01"})
+    assert c.since == date(2013, 1, 1) and c.years == 5
+    assert Config.from_env({}).since is None and Config.from_env({"CRAWL_SINCE": ""}).since is None
+    today = date(2026, 11, 9)
+    assert window_start(today, 5, None) == date(2021, 11, 9)
+    assert window_start(today, 5, date(2013, 1, 1)) == date(2013, 1, 1)
+    assert window_start(today, 5, date(2024, 1, 1)) == date(2021, 11, 9)
+    with pytest.raises(ValueError):
+        Config.from_env({"CRAWL_SINCE": "2013"})
 
 
 # the crawl loop ------------------------------------------------------------------------------
@@ -291,6 +306,9 @@ def test_plans_on_start_then_every_plan_hours():
     every_8k = FakeQueue([])
     crawler(every_8k, eight_k_items=None).round()
     assert every_8k.plans == [(date(2021, 10, 20), None)]
+    back = FakeQueue([])
+    crawler(back, eight_k_items=("2.02",), since=date(2013, 1, 1)).round()
+    assert back.plans == [(date(2013, 1, 1), ["2.02"])]
 
 
 def test_failed_delivery_is_published_again_next_round():

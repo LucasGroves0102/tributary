@@ -108,26 +108,30 @@ afterEach(() => {
 
 it("Home: hide and reorder cards, saved for the user, and reset", async () => {
   await render("#/", "table.watchlist");
-  expect(headings()).toEqual(["Continue", "Watchlist", "New", "Expected", "Recent"]);
-  expect(container.querySelector(".status-strip")).not.toBeNull();
-  await click(byLabel("Customize Home"));
-  await click(container.querySelector<HTMLInputElement>('.view-editor input[type="checkbox"]')!); // the status strip
-  await click(byLabel("Move Watchlist up"));
-  await click(byLabel("Move Watchlist up"));
+  // F6 (#127): the start card leads; the watchlist, new filings and data notes; the rest off
+  expect(headings()).toEqual(["Start", "Watchlist", "New", "Recent"]);
   expect(container.querySelector(".status-strip")).toBeNull();
-  expect(headings().slice(0, 3)).toEqual(["Customize", "Watchlist", "Continue"]);
+  await click(byLabel("Customize Home"));
+  const box = (label: string) => [...container.querySelectorAll<HTMLLabelElement>(".view-editor label")]
+    .find((l) => l.textContent === label)!.querySelector("input")!;
+  await click(box("Status strip"));
+  await click(box("Continue where you left off"));
+  await click(byLabel("Move Continue where you left off up"));
+  await click(byLabel("Move Continue where you left off up"));
+  expect(container.querySelector(".status-strip")).not.toBeNull();
+  expect(headings().slice(0, 4)).toEqual(["Customize", "Start", "Watchlist", "Continue"]);
   expect(saved.home).toEqual({ cards: [
-    { id: "watchlist", hidden: false }, { id: "status", hidden: true }, { id: "recent", hidden: false },
-    { id: "filings", hidden: false }, { id: "expected", hidden: false }, { id: "notes", hidden: false },
+    { id: "watchlist", hidden: false }, { id: "recent", hidden: false }, { id: "filings", hidden: false },
+    { id: "notes", hidden: false }, { id: "status", hidden: false }, { id: "expected", hidden: true },
   ] });
   // it comes back on the next visit
   act(() => root.unmount());
   await render("#/", "table.watchlist");
-  expect(headings().slice(0, 2)).toEqual(["Watchlist", "Continue"]);
+  expect(headings().slice(0, 3)).toEqual(["Start", "Watchlist", "Continue"]);
   await click(byLabel("Customize Home"));
   await click(button("Reset to default"));
   expect(saved.home).toBeUndefined();
-  expect(container.querySelector(".status-strip")).not.toBeNull();
+  expect(container.querySelector(".status-strip")).toBeNull();
 });
 
 it("watchlist and screener columns: choose, order, saved, read from the API", async () => {
@@ -170,5 +174,5 @@ it("without the preferences service, the defaults show and nothing is editable",
   await render("#/", "table.watchlist");
   expect(container.querySelector('[aria-label="Customize Home"]')).toBeNull();
   expect(container.querySelector(".col-picker")).toBeNull();
-  expect(headings()).toEqual(["Continue", "Watchlist", "New", "Expected", "Recent"]);
+  expect(headings()).toEqual(["Start", "Watchlist", "New", "Recent"]);
 });

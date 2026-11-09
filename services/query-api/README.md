@@ -1,7 +1,8 @@
 # query-api
 
-FR8, week 2. HTTP API over the gold tables, read-only except for the caller's own watchlist
-(app database); the [agent](../agent) and the [web](../web) app reach data only through it.
+FR8, week 2. HTTP API over the gold tables, read-only except for the caller's own saved work,
+preferences and alert settings (app database); the [agent](../agent) and the [web](../web) app
+reach data only through it.
 Every data route is permission-checked twice:
 
 1. **OpenFGA** (`authorizer.py`): `can_read_financials` / `can_read_filings` on the company,
@@ -41,15 +42,21 @@ request parameters. Dev tokens: `make token USER=alice`.
 | `GET /v1/me` | token | `catalog`: `{public, tiers, companies}`, whether every catalog company is readable to the caller and with which tiers (`companies`: how many); `companies`: with the catalog public, only what the caller reads beyond it (private grants), else every company the caller can read, with tiers; `sandbox` (expiry, plan, assistant allowance) for a demo sandbox user; `github` (login, plan, the demo's company ids, assistant allowance) for a GitHub sign-in; `account` (username, plan, `agent_questions_per_day`) for a password account |
 | `GET /v1/companies/search?q=&access=&limit=` | token | tickers, CIKs and any part of a name, best match first (`silver.search_companies`, migration 034): public identity + caller's access; `limit` 1-25, default 5; `access=financials`: only companies you can read, narrowed before the limit |
 | `GET /v1/metrics` | | metric names served by `financials`: `silver.metrics` and `gold.derived_metrics`, read once |
-| `GET /v1/companies/{id}/financials?metrics=&quarters=&view=&basis=&format=` | financials | values + citation + freshness; `quarters` 1-120 (every quarter there is, the Statements tab's Max); `format=csv`: one row per value with its source filing |
+| `GET /v1/companies/{id}/financials?metrics=&quarters=&view=&basis=&format=&readings=&callouts=` | financials | values + citation + freshness; `quarters` 1-120 (every quarter there is, the Statements tab's Max); `format=csv`: one row per value with its source filing; `callouts=true` (view quarter): quarters far outside their series ([Statement callouts](#statement-callouts)); `currency` (only when not USD: the company's reporting currency, every amount is in it, migration 056) and `cadence: "annual"` (only for a filer whose figures are fiscal years, a 20-F/40-F filer: gold never splits a year into quarters; `Store.cadence`, under RLS: gold has years and no quarter in the last 800 days AND the company's latest 10-K/10-Q/20-F/40-F in the filing index is a 20-F or 40-F, or with none indexed gold never had a quarter. Never from staleness: a US filer whose figures stopped, EIDP's at 2019 though it files 10-Qs, has no `cadence` and its figures read as old) |
+| `GET /v1/companies/{id}/components?metric=&period_end=&view=` | financials | what one figure is made of: a derived figure's inputs, a TTM's quarters, a sum's parts, and the tags, values and filings behind each ([Reported vs standardised](#reported-vs-standardised)) |
+| `GET /v1/companies/{id}/filings/{accession}/figures` | financials | what one filing itself says: its facts as gold reads them and the net debt, cash and investments and free cash flow computed from that filing alone; the thesis check's H2 guard reads it ([Reported vs standardised](#reported-vs-standardised)) |
+| `GET /v1/companies/{id}/insiders?limit=&cursor=&before=` | filings | insider filings (Forms 3, 4, 5), newest first: owners and roles, each line's code (in words), shares, price, value and shares owned after, a per-filing summary ([Insider filings](#insider-filings)) |
+| `GET /v1/companies/{id}/text-kpis?years=` | filings | backlog, orders and order growth as the filings state them in words (MD&A, the 10-K's Item 1, earnings releases), each value with the passages that state it; `years` 1-15, default 10 ([Backlog and orders from the text](#backlog-and-orders-from-the-text)) |
 | `GET /v1/companies/{id}/segments?axis=&metric=&quarters=&view=&basis=&format=` | financials | values per segment member (business segment, geography, product/service, reconciliation), exact decimal strings, citation per value ([Segments](#segments)) |
 | `GET /v1/companies/{id}/filings?limit=&accession_no=` | filings | recent parsed filings (or one) and their section outline, no text |
 | `GET /v1/companies/{id}/filing-index?form=&from=&to=&limit=&offset=` | token | every filing in the SEC index (public metadata), newest first; `sections` count only where the caller can read filings (OpenFGA check, then RLS) |
 | `GET /v1/filing-index?company_id=&form=&from=&to=&limit=&offset=` | token | the same across up to 50 companies (default: the caller's readable companies) |
 | `GET /v1/filings/latest?limit=` | token | newest parsed filings across the companies the caller can read filings for |
 | `GET /v1/companies/{id}/sections/{key}?form=&accession_no=&limit=&max_chars=` | filings | section text + citation; `max_chars` default 8,000, up to 1,000,000 (the reader asks for the whole section) |
-| `GET /v1/companies/{id}/filings/{accession}/changes?section=&basis=&kind=` | filings | new / removed / rewritten Risk Factors and MD&A paragraphs vs the comparable earlier filing, word diffs, citations in both filings ([What changed](#what-changed)) |
-| `GET /v1/search?q=&company=&form=&section=&from=&to=&limit=&offset=` | filings (every company searched) | best passage per section, ranked, with snippet and citation ([Search](#search)) |
+| `GET /v1/companies/{id}/filings/{accession}/changes?section=&basis=&kind=&view=&q=&numbers=` | filings | new / removed / rewritten Risk Factors and MD&A paragraphs vs the comparable earlier filing, word diffs, citations in both filings; with `view` read for materiality (noise hidden and counted, periods, figures, score and why; a 10-Q against a year ago by default; topic and new-figure filters) ([What changed](#what-changed)) |
+| `GET /v1/search?q=&company=&form=&section=&from=&to=&limit=&offset=&sort=&window=` | filings (every company searched) | best passage per section, ranked or newest first, with snippet, citation and a total ([Search](#search)) |
+| `GET /v1/companies/{id}/events` | filings | 8-K filings since the latest 10-Q/10-K period end, newest first: items (SEC title, kind), an excerpt of the 8-K's own words, the press release exhibit, `announced` (a completed deal or new financing read from a 7.01/8.01 announcement), and `stale`: figures at that period end an event after it may have changed ([Earnings and events](#earnings-and-events)) |
+| `GET /v1/companies/{id}/earnings?quarters=` | filings | each quarter's earnings release (8-K Item 2.02), newest first, `quarters` 1-8 (default 4): the release, its headline, outlook passages and management's adjustments (reconciliation tables, dollar notes), each with offsets into the release; no beat or miss ([Earnings and events](#earnings-and-events)) |
 | `GET /v1/companies/{id}/data-notes` | financials | data-quality and freshness notes: gaps, overlapping quarters, restatements, derived quarters, filings companyfacts doesn't carry yet, each with its filings ([Data notes](#data-notes)) |
 | `GET /v1/companies/{id}/annual-per-share?years=` | financials | EPS and weighted shares per fiscal year, as the 10-K states them (migration 036): per-share figures don't add, so quarters can't give them |
 | `GET /v1/data-notes?limit=&company_id=` | financials (every company covered) | the newest notes across the caller's companies, or the named ones of them (at most 50), without derived-quarters notes ([Data notes](#data-notes)) |
@@ -62,12 +69,29 @@ request parameters. Dev tokens: `make token USER=alice`.
 | `GET /v1/calendar/expected-filings?days=&scope=&format=` | token | expected 10-Q/10-K filings in the next N days (watchlist or readable companies) |
 | `GET /v1/companies/{id}/expected-filings?periods=` | token | estimated next 10-Q/10-K dates with their basis |
 | `GET /v1/filings/{accession}/recap?metrics=` | financials (flags: filings) | metrics vs prior quarter and year-ago, cited; one-time-item flags |
-| `GET /v1/companies/{id}/peers?limit=&columns=&access=` | token | suggested peers (SIC, size band, filer category), values where permitted |
+| `GET /v1/companies/{id}/peers?limit=&columns=&access=` | financials | suggested peers by business (10-K Item 1 similarity, competitors named, SIC division and size), each with why; a bank's peers on bank columns; values where permitted ([Peers](#peers)) |
+| `GET /v1/companies/{id}/peers/check/{candidate}` | financials on `{id}` | can `candidate` join these comps, and if not why: a foreign filer (20-F/40-F), no XBRL figures yet, no annual report ([Peers](#peers)) |
+| `GET /v1/sectors` | token | the open sector and industry grouping over SIC codes (migration 046), each industry's SIC ranges and company count |
 | `GET /v1/connections` | token | providers offered and the caller's market-data connections (provider, `…last4`, dates; never the key); both empty without `DATA_CONNECTIONS_KEY` ([Connect your data](#connect-your-data)) |
 | `PUT /v1/connections/{provider}` | `DATA_CONNECTIONS_KEY`, token | `{"api_key": "…"}`: validated with one provider call, stored encrypted |
 | `DELETE /v1/connections/{provider}` | `DATA_CONNECTIONS_KEY`, token | deletes the key and every price fetched with it |
 | `GET /v1/companies/{id}/prices?from=&to=` | `DATA_CONNECTIONS_KEY`, financials, the caller's own connection | the caller's end-of-day closes (exact decimals), refreshed at most once per US Eastern day |
 | `GET /v1/companies/{id}/valuation` | `DATA_CONNECTIONS_KEY`, financials, the caller's own connection | market cap, P/E, P/S, EV/EBIT from the caller's latest close and the latest gold figures, each with its date and citation |
+| `GET /v1/alerts/unread` | token, app DB | the bell: unread filing alerts, the newest one's time, the alerts job's last look for the caller ([Filing alerts](#filing-alerts)) |
+| `GET /v1/alerts/notifications?company_id=&limit=` | token, app DB (figures: financials now) | the caller's alerts, newest filing first: form, dates, an 8-K's items, a 10-K/10-Q's key figures and red-line results (stripped for a company the caller can no longer read), the filer's EDGAR link |
+| `POST /v1/alerts/notifications/read` | token, app DB | `{"ids": [...]}`, `{"company_id": ...}` or `{"all": true}`: marks the caller's own read |
+| `GET /v1/alerts/settings` | token, app DB | followed companies (watchlist, analysis projects) with the forms alerted, webhooks (URL masked, never the secret), whether email is on, the last check |
+| `PUT /v1/alerts/settings/{id}` | token, app DB | `{"forms": ["10-K", "10-Q", "8-K"], "other_8ks": false}` (any subset; `[]` = none; `other_8ks`: 8-Ks under 7.01/8.01 alone alert too, absent = unchanged) for one company |
+| `GET /v1/alerts/red-lines?company_id=&evaluate=` | token, app DB (`evaluate`: financials on the company) | the caller's red lines; with `evaluate=true` each on the company's latest figures |
+| `POST /v1/alerts/red-lines` | token, app DB | `{company_id, label, formula, view, op, threshold}`: a formula-language rule (no ticker, printable ASCII, no control characters in the label), checked like a chart formula; at most 10 per company and 200 per user |
+| `DELETE /v1/alerts/red-lines/{rule}` | token, app DB | the caller's own; another's is the same 404 as none |
+| `GET /v1/alerts/webhooks` | token, app DB | the caller's webhooks: masked URL, format, on/off, last delivery |
+| `POST /v1/alerts/webhooks` | token (not a demo sandbox: 403), app DB | `{"url", "format"?}` parsed by hand (a 422 never echoes the URL): https to a public address only (checked after DNS; 20 attempts an hour); stored with its scheme and host in lower case; answers the signing secret once; at most 3 |
+| `PATCH /v1/alerts/webhooks/{id}` | token, app DB | `{"enabled": bool}` |
+| `POST /v1/alerts/webhooks/{id}/rotate` | token, app DB | a new signing secret, shown once |
+| `DELETE /v1/alerts/webhooks/{id}` | token, app DB | the webhook and its delivery log |
+| `POST /v1/alerts/webhooks/{id}/test` | token, app DB | sends a signed test event to the caller's own webhook now (5 an hour), through the same checks; the result goes in the log |
+| `GET /v1/alerts/deliveries?webhook_id=&limit=` | token, app DB | the caller's delivery log: status, attempts, last HTTP status, a short error code, next try |
 
 `{id}` is the canonical 10-digit `company_id`. Prometheus metrics are on `/metrics` (including
 `tributary_permission_checks_total{tier,result}`); the web proxy blocks it and `/docs` from the
@@ -107,9 +131,21 @@ company_id of metrics written without a ticker.
   in the data is a gap. `view` picks quarter or TTM inputs; `ttm(...)` forces TTM inside it. The rows are
   also filtered on the input companies' ids as a bound array: `gold.financials` is a UNION
   view, and a company filter that arrives only through a join can't reach its indexes.
+- **n/m** (F7a): each input row carries migration 035's `gold.not_meaningful` reason, the tables'
+  rule, and a point built from one says `not_meaningful` (the reason; with several inputs, which
+  one: "PEP.operating_margin: ..."). `value` stays the exact figure, so an older web app draws what
+  it drew; the web app leaves the point as a gap and says why under the chart. The rule gets each
+  input company's currency (057: `gold.amount_currency`), so a yen company's margin isn't n/m for a
+  "$100K" base that is ¥100K.
+- **Currency** (057): amounts are in each company's reporting currency (056), and each input row
+  carries its `unit`. A series whose money isn't in dollars says so: `currency` ("CNY") beside the
+  catalog's `unit` ("USD" = an amount, "USD/shares" = per share), and per input; a dollar series'
+  JSON is as before (no `currency`). Inputs in two currencies (SAP's euros and NVIDIA's dollars,
+  added or divided) are refused, 422 code `currency`: Tributary converts none. One company's own
+  ratio has no currency and is drawn as before.
 - **Errors**: `{"code", "message", "pos", "length", "hint"}`. `validate` returns them with
-  200 and `valid: false`; `evaluate` returns 422 (formula) or 403 (company) with
-  `{"detail": {"errors": [...]}}`.
+  200 and `valid: false`; `evaluate` returns 422 (formula, or `currency` when its data mixes
+  currencies) or 403 (company) with `{"detail": {"errors": [...]}}`.
 
 `evaluate` checks `can_read_financials` for every company the formula references before the
 query, which runs through `Store` under RLS like every other route. Each point has `period`
@@ -172,7 +208,8 @@ quarter end) or `<metric>_q` (latest fiscal quarter) for every metric in the for
 each the latest value with its own `sources[key]` (`period_end`, `accession_no`, `form`,
 `filed`). Filters: `sic` (4-digit, repeatable), `sic_prefix` (1-3 digits), `industry` (SIC
 description contains), `q` (name contains or exact ticker), `exchange`,
-`fiscal_year_end_month`, `company_id` (repeatable, at most 21: only these companies, including
+`fiscal_year_end_month`, `sector` / `sector_industry` (repeatable, exact names from `/v1/sectors`),
+`company_id` (repeatable, at most 21: only these companies, including
 ones without gold financials, for a comps table or a tearsheet), `filer_category` (`large_accelerated`, `accelerated`,
 `non_accelerated`), `revenue_band` / `assets_band` (`lt100m`, `100m-1b`, `1b-10b`, `10b-100b`,
 `gte100b` on `revenue_ttm` / `total_assets_q`) and `where=<column>:<gt|gte|lt|lte>:<number>`
@@ -180,14 +217,31 @@ ones without gold financials, for a comps table or a tearsheet), `filer_category
 `fiscal_year_end` sort read `silver.fiscal_year_end_month` (migration 042): a 52/53-week year ending
 in a month's first week belongs to the month before (J&J's `0103` is December), while the row keeps
 the SEC's MMDD. `sort` is a column key or `name`, `sic` (the
-Industry column: by its name, not the code), `fiscal_year_end`, `filer_category`,
-`state_of_incorporation`, `-` for descending; nulls last.
+Industry column: by its name, not the code), `sector` (sector, then industry: the web app's grouping),
+`fiscal_year_end`, `filer_category`, `state_of_incorporation`, `-` for descending; nulls last.
 `limit` (500 as JSON, 5000 as CSV), `offset`, `format=json|csv`. JSON:
 `{as_of, total, limit, offset, sort, columns: [{key, metric, span, unit, balance}], rows: [{company_id,
 name, tickers, exchanges, sic, industry, fiscal_year_end, filer_category, filer_categories,
 state_of_incorporation, access: [tiers], values: {key: value}, sources: {key: {...}},
-readings: {key: {status, reason}}, latest_period, not_applicable: [metrics]}]}`. CSV adds a `notes`
+readings: {key: {status, reason}}, latest_period, not_applicable: [metrics], sector, sector_industry,
+co_registrants: [{company_id, name, accession_no, filed, filed_by}]}]}`. CSV adds a `notes`
 column. `balance`: a point in time, so its `_ttm` column is the same number as its `_q` one.
+
+**Sectors** (migration 046, `GET /v1/sectors`): Tributary's own grouping of the SEC's SIC codes into
+12 sectors and 88 industries (not GICS or any licensed scheme), one row per SIC range in
+`silver.sic_sectors`; the judgment calls (Alphabet's 7370 stays Technology, Walmart's 5331 is
+Consumer Staples retail, UnitedHealth's 6324 Health Care, blank checks and commodity trusts "Funds &
+Vehicles") are listed in the migration's header. Rows carry `sector` and `sector_industry` beside the
+SIC `industry`, which stays the filing's own label. The screener looks the sector up for every company
+only when a sector filter or the sector sort needs it, otherwise for the page's rows alone.
+
+**Co-registrants** (#135, migration 047): some companies file one combined 10-K as separate
+registrants, a parent and its subsidiary (PG&E Corp and Pacific Gas & Electric, Southern Co and
+Georgia Power, Corteva and EIDP) or a REIT and its operating partnership. They are two companies
+with their own figures, not a duplicate; `co_registrants` names the other one(s), from the 10-K
+accessions filed under more than one company's CIKs in the last 400 days (`silver.co_registrants()`,
+10 such filings on 2026-11-09). Read once an hour per process (~190 ms cold); a failure leaves the
+list empty rather than failing the screener.
 
 **How a value reads** (`readings`, migration 035, the only definition, used by the screener, watchlist
 and peers): `not_meaningful` (with `reason`): a margin on under $100K of revenue, a gross or operating
@@ -196,9 +250,12 @@ $100K, debt over 100 times equity, debt or equity below zero, ROE or payout over
 ratio over 100x. `not_applicable` (with `reason`): a bank's gross and operating margin, FCF, FCF margin,
 net debt, debt to equity and current ratio, whether or not a value exists. `old`: more than 300 days
 before the company's `latest_period` (the newest of its revenue, net income and total assets, never a
-future date). `behind`: more than 45. `values` keeps the exact figure in every case, but all except
-`behind` sort after real values and never pass a `where` or a size band: sorting by gross margin
-doesn't open on 209,828%. `/financials?readings=true` adds the row's `not_meaningful` (debt/equity and
+future date). `behind`: more than 45. `other_currency` (migration 056, with `reason` and `unit`): an
+amount or per-share figure in a currency other than the dollar (a 20-F filer's euros: `unit` "EUR" or
+"EUR/shares"); ratios have no currency and read as anyone's. `values` keeps the exact figure in every
+case, but all except `behind` sort after real values and never pass a `where` or a size band: sorting
+by gross margin doesn't open on 209,828%, and a euro revenue is never ranked, filtered, banded or
+averaged with dollars. `/financials?readings=true` adds the row's `not_meaningful` (debt/equity and
 ROE on that period's negative equity first) and `not_meaningful_periods: [{metric, period_end,
 reason}]`, the periods a requested metric has no row because of the company's equity there (gold has
 no debt/equity or ROE on negative equity), taken from the company's own latest `quarters` equity
@@ -256,7 +313,60 @@ explains a plan without `filings`).
 
 ## Peers
 
-`GET /v1/companies/{id}/peers`: companies with financials in the same 4-digit SIC, then the
+`GET /v1/companies/{id}/peers` (F4, H6): `require(financials)` on the company first, like every
+company route, then by business when its 10-K has a Business section on file (`basis: "business"`),
+else by SIC and size (`basis: "sic"`). The ranking is specified in `query_api/peers.py`'s docstring:
+
+- **Candidates**: the 60 companies whose latest 10-K Item 1 is most similar to this one's (cosine of
+  TF-IDF term vectors, `gold.business_peers`, built weekly by the parser image's `parser-peers` job,
+  [services/parser](../parser/README.md#peers-by-business)), plus any company either Item 1 names in
+  a sentence about competition (`gold.business_mentions`). All three tables read under RLS at
+  `filings` (a similarity needs both companies' filings readable), so a plan without filings text
+  falls back to SIC.
+- **Score** = similarity x SIC division (same SIC x1.15, same group x1.10, same division x1.0,
+  another division x0.80: a maker vs its customers) x size (1 / (1 + 0.3 x |log10 revenue ratio|), only
+  when the caller reads both revenues; no current revenue counts as $10M; a revenue in another
+  currency is an unknown size, x1, 057) + 0.05 if this company's
+  10-K names it + 0.03 if it names this company. Blank checks (SIC 6770) are never suggested for an operating company.
+- **`match`** says why: `similarity`, `terms` (the shared terms that add the most), `named_by_target` /
+  `names_target` (the sentence: accession, section, offsets, to cite), `sic_level`, `same_sector`,
+  `same_industry`, `same_filer_category`, `revenue_band`, `same_revenue_band`. `business` is the
+  company's own profile (filing, its most distinctive terms). The old fields stay, so an older web app
+  still reads `sic_level` and the bands.
+- **A bank** (035's rule, `gold.not_applicable_metrics`, read from the company's screener row: the same
+  rule as its readings and the web's bank template; 058 added Schwab, American Express, Synchrony and
+  Ally) without `columns` gets bank columns: revenue, net interest income, efficiency ratio, provision
+  for credit losses, loans, deposits, ROE, net margin (migration 048).
+- **`basis_reason`** (pre-ship; null by business) says why there was no business text to rank by,
+  from the company's latest 10-K stored in the last three years and its Item 1 as parsed
+  (`Store.business_text`: silver.filings by its CIKs, a primary-key probe of the document, the
+  section under RLS at `filings`; 2.4 ms for Intel on hermes): `filings_access` (your plan),
+  `no_annual_report`, `no_business_section` (Citigroup: its 10-K follows the annual report's own
+  layout and the parser finds no Item heading), `cross_reference` (Item 1 under 3,000 characters,
+  parser-peers' own threshold: Intel's "Business: ... Pages 3-5", GE's, McDonald's), `not_profiled`
+  (the weekly job hasn't read it yet), `no_close_peers`. `method` says the same in words.
+
+Measured on hermes' Item 1 texts of 2026-11-09 (run locally through this route; before = production's
+SIC and size answer the same day; the root README has the full table):
+VRT before LG Display, Impinj...; after Eaton and Johnson Controls (both named in Vertiv's 10-K),
+AAON, nVent, Forgent Power, Super Micro, Ciena, Flex, Amphenol. DECK before Crocs, Nike, Silverton
+Energy, Carlisle...; after Crocs, Columbia, Steve Madden, Under Armour, Nike, Kontoor, Wolverine.
+NVDA before Micron, Tigo Energy, Broadcom, Intel...; after AMD, Ambarella, Qualcomm, Super Micro,
+Broadcom, Micron, Marvell. JPM before Bank of America, Wells Fargo, Citigroup...; after PNC, Morgan
+Stanley, Bank of America, U.S. Bancorp, Capital One, Huntington, Wells Fargo. Precision at 10 against
+hand-written lists for nine companies: 47 of 90 (services/parser README).
+Gaps: a 10-K whose Item 1 is a cross-reference (Intel, General Electric, McDonald's) or wasn't parsed
+(Citigroup) has no profile, so it is never suggested by business (NVIDIA's list loses Intel, TI and
+ADI; JPMorgan's loses Citigroup), and its own peers are by SIC and size, with `basis_reason` saying
+which (owner's decision, 2026-11-09: no parser change for them).
+
+`GET /v1/companies/{id}/peers/check/{candidate}`: `require(financials)` on the comps' company, then
+public filing-index metadata about the candidate: `ok`, `reason` (`null`; `metadata_only`: it has
+figures your plan doesn't cover; `foreign_filer`: its annual reports are 20-F/40-F, IFRS, which
+Tributary doesn't read, e.g. Birkenstock; `no_xbrl`: it files 10-Ks but no XBRL figures are here yet;
+`no_annual_report`), `annual_form`, `annual_filed`. The web app asks before adding a peer and says why.
+
+By SIC and size (`basis: "sic"`): companies with financials in the same 4-digit SIC, then the
 3- and 2-digit groups; within a level, the same TTM revenue size band first (only for
 companies you can read, and only if you can read the company's own revenue), then the same
 filer category, revenue closeness and name. A revenue is read as the screener sorts it
@@ -299,7 +409,8 @@ first) and `PUT /v1/recent/filings` (the reader records what you open; the newes
   (`test_workspaces_db.py` proves it as the table owner).
 - **Validated.** Each kind's state has a strict schema (unknown fields refused) mirroring the web
   app's state; names are 1-100 (workspace) / 1-120 (item) characters without control
-  characters; a state is at most 16,000 bytes of compact UTF-8 JSON (a thesis 120,000); item
+  characters; a state is at most 16,000 bytes of compact UTF-8 JSON (a thesis 120,000, a model
+  60,000: app migration 015); item
   create/save bodies over 160,000 bytes, other saved-work bodies over 32 KiB (or any without a
   Content-Length) are refused before they are read. Caps: 50 workspaces, 100 items per
   workspace, 500 items per user (409 beyond).
@@ -327,29 +438,99 @@ rename), owner-only and validated like every item:
   reports). Lines `[[embed:<item id>]]` draw another item of the same workspace in the web app;
   they aren't checked here (an embedded item may be deleted later) and the web app drops any
   that don't resolve. `GET /v1/workspaces/{id}` leaves a thesis's state out (null, like a
-  report's); `/v1/workspace-items/{id}` returns it. **Versions** (app migration 014): a save that
-  changes a thesis's state keeps the version it replaced (`item_versions`, in the same
-  transaction; the newest `MAX_VERSIONS` = 30 per thesis; a rename or a save that changes nothing
-  keeps none). `GET /v1/workspace-items/{id}/versions` lists them newest first without their text
-  (`version_id`, `name`, `saved_at`, `replaced_at`, `characters`), `GET
+  report's); `/v1/workspace-items/{id}` returns it. **Versions** (app migration 014; models too
+  since F2): a save that changes a thesis's or a model's state keeps the version it replaced
+  (`item_versions`, in the same transaction; the newest `MAX_VERSIONS` = 30 per item; a rename or
+  a save that changes nothing keeps none). `GET /v1/workspace-items/{id}/versions` lists them
+  newest first without their state (`version_id`, `name`, `saved_at`, `replaced_at`, `characters`
+  of a thesis's text, a model's forecast `years` and whether it had bear and bull `cases`), `GET
   /v1/workspace-items/{id}/versions/{version_id}` returns one with its state; restoring is the web
   app loading it into the editor, and saving it is an ordinary save. Owner-only like the item
-  (another user's is the same 404), forced RLS on `app.user_id`, deleted with the thesis.
+  (another user's is the same 404), forced RLS on `app.user_id`, deleted with the item.
 - **`model`** (`ModelState`): `{companyId, historyYears (3-10, default 8), assumptions: [{growth,
   margin, note?}] (1-10)}`, growth -100..1000 and operating margin -1000..100, in percent; notes
   up to 500 characters (blank ones dropped). Optional `scenarios: {bear?, bull?}`, each a list
   of the same per-year assumptions for exactly as many years as `assumptions`, which is the
   **base** case (a model saved before scenarios is base only and validates unchanged); the
-  thesis check reads the base case only. Only the assumptions are stored: the web app reads
-  the history from `/v1/companies/{id}/financials?view=ttm` as the viewer, so a model of a
-  company you can't read draws nothing (the financials route answers 403 as always).
+  thesis check reads the base case only. F2 adds, all optional so a model saved before
+  validates and saves unchanged: per year `nonOperating` (interest and other, % of revenue,
+  -100..100), `taxRate` (-100..100), `shareChange` (diluted shares, % a year, -50..100) and
+  `fcfMargin` (-1000..100), absent meaning the default from history; `ytd: true` (year 1 is the
+  current fiscal year's reported quarters plus the remainder, its growth and margin the
+  remainder's); `adjustments` (up to 20 `{name (1-80), fy, quarter (1-4), kind: one_off |
+  acquired, amount (USD)}`, the user's own one-offs and acquired revenue); `price` (`{value > 0,
+  date}`, a price per share the user typed). Numbers in these are JSON numbers (a string or a
+  `"yes"` is refused). Only what the user typed is stored: every run reads the history again
+  ([Models](#models-one-copy-of-the-maths)), as the caller, so a model of a company you can't
+  read draws nothing (403 as always).
 
 Both grant nothing (a company id, the user's text and numbers). A thesis can be checked by the
 assistant ([Thesis checks](#thesis-checks)). Reports never include them:
 `ReportItem` still accepts only charts, comps and screens, and agent-api's report writer skips
-them. Tests: `test_workspaces.py` (states, sizes, bodies, scenarios, projects, another user's
-thesis, model or project is a 404 for every route), `test_workspaces_db.py` (forced RLS as the
-table owner, the 128 KiB check for theses only, projects and their 16 KiB check).
+them. Tests: `test_workspaces.py` (states, sizes, bodies, scenarios, F2's fields, model
+versions, projects, another user's thesis, model or project is a 404 for every route),
+`test_workspaces_db.py` (forced RLS as the table owner, the 128 KiB check for theses, 64 KiB for
+models, a full model's versions, projects and their 16 KiB check).
+
+## Models: one copy of the maths
+
+`POST /v1/companies/{id}/model` (`model_api.py`) runs a model: the body is a model item's state
+(`ModelState` above, strict; its `companyId` must be the path's), the answer everything the model
+page shows. The maths exist only here, in `model_maths.py`, whose docstring is the spec: the web
+app's model page and thesis embeds, agent-api's thesis check, and later MCP all call this route
+(before F2 they were two hand-kept copies, the web's `models/model.ts` and agent-api's
+`model_stats.py`). `require(financials)` comes first (the same 403 for any company you can't
+read), then `Store.model_inputs` reads in one session under RLS: TTM rows (40 quarters) and
+quarterly rows (12) of revenue, operating income, pretax income, income tax, net income,
+operating cash flow, capex, free cash flow, buybacks and diluted weighted shares; the 10-K's EPS
+and diluted shares (`gold.annual_per_share`, 036); the latest net debt and shares outstanding
+with their readings (`gold.latest_reading`, 035). A run stores nothing; bodies over 128 KiB are
+refused before they are read.
+
+The answer: `history` (fiscal years: reported and adjusted operating income and margin, interest
+and other, tax rate, net income, the 10-K's diluted EPS and shares, share change, operating cash
+flow, capex, FCF and its margin, buybacks, each figure's filing; a diluted share count that moves
+by more than half in a year is a split or a merger, not buybacks, so that year has no share change
+or EPS growth and the years before it no P/E: Deckers' 6-for-1, NVIDIA's 4- and 10-for-1,
+Vertiv's SPAC merger), `ttm` (the latest TTM when it
+isn't a fiscal year end), `current` (the current fiscal year's reported quarters and the same
+quarters a year earlier), `stats` and `run_rate` (B2 and B7's, unchanged), and per case (`bear`,
+`base`, `bull`; bear and bull `preview`ed from the base case until the user adds them) the
+`defaults` (what Reset sets, per year) and the projected `years` (revenue, growth, organic growth,
+operating income reported and adjusted, margin, pretax and net income, shares, EPS and its
+growth, FCF; which rates were `defaulted`; for a `ytd` year 1 its `actual` and `remainder`). The
+base case also has the B2 `check` and `user_set` the thesis check reads. A model saved before F2
+(no `ytd`) gets, per case, the `implied_remainder`: the remainder its full-year year 1 implies
+after the reported quarters, which the web app offers to rebuild year 1 from without changing it. With a `price`,
+`valuation`: market cap (price x latest shares outstanding), net debt with its date and reading,
+EV (only when net debt is current or merely behind; `ev_note` says why not: `old`, `absent`, ...)
+and P/E, EV/Revenue, EV/EBIT and FCF yield for every history year, the TTM and each case's years;
+`"n/m"` over losses. Currency (057): the run says the company's (`currency`, the unit of its rows;
+every amount is in it) and the price says its own (`price.currency`, three capitals; a price saved
+without one is in dollars, as before). When they differ, market cap is still price x shares, in the
+price's currency (`market_cap_currency`), but EV and every multiple are left out (`ev_note`
+"currency", `currency_mismatch: {price, figures}`): a dollar price never divides euro EPS. When
+they agree, net debt in that currency (its reading says `other_currency`: not a dollar figure) is
+read by its age alone, as a dollar company's is, so a euro price gives a euro company's EV and EV
+multiples in euros.
+
+Measured on the real inputs in `tests/fixtures/model` (production answers of 2026-11-09):
+Vertiv's FY2026 is Q1-Q3 reported ($10.24B, 39.3% over the same nine months) plus a Q4 whose
+default grows Q4 FY2025's $2.88B at the trailing twelve months' 35.3% growth, at their 20.1%
+operating margin. The remainder of the current year starts from the TTM like any first year
+(owner's decision, 2026-11-09): last year's remaining quarters moved by this year's change in
+margin carried one strong half forward, so NVIDIA's H2 FY2027 read 75.0% (H2 FY2026's 64.2% +10.8
+points) and +95.8%; it now reads the TTM's 65.2% and +83.4%, a full year of 65.5%. The remainder's
+FCF margin stays those quarters' a year earlier, since working capital is seasonal (Deckers: H1
+FY2027 -1.9%, H2 FY2026 35.7%, the TTM 18.9%). Deckers' FY2027 is H1 reported plus H2, with diluted shares down 8.4% a
+year (FY2027 Q2 against FY2026 Q2) as the default share change, and a $46M one-off in Q2 FY2027
+taking the year-to-date margin from 21.8% to 19.9%; Deckers' latest net debt reading is from
+2014 (`old`), so its EV multiples stay blank with that reason. B2 and B7's shared cases
+(`fixtures/model/b2-b7-cases.json`) give the same statistics, flags, run rates, defaults and
+`user_set` as before. Tests: `test_model_maths.py`, `test_model_api.py` (403 first and the same
+for any company, strict states, body cap), `test_rls.py` (the Store read under RLS alone). The web
+app's run fixtures are this route's answers: `fixtures/model/make_web_fixtures.py` regenerates
+them.
 
 ## Reports
 
@@ -391,7 +572,9 @@ checks"), one row per check in `thesis_checks`, kept with the thesis they checke
 - **Validated.** `CheckResult` is strict: a supported or contradicted claim and every "not
   mentioned" point cites at least one filing the agent's tools returned (`verified`); a
   supported claim has no figure that isn't in the data (none of its `figures` and no citation's
-  `figure_status` is `unverified`: the agent downgrades such a claim to unverifiable); citation
+  `figure_status` is `unverified`: the agent downgrades such a claim to unverifiable) and no
+  `filing_figures` entry (H2: a claimed computed figure against the cited filing's own, optional)
+  that disagrees with its filing; citation
   URLs only `https://www.sec.gov/`; accession numbers, section keys, the text hash and
   timestamps by pattern; numbers finite; at most 30 claims, 10 points, 4 models; the
   verification's `ok` recomputed. `filings` (Revisit, optional so older results still
@@ -416,7 +599,9 @@ hidden, in order; a card left out shows after the listed ones) and the column se
 screener (`screener`, 1-12) and the watchlist (`watchlist`, 1-8), each a list of screener column
 keys from `GET /v1/screener/columns`. `GET /v1/views` returns each view's saved state (null = the
 default), the defaults and the options; `PUT /v1/views/{view}` with `{"state": ...}` saves;
-`DELETE /v1/views/{view}` resets. Owner-only like workspaces (JWT `sub`, filtered statements,
+`DELETE /v1/views/{view}` resets. With nothing saved, Home is the watchlist, new filings and data
+notes, with the status strip, Continue and Expected filings off (`DEFAULT_HOME`, F6 #127; the web
+app's `views/model.ts` applies the same). Owner-only like workspaces (JWT `sub`, filtered statements,
 FORCEd row-level security; `test_views_db.py`), validated against fixed catalogs, not streamed,
 and grants nothing: the pages still read every value through the permission-checked routes, so a
 column added for an ungranted company stays masked.
@@ -742,7 +927,156 @@ provider call, another user can't see my connection or prices, layer 1 before th
 once-a-day refresh, rate limits, disconnect deletes the prices, valuation formulas; the real
 Tiingo adapter over `httpx.MockTransport` with `tests/fixtures/`, never Tiingo itself) and
 `test_connections_db.py` (the three tables' forced owner RLS for another user and for no user,
-WITH CHECK, cascades, checks; `APP_TEST_DATABASE_URL`).
+WITH CHECK, cascades, checks; `APP_TEST_DATABASE_URL`). Filing alerts: `test_webhooks.py` (every
+URL and address refusal, a rebound name refused at send time with nothing sent, the connection
+going to the checked address, redirects and errors as codes, size caps, the derived secret and the
+signature), `test_alerts.py` (material 8-Ks, key figures, red-line checks and evaluation, figures
+stripped without access, the webhook form refusing `http://169.254.169.254` and private addresses
+before anything is stored, strict bodies), `test_alerts_db.py` (forced RLS on all six tables, binding
+the owner; one user can't read, mark, change, test, rotate, delete or see the deliveries of another's
+alerts and webhooks; the secret never in a later response or a log; the job end to end over a fake
+index: follow dates, forms, routine 8-Ks skipped, 7.01/8.01-only 8-Ks only when asked, pending then
+ready with red lines, idempotent runs, retries after backoff, email only with a verified address,
+a stalled webhook not starving the user's others, stalls across runs, each user's fair share of the
+send budget), `test_alert_filings_db.py` (the job's
+index query as query_api without a user) and `test_alert_email.py`.
+
+## Filing alerts
+
+F6 (Phase 9 E, #154): when a company a user watches or analyses files a 10-K, a 10-Q or an 8-K
+with a material item, the user gets an alert in the app (the bell, the Alerts page, the Monitor
+step) and, if they add one, at a webhook (Discord, Slack or any https endpoint), with the key
+figures and their red lines evaluated on it. Rules are `alerts.py`'s docstring; storage is app
+migrations 016 and 017 (owner-only, forced RLS, not streamed).
+
+- **Who follows what.** The watchlist (from the day a company was added) and each analysis
+  project's company (from the day the project was made). Per company the user can turn any of the
+  three forms off, and turn on 8-Ks under 7.01 / 8.01 alone (`other_8ks`). Watching grants nothing:
+  figures and red lines are read as the user, through OpenFGA and RLS, or not at all
+  (`figures_status: no_access`).
+- **What alerts.** Originals only. An 8-K alerts when it has a material item: results (2.02), a
+  deal, debt, leadership, an impairment, non-reliance, a delisting and so on. Routine items alone
+  never alert (5.07, 5.08, 9.01: `events.ROUTINE`), and by default neither do 8-Ks whose only items
+  are 7.01 (Regulation FD: presentations, press releases) and/or 8.01 (Other events): the owner's
+  default of 2026-11-09 (`OTHER_8K_ITEMS`). `PUT /v1/alerts/settings/{id}` with `"other_8ks": true`
+  turns those on for one company (app migration 017; absent from the body = unchanged, so an older
+  web app's save keeps it; settings answer `other_8k_items` so the web app knows it may offer the
+  choice). Rows saved before 017 read false. An 8-K that doesn't alert is kept `skipped` (never
+  shown; `detail.quiet` for a 7.01/8.01 one), so turning the choice on applies from then on. Its
+  items come from the filing index, else the parsed item headings (filings tier). A 10-Q or 10-K
+  waits until gold has its figures (its recap cites the filing),
+  then shows revenue with its change on a year earlier, gross (else operating) margin, and diluted
+  EPS (net income for a 10-K's year); after 3 days without them it shows without.
+- **Red lines.** A formula in the [formula language](#formulas) (catalog metrics, + - * /, lags,
+  `ttm()`, `abs()`; no ticker: it reads its company), a view, `<`, `<=`, `>` or `>=`, and a constant.
+  Compiled like a chart formula (bound parameters only) and run as the user. Evaluated at the
+  filing's period on each 10-K/10-Q, and on demand on the latest figures (`?evaluate=true`). A red
+  line describes trouble: crossed means the alert says so. Example, measured on the screenshot
+  harness: `(receivables / receivables[-4q] - 1) - (revenue / revenue[-4q] - 1) > 0.10` on NVIDIA-like
+  figures gives 26.2 points, crossed; `gross_margin < 0.70` (TTM 71.2%) clear. A red line on an
+  amount says its `unit` in the company's currency (057: "CNY"), so messages and the web word it
+  "CNY 996.3B", never "$"; key figures in a message are in their unit too ("€2.1B", "€1.22 a share").
+- **How alerts are made: a database poll, not a Kafka consumer.** `query-api-alerts`
+  (`alert_job.py`) is a CronJob every 10 minutes. A filing reaches `silver.filings` within seconds
+  of the feed, but what an alert says arrives later from elsewhere (an 8-K's items with the nightly
+  submissions load, a 10-Q's figures with companyfacts), so a consumer would wait and come back to
+  the database anyway, and it would need its own SCRAM user, ACL entry and a secret only the owner
+  can create on hermes. Each run re-reads the last 3 days of the index and inserts with ON CONFLICT
+  DO NOTHING (one alert per user, filing and company; one delivery per webhook and alert), so a
+  missed or repeated run loses or doubles nothing. Cost per run: one short app-DB transaction per
+  user who follows something (a handful of statements), one filing-index query per 50 followed
+  companies (13 ms on hermes for 50 companies, index scans only, measured 2026-11-09), then a recap
+  and the red lines only for the filings that just arrived. One pod for a few seconds every 10
+  minutes; no SEC requests; no Kafka.
+- **Webhooks** (`webhooks.py`, its docstring is the spec). https only, port 443, no user info, no
+  IPv6 zone, an ASCII path, no internal names; the name is resolved as an absolute name (no search
+  domains: a cluster's short service names don't resolve) and refused if any answer is private,
+  loopback, link-local (169.254.169.254), shared, reserved, multicast, site-local, or an IPv6 form
+  of one (mapped, NAT64, 6to4, Teredo), when saved and again before every send, and the request
+  goes to the address just checked (no rebinding). Redirects are never followed. 3 s per socket
+  operation and a hard 8 s for the whole send, the name's lookup included (it all runs on a worker
+  thread and the socket is shut down at the deadline, so a slow resolver or an endpoint trickling
+  bytes can't hold the job: tests do both, one over a real socket; past the deadline nothing is
+  connected or sent, `dns_timeout` if the name hadn't resolved), 16 KiB body, 4 KiB of the answer
+  read; any failure is a short code. Each request is signed: `X-Tributary-Signature: v1=` HMAC-SHA256 of
+  `timestamp.body` with the webhook's secret, which is derived from the JWT secret, the webhook id
+  and a random salt (never stored, shown once on create or rotate, never logged; rotating the JWT
+  secret changes them all). The URL is stored (forced RLS) and returned masked. Delivery log with
+  retries after 5 min, 30 min, 2 h and 6 h, then failed; errors are codes. The job sends after
+  every user's alerts are made, users in a random order, each with a fair share of the 240 s
+  budget (what's left over the users left, so time one doesn't use goes to the next), 10
+  deliveries per user per run taken in turns across the user's webhooks (one webhook's backlog
+  can't fill the batch), nothing started after 240 s. A webhook that stalls (no answer in time, a
+  name that doesn't resolve or resolves too slowly, no connection, TLS, or a name that now
+  resolves to a private address, refused at send time) is skipped for the rest of
+  the run; after consecutive stalls it is left out of later runs for 30 min, 2 h, then 6 h each
+  (app migration 017, `stalls` / `stalled_until` on the webhook, shown on the settings page), and
+  anything it answers, a test that arrives or turning it off and on clears that; its deliveries
+  stay due. A slow, dead or hostile endpoint delays only its owner. Each send is recorded as soon
+  as it's made, and a retry sends figures only while the user can still read the company (layer
+  1 again).
+  Making alerts also runs users in a random order within 240 s; a user not reached waits for the
+  next run (the 3-day window covers it). Webhooks need a permanent account (GitHub or a
+  password account): an anonymous demo sandbox gets a 403, so a visitor can't make the server post
+  to a URL of their choosing. The Helm network policy (443 to public addresses only) is a second
+  layer under these checks.
+- **Email** (`alert_email.py`): a provider interface, off. `ALERT_SMTP_HOST` + `ALERT_SMTP_FROM`
+  (any SMTP relay, TLS) turn a provider on in the job, but a user also needs an address they
+  proved they own and none is stored yet, so nothing is sent; the settings say email isn't set up.
+  The network policy opens only 443, so SMTP also needs `alertEmail.enabled` in the Helm values
+  (`allow-smtp`, port 587 by default; deploy/helm/tributary README).
+
+## Statement callouts
+
+`/financials?callouts=true` (F5, `query_api/notes.py` `callouts`, its docstring is the spec) adds
+`callouts` for view `quarter`: for each base metric asked for, every quarter of its gold series (not
+just the window, since a quarter's neighbours can be outside it), tested as ops.check_financials (041)
+tests it:
+
+- `outlier`: at least 10 times the larger of the quarters either side, which agree (same sign, within
+  2x of each other); `seasonal` when the same quarter peaks in two other years too (the data notes'
+  rule). NVIDIA's dividends: 6,047M after 243M and 242M (`factor` 24.9).
+- `sign`: the other sign from both quarters beside it, on 041's sign_flip metrics (costs) and operating
+  cash flow (JPMorgan's swings between -$251.8B and +$147.8B). Never on the cash flow subtotals or the
+  change in cash: they change sign as a matter of course.
+- The newest quarter has no quarter after it, so 041 never tests it: here it is tested against the two
+  quarters before it (`edge: true`). That is how a step change shows.
+
+Each callout: `metric`, `period_end`, `kind`, `edge`, `value`, `factor` (outliers), `beside` (the two
+quarters compared, with values) and `seasonal`. It says what a figure is next to, never that it is
+wrong. Without `callouts=true` the answer is unchanged (the agent's `get_financials` reads it);
+`test_callouts.py` checks the thresholds against 041's SQL text.
+
+## Reported vs standardised
+
+`GET /v1/companies/{id}/components?metric=&period_end=&view=quarter|ttm` (F5, `query_api/components.py`,
+its docstring is the spec): one figure opened into what gold made it of, the FactSet/Koyfin pattern.
+`require(financials)` first, then `Store.components` in one session under RLS: the figure's
+`gold.financials` row, its inputs' rows at the same date, `gold.figure_facts` (migration 049) for each
+row built from facts, and the derived metric's definition. One company, one date.
+
+- `how`: `derived` (net debt, cash and investments, free cash flow, gross margin...: `components` from
+  the row's stored `inputs`, each with its role `+`, `-`, `numerator`, `denominator`, its own gold
+  figure and citation; a left-out input says why: `inside_cash` or `not_reported`), `ttm` (`parts`:
+  the four quarters, or the year a 10-K states), `sum` (a line tagged as parts, 038), `computed`
+  (gross profit as revenue less cost, 039: `parts` are the two), `ytd` (a quarter from year-to-date
+  figures: the two facts), `reported`.
+- `facts` (quarter view): the fact selection, every mapped tag with a value for the period, its
+  `priority`, whether it is a `line` or only part of a sum, its filing, how many `filings` stated it,
+  and which gold `used`. `gold.figure_facts` is SECURITY DEFINER (query_api has two columns of
+  `silver.financial_facts`) with `authz.readable_companies('financials')` as its only rule, like 036.
+- Values are exact decimal strings. 404 when gold has no figure there (or RLS hides it); 422 for a
+  metric `/v1/metrics` doesn't list.
+
+`GET /v1/companies/{id}/filings/{accession}/figures` (F7a, H2): one filing's own figures.
+`require(financials)` first, then `Store.filing_figures`, `gold.filing_figures` (migration 051) in the
+caller's session: the filing's facts as `gold.usable_facts` reads them (signs, sums, a total's current
+portion, a co-registrant's filing), the best tag per metric and period (`how: reported`, `xbrl_tag`),
+and `how: computed` rows for `net_debt`, `cash_and_investments` (each balance-sheet date, 040's rule for
+investments inside cash) and `free_cash_flow` (each cash-flow period), with their `inputs`. Nothing
+from other filings, so it says what the cited filing gives, not what gold settled on. Empty when the
+filing has no facts for that company. Same SECURITY DEFINER rule as `figure_facts`. agent-api's thesis
+check compares a supported claim's computed figure with it (agent README, "Thesis checks").
 
 ## Segments
 
@@ -794,9 +1128,90 @@ from `readable()` (financials) and passes them into the SQL (with the catalog pu
   `unit_change`. An `outlier` the same quarter also has in two other years gets `seasonal` and
   severity info. No check is suppressed: every finding still reaches a note.
 - Every note has `date` (restating or missing filing, a mistagged fact's filing, else the period
-  end; newest first: a 2033 period mustn't top the list) and
+  end: a 2033 period mustn't top the list) and
   `filings` (`role`, accession, form, filed, EDGAR `filing_url` from the public index). The
   plain-language wording is the web app's (`services/web/src/company/notes.ts`).
+- **Ranked, grouped, summarised (F7a, M2).** The checks cried wolf (on hermes the median company had
+  34 findings, the 90th percentile 114). Nothing is dropped; instead a series' repeats are one note
+  (same company, kind, metric, segment axis, rule, unit change, possible split, season: `detail`
+  gains `repeats`, `first_period_end`, `last_period_end`, `periods`, and the note keeps the newest
+  filings), and every note has a `rank`: `attention`, `note` or `minor`, scored from severity,
+  materiality (a 5% restatement or annual mismatch, a 10x spike, an impossible value), recency (2 and
+  5 years) and whether it's a headline metric; missing filings are always attention, derived
+  quarters, stock-based compensation benefits (050), unit changes and seasonal peaks always minor,
+  segment sums and left-out figures at most a note (`notes.py` docstring has the table). Notes come
+  attention first, then note, then minor, each newest first. Both routes add `summary` (notes per
+  rank, findings behind them). On 220 random companies' real findings: median 35 findings became 15
+  notes (0 attention, 1 note, 13 minor); 42 companies have anything needing attention, at most 6.
+
+## Earnings and events
+
+`/v1/companies/{id}/events` and `/v1/companies/{id}/earnings` (`events.py`, `releases.py`; rules
+in their docstrings) put the filings an analyst reads between 10-Qs next to the figures: what the
+company filed under Form 8-K since its last report, and each quarter's earnings release. Both
+`require(filings)` first, then read through `Store` as `query_api`: the 8-K list and its items
+are filing-index metadata (`silver.company_8ks`, migration 045, from the SEC's submissions
+history; a filing too new for the nightly load shows the items the parser found in it, under
+RLS), the excerpts and passages are section text under RLS on `silver.filing_sections`.
+
+- **Events since the last report.** `since` is the period end of the latest original 10-K or
+  10-Q (the last 400 days, `window: "recent"`, when there is none that recent); `events` are the
+  8-K and 8-K/A filed after it, at most 25, each with `items` (`{item, title, kind}`; `kind`:
+  deal, debt, agreement, leadership, impairment, non_reliance, earnings, disclosure, ...),
+  `items_from` (`index` or `parsed`), `material` (false when every item is routine: a vote,
+  nominations, exhibits alone), `event_date` (the 8-K's date of report), `excerpt` (the opening of
+  its most material item's section after the item's heading, cited with offsets; an item that only
+  says another is incorporated by reference gives way to the next), `release` (its first EX-99 exhibit) and
+  `affects`. **Stale figures**: an original 8-K whose event is dated after the period end flags
+  the balance-sheet figures it can change, listed once each in `stale` as of that period end with
+  the events behind them: 2.01 completed acquisition or disposition (cash, debt, net debt, total
+  assets), 2.03 new debt and 2.04 accelerated debt (debt, net debt, debt to equity; 2.03 cash
+  too), 2.06 impairment (total assets, equity), 3.02 unregistered equity sale (shares, equity),
+  1.03 bankruptcy and 4.02 non-reliance (`*`: every figure). A flag, never a recomputed figure.
+- **Announced under 7.01 / 8.01** (F1b, `announcements.py`, rules in its docstring): many
+  companies announce a closed acquisition or a new financing in a Regulation FD or Other Events
+  8-K with a press release, without Item 2.01 or 2.03. Such an 8-K (7.01 or 8.01, never one with
+  2.02: an earnings release recaps its quarter) is read at the opening of its press release and
+  item text, sentence by sentence, by fixed phrases: a **completed** acquisition or disposition
+  ("Completes Acquisition", "has acquired", "closed the sale of", not "agreement to acquire",
+  "expected to close", "upon completion") flags 2.01's figures; a **new financing** (notes priced
+  or issued, a credit facility or term loan entered, a term loan drawn; not a proposed or launched
+  offering, an amendment, a buyback, a dividend or guidance) flags 2.03's. `announced` on the
+  event says what was read: `kind` (deal, financing), `item` (7.01 or 8.01), `words` (the phrase
+  that matched, as written), `sentence` and a `citation` with offsets into the section it came
+  from. Checked on real 8-Ks (`tests/fixtures/announcements`, from production): Vertiv's Oct 26,
+  2026 7.01 8-K ("Vertiv Completes Acquisition of King Environmental Services") flags; its Sep 24
+  agreement to acquire the same company, its UIG agreement and plan of merger, its Oct 28 earnings
+  release, United Therapeutics' $2B buyback, a dividend, BWX's launched notes offering and National
+  Fuel's planned separation don't; Blackstone's, Las Vegas Sands' and TKO's priced notes do. Of
+  50 more 8-Ks sampled from production's search (7.01 and 8.01 sections, Oct 1 - Nov 6, 2026), 38
+  are read (7.01 or 8.01, no 2.02) and 2 flag, both rightly (Peoples Bancorp "Completes
+  Acquisition of Citizens National", TKO's priced notes). Reading the other 36's completion,
+  pricing and credit sentences by hand, none announces a completed deal or a new financing the
+  rules missed, except a "pricing of the Offering" whose 8-K never says what was offered (two
+  more completions there are 2.01 8-Ks, flagged by their item).
+- **Earnings releases.** A quarter's release is the 8-K with Item 2.02 filed after its end (within
+  120 days, the latest quarter end before the filing), the last one on or before the quarter's
+  10-Q/10-K when there are several (`other_releases` lists the rest); a quarter whose 10-Q isn't
+  filed yet is `estimated` (gold.expected_filings' next period end). Its text is the first EX-99
+  exhibit, else the 8-K's `2.02` section. From it, by fixed rules (no model): `headline`,
+  `outlook` (the blocks under the release's own Outlook or Guidance headings) and `adjustments`
+  (reconciliation tables, and footnotes before the statements that state a dollar amount). Each
+  passage has `heading`, `text` (lines as the parser wrote them), `truncated` and a `citation`
+  with offsets into the release. A release without such a heading or table gets none: the web app
+  and the agent say so. No beat or miss: Tributary holds no estimates.
+- **Measured** (hermes, 2026-11-08, operating companies, filings since 2024-11-01): 32,188 8-Ks
+  with Item 2.02 from 3,994 companies, every one stored, 30,578 (95%) with a parsed EX-99.1;
+  of 40,588 10-Q/10-K quarters, 30,284 (75%) have a 2.02 8-K between the period end and the
+  report (+7 days) and 28,866 (71%) a parsed EX-99. On 45 releases sampled across industries (one
+  per two-digit SIC, Oct 15 - Nov 6, 2026), 33 had an Outlook or Guidance heading and the rules
+  found 32 (the miss: a release whose text breaks every printed line); every block found was the
+  release's own outlook section, some opening with its disclaimer. 8-K items of operating companies: 111,113 8-Ks, 76,711 stored;
+  material event items are stored only when the document crawl took them (`CRAWL_8K_ITEMS`,
+  doc-fetcher README): an event whose 8-K isn't stored is still listed, from the index, with
+  its EDGAR link and no excerpt.
+- Per company, bounded: one company's 8-Ks (an index probe per CIK, 1.4 ms for NVIDIA's two
+  years on hermes), the sections of at most 25 events or 8 releases. No catalog-wide form.
 
 ## What changed
 
@@ -821,6 +1236,130 @@ built by the parser's `parser-index`; algorithm in `services/parser/src/filing_p
 - An accession that isn't a parsed filing of this company → 404 (the same for another company's
   filing); a parsed filing with nothing compared yet → 200 with `sections: []` and a `note`.
 
+### Read for materiality (F3: `view`, `q`, `numbers`)
+
+The stored diff counts every paragraph a page break split, every "second quarter" that became
+"third", every table row whose figures moved: Deckers' Q2 FY27 10-Q had 121 changes against its
+Q1 10-Q, half of them fragments, and its three-month text was diffed against six-month text
+(analyst tests, audit H4). With `view` the route runs a second pass over the stored changes at
+query time (`changes.py`, rules in its docstring), from the two section texts it already reads:
+no stored row changes and nothing is rebuilt.
+
+- `view=reading` (reading order) or `view=ranked` (highest score first); `q` or `numbers` alone
+  imply `reading`. Without any of the three the answer is exactly as above (the agent's
+  `get_section_changes` and an older web app read that).
+- `basis` defaults, with `view`, to the same quarter a year earlier for a 10-Q that has one
+  (else the prior filing); `comparisons` lists the filings this one was compared with
+  (`basis`, accession, form, filed, period), from `Store.section_bases` (one PK probe of
+  `gold.section_diffs` under RLS, 1.6 ms on hermes).
+- The pass: page furniture dropped ("Table of Contents 25", running headers with their page
+  number masked, never a table row); paragraphs a page break or a line-wrapped document split
+  joined; then hidden and counted per section in `material.hidden`: `resplit` (only split or
+  rejoined, or only furniture differed), `calendar` (equal once month names, "second/third
+  quarter" and the quarter's three months vs the year to date's six or nine months are masked),
+  `figures_only` (a table row whose words didn't change) and `minor` (similarity >= 0.9, the
+  stored diff's threshold). Pairs are re-made over what's left: never a quarter's passage with a
+  year-to-date one, a split-and-edited paragraph takes in its neighbours, and two passages with
+  the same run-in heading ("Gross Profit.") and period pair even when rewritten past
+  recognition.
+- Per change, besides the stored fields: `period` (10-Q: "three months", "six months", "nine
+  months", "three and six months"; from the passage, else its period heading), `figures`
+  (`new`: figures the compared passage doesn't state, `removed`), `moved` (the most significant
+  replaced figure that moved 10% or more: a dollar amount first, the largest first), `risk_terms` (risk wording new to the passage), `subsection`,
+  `score`, `why` (what counted, in words: "new passage", "5 new figures", "0.2% → 4.8%", "new
+  risk wording: tariff", "Liquidity and capital resources") and `merged` (stored paragraphs
+  behind it). Score = where it sits (Risk Factors 1.5; MD&A liquidity 1.3, results 1.0, critical
+  accounting 0.8, non-GAAP 0.6, boilerplate 0.3) x (new 2, removed 1.5, rewritten 1-3 by how
+  much; + new and removed figures; + how far figures moved; + new risk wording), halved under
+  12 words. `ranking` is the one line that says so. In a rewritten passage's `words`, a
+  calendar-only swap ("second" → "third" quarter, "June 30, 2025" → "September 30, 2026") is shown
+  as the new words, unmarked; every other word change is marked.
+- Filters, after the pass: `q` (2-100 characters; every word must appear in the passage or its
+  compared one, as a word prefix with a plural dropped, so "tariffs" finds "tariff"; "quoted
+  phrases" as written), `numbers=new` (passages with a new figure), `kind`, `section`. The answer
+  echoes `view` and `filters` (`terms` is what was matched), and counts `matched` (shown) and
+  `total` (after the pass, before filters). A web app that gets no `view` back is talking to an
+  older API.
+- Measured on production's texts (the stored rows reproduced exactly from them with the parser's
+  diff), changes shown after the pass, before filters: Deckers 10-Q Q2 FY27 against Q2 FY26
+  147 → 91 (against Q1: 121 → 80, of which 51 six-month passages new in Q2, now labelled);
+  Vertiv 10-Q Q3 2026 against the prior 10-Q 39 → 22 (9 calendar rollovers hidden), against Q3
+  2025 62 → 54; NVIDIA 10-K FY26 133 → 122, 10-Q Q2 FY27 against a year ago 129 → 119; Vertiv
+  10-K 2025 112 → 93; Deckers 10-K FY26 379 → 264. With `q=tariffs` Deckers' 10-Q shows 10
+  passages, the $46.0M IEEPA refund second. The pass costs 20-70 ms per 10-Q section and up to
+  145 ms for Deckers' 10-K Risk Factors (178 stored changes), in the request.
+- Per company, per filing: the same three per-accession reads as without a view plus
+  `section_bases`; no catalog ids, no `@@` (the topic is matched in Python on the passages the
+  caller already read under RLS).
+
+## Insider filings
+
+`GET /v1/companies/{id}/insiders` (#117, `insiders.py`, its docstring is the spec): `require(filings)`
+first (a filing's content), then `Store.insider_filings` under RLS (`silver.insider_filings` and
+`silver.insider_transactions`, migration 054, `granted_filings` on company_id): one session, the
+newest `limit` (1-100, default 50) filings filed before `before`, then their lines by accession (at
+most 101). Silver is parsed in SQL from the SEC's ownershipDocument XML (doc-fetcher stores it), so
+every figure is as filed. Per filing: `owners` (name, CIK, `roles`: Director, the officer title,
+10% owner, other), `aff10b5_one` (a Rule 10b5-1 plan), `summary` (shares and value bought (P), sold
+(S) and other), `lines` in document order (`kind` transaction or holding, `derivative`, `code` and
+`code_label` from the SEC's Form 4 codes, `shares`, `price`, `value` = shares x price for a priced
+transaction, `acquired_disposed`, `shares_after`, `direct_indirect`, `nature`, a derivative's exercise
+price and underlying), and a `citation` to the filing on EDGAR. Numbers are exact decimal strings.
+Amendments are listed as filed, never netted. Not an agent tool (yet): the recorded suites are
+unchanged. Pages: newest first by (filed, accession_no); with `has_more`, `next_cursor` is the page's
+last pair and `cursor=<it>` returns the filings after it, so a day split across two pages is never cut
+(`before=<day>` skips the rest of that day: it stays for older clients, not for paging).
+
+## Backlog and orders from the text
+
+`GET /v1/companies/{id}/text-kpis` (F8b, H11; `text_kpis.py`, its docstring is the spec): figures a
+company states in words but doesn't tag in XBRL. `require(filings)` first (they are read from filing
+text), then, under RLS: the filing index's 10-K/10-Q period ends (`Store.periodic_reports`), its 8-Ks
+(`Store.company_8ks`; the newest 60 with Item 2.02 are earnings releases, each dated by the quarter it
+reports, as `/earnings` does), and `Store.kpi_sections`: the company's name and its 10-K Items 1 and 7,
+10-Q Part I Item 2 and those releases' EX-99.1 filed in the last `years`, that mention backlog or
+orders (at most 160 sections; one company, never a catalog's ids). Fixed rules, no model:
+
+- **Backlog**: a sentence whose subject is the company's ("Vertiv's estimated combined order backlog
+  was $15.0 billion and $7.2 billion as of December 31, 2025 and 2024, respectively"; "the dollar
+  amount of backlog believed to be firm was approximately $20.6 billion"; "Backlog totaled $109.6
+  billion"), or a table's "Total backlog" row (its first column, at the document's period end, when the
+  table states a scale in dollars, its header's first year is the period's and it isn't split into
+  funded and unfunded columns). A segment's backlog, funded or unfunded backlog, a part of it, a bound
+  ("more than $5 billion") and guidance are never read.
+- **Orders** for a quarter: "GE Vernova orders of $9.7 billion" in a 10-Q or earnings release that
+  names the quarter (a company subject: "Orders of $5.0 billion" under a segment's heading has none),
+  or a "Total orders" row of a three-months table. **Order growth**: "third quarter organic orders up
+  ~60% compared to prior year period", with `basis` organic or reported; never sequential or TTM.
+- Each value is kept only when its number as written is in its passage, and cites every passage that
+  states it (`sources`: written, sentence or table, the passage, a citation with offsets the reader
+  opens at). Dates the filings disagree on keep a table's total, then a company-wide subject, then the
+  figure more filings state, else they are left out; `conflicts` lists each.
+
+The answer has `metrics.{backlog, orders, orders_growth}` with `points` (values as numbers: dollars, or
+percentage points for growth) and never a `rows` or `sections` key (verify.py reads those). Not an
+agent tool: the recorded suites are unchanged. Cost: 70-150 ms of Python per company over five years
+of sections (CAT, 3.4M characters: 68 ms).
+
+Measured by hand on 2026-11-09, on production's sections (2021-2026), every kept value checked against
+its passage. Built on 21 companies: Vertiv, Caterpillar, GE Vernova, Boeing, Lockheed Martin, Eaton,
+Northrop Grumman, General Dynamics, RTX, Honeywell, Emerson, Rockwell, Parker-Hannifin, Flowserve,
+Hubbell, Xylem, Deere, and NVIDIA, Coca-Cola, Deckers, Sprouts (which state none): 174 values at 13
+companies (161 backlog, 1 orders, 12 order growth), all correct after the rules above; the errors found
+on the way, each now a rule and a test: General Dynamics' segment sentences (15 wrong values),
+Northrop's funded column (15), Emerson's table with last year first (5), Honeywell's segment "Orders
+grew 19%" (1), Vertiv's "as of the end of August" (1); and, caught as conflicts rather than kept,
+Xylem's comparative year-end figures dated at the quarter (9 quarters lost), RTX's segment paragraphs,
+Boeing's line broken mid-sentence, Quanta's "remaining performance obligations and backlog were".
+Then held
+out, untouched: Textron, Huntington Ingalls, L3Harris, GE Aerospace, AMETEK, Dover, ITT, PulteGroup,
+Apple, Pfizer, Wabtec, Cummins, Jacobs, Quanta, Trane: 88 backlog values at 7 companies, all correct;
+none at the other 8 (no backlog stated, or not in these ways: L3Harris, AMETEK). Recall is lower by
+design: Flowserve's identical total and segment sentences tie on 10 of 21 quarters (left out), Lockheed
+Martin's 2021-22 release tables have their scale note too far up, and orders and order growth are
+stated in many ways (ITT's "Q4 orders up 9% (10% organic)" has no year-on-year words): only Vertiv's
+and GE Vernova's wording is read today.
+
 ## Search
 
 `GET /v1/search`: Postgres full-text search over `gold.section_search` (one row per
@@ -832,10 +1371,18 @@ applies `authz.readable_companies('filings')` itself: `@@` isn't leakproof, so u
 `gold.section_search` the planner can't use the GIN index at all. It returns offsets and ranks,
 no text; the snippet's text is still read through RLS on `silver.filing_sections`.
 
-- `q`: `websearch_to_tsquery('english', q)`: words, `"a phrase"`, `or`, `-excluded`.
+- `q`: `websearch_to_tsquery('english', q)`: words, `"a phrase"`, `or`, `-excluded`. A quoted
+  phrase matches its words adjacent and in order (stemmed: `"export controls"` matches "export
+  control rules"); `gold.section_search` keeps positions, so this runs in the index. `ts_headline`
+  still marks each of the phrase's words wherever it stands in the snippet; the web app re-marks a
+  phrase query's snippet itself (#80).
   Filters: `company`, `form` (`10-K`, `10-Q`, `8-K`, `/A` amendments), `section`, `from` / `to`
   (filing date). `limit` 1-50 (default 10), `offset` up to 1000, `has_more`.
-- One result per section: its best passage by `ts_rank_cd`, then newest filing first;
+- One result per section: its best passage by `ts_rank_cd`; with `sort=relevance` (default) best
+  rank first, then newest filing, with `sort=date` newest filing first, then rank (#145).
+  `total` is how many sections match in the range searched (`null` past the last page; the same
+  ranking pass counts them, migration 052's `gold.search_page`). `sort` and `window` are echoed:
+  the web app reads an answer without them as an older API.
   `passages_matched` counts the section's matching passages. `snippet` is `ts_headline` over that
   passage only (matches between « and »), cut from `silver.filing_sections` at query time.
   `citation` has the passage's character offsets into the document text.
@@ -845,5 +1392,9 @@ no text; the snippet's text is still read through RLS on `silver.filing_sections
   from `to` (or today), then 180, 730, then all time (a phrase with few recent matches has few
   matches), never before `from`. `searched_from` in the response is that lower bound (`null`:
   all time or `from`). A consequence: a page past the end of one window re-ranks a wider one, so
-  deep paging can repeat a result. Queries still stop after 8 s (`SEARCH_TIMEOUT`) with 422
-  "search too broad".
+  deep paging can repeat a result. `window=exact` (the web app sends it whenever the reader picked
+  dates or "All dates", #81) skips the windows: exactly `from`-`to`, which may be too broad.
+  Measured on hermes (2026-11-09, the inner query as the owner): "export controls" ranks 647
+  sections of 30 days in 0.5 s, 7,017 of a year in 4.3 s. The agent's tool sends neither `sort`
+  nor `window`, so its searches are unchanged. Queries still stop after 8 s (`SEARCH_TIMEOUT`)
+  with 422 "search too broad".

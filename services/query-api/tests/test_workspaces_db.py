@@ -331,6 +331,37 @@ def test_thesis_state_may_be_as_large_as_a_reports(db):
             conn.execute(insert, (wid, kind, state))
 
 
+def test_a_full_model_fits_and_keeps_its_versions(db):
+    """App migration 015 (F2): a model holds up to 64 KiB (the Query API's cap is 60,000 bytes of
+    compact JSON, jsonb's text is wider), other items still 16 KiB; a save over a model keeps the
+    one it replaced (item_versions, 014), owner-only like a thesis's."""
+    s, conn = db
+    wid = s.create("t-ws1", "Mine")["workspace_id"]
+    year = {"growth": 12.34, "margin": 23.45, "nonOperating": -1.23, "taxRate": 21.5,
+            "shareChange": -3.25, "fcfMargin": 18.75, "note": "é" * 500}
+    full = validate_state("model", {
+        "companyId": NVDA, "ytd": True, "assumptions": [year] * 10,
+        "scenarios": {"bear": [year] * 10, "bull": [year] * 10},
+        "adjustments": [{"name": "y" * 80, "fy": 2026, "quarter": 1, "amount": 1.5e9}] * 20,
+        "price": {"value": 1234.56, "date": "2026-11-06"}})
+    m = s.add_item("t-ws1", wid, "model", "Full", MODEL)["item_id"]
+    s.update_item("t-ws1", m, None, full)
+    assert s.item("t-ws1", m)["state"] == full
+    assert conn.execute("SELECT octet_length(state::text) > 16384 FROM workspace_items"
+                        " WHERE item_id = %s", (m,)).fetchone()[0]
+    listed = s.versions("t-ws1", m)
+    assert [(v["years"], v["cases"]) for v in listed] == [(1, False)]
+    assert s.version("t-ws1", m, listed[0]["version_id"])["state"] == MODEL
+    assert s.versions("t-ws2", m) is None
+    s.update_item("t-ws1", m, None, MODEL)  # restoring is a save: the full one is kept in turn
+    assert [(v["years"], v["cases"]) for v in s.versions("t-ws1", m)] == [(10, True), (1, False)]
+    insert = ("INSERT INTO workspace_items (workspace_id, user_id, kind, name, state)"
+              " VALUES (%s, 't-ws1', %s, 'x', %s::jsonb)")
+    for kind, n in (("model", 65_600), ("chart", 16_400)):
+        with pytest.raises(psycopg.errors.CheckViolation), conn.transaction():
+            conn.execute(insert, (wid, kind, '{"n": "' + "x" * n + '"}'))
+
+
 PROJECT = validate_project({"companyId": NVDA, "peers": [AAPL], "notes": "GPUs", "done": []})
 
 

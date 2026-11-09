@@ -266,7 +266,7 @@ it("a demo sandbox screens only its companies, with no 'only mine' box and a dem
   expect(container.textContent).not.toContain("metadata only");
   act(() => root.unmount());
   await render({ margin: 20, mine: true }, scope);
-  expect(calls().at(-1)!.searchParams.get("access")).toBe("financials");
+  expect(calls().filter((u) => u.pathname.endsWith("/screener")).at(-1)!.searchParams.get("access")).toBe("financials");
   expect($(".page > .row .muted")?.textContent).toBe("1 of the 1 companies in your demo");
   expect($(".card-h .sub")?.textContent).toBe("operating margin ≥ 20%");
 });
@@ -276,4 +276,37 @@ it("a named user keeps the full index and the 'only mine' box", async () => {
   expect(calls()[0]!.searchParams.get("access")).toBeNull();
   expect(container.textContent).toContain("Only companies I can read");
   expect($(".page > .row .muted")?.textContent).toBe("2 companies with figures in these columns");
+});
+
+it("F4: a sector filter from /v1/sectors, and the screen grouped by sector with a heading per industry", async () => {
+  const SECTORS = { note: "Tributary's own grouping of the SEC's SIC codes (not GICS)", sectors: [
+    { name: "Technology", companies: 900, industries: [{ name: "Semiconductors", sic: ["3674"], companies: 100 }, { name: "Software", sic: ["7372"], companies: 262 }] }] };
+  const grouped = [
+    { ...row(entry()), sector: "Technology", sector_industry: "Semiconductors" },
+    { ...row(TESLA), sector: "Consumer Discretionary", sector_industry: "Automobiles" },
+  ];
+  vi.mocked(fetch).mockImplementation(async (url) => new URL(String(url), "http://x").pathname.endsWith("/v1/sectors")
+    ? Response.json(SECTORS)
+    : Response.json({ ...SCREEN, rows: grouped }));
+  await render({ sort: "sector", sector: "Technology" });
+  const q = calls().find((u) => u.pathname.endsWith("/screener"))!;
+  expect(q.searchParams.get("sort")).toBe("sector");
+  expect(q.searchParams.getAll("sector")).toEqual(["Technology"]);
+  const sector = $("#f-sector") as HTMLSelectElement;
+  expect([...sector.options].map((o) => o.textContent)).toEqual(["Any", "Technology (900)"]);
+  expect([...container.querySelectorAll('select[aria-label="Industry within the sector"] option')].map((o) => o.textContent))
+    .toEqual(["Any industry", "Semiconductors (100)", "Software (262)"]);
+  expect([...container.querySelectorAll("tr.group-head th")].map((th) => th.textContent))
+    .toEqual(["Technology · Semiconductors", "Consumer Discretionary · Automobiles"]);
+  expect((container.querySelector(".card-h .chk input") as HTMLInputElement).checked).toBe(true);
+  expect($(".sector-sub")?.textContent).toBe("Semiconductors");
+});
+
+it("F4: an older API without /v1/sectors offers no sector filter or grouping", async () => {
+  vi.mocked(fetch).mockImplementation(async (url) => new URL(String(url), "http://x").pathname.endsWith("/v1/sectors")
+    ? Response.json({ detail: "Not Found" }, { status: 404 })
+    : Response.json(SCREEN));
+  await render();
+  expect($("#f-sector")).toBeNull();
+  expect(container.textContent).not.toContain("Group by sector");
 });

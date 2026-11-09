@@ -801,6 +801,13 @@ a.btn:hover {
   min-width: 0;
 }
 
+/* one line under a card's header, above its table (Data status' quality checks, #55) */
+.card-note {
+  margin: 0;
+  padding: var(--sp-3) var(--sp-6);
+  border-bottom: 1px solid var(--line);
+}
+
 /* a long description wraps beside its button instead of pushing the button to its own line */
 .card-h.keep {
   flex-wrap: nowrap;
@@ -975,6 +982,18 @@ table.t {
 
 .t th.first {
   z-index: 2;
+}
+
+/* the header moved down to stay under the top bar while the page scrolls past the table
+   (TableScroll headerShift): over the rows, with a shadow so it reads as lifted */
+.tw[data-head-moved] .t thead th {
+  transform: translateY(var(--tw-head-y, 0px));
+  z-index: 2;
+  box-shadow: 0 1px 0 var(--line), 0 6px 6px -6px var(--edge-shadow);
+}
+
+.tw[data-head-moved] .t thead th.first {
+  z-index: 3;
 }
 
 /* frozen: a line while the table scrolls, a shadow once a column has gone under it */
@@ -2268,6 +2287,30 @@ button.chip:disabled {
   border-radius: var(--radius);
 }
 
+/* deleted workspaces and items waiting out their undo window (workspaces/Actions UndoDeletes, #158):
+   on document.body, at the foot of the window, above the page and the assistant panel */
+.undo-stack {
+  position: fixed;
+  left: 50%;
+  bottom: var(--sp-7);
+  transform: translateX(-50%);
+  z-index: 60;
+  display: grid;
+  gap: var(--sp-3);
+  width: max-content;
+  max-width: calc(100vw - 32px);
+}
+
+.undo-stack .undo-note {
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+  box-shadow: 0 6px 18px -8px var(--edge-shadow);
+}
+
+.undo-stack .undo-note.failed {
+  color: var(--neg);
+}
+
 .th-sort {
   border: 0;
   padding: 0;
@@ -2459,6 +2502,25 @@ button.chip:disabled {
   color: var(--text-3);
 }
 
+/* the filer's "All other" under its segments (#171): set apart, not a segment */
+.t tr.reconciling td {
+  border-top: 1px solid var(--line-2);
+  font-style: italic;
+}
+
+/* insider transactions (company/Insiders.tsx, #117): the insider's name and role wrap */
+.t.insider-t td.first {
+  white-space: normal;
+  min-width: 12em;
+  max-width: 22em;
+}
+
+/* one line saying what a company tab is for, and where the rest is (#115) */
+.tab-purpose {
+  margin: 0 0 var(--sp-5);
+  max-width: 72em;
+}
+
 .t td.first .until {
   display: block;
   font-size: 11px;
@@ -2529,6 +2591,11 @@ button.chip:disabled {
   text-decoration: underline;
 }
 
+/* except a count that lists companies (Data status, #55): that one must look like a way in */
+.t td.n a.count-link {
+  color: var(--accent);
+}
+
 .flags {
   margin: var(--sp-3) 0 0;
   padding-left: 18px;
@@ -2573,6 +2640,82 @@ button.chip:disabled {
 
 .diff del {
   color: var(--neg);
+}
+
+/* What changed read for materiality (F3): comparison, order and filters above one list */
+.changes-tools {
+  gap: var(--sp-4);
+  padding: var(--sp-5) var(--sp-6) 0;
+  align-items: center;
+}
+
+.changes-topic {
+  gap: var(--sp-2);
+  flex: 1 1 240px;
+  max-width: 420px;
+}
+
+.changes-topic .field {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.changes-check {
+  gap: var(--sp-2);
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+
+.changes-basis,
+.changes-why,
+.changes-hidden {
+  margin: var(--sp-3) var(--sp-6) 0;
+  line-height: 1.45;
+  max-width: 900px;
+}
+
+.changes-basis {
+  color: var(--text-2);
+}
+
+.diff p .change-head {
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-2);
+}
+
+.diff p .change-head .tag {
+  margin-left: 0;
+}
+
+.tag.period {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: transparent;
+  font-weight: 500;
+}
+
+.diff p .change-why,
+.diff p .change-links {
+  display: block;
+  margin-top: var(--sp-2);
+}
+
+.diff p .change-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+  align-items: center;
+}
+
+.diff mark {
+  background: var(--warn-soft);
+  color: inherit;
+  outline: 1px solid var(--warn);
+  border-radius: 2px;
+}
+
+.changes-count {
+  margin-bottom: var(--sp-1);
 }
 
 /* Filing reader: outline groups, search, cited passage, What changed side by side */
@@ -2673,6 +2816,40 @@ mark {
   padding: 4px 8px;
 }
 
+/* a table in the filing's text, read back from its rows (reader/blocks.ts, #178): figures in
+   columns, the label column wraps instead of widening the table */
+.section-text .filing-table {
+  margin: var(--sp-5) 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font-size: var(--fs-base);
+  line-height: 1.4;
+}
+
+.section-text .filing-table.hit {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.ftable td.first,
+.ftable th.first {
+  white-space: normal;
+  min-width: 14em;
+  max-width: 32em;
+}
+
+.ftable td.n,
+.ftable th.n {
+  font-variant-numeric: tabular-nums;
+}
+
+.ftable tr.label-row td {
+  white-space: normal;
+  font-weight: 600;
+  color: var(--text-2);
+  padding-top: 8px;
+}
+
 .section-h h2 {
   margin: 0;
 }
@@ -2762,6 +2939,14 @@ mark {
 .results .result-co {
   padding: var(--sp-5) var(--sp-6);
   border-bottom: 1px solid var(--line);
+}
+
+/* what was searched, at the top of the results (#81, #145): a sentence, not a footnote */
+.search-scope {
+  padding: var(--sp-4) var(--sp-6);
+  border-bottom: 1px solid var(--line);
+  background: var(--panel-2);
+  font-weight: 500;
 }
 
 .results .result-co h2 {
@@ -3390,6 +3575,17 @@ button.link.num {
   margin: var(--sp-1) 0 var(--sp-3);
   color: var(--text-2);
   line-height: 1.5;
+}
+
+.notes-summary {
+  margin: 0;
+  padding: var(--sp-4) var(--sp-6) 0;
+  color: var(--text-2);
+}
+
+/* the API's rank (M2): what needs attention stands out from the minor and old */
+.note.rank-attention > .tag {
+  box-shadow: 0 0 0 2px var(--neg);
 }
 
 .note-f {
@@ -4065,6 +4261,83 @@ button.link.num {
   min-width: 0;
 }
 
+/* The thesis editor's Write view (F6, thesis/BlockEditor.tsx): text boxes between cards */
+.block-editor {
+  display: grid;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+
+.block-text {
+  field-sizing: content;
+  min-height: 2.6em;
+  resize: vertical;
+  font-size: var(--fs-base);
+  line-height: 1.55;
+  tab-size: 4;
+}
+
+.block-text.gap {
+  min-height: 1.9em;
+  opacity: 0.55;
+}
+
+.block-text.gap:focus,
+.block-text.gap:hover {
+  opacity: 1;
+}
+
+.block-card {
+  border-radius: var(--radius);
+  min-width: 0;
+}
+
+.block-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.block-card .report-embed {
+  border-left: 3px solid var(--accent-soft);
+}
+
+.block-card.quote .report-embed {
+  border-left-color: var(--warn-soft);
+}
+
+.card-moves {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.card-moves .btn {
+  min-width: 28px;
+  justify-content: center;
+}
+
+.quote-card .report-text {
+  margin: 0;
+}
+
+.quote-card .report-text blockquote {
+  margin: 0;
+}
+
+.tag.quote,
+.tag.earnings {
+  background: var(--warn-soft);
+  color: var(--warn);
+  border-color: transparent;
+}
+
+.report-embed.missing {
+  border-left: 3px solid var(--line);
+}
+
+.embed-comps {
+  margin-top: var(--sp-2);
+}
+
 .thesis-panes.split .thesis-preview {
   max-height: calc(60vh + 60px);
   overflow: auto;
@@ -4268,6 +4541,172 @@ mark.claim-mark {
 .assumptions .note-cell {
   min-width: 220px;
   width: 40%;
+}
+
+.assumptions tbody th.first {
+  vertical-align: top;
+  padding-top: 10px;
+}
+
+/* F2: the rate fields are narrower; blank shows the default as a placeholder */
+.assumptions td:nth-child(n + 4):not(.note-cell) .pct-in .field {
+  width: 64px;
+}
+
+.assumptions .field::placeholder {
+  color: var(--text-3);
+}
+
+/* a column or row heading's second line: "Q1–Q3 reported + Q4", "FY2026 Q3" */
+.col-sub {
+  display: block;
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+/* one line per default, under the case switch */
+.model-rules {
+  margin: 0;
+  padding: var(--sp-4) var(--sp-6) var(--sp-2) calc(var(--sp-6) + 14px);
+  line-height: 1.5;
+  max-width: 1100px;
+}
+
+.model-rules li + li {
+  margin-top: var(--sp-1);
+}
+
+/* the company's outlook beside the year it covers: quoted, never an input */
+.guidance-row td {
+  white-space: normal;
+  background: var(--panel-2);
+}
+
+.guidance-row summary {
+  cursor: pointer;
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+
+.guidance-quote {
+  margin: var(--sp-3) 0 0;
+  padding: var(--sp-2) var(--sp-4);
+  border-left: 3px solid var(--line-2);
+  font-size: var(--fs-sm);
+  max-width: 1000px;
+}
+
+.guidance-quote p {
+  margin: 0 0 var(--sp-1);
+}
+
+.guidance-quote cite {
+  display: block;
+  font-style: normal;
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+}
+
+/* the three-case table: line groups, a case column, the edited case marked */
+.model-table .group-row th {
+  padding-top: var(--sp-4);
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: var(--fs-xs);
+  position: static;
+}
+
+.model-table tbody th.first {
+  position: sticky;
+  top: auto;
+  vertical-align: top;
+  font-weight: 500;
+  color: var(--text);
+  white-space: normal;
+  min-width: 150px;
+  max-width: 220px;
+}
+
+.model-table tr.line-start > * {
+  border-top: 1px solid var(--line-2);
+}
+
+.model-table td.case {
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+}
+
+.model-table td.case.bear,
+.model-table td.case.bull {
+  color: var(--text-3);
+}
+
+.model-table tr.selected td.case {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.model-table td.forecast {
+  font-style: italic;
+}
+
+/* a split or an earlier share basis: said in the cell's title, marked * */
+.model-table td.basis {
+  color: var(--text-3);
+  cursor: help;
+}
+
+.model-table td.forecast.default {
+  color: var(--text-2);
+}
+
+.model-table td.ytd,
+.model-table th.ytd {
+  background: var(--panel-2);
+}
+
+.model-table th.forecast {
+  font-style: italic;
+}
+
+.model-pending {
+  margin: 0 0 var(--sp-2);
+}
+
+.model-upgrade {
+  margin: 0 0 var(--sp-5);
+}
+
+.model-adj-note {
+  margin: 0;
+  max-width: 900px;
+  line-height: 1.5;
+}
+
+.adjustments .field {
+  min-width: 0;
+}
+
+.adjustments td.first .field {
+  width: 240px;
+}
+
+.adjustments .field.narrow {
+  width: 84px;
+}
+
+.price-in {
+  gap: var(--sp-3);
+  align-items: center;
+  margin-bottom: var(--sp-3);
+}
+
+.model-valuation {
+  margin: var(--sp-3) 0 0;
+  line-height: 1.5;
 }
 
 .new-work .save-form {
@@ -5085,7 +5524,8 @@ button.chip.on {
   }
 
   .top .crumb,
-  .top .who {
+  .top .who,
+  .top .bell-word {
     display: none;
   }
 
@@ -5139,5 +5579,718 @@ button.chip.on {
     white-space: normal;
     width: 62px;
     font-size: var(--fs-xs);
+  }
+}
+
+/* Earnings and events (F1): the release beside its figures, 8-Ks since the last report. */
+.kv .p.stale-flag {
+  color: var(--warn);
+  margin-top: var(--sp-1);
+}
+
+.stale-box {
+  background: var(--warn-soft);
+  border-left: 3px solid var(--warn);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-5) var(--sp-6);
+  margin-bottom: var(--sp-6);
+  line-height: 1.5;
+}
+
+.stale-box ul {
+  margin: var(--sp-3) 0;
+  padding-left: 18px;
+}
+
+.stale-box p {
+  margin: 0;
+}
+
+ol.events {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+li.event {
+  border-top: 1px solid var(--line);
+  padding: var(--sp-5) 0;
+  display: grid;
+  gap: var(--sp-3);
+}
+
+li.event:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.row.event-head {
+  gap: var(--sp-3);
+  align-items: center;
+}
+
+.event-head .tag.warn {
+  margin-left: 0;
+}
+
+.event-date {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.event-excerpt {
+  margin: 0;
+  line-height: 1.55;
+  max-width: 900px;
+}
+
+/* F1b: a deal or financing read from a 7.01 / 8.01 announcement */
+.event-announced {
+  margin: 0;
+  line-height: 1.55;
+  max-width: 900px;
+  font-size: var(--fs-sm);
+}
+
+.event-announced b {
+  color: var(--warn);
+}
+
+.event-announced mark {
+  background: var(--warn-soft);
+  color: inherit;
+  padding: 0 2px;
+  border-radius: 2px;
+}
+
+.row.event-links {
+  gap: var(--sp-6);
+  font-size: var(--fs-sm);
+}
+
+details.routine {
+  margin-top: var(--sp-5);
+}
+
+details.routine summary {
+  cursor: pointer;
+}
+
+.row.earnings-pick {
+  margin-bottom: var(--sp-6);
+  gap: var(--sp-6);
+}
+
+.release-headline {
+  margin: 0 0 var(--sp-5);
+  padding-left: var(--sp-6);
+  border-left: 3px solid var(--accent);
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.release-blocks {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-8);
+}
+
+/* a grid item is as wide as its widest line unless told otherwise: a table's pre would widen the page */
+.release-blocks > * {
+  min-width: 0;
+}
+
+.release-block {
+  border-left: 3px solid var(--line-2);
+  padding-left: var(--sp-6);
+  display: grid;
+  gap: var(--sp-3);
+}
+
+.release-lines p.rl {
+  margin: 0;
+  line-height: 1.5;
+  max-width: 900px;
+}
+
+.release-lines p.rl.heading {
+  font-weight: 600;
+  margin-bottom: var(--sp-2);
+}
+
+.release-lines p.rl.sub {
+  padding-left: var(--sp-8);
+}
+
+.release-table-box summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.release-table {
+  font-family: var(--mono);
+  font-size: var(--fs-sm);
+  white-space: pre;
+  overflow: auto;
+  max-height: 420px;
+  max-width: 100%;
+  background: var(--panel-2);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-5);
+  margin: var(--sp-4) 0;
+}
+
+.earnings-method {
+  max-width: 900px;
+}
+
+/* F4: peers by business, sectors, co-registrants, bank template */
+
+/* a median's "3 of 4": how many peers it uses (hover: why the others are left out) */
+.t tr.agg .unit.count {
+  display: block;
+  font-weight: 500;
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+}
+
+/* Peers: what the company's own 10-K Business section is most distinctive for */
+.peers-basis {
+  margin: 0;
+  padding: var(--sp-3) var(--sp-4) 0;
+}
+
+.t.peers td.why {
+  min-width: 240px;
+}
+
+/* narrow, "Why" moves under the name (@container tw below 1040px): it wraps there, never cut (#173) */
+.t.peers .first .co-sub {
+  white-space: normal;
+  text-overflow: clip;
+}
+
+.t.peers .alike {
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+/* why a company can't join the comps (a foreign filer, no XBRL yet) */
+.notice {
+  margin: var(--sp-2) 0 0;
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--radius-sm);
+  background: var(--warn-soft);
+  color: var(--text);
+}
+
+/* the screener grouped by sector: a heading row per sector and industry */
+.t tr.group-head th {
+  position: static;
+  text-align: left;
+  padding-top: var(--sp-4);
+  background: var(--panel-2);
+  color: var(--text-2);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.sector-sub {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tag.joint {
+  margin-left: var(--sp-2);
+  border-style: dashed;
+}
+
+.joint-note {
+  margin: var(--sp-2) 0 0;
+  max-width: 900px;
+}
+
+.bank-note {
+  border-top: none;
+}
+
+/* F5: statement lines. A subtotal is bold, the items within one indented; an opened standardised line
+   lists the lines it is made of under it, and what one period is made of below the table. */
+.t.statement tr.total td {
+  font-weight: 600;
+}
+
+.t.statement tr.sub td.first,
+.t.statement tr.input-line td.first {
+  padding-left: 22px;
+}
+
+.t.statement tr.input-line td {
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+}
+
+.t.statement tr.opened td {
+  background: var(--accent-soft);
+}
+
+.t td.first .open-row {
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.t td.first .open-row .caret {
+  display: inline-block;
+  width: 12px;
+  color: var(--accent);
+}
+
+.t td.first .open-row .caret::before {
+  content: "▸";
+}
+
+.t td.first .open-row[aria-expanded="true"] .caret::before {
+  content: "▾";
+}
+
+/* a line with a definition: its hover says what the line is (a glyph here was an empty box on some systems) */
+.t td.first .defined {
+  text-decoration: underline dotted var(--text-3);
+  text-underline-offset: 3px;
+  cursor: help;
+}
+
+/* a quarter the API calls out: a dot in the cell's top-left corner, the sentence in the hover */
+.callout-mark {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--warn);
+  vertical-align: middle;
+}
+
+/* the mark sits just before the figure it is about */
+.t td.n.called > .callout-mark {
+  margin-right: 5px;
+  vertical-align: 1px;
+}
+
+.t td.n.tone-ok {
+  color: var(--pos);
+  font-style: normal;
+}
+
+.t td.n.tone-warn {
+  color: var(--warn);
+  font-style: normal;
+}
+
+.callouts {
+  padding-top: var(--sp-3);
+  padding-bottom: 0;
+}
+
+.callouts ul {
+  margin: var(--sp-2) 0;
+  padding-left: 0;
+  list-style: none;
+}
+
+.callouts li {
+  margin: 4px 0;
+  font-size: var(--fs-base);
+}
+
+.callouts .callout-link {
+  margin-left: 6px;
+  white-space: nowrap;
+}
+
+.components-panel {
+  margin: var(--sp-4) var(--sp-6);
+  padding: var(--sp-4);
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+
+.components-panel .comp-h {
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.components-panel h3 {
+  margin: 0;
+  font-size: var(--fs-base);
+}
+
+.components-panel .comp-head {
+  margin: var(--sp-3) 0 2px;
+}
+
+.t.comp-t td.first,
+.t.comp-t th.first {
+  background: var(--panel-2);
+}
+
+.t.comp-t td {
+  white-space: normal;
+}
+
+.t.comp-t tr.comp-fact td {
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+}
+
+.t.comp-t tr.comp-fact td.first {
+  padding-left: 22px;
+}
+
+.t.comp-t .co-sub-line {
+  display: block;
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+.t.comp-t .comp-filing {
+  white-space: nowrap;
+}
+
+/* the latest TTM or quarter on an annual chart (F5): not a full fiscal year, drawn lighter */
+.lchart-svg .ch-partial {
+  fill-opacity: 0.4;
+  stroke: currentColor;
+  stroke-dasharray: 3 2;
+}
+
+/* Filing alerts (F6): the top bar's bell, the Alerts page and the Monitor step, Settings */
+.bell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-decoration: none;
+}
+
+.bell .count {
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 18px;
+  text-align: center;
+}
+
+.bell[aria-current="page"] {
+  background: var(--panel-2);
+}
+
+.alert-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.alert-item {
+  padding: var(--sp-4) var(--sp-5);
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: var(--sp-2);
+}
+
+.alert-item:first-child {
+  border-top: 0;
+}
+
+.alert-item.unread {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.alert-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-2) var(--sp-3);
+}
+
+.alert-co {
+  font-weight: 650;
+}
+
+.tag.new {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: transparent;
+}
+
+.tag.crossed {
+  background: var(--neg-soft);
+  color: var(--neg);
+  border-color: transparent;
+}
+
+.alert-items {
+  margin: 0;
+  padding-left: var(--sp-6);
+  font-size: var(--fs-sm);
+}
+
+.alert-figures {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-7);
+  margin: 0;
+}
+
+.alert-figures dt {
+  font-size: var(--fs-sm);
+  color: var(--text-3);
+}
+
+.alert-figures dd {
+  margin: 0;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.alert-redlines,
+.redline-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-2);
+}
+
+.alert-redlines .redline.crossed b {
+  color: var(--neg);
+}
+
+.alert-redlines .redline.clear b {
+  color: var(--pos);
+}
+
+.redline-list > li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.redline-state {
+  display: inline-block;
+  min-width: 92px;
+  font-size: 12px;
+  font-weight: 650;
+  border-radius: var(--radius-sm);
+  padding: 2px 8px;
+  text-align: center;
+  background: var(--panel-2);
+  color: var(--text-2);
+}
+
+.redline-state.crossed {
+  background: var(--neg-soft);
+  color: var(--neg);
+}
+
+.redline-state.clear {
+  background: var(--pos-soft);
+  color: var(--pos);
+}
+
+.redline-form {
+  display: grid;
+  gap: var(--sp-3);
+  margin-top: var(--sp-4);
+}
+
+.redline-form .row > label {
+  min-width: 110px;
+}
+
+.monitor-alerts .alert-list,
+.alerts-page .alert-list {
+  margin: 0;
+}
+
+.webhook-list {
+  list-style: none;
+  margin: 0 0 var(--sp-4);
+  padding: 0;
+  display: grid;
+  gap: var(--sp-2);
+}
+
+.webhook-list > li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.webhook-list > li.off {
+  opacity: 0.7;
+}
+
+.webhook-form .field.grow {
+  min-width: min(100%, 360px);
+}
+
+.secret-once code.secret {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+  word-break: break-all;
+  user-select: all;
+}
+
+.t.alert-forms td.n {
+  text-align: center;
+}
+
+/* Home's first step (F6, #127) */
+.start-card {
+  border-left: 3px solid var(--accent);
+}
+
+.start-card .card-b {
+  display: grid;
+  gap: var(--sp-4);
+  padding: var(--sp-6) var(--sp-7);
+}
+
+.start-card .eyebrow {
+  color: var(--accent);
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 11px;
+}
+
+.start-card h2 {
+  margin: 2px 0 var(--sp-2);
+  font-size: var(--fs-xl);
+}
+
+.start-label {
+  display: block;
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+  margin-bottom: 4px;
+}
+
+.start-pick .co-search {
+  width: 100%;
+}
+
+.start-main {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4) var(--sp-7);
+  align-items: center;
+}
+
+.start-main p {
+  margin: 0;
+  max-width: 62ch;
+}
+
+.start-pick {
+  flex: 1 1 320px;
+  max-width: 460px;
+}
+
+.start-pick .field {
+  width: 100%;
+}
+
+.start-projects {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-6);
+  align-items: baseline;
+}
+
+.start-more {
+  margin: 0;
+}
+
+.start-alerts {
+  font-weight: 650;
+}
+
+/* Backlog and orders from the filings' text (F8b, company/TextKpis.tsx) */
+.text-kpi {
+  margin-top: var(--sp-6);
+  min-width: 0;
+}
+
+.text-kpi h3 {
+  margin: 0 0 var(--sp-3);
+  font-size: 13px;
+}
+
+.text-kpi-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.text-kpi-table th,
+.text-kpi-table td {
+  text-align: left;
+  vertical-align: top;
+  padding: var(--sp-2) var(--sp-4) var(--sp-2) 0;
+  border-bottom: 1px solid var(--line);
+  overflow-wrap: anywhere;
+}
+
+.text-kpi-table th {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+
+.text-kpi-table th:nth-child(1) {
+  width: 22%;
+}
+
+.text-kpi-table th:nth-child(2) {
+  width: 14%;
+}
+
+.text-kpi-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.text-kpi-table q.passage {
+  display: block;
+  margin-top: var(--sp-1);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-2);
+}
+
+@media (max-width: 640px) {
+  .text-kpi-table th:nth-child(1) {
+    width: 30%;
+  }
+
+  .text-kpi-table th:nth-child(2) {
+    width: 22%;
   }
 }

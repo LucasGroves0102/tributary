@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 
 import { expect, test } from "@playwright/test";
 
-import { KO, mockApi, NVDA, PEP, startDemo } from "./mockApi";
+import { byId, KO, mockApi, NVDA, PEP, screenerRow, startDemo } from "./mockApi";
 
 test("try the demo lands on Home with the sandbox and its watchlist", async ({ page }) => {
   await mockApi(page);
@@ -111,15 +111,17 @@ test("chart builder: formula autocomplete, annual frequency and deck output", as
   await expect(page.locator(".lchart-svg .ch-legend text")).toHaveCount(2);
 
   await page.getByRole("button", { name: "Annual" }).click();
-  await expect(page.locator(".lchart-svg .ch-axis text")).toHaveText(["CY2025"]); // the mock's one full calendar year
+  // the mock's one full calendar year, then the year in progress, marked (F5)
+  await expect(page.locator(".lchart-svg .ch-axis text")).toHaveText(["CY2025", "CY2026 Q2*"]);
   await page.getByLabel("Deck output").check();
   await expect(page.locator(".lchart.deck")).toBeVisible();
-  await expect(page.locator(".lchart-svg .ch-sub")).toHaveText(/^Calendar years, CY2025 · USD \(left\), % \(right\)$/);
+  await expect(page.locator(".lchart-svg .ch-sub")).toHaveText(/^Calendar years, CY2025–CY2026 Q2\* · USD \(left\), % \(right\)$/);
   await expect(page.locator(".ch-foot").first()).toContainText("Source: SEC filings via Tributary; 10-Q for NVDA; latest NVDA 10-Q filed Jul 30, 2026; as of Oct 21, 2026.");
   const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Export SVG" }).click()]);
   const svg = readFileSync((await download.path())!, "utf8");
   expect(svg).toContain("Source: SEC filings via Tributary");
-  expect(svg).toContain("Calendar years, CY2025");
+  expect(svg).toContain("Calendar years, CY2025–CY2026 Q2*");
+  expect(svg).toContain("* CY2026 Q2: the latest quarter, not a full calendar year");
 });
 
 test("comps: target and peers with the peer median, exported as CSV", async ({ page }) => {
@@ -284,7 +286,9 @@ test("reports: write one from a workspace, read it with its charts, download and
   // each saved item drawn in place, from its saved state, with live data
   await expect(report.locator(".report-embed")).toHaveCount(2);
   await expect(report.locator('.report-embed[aria-label="PEP margins"] .ch-legend text')).not.toHaveCount(0);
-  await expect(report.locator('.report-embed[aria-label="PEP vs KO"] .multiple')).toHaveCount(2);
+  // comps stay a table (F6), never charts
+  await expect(report.locator('.report-embed[aria-label="PEP vs KO"] table.comps tbody tr:not(.agg)')).toHaveCount(2);
+  await expect(report.locator('.report-embed[aria-label="PEP vs KO"] .multiple')).toHaveCount(0);
   // the unverified figure is flagged; the cited filing links to EDGAR
   await expect(report.locator(".figure.unverified")).toHaveText("$99.9B");
   await expect(report.locator(".report-meta")).toContainText("1 of 2 figures unverified");
@@ -312,16 +316,20 @@ test("reports: write one from a workspace, read it with its charts, download and
 test("customizable views: Home arrangement and table columns, saved and reset", async ({ page }) => {
   const fake = await mockApi(page);
   await startDemo(page);
-  const titles = page.locator(".page section.card h2");
-  await expect(titles.first()).toHaveText("Continue where you left off");
+  // the start card leads (F6, #127); then the cards: the watchlist first, the status strip off
+  const titles = page.locator(".page section.card:not(.start-card) h2");
+  await expect(page.locator(".start-card h2")).toHaveText("Start an analysis");
+  await expect(titles.first()).toHaveText("Watchlist");
+  await expect(page.locator(".status-strip")).toHaveCount(0);
   await page.getByRole("button", { name: "Customize Home" }).click();
   const editor = page.getByRole("region", { name: "Customize Home" });
-  await editor.getByRole("checkbox", { name: "Status strip" }).uncheck();
-  await editor.getByRole("button", { name: "Move Watchlist up" }).click();
+  await editor.getByRole("checkbox", { name: "Continue where you left off" }).check();
+  await editor.getByRole("button", { name: "Move Continue where you left off up" }).click();
+  await editor.getByRole("button", { name: "Move Continue where you left off up" }).click();
+  await editor.getByRole("button", { name: "Move Continue where you left off up" }).click();
   await page.getByRole("button", { name: "Done" }).click();
-  await expect(page.locator(".status-strip")).toHaveCount(0);
-  await expect(titles.first()).toHaveText("Watchlist");
-  expect((fake.views.home as { cards: unknown[] }).cards.slice(0, 2)).toEqual([{ id: "status", hidden: true }, { id: "watchlist", hidden: false }]);
+  await expect(titles.first()).toHaveText("Continue where you left off");
+  expect((fake.views.home as { cards: unknown[] }).cards.slice(0, 2)).toEqual([{ id: "recent", hidden: false }, { id: "watchlist", hidden: false }]);
 
   // watchlist columns
   const watch = page.locator("section.card", { has: page.getByRole("heading", { name: "Watchlist" }) });
@@ -335,7 +343,7 @@ test("customizable views: Home arrangement and table columns, saved and reset", 
   // it's all there after a reload
   await page.reload();
   await expect(page.locator(".sandbox-banner")).toBeVisible();
-  await expect(titles.first()).toHaveText("Watchlist");
+  await expect(titles.first()).toHaveText("Continue where you left off");
   await expect(page.locator("table.watchlist thead")).toContainText("Gross mgn");
   expect(fake.calls.some((c) => c.startsWith("GET /api/query/v1/watchlist?") && c.includes("columns=gross_margin_ttm"))).toBe(true);
 
@@ -371,7 +379,7 @@ test("#68: the main screens load with a clean console", async ({ page }) => {
   await mockApi(page);
   await startDemo(page);
   errors.length = 0; // signed in from here (the mock has no public status page for the front door)
-  for (const hash of ["#/", "#/companies", `#/company/${NVDA}`, `#/company/${NVDA}/statements`, `#/compare?target=${PEP}&peers=${KO}`, "#/chart", "#/analysis"]) {
+  for (const hash of ["#/", "#/companies", `#/company/${NVDA}`, `#/company/${NVDA}/statements`, `#/compare?target=${PEP}&peers=${KO}`, "#/chart", "#/analysis", "#/alerts", "#/settings"]) {
     await page.goto(`/${hash}`);
     await page.waitForLoadState("networkidle");
   }
@@ -430,4 +438,53 @@ test("workspace actions: from the page, with a confirmation over the whole scree
   await expect(dialog.getByRole("button", { name: "Keep" })).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
+});
+
+test("a company reporting in euros: labelled everywhere, never ranked or averaged with dollars (056)", async ({ page }) => {
+  await mockApi(page);
+  // Coca-Cola's mock answers, reshaped as a 20-F filer in euros that reports once a year
+  const euro = (row: Record<string, unknown>) => ({
+    ...row,
+    values: { ...(row.values as Record<string, unknown>), revenue_ttm: "2097429000", free_cash_flow_ttm: "307573000", net_debt_q: "816076000" },
+    readings: Object.fromEntries(["revenue_ttm", "free_cash_flow_ttm", "net_debt_q"].map((k) => [k, {
+      status: "other_currency", unit: "EUR", reason: "reported in EUR, so it isn't sorted, filtered or averaged with US-dollar figures" }])),
+  });
+  await page.route("**/api/query/v1/screener?**", async (route) => {
+    const ids = new URL(route.request().url()).searchParams.getAll("company_id");
+    if (!ids.includes(KO)) return route.fallback();
+    const rows = ids.map((id) => byId.get(id)).filter((c) => !!c).map((c) => (c!.id === KO ? euro(screenerRow(c!)) : screenerRow(c!)));
+    return route.fulfill({ json: { as_of: "", total: rows.length, limit: 50, offset: 0, sort: "name", columns: [], rows } });
+  });
+  await page.route(`**/api/query/v1/companies/${KO}/financials?**`, async (route) => {
+    const view = new URL(route.request().url()).searchParams.get("view");
+    const row = (metric: string, end: string, value: string, fiscal: string) => ({
+      metric, period_start: metric === "total_assets" ? null : `${Number(end.slice(0, 4)) - 1}-10-01`, period_end: end,
+      fiscal_period: fiscal, calendar_period: null, value, unit: "EUR", value_source: "ttm",
+      citation: { accession_no: `${KO}-25-000001`, form: "20-F", filed: "2025-12-18", xbrl_tag: "ifrs-full:Revenue", source_accessions: null, filing_url: null },
+      freshness: { filed: "2025-12-18", ingested_at: "2025-12-19T00:00:00Z" },
+    });
+    const rows = view === "ttm"
+      ? [row("revenue", "2025-09-30", "2097429000", "FY2025 Q4"), row("revenue", "2024-09-30", "1804690000", "FY2024 Q4"),
+         row("net_income", "2025-09-30", "348327000", "FY2025 Q4"), row("net_income", "2024-09-30", "191603000", "FY2024 Q4")]
+      : [row("total_assets", "2025-09-30", "4942120000", "FY2025 Q4")];
+    await route.fulfill({ json: { company_id: KO, view, basis: "fiscal", as_of: "", currency: "EUR", cadence: "annual", rows } });
+  });
+  await startDemo(page);
+  await page.goto(`/#/company/${KO}`);
+  await expect(page.locator(".meta").first()).toContainText("figures in EUR");
+  await expect(page.getByText("€2.10B").first()).toBeVisible();
+  await page.screenshot({ path: test.info().outputPath("euro-company.png") });
+
+  await page.goto(`/#/company/${KO}/statements`);
+  await expect(page.getByText(/reports once a year/)).toBeVisible();
+  await expect(page.getByText(/Figures in EUR/)).toBeVisible();
+  await page.getByRole("button", { name: "Show Annual" }).click();
+  await expect(page.locator("table").first()).toContainText("€2.10B");
+  await page.screenshot({ path: test.info().outputPath("euro-statements.png"), fullPage: true });
+
+  // in a comps table its revenue shows in euros and stays out of the dollar median
+  await page.goto(`/#/compare?target=${PEP}&peers=${KO},${NVDA}`);
+  await expect(page.locator("tr", { hasText: "Coca-Cola" }).first()).toContainText("€2.10B");
+  await expect(page.locator("td[title*='in another currency']").first()).toBeAttached();
+  await page.screenshot({ path: test.info().outputPath("euro-compare.png"), fullPage: true });
 });

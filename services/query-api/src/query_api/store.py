@@ -4,7 +4,7 @@ skipped."""
 
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any, Protocol
 
@@ -19,6 +19,11 @@ from query_api.screener import Compiled as Screen
 # a timeout on query_api would never reach these sessions. Search sets its own, longer one.
 QUERY_TIMEOUT = "5s"
 SEARCH_TIMEOUT = "8s"
+# /v1/search's orders (gold.search_page's p_sort): fixed SQL chosen by a validated key, never text
+SEARCH_ORDERS = {
+    "relevance": "h.rank DESC, h.filed DESC, h.accession_no, h.section_key",
+    "date": "h.filed DESC, h.rank DESC, h.accession_no, h.section_key",
+}
 # A recap's one-time-item flags are optional: a slow pass must cost the panel little, and never
 # all of it (ui.py answers without them).
 FLAGS_TIMEOUT = "2s"
@@ -35,6 +40,28 @@ READABLE_CIKS = """ARRAY(SELECT k.cik FROM silver.company_ciks k WHERE k.company
     UNION SELECT r FROM authz.readable_companies('filings') r))"""
 HEADLINE = ("StartSel=«, StopSel=», MaxWords=35, MinWords=15, MaxFragments=2,"
             " FragmentDelimiter=\" … \"")
+# Store.cadence: the annual and quarterly reports in the filing index, and how recent a quarter in
+# gold must be for a 20-F/40-F filer's figures to count as quarters (some furnish them on 6-Ks).
+PERIODIC_FORMS = ("10-K", "10-K/A", "10-KT", "10-KT/A", "10-Q", "10-Q/A", "10-QT", "10-QT/A",
+                  "20-F", "20-F/A", "40-F", "40-F/A")
+CADENCE_RECENT_DAYS = 800
+
+
+def cadence_of(recent: bool, quarters: bool, years: bool, figures: bool,
+               latest_form: str | None) -> str | None:
+    """'annual' when the company reports once a year: gold has years (TTM rows) and no quarter in
+    the last CADENCE_RECENT_DAYS, and its latest annual or quarterly report is a 20-F or 40-F (or,
+    with no such report in the index at all, gold has never had a quarter: the facts' period
+    lengths). Never because figures stopped: a US filer whose figures end years ago (EIDP files
+    10-Qs; its figures end in 2019) stays 'quarterly' and its figures read as old. None without
+    figures."""
+    if recent:
+        return "quarterly"
+    if years and latest_form is not None and latest_form.startswith(("20-F", "40-F")):
+        return "annual"
+    if years and latest_form is None and not quarters:
+        return "annual"
+    return "quarterly" if (figures or years) else None
 
 
 class SearchTooBroad(Exception):
@@ -208,7 +235,8 @@ class Store:
                        gold.not_meaningful(r.metric, r.value, (
                            SELECT d.inputs FROM gold.derived_financials d
                            WHERE d.company_id = %(company)s AND d.span = r.span
-                             AND d.metric = r.metric AND d.period_end = r.period_end))
+                             AND d.metric = r.metric AND d.period_end = r.period_end),
+                           NULL, gold.amount_currency(%(company)s))  -- 057
                            AS not_meaningful
                 FROM gold.filing_recap(
                     %(company)s,
@@ -268,6 +296,164 @@ class Store:
                       "limit": limit, "granted_only": granted_only})
             return cur.fetchall()
 
+    def business_peers(self, user_id: str, company_id: str) -> dict:
+        """Peers by business (migration 047) for one company, under RLS (`filings` on both
+        sides): its profile (None: no usable Item 1, or the caller can't read its filings), its
+        stored neighbours, and competitor mentions both ways with the sentence to cite. Primary-
+        key and index reads of one company only."""
+        with self._session(user_id) as cur:
+            cur.execute("SELECT accession_no, section_key, filed, terms, computed_at"
+                        " FROM gold.business_profiles WHERE company_id = %s", (company_id,))
+            profile = cur.fetchone()
+            if profile is None:
+                return {"profile": None, "peers": [], "mentions": []}
+            cur.execute("SELECT peer_id, similarity, terms FROM gold.business_peers"
+                        " WHERE company_id = %s", (company_id,))
+            peers = cur.fetchall()
+            cur.execute(
+                "SELECT company_id, named_id, accession_no, section_key, char_start, char_end"
+                " FROM gold.business_mentions WHERE company_id = %(c)s OR named_id = %(c)s"
+                " ORDER BY company_id, named_id, char_start", {"c": company_id})
+            return {"profile": profile, "peers": peers, "mentions": cur.fetchall()}
+
+    def business_text(self, user_id: str, company_id: str, days: int) -> dict | None:
+        """The company's latest stored 10-K filed in the last `days` and its Item 1 as parsed
+        (the longest parse: `chars`, `title`; both None without one), to say why it has no
+        business profile (query_api/peers.py). None: no 10-K stored. The 10-Ks come from the
+        filing index by the company's CIKs (= ANY(ARRAY(...)) reaches both branches of the UNION
+        view), each probed by primary key; the section reads under RLS (filings tier)."""
+        with self._session(user_id) as cur:
+            cur.execute(
+                """
+                SELECT f.accession_no, f.filing_date AS filed, s.chars, s.title
+                FROM silver.filings f
+                JOIN bronze.filing_documents d ON d.accession_no = f.accession_no
+                LEFT JOIN LATERAL (
+                    SELECT x.char_end - x.char_start AS chars, x.title
+                    FROM silver.filing_sections x
+                    WHERE x.accession_no = f.accession_no AND x.section_key = '1'
+                    ORDER BY x.char_end - x.char_start DESC LIMIT 1) s ON true
+                WHERE f.cik = ANY(ARRAY(SELECT k.cik FROM silver.company_ciks k
+                                        WHERE k.company_id = %(c)s))
+                  AND f.form = '10-K' AND f.filing_date > current_date - %(days)s::int
+                ORDER BY f.filing_date DESC, f.accession_no DESC
+                LIMIT 1
+                """, {"c": company_id, "days": days})
+            return cur.fetchone()
+
+    def peer_facts(self, user_id: str, company_ids: list[str],
+                   granted: list[str] | None) -> dict[str, dict]:
+        """company_id -> sic, sector, filer category, and TTM revenue read like Store.peers (only
+        for `granted`; None: RLS alone), and whether that revenue is in another currency (then no
+        value: its size is unknown, not small). For at most a page of candidates, never the
+        catalog."""
+        gate = "" if granted is None else "WHERE c.company_id = ANY(%(granted)s)"
+        with self._session(user_id) as cur:
+            cur.execute(
+                f"""
+                SELECT c.company_id, c.sic, s.sector, s.industry AS sector_industry,
+                       gold.filer_category(c.filer_categories) AS filer_category,
+                       r.value AS revenue,
+                       coalesce(r.other_currency, false) AS revenue_other_currency
+                FROM silver.companies c
+                LEFT JOIN silver.sic_sectors s ON c.sic BETWEEN s.sic_from AND s.sic_to
+                LEFT JOIN LATERAL (
+                    SELECT CASE WHEN x.status IS NULL OR x.status = 'behind'
+                                THEN x.value END AS value,
+                           x.status = 'other_currency' AS other_currency  -- 056/057
+                    FROM gold.latest_period(c.company_id) lp
+                    CROSS JOIN LATERAL gold.latest_reading(c.company_id, 'ttm', 'revenue',
+                                                           c.sic, lp.latest) x
+                    {gate}
+                ) r ON true
+                WHERE c.company_id = ANY(%(ids)s)
+                """, {"ids": company_ids, "granted": granted})
+            return {r.pop("company_id"): r for r in cur.fetchall()}
+
+    def sectors(self, user_id: str) -> list[dict]:
+        """The sector classification (migration 046): one row per SIC range, and how many
+        companies with financials each covers (public metadata, like the SIC codes)."""
+        with self._session(user_id) as cur:
+            cur.execute(
+                "SELECT s.sector, s.industry, s.sic_from, s.sic_to,"
+                "       count(v.company_id) AS companies"
+                " FROM silver.sic_sectors s"
+                " LEFT JOIN silver.companies c ON c.sic BETWEEN s.sic_from AND s.sic_to"
+                "      AND c.sic ~ '^\\d{4}$'"
+                " LEFT JOIN gold.financials_coverage v ON v.company_id = c.company_id"
+                " GROUP BY 1, 2, 3, 4 ORDER BY 1, 2, 3")
+            return cur.fetchall()
+
+    def co_registrants(self, user_id: str) -> list[dict]:
+        """Every pair of companies filing one combined 10-K (silver.co_registrants, 047): public
+        filing-index metadata, a few dozen rows."""
+        with self._session(user_id) as cur:
+            cur.execute("SELECT r.company_id, r.other_id, r.accession_no, r.filing_date,"
+                        "       r.filed_by, c.name AS other_name"
+                        " FROM silver.co_registrants() r"
+                        " JOIN silver.companies c ON c.company_id = r.other_id"
+                        " ORDER BY r.company_id, r.other_id")
+            return cur.fetchall()
+
+    def annual_reports(self, user_id: str, company_id: str) -> dict:
+        """Public index metadata for why a company has no figures to compare: whether gold has
+        any (gold.financials_coverage), and its latest annual report of each kind (10-K, 20-F,
+        40-F) from the filing index. One company: index probes on its CIKs."""
+        with self._session(user_id) as cur:
+            cur.execute(
+                """
+                SELECT EXISTS (SELECT 1 FROM gold.financials_coverage v
+                               WHERE v.company_id = %(c)s) AS has_financials,
+                       (SELECT c.sic FROM silver.companies c WHERE c.company_id = %(c)s) AS sic,
+                       (SELECT jsonb_object_agg(kind, latest) FROM (
+                            SELECT CASE WHEN f.form LIKE '20-F%%' THEN '20-F'
+                                        WHEN f.form LIKE '40-F%%' THEN '40-F'
+                                        ELSE '10-K' END AS kind,
+                                   max(f.filing_date) AS latest
+                            FROM silver.filings f
+                            -- = ANY(ARRAY(...)), not IN (subquery): the CIKs reach both branches
+                            -- of the UNION view as an index condition (hermes: 93 ms vs 4.2 s)
+                            WHERE f.cik = ANY(ARRAY(SELECT k.cik FROM silver.company_ciks k
+                                                    WHERE k.company_id = %(c)s))
+                              AND f.form IN ('10-K', '10-K/A', '10-KT', '20-F', '20-F/A',
+                                             '40-F', '40-F/A')
+                            GROUP BY 1) a) AS annual
+                """, {"c": company_id})
+            return cur.fetchone() or {}
+
+    def cadence(self, user_id: str, company_id: str) -> str | None:
+        """How often the company's figures come (migration 056; `cadence_of` is the rule): the
+        facts' period lengths and the forms the company files, never how old its figures are. Gold
+        under RLS, like the figures; the filing index is public metadata."""
+        with self._session(user_id) as cur:
+            cur.execute(
+                """
+                SELECT g.recent, g.quarters, g.years, g.figures,
+                       -- the index only when the facts leave it open (an InitPlan runs when first
+                       -- needed: a company with recent quarters never reads it, ~1 ms in all)
+                       CASE WHEN g.years AND NOT g.recent THEN
+                           (SELECT f.form FROM silver.filings f
+                            -- = ANY(ARRAY(...)): the CIKs reach both branches of the UNION view
+                            WHERE f.cik = ANY(ARRAY(SELECT k.cik FROM silver.company_ciks k
+                                                    WHERE k.company_id = %(c)s))
+                              AND f.form = ANY(%(forms)s)
+                            ORDER BY f.filing_date DESC, f.accession_no DESC LIMIT 1)
+                       END AS latest_form
+                FROM (SELECT EXISTS (SELECT 1 FROM gold.quarterly_financials q
+                                     WHERE q.company_id = %(c)s AND q.period_start IS NOT NULL
+                                       AND q.period_end >= current_date - %(recent)s) AS recent,
+                             EXISTS (SELECT 1 FROM gold.quarterly_financials q
+                                     WHERE q.company_id = %(c)s AND q.period_start IS NOT NULL)
+                                 AS quarters,
+                             EXISTS (SELECT 1 FROM gold.derived_financials d
+                                     WHERE d.company_id = %(c)s AND d.span = 'ttm') AS years,
+                             EXISTS (SELECT 1 FROM gold.quarterly_financials q
+                                     WHERE q.company_id = %(c)s) AS figures) g
+                """, {"c": company_id, "recent": CADENCE_RECENT_DAYS,
+                      "forms": list(PERIODIC_FORMS)})
+            row = cur.fetchone()
+            return cadence_of(**row) if row else None
+
     def financials(self, user_id: str, company_id: str, metrics: list[str], quarters: int,
                    view: str = "quarter", basis: str = "fiscal") -> list[dict]:
         """view: quarter | ttm. basis: fiscal (every fiscal period) | calendar (one row per
@@ -278,7 +464,10 @@ class Store:
                 SELECT metric, period_start, period_end, fiscal_year, fiscal_quarter,
                        calendar_year, calendar_quarter, value, unit, value_source,
                        source_tag, inputs, accession_no, form, filed, source_accessions,
-                       ingested_at, gold.not_meaningful(metric, value, inputs) AS not_meaningful,
+                       ingested_at,
+                       -- 057: the dollar bases only for a company whose amounts are dollars
+                       gold.not_meaningful(metric, value, inputs, NULL, cu.currency)
+                           AS not_meaningful,
                        (SELECT f.cik FROM silver.financial_facts f
                         WHERE f.accession_no = q.accession_no LIMIT 1) AS filer_cik
                 FROM (
@@ -287,9 +476,70 @@ class Store:
                     WHERE company_id = %s AND span = %s AND metric = ANY(%s)
                       AND (%s = 'fiscal' OR calendar_primary)
                 ) q
+                CROSS JOIN (SELECT gold.amount_currency(%s) AS currency) cu
                 WHERE row_number <= %s
                 ORDER BY metric, period_end DESC
-                """, (company_id, view, metrics, basis, quarters))
+                """, (company_id, view, metrics, basis, company_id, quarters))
+            return cur.fetchall()
+
+    FIGURE = """
+        SELECT metric, period_start, period_end, fiscal_year, fiscal_quarter, value, unit,
+               value_source, source_tag, inputs, accession_no, form, filed, source_accessions,
+               (SELECT f.cik FROM silver.financial_facts f
+                WHERE f.accession_no = q.accession_no LIMIT 1) AS filer_cik
+        FROM gold.financials q
+        WHERE company_id = %s AND span = %s AND metric = ANY(%s) AND period_end = %s
+        """
+
+    def components(self, user_id: str, company_id: str, span: str, metric: str,
+                   period_end: date) -> dict:
+        """What query_api.components shapes, in one session under RLS: the figure's gold row,
+        its inputs' rows at the same date (and revenue and cost for a computed gross profit),
+        gold.figure_facts (049) for every row built from facts, and the derived metric's
+        definition. One company, one date: index probes."""
+        with self._session(user_id) as cur:
+            cur.execute(self.FIGURE, (company_id, span, [metric], period_end))
+            row = cur.fetchone()
+            if row is None:
+                return {"row": None, "rows": {}, "facts": {}, "definition": None,
+                        "present": set()}
+            want = {k for k in (row["inputs"] or {}) if k != "quarters"
+                    and not k.endswith("_year_ago")}
+            if metric in ("net_debt", "cash_and_investments"):
+                want.add("short_term_investments")
+            if "gross_profit" in want or row["source_tag"] == "derived:revenue-cost_of_revenue":
+                want |= {"revenue", "cost_of_revenue"}
+            rows: dict[str, dict] = {}
+            if want:
+                cur.execute(self.FIGURE, (company_id, span, sorted(want), period_end))
+                rows = {r["metric"]: r for r in cur.fetchall()}
+            facts: dict[tuple[str, date], list[dict]] = {}
+            if span == "quarter":
+                for r in [row, *rows.values()]:
+                    if r["inputs"] or (r["source_tag"] or "").startswith("derived:"):
+                        continue
+                    ends = {r["period_end"]}
+                    if r["value_source"] == "derived" and r["period_start"]:
+                        ends.add(r["period_start"] - timedelta(days=1))
+                    for end in sorted(ends):
+                        cur.execute("SELECT * FROM gold.figure_facts(%s, %s, %s)",
+                                    (company_id, r["metric"], end))
+                        facts[(r["metric"], end)] = cur.fetchall()
+            cur.execute("SELECT definition FROM gold.derived_metrics WHERE metric = %s", (metric,))
+            d = cur.fetchone()
+            return {"row": row, "rows": rows, "facts": facts,
+                    "definition": d["definition"] if d else None, "present": set(rows)}
+
+    def filing_figures(self, user_id: str, company_id: str, accession_no: str) -> list[dict]:
+        """What one filing itself says (gold.filing_figures, 051): its facts as gold reads them,
+        the best tag per metric and period, and the net debt, cash and investments and free cash
+        flow computed from that filing alone. In the caller's session: the function reads only a
+        company authz.readable_companies('financials') gives this user. One company, one filing."""
+        with self._session(user_id) as cur:
+            cur.execute(
+                "SELECT * FROM gold.filing_figures(%s, %s)"
+                " ORDER BY how DESC, metric, period_end, period_start NULLS FIRST",
+                (company_id, accession_no))
             return cur.fetchall()
 
     def equity_readings(self, user_id: str, company_id: str, metrics: list[str], quarters: int,
@@ -326,6 +576,54 @@ class Store:
             cur.execute("SELECT * FROM gold.annual_per_share(%s, %s)"
                         " ORDER BY metric, period_end DESC", (company_id, years))
             return cur.fetchall()
+
+    def model_inputs(self, user_id: str, company_id: str, metrics: list[str], quarters: int,
+                     recent: int, years: int, latest: list[str]) -> dict:
+        """What a model run reads (query_api.model_maths), in one session under RLS: TTM rows
+        (fiscal, `quarters` per metric), quarterly rows (`recent` per metric), the 10-K's
+        per-share figures (gold.annual_per_share, 036) and the latest reading of each `latest`
+        metric (gold.latest_reading, 035: value, date, status, reason, unit, and period_status,
+        its age alone). Rows carry filer_cik."""
+        rows = """
+            SELECT metric, period_start, period_end, fiscal_year, fiscal_quarter, value, unit,
+                   value_source, source_tag, accession_no, form, filed,
+                   (SELECT f.cik FROM silver.financial_facts f
+                    WHERE f.accession_no = q.accession_no LIMIT 1) AS filer_cik
+            FROM (
+                SELECT *, row_number() OVER (PARTITION BY metric ORDER BY period_end DESC)
+                FROM gold.financials
+                WHERE company_id = %s AND span = %s AND metric = ANY(%s)
+            ) q
+            WHERE row_number <= %s
+            ORDER BY metric, period_end DESC
+            """
+        with self._session(user_id) as cur:
+            cur.execute(rows, (company_id, "ttm", metrics, quarters))
+            ttm = cur.fetchall()
+            cur.execute(rows, (company_id, "quarter", metrics, recent))
+            by_quarter = cur.fetchall()
+            cur.execute("SELECT * FROM gold.annual_per_share(%s, %s)"
+                        " ORDER BY metric, period_end DESC", (company_id, years))
+            annual = cur.fetchall()
+            cur.execute(
+                """
+                SELECT m.metric, x.period_end, x.value, x.accession_no, x.form, x.filed,
+                       x.status, x.reason, x.unit,
+                       -- the reading's age alone (035's rule): how an amount in another
+                       -- currency (status other_currency) reads in that currency; net debt and
+                       -- shares have no not-meaningful rule
+                       gold.period_status(x.period_end, lp.latest) AS period_status,
+                       (SELECT f.cik FROM silver.financial_facts f
+                        WHERE f.accession_no = x.accession_no LIMIT 1) AS filer_cik
+                FROM silver.companies c
+                CROSS JOIN LATERAL gold.latest_period(c.company_id) lp
+                CROSS JOIN unnest(%s::text[]) AS m(metric)
+                CROSS JOIN LATERAL gold.latest_reading(c.company_id, 'quarter', m.metric,
+                                                       c.sic, lp.latest) x
+                WHERE c.company_id = %s
+                """, (latest, company_id))
+            readings = {r["metric"]: r for r in cur.fetchall()}
+        return {"ttm": ttm, "quarters": by_quarter, "annual": annual, "latest": readings}
 
     def feed_status(self) -> dict:
         """When the newest filing was accepted by EDGAR and reached bronze (ops.feed_status,
@@ -389,6 +687,49 @@ class Store:
                       "basis": basis, "periods": periods})
             return cur.fetchall()
 
+    def insider_filings(self, user_id: str, company_id: str, limit: int,
+                        before: date | None = None,
+                        after: tuple[date, str] | None = None) -> list[dict]:
+        """One company's insider filings (Forms 3/4/5, migration 054), newest first (filed, then
+        accession, both descending: a total order), at most `limit`, each with its `lines` in
+        document order. `before`: filed before that day. `after`: the page after that (filed,
+        accession_no), a stable cursor (a day can hold more filings than a page). Under RLS
+        (granted_filings): one session, two index-backed reads; never more than `limit`
+        accessions in the second."""
+        after_filed, after_accession = after if after else (None, None)
+        with self._session(user_id) as cur:
+            cur.execute(
+                """
+                SELECT f.accession_no, f.issuer_cik, f.form, f.filed, f.period_of_report,
+                       f.owners, f.aff10b5_one
+                FROM silver.insider_filings f
+                WHERE f.company_id = %(company)s
+                  AND (%(before)s::date IS NULL OR f.filed < %(before)s)
+                  AND (%(after_filed)s::date IS NULL
+                       OR (f.filed, f.accession_no) < (%(after_filed)s::date,
+                                                       %(after_accession)s::text))
+                ORDER BY f.filed DESC, f.accession_no DESC
+                LIMIT %(limit)s
+                """, {"company": company_id, "before": before, "limit": limit,
+                      "after_filed": after_filed, "after_accession": after_accession})
+            filings = cur.fetchall()
+            if not filings:
+                return []
+            cur.execute(
+                """
+                SELECT accession_no, line, kind, derivative, security_title, transaction_date,
+                       code, equity_swap, shares, price, acquired_disposed, shares_after,
+                       direct_indirect, nature, exercise_price, underlying_title,
+                       underlying_shares
+                FROM silver.insider_transactions
+                WHERE accession_no = ANY(%(accessions)s) AND company_id = %(company)s
+                ORDER BY accession_no, line
+                """, {"accessions": [f["accession_no"] for f in filings], "company": company_id})
+            lines: dict[str, list[dict]] = {}
+            for r in cur.fetchall():
+                lines.setdefault(r["accession_no"], []).append(r)
+            return [{**f, "lines": lines.get(f["accession_no"], [])} for f in filings]
+
     def filings(self, user_id: str, company_id: str, limit: int,
                 accession_no: str | None = None) -> list[dict]:
         """Recent filings (or one filing) with the sections each contains (no text)."""
@@ -408,6 +749,102 @@ class Store:
                 LIMIT %s
                 """, (company_id, accession_no, accession_no, limit))
             return cur.fetchall()
+
+    def periodic_reports(self, user_id: str, company_id: str) -> list[dict]:
+        """The company's 10-K/10-Q (transition reports, amendments too) from the public filing
+        index with the period each covers; the SEC index's quirk of a period equal to the filing
+        date (NVIDIA's 2008 10-K) is left out, as in filing_index."""
+        with self._session(user_id) as cur:
+            cur.execute(
+                """
+                SELECT accession_no, form, filing_date, period_end
+                FROM silver.company_reports(ARRAY[%s]::text[])
+                WHERE period_end IS NOT NULL AND period_end <> filing_date
+                ORDER BY period_end DESC, filing_date, accession_no
+                """, (company_id,))
+            return cur.fetchall()
+
+    def company_8ks(self, user_id: str, company_id: str, since: date) -> list[dict]:
+        """The company's 8-K and 8-K/A filed on or after `since`, newest first, with their items
+        from the filing index (silver.company_8ks, migration 045); for a filing the nightly
+        submissions load doesn't have yet, `parsed_items`: the item headings the parser found
+        (RLS on silver.filing_sections: none without the filings tier)."""
+        with self._session(user_id) as cur:
+            cur.execute(
+                r"""
+                SELECT e.*,
+                       CASE WHEN e.items IS NULL THEN ARRAY(
+                           SELECT DISTINCT s.section_key FROM silver.filing_sections s
+                           WHERE s.accession_no = e.accession_no
+                             AND s.section_key ~ '^[0-9]\.[0-9]{2}$'
+                           ORDER BY 1) END AS parsed_items
+                FROM silver.company_8ks(%s, %s) e
+                ORDER BY e.filing_date DESC, e.accepted_at DESC NULLS LAST, e.accession_no DESC
+                """, (company_id, since))
+            return cur.fetchall()
+
+    def section_heads(self, user_id: str, company_id: str, accession_nos: list[str],
+                      head_chars: int) -> dict[str, list[dict]]:
+        """accession_no → its parsed sections (key, title, length, offsets, document) with the
+        first `head_chars` characters of each, in document order. A bounded list of one
+        company's filings (an events page, a few releases), never a catalog's."""
+        if not accession_nos:
+            return {}
+        with self._session(user_id) as cur:
+            cur.execute(
+                """
+                SELECT accession_no, section_key, title, left(text, %s) AS head,
+                       length(text) AS chars, char_start, char_end, document_url
+                FROM gold.filing_sections
+                WHERE company_id = %s AND accession_no = ANY(%s)
+                ORDER BY accession_no, section_key LIKE 'EX-%%', char_start, section_key
+                """, (head_chars, company_id, accession_nos))
+            out: dict[str, list[dict]] = {}
+            for r in cur.fetchall():
+                out.setdefault(r.pop("accession_no"), []).append(r)
+            return out
+
+    def section_texts(self, user_id: str, company_id: str,
+                      wanted: list[tuple[str, str]]) -> dict[tuple[str, str], str]:
+        """(accession_no, section_key) → the section's whole text, for these few sections."""
+        if not wanted:
+            return {}
+        with self._session(user_id) as cur:
+            cur.execute(
+                """
+                SELECT accession_no, section_key, text FROM gold.filing_sections
+                WHERE company_id = %s AND accession_no = ANY(%s) AND section_key = ANY(%s)
+                """, (company_id, sorted({a for a, _ in wanted}), sorted({k for _, k in wanted})))
+            pairs = set(wanted)
+            return {(r["accession_no"], r["section_key"]): r["text"] for r in cur.fetchall()
+                    if (r["accession_no"], r["section_key"]) in pairs}
+
+    def kpi_sections(self, user_id: str, company_id: str, since: date, releases: list[str],
+                     limit: int) -> dict:
+        """What query_api.text_kpis reads (F8b, H11), under RLS on the section text (the
+        filings tier): the company's name, and its 10-K Items 1 and 7, 10-Q Part I Item 2 and
+        these earnings releases' EX-99.1 (EX-99, EX-99.01), filed on or after `since`, that
+        mention backlog or orders, newest first. One company and bounded (`releases` is the
+        route's newest few, `limit` sections), never a catalog's."""
+        with self._session(user_id) as cur:
+            cur.execute("SELECT name FROM silver.companies WHERE company_id = %s", (company_id,))
+            row = cur.fetchone()
+            cur.execute(
+                r"""
+                SELECT accession_no, form, filed, period_of_report, section_key, char_start,
+                       document_url, text
+                FROM gold.filing_sections
+                WHERE company_id = %(company)s AND filed >= %(since)s
+                  AND ((form = '10-K' AND section_key IN ('1', '7'))
+                       OR (form = '10-Q' AND section_key = 'I-2')
+                       OR (form = '8-K' AND accession_no = ANY(%(releases)s)
+                           AND section_key ~ '^EX-99(\.0?1)?$'))
+                  AND (text ILIKE '%%backlog%%' OR text ILIKE '%%orders%%')
+                ORDER BY filed DESC, accession_no, section_key
+                LIMIT %(limit)s
+                """, {"company": company_id, "since": since, "releases": releases,
+                      "limit": limit})
+            return {"name": row["name"] if row else None, "sections": cur.fetchall()}
 
     def filing_index(self, user_id: str, company_ids: list[str] | None, forms: list[str],
                      start: date | None, end: date | None, limit: int, offset: int,
@@ -550,6 +987,23 @@ class Store:
                 """, (company_id, accession_no, basis, section_key, section_key))
             return cur.fetchall()
 
+    def section_bases(self, user_id: str, company_id: str, accession_no: str) -> list[dict]:
+        """What this filing was compared with, one row per basis (gold.section_diffs under
+        RLS, a PK prefix probe): basis, this filing's form, the compared filing."""
+        with self._session(user_id) as cur:
+            cur.execute(
+                """
+                SELECT DISTINCT ON (d.basis) d.basis, d.form, d.prior_accession_no,
+                       d.prior_form, d.prior_filed,
+                       pdoc.period_of_report AS prior_period_of_report
+                FROM gold.section_diffs d
+                LEFT JOIN bronze.filing_documents pdoc
+                       ON pdoc.accession_no = d.prior_accession_no
+                WHERE d.company_id = %s AND d.accession_no = %s
+                ORDER BY d.basis, d.section_key
+                """, (company_id, accession_no))
+            return cur.fetchall()
+
     def section_changes(self, user_id: str, accession_no: str, section_keys: list[str],
                         basis: str, kind: str | None) -> list[dict]:
         """gold.section_changes rows in reading order."""
@@ -575,12 +1029,16 @@ class Store:
 
     def search_sections(self, user_id: str, company_ids: list[str] | None, q: str,
                         form: str | None, section_key: str | None, start: date | None,
-                        end: date | None, limit: int, offset: int) -> list[dict]:
-        """Best passage per section matching websearch_to_tsquery(q), ranked by ts_rank_cd,
-        with a ts_headline snippet cut from that passage only (never the whole section).
-        company_ids None: every company the caller can read (gold.search_passages, migration
-        032, applies the same read rule as RLS; the section text below is still read under RLS).
-        Raises SearchTooBroad when ranking the matches takes over SEARCH_TIMEOUT."""
+                        end: date | None, limit: int, offset: int,
+                        sort: str = "relevance") -> list[dict]:
+        """Best passage per section matching websearch_to_tsquery(q), ranked by ts_rank_cd
+        (sort "relevance") or newest filed first ("date"), with a ts_headline snippet cut from
+        that passage only (never the whole section); every row carries `total`, the sections
+        matching in all. company_ids None: every company the caller can read (gold.search_page,
+        migration 052 over 032's search_passages, applies the same read rule as RLS; the section
+        text below is still read under RLS). Raises SearchTooBroad when ranking the matches
+        takes over SEARCH_TIMEOUT."""
+        order = SEARCH_ORDERS[sort]
         try:
             with self._session(user_id) as cur:
                 cur.execute(f"SET LOCAL statement_timeout = '{SEARCH_TIMEOUT}'")
@@ -589,12 +1047,13 @@ class Store:
                     WITH q AS (SELECT websearch_to_tsquery('english', %(q)s) AS q),
                     page AS (
                         SELECT p.*
-                        FROM q CROSS JOIN LATERAL gold.search_passages(
+                        FROM q CROSS JOIN LATERAL gold.search_page(
                             q.q, %(companies)s::text[], %(form)s::text, %(section)s::text,
-                            %(start)s::date, %(end)s::date, %(limit)s::int, %(offset)s::int) p
+                            %(start)s::date, %(end)s::date, %(sort)s::text, %(limit)s::int,
+                            %(offset)s::int) p
                     )
                     SELECT h.company_id, c.name, h.accession_no, h.form, h.filed,
-                           h.section_key, h.rank, h.passages_matched, s.title,
+                           h.section_key, h.rank, h.passages_matched, h.total, s.title,
                            s.char_start + h.start_char AS char_start,
                            s.char_start + h.end_char AS char_end,
                            regexp_replace(
@@ -614,9 +1073,9 @@ class Store:
                     LEFT JOIN bronze.filing_exhibits e
                            ON e.accession_no = h.accession_no AND e.exhibit_type = h.section_key
                     JOIN silver.companies c ON c.company_id = h.company_id
-                    ORDER BY h.rank DESC, h.filed DESC, h.accession_no, h.section_key
+                    ORDER BY """ + order + """
                     """, {"q": q, "companies": company_ids, "form": form,
-                          "section": section_key, "start": start, "end": end,
+                          "section": section_key, "start": start, "end": end, "sort": sort,
                           "limit": limit, "offset": offset, "headline": HEADLINE})
                 return cur.fetchall()
         except psycopg.errors.QueryCanceled:
@@ -757,3 +1216,35 @@ class Store:
                 ) i ON true
                 """, (accessions,))
             return {r.pop("accession_no"): r for r in cur.fetchall()}
+
+    def alert_filings(self, user_id: str, company_ids: list[str], forms: list[str],
+                      since: date) -> list[dict]:
+        """Filing alerts (query_api/alert_job.py): these companies' original filings of `forms`
+        filed on or after `since`, one row per (accession, company), newest first, with an 8-K's
+        items from the filing index (migration 045; NULL until the nightly submissions load has
+        it). Public index metadata (silver.filings runs as its owner, 017). A bounded id list
+        (the job passes at most alert_job.CHUNK followed companies), never the catalog's."""
+        if not company_ids:
+            return []
+        with self._session(user_id) as cur:
+            cur.execute(
+                r"""
+                SELECT DISTINCT ON (f.accession_no, f.company_id)
+                       f.company_id, f.accession_no, f.cik, f.form, f.filing_date, f.accepted_at,
+                       CASE WHEN f.form ~ '^10-[KQ]' AND f.report_date = f.filing_date
+                            THEN NULL ELSE f.report_date END AS period_end,
+                       CASE WHEN btrim(coalesce(h.items, '')) <> ''
+                            THEN regexp_split_to_array(btrim(h.items), '\s*,\s*') END AS items
+                FROM silver.filings f
+                LEFT JOIN bronze.submission_filings h
+                       ON h.accession_no = f.accession_no AND h.cik = f.cik
+                WHERE f.company_id = ANY(%(ids)s) AND f.form = ANY(%(forms)s)
+                  AND f.filing_date >= %(since)s
+                  AND f.filed_on >= %(since)s::date - %(margin)s
+                ORDER BY f.accession_no, f.company_id, h.items IS NULL, f.report_date IS NULL,
+                         f.cik
+                """, {"ids": company_ids, "forms": forms, "since": since,
+                      "margin": FILED_ON_MARGIN_DAYS})
+            rows = cur.fetchall()
+        rows.sort(key=lambda r: (r["filing_date"], r["accession_no"]), reverse=True)
+        return rows

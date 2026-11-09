@@ -1,0 +1,102 @@
+{
+ "bac": {
+  "accession_no": "0000070858-26-000157",
+  "company_id": "0000070858",
+  "filed": "2026-02-25",
+  "name": "BANK OF AMERICA CORP /DE/",
+  "sic": "6021",
+  "tickers": [
+   "BAC"
+  ]
+ },
+ "crox": {
+  "accession_no": "0001334036-26-000006",
+  "company_id": "0001334036",
+  "filed": "2026-02-12",
+  "name": "Crocs, Inc.",
+  "sic": "3021",
+  "tickers": [
+   "CROX"
+  ]
+ },
+ "deck": {
+  "accession_no": "0001628280-26-037664",
+  "company_id": "0000910521",
+  "filed": "2026-05-22",
+  "name": "DECKERS OUTDOOR CORP",
+  "sic": "3021",
+  "tickers": [
+   "DECK"
+  ]
+ },
+ "etn": {
+  "accession_no": "0001551182-26-000007",
+  "company_id": "0001551182",
+  "filed": "2026-02-26",
+  "name": "Eaton Corp plc",
+  "sic": "3590",
+  "tickers": [
+   "ETN"
+  ]
+ },
+ "intc": {
+  "accession_no": "0000050863-26-000011",
+  "company_id": "0000050863",
+  "filed": "2026-01-23",
+  "name": "INTEL CORP",
+  "sic": "3674",
+  "tickers": [
+   "INTC"
+  ]
+ },
+ "jpm": {
+  "accession_no": "0001628280-26-008131",
+  "company_id": "0000019617",
+  "filed": "2026-02-13",
+  "name": "JPMORGAN CHASE & CO",
+  "sic": "6021",
+  "tickers": [
+   "AMJB"
+  ]
+ },
+ "mchp": {
+  "accession_no": "0000827054-26-000016",
+  "company_id": "0000827054",
+  "filed": "2026-05-21",
+  "name": "MICROCHIP TECHNOLOGY INC",
+  "sic": "3674",
+  "tickers": [
+   "MCHP"
+  ]
+ },
+ "nke": {
+  "accession_no": "0000320187-26-000088",
+  "company_id": "0000320187",
+  "filed": "2026-07-15",
+  "name": "NIKE, Inc.",
+  "sic": "3021",
+  "tickers": [
+   "NKE"
+  ]
+ },
+ "nvt": {
+  "accession_no": "0001628280-26-008608",
+  "company_id": "0001720635",
+  "filed": "2026-02-17",
+  "name": "nVent Electric plc",
+  "sic": "3550",
+  "tickers": [
+   "NVT"
+  ]
+ },
+ "vrt": {
+  "accession_no": "0001674101-26-000008",
+  "company_id": "0001674101",
+  "filed": "2026-02-13",
+  "name": "Vertiv Holdings Co",
+  "sic": "3679",
+  "tickers": [
+   "VRT"
+  ]
+ }
+}

@@ -1,405 +1,284 @@
 import { describe, expect, it } from "vitest";
 
-import type { FinancialRow } from "../types";
+import deckEarnings from "../company/fixtures/deck-earnings.json";
+import nvdaEarnings from "../company/fixtures/nvda-earnings.json";
+import vrtEarnings from "../company/fixtures/vrt-earnings.json";
+import type { EarningsResponse } from "../types";
 import {
-  annualHistory,
-  baseYear,
-  caseOf,
-  checkAssumptions,
-  GROWTH_FLAG_POINTS,
-  defaultAssumptions,
-  growthOf,
-  historyStats,
-  modelRows,
+  adjustmentProblem,
+  fromPreview,
+  parseAdjustments,
+  parseDraft,
+  parsePriceDraft,
+  resizeDrafts,
+  toAdjustmentDraft,
+  toDraft,
+} from "./drafts";
+import deckFixture from "./fixtures/deck-run.json";
+import nvdaFixture from "./fixtures/nvda-run.json";
+import vrtOldFixture from "./fixtures/vrt-old-run.json";
+import vrtFixture from "./fixtures/vrt-run.json";
+import {
+  amountUnit,
+  evBlank,
+  formatCell,
+  guidanceYear,
+  modelColumns,
+  modelLines,
   modelSeries,
   modelState,
+  parseMillions,
   parsePercent,
-  project,
+  quartersLabel,
+  remainderLabel,
   resizeAssumptions,
   restoreModel,
-  runRate,
-  SCENARIOS,
   scenarioAssumptions,
-  shiftedCase,
   statLabel,
-  type HistoryYear,
+  type ModelRun,
 } from "./model";
-import fixture from "./stats-fixture.json";
+import { defaultRules } from "./rules";
 
+// real answers: the branch's POST /v1/companies/{id}/model over production inputs of 2026-11-09
+// (services/query-api/tests/fixtures/model); regenerate, don't hand-edit
+const vrt = vrtFixture.run as unknown as ModelRun;
+const vrtOld = vrtOldFixture.run as unknown as ModelRun;
+const deck = deckFixture.run as unknown as ModelRun;
+const nvda = nvdaFixture.run as unknown as ModelRun;
 const NVDA = "0001045810";
 
-function row(metric: string, fp: string, end: string, value: string): FinancialRow {
-  return {
-    metric,
-    period_start: null,
-    period_end: end,
-    fiscal_period: fp,
-    calendar_period: null,
-    value,
-    unit: "USD",
-    value_source: "derived",
-    citation: {
-      accession_no: `0001045810-${end.slice(2, 4)}-000001`,
-      form: "10-K",
-      filed: `${end.slice(0, 4)}-12-01`,
-      xbrl_tag: "Revenues",
-      source_accessions: null,
-      filing_url: null,
-    },
-    freshness: { filed: `${end.slice(0, 4)}-12-01`, ingested_at: `${end.slice(0, 4)}-12-02T00:00:00Z` },
-  };
-}
-
-function year(fy: number, revenue: number | null, operatingIncome: number | null = null): HistoryYear {
-  return { fy, periodEnd: `${fy}-12-31`, revenue, operatingIncome, revenueSource: null, operatingIncomeSource: null };
-}
-
-describe("annualHistory", () => {
-  const rows = [
-    row("revenue", "FY2023 Q4", "2023-12-31", "100"),
-    row("operating_income", "FY2023 Q4", "2023-12-31", "20"),
-    row("revenue", "FY2024 Q3", "2024-09-30", "105"), // a TTM at Q3: not a fiscal year
-    row("revenue", "FY2024 Q4", "2024-12-31", "110"),
-    row("operating_income", "FY2024 Q4", "2024-12-31", "33"),
-    row("revenue", "FY2025 Q4", "2025-12-31", "121"),
-    row("gross_profit", "FY2025 Q4", "2025-12-31", "60"), // another metric
-    row("revenue", "FY2022 Q4", "2022-12-31", "not a number"),
-  ];
-
-  it("keeps fiscal Q4 TTM rows as fiscal years, oldest first, with their filings", () => {
-    const h = annualHistory(rows, 8, NVDA);
-    expect(h.map((y) => [y.fy, y.revenue, y.operatingIncome])).toEqual([
-      [2023, 100, 20],
-      [2024, 110, 33],
-      [2025, 121, null],
-    ]);
-    expect(h[0]!.revenueSource).toMatchObject({ form: "10-K", accessionNo: "0001045810-23-000001", companyId: NVDA });
+describe("saved states", () => {
+  it("a model saved before F2 restores and saves byte-identical", () => {
+    const old = { companyId: NVDA, historyYears: 8, assumptions: [{ growth: 25, margin: 55.5, note: "Blackwell ramp" }, { growth: 12.5, margin: 50 }] };
+    const m = restoreModel(old)!;
+    expect(JSON.stringify(modelState(m))).toBe(JSON.stringify(old));
+    expect(m.ytd).toBeUndefined();
+    const withCases = { ...old, scenarios: { bear: [{ growth: 5, margin: 40 }, { growth: 0, margin: 35 }], bull: [{ growth: 40, margin: 60 }, { growth: 25, margin: 58 }] } };
+    expect(JSON.stringify(modelState(restoreModel(withCases)!))).toBe(JSON.stringify(withCases));
   });
 
-  it("keeps only the newest years asked for", () => {
-    expect(annualHistory(rows, 2).map((y) => y.fy)).toEqual([2024, 2025]);
-  });
-});
-
-describe("historyStats", () => {
-  it("computes a 5-year CAGR and the mean of the last 5 margins", () => {
-    // 100 → 161.051 over 5 years is 10% a year
-    const h = [year(2019, 80, 8), year(2020, 100, 10), year(2021, 110, 22), year(2022, 121, 24.2), year(2023, 133.1, 13.31), year(2024, 146.41, 29.282), year(2025, 161.051, 16.1051)];
-    const s = historyStats(h);
-    expect(s.cagr).toBeCloseTo(0.1, 10);
-    expect(s.cagrYears).toBe(5);
-    // margins 2021-2025: 20%, 20%, 10%, 20%, 10%
-    expect(s.avgMargin).toBeCloseTo(0.16, 10);
-    expect(s.marginYears).toBe(5);
-    expect(s.lastGrowth).toBeCloseTo(0.1, 10);
-    expect(s.lastMargin).toBeCloseTo(0.1, 10);
-    expect(statLabel(s.cagr, s.cagrYears, "CAGR")).toBe("5-yr CAGR 10.0%");
-    expect(statLabel(s.avgMargin, s.marginYears, "avg")).toBe("5-yr avg 16.0%");
+  it("keeps F2's fields: rates per year, ytd, adjustments and the user's price", () => {
+    const state = vrtFixture.state;
+    const m = restoreModel(state)!;
+    expect(m.ytd).toBe(true);
+    expect(m.assumptions[1]!.taxRate).toBe(21);
+    expect(m.assumptions[0]!.taxRate).toBeUndefined();
+    expect(m.adjustments).toEqual([{ name: "UIG", fy: 2026, quarter: 4, kind: "acquired", amount: 150e6 }]);
+    expect(m.price).toEqual({ value: 150, date: "2026-11-06" });
+    expect(modelState(m)).toEqual(state);
   });
 
-  it("uses a shorter window when history is short, and says when there's none", () => {
-    const s = historyStats([year(2024, 100, 10), year(2025, 120, 30)]);
-    expect(s.cagr).toBeCloseTo(0.2, 10);
-    expect(s.cagrYears).toBe(1);
-    expect(s.avgMargin).toBeCloseTo(0.175, 10);
-    const none = historyStats([year(2025, 120)]);
-    expect([none.cagr, none.avgMargin]).toEqual([null, null]);
-    expect(statLabel(none.cagr, none.cagrYears, "CAGR")).toBe("no growth history");
-    expect(historyStats([]).cagr).toBeNull();
-  });
-
-  it("starts the CAGR at the first positive revenue and ends at the latest year with revenue", () => {
-    const s = historyStats([year(2021, 0), year(2022, 100), year(2023, 110), year(2024, null)]);
-    expect(baseYear([year(2023, 121), year(2024, null)])!.fy).toBe(2023);
-    expect(s.cagr).toBeCloseTo(0.1, 10);
-    expect(s.cagrYears).toBe(1);
-  });
-
-  it("gives no growth across a missing year", () => {
-    expect(growthOf(year(2022, 100), year(2024, 150))).toBeNull();
-    expect(growthOf(year(2023, -5), year(2024, 150))).toBeNull();
-    expect(growthOf(year(2023, 100), year(2024, 150))).toBeCloseTo(0.5, 10);
-  });
-});
-
-describe("project", () => {
-  const history = [year(2024, 100, 10), year(2025, 200, 50)];
-
-  it("grows revenue from the base year and applies each year's margin", () => {
-    const p = project(history, [
-      { growth: 10, margin: 20, note: "price increase" },
-      { growth: -50, margin: 0 },
-      { growth: 0, margin: -10 },
-    ]);
-    expect(p.map((y) => y.fy)).toEqual([2026, 2027, 2028]);
-    expect(p[0]).toMatchObject({ growth: 0.1, margin: 0.2, note: "price increase" });
-    expect(p[0]!.revenue).toBeCloseTo(220, 10);
-    expect(p[0]!.operatingIncome).toBeCloseTo(44, 10);
-    expect(p[1]!.revenue).toBeCloseTo(110, 10);
-    expect(p[1]!.operatingIncome).toBeCloseTo(0, 10);
-    expect(p[2]!.revenue).toBeCloseTo(110, 10);
-    expect(p[2]!.operatingIncome).toBeCloseTo(-11, 10);
-  });
-
-  it("starts from the latest year with revenue, and is empty without one", () => {
-    expect(project([...history, year(2026, null, 5)], [{ growth: 50, margin: 10 }])[0]).toMatchObject({ fy: 2026, revenue: 300 });
-    expect(project([year(2025, null)], [{ growth: 5, margin: 5 }])).toEqual([]);
-    expect(project([], [{ growth: 5, margin: 5 }])).toEqual([]);
-  });
-
-  it("labels the table's history and forecast rows", () => {
-    const rows = modelRows(history, project(history, [{ growth: 10, margin: 20 }]));
-    expect(rows.map((r) => [r.label, r.forecast])).toEqual([
-      ["FY2024", false],
-      ["FY2025", false],
-      ["FY2026E", true],
-    ]);
-    expect(rows[0]!.growth).toBeNull();
-    expect(rows[1]!.growth).toBeCloseTo(1, 10);
-    expect(rows[1]!.margin).toBeCloseTo(0.25, 10);
-  });
-});
-
-describe("modelSeries", () => {
-  it("draws history solid and the forecast dashed from the base year, same colours", () => {
-    const history = [year(2024, 100, 10), year(2025, 200, 50)];
-    const s = modelSeries(history, project(history, [{ growth: 10, margin: 20 }]));
-    expect(s.map((x) => [x.name, x.color, x.dashed ?? false])).toEqual([
-      ["Revenue", 0, false],
-      ["Revenue (forecast)", 0, true],
-      ["Operating income", 1, false],
-      ["Operating income (forecast)", 1, true],
-    ]);
-    expect(s[1]!.points.map((p) => [p.key, p.period, p.y])).toEqual([
-      [2025, "FY2025", 200],
-      [2026, "FY2026E", 220.00000000000003],
-    ]);
-    expect(s[1]!.points.every((p) => p.sources.length === 0)).toBe(true);
-  });
-
-  it("leaves out a line with no values (no operating income reported)", () => {
-    const history = [year(2024, 100), year(2025, 200)];
-    const names = modelSeries(history, []).map((x) => x.name);
-    expect(names).toEqual(["Revenue", "Revenue (forecast)"]);
-  });
-});
-
-describe("assumptions", () => {
-  it("defaults start at the latest year without a run rate and fade to the long run", () => {
-    // growth 8.14% and margin 20% last year; long run: the CAGR held to 5%, the 15% average margin
-    const s = historyStats([year(2024, 100, 10), year(2025, 108.14, 21.628)]);
-    expect(defaultAssumptions(s, 2)).toEqual([
-      { growth: 8.1, margin: 20 },
-      { growth: 6.6, margin: 17.5 },
-    ]);
-    expect(defaultAssumptions(historyStats([]), 1)).toEqual([{ growth: 0, margin: 0 }]);
-    expect(defaultAssumptions(historyStats([]), 50)).toHaveLength(10);
-  });
-
-  it("resizes by repeating the last year (without its note) or cutting", () => {
-    const list = [{ growth: 5, margin: 10, note: "why" }];
-    expect(resizeAssumptions(list, 3)).toEqual([list[0], { growth: 5, margin: 10 }, { growth: 5, margin: 10 }]);
-    expect(resizeAssumptions(resizeAssumptions(list, 3), 1)).toEqual(list);
-    expect(resizeAssumptions(list, 99)).toHaveLength(10);
-    expect(resizeAssumptions([], 0)).toEqual([{ growth: 0, margin: 0 }]);
-  });
-
-  it("parses typed percentages within range", () => {
-    expect(parsePercent(" 12.5 ", [-100, 1000])).toBe(12.5);
-    expect(parsePercent("-3%", [-100, 1000])).toBe(-3);
-    expect(parsePercent("", [-100, 1000])).toBeNull();
-    expect(parsePercent("1e3", [-100, 1000])).toBeNull();
-    expect(parsePercent("-101", [-100, 1000])).toBeNull();
-    expect(parsePercent("101", [-1000, 100])).toBeNull();
-  });
-});
-
-describe("restoreModel / modelState", () => {
-  it("restores a saved state and drops what doesn't fit", () => {
-    expect(restoreModel({ companyId: "NVDA" })).toBeNull();
-    expect(restoreModel(null)).toBeNull();
+  it("drops what doesn't read, from untrusted JSON", () => {
     const m = restoreModel({
-      companyId: NVDA,
-      historyYears: 40,
-      assumptions: [{ growth: 5000, margin: 30, note: "  big  " }, { growth: "x", margin: 1 }, { growth: 1, margin: 2 }],
+      companyId: NVDA, ytd: "yes", price: { value: -1, date: "2026-11-06" },
+      adjustments: [{ name: "", fy: 2026, quarter: 1, amount: 1 }, { name: "ok", fy: 2026, quarter: 5, amount: 1 }, { name: "Charge", fy: 2026, quarter: 2, amount: -5e6, kind: "x" }],
+      assumptions: [{ growth: 2000, margin: 5, shareChange: -80, taxRate: "21" }],
     })!;
-    expect(m).toEqual({ companyId: NVDA, historyYears: 10, assumptions: [{ growth: 1000, margin: 30, note: "big" }, { growth: 1, margin: 2 }] });
-    expect(restoreModel({ companyId: NVDA })!).toEqual({ companyId: NVDA, historyYears: 8, assumptions: [{ growth: 0, margin: 0 }] });
+    expect(m.ytd).toBeUndefined();
+    expect(m.price).toBeUndefined();
+    expect(m.adjustments).toEqual([{ name: "Charge", fy: 2026, quarter: 2, kind: "one_off", amount: -5e6 }]);
+    expect(m.assumptions).toEqual([{ growth: 1000, margin: 5, shareChange: -50 }]);
   });
 
-  it("saves rounded numbers and no blank notes", () => {
-    expect(modelState({ companyId: NVDA, historyYears: 8, assumptions: [{ growth: 1.23456, margin: 2, note: "  " }, { growth: 3, margin: 4, note: " ok " }] })).toEqual({
-      companyId: NVDA,
-      historyYears: 8,
-      assumptions: [{ growth: 1.23, margin: 2 }, { growth: 3, margin: 4, note: "ok" }],
-    });
+  it("reads bear and bull only with as many years as the base case", () => {
+    const base = { companyId: NVDA, assumptions: [{ growth: 25, margin: 30, note: " ramp " }, { growth: 10, margin: 28 }] };
+    expect(scenarioAssumptions(base, "base")).toEqual([{ growth: 25, margin: 30, note: "ramp" }, { growth: 10, margin: 28 }]);
+    expect(scenarioAssumptions(base, "bear")).toBeNull();
+    expect(scenarioAssumptions({ ...base, scenarios: { bear: [{ growth: 1, margin: 1 }] } }, "bear")).toBeNull();
+    expect(scenarioAssumptions({ ...base, scenarios: { bull: [{ growth: 40, margin: 35 }, { growth: 20, margin: 30 }] } }, "bull")).toHaveLength(2);
   });
-});
 
-/** The same inputs and numbers as services/agent tests/test_model_stats.py: the thesis check
- * (Python) and the model page (here) must compute identical statistics and flags. */
-describe("checkAssumptions matches the agent's Python port (stats-fixture.json)", () => {
-  const close = (a: number | null, b: number | null) => {
-    if (a === null || b === null) expect(a).toBe(b);
-    else expect(a).toBeCloseTo(b, 12);
-  };
-  for (const c of fixture.cases) {
-    it(c.name, () => {
-      const history = annualHistory(c.rows as unknown as FinancialRow[], 10);
-      expect(history.map((y) => ({ fy: y.fy, periodEnd: y.periodEnd, revenue: y.revenue, operatingIncome: y.operatingIncome }))).toEqual(c.expected.history);
-      const r = checkAssumptions(history, c.assumptions);
-      const e = c.expected;
-      expect(r.baseFy).toBe(e.base_fy);
-      close(r.stats.cagr, e.stats.cagr);
-      expect(r.stats.cagrYears).toBe(e.stats.cagr_years);
-      close(r.stats.avgMargin, e.stats.avg_margin);
-      expect(r.stats.marginYears).toBe(e.stats.margin_years);
-      close(r.stats.lastGrowth, e.stats.last_growth);
-      close(r.stats.lastMargin, e.stats.last_margin);
-      close(r.marginMin, e.margin_min);
-      close(r.marginMax, e.margin_max);
-      expect(r.years.length).toBe(e.years.length);
-      r.years.forEach((y, i) => {
-        const x = e.years[i]!;
-        expect([y.fy, y.growth, y.margin, y.growthFlag, y.marginFlag]).toEqual([x.fy, x.growth, x.margin, x.growth_flag, x.margin_flag]);
-        close(y.growthVsCagr, x.growth_vs_cagr);
-      });
-    });
-  }
-
-  it("flags growth more than GROWTH_FLAG_POINTS from the CAGR and margins outside the 5-year range", () => {
-    const h = [year(2020, 100, 10), year(2021, 110, 22), year(2022, 121, 24.2), year(2023, 133.1, 13.31), year(2024, 146.41, 29.282), year(2025, 161.051, 16.1051)];
-    const r = checkAssumptions(h, [
-      { growth: 10 + GROWTH_FLAG_POINTS + 0.5, margin: 20 },
-      { growth: 10 - GROWTH_FLAG_POINTS - 0.5, margin: 10 },
-      { growth: 15, margin: 25 },
-    ]);
-    expect(r.years.map((y) => [y.fy, y.growthFlag, y.marginFlag])).toEqual([
-      [2026, "above", null],
-      [2027, "below", null],
-      [2028, null, "above"],
-    ]);
+  it("new years repeat the last one without its note", () => {
+    expect(resizeAssumptions([{ growth: 5, margin: 10, note: "x", taxRate: 20 }], 2)).toEqual([
+      { growth: 5, margin: 10, note: "x", taxRate: 20 }, { growth: 5, margin: 10, taxRate: 20 }]);
   });
 });
 
-describe("scenarios (bear / base / bull)", () => {
-  for (const c of fixture.scenario_cases) {
-    it(`picks the same assumptions as the agent's port: ${c.name}`, () => {
-      for (const s of SCENARIOS) expect(scenarioAssumptions(c.state, s)).toEqual(c.expected[s]);
-    });
-  }
-
-  const base = [{ growth: 25, margin: 30, note: "ramp" }, { growth: 10, margin: 28 }];
-  const bear = [{ growth: 5, margin: 20 }, { growth: -2.5, margin: 18, note: "cuts" }];
-
-  it("restores and saves bear and bull beside the base case; a base-only model saves as before", () => {
-    const m = restoreModel({ companyId: NVDA, historyYears: 8, assumptions: base, scenarios: { bear, bull: [{ growth: 1, margin: 2 }] } })!;
-    expect(m.assumptions).toEqual(base);
-    expect(m.scenarios).toEqual({ bear }); // a bull case with other years doesn't count
-    expect(modelState(m)).toEqual({ companyId: NVDA, historyYears: 8, assumptions: base, scenarios: { bear } });
-    const old = restoreModel({ companyId: NVDA, historyYears: 8, assumptions: base })!;
-    expect(old.scenarios).toBeUndefined();
-    expect(modelState(old)).toEqual({ companyId: NVDA, historyYears: 8, assumptions: base });
-    expect(caseOf(m, "bear")).toEqual(bear);
-    expect(caseOf(m, "bull")).toEqual(base); // no bull case: the base one
+describe("drafts: what the fields hold as typed", () => {
+  it("a blank rate is the default; a rate that doesn't read flags the year", () => {
+    const d = toDraft({ growth: 5, margin: 20 });
+    expect(parseDraft(d)).toEqual({ growth: 5, margin: 20 });
+    expect(parseDraft({ ...d, taxRate: "21" })).toEqual({ growth: 5, margin: 20, taxRate: 21 });
+    expect(parseDraft({ ...d, shareChange: "-60" })).toBeNull();
+    expect(parseDraft({ ...d, fcfMargin: "abc" })).toBeNull();
+    expect(resizeDrafts([{ ...d, taxRate: "21", note: "n" }], 2)[1]).toMatchObject({ taxRate: "21", note: "" });
   });
 
-  it("starts a new case from the base one, moved in proportion and without notes", () => {
-    // half the growth (at least 5 points), a fifth of the margin (at least 3 points)
-    expect(shiftedCase(base, "bear")).toEqual([
-      { growth: 12.5, margin: 24 },
-      { growth: 5, margin: 22.4 },
-    ]);
-    expect(shiftedCase([{ growth: 4, margin: 10 }], "bull")).toEqual([{ growth: 9, margin: 13 }]); // the minimums
-    expect(shiftedCase([{ growth: -10, margin: -5 }], "bear")).toEqual([{ growth: -15, margin: -8 }]);
-    expect(shiftedCase([{ growth: 999, margin: 99 }], "bull")).toEqual([{ growth: 1000, margin: 100 }]); // clamped
+  it("a new bear or bull case starts from the run's preview, keeping only the rates the user set", () => {
+    const bear = vrtOld.cases.bear!;
+    expect(bear.preview).toBe(true);
+    const drafts = fromPreview(bear.years);
+    expect(drafts[0]).toMatchObject({ growth: String(bear.years[0]!.inputs.growth), margin: String(bear.years[0]!.inputs.margin), taxRate: "", note: "" });
   });
 
-  it("draws bear and bull lighter beside the dashed base forecast", () => {
-    const history = [year(2024, 100, 20), year(2025, 110, 22)];
-    const series = modelSeries(history, project(history, base), { bear: project(history, bear), bull: project(history, base) });
-    expect(series.map((s) => [s.name, !!s.dashed, !!s.faint])).toEqual([
-      ["Revenue", false, false],
-      ["Revenue (base)", true, false],
-      ["Revenue (bear)", true, true],
-      ["Revenue (bull)", true, true],
-      ["Operating income", false, false],
-      ["Operating income (base)", true, false],
-      ["Operating income (bear)", true, true],
-      ["Operating income (bull)", true, true],
-    ]);
-    // every forecast starts at the base year, so the lines join the history
-    expect(series[2]!.points[0]).toMatchObject({ key: 2025, y: 110 });
-    expect(series[2]!.points[1]!.y).toBeCloseTo(110 * 1.05);
-    expect(new Set(series.map((s) => s.id)).size).toBe(series.length);
-    expect(modelSeries(history, project(history, base)).map((s) => s.name)).toEqual([
-      "Revenue", "Revenue (forecast)", "Operating income", "Operating income (forecast)"]);
-  });
-});
-
-describe("defaults on real shapes (stats-fixture.json default_cases, the agent's port checks the same)", () => {
-  const cases = (fixture as unknown as { default_cases: DefaultCase[] }).default_cases;
-  for (const c of cases) {
-    it(c.name, () => {
-      const rows = c.rows.map((r) => row(r.metric, r.fiscal_period, r.period_end, r.value));
-      const run = runRate(rows);
-      expect(run.period).toBe(c.expected.run_rate.period);
-      close(run.growth, c.expected.run_rate.growth);
-      close(run.margin, c.expected.run_rate.margin);
-      const stats = historyStats(annualHistory(rows, 10));
-      expect(defaultAssumptions(stats, c.years, run)).toEqual(c.expected.defaults);
-    });
-  }
-
-  /** each case's revenue three years out, as a multiple of the base year's */
-  const outcomes = (c: DefaultCase) => {
-    const rows = c.rows.map((r) => row(r.metric, r.fiscal_period, r.period_end, r.value));
-    const history = annualHistory(rows, 10);
-    const base = defaultAssumptions(historyStats(history), 3, runRate(rows));
-    const at = (a: typeof base) => project(history, a).at(-1)!.revenue / baseYear(history)!.revenue!;
-    return { base, bear: at(shiftedCase(base, "bear")), mid: at(base), bull: at(shiftedCase(base, "bull")) };
-  };
-  const shape = (name: string) => cases.find((c) => c.name.startsWith(name))!;
-
-  it("NVIDIA starts at its run rate and fades; bear no longer more than quadruples revenue (H5, #72, #73)", () => {
-    const o = outcomes(shape("hyper-growth"));
-    expect(o.base.map((a) => a.growth)).toEqual([83.4, 44.2, 24.6]);
-    expect(o.base.map((a) => a.margin)).toEqual([65.2, 55.6, 50.8]);
-    expect(o.bear).toBeLessThan(2); // was about 4.2x: a flat 66.9% less 5 points
-    expect(o.mid).toBeGreaterThan(3);
-    expect(o.bull).toBeGreaterThan(o.mid * 1.4);
+  it("adjustments: named, a fiscal quarter, $ millions", () => {
+    const refund = { name: "IEEPA refunds", kind: "one_off" as const, fy: "2027", quarter: "2", amount: "46" };
+    expect(parseAdjustments([refund])).toEqual([{ name: "IEEPA refunds", kind: "one_off", fy: 2027, quarter: 2, amount: 46e6 }]);
+    expect(adjustmentProblem({ ...refund, name: " " })).toBe("name it");
+    expect(adjustmentProblem({ ...refund, amount: "lots" })).toMatch(/\$ millions/);
+    expect(parseAdjustments([{ ...refund, fy: "27" }])).toBeNull();
+    expect(toAdjustmentDraft({ name: "x", kind: "one_off", fy: 2027, quarter: 2, amount: 46e6 }).amount).toBe("46");
+    expect(parseMillions("$1,200.5")).toBe(1_200_500_000);
   });
 
-  it("Vertiv starts at its 35% TTM growth and 20% TTM margin, not 18.5% and 11.4%", () => {
-    expect(outcomes(shape("accelerating")).base[0]).toEqual({ growth: 35.3, margin: 20.1 });
+  it("a price is blank (none), or a positive price with a real day", () => {
+    expect(parsePriceDraft({ value: "", date: "" })).toBeUndefined();
+    expect(parsePriceDraft({ value: "182.50", date: "2026-11-06" })).toEqual({ value: 182.5, date: "2026-11-06" });
+    expect(parsePriceDraft({ value: "0", date: "2026-11-06" })).toBeNull();
+    expect(parsePriceDraft({ value: "10", date: "2026-02-30" })).toBeNull();
+    expect(parsePriceDraft({ value: "10", date: "" })).toBeNull();
+    // 057: the price's currency when the user says one; "" is dollars, as before
+    expect(parsePriceDraft({ value: "182.50", date: "2026-11-06", currency: "EUR" })).toEqual({ value: 182.5, date: "2026-11-06", currency: "EUR" });
+    expect(parsePriceDraft({ value: "182.50", date: "2026-11-06", currency: "" })).toEqual({ value: 182.5, date: "2026-11-06" });
   });
 
-  it("Deckers starts at its 6.3%, not its 16.5% CAGR, and its cases stay apart", () => {
-    const o = outcomes(shape("steady"));
-    expect(o.base[0]).toEqual({ growth: 6.3, margin: 23.6 });
-    expect(o.mid - o.bear).toBeGreaterThan(0.1);
-    expect(o.bull - o.mid).toBeGreaterThan(0.1);
+  it("keeps a price's currency through restore and save (057), and none for a dollar one", () => {
+    const m = restoreModel({ companyId: "0001674101", assumptions: [{ growth: 1, margin: 2 }], price: { value: 150, date: "2026-11-06", currency: "EUR" } })!;
+    expect(m.price).toEqual({ value: 150, date: "2026-11-06", currency: "EUR" });
+    expect(modelState(m).price).toEqual({ value: 150, date: "2026-11-06", currency: "EUR" });
+    const usd = restoreModel({ companyId: "0001674101", assumptions: [{ growth: 1, margin: 2 }], price: { value: 150, date: "2026-11-06", currency: "euros" } })!;
+    expect(modelState(usd).price).toEqual({ value: 150, date: "2026-11-06" });
   });
 
-  it("a shrinking company's long run is held at 0%, never a permanent decline", () => {
-    const intel = outcomes(shape("shrinking"));
-    expect(intel.base.at(-1)!.growth).toBeGreaterThanOrEqual(0);
-    const falling = shape("synthetic").expected.defaults.map((a) => a.growth);
-    expect(falling.slice(0, 3)).toEqual([-20, -10, -5]);
+  it("words a euro filer's amounts in euros, and a price in another currency blocks EV (057)", () => {
+    expect(amountUnit({})).toBe("USD");
+    expect(amountUnit({ currency: "EUR" })).toBe("EUR");
+    expect(formatCell(2097429000, "USD", "EUR")).toBe("€2.10B");
+    expect(formatCell(1.22, "USD/shares", "EUR")).toBe("€1.22");
+    expect(formatCell(1.22, "USD/shares")).toBe("$1.22");
+    expect(formatCell(-0.5, "USD/shares")).toBe("-$0.50");
+    expect(formatCell(996e9, "USD", "CNY")).toBe("CN¥996.00B");
+    const euro = { ...vrt, currency: "EUR" } as ModelRun;
+    expect(modelSeries(euro, 5, ["base"])[0]!.unit).toBe("EUR");
+    const v = { ...vrt.valuation!, enterprise_value: null, ev_note: "currency", currency_mismatch: { price: "USD", figures: "EUR" } };
+    expect(evBlank(v)).toBe("no EV: the price is in USD and the figures in EUR");
   });
 });
 
-interface DefaultCase {
-  name: string;
-  years: number;
-  rows: { metric: string; period_end: string; fiscal_period: string; value: string }[];
-  expected: {
-    run_rate: { growth: number | null; margin: number | null; period: string | null };
-    defaults: { growth: number; margin: number }[];
-  };
-}
+describe("the three-case table", () => {
+  it("Vertiv FY2026E is Q1–Q3 reported plus Q4, with the TTM and the reported quarters beside the history", () => {
+    const cols = modelColumns(vrt, 6, 3);
+    expect(cols.map((c) => c.label)).toEqual(["FY2020", "FY2021", "FY2022", "FY2023", "FY2024", "FY2025", "TTM", "FY2026 Q1–Q3", "FY2026E", "FY2027E", "FY2028E"]);
+    expect(cols.find((c) => c.key === "ttm")!.sub).toBe("FY2026 Q3");
+    expect(cols.find((c) => c.key === "ytd")!.sub).toBe("reported");
+    expect(cols.find((c) => c.key === "f0")!.sub).toBe("Q1–Q3 reported + Q4");
+    const year1 = vrt.cases.base!.years[0]!;
+    expect(year1.actual!.quarters).toBe(3);
+    expect(year1.revenue).toBeCloseTo(year1.actual!.revenue! + year1.remainder!.revenue, -3);
+  });
 
-function close(a: number | null, b: number | null) {
-  if (a === null || b === null) expect(a).toBe(b);
-  else expect(a).toBeCloseTo(b, 12);
-}
+  it("Deckers FY2027E is H1 reported plus H2; a model saved before F2 says its first year is a full-year guess", () => {
+    expect(modelColumns(deck, 6, 2).map((c) => c.label).slice(-4)).toEqual(["TTM", "FY2027 H1", "FY2027E", "FY2028E"]);
+    expect(modelColumns(vrtOld, 8, 2).find((c) => c.key === "f0")!.sub).toBe("full-year guess");
+    expect(vrtOld.cases.base!.implied_remainder).not.toBeNull();
+  });
+
+  it("every line is there, with reported beside adjusted only for one-offs and organic growth only with acquired revenue", () => {
+    const keys = (r: ModelRun) => modelLines(r).map((l) => l.key);
+    expect(keys(vrt)).toEqual(["revenue", "growth", "organic", "oi", "margin", "nonop", "tax", "ni", "eps", "eps_growth", "shares", "share_change",
+      "fcf", "fcf_margin", "buybacks", "pe", "ev_revenue", "ev_ebit", "fcf_yield"]);
+    expect(keys(deck)).toEqual(expect.arrayContaining(["oi_reported", "margin_reported", "eps_reported"]));
+    expect(keys(deck)).not.toContain("organic");
+    expect(keys(nvda)).not.toContain("pe"); // no price, no valuation
+    const margin = modelLines(deck).find((l) => l.key === "margin")!;
+    expect(margin.label).toBe("Operating margin, adjusted");
+    const ytd = margin.ytd!(deck.current!) as number;
+    const reported = modelLines(deck).find((l) => l.key === "margin_reported")!.ytd!(deck.current!) as number;
+    expect(reported - ytd).toBeCloseTo(46e6 / deck.current!.actual!.revenue!, 6);
+  });
+
+  it("a split says so instead of reading as buybacks; the year to date's net income is adjusted too", () => {
+    const lines = modelLines(deck);
+    const fy2023 = deck.history.find((y) => y.fy === 2023)!;
+    const fy2022 = deck.history.find((y) => y.fy === 2022)!;
+    const change = lines.find((l) => l.key === "share_change")!;
+    expect(change.history(fy2023, 0)).toBeNull();
+    expect(change.noteOf!(fy2023)).toMatch(/a split or a merger, not buybacks/);
+    expect(lines.find((l) => l.key === "pe")!.history(fy2022, 0)).toBeNull();
+    expect(lines.find((l) => l.key === "eps")!.noteOf!(fy2022)).toMatch(/before the split or merger in FY2023/);
+    const ni = lines.find((l) => l.key === "ni")!;
+    expect(ni.ytd!(deck.current!)).toBeCloseTo(deck.current!.actual!.net_income! - 46e6 * (1 - deck.current!.actual!.income_tax! / deck.current!.actual!.pretax_income!), 0);
+    expect(defaultRules(deck, "base")[0]!.text).toMatch(/^FY2027E: H1 is reported/);
+  });
+
+  it("multiples at the user's price; no EV without a current net debt, and why", () => {
+    const pe = modelLines(vrt).find((l) => l.key === "pe")!;
+    expect(pe.forecast(vrt.cases.bull!.years[1]!, "bull", 1)).toBeCloseTo(150 / vrt.cases.bull!.years[1]!.eps_adjusted!, 6);
+    const evEbit = modelLines(deck).find((l) => l.key === "ev_ebit")!;
+    expect(evEbit.forecast(deck.cases.base!.years[0]!, "base", 0)).toBeNull();
+    expect(evBlank(deck.valuation)).toMatch(/from 2014-09-30, over 300 days/);
+    expect(evBlank(vrt.valuation)).toBeUndefined();
+  });
+
+  it("formats each unit", () => {
+    expect(formatCell(13_117_100_000, "USD")).toBe("$13.12B");
+    expect(formatCell(-783_200_000, "USD")).toBe("-$783.20M");
+    expect(formatCell(7.02, "USD/shares")).toBe("$7.02");
+    expect(formatCell(145_805_000, "shares")).toBe("145.8M");
+    expect(formatCell(24.3, "multiple")).toBe("24.3x");
+    expect(formatCell(0.2011, "ratio")).toBe("20.1%");
+    expect(formatCell("n/m", "multiple")).toBe("n/m");
+    expect(formatCell(null, "USD")).toBe("—");
+  });
+
+  it("the chart draws each case from the base year, bear and bull lighter", () => {
+    const s = modelSeries(vrt, 6, ["bear", "base", "bull"]);
+    expect(s.map((x) => x.name)).toEqual(["Revenue", "Revenue (bear)", "Revenue (base)", "Revenue (bull)", "Operating income",
+      "Operating income (bear)", "Operating income (base)", "Operating income (bull)"]);
+    expect(s.filter((x) => x.faint).map((x) => x.name)).toEqual(["Revenue (bear)", "Revenue (bull)", "Operating income (bear)", "Operating income (bull)"]);
+    expect(s[1]!.points[0]!.key).toBe(2025);
+    expect(modelSeries(nvda, 8, ["base"]).map((x) => x.name)).toEqual(["Revenue", "Revenue (forecast)", "Operating income", "Operating income (forecast)"]);
+  });
+});
+
+describe("guidance beside the year it covers", () => {
+  it("the latest release's outlook sits beside the fiscal year of the next quarter", () => {
+    expect(guidanceYear(vrtEarnings as EarningsResponse, vrt)?.fy).toBe(2026);
+    expect(guidanceYear(deckEarnings as EarningsResponse, deck)?.fy).toBe(2027);
+    expect(guidanceYear(nvdaEarnings as EarningsResponse, nvda)?.fy).toBe(2027);
+    expect(guidanceYear(null, vrt)).toBeNull();
+  });
+
+  it("a Q4 release out before its 10-K covers the year after; one older than the base year covers nothing", () => {
+    const q = (vrtEarnings as EarningsResponse).quarters[0]!;
+    const at = (period_end: string): EarningsResponse => ({ ...(vrtEarnings as EarningsResponse), quarters: [{ ...q, period_end }] });
+    expect(guidanceYear(at("2025-12-31"), vrt)?.fy).toBe(2026);
+    expect(guidanceYear(at("2026-12-31"), vrt)?.fy).toBe(2027);
+    expect(guidanceYear(at("2025-06-30"), vrt)).toBeNull();
+  });
+});
+
+describe("each default explained in one line", () => {
+  it("Vertiv: the year to date, then the run rate fading to the long run, and each rate", () => {
+    const lines = defaultRules(vrt, "base");
+    expect(lines.map((l) => l.key)).toEqual(["ytd", "growth", "nonOperating", "taxRate", "shareChange", "fcfMargin"]);
+    expect(lines[0]!.text).toBe("FY2026E: Q1–Q3 are reported ($10.24B, +39.3% on the same quarters a year earlier, at a 20.1% margin). "
+      + "Q4 starts from Q4 FY2025 ($2.88B), grown at the trailing twelve months to FY2026 Q3's +35.3% and at its 20.1% operating margin.");
+    expect(lines[1]!.text).toMatch(/^From FY2027E, growth and operating margin close half the gap each year from the trailing twelve months to FY2026 Q3/);
+    expect(lines[3]!.text).toMatch(/effective rate, 19\.8%/);
+    expect(lines.every((l) => !l.text.includes("\n"))).toBe(true);
+  });
+
+  it("NVIDIA: H2 starts from the trailing twelve months, not last year's H2 moved by this year's change", () => {
+    const lines = defaultRules(nvda, "base");
+    expect(lines[0]!.text).toMatch(/H2 starts from H2 FY2026 \(\$125\.13B\), grown at the trailing twelve months to FY2027 Q2's \+83\.4% and at its 65\.2% operating margin\.$/);
+    expect(nvda.cases.base!.defaults[0]).toMatchObject({ growth: 83.4, margin: 65.2, fcfMargin: 45.6 });
+    expect(lines.find((l) => l.key === "fcfMargin")!.text).toMatch(/; FY2027E's H2 at H2 FY2026's 45\.6%\.$/);
+  });
+
+  it("Deckers: shares down 8.4% a year, and a bear case's spread", () => {
+    const lines = defaultRules(deck, "bear");
+    expect(lines.find((l) => l.key === "shareChange")!.text).toBe(
+      "Share change (buybacks less issuance): -8.4% a year, diluted shares in FY2027 Q2 against the same quarter a year earlier.");
+    expect(lines.at(-1)!.key).toBe("spread");
+    expect(defaultRules(vrtOld, "base")[0]!.text).toMatch(/^Growth and operating margin start at the trailing twelve months/);
+  });
+
+  it("words quarters and ranges", () => {
+    expect([quartersLabel(1), quartersLabel(2), quartersLabel(3)]).toEqual(["Q1", "H1", "Q1–Q3"]);
+    expect([remainderLabel(1), remainderLabel(2), remainderLabel(3)]).toEqual(["Q2–Q4", "H2", "Q4"]);
+    expect(statLabel(0.081, 5, "CAGR")).toBe("5-yr CAGR 8.1%");
+    expect(statLabel(null, 0, "avg")).toBe("no margin history");
+    expect(parsePercent(" 12.5% ", [-100, 1000])).toBe(12.5);
+  });
+});

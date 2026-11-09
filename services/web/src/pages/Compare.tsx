@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
-import { failureReason, peers as fetchPeers, screener } from "../api";
+import { failureReason, peerCheck, peers as fetchPeers, screener } from "../api";
 import { NOT_APPLICABLE, NOT_REPORTED } from "../blanks";
 import { UNNAMED } from "../displayNames";
 import {
@@ -11,6 +11,8 @@ import {
   compareParams,
   compareRows,
   companiesOf,
+  countText,
+  isBank,
   MASKED_TITLE,
   MAX_PEERS,
   medianTitle,
@@ -32,6 +34,7 @@ import { download } from "../download";
 import { day } from "../format";
 import { go, href } from "../route";
 import { inScope, useScope } from "../scope";
+import { peerRefusal, suggestionTitle } from "../compare/peers";
 import type { Peers, Screener } from "../types";
 import { TableScroll } from "../components/TableScroll";
 
@@ -72,12 +75,15 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
   );
   const leftOut = companiesOf(asked).length - companiesOf(compare).length;
   const ids = companiesOf(compare);
-  const cols = columnsOf(compare);
   const params = useMemo(() => compareParams(compare), [compare]);
   const key = JSON.stringify(params);
   const [table, setTable] = useState<Load<Screener> | null>(null);
   const [suggested, setSuggested] = useState<Load<Peers> | null>(null);
+  const [refused, setRefused] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
+  // a bank target (035's rule, from its row) gets a bank's own columns unless some were chosen
+  const bank = table?.state === "ok" && isBank(table.data.rows.find((r) => r.company_id === compare.target));
+  const cols = columnsOf(compare, bank);
   const [chosen, setChartKey] = useState(cols[0]!);
   const [multiples, setMultiples] = useState(false);
   const [sort, setSort] = useState<CompareSort | null>(null);
@@ -122,13 +128,23 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
     embedded ? embedded.onChange({ ...compare, ...patch }) : go({ view: "compare", compare: { ...compare, ...patch } });
   const peerIds = compare.peers ?? [];
   const addPeer = (id: string) => peerIds.length < MAX_PEERS && set({ peers: [...peerIds, id] });
+  /** A picked company joins only if it has figures to compare; otherwise say why (F4: a foreign
+   * filer like Birkenstock, no XBRL yet, no annual report). An older API has no check: add it. */
+  const pickPeer = (id: string, name: string) => {
+    setRefused(null);
+    if (!compare.target) return addPeer(id);
+    peerCheck(token, compare.target, id)
+      .then((check) => (check && check.ok === false ? setRefused(peerRefusal(name, check)) : addPeer(id)))
+      .catch(() => addPeer(id));
+  };
   const removePeer = (id: string) => set({ peers: peerIds.filter((p) => p !== id) });
   const toggleColumn = (k: string) =>
     set({ cols: cols.includes(k) ? cols.filter((c) => c !== k) : COMPARE_COLUMNS.map((c) => c.key).filter((c) => c === k || cols.includes(c)) });
+  const offered = COMPARE_COLUMNS.filter((c) => !c.bank || bank || cols.includes(c.key));
 
   const rows = useMemo(
-    () => (table?.state === "ok" ? compareRows(compare, table.data.rows) : []),
-    [table, compare],
+    () => (table?.state === "ok" ? compareRows(compare, table.data.rows, bank) : []),
+    [table, compare, bank],
   );
   const stats = useMemo(() => peerStats(rows, cols), [rows, cols]);
   const sorted = useMemo(() => sortRows(rows, sort), [rows, sort]);
@@ -156,7 +172,7 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
   const exportCsv = () =>
     download(
       `comps-${target?.ticker?.toLowerCase() ?? "table"}.csv`,
-      new Blob([compareCsv(compare, rows)], { type: "text/csv" }),
+      new Blob([compareCsv(compare, rows, bank)], { type: "text/csv" }),
     );
   const chartThese = () => {
     const m = chartMetric(chartKey);
@@ -199,9 +215,15 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
             ))}
             {peerIds.length < MAX_PEERS && (
               <CompanySearch token={token} label="Add peer" placeholder="+ Add peer" exclude={ids}
-                onPick={(id) => addPeer(id)} />
+                onPick={(id, name) => pickPeer(id, name)} />
             )}
           </div>
+          {refused && (
+            <p className="notice small" role="status">
+              {refused}{" "}
+              <button className="link" onClick={() => setRefused(null)}>Dismiss</button>
+            </p>
+          )}
           {compare.target && (
             <div className="row wrap">
               <span className="faint">Suggested</span>
@@ -209,21 +231,21 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
               {suggested?.state === "error" && <span className="faint">no suggestions right now</span>}
               {suggested?.state === "ok" && candidates.length === 0 && (
                 <span className="faint">
-                  {scoped ? "no more companies in your demo share its industry" : "no more peers with the same SIC"}
+                  {scoped ? "no more companies in your demo share its industry" : "no more suggestions"}
                 </span>
               )}
               {candidates.map((p) => (
                 <button key={p.company_id} className="chip" onClick={() => addPeer(p.company_id)}
                   disabled={peerIds.length >= MAX_PEERS}
-                  title={`${p.name ?? p.company_id} · ${p.industry ?? "SIC " + (p.sic ?? "?")}` +
-                    `${p.match.revenue_band ? ` · revenue ${p.match.revenue_band}` : ""}` +
-                    `${p.access.includes("financials") ? "" : " · metadata only on your plan"}`}>
+                  title={suggestionTitle(p, suggested?.state === "ok" ? suggested.data.company.name : null)}>
                   + {p.tickers?.[0] ?? p.name ?? p.company_id}
                   {!p.access.includes("financials") && <span className="faint"> (metadata only)</span>}
                 </button>
               ))}
               {suggested?.state === "ok" && (
-                <span className="faint small" title={suggested.data.method}>same SIC, then size</span>
+                <span className="faint small" title={suggested.data.method}>
+                  {suggested.data.basis === "business" ? "by what they do (10-K Business sections)" : "same SIC, then size"}
+                </span>
               )}
             </div>
           )}
@@ -235,7 +257,7 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
           )}
           <div className="row wrap">
             <span className="faint">Columns</span>
-            {COMPARE_COLUMNS.map((c) => (
+            {offered.map((c) => (
               <label key={c.key} className="chk">
                 <input type="checkbox" checked={cols.includes(c.key)}
                   disabled={cols.includes(c.key) && cols.length === 1}
@@ -272,8 +294,8 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
         </div>
         {!ids.length ? (
           <p className="empty">
-            Pick a target company, then add peers or take the suggested ones (same SIC code, then
-            similar size). Or open a company and choose Compare.
+            Pick a target company, then add peers or take the suggested ones (companies whose 10-K
+            describes a similar business). Or open a company and choose Compare.
           </p>
         ) : table?.state === "error" ? (
           <ErrorPanel what="the comps" detail={`${table.message}. Fewer columns or peers may help`}
@@ -350,11 +372,11 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
                 ))}
                 <tr className="agg">
                   <td className="first">Peer median</td>
-                  <td className="faint" title="Peers you can read, excluding the target">{rows.filter((r) => !r.isTarget && r.readable).length} readable</td>
+                  <td className="faint" title="Each median says how many of the peers it uses; hover it for why the others are left out">n of N peers</td>
                   {cols.map((k) => (
                     <td key={k} className="n" title={medianTitle(stats[k]!)}>
                       {stats[k]!.n === 0 && stats[k]!.banks > 0 ? NOT_APPLICABLE : statText(k, stats[k]!.median)}
-                      {stats[k]!.n > 0 && stats[k]!.banks > 0 && <span className="unit"> excl. banks</span>}
+                      <span className="unit count">{countText(stats[k]!)}</span>
                     </td>
                   ))}
                   <td />

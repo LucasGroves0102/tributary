@@ -1,12 +1,21 @@
 import { displayNames } from "./format";
+import type { ModelRun } from "./models/model";
 import type {
   AgentEvent,
+  AlertForm,
+  AlertNotifications,
+  AlertSettings,
+  AlertUnread,
   Allowance,
   AuthProviders,
   PasswordSignedIn,
   Calendar,
+  Callout,
+  Components,
   DataNotes,
   DataStatus,
+  EarningsResponse,
+  EventsResponse,
   ExpectedFilings,
   Filing,
   FilingIndex,
@@ -15,10 +24,12 @@ import type {
   FormulaSeries,
   FormulaValidation,
   HistoryTurn,
+  InsiderFilings,
   LatestFiling,
   MarketConnection,
   MarketConnections,
   Me,
+  PeerCheck,
   Peers,
   Prices,
   ProjectState,
@@ -29,6 +40,7 @@ import type {
   ScreenerColumns,
   SearchResult,
   Section,
+  Sectors,
   SectionChanges,
   SectionSearch,
   SegmentRow,
@@ -46,6 +58,14 @@ import type {
   UiContext,
   Valuation,
   Watchlist,
+  RedLine,
+  RedLineOp,
+  RedLines,
+  Webhook,
+  WebhookCreated,
+  WebhookDelivery,
+  WebhookFormat,
+  TextKpis,
 } from "./types";
 
 const QUERY = "/api/query";
@@ -173,8 +193,10 @@ function send<T>(token: string, method: "PUT" | "DELETE", path: string) {
   );
 }
 
-/** A request with a JSON body (saved work). */
-function sendJson<T>(token: string, method: "POST" | "PUT" | "PATCH" | "DELETE", path: string, body?: unknown) {
+/** A request with a JSON body (saved work). `keepalive`: it outlives the page (a delete whose undo
+ * window was cut short by closing the tab). */
+function sendJson<T>(token: string, method: "POST" | "PUT" | "PATCH" | "DELETE", path: string, body?: unknown,
+  opts: { keepalive?: boolean } = {}) {
   return fetch(url(path, {}), {
     method,
     headers: {
@@ -182,6 +204,7 @@ function sendJson<T>(token: string, method: "POST" | "PUT" | "PATCH" | "DELETE",
       ...(body === undefined ? {} : { "Content-Type": "application/json" }),
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    ...(opts.keepalive ? { keepalive: true } : {}),
   }).then((r) => json<T>(r));
 }
 
@@ -222,26 +245,61 @@ export const createWorkspace = (token: string, name: string, project?: ProjectSt
   sendJson<SavedWorkspace>(token, "POST", "/v1/workspaces", project ? { name, project } : { name });
 
 /** Saves an analysis project's state over (the Query API refuses it for a plain workspace). */
-export const updateProject = (token: string, id: string, project: ProjectState) =>
-  sendJson<SavedWorkspace>(token, "PATCH", `/v1/workspaces/${enc(id)}`, { project });
+/** Steps a Query API one release older refuses in `done` (its step list is strict). */
+const NEWER_STEPS: readonly string[] = ["earnings"];
+
+/** Saves a project; refused by an older Query API for a step it doesn't know yet (a deploy rolls the
+ * web app before it), saves it again without that tick, so the rest is kept. */
+export const updateProject = async (token: string, id: string, project: ProjectState) => {
+  const save = (p: ProjectState) => sendJson<SavedWorkspace>(token, "PATCH", `/v1/workspaces/${enc(id)}`, { project: p });
+  try {
+    return await save(project);
+  } catch (e) {
+    const older = project.done.filter((s) => !NEWER_STEPS.includes(s));
+    if (!(e instanceof ApiError && e.status === 422) || older.length === project.done.length) throw e;
+    return save({ ...project, done: older });
+  }
+};
 
 export const renameWorkspace = (token: string, id: string, name: string) =>
   sendJson<SavedWorkspace>(token, "PATCH", `/v1/workspaces/${enc(id)}`, { name });
 
-export const deleteWorkspace = (token: string, id: string) =>
-  sendJson<{ deleted: boolean }>(token, "DELETE", `/v1/workspaces/${enc(id)}`);
+export const deleteWorkspace = (token: string, id: string, opts: { keepalive?: boolean } = {}) =>
+  sendJson<{ deleted: boolean }>(token, "DELETE", `/v1/workspaces/${enc(id)}`, undefined, opts);
 
 export const duplicateWorkspace = (token: string, id: string) =>
   sendJson<SavedWorkspace>(token, "POST", `/v1/workspaces/${enc(id)}/duplicate`, {});
 
 /** The state without what this app saves that a Query API one release older refuses (its state
  * models are strict): a chart layer's `display`, a screen's `issue`. Null when there is none. */
+/** The comps columns a Query API older than F4 accepts (workspaces.py CompareColumn then). */
+const OLDER_COMPARE_COLUMNS = new Set(["revenue_ttm", "revenue_growth_ttm", "gross_margin_ttm", "operating_margin_ttm",
+  "net_margin_ttm", "free_cash_flow_ttm", "fcf_margin_ttm", "net_debt_q", "debt_to_equity_q", "roe_ttm", "current_ratio_q"]);
+
 export function olderState(state: object): object | null {
   const s = state as Record<string, unknown>;
   let changed = false;
   const out: Record<string, unknown> = { ...s };
   if ("issue" in out) {
     delete out.issue;
+    changed = true;
+  }
+  // a screen's sector filter and grouping (F4)
+  for (const k of ["sector", "sector_industry"]) {
+    if (k in out) {
+      delete out[k];
+      changed = true;
+    }
+  }
+  if (typeof out.sort === "string" && out.sort.replace(/^-/, "") === "sector") {
+    delete out.sort;
+    changed = true;
+  }
+  // a comps table's bank columns (F4): an older API knows only the first eleven
+  if (Array.isArray(s.cols) && s.cols.some((c) => !OLDER_COMPARE_COLUMNS.has(c as string))) {
+    const kept = (s.cols as string[]).filter((c) => OLDER_COMPARE_COLUMNS.has(c));
+    if (kept.length) out.cols = kept;
+    else delete out.cols;
     changed = true;
   }
   if (Array.isArray(s.layers)) {
@@ -262,7 +320,7 @@ async function tolerantSave<T>(save: (state: object) => Promise<T>, state: objec
   try {
     return await save(state);
   } catch (e) {
-    const older = e instanceof ApiError && e.status === 422 && /Extra inputs are not permitted/.test(e.message) ? olderState(state) : null;
+    const older = e instanceof ApiError && e.status === 422 && /Extra inputs are not permitted|Input should be/.test(e.message) ? olderState(state) : null;
     if (!older) throw e;
     return save(older);
   }
@@ -287,8 +345,8 @@ export const updateItem = (token: string, id: string, patch: { name?: string; st
 export const duplicateItem = (token: string, id: string) =>
   sendJson<SavedItemFull>(token, "POST", `/v1/workspace-items/${enc(id)}/duplicate`, {});
 
-export const deleteItem = (token: string, id: string) =>
-  sendJson<{ deleted: boolean }>(token, "DELETE", `/v1/workspace-items/${enc(id)}`);
+export const deleteItem = (token: string, id: string, opts: { keepalive?: boolean } = {}) =>
+  sendJson<{ deleted: boolean }>(token, "DELETE", `/v1/workspace-items/${enc(id)}`, undefined, opts);
 
 export const recentWork = (token: string, limit = 8) => get<RecentWork>(token, "/v1/recent", { limit });
 
@@ -445,6 +503,10 @@ export interface SearchQuery {
   to?: string;
   limit?: number;
   offset?: number;
+  /** #145: best match first (default) or newest first; an older API ignores it and doesn't echo it */
+  sort?: "relevance" | "date";
+  /** #81: "exact" searches exactly from-to (or all dates) across every company; an older API ignores it */
+  window?: "auto" | "exact";
 }
 
 /** Full-text search over the parsed sections of companies whose filings the user can read. */
@@ -482,18 +544,70 @@ export const section = (token: string, companyId: string, key: string, accession
 export const latestFilings = (token: string, limit = 20) =>
   get<{ as_of: string; filings: LatestFiling[] }>(token, "/v1/filings/latest", { limit });
 
-/** Suggested peers of a company (same SIC, then size), with screener columns. readableOnly:
- * only companies the user can read (a demo sandbox). */
-export const peers = (token: string, companyId: string, columns: string[], limit = 10, readableOnly = false) =>
+/** Suggested peers of a company (by business since F4, else SIC and size), with screener columns.
+ * columns undefined: the API's choice (a bank's own columns for a bank; an older API's standard
+ * set): render from the answer's `columns`. readableOnly: only companies the user can read (a
+ * demo sandbox). */
+export const peers = (token: string, companyId: string, columns: string[] | undefined, limit = 10, readableOnly = false) =>
   get<Peers>(token, `/v1/companies/${companyId}/peers`, {
-    columns,
+    ...(columns ? { columns } : {}),
     limit,
     ...(readableOnly ? { access: "financials" } : {}),
   });
 
+/** May `candidateId` join the comps of `companyId`, and if not why (F4). null from an older
+ * Query API (no such route: the deploy window), then the peer is added as before. */
+export const peerCheck = (token: string, companyId: string, candidateId: string) =>
+  orNullOn404(get<PeerCheck>(token, `/v1/companies/${companyId}/peers/check/${candidateId}`));
+
+/** The open sector grouping (migration 046); null from an older Query API (no sector filter). */
+export const sectors = (token: string) => orNullOn404(get<Sectors>(token, "/v1/sectors"));
+
+/** A company's insider filings (#117, F7b); null from an API without the route (deploy window).
+ * `cursor`: a previous page's `next_cursor` (an API that gives none can't page). */
+export const insiderFilings = (token: string, companyId: string, limit = 100, cursor?: string) =>
+  orNullOn404(get<InsiderFilings>(token, `/v1/companies/${companyId}/insiders`, { limit, ...(cursor ? { cursor } : {}) }));
+
+/** What one figure is made of (F5): null from an API older than the route, or no figure there. */
+export const components = (token: string, companyId: string, metric: string, periodEnd: string, view: "quarter" | "ttm") =>
+  orNullOn404(get<Components>(token, `/v1/companies/${companyId}/components`, { metric, period_end: periodEnd, view }));
+
 /** A 10-Q/10-K's metrics vs the prior quarter and the year-ago quarter. */
 export const recap = (token: string, accessionNo: string) =>
   get<Recap>(token, `/v1/filings/${accessionNo}/recap`);
+
+/** null from a Query API one release older (no such route yet: the deploy window), else the answer. */
+function orNullOn404<T>(p: Promise<T>): Promise<T | null> {
+  return p.catch((e) => {
+    if (e instanceof ApiError && e.status === 404) return null;
+    throw e;
+  });
+}
+
+/** A model run (F2): the Query API's one copy of the maths over a model state (saved or as
+ * typed). null from a Query API one release older (no such route yet: the deploy window). */
+export const runModel = (token: string, companyId: string, state: object) =>
+  orNullOn404(sendJson<ModelRun>(token, "POST", `/v1/companies/${companyId}/model`, state));
+
+/** A save an older Query API refused for a field it doesn't know yet (its states are strict):
+ * the minute of a deploy. A model's new fields are the user's work, so the model page says to
+ * try again rather than saving without them (`olderState` leaves models alone). */
+export function refusedByOlderApi(e: unknown): boolean {
+  return e instanceof ApiError && e.status === 422 && /Extra inputs are not permitted/.test(e.message);
+}
+
+/** 8-Ks since the latest 10-Q/10-K period end, and the figures they may have made stale. */
+export const companyEvents = (token: string, companyId: string) =>
+  orNullOn404(get<EventsResponse>(token, `/v1/companies/${companyId}/events`));
+
+/** Backlog and orders as the filings state them in words (F8b), each value with its passages.
+ * null from a Query API one release older (no such route yet: the deploy window). */
+export const textKpis = (token: string, companyId: string) =>
+  orNullOn404(get<TextKpis>(token, `/v1/companies/${companyId}/text-kpis`));
+
+/** Each quarter's earnings release (8-K Item 2.02), its outlook and adjustments, newest first. */
+export const earnings = (token: string, companyId: string, quarters = 4) =>
+  orNullOn404(get<EarningsResponse>(token, `/v1/companies/${companyId}/earnings`, { quarters }));
 
 export const segments = (token: string, companyId: string, quarters = 8) =>
   get<{ as_of: string; rows: SegmentRow[] }>(token, `/v1/companies/${companyId}/segments`, { quarters });
@@ -512,9 +626,20 @@ export const segmentsOf = (
     ...(q.basis === "calendar" ? { basis: q.basis } : {}),
   });
 
+/** What a What changed request asks for (F3: `view`, `q`, `numbers`; an older API ignores them
+ * and answers without `view`). */
+export interface ChangesQuery {
+  basis?: "prior" | "year_ago";
+  view?: "reading" | "ranked";
+  q?: string;
+  numbers?: "new";
+  section?: string;
+}
+
 /** Paragraphs of Risk Factors and MD&A that changed since the comparable earlier filing. */
-export const sectionChanges = (token: string, companyId: string, accessionNo: string) =>
-  get<SectionChanges>(token, `/v1/companies/${companyId}/filings/${accessionNo}/changes`);
+export const sectionChanges = (token: string, companyId: string, accessionNo: string, q: ChangesQuery = {}) =>
+  get<SectionChanges>(token, `/v1/companies/${companyId}/filings/${accessionNo}/changes`,
+    Object.fromEntries(Object.entries(q).filter(([, v]) => v !== undefined && v !== "")) as Params);
 
 /** The next `periods` (1-4) estimated 10-Q/10-K filings (public index metadata). */
 export const expectedFilingsOf = (token: string, companyId: string, periods = 1) =>
@@ -537,9 +662,12 @@ export const financialsView = (
   basis: "fiscal" | "calendar" = "fiscal",
   /** ask why a ratio reads n/m (`not_meaningful` on each row, `not_meaningful_periods`) */
   readings = false,
+  /** view quarter: ask for the statement callouts (F5); an older API ignores it and sends none */
+  callouts = false,
 ) =>
-  withinOlderCap((older) => get<{ as_of: string; rows: FinancialRow[]; not_meaningful_periods?: NotMeaningfulPeriod[] }>(token, `/v1/companies/${companyId}/financials`, {
+  withinOlderCap((older) => get<{ as_of: string; rows: FinancialRow[]; not_meaningful_periods?: NotMeaningfulPeriod[]; callouts?: Callout[]; currency?: string; cadence?: "annual" }>(token, `/v1/companies/${companyId}/financials`, {
     ...(readings ? { readings: "true" } : {}),
+    ...(callouts ? { callouts: "true" } : {}),
     quarters: older ? OLDER_QUARTERS : quarters,
     metrics,
     view,
@@ -712,3 +840,59 @@ export async function ask(
   });
   await stream(r, onEvent);
 }
+
+// --- filing alerts (F6) ------------------------------------------------------------------------
+// An older Query API has no /v1/alerts routes (the deploy window): the bell and the pages read a
+// 404 as "not here yet" (null), never as an error.
+
+/** The bell's count; null from an API without alerts. */
+export const alertsUnread = (token: string) => orNullOn404(get<AlertUnread>(token, "/v1/alerts/unread"));
+
+export const alertNotifications = (token: string, q: { companyId?: string; limit?: number } = {}) =>
+  orNullOn404(get<AlertNotifications>(token, "/v1/alerts/notifications", {
+    ...(q.companyId ? { company_id: q.companyId } : {}),
+    ...(q.limit ? { limit: q.limit } : {}),
+  }));
+
+export const markAlertsRead = (token: string, which: { ids?: string[]; companyId?: string; all?: boolean }) =>
+  sendJson<{ marked: number }>(token, "POST", "/v1/alerts/notifications/read", {
+    ...(which.ids ? { ids: which.ids } : {}),
+    ...(which.companyId ? { company_id: which.companyId } : {}),
+    ...(which.all ? { all: true } : {}),
+  });
+
+export const alertSettings = (token: string) => orNullOn404(get<AlertSettings>(token, "/v1/alerts/settings"));
+
+/** A company's alert forms; `other8ks` only when the API offers it (`other_8k_items`): an older,
+ * strict API refuses a key it doesn't know. */
+export const putAlertForms = (token: string, companyId: string, forms: AlertForm[], other8ks?: boolean) =>
+  sendJson<{ company_id: string; forms: AlertForm[]; other_8ks?: boolean }>(token, "PUT", `/v1/alerts/settings/${companyId}`,
+    other8ks === undefined ? { forms } : { forms, other_8ks: other8ks });
+
+export const redLines = (token: string, companyId: string, evaluate = false) =>
+  orNullOn404(get<RedLines>(token, "/v1/alerts/red-lines", { company_id: companyId, ...(evaluate ? { evaluate: "true" } : {}) }));
+
+export const addRedLine = (token: string, body: { company_id: string; label: string; formula: string; view: "quarter" | "ttm"; op: RedLineOp; threshold: string }) =>
+  sendJson<{ red_line: RedLine }>(token, "POST", "/v1/alerts/red-lines", body);
+
+export const deleteRedLine = (token: string, ruleId: string) =>
+  sendJson<{ deleted: boolean }>(token, "DELETE", `/v1/alerts/red-lines/${enc(ruleId)}`);
+
+/** The URL goes only in this request's body; the answer carries the signing secret this once. */
+export const addWebhook = (token: string, url: string, format?: WebhookFormat) =>
+  sendJson<WebhookCreated>(token, "POST", "/v1/alerts/webhooks", { url, ...(format ? { format } : {}) });
+
+export const setWebhookEnabled = (token: string, id: string, enabled: boolean) =>
+  sendJson<{ webhook: Webhook }>(token, "PATCH", `/v1/alerts/webhooks/${enc(id)}`, { enabled });
+
+export const rotateWebhook = (token: string, id: string) =>
+  sendJson<WebhookCreated>(token, "POST", `/v1/alerts/webhooks/${enc(id)}/rotate`);
+
+export const deleteWebhook = (token: string, id: string) =>
+  sendJson<{ deleted: boolean }>(token, "DELETE", `/v1/alerts/webhooks/${enc(id)}`);
+
+export const testWebhook = (token: string, id: string) =>
+  sendJson<{ delivery: WebhookDelivery | null; ok: boolean }>(token, "POST", `/v1/alerts/webhooks/${enc(id)}/test`);
+
+export const webhookDeliveries = (token: string, webhookId?: string) =>
+  get<{ deliveries: WebhookDelivery[]; retries: number[] }>(token, "/v1/alerts/deliveries", webhookId ? { webhook_id: webhookId } : {});

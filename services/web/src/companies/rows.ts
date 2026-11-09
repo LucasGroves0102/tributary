@@ -32,6 +32,11 @@ export interface ScreenRow {
   exchange: string | null;
   industry: string | null;
   sic: string | null;
+  /** 046's grouping (null from an older API or without a SIC) */
+  sector: string | null;
+  sectorIndustry: string | null;
+  /** companies filing one combined 10-K with it (#135) */
+  coRegistrants: { company_id: string; name: string; filed_by: string | null }[];
   fye: string | null;
   readable: boolean;
   cells: Record<string, Cell>;
@@ -72,6 +77,9 @@ export function screenRow(r: ScreenerRow, columns: ColumnSpec[] = DEFAULT_SPECS)
     exchange: r.exchanges?.[0] ?? null,
     industry: r.industry,
     sic: r.sic,
+    sector: r.sector ?? null,
+    sectorIndustry: r.sector_industry ?? null,
+    coRegistrants: (r.co_registrants ?? []).map((c) => ({ company_id: c.company_id, name: c.name, filed_by: c.filed_by })),
     fye: fyeMonth(r.fiscal_year_end),
     readable,
     cells,

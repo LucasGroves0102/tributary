@@ -12,6 +12,8 @@ how to read it: not applicable, not meaningful, old, or just behind the company'
 The rules are in 035, once; this module only asks. Sorts and range filters take the comparable
 value, `k<i>`, which is NULL for all of them but "behind": the exact figure stays in `v<i>`, so a
 209,828% gross margin is still returned, with its reason, and doesn't win a sort or pass a filter.
+An amount in a currency other than the dollar reads `other_currency` (migration 056) and says its
+unit: shown in that currency, never sorted, filtered or averaged with dollar figures.
 
 The query has two stages, so its cost follows what the screen asks for and not how many
 companies the caller can read: the values filters and the sort need are read for every company
@@ -44,7 +46,9 @@ META_SORT = {"name": "b.name", "company_id": "b.company_id", "sic": "lower(b.ind
              # the month the fiscal year ends in (migration 042), so J&J's "0103" sorts as December
              "fiscal_year_end": "silver.fiscal_year_end_month(b.fiscal_year_end)",
              "filer_category": "b.filer_category",
-             "state_of_incorporation": "b.state_of_incorporation"}
+             "state_of_incorporation": "b.state_of_incorporation",
+             # sector, then industry within it (migration 046): the screener's grouping
+             "sector": "lower(b.sector || ' / ' || b.sector_industry)"}
 OPS = {"gt": ">", "gte": ">=", "lt": "<", "lte": "<="}
 FilerCategory = Literal["large_accelerated", "accelerated", "non_accelerated"]
 FILER_CATEGORIES: tuple[str, ...] = get_args(FilerCategory)
@@ -91,6 +95,8 @@ class Screen:
     exchanges: list[str] = field(default_factory=list)
     fye_months: list[int] = field(default_factory=list)
     filer_categories: list[str] = field(default_factory=list)
+    sectors: list[str] = field(default_factory=list)      # 046's sectors, exact names
+    sector_industries: list[str] = field(default_factory=list)  # and industries
     issue: str | None = None               # a data check's name: companies with a finding of it
     filters: list[Filter] = field(default_factory=list)
     sort: str = "-revenue_ttm"
@@ -173,7 +179,7 @@ def _values(slots: dict[str, int], company: str, sic: str, latest: str,
                     f"CASE WHEN x{i}.period_end IS NOT NULL THEN jsonb_build_object("
                     f"'period_end', x{i}.period_end, 'accession_no', x{i}.accession_no,"
                     f" 'form', x{i}.form, 'filed', x{i}.filed) END AS src{i}",
-                    f"x{i}.status AS st{i}", f"x{i}.reason AS why{i}",
+                    f"x{i}.status AS st{i}", f"x{i}.reason AS why{i}", f"x{i}.unit AS u{i}",
                     f"CASE WHEN x{i}.status IS NULL OR x{i}.status = 'behind'"
                     f" THEN x{i}.value END AS k{i}"]
         joins.append(f"LEFT JOIN LATERAL gold.latest_reading({company}, %(s{i})s, %(m{i})s,"
@@ -266,6 +272,12 @@ def compile_screen(s: Screen, granted: list[str] | None) -> Compiled:
     if s.filer_categories:
         meta.append("gold.filer_category(c.filer_categories) = ANY(%(filer_categories)s)")
         params["filer_categories"] = s.filer_categories
+    if s.sectors:
+        meta.append("ss.sector = ANY(%(sectors)s)")
+        params["sectors"] = s.sectors
+    if s.sector_industries:
+        meta.append("ss.industry = ANY(%(sector_industries)s)")
+        params["sector_industries"] = s.sector_industries
     if s.issue:
         # under RLS on ops.quality_findings: a company the caller can't read never matches, so
         # this says nothing about it (the public status page has the counts only)
@@ -287,21 +299,33 @@ def compile_screen(s: Screen, granted: list[str] | None) -> Compiled:
     direction = "DESC" if descending else "ASC"
     order = f"v.k{slots[sort_key]}" if sort_key in COLUMNS else META_SORT[sort_key]
     final = order.replace("v.k", "r.k").replace("b.", "r.")
-    ranked_outputs = "".join(f", v.v{i}, v.src{i}, v.st{i}, v.why{i}, v.k{i}"
+    ranked_outputs = "".join(f", v.v{i}, v.src{i}, v.st{i}, v.why{i}, v.u{i}, v.k{i}"
                              for i in ranked.values())
-    page_outputs = "".join(f", w.v{i}, w.src{i}, w.st{i}, w.why{i}" for i in page.values())
+    page_outputs = "".join(f", w.v{i}, w.src{i}, w.st{i}, w.why{i}, w.u{i}"
+                           for i in page.values())
     # the latest period is read once per row: for every company when a sort or filter needs it,
     # else only for the page
     early = bool(ranked)
     page_latest = "r.latest_period" if early else "a.latest"
+    # 046's sector, by range of SIC codes: for every company only when a sector filter or sort
+    # needs it, else for the page's rows after the LIMIT. Joined for the whole catalog it cost
+    # ~70 ms a call, and the range join's estimate (19 rows a company) misled the plan above it.
+    sector_early = bool(s.sectors or s.sector_industries or sort_key == "sector")
+    sector_cols = ", ss.sector, ss.industry AS sector_industry"
+    sector_join = "LEFT JOIN silver.sic_sectors ss ON {}.sic BETWEEN ss.sic_from AND ss.sic_to"
+    base_sector, base_join = ((sector_cols, sector_join.format("c")) if sector_early
+                              else ("", ""))
+    page_sector, page_join = (("", "") if sector_early
+                              else (sector_cols, sector_join.format("r")))
     sql = f"""
 WITH base AS (
     SELECT c.company_id, c.name, c.tickers, c.exchanges, c.sic,
            c.sic_description AS industry, c.fiscal_year_end,
            gold.filer_category(c.filer_categories) AS filer_category, c.filer_categories,
            c.state_of_incorporation,
-           gold.not_applicable_metrics(c.company_id, c.sic) AS not_applicable
+           gold.not_applicable_metrics(c.company_id, c.sic) AS not_applicable{base_sector}
     FROM silver.companies c
+    {base_join}
     WHERE {' AND '.join(meta)}
 ),
 ranked AS (
@@ -314,10 +338,11 @@ ranked AS (
     ORDER BY {order} {direction} NULLS LAST, b.company_id
     LIMIT %(limit)s OFFSET %(offset)s
 )
-SELECT r.*{'' if early else ', a.latest AS latest_period'}{page_outputs}
+SELECT r.*{'' if early else ', a.latest AS latest_period'}{page_outputs}{page_sector}
 FROM ranked r
 {'' if early else _latest('r.company_id', granted)}
 LEFT JOIN LATERAL {_values(page, 'r.company_id', 'r.sic', page_latest, granted)} w ON true
+{page_join}
 ORDER BY {final} {direction} NULLS LAST, r.company_id
 """
     return Compiled(sql, params, list(dict.fromkeys(s.columns)), slots)
@@ -329,13 +354,19 @@ def shape(row: dict, compiled: Compiled, financials: bool) -> dict:
     out = {k: row[k] for k in ("company_id", "name", "tickers", "exchanges", "sic", "industry",
                                 "fiscal_year_end", "filer_category", "filer_categories",
                                 "state_of_incorporation")}
+    # additive (046): the open sector/industry grouping over the SIC code, public like it
+    out["sector"] = row.get("sector")
+    out["sector_industry"] = row.get("sector_industry")
     out["values"] = {k: row[f"v{compiled.slots[k]}"] if financials else None
                      for k in compiled.columns}
     out["sources"] = {k: row[f"src{compiled.slots[k]}"] if financials else None
                       for k in compiled.columns}
-    # additive: how to read each value, only where there's something to say (035)
+    # additive: how to read each value, only where there's something to say (035); an amount in
+    # another currency (056) also says which, so it can be shown in it
     out["readings"] = {} if not financials else {
-        k: {"status": row[f"st{compiled.slots[k]}"], "reason": row.get(f"why{compiled.slots[k]}")}
+        k: {"status": row[f"st{compiled.slots[k]}"], "reason": row.get(f"why{compiled.slots[k]}"),
+            **({"unit": row.get(f"u{compiled.slots[k]}")}
+               if row[f"st{compiled.slots[k]}"] == "other_currency" else {})}
         for k in compiled.columns if row.get(f"st{compiled.slots[k]}")}
     out["latest_period"] = row.get("latest_period") if financials else None
     # from the public SIC, so also for a company the caller can't read

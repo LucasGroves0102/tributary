@@ -26,6 +26,38 @@ still reaches a note (ops.check_financials' rule: fix causes, never hide finding
   as `unit_change`.
 - A one-quarter spike is `seasonal` when the same quarter peaks in another year too (Deckers'
   December operating cash flow), instead of being called a scale error, and drops to info.
+
+Statement callouts (F5, `callouts`, on /financials with callouts=true): the same tests placed on
+the statement's own cells, so a figure far outside its series is said where it is read. A quarter
+is called out when, against the quarters beside it, it is
+- an `outlier`: ops.check_financials' (041) outlier test, OUTLIER_FACTOR times the larger of the two
+  quarters beside it, which agree (same sign, within NEIGHBOUR_SPREAD of each other); `seasonal`
+  when it is the company's habit, by the test above;
+- a `sign` change: 041's sign_flip test (the quarters beside it share a sign, it has the other), on
+  041's cost metrics and operating cash flow, where a change of sign is news. Not on the cash flow
+  subtotals or the change in cash, which change sign as a matter of course.
+The newest quarter has no quarter after it, so 041 never tests it; here it is tested against the two
+quarters before it (`edge`), which is how a step change shows (NVIDIA's dividends: 6,047M after 243M
+and 242M). A callout says what the figure is next to, never that it is wrong: every one is as filed.
+
+Ranked, grouped and summarised (F7a, M2: the notes cried wolf; on hermes 2026-11-09 the median
+company had 34 findings, the 90th percentile 114, Vertiv 24 segment-sum findings for one revenue
+series). No finding is dropped; what changes is how many notes they make and which come first:
+- Repeats are one note: findings of one company, kind, metric (and segment axis, rule, unit
+  change, possible split, season) are one note per series, dated by its newest, with `repeats`,
+  the first and last period and up to MAX_PERIODS period ends in `detail`, and the newest filings
+  (MAX_FILINGS).
+- Each note has a `rank`: `attention`, `note` or `minor`, from a score (`_score`): severity
+  (error 2, warning 1, info 0) + materiality (1: a restatement or annual mismatch of
+  MATERIAL_CHANGE or more, any 10x spike, an impossible value) + recency (+1 within RECENT_YEARS
+  of today, -1 older than OLD_YEARS) + a headline metric (HEADLINE: revenue, earnings, cash flow,
+  debt, cash, equity). 4 or more is attention, 3 a note, less minor. Some kinds have a fixed
+  place: filings missing from the figures are always attention; derived quarters, stock-based
+  compensation benefits (050), unit changes and seasonal peaks are minor; segment sums and
+  figures gold left out (mistagged, net debt gap) are at most a note.
+- Notes come attention first, then note, then minor, each newest first (severity breaks ties); a
+  group's rank is its most important member's. Both routes add `summary`: notes per rank and the
+  findings behind them, so a page can say "3 need attention" before listing 40 minor ones.
 """
 
 from collections.abc import Callable, Iterable
@@ -58,6 +90,15 @@ SPLIT_EVENT_DAYS = 550  # restatements of one split arrive with comparatives for
 UNIT_FACTORS = (1e3, 1e6)
 PEAK = 3  # another year's quarter this many times its neighbours: the spike is that quarter's habit
 SEASON_YEARS = 2
+# ops.check_financials' outlier test (migration 041), for the statement callouts: a quarter at least
+# OUTLIER_FACTOR times the larger of the quarters beside it, which agree within NEIGHBOUR_SPREAD
+OUTLIER_FACTOR = 10
+NEIGHBOUR_SPREAD = 2
+# 041's sign_flip metrics (costs, where the sign is a convention) and operating cash flow (F5)
+SIGN_METRICS = frozenset({
+    "cost_of_revenue", "research_and_development", "sga", "interest_expense", "capex",
+    "depreciation_amortization", "stock_based_compensation", "dividends_paid", "share_buybacks",
+    "operating_cash_flow"})
 
 # detail keys that name a filing, and the role the UI shows for each
 FILING_KEYS = {"accession_no": "source", "annual_accession": "annual",
@@ -136,6 +177,49 @@ def _is_outlier_seasonal(series: list[tuple[date, float]], at: date) -> bool:
     return years >= SEASON_YEARS
 
 
+def is_outlier(value: float, a: float, b: float) -> bool:
+    """041's outlier test: the quarters beside it agree (same sign, the larger at most
+    NEIGHBOUR_SPREAD times the smaller) and it is at least OUTLIER_FACTOR times the larger."""
+    if a == 0 or b == 0 or (a > 0) != (b > 0):
+        return False
+    big, small = max(abs(a), abs(b)), min(abs(a), abs(b))
+    return big <= NEIGHBOUR_SPREAD * small and abs(value) >= OUTLIER_FACTOR * big
+
+
+def is_sign_change(value: float, a: float, b: float) -> bool:
+    """041's sign_flip test: none is zero, the quarters beside it share a sign, it has the other."""
+    return value != 0 and a != 0 and b != 0 and (a > 0) == (b > 0) and (value > 0) != (a > 0)
+
+
+def callouts(metric: str, series: list[tuple[date, float]]) -> list[dict]:
+    """The statement callouts of one metric's quarters, oldest first (module docstring): interior
+    quarters against the quarters either side, the newest against the two before it."""
+    out: list[dict] = []
+    n = len(series)
+    for i, (end, value) in enumerate(series):
+        if 0 < i < n - 1:
+            beside, edge = (series[i - 1], series[i + 1]), False
+        elif i == n - 1 and n >= 3:
+            beside, edge = (series[i - 2], series[i - 1]), True
+        else:
+            continue
+        a, b = beside[0][1], beside[1][1]
+        if is_outlier(value, a, b):
+            kind = "outlier"
+        elif metric in SIGN_METRICS and is_sign_change(value, a, b):
+            kind = "sign"
+        else:
+            continue
+        out.append({
+            "metric": metric, "period_end": end, "kind": kind, "edge": edge,
+            "value": value,
+            "factor": round(abs(value) / max(abs(a), abs(b)), 1) if kind == "outlier" else None,
+            "beside": [{"period_end": d, "value": v} for d, v in beside],
+            "seasonal": kind == "outlier" and _is_outlier_seasonal(series, end),
+        })
+    return out
+
+
 def _split_events(findings: list[dict]) -> list[dict]:
     """Stock splits established by the findings themselves: for one company, restatements whose
     share counts moved by a clean ratio and whose EPS moved by its reciprocal in the same period and
@@ -203,10 +287,12 @@ def _plain_restatement(r: dict) -> dict:
 
 def shape(findings: list[dict], derived: list[dict], behind: list[dict],
           filings: dict[str, dict],
-          series: dict[tuple[str, str], list[tuple[date, float]]] | None = None) -> list[dict]:
-    """One list of notes, newest first: findings as checked (a stock split's as one note), a
-    derived-quarters note per metric, and a companyfacts-behind note per company (listing every
-    missing filing). `series`: (company, metric) → its quarters, oldest first, for the outliers."""
+          series: dict[tuple[str, str], list[tuple[date, float]]] | None = None,
+          now: datetime | None = None) -> list[dict]:
+    """One list of notes, most important first (module docstring, M2): findings as checked (a
+    stock split's as one note, a series' repeats as one), a derived-quarters note per metric, and
+    a companyfacts-behind note per company (listing every missing filing), each with its `rank`.
+    `series`: (company, metric) → its quarters, oldest first, for the outliers."""
 
     def cite(role: str, acc: str) -> dict:
         f = filings.get(acc, {})
@@ -279,11 +365,121 @@ def shape(findings: list[dict], derived: list[dict], behind: list[dict],
                          "filing_url": filing_url(r["cik"], r["accession_no"])}
                         for r in sorted(rows, key=lambda r: r["filing_date"], reverse=True)],
         })
+    today = (now or datetime.now(UTC)).date()
     for n in notes:
         n["date"] = note_date(n)
-    notes.sort(key=lambda n: (n["date"] or date.min, _SEVERITY.get(n["severity"], 0)),
-               reverse=True)
-    return notes
+        n["rank"] = rank(n, today)
+    return order(group_repeats(notes))
+
+
+# --- ranking and grouping (module docstring, M2) ---
+RANKS = ("attention", "note", "minor")
+HEADLINE = frozenset({
+    "revenue", "gross_profit", "operating_income", "net_income", "eps_basic", "eps_diluted",
+    "operating_cash_flow", "free_cash_flow", "capex", "cash", "long_term_debt",
+    "long_term_debt_current", "net_debt", "total_assets", "total_liabilities",
+    "stockholders_equity"})
+MATERIAL_CHANGE = 0.05  # a restatement or a year's quarters off by 5% or more
+RECENT_YEARS, OLD_YEARS = 2, 5
+MAX_PERIODS, MAX_FILINGS = 60, 6
+ALWAYS_MINOR = frozenset({DERIVED})
+AT_MOST_NOTE = frozenset({"mistagged_fact", "net_debt_gap", "calendar_collision",
+                          "overlapping_quarters"})
+
+
+def _years_ago(d: date | None, today: date) -> float | None:
+    return None if d is None else (today - d).days / 365.25
+
+
+def _score(n: dict, today: date) -> int:
+    d = n["detail"]
+    score = {"error": 2, "warning": 1}.get(n["severity"], 0)
+    change = d.get("change") if n["kind"] == "restatement" else d.get("deviation")
+    if n["kind"] in ("outlier", "impossible_value") or (
+            isinstance(change, int | float) and abs(change) >= MATERIAL_CHANGE
+            and not d.get("unit_change")):
+        score += 1
+    age = _years_ago(n.get("date"), today)
+    if age is not None:
+        score += 1 if age <= RECENT_YEARS else -1 if age > OLD_YEARS else 0
+    if n["metric"] is None or n["metric"] in HEADLINE:
+        score += 1
+    return score
+
+
+def rank(n: dict, today: date) -> str:
+    """attention | note | minor for one note (module docstring)."""
+    kind, d = n["kind"], n["detail"]
+    if kind == BEHIND:
+        return "attention"
+    if kind in ALWAYS_MINOR or d.get("seasonal") is True or d.get("rule") == "benefit" \
+            or d.get("unit_change") is True:
+        return "minor"
+    score = _score(n, today)
+    r = "attention" if score >= 4 else "note" if score >= 3 else "minor"
+    if (kind in AT_MOST_NOTE or kind.startswith("segment_sum_")) and r == "attention":
+        return "note"
+    return r
+
+
+def _group_key(n: dict) -> tuple | None:
+    if n["kind"] in (BEHIND, SPLIT, DERIVED):
+        return None  # already one note each
+    d = n["detail"]
+    return (n["company_id"], n["kind"], n["metric"], d.get("axis"), d.get("rule"),
+            d.get("unit_change"), d.get("may_be_split"), d.get("seasonal"))
+
+
+def group_repeats(notes: list[dict]) -> list[dict]:
+    """Findings of one series as one note (module docstring): the newest note's text and
+    detail, plus `repeats`, `first_period_end`, `last_period_end` and `periods` when there are
+    several; the group's most important rank and highest severity."""
+    groups: dict[tuple, list[dict]] = {}
+    out: list[dict] = []
+    for n in notes:
+        key = _group_key(n)
+        if key is None:
+            out.append(n)
+        else:
+            groups.setdefault(key, []).append(n)
+    for members in groups.values():
+        if len(members) == 1:
+            out.append(members[0])
+            continue
+        members.sort(key=lambda m: (m["date"] or date.min, _SEVERITY.get(m["severity"], 0)),
+                     reverse=True)
+        head = dict(members[0])
+        ends = sorted({m["period_end"] for m in members if m["period_end"]})
+        filings: list[dict] = []
+        for m in members:
+            for f in m["filings"]:
+                if all(f["accession_no"] != g["accession_no"] for g in filings):
+                    filings.append(f)
+        head["detail"] = {**members[0]["detail"], "repeats": len(members),
+                          "first_period_end": _iso(ends[0]) if ends else None,
+                          "last_period_end": _iso(ends[-1]) if ends else None,
+                          "periods": [_iso(e) for e in ends[-MAX_PERIODS:]]}
+        head["filings"] = filings[:MAX_FILINGS]
+        head["severity"] = max((m["severity"] for m in members),
+                               key=lambda v: _SEVERITY.get(v, 0))
+        head["rank"] = min((m["rank"] for m in members), key=RANKS.index)
+        out.append(head)
+    return out
+
+
+def order(notes: list[dict]) -> list[dict]:
+    """Attention, note, minor; each newest first, then by severity."""
+    return sorted(notes, key=lambda n: (-RANKS.index(n.get("rank", "note")),
+                                        n["date"] or date.min,
+                                        _SEVERITY.get(n["severity"], 0)), reverse=True)
+
+
+def summary(notes: list[dict], findings: int) -> dict:
+    """Notes per rank, and the findings and other notes behind them."""
+    out: dict[str, int] = {r: 0 for r in RANKS}
+    for n in notes:
+        out[n.get("rank", "note")] += 1
+    return {**out, "findings": findings}
 
 
 COMPANY_FINDINGS = 1000  # newest findings per company page (restatements can be many)
@@ -298,7 +494,7 @@ def add_notes_routes(app: FastAPI, *, store: Store, current_user: Callable[..., 
     User = Annotated[str, Depends(current_user)]
 
     def load(user_id: str, company_ids: list[str] | None, derived: bool,
-             limit: int) -> tuple[list[dict], Any]:
+             limit: int) -> tuple[list[dict], Any, int]:
         raw = store.data_notes(user_id, company_ids, derived, limit)
         accs = sorted({a for r in raw["findings"]
                        for _, a in accessions_of({"detail": r["detail"]})}
@@ -308,7 +504,7 @@ def add_notes_routes(app: FastAPI, *, store: Store, current_user: Callable[..., 
         series = store.metric_series(user_id, sorted({r["company_id"] for r in spikes}),
                                      sorted({r["metric"] for r in spikes})) if spikes else {}
         return (shape(raw["findings"], raw["derived"], raw["behind"], filings, series),
-                raw["checked_at"])
+                raw["checked_at"], len(raw["findings"]))
 
     @app.get("/v1/companies/{company_id}/data-notes", response_model=dict)
     def company_notes(user_id: User, company_id: CompanyId) -> dict:
@@ -316,9 +512,9 @@ def add_notes_routes(app: FastAPI, *, store: Store, current_user: Callable[..., 
         restatements, derived quarters, filings the SEC's XBRL API doesn't reflect yet. Each
         names its filings. Needs the financials tier (the notes are about values)."""
         require(user_id, "financials", company_id)
-        notes, checked = load(user_id, [company_id], True, COMPANY_FINDINGS)
+        notes, checked, findings = load(user_id, [company_id], True, COMPANY_FINDINGS)
         return {"company_id": company_id, "as_of": _now(), "checked_at": checked,
-                "notes": notes}
+                "summary": summary(notes, findings), "notes": notes}
 
     @app.get("/v1/data-notes", response_model=dict)
     def recent_notes(user_id: User,
@@ -339,13 +535,14 @@ def add_notes_routes(app: FastAPI, *, store: Store, current_user: Callable[..., 
             granted = sorted(c for c in set(company_id) if "financials" in access.get(c, set()))
         # several findings can read as one note, so ask for enough to fill the page
         raw_limit = max(limit * SPLIT_ROOM, MIN_RAW_FINDINGS)
-        notes, checked = load(user_id, granted, False, raw_limit) if granted != [] else ([], None)
+        notes, checked, findings = (load(user_id, granted, False, raw_limit) if granted != []
+                                    else ([], None, 0))
         # layer 1 on every note, also when no id list went into the query
         notes = [n for n in notes if "financials" in access.get(n["company_id"], set())]
         companies = len(granted) if granted is not None else sum(
             "financials" in tiers for tiers in access.values())
         return {"as_of": _now(), "checked_at": checked, "companies": companies,
-                "notes": notes[:limit]}
+                "summary": summary(notes, findings), "notes": notes[:limit]}
 
 
 def _as_date(v: Any) -> date | None:

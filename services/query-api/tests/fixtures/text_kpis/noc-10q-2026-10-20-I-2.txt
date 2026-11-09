@@ -1,0 +1,11 @@
+BACKLOG
+Backlog consisted of the following as of September 30, 2026 and December 31, 2025:
+September 30, 2026 December 31, 2025
+$ in millions Funded Unfunded Total
+Backlog Total
+Backlog % Change in 2026
+Aeronautics Systems $ 15,511 $ 11,288 $ 26,799 $ 23,052 16 %
+Defense Systems 10,294 26,181 36,475 27,796 31 %
+Mission Systems 14,442 5,533 19,975 18,632 7 %
+Space Systems 9,848 16,500 26,348 26,201 1 %
+Total backlog $ 50,095 $ 59,502 $ 109,597 $ 95,681 15 %

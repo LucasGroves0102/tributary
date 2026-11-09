@@ -240,6 +240,19 @@ it("searches from the box: the words go into the address", async () => {
   expect(paths().some((u) => u.pathname === "/api/query/v1/search" && u.searchParams.get("q") === "margins")).toBe(true);
 });
 
+it("#80: Exact phrase quotes the words, and then only the phrase is marked", async () => {
+  await render("II-1A", { q: "our products" });
+  // plain words: each word, wherever it is (all of them are in the passage)
+  expect([...container.querySelectorAll(".section-text mark")].map((m) => m.textContent)).toEqual(["Our", "our", "products"]);
+  const box = [...container.querySelectorAll<HTMLInputElement>(".reader-tools input[type=checkbox]")][0]!;
+  await act(async () => box.click());
+  for (let i = 0; i < 3; i++) await act(async () => {});
+  expect(window.location.hash).toBe(`#/filing/${NVDA}/${ACC}/II-1A?q=%22our+products%22`);
+  // "our data center products" isn't the phrase: nothing is marked
+  expect(container.querySelectorAll(".section-text mark")).toHaveLength(0);
+  expect(paths().some((u) => u.pathname === "/api/query/v1/search" && u.searchParams.get("q") === '"our products"')).toBe(true);
+});
+
 it("falls back to the first section for an unknown key, and explains a denial", async () => {
   await render("7");
   expect(container.textContent).toContain("This filing has no section 7; showing I-2.");

@@ -191,6 +191,38 @@ def test_renamed_members_are_merged(conn):
     ]
 
 
+def test_q4_pairs_a_restated_year_with_nine_months_of_its_own_cycle(conn):
+    """053 (Riley #88): JPMorgan recast FY2022 in its FY2024 10-K after merging Commercial Banking
+    into CIB; FY2022 Q4 was that recast year less the old nine months ($22.13B beside $12B
+    quarters). A restated year now pairs with the nine months of its own reporting cycle. A year
+    reported once differently and later as first reported (Vertiv's FY2022 regions) isn't
+    restated: the latest value, as before."""
+    tag = "us-gaap:Revenues"
+    nine, year = ("2022-01-01", "2022-09-30"), ("2022-01-01", "2022-12-31")
+    filings = [  # accession, form, filed, CIB nine months / year, Americas nine months / year
+        ("9000000003-22-000001", "10-Q", date(2022, 11, 1), ("37500", None), ("1895", None)),
+        ("9000000003-23-000001", "10-K", date(2023, 2, 20), (None, "48000"), (None, "2729")),
+        ("9000000003-23-000002", "10-Q", date(2023, 11, 1), ("37500", None), ("1895", None)),
+        ("9000000003-24-000001", "10-K", date(2024, 2, 20), (None, "48000"), (None, "2773")),
+        ("9000000003-25-000001", "10-K", date(2025, 2, 14), (None, "59600"), (None, "2729")),
+    ]
+    for accession, form, filed, cib, americas in filings:
+        facts = []
+        for member, (n, y) in (("x:CibMember", cib), ("x:AmericasMember", americas)):
+            if n:
+                facts.append((tag, member, *nine, n))
+            if y:
+                facts.append((tag, member, *year, y))
+        add_document(conn, accession, X, form, filed, mini_doc(X, facts))
+    segments.run(conn)
+    q4 = {m: [r for r in gold(conn, X, m) if r[1] == date(2022, 12, 31)][0]
+          for m in ("x:CibMember", "x:AmericasMember")}
+    assert q4["x:CibMember"][2:5] == (Decimal(48000 - 37500), "derived",
+                                      ["9000000003-23-000002", "9000000003-24-000001"])
+    assert q4["x:AmericasMember"][2:5] == (Decimal(2729 - 1895), "derived",
+                                           ["9000000003-23-000002", "9000000003-25-000001"])
+
+
 def test_ttm_sums_four_contiguous_quarters(conn):
     tag = "us-gaap:Revenues"
     quarters = [("2025-01-01", "2025-03-31"), ("2025-04-01", "2025-06-30"),

@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import type { Readable } from "../access";
+import { NotificationList } from "../alerts/Notifications";
+import { RedLines } from "../alerts/RedLines";
+import { useAlertsUnread } from "../alerts/useAlerts";
 import { ApiError, expectedFilingsOf, failureReason, getItem, screener, updateProject, workspace as fetchWorkspace } from "../api";
 import type { ChartState } from "../chart/model";
 import { header, HEADER_COLUMNS, listingLine } from "../company/data";
 import { leftText, useAllowanceContext } from "../assistant/useAllowance";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { day } from "../format";
-import { DEFAULT_HISTORY, DEFAULT_YEARS, modelState } from "../models/model";
 import { ModelPage } from "../models/ModelPage";
-import { newModelAssumptions } from "../models/useHistory";
+import { newModelState } from "../models/useModelRun";
 import { go, href } from "../route";
 import { textHash } from "../thesis/check";
 import { CheckPanel } from "../thesis/CheckPanel";
@@ -44,7 +46,7 @@ import {
   type Facts,
   type PinTarget,
 } from "./project";
-import { Business, Numbers, PeersStep, WhatChanged } from "./Steps";
+import { Business, EarningsStep, Numbers, PeersStep, WhatChanged } from "./Steps";
 
 interface Props {
   token: string;
@@ -261,6 +263,7 @@ function Project({ token, user, projectId, step: asked, itemId, saved, readable,
   const modelId = (itemId && models.some((m) => m.item_id === itemId) ? itemId : models[0]?.item_id) ?? null;
   // the header row says what the viewer reads; until it arrives, ask (the API decides: 403 shows as no access)
   const canFilings = row ? access.includes("filings") : true;
+  const canFinancials = row ? access.includes("financials") : true;
   const common = { token, companyId, name, ticker, label };
 
   const pane = (key: ProjectStep, body: ReactNode) => {
@@ -364,8 +367,10 @@ function Project({ token, user, projectId, step: asked, itemId, saved, readable,
                 onNotes={(notes) => void saveProject({ ...project, notes }, "notes")} />
             ))}
             {pane("numbers", (
-              <Numbers {...common} saved={saved} projectId={projectId} charts={charts} onOpenChart={onOpenChart} onSaved={itemsChanged} />
+              <Numbers {...common} saved={saved} projectId={projectId} charts={charts} onOpenChart={onOpenChart} onSaved={itemsChanged}
+                canReadFilings={canFilings} />
             ))}
+            {pane("earnings", <EarningsStep {...common} canReadFilings={canFilings} canReadFinancials={canFinancials} />)}
             {pane("changes", <WhatChanged {...common} canReadFilings={canFilings} />)}
             {pane("peers", (
               <PeersStep {...common} project={project} saved={saved} projectId={projectId} onSaved={itemsChanged}
@@ -389,7 +394,7 @@ function Project({ token, user, projectId, step: asked, itemId, saved, readable,
               }} />
             ))}
             {pane("monitor", (
-              <Monitor token={token} companyId={companyId} projectId={projectId} thesisId={thesisId} status={thesisStatus}
+              <Monitor token={token} companyId={companyId} name={name} projectId={projectId} thesisId={thesisId} status={thesisStatus}
                 checks={checks} label={label} onQuote={(q) => {
                   goStep("thesis");
                   window.setTimeout(() => bridge.current?.showQuote(q), 0);
@@ -445,7 +450,7 @@ function ModelStep({ token, companyId, ticker, models, modelId, saved, projectId
     setBusy(true);
     setError(null);
     try {
-      const state = modelState({ companyId, historyYears: DEFAULT_HISTORY, assumptions: await newModelAssumptions(token, companyId, DEFAULT_YEARS) });
+      const state = await newModelState(token, companyId);
       const item = await saved.create("model", `${ticker} model`.slice(0, 120), state, { workspaceId: projectId });
       onChanged();
       go({ view: "analysis", projectId, step: "model", itemId: item.item_id });
@@ -460,9 +465,10 @@ function ModelStep({ token, companyId, ticker, models, modelId, saved, projectId
       <section className="card">
         <div className="card-b">
           <p>
-            A revenue-first model: the company's fiscal years of revenue and operating income from its filings, then your
-            growth and margin per forecast year, as base, bear and bull cases. It starts at {ticker}'s trailing-twelve-month
-            growth and operating margin, fading each year toward its long-run rate; change any of it.
+            A model from the company's filings: its fiscal years and this year's reported quarters, then your growth and
+            margin per forecast year with net income, EPS, share count and free cash flow below them, as base, bear and bull
+            cases side by side. This year starts from its reported quarters, later years from {ticker}'s trailing-twelve-month
+            growth and margin fading toward its long-run rate; change any of it.
           </p>
           <button className="btn primary" disabled={busy} onClick={() => void create()}>{busy ? "Creating…" : "Create the model"}</button>
           {error && <p className="err small" role="alert">{error}</p>}
@@ -513,10 +519,49 @@ function useRecheckReason(token: string, companyId: string, checks: ReturnType<t
   return null;
 }
 
-/** Step 7: Check my thesis (the shared check, beside the project's thesis) and where the last
- * check stands against the filing index (Revisit): a newer 10-K/10-Q offers a re-check, and
- * otherwise the step says which filing the last check read. Checks run when the user asks. */
-function Monitor({ token, companyId, projectId, thesisId, status, checks, label, onQuote }: {
+/** Step 8: what the company files from now on and whether it crosses the user's red lines (F6,
+ * #154: the filing alerts the guide promised, for this company, with the alerts job's last check),
+ * then Check my thesis (the shared check, beside the project's thesis) and where the last check
+ * stands against the filing index (Revisit): a newer 10-K/10-Q offers a re-check. Checks run when
+ * the user asks; alerts arrive by themselves. */
+function Monitor(props: Parameters<typeof ThesisMonitor>[0] & { name: string }) {
+  const { token, companyId, name } = props;
+  const unread = useAlertsUnread(token);
+  const check = unread?.last_check ?? null;
+  return (
+    <>
+      <section className="card monitor-alerts" aria-labelledby="monitor-alerts-h">
+        <div className="card-h wrap">
+          <h3 id="monitor-alerts-h">New filings</h3>
+          <span className="sub">
+            10-K, 10-Q and material 8-Ks of {name} since you started following it, checked every 10 minutes
+            {check ? ` · last checked ${new Date(check.checked_at).toLocaleString()}` : ""}
+          </span>
+          <span className="grow" />
+          <a className="btn sm ghost" href={href({ view: "settings" })}>Alert settings</a>
+        </div>
+        <NotificationList token={token} companyId={companyId} limit={10} empty={
+          <>No new filings since you started following {name}. When it files a 10-K, 10-Q or a material 8-K it shows here, and in the bell
+            at the top, with its key figures and your red lines below checked on it.</>
+        } />
+      </section>
+      <section className="card monitor-redlines" aria-labelledby="monitor-redlines-h">
+        <div className="card-h wrap">
+          <h3 id="monitor-redlines-h">Red lines</h3>
+          <span className="sub">your rules on {name}'s figures: shown now on the latest figures, and checked on each new 10-K and 10-Q</span>
+        </div>
+        <div className="card-b">
+          <RedLines token={token} companyId={companyId} name={name} />
+        </div>
+      </section>
+      <h3 className="step-sub">Thesis check</h3>
+      <ThesisMonitor {...props} />
+    </>
+  );
+}
+
+/** Check my thesis against the filings, with the Revisit notice (B7). */
+function ThesisMonitor({ token, companyId, projectId, thesisId, status, checks, label, onQuote }: {
   token: string;
   companyId: string;
   projectId: string;
@@ -546,7 +591,7 @@ function Monitor({ token, companyId, projectId, thesisId, status, checks, label,
   if (!thesisId) {
     return (
       <p className="empty card">
-        Nothing to monitor yet: <a href={href({ view: "analysis", projectId, step: "thesis" })}>write the thesis</a> first. Then
+        No thesis to check yet: <a href={href({ view: "analysis", projectId, step: "thesis" })}>write the thesis</a> first. Then
         check it here; when the company files a newer 10-K or 10-Q than your last check read, this step says so.
       </p>
     );

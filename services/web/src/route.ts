@@ -7,7 +7,7 @@ import { parseSearch, searchQuery, type SearchState } from "./search/state";
 import type { ProjectStep } from "./types";
 
 /** An analysis project's guided steps, in order (analysis/project.ts STEPS has their labels). */
-export const PROJECT_STEPS: readonly ProjectStep[] = ["business", "numbers", "changes", "peers", "model", "thesis", "monitor"];
+export const PROJECT_STEPS: readonly ProjectStep[] = ["business", "numbers", "earnings", "changes", "peers", "model", "thesis", "monitor"];
 const STEP_SET = new Set<string>(PROJECT_STEPS);
 /** steps whose saved item can be named in the route (#/analysis/{id}/model/{item}) */
 const ITEM_STEPS = new Set<string>(["model", "thesis"]);
@@ -15,6 +15,7 @@ const ITEM_STEPS = new Set<string>(["model", "thesis"]);
 /** The company page's tabs, in order, with their labels. */
 export const COMPANY_TABS = [
   ["overview", "Overview"],
+  ["earnings", "Earnings"],
   ["statements", "Statements"],
   ["revenue", "Revenue"],
   ["segments", "Segments"],
@@ -37,6 +38,8 @@ export type Route =
       tab?: CompanyTab;
       /** the Statements tab's choices, in the address so they can be linked */
       statements?: StatementView;
+      /** the Filings tab with What changed open on this 10-K/10-Q (an alert's link) */
+      changes?: string;
     }
   | {
       view: "filing";
@@ -56,8 +59,10 @@ export type Route =
   | { view: "about" }
   /** how fresh, complete and checked the data is; public (shown signed out too) */
   | { view: "status" }
-  /** Settings → Connections: the user's own market-data key ("Connect your data") */
+  /** Settings: alerts (forms per company, webhooks) and the user's own market-data key */
   | { view: "settings" }
+  /** filing alerts: new 10-K/10-Q/8-K of watched and analysed companies, newest first */
+  | { view: "alerts" }
   /** one saved workspace: its items and reports, "Write a report" */
   | { view: "workspace"; workspaceId: string }
   /** a report the assistant wrote (a workspace item of kind report) */
@@ -90,7 +95,7 @@ const ACCESSION = /^\d{10}-\d{2}-\d{6}$/;
 /** Section keys as the Query API takes them: 10-K "1A", 10-Q "II-1A", 8-K "2.02", "EX-99.1". */
 export const SECTION = /^[A-Z0-9.?-]{1,8}$/;
 const MAX_Q = 200;
-const SIMPLE = new Set(["chart", "ask", "about", "status", "settings"]);
+const SIMPLE = new Set(["chart", "ask", "about", "status", "settings", "alerts"]);
 
 /** "#/company/0001045810" → route; anything unrecognized is Home. Companies keeps its
  * screener filters in a query ("#/companies?band=1b-10b"), Compare its comps
@@ -110,7 +115,7 @@ export function parse(hash: string): Route {
     const search = parseSearch(query);
     return search ? { view, search } : { view };
   }
-  if (view && SIMPLE.has(view)) return { view: view as "chart" | "ask" | "about" | "status" | "settings" };
+  if (view && SIMPLE.has(view)) return { view: view as "chart" | "ask" | "about" | "status" | "settings" | "alerts" };
   if (view === "explore") return { view: "companies" }; // links from before the v3 shell
   if (view === "analysis") {
     if (!a || !ID.test(a)) {
@@ -128,11 +133,13 @@ export function parse(hash: string): Route {
   if (view === "company" && CIK.test(a ?? "")) {
     if (!b || b === "overview" || !TABS.has(b)) return { view: "company", companyId: a! };
     const statements = b === "statements" ? parseStatementView(query) : {};
+    const changes = b === "filings" ? new URLSearchParams(query).get("changes") : null;
     return {
       view: "company",
       companyId: a!,
       tab: b as CompanyTab,
       ...(Object.keys(statements).length ? { statements } : {}),
+      ...(changes && ACCESSION.test(changes) ? { changes } : {}),
     };
   }
   if (view === "filing" && CIK.test(a ?? "") && ACCESSION.test(b ?? "")) {
@@ -177,7 +184,8 @@ export function href(route: Route): string {
     case "model":
       return `#/${route.view}/${encodeURIComponent(route.itemId)}`;
     case "company": {
-      const q = route.tab === "statements" && route.statements ? statementQuery(route.statements) : "";
+      const q = route.tab === "statements" && route.statements ? statementQuery(route.statements)
+        : route.tab === "filings" && route.changes ? `changes=${route.changes}` : "";
       return `#/company/${route.companyId}` + (route.tab && route.tab !== "overview" ? `/${route.tab}` : "") + (q ? `?${q}` : "");
     }
     case "filing": {

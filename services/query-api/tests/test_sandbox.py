@@ -56,6 +56,9 @@ class FakeStore:
     def financials(self, user_id, company_id, *args):
         return []
 
+    def cadence(self, user_id, company_id):
+        return "quarterly"
+
 
 class FakeSandboxes:
     """Same rules as AppSandboxes, in memory; `grants` is what authz-sync would derive."""

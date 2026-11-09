@@ -13,6 +13,7 @@ import {
   priorComparable,
   searchTerms,
   snippetRuns,
+  wordStem,
 } from "./text";
 
 describe("paragraphs", () => {
@@ -58,6 +59,25 @@ describe("search terms and highlighting", () => {
 
   it("turns the API's « » snippet marks into runs", () => {
     expect(snippetRuns("new «export» «controls» … end")).toEqual(["new ", { mark: "export" }, " ", { mark: "controls" }, " … end"]);
+  });
+
+  it("#80: a phrase marks its words together, as stemmed search matched them, never one alone", () => {
+    const text = "the export control rules, then controls to restrict chips; export-controls; Export Controls.";
+    expect(highlight(text, ["export controls"]).filter((r) => typeof r !== "string")).toEqual([
+      { mark: "export control" }, { mark: "export-controls" }, { mark: "Export Controls" },
+    ]);
+    // plain words still mark each word on its own (all of them must be in the passage, not together)
+    expect(countMatches(text, ["export", "controls"])).toBe(7);
+    expect(wordStem("controls")).toBe("control");
+    expect(wordStem("companies")).toBe("compan");
+    expect(wordStem("uses")).toBe("uses"); // never under 4 letters
+    expect(wordStem("business")).toBe("business");
+  });
+
+  it("#80: with a phrase in the query the snippet is marked like the reader, not by ts_headline's every word", () => {
+    const snippet = "the «export» «control» rules … «controls» to restrict … «export» licences";
+    expect(snippetRuns(snippet, ["export controls"]).filter((r) => typeof r !== "string")).toEqual([{ mark: "export control" }]);
+    expect(snippetRuns(snippet, ["export", "controls"])).toEqual(snippetRuns(snippet));
   });
 });
 

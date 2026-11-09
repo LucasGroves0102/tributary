@@ -35,6 +35,15 @@ describe("money", () => {
     expect(money(1.05, "USD/shares")).toBe("$1.05");
     expect(money(-0.4, "USD/shares")).toBe("-$0.40");
   });
+
+  it("shows another currency as its symbol or its code, never as dollars (migration 056)", () => {
+    expect(money(2097429000, "EUR")).toBe("€2.10B");
+    expect(money(1.87, "EUR/shares")).toBe("€1.87");
+    expect(money(-1.2e9, "CAD")).toBe("-CAD 1.20B");
+    expect(moneyRow([4.94e9, 1.1e9], "EUR")).toEqual(["€4.94B", "€1.10B"]);
+    expect(moneyRow([4.94e9, null], "BRL")).toEqual(["BRL 4.94B", null]);
+    expect(money(3, "shares")).toBe("$3.00"); // as before: not a currency
+  });
 });
 
 it("formats ratios, growth and dates", () => {

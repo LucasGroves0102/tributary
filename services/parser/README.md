@@ -79,6 +79,46 @@ Config (env): `DATABASE_URL` (required), `KAFKA_BOOTSTRAP_SERVERS` (default `loc
 `parser-backfill` for the [document crawl](../doc-fetcher/README.md#document-crawl), so crawled
 documents are parsed by a separate consumer and never queue ahead of live filings.
 
+## Section titles (rule 10)
+
+`python-5` / `rust-5` clean the stored `title` and nothing else (text, offsets, keys and which
+heading is kept are rules 1-9's; the audit's M4): leading separators and invisible marks go ("‑
+Exhibits", "| Risk Factors", an LRM, ", “Regulation FD Disclosure”"), a quoted or cross-referencing
+title keeps what's between its quotes (Deckers' Item 7, ', “Management’s Discussion …,” of our
+Annual' → the title), dot leaders go, and on a 10-K or 10-Q a title cut where its line wrapped
+("MANAGEMENT’S") takes the following lines while they continue one of the standard item titles of
+`TITLES_10K` / `TITLES_10Q` (at most 3 lines of at most 120 characters). Measured on production's
+stored titles (2026-11-09; the rule re-derived from each section's own first lines): a 0.5%
+random sample changes 181 of 8,106 titles (2.2%; about 44,000 of 1.97M), all wrapped titles
+completed; of the 1,980 titles starting with punctuation other than "[", "(" or "{", 1,968 change
+and 109 that were only punctuation become empty (the web app then names the section from its key).
+"[Reserved]" (13,878 titles) is a real title and stays. An 8-K whose kept heading is a sentence
+(", including Exhibit 99.1, is furnished …") keeps the sentence without its comma: the heading
+itself is in the text, which rule 10 doesn't change.
+
+Existing rows change only when re-parsed (`make reparse`, or the crawl outbox for some documents);
+a reparse rewrites the sections' rows and so their `parsed_at`, which makes `parser-index` recompute
+their search passages and diffs. New filings get clean titles as soon as both parsers are deployed.
+
+## Tables in the text
+
+`html_to_text` (rule 1) ends every block element, `<tr>` included, with a newline and every cell with
+a space, so a table row is one line ("Total assets $ 206,803 $ 111,601"; a label whose `<td>` holds a
+`<p>` puts its figures on the next line). The web reader reads tables back from that
+(`services/web/src/reader/blocks.ts`), and leaves out page numbers and "Table of Contents" lines,
+without a reparse. Changing how cells or rows are written changes every stored offset (citations,
+the search index, diffs, peers' mentions): don't, unless all of them are rebuilt.
+
+What a parser-side change could add, if it's ever wanted (F7b measured, not done): marking cell
+boundaries with a tab instead of a space keeps every offset (one character for one) and would let the
+reader split cells exactly, but needs `make reparse` of all ~340,000 stored documents (both parsers;
+production serves parser-rs rows, so the Rust build must match first), then `parser-index` to rebuild
+the search index and diffs and `parser-peers` for mentions; dropping page debris from the text would
+change offsets and needs the same. Parsing itself is cheap (parser-rs README benchmark: a 10-K 8 ms
+median in Rust, 71 ms in Python, parse only); the cost is reading and gunzipping ~338,000 documents
+(~1.3 GB stored at the crawl's ratios), rewriting ~2M section rows and rebuilding the search index
+(~12M passages) and diffs: hours on hermes, and every cached citation offset moves.
+
 ## Section diffs and search index (`parser-index`)
 
 A batch job in the same image (`filing_parser/index.py`, migration 021) that turns parsed
@@ -116,9 +156,48 @@ Cost on a sample of 78 real filings (10 companies, 12.8 MB of section text): 3 s
 section text when the GIN index is freshly built (tsvectors ~1x, GIN 0.25x, b-trees 0.04x); the
 GIN index grows to ~0.5-0.7x under incremental inserts, so REINDEX it after a bulk load.
 
+## Peers by business (`parser-peers`)
+
+A weekly batch job in the same image (`filing_parser/business.py`, its docstring is the spec;
+migration 047) that compares what companies say they do. For every company with financials it
+reads Item 1 (Business) of its latest 10-K from the last three years that has a usable one (at
+least 3,000 characters and not mis-parsed: Intel's, GE's and McDonald's are cross-references, so no profile),
+turns the first 80,000 characters into words and two-word phrases (stop words, places and
+human-capital words removed, simple singulars), and weights them TF-IDF: terms in 20 to 25% of the
+documents, the company's own name and corporate-structure phrases (SPAC mergers, share classes)
+dropped, the 400 heaviest kept and normalised. Then:
+
+- `gold.business_profiles`: the filing and section each profile came from, its most distinctive terms;
+- `gold.business_peers`: each company's 60 most similar companies (cosine), with the shared terms
+  that add the most, so the [Query API](../query-api/README.md#peers) can say why;
+- `gold.business_mentions`: other companies its Item 1 names in a sentence about competition (SEC
+  names and former names, normalised like `silver.normalize_name`; a one-word name counts only
+  capitalised and when it isn't an ordinary word), with the sentence's offsets to cite. Vertiv's
+  names Eaton and Johnson Controls.
+
+Everything is replaced in one transaction per run (readers see old or new); one run at a time
+(advisory lock). Cost on hermes' 4,888 usable Item 1s of 2026-11-09, run locally: 79 s, 406 MB
+peak, 293,280 peer rows and 4,166 mentions, 60 MB with indexes; the read itself took 6 s on hermes.
+No TF-IDF library: the standard library only, no paid embeddings, no external calls.
+
+How the settings were chosen: precision at 10 against hand-written peer lists for nine companies
+(VRT, DECK, NVDA, JPM, RCKY, KO, UNH, HD, XOM), on the full corpus, through the Query API's ranking.
+A minimum document frequency of 20 scored 47 of 90, 10 scored 45, 5 scored 44; 250 vs 400 terms and
+40,000 vs 80,000 characters moved it by at most one. XOM scores 1: Exxon's Item 1 is 6,600
+characters, mostly pointers to the rest of its 10-K.
+
+```bash
+parser-peers   # DATABASE_URL; no options
+```
+
+Helm: CronJob `business-peers` (Sundays 05:30); run it once after the deploy that adds migration 047.
+
 ## Tests
 
-`pytest services/parser`: `test_sections.py` parses real NVIDIA 10-K, 10-Q and 8-K documents
+`pytest services/parser`: `test_business.py` runs the peers rules on the openings of ten real 10-K
+Item 1 sections (`tests/fixtures/business`, hermes 2026-11-09: Vertiv, Eaton, nVent, Deckers, Crocs,
+Nike, JPMorgan, Bank of America, Intel's cross-reference, Microchip's mis-parse);
+`test_business_db.py` runs `parser-peers` on them in Postgres (rerun replaces, stub skipped, RLS); `test_sections.py` parses real NVIDIA 10-K, 10-Q and 8-K documents
 (`tests/fixtures/*.htm.gz`), three real Q3 2026 10-Qs with titled but unnumbered items for rule 9
 (`moh-`, `eix-`, `tnet-10-Q.htm.gz`: Molina, Edison International, TriNet; the hidden inline-XBRL
 header is emptied to save space, the extracted text is unchanged), plus small synthetic cases for

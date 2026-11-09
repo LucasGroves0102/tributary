@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 
 import { ACC, fin, NVDA, nvdaRow } from "../fixtures";
@@ -5,6 +7,8 @@ import type { Recap, RecapValue, SegmentRow } from "../types";
 import {
   eightKItems,
   figuresBehind,
+  FINANCE_ARMS,
+  financeArmNote,
   filingHeadings,
   fiscalYear,
   parsedNote,
@@ -51,7 +55,7 @@ describe("header and key stats", () => {
   it("names the company from public metadata", () => {
     expect(header(nvdaRow())).toEqual({
       name: "Nvidia", tickers: ["NVDA"], exchanges: ["Nasdaq"], industry: "Semiconductors & Related Devices",
-      sic: "3674", fye: "January", filer: "Large accelerated", state: "DE",
+      sic: "3674", fye: "January", filer: "Large accelerated", state: "DE", currency: null,
     });
   });
 
@@ -59,6 +63,27 @@ describe("header and key stats", () => {
     expect(recapAccession(nvdaRow())).toBe(ACC);
     expect(recapAccession(nvdaRow({ sources: { revenue_q: { ...SRC, form: "8-K" } } }))).toBeNull();
     expect(recapAccession(nvdaRow({ sources: {} }))).toBeNull();
+  });
+});
+
+describe("a company reporting in euros (migration 056)", () => {
+  const eur = (metric: string, end: string, value: string, fiscal: string) =>
+    ({ ...fin(metric, end, value, fiscal), unit: metric === "eps_diluted" ? "EUR/shares" : "EUR" });
+
+  it("its statements read in euros and say so", () => {
+    const t = metricTable([eur("revenue", "2025-09-30", "2097429000", "FY2025 Q4"), eur("eps_diluted", "2025-09-30", "1.87", "FY2025 Q4")],
+      STATEMENTS.is.rows, "q");
+    expect(t.currency).toBe("EUR");
+    expect(t.rows[0]!.cells[0]).toMatchObject({ text: "€2.10B" });
+    expect(t.rows[1]!.cells[0]).toMatchObject({ text: "€1.87" });
+    expect(metricTable([fin("revenue", "2026-07-26", "46743000000", "FY2027 Q2")], STATEMENTS.is.rows, "q").currency).toBeUndefined();
+  });
+
+  it("its header and key stats name the currency", () => {
+    const row = nvdaRow({ values: { revenue_ttm: "2097429000" }, readings: { revenue_ttm: { status: "other_currency", unit: "EUR", reason: "reported in EUR" } } });
+    expect(header(row).currency).toBe("EUR");
+    expect(keyStats(row).find((s) => s.key === "revenue_ttm")!.text).toBe("€2.10B");
+    expect(header(nvdaRow()).currency).toBeNull();
   });
 });
 
@@ -381,6 +406,36 @@ describe("segment shares", () => {
     expect(plain!.rows[0]!.share).toBeCloseTo(0.75);
   });
 
+  it("#171: the filer's All Other is a last row, only in quarters where it and the segments make the total", () => {
+    // NVIDIA's operating income as filed (production, 2026-11-09): in FY2025 Q3 the reconciling member is
+    // All Other (22,081 + 1,502 - 1,714 = 21,869, the statement's figure); in FY2027 Q2 it carries the
+    // segments' total (66,595) and doesn't tie, so it isn't shown as All Other
+    const op = (axis: SegmentRow["axis"], member: string, label: string, end: string, value: string): SegmentRow => ({
+      ...row(member, label, value), axis, metric: "operating_income", period_end: end,
+    });
+    const rows = [
+      op("business_segment", "nvda:ComputeAndNetworkingSegmentMember", "Compute and Networking", "2024-10-27", "22081000000"),
+      op("business_segment", "nvda:GraphicsSegmentMember", "Graphics", "2024-10-27", "1502000000"),
+      op("reconciliation", "us-gaap:CorporateNonSegmentMember", "Corporate", "2024-10-27", "-1714000000"),
+      op("business_segment", "nvda:ComputeAndNetworkingSegmentMember", "Compute and Networking", "2026-07-26", "62696000000"),
+      op("business_segment", "nvda:GraphicsSegmentMember", "Graphics", "2026-07-26", "3899000000"),
+      op("reconciliation", "us-gaap:CorporateNonSegmentMember", "Corporate", "2026-07-26", "66595000000"),
+    ];
+    const totals = [fin("operating_income", "2024-10-27", "21869000000", "FY2025 Q3"), fin("operating_income", "2026-07-26", "63734000000", "FY2027 Q2")];
+    const [t] = segmentTables(rows, totals);
+    expect(t!.rows.map((r) => r.label)).toEqual(["Compute and Networking", "Graphics", "All other"]);
+    const other = t!.rows.at(-1)!;
+    expect(other.reconciling).toBe(true);
+    expect(other.cells.map((c) => c?.text ?? null)).toEqual(["-$1.71B", null]);
+    expect(other.cells[0]!.title).toContain("reported outside the segments as Corporate");
+    expect(other.share).toBeNull();
+    // without the consolidated figure nothing can tie: no row
+    expect(segmentTables(rows)[0]!.rows.map((r) => r.label)).toEqual(["Compute and Networking", "Graphics"]);
+    // a reconciling member that's zero where it ties (NVIDIA's revenue) isn't a row either
+    const rev = rows.map((r) => ({ ...r, metric: "revenue", value: r.axis === "reconciliation" ? "0" : r.value }));
+    expect(segmentTables(rev, [fin("revenue", "2024-10-27", "23583000000", "FY2025 Q3")])[0]!.rows.some((r) => r.reconciling)).toBe(false);
+  });
+
   it("a member bigger than reported revenue isn't a share: the two aren't on one basis", () => {
     const [t] = segmentTables([row("x:A", "A", "900000000"), row("x:B", "B", "20000000")], [fin("revenue", "2026-07-26", "114000000", "FY2026 Q3")]);
     expect(t!.rows[0]!.shareTooBig).toBe(true);
@@ -469,5 +524,21 @@ describe("what a statement's own lines can't say", () => {
     const csv = financialsCsv(rows, table(rows, "is"), "quarter");
     expect(csv).not.toContain("other_items");
     expect(csv).toContain("net_income");
+  });
+});
+
+describe("debt that includes a finance arm (migration 055)", () => {
+  it("Ford's and GM's pages say their net debt includes Ford Credit's and GM Financial's", () => {
+    expect(financeArmNote("0000037996", "Ford Motor")).toBe("Ford Motor's debt and net debt are consolidated: they include " +
+      "Ford Credit's borrowings, which fund its loans and leases to dealers and customers, as well as the automotive " +
+      "business's own debt. The 10-K shows the two separately in its segment information.");
+    expect(financeArmNote("0001467858", "General Motors")).toContain("they include GM Financial's borrowings");
+    expect(financeArmNote(NVDA, "Nvidia")).toBeNull();
+  });
+
+  it("names exactly the companies whose debt 055 sums with a finance member", () => {
+    const sql = readFileSync(`${process.cwd()}/../../db/migrations/055_filing_xbrl_facts.sql`, "utf8");
+    const summed = new Set([...sql.matchAll(/\('(\d{10})', '(?:DebtCurrent|LongTermDebt\w*)\[[^\]]*(?:FordCredit|GmFinancial)Member/g)].map((m) => m[1]));
+    expect([...summed].sort()).toEqual(Object.keys(FINANCE_ARMS).sort());
   });
 });

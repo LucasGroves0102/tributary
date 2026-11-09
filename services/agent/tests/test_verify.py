@@ -1,4 +1,6 @@
 import json
+import re
+from pathlib import Path
 
 import pytest
 
@@ -260,3 +262,47 @@ def test_the_search_echo_of_a_query_is_not_evidence():
     figs, _ = statuses("Revenue was $46.7B; Data Center revenue was $41.1 billion.", [search],
                        {Q2})
     assert figs == {"$46.7B": "unverified", "$41.1 billion": "quoted"}
+
+
+BIRK = "0001977102"
+BIRK_10K = "0001977102-25-000032"
+# Birkenstock's FY2025 gold rows as /financials answers after 056 (b6-runbook F8a's canary):
+# amounts in euros, `currency` on the answer, net debt with its inputs
+BIRKENSTOCK = json.dumps({"company_id": BIRK, "currency": "EUR", "rows": [
+    {"metric": "revenue", "period_end": "2025-09-30", "value": "2097429000", "unit": "EUR",
+     "citation": {"accession_no": BIRK_10K}},
+    {"metric": "net_debt", "period_end": "2025-09-30", "value": "816076000", "unit": "EUR",
+     "inputs": {"long_term_debt": "1128010000", "long_term_debt_current": "17133000",
+                "cash": "329067000"}, "citation": {"accession_no": BIRK_10K}},
+    {"metric": "revenue_growth", "period_end": "2025-09-30", "value": "0.161", "unit": "ratio",
+     "inputs": {"revenue_year_ago": "1805000000"}, "citation": {"accession_no": BIRK_10K}}]})
+
+
+def test_a_dollar_figure_never_verifies_on_another_currency():
+    """F8b: "$2,097M" said about Birkenstock's €2,097M is not verified (nor its inputs, nor a
+    difference of euro rows); written without "$" it matches as before; NVIDIA's dollars too."""
+    figs, v = statuses("Revenue was $2,097M (€2,097M), 2,097 million; net debt $816M, debt of "
+                       "$1,128M less cash $329M, up $292M on $1,805M.",
+                       [BIRKENSTOCK], {BIRK_10K})
+    assert figs == {"$2,097M": "unverified", "2,097 million": "verified", "$816M": "unverified",
+                    "$1,128M": "unverified", "$329M": "unverified", "$292M": "unverified",
+                    "$1,805M": "unverified"}
+    assert not v.ok
+    # beside a dollar company's rows, its own figures verify as before
+    figs, _ = statuses("NVIDIA's revenue was $96.2B; Birkenstock's 2,097 million.",
+                       [REVENUE, BIRKENSTOCK], CITED | {BIRK_10K})
+    assert figs == {"$96.2B": "verified", "2,097 million": "verified"}
+
+
+def test_the_recorded_suites_hold_only_dollar_rows():
+    """The guard above runs only when a row is in another currency: every row the recorded
+    replays hold is in USD, so they verify exactly as before (and stay at 97)."""
+    root = Path(__file__).resolve().parents[3] / "tests"
+    units: set[str] = set()
+    files = [*root.glob("adversarial/recordings/*.json"), *root.glob("citations/recordings/*.json")]
+    assert len(files) > 50
+    for f in files:
+        text = f.read_text()
+        units |= set(re.findall(r'unit\\*"\s*:\s*\\*"([A-Za-z/]+)', text))
+        assert not re.search(r'currency\\*"\s*:', text), f
+    assert units <= {"USD", "USD/shares", "ratio", "shares", "pure"}, units

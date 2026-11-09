@@ -1,6 +1,8 @@
+import { bellLabel } from "../alerts/alerts";
 import { UNNAMED } from "../companies/directory";
 import { href, NAV, type Route } from "../route";
 import type { Theme } from "../theme";
+import type { AlertUnread } from "../types";
 
 interface Props {
   route: Route;
@@ -24,6 +26,8 @@ interface Props {
   /** narrow screens: open or close the sidebar drawer */
   onMenu?: () => void;
   menuOpen?: boolean;
+  /** filing alerts' unread count (F6): undefined while it loads, null without alerts (no bell) */
+  alerts?: AlertUnread | null;
 }
 
 export function TopBar(props: Props) {
@@ -77,6 +81,18 @@ export function TopBar(props: Props) {
             <span className="faint">Signed in to</span> {user}
           </span>
         )
+      )}
+      {props.alerts && (
+        <a className={props.alerts.unread ? "btn ghost sm bell on" : "btn ghost sm bell"} href={href({ view: "alerts" })}
+          aria-label={bellLabel(props.alerts.unread)} title={bellLabel(props.alerts.unread)}
+          aria-current={route.view === "alerts" ? "page" : undefined}>
+          <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M8 1.5a4 4 0 0 0-4 4v2.6L2.6 11h10.8L12 8.1V5.5a4 4 0 0 0-4-4zM6.3 12.5a1.8 1.8 0 0 0 3.4 0"
+              fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" strokeLinecap="round" />
+          </svg>
+          <span className="bell-word">Alerts</span>
+          {props.alerts.unread > 0 && <span className="count" aria-hidden="true">{props.alerts.unread > 99 ? "99+" : props.alerts.unread}</span>}
+        </a>
       )}
       <button className="btn ghost sm" onClick={props.onTheme}>
         {theme === "dark" ? "Light" : "Dark"}
@@ -133,6 +149,7 @@ function Breadcrumb({
   const label = route.view === "about" ? "What Tributary covers"
     : route.view === "status" ? "Data status"
     : route.view === "settings" ? "Settings"
+    : route.view === "alerts" ? "Alerts"
     : route.view === "workspace" ? "Workspace"
     : route.view === "report" ? "Report"
     : route.view === "thesis" ? "Thesis"

@@ -38,8 +38,9 @@ spec:
     demo:
       enabled: false
     # doc-crawler stays on after the 5-year crawl (finished 2026-10-22): every CRAWL_PLAN_HOURS it
-    # queues new 10-K/10-Q/8-K filings of every operating company, while the live doc-fetcher only
-    # covers tracked companies. Scaling it to 0 stops documents for everyone else.
+    # queues what the live doc-fetcher leaves (amendments, daily-index filings, other 8-Ks, fetch
+    # errors); doc-fetcher stores operating companies' new 10-K/10-Q/material 8-Ks within minutes
+    # since 2026-11-09. Scaling the crawler to 0 stops that catch-up.
     services:
       parser-backfill:
         replicas: 1

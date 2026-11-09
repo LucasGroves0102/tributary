@@ -1,0 +1,33 @@
+Item 1. Financial Statements
+MICROCHIP TECHNOLOGY INCORPORATED AND SUBSIDIARIES
+CONSOLIDATED BALANCE SHEETS
+(in millions, except share and per share amounts)
+ASSETS
+March 31,
+2026 2025
+Cash and cash equivalents $ 240.3 $ 771.7
+Accounts receivable, net 894.7 689.7
+Inventories 1,035.4 1,293.5
+Other current assets 207.2 236.4
+Total current assets 2,377.6 2,991.3
+Property, plant and equipment, net 1,106.7 1,183.7
+Goodwill 6,695.5 6,684.8
+Intangible assets, net 2,033.4 2,389.0
+Long-term deferred tax assets 1,792.5 1,728.1
+Other assets 364.4 397.7
+Total assets $ 14,370.1 $ 15,374.6
+LIABILITIES AND STOCKHOLDERS' EQUITY
+Accounts payable $ 205.6 $ 160.6
+Accrued liabilities 930.7 994.5
+Total current liabilities 1,136.3 1,155.1
+Long-term debt 5,496.4 5,630.4
+Long-term income tax payable 570.9 633.4
+Long-term deferred tax liability 25.1 33.8
+Other long-term liabilities 709.0 843.6
+Stockholders' equity:
+Preferred stock, $0.001 par value per share; authorized 5,000,000 shares; 7.50% Series A mandatory convertible preferred stock, 1,485,000 shares issued and outstanding at March 31, 2026 and March 31, 2025, with a liquidation preference of $1,000 per share, or $1,485.0 million in the aggregate
+— —
+Common stock, $0.001 par value per share; authorized 900,000,000 shares; 578,423,967 shares issued and 542,079,011 shares outstanding at March 31, 2026; 577,996,915 shares issued and 538,704,604 shares outstanding at March 31, 2025
+0.6 0.6
+Additional paid-in capital 4,071.5 3,909.9
+Common stock he

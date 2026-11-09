@@ -32,7 +32,12 @@ page. Every data table is a `components/TableScroll`: a table that doesn't fit s
 are off screen on each side and moves to them, shows a shadow on an edge with more beyond it and on a
 frozen name column once something is under it, blanks a column showing only in part (a number is
 never read with digits missing), and takes arrow keys once focused; a statement opens at its newest
-periods. Numeric headers stack their label over their unit, so a column is as wide as
+periods. A long table's header row stays under the top bar while the page scrolls past it: the
+table scrolls sideways, so a `position: sticky` header could only stick inside that scroller, and a
+bounded-height scroller would trap the wheel on pages with several tables; instead the real header
+row moves down (`headerShift`, a `--tw-head-y` variable set through the CSSOM, which the CSP allows),
+so its sort buttons, the frozen first column and the sideways scroll work unchanged and there is no
+copy to keep in step. Numeric headers stack their label over their unit, so a column is as wide as
 its numbers, and as a table narrows the wordy columns give way first (the screener's industry and
 Peers' "Why" move under the name; the watchlist's period end and Compare's fiscal label go to the
 hover). Dollars in a statement, segment or revenue row share the largest value's unit (`format.ts`
@@ -43,8 +48,9 @@ size at any width and titles and footnotes wrap instead of being cut; `svgRef` a
 standard-size drawing, so Export SVG / PNG give the same deck-ready image from a phone or a monitor.
 The chart builder puts the chart first when there's no room for it beside the layers.
 
-Views (hash routes): `#/` Home (status strip, watchlist table, new filings since the last
-visit, expected filings); `#/companies?<filters>` the screener (`/v1/screener`: filters kept in
+Views (hash routes): `#/` Home (Start an analysis first, then the watchlist table, new filings since the
+last visit and data notes; the status strip, Continue and expected filings can be turned on in
+Customize); `#/alerts` filing alerts (below); `#/companies?<filters>` the screener (`/v1/screener`: filters kept in
 the URL, sortable, ungranted companies as metadata only, CSV export through the API);
 `#/company/<company_id>` 12-quarter chart and table, every value linked to its filing (a statement or segment value opens the filing in the reader at its financial statements, a 10-K's Item 8 or a 10-Q's Part I Item 1; the EDGAR link sits beside it on hover);
 `#/filing/<company_id>/<accession>[/<section>]` parsed filing reader; `#/chart` the chart
@@ -66,8 +72,9 @@ the commit they were recorded in, which shows only on the link's hover). It is p
 app shell (and without calling `/v1/me`), linked from the front door; signed in, from the
 sidebar footer. Every figure comes from the API; the page hard-codes none. A signed-in reader can
 follow a check's company count to the screener (`#/companies?issue=<check>`: the companies they can
-read with such a finding); the status route itself stays aggregate, and signed out there are no
-such links. The agent's page context reports it as `about` (agent-api has no `status` page) and
+read with such a finding; the counts are coloured as links and a line above the table says so); the
+status route itself stays aggregate, and signed out there are no such links, only a line saying
+that signing in lists the companies (#55). The agent's page context reports it as `about` (agent-api has no `status` page) and
 leaves the data-check filter out of the screen it sends (its filters are strict).
 
 Company names (`src/displayNames.ts`, `src/companies/directory.ts`): SEC conformed names are made
@@ -150,6 +157,73 @@ API), the heading also *highlights* (each word marked, what next and previous st
 outline's legend says what its numbers are; only one kind shows at a time. The previous and next
 filing of the same form (10-K, 10-Q, 8-K) open at the same section with the same search; one that
 isn't parsed links to EDGAR.
+The section shows as paragraphs and tables (`reader/blocks.ts`, rules in its docstring; #178, #179),
+read back from the stored text without a reparse: the parser writes one table row per line with its
+cells joined by a space, so a run of lines ending in figures ("Cash and cash equivalents $ 10,605
+$ 8,589") becomes a table with a label column, its date heads ("Jan 25, 2026 Jan 26, 2025") and
+sub-headings, and a label whose figures wrapped onto the next line is joined back to them. Page
+numbers and "Table of Contents" lines are left out, and a sentence a page break cut rejoins. Display
+only: offsets are the stored text's, so citations, cited passages and highlights land as before
+(highlights are counted per table cell, the same pieces next/previous step through). What it can't
+do: a table whose cells hold words (a list of directors) stays text; cells merged across columns in
+the HTML can't be told apart; and the search index still holds the debris, so a phrase across a page
+break isn't found (a parser-side change and reindex would fix that; services/parser README "Tables in
+the text").
+
+Earnings and events (F1; `company/Earnings.tsx`, `company/Events.tsx`, wording in `company/events.ts`'s
+docstring; the Query API's `/earnings` and `/events`, rules in its README, "Earnings and events"):
+- **Earnings tab** (company page, after Overview; also the Analysis flow's Earnings step): a quarter
+  picker (quarters by their end date, the newest with a release first; "expected" until the 10-Q/10-K
+  covering it is filed), then the **earnings release** (8-K Item 2.02: its headline quoted, the 8-K's
+  items, Read the release in the reader, EDGAR), beside the quarter's **reported figures** from its
+  10-Q/10-K (the recap route: revenue, operating and net income, EPS, free cash flow, the three
+  margins, against the same quarter a year ago, n/m readings from the API; "not filed yet" or "not
+  in the figures yet" when that's the case); the **outlook stated in the release** (the blocks under
+  its own Outlook or Guidance headings, lines as written, each with Read it in the release at its
+  offset); **management's adjustments** (its reconciliation tables, folded, in monospace, and its
+  notes that state a dollar amount). Each says when the release has none ("no section headed Outlook
+  or Guidance ... read the release to be sure"). No beat or miss: Tributary has no estimates, and the
+  page says so. Pins: an outlook block or a note as `quoteLines` (its lines kept), a table as
+  `quoteTable` (a code block in the quote), each citing "8-K for the quarter ended …".
+- **Since the last report** (company Overview, below Key stats; the What changed step's first card):
+  the 8-Ks filed after the latest 10-Q/10-K period end, newest first: date, form, the items in the
+  reader's short labels (`EIGHT_K_ITEMS`; exhibits left out), "may change cash, debt, ..." on an
+  event the API says affects a balance, the 8-K's own opening words quoted (pinnable in a project),
+  Read the 8-K at that passage, Read the press release, EDGAR; one not stored here says so and links
+  EDGAR. Routine filings (votes, nominations, exhibits alone) fold under one line. Above them, the
+  figures as of the period end a later event may have changed, each with its event, and "no pro
+  forma": Tributary doesn't compute a figure after the event. The same flags sit on the Overview's
+  key stats (Cash, Net debt, Debt / equity; every stat for non-reliance or bankruptcy) when the
+  figure is as of that period end or earlier: "⚑ before the Oct 27, 2026 8-K (Acquisition or
+  disposition)" ("... and 1 more 8-K" when several; the hover names each), the figure itself
+  unchanged. The Overview asks `/events` once for both. An event the API flags from its 7.01 / 8.01
+  announcement (F1b, `announced`) says so under its head: "⚑ A completed acquisition or
+  disposition, read from its Item 7.01 announcement (it has no Item 2.01): the words “Completes
+  Acquisition” in Press release", linking the reader at that sentence, then the sentence quoted;
+  the stale list names it the same way. An older API without `announced` words it by its items.
+- An older Query API without the routes (404) reads as "not available here yet", never an error
+  (`api.ts` `orNullOn404`); e2e's mock answers both routes so the clean-console check holds.
+
+Backlog and orders from the filings' text (F8b, H11; `company/TextKpis.tsx`, wording in
+`company/textKpis.ts`; the Query API's `/text-kpis`, rules in its README): a card on the company
+page's Overview (last) and in the Numbers step (after the backlog proxy chart), headed "Backlog and
+orders", every figure labelled "from the filing's text". A chart (backlog and orders as bars, order
+growth as a line on the right, one basis: organic when the filings say so more often; points open the
+reader at their passage) and per figure a table, newest first (six, then Show all): as of (a date for
+backlog, "quarter to ..." for orders), the figure as the API states it, and where it's written ("10-Q
+filed Oct 22, 2025 · MD&A", linking the reader at the passage's offset; "also in N more filings")
+with the passage quoted around its number. With nothing stated it says what it looked for and where,
+and that a company can state these otherwise or only by segment. The figures, their dates and which
+one wins a disagreement are the API's; nothing is read from text in the browser. An older API (404)
+reads "not available here yet"; without the filings tier it asks nothing. e2e's mock answers the
+route (empty). Fixtures `company/fixtures/{vrt,nvda}-text-kpis.json`: the branch's route over
+production's sections (2026-11-09).
+- Verified (2026-11-08) against production's data through a harness: the branch's routes over rows
+  read from hermes, every other read from production: Vertiv's Sep 30 cash, debt, net debt and total
+  assets flagged before the Oct 27 UIG acquisition (tester 1's missed 8-K) with its 8-K quoted;
+  Deckers' FY27 outlook ($7.80 to $7.95 EPS) and the $46.0M IEEPA refund note (tester 2's facts);
+  NVIDIA's Q3 FY27 outlook and its debt 8-K after the Jul 26 quarter end; a pinned guidance table
+  in a thesis citing "8-K for the quarter ended 2026-09-30".
 
 Company page (`pages/Company.tsx`): Statements keeps statement, period, basis and range in the
 address (`#/company/{id}/statements?kind=bs&period=ttm&range=5y`, `company/statementView.ts`, defaults
@@ -160,6 +234,64 @@ migration 014; `filingHeadings`: on a newest-first page a heading only moves bac
 10-K for FY2026 is filed in FY2027 beside that quarter's 8-Ks), and says "not parsed yet" only on
 forms that get parsed. What changed sits under the table, so the table has the page's width; its
 actions stay in view on narrow pages (sticky) and long 8-K item lists wrap.
+
+Statements since F5 (migration 049; `company/data.ts` `STATEMENTS`, `cashBridges`, `company/callouts.ts`,
+`company/components.ts`, `company/Components.tsx`):
+
+- **Cash flow** reads as a statement: depreciation and stock pay (added back), then net cash from operating
+  activities; capex, then net cash from investing; dividends and buybacks, then net cash from financing;
+  "Exchange rates and other" (the change in cash less the three subtotals, shown only when it is more than
+  rounding: JPMorgan's -$14.6B in Q4 2024); the change in cash; the cash at the start of the period (the
+  end of the one before, so the request asks for four more quarters); the cash at its end (with restricted
+  cash, where the statement ends); and **Beginning + change = end?**, "✓ ties" or "off $X" with the gap
+  in the hover (within 0.5% or $100K: 15,620 of 16,062 quarters since 2019 tie on 613 companies rebuilt
+  with 049). **One sign convention**: outflows (capex, dividends, buybacks) are negative, as filings print
+  them, in the table, its CSV and the Numbers step's charts; the hover gives the amount the tag carries.
+  The chart builder and screener keep the API's metric, the amount paid.
+- **Balance sheet**: cash and short-term investments (049's derived line, net debt's own reading); under
+  current liabilities, accounts payable, contract liabilities (customer advances: Vertiv's $1.13B to
+  $4.12B beside current liabilities of $3.58B to $8.71B) and debt due within a year; contract liabilities
+  current and noncurrent; and remaining performance obligations (revenue under contract not yet
+  recognised, the nearest tagged figure to a backlog; Caterpillar $49.4B, NVIDIA $3.2B; Vertiv tags none).
+  A dotted label has its definition in the hover.
+- **Callouts** (Quarterly): a quarter the API calls out (`/financials?callouts=true`, query-api README
+  "Statement callouts") carries a dot before its figure, its sentence in the hover, and a line under the
+  table in **Worth a look** with a link to its filing: "Dividends paid, FY2027 Q2: -$6.05B, 25 times the two
+  quarters before it (-$242.00M and -$243.00M). The filing says why." A row whose sign changes in three or
+  more of the shown quarters is said once ("Net cash from operating activities changes sign in 6 of these
+  8 quarters, from -$251.84B to $147.76B"). The page never decides one; it never calls a figure wrong.
+- **Reported vs standardised**: a standardised line (a derived figure such as net debt, cash and
+  investments, free cash flow or a ratio; gross profit computed as revenue less cost; a line tagged as
+  parts) has ▸. Opened, its lines show under it across the periods (from each column's `inputs`, signed:
+  "+ Long-term debt", "− Cash"), and a panel below the table shows what one period is made of
+  (`/v1/companies/{id}/components`): each line's value, the tag the filing used, its filing (reader and
+  EDGAR), and the other tags with a value for that date and why gold didn't use them ("not used:
+  LongTermDebtNoncurrent comes first"). Ratios open the same way.
+
+What changed (F3; `company/Filings.tsx` `Changes`, wording in `company/changes.ts`'s docstring; the
+Query API's `/changes` with `view`, rules in its README, "Read for materiality"): a 10-Q opens
+against the **same quarter a year earlier** (Previous 10-Q one click away; a 10-K against the
+previous 10-K), **most material first** (Reading order beside it), with a **topic** box ("tariffs":
+matches marked), **Only passages with new figures** and a section choice. Above the list, in words:
+what it was compared with ("Compared with the 10-Q for the quarter ended Sep 30, 2025, filed Oct 31,
+2025."), the ranking line, and what the pass left out ("Not shown: 9 calendar rollovers ..., 2
+paragraphs only split, rejoined or page furniture, ..."), then "10 of 91 changes about “tariffs”".
+Each change says New / Removed / Rewritten, its section, its period ("3 months", "6 months, year to
+date", "3 and 6 months": a 10-Q's quarter text is never read as its half-year text), the passage
+with its word diff (a "second" → "third" swap inside it unmarked), "Why it ranks here: new passage ·
+5 new figures · new risk wording: tariff, refund · Results of operations" and Read it in the filing;
+the first 30, then Show all. In Analysis the same list pins each passage with its period ("MD&A (6
+months, year to date)"). The filing reader's side by side asks the same view, a 10-Q a year earlier
+with the comparison switchable, and puts each passage's period beside it. When the year-ago 10-Q
+isn't indexed the page falls back to the previous one once and says so. An older Query API (no
+`view` in its answer) gets the plain list it always had, the comparison still choosable; the
+"unchanged or minor" count no longer adds minor edits twice. Verified (2026-11-09) through a harness
+serving the built app: the branch's `/changes` over production's section texts (its stored rows
+reproduced exactly from them), every other read from production: Deckers' Q2 FY27 10-Q against Q2
+FY26 (91 changes, "tariffs" 10, with new figures 4), against Q1 (its six-month text labelled, not
+paired with Q1's three-month text), Vertiv's Q3 10-Q (against Q2: 9 calendar rollovers hidden,
+"third quarter" unmarked inside rewritten passages; against Q3 2025: its new covenant risk factors
+ranked), NVIDIA's 10-K against the previous 10-K, at desktop and phone widths.
 
 Freshness has two clocks, labelled, explained on hover (`home/useFeedStatus.ts`): a filing is *listed*
 (`GET /v1/status`, the same time as Data status's "Newest filing listed here") minutes after EDGAR accepts
@@ -183,14 +315,34 @@ and an 8-K's period of report reads as the event date it is (`format.ts` `period
 Home: the sidebar badge and the status tile count the same filings (`Workspace.fresh`: the
 watchlist's with the catalog open, since the feed is then everyone's latest 50) and say the same
 thing (`home/data.ts` `sinceLabel`: since your last visit, or the last 7 days on a first visit in
-this browser). Removing a watchlist company offers Undo for 15 seconds. "New chart" starts empty
+this browser). Removing a watchlist company offers Undo for 15 seconds. Deleting a workspace or a
+saved item (#158, `useSaved` `deleteWithUndo`) hides it at once and offers Undo for 10 seconds at
+the foot of the window (`UndoDeletes`); the DELETE goes out when that runs out, or at once (as a
+`keepalive` request) when the page closes or another user signs in, so closing the tab never keeps
+something the user confirmed. It's an undo window in the browser, not a soft delete: nothing
+changes in the API or the app DB, and once sent a delete is final. The assistant's own Undo of a
+save still deletes immediately. "New chart" starts empty
 and detached from any saved chart (the nav's Chart builder still reopens the draft). Anything that
 replaces a chart with work in it (New chart, a template, a Chart button, opening a saved chart) keeps
 that draft: the builder says what happened and can restore it until the next replacement.
 
 Search (`pages/Search.tsx`): words run on Enter or the button (each search ranks every match);
-form, company and dates apply as soon as they change. Inverted dates aren't searched: the page says
+form, company, dates, order and Exact phrase apply as soon as they change. Inverted dates aren't searched: the page says
 so and offers to swap them. No result under filters offers to clear them instead of blaming the words.
+The results open with one sentence saying what was searched (`search/state.ts` `searchScope`, from
+the API's answer, not from what was asked): "647 sections in every company's filings filed since
+Oct 10, 2026 match, best match first." (#81, #145). The dates a reader picks are exactly the dates
+searched (`searchWindow`: `window=exact`), across every company too; only an all-company search with
+no dates lets the API rank the newest window that fills a page, and then the sentence says from when
+and offers "The past year" and "All dates" (`dates=all`). One company is always every date, and the
+sentence says "of any date". Order: Best match or Newest first (`sort=date`; then the list stays in
+date order, a company's run of hits grouped, not all its hits). The pager says "1-20 of 647".
+Exact phrase (`isPhrase`/`asPhrase`) quotes the words; a phrase marks only the words together, in the
+snippets too (`reader/text.ts` `snippetRuns(snippet, terms)` re-marks a phrase query's snippet
+because `ts_headline` marks each word alone; `highlight` matches each word from its stem, `wordStem`,
+so "export controls" marks "export control rules" as the stemmed search matched it). The reader's
+search box has the same box (#80). An older API ignores `sort`/`window` and echoes neither: the
+sentence then shows no count and "best match first".
 
 While the catalog is closed, a sandbox (or a GitHub sign-in) lists only its own 20 companies
 (`src/scope.ts`, a React context set from the session, and only while `/v1/me` says the catalog
@@ -260,12 +412,23 @@ on the folder changed last. Never just the first workspace.
 
 - **Thesis** (`#/thesis/{id}`, `ThesisPage.tsx`, pure parts in `thesis/model.ts`): a title (the
   item's name), an optional company and a Markdown body (up to 100,000 characters). Write,
-  Preview or Side by side (remembered per browser); Save or Ctrl/Cmd+S, with an "unsaved
-  changes" mark and the browser's leave-page warning. "Embed a saved item…" inserts a
-  `[[embed:<item id>]]` line at the cursor (at the end until the user has placed one, never above
-  the title) for any chart, comps set, screen or model in the same
+  Markdown, Preview or Side by side (remembered per browser); Save or Ctrl/Cmd+S, with an "unsaved
+  changes" mark and the browser's leave-page warning. **Write** (F6, `thesis/BlockEditor.tsx`, rules
+  in `thesis/blocks.ts`'s docstring) shows the text in boxes and every embedded chart, comps set,
+  model or screen and every pinned quote or earnings-release passage as a card, drawn live: never a
+  `[[embed:…]]` line. A card moves up or down past the paragraph or card beside it (↑ ↓, or Alt+↑ /
+  Alt+↓ on the focused card) and goes with ✕ or Delete, with Undo in the notice; moves are announced
+  and focus follows the card. A quote card says what it is and the period it reports on ("Quote ·
+  10-Q · quarter ended 2026-10-26", "Earnings release · 8-K"). The Markdown underneath is still the
+  only thing saved: the cards are read from it and every edit writes it back line for line, so
+  export, import, versions, drafts and pins are unchanged (a test exports and imports a pinned
+  thesis and gets the same bytes). **Markdown** shows the text as saved, embed lines and all.
+  "Embed a saved item…" inserts a `[[embed:<item id>]]` line at the cursor (at the end until the
+  user has placed one, never above the title) for any chart, comps set, screen or model in the same
   workspace; the preview draws each one in place as reports do (`reports/Embeds.tsx`, the data
-  read now as the viewer). A marker for anything else (another workspace's or user's item, a
+  read now as the viewer). A comps set is drawn as its table (`compare/CompsTable.tsx`: the saved
+  columns, each company's latest quarter, the peer median with n of N, metadata only where the
+  viewer can't read the financials), in theses and reports alike, never as charts. A marker for anything else (another workspace's or user's item, a
   report, a malformed line) is dropped and the editor says how many don't resolve. The text is
   rendered only through `markdown.ts` `renderMarkdown` (marked + DOMPurify, no inline styles or
   form controls; images become their alt text, since the CSP loads nothing from elsewhere;
@@ -296,7 +459,7 @@ on the folder changed last. Never just the first workspace.
   Clicking a claim's quote marks it in the preview (only text nodes are wrapped in
   `<mark class="claim-mark">`; nothing is parsed) or selects it in the editor in Write mode. Then
   each embedded model's assumptions per forecast year against its 5-year revenue CAGR and margin
-  range (computed by agent-api with `models/model.ts`' definitions; flagged years marked), what
+  range (the Query API's model run, read by agent-api; flagged years marked), what
   the latest 10-K/10-Q says that the thesis doesn't mention, the summary, notes (e.g. "only the
   first 30,000 characters were checked") and as-of, with model and cost behind Details. A
   quote shows without the Markdown it was written in (`plainQuote`; finding it still uses the
@@ -320,45 +483,65 @@ on the folder changed last. Never just the first workspace.
   checked claims, model assumption flags that changed (by model and fiscal year), models added or
   removed, and the count of points not mentioned. Quotes there are plain text (React-escaped),
   statuses are labels; the assistant's prose still renders only in the claims below.
-- **Model** (`#/model/{id}`, `ModelPage.tsx`, pure parts in `models/model.ts`): a company's
-  fiscal years of revenue and operating income, read live from `/v1/companies/{id}/financials`
-  (`view=ttm`, 40 quarters: the TTM at each fiscal Q4 is the fiscal year, as the Statements tab's
-  annual view), and your assumptions per forecast year (1-10, default 3): revenue growth %,
-  operating margin % and a note. Each assumption shows its default beside it ("default 44.2%"),
-  and a line above the table says the rule with the company's numbers: the TTM run rate, the
-  revenue CAGR and mean operating margin over the last 5 fiscal years (fewer when the history is
-  shorter) and the long-run rate. The projection starts at the latest fiscal
-  year with revenue: revenue_t = revenue_(t-1) × (1 + growth_t), operating income_t = revenue_t ×
-  margin_t. The chart draws history solid and forecast dashed in the same colour (a series'
-  `dashed`), joined at the base year; history points open their filing. The table labels each
-  year Reported or Forecast (`FY2027E`). History years shown: 3-10 (default 8). **Defaults**
-  (`runRate`, `defaultAssumptions`): year 1 at the trailing-twelve-month run rate (the newest TTM
-  revenue against the TTM a year earlier, and its operating margin; the latest fiscal year's
-  without one), then each year closes half the gap (`FADE`) to the long run: growth to the 5-year
-  CAGR held between 0% and 5% (`LONG_RUN_GROWTH_CAP`), margin to the 5-year average. NVIDIA
-  (TTM +83.4% at 65.2%) starts 83.4 / 44.2 / 24.6% at 65.2 / 55.6 / 50.8% instead of a flat 66.9%
-  at 46.0% to $1.00T; Vertiv starts at 35.3% and 20.1%, Deckers at 6.3% (not its 16.5% CAGR); a
-  shrinking company's long run is 0%, not a permanent decline. "Reset to defaults" sets exactly
-  the defaults shown. Only the assumptions are saved, never the history. A model embeds in a thesis like a
-  chart (its chart and table from the saved assumptions and the live history). Per-segment
-  growth isn't there yet. **Bear / base / bull**: a Scenario switch above the assumptions picks
-  the case being edited; "Add bear and bull cases" starts them from the base case minus / plus
-  half its growth (at least 5 points) and a fifth of its margin (at least 3), per year
-  (`SCENARIO_SPREAD`): in proportion, so NVIDIA's bear case about doubles revenue in three years
-  while base more than triples it and bull grows it over five times (a fixed 5 points left bear
-  more than quadrupling it). Same forecast years (changing the number of years changes every
-  case). The chart draws the base forecast dashed and the bear and bull ones lighter (a series'
-  `faint`: thinner, `stroke-opacity`, an SVG attribute, not a style); the table shows the
-  selected case: before bear and bull are added, what that case would start as, labelled a
-  preview; while a case's numbers don't parse, its last valid ones (marked), never the base case
-  under the bear tab. Saved as `scenarios: {bear, bull}` beside
-  `assumptions`, which stays the base case: a model saved before scenarios is base only and
-  saves exactly as before, and Check my thesis checks the base case (`scenarioAssumptions`,
-  ported to agent-api; the fixture's `scenario_cases`). An embedded model draws all three.
-  `checkAssumptions` / `marginRange` hold the thesis check's flag rule
-  (growth more than 10 points from the CAGR, a margin outside the 5-year [min, max]);
-  `models/stats-fixture.json` is shared with agent-api's Python port (`model_stats.py`), and
-  both test suites check the same numbers.
+- **Model** (`#/model/{id}`, `ModelPage.tsx`; what was typed in `models/drafts.ts`, the saved state,
+  the run's answer, the chart and the table in `models/model.ts`, the one-line rules in
+  `models/rules.ts`): your assumptions for a company, run by the Query API. **The maths aren't
+  here**: every change (300 ms after the last keystroke, `useModelRun`) posts the state to `POST
+  /v1/companies/{id}/model`, the one copy of a model's maths (Query API README, "Models: one copy
+  of the maths", whose `model_maths.py` docstring is the spec); the thesis check and later MCP call
+  the same route. Before F2 the web app and agent-api each kept a copy.
+  Per forecast year (1-10, default 3) and case: revenue growth %, operating margin %, and four
+  rates, blank meaning Tributary's default from history (shown as the placeholder): interest and
+  other (% of revenue: operating income less pretax income), tax rate, share change (buybacks less
+  issuance, % a year) and FCF margin (FCF as one rate on revenue rather than cash flow less capex:
+  both move with revenue, and the table shows operating cash flow, capex and FCF behind it); a
+  note. Each field shows its default ("default 35.3%"), and one line per default says the rule
+  with the company's numbers (`defaultRules`). **The current year from actuals** (`ytd`, every new
+  model): year 1 is the current fiscal year's reported quarters plus the remainder, its growth and
+  margin the remainder's ("FY2026E · Q4 (Q1–Q3 reported)"); the remainder grows the same quarters
+  a year earlier at the trailing twelve months' growth, at their operating margin (the TTM run
+  rate, like any first year; its FCF margin is those quarters' a year earlier). Vertiv's FY2026E
+  is Q1–Q3 as reported ($10.24B, +39.3%) plus a Q4 starting at +35.3% and 20.1%; Deckers' FY2027E
+  is H1 plus H2; NVIDIA's FY2027E is H1 plus an H2 at +83.4% and 65.2% (last year's H2 margin moved
+  by this year's change read 75.0%). Later years close half the gap each year from the TTM run
+  rate to the long run (B7, unchanged). A model saved before F2 opens unchanged (year 1 a full-year guess, labelled so) and
+  offers "Build FY2026E from Q1–Q3 reported", which sets each case's remainder to what its full
+  year implied (`implied_remainder`), so no year changes until the user edits it.
+  **The table** (`modelColumns`, `modelLines`, `ModelView`): one table with every line (revenue,
+  growth, organic growth with acquired revenue, operating income and margin, reported beside
+  adjusted with one-offs, interest and other, tax rate, net income, diluted EPS and its growth,
+  diluted shares and their change, FCF and its margin, buybacks, and with a price the multiples)
+  and bear, base and bull side by side: history years, the TTM (when it isn't a fiscal year end)
+  and the current year's reported quarters once per line, then a row per case for the forecast
+  years, the case being edited marked. A split or merger year (the API's `share_break`) shows no
+  share change or EPS growth, and per-share figures before it are marked * with why. The chart
+  draws revenue and operating income, history solid, each case dashed (bear and bull lighter,
+  `faint`). **Bear / base / bull**: a switch picks the case being edited; "Add bear and bull cases"
+  copies the run's preview of them (the base case moved by half its growth, at least 5 points, and
+  a fifth of its margin, at least 3; the rates the user set), and waits for the run of the latest
+  numbers so a case never starts from stale ones. Before they're added, a bear or bull tab shows
+  that case's preview beside base; a case whose numbers don't parse keeps its last valid ones
+  (marked ⚠), never another case's. Check my thesis checks the base case. **Adjustments** (yours,
+  labelled so): a named one-off in a fiscal quarter's operating income (Deckers' "IEEPA tariff
+  refunds", $46M, Q2 FY2027: its H1 margin reads 19.9% adjusted beside 21.8% reported, and the
+  defaults read the clean year), or acquired revenue, which only organic growth leaves out.
+  **Guidance** (`guidanceYear`): the latest earnings release's outlook (F1's `/earnings`) sits in a
+  collapsed row beside the forecast year it covers (the fiscal year of the quarter after the
+  release's), quoted with its 8-K citation, never read into a field. **Valuation at your price**:
+  a price per share and a day you type, saved with the model, give market cap (× the latest shares
+  outstanding), EV (+ net debt, only when its reading is current; Deckers' latest is from 2014, so
+  EV is blank and says why) and P/E, EV/Revenue, EV/EBIT and FCF yield on history, the TTM and each
+  case. The page says it's your price: nothing is fetched or kept. A company reporting in another
+  currency (057: the run's `currency`) has its table, chart and notes in it ("€2.10B"), and the price
+  gets a currency picker (the company's or USD; a price saved before is dollars): a price in another
+  currency than the figures gives market cap in the price's currency but no EV or multiple, and the
+  card says why and to type the price in the figures' currency. **History**: every save over a
+  model keeps the version it replaced (Query API, app DB 014/015); Restore loads one into the
+  editor unsaved, with Undo. Only what was typed is saved, never the history or a result.
+  Embedded in a thesis or report (`ModelEmbed`), a model is run from its saved state and drawn the
+  same way. Tests: `model.test.ts` on real run answers (`models/fixtures/*-run.json`: the branch's
+  route over production inputs of 2026-11-09; `synthetic-runs.json` for the UI tests' history),
+  regenerated with `services/query-api/tests/fixtures/model/make_web_fixtures.py`, not hand-edited.
 
 Analysis (`src/analysis/`, `#/analysis`, sidebar "Analysis", `g p`): a guided research project
 per company, from its filings to a thesis that's checked after every filing. Rules are in
@@ -377,8 +560,8 @@ per company, from its filings to a thesis that's checked after every filing. Rul
   `access=financials` on the API too), suggested peers from `/peers` (readable ones, the first
   3 ticked), a name; it creates the workspace with its project and opens step 1.
 - **A project** (`#/analysis/{id}[/{step}[/{item}]]`, `ProjectPage.tsx`): a header with the
-  company (public identity), "n of 7 steps done" and tabs for the 7 steps under the rail's names
-  (each tab opens its own step); a rail of the 7 steps with a done marker each. Done means the
+  company (public identity), "n of 8 steps done" and tabs for the 8 steps under the rail's names
+  (each tab opens its own step); a rail of the 8 steps with a done marker each. Done means the
   user ticked it (`project.done`), never automatic and never locked: work in a step (notes, a
   saved chart, peers, a model, the Core thesis written, a check: `hasWork`) shows as a hint under
   the box ("1 chart saved here"). The rail's Monitor says "re-check" when the last check no longer
@@ -388,19 +571,38 @@ per company, from its filings to a thesis that's checked after every filing. Rul
   everything typed; editors take `active` so only the visible one answers Ctrl+S.
 - **Steps**, each reusing a screen scoped to the company: 1 **Business**: "How it makes money"
   notes (saved in the project after a pause), the latest 10-K's Item 1 in paragraphs, and the
-  company page's Segments tables; 2 **Numbers**: five chart builder states (`charts.ts`: revenue
-  and YoY growth, gross and operating margin, free cash flow = operating cash flow − capex, ten
-  fiscal years annually; the Revenue tab's receivables vs revenue; long-term debt with debt to
-  equity), each drawn by `ChartView`, with Open in Chart builder, Save to project and Add to
-  thesis; 3 **What changed**: the filing page's `Changes` for the latest 10-Q and 10-K;
-  4 **Peers**: Compare with the target fixed and the peers saved in the project (`embedded`:
+  company page's Segments tables; 2 **Numbers**: nine chart builder states (`charts.ts`: revenue
+  and YoY growth, gross and operating margin, free cash flow = operating cash flow − capex,
+  buybacks and dividends against free cash flow, shares outstanding, inventory with days of
+  inventory, remaining performance obligations and customer advances against revenue, ten fiscal
+  years annually then the year in progress; the Revenue tab's receivables vs revenue; long-term debt
+  with debt to equity), each drawn by `ChartView`, with Open in Chart builder, Save to project and Add
+  to thesis. Outflows are drawn below zero (`-capex` formula layers). After the backlog proxy, the
+  backlog and orders the filings state in words (F8b, below); 3 **Earnings**: the company page's Earnings view (below), every outlook block, note and
+  reconciliation pinnable; 4 **What changed**: "Since the last report" (the 8-Ks filed after the
+  latest 10-Q/10-K period end, each excerpt pinnable, the balances they may have changed flagged),
+  then the filing page's `Changes` for the latest 10-Q and 10-K (a 10-Q against a year earlier,
+  ranked, filters; each pin names the passage's period);
+  5 **Peers**: Compare with the target fixed and the peers saved in the project (`embedded`:
   changes come back instead of going to the URL), Save to project / Add to thesis for the comps;
-  5 **Model**: the project's models (ModelPage embedded, bear/base/bull), "Create the model"
-  from the company's history; 6 **Thesis**: ThesisPage embedded (no back link, no company
-  picker); 7 **Monitor**: Check my thesis (disabled while the thesis has unsaved changes or only
-  template text; checks run when the user asks), where the filings stand (Revisit's new-filing
-  notice with a re-check, or which 10-K/10-Q the last check read), and the check panel (a quote
-  opens the Thesis step and marks it).
+  6 **Model**: the project's models (ModelPage embedded, bear/base/bull side by side), "Create
+  the model" from the company's history (this year from its reported quarters); 7 **Thesis**: ThesisPage embedded (no back link, no company
+  picker); 8 **Monitor** (F6, #154): the company's filing alerts (`alerts/Notifications.tsx`, newest
+  filing first, with the alerts job's last check), its red lines (`alerts/RedLines.tsx`: each
+  "Clear" or "Crossed" on the latest figures, a form with rules to start from or a formula of your
+  own; a percent is typed as 55 and saved as 0.55), then Check my thesis (disabled while the
+  thesis has unsaved changes or only template text; checks run when the user asks), where the
+  filings stand (Revisit's new-filing notice with a re-check, or which 10-K/10-Q the last check
+  read), and the check panel (a quote opens the Thesis step and marks it).
+- **Why Earnings is a step and the 8-Ks sit in What changed** (F1, from the analyst tests: the
+  release and the acquisition after the quarter end were "the most decision-relevant filing
+  content" and came only from a lucky search and the check): the release is management's account
+  of the figures the Numbers step just showed (its outlook, its own adjustments), so it comes right
+  after them as a step of its own, with its own tick, impossible to miss; the 8-Ks filed since the
+  report are what changed after its period end, read beside the report's rewritten paragraphs.
+  Projects saved before F1 keep their ticks: Earnings starts unticked, so such a project opens at
+  it until it's ticked. An older Query API refuses `earnings` in `done`: `updateProject` saves again
+  without that tick (deploy window).
 - **Thesis template**: a project's thesis starts from `thesisTemplate`: `# Company: thesis`, then
   Core thesis, Variant perception, Pillars (with `### Pillar 1`), Catalysts (prefilled with the
   next expected 10-Q/10-K dates, `/expected-filings?periods=4`, labelled estimated), Risks and
@@ -414,7 +616,8 @@ per company, from its filings to a thesis that's checked after every filing. Rul
   others; a missing section is added); a filing passage (Item 1, a what-changed paragraph; removed ones
   quote the earlier filing) goes in as a blockquote, escaped so it renders as written, with a
   citation line: form, the period it reports on ("10-Q for the quarter ended 2026-09-30", so
-  six-month wording reads in its filing), filed date, section, and the accession linked to EDGAR
+  six-month wording reads in its filing; a release's passage "8-K for the quarter ended 2026-09-30",
+  the quarter the release reports), filed date, section, and the accession linked to EDGAR
   (`edgarFilingUrl`, built only from the company id and accession number the API returned). The
   project's thesis editor stays mounted and registers a handle (`bridge.ts`), so a pin lands in
   the text being edited: saved at once when there were no unsaved changes, else left as an
@@ -428,6 +631,32 @@ per company, from its filings to a thesis that's checked after every filing. Rul
 - Grants nothing: every step reads through the permission-checked routes as the viewer. The
   assistant's page context reports a project as `workspace` (its thesis and model steps as
   `thesis` / `model`): agent-api's pages have no `analysis`.
+
+Home's first step (F6, #127, `home/StartCard.tsx`): a "Start an analysis" card leads Home, a
+company picker (companies you can read) that opens New analysis on the one you pick, the analyses
+under way to continue (with their steps done), and the new filing alerts. Screen companies, New
+comps and New chart stay in the page bar as quiet buttons. With nothing saved, the cards under it
+are the watchlist, new filings and data notes, the three the testers said work; the status strip,
+Continue where you left off and Expected filings are off (`views/model.ts` `DEFAULT_HOME`) and come
+back in Customize.
+
+Filing alerts (F6, `src/alerts/`, Query API README "Filing alerts"): a bell in the top bar with
+the unread count (`useAlerts.ts`: one request shared by every hook, again every 5 minutes, on
+focus and after marking read; an older API's 404 hides the bell); `#/alerts` lists them newest
+filing first: form, company, filed date and period, an 8-K's items, a 10-K/10-Q's key figures with
+their change on a year earlier, your red lines on it (Clear / Crossed), and links to What changed
+(the company's Filings tab opened on that filing's comparison: `#/company/<id>/filings?changes=<accession>`),
+Earnings, the reader and EDGAR; opening the list marks what it shows read. Settings → Filing alerts
+(`AlertSettings.tsx`): 10-K / 10-Q / 8-K per followed company, saved at once, and a 7.01 / 8.01
+column (8-Ks filed only under Regulation FD or Other events, off by default; disabled while 8-Ks
+are off) shown only when the API's settings list `other_8k_items`: an older API is sent the forms
+alone, so a save during a deploy never meets a strict refusal; webhooks (the URL
+typed once and cleared, shown masked; the API's refusal sentence for anything but https to a
+public address; the signing secret shown once with Copy, kept only in the component's state;
+Send a test, New secret, Remove, on/off; a webhook the alerts job is leaving out after repeated
+stalls says until when, `stallNote`; a demo sandbox is told webhooks need a permanent account)
+and the delivery log in words ("Retrying: it answered 500; tried 2 times"); email says it isn't set up. `alerts/alerts.ts` only words what the API
+decided.
 
 Customizable views (`src/views/`, Query API `/v1/views`): Home's "Customize" shows, hides and
 reorders its cards; the watchlist and the screener have "Columns" to choose and order their value
@@ -489,6 +718,12 @@ Overview, Revenue, Analysis Numbers, Compare, thesis and report embeds), SVG, PN
   "Reads as" overrides it (`display`, saved with the chart). Debt to equity is 1.91x here as in the tables,
   NVDA / MSFT a multiple, `receivables / revenue * 365` a number of days. A contribution to growth is
   in points on axis and tooltip alike.
+- **The year in progress on annual charts** (F5, `chart/series.ts` `annualPoints`): after the last
+  fiscal year end, the newest quarter stays as a last point labelled as that quarter and marked
+  ("FY2027 Q2*"): the trailing twelve months to it for a flow, its quarter end for a balance (every
+  input a balance). Its bar is lighter with a dashed edge, a line reaches it dashed to a hollow point,
+  the footnote says "* FY2027 Q2: the latest quarter, not a full fiscal year (...)", and it never makes
+  another layer "stop". A chart with no full year on file draws that point rather than nothing.
 - **Gaps are gaps** (`chart/series.ts` `xAxis`): the axis has every period between the first and the
   last, so a missing year is a shaded hole, lines and areas break there, a point alone gets a dot, the
   table and the CSV have its row. The legend lists only what is drawn. `chart/notes.ts` says the rest in
@@ -509,7 +744,68 @@ Compare's dollar charts can also read on a log scale or indexed to the first val
 saved; it says so when the largest company is over 100 times the smallest). "Chart these" and Peers'
 "Chart margins" draw at most 8 companies, the colours a chart tells apart, and say so. The Peers table
 sorts by any column like Compare (`compare/state.ts` `nextSort`/`sortRows`: high first, again to reverse,
-a third time for the suggested order; empty cells last).
+a third time for the suggested order; empty cells last). Revenue growth is green or red; below 1,040px
+"Why" moves under the name and wraps there instead of being cut (#173).
+
+Peers (F4, H6; the company page's Peers tab and Compare's suggestions): the Query API suggests peers by
+what companies do (their 10-K Business sections compared word by word, competitors either one names,
+then SIC division and size: Query API README "Peers"), and the page only words its answer
+(`compare/peers.ts`): each peer's "Why" says how alike the two Business sections read ("very similar",
+"similar", "somewhat similar"), the shared terms ("business: footwear, wholesale channel, dtc"), "named
+as a competitor in Vertiv's 10-K" or "its 10-K names Vertiv as a competitor" (a link that opens that
+sentence in the reader), the same industry and a similar size. Above the table, the company's own most
+distinctive terms. The columns are the answer's: a bank is compared on a bank's lines. Each median says
+how many of the peers it uses ("3 of 4"), and its hover why the others are left out, in the blanks
+vocabulary (not reported, not applicable, not meaningful or old, metadata only). Compare's medians do the
+same. Adding a peer on Compare asks `/peers/check` first: a company with no figures to compare isn't
+added, and the page says why (Birkenstock files 20-F annual reports as a foreign private issuer, under
+IFRS; a company whose XBRL hasn't arrived yet; a fund with no annual report). A bank target's comps open
+on a bank's columns (net interest income, efficiency ratio, provision, loans, deposits, ROE, net margin)
+unless columns were chosen; the column picker offers a bank's lines only for a bank.
+When there is no business text to compare, peers are by SIC code and size, and every row's "Why" starts
+by saying so and why, from the API's `basis_reason` (`compare/peers.ts` `fallbackPart`, the full
+sentence in its hover and above the table: `fallbackSentence`): "by SIC and size (Intel's 10-K
+Business section is a cross-reference)", "no Business section found in Citigroup's 10-K", "no 10-K
+from the last three years", "filings text isn't in your plan", "isn't compared yet", "no close business
+match". An older API without `basis_reason` reads "by SIC and size", its `method` in the hover.
+
+Sectors (#136): the screener's filters have a Sector and an Industry within it (`/v1/sectors`,
+Tributary's own grouping of SIC codes, not GICS), and "Group by sector" sorts by sector and industry
+with a heading row for each. The SIC label stays: the Industry column shows it with the sector's
+industry under it, and the company header reads "Technology · Semiconductors · Semiconductors & Related
+Devices (SIC 3674)".
+
+Co-registrants (#135): a company that files one combined 10-K with another (PG&E Corp and Pacific Gas
+& Electric) has a "combined 10-K" tag in the screener and a note on its page saying it isn't a
+duplicate: two SEC registrants, each with its own statements, a parent's including its subsidiaries'.
+
+A bank (#103; the API's `not_applicable` list): Key stats show net revenue, net interest income,
+efficiency ratio, provision for credit losses, net income, EPS, loans, deposits, CET1 (where the bank
+tags it), ROE, revenue growth and net margin; Statements show a bank's income statement (net interest
+income, noninterest income, net revenue, noninterest expense, provision, pretax and net income) and
+balance sheet (cash and due from banks, loans net of the allowance, total assets, deposits, total
+liabilities, equity, CET1). Both say what isn't shown and why: net interest margin, tangible book value
+per share and ROTCE (migration 048's header). Which companies are banks is the API's alone (migration
+058 added Schwab, American Express, Synchrony and Ally); nothing here lists one.
+
+Debt with a finance arm (`company/data.ts` `FINANCE_ARMS`, `financeArmNote`): Ford's and GM's debt and
+net debt are their consolidated balance sheets' (migration 055 sums each debt line's segment members),
+so they include Ford Credit's and GM Financial's borrowings. Overview (under Key stats, and in the Net
+debt stat's hover) and the Balance sheet say so. Keyed by company id; `data.test.ts` checks the ids
+against 055's company tags.
+
+Insider filings (#117; `company/Insiders.tsx`, wording in `company/insiders.ts`'s docstring; the
+Query API's `/v1/companies/{id}/insiders`, read from the SEC's XML, rules in its README "Insider
+filings"): on the Filings tab's Insider filter, an "Insider transactions" table lists every trade of
+the company's Forms 3, 4 and 5, newest first: the insider and their role, the date, the transaction
+(the SEC's code in words, a derivative's security, an indirect holding's nature, a 10b5-1 plan), the
+shares signed by direction, price, value and shares owned after, each linking its filing on EDGAR.
+In the filing index (Insider and All), an insider filing's row says who and what ("Kress Colette, EVP
+& Chief Financial Officer · sold 34,918 shares ($7.65M) · shares withheld for tax or exercise price:
+40,747 shares"). Needs filings access; an older API (404) says the details aren't available yet and
+the index stays as before. Every figure is the API's; nothing is summed or valued here. The table
+starts with the 100 most recent filings; "Show older filings" asks for the next 100 with the API's
+`next_cursor` (an API without it shows no button: the 100 most recent, as before).
 
 Revenue view (the company page's Revenue tab, `src/company/Revenue.tsx`; rules in
 `company/revenue.ts`'s docstring): three sections, each chart an ordinary chart state, so "Save
@@ -517,8 +813,12 @@ to workspace" (`workspaces/SaveChart.tsx`: name and workspace, through the same 
 state cleaner as the chart builder's Save as, without becoming the chart builder's open item)
 makes it a chart item a thesis there can embed, and "Open in Chart builder" opens it there.
 Values need financials access, like Statements.
+Revenue and Segments each do one job (#115) and say so in a line at the top with a link to the other:
+Revenue is three years of trends (trailing twelve months), what drove growth and revenue quality;
+Segments is the quarters as filed, with gross profit and operating income by segment, share and YoY.
+Revenue had a Quarterly switch until F7b; its tables were Segments' revenue tables again, so it went.
 
-- **Revenue by segment and geography** (TTM or Quarterly, fiscal periods; `/v1/companies/{id}/
+- **Revenue trends by segment, geography and product** (TTM, fiscal periods; `/v1/companies/{id}/
   segments?metric=revenue`): per axis (business segment, geography, product/service) a chart and
   a members × periods table (last 8 periods), each value's hover naming its filing. A member
   missing a period shows "·", never zero; one reported in part of the window says "from FY2024
@@ -558,7 +858,13 @@ a year earlier, found by date. A member with no value in those quarters isn't li
 before the newest reads "until FY2025 Q3", dimmed, after the current members (a reorganisation:
 Deckers' UGG Wholesale became UGG Brand). A table whose newest quarter is more than 100 days behind the
 company's newest segment figure says it isn't current (Deckers reports gross profit by segment since
-2025, so its operating income ends December 2024).
+2025, so its operating income ends December 2024). A business-segment table ends with the filer's
+"All other" (#171: its reconciling members, the API's `reconciliation` axis, summed) only for quarters
+where the segments plus it come to the consolidated revenue, gross profit or operating income within
+0.5% (037's tolerance; the tab now also asks `/financials` for those two). NVIDIA's reconciling member
+is All Other in FY2025 (−$1.71B in Q3: $22.08B + $1.50B − $1.71B = the statement's $21.87B) but carries
+the segments' total from FY2026 ($66.6B beside segments of $66.6B), which never ties, so only the
+first is shown. It has no share or YoY and is in no sum.
 
 Segment layers (`chart/segments.ts`, `chart/fetch.ts`): the Revenue view's segment charts are
 chart builder layers of kind `segment` (company, segment metric, axis, 1-20 members), read from
@@ -573,7 +879,8 @@ Connect your data (Query API README, "Connect your data"; shown only when `/v1/c
 answers, i.e. the server has `DATA_CONNECTIONS_KEY`: `market/useMarketData.ts`, one request per
 token shared by every component; a 404 or an error hides everything below):
 
-- **Settings → Connections** (`#/settings`, `pages/Settings.tsx`, linked from the sidebar footer):
+- **Settings → Connections** (`#/settings`, `pages/Settings.tsx`, linked from the sidebar footer
+  whether or not a provider is offered, since Settings also holds filing alerts, #60):
   per provider (Tiingo today) a link to get a key, a password field (`autocomplete=off`) and
   Connect. The key goes out once, in the `PUT /v1/connections/{provider}` body; the field is
   cleared on success and nothing keeps it (no state, no storage). A saved key shows as provider,
@@ -597,8 +904,14 @@ Data notes (`src/company/notes.ts`, Query API `/v1/companies/{id}/data-notes`, `
 the tearsheet's Data notes tab groups what the automated checks found (freshness, restated
 figures, gaps and overlapping periods, values to double-check, derived quarters) in plain
 language, each with links to its filings (the reader for 10-K/10-Q text the user can read,
-else EDGAR); groups run newest first, by their newest note, with derived quarters last. Home lists
-the newest notes of the user's own companies, by name: with the catalog open, the ones they watch or
+else EDGAR); groups run by their most important note, then their newest, with derived quarters last.
+The API ranks and groups the findings (M2: `rank` attention / note / minor, a series' repeats as one
+note with `repeats` and its period range, a `summary`): the tab opens on a line like "1 needs attention
+· 3 worth a look · 40 minor or old, from 312 check findings", each group shows what needs attention or
+is worth a look and keeps its minor and old notes behind "Show all" (`shownNotes`), and a note that
+needs attention is outlined. Against an older API (no rank, no summary) every note reads as a plain
+note and no summary shows. Home lists what needs attention first, then the newest notes of the user's
+own companies, by name: with the catalog open, the ones they watch or
 analyse (`/v1/data-notes?company_id=`, at most 50), since every company is readable; while it's closed,
 the ones they can read. They need financials access, like the values they describe. A
 company is checked when its figures change, so its tab says when *its* figures were last checked while
@@ -639,9 +952,22 @@ zero. Whether a value is n/m, n/a or old is the database's call (migration 035),
 the screener, Peers, Compare, Key stats and Home can't disagree with the sort behind them; `readFigure`
 only words it. An n/m keeps its exact figure and reason in the hover. Ratios on negative equity (gold has
 no debt/equity or ROE row there) read n/m only where `/financials?readings=true` lists the period in
-`not_meaningful_periods`; the page never works out equity itself. An old figure (about a year or
+`not_meaningful_periods`; the page never works out equity itself. Charts read the same rule (F7a): a
+point `/v1/formulas/evaluate` marks `not_meaningful` is a gap, never the raw ratio (Triton's 1,047%
+operating margin), and the chart says under it which periods read n/m and why (`series.ts`
+`notMeaningfulNote`); the CSV keeps the exact figure. An old figure (about a year or
 more behind the company's latest period) shows dimmed with its date; one merely behind shows its date
-and still counts. Neither n/m, n/a nor old enters a median. A bank reads "n/a (bank)" for gross and
+and still counts. Neither n/m, n/a nor old enters a median. A company reporting in another currency (a
+20-F/40-F filer, migration 056) shows its amounts in it, never converted: `money()` writes the symbol or
+the ISO code (€2.10B, CAD 1.20B, €1.87 a share); a screener, Peers or Compare cell the API reads
+`other_currency` shows the figure in its currency and leaves sorts, filters and medians ("1 in another
+currency" in the median's hover); the company header says "figures in EUR", the statements' unit and
+note say it too (`MetricTable.currency`, from the rows' units), and a filer whose figures are fiscal
+years (`cadence: "annual"`) is told so beside the statements with a button to Annual. Charts (057): a
+formula series whose money isn't dollars says so (`currency`), and `toSeries` draws it in that unit
+("CNY", "EUR/shares": axis "CNY", ticks CN¥996B, "EUR per share"), never "$"; a formula mixing two
+currencies is refused by the API (code `currency`) and its layer shows why; an older API reads as
+dollars. Alert red lines on an amount show its `unit` (CN¥1.00T). A bank reads "n/a (bank)" for gross and
 operating margin, FCF, FCF margin, net debt, debt to equity and the current ratio whether or not it
 tags them, by the API's `not_applicable` list. Statements: a balance sheet has no TTM (the button is off,
 and a saved one reads as quarters); EPS and diluted shares read n/a in TTM, — in a fiscal Q4 (the 10-K
@@ -708,6 +1034,8 @@ React.lazy); once signed in and idle the app prefetches them, so switching scree
 | + Revenue tab, Revisit (2026-11-02) | Company 30.0 kB (9.5 kB) with the Revenue view and its chart renderer; ThesisPage 22.8 kB (8.1 kB) | |
 | + Price tab, Settings (`#/settings`) (2026-11-02, Connect your data) | Company 37.1 kB (11.7 kB) with the Price tab; Settings 3.1 kB (1.4 kB); shell 358.7 kB (114.3 kB) | |
 | + Analysis (`#/analysis…`) (2026-11-02) | AnalysisPage 35.7 kB (12.0 kB) + ThesisPage 32.3 kB (11.8 kB), ModelPage 9.9 kB (3.8 kB), Compare 10.8 kB (4.0 kB), Company chunks; shell 361.0 kB (114.9 kB) | 48.6 kB (10.3 kB) |
+| + Model depth (2026-11-09, F2) | ModelPage 27.7 kB (9.6 kB), useModelRun 14.1 kB (5.0 kB), ModelView 6.2 kB (2.7 kB), model 3.3 kB (1.7 kB); shell 433.6 kB (142.4 kB) | 65.4 kB (13.6 kB) |
+| + Thesis cards, alerts, Home's first step (2026-11-09, F6) | ThesisPage 40.0 kB (14.3 kB) with the Write view; AlertsPage 1.5 kB + Notifications chunk; Settings 11.4 kB (4.0 kB); shell 471.9 kB (154.4 kB), +9.3 kB (+3.1 kB) over F5's 462.6 kB (151.3 kB) for the bell, the start card and the alerts' wording | 72.8 kB (15.0 kB) |
 
 Before splitting, everything was one 493.6 kB (156.3 kB gzip) script; the first screen now
 loads a third less. Most of what remains is React DOM. Chart data is cached in memory per
@@ -721,10 +1049,24 @@ after query-api), so for a minute this page can talk to a Query API one release 
 of the newer API degrades rather than breaks (`api.ts`, tested in `api.test.ts`): a refused 1,000,000
 `max_chars` or 120 `quarters` is asked again at the old caps (50,000, 40); a save refused for a field
 the older strict models don't know (a chart layer's `display`, a screen's `issue`) is saved again
-without it, so no work is lost; versions answer an empty list on 404; data notes asked for some
+without it, so no work is lost (a model's F2 fields are the user's work, so a save the older API
+refuses for them says to try again in a minute instead of dropping them); a model run (`POST
+/v1/companies/{id}/model`) answering 404 shows "being updated, draws again in a minute" with Try
+again, and a new model then starts at zeros in the older shape; versions answer an empty list on
+404; data notes asked for some
 companies keep only those; a data-check screen the API didn't echo (`issue`) is a failure with Try
 again, never every company; `/annual-per-share`, `readings` and agent-api's `/v1/allowance` were
-already optional.
+already optional. F4: `/peers/check` and `/v1/sectors` answering 404 mean no check (the peer is added
+as before) and no sector filter; a bank's statement or header columns refused (422) are asked again
+without the bank lines; a save refused for a comps table's bank columns or a screen's sector filter
+(an older strict model: "Input should be ..." or "Extra inputs") is saved again without them. F5: a
+statement refused for 049's metrics (422) is asked again without them (no subtotals or reconciliation,
+as before); an older API ignores `callouts` (no marks); `/components` answering 404 says the figure
+can't be opened yet; a Numbers chart line of a metric it doesn't know says it couldn't be drawn (the rest draw).
+F6: every `/v1/alerts` route answering 404 means no alerts yet: no bell, and the Alerts page, the
+Monitor step's lists and Settings' section say alerts aren't available on this server yet; an older
+API's notification without `filing_url` links EDGAR from the company id. The thesis's Write view and
+the comps table change no request, and Home's new default arrangement asks nothing new.
 
 `Dockerfile` builds the bundle and serves it from `nginx-unprivileged` on port 8080
 (`deploy/nginx.conf`). nginx returns 404 for the APIs' `/docs`, `/redoc`, `/openapi.json` and

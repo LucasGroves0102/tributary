@@ -15,21 +15,30 @@ import { ErrorPanel, Skeleton } from "../States";
 import { day, periodPhrase } from "../../format";
 import {
   comparableForm,
-  countMatches,
-  firstMatchFrom,
   highlight,
   nextComparable,
   outlineGroups,
-  paragraphAt,
-  paragraphs,
   priorComparable,
   searchTerms,
   snippetRuns,
   steppedForm,
   type Run,
 } from "../../reader/text";
+import { blockAt, blockMatches, firstBlockMatch, readerBlocks, type Block } from "../../reader/blocks";
+import { sectionTitle } from "../../reader/sections";
 import { go, href } from "../../route";
+import { asPhrase, isPhrase } from "../../search/state";
+import { TableScroll } from "../TableScroll";
+
+/** A loaded section's blocks, read once per answer (the match count is worked out on every render). */
+const BLOCKS = new WeakMap<object, Block[]>();
+function blocksOf(section: { text: string }): Block[] {
+  let b = BLOCKS.get(section);
+  if (!b) BLOCKS.set(section, (b = readerBlocks(section.text)));
+  return b;
+}
 import type { IndexedFiling, SectionChanges, SectionHit } from "../../types";
+import { type Basis, comparisonLabel, defaultBasis, fallBack, periodLabel } from "../../company/changes";
 
 interface Props {
   token: string;
@@ -83,7 +92,16 @@ export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q,
     fetchSection(token, companyId, active!.section_key, accessionNo),
   );
   const form = f ? comparableForm(f.form) : null;
-  const changes = useLoad(form ? accessionNo : null, () => sectionChanges(token, companyId, accessionNo));
+  // F3: read for materiality (calendar rollovers and split paragraphs hidden), a 10-Q against the
+  // same quarter a year earlier unless that isn't indexed (then the previous one, once)
+  const [readerBasis, setReaderBasis] = useState<Basis | null>(null);
+  const basis = readerBasis ?? defaultBasis(f?.form);
+  const changes = useLoad(form ? `${accessionNo}|${basis}` : null, () =>
+    sectionChanges(token, companyId, accessionNo, { view: "reading", basis }));
+  useEffect(() => {
+    if (changes?.state === "ok" && fallBack(changes.data, basis, readerBasis !== null)) setReaderBasis("prior");
+  }, [changes]);
+  useEffect(() => setReaderBasis(null), [accessionNo]);
   const stepped = f ? steppedForm(f.form) : null;
   const prior = useLoad(stepped && f ? accessionNo : null, () =>
     filingIndex(token, companyId, { forms: [stepped!], to: f!.filed, limit: 5 }).then((r) => priorComparable(r.filings, f!)),
@@ -156,7 +174,7 @@ export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q,
   const diffOn = !!active && diffFor === active.section_key;
   const hitsBySection = new Map<string, SectionHit>(hits?.state === "ok" ? hits.data.map((h) => [h.section_key, h]) : []);
   const sectionText = text?.state === "ok" ? text.data : null;
-  const matches = terms.length && sectionText ? countMatches(sectionText.text, terms) : 0;
+  const matches = terms.length && sectionText ? blocksOf(sectionText).reduce((n, b) => n + blockMatches(b, terms), 0) : 0;
   const step = (by: 1 | -1) => matches > 0 && setMatch((m) => ((m < 0 ? (by > 0 ? -1 : 0) : m) + by + matches) % matches);
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -178,7 +196,7 @@ export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q,
   const index = f.sections.findIndex((s) => s.section_key === active?.section_key);
   const neighbour = (i: number) => f.sections[i] && (
     <a href={href({ view: "filing", companyId, accessionNo, section: f.sections[i]!.section_key, ...(query ? { q: query } : {}) })}>
-      {i < index ? "← " : ""}{f.sections[i]!.section_key} · {f.sections[i]!.title ?? "Untitled"}{i > index ? " →" : ""}
+      {i < index ? "← " : ""}{f.sections[i]!.section_key} · {sectionTitle(f.sections[i]!.section_key, f.sections[i]!.title)}{i > index ? " →" : ""}
     </a>
   );
 
@@ -210,9 +228,20 @@ export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q,
       </header>
       <div className="reader-tools row wrap">
         <form className="row grow" role="search" onSubmit={submit}>
-          <input className="field" type="search" aria-label="Search this filing" placeholder="Search this filing…"
+          <input className="field" type="search" aria-label="Search this filing" placeholder={'Search this filing: words or "a phrase"'}
             value={draft} maxLength={200} onChange={(e) => setDraft(e.target.value)} onKeyDown={onSearchKey} />
           <button className="btn sm" type="submit">Search</button>
+          <label className="chk small" title="Match the words together, in this order (the same as typing them in quotes)">
+            <input type="checkbox" checked={isPhrase(draft)} disabled={!draft.trim()}
+              onChange={(e) => {
+                // #80: applies at once, like the search page's filters
+                const next = asPhrase(draft, e.target.checked);
+                setDraft(next);
+                go({ view: "filing", companyId, accessionNo, section: active?.section_key ?? null, ...(next ? { q: next } : {}) });
+                setQuery(next);
+              }} />
+            <span>Exact phrase</span>
+          </label>
         </form>
         {stepped && active && (
           <span className="filing-steps" role="group" aria-label={`Other ${stepped} filings`}>
@@ -239,7 +268,7 @@ export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q,
                     aria-current={s.section_key === active?.section_key ? "page" : undefined}
                   >
                     <span className="key">{s.section_key}</span>
-                    <span className="grow">{s.title ?? "Untitled"}</span>
+                    <span className="grow">{sectionTitle(s.section_key, s.title)}</span>
                     {hit ? (
                       <span className="cnt" title={`${hit.passages_matched} matching passage${hit.passages_matched === 1 ? "" : "s"}`}>
                         {hit.passages_matched}
@@ -253,15 +282,15 @@ export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q,
             </div>
           ))}
         </nav>
-        <article className="section-text">
+        <article className="section-text" data-sticky-scope="">
           {sectionKey && active && active.section_key !== sectionKey && (
             <p className="faint small">This filing has no section {sectionKey}; showing {active.section_key}.</p>
           )}
           {active === null && <p className="empty">This filing has no parsed sections.</p>}
           {active && (
-            <div className="row wrap section-h">
+            <div className="row wrap section-h" data-sticky-bar="">
               <h2 className="grow">
-                {active.section_key} · {active.title ?? "Untitled"}
+                {active.section_key} · {sectionTitle(active.section_key, active.title)}
               </h2>
               {terms.length > 0 && sectionText && !diffOn && (
                 <MatchNav matches={matches} current={match} passages={hitsBySection.get(active.section_key)?.passages_matched ?? 0}
@@ -269,13 +298,16 @@ export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q,
               )}
               {diff && (
                 <button className="btn sm" aria-pressed={diffOn} onClick={() => setDiffFor(diffOn ? null : active.section_key)}>
-                  {diffOn ? "Back to text" : `What changed (${diff.summary.new + diff.summary.removed + diff.summary.rewritten})`}
+                  {diffOn ? "Back to text" : `What changed (${diff.material
+                    ? diff.material.new + diff.material.removed + diff.material.rewritten
+                    : diff.summary.new + diff.summary.removed + diff.summary.rewritten})`}
                 </button>
               )}
             </div>
           )}
           {active && diffOn && diff ? (
-            <SideBySide diff={diff} companyId={companyId} />
+            <SideBySide diff={diff} companyId={companyId} basis={changes?.state === "ok" ? changes.data.basis : basis}
+              form={f?.form ?? null} onBasis={f?.form.startsWith("10-Q") ? setReaderBasis : undefined} />
           ) : (
             active && <SectionBody load={text} terms={terms} at={at} current={match} onOpen={setMatch} />
           )}
@@ -339,21 +371,29 @@ function SectionBody({ load, terms, at, current, onOpen }: {
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const section = load?.state === "ok" ? load.data : null;
-  const ps = useMemo(() => (section ? paragraphs(section.text) : []), [section]);
+  // #178/#179: paragraphs and tables, page debris left out (reader/blocks.ts)
+  const blocks = useMemo(() => (section ? blocksOf(section) : []), [section]);
   const start = section?.citation.char_start;
-  const target = at !== undefined && start !== undefined ? paragraphAt(ps, at - start) : -1;
+  const target = at !== undefined && start !== undefined ? blockAt(blocks, at - start) : -1;
   const beyond = section && at !== undefined && start !== undefined && at - start >= section.text.length;
   const hasTerms = terms.length > 0;
   // opening a section with a search: the first highlight, or the first at the cited passage
   useEffect(() => {
-    if (section && hasTerms && current < 0) onOpen(firstMatchFrom(ps, terms, target));
-  }, [section, hasTerms, current, ps, terms, target, onOpen]);
+    if (section && hasTerms && current < 0) onOpen(firstBlockMatch(blocks, terms, target));
+  }, [section, hasTerms, current, blocks, terms, target, onOpen]);
   useEffect(() => {
     if (!section) return;
     const el = ref.current?.querySelector(current >= 0 ? "mark.cur" : ".hit") ?? ref.current?.querySelector(".hit");
     el?.scrollIntoView?.({ block: "center" });
   }, [section, target, current]);
   let marks = 0;
+  // highlights numbered in blockUnits' order, so next/previous and the count agree
+  const marked = (s: string) =>
+    highlight(s, terms).map((r, j) => {
+      if (typeof r === "string") return r;
+      const n = marks++;
+      return <mark key={j} className={n === current ? "cur" : undefined}>{r.mark}</mark>;
+    });
 
   if (!load || load.state === "loading") return <Skeleton lines={6} label="Loading the section" />;
   if (load.state === "denied") return <p className="empty locked">This section isn't included in your access.</p>;
@@ -362,15 +402,40 @@ function SectionBody({ load, terms, at, current, onOpen }: {
   }
   return (
     <div ref={ref}>
-      {ps.map((p, i) => (
-        <p key={p.start} className={i === target ? "hit" : undefined}>
-          {highlight(p.text, terms).map((r, j) => {
-            if (typeof r === "string") return r;
-            const n = marks++;
-            return <mark key={j} className={n === current ? "cur" : undefined}>{r.mark}</mark>;
-          })}
-        </p>
-      ))}
+      {blocks.map((b, i) =>
+        b.kind === "p" ? (
+          <p key={b.start} className={i === target ? "hit" : undefined}>{marked(b.text)}</p>
+        ) : (
+          <div key={b.start} className={i === target ? "hit filing-table" : "filing-table"}>
+            <TableScroll label="A table in the filing">
+              <table className="t ftable">
+                {b.heads && (
+                  <thead>
+                    <tr>
+                      <th className="first">{marked(b.heads.label)}</th>
+                      {b.heads.cells.map((c, k) => <th key={k} className="n">{marked(c)}</th>)}
+                    </tr>
+                  </thead>
+                )}
+                <tbody>
+                  {b.rows.map((r) =>
+                    r.cells.length ? (
+                      <tr key={r.start}>
+                        <td className="first">{marked(r.label)}</td>
+                        {r.cells.map((c, k) => <td key={k} className="n">{marked(c)}</td>)}
+                      </tr>
+                    ) : (
+                      <tr key={r.start} className="label-row">
+                        <td colSpan={b.columns + 1}>{marked(r.label)}</td>
+                      </tr>
+                    ),
+                  )}
+                </tbody>
+              </table>
+            </TableScroll>
+          </div>
+        ),
+      )}
       {section.truncated && (
         <p className="muted small">
           Showing the first {section.text.length.toLocaleString()} of {section.total_chars.toLocaleString()} characters
@@ -395,7 +460,7 @@ function SearchHits({ hits, query, companyId, accessionNo }: { hits: Load<Sectio
             <a href={href({ view: "filing", companyId, accessionNo, section: h.section_key, at: h.citation.char_start, q: query })}>
               <b>{h.section_key}</b> {h.title ?? ""}
             </a>
-            <div className="snippet"><Marked runs={snippetRuns(h.snippet)} /></div>
+            <div className="snippet"><Marked runs={snippetRuns(h.snippet, searchTerms(query))} /></div>
           </li>
         ))}
       </ul>
@@ -441,17 +506,36 @@ function FilingStep({ load, dir, form, companyId, sectionKey, q }: { load: Load<
 type DiffSection = SectionChanges["sections"][number];
 
 /** What changed in this section since the comparable filing: prior on the left, this filing on
- * the right; rewritten paragraphs mark removed words on the left and added words on the right. */
-function SideBySide({ diff, companyId }: { diff: DiffSection; companyId: string }) {
+ * the right; rewritten paragraphs mark removed words on the left and added words on the right. A
+ * 10-Q can switch between the same quarter a year earlier and the previous 10-Q (`onBasis`); a
+ * passage that names its period says so (F3). */
+function SideBySide({ diff, companyId, basis, form, onBasis }: {
+  diff: DiffSection;
+  companyId: string;
+  basis: Basis;
+  form: string | null;
+  onBasis?: (b: Basis) => void;
+}) {
   const c = diff.compared_to;
+  const m = diff.material;
+  const hidden = m ? m.hidden.calendar + m.hidden.resplit + m.hidden.figures_only + m.hidden.minor : 0;
   return (
     <div className="sbs-wrap">
       <div className="row wrap">
-        <span className="tag q">{diff.summary.new} new</span>
-        <span className="tag e">{diff.summary.rewritten} rewritten</span>
-        <span className="tag warn">{diff.summary.removed} removed</span>
+        {onBasis && (
+          <span className="seg" role="group" aria-label="Compare with">
+            {(["year_ago", "prior"] as const).map((b) => (
+              <button key={b} className={basis === b ? "on" : undefined} aria-pressed={basis === b} onClick={() => onBasis(b)}>
+                {comparisonLabel(b, form)}
+              </button>
+            ))}
+          </span>
+        )}
+        <span className="tag q">{m ? m.new : diff.summary.new} new</span>
+        <span className="tag e">{m ? m.rewritten : diff.summary.rewritten} rewritten</span>
+        <span className="tag warn">{m ? m.removed : diff.summary.removed} removed</span>
         <span className="faint">
-          · {diff.summary.unchanged + diff.summary.minor_edits + diff.summary.numbers_only} unchanged or minor, hidden
+          · {diff.summary.unchanged + hidden} unchanged or minor, hidden
         </span>
       </div>
       {diff.stale ? (
@@ -463,7 +547,7 @@ function SideBySide({ diff, companyId }: { diff: DiffSection; companyId: string 
           <div className="sbs-h" role="row">
             <span role="columnheader">
               <a href={href({ view: "filing", companyId, accessionNo: c.accession_no, section: c.section_key })}>
-                Prior {c.form}, filed {day(c.filed, true)}
+                {basis === "year_ago" ? `${c.form} a year earlier` : `Prior ${c.form}`}, filed {day(c.filed, true)}
               </a>
             </span>
             <span role="columnheader">This filing</span>
@@ -471,6 +555,7 @@ function SideBySide({ diff, companyId }: { diff: DiffSection; companyId: string 
           {diff.changes.map((ch, i) => (
             <div key={i} className={`sbs-r ${ch.kind}`} role="row">
               <div role="cell" className="old">
+                {ch.kind === "removed" && periodLabel(ch.period) && <><span className="tag period">{periodLabel(ch.period)}</span>{" "}</>}
                 {ch.kind === "new" ? (
                   <span className="faint">not in the prior filing</span>
                 ) : ch.kind === "rewritten" && ch.words ? (
@@ -480,6 +565,7 @@ function SideBySide({ diff, companyId }: { diff: DiffSection; companyId: string 
                 )}
               </div>
               <div role="cell" className="new">
+                {ch.kind !== "removed" && periodLabel(ch.period) && <><span className="tag period">{periodLabel(ch.period)}</span>{" "}</>}
                 {ch.kind === "removed" ? (
                   <span className="faint">removed</span>
                 ) : ch.kind === "rewritten" && ch.words ? (

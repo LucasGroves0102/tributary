@@ -1,0 +1,120 @@
+{
+ "company_id": "0001674101",
+ "name": "Vertiv Holdings Co",
+ "tickers": [
+  "VRT"
+ ],
+ "exchanges": [
+  "NYSE"
+ ],
+ "sic": "3679",
+ "industry": "Electronic Components, NEC",
+ "fiscal_year_end": "1231",
+ "filer_category": "large_accelerated",
+ "filer_categories": [
+  "Large accelerated filer"
+ ],
+ "state_of_incorporation": "DE",
+ "values": {
+  "revenue_ttm": "13116600000",
+  "revenue_growth_ttm": "0.352743",
+  "gross_margin_ttm": "0.381151",
+  "operating_margin_ttm": "0.201401",
+  "net_income_ttm": "2098000000",
+  "free_cash_flow_ttm": "3147200000",
+  "fcf_margin_ttm": "0.239940",
+  "eps_diluted_q": "1.95",
+  "cash_q": "3512900000",
+  "net_debt_q": "-783200000",
+  "debt_to_equity_q": "0.532261",
+  "roe_ttm": "0.465669",
+  "revenue_q": "4312800000"
+ },
+ "sources": {
+  "revenue_ttm": {
+   "form": "10-Q",
+   "filed": "2026-10-28",
+   "period_end": "2026-09-30",
+   "accession_no": "0001628280-26-067893"
+  },
+  "revenue_growth_ttm": {
+   "form": "10-Q",
+   "filed": "2026-10-28",
+   "period_end": "2026-09-30",
+   "accession_no": "0001628280-26-067893"
+  },
+  "gross_margin_ttm": {
+   "form": "10-Q",
+   "filed": "2026-10-28",
+   "period_end": "2026-09-30",
+   "accession_no": "0001628280-26-067893"
+  },
+  "operating_margin_ttm": {
+   "form": "10-Q",
+   "filed": "2026-10-28",
+   "period_end": "2026-09-30",
+   "accession_no": "0001628280-26-067893"
+  },
+  "net_income_ttm": {
+   "form": "10-Q",
+   "filed": "2026-10-28",
+   "period_end": "2026-09-30",
+   "accession_no": "0001628280-26-067893"
+  },
+  "free_cash_flow_ttm": {
+   "form": "10-Q",
+   "filed": "2026-10-28",
+   "period_end": "2026-09-30",
+   "accession_no": "0001628280-26-067893"
+  },
+  "fcf_margin_ttm": {
+   "form": "10-Q",
+   "filed": "2026-10-28",
+   "period_end": "2026-09-30",
+   "accession_no": "0001628280-26-067893"
+  },
+  "eps_diluted_q": {
+   "form": "10-Q",
+   "filed": "2026-10-28",
+   "period_end": "2026-09-30",
+   "accession_no": "0001628280-26-067893"
+  },
+  "cash_q": {
+   "form": "10-Q",
+   "filed": "2026-10-28",
+   "period_end": "2026-09-30",
+   "accession_no": "0001628280-26-067893"
+  },
+  "net_debt_q": {
+   "form": "10-Q",
+   "filed": "2026-10-28",
+   "period_end": "2026-09-30",
+   "accession_no": "0001628280-26-067893"
+  },
+  "debt_to_equity_q": {
+   "form": "10-Q",
+   "filed": "2026-10-28",
+   "period_end": "2026-09-30",
+   "accession_no": "0001628280-26-067893"
+  },
+  "roe_ttm": {
+   "form": "10-Q",
+   "filed": "2026-10-28",
+   "period_end": "2026-09-30",
+   "accession_no": "0001628280-26-067893"
+  },
+  "revenue_q": {
+   "form": "10-Q",
+   "filed": "2026-10-28",
+   "period_end": "2026-09-30",
+   "accession_no": "0001628280-26-067893"
+  }
+ },
+ "readings": {},
+ "latest_period": "2026-09-30",
+ "not_applicable": [],
+ "access": [
+  "filings",
+  "financials"
+ ]
+}

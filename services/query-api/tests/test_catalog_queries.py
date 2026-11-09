@@ -3,8 +3,10 @@ that list comes from authz.public_access, which RLS reads anyway, so it filters 
 queries around it timed out (hermes, 2026-11-02; migration 032). Fails if a route goes back to it.
 Also: layer 1 still blanks what it doesn't allow when no id list reaches the query."""
 
-from datetime import date
+import json
+from datetime import date, timedelta
 from decimal import Decimal
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -27,7 +29,28 @@ ROUTES = ["/v1/screener?limit=50", "/v1/screener?limit=50&access=financials",
           "/v1/screener?where=revenue_ttm:gte:1", "/v1/filings/latest", "/v1/filing-index?limit=50",
           "/v1/search?q=supply+chain", "/v1/companies/search?q=app&access=financials",
           "/v1/data-notes", f"/v1/companies/{NVDA}/peers", "/v1/watchlist",
-          "/v1/calendar/expected-filings?scope=readable"]
+          "/v1/calendar/expected-filings?scope=readable", f"/v1/companies/{NVDA}/events",
+          f"/v1/companies/{NVDA}/earnings?quarters=8",
+          f"/v1/companies/{NVDA}/filings/0001045810-26-000021/changes?view=ranked&q=tariffs",
+          # F5: one company's statement callouts and one figure's components
+          f"/v1/companies/{NVDA}/financials?quarters=120&callouts=true",
+          f"/v1/companies/{NVDA}/components?metric=net_debt&period_end=2026-07-26",
+          # F7b: one company's insider filings (#117)
+          f"/v1/companies/{NVDA}/insiders?limit=100",
+          # F8b: one company's backlog and orders from its filings' text (H11)
+          f"/v1/companies/{NVDA}/text-kpis?years=15", f"/v1/companies/{NVDA}/text-kpis",
+          # pre-ship review: the routes F2-F8 added that weren't here yet
+          f"/v1/companies/{NVDA}/filings/0001045810-26-000021/figures",
+          f"/v1/companies/{NVDA}/peers/check/{TSLA}", "/v1/sectors",
+          "/v1/search?q=supply+chain&from=2025-11-01&to=2026-11-01&window=exact",
+          "/v1/search?q=supply+chain&window=exact&sort=date",
+          f"/v1/companies/{NVDA}/insiders?limit=100&cursor=2026-09-18_0001588670-26-000014"]
+# POST routes: path, body
+POSTS = [(f"/v1/companies/{NVDA}/model",
+          {"companyId": NVDA, "historyYears": 8, "ytd": True,
+           "assumptions": [{"growth": 30, "margin": 55}, {"growth": 20, "margin": 50}],
+           "price": {"value": 180, "date": "2026-11-06"}})]
+MODEL_INPUTS = Path(__file__).parent / "fixtures" / "model" / "nvda.json"
 
 
 def meta(cid):
@@ -88,8 +111,59 @@ class RecordingStore:
     def answer_last_reports(self, *_):
         return {}
 
+    def answer_company_8ks(self, user_id, company_id, since):
+        return [{"accession_no": f"0001045810-26-{n:06d}", "cik": NVDA, "form": "8-K",
+                 "filing_date": date(2026, 11, 5) - timedelta(days=n), "accepted_at": None,
+                 "report_date": None, "primary_document": "d.htm", "items": ["2.02", "8.01"],
+                 "parsed_items": None} for n in range(200)]
+
+    def answer_section_heads(self, *_):
+        return {}
+
+    def answer_has_filing(self, *_):
+        return True
+
+    def answer_section_texts(self, *_):
+        return {}
+
+    def answer_kpi_sections(self, *_):
+        return {"name": "NVIDIA CORP", "sections": []}
+
     def answer_peers(self, *_, **__):
         return []
+
+    def answer_business_peers(self, user_id, company_id):
+        """NVDA's stored neighbours, OUTSIDE among them as if RLS let it through."""
+        return {"profile": {"accession_no": "0001045810-26-000021", "section_key": "1",
+                            "filed": date(2026, 2, 25), "terms": ["gpu"], "computed_at": None},
+                "peers": [{"peer_id": c, "similarity": 0.3, "terms": ["gpu"]}
+                          for c in (OUTSIDE, "0000000002")],
+                "mentions": []}
+
+    def answer_metric_names(self, *_):
+        return {"metrics": ["dividends_paid"], "derived_metrics": ["net_debt"]}
+
+    def answer_metric_series(self, *_):
+        return {(NVDA, "dividends_paid"): [(date(2026, 1, 25), 242.0), (date(2026, 4, 26), 243.0),
+                                           (date(2026, 7, 26), 6047.0)]}
+
+    def answer_components(self, *_):
+        return {"row": {"metric": "net_debt", "period_start": None, "period_end": date(2026, 7, 26),
+                        "value": Decimal(-1), "unit": "USD", "value_source": "computed",
+                        "source_tag": None, "inputs": {"cash": 1}, "accession_no": "a",
+                        "form": "10-Q", "filed": date(2026, 8, 26), "source_accessions": ["a"]},
+                "rows": {}, "facts": {}, "definition": None, "present": set()}
+
+    def answer_peer_facts(self, user_id, ids, granted):
+        return {c: {"sic": "3674", "sector": "Technology", "sector_industry": "Semiconductors",
+                    "filer_category": "large_accelerated", "revenue": Decimal(5)} for c in ids}
+
+    def answer_annual_reports(self, *_):
+        return {"sic": "3711", "annual": {"10-K": date(2026, 1, 29)}, "has_financials": True}
+
+    def answer_model_inputs(self, *_):
+        """NVIDIA's production inputs (fixtures/model/nvda.json, Store shape)."""
+        return json.loads(MODEL_INPUTS.read_text())
 
 
 class Watchlist:
@@ -132,6 +206,18 @@ def long_lists(value: Any) -> list[int]:
 def test_no_route_passes_the_catalog_ids_into_sql(token, route):
     c = app()
     r = c.get(route, headers=token("carol"))
+    assert r.status_code == 200, r.text
+    assert c.store.calls, "the route should have queried"
+    for name, args, kwargs in c.store.calls:
+        if name == "catalog_companies":
+            continue
+        assert not long_lists([args, kwargs]), f"{route}: {name} got a catalog-sized list"
+
+
+@pytest.mark.parametrize(("route", "body"), POSTS)
+def test_no_post_route_passes_the_catalog_ids_into_sql(token, route, body):
+    c = app()
+    r = c.post(route, json=body, headers=token("carol"))
     assert r.status_code == 200, r.text
     assert c.store.calls, "the route should have queried"
     for name, args, kwargs in c.store.calls:
@@ -250,6 +336,18 @@ def test_search_with_from_stops_there_and_too_broad_is_still_422(token):
         raise SearchTooBroad
     c.store.answer_search_sections = broad
     assert c.get("/v1/search?q=revenue", headers=token("carol")).status_code == 422
+
+
+def test_search_window_exact_ranks_exactly_the_range_asked(token):
+    """#81: the dates a reader picked are the dates searched, across the catalog too: one call
+    over exactly from-to, still no id list (the definer function reads the rule itself)."""
+    c = app()
+    body = c.get("/v1/search?q=x+y&from=2025-11-01&to=2026-11-01&window=exact&sort=date",
+                 headers=token("carol")).json()
+    [(_, args, kwargs)] = [x for x in c.store.calls if x[0] == "search_sections"]
+    assert args[1] is None and args[5] == date(2025, 11, 1) and args[6] == date(2026, 11, 1)
+    assert kwargs == {"sort": "date"}
+    assert "searched_from" not in body and body["window"] == "exact"
 
 
 def test_search_of_one_company_is_exact_all_time(token):

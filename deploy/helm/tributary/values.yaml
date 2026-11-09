@@ -80,6 +80,15 @@ github:
 
 logLevel: INFO
 
+# Filing alerts by email (query_api/alert_email.py): off. allow-internet opens only 443, so SMTP
+# needs this too: `enabled: true` adds allow-smtp, TCP `port` to public addresses for pods that
+# `uses: email` (the alerts job). Turning email on = this, plus ALERT_SMTP_HOST / ALERT_SMTP_FROM
+# (and ALERT_SMTP_PORT when not 587, the same number as `port`) in the alerts job's env and
+# ALERT_SMTP_USER / ALERT_SMTP_PASSWORD from the secret.
+alertEmail:
+  enabled: false
+  port: 587
+
 # Prometheus (deploy/helm/monitoring) scrapes /metrics from each service through a PodMonitor:
 # on `port` for HTTP services, on `metrics.port` for workers. `metrics: false` opts a service out.
 metrics:
@@ -105,7 +114,8 @@ resources:
 # uses: postgres, app-postgres (APP_DATABASE_URL), kafka, openfga, sec (SEC_USER_AGENT + HTTPS
 # out, and the shared SEC rate limit in host Postgres), anthropic (API key + HTTPS out), github
 # (GitHub OAuth app keys, optional, + HTTPS out), market-data (data-connections-key, optional,
-# + HTTPS out to users' market-data providers), jwt, query-api, demo. Each adds the env vars
+# + HTTPS out to users' market-data providers), webhooks (HTTPS out to users' alert webhooks;
+# query_api/webhooks.py refuses private addresses), jwt, query-api, demo. Each adds the env vars
 # and network access it needs.
 # kafkaUser: the Kafka SCRAM user with kafka.sasl.enabled (default: the service/job name).
 # secClass: priority in the shared SEC rate limit (SEC_CALLER_CLASS): live, batch or bulk.
@@ -119,6 +129,9 @@ services:
       POLL_INTERVAL_SECONDS: "30"
   bronze-loader:
     uses: [kafka, postgres]
+  # Live documents: every 10-K/10-Q/8-K of tracked companies, and every operating company's new
+  # 10-K, 10-Q and material 8-K from the feed (FETCH_OPERATING, FETCH_8K_ITEMS; services/doc-fetcher
+  # README), within minutes. SEC class live.
   doc-fetcher:
     uses: [kafka, postgres, sec]
   # image: parser-rs (Rust, live since 2026-10-20) or parser (the Python reference). Both consume
@@ -142,8 +155,8 @@ services:
   # filings every CRAWL_PLAN_HOURS. Pauses itself while the node has under CRAWL_MIN_FREE_GB free;
   # pause by hand with UPDATE ops.doc_crawl_control SET paused = true. Shipped stopped: start it and
   # parser-backfill with replicas: 1 in deploy/flux/releases/tributary.yaml (README), and keep both
-  # running after the backfill: doc-fetcher only covers tracked companies, so this is what keeps
-  # every other company's documents current.
+  # running after the backfill: it takes what doc-fetcher leaves (amendments, daily-index filings,
+  # 8-Ks outside doc-fetcher's items, fetch errors).
   doc-crawler:
     image: doc-fetcher
     command: [doc-crawler]
@@ -152,9 +165,10 @@ services:
     secClass: bulk
     terminationGracePeriodSeconds: 60
     env:
-      # 11 years reaches November 2015: the pre-2021 document backfill from 2016 (Lucas, 2026-11-09; measured in
-      # the doc-fetcher README: ~288k filings, ~+53 GB, ~29 h fetching at the spare rate, then search indexing).
-      # Once the features branch ships, CRAWL_SINCE: "2016-01-01" fixes the start instead of rolling.
+      # 11 years reaches November 2015: the pre-2021 document backfill from 2016 (Lucas, 2026-11-09; doc-fetcher
+      # README "Documents before 2021": ~288k filings, ~+53 GB, ~29 h at the spare rate, then search indexing).
+      # CRAWL_SINCE (a fixed start that can only reach further back) is left unset: the rolling 11 years already
+      # covers 2016, and the crawl planned from November 2015 on 2026-11-09.
       CRAWL_YEARS: "11"
       # results, Reg FD and other events, plus the material events the company page lists since the last
       # report (deals, debt, leadership, impairments, auditor, non-reliance): ~65k more 8-Ks over 5 years
@@ -188,7 +202,8 @@ services:
     uses: [kafka, postgres, openfga]
   query-api:
     port: 8000
-    uses: [postgres, app-postgres, openfga, jwt, demo, github, market-data]
+    # webhooks: the alert settings' "Send a test" (query_api/alerts.py, 5 an hour per user)
+    uses: [postgres, app-postgres, openfga, jwt, demo, github, market-data, webhooks]
     from: [web, agent-api]
     resources:
       requests:
@@ -260,6 +275,26 @@ jobs:
         memory: 256Mi
       limits:
         memory: 1Gi
+  # Filings companyfacts lacks, read from their own XBRL (facts-fetcher-filings, migration 055):
+  # 10-K/10-Qs at least 3 days old with no fact in silver (the stored document's extract, else the
+  # filing's instance: two SEC requests), the stored documents of companies with their own tags or
+  # member sums (NVIDIA's capex, Ford's and GM's debt), and filings companyfacts has since caught up
+  # with (their own facts leave silver). Each batch refreshes its companies' gold. Ships suspended:
+  # run the backfill once (services/facts-fetcher README, "Filings companyfacts lacks"), then set
+  # suspend: false in the Flux release for the daily run.
+  filing-facts:
+    image: facts-fetcher
+    command: [facts-fetcher-filings]
+    schedule: "30 9 * * *"
+    suspend: true
+    timeoutSeconds: 7200
+    uses: [postgres, sec]
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        memory: 1Gi
   # Every SEC filer's XBRL facts from the nightly companyfacts.zip (one ~1.4 GB download per
   # night). A run loads batches of BULK_LIMIT changed companies back to back, saving progress
   # after each; a stopped run resumes where it left off. Once caught up, a night only touches the
@@ -302,6 +337,39 @@ jobs:
         memory: 256Mi
       limits:
         memory: 1Gi
+  # Insider filings (#117, migration 054): the Forms 3/4/5 of operating companies filed in the last
+  # INSIDERS_DAYS days that bronze.ownership_documents doesn't have, newest first, one SEC request
+  # each at the bulk class, stored and parsed into silver. The live doc-fetcher stores new ones from
+  # the feed. Run once after the deploy: kubectl create job --from=cronjob/insiders-backfill ins-1
+  # (~179,000 filings a year: 90 days is ~45,000 requests, about 2 h when the bulk class is idle,
+  # up to ~15 h while the document crawl takes most of it). A run cut off at the deadline loses
+  # nothing: the next one takes only what is still missing.
+  insiders-backfill:
+    image: doc-fetcher
+    command: [doc-fetcher-insiders]
+    schedule: "0 0 1 1 *"
+    suspend: true
+    timeoutSeconds: 61200
+    uses: [postgres, sec]
+    secClass: bulk
+    env:
+      INSIDERS_DAYS: "90"
+      INSIDERS_LIMIT: "60000"
+  # The daily catch-up: the same job over the last 7 days, after the nightly submissions load
+  # (05:30), for insider filings the live feed missed (a doc-fetcher outage, a feed gap). Filings
+  # kept as failed in ops.insider_queue (gone, no XML, refused) are retaken once a run, after the
+  # rest, while inside the 7 days. Usually a handful of requests; a week of total outage is ~3,500
+  # (~10 min at the bulk class).
+  insiders-catchup:
+    image: doc-fetcher
+    command: [doc-fetcher-insiders]
+    schedule: "45 8 * * *"
+    timeoutSeconds: 7200
+    uses: [postgres, sec]
+    secClass: bulk
+    env:
+      INSIDERS_DAYS: "7"
+      INSIDERS_LIMIT: "5000"
   # Run once to fill a new database: kubectl create job --from=cronjob/seed-documents seed-1
   seed-documents:
     image: doc-fetcher
@@ -338,6 +406,22 @@ jobs:
       SEGMENTS_BATCH: "25"
       SEGMENTS_ROUNDS: "40"
       SEGMENTS_PAUSE_SECONDS: "0"
+  # Filing alerts (query_api/alert_job.py, app migration 016): every 10 minutes, the 10-K, 10-Q
+  # and material 8-K filings of each user's watched and analysed companies in the last 3 days
+  # (public filing index), as in-app notifications with their key figures and the user's red
+  # lines (read as that user: OpenFGA, then RLS), sent on to users' webhooks with retries.
+  # Idempotent on the filing, so a missed or repeated run loses or doubles nothing. postgres +
+  # app-postgres + openfga = the reads; jwt = webhook signing secrets (derived, never stored);
+  # webhooks = HTTPS out to public addresses only. No Kafka client, no SEC requests.
+  alerts:
+    image: query-api
+    command: [query-api-alerts]
+    schedule: "*/10 * * * *"
+    timeoutSeconds: 540
+    # email: SMTP out, only once alertEmail.enabled (off: the label opens nothing)
+    uses: [postgres, app-postgres, openfga, jwt, webhooks, email]
+    env:
+      PUBLIC_APP_URL: https://tributary.lucasgroves.dev
   # Deletes demo sandbox users past their expiry (query_api/sandbox.py). The deletion reaches
   # OpenFGA and authz.user_access through CDC like any user's; watchlists and usage go too.
   demo-cleanup:
@@ -371,3 +455,22 @@ jobs:
     env:
       SECTION_INDEX_LIMIT: "20000"
       SECTION_INDEX_BATCH: "25"
+  # Peers by business (parser-peers, migration 047): reads each company's latest 10-K Item 1
+  # twice (~250 MB of text, ~6 s each on hermes), compares them as term vectors and replaces
+  # gold.business_profiles / business_peers / business_mentions in one transaction (60 MB). No
+  # SEC requests. 79 s and 406 MB peak on hermes' 4,888 usable Item 1s of 2026-11-09. Weekly:
+  # a new 10-K changes one company's vector; until the first run the Query API ranks peers by SIC
+  # and size. First run after the deploy: kubectl -n tributary create job
+  # --from=cronjob/business-peers business-peers-1 (docs/analyst-test/b6-runbook.md, F4).
+  business-peers:
+    image: parser
+    command: [parser-peers]
+    schedule: "30 5 * * 0"
+    timeoutSeconds: 3600
+    uses: [postgres]
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        memory: 1Gi

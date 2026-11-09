@@ -26,9 +26,11 @@ import {
   type AxisTable,
   type View,
 } from "./revenue";
+import { rowsCurrency } from "./data";
 import { Gate } from "./Tables";
 import { useLoad } from "./useLoad";
 import { TableScroll } from "../components/TableScroll";
+import { href } from "../route";
 
 interface Props {
   token: string;
@@ -49,8 +51,11 @@ const BLOCKED_TITLE = "No contribution: these members changed by more than reven
  * revenue quality (company/revenue.ts has the rules). Every chart is a chart state: it can be
  * saved to a workspace (and embedded in a thesis) or opened in the chart builder. Values need
  * financials access, like Statements. */
+/** #115: Revenue is trends and drivers (trailing twelve months, three years); Segments is the
+ * reported quarters with each segment's profit, share and growth. Each says so and links to the
+ * other, and Revenue has no quarterly switch: that view was Segments' revenue tables again. */
 export function Revenue({ token, companyId, name, ticker, saved, onOpenChart }: Props) {
-  const [view, setView] = useState<View>("ttm");
+  const view: View = "ttm";
   const ttm = useLoad(`${companyId}|ttm`, () =>
     Promise.all([
       segmentsOf(token, companyId, { metric: "revenue", quarters: QUARTERS, view: "ttm", basis: "fiscal" }),
@@ -59,32 +64,24 @@ export function Revenue({ token, companyId, name, ticker, saved, onOpenChart }: 
   );
   // revenue quality reads quarters, receivables against the quarter's own revenue (H3)
   const quality = useLoad(`${companyId}|quality`, () => financialsView(token, companyId, QUARTERS, ["revenue", "receivables"], "quarter"));
-  const quarter = useLoad(view === "quarter" ? `${companyId}|quarter` : null, () =>
-    Promise.all([
-      segmentsOf(token, companyId, { metric: "revenue", quarters: PERIODS, view: "quarter", basis: "fiscal" }),
-      financialsView(token, companyId, PERIODS, ["revenue"], "quarter"),
-    ]),
-  );
   const label = (id: string) => (id === companyId ? ticker : UNNAMED);
-  const shown = view === "quarter" ? quarter : ttm;
 
   return (
     <>
+      <p className="tab-purpose muted">
+        How {name}'s revenue is made up and how it's moving: three years of trailing-twelve-month revenue by segment,
+        geography and product, what drove the growth, and whether receivables keep pace. The quarters as filed, with
+        gross profit and operating income by segment, are on{" "}
+        <a href={href({ view: "company", companyId, tab: "segments" })}>Segments</a>.
+      </p>
       <section className="card">
         <div className="card-h wrap">
-          <h2>Revenue by segment and geography</h2>
-          <span className="seg" role="group" aria-label="Period">
-            {(["ttm", "quarter"] as View[]).map((v) => (
-              <button key={v} className={v === view ? "on" : undefined} aria-pressed={v === view} onClick={() => setView(v)}>
-                {v === "ttm" ? "TTM" : "Quarterly"}
-              </button>
-            ))}
-          </span>
-          <span className="sub">fiscal periods · USD · as reported in the filings' XBRL; hover a value for its filing</span>
+          <h2>Revenue trends by segment, geography and product</h2>
+          <span className="sub">trailing twelve months · fiscal periods · USD · as reported in the filings' XBRL; hover a value for its filing</span>
         </div>
-        <Gate load={shown} name={name} what="Financials">
+        <Gate load={ttm} name={name} what="Financials">
           {() => {
-            const [seg, fin] = (shown as { state: "ok"; data: [{ rows: SegmentRow[] }, { rows: FinancialRow[] }] }).data;
+            const [seg, fin] = (ttm as { state: "ok"; data: [{ rows: SegmentRow[] }, { rows: FinancialRow[] }] }).data;
             return <Axes rows={seg.rows} totals={totalsByKey(fin.rows, "revenue")} view={view} {...{ companyId, ticker, name, saved, onOpenChart, token, label }} />;
           }}
         </Gate>
@@ -288,6 +285,8 @@ function Decomposition({ rows, totals, ...c }: Common & { rows: SegmentRow[]; to
 
 function Quality({ rows, ...c }: Common & { rows: FinancialRow[] }) {
   const q = useMemo(() => revenueQuality(rows), [rows]);
+  // a company reporting in another currency (migration 056): its rows say which
+  const currency = rowsCurrency(rows);
   const chart = useMemo(() => qualityChart(c.companyId, c.ticker), [c.companyId, c.ticker]);
   const flagged = q.filter((r) => r.flagged).length;
   return (
@@ -324,8 +323,8 @@ function Quality({ rows, ...c }: Common & { rows: FinancialRow[] }) {
                 {q.map((r) => (
                   <tr key={r.label} className={r.flagged ? "flagged" : undefined}>
                     <td className="first">{r.label}</td>
-                    <td className="n">{money(r.revenue, "USD")}</td>
-                    <td className="n">{money(r.receivables, "USD")}</td>
+                    <td className="n">{money(r.revenue, currency)}</td>
+                    <td className="n">{money(r.receivables, currency)}</td>
                     <td className="n">{r.dso.toFixed(0)}</td>
                     <td className="n">{r.revenueGrowth === null ? NO_DATA : change(r.revenueGrowth)}</td>
                     <td className="n">{r.receivablesGrowth === null ? NO_DATA : change(r.receivablesGrowth)}</td>

@@ -33,6 +33,15 @@ Rule 4 and the decimal and stated-scale cells came after the recorded suites (te
 tests/citations): they run only for a figure 1-3 left unverified, so a recorded answer verifies
 exactly as before. Nothing is loosened: every rule still needs the number itself in what the
 tools returned.
+
+Currencies (F8b, after the suites too): since migration 056 a company's figures are in its own
+currency, and /financials says so (each row's `unit`, "EUR"; `currency` on the answer when it isn't
+USD). A figure written in dollars ("$2,097M", "$45.1B") never stands on an amount in another
+currency: when rules 1, 2 or 4 verified or derived it from such a row or input, it is checked again
+with only dollar rows, and is unverified unless those verify it. Every row in the recorded suites is
+in USD, so this never runs for them. A figure written without "$" ("2,097 million") is matched as
+before, whatever the currency. Filing text isn't read for its currency: a "$" figure can still be
+quoted from a euro filing's "2,097 million" (rule 3), as before.
 """
 
 import json
@@ -139,6 +148,33 @@ def verify(answer: str, tool_results: list[str], cited: set[str]) -> Verificatio
 
 
 def _check(written: str, value: float, step: float, ev: _Evidence) -> Figure:
+    f = _check_rules(written, value, step, ev)
+    # added after the recorded suites (F8b): a dollar figure never verifies on another currency
+    if f.status in ("verified", "derived") and written.lstrip().startswith("$") and \
+            any(_foreign(r) for r in (*ev.rows, *ev.inputs)):
+        dollars = _Evidence([r for r in ev.rows if not _foreign(r)], ev.texts, ev.plain_texts,
+                            ev.cells, ev.scaled, [r for r in ev.inputs if not _foreign(r)])
+        f = _check_rules(written, value, step, dollars)
+    return f
+
+
+def _foreign(r: dict) -> bool:
+    """A row or input in a currency other than the dollar (056's units, the answer's
+    `currency`)."""
+    return r.get("_currency") not in (None, "USD")
+
+
+def _currency(data: dict, r: dict) -> str | None:
+    """The currency of a /financials row: its unit's ("EUR", "EUR/shares"), else the answer's
+    (`currency`, present only when not USD), else None (a dollar answer)."""
+    code = str(r.get("unit") or "").split("/")[0]
+    if re.fullmatch(r"[A-Z]{3}", code):
+        return code
+    c = data.get("currency")
+    return c if isinstance(c, str) and re.fullmatch(r"[A-Z]{3}", c) else None
+
+
+def _check_rules(written: str, value: float, step: float, ev: _Evidence) -> Figure:
     tol = step / 2 * 1.0001
     target = abs(value)
 
@@ -293,7 +329,8 @@ def _financial_rows(content: str) -> list[dict]:
     if not isinstance(data, dict) or not isinstance(data.get("rows"), list):
         return []
     company = data.get("company_id")
-    return [{**r, "company_id": company, "value": float(r["value"]), "_span": _span(data, r)}
+    return [{**r, "company_id": company, "value": float(r["value"]), "_span": _span(data, r),
+             "_currency": _currency(data, r)}
             for r in data["rows"] if isinstance(r, dict) and "value" in r and "metric" in r]
 
 
@@ -324,6 +361,7 @@ def _input_rows(content: str) -> list[dict]:
             continue
         cite = r.get("citation") if isinstance(r.get("citation"), dict) else {}
         span = _span(data, r)
+        currency = _currency(data, r) if data.get("currency") else None  # the company's
         for name, v in r["inputs"].items():
             if name == "quarters" and isinstance(v, list):
                 for q in v:  # a TTM's quarters: quarters, never paired with the TTM itself
@@ -332,7 +370,7 @@ def _input_rows(content: str) -> list[dict]:
                         out.append({"metric": str(r["metric"]), "value": value,
                                     "company_id": company, "period_end": q.get("period_end"),
                                     "citation": {"accession_no": q.get("accession_no")},
-                                    "_span": "quarter"})
+                                    "_span": "quarter", "_currency": currency})
                 continue
             value = _number(v)
             if value is None:
@@ -341,7 +379,8 @@ def _input_rows(content: str) -> list[dict]:
             row = {"metric": str(name), "base": str(name).removesuffix("_year_ago"),
                    "value": value, "company_id": company,
                    "period_end": None if year_ago else r.get("period_end"),
-                   "citation": {} if year_ago else cite, "_span": span}
+                   "citation": {} if year_ago else cite, "_span": span,
+                   "_currency": data.get("currency") if data.get("currency") else None}
             end = _end(r)
             if year_ago and end is not None:  # a year before the row's: for pairing only
                 row["_end"] = (end - timedelta(days=364)).isoformat()

@@ -8,7 +8,7 @@ from decimal import Decimal
 
 import pytest
 
-from facts_fetcher.db import refresh_gold
+from facts_fetcher.db import company_ids, refresh_gold
 
 psycopg = pytest.importorskip("psycopg")
 pytestmark = pytest.mark.skipif(
@@ -56,6 +56,7 @@ METRICS = {
     "LongTermNotesPayable": "long_term_debt",
     "LongTermDebtCurrent": "long_term_debt_current",
     "DebtCurrent": "long_term_debt_current",
+    "ShareBasedCompensation": "stock_based_compensation",
     "ShortTermInvestments": "short_term_investments",
     "MarketableSecuritiesCurrent": "short_term_investments",
     "DebtSecuritiesAvailableForSaleExcludingAccruedInterestCurrent": "short_term_investments",
@@ -681,11 +682,21 @@ def test_a_fallback_tag_below_its_current_portion_is_the_noncurrent_line(conn):
     assert findings(conn, "impossible_value") == []
 
 
-def test_negative_debt_is_an_impossible_value(conn):
+def test_negative_debt_reads_as_the_balance(conn):
+    # 050: the debt note's "less current portion (x)" sign (Euronet's 2013 10-K tags its current
+    # debt -10,903,000 where three 10-Qs said +10,903,000); a balance can't be below zero
     put(conn, [("LongTermDebtNoncurrent", None, END, -5, "q", FILED),
                ("LongTermDebtCurrent", None, END, -1, "q", FILED)])
-    assert [(m, d["rule"]) for m, _, d in findings(conn, "impossible_value")] == [
-        ("long_term_debt", "negative"), ("long_term_debt_current", "negative")]
+    assert gold(conn, "long_term_debt", END) == (5, "LongTermDebtNoncurrent")
+    assert gold(conn, "long_term_debt_current", END) == (1, "LongTermDebtCurrent")
+    assert findings(conn, "impossible_value") == []
+
+
+def test_a_debt_sign_that_changed_between_filings_isnt_a_restatement(conn):
+    put(conn, [("LongTermDebtCurrent", None, END, 10903000, "q", "2026-11-02"),
+               ("LongTermDebtCurrent", None, END, -10903000, "k", "2027-02-20", "10-K")])
+    assert gold(conn, "long_term_debt_current", END) == (10903000, "LongTermDebtCurrent")
+    assert findings(conn, "restatement") == []
 
 
 @pytest.mark.parametrize("sic", ["6021", None])
@@ -712,6 +723,35 @@ def test_a_debt_figure_many_times_total_liabilities_is_a_scale_slip(conn):
     assert derived(conn, "net_debt", END) is None
     ((metric, end, detail),) = findings(conn, "mistagged_fact")
     assert metric == "long_term_debt" and detail["rule"] == "debt_above_liabilities"
+
+
+def test_debt_is_compared_with_liabilities_in_its_own_currency(conn):
+    """057: a yen filer's 20-F also tags a convenience dollar translation (filed after it here, so
+    the check's latest-first lookup met it): ¥5T of debt against $200B of liabilities and $400B of
+    assets read as a scale slip. Compared in yen (¥30T, ¥60T) it is ordinary debt."""
+    conn.execute("UPDATE silver.companies SET sic = '3711' WHERE company_id = %s", (CO,))
+    conn.execute("DELETE FROM silver.financial_facts")
+    for tag, metric, value, unit, filed in (
+            ("LongTermDebtNoncurrent", "long_term_debt", 5_000_000_000_000, "JPY", FILED),
+            ("Liabilities", "total_liabilities", 30_000_000_000_000, "JPY", FILED),
+            ("Assets", "total_assets", 60_000_000_000_000, "JPY", FILED),
+            ("Liabilities", "total_liabilities", 200_000_000_000, "USD", "2026-11-03"),
+            ("Assets", "total_assets", 400_000_000_000, "USD", "2026-11-03")):
+        conn.execute(
+            "INSERT INTO silver.financial_facts (cik, metric, tag, unit, period_start, period_end,"
+            " value, accession_no, form, filed, ingested_at) VALUES (%s, %s, %s, %s, NULL, %s, %s,"
+            " %s, '20-F', %s, '2026-11-03')",
+            (CO, metric, tag, unit, END, value, "k" if unit == "JPY" else "k2", filed))
+    conn.execute("SELECT ops.check_financials(ARRAY[%s])", (CO,))
+    assert [f for f in findings(conn, "mistagged_fact")
+            if f[2].get("rule") == "debt_above_liabilities"] == []
+    # debt over five times yen liabilities and assets is still a slip
+    conn.execute("UPDATE silver.financial_facts SET value = value / 7 WHERE unit = 'JPY'"
+                 " AND tag IN ('Liabilities', 'Assets')")
+    conn.execute("UPDATE silver.financial_facts SET value = value * 10 WHERE unit = 'JPY'"
+                 " AND tag = 'LongTermDebtNoncurrent'")
+    conn.execute("SELECT ops.check_financials(ARRAY[%s])", (CO,))
+    assert [f[2]["rule"] for f in findings(conn, "mistagged_fact")] == ["debt_above_liabilities"]
 
 
 def test_debt_a_little_above_a_partial_liabilities_tag_stays(conn):
@@ -1221,3 +1261,174 @@ def test_the_month_changes_no_fiscal_label(conn):
         (CO,),
     ).fetchone()
     assert row == (2025, 4)
+
+
+# --- filers the XBRL names, debt parts' scale, stock-based compensation benefits (050) --------
+
+SUB = "0000028385"  # DTE Electric: the SEC filed DTE Energy's 2026 10-Qs under this CIK
+
+
+def filing(conn, accession, entity, filers):
+    """A stored 10-Q whose XBRL names `entity`, filed by `filers` (the feed's rows)."""
+    conn.execute(
+        "INSERT INTO bronze.filing_documents (accession_no, cik, form, filed, document_name, url,"
+        " content_gzip, content_sha256, size_bytes)"
+        " VALUES (%s, %s, '10-Q', %s, 'q.htm', 'https://www.sec.gov/q.htm', '\\x00', 'x', 1)",
+        (accession, entity, FILED),
+    )
+    conn.execute(
+        "INSERT INTO bronze.filing_xbrl (accession_no, cik, entity_cik, document_sha256,"
+        " extractor_version, status) VALUES (%s, %s, %s, 'x', 1, 'ok')",
+        (accession, entity, entity),
+    )
+    for cik in filers:
+        conn.execute(
+            "INSERT INTO bronze.filings (accession_no, cik, form_type, filed_at, payload,"
+            " kafka_partition, kafka_offset) VALUES (%s, %s, '10-Q', %s, '{}', 0, 0)",
+            (accession, cik, FILED),
+        )
+
+
+def fact(conn, cik, tag, start, end, value, accession):
+    conn.execute(
+        "INSERT INTO silver.financial_facts (cik, metric, tag, unit, period_start, period_end,"
+        " value, accession_no, form, filed) VALUES (%s, %s, %s, 'USD', %s, %s, %s, %s, '10-Q', %s)",
+        (cik, METRICS[tag], tag, start, end, value, accession, FILED),
+    )
+
+
+def dte(conn):
+    """CO's Q2 under its own CIK; its Q3 10-Q (filed with SUB) only under SUB, as the SEC has it."""
+    put(conn, [("Revenues", *Q2, 3369, "q2", "2026-07-28")])
+    fact(conn, SUB, "Revenues", *Q3, 3727, "q3")
+    fact(conn, SUB, "NetIncomeLoss", *Q3, 470, "q3")
+
+
+def test_a_filing_the_sec_put_under_a_co_registrant_is_the_named_filers(conn):
+    dte(conn)
+    filing(conn, "q3", CO, [CO, SUB])
+    assert company_ids(conn, [SUB]) == [CO]  # the loaders refresh CO when SUB's payload changes
+    refresh_gold(conn, company_ids(conn, [SUB]))
+    assert gold(conn, "revenue", END) == (3727, "Revenues")
+    assert gold(conn, "net_income", END) == (470, "NetIncomeLoss")
+    assert gold(conn, "revenue", "2026-06-30") == (3369, "Revenues")
+
+
+def test_an_entity_that_isnt_a_filer_moves_nothing(conn):
+    # a mistyped identifier in the XBRL: CO didn't file it, so the facts stay where the SEC put them
+    dte(conn)
+    filing(conn, "q3", CO, [SUB])
+    assert company_ids(conn, [SUB]) == []
+    refresh_gold(conn, [CO])
+    assert gold(conn, "revenue", END) is None
+
+
+def test_a_co_registrant_with_gold_of_its_own_gives_the_parents_figures_back(conn):
+    # Southern California Edison's Q2 2026 revenue was Edison International's 4,357M
+    dte(conn)
+    filing(conn, "q3", CO, [CO, SUB])
+    conn.execute("INSERT INTO silver.companies (company_id, name, current_cik, tracked, sic)"
+                 " VALUES (%s, 'DTE ELECTRIC', %s, false, '4911')", (SUB, SUB))
+    conn.execute("INSERT INTO silver.company_ciks (cik, company_id) VALUES (%s, %s)", (SUB, SUB))
+    fact(conn, SUB, "Revenues", *Q2, 1900, "sub-q2")
+    refresh_gold(conn, company_ids(conn, [SUB]))
+    assert sorted(company_ids(conn, [SUB])) == sorted([CO, SUB])
+    assert gold(conn, "revenue", END) == (3727, "Revenues")
+    sub = conn.execute(
+        "SELECT period_end, value FROM gold.quarterly_financials"
+        " WHERE company_id = %s AND metric = 'revenue' ORDER BY period_end", (SUB,)).fetchall()
+    assert sub == [(date(2026, 6, 30), 1900)]
+
+
+def test_the_named_filers_own_facts_win(conn):
+    # the SEC filed the facts under both: the company's own are read, nothing twice
+    dte(conn)
+    filing(conn, "q3", CO, [CO, SUB])
+    fact(conn, CO, "Revenues", *Q3, 3727, "q3")
+    fact(conn, CO, "NetIncomeLoss", *Q3, 470, "q3")
+    refresh_gold(conn, [CO])
+    rows = conn.execute(
+        "SELECT count(*) FROM gold.quarterly_financials"
+        " WHERE company_id = %s AND period_end = %s", (CO, END)).fetchone()[0]
+    assert rows == 2
+    assert gold(conn, "revenue", END) == (3727, "Revenues")
+
+
+def test_debt_parts_at_a_thousand_times_their_total_are_left_out(conn):
+    # Bank First's 2019 10-K: current 1,400,000,000 and noncurrent 38,400,000,000 beside its own
+    # LongTermDebt of 39,800,000; 041 caught the noncurrent (above liabilities), not the current
+    put(
+        conn,
+        [
+            ("LongTermDebtCurrent", None, END, 1400000000, "k", FILED, "10-K"),
+            ("LongTermDebtNoncurrent", None, END, 38400000000, "k", FILED, "10-K"),
+            ("LongTermDebt", None, END, 39800000, "k", FILED, "10-K"),
+            ("Liabilities", None, END, 1979957000, "k", FILED, "10-K"),
+            ("Assets", None, END, 2210168000, "k", FILED, "10-K"),
+        ],
+        sic="6021",
+    )
+    assert gold(conn, "long_term_debt_current", END) is None
+    assert gold(conn, "long_term_debt", END) is None
+    rules = sorted((m, d["rule"], d.get("factor")) for m, _, d in findings(conn, "mistagged_fact"))
+    assert rules == [("long_term_debt", "debt_above_liabilities", None),
+                     ("long_term_debt_current", "debt_parts_scale", 1000)]
+
+
+def test_a_non_bank_with_slipped_parts_keeps_the_filings_total(conn):
+    put(
+        conn,
+        [
+            ("LongTermDebtCurrent", None, END, 1400000000, "k", FILED, "10-K"),
+            ("LongTermDebtNoncurrent", None, END, 38400000000, "k", FILED, "10-K"),
+            ("LongTermDebt", None, END, 39800000, "k", FILED, "10-K"),
+            ("Liabilities", None, END, 900000000, "k", FILED, "10-K"),
+            ("Assets", None, END, 2000000000, "k", FILED, "10-K"),
+        ],
+    )
+    assert gold(conn, "long_term_debt_current", END) is None
+    assert gold(conn, "long_term_debt", END) == (39800000, "LongTermDebt")
+
+
+def test_parts_that_add_up_to_their_total_stay(conn):
+    put(
+        conn,
+        [
+            ("LongTermDebtCurrent", None, END, 1400000, "k", FILED, "10-K"),
+            ("LongTermDebtNoncurrent", None, END, 38400000, "k", FILED, "10-K"),
+            ("LongTermDebt", None, END, 39800000, "k", FILED, "10-K"),
+        ],
+    )
+    assert gold(conn, "long_term_debt_current", END) == (1400000, "LongTermDebtCurrent")
+    assert gold(conn, "long_term_debt", END) == (38400000, "LongTermDebtNoncurrent")
+    assert findings(conn, "mistagged_fact") == []
+
+
+def sign_flips(conn):
+    return conn.execute(
+        "SELECT period_end, severity, detail->>'rule' FROM ops.quality_findings"
+        " WHERE company_id = %s AND check_name = 'sign_flip'", (CO,)).fetchall()
+
+
+SBC = [("ShareBasedCompensation", *Q1, 6728000, "q1", "2026-05-01"),
+       ("ShareBasedCompensation", *Q2, -866000, "q2", "2026-08-01"),  # Aurinia: a reversal
+       ("ShareBasedCompensation", *Q3, 2839000, "q3", "2026-11-02")]
+
+
+def test_a_negative_stock_compensation_quarter_is_a_benefit_as_filed(conn):
+    put(conn, SBC)
+    assert gold(conn, "stock_based_compensation", "2026-06-30") == (-866000,
+                                                                     "ShareBasedCompensation")
+    assert sign_flips(conn) == [(date(2026, 6, 30), "info", "benefit")]
+
+
+def test_a_benefit_another_filing_reports_positive_is_still_a_warning(conn):
+    put(conn, [*SBC, ("ShareBasedCompensation", *Q2, 866000, "q2-orig", "2026-07-30")])
+    assert sign_flips(conn) == [(date(2026, 6, 30), "warning", None)]
+
+
+def test_a_cost_that_flips_sign_is_still_a_warning(conn):
+    put(conn, [("PaymentsToAcquireProductiveAssets", *Q1, 100, "q1", "2026-05-01"),
+               ("PaymentsToAcquireProductiveAssets", *Q2, -90, "q2", "2026-08-01"),
+               ("PaymentsToAcquireProductiveAssets", *Q3, 110, "q3", "2026-11-02")])
+    assert sign_flips(conn) == [(date(2026, 6, 30), "warning", None)]

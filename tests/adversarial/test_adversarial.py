@@ -62,3 +62,9 @@ def test_checks_catch_leaks(truth):
               "content": '{"results":[{"company_id":"0001318605","name":"Tesla"}]}'}
     assert h.tool_leaks([search], {"0001318605": ["financials"]})
     assert not h.tool_leaks([search], {"0001318605": ["financials", "filings"]})
+    for name in ("get_earnings_release", "get_events_since_report"):
+        call = {"name": name, "input": {"company_id": "0001318605"}, "is_error": False}
+        assert h.tool_leaks([call], {"0001318605": ["financials"]}) == [
+            {"tool": name, "company_id": "0001318605", "tier": "filings"}]
+        assert not h.tool_leaks([call], {"0001318605": ["financials", "filings"]})
+        assert not h.tool_leaks([{**call, "is_error": True}], {})

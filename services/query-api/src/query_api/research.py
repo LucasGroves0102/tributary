@@ -5,6 +5,15 @@ Both need the `filings` tier. Same two layers as every route (app.py): OpenFGA f
 (`require` for one company, `readable` for the list search may cover), then Store, which runs
 every query as query_api with app.user_id set, so RLS on gold.section_search /
 gold.section_diffs / gold.section_changes filters again.
+
+What changed has two answers. Without `view` (or `q`, `numbers`), the stored changes as the
+parser's diff wrote them, as before F3 (the agent's get_section_changes reads that). With `view`
+(`reading` or `ranked`), the materiality pass of query_api.changes (its docstring is the spec):
+split paragraphs merged, calendar rollovers and figure-only rows hidden and counted, each
+change with its period, figures, score and why; `basis` then defaults to the same quarter a year
+earlier for a 10-Q that has one (`comparisons` lists what this filing was compared with), and
+`q`, `numbers` and `kind` filter after the pass. The answer echoes `view`: a client that gets
+none back is talking to an older API that ignored it.
 """
 
 from collections.abc import Callable
@@ -13,6 +22,7 @@ from typing import Annotated, Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Path, Query
 
+from query_api import changes as material
 from query_api.authorizer import Readable
 from query_api.shapes import filing_url, newest_windows
 from query_api.store import SearchTooBroad, Store
@@ -22,6 +32,8 @@ Accession = Annotated[str, Path(pattern=r"^\d{10}-\d{2}-\d{6}$")]
 SECTION = r"^[A-Z0-9.?-]{1,8}$"
 FORM = r"^(10-K|10-Q|8-K)(/A)?$"
 Kind = Literal["new", "removed", "rewritten"]
+View = Literal["reading", "ranked"]
+Basis = Literal["prior", "year_ago"]
 SNIPPET_MARKS = ("«", "»")  # around matched words in search snippets
 # /v1/search over the whole public catalog: rank the matches of the newest window that fills the
 # page. Ranking every match of a common phrase (276,000 passages for "supply chain" on hermes)
@@ -99,6 +111,61 @@ def shape_section(d: dict, changes: list[dict]) -> dict:
     }
 
 
+def default_basis(comparisons: list[dict]) -> Basis:
+    """A 10-Q against the same quarter a year earlier when that was compared, else the prior
+    filing (a 10-K, or a 10-Q with no year-ago 10-Q indexed)."""
+    bases = {c["basis"]: c for c in comparisons}
+    if "year_ago" in bases and bases["year_ago"].get("form", "").startswith("10-Q"):
+        return "year_ago"
+    return "prior"
+
+
+def shape_material(d: dict, rows: list[dict], view: str, terms: list[str],
+                   numbers: str | None, kind: str | None) -> dict:
+    """One section through the materiality pass (query_api.changes), filtered and ordered."""
+    out = shape_section(d, [])
+    stale = out["stale"]
+    reading = (material.read_section(d["section_key"], d["form"], d["text"], d["prior_text"],
+                                     rows)
+               if not stale else material.Reading([], dict.fromkeys(material.HIDDEN, 0)))
+    this = {"accession_no": d["accession_no"], "form": d["form"], "filed": d["filed"],
+            "period_of_report": d["period_of_report"], "section_key": d["section_key"],
+            "document_url": d["document_url"], "char_start": d["char_start"]}
+    prior = {"accession_no": d["prior_accession_no"], "form": d["prior_form"],
+             "filed": d["prior_filed"], "period_of_report": d["prior_period_of_report"],
+             "section_key": d["section_key"], "document_url": d["prior_document_url"],
+             "char_start": d["prior_char_start"]}
+    shown = []
+    for c in reading.changes:
+        text = c.new.text if c.new else None
+        prior_text = c.old.text if c.old else None
+        if kind and c.kind != kind:
+            continue
+        if numbers == "new" and not c.figures_new:
+            continue
+        if terms and not material.matches_topic(terms, text, prior_text):
+            continue
+        shown.append({
+            "kind": c.kind, "similarity": c.similarity, "text": text, "prior_text": prior_text,
+            "words": material.quiet_calendar(material.render_words(prior_text or "",
+                                                                   text or "", c.words))
+                     if c.words is not None else None,
+            "citation": _citation(this, c.new.flat()) if c.new else None,
+            "prior_citation": _citation(prior, c.old.flat()) if c.old else None,
+            "section_key": d["section_key"], "period": c.period, "subsection": c.subsection,
+            "figures": {"new": c.figures_new, "removed": c.figures_removed},
+            "moved": c.moved, "risk_terms": c.risk, "score": c.score, "why": c.why,
+            "merged": (c.new.parts if c.new else 0) + (c.old.parts if c.old else 0),
+        })
+    if view == "ranked":
+        shown.sort(key=lambda x: -x["score"])  # stable: reading order within a score
+    counts = {k: sum(1 for c in reading.changes if c.kind == k)
+              for k in ("new", "removed", "rewritten")}
+    out["material"] = {**counts, "hidden": reading.hidden, "shown": len(shown)}
+    out["changes"] = shown
+    return out
+
+
 def add_research_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str],
                         require: Callable[[str, str, str], None],
                         readable: Callable[[str], Readable]) -> None:
@@ -110,15 +177,33 @@ def add_research_routes(app: FastAPI, *, store: Store, current_user: Callable[..
         section: Annotated[str | None, Query(
             pattern=SECTION, description='10-K "1A" or "7", 10-Q "II-1A" or "I-2"; default: all'
         )] = None,
-        basis: Annotated[Literal["prior", "year_ago"], Query(
+        basis: Annotated[Basis | None, Query(
             description="prior: the previous 10-K / 10-Q; year_ago: the 10-Q for the same"
-                        " quarter a year earlier")] = "prior",
+                        " quarter a year earlier. Default: prior; with `view`, year_ago for a"
+                        " 10-Q that has one")] = None,
         kind: Annotated[Kind | None, Query(description="only this kind of change")] = None,
+        view: Annotated[View | None, Query(
+            description="the materiality pass (split paragraphs merged, calendar rollovers"
+                        " hidden, scored): reading order, or ranked by score")] = None,
+        q: Annotated[str | None, Query(
+            min_length=2, max_length=100,
+            description='a topic: passages with every word (a prefix: "tariffs" finds'
+                        ' "tariff") or "a phrase"; implies view')] = None,
+        numbers: Annotated[Literal["new"] | None, Query(
+            description="new: only passages that state a figure the compared passage"
+                        " doesn't; implies view")] = None,
     ) -> dict:
         """Paragraphs of Risk Factors and MD&A that are new, removed or rewritten since the
         comparable earlier filing, each cited in both filings. Unchanged paragraphs (numbers
-        masked, so "fiscal 2025" → "2026" alone is unchanged) are only counted."""
+        masked, so "fiscal 2025" → "2026" alone is unchanged) are only counted. With `view`,
+        read for materiality (query_api/changes.py)."""
         require(user_id, "filings", company_id)
+        if view is None and (q is not None or numbers is not None):
+            view = "reading"
+        if view is not None:
+            return _material_changes(user_id, company_id, accession_no, section, basis, kind,
+                                     view, q, numbers)
+        basis = basis or "prior"
         diffs = store.section_diffs(user_id, company_id, accession_no, section, basis)
         if not diffs and not store.has_filing(user_id, company_id, accession_no):
             raise HTTPException(404, "no parsed filing with this accession for this company")
@@ -131,6 +216,41 @@ def add_research_routes(app: FastAPI, *, store: Store, current_user: Callable[..
             "company_id": company_id, "accession_no": accession_no, "basis": basis,
             "as_of": _now(),
             "sections": [shape_section(d, by_section.get(d["section_key"], [])) for d in diffs],
+            **({} if diffs else {"note": "no comparable earlier filing with these sections is"
+                                         " indexed yet"}),
+        }
+
+    def _material_changes(user_id: str, company_id: str, accession_no: str,
+                          section: str | None, basis: Basis | None, kind: str | None,
+                          view: str, q: str | None, numbers: str | None) -> dict:
+        comparisons = store.section_bases(user_id, company_id, accession_no)
+        chosen: Basis = basis or default_basis(comparisons)
+        diffs = store.section_diffs(user_id, company_id, accession_no, section, chosen)
+        if not diffs and not comparisons \
+                and not store.has_filing(user_id, company_id, accession_no):
+            raise HTTPException(404, "no parsed filing with this accession for this company")
+        rows = store.section_changes(user_id, accession_no, [d["section_key"] for d in diffs],
+                                     chosen, None) if diffs else []
+        by_section: dict[str, list[dict]] = {}
+        for c in rows:
+            by_section.setdefault(c["section_key"], []).append(c)
+        terms = material.topic_terms(q)
+        sections = [shape_material(d, by_section.get(d["section_key"], []), view, terms,
+                                   numbers, kind) for d in diffs]
+        return {
+            "company_id": company_id, "accession_no": accession_no, "basis": chosen,
+            "as_of": _now(), "view": view,
+            "comparisons": [{"basis": c["basis"], "accession_no": c["prior_accession_no"],
+                             "form": c["prior_form"], "filed": c["prior_filed"],
+                             "period_of_report": c["prior_period_of_report"]}
+                            for c in comparisons],
+            "filters": {"q": q, "terms": terms, "numbers": numbers, "kind": kind,
+                        "section": section},
+            "ranking": material.RANKING,
+            "matched": sum(s["material"]["shown"] for s in sections),
+            "total": sum(sum(s["material"][k] for k in ("new", "removed", "rewritten"))
+                         for s in sections),
+            "sections": sections,
             **({} if diffs else {"note": "no comparable earlier filing with these sections is"
                                          " indexed yet"}),
         }
@@ -149,12 +269,21 @@ def add_research_routes(app: FastAPI, *, store: Store, current_user: Callable[..
         end: Annotated[date | None, Query(alias="to", description="filed on or before")] = None,
         limit: Annotated[int, Query(ge=1, le=50)] = 10,
         offset: Annotated[int, Query(ge=0, le=1000)] = 0,
+        sort: Annotated[Literal["relevance", "date"], Query(
+            description="relevance (rank, then newest) or date (newest filed first)")]
+            = "relevance",
+        window: Annotated[Literal["auto", "exact"], Query(
+            description="auto: with the catalog public and no company, the newest window that"
+                        " fills the page; exact: exactly from-to (may be too broad: 422)")]
+            = "auto",
     ) -> dict:
         """Full-text search over the parsed sections of the companies whose filings the caller
-        can read: the best-matching passage per section, ranked, with a snippet (matches
-        between « and ») and a citation to the passage. With the catalog public and no `company`,
-        `searched_from` says how far back the ranked filings go: the newest window that fills
-        the page, wider only when there are few matches."""
+        can read: the best-matching passage per section, ranked (or newest first with
+        `sort=date`), with a snippet (matches between « and ») and a citation to the passage.
+        `total` is how many sections match in the range searched (None past the last page).
+        With the catalog public, no `company` and `window=auto`, `searched_from` says how far
+        back the ranked filings go: the newest window that fills the page, wider only when
+        there are few matches. `sort` and `window` are echoed (additive)."""
         if company is not None:
             require(user_id, "filings", company)
             granted: list[str] | None = [company]
@@ -166,22 +295,24 @@ def add_research_routes(app: FastAPI, *, store: Store, current_user: Callable[..
         rows: list[dict] = []
         windowed: dict[str, date | None] = {}
         try:
-            if granted is None:
+            if granted is None and window == "auto":
                 today = datetime.now(UTC).date()  # EDGAR dates are US Eastern, never later
                 for lower in newest_windows(SEARCH_WINDOW_DAYS, start, end, today):
                     rows = store.search_sections(user_id, None, q, form, section, lower, end,
-                                                 limit + 1, offset)
+                                                 limit + 1, offset, sort=sort)
                     windowed = {"searched_from": lower}
                     if len(rows) > limit:
                         break
-            elif granted:
+            elif granted is None or granted:
                 rows = store.search_sections(user_id, granted, q, form, section, start, end,
-                                             limit + 1, offset)
+                                             limit + 1, offset, sort=sort)
         except SearchTooBroad:
             raise HTTPException(422, "search too broad: add a company, form, section or"
                                      " date filter, or more specific words") from None
+        total = rows[0].get("total") if rows else (0 if offset == 0 else None)
         return {
             "query": q, "as_of": _now(), "limit": limit, "offset": offset, **windowed,
+            "sort": sort, "window": window, "total": total,
             "has_more": len(rows) > limit,  # layer 1 on every row below, also without an id list
             "results": [{
                 "company_id": r["company_id"], "name": r["name"],

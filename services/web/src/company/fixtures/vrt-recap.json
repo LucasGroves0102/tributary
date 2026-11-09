@@ -1,0 +1,797 @@
+{
+ "accession_no": "0001628280-26-067893",
+ "company_id": "0001674101",
+ "form": "10-Q",
+ "filed": "2026-10-28",
+ "period_end": "2026-09-30",
+ "as_of": "2026-11-09T05:38:16.492562+00:00",
+ "note": "Values as currently reported: a restated value cites the restating filing. pct_change is null for ratios (change is in ratio points) and when the earlier value is 0.",
+ "metrics": [
+  {
+   "metric": "cash",
+   "span": "quarter",
+   "unit": "USD",
+   "current": {
+    "value": "3512900000",
+    "not_meaningful": null,
+    "period_start": null,
+    "period_end": "2026-09-30",
+    "fiscal_period": "FY2026 Q3",
+    "calendar_period": "CY2026 Q3",
+    "value_source": "reported",
+    "citation": {
+     "accession_no": "0001628280-26-067893",
+     "form": "10-Q",
+     "filed": "2026-10-28",
+     "xbrl_tag": "us-gaap:CashAndCashEquivalentsAtCarryingValue",
+     "source_accessions": [
+      "0001628280-26-067893"
+     ],
+     "filing_url": "https://www.sec.gov/Archives/edgar/data/1674101/000162828026067893/"
+    },
+    "freshness": {
+     "filed": "2026-10-28",
+     "ingested_at": "2026-10-29T09:01:42.836312Z"
+    }
+   },
+   "prior_quarter": {
+    "value": "2810600000",
+    "not_meaningful": null,
+    "period_start": null,
+    "period_end": "2026-06-30",
+    "fiscal_period": "FY2026 Q2",
+    "calendar_period": "CY2026 Q2",
+    "value_source": "reported",
+    "citation": {
+     "accession_no": "0001628280-26-050609",
+     "form": "10-Q",
+     "filed": "2026-07-29",
+     "xbrl_tag": "us-gaap:CashAndCashEquivalentsAtCarryingValue",
+     "source_accessions": [
+      "0001628280-26-050609"
+     ],
+     "filing_url": "https://www.sec.gov/Archives/edgar/data/1674101/000162828026050609/"
+    },
+    "freshness": {
+     "filed": "2026-07-29",
+     "ingested_at": "2026-10-20T06:37:11.463397Z"
+    },
+    "change": "702300000",
+    "pct_change": "0.249875"
+   },
+   "year_ago": {
+    "value": "1396000000",
+    "not_meaningful": null,
+    "period_start": null,
+    "period_end": "2025-09-30",
+    "fiscal_period": "FY2025 Q3",
+    "calendar_period": "CY2025 Q3",
+    "value_source": "reported",
+    "citation": {
+     "accession_no": "0001674101-25-000024",
+     "form": "10-Q",
+     "filed": "2025-10-22",
+     "xbrl_tag": "us-gaap:CashAndCashEquivalentsAtCarryingValue",
+     "source_accessions": [
+      "0001674101-25-000024"
+     ],
+     "filing_url": "https://www.sec.gov/Archives/edgar/data/1674101/000167410125000024/"
+    },
+    "freshness": {
+     "filed": "2025-10-22",
+     "ingested_at": "2026-10-20T06:37:11.463397Z"
+    },
+    "change": "2116900000",
+    "pct_change": "1.516404"
+   }
+  },
+  {
+   "metric": "eps_diluted",
+   "span": "quarter",
+   "unit": "USD/shares",
+   "current": {
+    "value": "1.95",
+    "not_meaningful": null,
+    "period_start": "2026-07-01",
+    "period_end": "2026-09-30",
+    "fiscal_period": "FY2026 Q3",
+    "calendar_period": "CY2026 Q3",
+    "value_source": "reported",
+    "citation": {
+     "accession_no": "0001628280-26-067893",
+     "form": "10-Q",
+     "filed": "2026-10-28",
+     "xbrl_tag": "us-gaap:EarningsPerShareDiluted",
+     "source_accessions": [
+      "0001628280-26-067893"
+     ],
+     "filing_url": "https://www.sec.gov/Archives/edgar/data/1674101/000162828026067893/"
+    },
+    "freshness": {
+     "filed": "2026-10-28",
+     "ingested_at": "2026-10-29T09:01:42.836312Z"
+    }
+   },
+   "prior_quarter": {
+    "value": "1.27",
+    "not_meaningful": null,
+    "period_start": "2026-04-01",
+    "period_end": "2026-06-30",
+    "fiscal_period": "FY2026 Q2",
+    "calendar_period": "CY2026 Q2",
+    "value_source": "reported",
+    "citation": {
+     "accession_no": "0001628280-26-050609",
+     "form": "10-Q",
+     "filed": "2026-07-29",
+     "xbrl_tag": "us-gaap:EarningsPerShareDiluted",
+     "source_accessions": [
+      "0001628280-26-050609"
+     ],
+     "filing_url": "https://www.sec.gov/Archives/edgar/data/1674101/000162828026050609/"
+    },
+    "freshness": {
+     "filed": "2026-07-29",
+     "ingested_at": "2026-10-20T06:37:11.463397Z"
+    },
+    "change": "0.68",
+    "pct_change": "0.535433"
+   },
+   "year_ago": {
+    "value": "1.02",
+    "not_meaningful": null,
+    "period_start": "2025-07-01",
+    "period_end": "2025-09-30",
+    "fiscal_period": "FY2025 Q3",
+    "calendar_period": "CY2025 Q3",
+    "value_source": "reported",
+    "citation": {
+     "accession_no": "0001628280-26-067893",
+     "form": "10-Q",
+     "filed": "2026-10-28",
+     "xbrl_tag": "us-gaap:EarningsPerShareDiluted",
+     "source_accessions": [
+      "0001628280-26-067893"
+     ],
+     "filing_url": "https://www.sec.gov/Archives/edgar/data/1674101/000162828026067893/"
+    },
+    "freshness": {
+     "filed": "2026-10-28",
+     "ingested_at": "2026-10-29T09:01:42.836312Z"
+    },
+    "change": "0.93",
+    "pct_change": "0.911765"
+   }
+  },
+  {
+   "metric": "free_cash_flow",
+   "span": "quarter",
+   "unit": "USD",
+   "current": {
+    "value": "654900000",
+    "not_meaningful": null,
+    "period_start": "2026-07-01",
+    "period_end": "2026-09-30",
+    "fiscal_period": "FY2026 Q3",
+    "calendar_period": "CY2026 Q3",
+    "value_source": "computed",
+    "citation": {
+     "accession_no": "0001628280-26-067893",
+     "form": "10-Q",
+     "filed": "2026-10-28",
+     "xbrl_tag": null,
+     "source_accessions": [
+      "0001628280-26-050609",
+      "0001628280-26-067893"
+     ],
+     "filing_url": "https://www.sec.gov/Archives/edgar/data/1674101/000162828026067893/"
+    },
+    "freshness": {
+     "filed": "2026-10-28",
+     "ingested_at": "2026-10-29T09:01:42.836312Z"
+    }
+   },
+   "prior_quarter": {
+    "value": "926500000",
+    "not_meaningful": null,
+    "period_start": "2026-04-01",
+    "period_end": "2026-06-30",
+    "fiscal_period": "FY2026 Q2",
+    "calendar_period": "CY2026 Q2",
+    "value_source": "computed",
+    "citation": {
+     "accession_no": "0001628280-26-050609",
+     "form": "10-Q",
+     "filed": "2026-07-29",
+     "xbrl_tag": null,
+     "source_accessions": [
+      "0001628280-26-026556",
+      "0001628280-26-050609"
+     ],
+     "filing_url": "https://www.sec.gov/Archives/edgar/data/1674101/000162828026050609/"
+    },
+    "freshness": {
+     "filed": "2026-07-29",
+     "ingested_at": "2026-10-20T06:37:11.463397Z"
+    },
+    "change": "-271600000",
+    "pct_change": "-0.293146"
+   },
+   "year_ago": {
+    "value": "437500000",
+    "not_meaningful": null,
+    "period_start": "2025-07-01",
+    "period_end": "2025-09-30",
+    "fiscal_period": "FY2025 Q3",
+    "calendar_period": "CY2025 Q3",
+    "value_source": "computed",
+    "citation": {
+     "accession_no": "0001628280-26-067893",
+     "form": "10-Q",
+     "filed": "2026-10-28",
+     "xbrl_tag": null,
+     "source_accessions": [
+      "0001628280-26-050609",
+      "0001628280-26-067893",
+      "0001674101-25-000024"
+     ],
+     "filing_url": "https://www.sec.gov/Archives/edgar/data/1674101/000162828026067893/"
+    },
+    "freshness": {
+     "filed": "2026-10-28",
+     "ingested_at": "2026-10-29T09:01:42.836312Z"
+    },
+    "change": "217400000",
+    "pct_change": "0.496914"
+   }
+  },
+  {
+   "metric": "gross_margin",
+   "span": "quarter",
+   "unit": "ratio",
+   "current": {
+    "value": "0.381052",
+    "not_meaningful": null,
+    "period_start": "2026-07-01",
+    "period_end": "2026-09-30",
+    "fiscal_period": "FY2026 Q3",
+    "calendar_period": "CY2026 Q3",
+    "value_source": "computed",
+    "citation": {
+     "accession_no": "0001628280-26-067893",
+     "form": "10-Q",
+     "filed": "2026-10-28",
+     "xbrl_tag": null,
+     "source_accessions": [
+      "0001628280-26-067893"
+     ],
+     "filing_url": "https://www.sec.gov/Archives/edgar/data/1674101/000162828026067893/"
+    },
+    "freshness": {
+     "filed": "2026-10-28",
+     "ingested_at": "2026-10-29T09:01:42.836312Z"
+    }
+   },
+   "prior_quarter": {
+    "value": "0.377149",
+    "not_meaningful": null,
+    "period_start": "2026-04-01",
+    "period_end": "2026-06-30",
+    "fiscal_period": "FY2026 Q2",
+    "calendar_period": "CY2026 Q2",
+    "value_source": "computed",
+    "citation": {
+     "accession_no": "0001628280-26-050609",
+     "form": "10-Q",
+     "filed": "2026-07-29",
+     "xbrl_tag": null,
+     "source_accessions": [
+      "0001628280-26-050609"
+     ],
+     "filing_url": "https://www.sec.gov/Archives/edgar/data/1674101/000162828026050609/"
+    },
+    "freshness": {
+     "filed": "2026-07-29",
+     "ingested_at": "2026-10-20T06:37:11.463397Z"
+    },
+    "change": "0.003903",
+    "pct_change": null
+   },
+   "year_ago": {
+    "value": "0.377719",
+    "not_meaningful": null,
+    "period_start": "2025-07-01",
+    "period_end": "2025-09-30",
+    "fiscal_period": "FY2025 Q3",
+    "calendar_period": "CY2025 Q3",
+    "value_source": "computed",
+    "citation": {
+     "accession_no": "0001628280-26-067893",
+     "form": "10-Q",
+     "filed": "2026-10-28",
+     "xbrl_tag": null,
+     "source_accessions": [
+      "0001628280-26-067893"
+     ],
+     "filing_url": "https://www.sec.gov/Archives/edgar/data/1674101/000162828026067893/"
+    },
+    "freshness": {
+     "filed": "2026-10-28",
+     "ingested_at": "2026-10-29T09:01:42.836312Z"
+    },
+    "change": "0.003333",
+    "pct_change": null
+   }
+  },
+  {
+   "metric": "long_term_debt",
+   "span": "quarter",
+   "unit": "USD",
+   "current": {
+    "value": "2925100000",
+    "not_meaningful": null,
+    "period_start": null,
+    "period_end": "2026-09-30",
+    "fiscal_period": "FY2026 Q3",
+    "calendar_period": "CY2026 Q3",
+    "value_source": "reported",
+    "citation": {
+     "accession_no": "0001628280-26-067893",
+     "form": "10-Q",
+     "filed": "2026-10-28",
+     "xbrl_tag": "us-gaap:LongTermDebtNoncurrent",
+     "source_accessions": [
+      "0001628280-26-067893"
+     ],
+     "filing_url": "https://www.sec.gov/Archives/edgar/data/1674101/000162828026067893/"
+    },
+    "freshness": {
+     "filed": "2026-10-28",
+     "ingested_at": "2026-10-29T09:01:42.836312Z"
+    }
+   },
+   "prior_quarter": {
+    "value": "2939800000",
+    "not_meaningful": null,
+    "period_start": null,
+    "period_end": "2026-06-30",
+    "fiscal_period": "FY2026 Q2",
+    "calendar_period": "CY2026 Q2",
+    "value_source": "reported",
+    "citation": {
+     "accession_no": "0001628280-26-050609",
+     "form": "10-Q",
+     "filed": "2026-07-29",
+     "xbrl_tag": "us-gaap:LongTermDebtNoncurrent",
+     "source_accessions": [
+      "0001628280-26-050609"
+     ],
+     "filing_url": "https://www.sec.gov/Archives/edgar/data/1674101/000162828026050609/"
+    },
+    "freshness": {
+     "filed": "2026-07-29",
+     "ingested_at": "2026-10-20T06:37:11.463397Z"
+    },
+    "change": "-14700000",
+    "pct_change": "-0.005000"
+   },
+   "year_ago": {
+    "value": "2897600000",
+    "not_meaningful": null,
+    "period_start": null,
+    "period_end": "2025-09-30",
+    "fiscal_period": "FY2025 Q3",
+    "calendar_period": "CY2025 Q3",
+    "value_source": "reported",
+    "citation": {
+     "accession_no": "0001674101-25-000024",
+     "form": "10-Q",
+     "filed": "2025-10-22",
+     "xbrl_tag": "us-gaap:LongTermDebtNoncurrent",
+     "source_accessions": [
+      "0001674101-25-000024"
+     ],
+     "filing_url": "https://www.sec.gov/Archives/edgar/data/1674101/000167410125000024/"
+    },
+    "freshness": {
+     "filed": "2025-10-22",
+     "ingested_at": "2026-10-20T06:37:11.463397Z"
+    },
+    "change": "27500000",
+    "pct_change": "0.009491"
+   }
+  },
+  {
+   "metric": "net_income",
+   "span": "quarter",
+   "unit": "USD",
+   "current": {
+    "value": "764500000",
+    "not_meaningful": null,
+    "period_start": "2026-07-01",
+    "period_end": "2026-09-30",
+    "fiscal_period": "FY2026 Q3",
+    "calendar_period": "CY2026 Q3",
+    "value_source": "reported",
+    "citation": {
+     "accession_no": "0001628280-26-067893",
+     "form": "10-Q",
+     "filed": "2026-10-28",
+     "xbrl_tag": "us-gaap:NetIncomeLoss",
+     "source_accessions": [
+      "0001628280-26-067893"
+     ],
+     "filing_url": "https://www.sec.gov/Archives/edgar/data/1674101/000162828026067893/"
+    },
+    "freshness": {
+     "filed": "2026-10-28",
+     "ingested_at": "2026-10-29T09:01:42.836312Z"
+    }
+   },
+   "prior_quarter": {
+    "value": "497800000",
+    "not_meaningful": null,
+    "period_start": "2026-04-01",
+    "period_end": "2026-06-30",
+    "fiscal_period": "FY2026 Q2",
+    "calendar_period": "CY2026 Q2",
+    "value_source": "reported",
+    "citation": {
+     "accession_no": "0001628280-26-067893",
+     "form": "10-Q",
+     "filed": "2026-10-28",
+     "xbrl_tag": "us-gaap:NetIncomeLoss",
+     "source_accessions": [
+      "0001628280-26-067893"
+     ],
+     "filing_url": "https://www.sec.gov/Archives/edgar/data/1674101/000162828026067893/"
+    },
+    "freshness": {
+     "filed": "2026-10-28",
+     "ingested_at": "2026-10-29T09:01:42.836312Z"
+    },
+    "change": "266700000",
+    "pct_change": "0.535757"
+   },
+   "year_ago": {
+    "value": "398500000",
+    "not_meaningful": null,
+    "period_start": "2025-07-01",
+    "period_end": "2025-09-30",
+    "fiscal_period": "FY2025 Q3",
+    "calendar_period": "CY2025 Q3",
+    "value_source": "reported",
+    "citation": {
+     "accession_no": "0001628280-26-067893",
+     "form": "10-Q",
+     "filed": "2026-10-28",
+     "xbrl_tag": "us-gaap:NetIncomeLoss",
+     "source_accessions": [
+      "0001628280-26-067893"
+     ],
+     "filing_url": "https://www.sec.gov/Archives/edgar/data/1674101/000162828026067893/"
+    },
+    "freshness": {
+     "filed": "2026-10-28",
+     "ingested_at": "2026-10-29T09:01:42.836312Z"
+    },
+    "change": "366000000",
+    "pct_change": "0.918444"
+   }
+  },
+  {
+   "metric": "net_margin",
+   "span": "quarter",
+   "unit": "ratio",
+   "current": {
+    "value": "0.177263",
+    "not_meaningful": null,
+    "period_start": "2026-07-01",
+    "period_end": "2026-09-30",
+    "fiscal_period": "FY2026 Q3",
+    "calendar_period": "CY2026 Q3",
+    "value_source": "computed",
+    "citation": {
+     "accession_no": "0001628280-26-067893",
+     "form": "10-Q",
+     "filed": "2026-10-28",
+     "xbrl_tag": null,
+     "source_accessions": [
+      "0001628280-26-067893"
+     ],
+     "filing_url": "https://www.sec.gov/Archives/edgar/data/1674101/000162828026067893/"
+    },
+    "freshness": {
+     "filed": "2026-10-28",
+     "ingested_at": "2026-10-29T09:01:42.836312Z"
+    }
+   },
+   "prior_quarter": {
+    "value": "0.152032",
+    "not_meaningful": null,
+    "period_start": "2026-04-01",
+    "period_end": "2026-06-30",
+    "fiscal_period": "FY2026 Q2",
+    "calendar_period": "CY2026 Q2",
+    "value_source": "computed",
+    "citation": {
+     "accession_no": "0001628280-26-067893",
+     "form": "10-Q",
+     "filed": "2026-10-28",
+     "xbrl_tag": null,
+     "source_accessions": [
+      "0001628280-26-050609",
+      "0001628280-26-067893"
+     ],
+     "filing_url": "https://www.sec.gov/Archives/edgar/data/1674101/000162828026067893/"
+    },
+    "freshness": {
+     "filed": "2026-10-28",
+     "ingested_at": "2026-10-29T09:01:42.836312Z"
+    },
+    "change": "0.025231",
+    "pct_change": null
+   },
+   "year_ago": {
+    "value": "0.148927",
+    "not_meaningful": null,
+    "period_start": "2025-07-01",
+    "period_end": "2025-09-30",
+    "fiscal_period": "FY2025 Q3",
+    "calendar_period": "CY2025 Q3",
+    "value_source": "computed",
+    "citation": {
+     "accession_no": "0001628280-26-067893",
+     "form": "10-Q",
+     "filed": "2026-10-28",
+     "xbrl_tag": null,
+     "source_accessions": [
+      "0001628280-26-067893"
+     ],
+     "filing_url": "https://www.sec.gov/Archives/edgar/data/1674101/000162828026067893/"
+    },
+    "freshness": {
+     "filed": "2026-10-28",
+     "ingested_at": "2026-10-29T09:01:42.836312Z"
+    },
+    "change": "0.028336",
+    "pct_change": null
+   }
+  },
+  {
+   "metric": "operating_income",
+   "span": "quarter",
+   "unit": "USD",
+   "current": {
+    "value": "983800000",
+    "not_meaningful": null,
+    "period_start": "2026-07-01",
+    "period_end": "2026-09-30",
+    "fiscal_period": "FY2026 Q3",
+    "calendar_period": "CY2026 Q3",
+    "value_source": "reported",
+    "citation": {
+     "accession_no": "0001628280-26-067893",
+     "form": "10-Q",
+     "filed": "2026-10-28",
+     "xbrl_tag": "us-gaap:OperatingIncomeLoss",
+     "source_accessions": [
+      "0001628280-26-067893"
+     ],
+     "filing_url": "https://www.sec.gov/Archives/edgar/data/1674101/000162828026067893/"
+    },
+    "freshness": {
+     "filed": "2026-10-28",
+     "ingested_at": "2026-10-29T09:01:42.836312Z"
+    }
+   },
+   "prior_quarter": {
+    "value": "637900000",
+    "not_meaningful": null,
+    "period_start": "2026-04-01",
+    "period_end": "2026-06-30",
+    "fiscal_period": "FY2026 Q2",
+    "calendar_period": "CY2026 Q2",
+    "value_source": "reported",
+    "citation": {
+     "accession_no": "0001628280-26-050609",
+     "form": "10-Q",
+     "filed": "2026-07-29",
+     "xbrl_tag": "us-gaap:OperatingIncomeLoss",
+     "source_accessions": [
+      "0001628280-26-050609"
+     ],
+     "filing_url": "https://www.sec.gov/Archives/edgar/data/1674101/000162828026050609/"
+    },
+    "freshness": {
+     "filed": "2026-07-29",
+     "ingested_at": "2026-10-20T06:37:11.463397Z"
+    },
+    "change": "345900000",
+    "pct_change": "0.542248"
+   },
+   "year_ago": {
+    "value": "516700000",
+    "not_meaningful": null,
+    "period_start": "2025-07-01",
+    "period_end": "2025-09-30",
+    "fiscal_period": "FY2025 Q3",
+    "calendar_period": "CY2025 Q3",
+    "value_source": "reported",
+    "citation": {
+     "accession_no": "0001628280-26-067893",
+     "form": "10-Q",
+     "filed": "2026-10-28",
+     "xbrl_tag": "us-gaap:OperatingIncomeLoss",
+     "source_accessions": [
+      "0001628280-26-067893"
+     ],
+     "filing_url": "https://www.sec.gov/Archives/edgar/data/1674101/000162828026067893/"
+    },
+    "freshness": {
+     "filed": "2026-10-28",
+     "ingested_at": "2026-10-29T09:01:42.836312Z"
+    },
+    "change": "467100000",
+    "pct_change": "0.904006"
+   }
+  },
+  {
+   "metric": "operating_margin",
+   "span": "quarter",
+   "unit": "ratio",
+   "current": {
+    "value": "0.228112",
+    "not_meaningful": null,
+    "period_start": "2026-07-01",
+    "period_end": "2026-09-30",
+    "fiscal_period": "FY2026 Q3",
+    "calendar_period": "CY2026 Q3",
+    "value_source": "computed",
+    "citation": {
+     "accession_no": "0001628280-26-067893",
+     "form": "10-Q",
+     "filed": "2026-10-28",
+     "xbrl_tag": null,
+     "source_accessions": [
+      "0001628280-26-067893"
+     ],
+     "filing_url": "https://www.sec.gov/Archives/edgar/data/1674101/000162828026067893/"
+    },
+    "freshness": {
+     "filed": "2026-10-28",
+     "ingested_at": "2026-10-29T09:01:42.836312Z"
+    }
+   },
+   "prior_quarter": {
+    "value": "0.194820",
+    "not_meaningful": null,
+    "period_start": "2026-04-01",
+    "period_end": "2026-06-30",
+    "fiscal_period": "FY2026 Q2",
+    "calendar_period": "CY2026 Q2",
+    "value_source": "computed",
+    "citation": {
+     "accession_no": "0001628280-26-050609",
+     "form": "10-Q",
+     "filed": "2026-07-29",
+     "xbrl_tag": null,
+     "source_accessions": [
+      "0001628280-26-050609"
+     ],
+     "filing_url": "https://www.sec.gov/Archives/edgar/data/1674101/000162828026050609/"
+    },
+    "freshness": {
+     "filed": "2026-07-29",
+     "ingested_at": "2026-10-20T06:37:11.463397Z"
+    },
+    "change": "0.033292",
+    "pct_change": null
+   },
+   "year_ago": {
+    "value": "0.193101",
+    "not_meaningful": null,
+    "period_start": "2025-07-01",
+    "period_end": "2025-09-30",
+    "fiscal_period": "FY2025 Q3",
+    "calendar_period": "CY2025 Q3",
+    "value_source": "computed",
+    "citation": {
+     "accession_no": "0001628280-26-067893",
+     "form": "10-Q",
+     "filed": "2026-10-28",
+     "xbrl_tag": null,
+     "source_accessions": [
+      "0001628280-26-067893"
+     ],
+     "filing_url": "https://www.sec.gov/Archives/edgar/data/1674101/000162828026067893/"
+    },
+    "freshness": {
+     "filed": "2026-10-28",
+     "ingested_at": "2026-10-29T09:01:42.836312Z"
+    },
+    "change": "0.035011",
+    "pct_change": null
+   }
+  },
+  {
+   "metric": "revenue",
+   "span": "quarter",
+   "unit": "USD",
+   "current": {
+    "value": "4312800000",
+    "not_meaningful": null,
+    "period_start": "2026-07-01",
+    "period_end": "2026-09-30",
+    "fiscal_period": "FY2026 Q3",
+    "calendar_period": "CY2026 Q3",
+    "value_source": "reported",
+    "citation": {
+     "accession_no": "0001628280-26-067893",
+     "form": "10-Q",
+     "filed": "2026-10-28",
+     "xbrl_tag": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+     "source_accessions": [
+      "0001628280-26-067893"
+     ],
+     "filing_url": "https://www.sec.gov/Archives/edgar/data/1674101/000162828026067893/"
+    },
+    "freshness": {
+     "filed": "2026-10-28",
+     "ingested_at": "2026-10-29T09:01:42.836312Z"
+    }
+   },
+   "prior_quarter": {
+    "value": "3274300000",
+    "not_meaningful": null,
+    "period_start": "2026-04-01",
+    "period_end": "2026-06-30",
+    "fiscal_period": "FY2026 Q2",
+    "calendar_period": "CY2026 Q2",
+    "value_source": "reported",
+    "citation": {
+     "accession_no": "0001628280-26-050609",
+     "form": "10-Q",
+     "filed": "2026-07-29",
+     "xbrl_tag": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+     "source_accessions": [
+      "0001628280-26-050609"
+     ],
+     "filing_url": "https://www.sec.gov/Archives/edgar/data/1674101/000162828026050609/"
+    },
+    "freshness": {
+     "filed": "2026-07-29",
+     "ingested_at": "2026-10-20T06:37:11.463397Z"
+    },
+    "change": "1038500000",
+    "pct_change": "0.317167"
+   },
+   "year_ago": {
+    "value": "2675800000",
+    "not_meaningful": null,
+    "period_start": "2025-07-01",
+    "period_end": "2025-09-30",
+    "fiscal_period": "FY2025 Q3",
+    "calendar_period": "CY2025 Q3",
+    "value_source": "reported",
+    "citation": {
+     "accession_no": "0001628280-26-067893",
+     "form": "10-Q",
+     "filed": "2026-10-28",
+     "xbrl_tag": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+     "source_accessions": [
+      "0001628280-26-067893"
+     ],
+     "filing_url": "https://www.sec.gov/Archives/edgar/data/1674101/000162828026067893/"
+    },
+    "freshness": {
+     "filed": "2026-10-28",
+     "ingested_at": "2026-10-29T09:01:42.836312Z"
+    },
+    "change": "1637000000",
+    "pct_change": "0.611780"
+   }
+  }
+ ],
+ "flags": []
+}

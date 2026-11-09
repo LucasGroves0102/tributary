@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 
-import { failureReason, screener, SCREENER_CSV_ROWS, screenerCsv } from "../api";
+import { failureReason, screener, SCREENER_CSV_ROWS, screenerCsv, sectors as fetchSectors } from "../api";
+import { coRegistrantNote } from "../compare/peers";
 import { DEFAULT_SPECS, MASKED_TITLE, screenRow } from "../companies/rows";
 import {
   activeFilters,
@@ -13,6 +14,7 @@ import {
   EXCHANGES,
   FILER_CATEGORIES,
   FILER_LABELS,
+  GROUP_SORT,
   hasValueFilter,
   isEmpty,
   MONTHS,
@@ -29,7 +31,7 @@ import { navRow, onTableKey } from "../components/tableNav";
 import { download } from "../download";
 import { go, href } from "../route";
 import { useScope } from "../scope";
-import type { Screener } from "../types";
+import type { Screener, Sectors } from "../types";
 import type { ColumnSpec } from "../views/model";
 import { TableScroll } from "../components/TableScroll";
 
@@ -65,6 +67,7 @@ export function Companies({ token, screen: asked, watched, onWatch, onChart, sav
   const [exporting, setExporting] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
+  const [sectorList, setSectorList] = useState<Sectors | null>(null);
   const columnKeys = columns.map((c) => c.key).join(",");
   const params = useMemo(
     () => screenParams(scope ? { ...screen, mine: true } : screen, columnKeys.split(",")),
@@ -90,6 +93,18 @@ export function Companies({ token, screen: asked, watched, onWatch, onChart, sav
     };
     // params is keyed by its JSON so a new but equal screen doesn't refetch
   }, [token, key, attempt]);
+
+  // the sector grouping (046), asked after the screen: null from an older API, and then no sector
+  // filter or grouping is offered
+  useEffect(() => {
+    let live = true;
+    fetchSectors(token)
+      .then((s) => live && setSectorList(s && Array.isArray(s.sectors) ? s : null))
+      .catch(() => live && setSectorList(null));
+    return () => {
+      live = false;
+    };
+  }, [token]);
 
   const set = (patch: Partial<ScreenFilters>) =>
     go({ view: "companies", screen: { ...screen, page: undefined, ...patch } });
@@ -135,13 +150,20 @@ export function Companies({ token, screen: asked, watched, onWatch, onChart, sav
       {note && <p className="empty error">{note}</p>}
 
       <div className="screener">
-        <FilterRail screen={screen} set={set} scoped={scope !== null} />
+        <FilterRail screen={screen} set={set} scoped={scope !== null} sectors={sectorList} />
 
         <section className="card">
           <div className="card-h keep">
             <h2>Screen</h2>
             <span className="sub">{describe(screen)}</span>
             <span className="grow" />
+            {sectorList && (
+              <label className="chk small" title="Sort by sector, then industry, with a heading for each (Tributary's own grouping of SIC codes)">
+                <input type="checkbox" checked={(screen.sort ?? "").replace(/^-/, "") === GROUP_SORT}
+                  onChange={(e) => set({ sort: e.target.checked ? GROUP_SORT : undefined })} />
+                Group by sector
+              </label>
+            )}
             {!isEmpty(screen) && (
               <button className="btn sm ghost" onClick={() => go({ view: "companies" })}>
                 Reset filters
@@ -217,12 +239,15 @@ const APPLY_AFTER_MS = 400;
 /** Up to this wide the filters start folded: all nine would fill a phone's first screen. */
 const FOLD_FILTERS_PX = 700;
 
-function FilterRail({ screen, set, scoped }: {
+function FilterRail({ screen, set, scoped, sectors }: {
   screen: ScreenFilters;
   set: (p: Partial<ScreenFilters>) => void;
   /** a demo sandbox: only its companies, so no "Only companies I can read" */
   scoped: boolean;
+  /** /v1/sectors (null: an older API, no sector filter) */
+  sectors: Sectors | null;
 }) {
+  const sectorOf = sectors?.sectors.find((s) => s.name === screen.sector) ?? null;
   // every filter applies by itself: selects at once, typed ones a moment after typing stops (or
   // on Enter or leaving the field), so nothing needs a second step
   const [q, setQ] = useState(screen.q ?? "");
@@ -316,6 +341,28 @@ function FilterRail({ screen, set, scoped }: {
           </button>
         )}
       </div>
+      {sectors && (
+        <div>
+          <label htmlFor="f-sector">Sector</label>
+          <select id="f-sector" className="field" value={screen.sector ?? ""}
+            title={sectors.note}
+            onChange={(e) => apply({ sector: e.target.value || undefined, sector_industry: undefined })}>
+            <option value="">Any</option>
+            {sectors.sectors.map((s) => (
+              <option key={s.name} value={s.name}>{s.name} ({s.companies.toLocaleString()})</option>
+            ))}
+          </select>
+          {sectorOf && (
+            <select className="field" aria-label="Industry within the sector" value={screen.sector_industry ?? ""}
+              onChange={(e) => apply({ sector_industry: e.target.value || undefined })}>
+              <option value="">Any industry</option>
+              {sectorOf.industries.map((i) => (
+                <option key={i.name} value={i.name} title={`SIC ${i.sic.join(", ")}`}>{i.name} ({i.companies.toLocaleString()})</option>
+              ))}
+            </select>
+          )}
+        </div>
+      )}
       <div>
         <label htmlFor="f-band">Revenue TTM</label>
         <select id="f-band" className="field" value={screen.band ?? ""}
@@ -448,8 +495,17 @@ function Table({
           <tbody onKeyDown={onTableKey}>
             {rows.map((r, i) => {
               const isWatched = watched?.has(r.companyId) ?? false;
+              const group = sortKey === GROUP_SORT ? `${r.sector ?? "No sector (no SIC code)"}${r.sectorIndustry ? ` · ${r.sectorIndustry}` : ""}` : null;
+              const newGroup = group !== null && (i === 0 || group !== `${rows[i - 1]!.sector ?? "No sector (no SIC code)"}${rows[i - 1]!.sectorIndustry ? ` · ${rows[i - 1]!.sectorIndustry}` : ""}`);
+              const joint = coRegistrantNote(r.name, r.coRegistrants, r.companyId);
               return (
-                <tr key={r.companyId} className={r.readable ? "clk" : "clk masked"} {...navRow(i, r.name)}
+                <Fragment key={r.companyId}>
+                {newGroup && (
+                  <tr className="group-head">
+                    <th colSpan={columns.length + 4} scope="rowgroup">{group}</th>
+                  </tr>
+                )}
+                <tr className={r.readable ? "clk" : "clk masked"} {...navRow(i, r.name)}
                   onClick={() => go({ view: "company", companyId: r.companyId })}>
                   <td className="first">
                     <a className="co" href={href({ view: "company", companyId: r.companyId })}
@@ -459,12 +515,16 @@ function Table({
                       {!r.readable && (
                         <span className="tag" title={MASKED_TITLE}>metadata only</span>
                       )}
+                      {joint && <span className="tag joint" title={joint}>combined 10-K</span>}
                     </a>
                     {r.industry && <div className="co-sub faint small" title={r.industry}>{r.industry}</div>}
                   </td>
-                  <td className="muted ind" title={r.industry ?? undefined}>
+                  <td className="muted ind" title={`${r.sector ? `${r.sector} · ${r.sectorIndustry} (Tributary's grouping). ` : ""}SIC: ${r.industry ?? "none"}`}>
                     <span className="ind-in">
-                      <span className="ind-name">{r.industry ?? "—"}</span>
+                      <span className="ind-name">
+                        {r.industry ?? "—"}
+                        {r.sectorIndustry && <span className="faint small sector-sub">{r.sectorIndustry}</span>}
+                      </span>
                       {r.sic && (
                         <button className="link faint mono" title={`Only SIC ${r.sic}`}
                           onClick={(e) => {
@@ -510,6 +570,7 @@ function Table({
                     )}
                   </td>
                 </tr>
+                </Fragment>
               );
             })}
           </tbody>

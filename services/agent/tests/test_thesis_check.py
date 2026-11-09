@@ -11,7 +11,9 @@ import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
+from query_api.model_maths import run as run_model
 from query_api.thesis_checks import validate_check
+from query_api.workspaces import validate_state
 from tributary_agent.agent import SYSTEM
 from tributary_agent.server import LimitExceeded, Limits, create_app
 from tributary_agent.thesis_check import (
@@ -104,8 +106,10 @@ class FakeQueryApi:
     """The Query API as alice sees it: her thesis and model, NVDA and AMD readable, MSFT not
     (catalog closed); every request recorded with its token."""
 
-    def __init__(self, markdown=MARKDOWN, save_status=201):
+    def __init__(self, markdown=MARKDOWN, save_status=201, quarters=(), figures=None):
         self.markdown = markdown
+        self.quarters = list(quarters)  # quarterly rows the model run reads (F2 ytd)
+        self.figures = figures  # accession -> /filings/{acc}/figures rows (None: an older API)
         self.save_status = save_status
         self.seen: list[httpx.Request] = []
         self.saved: list[dict] = []
@@ -139,6 +143,11 @@ class FakeQueryApi:
             return httpx.Response(200, json={"results": [
                 {"company_id": hits[q], "name": q, "matched_on": "ticker", "matched_alias": q}]
                 if q in hits else []})
+        if path == f"/v1/companies/{NVDA}/model" and method == "POST":
+            # the Query API's own maths (query_api/model_maths.py) over the same TTM rows
+            body = run_model({"ttm": fy_rows(), "quarters": self.quarters, "annual": [],
+                              "latest": {}}, validate_state("model", json.loads(request.content)))
+            return httpx.Response(200, json=json.loads(json.dumps(body, default=str)))
         if path == f"/v1/companies/{NVDA}/financials":
             if request.url.params.get("view") == "ttm":
                 return httpx.Response(200, json={"company_id": NVDA, "as_of": AS_OF,
@@ -150,6 +159,11 @@ class FakeQueryApi:
             return httpx.Response(200, json={"company_id": NVDA, "filings": [INDEX_ROW]})
         if path == f"/v1/companies/{NVDA}/sections/I-2":
             return httpx.Response(200, json=SECTION)
+        if path.startswith(f"/v1/companies/{NVDA}/filings/") and path.endswith("/figures") \
+                and self.figures is not None:
+            acc = path.split("/")[-2]
+            return httpx.Response(200, json={"company_id": NVDA, "accession_no": acc,
+                                             "figures": self.figures.get(acc, [])})
         if path.startswith("/v1/companies/"):
             return httpx.Response(403, json={"detail": "not permitted"})
         if path == f"/v1/thesis-checks/{THESIS}" and method == "POST":
@@ -385,7 +399,9 @@ def test_prompt_injection_in_the_thesis_does_not_widen_the_scope():
                  tool_use("t2", "list_filings", {"company_id": "0000789019"}),
                  tool_use("t3", "search_filings", {"query": "bob workspace"}),
                  tool_use("t4", "get_section", {"company_id": "0000320193",
-                                                "section_key": "7"})),
+                                                "section_key": "7"}),
+                 tool_use("t6", "get_earnings_release", {"company_id": MSFT}),
+                 tool_use("t7", "get_events_since_report", {"company_id": "0000320193"})),
         response("tool_use", tool_use("t5", "submit_check", {
             "summary": "Checked.", "claims": [], "assumptions": [], "not_mentioned": []})),
         response("end_turn", text("Done.")))
@@ -802,6 +818,93 @@ def test_check_result_refuses_a_supported_claim_with_figures_not_in_the_data():
         validate_check(result)
 
 
+# --- H2, #2: agreeing with the app's computed figure isn't agreeing with the filing ----------
+
+NET_DEBT_ROW = {"metric": "net_debt", "value": "10920000000", "period_end": "2026-07-26",
+                "fiscal_period": "FY2027 Q2",
+                "inputs": {"long_term_debt": 8466000000, "cash": 23422000000},
+                "citation": {"accession_no": ACC, "form": "10-Q", "filed": "2026-08-27",
+                             "xbrl_tag": "derived", "filing_url": URL}}
+NET_DEBT_CLAIM = {"quote": "Net debt was $10.92B.", "status": "supported",
+                  "explanation": "The 10-Q's figures give it.",
+                  "citations": [{"accession_no": ACC}]}
+
+
+def net_debt_check(monkeypatch, filing_value, unit=None):
+    """Riley #2: Tributary's computed net debt ($10.92B) left out NVIDIA's $99.37B of marketable
+    securities; the claim matched it and was certified. The cited 10-Q's own figures say
+    otherwise."""
+    monkeypatch.setitem(globals(), "QUARTER", {**QUARTER,
+                                               "rows": [*QUARTER["rows"], NET_DEBT_ROW]})
+    figures = {ACC: [{"metric": "net_debt", "period_start": None, "period_end": "2026-07-26",
+                      "value": filing_value, "how": "computed", **({"unit": unit} if unit else {})},
+                     {"metric": "cash", "period_start": None, "period_end": "2026-07-26",
+                      "value": "23422000000", "how": "reported"}]}
+    fake = FakeQueryApi(markdown=MARKDOWN + "\nNet debt was $10.92B.\n", figures=figures)
+    submission = {**SUBMISSION, "claims": [SUBMISSION["claims"][0], NET_DEBT_CLAIM]}
+    run(fake, *script(submission))
+    asked = [r.url.path for r in fake.seen if r.url.path.endswith("/figures")]
+    return validate_check(fake.saved[0]["result"])["claims"], asked
+
+
+def test_a_computed_figure_the_cited_filing_disagrees_with_isnt_supported(monkeypatch):
+    claims, asked = net_debt_check(monkeypatch, "-66003000000")
+    assert asked == [f"/v1/companies/{NVDA}/filings/{ACC}/figures"]  # once, revenue isn't guarded
+    revenue, net_debt = claims
+    assert revenue["status"] == "supported" and revenue["filing_figures"] == []
+    assert net_debt["status"] == "unverifiable" and net_debt["downgraded"]
+    assert net_debt["explanation"].endswith(
+        "(Marked unverifiable: the 10-Q filed 2026-08-27 gives net debt of -$66.0B at 2026-07-26 "
+        "from its own figures, not $10.92B: Tributary's computed figure doesn't match the "
+        "filing.)")
+    assert net_debt["filing_figures"] == [{
+        "metric": "net_debt", "period_end": "2026-07-26", "accession_no": ACC,
+        "figure": "$10.92B", "filing_value": "-66003000000", "agrees": False}]
+
+
+def test_a_computed_figure_the_filing_agrees_with_stays_supported(monkeypatch):
+    claims, _ = net_debt_check(monkeypatch, "10921000000")  # within the claim's rounding
+    assert claims[1]["status"] == "supported"
+    assert claims[1]["filing_figures"][0]["agrees"] is True
+
+
+def test_a_dollar_figure_against_a_filing_in_another_currency_isnt_supported(monkeypatch):
+    """057: the filing's figures say their unit; "$10.92B" isn't a figure of €10.92B, and the
+    note says the filing's currency. The stored filing figure has no unit (a strict model)."""
+    claims, _ = net_debt_check(monkeypatch, "10921000000", unit="EUR")
+    net_debt = claims[1]
+    assert net_debt["status"] == "unverifiable"
+    assert "gives net debt of €10.9B at 2026-07-26" in net_debt["explanation"]
+    assert net_debt["filing_figures"] == [{
+        "metric": "net_debt", "period_end": "2026-07-26", "accession_no": ACC,
+        "figure": "$10.92B", "filing_value": "10921000000", "agrees": False}]
+
+
+def test_an_older_query_api_without_filing_figures_changes_nothing(monkeypatch):
+    monkeypatch.setitem(globals(), "QUARTER", {**QUARTER,
+                                               "rows": [*QUARTER["rows"], NET_DEBT_ROW]})
+    fake = FakeQueryApi(markdown=MARKDOWN + "\nNet debt was $10.92B.\n")  # the route 403s
+    run(fake, *script({**SUBMISSION, "claims": [NET_DEBT_CLAIM]}))
+    claim = validate_check(fake.saved[0]["result"])["claims"][0]
+    assert claim["status"] == "supported" and claim["filing_figures"] == []
+
+
+def test_check_result_refuses_a_supported_claim_the_filing_disagrees_with(monkeypatch):
+    """query_api.thesis_checks.CheckResult enforces it too (they change together)."""
+    monkeypatch.setitem(globals(), "QUARTER", {**QUARTER,
+                                               "rows": [*QUARTER["rows"], NET_DEBT_ROW]})
+    fake = FakeQueryApi(markdown=MARKDOWN + "\nNet debt was $10.92B.\n",
+                        figures={ACC: [{"metric": "net_debt", "period_start": None,
+                                        "period_end": "2026-07-26", "value": "10920000000",
+                                        "how": "computed"}]})
+    run(fake, *script({**SUBMISSION, "claims": [NET_DEBT_CLAIM]}))
+    fake_result = json.loads(json.dumps(fake.saved[0]["result"]))
+    assert fake_result["claims"][0]["status"] == "supported"
+    fake_result["claims"][0]["filing_figures"][0]["agrees"] = False
+    with pytest.raises(ValueError, match="filing"):
+        validate_check(fake_result)
+
+
 # --- #74: a model still at its defaults isn't the user's view --------------------------------
 
 def test_the_check_data_says_which_years_the_user_set(monkeypatch):
@@ -816,3 +919,97 @@ def test_the_check_data_says_which_years_the_user_set(monkeypatch):
     assert [f["user_set"] for f in model["forecast"]] == [False, False, True]
     assert (model["ttm_growth_pct"], model["ttm_margin_pct"]) == (10.0, 10.0)
     assert "user_set false" in CHECK_RULES
+
+
+def test_the_check_reads_the_release_and_the_events_since_the_report():
+    """C11: the fact that changed tester 1's thesis (an acquisition after the quarter end) came
+    only from the check; the rules now send it to the events and the release, and say what a
+    stale balance-sheet figure means."""
+    assert "get_events_since_report" in CHECK_RULES and "get_earnings_release" in CHECK_RULES
+    # F3: what changed can be read against a year ago; the check says which comparison
+    assert "get_material_changes" in CHECK_RULES and "say what it was compared" in CHECK_RULES
+    assert "under stale: say so and cite the" in CHECK_RULES
+    assert "Never compute a figure after the event" in CHECK_RULES
+
+
+# --- F2: the model run comes from the Query API, the one copy of the maths -------------------
+
+def check_data(messages) -> dict:
+    return json.loads(messages.requests[0]["messages"][0]["content"][1]["text"].split("\n")[2])
+
+
+def test_the_model_is_run_by_the_query_api_as_the_user():
+    fake = FakeQueryApi()
+    _, messages, _ = run(fake, *script())
+    posts = [r for r in fake.seen if r.method == "POST" and r.url.path.endswith("/model")]
+    assert [r.url.path for r in posts] == [f"/v1/companies/{NVDA}/model"]
+    assert posts[0].headers["authorization"] == "Bearer alice-token"
+    assert json.loads(posts[0].content) == MODEL  # the saved state, as saved
+    forecast = check_data(messages)["models"][0]["forecast"]
+    # the lines below operating income, and which rates are still Tributary's defaults
+    assert forecast[0]["defaulted"] == ["nonOperating", "taxRate", "shareChange", "fcfMargin"]
+    assert forecast[0]["reported_quarters"] == 0 and "eps_diluted" in forecast[0]
+    assert "defaulted" in CHECK_RULES and "reported_quarters" in CHECK_RULES
+
+
+def test_an_older_query_api_without_the_route_leaves_the_model_out_not_the_check():
+    """The minute of a deploy: agent-api before the Query API. The claims are still checked."""
+    class Older(FakeQueryApi):
+        def __call__(self, request):
+            if request.url.path.endswith("/model"):
+                self.seen.append(request)
+                return httpx.Response(404, json={"detail": "Not Found"})
+            return super().__call__(request)
+
+    fake = Older()
+    run(fake, *script())
+    result = validate_check(fake.saved[0]["result"])
+    assert result["assumptions"][0]["error"] == "the Query API can't run models yet"
+    assert result["assumptions"][0]["years"] == [] and result["claims"]
+
+
+def test_a_models_amounts_in_another_currency_say_so_in_the_check_data():
+    """Pre-ship review: the prompts say "write every dollar amount with $" (unchanged: that needs
+    a re-record), so every figure the model sees for a non-USD company must say its currency. The
+    check data's history amounts come from the model run, whose `currency` (057) is now beside
+    them; a dollar company's block is as before (no key)."""
+    _, messages, _ = run(FakeQueryApi(), *script())
+    assert "currency" not in check_data(messages)["models"][0]
+
+    class Euros(FakeQueryApi):
+        def __call__(self, request):
+            r = super().__call__(request)
+            if request.url.path.endswith("/model"):
+                return httpx.Response(200, json={**r.json(), "currency": "EUR"})
+            return r
+
+    _, messages, _ = run(Euros(), *script())
+    model = check_data(messages)["models"][0]
+    assert model["currency"] == "EUR" and model["history"][-1]["revenue"] is not None
+    assert list(model)[:4] == ["model", "name", "company_id", "currency"]  # before the amounts
+
+
+def quarter_rows(fy: int, values: list[tuple[int, float, float]]) -> list[dict]:
+    return [{"metric": m, "fiscal_period": f"FY{fy} Q{q}", "period_end": f"{fy}-0{q * 3}-28",
+             "value": str(int(v)), "citation": {"accession_no": ACC, "form": "10-Q",
+                                                "filed": "2026-08-27", "filing_url": URL}}
+            for q, rev, oi in values for m, v in (("revenue", rev), ("operating_income", oi))]
+
+
+def test_a_year_built_from_reported_quarters_is_checked_on_its_full_year(monkeypatch):
+    """F2 `ytd`: FY2026's first half is reported; the user's 25% / 30% are the second half's,
+    so the check's growth and margin are the full year's, and the data says what's reported."""
+    monkeypatch.setitem(globals(), "MODEL", {**MODEL, "ytd": True})
+    rows = (quarter_rows(2025, [(1, 35e9, 3.5e9), (2, 36e9, 3.6e9)])
+            + quarter_rows(2026, [(1, 40e9, 6e9), (2, 41e9, 6.2e9)]))
+    fake = FakeQueryApi(quarters=rows)
+    _, messages, _ = run(fake, *script())
+    year1 = check_data(messages)["models"][0]["forecast"][0]
+    assert year1["reported_quarters"] == 2
+    h2 = (146.41e9 - 71e9) * 1.25
+    full = 81e9 + h2
+    assert year1["growth_pct"] == pytest.approx((full / 146.41e9 - 1) * 100, abs=0.01)
+    assert year1["margin_pct"] == pytest.approx((12.2e9 + h2 * 0.3) / full * 100, abs=0.01)
+    result = validate_check(fake.saved[0]["result"])
+    assert result["assumptions"][0]["years"][0]["growth"] == pytest.approx(
+        year1["growth_pct"], abs=0.01)

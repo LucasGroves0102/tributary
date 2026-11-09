@@ -1,0 +1,654 @@
+{
+ "company_id": "0001045810",
+ "filings": [
+  {
+   "accession_no": "0001197647-26-000013",
+   "form": "4",
+   "filed": "2026-11-06",
+   "period_of_report": "2026-11-04",
+   "aff10b5_one": true,
+   "owners": [
+    {
+     "cik": "0001197647",
+     "name": "COXE TENCH",
+     "roles": [
+      "Director"
+     ]
+    }
+   ],
+   "summary": {
+    "other": {
+     "shares": "500000",
+     "value": "0"
+    }
+   },
+   "lines": [
+    {
+     "line": 1,
+     "kind": "transaction",
+     "derivative": false,
+     "security_title": "Common",
+     "transaction_date": "2026-11-04",
+     "code": "G",
+     "code_label": "Gift",
+     "equity_swap": false,
+     "shares": "500000",
+     "price": "0",
+     "value": "0",
+     "acquired_disposed": "D",
+     "shares_after": "23171360",
+     "direct_indirect": "I",
+     "nature": "By Trust",
+     "exercise_price": null,
+     "underlying_title": null,
+     "underlying_shares": null
+    },
+    {
+     "line": 2,
+     "kind": "holding",
+     "derivative": false,
+     "security_title": "Common",
+     "transaction_date": null,
+     "code": null,
+     "code_label": null,
+     "equity_swap": null,
+     "shares": null,
+     "price": null,
+     "value": null,
+     "acquired_disposed": null,
+     "shares_after": "57378",
+     "direct_indirect": "D",
+     "nature": null,
+     "exercise_price": null,
+     "underlying_title": null,
+     "underlying_shares": null
+    },
+    {
+     "line": 3,
+     "kind": "holding",
+     "derivative": false,
+     "security_title": "Common",
+     "transaction_date": null,
+     "code": null,
+     "code_label": null,
+     "equity_swap": null,
+     "shares": null,
+     "price": null,
+     "value": null,
+     "acquired_disposed": null,
+     "shares_after": "4852480",
+     "direct_indirect": "I",
+     "nature": "By Profit Sharing Plan Trust",
+     "exercise_price": null,
+     "underlying_title": null,
+     "underlying_shares": null
+    }
+   ],
+   "citation": {
+    "accession_no": "0001197647-26-000013",
+    "form": "4",
+    "filed": "2026-11-06",
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000119764726000013/"
+   }
+  },
+  {
+   "accession_no": "0002152188-26-000007",
+   "form": "4/A",
+   "filed": "2026-10-13",
+   "period_of_report": "2026-09-09",
+   "aff10b5_one": false,
+   "owners": [
+    {
+     "cik": "0002152188",
+     "name": "Parker Nicholas P.",
+     "roles": [
+      "EVP, Worldwide Field Ops"
+     ]
+    }
+   ],
+   "summary": {
+    "other": {
+     "shares": "160418",
+     "value": "0"
+    }
+   },
+   "lines": [
+    {
+     "line": 1,
+     "kind": "transaction",
+     "derivative": false,
+     "security_title": "Common Stock",
+     "transaction_date": "2026-09-09",
+     "code": "A",
+     "code_label": "Grant or award",
+     "equity_swap": false,
+     "shares": "160418",
+     "price": "0",
+     "value": "0",
+     "acquired_disposed": "A",
+     "shares_after": "160418",
+     "direct_indirect": "D",
+     "nature": null,
+     "exercise_price": null,
+     "underlying_title": null,
+     "underlying_shares": null
+    }
+   ],
+   "citation": {
+    "accession_no": "0002152188-26-000007",
+    "form": "4/A",
+    "filed": "2026-10-13",
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000215218826000007/"
+   }
+  },
+  {
+   "accession_no": "0001588670-26-000014",
+   "form": "4",
+   "filed": "2026-09-18",
+   "period_of_report": "2026-09-16",
+   "aff10b5_one": true,
+   "owners": [
+    {
+     "cik": "0001588670",
+     "name": "Kress Colette",
+     "roles": [
+      "EVP & Chief Financial Officer"
+     ]
+    }
+   ],
+   "summary": {
+    "other": {
+     "shares": "40747",
+     "value": "8645290.99"
+    },
+    "sold": {
+     "shares": "34918",
+     "value": "7648632.4508"
+    }
+   },
+   "lines": [
+    {
+     "line": 1,
+     "kind": "transaction",
+     "derivative": false,
+     "security_title": "Common",
+     "transaction_date": "2026-09-16",
+     "code": "F",
+     "code_label": "Shares withheld for tax or exercise price",
+     "equity_swap": false,
+     "shares": "40747",
+     "price": "212.17",
+     "value": "8645290.99",
+     "acquired_disposed": "D",
+     "shares_after": "800021",
+     "direct_indirect": "D",
+     "nature": null,
+     "exercise_price": null,
+     "underlying_title": null,
+     "underlying_shares": null
+    },
+    {
+     "line": 2,
+     "kind": "transaction",
+     "derivative": false,
+     "security_title": "Common",
+     "transaction_date": "2026-09-17",
+     "code": "S",
+     "code_label": "Open-market sale",
+     "equity_swap": false,
+     "shares": "4681",
+     "price": "218.0144",
+     "value": "1020525.4064",
+     "acquired_disposed": "D",
+     "shares_after": "795340",
+     "direct_indirect": "D",
+     "nature": null,
+     "exercise_price": null,
+     "underlying_title": null,
+     "underlying_shares": null
+    },
+    {
+     "line": 3,
+     "kind": "transaction",
+     "derivative": false,
+     "security_title": "Common",
+     "transaction_date": "2026-09-17",
+     "code": "S",
+     "code_label": "Open-market sale",
+     "equity_swap": false,
+     "shares": "20369",
+     "price": "219.0172",
+     "value": "4461161.3468",
+     "acquired_disposed": "D",
+     "shares_after": "774971",
+     "direct_indirect": "D",
+     "nature": null,
+     "exercise_price": null,
+     "underlying_title": null,
+     "underlying_shares": null
+    },
+    {
+     "line": 4,
+     "kind": "transaction",
+     "derivative": false,
+     "security_title": "Common",
+     "transaction_date": "2026-09-17",
+     "code": "S",
+     "code_label": "Open-market sale",
+     "equity_swap": false,
+     "shares": "9868",
+     "price": "219.5932",
+     "value": "2166945.6976",
+     "acquired_disposed": "D",
+     "shares_after": "765103",
+     "direct_indirect": "D",
+     "nature": null,
+     "exercise_price": null,
+     "underlying_title": null,
+     "underlying_shares": null
+    },
+    {
+     "line": 5,
+     "kind": "holding",
+     "derivative": false,
+     "security_title": "Common",
+     "transaction_date": null,
+     "code": null,
+     "code_label": null,
+     "equity_swap": null,
+     "shares": null,
+     "price": null,
+     "value": null,
+     "acquired_disposed": null,
+     "shares_after": "83060",
+     "direct_indirect": "I",
+     "nature": "By Trust",
+     "exercise_price": null,
+     "underlying_title": null,
+     "underlying_shares": null
+    },
+    {
+     "line": 6,
+     "kind": "holding",
+     "derivative": false,
+     "security_title": "Common",
+     "transaction_date": null,
+     "code": null,
+     "code_label": null,
+     "equity_swap": null,
+     "shares": null,
+     "price": null,
+     "value": null,
+     "acquired_disposed": null,
+     "shares_after": "712934",
+     "direct_indirect": "I",
+     "nature": "By Limited Liability Company",
+     "exercise_price": null,
+     "underlying_title": null,
+     "underlying_shares": null
+    },
+    {
+     "line": 7,
+     "kind": "holding",
+     "derivative": false,
+     "security_title": "Common",
+     "transaction_date": null,
+     "code": null,
+     "code_label": null,
+     "equity_swap": null,
+     "shares": null,
+     "price": null,
+     "value": null,
+     "acquired_disposed": null,
+     "shares_after": "4000",
+     "direct_indirect": "I",
+     "nature": "By immediate family member 1",
+     "exercise_price": null,
+     "underlying_title": null,
+     "underlying_shares": null
+    },
+    {
+     "line": 8,
+     "kind": "holding",
+     "derivative": false,
+     "security_title": "Common",
+     "transaction_date": null,
+     "code": null,
+     "code_label": null,
+     "equity_swap": null,
+     "shares": null,
+     "price": null,
+     "value": null,
+     "acquired_disposed": null,
+     "shares_after": "4000",
+     "direct_indirect": "I",
+     "nature": "By immediate family member 2",
+     "exercise_price": null,
+     "underlying_title": null,
+     "underlying_shares": null
+    },
+    {
+     "line": 9,
+     "kind": "holding",
+     "derivative": false,
+     "security_title": "Common",
+     "transaction_date": null,
+     "code": null,
+     "code_label": null,
+     "equity_swap": null,
+     "shares": null,
+     "price": null,
+     "value": null,
+     "acquired_disposed": null,
+     "shares_after": "451498",
+     "direct_indirect": "I",
+     "nature": "Grantor Retained Annuity Trust 1",
+     "exercise_price": null,
+     "underlying_title": null,
+     "underlying_shares": null
+    },
+    {
+     "line": 10,
+     "kind": "holding",
+     "derivative": false,
+     "security_title": "Common",
+     "transaction_date": null,
+     "code": null,
+     "code_label": null,
+     "equity_swap": null,
+     "shares": null,
+     "price": null,
+     "value": null,
+     "acquired_disposed": null,
+     "shares_after": "451498",
+     "direct_indirect": "I",
+     "nature": "Grantor Retained Annuity Trust 2",
+     "exercise_price": null,
+     "underlying_title": null,
+     "underlying_shares": null
+    },
+    {
+     "line": 11,
+     "kind": "holding",
+     "derivative": false,
+     "security_title": "Common",
+     "transaction_date": null,
+     "code": null,
+     "code_label": null,
+     "equity_swap": null,
+     "shares": null,
+     "price": null,
+     "value": null,
+     "acquired_disposed": null,
+     "shares_after": "2032048",
+     "direct_indirect": "I",
+     "nature": "Grantor Retained Annuity Trust 3",
+     "exercise_price": null,
+     "underlying_title": null,
+     "underlying_shares": null
+    },
+    {
+     "line": 12,
+     "kind": "holding",
+     "derivative": false,
+     "security_title": "Common",
+     "transaction_date": null,
+     "code": null,
+     "code_label": null,
+     "equity_swap": null,
+     "shares": null,
+     "price": null,
+     "value": null,
+     "acquired_disposed": null,
+     "shares_after": "271592",
+     "direct_indirect": "I",
+     "nature": "Grantor Retained Annuity Trust 4",
+     "exercise_price": null,
+     "underlying_title": null,
+     "underlying_shares": null
+    }
+   ],
+   "citation": {
+    "accession_no": "0001588670-26-000014",
+    "form": "4",
+    "filed": "2026-09-18",
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000158867026000014/"
+   }
+  },
+  {
+   "accession_no": "0001199039-26-000014",
+   "form": "4",
+   "filed": "2026-09-08",
+   "period_of_report": "2026-09-03",
+   "aff10b5_one": false,
+   "owners": [
+    {
+     "cik": "0001199039",
+     "name": "STEVENS MARK A",
+     "roles": [
+      "Director"
+     ]
+    }
+   ],
+   "summary": {
+    "sold": {
+     "shares": "1022239",
+     "value": "235636867.4110"
+    }
+   },
+   "lines": [
+    {
+     "line": 1,
+     "kind": "transaction",
+     "derivative": false,
+     "security_title": "Common Stock",
+     "transaction_date": "2026-09-03",
+     "code": "S",
+     "code_label": "Open-market sale",
+     "equity_swap": false,
+     "shares": "198707",
+     "price": "227.6954",
+     "value": "45244669.8478",
+     "acquired_disposed": "D",
+     "shares_after": "3160063",
+     "direct_indirect": "I",
+     "nature": "By Trust",
+     "exercise_price": null,
+     "underlying_title": null,
+     "underlying_shares": null
+    },
+    {
+     "line": 2,
+     "kind": "transaction",
+     "derivative": false,
+     "security_title": "Common Stock",
+     "transaction_date": "2026-09-03",
+     "code": "S",
+     "code_label": "Open-market sale",
+     "equity_swap": false,
+     "shares": "1293",
+     "price": "228.2703",
+     "value": "295153.4979",
+     "acquired_disposed": "D",
+     "shares_after": "3158770",
+     "direct_indirect": "I",
+     "nature": "By Trust",
+     "exercise_price": null,
+     "underlying_title": null,
+     "underlying_shares": null
+    },
+    {
+     "line": 3,
+     "kind": "transaction",
+     "derivative": false,
+     "security_title": "Common Stock",
+     "transaction_date": "2026-09-03",
+     "code": "S",
+     "code_label": "Open-market sale",
+     "equity_swap": false,
+     "shares": "200000",
+     "price": "229.8705",
+     "value": "45974100.0000",
+     "acquired_disposed": "D",
+     "shares_after": "2958770",
+     "direct_indirect": "I",
+     "nature": "By Trust",
+     "exercise_price": null,
+     "underlying_title": null,
+     "underlying_shares": null
+    },
+    {
+     "line": 4,
+     "kind": "transaction",
+     "derivative": false,
+     "security_title": "Common Stock",
+     "transaction_date": "2026-09-04",
+     "code": "S",
+     "code_label": "Open-market sale",
+     "equity_swap": false,
+     "shares": "197180",
+     "price": "230.4039",
+     "value": "45431041.0020",
+     "acquired_disposed": "D",
+     "shares_after": "2761590",
+     "direct_indirect": "I",
+     "nature": "By Trust",
+     "exercise_price": null,
+     "underlying_title": null,
+     "underlying_shares": null
+    },
+    {
+     "line": 5,
+     "kind": "transaction",
+     "derivative": false,
+     "security_title": "Common Stock",
+     "transaction_date": "2026-09-04",
+     "code": "S",
+     "code_label": "Open-market sale",
+     "equity_swap": false,
+     "shares": "237820",
+     "price": "231.1677",
+     "value": "54976302.4140",
+     "acquired_disposed": "D",
+     "shares_after": "2523770",
+     "direct_indirect": "I",
+     "nature": "By Trust",
+     "exercise_price": null,
+     "underlying_title": null,
+     "underlying_shares": null
+    },
+    {
+     "line": 6,
+     "kind": "transaction",
+     "derivative": false,
+     "security_title": "Common Stock",
+     "transaction_date": "2026-09-04",
+     "code": "S",
+     "code_label": "Open-market sale",
+     "equity_swap": false,
+     "shares": "182628",
+     "price": "233.4615",
+     "value": "42636606.8220",
+     "acquired_disposed": "D",
+     "shares_after": "2341142",
+     "direct_indirect": "I",
+     "nature": "By Trust",
+     "exercise_price": null,
+     "underlying_title": null,
+     "underlying_shares": null
+    },
+    {
+     "line": 7,
+     "kind": "transaction",
+     "derivative": false,
+     "security_title": "Common Stock",
+     "transaction_date": "2026-09-04",
+     "code": "S",
+     "code_label": "Open-market sale",
+     "equity_swap": false,
+     "shares": "4611",
+     "price": "234.0043",
+     "value": "1078993.8273",
+     "acquired_disposed": "D",
+     "shares_after": "2336531",
+     "direct_indirect": "I",
+     "nature": "By Trust",
+     "exercise_price": null,
+     "underlying_title": null,
+     "underlying_shares": null
+    },
+    {
+     "line": 8,
+     "kind": "holding",
+     "derivative": false,
+     "security_title": "Common Stock",
+     "transaction_date": null,
+     "code": null,
+     "code_label": null,
+     "equity_swap": null,
+     "shares": null,
+     "price": null,
+     "value": null,
+     "acquired_disposed": null,
+     "shares_after": "11544612",
+     "direct_indirect": "D",
+     "nature": null,
+     "exercise_price": null,
+     "underlying_title": null,
+     "underlying_shares": null
+    },
+    {
+     "line": 9,
+     "kind": "holding",
+     "derivative": false,
+     "security_title": "Common Stock",
+     "transaction_date": null,
+     "code": null,
+     "code_label": null,
+     "equity_swap": null,
+     "shares": null,
+     "price": null,
+     "value": null,
+     "acquired_disposed": null,
+     "shares_after": "15017750",
+     "direct_indirect": "I",
+     "nature": "By the Envy Trust",
+     "exercise_price": null,
+     "underlying_title": null,
+     "underlying_shares": null
+    }
+   ],
+   "citation": {
+    "accession_no": "0001199039-26-000014",
+    "form": "4",
+    "filed": "2026-09-08",
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000119903926000014/"
+   }
+  },
+  {
+   "accession_no": "0002152188-26-000003",
+   "form": "3",
+   "filed": "2026-09-03",
+   "period_of_report": "2026-08-24",
+   "aff10b5_one": null,
+   "owners": [
+    {
+     "cik": "0002152188",
+     "name": "Parker Nicholas P.",
+     "roles": [
+      "EVP, Worldwide Field Ops"
+     ]
+    }
+   ],
+   "summary": {},
+   "lines": [],
+   "citation": {
+    "accession_no": "0002152188-26-000003",
+    "form": "3",
+    "filed": "2026-09-03",
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000215218826000003/"
+   }
+  }
+ ],
+ "has_more": false
+}

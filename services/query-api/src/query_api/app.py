@@ -2,6 +2,7 @@
 OpenFGA first (layer 1), then Postgres row-level security (layer 2, in Store)."""
 
 import logging
+import re
 import time
 from collections.abc import Callable
 from datetime import UTC, date, datetime
@@ -14,11 +15,14 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from prometheus_client import Counter
 from pydantic import BaseModel, Field
 
+from query_api.alerts import AppAlerts, add_alert_routes
 from query_api.auth import Unauthenticated, mint, verify_claims
 from query_api.authorizer import Access, Authorizer, AuthzUnavailable, Readable
+from query_api.components import add_components_routes
 from query_api.connections import MarketData, add_connection_routes
 from query_api.csv_export import csv_response
 from query_api.demo import add_sandbox_routes, demo_company_resolver
+from query_api.events import add_event_routes
 from query_api.formula import (
     CATALOG,
     Analysis,
@@ -32,7 +36,10 @@ from query_api.formula import (
     to_dict,
 )
 from query_api.github import Accounts, GitHub, GitHubConfig, add_github_routes, is_github_user
+from query_api.insiders import add_insider_routes
+from query_api.model_api import add_model_routes
 from query_api.notes import add_notes_routes
+from query_api.notes import callouts as statement_callouts
 from query_api.password_accounts import PasswordAccounts, add_password_routes
 from query_api.passwords import is_password_user
 from query_api.research import add_research_routes
@@ -47,10 +54,12 @@ from query_api.shapes import filing_url
 from query_api.shapes import period as _period
 from query_api.status import add_status_routes
 from query_api.store import QUERY_TIMEOUT, Store
+from query_api.text_kpis import add_text_kpi_routes
 from query_api.thesis_checks import ThesisChecks, add_thesis_check_routes
-from query_api.ui import add_ui_routes
+from query_api.ui import add_ui_routes, today_eastern
 from query_api.views import Views, add_view_routes
 from query_api.watchlist import Watchlists
+from query_api.webhooks import Sender
 from query_api.workspace_api import add_workspace_routes
 from query_api.workspaces import Workspaces
 from tributary_telemetry.http import instrument
@@ -111,6 +120,9 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
                thesis_checks: ThesisChecks | None = None,
                market_data: MarketData | None = None,
                password_accounts: PasswordAccounts | None = None,
+               alerts: AppAlerts | None = None,
+               webhook_sender: Sender | None = None,
+               webhook_resolver: Callable[..., Any] | None = None,
                monotonic: Callable[[], float] = time.monotonic) -> FastAPI:
     """demo_users: accounts anyone may sign in as without a password (empty disables it).
     today: the current US Eastern date (EDGAR's), injectable for tests.
@@ -126,7 +138,10 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
     market_data: "Connect your data" (query_api.connections); None (no DATA_CONNECTIONS_KEY):
     its routes don't exist.
     password_accounts: owner-created username/password accounts (query_api.password_accounts);
-    None (no app database): POST /v1/auth/password answers 404 and "pw-" tokens are refused."""
+    None (no app database): POST /v1/auth/password answers 404 and "pw-" tokens are refused.
+    alerts: filing alerts in the app database (query_api.alerts; None: its routes answer 503);
+    webhook_sender, webhook_resolver: how a webhook test send connects and resolves names
+    (query_api.webhooks; injected in tests)."""
     app = FastAPI(title="Tributary Query API", version="1")
     instrument(app)
 
@@ -224,6 +239,12 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
                         readable=readable)
     add_notes_routes(app, store=store, current_user=current_user, require=require,
                      readable=readable)
+    add_event_routes(app, store=store, current_user=current_user, require=require,
+                     today=today or today_eastern)
+    add_model_routes(app, store=store, current_user=current_user, require=require)
+    add_insider_routes(app, store=store, current_user=current_user, require=require)
+    add_text_kpi_routes(app, store=store, current_user=current_user, require=require,
+                        today=today or today_eastern)
 
     add_workspace_routes(app, store=store, workspaces=workspaces, current_user=current_user)
     add_thesis_check_routes(app, checks=thesis_checks, current_user=current_user)
@@ -232,6 +253,9 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
                           require=require)
 
     now = clock or (lambda: datetime.now(UTC))
+    add_alert_routes(app, alerts=alerts, store=store, current_user=current_user, require=require,
+                     readable=readable, jwt_secret=jwt_secret, sender=webhook_sender,
+                     resolver=webhook_resolver, clock=now)
     add_status_routes(app, store=store, clock=now)
     demo_companies = demo_company_resolver(store)
     sandbox_info = add_sandbox_routes(
@@ -345,6 +369,9 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
         """Metric names financials accepts: reported (silver.metrics) and derived."""
         return metric_names()
 
+    add_components_routes(app, store=store, current_user=current_user, require=require,
+                          metric_names=metric_names)
+
     @app.get("/v1/companies/{company_id}/financials", response_model=dict)
     def financials(
         user_id: User, company_id: CompanyId,
@@ -363,6 +390,10 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
                         "and `not_meaningful_periods` for periods a ratio has no row because of "
                         "the company's equity")]
             = False,
+        callouts: Annotated[bool, Query(
+            description="view=quarter: add `callouts`, quarters far outside their series or "
+                        "of the other sign from the quarters beside them (query_api.notes)")]
+            = False,
     ) -> dict | Response:
         names = metric_names()
         every = names["metrics"] + names["derived_metrics"]
@@ -373,6 +404,14 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
         rows = store.financials(user_id, company_id, metrics or every, quarters, view, basis)
         meta: dict[str, Any] = {"company_id": company_id, "view": view, "basis": basis,
                                 "as_of": _now()}
+        # additive, only when not the usual (migration 056): the currency the company's amounts
+        # are in, and that its figures are fiscal years (a 20-F/40-F filer), never quarters
+        # any amount's, per-share ones too ("EUR/shares": a request for EPS alone, 057)
+        currency = next((c for r in rows if (c := currency_of(r["unit"])) is not None), "USD")
+        if currency != "USD":
+            meta["currency"] = currency
+        if fmt == "json" and store.cadence(user_id, company_id) == "annual":
+            meta["cadence"] = "annual"
         # equity's reasons (035): over a row's own, and where gold has no row (negative equity)
         by_equity: dict[tuple[str, date], str] = {}
         if readings and fmt == "json":
@@ -388,6 +427,13 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
                 {"metric": m, "period_end": end, "reason": reason}
                 for (m, end), reason in sorted(by_equity.items(),
                                                key=lambda x: (x[0][0], -x[0][1].toordinal()))]
+        if callouts and view == "quarter" and fmt == "json":
+            # every quarter of the series, not just the window: a quarter's neighbours can be
+            # outside it (F5; only for the web's statements, so the agent's JSON is unchanged)
+            base = sorted(set(metrics or every) & set(names["metrics"]))
+            series = store.metric_series(user_id, [company_id], base) if base else {}
+            meta["callouts"] = [c for (_, m), s in sorted(series.items())
+                                for c in statement_callouts(m, s)]
         if fmt == "csv":
             return csv_response(f"{company_id}-financials-{view}-{basis}.csv", FINANCIALS_CSV, ([
                 r["metric"], view, r["period_start"], r["period_end"],
@@ -616,12 +662,22 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
             raise HTTPException(403, {"errors": not_yours(user_id, denied)})
         compiled = compile_formula(ast, a, companies, body.basis, body.start, body.end)
         rows = store.formula(user_id, compiled)
+        # 057: amounts are in each company's own currency (056). Inputs in two currencies can't be
+        # added, subtracted or divided: Tributary converts none. One currency: the series' money is
+        # in it (`currency`, only when not USD, so a dollar formula's JSON is as before).
+        currencies = _input_currencies(rows)
+        mixed = sorted(set().union(*currencies.values())) if currencies else []
+        if len(mixed) > 1:
+            raise HTTPException(422, {"errors": [_mixed_currencies(body.formula, a,
+                                                                   currencies).to_dict()]})
+        currency = mixed[0] if mixed else "USD"
         return {
             "formula": body.formula, "unit": a.unit, "display": a.display,
+            **({"currency": currency} if currency != "USD" and a.unit in MONEY_UNITS else {}),
             "basis": body.basis, "view": body.view,
             "alignment": compiled.alignment, "as_of": _now(),
-            "inputs": _inputs(a, companies),
-            "points": [_point(r, compiled.alignment) for r in rows],
+            "inputs": _inputs(a, companies, currencies),
+            "points": [_point(r, compiled.alignment, [i.ref for i in a.inputs]) for r in rows],
         }
 
     return app
@@ -632,26 +688,73 @@ def _no_default(at: tuple[int, int]) -> FormulaError:
                         "Choose a default company, or write TICKER.metric", code="company")
 
 
-def _inputs(a: Analysis, companies: dict[str | None, str | None]) -> list[dict]:
+MONEY_UNITS = ("USD", "USD/shares")
+
+
+def currency_of(unit: str | None) -> str | None:
+    """The currency of a unit: "EUR" of "EUR" and "EUR/shares"; None for shares and ratios."""
+    code = (unit or "").split("/")[0]
+    return code if re.fullmatch(r"[A-Z]{3}", code) else None
+
+
+def _input_currencies(rows: list[dict]) -> dict[int, set[str]]:
+    """input index -> the currencies of its rows' amounts (057; each company has one: 056)."""
+    out: dict[int, set[str]] = {}
+    for r in rows:
+        for x in r["inputs"]:
+            c = currency_of(x.get("unit"))
+            if c is not None:
+                out.setdefault(x["input"], set()).add(c)
+    return out
+
+
+def _mixed_currencies(formula: str, a: Analysis, currencies: dict[int, set[str]]) -> FormulaError:
+    said = "; ".join(f"{a.inputs[i].ref} is in {', '.join(sorted(cs))}"
+                     for i, cs in sorted(currencies.items()))
+    return FormulaError(f"These figures are in different currencies ({said}): Tributary doesn't "
+                        "convert currencies, so a formula can't combine them", 0,
+                        max(1, len(formula)),
+                        "Chart each company on its own, or compare ratios such as margins and "
+                        "growth, which have no currency", code="currency")
+
+
+def _inputs(a: Analysis, companies: dict[str | None, str | None],
+            currencies: dict[int, set[str]] | None = None) -> list[dict]:
+    def currency(i: int) -> dict:
+        cs = (currencies or {}).get(i, set())
+        return {"currency": next(iter(cs))} if len(cs) == 1 and cs != {"USD"} else {}
+
     return [{"input": i, "ref": inp.ref, "ticker": inp.ticker,
              "company_id": companies.get(inp.ticker), "metric": inp.metric, "span": inp.span,
-             "lag_quarters": inp.lag, "unit": CATALOG[inp.metric][0]}
+             "lag_quarters": inp.lag, "unit": CATALOG[inp.metric][0], **currency(i)}
             for i, inp in enumerate(a.inputs)]
 
 
-def _point(r: dict, align: str) -> dict:
+def _point(r: dict, align: str, refs: list[str] | None = None) -> dict:
+    """One point with its inputs' provenance. `not_meaningful` (F7a, item 7): the reason an input
+    reads n/m by migration 035, the tables' rule, so a chart leaves a gap and says why instead of
+    plotting the raw ratio; with several inputs it names the input. `value` stays the exact
+    figure, so an older web app that ignores the field draws what it always drew."""
     year, quarter = divmod(r["period_key"], 4)
     prefix = "FY" if align == "fiscal" and r["fiscal_key"] else "CY"
     inputs = [{
         "input": x["input"], "period_start": x["period_start"], "period_end": x["period_end"],
         "value": x["value"], "value_source": x["value_source"],
+        **({"not_meaningful": x["not_meaningful"]} if x.get("not_meaningful") else {}),
         "citation": {"accession_no": x["accession_no"], "form": x["form"], "filed": x["filed"],
                      "source_accessions": x["source_accessions"],
                      "filing_url": filing_url(x.get("filer_cik"), x["accession_no"])},
         "freshness": {"filed": x["filed"], "ingested_at": x["ingested_at"]},
     } for x in r["inputs"]]
+    nm = next((x for x in r["inputs"] if x.get("not_meaningful")), None)
+    reason = None
+    if nm is not None:
+        ref = (refs or [])[nm["input"]] if nm["input"] < len(refs or []) else None
+        reason = nm["not_meaningful"] if not refs or len(refs) == 1 or ref is None \
+            else f"{ref}: {nm['not_meaningful']}"
     return {"period": f"{prefix}{year} Q{quarter + 1}", "period_key": r["period_key"],
             "period_end": r["period_end"], "value": r["value"], "inputs": inputs,
+            **({"not_meaningful": reason} if reason else {}),
             "source_accessions": sorted({a for x in r["inputs"] for a in x["source_accessions"]})}
 
 

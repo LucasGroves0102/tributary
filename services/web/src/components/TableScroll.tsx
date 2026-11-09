@@ -33,6 +33,30 @@ export function cutColumns(
   });
 }
 
+/** How far a table's header moves down so it stays in view while the page scrolls past the table:
+ * from 0 (the table's top is below `viewTop`, the sticky top bar's bottom) up to the table's height
+ * less the header's, so the header never leaves its own table. Pure. */
+export function headerShift(table: { top: number; height: number }, head: number, viewTop: number): number {
+  const shift = viewTop - table.top;
+  if (shift <= 0) return 0;
+  return Math.round(Math.min(shift, Math.max(0, table.height - head)));
+}
+
+/** The line a table's header sticks to: the bottom of the app's sticky top bar (`.top`), or the
+ * window's top on a page without one (the public status page); lower when the table sits in a
+ * `[data-sticky-scope]` whose own `[data-sticky-bar]` is stuck under it (the reader's section
+ * heading with next and previous match). */
+function stickyTop(table: Element): number {
+  const top = document.querySelector(".top");
+  let line = top ? Math.max(0, top.getBoundingClientRect().bottom) : 0;
+  const bar = table.closest("[data-sticky-scope]")?.querySelector("[data-sticky-bar]");
+  if (bar) {
+    const r = bar.getBoundingClientRect();
+    if (r.top <= line + 1) line = Math.max(line, r.bottom);
+  }
+  return line;
+}
+
 interface Props {
   children: ReactNode;
   /** open at the far end: statements run oldest to newest, so the newest stays in view when narrow */
@@ -51,7 +75,8 @@ const NONE: Off = { left: 0, right: 0, scrolls: false };
  * there's more that way, a column showing only in part is blanked rather than cut mid-number, and a
  * line above the table says how many columns are off screen on each side and moves to them. A table
  * that fits shows none of it. Arrow keys scroll it once it has focus; it is a tab stop only while
- * there is something to scroll. */
+ * there is something to scroll. The header row stays under the top bar while the page scrolls past
+ * a long table (`headerShift`). */
 export function TableScroll({ children, atEnd = false, resetKey, label = "Table" }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const [off, setOff] = useState<Off>(NONE);
@@ -80,9 +105,50 @@ export function TableScroll({ children, atEnd = false, resetKey, label = "Table"
     }
   }, []);
 
+  // The header stays in view while the page scrolls past a long table. `.tw` scrolls sideways, so a
+  // `position: sticky` header can only stick inside it, never to the page; instead the real header
+  // moves down (`--tw-head-y`, set through the CSSOM, which the CSP's style-src allows, unlike a
+  // style attribute). Being the real one, its sort buttons, the frozen first column, the sideways
+  // scroll and the cut-column measure all keep working; no copy to keep in step, no nested scroller.
+  const placeHead = useRef(() => {});
+  placeHead.current = () => {
+    const el = box.current;
+    const table = el?.querySelector("table");
+    const head = table?.tHead;
+    if (!el || !table || !head) return;
+    const r = table.getBoundingClientRect();
+    const y = headerShift({ top: r.top, height: r.height }, head.offsetHeight, stickyTop(table));
+    if (y > 0) {
+      el.style.setProperty("--tw-head-y", `${y}px`);
+      el.dataset.headMoved = "";
+    } else if ("headMoved" in el.dataset) {
+      el.style.removeProperty("--tw-head-y");
+      delete el.dataset.headMoved;
+    }
+  };
+  useEffect(() => {
+    let frame = 0;
+    const onScroll = () => {
+      if (!frame) {
+        frame = requestAnimationFrame(() => {
+          frame = 0;
+          placeHead.current();
+        });
+      }
+    };
+    window.addEventListener("scroll", onScroll, { passive: true, capture: true });
+    window.addEventListener("resize", onScroll, { passive: true });
+    return () => {
+      if (frame) cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", onScroll, { capture: true });
+      window.removeEventListener("resize", onScroll);
+    };
+  }, []);
+
   // a new sort or page can bring new rows without a scroll or a resize
   useEffect(() => {
     measure();
+    placeHead.current();
   });
 
   useLayoutEffect(() => {

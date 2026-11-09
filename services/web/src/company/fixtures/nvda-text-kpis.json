@@ -1,0 +1,34 @@
+{
+ "company_id": "0001045810",
+ "as_of": "2026-11-09T16:48:10.789605+00:00",
+ "since": "2016-11-09",
+ "metrics": {
+  "backlog": {
+   "label": "Backlog",
+   "unit": "USD",
+   "span": "instant",
+   "points": [],
+   "conflicts": []
+  },
+  "orders": {
+   "label": "Orders in the quarter",
+   "unit": "USD",
+   "span": "quarter",
+   "points": [],
+   "conflicts": []
+  },
+  "orders_growth": {
+   "label": "Order growth in the quarter, year on year",
+   "unit": "percent",
+   "span": "quarter",
+   "points": [],
+   "conflicts": []
+  }
+ },
+ "read": {
+  "sections": 16,
+  "filings": 11,
+  "from": "2021-11-22"
+ },
+ "method": "Backlog and orders as the filings' own words state them, read by fixed rules from MD&A, the 10-K's Item 1 and earnings releases (query_api/text_kpis.py): each value cites its passage and is kept only when its number is in that passage. A company may state them in ways these rules don't read; nothing is estimated or computed."
+}

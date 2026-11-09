@@ -5,17 +5,24 @@ import {
   ApiError,
   askFailure,
   checkThesis,
+  companyEvents,
+  earnings,
   failureReason,
   financialsView,
   itemVersions,
   noDetail,
   NOT_ANSWERING,
   olderState,
+  peerCheck,
+  sectors,
   recentDataNotes,
+  refusedByOlderApi,
+  runModel,
   screener,
   section,
   SseParser,
   updateItem,
+  updateProject,
 } from "./api";
 
 describe("failureReason", () => {
@@ -93,6 +100,33 @@ describe("a Query API one release older (the minute of a deploy)", () => {
     expect(seen.map((s) => s.url.searchParams.get("quarters"))).toEqual(["120", "40", "8"]);
   });
 
+  it("F1: earnings and events read as unavailable (null) from an API without the routes; other errors still throw", async () => {
+    older(() => Response.json({ detail: "Not Found" }, { status: 404 }));
+    expect(await companyEvents("t", "0001674101")).toBeNull();
+    expect(await earnings("t", "0001674101")).toBeNull();
+    older(() => Response.json({ detail: "not permitted to read filings for this company" }, { status: 403 }));
+    await expect(companyEvents("t", "0001674101")).rejects.toMatchObject({ status: 403 });
+    vi.unstubAllGlobals();
+  });
+
+  it("F1: a project ticked Earnings is saved without the tick by an API that doesn't know the step yet", async () => {
+    const seen = older((s) => {
+      const done = (s.body as { project: { done: string[] } }).project.done;
+      return done.includes("earnings")
+        ? Response.json({ detail: [{ type: "literal_error", loc: ["body", "project", "done", 1] }] }, { status: 422 })
+        : Response.json({ workspace_id: "w", project: (s.body as { project: object }).project, items: [] });
+    });
+    const p = { companyId: "0001674101", peers: [], notes: "", done: ["business", "earnings"] as ("business" | "earnings")[] };
+    await updateProject("t", "w", p);
+    await updateProject("t", "w", { ...p, done: ["business"] });
+    vi.unstubAllGlobals();
+    expect(seen.map((s) => (s.body as { project: { done: string[] } }).project.done)).toEqual([["business", "earnings"], ["business"], ["business"]]);
+    // a refusal for anything else is the user's to see
+    older(() => Response.json({ detail: "notes too long" }, { status: 422 }));
+    await expect(updateProject("t", "w", { ...p, done: ["business"] })).rejects.toThrow("notes too long");
+    vi.unstubAllGlobals();
+  });
+
   it("a save refused for a field the API doesn't know yet is saved without it", async () => {
     const seen = older((s) => {
       const text = JSON.stringify(s.body);
@@ -118,6 +152,43 @@ describe("a Query API one release older (the minute of a deploy)", () => {
     await expect(addItem("t", "w", "chart", "n", chart)).rejects.toThrow("name: too long");
     vi.unstubAllGlobals();
     expect(olderState({ layers: [{ kind: "metric" }] })).toBeNull();
+  });
+
+  it("F2: a model run reads as unavailable (null) from an API without the route; a save of F2's fields isn't stripped", async () => {
+    const seen = older((s) => (s.url.pathname.endsWith("/model") ? Response.json({ detail: "Not Found" }, { status: 404 })
+      : Response.json({ detail: "invalid model state: 1 validation error\nytd\n  Extra inputs are not permitted" }, { status: 422 })));
+    expect(await runModel("t", "0001674101", { companyId: "0001674101", assumptions: [] })).toBeNull();
+    const model = { companyId: "0001674101", historyYears: 8, ytd: true, assumptions: [{ growth: 1, margin: 1, taxRate: 21 }] };
+    const err = await updateItem("t", "i", { state: model }).catch((e: unknown) => e);
+    vi.unstubAllGlobals();
+    // the user's model is never saved without its new fields: the page says to try again
+    expect(seen.filter((s) => s.url.pathname.startsWith("/api/query/v1/workspace-items")).map((s) => s.body)).toEqual([{ state: model }]);
+    expect(olderState(model)).toBeNull();
+    expect(refusedByOlderApi(err)).toBe(true);
+    expect(refusedByOlderApi(new ApiError("name: too long", 422))).toBe(false);
+    older(() => Response.json({ detail: "not permitted to read financials for this company" }, { status: 403 }));
+    await expect(runModel("t", "0001674101", {})).rejects.toMatchObject({ status: 403 });
+    vi.unstubAllGlobals();
+  });
+
+  it("F4: an older API's saves drop a comps table's bank columns and a screen's sectors; peer checks and sectors read as unavailable", async () => {
+    expect(olderState({ target: "0000019617", cols: ["revenue_ttm", "net_interest_income_ttm", "deposits_q"] }))
+      .toEqual({ target: "0000019617", cols: ["revenue_ttm"] });
+    expect(olderState({ target: "0000019617", cols: ["deposits_q"] })).toEqual({ target: "0000019617" });
+    expect(olderState({ q: "bank", sector: "Financials", sector_industry: "Banks & thrifts", sort: "-sector" })).toEqual({ q: "bank" });
+    expect(olderState({ target: "0000019617", cols: ["revenue_ttm"] })).toBeNull();
+    // a Literal an older strict model doesn't know is refused as "Input should be ...": saved again without it
+    const seen = older((s) => (Array.isArray((s.body as { state?: { cols?: string[] } }).state?.cols) && (s.body as { state: { cols: string[] } }).state.cols.includes("deposits_q")
+      ? Response.json({ detail: "invalid comps state: 1 validation error\ncols.1\n  Input should be 'revenue_ttm', 'revenue_growth_ttm'" }, { status: 422 })
+      : Response.json({ id: "i", kind: "comps", name: "n", state: (s.body as { state: object }).state })));
+    const saved = await addItem("t", "w", "comps", "n", { target: "0000019617", cols: ["revenue_ttm", "deposits_q"] });
+    expect(saved.state).toEqual({ target: "0000019617", cols: ["revenue_ttm"] });
+    expect(seen).toHaveLength(2);
+    vi.unstubAllGlobals();
+    older(() => Response.json({ detail: "Not Found" }, { status: 404 }));
+    expect(await peerCheck("t", "0001045810", "0001977102")).toBeNull();
+    expect(await sectors("t")).toBeNull();
+    vi.unstubAllGlobals();
   });
 
   it("no versions, notes of the companies asked for, and no unfiltered data-check screen", async () => {

@@ -2,8 +2,8 @@
 
 FR1, week 1. Polls the EDGAR latest-filings feed and publishes each new filing to the
 `filings.raw` Kafka topic, keyed by CIK. Downstream, [bronze-loader](../bronze-loader) writes
-the events to `bronze.filings` and [doc-fetcher](../doc-fetcher) fetches documents for tracked
-companies.
+the events to `bronze.filings` and [doc-fetcher](../doc-fetcher) fetches the documents of tracked
+companies and every operating company's new 10-K, 10-Q and material 8-K.
 
 Feed: https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&output=atom
 

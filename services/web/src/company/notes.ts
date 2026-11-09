@@ -4,7 +4,7 @@
 
 import { metricLabel } from "../chart/metrics";
 import { day } from "../format";
-import type { DataNote, NoteFiling } from "../types";
+import type { DataNote, NoteFiling, NoteRank } from "../types";
 
 export interface Explained {
   /** short heading, e.g. "Revenue restated" */
@@ -54,8 +54,29 @@ const AXES: Record<string, string> = {
  * rather than promising the usual. */
 const USUAL_LAG_DAYS = 3;
 
-/** A note in words. Every number keeps its unit (%, days, ×) and period. */
+/** How much a note matters (the API's rank, M2); an older API sends none: a plain note. */
+export function rankOf(n: DataNote): NoteRank {
+  return n.rank === "attention" || n.rank === "minor" ? n.rank : "note";
+}
+
+const RANK_ORDER: Record<NoteRank, number> = { attention: 0, note: 1, minor: 2 };
+
+/** A note in words, and, for a series the API grouped (`repeats`), where else it was found. */
 export function explain(n: DataNote, now = Date.now()): Explained {
+  const e = explainOne(n, now);
+  const repeats = num(n.detail.repeats);
+  if (repeats === null || repeats < 2) return e;
+  const span = str(n.detail.first_period_end) && str(n.detail.last_period_end)
+    ? `, from ${date(n.detail.first_period_end)} to ${date(n.detail.last_period_end)}`
+    : "";
+  return {
+    title: `${e.title} (${repeats} periods)`,
+    text: `${e.text} The same check found this in ${repeats} periods${span}; this is the newest.`,
+  };
+}
+
+/** One finding in words. Every number keeps its unit (%, days, ×) and period. */
+function explainOne(n: DataNote, now: number): Explained {
   const d = n.detail;
   const m = n.metric ? metricLabel(n.metric) : "A figure";
   const pe = n.period_end ? `the period ending ${day(n.period_end, true)}` : "one period";
@@ -136,6 +157,14 @@ export function explain(n: DataNote, now = Date.now()): Explained {
       };
     case "mistagged_fact": {
       const filed = d.filed ? ` filed ${date(d.filed)}` : "";
+      if (str(d.rule) === "debt_parts_scale") {
+        // 050: Bank First's 2019 10-K, current and noncurrent debt 1,000 times its own total
+        const factor = num(d.factor);
+        return {
+          title: "Debt: left out, parts in the wrong scale",
+          text: `The ${str(d.form) ?? "filing"}${filed} tags current and noncurrent debt for ${pe} that add up to ${factor ? `${factor.toLocaleString("en-US")} times` : "many times"} the total debt it tags for the same date, a scale slip in its XBRL. The parts aren't used.`,
+        };
+      }
       return str(d.rule) === "debt_above_liabilities"
         ? {
             title: `${m}: left out, larger than total liabilities`,
@@ -179,6 +208,13 @@ export function explain(n: DataNote, now = Date.now()): Explained {
       };
     }
     case "sign_flip":
+      // 050: a negative stock-based compensation quarter is a benefit as filed
+      if (str(d.rule) === "benefit") {
+        return {
+          title: `${m}: a benefit this quarter`,
+          text: `${m} for ${pe} is negative as filed, unlike the quarters around it: forfeited awards reversing expense booked earlier, or cash-settled awards remeasured. The filing's own year-to-date figures agree, so it isn't a slip.`,
+        };
+      }
       return {
         title: `${m}: sign flips for one quarter`,
         text: `${m} for ${pe} has the opposite sign from the quarters around it, usually a sign convention slip in the filing's XBRL rather than a real change.`,
@@ -250,13 +286,26 @@ export function edgarUrl(f: NoteFiling): string | null {
   return f.filing_url?.startsWith("https://www.sec.gov/") ? f.filing_url : null;
 }
 
-/** Notes by group, dropping empty groups. Notes keep the API's order (newest first), and so do the
- * groups, by their newest note: a tab opening on a 2021 restatement above 2026 gaps reads as if
- * nothing newer happened. Derived quarters aren't events, so they stay last whatever their date. */
+/** Notes by group, dropping empty groups. Notes keep the API's order (what matters first, then
+ * newest), and the groups run by their most important note, then their newest: a tab opening on
+ * a 2021 restatement above 2026 gaps reads as if nothing newer happened. Derived quarters aren't
+ * events, so they stay last whatever their date. */
 export function groupNotes(notes: DataNote[]): { key: string; label: string; notes: DataNote[] }[] {
   const newest = (g: { notes: DataNote[] }) => g.notes.reduce((d, n) => ((n.date ?? "") > d ? n.date ?? "" : d), "");
+  const top = (g: { notes: DataNote[] }) => Math.min(...g.notes.map((n) => RANK_ORDER[rankOf(n)]));
   return NOTE_GROUPS.map((g) => ({ key: g.key, label: g.label, notes: notes.filter((n) => g.kinds(n.kind)) }))
     .concat([{ key: "other", label: "Other", notes: notes.filter((n) => !NOTE_GROUPS.some((g) => g.kinds(n.kind))) }])
     .filter((g) => g.notes.length > 0)
-    .sort((a, b) => Number(a.key === "derived") - Number(b.key === "derived") || newest(b).localeCompare(newest(a)));
+    .sort((a, b) => Number(a.key === "derived") - Number(b.key === "derived") || top(a) - top(b) || newest(b).localeCompare(newest(a)));
+}
+
+/** The summary line over a company's notes (the API's `summary`), or null from an older API. */
+export function summaryText(s: { attention: number; note: number; minor: number; findings: number } | undefined): string | null {
+  if (!s) return null;
+  const parts = [
+    s.attention ? `${s.attention} need${s.attention === 1 ? "s" : ""} attention` : "nothing needs attention",
+    s.note ? `${s.note} worth a look` : null,
+    s.minor ? `${s.minor} minor or old` : null,
+  ].filter(Boolean);
+  return `${parts.join(" · ")}, from ${s.findings.toLocaleString("en-US")} check finding${s.findings === 1 ? "" : "s"}`;
 }

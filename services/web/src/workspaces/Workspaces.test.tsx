@@ -7,6 +7,7 @@ import { App } from "../App";
 import { entry, NVDA } from "../fixtures";
 import { forgetVisits } from "../home/lastVisit";
 import type { SavedItemFull, SavedWorkspace, UiAction } from "../types";
+import { UNDO_MS } from "./useSaved";
 
 const AAPL = "0000320193";
 const ME = {
@@ -63,6 +64,11 @@ function respond(url: string, init?: RequestInit): Response {
   if (path === "/v1/demo/users") return Response.json({ users: ["alice"] });
   if (path === "/v1/demo/token") return Response.json({ token: "t" });
   if (path === "/v1/me") return Response.json(ME);
+  // Home with Continue where you left off on (F6 turned it off by default)
+  if (path === "/v1/views" && method === "GET") {
+    return Response.json({ views: { home: { cards: [{ id: "recent", hidden: false }] }, screener: null, watchlist: null },
+      options: { home_cards: [], columns: [], max_columns: { screener: 12, watchlist: 8 } } });
+  }
   if (path === "/v1/watchlist") return Response.json({ as_of: "", columns: [], expected_method: "", companies: [entry()] });
   if (path === "/v1/screener/columns") return Response.json(COLUMNS);
   if (path === "/v1/screener") {
@@ -302,8 +308,16 @@ it("renames, duplicates and deletes from a row's menu, which leaves the row's na
   const confirm = () => document.querySelector<HTMLElement>(".sheet-overlay .ws-confirm");
   expect(confirm()?.closest(".side")).toBeNull();
   expect(document.activeElement?.textContent).toBe("Keep");
+  expect(confirm()?.textContent).toContain("You can undo it for 10 seconds.");
   await click(confirm()!.querySelector("button")!);
+  // #158: gone from the list at once, sent only when the undo window ends (or the page closes)
+  expect(sidebarItem("Lost access")).toBeUndefined();
+  expect(document.querySelector(".undo-stack")?.textContent).toContain("Deleted “Lost access”.");
+  expect(calls("DELETE")).toEqual([]);
+  await act(async () => window.dispatchEvent(new Event("pagehide")));
+  await settle();
   expect(calls("DELETE").map(([u]) => u)).toEqual(["/api/query/v1/workspace-items/i2"]);
+  expect(document.querySelector(".undo-stack")).toBeNull();
   expect(sidebarItem("Lost access")).toBeUndefined();
   await click(buttons(/Actions for workspace Semis/)[0]!);
   const del = buttons(/Delete workspace Semis/)[0]!;
@@ -317,6 +331,40 @@ it("renames, duplicates and deletes from a row's menu, which leaves the row's na
   await click(del);
   await click(confirm()!.querySelector("button")!);
   expect($(".side .ws")?.textContent).toContain("Save a chart, comps table or screen");
+  await act(async () => window.dispatchEvent(new Event("pagehide")));
+  await settle();
+  expect(calls("DELETE").map(([u]) => u)).toContain("/api/query/v1/workspaces/w1");
+});
+
+it("#158: a deleted workspace comes back with Undo, and nothing is sent", async () => {
+  await render("#/");
+  const deleteSemis = async () => {
+    await click(buttons(/Actions for workspace Semis/)[0]!);
+    await click(buttons(/Delete workspace Semis/)[0]!);
+    await click(document.querySelector<HTMLButtonElement>(".ws-confirm button")!);
+  };
+  // the undo window's timer, caught on its way to the real setTimeout
+  const timers = vi.spyOn(globalThis, "setTimeout");
+  await deleteSemis();
+  expect(container.querySelector(".side .ws")?.textContent).not.toContain("Semis");
+  const note = document.querySelector(".undo-stack .undo-note")!;
+  expect(note.textContent).toContain("Deleted “Semis” and its 3 items.");
+  await click(note.querySelector("button")!);
+  expect(container.querySelector(".side .ws")?.textContent).toContain("Semis");
+  expect(document.querySelector(".undo-stack")).toBeNull();
+  const undone = timers.mock.calls.find(([, ms]) => ms === UNDO_MS)![0] as () => void;
+  await act(async () => undone()); // its time would have come: undone, nothing to send
+  await settle();
+  expect(calls("DELETE")).toEqual([]);
+  // the window running out sends it
+  timers.mockClear();
+  await deleteSemis();
+  const due = timers.mock.calls.find(([, ms]) => ms === UNDO_MS)![0] as () => void;
+  timers.mockRestore();
+  await act(async () => due());
+  await settle();
+  expect(calls("DELETE").map(([u]) => u)).toEqual(["/api/query/v1/workspaces/w1"]);
+  expect(document.querySelector(".undo-stack")).toBeNull();
 });
 
 it("a folder's arrow folds it, and its name opens the workspace instead of folding it", async () => {
@@ -347,6 +395,8 @@ it("a workspace's page has its rename, duplicate and delete in the open", async 
   expect(document.querySelector(".ws-confirm")).toBeNull();
   await click(inPage("Delete Lost access")!);
   await click(document.querySelector<HTMLButtonElement>(".ws-confirm button")!);
+  await act(async () => window.dispatchEvent(new Event("pagehide")));
+  await settle();
   expect(calls("DELETE").map(([u]) => u)).toContain("/api/query/v1/workspace-items/i2");
 });
 

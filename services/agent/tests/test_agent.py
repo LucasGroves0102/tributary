@@ -364,6 +364,23 @@ def test_financials_view_and_basis_pass_through():
     assert (seen[0].url.params["view"], seen[0].url.params["basis"]) == ("ttm", "calendar")
 
 
+def test_a_non_dollar_companys_figures_reach_the_model_with_their_currency():
+    """Pre-ship review: the prompt says "write every dollar amount with $" (unchanged: that needs
+    a re-record), so a non-USD company's figures must say their currency where the model reads
+    them. /financials does (`currency` on the answer, `unit` on each row, 056/057); the tool
+    result is that JSON, first key to last, nothing dropped."""
+    body = {"company_id": NVDA, "view": "ttm", "basis": "fiscal", "as_of": "2026-11-09T00:00:00Z",
+            "currency": "JPY", "cadence": "annual",
+            "rows": [{"metric": "revenue", "period_end": "2026-03-31", "value": "48036704000000",
+                      "unit": "JPY", "citation": {"accession_no": "0001094517-26-000020",
+                                                  "form": "20-F"}}]}
+    api, _ = query_api(lambda r: httpx.Response(200, json=body))
+    content, is_error = api.run("get_financials", {"company_id": NVDA, "view": "ttm"})
+    assert not is_error
+    assert json.loads(content) == body
+    assert content.index('"currency":"JPY"') < content.index('"rows"')
+
+
 def financials_metrics(tools):
     tool = next(t for t in tools if t["name"] == "get_financials")
     return tool["input_schema"]["properties"]["metrics"]["items"].get("enum")
@@ -410,6 +427,31 @@ def test_financials_quarters_stay_within_the_schema():
                                                 "description": "default 4"}
 
 
+def test_null_or_wrong_numbers_are_a_validation_message_not_a_crash():
+    """F7a: the model sends null for "no preference"; int(None) raised a TypeError out of run()."""
+    api, seen = query_api(ok)
+    acc = "0001045810-26-000021"
+    assert api.run("get_section", {"company_id": NVDA, "section_key": "1A",
+                                   "max_chars": None})[1] is False
+    assert seen[-1].url.params["max_chars"] == "8000"
+    assert api.run("get_section", {"company_id": NVDA, "section_key": "1A",
+                                   "max_chars": 50000})[1] is False
+    assert seen[-1].url.params["max_chars"] == "20000"
+    assert api.run("search_filings", {"query": "x", "limit": None, "offset": None})[1] is False
+    assert dict(seen[-1].url.params) == {"q": "x", "limit": "10", "offset": "0"}
+    assert api.run("get_section_changes", {"company_id": NVDA, "accession_no": acc,
+                                           "max_changes": None})[1] is False
+    for name, args in (("get_section", {"company_id": NVDA, "section_key": "1A",
+                                        "max_chars": "lots"}),
+                       ("search_filings", {"query": "x", "limit": [3]}),
+                       ("get_section_changes", {"company_id": NVDA, "accession_no": acc,
+                                                "max_changes": "all"})):
+        before = len(seen)
+        content, is_error = api.run(name, args)
+        assert is_error and content.startswith(f"invalid call to {name}: "), content
+        assert "whole number" in content and len(seen) == before
+
+
 def test_section_changes_tool_validates_and_routes():
     api, seen = query_api(ok)
     acc = "0001045810-26-000021"
@@ -439,6 +481,53 @@ def test_section_changes_tool_keeps_the_first_changes():
     assert (len(b["changes"]), b["changes_omitted"]) == (1, 1)
 
 
+def test_material_changes_tool_validates_and_routes():
+    """F3: a new tool (get_section_changes' schema is unchanged): the ranked view of /changes."""
+    api, seen = query_api(ok)
+    acc = "0001045810-26-000021"
+    for bad in ({"company_id": NVDA, "accession_no": "../me"},
+                {"company_id": NVDA, "accession_no": acc, "section_key": "1A/../x"},
+                {"company_id": NVDA, "accession_no": acc, "basis": "forever"},
+                {"company_id": NVDA, "accession_no": acc, "topic": "x"},
+                {"company_id": NVDA, "accession_no": acc, "topic": "x" * 101}):
+        content, is_error = api.run("get_material_changes", bad)
+        assert is_error and content.startswith("invalid call"), bad
+    assert seen == []
+    assert api.run("get_material_changes", {"company_id": NVDA, "accession_no": acc})[1] is False
+    assert seen[0].url.path == f"/v1/companies/{NVDA}/filings/{acc}/changes"
+    assert dict(seen[0].url.params) == {"view": "ranked"}  # the API picks the basis
+    args = {"company_id": NVDA, "accession_no": acc, "basis": "year_ago", "section_key": "II-1A",
+            "topic": "  export   controls ", "new_figures": True}
+    assert api.run("get_material_changes", args)[1] is False
+    assert dict(seen[1].url.params) == {"view": "ranked", "basis": "year_ago",
+                                        "section": "II-1A", "q": "export controls",
+                                        "numbers": "new"}
+    schema = next(t for t in TOOLS if t["name"] == "get_material_changes")["input_schema"]
+    assert schema["required"] == ["company_id", "accession_no"]
+    old = next(t for t in TOOLS if t["name"] == "get_section_changes")["input_schema"]
+    assert set(old["properties"]) == {"company_id", "accession_no", "section_key", "basis",
+                                      "kind", "max_changes"}
+
+
+def test_material_changes_tool_keeps_the_top_scores_and_drops_the_topic_echo():
+    def changes(request):
+        return httpx.Response(200, json={
+            "view": "ranked", "filters": {"q": "$46.7B", "terms": ["$46.7b"]},
+            "sections": [
+                {"section_key": "II-1A", "changes": [{"score": 6.0}, {"score": 1.0}]},
+                {"section_key": "I-2", "changes": [{"score": 7.0}, {"score": 5.0},
+                                                   {"score": 0.5}]}]})
+
+    api, _ = query_api(changes)
+    content, _ = api.run("get_material_changes", {"company_id": NVDA, "max_changes": 3,
+                                                  "accession_no": "0001045810-26-000021"})
+    body = json.loads(content)
+    assert "filters" not in body and "46.7" not in content  # the model's own words aren't evidence
+    a, b = body["sections"]
+    assert [c["score"] for c in a["changes"]] == [6.0] and a["changes_omitted"] == 1
+    assert [c["score"] for c in b["changes"]] == [7.0, 5.0] and b["changes_omitted"] == 1
+
+
 def test_search_tool_routes_filters():
     api, seen = query_api(ok)
     assert api.run("search_filings", {"query": "export controls"})[1] is False
@@ -451,3 +540,43 @@ def test_search_tool_routes_filters():
                                         "from": "2026-01-01", "to": "2026-12-31"}
     content, is_error = api.run("search_filings", {"query": "x", "filed_from": "last year"})
     assert is_error and len(seen) == 2
+
+
+def test_earnings_and_events_tools_validate_and_route():
+    api, seen = query_api(ok)
+    for bad in ({"company_id": "../me"}, {"company_id": NVDA, "quarters": None},
+                {"company_id": NVDA, "quarters": "latest"}):
+        content, is_error = api.run("get_earnings_release", bad)
+        assert is_error and content.startswith("invalid call")
+    assert api.run("get_events_since_report", {"company_id": "1045810/x"})[1] is True
+    assert seen == []
+    for asked, sent in ((None, "1"), (3, "3"), (9, "4"), (0, "1")):
+        args = {"company_id": NVDA} if asked is None else {"company_id": NVDA, "quarters": asked}
+        assert api.run("get_earnings_release", args)[1] is False
+        assert seen[-1].url.path == f"/v1/companies/{NVDA}/earnings"
+        assert dict(seen[-1].url.params) == {"quarters": sent}
+    assert api.run("get_events_since_report", {"company_id": NVDA})[1] is False
+    assert seen[-1].url.path == f"/v1/companies/{NVDA}/events" and not seen[-1].url.params
+    for name in ("get_earnings_release", "get_events_since_report"):
+        schema = next(t for t in TOOLS if t["name"] == name)["input_schema"]
+        assert schema["required"] == ["company_id"]
+
+
+def test_earnings_tool_keeps_long_tables_to_their_citation():
+    """A release's reconciliation tables can run to many thousand characters: whole up to
+    ADJUSTMENT_CHARS a quarter, then heading and citation only (get_section reads the rest)."""
+    table = {"kind": "reconciliation", "heading": "Reconciliation", "text": "x" * 4000,
+             "citation": {"accession_no": "0001045810-26-000073", "section_key": "EX-99.1"}}
+
+    def earnings(request):
+        return httpx.Response(200, json={"quarters": [
+            {"outlook": [{"text": "y" * 9000}], "adjustments": [dict(table), dict(table)]}]})
+
+    api, _ = query_api(earnings)
+    content, is_error = api.run("get_earnings_release", {"company_id": NVDA})
+    [quarter] = json.loads(content)["quarters"]
+    first, second = quarter["adjustments"]
+    assert not is_error and len(quarter["outlook"][0]["text"]) == 9000  # outlook stays whole
+    assert first["text"] == "x" * 4000 and "omitted" not in first
+    assert second["text"] is None and "get_section" in second["omitted"]
+    assert second["citation"]["section_key"] == "EX-99.1"

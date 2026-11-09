@@ -8,7 +8,7 @@ import { metricLabel } from "../chart/metrics";
 import { autoTitle } from "../chart/model";
 import { describe, isEmpty } from "../companies/screen";
 import { cleanCompare, COMPARE_COLUMNS, DEFAULT_COLUMNS } from "../compare/state";
-import { restoreModel, SCENARIO_LABELS, SCENARIOS, type Assumption } from "../models/model";
+import { RATE_LABELS, RATES, restoreModel, SCENARIO_LABELS, SCENARIOS, type Assumption } from "../models/model";
 import type { ClaimStatus, ThesisCheck } from "../types";
 import { restoreChartState, restoreCompare, restoreScreen } from "../workspaces/model";
 import { STATUS_LABELS } from "./check";
@@ -40,13 +40,18 @@ export function embedSummary(item: EmbedItem, label: (companyId: string) => stri
     case "model": {
       const m = restoreModel(item.state);
       if (!m) return [];
-      const years = (list: Assumption[]) => list.map((a, i) => `year ${i + 1} ${pct(a.growth)} growth, ${pct(a.margin)} margin`).join("; ");
+      const rates = (a: Assumption) => RATES.flatMap((r) => (a[r] === undefined ? [] : [`${RATE_LABELS[r].toLowerCase()} ${pct(a[r]!)}`]));
+      const years = (list: Assumption[]) => list.map((a, i) => [`year ${i + 1}${i === 0 && m.ytd ? " (the rest of the current year)" : ""} ${pct(a.growth)} growth`,
+        `${pct(a.margin)} margin`, ...rates(a)].join(", ")).join("; ");
       return [
-        `${label(m.companyId)}: revenue growth and operating margin per forecast year (your assumptions, not data).`,
+        `${label(m.companyId)}: revenue growth and operating margin per forecast year, and any other rate set (your assumptions, not data; blank rates follow history).`,
+        ...(m.ytd ? ["Year 1 is the current fiscal year: its reported quarters, then the rest at these numbers."] : []),
         ...SCENARIOS.flatMap((s) => {
           const list = s === "base" ? m.assumptions : m.scenarios?.[s];
           return list ? [`${SCENARIO_LABELS[s]}: ${years(list)}.`] : [];
         }),
+        ...(m.adjustments ?? []).map((a) => `Your adjustment: ${a.name}, ${a.kind === "acquired" ? "acquired revenue" : "a one-off in operating income"} of $${(a.amount / 1e6).toFixed(1)}M in FY${a.fy} Q${a.quarter}.`),
+        ...(m.price ? [`Valued at your price of $${m.price.value.toFixed(2)} on ${m.price.date}.`] : []),
       ];
     }
     default:

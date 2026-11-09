@@ -343,6 +343,48 @@ def test_peers_and_search_can_be_only_granted_companies(peer_conn):
     assert [r["company_id"] for r in store.search("t-free", P3, only=[P3])] == [P3]
 
 
+def ten_k(conn, cid, acc, days_ago, item1=None):
+    """A stored 10-K filed `days_ago`, with an Item 1 of that text (None: no sections at all)."""
+    conn.execute("INSERT INTO bronze.submission_filings (accession_no, cik, form, filing_date,"
+                 " report_date) VALUES (%s, %s, '10-K', current_date - %s, NULL)",
+                 (acc, cid, days_ago))
+    conn.execute("INSERT INTO bronze.filing_documents (accession_no, cik, form, filed,"
+                 " document_name, url, content_gzip, content_sha256, size_bytes)"
+                 " VALUES (%s, %s, '10-K', current_date - %s, 'k.htm',"
+                 " 'https://www.sec.gov/k.htm', '\\x00', 'x', 1)", (acc, cid, days_ago))
+    if item1 is not None:
+        conn.execute("INSERT INTO silver.filing_sections (accession_no, section_key, parser,"
+                     " parser_version, part, item, title, text, char_start, char_end)"
+                     " VALUES (%s, '1', 'rust', 't', 'I', '1', 'Business:', %s, 500, %s)",
+                     (acc, item1, 500 + len(item1)))
+
+
+def test_peers_say_the_10k_business_section_is_a_cross_reference(peer_conn, token):
+    """Intel's Item 1 (2026-01-23 10-K) is 143 characters of page numbers: SIC and size, and the
+    answer says why. The section is read under RLS (filings tier), the 10-Ks by the CIK."""
+    peer_conn.execute("INSERT INTO authz.user_access (user_id, company_id, tier)"
+                      " VALUES ('t-free', %s, 'filings')", (P1,))
+    ten_k(peer_conn, P1, f"{P1}-26-000009", 300, "x" * 5_000)  # an older, usable one
+    ten_k(peer_conn, P1, f"{P1}-26-000010", 40, "Item 1. Business: General development of"
+          " business Pages 3-5, 18 Description of business Pages 3-24")
+    store = Store(OneConnection(peer_conn))
+    text = store.business_text("t-free", P1, 1100)
+    assert text["accession_no"] == f"{P1}-26-000010" and text["chars"] < 3_000
+    body = peers(peer_conn, token, "t-free")
+    assert (body["basis"], body["basis_reason"]) == ("sic", "cross_reference")
+    # without the filings tier RLS hides the section: the same 10-K reads as having none
+    assert store.business_text("t-nobody", P1, 1100)["chars"] is None
+
+
+def test_peers_say_the_10k_has_no_business_section(peer_conn, token):
+    """Citigroup's 10-Ks are stored but the parser finds no Item heading in them."""
+    peer_conn.execute("INSERT INTO authz.user_access (user_id, company_id, tier)"
+                      " VALUES ('t-free', %s, 'filings')", (P1,))
+    ten_k(peer_conn, P1, f"{P1}-26-000011", 30)
+    assert peers(peer_conn, token, "t-free")["basis_reason"] == "no_business_section"
+    assert Store(OneConnection(peer_conn)).business_text("t-free", P1, 20) is None  # too old
+
+
 def test_screener_lists_a_data_check_only_for_companies_the_caller_can_read(recap_conn, token):
     """The status page's drill-through: same RLS as everything, so an unreadable company with a
     finding simply isn't there (no oracle), and the check's name goes in as a bind parameter."""

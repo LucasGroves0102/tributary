@@ -1,0 +1,108 @@
+{
+ "company_id": "0000910521",
+ "as_of": "2026-11-09T05:37:02.374524+00:00",
+ "quarters": [
+  {
+   "period_end": "2026-09-30",
+   "estimated": false,
+   "report": {
+    "accession_no": "0001628280-26-068116",
+    "form": "10-Q",
+    "filed": "2026-10-29"
+   },
+   "release": {
+    "accession_no": "0000910521-26-000028",
+    "form": "8-K",
+    "filed": "2026-10-22",
+    "accepted_at": "2026-10-22T20:09:31Z",
+    "items": [
+     {
+      "item": "2.02",
+      "title": "Results of Operations and Financial Condition",
+      "kind": "earnings"
+     },
+     {
+      "item": "5.02",
+      "title": "Departure of Directors or Certain Officers; Election of Directors; Appointment of Certain Officers; Compensatory Arrangements of Certain Officers",
+      "kind": "leadership"
+     },
+     {
+      "item": "7.01",
+      "title": "Regulation FD Disclosure",
+      "kind": "disclosure"
+     },
+     {
+      "item": "9.01",
+      "title": "Financial Statements and Exhibits",
+      "kind": "exhibits"
+     }
+    ],
+    "section_key": "EX-99.1",
+    "title": "Exhibit 99.1",
+    "total_chars": 15254,
+    "document_url": "https://www.sec.gov/Archives/edgar/data/910521/000091052126000028/deckex991pressrelease-9302.htm",
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/910521/000091052126000028/"
+   },
+   "headline": {
+    "kind": "headline",
+    "heading": null,
+    "text": "DECKERS BRANDS REPORTS SECOND QUARTER FISCAL YEAR 2027 FINANCIAL RESULTS",
+    "char_start": 13,
+    "char_end": 85,
+    "truncated": false,
+    "citation": {
+     "accession_no": "0000910521-26-000028",
+     "form": "8-K",
+     "filed": "2026-10-22",
+     "filing_url": "https://www.sec.gov/Archives/edgar/data/910521/000091052126000028/",
+     "section_key": "EX-99.1",
+     "document_url": "https://www.sec.gov/Archives/edgar/data/910521/000091052126000028/deckex991pressrelease-9302.htm",
+     "char_start": 13,
+     "char_end": 85
+    }
+   },
+   "outlook": [
+    {
+     "kind": "outlook",
+     "heading": "Full Fiscal Year 2027 Outlook(2) for the Twelve Month Period Ending March 31, 2027",
+     "text": "Full Fiscal Year 2027 Outlook(2) for the Twelve Month Period Ending March 31, 2027\nThe Company’s outlook is forward-looking in nature, reflecting our expectations as of October 22, 2026, and is subject to significant risks and uncertainties that limit our ability to accurately forecast results. This outlook assumes no meaningful changes to the Company’s business prospects or risks and uncertainties identified by management that could impact future results, which include but are not limited to: changes in macroeconomic and geopolitical conditions, including escalating global conflicts, shifts in consumer confidence and discretionary spending, inflationary pressures, and foreign currency exchange rate fluctuations; changes to global trade policy, including tariffs and trade restrictions; and supply chain disruption. This outlook includes the benefit of IEEPA tariff net refunds received through October 8, 2026(2), but does not assume any further collection of tariff refunds.\n•Net consolidated sales are now expected to be in the range of $5.700 billion to $5.725 billion.\n◦HOKA is now expected to increase by a high-single-digit percentage versus last year.\n◦UGG is now expected to increase by a low-single-digit percentage versus last year.\n•Gross margin is now expected to be approximately 58.5%.\n•SG&A expenses as a percentage of net sales are now expected to be approximately 35.5%.\n•Operating margin is now expected to be approximately 23%.\n•Effective tax rate is still expected to be approximately 23%.\n•Diluted earnings per share is now expected to be in the range of $7.80 to $7.95.\n•The earnings per share guidance assumes the repurchase of shares with a value equal to $1.0 billion.\n(2) Through October 8, 2026, the Company has received IEEPA tariff net refunds totaling $87.9 million, plus associated interest of $4.7 million, which have been factored into our updated outlook as a reduction of cost of sales and an increase to total other income, respectively. The net benefit to both gross margin and operating margin is approximately 150 basis points. Net of tax, this resulted in an approximate $0.52 benefit to the Company's projected full fiscal year 2027 diluted earnings per share.",
+     "char_start": 4273,
+     "char_end": 6485,
+     "truncated": false,
+     "citation": {
+      "accession_no": "0000910521-26-000028",
+      "form": "8-K",
+      "filed": "2026-10-22",
+      "filing_url": "https://www.sec.gov/Archives/edgar/data/910521/000091052126000028/",
+      "section_key": "EX-99.1",
+      "document_url": "https://www.sec.gov/Archives/edgar/data/910521/000091052126000028/deckex991pressrelease-9302.htm",
+      "char_start": 4273,
+      "char_end": 6485
+     }
+    }
+   ],
+   "adjustments": [
+    {
+     "kind": "note",
+     "heading": null,
+     "text": "(1) During the second quarter of fiscal year 2027, the Company received International Emergency Economic Powers Act (\"IEEPA\") tariff net refunds totaling $46.0 million, plus associated interest of $3.0 million, which were recognized as a reduction of cost of sales and an increase to total other income, respectively. The net benefit to both gross margin and operating margin was approximately 310 basis points. Net of tax, this resulted in an approximate $0.28 benefit to second quarter fiscal year 2027 diluted earnings per share.",
+     "char_start": 2736,
+     "char_end": 3268,
+     "truncated": false,
+     "citation": {
+      "accession_no": "0000910521-26-000028",
+      "form": "8-K",
+      "filed": "2026-10-22",
+      "filing_url": "https://www.sec.gov/Archives/edgar/data/910521/000091052126000028/",
+      "section_key": "EX-99.1",
+      "document_url": "https://www.sec.gov/Archives/edgar/data/910521/000091052126000028/deckex991pressrelease-9302.htm",
+      "char_start": 2736,
+      "char_end": 3268
+     }
+    }
+   ],
+   "other_releases": []
+  }
+ ],
+ "method": "Each quarter's earnings release is the 8-K with Item 2.02 filed after that quarter's end (within 120 days, before the next quarter ends), the last one on or before the 10-Q/10-K for the quarter when there are several; its text is the first EX-99 exhibit. Outlook passages are the blocks under the release's own Outlook or Guidance headings; adjustments are its reconciliation tables and the notes under its figures that state a dollar amount. Quoted as written, found by fixed rules: a release without such a heading or table shows none. No beat or miss: Tributary holds no estimates."
+}

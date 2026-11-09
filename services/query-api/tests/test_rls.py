@@ -232,6 +232,157 @@ def test_data_notes_respect_rls(client, token):
     assert client.get("/v1/data-notes", headers=token("t-nobody")).json()["notes"] == []
 
 
+RELEASE_TEXT = ("Acme Reports Third Quarter 2026 Results\n"
+                "(1) Results include a $3.0 million benefit from tariff refunds received in the"
+                " quarter, which the Company excludes from adjusted figures.\n"
+                "Full Year 2026 Guidance\n"
+                "•Revenue is expected to be $40 to $42 million.")
+
+
+@pytest.fixture
+def events(client):
+    """For A and B: a 10-Q for Jun 30, an 8-K with Item 2.02 and its press release, an 8-K
+    completing an acquisition after the quarter end, and an 8-K too new for the submissions
+    history (bronze.filings only) whose parsed headings give its items. Layer 1 allows
+    everything: what a caller sees of the sections is RLS's doing."""
+    conn = client.app_conn
+    for cid in (A, B):
+        rows = [(f"{cid}-26-000020", "10-Q", "2026-08-05", "2026-06-30", None),
+                (f"{cid}-26-000021", "8-K", "2026-08-04", "2026-08-04", "2.02,9.01"),
+                (f"{cid}-26-000022", "8-K", "2026-08-20", "2026-08-18", "2.01,9.01")]
+        for acc, form, filed, report, items in rows:
+            conn.execute("INSERT INTO bronze.submission_filings (accession_no, cik, form,"
+                         " filing_date, report_date, primary_document, items) VALUES"
+                         " (%s, %s, %s, %s, %s, 'd.htm', %s)", (acc, cid, form, filed, report,
+                                                                   items))
+        conn.execute("INSERT INTO bronze.filings (accession_no, cik, form_type, filed_at, payload,"
+                     " kafka_partition, kafka_offset) VALUES (%s, %s, '8-K',"
+                     " '2026-08-25 20:05+00', '{}', 0, 0)", (f"{cid}-26-000023", cid))
+        sections = [(f"{cid}-26-000021", "EX-99.1", RELEASE_TEXT),
+                    (f"{cid}-26-000022", "2.01", "On August 18, 2026, Acme completed its"
+                                                 " acquisition of Widgets Inc. for $50 million."),
+                    (f"{cid}-26-000023", "2.03", "On August 25, 2026, Acme borrowed $20 million.")]
+        for acc, key, text in sections:
+            conn.execute(
+                "INSERT INTO bronze.filing_documents (accession_no, cik, form, filed,"
+                " document_name, url, content_gzip, content_sha256, size_bytes)"
+                " VALUES (%s, %s, '8-K', '2026-08-04', 'e.htm', 'u', '\\x00', 'x', 1)"
+                " ON CONFLICT DO NOTHING", (acc, cid))
+            conn.execute(
+                "INSERT INTO silver.filing_sections (accession_no, section_key, parser,"
+                " parser_version, item, title, text, char_start, char_end)"
+                " VALUES (%s, %s, 'python', 't', %s, 'Item', %s, 0, %s)",
+                (acc, key, key, text, len(text)))
+    return TestClient(create_app(AllowAll(), Store(OneConnection(conn)), SECRET,
+                                 today=lambda: date(2026, 11, 8)))
+
+
+def test_events_index_is_public_but_excerpts_and_parsed_items_respect_rls(events, token):
+    def get(user, company):
+        r = events.get(f"/v1/companies/{company}/events", headers=token(user))
+        assert r.status_code == 200, r.text
+        return r.json()
+
+    body = get("t-pro", A)
+    assert body["since"] == "2026-06-30" and body["window"] == "since_report"
+    assert [(e["accession_no"], e["items_from"]) for e in body["events"]] == [
+        (f"{A}-26-000023", "parsed"), (f"{A}-26-000022", "index"), (f"{A}-26-000021", "index")]
+    new, deal, _ = body["events"]
+    assert [i["item"] for i in new["items"]] == ["2.03"]
+    assert deal["excerpt"]["text"].startswith("On August 18, 2026, Acme completed")
+    assert {s["metric"] for s in body["stale"]} == {
+        "cash", "long_term_debt", "net_debt", "total_assets", "debt_to_equity"}
+    # B: the index is public metadata, its text isn't readable (no grant): no excerpt, and the
+    # newest 8-K's items can't be read from sections the caller can't see
+    other = get("t-pro", B)
+    assert [e["items_from"] for e in other["events"]] == [None, "index", "index"]
+    assert all(e["excerpt"] is None and not e["sections_available"] for e in other["events"])
+    assert {s["metric"] for s in other["stale"]} == {"cash", "long_term_debt", "net_debt",
+                                                     "total_assets"}
+    assert all(e["excerpt"] is None for e in get("t-free", A)["events"])  # no filings tier
+
+
+def test_earnings_text_respects_rls(events, token):
+    def quarter(user, company):
+        r = events.get(f"/v1/companies/{company}/earnings?quarters=1", headers=token(user))
+        assert r.status_code == 200, r.text
+        [q] = r.json()["quarters"]
+        return q
+
+    q = quarter("t-pro", A)
+    assert q["period_end"] == "2026-06-30" and q["report"]["accession_no"] == f"{A}-26-000020"
+    assert q["release"]["accession_no"] == f"{A}-26-000021"
+    assert q["release"]["section_key"] == "EX-99.1"
+    assert q["headline"]["text"] == "Acme Reports Third Quarter 2026 Results"
+    assert [o["heading"] for o in q["outlook"]] == ["Full Year 2026 Guidance"]
+    assert [a["kind"] for a in q["adjustments"]] == ["note"]
+    hidden = quarter("t-pro", B)  # the release is listed; its text isn't readable
+    assert hidden["release"]["accession_no"] == f"{B}-26-000021"
+    assert hidden["release"]["section_key"] is None and hidden["outlook"] == []
+    assert quarter("t-free", A)["outlook"] == []
+
+
+def test_model_runs_read_only_what_rls_allows(client, token):
+    """F2: POST /v1/companies/{id}/model reads gold through Store.model_inputs under RLS; with
+    layer one allowing everything, an ungranted company or user still reads no rows."""
+    store = Store(OneConnection(client.app_conn))
+
+    def inputs(user, company):
+        return store.model_inputs(user, company, ["revenue", "net_margin"], 40, 12, 12,
+                                  ["net_debt", "shares_outstanding"])
+
+    mine = inputs("t-free", A)
+    assert [r["metric"] for r in mine["quarters"]] == ["revenue"]
+    assert [r["metric"] for r in mine["ttm"]] == ["net_margin"]
+    for user, company in (("t-free", B), ("t-nobody", A)):
+        hidden = inputs(user, company)
+        assert hidden["ttm"] == hidden["quarters"] == hidden["annual"] == []
+        assert all(r["value"] is None for r in hidden["latest"].values())
+    state = {"companyId": B, "ytd": True, "assumptions": [{"growth": 5, "margin": 10}]}
+    r = client.post(f"/v1/companies/{B}/model", json=state, headers=token("t-free"))
+    assert r.status_code == 200 and r.json()["history"] == [] and r.json()["base_fy"] is None
+
+
+def test_a_euro_companys_ev_is_in_euros_at_a_euro_price(client, token):
+    """Pre-ship review: a euro company's net debt reads other_currency (056), which the model took
+    for unusable, so EV was blank even at a price in euros. Store.model_inputs now gives the
+    reading's unit and age (under RLS, as before); at a euro price EV is in euros, at a dollar
+    price nothing is divided."""
+    conn, acc = client.app_conn, f"{A}-26-000001"
+    conn.execute("UPDATE gold.quarterly_financials SET unit = 'EUR' WHERE company_id = %s", (A,))
+    conn.execute(
+        "INSERT INTO gold.quarterly_financials (company_id, metric, period_end, value, unit,"
+        " value_source, source_tag, accession_no, filed, source_accessions, ingested_at) VALUES"
+        " (%s, 'shares_outstanding', '2026-06-30', 1000, 'shares', 'reported',"
+        " 'dei:EntityCommonStockSharesOutstanding', %s, '2026-08-01', ARRAY[%s], now())",
+        (A, acc, acc))
+    conn.execute(
+        "INSERT INTO gold.derived_financials (company_id, span, metric, period_end, value, unit,"
+        " value_source, inputs, accession_no, filed, source_accessions, ingested_at) VALUES"
+        " (%s, 'quarter', 'net_debt', '2026-06-30', 500, 'EUR', 'computed', '{}', %s,"
+        " '2026-08-01', ARRAY[%s], now())", (A, acc, acc))
+    store = Store(OneConnection(conn))
+    latest = store.model_inputs("t-free", A, ["revenue"], 40, 12, 12,
+                                ["net_debt", "shares_outstanding"])["latest"]
+    debt = latest["net_debt"]
+    assert (debt["status"], debt["unit"], debt["period_status"]) == ("other_currency", "EUR", None)
+    hidden = store.model_inputs("t-free", B, ["revenue"], 40, 12, 12, ["net_debt"])["latest"]
+    assert hidden["net_debt"]["value"] is None and hidden["net_debt"]["unit"] is None
+
+    state = {"companyId": A, "assumptions": [{"growth": 5, "margin": 10}],
+             "price": {"value": 2, "date": "2026-11-06", "currency": "EUR"}}
+    r = client.post(f"/v1/companies/{A}/model", json=state, headers=token("t-free"))
+    assert r.status_code == 200, r.text
+    v = r.json()["valuation"]
+    assert r.json()["currency"] == "EUR" and v["market_cap_currency"] == "EUR"
+    assert (v["market_cap"], v["enterprise_value"], v["ev_note"]) == (2000, 2500, None)
+    state["price"]["currency"] = "USD"
+    v = client.post(f"/v1/companies/{A}/model", json=state, headers=token("t-free")).json()[
+        "valuation"]
+    assert v["enterprise_value"] is None
+    assert v["currency_mismatch"] == {"price": "USD", "figures": "EUR"}
+
+
 def test_metric_list_matches_database(client):
     served = client.get("/v1/metrics").json()
     with psycopg.connect(DSN) as conn:
@@ -396,6 +547,22 @@ def test_section_changes_with_both_citations(texts, token):
     assert c["citation"]["char_end"] == 12 and c["prior_citation"]["char_end"] == 9
 
 
+def test_material_view_reads_the_bases_and_changes_under_rls(texts, token):
+    """F3: view=ranked asks gold.section_diffs for its bases and runs the pass, as query_api."""
+    r = changes(texts, token, "t-pro", A, "view=ranked")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["view"] == "ranked" and body["basis"] == "prior"
+    assert body["comparisons"] == [{"basis": "prior", "accession_no": f"{A}-25-000002",
+                                    "form": "10-K", "filed": "2025-02-01",
+                                    "period_of_report": None}]
+    [s] = body["sections"]
+    assert s["material"]["shown"] == len(s["changes"])
+    # layer 1 allows everything here: RLS alone hides B's rows and the free plan's
+    for user, company in (("t-pro", B), ("t-free", A), ("t-nobody", A)):
+        assert changes(texts, token, user, company, "view=ranked").status_code == 404
+
+
 def test_section_changes_hidden_without_filings_grant(texts, token):
     # layer 1 allows everything here: RLS alone hides B's and the free plan's rows
     for user, company in (("t-pro", B), ("t-free", A), ("t-nobody", A)):
@@ -478,10 +645,39 @@ def test_search_ranks_denser_matches_first(texts, token):
             search(texts, token, "t-pro", 'q="export controls"')] == [f"{A}-26-000003"]
 
 
+def test_search_quoted_phrase_date_order_and_total(texts, token):
+    """#80: a quoted phrase matches the words together only; #145: newest first and a total."""
+    conn = texts.app_conn
+    for acc, filed, text in (
+            (f"{A}-25-000003", "2025-05-01", "export controls on chips; export controls again"),
+            (f"{A}-26-000004", "2026-05-01", "new export controls"),
+            (f"{A}-26-000005", "2026-06-01", "export rules and, much later, some controls")):
+        conn.execute(
+            "INSERT INTO bronze.filing_documents (accession_no, cik, form, filed,"
+            " document_name, url, content_gzip, content_sha256, size_bytes)"
+            " VALUES (%s, %s, '10-Q', %s, 'd.htm', 'u', '\\x00', 'x', 1)", (acc, A, filed))
+        conn.execute(
+            "INSERT INTO silver.filing_sections (accession_no, section_key, parser,"
+            " parser_version, item, title, text, char_start, char_end)"
+            " VALUES (%s, 'II-1A', 'python', 't', '1A', 'Risk Factors', %s, 100, 150)",
+            (acc, text))
+        conn.execute("SELECT gold.refresh_section_search(ARRAY[%s])", (acc,))
+    accs = lambda q: [h["citation"]["accession_no"]  # noqa: E731
+                      for h in search(texts, token, "t-pro", q)]
+    assert accs("q=export+controls") == [f"{A}-25-000003", f"{A}-26-000004", f"{A}-26-000005"]
+    assert accs("q=%22export+controls%22") == [f"{A}-25-000003", f"{A}-26-000004"]
+    assert accs("q=export+controls&sort=date") == [f"{A}-26-000005", f"{A}-26-000004",
+                                                   f"{A}-25-000003"]
+    body = texts.get("/v1/search?q=export+controls&limit=1&sort=date",
+                     headers=token("t-pro")).json()
+    assert body["total"] == 3 and body["has_more"] is True and body["sort"] == "date"
+    body = texts.get("/v1/search?q=%22export+controls%22&limit=1&offset=1",
+                     headers=token("t-pro")).json()
+    assert body["total"] == 2 and body["has_more"] is False
+
+
 def test_every_session_has_a_statement_timeout(client):
     """SET LOCAL ROLE skips role settings, so Store must set the timeout itself."""
-    import psycopg
-
     store = Store(OneConnection(client.app_conn))
     with store._session("t-free") as cur:
         cur.execute("SHOW statement_timeout")
@@ -527,6 +723,117 @@ def test_public_catalog_readable_by_any_signed_in_user(client, token):
         assert visible(client.app_conn, "t-reader",
                        f"SELECT DISTINCT {col} FROM {table}"  # noqa: S608
                        f" WHERE {col} IN (%s, %s)", (A, B)) == [(B,)], table
+
+
+INSIDER_XML = (  # an ownershipDocument as filed, cut down: one owner, one sale
+    "<ownershipDocument><documentType>4</documentType><periodOfReport>2026-09-16</periodOfReport>"
+    "<issuer><issuerCik>{cik}</issuerCik></issuer><reportingOwner><reportingOwnerId>"
+    "<rptOwnerCik>0001588670</rptOwnerCik><rptOwnerName>Secret Insider</rptOwnerName>"
+    "</reportingOwnerId><reportingOwnerRelationship><isOfficer>1</isOfficer>"
+    "<officerTitle>CFO</officerTitle></reportingOwnerRelationship></reportingOwner>"
+    "<nonDerivativeTable><nonDerivativeTransaction><securityTitle><value>Common</value>"
+    "</securityTitle><transactionDate><value>2026-09-16</value></transactionDate>"
+    "<transactionCoding><transactionCode>S</transactionCode></transactionCoding>"
+    "<transactionAmounts><transactionShares><value>100</value></transactionShares>"
+    "<transactionPricePerShare><value>2.5</value></transactionPricePerShare>"
+    "<transactionAcquiredDisposedCode><value>D</value></transactionAcquiredDisposedCode>"
+    "</transactionAmounts></nonDerivativeTransaction></nonDerivativeTable></ownershipDocument>")
+
+
+def add_insider_filings(conn):
+    for cid in (A, B):
+        conn.execute("INSERT INTO bronze.ownership_documents (accession_no, cik, form, filed, url,"
+                     " xml, content_sha256) VALUES (%s, %s, '4', '2026-09-18', 'u', %s, 'x')",
+                     (f"{cid}-26-000009", cid, INSIDER_XML.format(cik=cid)))
+    conn.execute("SELECT silver.refresh_insider_filings(%s)",
+                 ([f"{A}-26-000009", f"{B}-26-000009"],))
+
+
+def test_insider_filings_respect_rls(client, token):
+    """#117 (054): insider filings are filing content, the filings tier, RLS on company_id; the
+    allow-all authorizer lists both companies, RLS still hides B's."""
+    conn = client.app_conn
+    add_insider_filings(conn)
+    for table in ("silver.insider_filings", "silver.insider_transactions"):
+        assert visible(conn, "t-pro", f"SELECT DISTINCT company_id FROM {table}") == [(A,)]  # noqa: S608
+        assert visible(conn, "t-free", f"SELECT count(*) FROM {table}") == [(0,)]  # noqa: S608
+        for user in (None, ""):
+            assert visible(conn, user, f"SELECT count(*) FROM {table}") == [(0,)]  # noqa: S608
+    r = client.get(f"/v1/companies/{A}/insiders", headers=token("t-pro"))
+    assert r.status_code == 200, r.text
+    [f] = r.json()["filings"]
+    assert f["owners"] == [{"cik": "0001588670", "name": "Secret Insider", "roles": ["CFO"]}]
+    assert f["lines"][0]["value"] == "250.0" and f["summary"] == {"sold": {"shares": "100",
+                                                                           "value": "250.0"}}
+    assert client.get(f"/v1/companies/{B}/insiders", headers=token("t-pro")).json()["filings"] == []
+    open_catalog(conn, B)
+    assert visible(conn, "t-reader", "SELECT company_id FROM silver.insider_filings") == [(B,)]
+
+
+def test_insider_pages_never_skip_the_rest_of_a_day(client, token):
+    """Pre-ship review: paging with before=<last day> lost the day's other filings. Five filings,
+    three on one day, two a page: the cursor walks all five once, newest first, under RLS."""
+    conn = client.app_conn
+    days = ["2026-09-18", "2026-09-17", "2026-09-17", "2026-09-17", "2026-09-10"]
+    accessions = [f"{A}-26-00002{n}" for n in range(5)]
+    for acc, day in zip(accessions, days, strict=True):
+        conn.execute("INSERT INTO bronze.ownership_documents (accession_no, cik, form, filed, url,"
+                     " xml, content_sha256) VALUES (%s, %s, '4', %s, 'u', %s, 'x')",
+                     (acc, A, day, INSIDER_XML.format(cik=A)))
+    conn.execute("SELECT silver.refresh_insider_filings(%s)", (accessions,))
+    seen, cursor, pages = [], None, 0
+    while True:
+        params = {"limit": 2, **({"cursor": cursor} if cursor else {})}
+        body = client.get(f"/v1/companies/{A}/insiders", params=params,
+                          headers=token("t-pro")).json()
+        seen += [(f["filed"], f["accession_no"]) for f in body["filings"]]
+        pages += 1
+        cursor = body["next_cursor"]
+        if not body["has_more"]:
+            break
+    assert pages == 3 and cursor is None
+    assert seen == sorted(zip(days, accessions, strict=True), reverse=True)
+    # the old way: before=<the first page's last day> skips that day's third filing
+    old = client.get(f"/v1/companies/{A}/insiders", params={"limit": 2, "before": "2026-09-17"},
+                     headers=token("t-pro")).json()
+    assert [f["filed"] for f in old["filings"]] == ["2026-09-10"]
+
+
+def test_filing_figures_say_their_currency(client, token):
+    """057: gold.filing_figures returns each figure's unit: a euro filing's facts and the net
+    debt computed from them are in EUR (the thesis check words them so)."""
+    conn = client.app_conn
+    for tag, metric, value in (("LongTermDebtNoncurrent", "long_term_debt", 1128010000),
+                               ("CashAndCashEquivalentsAtCarryingValue", "cash", 329067000)):
+        conn.execute(
+            "INSERT INTO silver.financial_facts (cik, metric, tag, unit, period_start, period_end,"
+            " value, accession_no, form, filed) VALUES (%s, %s, %s, 'EUR', NULL, '2026-09-30',"
+            " %s, %s, '20-F', '2026-12-01')", (A, metric, tag, value, f"{A}-26-000010"))
+    r = client.get(f"/v1/companies/{A}/filings/{A}-26-000010/figures", headers=token("t-free"))
+    assert r.status_code == 200, r.text
+    units = {f["metric"]: f["unit"] for f in r.json()["figures"]}
+    assert {"long_term_debt", "cash", "net_debt", "cash_and_investments"} <= set(units)
+    assert set(units.values()) == {"EUR"}
+
+
+def test_text_kpis_respect_rls(client, token):
+    """F8b (H11): the backlog read from a 10-K's MD&A is section text, the filings tier; the
+    allow-all authorizer lets every call through, RLS alone hides B's and the free plan's."""
+    conn = client.app_conn
+    for cid in (A, B):
+        conn.execute(
+            "INSERT INTO silver.filing_sections (accession_no, section_key, parser, parser_version,"
+            " item, title, text, char_start, char_end) VALUES (%s, '7', 'python', 't', '7', 'MD&A',"
+            " 'Our backlog was $1.2 billion at December 31, 2025.', 100, 150)",
+            (f"{cid}-26-000002",))
+
+    def backlog(user, company):
+        r = client.get(f"/v1/companies/{company}/text-kpis", headers=token(user))
+        assert r.status_code == 200, r.text
+        return [(p["period_end"], p["value"]) for p in r.json()["metrics"]["backlog"]["points"]]
+
+    assert backlog("t-pro", A) == [("2025-12-31", 1.2e9)]
+    assert backlog("t-pro", B) == [] and backlog("t-free", A) == []
 
 
 def test_public_catalog_needs_a_user_id(client):
@@ -586,6 +893,7 @@ def test_store_reads_the_catalog_list_under_rls(client):
 # Open access without an id list (migration 032): RLS alone, as with the catalog public ---------
 
 SEARCH_FN = "gold.search_passages(tsquery, text[], text, text, date, date, int, int)"
+SEARCH_PAGE_FN = "gold.search_page(tsquery, text[], text, text, date, date, text, int, int)"
 
 
 class PublicCatalogSaysOpenFga:
@@ -734,14 +1042,38 @@ def test_search_passages_applies_the_read_rule(client):
 
 def test_search_passages_is_locked_down(client):
     conn = client.app_conn
-    fn = (SEARCH_FN,)
-    assert conn.execute("SELECT has_function_privilege('query_api', %s, 'EXECUTE')",
-                        fn).fetchone() == (True,)
-    assert conn.execute("SELECT has_function_privilege('ops_reader', %s, 'EXECUTE')",
-                        fn).fetchone() == (False,)
-    secdef, config = conn.execute(
-        "SELECT prosecdef, proconfig FROM pg_proc WHERE oid = %s::regprocedure", fn).fetchone()
-    assert secdef is True and config == ["search_path=pg_catalog, pg_temp"]
+    for fn in ((SEARCH_FN,), (SEARCH_PAGE_FN,)):
+        assert conn.execute("SELECT has_function_privilege('query_api', %s, 'EXECUTE')",
+                            fn).fetchone() == (True,)
+        assert conn.execute("SELECT has_function_privilege('ops_reader', %s, 'EXECUTE')",
+                            fn).fetchone() == (False,)
+        secdef, config = conn.execute(
+            "SELECT prosecdef, proconfig FROM pg_proc WHERE oid = %s::regprocedure",
+            fn).fetchone()
+        assert secdef is True and config == ["search_path=pg_catalog, pg_temp"]
+
+
+def test_search_page_applies_the_read_rule(client):
+    """052's gold.search_page is 032's read rule with an order and a total: the same cases."""
+    conn = client.app_conn
+    for cid in (A, B):
+        conn.execute("SELECT gold.refresh_section_search(ARRAY[%s])", (f"{cid}-26-000002",))
+
+    def page(user, companies=None, sort="relevance"):
+        return visible(conn, user,
+                       "SELECT company_id, total FROM gold.search_page(websearch_to_tsquery("
+                       "'english', 'secret'), %s::text[], NULL, NULL, NULL, NULL, %s, 10, 0)"
+                       " ORDER BY company_id", (companies, sort))
+    assert page("t-pro") == [(A, 1)]
+    assert page("t-pro", [B]) == []
+    assert page("t-free") == [] and page("t-reader") == []
+    for user in (None, ""):
+        assert page(user) == [] and page(user, [A, B]) == []
+    open_catalog(conn, B)
+    assert page("t-reader") == [(B, 1)]
+    assert page("t-pro", sort="date") == [(A, 2), (B, 2)]
+    with pytest.raises(psycopg.errors.RaiseException):
+        page("t-pro", sort="rank DESC; --")
 
 
 def test_search_with_the_catalog_public_is_bounded_by_rls(client, token):
@@ -846,3 +1178,118 @@ def test_expected_filings_recent_covers_only_readable_companies(client):
         for r in fn]
     assert rows(store.expected_filings("t-reader", None, as_of, 2)) == rows(
         store.expected_filings("t-reader", [B], as_of, 2))
+
+
+def business_rows(conn):
+    """A's and B's Item 1 compared (migration 047): profiles, a peer row each way, and A's 10-K
+    naming B as a competitor."""
+    for cid, other in ((A, B), (B, A)):
+        conn.execute("INSERT INTO gold.business_profiles (company_id, accession_no, section_key,"
+                     " filed, parser, terms, algorithm) VALUES (%s, %s, '1', '2026-02-01',"
+                     " 'python', '{secret term}', 'business-1')", (cid, f"{cid}-26-000002"))
+        conn.execute("INSERT INTO gold.business_peers (company_id, peer_id, similarity, terms)"
+                     " VALUES (%s, %s, 0.4, '{secret term}')", (cid, other))
+    conn.execute("INSERT INTO gold.business_mentions (company_id, named_id, accession_no,"
+                 " section_key, char_start, char_end) VALUES (%s, %s, %s, '1', 0, 12)",
+                 (A, B, f"{A}-26-000002"))
+
+
+def test_business_peers_need_filings_on_both_companies(client, token):
+    """F4: similarities come from Item 1 text. t-pro reads A's filings but not B's: A's profile
+    and its own sentence naming B (A's text) show, the A-B similarity and its terms don't."""
+    business_rows(client.app_conn)
+    body = client.get(f"/v1/companies/{A}/peers", headers=token("t-pro")).json()
+    assert body["basis"] == "business" and body["business"]["terms"] == ["secret term"]
+    (b,) = body["peers"]
+    assert b["company_id"] == B and b["match"]["similarity"] == 0 and b["match"]["terms"] == []
+    assert b["match"]["named_by_target"]["char_end"] == 12
+    assert b["values"]["revenue_ttm"] is None  # and no financials on B either
+    # financials only: no Item 1 for this caller, so SIC and size
+    free = client.get(f"/v1/companies/{A}/peers", headers=token("t-free")).json()
+    assert free["basis"] == "sic" and free["business"] is None
+
+
+def test_sectors_co_registrants_and_peer_check_run_as_query_api(client, token):
+    """046's view and 047's function are public metadata the query_api role can read."""
+    r = client.get("/v1/sectors", headers=token("t-nobody"))
+    assert r.status_code == 200, r.text
+    staples = next(s for s in r.json()["sectors"] if s["name"] == "Consumer Staples")
+    beverages = next(i for i in staples["industries"] if i["name"] == "Beverages")
+    assert beverages["companies"] >= 1 and "2080-2089" in beverages["sic"]
+    rows = client.get(f"/v1/screener?company_id={A}&company_id={B}",
+                      headers=token("t-free")).json()["rows"]
+    by_id = {x["company_id"]: x for x in rows}
+    assert (by_id[A]["sector"], by_id[A]["sector_industry"]) == ("Consumer Staples", "Beverages")
+    assert by_id[B]["sector"] is None and by_id[A]["co_registrants"] == []
+    check = client.get(f"/v1/companies/{A}/peers/check/{B}", headers=token("t-free"))
+    assert check.status_code == 200, check.text
+    assert check.json()["ok"] is True  # B has gold rows; AllowAll reads it
+
+
+def test_components_and_figure_facts_read_only_what_the_rule_allows(client, token):
+    """F5: gold.figure_facts (049) is SECURITY DEFINER over silver.financial_facts' values, so
+    its only rule is authz.readable_companies: t-free reads A's facts, not B's, whatever layer 1
+    says."""
+    conn = client.app_conn
+    for cid in (A, B):
+        conn.execute(
+            "INSERT INTO silver.financial_facts (cik, metric, tag, unit, period_start, period_end,"
+            " value, accession_no, form, filed) VALUES (%s, 'revenue', 'Revenues', 'USD',"
+            " '2026-04-01', '2026-06-30', 5, %s, '10-Q', '2026-08-01')", (cid, f"{cid}-26-000001"))
+    conn.execute("UPDATE gold.quarterly_financials SET period_start = '2026-04-01'"
+                 " WHERE company_id IN (%s, %s) AND metric = 'revenue'", (A, B))
+    with conn.transaction(), conn.cursor() as cur:
+        cur.execute("SET LOCAL ROLE query_api")
+        cur.execute("SELECT set_config('app.user_id', 't-free', true)")
+        seen = {c: cur.execute("SELECT tag, value FROM gold.figure_facts(%s, 'revenue',"
+                               " '2026-06-30')", (c,)).fetchall() for c in (A, B)}
+        cur.execute("SELECT set_config('app.user_id', '', true)")
+        nobody = cur.execute("SELECT count(*) FROM gold.figure_facts(%s, 'revenue', '2026-06-30')",
+                             (A,)).fetchone()
+        cur.execute("RESET ROLE")
+    assert seen == {A: [("Revenues", 5)], B: []} and nobody == (0,)
+    url = "/components?metric=revenue&period_end=2026-06-30"
+    mine = client.get(f"/v1/companies/{A}{url}", headers=token("t-free"))
+    assert mine.status_code == 200, mine.text
+    assert [(f["tag"], f["used"]) for f in mine.json()["facts"]] == [("Revenues", True)]
+    # layer 1 allows everything here: RLS alone hides B's figure
+    assert client.get(f"/v1/companies/{B}{url}", headers=token("t-free")).status_code == 404
+
+
+def test_filing_figures_compute_from_one_filing_and_read_only_what_the_rule_allows(client, token):
+    """H2: gold.filing_figures (051) is SECURITY DEFINER over silver like 049's figure_facts. It
+    gives the cited filing's own net debt (NVIDIA's 10-Q: debt less cash less the securities a
+    computed figure left out); t-free reads A's, not B's, and no user reads nothing."""
+    conn = client.app_conn
+    for cid in (A, B):
+        for tag, metric, value in (
+                ("LongTermDebtNoncurrent", "long_term_debt", 33370),
+                ("CashAndCashEquivalentsAtCarryingValue", "cash", 11490),
+                ("ShortTermInvestments", "short_term_investments", 99370),
+                ("AssetsCurrent", "current_assets", 140000)):
+            conn.execute(
+                "INSERT INTO silver.financial_facts (cik, metric, tag, unit, period_start,"
+                " period_end, value, accession_no, form, filed) VALUES (%s, %s, %s, 'USD', NULL,"
+                " '2026-06-30', %s, %s, '10-Q', '2026-08-01')",
+                (cid, metric, tag, value, f"{cid}-26-000009"))
+    with conn.transaction(), conn.cursor() as cur:
+        cur.execute("SET LOCAL ROLE query_api")
+        cur.execute("SELECT set_config('app.user_id', 't-free', true)")
+        seen = {c: cur.execute(
+            "SELECT metric, value FROM gold.filing_figures(%s, %s) WHERE how = 'computed'"
+            " ORDER BY metric", (c, f"{c}-26-000009")).fetchall() for c in (A, B)}
+        cur.execute("SELECT set_config('app.user_id', '', true)")
+        nobody = cur.execute("SELECT count(*) FROM gold.filing_figures(%s, %s)",
+                             (A, f"{A}-26-000009")).fetchone()
+        cur.execute("RESET ROLE")
+    assert seen == {A: [("cash_and_investments", 11490 + 99370),
+                        ("net_debt", 33370 - 11490 - 99370)], B: []}
+    assert nobody == (0,)
+    mine = client.get(f"/v1/companies/{A}/filings/{A}-26-000009/figures", headers=token("t-free"))
+    assert mine.status_code == 200, mine.text
+    net = next(f for f in mine.json()["figures"] if f["metric"] == "net_debt")
+    assert net["value"] == "-77490" and net["inputs"]["short_term_investments"] == "99370"
+    # layer 1 allows everything here: the function's rule alone gives B nothing
+    theirs = client.get(f"/v1/companies/{B}/filings/{B}-26-000009/figures",
+                        headers=token("t-free"))
+    assert theirs.status_code == 200 and theirs.json()["figures"] == []

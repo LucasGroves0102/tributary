@@ -1,0 +1,87 @@
+Fiscal Year 2026 Summary
+Year Ended
+Jan 25, 2026 Jan 26, 2025 Change
+($ in millions, except per share data)
+Revenue $ 215,938 $ 130,497 Up 65%
+Gross margin 71.1 % 75.0 % -3.9 pts
+Operating expenses $ 23,076 $ 16,405 Up 41%
+Operating income $ 130,387 $ 81,453 Up 60%
+Net income $ 120,067 $ 72,880 Up 65%
+Net income per diluted share $ 4.90 $ 2.94 Up 67%
+Revenue for fiscal year 2026 was $215.9 billion, up 65% from a year ago.
+Data Center revenue for fiscal year 2026 was up 68% from a year ago. The strong year-on-year growth was driven by the major platform shifts – accelerated computing and AI.
+Gaming revenue for fiscal year 2026 was up 41% from a year ago, driven by strong Blackwell demand. We expect supply constraints to be a headwind to Gaming in the first quarter of fiscal 2027 and beyond.
+Professional Visualization revenue for fiscal year 2026 was up 70% from a year ago, driven by exceptional demand for Blackwell as well as the launch of our new DGX Spark.
+Automotive revenue for fiscal year 2026 was up 39% from a year ago, driven by continued adoption of our self-driving platforms.
+Gross margin decreased in fiscal year 2026 as our business model transitioned from offering Hopper HGX systems to Blackwell full-scale datacenter solutions. The gross margin decrease was also impacted by a $4.5 billion charge associated with H20 excess inventory and purchase obligations.
+Operating expenses for fiscal year 2026 were up 41% from a year ago, driven by higher compensation and benefits expenses due to employee growth and compute and infrastructure costs.
+37
+Table of Contents
+Critical Accounting Estimates
+Our consolidated financial statements are prepared in accordance with accounting principles generally accepted in the United States, or U.S. GAAP. The preparation of these financial statements requires us to make estimates and judgments that affect the reported amounts of assets, liabilities, revenue, cost of revenue, expenses and related disclosure of contingencies. Critical accounting estimates are those estimates that involve a significant level of estimation uncertainty and could have a material impact on our financial condition or results of operations. We have critical accounting estimates in the areas of inventories, income taxes, non-marketable equity securities, and revenue recognition. Refer to Note 1 of the Notes to the Consolidated Financial Statements in Part IV, Item 15 of this Annual Report on Form 10-K for a summary of significant accounting policies.
+Inventories
+We charge cost of sales for inventory provisions to write-down our inventory to the lower of cost or net realizable value or for obsolete or excess inventory, and for excess product purchase commitments. Most of our inventory provisions relate to excess quantities of products or components, based on our inventory levels and future product purchase commitments compared to assumptions about future demand and market conditions, which requires management judgment.
+Situations that may result in excess or obsolete inventory or excess product purchase commitments include changes in business and economic conditions, changes in market conditions, sudden and significant decreases in demand for our products, including potential cancellation or deferral of customer purchase orders, inventory obsolescence because of changing technology and customer requirements, new product introductions resulting in less demand for existing products or inconsistent spikes in demand, failure to estimate customer demand properly, ordering in advance of historical lead-times, government regulations and the impact of changes in future demand, or increase in demand for competitive products, including competitive actions.
+The net effect on our gross margin from inventory provisions and sales of items previously written down was an unfavorable impact of 2.6% in fiscal year 2026 and 2.3% in fiscal year 2025. Our inventory and capacity purchase commitments are based on forecasts of future customer demand and consider our third-party manufacturers' lead times and constraints. Our manufacturing lead times can be and have been long, and in some cases, extended beyond twelve months for some products. We may place non-cancellable inventory orders for certain product components in advance of our historical lead times, pay premiums and provide deposits to secure future supply and capacity. We also adjust to other market factors, such as product offerings and pricing actions by our competitors, new product transitions, and macroeconomic conditions - all of which may impact demand for our products.
+Refer to the Gross Profit and Gross Margin discussion below in this Management's Discussion and Analysis for further discussion.
+Income Taxes
+We are subject to income taxes in the U.S. and foreign jurisdictions. Our calculation of deferred tax assets and liabilities is based on certain estimates and judgments and involves dealing with uncertainties in the application of complex tax laws. Our estimates of deferred tax assets and liabilities may change based, in part, on added certainty or finality to an anticipated outcome, changes in accounting standards or tax laws in the U.S. or foreign jurisdictions where we operate, or changes in other facts or circumstances. In addition, we recognize liabilities for potential U.S. and foreign income tax contingencies based on our estimate of whether, and the extent to which, additional taxes may be due. If we determine that payment of these amounts is unnecessary or if the recorded tax liability is less than our current assessment, we may be required to recognize an income tax benefit or additional income tax expense in our financial statements accordingly.
+We record a valuation allowance to reduce deferred tax assets to the amount that is believed more likely than not to be realized based on all available evidence. To the extent realization of the deferred tax assets becomes more-likely-than-not, we would recognize such deferred tax assets as income tax benefits during the period.
+We recognize the benefit from a tax position only if it is more-likely-than-not that the position would be sustained upon audit based solely on the technical merits of the tax position. Our policy is to include interest and penalties related to unrecognized tax benefits as a component of income tax expense.
+Non-Marketable Equity Securities
+Non-marketable equity securities consist of investments in private companies without readily determinable fair values. They are measured at cost minus impairment, if any, and are adjusted for observable price changes in orderly transactions for a similar investment in the same issuer (the measurement alternative). These adjustments may require use of unobservable inputs.
+We assess impairment quarterly based on qualitative and quantitative factors, including the investee’s operating performance and market trends.
+38
+Table of Contents
+Revenue Recognition
+Revenue Allowances
+For products sold with a right of return, we record a reduction to revenue by establishing a sales return allowance for estimated product returns at the time revenue is recognized, based primarily on historical return rates. However, if product returns for a fiscal period are anticipated to exceed historical return rates, we may determine that additional sales return allowances are required to reflect our estimated exposure for product returns. Return rights for certain stocking distributors for specific products are contractually limited based on a percentage of prior quarter shipments. For shipments to other customers, we do not allow returns, although we may approve returns for credit or refund based on applicable facts and circumstances.
+We account for customer programs, which involve rebates and marketing development funds, or MDFs, as a reduction in revenue and accrue for such programs based on the amount we expect to be claimed by customers. Certain customer programs include distributor price incentives or other channel programs for specific products and customer classes which require judgment as to whether the applicable incentives will be attained. Estimates for customer program accruals include a combination of historical attainment and claim rates and may be adjusted based on relevant internal and external factors.
+Contracts with Multiple Performance Obligations
+Our contracts may contain more than one performance obligation. Judgment is required in determining whether each performance obligation within a customer contract is distinct. Except for License and Development Arrangements, NVIDIA products and services function on a standalone basis and do not require a significant amount of integration or interdependency. Therefore, multiple performance obligations contained within a customer contract are considered distinct and are not combined for revenue recognition purposes.
+We allocate the total transaction price to each distinct performance obligation in an arrangement with multiple performance obligations on a relative standalone selling price basis. In most cases, we can establish standalone selling price based on directly observable prices of products or services sold separately in comparable circumstances to similar customers. If standalone selling price is not directly observable, such as when we do not sell a product or service separately, we determine standalone selling price based on market data and other observable inputs.
+Results of Operations
+A discussion regarding our financial condition and results of operations for fiscal year 2026 compared to fiscal year 2025 is presented below. A discussion regarding our financial condition and results of operations for fiscal year 2025 compared to fiscal year 2024 can be found under Item 7 in our Annual Report on Form 10-K for the fiscal year ended January 26, 2025, filed with the SEC on February 26, 2025, which is available free of charge on the SEC’s website at http://www.sec.gov and at our investor relations website, http://investor.nvidia.com.
+39
+Table of Contents
+The following table sets forth, for the periods indicated, certain items in our Consolidated Statements of Income expressed as a percentage of revenue.
+Year Ended
+Jan 25, 2026 Jan 26, 2025
+Revenue 100.0 % 100.0 %
+Cost of revenue 28.9 25.0
+Gross profit 71.1 75.0
+Operating expenses
+Research and development 8.6 9.9
+Sales, general and administrative 2.1 2.7
+Total operating expenses 10.7 12.6
+Operating income 60.4 62.4
+Interest income 1.1 1.4
+Interest expense (0.1) (0.2)
+Other income, net
+4.2 0.8
+Total other income, net
+5.2 2.0
+Income before income tax 65.5 64.4
+Income tax expense 9.9 8.6
+Net income 55.6 % 55.8 %
+Reportable Segments
+Revenue by Reportable Segments
+Year Ended
+Jan 25, 2026 Jan 26, 2025 $
+Change %
+Change
+($ in millions)
+Compute & Networking
+$ 193,479 $ 116,193 $ 77,286 67 %
+Graphics 22,459 14,304 8,155 57 %
+Total $ 215,938 $ 130,497 $ 85,441 65 %
+Operating Income by Reportable Segments
+Year Ended
+Jan 25, 2026 Jan 26, 2025 $
+Change %
+Change
+($ in millions)
+Compute & Networking
+$ 130,141 $ 82,875 $ 47,266 57 %
+Graphics 9,156 5,085 4,071 80 %
+Total $ 139,297 $ 87,960 $ 51,337 58 %

@@ -6,20 +6,21 @@ import { csvCell } from "../chart/series";
 import { calendarLabel } from "../compare/state";
 import { FILER_LABELS, fyeMonth, type FilerCategory } from "../companies/screen";
 import { BANK_NA, NO_DATA, NO_DATA_TITLE, NOT_APPLICABLE, NOT_MEANINGFUL, NOT_REPORTED, readFigure } from "../blanks";
-import { change, day, money, moneyRow, pct } from "../format";
+import { change, currencyOf, day, money, moneyRow, pct } from "../format";
 import { num } from "../home/data";
 import { EIGHT_K_ITEMS } from "../reader/sections";
 import { separateMembers } from "../chart/segments";
-import type { FinancialRow, NotMeaningfulPeriod, Recap, RecapValue, ScreenerRow, SegmentRow, ValueSource } from "../types";
+import type { Callout, FinancialRow, NotMeaningfulPeriod, Recap, RecapValue, ScreenerRow, SegmentRow, ValueSource } from "../types";
 
 export type Fmt = "usd" | "pct" | "growth" | "x" | "eps" | "shares";
 
-export function fmt(kind: Fmt, v: number): string {
+/** `currency`: the company's (USD unless it reports in another, migration 056). */
+export function fmt(kind: Fmt, v: number, currency = "USD"): string {
   switch (kind) {
     case "usd":
-      return money(v, "USD");
+      return money(v, currency);
     case "eps":
-      return money(v, "USD/shares");
+      return money(v, `${currency}/shares`);
     case "pct":
       return pct(v);
     case "growth":
@@ -48,9 +49,59 @@ export const KEY_STATS: { key: string; label: string; kind: Fmt }[] = [
   { key: "roe_ttm", label: "Return on equity", kind: "pct" },
 ];
 
+/** A bank's key stats (F4, #103; migration 048): what a bank is compared on. Net interest margin,
+ * tangible book value per share and ROTCE are left out: no standard tag carries their inputs
+ * quarterly (048's header; BANK_NOT_SHOWN says so on the page). */
+export const BANK_KEY_STATS: { key: string; label: string; kind: Fmt }[] = [
+  { key: "revenue_ttm", label: "Net revenue", kind: "usd" },
+  { key: "net_interest_income_ttm", label: "Net interest income", kind: "usd" },
+  { key: "efficiency_ratio_ttm", label: "Efficiency ratio", kind: "pct" },
+  { key: "provision_for_credit_losses_ttm", label: "Provision for credit losses", kind: "usd" },
+  { key: "net_income_ttm", label: "Net income", kind: "usd" },
+  { key: "eps_diluted_q", label: "EPS (diluted)", kind: "eps" },
+  { key: "loans_q", label: "Loans, net", kind: "usd" },
+  { key: "deposits_q", label: "Deposits", kind: "usd" },
+  { key: "cet1_ratio_q", label: "CET1 ratio", kind: "pct" },
+  { key: "roe_ttm", label: "Return on equity", kind: "pct" },
+  { key: "revenue_growth_ttm", label: "Revenue growth", kind: "growth" },
+  { key: "net_margin_ttm", label: "Net margin", kind: "pct" },
+];
+
+/** What a bank's page says about the bank figures it doesn't show. */
+export const BANK_NOT_SHOWN =
+  "Not shown: net interest margin (it needs average interest-earning assets, which banks don't tag " +
+  "in standard XBRL), and tangible book value per share and ROTCE (the largest banks tag goodwill " +
+  "every quarter but other intangible assets and preferred stock only in the 10-K or under their own " +
+  "tags, so a quarterly figure would mix definitions). Efficiency ratio = noninterest expense / (net " +
+  "interest income + noninterest income), lower is leaner.";
+
+/** Companies whose debt, and so net debt, includes a captive finance arm's borrowings: migration 055
+ * sums each debt line's segment members (Ford's CompanyExcludingFordCredit + FordCredit, GM's
+ * Automotive + GmFinancial), which is the consolidated balance sheet's figure, kept as built. Their
+ * pages say so. Keyed by company id; data.test.ts checks the ids against 055's company tags. */
+export const FINANCE_ARMS: Record<string, string> = {
+  "0000037996": "Ford Credit",
+  "0001467858": "GM Financial",
+};
+
+/** The note for a company in FINANCE_ARMS, or null. */
+export function financeArmNote(companyId: string, name: string): string | null {
+  const arm = FINANCE_ARMS[companyId];
+  if (!arm) return null;
+  const owner = /s$/i.test(name) ? `${name}'` : `${name}'s`;
+  return `${owner} debt and net debt are consolidated: they include ${arm}'s borrowings, which fund its loans and ` +
+    `leases to dealers and customers, as well as the automotive business's own debt. The 10-K shows the two ` +
+    `separately in its segment information.`;
+}
+
+/** A bank by migration 035's rule: the API marks the metrics that don't describe it. */
+export const isBankRow = (row: Pick<ScreenerRow, "not_applicable">): boolean => !!row.not_applicable?.length;
+
 /** Asked for with the key stats: the latest quarter's revenue names the filing to recap. */
 export const RECAP_COLUMN = "revenue_q";
 export const HEADER_COLUMNS = [...KEY_STATS.map((s) => s.key), RECAP_COLUMN];
+/** The header's columns with a bank's own (an older API refuses them: ask again without). */
+export const HEADER_COLUMNS_WITH_BANK = [...new Set([...HEADER_COLUMNS, ...BANK_KEY_STATS.map((s) => s.key)])];
 
 /** The header's listing line: the main ticker, then how many other classes and notes it has (their
  * tickers in the hover). A bank can have a dozen preferreds. */
@@ -64,6 +115,10 @@ export function listingLine(tickers: string[], exchanges: string[]): { text: str
 }
 
 export interface KeyStat {
+  /** the screener column (KEY_STATS) */
+  key: string;
+  /** the period the figure is as of (its source's period end), when it has one */
+  periodEnd: string | null;
   label: string;
   text: string;
   /** the period the value covers, e.g. "TTM to Jul 26, 2026" */
@@ -82,7 +137,9 @@ function periodText(key: string, src: ValueSource): string {
 }
 
 export function keyStats(row: ScreenerRow): KeyStat[] {
-  return KEY_STATS.map(({ key, label, kind }) => {
+  // a bank's own set when the answer has its columns (an older API didn't send them)
+  const stats = isBankRow(row) && "net_interest_income_ttm" in row.values ? BANK_KEY_STATS : KEY_STATS;
+  return stats.map(({ key, label, kind }) => {
     const src = row.sources[key] ?? null;
     const f = readFigure({
       label,
@@ -106,7 +163,7 @@ export function keyStats(row: ScreenerRow): KeyStat[] {
           : f.old
             ? `old · ${periodText(key, src)}`
             : periodText(key, src);
-    return { label, text: f.text, period, title: f.title, old: f.old };
+    return { key, periodEnd: src?.period_end ?? null, label, text: f.text, period, title: f.title, old: f.old };
   });
 }
 
@@ -119,9 +176,12 @@ export interface Header {
   fye: string | null;
   filer: string | null;
   state: string | null;
+  /** the company reports in another currency (migration 056): its code, from the readings */
+  currency: string | null;
 }
 
 export function header(row: ScreenerRow): Header {
+  const other = Object.values(row.readings ?? {}).find((r) => r?.status === "other_currency");
   return {
     name: row.name ?? row.company_id,
     tickers: row.tickers ?? [],
@@ -131,6 +191,7 @@ export function header(row: ScreenerRow): Header {
     fye: fyeMonth(row.fiscal_year_end),
     filer: row.filer_category ? (FILER_LABELS[row.filer_category as FilerCategory] ?? row.filer_category) : null,
     state: row.state_of_incorporation,
+    currency: other ? currencyOf(other.unit) : null,
   };
 }
 
@@ -150,7 +211,37 @@ export type Statement = "is" | "bs" | "cf";
 export type StatementRange = "8q" | "5y" | "10y" | "max";
 export const RANGE_QUARTERS: Record<StatementRange, number> = { "8q": 8, "5y": 20, "10y": 40, max: 120 };
 
-export const STATEMENTS: Record<Statement, { label: string; rows: [string, string, Fmt][] }> = {
+/** How a statement line reads (F5): `sub` an item of the subtotal it sits with (indented), `total` a
+ * subtotal, `outflow` a payment the filing tags as the positive amount paid, shown negative as the cash
+ * flow statement prints it (the CSV too). `define` is the label's hover: what the line is. */
+export interface LineOpts {
+  sub?: boolean;
+  total?: boolean;
+  outflow?: boolean;
+  define?: string;
+}
+export type Line = [string, string, Fmt, LineOpts?];
+
+/** What the lines migration 049 added are (their hovers; README "Statements"). */
+export const DEFINITIONS: Record<string, string> = {
+  cash_and_investments:
+    "Cash and short-term investments, read as net debt reads them: investments already inside cash aren't added twice, and there's no figure when they're missing at this date but were reported lately. Open it to see the tags behind it.",
+  accounts_payable: "What the company owes its suppliers, due within a year.",
+  contract_liabilities_current:
+    "Customer advances and billings ahead of revenue, due within a year (contract liabilities; filers that kept the older name tag it as deferred revenue).",
+  contract_liabilities: "All contract liabilities, current and noncurrent: the filing's total, or its two lines added up.",
+  remaining_performance_obligations:
+    "Revenue under contract not yet recognised (remaining performance obligations, from the revenue note): the nearest tagged figure to a backlog. Not a balance-sheet line. Many companies don't tag it; the backlog a company states in words is on its Overview, from the filing's text.",
+  investing_cash_flow: "Net cash from investing activities, as the filing totals it: capex, acquisitions, and buying and selling investments.",
+  financing_cash_flow: "Net cash from financing activities, as the filing totals it: borrowing and repayment, dividends, buybacks, shares issued.",
+  change_in_cash: "Net change in cash, cash equivalents and restricted cash, after exchange-rate effects, as the cash flow statement totals it.",
+  cash_and_restricted_cash:
+    "Cash, cash equivalents and restricted cash at the period's end: where the cash flow statement ends. The balance sheet's cash can leave restricted cash out.",
+};
+
+const OUTFLOW = "outflow: shown negative, as the cash flow statement prints it";
+
+export const STATEMENTS: Record<Statement, { label: string; rows: Line[] }> = {
   is: {
     label: "Income statement",
     rows: [
@@ -173,33 +264,82 @@ export const STATEMENTS: Record<Statement, { label: string; rows: [string, strin
     rows: [
       ["cash", "Cash", "usd"],
       ["short_term_investments", "Short-term investments", "usd"],
+      ["cash_and_investments", "Cash and short-term investments", "usd", { total: true, define: DEFINITIONS.cash_and_investments }],
       ["receivables", "Receivables", "usd"],
       ["inventory", "Inventory", "usd"],
       ["current_assets", "Current assets", "usd"],
       ["total_assets", "Total assets", "usd"],
-      ["current_liabilities", "Current liabilities", "usd"],
-      ["long_term_debt_current", "Debt due within a year", "usd"],
+      ["current_liabilities", "Current liabilities", "usd", { total: true }],
+      ["accounts_payable", "Accounts payable", "usd", { sub: true, define: DEFINITIONS.accounts_payable }],
+      ["contract_liabilities_current", "Contract liabilities (customer advances)", "usd", { sub: true, define: DEFINITIONS.contract_liabilities_current }],
+      ["long_term_debt_current", "Debt due within a year", "usd", { sub: true }],
       ["long_term_debt", "Long-term debt", "usd"],
+      ["contract_liabilities", "Contract liabilities, current and noncurrent", "usd", { define: DEFINITIONS.contract_liabilities }],
       ["total_liabilities", "Total liabilities", "usd"],
       ["stockholders_equity", "Stockholders' equity", "usd"],
       ["net_debt", "Net debt", "usd"],
+      ["remaining_performance_obligations", "Remaining performance obligations (backlog; not on the balance sheet)", "usd", { define: DEFINITIONS.remaining_performance_obligations }],
     ],
   },
   cf: {
     label: "Cash flow",
     rows: [
-      ["operating_cash_flow", "Operating cash flow", "usd"],
-      ["capex", "Capital expenditure", "usd"],
-      ["free_cash_flow", "Free cash flow", "usd"],
-      ["depreciation_amortization", "Depreciation and amortization", "usd"],
-      ["stock_based_compensation", "Stock-based compensation", "usd"],
-      ["dividends_paid", "Dividends paid", "usd"],
-      ["share_buybacks", "Share buybacks", "usd"],
+      ["depreciation_amortization", "Depreciation and amortization (added back)", "usd", { sub: true }],
+      ["stock_based_compensation", "Stock-based compensation (added back)", "usd", { sub: true }],
+      ["operating_cash_flow", "Net cash from operating activities", "usd", { total: true }],
+      ["capex", "Capital expenditure", "usd", { sub: true, outflow: true }],
+      ["investing_cash_flow", "Net cash from investing activities", "usd", { total: true, define: DEFINITIONS.investing_cash_flow }],
+      ["dividends_paid", "Dividends paid", "usd", { sub: true, outflow: true }],
+      ["share_buybacks", "Share buybacks", "usd", { sub: true, outflow: true }],
+      ["financing_cash_flow", "Net cash from financing activities", "usd", { total: true, define: DEFINITIONS.financing_cash_flow }],
+      ["change_in_cash", "Change in cash", "usd", { total: true, define: DEFINITIONS.change_in_cash }],
+      ["cash_and_restricted_cash", "Cash at end of period", "usd", { define: DEFINITIONS.cash_and_restricted_cash }],
+      ["free_cash_flow", "Free cash flow (operating cash flow less capex)", "usd"],
     ],
   },
 };
 
-export const RATIOS: [string, string, Fmt][] = [
+/** The metrics migration 049 added: an older API refuses them (422), so a statement asks again without
+ * them (the Production fallback, services/web README). */
+export const F5_METRICS = new Set(["cash_and_investments", "accounts_payable", "contract_liabilities_current",
+  "contract_liabilities", "remaining_performance_obligations", "investing_cash_flow", "financing_cash_flow",
+  "change_in_cash", "cash_and_restricted_cash"]);
+
+/** A bank's statements (F4, migration 048): its own lines instead of the industrial ones that read
+ * n/a for a bank. Cash flow is the same statement. Revenue is net revenue (net interest income plus
+ * noninterest income: a bank's net revenue tag, or 038's sum). */
+export const BANK_STATEMENTS: Record<Statement, { label: string; rows: Line[] }> = {
+  is: {
+    label: "Income statement",
+    rows: [
+      ["net_interest_income", "Net interest income", "usd"],
+      ["noninterest_income", "Noninterest income", "usd"],
+      ["revenue", "Net revenue", "usd"],
+      ["noninterest_expense", "Noninterest expense", "usd"],
+      ["provision_for_credit_losses", "Provision for credit losses", "usd"],
+      ["pretax_income", "Pretax income", "usd"],
+      ["income_tax", "Income tax", "usd"],
+      ["net_income", "Net income", "usd"],
+      ["eps_diluted", "EPS (diluted)", "eps"],
+      ["weighted_shares_diluted", "Diluted shares", "shares"],
+    ],
+  },
+  bs: {
+    label: "Balance sheet",
+    rows: [
+      ["cash", "Cash and due from banks", "usd"],
+      ["loans", "Loans, net of the allowance", "usd"],
+      ["total_assets", "Total assets", "usd"],
+      ["deposits", "Deposits", "usd"],
+      ["total_liabilities", "Total liabilities", "usd"],
+      ["stockholders_equity", "Stockholders' equity", "usd"],
+      ["cet1_ratio", "CET1 capital ratio (where tagged)", "pct"],
+    ],
+  },
+  cf: STATEMENTS.cf,
+};
+
+export const RATIOS: Line[] = [
   ["gross_margin", "Gross margin", "pct"],
   ["operating_margin", "Operating margin", "pct"],
   ["net_margin", "Net margin", "pct"],
@@ -214,8 +354,12 @@ export const RATIOS: [string, string, Fmt][] = [
 
 /** What to request for a period choice: quarterly values, TTM ending each quarter, or annual
  * (TTM at each fiscal Q4: the fiscal year; balances at its end). */
-export function statementRequest(period: Period, range: StatementRange = "8q"): { view: "quarter" | "ttm"; quarters: number } {
-  return period === "a" ? { view: "ttm", quarters: 40 } : { view: period === "q" ? "quarter" : "ttm", quarters: RANGE_QUARTERS[range] };
+export function statementRequest(period: Period, range: StatementRange = "8q", kind: Statement = "is"): { view: "quarter" | "ttm"; quarters: number } {
+  const req: { view: "quarter" | "ttm"; quarters: number } = period === "a"
+    ? { view: "ttm", quarters: 40 }
+    : { view: period === "q" ? "quarter" : "ttm", quarters: RANGE_QUARTERS[range] };
+  // the cash flow statement's first column starts with the cash at the end of the period before it
+  return kind === "cf" ? { ...req, quarters: Math.min(120, req.quarters + 4) } : req;
 }
 
 export const ANNUAL_YEARS = 10;
@@ -225,6 +369,14 @@ export interface TableCell {
   raw: string;
   title: string;
   derived: boolean;
+  /** a quarter called out by the API (company/callouts.ts words it) */
+  callout?: Callout;
+  /** what the figure is made of can be opened (F5): a derived figure, a computed one, a sum of tags */
+  opens?: boolean;
+  /** shown by a style: a reconciliation that ties, or doesn't */
+  tone?: "ok" | "warn";
+  /** a derived figure's inputs (gold's `inputs`): the opened row's lines read them */
+  inputs?: Record<string, number>;
   /** the filing on EDGAR (the secondary link) */
   url: string | null;
   /** the filing the value comes from, opened in the reader (the value's own link) */
@@ -282,8 +434,10 @@ export interface BlankCell {
 
 export interface MetricTable {
   columns: { periodEnd: string; label: string; sub: string }[];
+  /** the amounts' currency (migration 056: a 20-F filer's own); absent = USD */
+  currency?: string;
   /** `blanks[i]` is what `cells[i]` reads when it's null */
-  rows: { metric: string; label: string; cells: (TableCell | null)[]; blanks: BlankCell[] }[];
+  rows: { metric: string; label: string; cells: (TableCell | null)[]; blanks: BlankCell[]; opts?: LineOpts }[];
 }
 
 /** Per-share figures: quarters state them, but they don't add (the share count changes), so gold
@@ -325,11 +479,31 @@ function cellTitle(label: string, r: FinancialRow): string {
     `Source: ${r.citation.form} filed ${day(r.citation.filed, true)}, ${r.citation.accession_no}; ${src}`;
 }
 
+/** Whether a row's figure opens into its parts (F5, /components): a derived figure (its `inputs`), gross
+ * profit computed as revenue less cost, or a line the filing tags as parts (a sum). A TTM's quarters
+ * don't count: every TTM is that. */
+export function opensIntoParts(r: FinancialRow): boolean {
+  const tag = r.citation.xbrl_tag ?? "";
+  return (!!r.inputs && !("quarters" in r.inputs)) || tag.startsWith("derived:") || tag.includes("+");
+}
+
+function numericInputs(inputs: NonNullable<FinancialRow["inputs"]>): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const [k, v] of Object.entries(inputs)) {
+    const n = typeof v === "number" || typeof v === "string" ? Number(v) : NaN;
+    if (Number.isFinite(n)) out[k] = n;
+  }
+  return out;
+}
+
+/** "-6047000000" for "6047000000": an outflow's figure as the statement shows it (exact, as text). */
+export const negated = (raw: string): string => (raw.startsWith("-") ? raw.slice(1) : /^0(\.0*)?$/.test(raw) ? raw : `-${raw}`);
+
 /** Rows (one metric per row, its values by period) for the metrics given; metrics without any
  * value are left out. Columns newest last, as statements read. */
 export function metricTable(
   rows: FinancialRow[],
-  metrics: [string, string, Fmt][],
+  metrics: Line[],
   period: Period,
   basis: Basis = "fiscal",
   /** metrics that don't describe this company, whatever it tags (ScreenerRow.not_applicable) */
@@ -339,6 +513,8 @@ export function metricTable(
   /** the API's `not_meaningful_periods`: why a period a metric has no row for reads n/m (debt/equity
    * and ROE on negative equity, migration 035). Never worked out here; an older API sends none. */
   meaningless: NotMeaningfulPeriod[] = [],
+  /** the API's callouts (F5): a cell they name carries one; quarterly tables only */
+  callouts: Callout[] = [],
 ): MetricTable {
   const periodOf = (r: FinancialRow) => (basis === "calendar" ? r.calendar_period : r.fiscal_period) ?? null;
   const kept = period === "a" ? rows.filter((r) => periodOf(r)?.endsWith("Q4")) : rows;
@@ -353,20 +529,26 @@ export function metricTable(
   const columns = ends.map((end) => ({ periodEnd: end, label: label(end), sub: day(end, true) }));
   const by = new Map(kept.map((r) => [`${r.metric}|${r.period_end}`, r]));
   const why = new Map(meaningless.map((p) => [`${p.metric}|${p.period_end}`, p.reason]));
+  const called = new Map(period === "q" ? callouts.map((c) => [`${c.metric}|${c.period_end}`, c]) : []);
+  const currency = rowsCurrency(rows);
   return {
     columns,
+    ...(currency !== "USD" ? { currency } : {}),
     rows: metrics
-      .map(([metric, name, kind]) => {
+      .map(([metric, name, kind, opts]) => {
+        const sign = opts?.outflow ? -1 : 1;
         // dollars read in one unit across a row; the hover has the exact figure
         const row = kind === "usd"
           ? moneyRow(ends.map((end) => {
               const r = by.get(`${metric}|${end}`);
-              return r ? num(r.value) : null;
-            }))
+              const v = r ? num(r.value) : null;
+              return v === null ? null : sign * v;
+            }), currency)
           : null;
         return {
           metric,
           label: name,
+          ...(opts ? { opts } : {}),
           blanks: ends.map((_, i) => blankCell(metric, name, period, columns[i]!.label, notApplicable)),
           cells: ends.map((end, i): TableCell | null => {
             const r = by.get(`${metric}|${end}`);
@@ -380,12 +562,14 @@ export function metricTable(
               };
             }
             if (!r || v === null) return null;
-            const figure = row?.[i] ?? fmt(kind, v);
+            const figure = row?.[i] ?? fmt(kind, sign * v, currency);
             const source = {
-              raw: String(r.value),
+              raw: sign < 0 ? negated(String(r.value)) : String(r.value),
               derived: r.value_source === "derived",
               url: r.citation.filing_url,
               source: { accessionNo: r.citation.accession_no, form: r.citation.form },
+              ...(opensIntoParts(r) ? { opens: true } : {}),
+              ...(r.inputs && !("quarters" in r.inputs) ? { inputs: numericInputs(r.inputs) } : {}),
             };
             if (notApplicable.includes(metric)) {
               return { ...source, derived: false, text: BANK_NA, title: `${name}: ${BANK_TITLE} The figure on file: ${figure}. ${cellTitle(name, r)}` };
@@ -393,13 +577,21 @@ export function metricTable(
             if (r.not_meaningful) {
               return { ...source, derived: false, text: NOT_MEANINGFUL, title: `${name}: not meaningful, because ${r.not_meaningful}. The figure on file: ${figure}. ${cellTitle(name, r)}` };
             }
-            return { ...source, text: figure, title: cellTitle(name, r) };
+            const callout = called.get(`${metric}|${end}`);
+            const outflow = sign < 0 ? ` Shown negative: an ${OUTFLOW}; the filing tags the amount paid, ${fmt(kind, v, currency)}.` : "";
+            return { ...source, text: figure, title: cellTitle(name, r) + outflow, ...(callout ? { callout } : {}) };
           }),
         };
       })
       // an n/a row stays, so its absence is explained: a bank's FCF, EPS in a TTM view
       .filter((r) => r.cells.some(Boolean) || (ends.length > 0 && r.blanks.every((b) => b.text === BANK_NA || b.text === NOT_APPLICABLE))),
   };
+}
+
+/** The currency a company's rows are in: the unit of its first amount (USD without one). Gold keeps
+ * every company in one currency (migration 056), so the first says it. */
+export function rowsCurrency(rows: { unit: string }[]): string {
+  return currencyOf(rows.find((r) => /^[A-Z]{3}$/.test(r.unit ?? ""))?.unit);
 }
 
 /** Revenue already net of interest expense: a bank's net revenue tag, or its net interest income plus
@@ -417,7 +609,7 @@ function computedRow(metric: string, label: string, table: MetricTable, value: (
   const ends = table.columns.map((c) => c.periodEnd);
   const values = ends.map(value);
   if (!values.some((v) => v !== null)) return null;
-  const figures = moneyRow(values);
+  const figures = moneyRow(values, table.currency);
   return {
     metric,
     label,
@@ -452,6 +644,7 @@ export function withBridges(table: MetricTable, rows: FinancialRow[], kind: Stat
       return op !== null && net !== null && valueAt(end, by, "pretax_income") === null ? net - op : null;
     }, "net income less operating income, where the filing tags no pretax income: interest, other income and expense, and any tax, not itemised in its XBRL."));
   }
+  if (kind === "cf") cashBridges(table, rows, by, insertAfter);
   if (kind === "bs") {
     insertAfter("stockholders_equity", computedRow("other_equity", "Not itemised", table, (end) => {
       const assets = valueAt(end, by, "total_assets");
@@ -465,9 +658,86 @@ export function withBridges(table: MetricTable, rows: FinancialRow[], kind: Stat
   return out;
 }
 
+/** The cash flow statement's reconciliation (F5, #111): beginning cash + change in cash = ending cash, within
+ * TIE_SHARE of the larger cash figure or TIE_FLOOR dollars (filers round each year to date). Measured on 613
+ * companies rebuilt with migration 049: 15,620 of 16,062 quarters since 2019 tie, 442 at 112 companies don't
+ * (a scope change: cash held for sale or restricted cash on one side only, an exchange-rate line tagged
+ * apart, a restated quarter). */
+export const TIE_SHARE = 0.005;
+export const TIE_FLOOR = 100_000;
+const DAY_MS = 86_400_000;
+
+export function ties(beginning: number, change: number, ending: number): boolean {
+  return Math.abs(beginning + change - ending) <= Math.max(TIE_SHARE * Math.max(Math.abs(beginning), Math.abs(ending)), TIE_FLOOR);
+}
+
+/** What the cash flow statement's own lines can't say, as computed rows: the subtotals' remainder
+ * ("exchange rates and other"), the cash at the start of each period (the ending cash of the period
+ * before), and whether start + change = end. Never stored figures: not in the CSV, charts or the
+ * assistant's data. */
+function cashBridges(table: MetricTable, rows: FinancialRow[], by: Map<string, FinancialRow>,
+  insertAfter: (metric: string, row: MetricTable["rows"][number] | null) => void) {
+  const ending = rows.filter((r) => r.metric === "cash_and_restricted_cash");
+  const startOf = (end: string) => (by.get(`change_in_cash|${end}`) ?? by.get(`operating_cash_flow|${end}`))?.period_start ?? null;
+  const beginning = (end: string): number | null => {
+    const start = startOf(end);
+    if (!start) return null;
+    const before = Date.parse(start) - DAY_MS;
+    const r = ending.find((x) => Math.abs(Date.parse(x.period_end) - before) <= 7 * DAY_MS);
+    return r ? num(r.value) : null;
+  };
+  const remainder = (end: string): number | null => {
+    const [change, op, inv, fin] = ["change_in_cash", "operating_cash_flow", "investing_cash_flow", "financing_cash_flow"]
+      .map((m) => valueAt(end, by, m));
+    return change === null || op === null || inv === null || fin === null ? null : change - op - inv - fin;
+  };
+  const ends = table.columns.map((c) => c.periodEnd);
+  const material = ends.some((end) => {
+    const x = remainder(end);
+    const change = valueAt(end, by, "change_in_cash");
+    return x !== null && change !== null && Math.abs(x) > Math.max(TIE_SHARE * Math.abs(change), TIE_FLOOR);
+  });
+  if (material) {
+    insertAfter("financing_cash_flow", computedRow("fx_and_other", "Exchange rates and other", table, remainder,
+      "the change in cash less the three subtotals: the effect of exchange rates on cash, and any cash flows the filing reports apart from the three (discontinued operations)."));
+  }
+  insertAfter("change_in_cash", computedRow("cash_beginning", "Cash at beginning of period", table, beginning,
+    "the cash at the end of the period before (with restricted cash), where the cash flow statement starts."));
+  const checks = ends.map((end) => {
+    const b = beginning(end);
+    const c = valueAt(end, by, "change_in_cash");
+    const e = valueAt(end, by, "cash_and_restricted_cash");
+    return b === null || c === null || e === null ? null : { b, c, e, ok: ties(b, c, e) };
+  });
+  if (!checks.some(Boolean)) return;
+  const label = "Beginning + change = end?";
+  insertAfter("cash_and_restricted_cash", {
+    metric: "cash_reconciliation",
+    label,
+    opts: { define: "Whether the cash at the start of the period plus the change in cash equals the cash at its end, as a cash flow statement must. Where it doesn't, the figures are as filed: one side usually covers more (cash held for sale, restricted cash) or a quarter was restated." },
+    blanks: ends.map(() => ({ text: "", title: `${label}: needs the beginning and ending cash and the change in cash for the period.` })),
+    cells: checks.map((x, i): TableCell | null => {
+      if (!x) return null;
+      const period = table.columns[i]!.label;
+      const cur = table.currency ?? "USD";
+      const sum = `${money(x.b, cur)} + ${money(x.c, cur)} = ${money(x.b + x.c, cur)}`;
+      if (x.ok) {
+        return { text: "✓ ties", raw: "", derived: true, url: null, tone: "ok",
+          title: `${period}: beginning cash ${sum}, the ending cash (${money(x.e, cur)}). It ties.` };
+      }
+      const gap = x.b + x.c - x.e;
+      return { text: `off ${money(Math.abs(gap), cur)}`, raw: String(gap), derived: true, url: null, tone: "warn",
+        title: `${period}: beginning cash ${sum}, but the ending cash is ${money(x.e, cur)}, ${money(Math.abs(gap), cur)} ${gap > 0 ? "less" : "more"}. ` +
+          "The figures are as filed: usually one side covers more than the other (cash held for sale, restricted cash) or a quarter was restated. The filing's cash flow statement shows its own reconciliation." };
+    }),
+  });
+}
+
 /** Long-format CSV of the rows behind a table: one line per value with its source. */
 export function financialsCsv(rows: FinancialRow[], table: MetricTable, view: string): string {
   const want = new Set(table.rows.map((r) => r.metric));
+  // the table's sign convention: an outflow line is negative here too
+  const outflows = new Set(table.rows.filter((r) => r.opts?.outflow).map((r) => r.metric));
   const ends = new Set(table.columns.map((c) => c.periodEnd));
   const header = ["metric", "view", "fiscal_period", "calendar_period", "period_start", "period_end", "value",
     "unit", "value_source", "accession_no", "form", "filed", "xbrl_tag", "source_accessions"];
@@ -475,7 +745,7 @@ export function financialsCsv(rows: FinancialRow[], table: MetricTable, view: st
     .filter((r) => want.has(r.metric) && ends.has(r.period_end))
     .sort((a, b) => a.metric.localeCompare(b.metric) || a.period_end.localeCompare(b.period_end))
     .map((r) => [r.metric, view, r.fiscal_period ?? "", r.calendar_period ?? "", r.period_start ?? "", r.period_end,
-      String(r.value), r.unit, r.value_source, r.citation.accession_no, r.citation.form, r.citation.filed,
+      outflows.has(r.metric) ? negated(String(r.value)) : String(r.value), r.unit, r.value_source, r.citation.accession_no, r.citation.form, r.citation.filed,
       r.citation.xbrl_tag, (r.citation.source_accessions ?? []).join(" ")]);
   return [header, ...lines].map((l) => l.map(csvCell).join(",")).join("\r\n") + "\r\n";
 }
@@ -524,9 +794,10 @@ function src(v: RecapValue | null): string {
 }
 
 /** Quarter values (TTM ones are for ratios the quarter lacks) vs the prior and year-ago
- * quarter; column labels from the values' fiscal periods. */
-export function recapRows(recap: Recap): { labels: [string, string, string]; rows: RecapRow[] } {
-  const quarter = recap.metrics.filter((m) => m.span === "quarter" && RECAP_LABELS[m.metric]);
+ * quarter; column labels from the values' fiscal periods. `only`: these metrics, in RECAP_LABELS
+ * order (the Earnings view's income-statement lines). */
+export function recapRows(recap: Recap, only?: readonly string[]): { labels: [string, string, string]; rows: RecapRow[] } {
+  const quarter = recap.metrics.filter((m) => m.span === "quarter" && RECAP_LABELS[m.metric] && (!only || only.includes(m.metric)));
   const first = quarter.find((m) => m.prior_quarter && m.year_ago) ?? quarter[0];
   const lab = (v: RecapValue | null | undefined, fallback: string) => v?.fiscal_period ?? (v ? calendarLabel(v.period_end) : fallback);
   const labels: [string, string, string] = [
@@ -594,6 +865,8 @@ export interface SegmentTable {
     /** the member's last period, when it stopped before the table's newest ("FY2025 Q3"): an old
      * segmentation, listed after the current members */
     until: string | null;
+    /** #171: the filer's "All Other" (its reconciling members), last, only for periods where it ties */
+    reconciling?: boolean;
   }[];
   /** consolidated: reported revenue. members: their sum, because revenue isn't known for the period.
    * none: neither can be trusted, so no share is printed. */
@@ -608,6 +881,52 @@ export interface SegmentTable {
 
 const listOf = (names: string[], most = 4) =>
   names.length <= most ? names.join(", ") : `${names.slice(0, most).join(", ")} and ${names.length - most} more`;
+
+/** Segments plus "All other" must come to the consolidated figure within this (037's 0.5%). */
+export const RECONCILE_TOLERANCE = 0.005;
+
+/** #171: the filer's "All Other" in a business-segment table: its reconciling members (corporate,
+ * unallocated items, eliminations: the API's `reconciliation` axis, summed per quarter), shown only for
+ * the quarters where the segments plus it come to the consolidated figure within RECONCILE_TOLERANCE.
+ * The same member can carry the segments' total instead (NVIDIA's after FY2026 Q1, $66.6B beside
+ * segments of $66.6B): that never ties, so it's never shown as All other. Null when nothing ties or
+ * every tied value is zero (NVIDIA's revenue). Never in a share or a sum. */
+function reconcilingRow(
+  recon: SegmentRow[], ends: string[], columns: { label: string }[],
+  consolidated: (end: string) => number | null, segmentsSum: (end: string) => number,
+): SegmentTable["rows"][number] | null {
+  if (!recon.length) return null;
+  let shown = false;
+  const values = ends.map((end) => {
+    const here = recon.filter((r) => Math.abs(Date.parse(r.period_end) - Date.parse(end)) <= 7 * DAY && num(r.value) !== null);
+    const total = consolidated(end);
+    if (!here.length || total === null || total === 0) return null;
+    const v = here.reduce((s, r) => s + num(r.value)!, 0);
+    if (Math.abs(segmentsSum(end) + v - total) > RECONCILE_TOLERANCE * Math.abs(total)) return null;
+    if (v !== 0) shown = true;
+    return { v, here };
+  });
+  if (!shown) return null;
+  const texts = moneyRow(values.map((x) => x?.v ?? null));
+  const cells = values.map((x, i): TableCell | null => {
+    if (!x) return null;
+    const first = x.here[0]!;
+    return {
+      text: texts[i] ?? fmt("usd", x.v),
+      raw: x.here.length === 1 ? first.value : String(x.v),
+      title: `All other, ${columns[i]!.label}: reported outside the segments as ${listOf(x.here.map((r) => r.member_label))}; ` +
+        `with the segments it comes to the consolidated figure. Source: ${first.citation.form} filed ${day(first.citation.filed, true)}, ` +
+        `${first.citation.accession_no}`,
+      derived: false,
+      url: first.citation.filing_url,
+      source: { accessionNo: first.citation.accession_no, form: first.citation.form },
+    };
+  });
+  return {
+    member: "reconciling", label: "All other", cells, share: null, shareTooBig: false, yoy: null,
+    yoyNotMeaningful: false, overlaps: false, until: null, reconciling: true,
+  };
+}
 
 /** One table per axis and metric (revenue, gross profit, operating income), members by period, newest
  * last; reconciliation members (corporate, eliminations) left out. A revenue share is the member over
@@ -637,12 +956,12 @@ export function segmentTables(rows: SegmentRow[], revenue: FinancialRow[] = []):
     return Object.keys(AXIS_LABELS).indexOf(axis!) * 10 + Object.keys(SEGMENT_METRICS).indexOf(metric!);
   };
   // the same quarter: gold's period end and the segment fact's can be a day or two apart
-  const revenueRows = revenue.filter((r) => r.metric === "revenue");
-  const consolidatedAt = (end: string): number | null => {
-    const at = Date.parse(end);
-    const near = revenueRows.find((r) => Math.abs(Date.parse(r.period_end) - at) <= 7 * 86_400_000);
-    return near ? num(near.value) : null;
+  const near = (end: string, d: string) => Math.abs(Date.parse(d) - Date.parse(end)) <= 7 * 86_400_000;
+  const consolidatedOf = (metric: string, end: string): number | null => {
+    const r = revenue.find((x) => x.metric === metric && near(end, x.period_end));
+    return r ? num(r.value) : null;
   };
+  const consolidatedAt = (end: string) => consolidatedOf("revenue", end);
   return [...groups.entries()].sort(([a], [b]) => order(a) - order(b)).map(([k, rs]) => {
     const [axis, metric] = k.split("|") as [string, string];
     const ends = [...new Set(rs.map((r) => r.period_end))].sort().slice(-8);
@@ -717,6 +1036,11 @@ export function segmentTables(rows: SegmentRow[], revenue: FinancialRow[] = []):
     // current members by their newest value, then the ones that stopped, by their last
     const lastValue = (r: (typeof out)[number]) => num(at(r.member, lastOf(r.member))?.value) ?? -Infinity;
     out.sort((a, b) => Number(a.until !== null) - Number(b.until !== null) || lastValue(b) - lastValue(a));
+    const other = axis === "business_segment" && !separated?.drop.size
+      ? reconcilingRow(rows.filter((r) => r.axis === "reconciliation" && r.metric === metric), ends, columns,
+        (end) => consolidatedOf(metric, end), (end) => members.reduce((s, [m]) => s + (num(at(m, end)?.value) ?? 0), 0))
+      : null;
+    if (other) out.push(other);
     // a member that stopped is said once, below; it stays out of sums either way
     const parts = out.filter((r) => r.overlaps && r.until === null).map((r) => r.label);
     const overlapNote = parts.length

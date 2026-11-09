@@ -393,3 +393,140 @@ fn no_titles_keeps_previous_result() {
     );
     assert!(find_sections("No headings at all.", "10-Q").is_err());
 }
+
+#[test]
+fn rule_10_leading_punctuation_and_quotes() {
+    let body = "Text. ".repeat(20);
+    let text = [
+        "Item 2.02, \"Results of Operations and Financial Condition\"",
+        &body,
+        "Item 7.01 \u{2011} \u{2002}Regulation FD Disclosure",
+        &body,
+        "Item 8.01\u{200e} Other Events.",
+        &body,
+        "Item 9.01 , \u{201c}Financial Statements and Exhibits.\u{201d} and more",
+        &body,
+    ]
+    .join("\n");
+    let s = find_sections(&text, "8-K").unwrap();
+    assert_eq!(
+        section(&s, "2.02").title,
+        "Results of Operations and Financial Condition"
+    );
+    assert_eq!(section(&s, "7.01").title, "Regulation FD Disclosure");
+    assert_eq!(section(&s, "8.01").title, "Other Events.");
+    assert_eq!(
+        section(&s, "9.01").title,
+        "Financial Statements and Exhibits."
+    );
+    let text = [
+        "Item 1. | Business",
+        &body,
+        "Item 1A. \u{201c}Risk",
+        &body,
+        "Item 6. [Reserved]",
+        &body,
+        "Item 9A. \u{2026}..CONTROLS AND PROCEDURES\u{2026}..",
+        &body,
+        "Item 9B. ,",
+        &body,
+    ]
+    .join("\n");
+    let s = find_sections(&text, "10-K").unwrap();
+    assert_eq!(section(&s, "1").title, "Business");
+    assert_eq!(section(&s, "1A").title, "Risk");
+    assert_eq!(section(&s, "6").title, "[Reserved]");
+    assert_eq!(section(&s, "9A").title, "CONTROLS AND PROCEDURES");
+    assert_eq!(section(&s, "9B").title, "");
+}
+
+#[test]
+fn rule_10_cross_reference_title_is_the_quoted_one() {
+    let heading = "Item 7, \u{201c}Management\u{2019}s Discussion and Analysis of Financial \
+                   Condition and Results of Operations,\u{201d} of our Annual";
+    let text = format!("{heading}\n{}", "Report. ".repeat(30));
+    let s = find_sections(&text, "10-K").unwrap();
+    let mdna = "Management\u{2019}s Discussion and Analysis of Financial Condition and Results \
+                of Operations";
+    assert_eq!(section(&s, "7").title, mdna);
+}
+
+#[test]
+fn rule_10_wrapped_titles_are_completed() {
+    let text = [
+        "Item 7. MANAGEMENT\u{2019}S",
+        "DISCUSSION AND ANALYSIS OF FINANCIAL CONDITION AND",
+        "RESULTS OF OPERATIONS",
+        &"Revenue grew. ".repeat(30),
+        "Item 7A. Quantitative and Qualitative Disclosures",
+        "about Market Risk.",
+        &"Rates. ".repeat(30),
+        // the filer's own short title: the next line doesn't continue it, so it stays
+        "Item 9. Changes in and Disagreements",
+        "None.",
+        "Item 9A. Controls",
+        &"Our controls work. ".repeat(10),
+    ]
+    .join("\n");
+    let s = find_sections(&text, "10-K").unwrap();
+    let mdna = "MANAGEMENT\u{2019}S DISCUSSION AND ANALYSIS OF FINANCIAL CONDITION AND RESULTS \
+                OF OPERATIONS";
+    assert_eq!(section(&s, "7").title, mdna);
+    let risk = "Quantitative and Qualitative Disclosures about Market Risk.";
+    assert_eq!(section(&s, "7A").title, risk);
+    assert_eq!(section(&s, "9").title, "Changes in and Disagreements");
+    assert_eq!(section(&s, "9A").title, "Controls");
+    // a 10-Q's title by its Part: Part I item 2 is MD&A, never Part II item 2's title
+    let text = [
+        "PART I",
+        "Item 2. Management\u{2019}s Discussion and Analysis",
+        "of Financial Condition and Results of Operations",
+        &"Sales. ".repeat(30),
+        "PART II",
+        "Item 2. Unregistered Sales of Equity Securities",
+        "and Use of Proceeds",
+        &"None. ".repeat(5),
+    ]
+    .join("\n");
+    let s = find_sections(&text, "10-Q").unwrap();
+    let mdna = "Management\u{2019}s Discussion and Analysis of Financial Condition and Results \
+                of Operations";
+    assert_eq!(section(&s, "I-2").title, mdna);
+    let sales = "Unregistered Sales of Equity Securities and Use of Proceeds";
+    assert_eq!(section(&s, "II-2").title, sales);
+}
+
+#[test]
+fn rule_10_wrapping_stops_after_three_lines_and_at_long_lines() {
+    let text = [
+        "Item 7. Management's",
+        "Discussion",
+        "and",
+        "Analysis",
+        "of Financial Condition",
+        &"Body. ".repeat(30),
+    ]
+    .join("\n");
+    let s = find_sections(&text, "10-K").unwrap();
+    let three = "Management's Discussion and Analysis";
+    assert_eq!(section(&s, "7").title, three);
+    let text = [
+        "Item 7. Management's Discussion and Analysis of",
+        &format!("Financial {}", "x".repeat(120)),
+        &"Body. ".repeat(30),
+    ]
+    .join("\n");
+    let s = find_sections(&text, "10-K").unwrap();
+    let cut = "Management's Discussion and Analysis of";
+    assert_eq!(section(&s, "7").title, cut);
+}
+
+#[test]
+fn rule_10_changes_titles_only() {
+    let sections = parse(&fixture("10-K"), "10-K").unwrap();
+    let titles: Vec<&str> = sections.iter().take(3).map(|s| s.title.as_str()).collect();
+    assert_eq!(
+        titles,
+        ["Business", "Risk Factors", "Unresolved Staff Comments"]
+    );
+}

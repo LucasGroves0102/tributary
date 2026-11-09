@@ -23,6 +23,7 @@ query-api = "query_api.main:main"
 query-api-token = "query_api.auth:mint_cli"
 query-api-demo-cleanup = "query_api.sandbox:cleanup_main"
 query-api-account = "query_api.password_accounts:cli_main"
+query-api-alerts = "query_api.alert_job:main"
 
 [build-system]
 requires = ["setuptools>=68"]

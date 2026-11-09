@@ -158,10 +158,14 @@ it("writes a report from the workspace page and opens it", async () => {
   expect(report.textContent).not.toContain("[[embed:");
   const evaluate = vi.mocked(fetch).mock.calls.find(([u]) => String(u).includes("/v1/formulas/evaluate"))!;
   expect(JSON.parse(String(evaluate[1]!.body))).toMatchObject({ formula: "revenue", default_company: NVDA, view: "ttm" });
-  // the comps' ungranted peer isn't read: no access, as anywhere else
-  await waitFor(".report-embed");
-  await act(async () => new Promise((r) => setTimeout(r, 0)));
-  expect(report.textContent).toContain("No access to AAPL");
+  // the comps are their table (F6: never three charts), read now as the viewer: a company whose
+  // financials the viewer can't read shows metadata only, as on Compare
+  await waitFor(".report-embed table.comps");
+  const comps = report.querySelector(".report-embed table.comps")!;
+  expect([...comps.querySelectorAll("tbody td.first b")].map((b) => b.textContent)).toEqual(["Nvidia", "Apple"]);
+  expect(comps.textContent).toContain("metadata only");
+  expect(comps.querySelector("tr.agg td.first")?.textContent).toBe("Peer median");
+  expect(report.querySelector(".report-embed .multiples, .report-embed svg")).toBeNull();
   expect(report.textContent).not.toContain("0000320193");
   // the unverified figure is flagged; the cited filing links to EDGAR
   expect([...report.querySelectorAll(".figure.unverified")].map((e) => e.textContent)).toEqual(["$61.2B"]);

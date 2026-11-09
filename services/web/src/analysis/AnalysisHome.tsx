@@ -288,7 +288,7 @@ function NewAnalysis({ token, saved, readable, onDone, start }: Omit<Props, "lab
             setTouched(true);
           }} />
         <p className="faint small">
-          An analysis is a project: one company's research in seven guided steps, with its charts, model and thesis kept inside
+          An analysis is a project: one company's research in eight guided steps, with its charts, model and thesis kept inside
           it, and a workspace of its own under Workspaces in the sidebar. A company page's New thesis or New model is a single
           item in a folder, without the steps.
         </p>

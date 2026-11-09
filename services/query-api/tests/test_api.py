@@ -42,6 +42,9 @@ class FakeStore:
         self.metric_reads += 1
         return {"metrics": ["eps_diluted", "revenue"], "derived_metrics": ["gross_margin", "roe"]}
 
+    def cadence(self, user_id, company_id):
+        return "quarterly"
+
     def financials(self, user_id, company_id, metrics, quarters, view, basis):
         self.calls.append(("financials", user_id, company_id))
         self.financials_args = (metrics, quarters, view, basis)
@@ -354,6 +357,23 @@ def test_catalog_list_is_cached_briefly(token):
     assert c.store.catalog_reads == 2
 
 
+def test_financials_say_the_currency_of_per_share_figures_too(token):
+    """057: `currency` came from the first exactly-three-letter unit, so a euro company's EPS
+    alone ("EUR/shares") read as dollars. Any amount's unit says it now; dollars stay unsaid."""
+    unit = {"value": "EUR/shares"}
+
+    class Store(FakeStore):
+        def financials(self, *args):
+            return [{**super().financials(*args)[0], "metric": "eps_diluted", "value": 1.22,
+                     "unit": unit["value"]}]
+
+    c = TestClient(create_app(FakeAuthorizer(GRANTS), Store(), SECRET))
+    url = f"/v1/companies/{NVDA}/financials?metrics=eps_diluted"
+    assert c.get(url, headers=token("alice")).json()["currency"] == "EUR"
+    unit["value"] = "USD/shares"
+    assert "currency" not in c.get(url, headers=token("alice")).json()
+
+
 def test_financials_link_to_the_filing(token):
     class Store(FakeStore):
         def financials(self, *args):
@@ -476,3 +496,33 @@ def test_status_data_is_cached_for_a_minute():
     t[0] += timedelta(seconds=1)
     assert c.get("/v1/status/data").json()["as_of"] == "2026-11-02T12:01:00+00:00"
     assert store.calls == [("data_status",)] * 2
+
+
+@pytest.mark.parametrize(
+    ("facts", "latest_form", "cadence"),
+    [
+        # (recent quarter, any quarter, years, any figure)
+        ((True, True, True, True), "10-Q", "quarterly"),
+        # EIDP: still files 10-Qs, its figures end in 2019: old, never "once a year"
+        ((False, True, True, True), "10-Q", "quarterly"),
+        ((False, True, True, True), "10-K", "quarterly"),
+        ((False, False, True, True), "10-K", "quarterly"),  # a 10-K with no quarter facts
+        # Birkenstock: a 20-F filer's years
+        ((False, False, True, True), "20-F", "annual"),
+        ((False, True, True, True), "40-F/A", "annual"),  # quarters once, years now
+        # ICON, Arm: 20-F filers with quarters (6-Ks) in gold read as quarters
+        ((True, True, True, True), "20-F", "quarterly"),
+        # nothing in the index: the facts' period lengths decide
+        ((False, False, True, True), None, "annual"),
+        ((False, True, True, True), None, "quarterly"),
+        ((False, False, False, True), "20-F", "quarterly"),  # balances only, no years
+        ((False, False, False, False), None, None),
+    ],
+)
+def test_cadence_comes_from_forms_and_period_lengths_never_from_staleness(facts, latest_form,
+                                                                         cadence):
+    from query_api.store import cadence_of
+
+    recent, quarters, years, figures = facts
+    assert cadence_of(recent=recent, quarters=quarters, years=years, figures=figures,
+                      latest_form=latest_form) == cadence

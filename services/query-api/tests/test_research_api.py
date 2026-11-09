@@ -21,7 +21,7 @@ OLD_TEXT = "Item 1A. Risk Factors\nSales rose 12% in fiscal 2025 and fell.\nAn o
 
 class Store:
     def __init__(self, broad=False):
-        self.calls, self.broad = [], broad
+        self.calls, self.broad, self.sorts = [], broad, []
 
     def section_diffs(self, user_id, company_id, accession_no, section, basis):
         self.calls.append(("section_diffs", user_id, company_id, accession_no, section, basis))
@@ -58,15 +58,17 @@ class Store:
         self.calls.append(("has_filing", company_id, accession_no))
         return False
 
-    def search_sections(self, user_id, companies, q, form, section, start, end, limit, offset):
+    def search_sections(self, user_id, companies, q, form, section, start, end, limit, offset,
+                        sort="relevance"):
         self.calls.append(("search", user_id, tuple(companies), q, form, section, start, end,
                            limit, offset))
+        self.sorts.append(sort)
         if self.broad:
             raise SearchTooBroad
         return [{"company_id": NVDA, "name": "NVIDIA CORP", "accession_no": ACC, "form": "10-K",
                  "filed": date(2026, 2, 25), "period_of_report": date(2026, 1, 25),
                  "section_key": "1A", "title": "Risk Factors", "rank": 0.25,
-                 "passages_matched": 2, "snippet": "our «Groq» license",
+                 "passages_matched": 2, "snippet": "our «Groq» license", "total": 3,
                  "char_start": 1010, "char_end": 1300, "document_url": "https://sec/new.htm",
                  "cik": "0001045810", "ingested_at": "2026-10-20T00:00:00Z"}] * min(limit, 3)
 
@@ -150,10 +152,25 @@ def test_search_company_filter_is_checked(token):
                               date(2026, 1, 1), date(2026, 12, 31), 11, 10)]
 
 
+def test_search_says_how_many_match_and_in_which_order(token):
+    """#145: a total, and newest-first as well as relevance; both echoed (the web app reads an
+    answer without `sort` as an older API that ranked by relevance whatever it asked)."""
+    c = client()
+    body = c.get("/v1/search?q=groq&limit=2", headers=token("bob")).json()
+    assert body["total"] == 3 and body["sort"] == "relevance" and body["window"] == "auto"
+    body = c.get("/v1/search?q=groq&sort=date", headers=token("bob")).json()
+    assert body["sort"] == "date" and c.store.sorts == ["relevance", "date"]  # type: ignore[attr-defined]
+    c.store.search_sections = lambda *a, **k: []  # type: ignore[attr-defined]
+    assert c.get("/v1/search?q=groq", headers=token("bob")).json()["total"] == 0
+    # past the last page the total isn't known: never a wrong 0
+    assert c.get("/v1/search?q=groq&offset=40", headers=token("bob")).json()["total"] is None
+
+
 def test_search_rejects_bad_parameters(token):
     c = client()
     for q in ("q=a", "q=groq&company=NVDA", "q=groq&form=S-1", "q=groq&limit=500",
-              "q=groq&section=1A;DROP", "q=groq&from=yesterday"):
+              "q=groq&section=1A;DROP", "q=groq&from=yesterday", "q=groq&sort=rank;DROP",
+              "q=groq&window=all"):
         assert c.get(f"/v1/search?{q}", headers=token("bob")).status_code == 422, q
     assert c.store.calls == []  # type: ignore[attr-defined]
 

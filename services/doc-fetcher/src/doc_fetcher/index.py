@@ -66,6 +66,15 @@ def parse_exhibits(raw: bytes) -> list[Exhibit]:
     return exhibits
 
 
+ITEM = re.compile(r"Item\s+(\d{1,2}\.\d{2})")
+
+
+def parse_items(raw: bytes) -> frozenset[str]:
+    """An 8-K's items from its index page ("Item 2.02: Results of ..." lines), e.g.
+    {"2.02", "9.01"}; empty when the page lists none."""
+    return frozenset(ITEM.findall(_form_info(html.fromstring(raw)).get("Items", "")))
+
+
 def index_url(cik: str, accession_no: str) -> str:
     return (f"{SEC_BASE}/Archives/edgar/data/{int(cik)}/{accession_no.replace('-', '')}/"
             f"{accession_no}-index.htm")
