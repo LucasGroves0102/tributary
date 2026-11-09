@@ -22,8 +22,9 @@ import {
   type TableCell,
   withAnnualPerShare,
   withBridges,
+  statementSection,
 } from "./data";
-import { go } from "../route";
+import { go, href } from "../route";
 import type { StatementView } from "./statementView";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { TableScroll } from "../components/TableScroll";
@@ -69,27 +70,49 @@ function Seg<T extends string>({ value, options, set, label, off }: {
 
 const NO_DATA_CELL: BlankCell = { text: NO_DATA, title: NO_DATA_TITLE };
 
-function Cell({ cell, blank = NO_DATA_CELL }: { cell: TableCell | null; blank?: BlankCell }) {
+const CIK = /^\d{10}$/;
+const ACCESSION = /^\d{10}-\d{2}-\d{6}$/;
+
+/** Where a value can be read (#113): the value opens its filing in Tributary's reader, at the
+ * financial statements when the form says where they are; "↗" beside it (shown on hover or
+ * focus) is the filing on EDGAR. Only ids of the right shape make a reader link. */
+export function cellLinks(cell: TableCell, companyId: string): { reader: string | null; edgar: string | null } {
+  const s = cell.source;
+  const reader = s && CIK.test(companyId) && ACCESSION.test(s.accessionNo)
+    ? href({ view: "filing", companyId, accessionNo: s.accessionNo, section: statementSection(s.form) })
+    : null;
+  return { reader, edgar: cell.url?.startsWith("https://www.sec.gov/") ? cell.url : null };
+}
+
+function Cell({ cell, blank = NO_DATA_CELL, companyId }: { cell: TableCell | null; blank?: BlankCell; companyId: string }) {
   if (!cell) return <td className="n faint" title={blank.title}>{blank.text}</td>;
   if (cell.text === NOT_MEANINGFUL || cell.text.startsWith(NOT_APPLICABLE)) {
     return <td className="n faint" title={cell.title}>{cell.text}</td>;
   }
+  const { reader, edgar } = cellLinks(cell, companyId);
+  const form = cell.source?.form ?? "filing";
   return (
     <td className={cell.derived ? "n derived" : "n"} title={cell.title}>
-      {cell.url ? (
-        <a href={cell.url} target="_blank" rel="noopener noreferrer">
-          {cell.text}
-        </a>
+      {reader ? (
+        <a href={reader} aria-label={`${cell.text}: open the ${form} in Tributary's reader`}>{cell.text}</a>
+      ) : edgar ? (
+        <a href={edgar} target="_blank" rel="noopener noreferrer">{cell.text}</a>
       ) : (
         cell.text
+      )}
+      {/* the arrow is drawn by CSS, so a copied table and the cell's text stay the figure */}
+      {reader && edgar && (
+        <a className="cell-edgar" href={edgar} target="_blank" rel="noopener noreferrer"
+          aria-label={`The ${form} on EDGAR, sec.gov`} title={`The ${form} on EDGAR, sec.gov`} />
       )}
     </td>
   );
 }
 
-/** A metric × period table; every cell's hover names its filing and links to it. Columns run
- * oldest to newest, as statements read, so a wide one opens at its newest end. */
-export function MetricTableView({ table, first }: { table: MetricTable; first: string }) {
+/** A metric × period table; every cell's hover names its filing, the value opens it in the
+ * reader and "↗" on EDGAR. Columns run oldest to newest, as statements read, so a wide one opens
+ * at its newest end. */
+export function MetricTableView({ table, first, companyId }: { table: MetricTable; first: string; companyId: string }) {
   return (
     <TableScroll atEnd resetKey={table.columns.length} label={first}>
       <table className="t statement">
@@ -109,7 +132,7 @@ export function MetricTableView({ table, first }: { table: MetricTable; first: s
             <tr key={r.metric}>
               <td className="first">{r.label}</td>
               {r.cells.map((c, i) => (
-                <Cell key={table.columns[i]!.periodEnd} cell={c} blank={r.blanks[i]} />
+                <Cell key={table.columns[i]!.periodEnd} cell={c} blank={r.blanks[i]} companyId={companyId} />
               ))}
             </tr>
           ))}
@@ -179,7 +202,7 @@ export function Statements({ token, companyId, name, ticker, notApplicable = [],
       <Gate load={load} name={name} what="Financials">
         {() =>
           table!.rows.length ? (
-            <MetricTableView table={table!} first={STATEMENTS[kind].label} />
+            <MetricTableView table={table!} first={STATEMENTS[kind].label} companyId={companyId} />
           ) : (
             <p className="empty">
               No {STATEMENTS[kind].label.toLowerCase()} values for these periods. Try{" "}
@@ -199,7 +222,7 @@ export function Statements({ token, companyId, name, ticker, notApplicable = [],
               ? "EPS and diluted shares have no fiscal Q4: a 10-K states the year, and the year less nine months isn't the quarter when the share count changes. "
               : ""}
         Italic values are derived (e.g. Q4 = the 10-K's year minus nine months year-to-date),
-        the rest are reported. Every value links to its filing. {NO_DATA} no data in this period, — not reported, $0 a real zero.
+        the rest are reported. A value opens its filing in the reader; ↗ beside it (on hover) is the filing on EDGAR. {NO_DATA} no data in this period, — not reported, $0 a real zero.
       </div>
     </section>
   );
@@ -225,7 +248,7 @@ export function Ratios({ token, companyId, name, ticker, notApplicable = [] }: T
         </button>
       </div>
       <Gate load={load} name={name} what="Financials">
-        {() => (table!.rows.length ? <MetricTableView table={table!} first="Ratio" /> : <p className="empty">No ratios for these periods yet: they come from 10-Q and 10-K XBRL values. Statements shows what {name} reports.</p>)}
+        {() => (table!.rows.length ? <MetricTableView table={table!} first="Ratio" companyId={companyId} /> : <p className="empty">No ratios for these periods yet: they come from 10-Q and 10-K XBRL values. Statements shows what {name} reports.</p>)}
       </Gate>
     </section>
   );
@@ -283,7 +306,7 @@ export function Segments({ token, companyId, name }: { token: string; companyId:
                         <tr key={r.member}>
                           <td className="first" title={r.member}>{r.label}</td>
                           {r.cells.map((c, i) => (
-                            <Cell key={t.columns[i]!.periodEnd} cell={c} />
+                            <Cell key={t.columns[i]!.periodEnd} cell={c} companyId={companyId} />
                           ))}
                           {t.metric === "revenue" ? (
                             r.shareTooBig ? (

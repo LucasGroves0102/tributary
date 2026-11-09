@@ -2447,6 +2447,33 @@ button.chip:disabled {
   font-style: italic;
 }
 
+/* a statement value opens the reader; its EDGAR link sits in the cell's right padding, seen on
+   hover or focus (opacity, not visibility, so Tab still reaches it), never moving the figure */
+.t td.n:has(> .cell-edgar) {
+  position: relative;
+}
+
+.t td.n > .cell-edgar {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  font-size: 10px;
+  line-height: 1;
+  font-style: normal;
+  text-decoration: none;
+  color: var(--text-3);
+  opacity: 0;
+}
+
+.t td.n > .cell-edgar::before {
+  content: "↗";
+}
+
+.t td.n:hover > .cell-edgar,
+.t td.n > .cell-edgar:focus-visible {
+  opacity: 1;
+}
+
 /* a figure from another period than the company's latest (blanks.ts): the date under it; an old one dimmed */
 .fig {
   display: inline-block;

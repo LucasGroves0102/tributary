@@ -225,7 +225,18 @@ export interface TableCell {
   raw: string;
   title: string;
   derived: boolean;
+  /** the filing on EDGAR (the secondary link) */
   url: string | null;
+  /** the filing the value comes from, opened in the reader (the value's own link) */
+  source?: { accessionNo: string; form: string };
+}
+
+/** Where a statement's XBRL value is printed: a 10-K's Item 8, a 10-Q's Part I Item 1 (the
+ * reader's section keys); other forms open at their first section. */
+export function statementSection(form: string): string | null {
+  if (/^10-K/.test(form)) return "8";
+  if (/^10-Q/.test(form)) return "I-1";
+  return null;
 }
 
 /** What an empty cell reads (blanks.ts). */
@@ -339,6 +350,7 @@ export function metricTable(
               raw: String(r.value),
               derived: r.value_source === "derived",
               url: r.citation.filing_url,
+              source: { accessionNo: r.citation.accession_no, form: r.citation.form },
             };
             if (notApplicable.includes(metric)) {
               return { ...source, derived: false, text: BANK_NA, title: `${name}: ${BANK_TITLE} The figure on file: ${figure}. ${cellTitle(name, r)}` };
@@ -613,6 +625,7 @@ export function segmentTables(rows: SegmentRow[], revenue: FinancialRow[] = []):
             `${r.citation.accession_no}; ${r.value_source}${r.citation.xbrl_axis ? `, ${r.citation.xbrl_axis}` : ""}`,
           derived: r.value_source === "derived",
           url: r.citation.filing_url,
+          source: { accessionNo: r.citation.accession_no, form: r.citation.form },
         };
       });
       const last = num(at(member, latest)?.value);

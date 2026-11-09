@@ -46,7 +46,7 @@ The chart builder puts the chart first when there's no room for it beside the la
 Views (hash routes): `#/` Home (status strip, watchlist table, new filings since the last
 visit, expected filings); `#/companies?<filters>` the screener (`/v1/screener`: filters kept in
 the URL, sortable, ungranted companies as metadata only, CSV export through the API);
-`#/company/<company_id>` 12-quarter chart and table, every value linked to its filing;
+`#/company/<company_id>` 12-quarter chart and table, every value linked to its filing (a statement or segment value opens the filing in the reader at its financial statements, a 10-K's Item 8 or a 10-Q's Part I Item 1; the EDGAR link sits beside it on hover);
 `#/filing/<company_id>/<accession>[/<section>]` parsed filing reader; `#/chart` the chart
 builder (each layer a `/v1/formulas/evaluate` request; plain SVG; CSV, SVG and PNG export);
 `#/ask` the assistant full width, with streamed answers, the lookups it made and verified citation links

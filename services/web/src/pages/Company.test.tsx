@@ -325,7 +325,10 @@ it("statements: quarterly, annual and TTM, each value cited, CSV export", async 
   expect(q.searchParams.getAll("metrics")).toContain("cost_of_revenue");
   const cell = [...container.querySelectorAll("td.n")].find((td) => td.textContent === "$46.74B")!;
   expect(cell.getAttribute("title")).toContain(`Source: 10-Q filed Aug 26, 2026, ${ACC}`);
-  expect(cell.querySelector("a")?.getAttribute("href")).toBe("https://www.sec.gov/x/");
+  // #113: the value opens the 10-Q's financial statements in the reader; EDGAR is the second link
+  expect(cell.querySelector("a")?.getAttribute("href")).toBe(`#/filing/${NVDA}/${ACC}/I-1`);
+  expect(cell.querySelector("a.cell-edgar")?.getAttribute("href")).toBe("https://www.sec.gov/x/");
+  expect(cell.querySelector("a.cell-edgar")?.getAttribute("target")).toBe("_blank");
   await click(button("Annual"));
   expect(window.location.hash).toBe(`#/company/${NVDA}/statements?period=a`);
   act(() => root.unmount());
