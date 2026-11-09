@@ -7,6 +7,9 @@
  * - A stale flag sits on a key stat when the API lists its metric (cash_q → cash, net_debt_q →
  *   net_debt, debt_to_equity_q → debt_to_equity; "*" every figure) and the figure is as of the
  *   report's period end or earlier: it is before the event. A flag, never a recomputed figure.
+ * - An event flagged from its 7.01 / 8.01 announcement (the API's `announced`, F1b) is named by
+ *   what was announced ("a completed acquisition or disposition", "a new financing") and says it
+ *   was read from that announcement; its words are quoted as the API returned them.
  * - A quarter is named by its end ("Quarter ended Sep 30, 2026", "expected" until a 10-Q/10-K
  *   covers it): the release's fiscal label is the company's own words, quoted in its headline.
  * - A passage is read as lines: bullets ("•◦▪●") as list items, a reconciliation as a table (its
@@ -14,7 +17,7 @@
 
 import { day } from "../format";
 import { EIGHT_K_ITEMS } from "../reader/sections";
-import type { EarningsQuarter, EventItem, EventsResponse, FilingEvent, ReleasePassage } from "../types";
+import type { EarningsQuarter, EventAnnouncement, EventItem, EventsResponse, FilingEvent, ReleasePassage } from "../types";
 
 /** what a stale flag calls each metric the API can list */
 export const METRIC_LABEL: Record<string, string> = {
@@ -45,13 +48,30 @@ export interface StaleFlag {
   /** the period end the figure is as of */
   asOf: string | null;
   events: FilingEvent[];
-  /** "the Oct 27, 2026 8-K (Acquisition or disposition)" */
+  /** "the Oct 27, 2026 8-K (Acquisition or disposition)", "... and 1 more 8-K" (the newest
+   * event; `text` names every one) */
   short: string;
   /** the whole sentence, for a hover or a list */
   text: string;
 }
 
-const eventPhrase = (e: FilingEvent) => `the ${day(e.event_date, true)} 8-K (${eventLabels(e)[0] ?? "8-K"})`;
+/** what each kind of announcement is called */
+export const ANNOUNCED_LABEL: Record<EventAnnouncement["kind"], string> = {
+  deal: "a completed acquisition or disposition",
+  financing: "a new financing",
+};
+
+/** the item that would have reported each kind */
+export const ANNOUNCED_ITEM: Record<EventAnnouncement["kind"], string> = { deal: "2.01", financing: "2.03" };
+
+/** "a completed acquisition or disposition, read from its 7.01 announcement" */
+export const announcedPhrase = (a: EventAnnouncement): string =>
+  `${ANNOUNCED_LABEL[a.kind] ?? a.kind}, read from its ${a.item} announcement`;
+
+const eventPhrase = (e: FilingEvent) => {
+  const a = e.announced?.[0];
+  return `the ${day(e.event_date, true)} 8-K (${a ? announcedPhrase(a) : (eventLabels(e)[0] ?? "8-K")})`;
+};
 
 /** The API's stale list with its events, worded. */
 export function staleFlags(r: EventsResponse | null): StaleFlag[] {
@@ -61,12 +81,14 @@ export function staleFlags(r: EventsResponse | null): StaleFlag[] {
     const events = s.events.map((a) => byAcc.get(a)).filter((e): e is FilingEvent => e !== undefined);
     const label = METRIC_LABEL[s.metric] ?? s.metric;
     const after = events.map(eventPhrase).join(" and ") || "a later 8-K";
+    // one phrase on a key stat or a list line; every event in the sentence (a hover)
+    const more = events.length - 1;
     return {
       metric: s.metric,
       label,
       asOf: s.as_of,
       events,
-      short: after,
+      short: more > 0 ? `${eventPhrase(events[0]!)} and ${more} more 8-K${more === 1 ? "" : "s"}` : after,
       text: `${label}${s.as_of ? ` at ${day(s.as_of, true)}` : ""} is from before ${after}, which may have changed it. ` +
         "Tributary doesn't compute a figure after the event: the 8-K and the next 10-Q or 10-K say what changed.",
     };

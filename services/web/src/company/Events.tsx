@@ -7,7 +7,7 @@ import { day } from "../format";
 import { sectionName } from "../reader/sections";
 import { href } from "../route";
 import type { EventsResponse, FilingEvent } from "../types";
-import { eventLabels, itemLabel, METRIC_LABEL, splitEvents, staleFlags, windowLine } from "./events";
+import { ANNOUNCED_ITEM, ANNOUNCED_LABEL, eventLabels, itemLabel, METRIC_LABEL, splitEvents, staleFlags, windowLine } from "./events";
 import { Gate } from "./Tables";
 import { type Load, useLoad } from "./useLoad";
 
@@ -98,12 +98,23 @@ function EventRow({ companyId, e }: { companyId: string; e: FilingEvent }) {
         <span className="tag k">{e.form}</span>
         {eventLabels(e).map((l) => <span key={l} className="tag">{l}</span>)}
         {affects.length > 0 && (
-          <span className="tag warn" title={`An event after the period end: ${affects.join(", ")} as of that date may have changed`}>
+          <span className="tag warn" title={`An event after the period end: ${affects.join(", ")} as of that date may have changed${e.announced?.length ? " (read from the 8-K's announcement)" : ""}`}>
             may change {affects.join(", ").toLowerCase()}
           </span>
         )}
         {e.event_date !== e.filed && <span className="faint small">event {day(e.event_date, true)}</span>}
       </div>
+      {(e.announced ?? []).map((a) => (
+        <p key={a.kind} className="event-announced" role="note">
+          <b>⚑ {ANNOUNCED_LABEL[a.kind] ?? a.kind}</b>, read from its Item {a.item} announcement
+          {e.items.some((i) => i.item === ANNOUNCED_ITEM[a.kind]) ? "" : ` (it has no Item ${ANNOUNCED_ITEM[a.kind]})`}: the words{" "}
+          <mark>“{a.words}”</mark> in{" "}
+          <a href={href({ view: "filing", companyId, accessionNo: e.accession_no, section: a.section_key, ...(a.citation.char_start !== undefined ? { at: a.citation.char_start } : {}) })}>
+            {sectionName(a.section_key)}
+          </a>
+          . <span className="faint">“{a.sentence}”</span>
+        </p>
+      ))}
       {ex && cite?.section_key ? (
         <p className="pinnable event-excerpt">
           <span className="faint small">{sectionName(ex.item)}: </span>“{ex.text}”{" "}

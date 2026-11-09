@@ -1,6 +1,6 @@
 {
  "company_id": "0001045810",
- "as_of": "2026-11-09T05:42:55.554387+00:00",
+ "as_of": "2026-11-09T07:11:51.033880+00:00",
  "latest_report": {
   "accession_no": "0001045810-26-000075",
   "form": "10-Q",
@@ -27,6 +27,7 @@
    "material": true,
    "amendment": false,
    "affects": [],
+   "announced": [],
    "sections_available": true,
    "excerpt": {
     "item": "8.01",
@@ -68,6 +69,7 @@
    "material": true,
    "amendment": false,
    "affects": [],
+   "announced": [],
    "sections_available": true,
    "excerpt": {
     "item": "2.02",
@@ -122,6 +124,7 @@
     "debt_to_equity",
     "cash"
    ],
+   "announced": [],
    "sections_available": true,
    "excerpt": {
     "item": "1.01",
@@ -176,5 +179,5 @@
    ]
   }
  ],
- "method": "8-K and 8-K/A filings from the SEC filing index filed after the period end of the latest 10-K or 10-Q, newest first, with their items (the SEC's submissions history; a filing too new for it shows the items the parser found). Figures as of that period end that an event after it may have changed are listed in `stale`: completed acquisitions or dispositions (2.01), new or accelerated debt (2.03, 2.04), impairments (2.06), unregistered equity sales (3.02), and bankruptcy or non-reliance on past statements (1.03, 4.02: every figure). A flag, not a recomputed figure."
+ "method": "8-K and 8-K/A filings from the SEC filing index filed after the period end of the latest 10-K or 10-Q, newest first, with their items (the SEC's submissions history; a filing too new for it shows the items the parser found). Figures as of that period end that an event after it may have changed are listed in `stale`: completed acquisitions or dispositions (2.01), new or accelerated debt (2.03, 2.04), impairments (2.06), unregistered equity sales (3.02), and bankruptcy or non-reliance on past statements (1.03, 4.02: every figure). An 8-K under Item 7.01 or 8.01 whose press release or text says an acquisition or disposition was completed, or notes were priced or issued, a credit facility entered or a term loan drawn, flags the same figures as 2.01 or 2.03; `announced` quotes the words. A flag, not a recomputed figure."
 }

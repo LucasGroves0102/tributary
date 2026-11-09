@@ -5370,6 +5370,25 @@ li.event:first-child {
   max-width: 900px;
 }
 
+/* F1b: a deal or financing read from a 7.01 / 8.01 announcement */
+.event-announced {
+  margin: 0;
+  line-height: 1.55;
+  max-width: 900px;
+  font-size: var(--fs-sm);
+}
+
+.event-announced b {
+  color: var(--warn);
+}
+
+.event-announced mark {
+  background: var(--warn-soft);
+  color: inherit;
+  padding: 0 2px;
+  border-radius: 2px;
+}
+
 .row.event-links {
   gap: var(--sp-6);
   font-size: var(--fs-sm);

@@ -127,10 +127,10 @@ it("lists the 8-Ks since the last report and flags the balances an acquisition a
   const box = $(".stale-box")!;
   expect(box.querySelector("b")?.textContent).toBe("⚑ Figures as of Sep 30, 2026 that a later 8-K may have changed");
   expect([...box.querySelectorAll("li")].map((l) => l.textContent)).toEqual([
-    "Cash: before the Oct 27, 2026 8-K (Acquisition or disposition)",
-    "Debt: before the Oct 27, 2026 8-K (Acquisition or disposition)",
-    "Net debt: before the Oct 27, 2026 8-K (Acquisition or disposition)",
-    "Total assets: before the Oct 27, 2026 8-K (Acquisition or disposition)"]);
+    "Cash: before the Oct 27, 2026 8-K (Acquisition or disposition) and 1 more 8-K",
+    "Debt: before the Oct 27, 2026 8-K (Acquisition or disposition) and 1 more 8-K",
+    "Net debt: before the Oct 27, 2026 8-K (Acquisition or disposition) and 1 more 8-K",
+    "Total assets: before the Oct 27, 2026 8-K (Acquisition or disposition) and 1 more 8-K"]);
   expect(box.textContent).toContain("no pro forma");
   const rows = $$("li.event");
   expect(rows.map((r) => r.querySelector(".event-date")?.textContent)).toEqual(["Oct 28, 2026", "Oct 27, 2026", "Oct 26, 2026"]);
@@ -143,13 +143,25 @@ it("lists the 8-Ks since the last report and flags the balances an acquisition a
   expect([...uig.querySelectorAll("a")].find((a) => a.textContent === "Read the press release")?.getAttribute("href"))
     .toBe(`#/filing/${VRT}/${UIG}/EX-99.1`);
   expect(uig.querySelector("a.edgar-link")?.getAttribute("href")).toMatch(/^https:\/\/www\.sec\.gov\/Archives\/edgar\/data\/1674101\//);
+  expect(uig.querySelector(".event-announced")).toBeNull(); // its 2.01 flags it
+  // F1b: the Oct 26 8-K is Item 7.01 only; its press release says the KES acquisition is complete
+  const kes = rows[2]!;
+  expect([...kes.querySelectorAll(".event-head .tag")].map((t) => t.textContent)).toEqual([
+    "8-K", "Regulation FD disclosure", "may change cash, debt, net debt, total assets"]);
+  const note = kes.querySelector(".event-announced")!;
+  expect(note.textContent).toMatch(/^⚑ a completed acquisition or disposition, read from its Item 7\.01 announcement \(it has no Item 2\.01\): the words “Completes Acquisition” in /);
+  expect(note.querySelector("mark")?.textContent).toBe("“Completes Acquisition”");
+  expect(note.textContent).toContain("“Vertiv Completes Acquisition of King Environmental Services Ltd.");
+  expect(note.querySelector("a")?.getAttribute("href")).toMatch(new RegExp(`^#/filing/${VRT}/0001628280-26-067127/EX-99\\.1\\?at=\\d+$`));
+  // the earnings release beside it (2.02 + 7.01) is never read
+  expect(rows[0]!.querySelector(".event-announced")).toBeNull();
 });
 
 it("flags Vertiv's Sep 30 cash and net debt on the Overview's key stats, with the event, without a new figure", async () => {
   const row = VRT_ROW as unknown as ScreenerRow;
   await render(<Overview token="t" companyId={VRT} name="Vertiv" row={row} access={["financials", "filings"]} />);
   const stat = (label: string) => $$(".kv.stats > div").find((d) => d.querySelector(".k")?.textContent === label)!;
-  expect(stat("Net debt").querySelector(".stale-flag")?.textContent).toBe("⚑ before the Oct 27, 2026 8-K (Acquisition or disposition)");
+  expect(stat("Net debt").querySelector(".stale-flag")?.textContent).toBe("⚑ before the Oct 27, 2026 8-K (Acquisition or disposition) and 1 more 8-K");
   expect(stat("Net debt").getAttribute("title")).toContain("Net debt at Sep 30, 2026 is from before the Oct 27, 2026 8-K");
   expect(stat("Net debt").querySelector(".v")?.textContent).toBe("-$783.20M"); // the figure itself is unchanged
   expect(stat("Cash").querySelector(".stale-flag")).not.toBeNull();

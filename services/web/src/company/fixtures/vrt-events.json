@@ -1,6 +1,6 @@
 {
  "company_id": "0001674101",
- "as_of": "2026-11-09T05:42:55.436675+00:00",
+ "as_of": "2026-11-09T07:11:51.027017+00:00",
  "latest_report": {
   "accession_no": "0001628280-26-067893",
   "form": "10-Q",
@@ -37,6 +37,7 @@
    "material": true,
    "amendment": false,
    "affects": [],
+   "announced": [],
    "sections_available": true,
    "excerpt": {
     "item": "2.02",
@@ -91,6 +92,7 @@
     "net_debt",
     "total_assets"
    ],
+   "announced": [],
    "sections_available": true,
    "excerpt": {
     "item": "2.01",
@@ -134,7 +136,31 @@
    "items_from": "index",
    "material": true,
    "amendment": false,
-   "affects": [],
+   "affects": [
+    "cash",
+    "long_term_debt",
+    "net_debt",
+    "total_assets"
+   ],
+   "announced": [
+    {
+     "kind": "deal",
+     "item": "7.01",
+     "section_key": "EX-99.1",
+     "words": "Completes Acquisition",
+     "sentence": "Vertiv Completes Acquisition of King Environmental Services Ltd., Expanding Global Fluid Management Services",
+     "citation": {
+      "accession_no": "0001628280-26-067127",
+      "form": "8-K",
+      "filed": "2026-10-26",
+      "filing_url": "https://www.sec.gov/Archives/edgar/data/1674101/000162828026067127/",
+      "section_key": "EX-99.1",
+      "document_url": "https://www.sec.gov/Archives/edgar/data/1674101/000162828026067127/exhibit991vrt-q42026102620.htm",
+      "char_start": 0,
+      "char_end": 108
+     }
+    }
+   ],
    "sections_available": true,
    "excerpt": {
     "item": "7.01",
@@ -164,30 +190,34 @@
    "metric": "cash",
    "as_of": "2026-09-30",
    "events": [
-    "0001628280-26-067393"
+    "0001628280-26-067393",
+    "0001628280-26-067127"
    ]
   },
   {
    "metric": "long_term_debt",
    "as_of": "2026-09-30",
    "events": [
-    "0001628280-26-067393"
+    "0001628280-26-067393",
+    "0001628280-26-067127"
    ]
   },
   {
    "metric": "net_debt",
    "as_of": "2026-09-30",
    "events": [
-    "0001628280-26-067393"
+    "0001628280-26-067393",
+    "0001628280-26-067127"
    ]
   },
   {
    "metric": "total_assets",
    "as_of": "2026-09-30",
    "events": [
-    "0001628280-26-067393"
+    "0001628280-26-067393",
+    "0001628280-26-067127"
    ]
   }
  ],
- "method": "8-K and 8-K/A filings from the SEC filing index filed after the period end of the latest 10-K or 10-Q, newest first, with their items (the SEC's submissions history; a filing too new for it shows the items the parser found). Figures as of that period end that an event after it may have changed are listed in `stale`: completed acquisitions or dispositions (2.01), new or accelerated debt (2.03, 2.04), impairments (2.06), unregistered equity sales (3.02), and bankruptcy or non-reliance on past statements (1.03, 4.02: every figure). A flag, not a recomputed figure."
+ "method": "8-K and 8-K/A filings from the SEC filing index filed after the period end of the latest 10-K or 10-Q, newest first, with their items (the SEC's submissions history; a filing too new for it shows the items the parser found). Figures as of that period end that an event after it may have changed are listed in `stale`: completed acquisitions or dispositions (2.01), new or accelerated debt (2.03, 2.04), impairments (2.06), unregistered equity sales (3.02), and bankruptcy or non-reliance on past statements (1.03, 4.02: every figure). An 8-K under Item 7.01 or 8.01 whose press release or text says an acquisition or disposition was completed, or notes were priced or issued, a credit facility entered or a term loan drawn, flags the same figures as 2.01 or 2.03; `announced` quotes the words. A flag, not a recomputed figure."
 }

@@ -1234,11 +1234,27 @@ export interface FilingEvent {
   amendment: boolean;
   /** metrics at the report's period end this event may have changed ("*": every figure) */
   affects: string[];
+  /** F1b: what a 7.01 / 8.01 8-K announced that flags figures as 2.01 or 2.03 would (absent
+   * from an older API) */
+  announced?: EventAnnouncement[];
   sections_available: boolean;
   excerpt: { item: string; text: string; citation: EventCitation } | null;
   release: { section_key: string; title: string | null } | null;
   filing_url: string | null;
   document_url: string | null;
+}
+
+/** A completed deal or a new financing read from an 8-K's 7.01 / 8.01 announcement (Query API
+ * announcements.py): the words that matched and their sentence, cited. */
+export interface EventAnnouncement {
+  kind: "deal" | "financing";
+  /** the item it was announced under: 7.01 or 8.01 */
+  item: string;
+  /** where the words were read: the press release ("EX-99.1") or the item's text */
+  section_key: string;
+  words: string;
+  sentence: string;
+  citation: EventCitation;
 }
 
 export interface StaleFigure {

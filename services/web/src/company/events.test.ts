@@ -11,16 +11,29 @@ const events = VRT_EVENTS as EventsResponse;
 const vrt = VRT_EARNINGS as EarningsResponse;
 const deck = DECK_EARNINGS as EarningsResponse;
 const UIG = "0001628280-26-067393";
+const KES = "0001628280-26-067127";
 
 describe("events since the last report", () => {
   it("words the API's stale list: Vertiv's balances at Sep 30 are from before the UIG acquisition (tester 1)", () => {
     const flags = staleFlags(events);
     expect(flags.map((f) => f.label)).toEqual(["Cash", "Debt", "Net debt", "Total assets"]);
-    expect(flags.every((f) => f.asOf === "2026-09-30" && f.events.map((e) => e.accession_no).join() === UIG)).toBe(true);
-    expect(flags[2]!.short).toBe("the Oct 27, 2026 8-K (Acquisition or disposition)");
-    expect(flags[2]!.text).toContain("Net debt at Sep 30, 2026 is from before the Oct 27, 2026 8-K");
+    expect(flags.every((f) => f.asOf === "2026-09-30" && f.events.map((e) => e.accession_no).join() === `${UIG},${KES}`)).toBe(true);
+    expect(flags[2]!.short).toBe("the Oct 27, 2026 8-K (Acquisition or disposition) and 1 more 8-K");
+    expect(flags[2]!.text).toContain("Net debt at Sep 30, 2026 is from before the Oct 27, 2026 8-K (Acquisition or disposition) and " +
+      "the Oct 26, 2026 8-K (a completed acquisition or disposition, read from its 7.01 announcement)");
     expect(flags[2]!.text).toContain("doesn't compute a figure after the event");
     expect(staleFlags(null)).toEqual([]);
+  });
+
+  it("names an event flagged from its 7.01 announcement by what it announced (F1b: Vertiv's Oct 26 8-K, KES)", () => {
+    const kes = events.events.find((e) => e.accession_no === KES)!;
+    expect(kes.affects).toEqual(["cash", "long_term_debt", "net_debt", "total_assets"]);
+    expect(kes.announced?.map((a) => [a.kind, a.item, a.words])).toEqual([["deal", "7.01", "Completes Acquisition"]]);
+    const only = staleFlags({ ...events, stale: [{ metric: "cash", as_of: "2026-09-30", events: [KES] }] });
+    expect(only[0]!.short).toBe("the Oct 26, 2026 8-K (a completed acquisition or disposition, read from its 7.01 announcement)");
+    // an older API without `announced` words the event by its items, as before
+    const older = { ...events, events: events.events.map(({ announced: _, ...e }) => e), stale: [{ metric: "cash", as_of: "2026-09-30", events: [KES] }] };
+    expect(staleFlags(older)[0]!.short).toBe("the Oct 26, 2026 8-K (Regulation FD disclosure)");
   });
 
   it("flags a key stat only for its metric, and only a figure as of the report's period end or earlier", () => {

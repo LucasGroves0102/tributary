@@ -176,7 +176,12 @@ docstring; the Query API's `/earnings` and `/events`, rules in its README, "Earn
   forma": Tributary doesn't compute a figure after the event. The same flags sit on the Overview's
   key stats (Cash, Net debt, Debt / equity; every stat for non-reliance or bankruptcy) when the
   figure is as of that period end or earlier: "⚑ before the Oct 27, 2026 8-K (Acquisition or
-  disposition)", the figure itself unchanged. The Overview asks `/events` once for both.
+  disposition)" ("... and 1 more 8-K" when several; the hover names each), the figure itself
+  unchanged. The Overview asks `/events` once for both. An event the API flags from its 7.01 / 8.01
+  announcement (F1b, `announced`) says so under its head: "⚑ a completed acquisition or
+  disposition, read from its Item 7.01 announcement (it has no Item 2.01): the words “Completes
+  Acquisition” in Press release", linking the reader at that sentence, then the sentence quoted;
+  the stale list names it the same way. An older API without `announced` words it by its items.
 - An older Query API without the routes (404) reads as "not available here yet", never an error
   (`api.ts` `orNullOn404`); e2e's mock answers both routes so the clean-console check holds.
 - Verified (2026-11-08) against production's data through a harness: the branch's routes over rows
