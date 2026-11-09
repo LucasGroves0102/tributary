@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import type { Readable } from "../access";
 import { failureReason } from "../api";
@@ -11,8 +11,7 @@ import { metricLabel } from "../chart/metrics";
 import { basis, frequencyOf, layerColor, layerKey, layerName, type ChartState, type TtmCatalog, chartTitle, rangeDates } from "../chart/model";
 import { toSeries, type Series, type Source } from "../chart/series";
 import { BAND_LABELS, FILER_LABELS } from "../companies/screen";
-import { SmallMultiples } from "../compare/SmallMultiples";
-import { COMPARE_COLUMNS, DEFAULT_COLUMNS } from "../compare/state";
+import { CompsTable } from "../compare/CompsTable";
 import { Skeleton } from "../components/States";
 import { ModelEmbed } from "../models/ModelView";
 import { restoreModel } from "../models/model";
@@ -20,9 +19,6 @@ import { go, href } from "../route";
 import type { FormulaSeries } from "../types";
 import { restoreChartState, restoreCompare, restoreScreen } from "../workspaces/model";
 import type { ReportItem } from "./model";
-
-/** Columns a report's comps embed charts: the first few of the saved set. */
-export const EMBED_COMPS_COLUMNS = 3;
 
 interface Common {
   token: string;
@@ -37,8 +33,9 @@ const TAGS = { chart: "Chart", comps: "Comps", screen: "Screen", model: "Model" 
 
 /** A saved item drawn in a report or thesis from its saved state: the data is read now,
  * through the Query API as the viewer (an ungranted company shows "no access", as anywhere
- * else). */
-export function Embed(props: Common & { readable: Readable; hasTtm: TtmCatalog; onOpenChart: (s: ChartState) => void }) {
+ * else). A comps set is its table (F6: "keep pinned comps as a table"), never charts.
+ * `actions`: the thesis editor's card buttons (move, remove), before the Open link. */
+export function Embed(props: Common & { readable: Readable; hasTtm: TtmCatalog; onOpenChart: (s: ChartState) => void; actions?: ReactNode }) {
   const { item } = props;
   return (
     <figure className="card report-embed" aria-label={item.name}>
@@ -46,6 +43,7 @@ export function Embed(props: Common & { readable: Readable; hasTtm: TtmCatalog; 
         <span className={`tag ${item.kind}`}>{TAGS[item.kind]}</span>{" "}
         <b>{item.name}</b>
         <span className="grow" />
+        {props.actions}
         <span className="no-print">
           {item.kind === "chart" ? (
             <button className="btn sm ghost" onClick={() => props.onOpenChart(restoreChartState(item.state))}>
@@ -175,24 +173,9 @@ export function ChartView({ token, chart, name, label, hasTtm }: {
   );
 }
 
-function EmbeddedComps({ token, item, label, readable }: Common & { readable: Readable }) {
-  const s = restoreCompare(item.state);
-  const ids = [s.target, ...(s.peers ?? [])].filter((x): x is string => !!x);
-  const mine = ids.filter((id) => readable.has(id));
-  const lost = ids.filter((id) => !readable.has(id));
-  const cols = (s.cols?.length ? s.cols : DEFAULT_COLUMNS).filter((c) => COMPARE_COLUMNS.some((x) => x.key === c)).slice(0, EMBED_COMPS_COLUMNS);
-  return (
-    <>
-      {mine.length ? (
-        <SmallMultiples token={token} companyIds={mine} cols={cols} label={label} />
-      ) : (
-        <p className="empty">None of these companies' financials are on your plan.</p>
-      )}
-      {lost.length > 0 && (
-        <p className="faint small">No access to {lost.map(label).join(", ")}: your plan doesn't include their financials.</p>
-      )}
-    </>
-  );
+function EmbeddedComps({ token, item, label }: Common & { readable: Readable }) {
+  const compare = useMemo(() => restoreCompare(item.state), [item.state]);
+  return <CompsTable token={token} compare={compare} label={label} />;
 }
 
 function EmbeddedModel({ token, item, label }: Common) {

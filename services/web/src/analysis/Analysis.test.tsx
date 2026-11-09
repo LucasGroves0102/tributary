@@ -275,6 +275,7 @@ it("L5: a pin chooses its pillar, or starts a new one", async () => {
 });
 
 it("switches steps from the rail and the header's tabs without losing an unsaved thesis", async () => {
+  window.localStorage.setItem("tributary.thesis.mode", "markdown");
   await render(`#/analysis/${PID}/thesis`, "textarea.thesis-text");
   const head = container.querySelector(".project-head")!;
   expect(head.querySelector("h1")?.textContent).toBe("Nvidia");
@@ -300,6 +301,7 @@ it("switches steps from the rail and the header's tabs without losing an unsaved
   expect(container.querySelector(".filing-watch")?.textContent).toContain("a newer 10-K or 10-Q than that check read shows here");
   // the rail: another step, then back; the thesis editor stayed mounted with the draft
   await goTo(`#/analysis/${PID}/business`, ".notes-text");
+  window.localStorage.setItem("tributary.thesis.mode", "markdown");
   await goTo(`#/analysis/${PID}/thesis`, "textarea.thesis-text");
   expect(thesisText().value).toBe(`${TEMPLATE}\nMy own words.`);
   expect(writes.filter((w) => w.method === "PUT")).toHaveLength(0);

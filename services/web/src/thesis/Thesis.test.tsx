@@ -205,6 +205,8 @@ function type(el: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement, va
   el.dispatchEvent(new Event(el instanceof HTMLSelectElement ? "change" : "input", { bubbles: true }));
 }
 const textarea = () => container.querySelector<HTMLTextAreaElement>("textarea.thesis-text")!;
+/** F6: Write shows cards; these tests read and type the Markdown as saved (the Markdown mode) */
+const markdownMode = () => window.localStorage.setItem("tributary.thesis.mode", "markdown");
 async function blobText(b: Blob): Promise<string> {
   return new Promise((done) => {
     const r = new FileReader();
@@ -265,6 +267,7 @@ it("renders a thesis with this workspace's items embedded, sanitized, foreign em
 
 it("inserts an embed at the cursor and saves name, company and text", async () => {
   items.set(THESIS_ID, item(THESIS_ID, "thesis", "Untitled thesis", { markdown: "Intro." }));
+  markdownMode();
   await render(`#/thesis/${THESIS_ID}`, "textarea.thesis-text");
   await act(async () => {
     textarea().focus();
@@ -294,6 +297,7 @@ it("inserts an embed at the cursor and saves name, company and text", async () =
 });
 
 it("exports Markdown with a header and readable embed lines", async () => {
+  markdownMode();
   await render(`#/thesis/${THESIS_ID}`, "textarea.thesis-text");
   const created = vi.fn((_b: Blob) => "blob:thesis");
   Object.assign(URL, { createObjectURL: created, revokeObjectURL: () => {} });
@@ -315,6 +319,44 @@ it("exports Markdown with a header and readable embed lines", async () => {
   expect(textarea().value).not.toContain("tributary:embed");
 });
 
+it("F6: Write shows embeds as cards that move and go; export then import gives the same Markdown", async () => {
+  const md = `# Why NVDA\n\nData centers keep buying.\n\n[[embed:${CHART_ID}]]\n\n## The model\n\n[[embed:${MODEL_ID}]]\n\nEnd.\n`;
+  items.set(THESIS_ID, item(THESIS_ID, "thesis", "NVDA: the build-out", { companyId: NVDA, markdown: md }));
+  window.localStorage.setItem("tributary.thesis.mode", "write");
+  await render(`#/thesis/${THESIS_ID}`, ".block-card");
+  const labels = () => [...container.querySelectorAll(".block-card")].map((c) => c.getAttribute("aria-label"));
+  expect(labels()).toEqual(["Chart “NVDA revenue”", "Model “NVDA model”"]);
+  for (const t of container.querySelectorAll<HTMLTextAreaElement>("textarea.block-text")) expect(t.value).not.toContain("[[embed:");
+  expect(container.querySelector(".thesis-preview")).toBeNull(); // Write alone (1440px picked split only without a choice)
+  const byLabel = (l: string) => container.querySelector<HTMLButtonElement>(`button[aria-label="${l}"]`)!;
+  // the model card up past its heading, then back: unsaved, then the saved text again
+  await click(byLabel("Move the model “NVDA model” up"));
+  expect(labels()).toEqual(["Chart “NVDA revenue”", "Model “NVDA model”"]);
+  expect(container.textContent).toContain("● unsaved changes");
+  await click(byLabel("Move the model “NVDA model” down"));
+  expect(container.textContent).not.toContain("● unsaved changes");
+  // removing a card offers Undo
+  await click(byLabel("Remove the chart “NVDA revenue”"));
+  expect(labels()).toEqual(["Model “NVDA model”"]);
+  expect(container.textContent).toContain("Removed the chart “NVDA revenue”. Save to keep it that way.");
+  await click(button("Undo"));
+  expect(labels()).toEqual(["Chart “NVDA revenue”", "Model “NVDA model”"]);
+  // export, import the same file: the Markdown underneath is unchanged, byte for byte
+  const created = vi.fn((_b: Blob) => "blob:thesis");
+  Object.assign(URL, { createObjectURL: created, revokeObjectURL: () => {} });
+  await click(button("Export .md"));
+  const text = await blobText(created.mock.calls[0]![0] as Blob);
+  expect(text).toContain(`<!-- tributary:embed ${CHART_ID} -->`);
+  const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
+  Object.defineProperty(input, "files", { value: [new File([text], "nvda.md", { type: "text/markdown" })], configurable: true });
+  await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));
+  await settle();
+  expect(labels()).toEqual(["Chart “NVDA revenue”", "Model “NVDA model”"]);
+  expect(container.textContent).not.toContain("● unsaved changes");
+  await click(button("Markdown"));
+  expect(textarea().value).toBe(md);
+});
+
 it("exports the last check with it, saying when it's stale (M6)", async () => {
   stored = [{ check_id: CHECK_ID, text_hash: "0".repeat(64) }]; // checked another text: stale
   await render(`#/thesis/${THESIS_ID}`, ".check-panel .claims");
@@ -330,6 +372,7 @@ it("exports the last check with it, saying when it's stale (M6)", async () => {
 
 it("an embed goes at the end until the cursor is placed, never above the title (#62)", async () => {
   items.set(THESIS_ID, item(THESIS_ID, "thesis", "NVDA", { markdown: "# NVDA\n\nBody." }));
+  markdownMode();
   await render(`#/thesis/${THESIS_ID}`, "textarea.thesis-text");
   const picker = container.querySelector<HTMLSelectElement>(".thesis-tools select")!;
   await act(async () => type(picker, CHART_ID));
@@ -338,6 +381,7 @@ it("an embed goes at the end until the cursor is placed, never above the title (
 });
 
 it("lists earlier versions and restores one into the editor, unsaved, with an undo (M5)", async () => {
+  markdownMode();
   await render(`#/thesis/${THESIS_ID}`, "textarea.thesis-text");
   await click(button("History"));
   await waitFor(".version-list li");
@@ -353,6 +397,7 @@ it("lists earlier versions and restores one into the editor, unsaved, with an un
 });
 
 it("imports a .md file, refuses a binary one, and can undo the import", async () => {
+  markdownMode();
   await render(`#/thesis/${THESIS_ID}`, "textarea.thesis-text");
   const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
   const pick = async (f: File) => {
@@ -495,7 +540,8 @@ it("checks the saved thesis and shows claims, assumptions, what's not mentioned 
   // clicking a quote marks it in the preview
   await click(panel.querySelector<HTMLButtonElement>("button.claim-quote")!);
   expect(container.querySelector(".thesis-doc mark.claim-mark")?.textContent).toBe("Data centers keep buying.");
-  // the text changes: the check is stale, and Check waits for Save
+  // the text changes (typed in the Markdown view): the check is stale, and Check waits for Save
+  await click(button("Markdown"));
   await act(async () => type(textarea(), BODY + "\n\nMore."));
   await settle();
   expect(panel.textContent).toContain("Stale: the thesis changed since this check");
@@ -571,6 +617,7 @@ it("lists theses with a newer 10-Q on the workspace page", async () => {
 });
 
 it("shows no check panel until a check exists", async () => {
+  markdownMode();
   await render(`#/thesis/${THESIS_ID}`, "textarea.thesis-text");
   expect(container.querySelector(".check-panel")).toBeNull();
   expect(button("Check my thesis").disabled).toBe(false);
