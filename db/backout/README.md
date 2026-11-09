@@ -12,6 +12,7 @@ removes the rows they added, and the rebuild job then rebuilds gold the old way.
 | [`bank_metrics_048.sql`](bank_metrics_048.sql) | 048: a bank's metrics, tags and rows removed, `gold.refresh_derived_financials` back to 040's body. Independent of the two above | `financials-rebuild` job |
 | [`filers_debt_050.sql`](filers_debt_050.sql) | 050: `gold.usable_facts` back to 043's body (no co-registrant attribution, debt with the filing's sign, slipped debt parts kept), `ops.check_financials` to 041's; `gold.companies_for_ciks` stays but returns only the CIKs' own companies | `financials-rebuild` job |
 | [`kpis_049.sql`](kpis_049.sql) | 049: the cash flow subtotals, contract balances, RPO, payables and cash and investments removed, `gold.refresh_derived_financials` back to 048's body and `gold.not_applicable_metrics` to 035's (`gold.figure_facts` stays: see its header). Tested on 60 companies of the sample: gold equal to before 049 row for row | `financials-rebuild` job |
+| [`segments_same_basis_053.sql`](segments_same_basis_053.sql) | 053: `gold.refresh_segment_financials` back to 018's body (derived quarters from the latest filings again). Independent of the others. Tested on JPM, NVDA, DECK and VRT: gold equal to 018's row for row | the segments refresh (db/README "053") |
 
 ## Order
 

@@ -116,6 +116,21 @@ the same filing's own total are left out (`mistagged_fact`, rule `debt_parts_sca
 to date: forfeitures, remeasured liability awards); its `sign_flip` is severity `info`, rule `benefit`,
 unless another filing reports the quarter positive. Measurements in its header. Needs
 `financials-rebuild`; backout `backout/filers_debt_050.sql`.
+`053_segment_same_basis.sql` replaces `gold.refresh_segment_financials` (018's body + edits marked
+"053"): a segment quarter derived as a year-to-date difference (Q4 = FY - 9 months) whose later value
+was restated after it was first reported takes that value from the first filing on or after the
+earlier value's filing, so both come from one reporting cycle and one segment basis (Riley #88:
+JPMorgan's FY2022 Q4 CIB was its FY2024 10-K's recast year, with Commercial Banking, less the old
+nine months: $22.13B beside $12B quarters, and the TTM fell 10% when it left the window). Measured on
+production's segment facts of JPM, NVDA, DECK and VRT, both bodies run on a throwaway copy: 13 of 1,034
+quarters change (and the TTMs over them), each now in line with its neighbours and the reported
+totals: JPM CIB FY2022 Q4 $22.13B -> $10.60B; NVIDIA's FY2024 geography TTMs now equal its FY2024
+10-K (US $26.966B, Taiwan $13.405B, China $10.306B) and its FY2024/FY2025 Q4 "Corporate" operating
+income -$1.35B/-$1.84B instead of $41.4B/$92.6B; Vertiv's FY2021 Q4 regions sum to $1,411M against
+$1,410M of revenue (was $1,580M) and its FY2020 Q4 products/services to $1,020M/$285M (was $780M/$525M);
+Deckers unchanged. A year reported once differently but later as first reported (Vertiv's FY2023
+10-K on FY2022) isn't "restated": the latest value, as before. Needs the segments refresh after the
+deploy, then `ops.check_segments`; backout `backout/segments_same_basis_053.sql`. Catalog only.
 `052_search_sort_total.sql` adds `gold.search_page`: 032's `search_passages` with an order (`relevance`
 or `date`) and a `total` of the matching sections, for the search page's count and "Newest first"
 (#145). Same SECURITY DEFINER read rule; `search_passages` stays for an API pod from before it.

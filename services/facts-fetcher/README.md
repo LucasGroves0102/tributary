@@ -103,7 +103,9 @@ How it runs (module docstrings hold the exact rules):
 - **Gold** (`gold.refresh_segment_financials`): members matched across filings (same folded
   label, or a member that disappears before another appears with the same restated value),
   then the main pipeline's quarter rules (tag priority, latest filing, Q4 = FY - 9 months when
-  80-120 days, so 16-week quarters fit), then TTM over four contiguous quarters. `gold.segments`
+  80-120 days, so 16-week quarters fit; since 053 a year restated after it was first reported is
+  paired with the nine months of its own reporting cycle, so a recast never makes one inflated
+  quarter: JPMorgan's FY2022 Q4 CIB), then TTM over four contiguous quarters. `gold.segments`
   adds fiscal and calendar labels with 014's rules.
 - **Quality** (`ops.check_segments`): the members of each axis vs `gold.quarterly_financials`
   for the same period end, within 1% (one overlapping subtotal allowed); warnings
