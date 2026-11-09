@@ -530,8 +530,13 @@ export const AXIS_LABELS: Record<string, string> = {
   geography: "Geography",
   product_service: "Products and services",
 };
-const SEGMENT_METRICS: Record<string, string> = { revenue: "Revenue", operating_income: "Operating income" };
+const SEGMENT_METRICS: Record<string, string> = { revenue: "Revenue", gross_profit: "Gross profit", operating_income: "Operating income" };
 const SHARE_TOLERANCE = 0.02;
+const DAY = 86_400_000;
+/** a table whose newest quarter is this far behind the company's newest segment figure is stale */
+const STALE_DAYS = 100;
+/** a year-ago quarter is the one ending within this many days of a year before */
+const YEAR_AGO_SLACK_DAYS = 20;
 
 export interface SegmentTable {
   axis: string;
@@ -547,31 +552,50 @@ export interface SegmentTable {
     /** the member is bigger than the consolidated figure: not on the same basis */
     shareTooBig: boolean;
     yoy: number | null;
+    /** the year-ago quarter was a loss or zero: no growth rate (n/m) */
+    yoyNotMeaningful: boolean;
     /** part of another member, or another cut of the same revenue */
     overlaps: boolean;
+    /** the member's last period, when it stopped before the table's newest ("FY2025 Q3"): an old
+     * segmentation, listed after the current members */
+    until: string | null;
   }[];
   /** consolidated: reported revenue. members: their sum, because revenue isn't known for the period.
    * none: neither can be trusted, so no share is printed. */
   shareOf: "consolidated" | "members" | "none";
   /** what the table says about members that overlap, when they do */
   overlapNote: string | null;
+  /** the table ends well before the company's newest segment figures: it isn't current */
+  staleNote: string | null;
+  /** members that stopped reporting, said once under the table */
+  retiredNote: string | null;
 }
 
 const listOf = (names: string[], most = 4) =>
   names.length <= most ? names.join(", ") : `${names.slice(0, most).join(", ")} and ${names.length - most} more`;
 
-/** One table per axis and metric (revenue, operating income), members by period, newest last; YoY
- * vs four periods earlier; reconciliation members (corporate, eliminations) left out. A revenue
- * share is the member over consolidated revenue for that period, never over the members' sum: a
- * parent reported beside its children (NVIDIA's Data Center and Hyperscale) or two cuts of the same
- * revenue (Vertiv's Products and Product excluding Spares) would halve everything. Without revenue
- * for the period, it's over the members' sum only if nothing shows they overlap. */
+/** One table per axis and metric (revenue, gross profit, operating income), members by period, newest
+ * last; reconciliation members (corporate, eliminations) left out. A revenue share is the member over
+ * consolidated revenue for that period, never over the members' sum: a parent reported beside its
+ * children (NVIDIA's Data Center and Hyperscale) or two cuts of the same revenue (Vertiv's Products
+ * and Product excluding Spares) would halve everything. Without revenue for the period, it's over the
+ * members' sum only if nothing shows they overlap.
+ *
+ * What's current (M8): YoY is the newest quarter against the one ending a year earlier (by date, so a
+ * missing quarter in between doesn't hide it). A member with no value in the table's quarters isn't
+ * listed (no empty rows); one that stopped before the newest quarter (a company that reorganised its
+ * segments: Deckers' UGG Wholesale became UGG Brand in 2025) reads "until FY2025 Q3" and is listed
+ * after the current ones. A table whose newest quarter is over STALE_DAYS behind the company's newest
+ * segment figure says so: Deckers has reported gross profit, not operating income, by segment since
+ * 2025, so its operating income table ends at December 2024. */
 export function segmentTables(rows: SegmentRow[], revenue: FinancialRow[] = []): SegmentTable[] {
   const groups = new Map<string, SegmentRow[]>();
+  let newest = "";
   for (const r of rows) {
     if (!AXIS_LABELS[r.axis] || !SEGMENT_METRICS[r.metric]) continue;
     const k = `${r.axis}|${r.metric}`;
     groups.set(k, [...(groups.get(k) ?? []), r]);
+    if (r.period_end > newest) newest = r.period_end;
   }
   const order = (k: string) => {
     const [axis, metric] = k.split("|");
@@ -588,9 +612,19 @@ export function segmentTables(rows: SegmentRow[], revenue: FinancialRow[] = []):
     const [axis, metric] = k.split("|") as [string, string];
     const ends = [...new Set(rs.map((r) => r.period_end))].sort().slice(-8);
     const columns = ends.map((e) => ({ periodEnd: e, label: rs.find((r) => r.period_end === e && r.fiscal_period)?.fiscal_period ?? calendarLabel(e) }));
-    const members = [...new Map(rs.map((r) => [r.member, r.member_label])).entries()];
     const latest = ends.at(-1);
     const at = (member: string, end: string | undefined) => rs.find((r) => r.member === member && r.period_end === end);
+    const valued = (member: string, end: string) => num(at(member, end)?.value) !== null;
+    // only members with a value in the table's quarters: an earlier segmentation's are out of the window
+    const members = [...new Map(rs.map((r) => [r.member, r.member_label])).entries()]
+      .filter(([member]) => ends.some((e) => valued(member, e)));
+    const lastOf = (member: string) => ends.filter((e) => valued(member, e)).at(-1)!;
+    const yearAgoOf = (member: string): number | null => {
+      if (!latest) return null;
+      const want = Date.parse(latest) - 365 * DAY;
+      const r = rs.find((x) => x.member === member && Math.abs(Date.parse(x.period_end) - want) <= YEAR_AGO_SLACK_DAYS * DAY);
+      return r ? num(r.value) : null;
+    };
     // which members overlap, over the table's periods
     const periods = new Map(ends.map((e, i) => [i, new Map(rs.filter((r) => r.period_end === e && num(r.value) !== null).map((r) => [r.member, num(r.value)!]))]));
     const totals = new Map(ends.flatMap((e, i): [number, number][] => {
@@ -629,26 +663,45 @@ export function segmentTables(rows: SegmentRow[], revenue: FinancialRow[] = []):
         };
       });
       const last = num(at(member, latest)?.value);
-      const yearAgo = ends.length >= 5 ? num(at(member, ends[ends.length - 5])?.value) : null;
+      const yearAgo = yearAgoOf(member);
       const share = last !== null && shareOf !== "none" && base > 0 ? last / base : null;
+      const lastEnd = lastOf(member);
       return {
         member,
         label,
         cells,
         share,
         shareTooBig: share !== null && share > 1 + SHARE_TOLERANCE,
-        yoy: last !== null && yearAgo ? last / yearAgo - 1 : null,
+        // a change from a loss (or zero) a year earlier isn't a growth rate
+        yoy: last !== null && yearAgo !== null && yearAgo > 0 ? last / yearAgo - 1 : null,
+        yoyNotMeaningful: last !== null && yearAgo !== null && yearAgo <= 0,
         overlaps: separated?.drop.has(member) ?? false,
+        until: lastEnd === latest ? null : columns[ends.indexOf(lastEnd)]!.label,
       };
     });
-    out.sort((a, b) => (num(at(b.member, latest)?.value) ?? -Infinity) - (num(at(a.member, latest)?.value) ?? -Infinity));
-    const parts = out.filter((r) => r.overlaps).map((r) => r.label);
+    // current members by their newest value, then the ones that stopped, by their last
+    const lastValue = (r: (typeof out)[number]) => num(at(r.member, lastOf(r.member))?.value) ?? -Infinity;
+    out.sort((a, b) => Number(a.until !== null) - Number(b.until !== null) || lastValue(b) - lastValue(a));
+    // a member that stopped is said once, below; it stays out of sums either way
+    const parts = out.filter((r) => r.overlaps && r.until === null).map((r) => r.label);
     const overlapNote = parts.length
       ? `${listOf(parts)} ${parts.length === 1 ? "is" : "are"} part of another line here, or another cut of the same revenue, so the lines add up to more than revenue. Each share is of consolidated revenue.`
       : separated?.unreliable.has(latestIndex)
         ? "These lines add up to more than revenue and can't be separated: some overlap, or include sales between segments. Each share is of consolidated revenue, so don't add them up."
         : null;
-    return { axis, metric, title: `${SEGMENT_METRICS[metric]} by ${AXIS_LABELS[axis]!.toLowerCase()}`, columns, rows: out, shareOf, overlapNote };
+    const what = SEGMENT_METRICS[metric]!.toLowerCase();
+    const staleNote = latest && Date.parse(newest) - Date.parse(latest) > STALE_DAYS * DAY
+      ? `Not current: the last ${what} by ${AXIS_LABELS[axis]!.toLowerCase()} is for ${columns.at(-1)!.label} (the quarter ending ${day(latest, true)}). ` +
+        `The company's filings since report other segment figures (to ${day(newest, true)}), not this one.`
+      : null;
+    const stopped = out.filter((r) => r.until !== null);
+    const retired = stopped.map((r) => r.label);
+    const one = new Set(stopped.map((r) => r.until)).size === 1;
+    const retiredNote = retired.length
+      ? `${listOf(retired)} ${retired.length === 1 ? "was" : "were"} last reported ${one ? `for ${stopped[0]!.until}` : `before ${columns.at(-1)!.label}`}: ` +
+        `usually the company reorganised its segments or stopped disclosing ${retired.length === 1 ? "it" : "them"}, so ${retired.length === 1 ? "it's" : "they're"} listed after the current ones, not as if current.`
+      : null;
+    return { axis, metric, title: `${SEGMENT_METRICS[metric]} by ${AXIS_LABELS[axis]!.toLowerCase()}`, columns, rows: out, shareOf, overlapNote, staleNote, retiredNote };
   });
 }
 

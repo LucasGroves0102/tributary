@@ -2447,6 +2447,25 @@ button.chip:disabled {
   font-style: italic;
 }
 
+/* Segments: a table that isn't current, and members of an old segmentation (M8) */
+.stale-note {
+  margin: 0;
+  padding-bottom: 0;
+  color: var(--warn);
+  font-size: var(--fs-base);
+}
+
+.t tr.retired td {
+  color: var(--text-3);
+}
+
+.t td.first .until {
+  display: block;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-3);
+}
+
 /* a statement value opens the reader; its EDGAR link sits in the cell's right padding, seen on
    hover or focus (opacity, not visibility, so Tab still reaches it), never moving the figure */
 .t td.n:has(> .cell-edgar) {

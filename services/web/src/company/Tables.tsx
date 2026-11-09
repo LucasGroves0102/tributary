@@ -288,6 +288,7 @@ export function Segments({ token, companyId, name }: { token: string; companyId:
                   <h2>{t.title}</h2>
                   <span className="sub">quarterly · USD · as reported in the filings' XBRL</span>
                 </div>
+                {t.staleNote && <p className="card-b stale-note" role="note">⚠ {t.staleNote}</p>}
                 <TableScroll atEnd resetKey={t.columns.length} label={t.title}>
                   <table className="t aligned">
                     <thead>
@@ -303,8 +304,11 @@ export function Segments({ token, companyId, name }: { token: string; companyId:
                     </thead>
                     <tbody>
                       {t.rows.map((r) => (
-                        <tr key={r.member}>
-                          <td className="first" title={r.member}>{r.label}</td>
+                        <tr key={r.member} className={r.until ? "retired" : undefined}>
+                          <td className="first" title={r.until ? `${r.member}: last reported for ${r.until}` : r.member}>
+                            {r.label}
+                            {r.until && <span className="until">until {r.until}</span>}
+                          </td>
                           {r.cells.map((c, i) => (
                             <Cell key={t.columns[i]!.periodEnd} cell={c} companyId={companyId} />
                           ))}
@@ -317,16 +321,21 @@ export function Segments({ token, companyId, name }: { token: string; companyId:
                               </td>
                             )
                           ) : <td aria-hidden="true" />}
-                          <td className={`n ${r.yoy === null ? "faint" : r.yoy >= 0 ? "pos" : "neg"}`}
-                            title={r.yoy === null ? NO_DATA_TITLE : undefined}>
-                            {r.yoy === null ? NO_DATA : change(r.yoy)}
-                          </td>
+                          {r.yoyNotMeaningful ? (
+                            <td className="n faint" title="Not meaningful: the same quarter a year earlier was a loss or zero, so there's no growth rate.">{NOT_MEANINGFUL}</td>
+                          ) : (
+                            <td className={`n ${r.yoy === null ? "faint" : r.yoy >= 0 ? "pos" : "neg"}`}
+                              title={r.yoy === null ? NO_DATA_TITLE : undefined}>
+                              {r.yoy === null ? NO_DATA : change(r.yoy)}
+                            </td>
+                          )}
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </TableScroll>
                 {t.overlapNote && <p className="small muted card-b">{t.overlapNote}</p>}
+                {t.retiredNote && <p className="small muted card-b">{t.retiredNote}</p>}
                 {t.metric === "revenue" && t.shareOf === "none" && (
                   <p className="small muted card-b">No shares: consolidated revenue isn't known for this quarter, and these lines overlap, so their sum isn't a total either.</p>
                 )}
@@ -334,7 +343,8 @@ export function Segments({ token, companyId, name }: { token: string; companyId:
             ))}
             <div className="foot">
               Share: of consolidated revenue in the latest quarter, so lines that overlap each read
-              their true share. YoY: latest quarter vs four quarters earlier.
+              their true share. YoY: latest quarter vs the quarter ending a year earlier. A member marked
+              "until" stopped being reported (an old segmentation) and is listed after the current ones.
             </div>
           </>
         )

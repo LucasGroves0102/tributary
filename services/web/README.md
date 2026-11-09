@@ -540,6 +540,14 @@ Values need financials access, like Statements.
   quarter view (`revenue / revenue[-4q] - 1`, `receivables / receivables[-4q] - 1`); the Analysis
   Numbers step draws the same chart.
 
+The Segments tab (`company/data.ts` `segmentTables`): a table per axis and metric (revenue, gross
+profit, operating income), the newest eight quarters. YoY is the newest quarter against the one ending
+a year earlier, found by date. A member with no value in those quarters isn't listed; one that stopped
+before the newest reads "until FY2025 Q3", dimmed, after the current members (a reorganisation:
+Deckers' UGG Wholesale became UGG Brand). A table whose newest quarter is more than 100 days behind the
+company's newest segment figure says it isn't current (Deckers reports gross profit by segment since
+2025, so its operating income ends December 2024).
+
 Segment layers (`chart/segments.ts`, `chart/fetch.ts`): the Revenue view's segment charts are
 chart builder layers of kind `segment` (company, segment metric, axis, 1-20 members), read from
 `/segments` instead of `/v1/formulas/evaluate` (one request per company, axis, metric and view,

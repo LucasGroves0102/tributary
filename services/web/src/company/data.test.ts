@@ -172,6 +172,53 @@ describe("segments", () => {
     expect(geo!.title).toBe("Revenue by geography");
     expect(segmentTables([])).toEqual([]);
   });
+
+  // M8: Deckers reorganised in 2025 (UGG Wholesale and Direct to Consumer became UGG Brand) and has
+  // reported gross profit, not operating income, by segment since; production rows, 2026-11-08
+  const deck = (member: string, label: string, metric: string, end: string, value: number): SegmentRow =>
+    ({ ...seg(member, label, end, String(value * 1e6)), metric });
+  const QUARTERS = ["2024-12-31", "2025-03-31", "2025-06-30", "2025-09-30", "2025-12-31", "2026-03-31", "2026-06-30", "2026-09-30"];
+  const DECK = [
+    ...["2023-09-30", "2023-12-31", "2024-09-30", "2024-12-31"].flatMap((e, i) => [
+      deck("deck:UGGWholesaleSegmentMember", "UGG Wholesale", "revenue", e, [512, 467, 512, 467][i]!),
+      deck("deck:UGGWholesaleSegmentMember", "UGG Wholesale", "operating_income", e, [180, 170, 195, 190][i]!),
+      deck("deck:DirectToConsumerSegmentMember", "Direct to Consumer", "operating_income", e, [130, 401, 143, 481][i]!),
+    ]),
+    deck("deck:SanukWholesaleSegmentMember", "Sanuk Wholesale", "revenue", "2024-09-30", 1),
+    ...QUARTERS.map((e, i) => deck("deck:UGGBrandSegmentMember", "UGG Brand", "revenue", e, [1244, 374, 265, 759, 1305, 408, 278, 786][i]!)),
+    ...QUARTERS.map((e, i) => deck("deck:UGGBrandSegmentMember", "UGG Brand", "gross_profit", e, [783, 226, 139, 421, 808, 253, 152, 480][i]!)),
+  ];
+
+  it("M8: a table that ended long ago says it isn't current, and YoY finds the year-ago quarter by date", () => {
+    const tables = segmentTables(DECK);
+    expect(tables.map((t) => t.title)).toEqual([
+      "Revenue by business segments", "Gross profit by business segments", "Operating income by business segments",
+    ]);
+    const oi = tables[2]!;
+    expect(oi.staleNote).toContain("Not current: the last operating income by business segments is for CY2024 Q4");
+    expect(oi.staleNote).toContain("to Sep 30, 2026");
+    // 2024-12-31 against 2023-12-31, with no quarter in between on file
+    expect(oi.rows.find((r) => r.label === "UGG Wholesale")!.yoy).toBeCloseTo(190 / 170 - 1);
+    expect(oi.rows.find((r) => r.label === "Direct to Consumer")!.yoy).toBeCloseTo(481 / 401 - 1);
+    expect(tables[0]!.staleNote).toBeNull();
+    expect(tables[1]!.staleNote).toBeNull();
+  });
+
+  it("M8: members that stopped read 'until' after the current ones; members out of the window aren't empty rows", () => {
+    const [rev] = segmentTables(DECK);
+    expect(rev!.rows.map((r) => [r.label, r.until])).toEqual([["UGG Brand", null], ["UGG Wholesale", "CY2024 Q4"]]);
+    expect(rev!.rows.some((r) => r.label === "Sanuk Wholesale")).toBe(false); // only before the eight quarters shown
+    expect(rev!.retiredNote).toContain("UGG Wholesale was last reported for CY2024 Q4");
+    expect(rev!.rows[0]!.yoy).toBeCloseTo(786 / 759 - 1);
+  });
+
+  it("M8: a change from a year-ago loss isn't a growth rate (Teva Wholesale's -491.9%)", () => {
+    const [t] = segmentTables([
+      deck("deck:Other", "Other Wholesale", "operating_income", "2023-12-31", -1.36),
+      deck("deck:Other", "Other Wholesale", "operating_income", "2024-12-31", 5.35),
+    ]);
+    expect(t!.rows[0]).toMatchObject({ yoy: null, yoyNotMeaningful: true });
+  });
 });
 
 it("labels 8-K items and filters forms", () => {
