@@ -16,6 +16,7 @@ as tool errors the model must report.
 | `list_filings` | `GET /v1/companies/{id}/filings` |
 | `get_section` | `GET /v1/companies/{id}/sections/{key}` |
 | `get_section_changes` | `GET /v1/companies/{id}/filings/{accession}/changes` (keeps the first `max_changes`, default 20, max 50; says how many it left out) |
+| `get_material_changes` | `GET /v1/companies/{id}/filings/{accession}/changes?view=ranked` (`topic` → `q`, `new_figures` → `numbers=new`; keeps the `max_changes` highest scores across sections, default 15, max 50, says how many it left out, and drops the echoed filters) |
 | `search_filings` | `GET /v1/search` |
 | `get_earnings_release` | `GET /v1/companies/{id}/earnings` (`quarters` 1-4, default 1; a quarter's quoted adjustments whole up to 6,000 characters, the rest keep heading and citation and say to read them with `get_section`) |
 | `get_events_since_report` | `GET /v1/companies/{id}/events` |
@@ -30,6 +31,18 @@ added without re-recording: the recorded suites don't depend on the tool list, a
 report prompts and existing tools are unchanged (`tests/adversarial`, `tests/citations` still 97
 passing). Both need the `filings` tier, so the adversarial harness counts a result for a company
 the user can't read filings for as a leak, as it does for `search_filings`.
+
+`get_material_changes` (F3) reads What changed for materiality (Query API README, "Read for
+materiality"): a 10-Q against the same quarter a year earlier unless the model asks for `prior`,
+split paragraphs, calendar rollovers and figure-only rows left out and counted, each change with
+its period, new and removed figures, a score and why. It is a new tool, not new parameters on
+`get_section_changes` (whose schema and answer are unchanged): no re-recording (97 replays pass),
+in `report.COMPANY_TOOLS` and in the harness's TOOL_TIER as `filings`. The answer drops the
+echoed `filters`: a topic is the model's own words, never evidence for a figure it writes
+(verify.py). Check my thesis lists it beside `get_section_changes` and, when it calls a risk
+factor new, says what the filing was compared with (tester 1 saw the check call a covenant
+"new" while What changed, against the prior 10-Q, showed nothing new: against a year ago,
+Vertiv's covenant risk factors are new).
 
 `get_financials`' metric names come from `GET /v1/metrics` (`MetricTools`, fetched once; until
 the Query API answers, the tool lists no names and the API rejects unknown ones).

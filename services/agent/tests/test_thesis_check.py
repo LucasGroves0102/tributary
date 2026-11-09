@@ -833,6 +833,8 @@ def test_the_check_reads_the_release_and_the_events_since_the_report():
     only from the check; the rules now send it to the events and the release, and say what a
     stale balance-sheet figure means."""
     assert "get_events_since_report" in CHECK_RULES and "get_earnings_release" in CHECK_RULES
+    # F3: what changed can be read against a year ago; the check says which comparison
+    assert "get_material_changes" in CHECK_RULES and "say what it was compared" in CHECK_RULES
     assert "under stale: say so and cite the" in CHECK_RULES
     assert "Never compute a figure after the event" in CHECK_RULES
 

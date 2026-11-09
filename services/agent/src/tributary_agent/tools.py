@@ -14,6 +14,8 @@ DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 COMPANY_ID = {"type": "string", "pattern": r"^\d{10}$",
               "description": "10-digit canonical company_id from search_companies or whoami"}
 MAX_CHANGES = 50
+MATERIAL_CHANGES = 15  # get_material_changes' default: the top of the ranked list
+TOPIC_CHARS = 100  # the Query API's limit for a topic (q)
 MAX_QUARTERS = 40  # get_financials' schema maximum, also enforced in _route
 MAX_RELEASE_QUARTERS = 4  # get_earnings_release's schema maximum, enforced in _route too
 # get_earnings_release: quoted adjustments (reconciliation tables) kept whole up to this many
@@ -125,6 +127,45 @@ TOOLS: list[dict] = [
                 "kind": {"type": "string", "enum": ["new", "removed", "rewritten"]},
                 "max_changes": {"type": "integer", "minimum": 1, "maximum": MAX_CHANGES,
                                 "description": "default 20"},
+            },
+            "required": ["company_id", "accession_no"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "get_material_changes",
+        "description": "What changed in a 10-K's or 10-Q's Risk Factors and MD&A, read for "
+                       "materiality and ranked: a 10-Q against the same quarter a year "
+                       "earlier by default (basis prior: the previous 10-Q), a 10-K against "
+                       "the previous 10-K. Paragraphs only split or rejoined, calendar "
+                       "rollovers (\"second\" to \"third\" quarter, dates) and figure-only "
+                       "table rows are left out and counted (\"hidden\"). Each change has its "
+                       "period (three, six or nine months), the figures it adds or drops, a "
+                       "score and why it ranks there, and is cited in both filings; "
+                       "\"comparisons\" names the filings it can be compared with. Filter by "
+                       "topic (every word must appear) or to passages with new figures. Get "
+                       "the accession_no from list_filings.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "company_id": COMPANY_ID,
+                "accession_no": {"type": "string", "pattern": r"^\d{10}-\d{2}-\d{6}$",
+                                 "description": "the later filing"},
+                "basis": {"type": "string", "enum": ["prior", "year_ago"],
+                          "description": "default: year_ago for a 10-Q (prior when there is "
+                                         "none), prior for a 10-K"},
+                "section_key": {"type": "string",
+                                "description": '10-K "1A" or "7", 10-Q "II-1A" or "I-2";'
+                                               " default: all compared sections"},
+                "topic": {"type": "string",
+                          "description": 'words that must all appear, e.g. tariffs or '
+                                         '"credit facility"'},
+                "new_figures": {"type": "boolean",
+                                "description": "only passages stating a figure the earlier "
+                                               "one doesn't"},
+                "max_changes": {"type": "integer", "minimum": 1, "maximum": MAX_CHANGES,
+                                "description": f"default {MATERIAL_CHANGES}, highest score "
+                                               "first"},
             },
             "required": ["company_id", "accession_no"],
             "additionalProperties": False,
@@ -258,6 +299,8 @@ class QueryApi:
             body = r.json()
             if name == "get_section_changes":
                 body = _first_changes(body, int(args.get("max_changes", 20)))
+            if name == "get_material_changes":
+                body = _top_changes(body, args.get("max_changes", MATERIAL_CHANGES))
             if name == "get_earnings_release":
                 body = _short_adjustments(body)
             return json.dumps(body, separators=(",", ":"), default=str), False
@@ -308,6 +351,25 @@ def _route(name: str, a: dict[str, Any]) -> tuple[str, dict]:
         if a.get("kind"):
             params["kind"] = a["kind"]
         return f"/v1/companies/{company()}/filings/{acc}/changes", params
+    if name == "get_material_changes":
+        acc = str(a["accession_no"])
+        if not ACCESSION.fullmatch(acc):
+            raise ValueError("accession_no looks like 0001045810-26-000021")
+        params = {"view": "ranked"}
+        if a.get("basis") in ("prior", "year_ago"):
+            params["basis"] = a["basis"]
+        elif a.get("basis"):
+            raise ValueError('basis is "prior" or "year_ago"')
+        if a.get("section_key"):
+            params["section"] = section_key(a["section_key"])
+        topic = " ".join(str(a.get("topic") or "").split())
+        if topic:
+            if not 2 <= len(topic) <= TOPIC_CHARS:
+                raise ValueError(f"topic must be 2 to {TOPIC_CHARS} characters")
+            params["q"] = topic
+        if a.get("new_figures") is True:
+            params["numbers"] = "new"
+        return f"/v1/companies/{company()}/filings/{acc}/changes", params
     if name == "get_earnings_release":
         try:
             n = int(a.get("quarters", 1))
@@ -357,6 +419,28 @@ def _first_changes(body: dict, limit: int) -> dict:
     for s in body.get("sections") or []:
         changes = s.get("changes") or []
         s["changes"], left = changes[:left], max(0, left - len(changes))
+        if len(changes) > len(s["changes"]):
+            s["changes_omitted"] = len(changes) - len(s["changes"])
+    return body
+
+
+def _top_changes(body: dict, limit: Any) -> dict:
+    """The `limit` highest-scored changes across sections (the ranked view's order), each left in
+    its section, saying how many were left out. The echoed filters go: the topic is the model's
+    own words, never evidence for a figure it writes (verify.py)."""
+    try:
+        keep = max(1, min(int(limit), MAX_CHANGES))
+    except (TypeError, ValueError):
+        keep = MATERIAL_CHANGES
+    body.pop("filters", None)
+    ranked = sorted(((c.get("score") or 0, i, j)
+                     for i, s in enumerate(body.get("sections") or [])
+                     for j, c in enumerate(s.get("changes") or [])),
+                    key=lambda x: (-x[0], x[1], x[2]))
+    kept = {(i, j) for _, i, j in ranked[:keep]}
+    for i, s in enumerate(body.get("sections") or []):
+        changes = s.get("changes") or []
+        s["changes"] = [c for j, c in enumerate(changes) if (i, j) in kept]
         if len(changes) > len(s["changes"]):
             s["changes_omitted"] = len(changes) - len(s["changes"])
     return body

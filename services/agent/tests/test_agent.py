@@ -439,6 +439,53 @@ def test_section_changes_tool_keeps_the_first_changes():
     assert (len(b["changes"]), b["changes_omitted"]) == (1, 1)
 
 
+def test_material_changes_tool_validates_and_routes():
+    """F3: a new tool (get_section_changes' schema is unchanged): the ranked view of /changes."""
+    api, seen = query_api(ok)
+    acc = "0001045810-26-000021"
+    for bad in ({"company_id": NVDA, "accession_no": "../me"},
+                {"company_id": NVDA, "accession_no": acc, "section_key": "1A/../x"},
+                {"company_id": NVDA, "accession_no": acc, "basis": "forever"},
+                {"company_id": NVDA, "accession_no": acc, "topic": "x"},
+                {"company_id": NVDA, "accession_no": acc, "topic": "x" * 101}):
+        content, is_error = api.run("get_material_changes", bad)
+        assert is_error and content.startswith("invalid call"), bad
+    assert seen == []
+    assert api.run("get_material_changes", {"company_id": NVDA, "accession_no": acc})[1] is False
+    assert seen[0].url.path == f"/v1/companies/{NVDA}/filings/{acc}/changes"
+    assert dict(seen[0].url.params) == {"view": "ranked"}  # the API picks the basis
+    args = {"company_id": NVDA, "accession_no": acc, "basis": "year_ago", "section_key": "II-1A",
+            "topic": "  export   controls ", "new_figures": True}
+    assert api.run("get_material_changes", args)[1] is False
+    assert dict(seen[1].url.params) == {"view": "ranked", "basis": "year_ago",
+                                        "section": "II-1A", "q": "export controls",
+                                        "numbers": "new"}
+    schema = next(t for t in TOOLS if t["name"] == "get_material_changes")["input_schema"]
+    assert schema["required"] == ["company_id", "accession_no"]
+    old = next(t for t in TOOLS if t["name"] == "get_section_changes")["input_schema"]
+    assert set(old["properties"]) == {"company_id", "accession_no", "section_key", "basis",
+                                      "kind", "max_changes"}
+
+
+def test_material_changes_tool_keeps_the_top_scores_and_drops_the_topic_echo():
+    def changes(request):
+        return httpx.Response(200, json={
+            "view": "ranked", "filters": {"q": "$46.7B", "terms": ["$46.7b"]},
+            "sections": [
+                {"section_key": "II-1A", "changes": [{"score": 6.0}, {"score": 1.0}]},
+                {"section_key": "I-2", "changes": [{"score": 7.0}, {"score": 5.0},
+                                                   {"score": 0.5}]}]})
+
+    api, _ = query_api(changes)
+    content, _ = api.run("get_material_changes", {"company_id": NVDA, "max_changes": 3,
+                                                  "accession_no": "0001045810-26-000021"})
+    body = json.loads(content)
+    assert "filters" not in body and "46.7" not in content  # the model's own words aren't evidence
+    a, b = body["sections"]
+    assert [c["score"] for c in a["changes"]] == [6.0] and a["changes_omitted"] == 1
+    assert [c["score"] for c in b["changes"]] == [7.0, 5.0] and b["changes_omitted"] == 1
+
+
 def test_search_tool_routes_filters():
     api, seen = query_api(ok)
     assert api.run("search_filings", {"query": "export controls"})[1] is False

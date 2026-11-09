@@ -58,7 +58,8 @@ MARKER = re.compile(r"\[\[\s*embed\s*:\s*(item-\d{1,3})\s*\]\]", re.IGNORECASE)
 FORMULA_TICKER = re.compile(r"(?<![A-Za-z0-9_.])([A-Za-z_][A-Za-z0-9_]{0,9})\s*\.\s*[A-Za-z_]")
 _CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
 COMPANY_TOOLS = ("get_financials", "list_filings", "get_section", "get_section_changes",
-                 "search_filings", "get_earnings_release", "get_events_since_report")
+                 "search_filings", "get_earnings_release", "get_events_since_report",
+                 "get_material_changes")
 
 REPORT_RULES = """
 
