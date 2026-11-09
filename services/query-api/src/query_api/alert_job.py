@@ -240,6 +240,8 @@ def run(*, alerts: AppAlerts, store: Any, can: Callable[[str, str, str], bool], 
     report.filings = sum(len(v) for v in filings.values())
     index_items = {r["accession_no"]: r["items"] for rows in filings.values() for r in rows}
     for user_id, plan in plans.items():
+        if not plan["follows"] and not plan["webhooks"]:
+            continue  # nothing to alert and nothing to send: no writes for this user
         try:
             rows, newest = new_rows(plan, filings)
             report.created += alerts.add_notifications(user_id, rows)
