@@ -27,6 +27,10 @@ so the live parser never has crawled documents queued ahead of a new filing, its
 `KafkaConsumerLagGrowing` alert keeps meaning "live parsing is behind", and a document that stops
 a parser stops only the backfill one. Both parsers write the same rows and are idempotent per
 accession, so an event published twice (the crawl republishes unconfirmed ones) is harmless.
+doc-fetcher works the same way since migration 059: a document, its exhibits and its owed event
+(`ops.document_outbox`) commit together, and an event Kafka didn't confirm is sent again within a
+minute; a document the crawl finds stored with an event still owed gets a `documents.backfill`
+event too.
 
 Each producer and consumer above is a Kafka principal with ACLs for exactly these topics and its
 group (Kafka SASL is on in production; `deploy/helm/platform/files/kafka-acls.yaml`: `poller`,
