@@ -583,6 +583,59 @@ def test_financials_say_their_currency_and_that_they_are_years(conn, token):
     assert "currency" not in usd and "cadence" not in usd  # a dollar filer's JSON is as before
 
 
+EIDP_LIKE, SIX_K = "9200000021", "9200000022"
+
+
+def periodic(conn, cid, form, filed, n):
+    conn.execute("INSERT INTO bronze.submission_filings (accession_no, cik, form, filing_date,"
+                 " report_date) VALUES (%s, %s, %s, %s, %s)",
+                 (f"{cid}-26-{n:06d}", cid, form, filed, filed - timedelta(days=40)))
+
+
+def listed(conn, cid, name):
+    conn.execute("INSERT INTO silver.companies (company_id, name, current_cik, sic)"
+                 " VALUES (%s, %s, %s, '2800')", (cid, name, cid))
+    conn.execute("INSERT INTO silver.company_ciks (cik, company_id) VALUES (%s, %s)", (cid, cid))
+    for tier in ("financials", "filings"):
+        conn.execute("INSERT INTO authz.public_access (company_id, tier) VALUES (%s, %s)",
+                     (cid, tier))
+
+
+def test_a_us_filer_whose_figures_stopped_is_old_not_once_a_year(conn, token):
+    """B1 (pre-ship review): EIDP files 10-Qs but its figures end in 2019. The old rule (no
+    quarter in 800 days, TTM rows) called it a 20-F/40-F filer; ~96 US filers on hermes."""
+    listed(conn, EIDP_LIKE, "Stale US Co")
+    reported(conn, EIDP_LIKE, "revenue", date(2019, 3, 31), 5_000_000_000)
+    derived(conn, EIDP_LIKE, "revenue", date(2019, 3, 31), 21_000_000_000, {"quarters": []},
+            unit="USD")
+    periodic(conn, EIDP_LIKE, "10-K", date(2026, 2, 10), 1)
+    periodic(conn, EIDP_LIKE, "10-Q", date(2026, 7, 31), 2)
+    # a 20-F filer whose quarters come in gold too (ICON, Arm: 6-Ks): quarters
+    listed(conn, SIX_K, "Six-K Co")
+    recent = date.today() - timedelta(days=120)
+    reported(conn, SIX_K, "revenue", recent, 2_000_000_000)
+    derived(conn, SIX_K, "revenue", recent, 8_000_000_000, {"quarters": []}, unit="USD")
+    periodic(conn, SIX_K, "20-F", date.today() - timedelta(days=200), 1)
+    # Birkenstock's, now with its 20-F in the index: once a year
+    euro_co(conn)
+    periodic(conn, EURO, "20-F", LATEST + timedelta(days=60), 1)
+    c = api(conn)
+    for cid, cadence in ((EIDP_LIKE, None), (SIX_K, None), (EURO, "annual")):
+        body = c.get(f"/v1/companies/{cid}/financials", headers=token(USER),
+                     params={"view": "ttm", "metrics": ["revenue"]}).json()
+        assert body.get("cadence") == cadence, cid
+    store = Store(OneConnection(conn))
+    assert store.cadence(USER, EIDP_LIKE) == "quarterly"
+    assert store.cadence(USER, SIX_K) == "quarterly"
+    assert store.cadence(USER, EURO) == "annual"
+    # a 20-F filer who later files 10-Qs is quarterly again; one who files 20-Fs after its
+    # 10-Qs is annual (the latest report decides)
+    periodic(conn, EURO, "10-Q", LATEST + timedelta(days=120), 2)
+    assert store.cadence(USER, EURO) == "quarterly"
+    periodic(conn, EIDP_LIKE, "20-F", date(2026, 10, 1), 3)
+    assert store.cadence(USER, EIDP_LIKE) == "annual"
+
+
 @pytest.mark.parametrize(
     ("metric", "value", "inputs", "currency", "says"),
     [

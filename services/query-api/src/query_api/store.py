@@ -40,6 +40,28 @@ READABLE_CIKS = """ARRAY(SELECT k.cik FROM silver.company_ciks k WHERE k.company
     UNION SELECT r FROM authz.readable_companies('filings') r))"""
 HEADLINE = ("StartSel=«, StopSel=», MaxWords=35, MinWords=15, MaxFragments=2,"
             " FragmentDelimiter=\" … \"")
+# Store.cadence: the annual and quarterly reports in the filing index, and how recent a quarter in
+# gold must be for a 20-F/40-F filer's figures to count as quarters (some furnish them on 6-Ks).
+PERIODIC_FORMS = ("10-K", "10-K/A", "10-KT", "10-KT/A", "10-Q", "10-Q/A", "10-QT", "10-QT/A",
+                  "20-F", "20-F/A", "40-F", "40-F/A")
+CADENCE_RECENT_DAYS = 800
+
+
+def cadence_of(recent: bool, quarters: bool, years: bool, figures: bool,
+               latest_form: str | None) -> str | None:
+    """'annual' when the company reports once a year: gold has years (TTM rows) and no quarter in
+    the last CADENCE_RECENT_DAYS, and its latest annual or quarterly report is a 20-F or 40-F (or,
+    with no such report in the index at all, gold has never had a quarter: the facts' period
+    lengths). Never because figures stopped: a US filer whose figures end years ago (EIDP files
+    10-Qs; its figures end in 2019) stays 'quarterly' and its figures read as old. None without
+    figures."""
+    if recent:
+        return "quarterly"
+    if years and latest_form is not None and latest_form.startswith(("20-F", "40-F")):
+        return "annual"
+    if years and latest_form is None and not quarters:
+        return "annual"
+    return "quarterly" if (figures or years) else None
 
 
 class SearchTooBroad(Exception):
@@ -375,23 +397,37 @@ class Store:
             return cur.fetchone() or {}
 
     def cadence(self, user_id: str, company_id: str) -> str | None:
-        """How often the company's figures come (migration 056): 'quarterly' when gold has a
-        quarter (a duration of 80-120 days) ending in the last 800 days, 'annual' when it has
-        only years (a 20-F or 40-F filer: gold never makes a quarter out of a year or a half),
-        None without figures. Under RLS, like the figures."""
+        """How often the company's figures come (migration 056; `cadence_of` is the rule): the
+        facts' period lengths and the forms the company files, never how old its figures are. Gold
+        under RLS, like the figures; the filing index is public metadata."""
         with self._session(user_id) as cur:
             cur.execute(
                 """
-                SELECT CASE
-                    WHEN EXISTS (SELECT 1 FROM gold.quarterly_financials q
-                                 WHERE q.company_id = %(c)s AND q.period_start IS NOT NULL
-                                   AND q.period_end >= current_date - 800) THEN 'quarterly'
-                    WHEN EXISTS (SELECT 1 FROM gold.derived_financials d
-                                 WHERE d.company_id = %(c)s AND d.span = 'ttm') THEN 'annual'
-                END AS cadence
-                """, {"c": company_id})
+                SELECT g.recent, g.quarters, g.years, g.figures,
+                       -- the index only when the facts leave it open (an InitPlan runs when first
+                       -- needed: a company with recent quarters never reads it, ~1 ms in all)
+                       CASE WHEN g.years AND NOT g.recent THEN
+                           (SELECT f.form FROM silver.filings f
+                            -- = ANY(ARRAY(...)): the CIKs reach both branches of the UNION view
+                            WHERE f.cik = ANY(ARRAY(SELECT k.cik FROM silver.company_ciks k
+                                                    WHERE k.company_id = %(c)s))
+                              AND f.form = ANY(%(forms)s)
+                            ORDER BY f.filing_date DESC, f.accession_no DESC LIMIT 1)
+                       END AS latest_form
+                FROM (SELECT EXISTS (SELECT 1 FROM gold.quarterly_financials q
+                                     WHERE q.company_id = %(c)s AND q.period_start IS NOT NULL
+                                       AND q.period_end >= current_date - %(recent)s) AS recent,
+                             EXISTS (SELECT 1 FROM gold.quarterly_financials q
+                                     WHERE q.company_id = %(c)s AND q.period_start IS NOT NULL)
+                                 AS quarters,
+                             EXISTS (SELECT 1 FROM gold.derived_financials d
+                                     WHERE d.company_id = %(c)s AND d.span = 'ttm') AS years,
+                             EXISTS (SELECT 1 FROM gold.quarterly_financials q
+                                     WHERE q.company_id = %(c)s) AS figures) g
+                """, {"c": company_id, "recent": CADENCE_RECENT_DAYS,
+                      "forms": list(PERIODIC_FORMS)})
             row = cur.fetchone()
-            return row["cadence"] if row else None
+            return cadence_of(**row) if row else None
 
     def financials(self, user_id: str, company_id: str, metrics: list[str], quarters: int,
                    view: str = "quarter", basis: str = "fiscal") -> list[dict]:

@@ -496,3 +496,33 @@ def test_status_data_is_cached_for_a_minute():
     t[0] += timedelta(seconds=1)
     assert c.get("/v1/status/data").json()["as_of"] == "2026-11-02T12:01:00+00:00"
     assert store.calls == [("data_status",)] * 2
+
+
+@pytest.mark.parametrize(
+    ("facts", "latest_form", "cadence"),
+    [
+        # (recent quarter, any quarter, years, any figure)
+        ((True, True, True, True), "10-Q", "quarterly"),
+        # EIDP: still files 10-Qs, its figures end in 2019: old, never "once a year"
+        ((False, True, True, True), "10-Q", "quarterly"),
+        ((False, True, True, True), "10-K", "quarterly"),
+        ((False, False, True, True), "10-K", "quarterly"),  # a 10-K with no quarter facts
+        # Birkenstock: a 20-F filer's years
+        ((False, False, True, True), "20-F", "annual"),
+        ((False, True, True, True), "40-F/A", "annual"),  # quarters once, years now
+        # ICON, Arm: 20-F filers with quarters (6-Ks) in gold read as quarters
+        ((True, True, True, True), "20-F", "quarterly"),
+        # nothing in the index: the facts' period lengths decide
+        ((False, False, True, True), None, "annual"),
+        ((False, True, True, True), None, "quarterly"),
+        ((False, False, False, True), "20-F", "quarterly"),  # balances only, no years
+        ((False, False, False, False), None, None),
+    ],
+)
+def test_cadence_comes_from_forms_and_period_lengths_never_from_staleness(facts, latest_form,
+                                                                         cadence):
+    from query_api.store import cadence_of
+
+    recent, quarters, years, figures = facts
+    assert cadence_of(recent=recent, quarters=quarters, years=years, figures=figures,
+                      latest_form=latest_form) == cadence
