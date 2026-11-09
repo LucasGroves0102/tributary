@@ -252,10 +252,18 @@ describe("each default explained in one line", () => {
   it("Vertiv: the year to date, then the run rate fading to the long run, and each rate", () => {
     const lines = defaultRules(vrt, "base");
     expect(lines.map((l) => l.key)).toEqual(["ytd", "growth", "nonOperating", "taxRate", "shareChange", "fcfMargin"]);
-    expect(lines[0]!.text).toMatch(/^FY2026E: Q1–Q3 are reported \(\$10\.24B, \+39\.3% on the same quarters a year earlier, at a 20\.1% margin\)\. Q4 starts from Q4 FY2025 \(\$2\.88B at 20\.1%\)/);
+    expect(lines[0]!.text).toBe("FY2026E: Q1–Q3 are reported ($10.24B, +39.3% on the same quarters a year earlier, at a 20.1% margin). "
+      + "Q4 starts from Q4 FY2025 ($2.88B), grown at the trailing twelve months to FY2026 Q3's +35.3% and at its 20.1% operating margin.");
     expect(lines[1]!.text).toMatch(/^From FY2027E, growth and operating margin close half the gap each year from the trailing twelve months to FY2026 Q3/);
     expect(lines[3]!.text).toMatch(/effective rate, 19\.8%/);
     expect(lines.every((l) => !l.text.includes("\n"))).toBe(true);
+  });
+
+  it("NVIDIA: H2 starts from the trailing twelve months, not last year's H2 moved by this year's change", () => {
+    const lines = defaultRules(nvda, "base");
+    expect(lines[0]!.text).toMatch(/H2 starts from H2 FY2026 \(\$125\.13B\), grown at the trailing twelve months to FY2027 Q2's \+83\.4% and at its 65\.2% operating margin\.$/);
+    expect(nvda.cases.base!.defaults[0]).toMatchObject({ growth: 83.4, margin: 65.2, fcfMargin: 45.6 });
+    expect(lines.find((l) => l.key === "fcfMargin")!.text).toMatch(/; FY2027E's H2 at H2 FY2026's 45\.6%\.$/);
   });
 
   it("Deckers: shares down 8.4% a year, and a bear case's spread", () => {

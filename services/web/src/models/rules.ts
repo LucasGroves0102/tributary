@@ -16,7 +16,6 @@ import {
 } from "./model";
 
 const pct = (ratio: number | null | undefined) => (ratio === null || ratio === undefined ? "n/a" : `${(ratio * 100).toFixed(1)}%`);
-const pts = (ratio: number) => `${ratio >= 0 ? "+" : ""}${(ratio * 100).toFixed(1)} points`;
 const signed = (ratio: number | null) => (ratio === null ? "n/a" : `${ratio >= 0 ? "+" : ""}${(ratio * 100).toFixed(1)}%`);
 
 /** The lines, in the order of the assumptions' columns. */
@@ -32,12 +31,12 @@ export function defaultRules(run: ModelRun, selected: Scenario): { key: string; 
   if (fromQuarters && cur?.actual && cur.prior && cur.remainder_prior) {
     const a = cur.actual;
     const r = cur.remainder_prior;
-    const change = a.margin !== null && cur.prior.margin !== null ? a.margin - cur.prior.margin : null;
+    // the remainder's growth and margin are year 1's run-rate defaults: the TTM's (model_maths)
     out.push({
       key: "ytd",
       text: `FY${cur.fy}E: ${quartersLabel(cur.quarters)} ${cur.quarters === 3 ? "are" : "is"} reported (${formatCell(a.revenue, "USD", amountUnit(run))}, ${signed(a.growth)} on the same quarters a year earlier, at a ${pct(a.margin)} margin). `
-        + `${remainderLabel(cur.quarters)} starts from ${remainderLabel(cur.quarters)} FY${cur.fy - 1} (${formatCell(r.revenue, "USD", amountUnit(run))} at ${pct(r.margin)}): grown at that ${signed(a.growth)}, `
-        + `its margin moved by this year's change so far${change === null ? "" : ` (${pts(change)})`}.`,
+        + `${remainderLabel(cur.quarters)} starts from ${remainderLabel(cur.quarters)} FY${cur.fy - 1} (${formatCell(r.revenue, "USD", amountUnit(run))}), grown at ${ttm}'s ${signed(rr.growth)} `
+        + `and at its ${pct(rr.margin)} operating margin.`,
     });
     out.push({
       key: "growth",

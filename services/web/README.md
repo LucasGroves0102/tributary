@@ -495,15 +495,16 @@ on the folder changed last. Never just the first workspace.
   other (% of revenue: operating income less pretax income), tax rate, share change (buybacks less
   issuance, % a year) and FCF margin (FCF as one rate on revenue rather than cash flow less capex:
   both move with revenue, and the table shows operating cash flow, capex and FCF behind it); a
-  note. Each field shows its default ("default 39.3%"), and one line per default says the rule
+  note. Each field shows its default ("default 35.3%"), and one line per default says the rule
   with the company's numbers (`defaultRules`). **The current year from actuals** (`ytd`, every new
   model): year 1 is the current fiscal year's reported quarters plus the remainder, its growth and
-  margin the remainder's ("FY2026E · Q4 (Q1–Q3 reported)"); the remainder starts at the year to
-  date's growth over the same quarters a year earlier and those quarters' margin a year earlier
-  moved by this year's change so far. Vertiv's FY2026E is Q1–Q3 as reported ($10.24B, +39.3%) plus
-  a Q4 starting at +39.3% and 23.3%; Deckers' FY2027E is H1 plus H2; NVIDIA's FY2027E is H1 plus H2.
-  Later years start at the TTM run rate and close half the gap each year to the long run (B7,
-  unchanged). A model saved before F2 opens unchanged (year 1 a full-year guess, labelled so) and
+  margin the remainder's ("FY2026E · Q4 (Q1–Q3 reported)"); the remainder grows the same quarters
+  a year earlier at the trailing twelve months' growth, at their operating margin (the TTM run
+  rate, like any first year; its FCF margin is those quarters' a year earlier). Vertiv's FY2026E
+  is Q1–Q3 as reported ($10.24B, +39.3%) plus a Q4 starting at +35.3% and 20.1%; Deckers' FY2027E
+  is H1 plus H2; NVIDIA's FY2027E is H1 plus an H2 at +83.4% and 65.2% (last year's H2 margin moved
+  by this year's change read 75.0%). Later years close half the gap each year from the TTM run
+  rate to the long run (B7, unchanged). A model saved before F2 opens unchanged (year 1 a full-year guess, labelled so) and
   offers "Build FY2026E from Q1–Q3 reported", which sets each case's remainder to what its full
   year implied (`implied_remainder`), so no year changes until the user edits it.
   **The table** (`modelColumns`, `modelLines`, `ModelView`): one table with every line (revenue,
