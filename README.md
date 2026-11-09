@@ -244,8 +244,10 @@ without losing anything you typed:
 
 1. **Business**: the latest 10-K's Item 1, the segments, and your "how it makes money" notes.
 2. **Numbers**: ten fiscal years of revenue and growth, gross and operating margin, free cash
-   flow (operating cash flow − capex), receivables against revenue, and debt; each chart opens
-   in the chart builder or saves to the project.
+   flow (operating cash flow − capex), buybacks and dividends, shares outstanding, inventory,
+   receivables against revenue, a backlog proxy and customer advances, and debt, each ending with
+   the year in progress (the latest TTM or quarter, marked as partial); each chart opens in the
+   chart builder or saves to the project.
 3. **Earnings**: each quarter's earnings release beside its reported figures, the outlook it
    states and management's adjustments ([below](#earnings-and-events)).
 4. **What changed**: the 8-Ks filed since the last 10-Q or 10-K (deals, debt, leadership,
@@ -303,6 +305,24 @@ index here (140,884 of 140,884, all filers); for operating companies over the la
 releases sampled across industries, the outlook rules found 32 of the 33 that have an Outlook or
 Guidance section, and nothing in the others. Rules and numbers:
 [query-api](services/query-api/README.md#earnings-and-events), [web](services/web/README.md).
+
+#### Statements: cash flow, KPIs, reported vs standardised
+
+The cash flow statement shows its operating, investing and financing subtotals, exchange rates and
+other, the change in cash, the cash it starts and ends with, and whether start + change = end; outflows
+are negative, as filings print them. Measured on 613 companies rebuilt with migration 049: 15,620 of
+16,062 quarters since 2019 tie within 0.5%, and where one doesn't the page says by how much. The
+balance sheet adds customer advances (contract liabilities: Vertiv's $1.13B to $4.12B in a year, beside
+current liabilities of $3.58B to $8.71B), accounts payable, remaining performance obligations (the
+nearest tagged figure to a backlog: Caterpillar $49.4B) and cash and short-term investments, read by net
+debt's own rule. A quarter far outside its series (NVIDIA's dividends: $6.05B after $243M) or of the
+other sign (JPMorgan's operating cash flow, six sign changes in eight quarters) is marked, with its
+filing, by the same tests as the data notes. A standardised line (net debt, free cash flow, a computed
+gross profit, a line tagged as parts) opens into what it is made of: each part's value, the tag the
+filing used, its filing, and the other tags reported for that date. Existing figures didn't move: the
+same 613 companies rebuilt before and after the migration gave identical rows. Rules and numbers:
+[db](db/README.md), [query-api](services/query-api/README.md#statement-callouts),
+[web](services/web/README.md).
 
 #### What changed
 
