@@ -98,7 +98,8 @@ into `silver.financial_facts` with `source = 'filing'` (a filing companyfacts la
 (what companyfacts never carries), and `gold.refresh_financials` rebuilds the companies; one
 transaction per batch of 25 filings. Re-running changes nothing (delete-then-insert on the accession).
 `--rebuild` re-projects every stored row from its source after a change to the tags or sums, without
-the SEC.
+the SEC, committing each batch as it goes (nothing may open a transaction before the first batch, or
+every batch becomes a savepoint of one transaction as long as the job).
 
 What the extract reads is what companyfacts carries: on 705 filings both have (the 46 companies the
 gaps touch, 2019-2026), 59,054 of 59,097 shared values are identical; the 43 others are a figure

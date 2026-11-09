@@ -332,3 +332,33 @@ def test_no_sum_when_another_member_is_on_the_axis(conn):
 @db
 def test_no_sum_when_the_filing_has_the_consolidated_figure(conn):
     assert ford(conn, {"f:A": 5550, "f:B": 51752}, total=57302) is None
+
+
+class _Spy:
+    """A real connection that notes the transaction state each `transaction()` starts from."""
+
+    def __init__(self, conn):
+        self._conn, self.starts = conn, []
+
+    def transaction(self, *a, **kw):
+        self.starts.append(self._conn.info.transaction_status.name)
+        return self._conn.transaction(*a, **kw)
+
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
+
+
+@db
+def test_rebuild_commits_each_batch_instead_of_holding_one_transaction():
+    # mapping() ran outside any transaction and opened an implicit one, so every batch's
+    # transaction() was a savepoint and --rebuild held one transaction for the whole job
+    import psycopg
+
+    with psycopg.connect(os.environ["TEST_DATABASE_URL"]) as c:
+        if c.execute("SELECT count(*) FROM bronze.filing_facts").fetchone()[0]:
+            pytest.skip("bronze.filing_facts has rows: this test must not rebuild them")
+        c.rollback()
+        spy = _Spy(c)
+        filings.rebuild(spy, filings.RunStats())
+        assert spy.starts and set(spy.starts) == {"IDLE"}
+        assert c.info.transaction_status.name == "IDLE"

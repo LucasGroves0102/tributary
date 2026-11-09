@@ -385,6 +385,8 @@ def read_filing(conn: psycopg.Connection, filing: Filing, m: Mapping, fetch: Fet
 
 def load(conn: psycopg.Connection, filings: Sequence[Filing], m: Mapping, fetch: Fetch | None,
          stats: RunStats, batch_size: int = BATCH) -> None:
+    """Read and store `filings`, one transaction per batch: on a connection with no transaction
+    open (the jobs) each batch commits; inside a caller's transaction (tests) they're savepoints."""
     batch: list[Row] = []
 
     def flush() -> None:
@@ -434,9 +436,12 @@ def catch_up(conn: psycopg.Connection, stats: RunStats) -> None:
 
 
 def rebuild(conn: psycopg.Connection, stats: RunStats) -> None:
-    """Re-project every stored row from its source with the current tags and sums; no SEC."""
-    m = mapping(conn)
+    """Re-project every stored row from its source with the current tags and sums; no SEC. Each
+    batch commits on its own (load): nothing may leave a transaction open before it, or every
+    batch's `conn.transaction()` becomes a savepoint of one transaction as long as the job (the
+    mapping read used to open it)."""
     with conn.transaction():
+        m = mapping(conn)
         rows = conn.execute(
             "SELECT accession_no, cik, form, filed, gap AND superseded_at IS NULL"
             " FROM bronze.filing_facts ORDER BY filed, accession_no").fetchall()
