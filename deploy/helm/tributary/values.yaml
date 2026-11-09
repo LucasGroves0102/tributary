@@ -157,6 +157,8 @@ services:
     terminationGracePeriodSeconds: 60
     env:
       CRAWL_YEARS: "5"
+      # CRAWL_SINCE: "2013-01-01"  # a backfill's fixed start (F8b, doc-fetcher README "Documents
+      # before 2021"): measured ~408k filings, ~74 GB of database, ~41 h; not started
       CRAWL_8K_ITEMS: "2.02,7.01,8.01"
       CRAWL_MIN_FREE_GB: "50"
       CRAWL_WORKERS: "4"

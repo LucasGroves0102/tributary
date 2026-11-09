@@ -88,7 +88,8 @@ idle, longer while the document crawl runs), ~75 MB and ~30 MB.
 `doc-crawler` (`crawl.py`, `crawl_fetch.py`, `crawl_db.py`; migration `020_doc_crawl.sql`)
 fetches the 10-K, 10-K/A, 10-Q, 10-Q/A and 8-K primary documents and 8-K EX-99.x exhibits of
 every company with gold financials (the operating companies, ~6,000) for the last `CRAWL_YEARS`
-years, into the same bronze tables, in the same gzip format the live doc-fetcher writes and
+years (or since `CRAWL_SINCE`, a date, when that is earlier: a backfill's fixed start), into the same
+bronze tables, in the same gzip format the live doc-fetcher writes and
 both parsers read. 8-Ks only with an item in `CRAWL_8K_ITEMS` (default `2.02,7.01,8.01`:
 results, Reg FD and other events, where the press releases are; `all` for every 8-K).
 
@@ -141,6 +142,33 @@ another ~28% on 10-K/10-Q (~5-7 GB in total), not worth a second format in both 
 Section text is 9-21% of the HTML. Tracked-company averages in bronze (parser-rs README):
 10-K 3.3 MB, 10-Q 2.3 MB, 8-K 44 KB, EX-99 exhibit 310 KB. `ops.doc_crawl_status` reports the
 measured compression ratio and the projected final stored size as the crawl goes.
+
+### Documents before 2021 (F8b: measured, not started)
+
+Stored documents start 2021-10-21 (the first 5-year plan); XBRL figures go back to 2009. A backfill is
+one setting, `CRAWL_SINCE` (e.g. `2013-01-01`) on the doc-crawler: the plan then reaches back to it,
+newest first, so recent filings still go first, and the window never shortens. `CRAWL_YEARS` alone
+isn't the same: it rolls (14 years reaches 2012-11-09 today and moves a day each day) and can't stage
+2016 then 2013. Measured on hermes (2026-11-09, read only) for 2013-01-01 to 2021-10-20, operating
+companies, production's 20 8-K items:
+
+| | 10-K | 10-K/A | 10-Q | 10-Q/A | 8-K | Total |
+|---|---|---|---|---|---|---|
+| Filings | 27,178 | 3,409 | 80,782 | 2,374 | 294,098 | 407,841 |
+| SEC requests | 27,178 | 3,409 | 80,782 | 2,374 | ~815,000 | ~928,000 |
+| Stored (gzip) | 4.8 GB | 0.3 GB | 8.0 GB | 0.2 GB | 4.4 GB | 17.8 GB |
+| Section text (silver) | 4.6 GB | 0.2 GB | 4.9 GB | 0.1 GB | 3.1 GB | 12.9 GB |
+| Search passages (gold) | 13.0 GB | 0.6 GB | 14.2 GB | 0.3 GB | 7.5 GB | 35.6 GB |
+| What changed (gold) | 1.5 GB | | 5.9 GB | | | 7.5 GB |
+
+About 74 GB more database (97 GB today), the weekly full backup about 26 GB larger, ~41 hours of
+fetching at the crawl's 10,000 filings an hour (the 5-year crawl's rate; parsing keeps pace) and ~53
+hours of section-index. From 2016 instead: 287,853 filings, ~53 GB and ~19 GB, ~29 and ~37 hours.
+Pre-2019 HTML (no inline XBRL) stores at 0.67 (10-K) and 0.72 (10-Q) of today's per-filing size: 24
+sampled 2015 documents beside the same companies' 2025 ones. The parser reads them: of the 24, Item 1A
+in 11 of 12 10-Ks, Item 7 in 12 (one a cross-reference), MD&A in 11 of 12 10-Qs. Where it costs: the
+weekly full dump and the Sunday restore test (`FREE_SPACE_FACTOR` x the dump) on the same disk; the
+steps, the disk budget and the decisions are in the F8b runbook (docs/analyst-test, local).
 
 Before starting on hermes, check the target count without writing anything:
 

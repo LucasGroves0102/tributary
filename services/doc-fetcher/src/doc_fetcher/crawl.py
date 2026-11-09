@@ -4,7 +4,8 @@ A long-running worker (Helm `services.doc-crawler`, shipped at replicas 0). Each
 
 1. pause if the operator set ops.doc_crawl_control.paused, or free disk is under the guard;
 2. every `plan_hours`, queue new targets (ops.doc_crawl_plan: companies with gold financials,
-   last `years` years) — so after the backfill it keeps up with new filings of every company;
+   last `years` years, or since `since` when that is earlier: CRAWL_SINCE, a backfill's fixed
+   start) — so after the backfill it keeps up with new filings of every company;
 3. publish documents.backfill for stored documents whose event isn't confirmed (outbox);
 4. claim a batch (tracked companies first, then most recent first), fetch it with `workers`
    threads through sec_client (caller class from SEC_CALLER_CLASS: bulk), store each filing and
@@ -63,6 +64,9 @@ class Config:
     batch: int = 32
     workers: int = 4
     years: int = 5
+    # a fixed earliest filing date (CRAWL_SINCE, YYYY-MM-DD): the window reaches back to it when
+    # it's before the rolling `years` (a backfill, F8b); never shortens the window
+    since: date | None = None
     eight_k_items: tuple[str, ...] | None = ("2.02", "7.01", "8.01")
     min_free_bytes: int = 50 * 10**9
     disk_path: str = "/tmp"
@@ -83,6 +87,7 @@ class Config:
             batch=int(env.get("CRAWL_BATCH", d.batch)),
             workers=int(env.get("CRAWL_WORKERS", d.workers)),
             years=int(env.get("CRAWL_YEARS", d.years)),
+            since=date.fromisoformat(env["CRAWL_SINCE"]) if env.get("CRAWL_SINCE") else None,
             eight_k_items=(None if items.strip().lower() == "all"
                            else tuple(i.strip() for i in items.split(",") if i.strip())),
             min_free_bytes=int(float(env.get("CRAWL_MIN_FREE_GB", 50)) * 10**9),
@@ -171,6 +176,12 @@ def years_before(day: date, years: int) -> date:
     return date(day.year - years, day.month, min(day.day, 28))
 
 
+def window_start(today: date, years: int, since: date | None) -> date:
+    """The earliest filing date the plan queues: `years` back, or `since` when it's earlier."""
+    rolling = years_before(today, years)
+    return min(rolling, since) if since is not None else rolling
+
+
 def disk_free(path: str) -> int:
     """Free bytes on the filesystem holding `path`. In the pod, /tmp is an emptyDir on the node's
     disk, which on hermes is the same filesystem as host Postgres (/var/lib/postgresql)."""
@@ -213,7 +224,7 @@ class Crawler:
             self._state("disk_low", free)
             return c.pause_seconds
         if self.planned_at is None or self.clock() - self.planned_at >= c.plan_hours * 3600:
-            since = years_before(self.today(), c.years)
+            since = window_start(self.today(), c.years, c.since)
             items = list(c.eight_k_items) if c.eight_k_items is not None else None
             added = self.queue.plan(since, items)
             self.planned_at = self.clock()

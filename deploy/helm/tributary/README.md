@@ -101,6 +101,9 @@ On hermes both run at 1 and stay on after the backfill: the crawler re-plans eve
 `CRAWL_PLAN_HOURS` and fetches what the live doc-fetcher leaves (amendments, daily-index filings,
 8-Ks outside its items, fetch errors). Since 2026-11-09 doc-fetcher itself stores every operating
 company's new 10-K, 10-Q and material 8-K from the feed within minutes (`FETCH_OPERATING`).
+Documents before the 5-year window (F8b) are one env var on the crawler, `CRAWL_SINCE` (a date),
+set under `values.services.doc-crawler.env` in the Flux release; measured cost and steps in the
+doc-fetcher README, "Documents before 2021". Not set.
 
 ## Components
 
