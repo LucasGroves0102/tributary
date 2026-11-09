@@ -25,6 +25,7 @@ import {
   type Run,
 } from "../../reader/text";
 import { blockAt, blockMatches, firstBlockMatch, readerBlocks, type Block } from "../../reader/blocks";
+import { sectionTitle } from "../../reader/sections";
 import { go, href } from "../../route";
 import { asPhrase, isPhrase } from "../../search/state";
 import { TableScroll } from "../TableScroll";
@@ -195,7 +196,7 @@ export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q,
   const index = f.sections.findIndex((s) => s.section_key === active?.section_key);
   const neighbour = (i: number) => f.sections[i] && (
     <a href={href({ view: "filing", companyId, accessionNo, section: f.sections[i]!.section_key, ...(query ? { q: query } : {}) })}>
-      {i < index ? "← " : ""}{f.sections[i]!.section_key} · {f.sections[i]!.title ?? "Untitled"}{i > index ? " →" : ""}
+      {i < index ? "← " : ""}{f.sections[i]!.section_key} · {sectionTitle(f.sections[i]!.section_key, f.sections[i]!.title)}{i > index ? " →" : ""}
     </a>
   );
 
@@ -267,7 +268,7 @@ export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q,
                     aria-current={s.section_key === active?.section_key ? "page" : undefined}
                   >
                     <span className="key">{s.section_key}</span>
-                    <span className="grow">{s.title ?? "Untitled"}</span>
+                    <span className="grow">{sectionTitle(s.section_key, s.title)}</span>
                     {hit ? (
                       <span className="cnt" title={`${hit.passages_matched} matching passage${hit.passages_matched === 1 ? "" : "s"}`}>
                         {hit.passages_matched}
@@ -289,7 +290,7 @@ export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q,
           {active && (
             <div className="row wrap section-h" data-sticky-bar="">
               <h2 className="grow">
-                {active.section_key} · {active.title ?? "Untitled"}
+                {active.section_key} · {sectionTitle(active.section_key, active.title)}
               </h2>
               {terms.length > 0 && sectionText && !diffOn && (
                 <MatchNav matches={matches} current={match} passages={hitsBySection.get(active.section_key)?.passages_matched ?? 0}

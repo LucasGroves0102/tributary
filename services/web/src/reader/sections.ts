@@ -67,6 +67,12 @@ const TEN_Q: Record<string, string> = {
   "II-6": "Exhibits",
 };
 
+/** A section's own title, or its name from the key when the parser left none (rule 10 empties a
+ * title that was only punctuation, such as an 8-K's ","). */
+export function sectionTitle(key: string, title: string | null | undefined): string {
+  return title?.trim() || sectionName(key);
+}
+
 /** "MD&A", "Risk Factors", "Press release", "Exhibit 10.1", "Item 3C" for one it doesn't know. */
 export function sectionName(key: string): string {
   const known = TEN_Q[key] ?? TEN_K[key] ?? EIGHT_K_ITEMS[key];
