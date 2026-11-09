@@ -15,8 +15,8 @@ from decimal import Decimal
 import pytest
 from fastapi.testclient import TestClient
 
-from query_api.alert_job import run
-from query_api.alerts import MAX_RED_LINES_TOTAL, AppAlerts
+from query_api.alert_job import deliver, run
+from query_api.alerts import FORMS, MAX_RED_LINES_TOTAL, AppAlerts
 from query_api.app import create_app
 from query_api.webhooks import Sent, signature, webhook_secret
 
@@ -482,3 +482,175 @@ def test_figures_go_out_only_while_the_company_is_readable(conn, alerts):
     first, second = (json.loads(b) for _, b, _ in failing.sent)
     assert first["figures"] and second["figures"] is None and second["red_lines"] == []
     assert second["figures_status"] == "no_access"
+
+
+# --- pre-ship (2026-11-09): the 8-K default, stalled webhooks, a fair share of the budget -------
+
+FD = "0001045810-26-000102"     # NVDA 8-K 7.01 + 9.01 (an investor presentation)
+OTHER = "0001045810-26-000103"  # NVDA 8-K 8.01 alone
+DEAL = "0001045810-26-000104"   # NVDA 8-K 1.01 + 8.01
+LATER_FD = "0001045810-26-000105"
+
+
+def eight_ks():
+    store = JobStore()
+    store.filings = [filing(FD, "8-K", date(2026, 11, 19), items=["7.01", "9.01"]),
+                     filing(OTHER, "8-K", date(2026, 11, 19), items=["8.01"]),
+                     filing(DEAL, "8-K", date(2026, 11, 18), items=["1.01", "8.01"])]
+    return store
+
+
+def test_7_01_and_8_01_8ks_alert_only_for_companies_that_asked(conn, alerts):
+    alerts.add_webhook(A, HOOK_URL, "json", b"s" * 16)
+    sender = RecordingSender()
+    run_job(alerts, eight_ks(), sender)
+    shown = {n["accession_no"]: n for n in alerts.notifications(A, None, 50)}
+    assert set(shown) == {DEAL}  # the deal alerts; the presentation and 8.01 alone don't
+    assert len(sender.sent) == 1 and alerts.unread(A)["unread"] == 1
+    quiet = conn.execute("SELECT accession_no, detail->>'quiet' FROM notifications"
+                         " WHERE user_id = %s AND status = 'skipped' ORDER BY 1", (A,)).fetchall()
+    assert quiet == [(FD, "true"), (OTHER, "true")]  # kept, never shown or sent
+
+    # turned on for NVDA: the next 7.01 / 8.01 8-Ks alert (the skipped ones stay skipped)
+    assert alerts.put_setting(A, NVDA, list(FORMS), True) is True
+    later = eight_ks()
+    later.filings.append(filing(LATER_FD, "8-K", date(2026, 11, 20), items=["7.01"]))
+    run_job(alerts, later, sender, now=NOW + timedelta(minutes=10))
+    shown = {n["accession_no"] for n in alerts.notifications(A, None, 50)}
+    assert shown == {DEAL, LATER_FD} and len(sender.sent) == 2
+
+
+def test_other_8ks_is_saved_kept_by_an_older_web_app_and_the_default_is_no_row(conn, alerts,
+                                                                                token):
+    # a row saved before 017 reads false: the new default
+    conn.execute("INSERT INTO alert_settings (user_id, company_id, forms) VALUES"
+                 " (%s, %s, '{10-K,8-K}')", (A, MSFT))
+    c = api(alerts, RecordingSender())
+    s = c.get("/v1/alerts/settings", headers=token(A)).json()
+    assert s["other_8k_items"] == ["7.01", "8.01"]
+    by = {x["company_id"]: x for x in s["companies"]}
+    assert by[NVDA]["other_8ks"] is False and by[NVDA]["forms"] == ["10-K", "10-Q", "8-K"]
+    assert alerts.settings(A)[MSFT] == {"forms": ["10-K", "8-K"], "other_8ks": False}
+
+    r = c.put(f"/v1/alerts/settings/{NVDA}", headers=token(A),
+              json={"forms": ["10-K", "10-Q", "8-K"], "other_8ks": True})
+    assert r.json() == {"company_id": NVDA, "forms": ["10-K", "10-Q", "8-K"], "other_8ks": True}
+    # an older web app saves forms only: the choice stays
+    r = c.put(f"/v1/alerts/settings/{NVDA}", headers=token(A), json={"forms": ["10-Q", "8-K"]})
+    assert r.json()["other_8ks"] is True
+    assert alerts.settings(A)[NVDA] == {"forms": ["10-Q", "8-K"], "other_8ks": True}
+    # back to the default: no row
+    c.put(f"/v1/alerts/settings/{NVDA}", headers=token(A),
+          json={"forms": ["10-K", "10-Q", "8-K"], "other_8ks": False})
+    assert NVDA not in alerts.settings(A)
+    assert c.get("/v1/alerts/settings", headers=token(B)).json()["companies"] == []
+
+
+class Stalling:
+    """A sender whose URLs starting with `bad` stall with `code`; every other one arrives."""
+
+    def __init__(self, bad, code="timeout"):
+        self.bad, self.code, self.sent = bad, code, []
+
+    def send(self, url, body, headers):
+        self.sent.append(url)
+        return Sent(False, None, self.code) if url.startswith(self.bad) else Sent(True, 204)
+
+
+def ready_8ks(alerts, user, first, n, at):
+    """n ready 8-Ks for `user`: a delivery each for every enabled webhook, due at `at`."""
+    rows = [{"company_id": NVDA, "accession_no": f"0001045810-26-{first + i:06d}", "form": "8-K",
+             "filed": date(2026, 11, 19), "period_end": None, "items": ["2.02"],
+             "sources": ["watchlist"], "cik": NVDA} for i in range(n)]
+    alerts.add_notifications(user, rows)
+    mine = {r["accession_no"] for r in rows}
+    pending = [p for p in alerts.pending(user) if p["accession_no"] in mine]
+    alerts.finish(user, [{"notification_id": p["notification_id"], "status": "ready",
+                          "items": ["2.02"], "detail": {}} for p in pending], at)
+
+
+def test_one_stalled_webhook_doesnt_starve_the_users_others(conn, alerts):
+    """The review's minor: 12 older deliveries to a dead webhook filled the 10-row batch and the
+    user's other webhook got nothing. Deliveries are now taken in turns across webhooks."""
+    alerts.add_webhook(A, HOOK_URL, "json", b"s" * 16)
+    ready_8ks(alerts, A, 900, 12, NOW - timedelta(hours=1))  # only the first webhook exists yet
+    alerts.add_webhook(A, "https://hooks.example.org/ok", "json", b"t" * 16)
+    ready_8ks(alerts, A, 950, 1, NOW)
+    sender = Stalling(HOOK_URL)
+    ok, failed, stalled = deliver(alerts, JobStore(), sender, A, jwt_secret=SECRET,
+                                  app_url="https://app.example", at=NOW,
+                                  can=FakeAuthorizer({}).can)
+    assert sender.sent.count(HOOK_URL) == 1  # stalled once, then skipped for the run
+    assert sender.sent.count("https://hooks.example.org/ok") == 1  # its delivery went out
+    assert (ok, failed, stalled) == (1, 1, 1)
+
+
+@pytest.mark.parametrize("code", ["timeout", "dns_timeout", "unresolvable", "connect", "tls"])
+def test_repeated_stalls_leave_a_webhook_out_of_later_runs(conn, alerts, token, code):
+    hook = alerts.add_webhook(A, HOOK_URL, "json", b"s" * 16)
+    store = JobStore()
+    store.filings = [f for f in store.filings if f["accession_no"] == REL]
+    sender = Stalling(HOOK_URL, code)
+    run_job(alerts, store, sender)                                   # stall 1: this run only
+    run_job(alerts, store, sender, now=NOW + timedelta(minutes=10))  # stall 2: 30 minutes off
+    assert len(sender.sent) == 2
+    (w,) = api(alerts, sender).get("/v1/alerts/webhooks", headers=token(A)).json()["webhooks"]
+    assert w["stalls"] == 2
+    assert datetime.fromisoformat(w["stalled_until"]) == NOW + timedelta(minutes=40)
+    run_job(alerts, store, sender, now=NOW + timedelta(minutes=20))  # left out
+    assert len(sender.sent) == 2
+    (d,) = alerts.deliveries(A, None, 10)
+    assert d["status"] == "pending"  # still due once the webhook is tried again
+    # a test send that arrives clears it; the next run once the delivery's own backoff is over
+    # (30 minutes after its 2nd try) sends
+    assert alerts.record_test(A, hook["webhook_id"], Sent(True, 204), NOW)
+    w = alerts.webhook(A, hook["webhook_id"])
+    assert (w["stalls"], w["stalled_until"]) == (0, None)
+    sender.bad = "https://nothing-stalls"
+    run_job(alerts, store, sender, now=NOW + timedelta(minutes=40))
+    assert len(sender.sent) == 3
+    assert {d["status"] for d in alerts.deliveries(A, None, 10)} == {"delivered"}
+
+
+def test_turning_a_webhook_back_on_clears_its_stall(conn, alerts):
+    hook = alerts.add_webhook(A, HOOK_URL, "json", b"s" * 16)
+    for _ in range(3):
+        alerts.webhook_result(A, hook["webhook_id"], True, NOW)
+    assert alerts.webhook(A, hook["webhook_id"])["stalls"] == 3
+    assert alerts.webhook(A, hook["webhook_id"])["stalled_until"] == NOW + timedelta(hours=2)
+    alerts.set_webhook(A, hook["webhook_id"], False)
+    assert alerts.webhook(A, hook["webhook_id"])["stalls"] == 3
+    row = alerts.set_webhook(A, hook["webhook_id"], True)
+    assert (row["stalls"], row["stalled_until"]) == (0, None)
+    # B can't touch it
+    alerts.webhook_result(B, hook["webhook_id"], True, NOW)
+    assert alerts.webhook(A, hook["webhook_id"])["stalls"] == 0
+
+
+def test_each_user_gets_a_fair_share_of_the_send_budget(conn, alerts):
+    """A slow endpoint that answers (no stall) used to keep the first user sending until the
+    run's 240 s were gone. Each user now gets what's left over the users left."""
+    conn.execute("INSERT INTO watchlists (user_id, company_id, added_at) VALUES"
+                 " (%s, %s, '2026-11-10T12:00:00Z')", (B, NVDA))
+    for i in range(3):
+        alerts.add_webhook(A, f"https://slow.example.com/{i}", "json", bytes([i + 1]) * 16)
+    alerts.add_webhook(B, "https://hooks.example.org/b", "json", b"u" * 16)
+    clock = [0.0]
+
+    class Slow:
+        def __init__(self):
+            self.sent = []
+
+        def send(self, url, body, headers):
+            self.sent.append(url)
+            if url.startswith("https://slow."):
+                clock[0] += 30.0  # 30 s and a 500: answered, so never stalled
+                return Sent(False, 500, "http_500")
+            return Sent(True, 204)
+    sender = Slow()
+    run(alerts=alerts, store=JobStore(), can=FakeAuthorizer({}).can, sender=sender,
+        jwt_secret=SECRET, now=NOW, users=[A, B], monotonic=lambda: clock[0],
+        shuffle=lambda users: users.sort())  # A first, in making and in sending
+    a_sends = [u for u in sender.sent if u.startswith("https://slow.")]
+    assert len(a_sends) == 4  # A's share: 120 s of 240, sends started at 0, 30, 60 and 90
+    assert sender.sent.count("https://hooks.example.org/b") == 3  # B still gets all of its own

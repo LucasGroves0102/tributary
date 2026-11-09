@@ -11,13 +11,19 @@ Rules (the spec; README "Filing alerts"; test_alerts.py):
   ways is one alert with both sources. Watching grants nothing: an alert is about a public
   filing, and its figures are read as the user, through layer 1 and RLS, or not at all.
 - Forms: 10-K, 10-Q and 8-K, originals (amendments re-report). Per company the user may turn
-  any of the three off (`alert_settings`; no row = all three). Only filings filed on or after
-  the day the company was followed alert.
+  any of the three off (`alert_settings`; no row = all three, `other_8ks` off). Only filings
+  filed on or after the day the company was followed alert.
 - An 8-K alerts when any of its items is material: anything but the routine ones of
-  query_api.events (5.07 votes, 5.08 nominations, 9.01 exhibits alone). Its items come from
-  the filing index, else from the item headings the parser found (only with the filings tier);
-  until either has them the alert is pending, and after PENDING_DAYS without them it is shown
-  with its items unknown. An 8-K whose items are all routine is `skipped`: kept, never shown.
+  query_api.events (5.07 votes, 5.08 nominations, 9.01 exhibits alone) and, by default, the
+  OTHER_8K_ITEMS (7.01 Regulation FD, 8.01 Other events): an 8-K whose only items are those
+  (with or without routine ones) alerts only for a company whose setting has `other_8ks` on
+  (app migration 017; owner's decision 2026-11-09: deals, debt, leadership, results under 2.02,
+  impairments, non-reliance and the like alert, presentations and press-release-only 8-Ks don't).
+  Its items come from the filing index, else from the item headings the parser found (only with
+  the filings tier); until either has them the alert is pending, and after PENDING_DAYS without
+  them it is shown with its items unknown. An 8-K that doesn't alert is `skipped` (`detail.quiet`
+  true when it was 7.01/8.01): kept so it isn't made again, never shown; turning `other_8ks` on
+  later applies to 8-Ks from then on.
 - A 10-K or 10-Q is pending until gold has its figures (its recap's current period cites the
   filing), then ready with KEY_FIGURES for its period (the quarter for a 10-Q, the fiscal year
   for a 10-K: revenue with its change on a year earlier, gross margin, else operating margin,
@@ -59,7 +65,7 @@ from fastapi import Depends, FastAPI, HTTPException, Path, Query, Request
 from fastapi.responses import JSONResponse
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator
 from starlette.concurrency import run_in_threadpool
 
 from query_api import events
@@ -89,6 +95,8 @@ from query_api.webhooks import (
 log = logging.getLogger("query_api.alerts")
 
 FORMS: tuple[str, ...] = ("10-K", "10-Q", "8-K")
+# 8-K items that alert only when the user turns them on for the company (module docstring)
+OTHER_8K_ITEMS = frozenset({"7.01", "8.01"})
 SOURCES = ("watchlist", "analysis")
 LOOKBACK_DAYS = 3        # each run reads filings filed in the last 3 days (ET)
 PENDING_DAYS = 3         # a filing waits this long for its figures or items
@@ -120,11 +128,18 @@ OPS = ("<", "<=", ">", ">=")
 
 # --- rules ------------------------------------------------------------------------------------
 
-def material(items: list[str] | None) -> bool | None:
-    """An 8-K's items: True when any isn't routine, False when all are, None when unknown."""
+def material(items: list[str] | None, other_8ks: bool = False) -> bool | None:
+    """An 8-K's items: True when any alerts (neither routine nor, unless `other_8ks`, one of
+    OTHER_8K_ITEMS), False when none does, None when unknown."""
     if not items:
         return None
-    return any(i not in events.ROUTINE for i in items)
+    quiet = events.ROUTINE if other_8ks else events.ROUTINE | OTHER_8K_ITEMS
+    return any(i not in quiet for i in items)
+
+
+def quiet_8k(items: list[str] | None) -> bool:
+    """An 8-K that alerts only with `other_8ks`: its alerting items are all OTHER_8K_ITEMS."""
+    return bool(items) and material(items, True) is True and material(items) is False
 
 
 def item_info(items: list[str] | None) -> list[dict]:
@@ -312,12 +327,16 @@ class Pool(Protocol):
 
 NOTIFICATION_COLUMNS = ("notification_id::text, company_id, accession_no, form, filed, period_end,"
                         " items, sources, status, detail, created_at, ready_at, read_at")
-WEBHOOK_COLUMNS = "webhook_id::text, url, format, enabled, created_at, rotated_at"
+WEBHOOK_COLUMNS = ("webhook_id::text, url, format, enabled, created_at, rotated_at, stalls,"
+                   " stalled_until")
 DELIVERY_COLUMNS = ("delivery_id::text, webhook_id::text, notification_id::text, status, attempts,"
                     " next_attempt_at, last_attempt_at, last_status, last_error, created_at,"
                     " delivered_at")
 # a failed delivery is tried again after these waits, then given up (the job runs every 10 min)
 BACKOFF = (timedelta(minutes=5), timedelta(minutes=30), timedelta(hours=2), timedelta(hours=6))
+# a webhook whose sends stall (alert_job.STALLED) is left out of sends for this long after its
+# 1st, 2nd, 3rd, ... consecutive stall (the last repeats): the 1st only for the rest of the run
+STALL_WAITS = (timedelta(0), timedelta(minutes=30), timedelta(hours=2), timedelta(hours=6))
 
 
 class AppAlerts:
@@ -355,28 +374,39 @@ class AppAlerts:
                 """, {"u": user_id})
             return cur.fetchall()
 
-    def settings(self, user_id: str) -> dict[str, list[str]]:
+    def settings(self, user_id: str) -> dict[str, dict]:
+        """company_id → {forms, other_8ks} for the companies with a row (no row: the default)."""
         with self._tx(user_id) as cur:
-            cur.execute("SELECT company_id, forms FROM alert_settings WHERE user_id = %s",
-                        (user_id,))
-            return {r["company_id"]: r["forms"] for r in cur.fetchall()}
+            cur.execute("SELECT company_id, forms, other_8ks FROM alert_settings"
+                        " WHERE user_id = %s", (user_id,))
+            return {r["company_id"]: {"forms": r["forms"], "other_8ks": r["other_8ks"]}
+                    for r in cur.fetchall()}
 
-    def put_setting(self, user_id: str, company_id: str, forms: Sequence[str]) -> None:
+    def put_setting(self, user_id: str, company_id: str, forms: Sequence[str],
+                    other_8ks: bool | None = None) -> bool:
+        """Saves one company's forms and, unless None (an older web app's save), `other_8ks`;
+        returns the `other_8ks` now in force. The default (every form, other_8ks off) is no row."""
         try:
             with self._tx(user_id) as cur:
                 cur.execute("SELECT count(*) AS n FROM alert_settings WHERE user_id = %s"
                             " AND company_id <> %s", (user_id, company_id))
                 if (cur.fetchone() or {"n": 0})["n"] >= MAX_SETTINGS:
                     raise ValueError(f"at most {MAX_SETTINGS} companies' settings")
-                if sorted(forms) == sorted(FORMS):  # the default: no row
+                if other_8ks is None:
+                    cur.execute("SELECT other_8ks FROM alert_settings WHERE user_id = %s"
+                                " AND company_id = %s", (user_id, company_id))
+                    other_8ks = bool((cur.fetchone() or {"other_8ks": False})["other_8ks"])
+                if sorted(forms) == sorted(FORMS) and not other_8ks:  # the default: no row
                     cur.execute("DELETE FROM alert_settings WHERE user_id = %s AND company_id = %s",
                                 (user_id, company_id))
-                    return
-                cur.execute("INSERT INTO alert_settings (user_id, company_id, forms, updated_at)"
-                            " VALUES (%s, %s, %s, statement_timestamp())"
+                    return False
+                cur.execute("INSERT INTO alert_settings (user_id, company_id, forms, other_8ks,"
+                            " updated_at) VALUES (%s, %s, %s, %s, statement_timestamp())"
                             " ON CONFLICT (user_id, company_id) DO UPDATE"
-                            " SET forms = EXCLUDED.forms, updated_at = EXCLUDED.updated_at",
-                            (user_id, company_id, list(forms)))
+                            " SET forms = EXCLUDED.forms, other_8ks = EXCLUDED.other_8ks,"
+                            "     updated_at = EXCLUDED.updated_at",
+                            (user_id, company_id, list(forms), other_8ks))
+                return other_8ks
         except psycopg.errors.ForeignKeyViolation:
             raise UnknownUser(user_id) from None
 
@@ -488,10 +518,27 @@ class AppAlerts:
             raise UnknownUser(user_id) from None
 
     def set_webhook(self, user_id: str, webhook_id: str, enabled: bool) -> dict | None:
+        """On or off; turning it on also clears a stall (the user says it's back)."""
         with self._tx(user_id) as cur:
-            cur.execute(f"UPDATE webhooks SET enabled = %s WHERE user_id = %s AND webhook_id = %s"
-                        f" RETURNING {WEBHOOK_COLUMNS}", (enabled, user_id, webhook_id))
+            cur.execute("UPDATE webhooks SET enabled = %(e)s,"
+                        " stalls = CASE WHEN %(e)s THEN 0 ELSE stalls END,"
+                        " stalled_until = CASE WHEN %(e)s THEN NULL ELSE stalled_until END"
+                        " WHERE user_id = %(u)s AND webhook_id = %(w)s"
+                        f" RETURNING {WEBHOOK_COLUMNS}",
+                        {"e": enabled, "u": user_id, "w": webhook_id})
             return cur.fetchone()
+
+    def webhook_result(self, user_id: str, webhook_id: str, stalled: bool, at: datetime) -> None:
+        """After a send: a stall counts and waits STALL_WAITS[stalls] (the last one repeats);
+        anything the endpoint answered clears it (migration 017)."""
+        with self._tx(user_id) as cur:
+            cur.execute("UPDATE webhooks SET"
+                        " stalls = CASE WHEN %(s)s THEN least(stalls + 1, 1000) ELSE 0 END,"
+                        " stalled_until = CASE WHEN %(s)s THEN %(at)s::timestamptz"
+                        "   + (%(waits)s::interval[])[least(stalls + 1, %(n)s)] END"
+                        " WHERE user_id = %(u)s AND webhook_id = %(w)s",
+                        {"s": stalled, "at": at, "waits": list(STALL_WAITS),
+                         "n": len(STALL_WAITS), "u": user_id, "w": webhook_id})
 
     def rotate_webhook(self, user_id: str, webhook_id: str, salt: bytes) -> dict | None:
         with self._tx(user_id) as cur:
@@ -518,7 +565,11 @@ class AppAlerts:
                 f" RETURNING {DELIVERY_COLUMNS}",
                 {"u": user_id, "w": webhook_id, "s": "delivered" if sent.ok else "failed",
                  "at": at, "st": sent.status, "e": sent.error, "ok": sent.ok})
-            return cur.fetchone()
+            row = cur.fetchone()
+            if sent.ok:  # it arrived: a stall from earlier runs is over
+                cur.execute("UPDATE webhooks SET stalls = 0, stalled_until = NULL"
+                            " WHERE user_id = %s AND webhook_id = %s", (user_id, webhook_id))
+            return row
 
     def deliveries(self, user_id: str, webhook_id: str | None, limit: int) -> list[dict]:
         with self._tx(user_id) as cur:
@@ -541,9 +592,10 @@ class AppAlerts:
         follows = self.follows(user_id)
         ids = [f["company_id"] for f in follows]
         with self._tx(user_id) as cur:
-            cur.execute("SELECT company_id, forms FROM alert_settings WHERE user_id = %s"
-                        " AND company_id = ANY(%s)", (user_id, ids))
-            settings = {r["company_id"]: r["forms"] for r in cur.fetchall()}
+            cur.execute("SELECT company_id, forms, other_8ks FROM alert_settings"
+                        " WHERE user_id = %s AND company_id = ANY(%s)", (user_id, ids))
+            settings = {r["company_id"]: {"forms": r["forms"], "other_8ks": r["other_8ks"]}
+                        for r in cur.fetchall()}
             cur.execute("SELECT rule_id::text, company_id, label, formula, view, op, threshold"
                         " FROM red_lines WHERE user_id = %s AND company_id = ANY(%s)"
                         " ORDER BY created_at, rule_id", (user_id, ids))
@@ -604,19 +656,28 @@ class AppAlerts:
         return ready
 
     def due(self, user_id: str, at: datetime, limit: int = 10) -> list[dict]:
-        """Deliveries to make now, with their webhook (URL, format, salt) and notification."""
+        """Deliveries to make now, with their webhook (URL, format, salt, stalls) and
+        notification. Taken in turns across the user's webhooks (each one's oldest first, then
+        each one's second, ...), so one webhook's backlog can't fill the batch while another
+        waits; a webhook stalled until later (017) is left out."""
         with self._tx(user_id) as cur:
             cur.execute(
-                "SELECT d.delivery_id::text, d.attempts, w.webhook_id::text, w.url, w.format,"
-                "       w.secret_salt, n.notification_id::text, n.company_id, n.accession_no,"
-                "       n.form, n.filed, n.period_end, n.items, n.sources, n.detail"
+                "SELECT * FROM ("
+                " SELECT d.delivery_id::text, d.attempts, w.webhook_id::text, w.url, w.format,"
+                "        w.secret_salt, w.stalls, n.notification_id::text, n.company_id,"
+                "        n.accession_no, n.form, n.filed, n.period_end, n.items, n.sources,"
+                "        n.detail, d.next_attempt_at,"
+                "        row_number() OVER (PARTITION BY d.webhook_id"
+                "                           ORDER BY d.next_attempt_at, d.delivery_id) AS turn"
                 " FROM webhook_deliveries d"
                 " JOIN webhooks w ON w.webhook_id = d.webhook_id AND w.user_id = d.user_id"
                 " JOIN notifications n ON n.notification_id = d.notification_id"
                 "   AND n.user_id = d.user_id"
-                " WHERE d.user_id = %s AND d.status = 'pending' AND d.next_attempt_at <= %s"
-                "   AND w.enabled"
-                " ORDER BY d.next_attempt_at, d.delivery_id LIMIT %s", (user_id, at, limit))
+                " WHERE d.user_id = %(u)s AND d.status = 'pending' AND d.next_attempt_at <= %(at)s"
+                "   AND w.user_id = %(u)s AND w.enabled"
+                "   AND (w.stalled_until IS NULL OR w.stalled_until <= %(at)s)"
+                ") t ORDER BY turn, next_attempt_at, delivery_id LIMIT %(n)s",
+                {"u": user_id, "at": at, "n": limit})
             return cur.fetchall()
 
     def record(self, user_id: str, results: list[tuple[str, int, Sent]], at: datetime) -> None:
@@ -687,7 +748,9 @@ def notification_out(n: dict, can_read_financials: bool) -> dict:
 def webhook_out(w: dict) -> dict:
     return {"id": w["webhook_id"], "url": mask(w["url"]), "format": w["format"],
             "enabled": w["enabled"], "created_at": w["created_at"],
-            "rotated_at": w.get("rotated_at"), "last_delivery": w.get("last_delivery")}
+            "rotated_at": w.get("rotated_at"), "last_delivery": w.get("last_delivery"),
+            # consecutive sends that stalled, and until when the job leaves it out (017)
+            "stalls": w.get("stalls") or 0, "stalled_until": w.get("stalled_until")}
 
 
 def delivery_out(d: dict) -> dict:
@@ -713,6 +776,8 @@ class _Strict(BaseModel):
 
 class SettingBody(_Strict):
     forms: list[Literal["10-K", "10-Q", "8-K"]] = Field(max_length=3)
+    # 8-Ks whose only items are 7.01/8.01 too; absent (an older web app) = unchanged
+    other_8ks: StrictBool | None = None
 
     @field_validator("forms")
     @classmethod
@@ -833,10 +898,14 @@ def add_alert_routes(app: FastAPI, *, alerts: AppAlerts | None, store: Any,
         follows = a.follows(user_id)
         chosen = a.settings(user_id)
         status = a.unread(user_id)
+        default = {"forms": list(FORMS), "other_8ks": False}
         return {"forms": list(FORMS),
+                # the items an 8-K needs others besides to alert, unless other_8ks (additive:
+                # the web app offers the choice only when the API says it)
+                "other_8k_items": sorted(OTHER_8K_ITEMS),
                 "companies": [{"company_id": f["company_id"], "sources": f["sources"],
                                "since": f["since"],
-                               "forms": chosen.get(f["company_id"], list(FORMS))}
+                               **chosen.get(f["company_id"], default)}
                               for f in follows],
                 "webhooks": [webhook_out(w) for w in a.webhooks(user_id)],
                 "formats": list(FORMATS), "max_webhooks": MAX_WEBHOOKS,
@@ -848,14 +917,15 @@ def add_alert_routes(app: FastAPI, *, alerts: AppAlerts | None, store: Any,
 
     @app.put("/v1/alerts/settings/{company_id}", response_model=dict)
     def put_setting(user_id: User, company_id: CompanyId, body: SettingBody) -> dict:
-        """The forms alerted for one company ([] = none)."""
+        """The forms alerted for one company ([] = none) and whether 8-Ks with only 7.01/8.01
+        items alert too (`other_8ks`; left as it was when absent)."""
         try:
-            db().put_setting(user_id, company_id, body.forms)
+            other = db().put_setting(user_id, company_id, body.forms, body.other_8ks)
         except UnknownUser:
             raise HTTPException(409, "no account to save settings to") from None
         except ValueError as e:
             raise HTTPException(409, str(e)) from None
-        return {"company_id": company_id, "forms": body.forms}
+        return {"company_id": company_id, "forms": body.forms, "other_8ks": other}
 
     @app.get("/v1/alerts/red-lines", response_model=dict)
     def red_lines(

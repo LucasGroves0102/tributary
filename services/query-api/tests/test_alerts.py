@@ -20,6 +20,7 @@ from query_api.alerts import (
     message,
     notification_out,
     plain_value,
+    quiet_8k,
 )
 from query_api.app import create_app
 
@@ -46,6 +47,36 @@ def test_material_8k_items():
     assert material(None) is None and material([]) is None
     assert item_info(["2.02"])[0] == {"item": "2.02", "kind": "earnings",
                                       "title": "Results of Operations and Financial Condition"}
+
+
+@pytest.mark.parametrize("items, default, asked", [
+    (["7.01"], False, True),                    # Reg FD alone: a presentation, a press release
+    (["8.01", "9.01"], False, True),            # other events with exhibits
+    (["7.01", "8.01", "9.01", "5.07"], False, True),
+    (["7.01", "2.02", "9.01"], True, True),     # results: always
+    (["8.01", "1.01"], True, True),             # a deal: always
+    (["5.02", "7.01"], True, True),             # leadership
+    (["2.06"], True, True), (["4.02"], True, True), (["2.03", "8.01"], True, True),
+    (["5.07", "9.01"], False, False),           # routine alone: never, even when asked
+])
+def test_7_01_and_8_01_alone_alert_only_when_asked(items, default, asked):
+    # the owner's default (2026-11-09): 10-K, 10-Q and 8-Ks with a material item; 8-Ks whose
+    # only items are 7.01 and/or 8.01 alert only for a company the user turned them on for
+    assert material(items) is default
+    assert material(items, other_8ks=True) is asked
+    assert quiet_8k(items) is (asked and not default)
+
+
+def test_setting_bodies_are_strict(token):
+    c = TestClient(create_app(FakeAuthorizer({}), FakeStore(), SECRET))
+    for body in ({"forms": ["8-K"], "other_8ks": "true"}, {"forms": ["8-K"], "other_8ks": 1},
+                 {"forms": ["8-K"], "all_8ks": True}, {"forms": ["S-1"]}):
+        r = c.put(f"/v1/alerts/settings/{NVDA}", headers=token("alice"), json=body)
+        assert r.status_code == 422, body
+    # a well-formed body, with or without the new key, reaches the (absent) database
+    for body in ({"forms": ["8-K"]}, {"forms": ["8-K"], "other_8ks": True}):
+        assert c.put(f"/v1/alerts/settings/{NVDA}", headers=token("alice"),
+                     json=body).status_code == 503
 
 
 def test_key_figures_wait_until_gold_cites_the_filing():

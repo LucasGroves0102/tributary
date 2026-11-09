@@ -320,3 +320,49 @@ def test_a_trickling_endpoint_is_cut_at_the_total_deadline():
     server.close()
     assert sent == Sent(False, None, "timeout")
     assert took < 2.5
+
+
+def test_a_slow_lookup_is_inside_the_total_deadline():
+    """The review's slow-DNS domain: the lookup used to run before the hard timeout started, so a
+    resolver taking its time held the job's shared send budget. Now it counts, and nothing is
+    connected or sent once the deadline has passed, even when the answer comes later."""
+    done = threading.Event()
+
+    def slow(host, port, type=None):
+        time.sleep(1.0)
+        done.set()
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", port))]
+    sender = HttpsSender(resolver=slow, opener=opener(204), total_timeout=0.2)
+    start = time.monotonic()
+    sent = sender.send("https://hooks.example.com/x", b"{}", {})
+    assert sent == Sent(False, None, "dns_timeout")
+    assert time.monotonic() - start < 0.9
+    assert done.wait(3)
+    time.sleep(0.05)
+    assert FakeConnection.made == []  # the late answer opened nothing
+
+
+def test_a_resolver_that_fails_oddly_is_a_code():
+    def odd(*_a, **_k):
+        raise RuntimeError("resolver broke")
+    sender = HttpsSender(resolver=odd, opener=opener(204))
+    assert sender.send("https://hooks.example.com/x", b"{}", {}) == Sent(False, None,
+                                                                         "unresolvable")
+    assert FakeConnection.made == []
+
+
+def test_a_connect_finishing_after_the_deadline_sends_nothing():
+    class SlowConnect(FakeConnection):
+        def connect(self):
+            time.sleep(0.6)
+    made = []
+
+    def slow_opener(target, address, timeout):
+        conn = SlowConnect(target, address, timeout)
+        made.append(conn)
+        return conn
+    sender = HttpsSender(resolver=answers("93.184.216.34"), opener=slow_opener, total_timeout=0.2)
+    assert sender.send("https://hooks.example.com/x", b"{}", {}) == Sent(False, None, "timeout")
+    time.sleep(0.8)
+    (conn,) = made
+    assert conn.requests == [] and conn.closed

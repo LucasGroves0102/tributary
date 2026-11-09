@@ -21,9 +21,11 @@ Rules (the spec; README "Filing alerts"; test_webhooks.py):
 - Redirects are never followed: a 3xx is a failed delivery ("redirect"). Delivered = a 2xx.
 - Size and time: a request body of at most MAX_BODY bytes; at most MAX_RESPONSE bytes of the
   answer are read (and dropped); CONNECT_TIMEOUT for each socket operation, and a hard
-  TOTAL_TIMEOUT for the whole send: the exchange runs on a worker thread and the socket is shut
-  down when time is up, so an endpoint trickling bytes or endless 100 Continues can't hold a
-  thread longer. Any failure is a short code; nothing raises out of `send`.
+  TOTAL_TIMEOUT for the whole send, the name's lookup and address check included: it all runs on
+  a worker thread and the socket is shut down when time is up, so a slow resolver, an endpoint
+  trickling bytes or endless 100 Continues can't hold the caller longer ("dns_timeout" when the
+  name hadn't resolved by then, else "timeout"; after the deadline nothing is connected or sent).
+  Any failure is a short code; nothing raises out of `send`.
 - Signed: `X-Tributary-Signature: v1=<hex HMAC-SHA256(secret, "<timestamp>.<body>")>` with
   `X-Tributary-Timestamp` (Unix seconds), `X-Tributary-Delivery` (the delivery's id) and
   `X-Tributary-Event`. A receiver recomputes it with its secret and rejects old timestamps.
@@ -327,30 +329,71 @@ class HttpsSender:
         self._resolve, self._open, self._total = resolver, opener, total_timeout
 
     def send(self, url: str, body: bytes, headers: dict[str, str]) -> Sent:
+        """The whole send, the name's lookup and address check included, runs on a worker
+        thread inside the hard total timeout: a slow resolver can't hold the job longer than an
+        endpoint can (review 2026-11-09). Past the deadline: "dns_timeout" if the name hadn't
+        resolved yet, else "timeout"; nothing is connected or sent after it."""
         if len(body) > MAX_BODY:
             return Sent(False, None, "too_large")
-        try:
-            target, address = vet(url, self._resolve)
-        except WebhookRefused as e:
-            return Sent(False, None, e.code)
-        conn = self._open(target, address, CONNECT_TIMEOUT)
-        box: list[Sent] = []
-        worker = threading.Thread(target=lambda: box.append(_exchange(conn, target, body, headers)),
-                                  name="webhook-send", daemon=True)
+        attempt = _Attempt()
+
+        def work() -> None:
+            attempt.result = attempt.run(lambda: vet(url, self._resolve), self._open,
+                                         body, headers)
+        worker = threading.Thread(target=work, name="webhook-send", daemon=True)
         worker.start()
         worker.join(self._total)
-        if worker.is_alive() or not box:
-            _abort(conn)
-            worker.join(1.0)
-            return Sent(False, None, "timeout")
-        return box[0]
+        if worker.is_alive() or attempt.result is None:
+            resolved, conn = attempt.cancel()
+            if conn is not None:
+                _abort(conn)
+                worker.join(1.0)  # a cut socket ends the worker's read at once
+            # a lookup can't be cut: its daemon thread ends with the resolver's own timeout,
+            # and opens nothing then (_Attempt)
+            return Sent(False, None, "timeout" if resolved else "dns_timeout")
+        return attempt.result
+
+
+class _Attempt:
+    """One send's state between HttpsSender.send and its worker: once cancelled (the deadline
+    passed), the worker opens no connection and sends nothing."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self.cancelled = False
+        self.resolved = False
+        self.conn: http.client.HTTPConnection | None = None
+        self.result: Sent | None = None
+
+    def cancel(self) -> tuple[bool, http.client.HTTPConnection | None]:
+        with self._lock:
+            self.cancelled = True
+            return self.resolved, self.conn
+
+    def run(self, check: Callable[[], tuple[Target, str]], opener: Opener, body: bytes,
+            headers: dict[str, str]) -> Sent:
+        try:
+            target, address = check()
+        except WebhookRefused as e:
+            return Sent(False, None, e.code)
+        except Exception:  # a resolver that fails some other way: nothing raises out of send
+            return Sent(False, None, "unresolvable")
+        with self._lock:
+            if self.cancelled:
+                return Sent(False, None, "dns_timeout")
+            self.resolved = True
+            self.conn = conn = opener(target, address, CONNECT_TIMEOUT)
+        return _exchange(conn, target, body, headers, lambda: self.cancelled)
 
 
 def _exchange(conn: http.client.HTTPConnection, target: Target, body: bytes,
-              headers: dict[str, str]) -> Sent:
-    """One POST and its status (on HttpsSender's worker thread); never raises."""
+              headers: dict[str, str], cancelled: Callable[[], bool] = lambda: False) -> Sent:
+    """One POST and its status (on HttpsSender's worker thread); never raises. Nothing is sent
+    once `cancelled()` (the deadline cut a connect that was still under way)."""
     try:
         conn.connect()
+        if cancelled():
+            return Sent(False, None, "timeout")
         conn.request("POST", target.path, body=body, headers=headers)
         response = conn.getresponse()
         status = response.status

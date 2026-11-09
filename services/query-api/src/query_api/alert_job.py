@@ -24,12 +24,18 @@ A run:
    figures and red lines, after layer 1 (`can`, OpenFGA) and through Store as that user (RLS).
    Never another user's access.
 4. Deliveries due (a new ready alert x each enabled webhook, and earlier failures whose backoff
-   ran out), through HttpsSender; each result in the delivery log. Sends come after every user's
-   alerts are made, users in a random order, at most SENDS_PER_USER each, a webhook that times out
-   or can't be reached skipped for the rest of the run, and none started after SEND_BUDGET seconds:
-   a slow or hostile endpoint delays only its owner's deliveries (they stay due for the next run).
-   Each send is recorded as soon as it's made, and its figures go out only while the user can
-   still read the company's financials (layer 1 again at send time).
+   ran out), through HttpsSender (the name's lookup inside its hard timeout); each result in the
+   delivery log. Sends come after every user's alerts are made, users in a random order, each
+   with a fair share of what's left of SEND_BUDGET (the time left / the users left, so time one
+   doesn't use goes to the next; a send under way finishes, at most webhooks.TOTAL_TIMEOUT),
+   at most SENDS_PER_USER each, taken in turns across the user's webhooks (AppAlerts.due), and
+   none started after SEND_BUDGET seconds. A webhook that stalls (STALLED: no answer in time, a
+   name that doesn't resolve or resolves too slowly, no connection, TLS) is skipped for the rest
+   of the run, and after consecutive stalls left out of later runs too (alerts.STALL_WAITS, app
+   migration 017) until anything it answers clears it: a slow, dead or hostile endpoint delays
+   only its owner's deliveries (they stay due). Each send is recorded as soon as it's made, and
+   its figures go out only while the user can still read the company's financials (layer 1
+   again at send time).
    Email only with a provider configured AND a verified address for the user
    (query_api/alert_email.py: neither exists yet, so none is sent): one digest of the alerts that
    became ready.
@@ -64,6 +70,7 @@ from query_api.alerts import (
     key_figures,
     material,
     message,
+    quiet_8k,
     red_line_points,
 )
 from query_api.shapes import filing_url
@@ -78,7 +85,8 @@ SENDS_PER_USER = 10     # deliveries tried per user per run
 MAKE_BUDGET = 240.0     # seconds of making alerts per run
 MAX_DETAIL = 15_000     # bytes of a notification's detail (the table allows 16384)
 SEND_BUDGET = 240.0     # seconds of sending per run (the Job's deadline is 540)
-STALLED = frozenset({"timeout", "connect", "tls"})  # skip that webhook for the rest of the run
+# skip that webhook for the rest of the run, and count a stall (alerts.STALL_WAITS)
+STALLED = frozenset({"timeout", "dns_timeout", "unresolvable", "connect", "tls"})
 SYSTEM = ""         # the filing index is public metadata: read without a user
 
 
@@ -94,6 +102,7 @@ class Report:
     failed: int = 0
     emailed: int = 0
     deferred: int = 0
+    stalled: int = 0
     errors: int = 0
 
 
@@ -132,7 +141,7 @@ def new_rows(plan: dict, filings: dict[str, list[dict]]) -> tuple[list[dict], da
     filed on or after the day they followed; and the newest filing date seen."""
     rows, newest = [], None
     for f in plan["follows"]:
-        forms = plan["settings"].get(f["company_id"], list(FORMS))
+        forms = plan["settings"].get(f["company_id"], {}).get("forms", list(FORMS))
         for r in filings.get(f["company_id"], []):
             newest = max(newest, r["filing_date"]) if newest else r["filing_date"]
             if r["form"] not in forms or r["filing_date"] < f["since"]:
@@ -147,8 +156,9 @@ def new_rows(plan: dict, filings: dict[str, list[dict]]) -> tuple[list[dict], da
 
 def complete(n: dict, *, user_id: str, store: Any, can: Callable[[str, str, str], bool],
              rules: list[dict], index_items: dict[str, list[str] | None],
-             today: date) -> dict | None:
-    """What a pending notification becomes now (status, items, detail); None: still waiting."""
+             today: date, other_8ks: bool = False) -> dict | None:
+    """What a pending notification becomes now (status, items, detail); None: still waiting.
+    `other_8ks`: the company's setting (an 8-K with only 7.01/8.01 items alerts too)."""
     detail = dict(n.get("detail") or {})
     waited = (today - n["filed"]).days > PENDING_DAYS
     cid, acc = n["company_id"], n["accession_no"]
@@ -160,10 +170,12 @@ def complete(n: dict, *, user_id: str, store: Any, can: Callable[[str, str, str]
                       if r["accession_no"] == acc]
             items = (parsed[0]["items"] or parsed[0]["parsed_items"] or None) if parsed else None
             source = "parsed" if items else None
-        is_material = material(items)
+        is_material = material(items, other_8ks)
         if is_material is None and not waited:
             return None
         detail.update(items_from=source, material=is_material)
+        if is_material is False and quiet_8k(items):
+            detail["quiet"] = True  # 7.01/8.01 only, and the user hasn't asked for those
         return {"notification_id": n["notification_id"], "items": items, "detail": detail,
                 "status": "skipped" if is_material is False else "ready"}
     if not can(user_id, "financials", cid):
@@ -197,18 +209,21 @@ def complete(n: dict, *, user_id: str, store: Any, can: Callable[[str, str, str]
 
 def deliver(alerts: AppAlerts, store: Any, sender: Sender, user_id: str, *, jwt_secret: str,
             app_url: str, at: datetime, can: Callable[[str, str, str], bool],
-            until: Callable[[], bool] = lambda: True) -> tuple[int, int]:
+            until: Callable[[], bool] = lambda: True) -> tuple[int, int, int]:
     """Up to SENDS_PER_USER due deliveries while `until()` holds, each recorded once made; a
-    webhook that stalls is left for the next run (its rows stay due, untouched). Figures and red
-    lines go out only if the user can still read the company's financials."""
+    webhook that stalls is left for the next run (its rows stay due, untouched) and its stall
+    counted (later runs leave it out for a while, alerts.STALL_WAITS); one that answers clears
+    an earlier stall. Figures and red lines go out only if the user can still read the
+    company's financials. Returns (delivered, failed, webhooks that stalled)."""
     due = alerts.due(user_id, at, SENDS_PER_USER)
     if not due:
-        return 0, 0
+        return 0, 0, 0
     ids = sorted({d["company_id"] for d in due})
     names = store.profiles(user_id, ids)
     tickers = store.tickers(user_id, ids)
     ok = failed = 0
     stalled: set[str] = set()
+    cleared: set[str] = set()
     readable: dict[str, bool] = {}
     for d in due:
         if d["webhook_id"] in stalled or not until():
@@ -229,11 +244,15 @@ def deliver(alerts: AppAlerts, store: Any, sender: Sender, user_id: str, *, jwt_
         secret = webhook_secret(jwt_secret, d["webhook_id"], bytes(d["secret_salt"]))
         body = body_of(d["format"], event(d, company, link, at), message(d, label, link))
         sent = sender.send(d["url"], body, headers(secret, d["delivery_id"], "filing", body))
+        alerts.record(user_id, [(d["delivery_id"], d["attempts"], sent)], at)
         if sent.error in STALLED:
             stalled.add(d["webhook_id"])
-        alerts.record(user_id, [(d["delivery_id"], d["attempts"], sent)], at)
+            alerts.webhook_result(user_id, d["webhook_id"], True, at)
+        elif d.get("stalls") and d["webhook_id"] not in cleared:
+            cleared.add(d["webhook_id"])  # it answered: an earlier stall is over
+            alerts.webhook_result(user_id, d["webhook_id"], False, at)
         ok, failed = (ok + 1, failed) if sent.ok else (ok, failed + 1)
-    return ok, failed
+    return ok, failed, len(stalled)
 
 
 def email_digest(alerts: AppAlerts, store: Any, email: EmailProvider, to: str, user_id: str,
@@ -293,7 +312,9 @@ def run(*, alerts: AppAlerts, store: Any, can: Callable[[str, str, str], bool], 
             for n in alerts.pending(user_id):
                 u = complete(n, user_id=user_id, store=store, can=can,
                              rules=plan["red_lines"].get(n["company_id"], []),
-                             index_items=index_items, today=today)
+                             index_items=index_items, today=today,
+                             other_8ks=plan["settings"].get(n["company_id"], {})
+                             .get("other_8ks", False))
                 if u is not None:
                     updates.append(u)
             ready = alerts.finish(user_id, updates, now)
@@ -313,17 +334,23 @@ def run(*, alerts: AppAlerts, store: Any, can: Callable[[str, str, str], bool], 
             report.errors += 1
             log.warning("alerts: a user's run failed: %s", type(e).__name__,
                         extra={"user_id": user_id})
-    # sending last, in a random order, within a budget (module docstring, step 4)
+    # sending last, in a random order, each user a fair share of the budget (docstring, step 4)
     senders = [u for u, p in plans.items() if p["webhooks"]]
     shuffle(senders)
     deadline = monotonic() + SEND_BUDGET
-    for user_id in senders:
+    for i, user_id in enumerate(senders):
+        start = monotonic()
+        if start >= deadline:
+            report.deferred += 1
+            continue
+        mine = start + (deadline - start) / (len(senders) - i)  # this user's share ends here
         try:
-            ok, failed = deliver(alerts, store, sender, user_id, jwt_secret=jwt_secret,
-                                 app_url=app_url, at=now, can=can,
-                                 until=lambda: monotonic() < deadline)
+            ok, failed, stalls = deliver(alerts, store, sender, user_id, jwt_secret=jwt_secret,
+                                         app_url=app_url, at=now, can=can,
+                                         until=lambda end=mine: monotonic() < end)
             report.delivered += ok
             report.failed += failed
+            report.stalled += stalls
         except Exception as e:
             report.errors += 1
             log.warning("alerts: a user's deliveries failed: %s", type(e).__name__,
