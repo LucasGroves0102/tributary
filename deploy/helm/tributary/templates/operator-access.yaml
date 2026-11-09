@@ -1,0 +1,48 @@
+{{- /* Read-only operator access: a ServiceAccount that can see the workloads (pods, their logs,
+jobs, cronjobs, deployments, events) in this namespace and change nothing. No secrets or configmaps,
+no pods/exec or port-forward, no create/patch/delete: a token for it can watch a rebuild and read its
+logs, never read a credential or start a pod (a Job could mount any secret, so job creation stays with
+the owner). Its token is made by hand on the server (deploy/helm/tributary/README.md) and never stored
+in git. Off with operatorAccess.enabled=false; deleting the ServiceAccount voids every token. */ -}}
+{{- if .Values.operatorAccess.enabled }}
+{{- $ctx := dict "root" $ "name" "operator-readonly" }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: operator-readonly
+  labels:
+    {{- include "tributary.labels" $ctx | nindent 4 }}
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: operator-readonly
+  labels:
+    {{- include "tributary.labels" $ctx | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "events"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["batch"]
+    resources: ["jobs", "cronjobs"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: operator-readonly
+  labels:
+    {{- include "tributary.labels" $ctx | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: operator-readonly
+subjects:
+  - kind: ServiceAccount
+    name: operator-readonly
+    namespace: {{ .Release.Namespace }}
+{{- end }}

@@ -275,6 +275,48 @@ makes every stored API key unreadable (users would reconnect; their prices can b
 To turn the feature off again, remove the key (`sops deploy/secrets/tributary.yaml`) and
 restart query-api; stored connections stay encrypted in the app DB until users disconnect.
 
+## Read-only operator access
+
+`templates/operator-access.yaml` (`operatorAccess.enabled`, on) creates a ServiceAccount, `operator-readonly`,
+that can get, list and watch pods, pod logs, events, jobs, cronjobs, deployments and replicasets in this
+namespace, and nothing else: no secrets or configmaps, no `pods/exec` or port-forward, no create, patch or
+delete. Creating Jobs is deliberately left out, because a Job can mount any secret in the namespace. It is
+for watching a rebuild or a backfill and reading its logs from the server's own shell without `sudo`.
+
+Its token is made by hand on the server and never stored in git. As the owner, on hermes (the token goes
+straight into a file only your login can read; nothing is printed):
+
+```bash
+sudo -v
+mkdir -p ~/.kube
+CA=$(sudo kubectl config view --raw -o jsonpath='{.clusters[0].cluster.certificate-authority-data}')
+TOKEN=$(sudo kubectl -n tributary create token operator-readonly --duration=720h)
+umask 077
+cat > ~/.kube/operator-readonly.yaml <<KUBECONFIG
+apiVersion: v1
+kind: Config
+clusters:
+- name: k3s
+  cluster:
+    server: https://127.0.0.1:6443
+    certificate-authority-data: $CA
+users:
+- name: operator-readonly
+  user:
+    token: $TOKEN
+contexts:
+- name: operator-readonly
+  context: {cluster: k3s, user: operator-readonly, namespace: tributary}
+current-context: operator-readonly
+KUBECONFIG
+unset CA TOKEN
+kubectl --kubeconfig ~/.kube/operator-readonly.yaml get jobs
+```
+
+The token lasts 30 days; run the same commands again to renew it. To revoke every token at once:
+`sudo kubectl -n tributary delete serviceaccount operator-readonly` (the next Flux reconcile recreates the
+account with no valid tokens), or set `operatorAccess.enabled: false`.
+
 ## Kafka authentication
 
 `kafka.sasl.enabled` (default false; on in hermes' Flux release) is phase B of the Kafka SASL/SCRAM rollout, described with

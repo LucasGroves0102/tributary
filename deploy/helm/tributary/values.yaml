@@ -99,6 +99,11 @@ metrics:
   podLabels:
     app.kubernetes.io/name: prometheus
 
+# Read-only operator access (templates/operator-access.yaml): a ServiceAccount that can watch pods, logs,
+# jobs and cronjobs in this namespace and change nothing, for a monitoring token made by hand on the server.
+operatorAccess:
+  enabled: true
+
 # CronJob schedules are in this zone (EDGAR's daily index lands late evening ET).
 timeZone: America/New_York
 
