@@ -277,8 +277,11 @@ def test_streams_text_and_tool_events():
     )
     events = list(Agent(fake, query_api(ok)[0], "claude-haiku-5-5", stream=True)
                   .events("NVDA?"))
-    assert [e["type"] for e in events] == ["tool", "text", "text", "done"]
-    assert events[0] == {"type": "tool", "round": 0, "name": "whoami", "input": {},
+    assert [e["type"] for e in events] == ["usage", "tool", "text", "text", "usage", "done"]
+    # each model call that returned, as it returns: what the server records as spent even if
+    # a later call fails (100 input + 20 output tokens at Haiku's prices)
+    assert events[0] == {"type": "usage", "round": 0, "cost_usd": pytest.approx(2e-5)}
+    assert events[1] == {"type": "tool", "round": 0, "name": "whoami", "input": {},
                          "is_error": False}
     assert "".join(e["text"] for e in events if e["type"] == "text") == "Nvidia grew."
     assert events[-1]["answer"].text == "Nvidia grew."
@@ -390,6 +393,21 @@ def test_agent_sends_the_tools_it_was_given():
         200, json={"metrics": ["revenue"], "derived_metrics": []}))
     Agent(fake, api, "claude-haiku-5-5", tools=MetricTools().get(api)).ask("hi")
     assert financials_metrics(fake.requests[0]["tools"]) == ["revenue"]
+
+
+def test_financials_quarters_stay_within_the_schema():
+    """Review blocker 1: the Query API takes 120 quarters (the web's Max) and the model's
+    `quarters` went through unclamped; 45 metrics x 120 quarters is megabytes, enough to push
+    the next model call past its context. The schema the model sees is unchanged (1-40)."""
+    api, seen = query_api(ok)
+    for asked, sent in ((120, "40"), (10_000, "40"), (0, "1"), (-5, "1"), ("8", "8"), (12, "12")):
+        assert api.run("get_financials", {"company_id": NVDA, "quarters": asked})[1] is False
+        assert seen[-1].url.params["quarters"] == sent
+    content, is_error = api.run("get_financials", {"company_id": NVDA, "quarters": None})
+    assert is_error and content.startswith("invalid call") and len(seen) == 6
+    schema = next(t for t in TOOLS if t["name"] == "get_financials")["input_schema"]
+    assert schema["properties"]["quarters"] == {"type": "integer", "minimum": 1, "maximum": 40,
+                                                "description": "default 4"}
 
 
 def test_section_changes_tool_validates_and_routes():

@@ -163,11 +163,13 @@ class Agent:
 
     def events(self, question: str, history: Sequence[dict] = (),
                context: UiContext | None = None, blocks: Sequence[str] = ()) -> Iterator[dict]:
-        """Yields {"type": "text"} deltas (when streaming), one {"type": "tool"} per tool call,
-        a {"type": "action"} after each accepted UI action, then {"type": "done", "answer":
-        Answer}. Rounds count from 0. history: earlier user/assistant text turns. context: the
-        web app's screen, sent as data ahead of the question (only with ui). blocks: more data
-        ahead of the question (a report's <workspace>)."""
+        """Yields {"type": "text"} deltas (when streaming), one {"type": "usage"} after each
+        model call that returned (its `cost_usd`: what that call cost, None for a model without
+        prices), one {"type": "tool"} per tool call, a {"type": "action"} after each accepted UI
+        action, then {"type": "done", "answer": Answer}. Rounds count from 0. history: earlier
+        user/assistant text turns. context: the web app's screen, sent as data ahead of the
+        question (only with ui). blocks: more data ahead of the question (a report's
+        <workspace>)."""
         content: str | list[dict] = question
         if context is not None and self._ui is not None:
             observe = getattr(self._ui, "observe", None)
@@ -194,6 +196,12 @@ class Agent:
             answer.rounds += 1
             answer.usage.add(response.usage)
             self._log_round(answer.rounds - 1, response, closing)
+            # a model call that returned is paid for, whatever happens next (server.py: the
+            # day's spend and refunds read these, not only the done event)
+            paid = Usage()
+            paid.add(response.usage)
+            yield {"type": "usage", "round": answer.rounds - 1,
+                   "cost_usd": paid.cost_usd(self.model)}
             if (response.stop_reason == "max_tokens" and self._retry and not retried
                     and not closing and _unfinished(response)):
                 # the cut-off reply is dropped (a tool call in it may be incomplete); once

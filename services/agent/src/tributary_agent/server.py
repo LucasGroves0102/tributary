@@ -70,12 +70,21 @@ class LimitExceeded(Exception):
     pass
 
 
+# Runs given back per user per UTC day (`Limits.take_refund`). Only failures that are ours and
+# can't be caused on purpose are given back at all (create_app's docstring); two a day covers a
+# retry after a passing outage, and caps what anyone could get free if one of them turned out to
+# be reachable after all: two runs' model calls a day (two checks: 8 questions), still inside the
+# day's budget.
+REFUNDS_PER_DAY = 2
+
+
 class Limits:
-    """Questions per hour per user and per client IP, and model spend per UTC day across all
-    users."""
+    """Questions per hour per user and per client IP, model spend per UTC day across all
+    users, and refunds per user per UTC day."""
 
     def __init__(self, per_hour: int, per_ip_per_hour: int, daily_budget_usd: float,
-                 clock: Callable[[], float] = time.time) -> None:
+                 clock: Callable[[], float] = time.time,
+                 refunds_per_day: int = REFUNDS_PER_DAY) -> None:
         self._per_hour = per_hour
         self._per_ip = per_ip_per_hour
         self._budget = daily_budget_usd
@@ -85,6 +94,9 @@ class Limits:
         self._by_ip: dict[str, deque[float]] = defaultdict(deque)
         self._swept = clock()
         self._spent: dict[str, float] = defaultdict(float)  # UTC date -> USD
+        self._refunds_per_day = refunds_per_day
+        self._refunds_day = ""
+        self._refunds: dict[str, int] = {}  # user -> refunds given on _refunds_day
 
     def _today(self) -> str:
         return datetime.fromtimestamp(self._clock(), UTC).date().isoformat()
@@ -132,8 +144,8 @@ class Limits:
             return now
 
     def release(self, user_id: str, client_ip: str, questions: int, stamp: float) -> None:
-        """Gives back what `acquire` took at `stamp` (a run that produced nothing, a refused
-        quota). The day's spend is never given back: the model calls were made."""
+        """Gives back what `acquire` took at `stamp` (a run given back, a refused quota). The
+        day's spend is never given back: the model calls were made."""
         with self._lock:
             for asked in (self._by_user.get(user_id), self._by_ip.get(client_ip)):
                 for _ in range(questions):
@@ -156,6 +168,22 @@ class Limits:
         with self._lock:
             self._spent[self._today()] += usd
 
+    def spent(self) -> float:
+        """The day's (UTC) recorded model spend so far."""
+        with self._lock:
+            return self._spent[self._today()]
+
+    def take_refund(self, user_id: str) -> bool:
+        """Takes one of the user's refunds for today (UTC), or False when they're used up."""
+        with self._lock:
+            today = self._today()
+            if today != self._refunds_day:
+                self._refunds_day, self._refunds = today, {}
+            if self._refunds.get(user_id, 0) >= self._refunds_per_day:
+                return False
+            self._refunds[user_id] = self._refunds.get(user_id, 0) + 1
+            return True
+
 
 def answer_json(a: Answer) -> dict:
     return {"text": a.text, "stop": a.stop, "model": a.model, "rounds": a.rounds,
@@ -177,7 +205,7 @@ def _no_daily_count(tok: str) -> dict:
 
 class Charge:
     """What one request took from the limits (the hour's, per user and per address, and the
-    user's persistent daily quota), and how to give it back when the run produced nothing."""
+    user's persistent daily quota), and how to give it back (create_app's docstring says when)."""
 
     def __init__(self, limits: Limits, refund_quota: Callable[[str, int], None], user_id: str,
                  ip: str, tok: str, questions: int, stamp: float) -> None:
@@ -212,10 +240,18 @@ def create_app(make_agent: Callable[[str], Agent], who_is: Callable[[str], str],
     the user's daily cap and what's left of it, for /v1/allowance.
 
     Charging: a request takes its questions before the model runs (so parallel requests can't
-    overspend) and gives them back if the run ends without its result: no answer (a model
-    error), no saved report, no saved check. A result counts, partial ones included (a check
-    the model submitted before stopping); a client that disconnects is never refunded (it may
-    have read a streamed answer). The day's model budget always keeps what was spent."""
+    overspend). Every model call that returned is recorded against the day's budget as it
+    happens (the agent's `usage` events), whatever happens next: a model error later in the
+    run, a client that went away. Questions are given back only for a failure that is ours and
+    can't be caused on purpose, at most REFUNDS_PER_DAY times per user per day:
+    - a model API error (outage, overload) before any model call returned and before any text
+      streamed: nothing billable was produced;
+    - a thesis check that saved nothing because its replies were cut off at max_tokens.
+    Nothing else is given back: an error after a paid round (a user can push the context past
+    the model's limit), a model that chose not to submit, a save refused because the thesis or
+    workspace was deleted mid-run, a client that disconnects (it may have read the answer). A
+    result counts, partial ones included (a check the model submitted before stopping). The
+    "refunded" event is sent only when the questions really were given back."""
     app = FastAPI(title="Tributary Agent", version="1")
     instrument(app)
     bearer = HTTPBearer(auto_error=False)
@@ -249,25 +285,50 @@ def create_app(make_agent: Callable[[str], Agent], who_is: Callable[[str], str],
     def sse(events: Iterator[dict], user_id: str, kind: str, paid: Charge,
             result: str | None = None) -> StreamingResponse:
         """result: the event type that means the run produced what it was asked for ("report",
-        "check"); None: an answer (any streamed text, or done). Without it, `paid` is given
-        back and a "refunded" event says so before done (or the error)."""
+        "check"); None: an answer (any streamed text, or done). `paid` is given back, with a
+        "refunded" event before done (or the error), only as create_app's docstring says."""
         produces = result or "text"
 
-        def refunded() -> str:
+        def give_back(why: str) -> Iterator[str]:
+            if not limits.take_refund(user_id):
+                log.info("user=%s %s not refunded (%s): today's refunds are used", user_id,
+                         kind, why, extra={"user_id": user_id, "kind": kind, "why": why})
+                return
             paid.refund()
-            log.info("user=%s %s refunded %d questions", user_id, kind, paid.questions,
-                     extra={"user_id": user_id, "kind": kind, "questions": paid.questions})
-            return f"data: {json.dumps({'type': 'refunded', 'questions': paid.questions})}\n\n"
+            log.info("user=%s %s refunded %d questions (%s)", user_id, kind, paid.questions,
+                     why, extra={"user_id": user_id, "kind": kind, "questions": paid.questions,
+                                 "why": why})
+            yield f"data: {json.dumps({'type': 'refunded', 'questions': paid.questions})}\n\n"
 
         def stream() -> Iterator[str]:
-            produced = False
+            produced = False  # the result: an answer's text, a saved report or check
+            billable = False  # a model call returned, or text streamed
+            cut_off = False  # a check with nothing to save: its replies hit max_tokens
+            partial = 0.0  # what the calls that returned cost, until done gives the whole
+            spent = False
+
+            def spend(usd: float) -> None:
+                nonlocal spent
+                if not spent:
+                    spent = True
+                    limits.spend(usd)
+
             try:
                 for event in events:
+                    if event["type"] == "usage":  # internal: never sent to the browser
+                        billable = True
+                        partial += event.get("cost_usd") or 0
+                        continue
+                    if event["type"] == "text":
+                        billable = True
                     if event["type"] == produces:
                         produced = True
+                    if event["type"] == "error":
+                        cut_off = cut_off or event.get("cut_off") is True
+                        event = {"type": "error", "message": event.get("message")}
                     if event["type"] == "done":
                         answer = event["answer"]
-                        limits.spend(answer.cost_usd or 0)
+                        spend(answer.cost_usd or 0)
                         record_answer(answer)
                         log.info("user=%s %s rounds=%d cost=%.4f stop=%s", user_id, kind,
                                  answer.rounds, answer.cost_usd or 0, answer.stop,
@@ -277,16 +338,20 @@ def create_app(make_agent: Callable[[str], Agent], who_is: Callable[[str], str],
                                         "input_tokens": answer.usage.input_tokens,
                                         "output_tokens": answer.usage.output_tokens,
                                         "tool_calls": len(answer.tool_calls)})
-                        if result is not None and not produced:
-                            yield refunded()
+                        if result is not None and not produced and cut_off:
+                            yield from give_back("cut off at max_tokens")
                         event = {"type": "done", "answer": answer_json(answer)}
                     yield f"data: {json.dumps(event, default=str)}\n\n"
             except anthropic.APIError as e:
+                spend(partial)
                 record_error()
-                log.warning("model error for %s: %s", user_id, e, extra={"user_id": user_id})
-                if not produced:
-                    yield refunded()
+                log.warning("model error for %s: %s (cost so far %.4f)", user_id, e, partial,
+                            extra={"user_id": user_id, "cost_usd": partial})
+                if not produced and not billable:
+                    yield from give_back("model error before any output")
                 yield f"data: {json.dumps({'type': 'error', 'message': 'model unavailable'})}\n\n"
+            finally:  # a client that went away: what the model calls cost still counts
+                spend(partial)
 
         return StreamingResponse(stream(), media_type="text/event-stream",
                                  headers={"Cache-Control": "no-cache"})
@@ -323,7 +388,7 @@ def create_app(make_agent: Callable[[str], Agent], who_is: Callable[[str], str],
             (report.py). Streams the agent's events, a "report" event once saved (or an
             "error"), then "done". Counts as REPORT_QUESTIONS questions against every limit,
             taken only once the workspace is the user's and has something to report on, and
-            given back ("refunded") when no report was saved."""
+            given back ("refunded") only after a model error before any output."""
             user_id = who_is(tok)
             reporter = reporter_for(tok)
             try:
@@ -344,7 +409,8 @@ def create_app(make_agent: Callable[[str], Agent], who_is: Callable[[str], str],
             (thesis_check.py). Streams the agent's events, a "check" event once saved (or an
             "error"), then "done". Counts as CHECK_QUESTIONS questions against every limit,
             taken only once the thesis is the user's and has text to check, and given back
-            ("refunded") when no check was saved; a partial check (submitted before the model
+            ("refunded") only after a model error before any output or when replies cut off at
+            max_tokens left nothing to save; a partial check (submitted before the model
             stopped) is saved and counts."""
             user_id = who_is(tok)
             checker = checker_for(tok)
@@ -408,7 +474,7 @@ def query_api_quota(base_url: str,
 
 def query_api_refund(base_url: str,
                      http: httpx.Client | None = None) -> Callable[[str, int], None]:
-    """Gives back questions take_quota took for a run that produced nothing
+    """Gives back questions take_quota took for a run create_app gives back
     (`POST /v1/demo/agent-quota/refund`, off the public site like the take). Never raises: a
     refund that fails only leaves the count as it was, and is logged."""
     post = http.post if http else httpx.post

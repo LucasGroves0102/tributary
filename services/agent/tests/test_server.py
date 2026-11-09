@@ -423,3 +423,80 @@ def test_query_api_refund_never_raises():
         raise httpx.ConnectError("down")
 
     query_api_refund("http://q", http=httpx.Client(transport=httpx.MockTransport(down)))("t", 1)
+
+
+# --- review blockers 1 and 2: what can't be had for free -------------------------------------
+
+class OverflowingMessages:
+    """The reviewer's attack: round 0 asks for every metric over 120 quarters (a paid call);
+    round 1 fails because the tool result pushed the context past the model's limit."""
+
+    def __init__(self):
+        self.calls = 0
+
+    def create(self, **kwargs):
+        self.calls += 1
+        if self.calls % 2:
+            return NS(stop_reason="tool_use",
+                      content=[NS(type="tool_use", id=f"t{self.calls}", name="get_financials",
+                                  input={"company_id": "0001045810", "quarters": 120})],
+                      usage=NS(input_tokens=1_000_000, output_tokens=0))
+        raise anthropic.BadRequestError(
+            "prompt is too long", body=None,
+            response=httpx.Response(400, request=httpx.Request("POST", "https://api")))
+
+
+class Rows:
+    def run(self, name, args):
+        return json.dumps({"rows": []}), False
+
+
+def test_a_model_error_after_a_paid_round_counts_and_its_spend_is_recorded():
+    """Before: each such run was given back (net quota 0) and recorded no spend ($0.00), so no
+    quota, hourly limit or budget bounded the user. Now the question stays taken and the paid
+    call is in the day's spend."""
+    ledger = []
+    limits = Limits(per_hour=100, per_ip_per_hour=100, daily_budget_usd=100)
+    messages = OverflowingMessages()
+    app = create_app(lambda tok: Agent(messages, Rows(), "claude-haiku-5-5"), who_is, limits,
+                     take_quota=lambda tok, n=1: ledger.append(n),
+                     refund_quota=lambda tok, n=1: ledger.append(-n))
+    c = TestClient(app)
+    for _ in range(10):
+        # no "refunded": it counted
+        assert [e["type"] for e in events(ask(c))] == ["tool", "error"]
+    assert sum(ledger) == 10
+    assert limits.spent() == pytest.approx(10 * 0.10)  # ten paid rounds of 1M input tokens
+    assert allowance(c).json()["left_this_hour"] == 90
+
+
+def test_the_hourly_limit_holds_against_late_model_errors():
+    limits = Limits(per_hour=2, per_ip_per_hour=100, daily_budget_usd=100)
+    messages = OverflowingMessages()
+    c = TestClient(create_app(lambda tok: Agent(messages, Rows(), "claude-haiku-5-5"), who_is,
+                              limits))
+    assert [ask(c).status_code for _ in range(4)] == [200, 200, 429, 429]
+
+
+def test_early_model_errors_are_given_back_at_most_twice_a_day():
+    """An outage before any output is ours, so it's given back, but only REFUNDS_PER_DAY times
+    per user per day: anything that turned out to be reachable on purpose stays bounded."""
+    clock = Clock()
+    ledger = []
+    limits = Limits(per_hour=100, per_ip_per_hour=100, daily_budget_usd=5, clock=clock)
+    app = create_app(lambda tok: Agent(FailingMessages(), NoTools(), "claude-haiku-5-5",
+                                       stream=True),
+                     who_is, limits, take_quota=lambda tok, n=1: ledger.append(n),
+                     refund_quota=lambda tok, n=1: ledger.append(-n))
+    c = TestClient(app)
+    kinds = [[e["type"] for e in events(ask(c))] for _ in range(3)]
+    assert kinds == [["refunded", "error"], ["refunded", "error"], ["error"]]
+    assert ledger == [1, -1, 1, -1, 1]
+    assert limits.spent() == 0  # nothing returned, nothing billed
+    clock.t += 86400  # a new UTC day
+    assert [e["type"] for e in events(ask(c))] == ["refunded", "error"]
+
+
+def test_usage_events_stay_in_the_server():
+    c, _ = client()
+    assert [e["type"] for e in events(ask(c))] == ["done"]

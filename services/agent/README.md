@@ -81,12 +81,20 @@ Query API decides from the token, and its 429 message is shown as is. Production
 owner's address, and the per-account daily caps still hold.
 A report counts as 3 questions ([Reports](#reports)), a thesis check 4
 ([Thesis checks](#thesis-checks)). Questions are taken before the model runs (so parallel requests
-can't overspend) and given back when the run ends without its result: a model error before any
-answer text, a report or thesis check that saved nothing (`server.Charge`; the Query API's
-`POST /v1/demo/agent-quota/refund` for the daily caps). The stream then carries
-`{"type": "refunded", "questions": n}`. A result counts, partial ones included; a client that
-disconnects is never given anything back (it may have read the answer as it streamed), and the
-day's model budget keeps what was spent. A refused daily quota gives the hour's allowance back.
+can't overspend). Every model call that returns is added to the day's model budget as it returns
+(the agent's internal `usage` events, never sent to the browser), so a run that fails later, or a
+client that goes away, still counts what it cost. Questions are given back only for a failure that
+is ours and can't be caused on purpose, and at most twice per user per UTC day (`REFUNDS_PER_DAY`,
+in-process like the hour's limits): a model API error (outage, overload) before any model call
+returned and before any text streamed, or a thesis check that saved nothing because its replies
+were cut off at max_tokens (`server.Charge`; the Query API's `POST /v1/demo/agent-quota/refund`
+for the daily caps). The stream then carries `{"type": "refunded", "questions": n}`, and the web
+app says the run didn't count only then. Nothing else is given back: an error after a paid round
+(a long enough tool result can push the next call past the model's context), a model that chose
+not to submit, a save refused because the thesis or workspace was deleted mid-run, a client that
+disconnects. A result counts, partial ones included. A refused daily quota gives the hour's
+allowance back. `get_financials` asks for at most 40 quarters whatever the model passes (the
+schema's limit; the Query API itself takes 120 for the web app).
 
 The web app's `context.page` is one of home, companies, company, filing, chart, compare,
 search, ask, about, workspace, report, thesis, model.
@@ -193,14 +201,16 @@ result) or an `error` event if it couldn't be saved or the model never submitted
 - **Counts as 4 questions** (`CHECK_QUESTIONS`) against every limit, like a report's 3: a check
   runs up to 16 tool rounds (`CHECK_ROUNDS`), about 4 rounds per question as reports (12 rounds,
   3 questions); refused with a message saying so when it doesn't fit. A check that saved
-  nothing is given back (see the limits above).
+  nothing counts, unless it failed in one of the two ways that are given back (see the limits
+  above): a refused save, a deleted thesis or a model that didn't submit are not.
 - **Room to finish** (C1). `submit_check` for a full-length thesis, after thinking, ran past the
   chat's 8,000 tokens per reply on every run; a check now has `CHECK_MAX_TOKENS` (32,000, thinking
   included, streamed). A reply cut off while thinking or calling a tool is dropped and the model
   asked once to submit more briefly (`CHECK_RETRY`); at the round limit a closing call
   (`CHECK_CLOSING`, tools kept) asks it to submit what it has checked. A result submitted that
   way is saved like any other, with the stop in `stop` and a note; one that never comes is an
-  error that says why, and the check is given back.
+  error that says why. Cut off at max_tokens even after the retry, the check is given back
+  (`cut_off` on the error event, which the server strips); stopping any other way, it counts.
 
 Result shape (`query_api.thesis_checks.CheckResult`): `thesis` (item, title, company,
 `text_hash`, characters checked, truncated), `summary`, `claims[]` (`quote`, `quote_found`,

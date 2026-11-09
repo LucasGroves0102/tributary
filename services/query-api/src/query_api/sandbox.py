@@ -310,11 +310,13 @@ class AppSandboxes:
             return cap - mine - questions
 
     def give_back(self, user_id: str, now: datetime, questions: int) -> int:
-        """Gives back up to `questions` of today's (UTC) count for a run that produced nothing:
+        """Gives back up to `questions` of today's (UTC) count for a run agent-api gives back:
         never below zero, so it can't add questions; the shared day goes down with a sandbox's
         or GitHub account's (a password account never counted there). Locks as take_question
         does (the day's row first), so a refund and a take can't interleave. Returns how many
-        were given back (0 when the run straddled midnight: yesterday's stay spent)."""
+        were given back. A run that started before midnight UTC took yesterday's questions but
+        is given back from today's, up to what today has used: usage can move from today to
+        yesterday, but never more than the run took, so no questions are gained."""
         day = now.astimezone(UTC).date()
         with self._pool.connection() as conn, conn.transaction(), conn.cursor() as cur:
             shared = not is_password_user(user_id)

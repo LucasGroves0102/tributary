@@ -14,6 +14,7 @@ DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 COMPANY_ID = {"type": "string", "pattern": r"^\d{10}$",
               "description": "10-digit canonical company_id from search_companies or whoami"}
 MAX_CHANGES = 50
+MAX_QUARTERS = 40  # get_financials' schema maximum, also enforced in _route
 
 TOOLS: list[dict] = [
     {
@@ -48,7 +49,7 @@ TOOLS: list[dict] = [
                 # enum: the Query API's /v1/metrics (with_metrics)
                 "metrics": {"type": "array", "items": {"type": "string"},
                             "description": "default: all"},
-                "quarters": {"type": "integer", "minimum": 1, "maximum": 40,
+                "quarters": {"type": "integer", "minimum": 1, "maximum": MAX_QUARTERS,
                              "description": "default 4"},
                 "view": {"type": "string", "enum": ["quarter", "ttm"],
                          "description": "quarter (default), or trailing twelve months ending "
@@ -236,7 +237,9 @@ def _route(name: str, a: dict[str, Any]) -> tuple[str, dict]:
     if name == "search_companies":
         return "/v1/companies/search", {"q": a["query"]}
     if name == "get_financials":
-        params: dict[str, Any] = {"quarters": a.get("quarters", 4)}
+        # the schema's 1-40, enforced here: the Query API takes up to 120 (the web's Max), and
+        # every metric over 120 quarters is megabytes in the model's context
+        params: dict[str, Any] = {"quarters": _quarters(a.get("quarters", 4))}
         if a.get("metrics"):
             params["metrics"] = a["metrics"]
         for key in ("view", "basis"):
@@ -278,6 +281,14 @@ def _route(name: str, a: dict[str, Any]) -> tuple[str, dict]:
                 params[param] = a[arg]
         return "/v1/search", params
     raise ValueError(f"unknown tool {name}")
+
+
+def _quarters(value: Any) -> int:
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        raise ValueError(f"quarters must be a whole number from 1 to {MAX_QUARTERS}") from None
+    return max(1, min(n, MAX_QUARTERS))
 
 
 def section_key(value: Any) -> str:

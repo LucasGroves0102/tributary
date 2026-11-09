@@ -797,7 +797,8 @@ class Checker:
 
     def events(self, job: Job) -> Iterator[dict]:
         """The agent's events; before its done event, {"type": "check", ...} once saved, or
-        {"type": "error"} if it couldn't be."""
+        {"type": "error"} if it couldn't be (`cut_off` true when nothing was submitted because
+        the replies hit max_tokens; server.py strips it)."""
         tools = CheckTools(self._api, job.allowed)
         tools.results.extend(job.prefetched)
         agent = self._make_agent(tools)
@@ -806,7 +807,10 @@ class Checker:
                 answer = event["answer"]
                 if tools.submitted is None:
                     why = STOPPED.get(answer.stop, f"it stopped ({answer.stop})")
-                    yield {"type": "error", "message": f"{why}, so there was nothing to save"}
+                    # cut_off: nothing to save because every reply ran into max_tokens, the one
+                    # stop server.py may give back (a model that chose not to submit isn't)
+                    yield {"type": "error", "message": f"{why}, so there was nothing to save",
+                           "cut_off": answer.stop == "max_tokens"}
                 else:
                     result = assemble(job, tools.submitted, answer, tools.results, self._clock())
                     try:
