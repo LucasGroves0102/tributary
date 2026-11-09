@@ -166,29 +166,30 @@ result) or an `error` event if it couldn't be saved or the model never submitted
   and nothing is spent; an empty thesis is a 422. The models it embeds (`[[embed:<id>]]` lines
   naming `model` items of its workspace, first 4) come from `GET /v1/workspaces/{id}`.
 - **Assumptions computed, not written by the model.** For each model, its company's history is
-  read as the user (`get_financials`, TTM, 40 quarters, as the web app's model page) and
-  `model_stats.py`, a port of the web app's `models/model.ts`, computes the 5-fiscal-year revenue
-  CAGR, mean operating margin and its [min, max], each forecast year's growth minus the CAGR and
-  two flags: **growth more than 10 percentage points above or below the CAGR, or a margin
-  outside the 5-year [min, max]** (`GROWTH_FLAG_POINTS`). The numbers go to the model as data;
-  it only writes the commentary. `services/web/src/models/stats-fixture.json` holds the same
-  inputs and expected numbers for both test suites. Each forecast year also says whether the
-  user set it (`user_set`): a year equal to a default a new model starts from (the run-rate rule
-  below, or the flat 5-year CAGR and average margin of models made before it) is Tributary's, not
-  the user's view, and `CHECK_RULES` tells the model not to endorse it as such. The data also
-  carries the TTM run rate (`ttm_growth_pct`, `ttm_margin_pct`).
-- **Model defaults** (`model_stats.default_assumptions`, port of web `defaultAssumptions`): year 1
-  at the trailing-twelve-month run rate (the newest TTM revenue against the TTM a year earlier,
-  and its operating margin; else the latest fiscal year's), then each year closes half the gap
-  to the long run: growth to the 5-year CAGR held between 0% and 5%, margin to the 5-year
-  average. NVIDIA (TTM +83.4%, 65.2%) starts 83.4 / 44.2 / 24.6% growth at 65.2 / 55.6 / 50.8%;
-  Deckers starts at its 6.3%, not its 16.5% CAGR. The fixture's `default_cases` hold real TTM
-  rows of four shapes (hyper-growth, accelerating, steady, shrinking).
+  read as the user (`get_financials`, TTM, 40 quarters: the evidence its figures verify against)
+  and the model is **run by the Query API** (`model_stats.run_model`: `POST
+  /v1/companies/{id}/model` with the saved state, as the user). Since F2 that route is the one
+  copy of a model's maths (Query API README, "Models: one copy of the maths"); agent-api no
+  longer ports the web app's. The run gives the 5-fiscal-year revenue CAGR, mean operating margin
+  and its [min, max], each forecast year's full-year growth minus the CAGR and two flags:
+  **growth more than 10 percentage points above or below the CAGR, or a margin outside the
+  5-year [min, max]**. The numbers go to the model as data; it only writes the commentary. Each
+  forecast year also says whether the user set it (`user_set`): a year equal to a default a new
+  model starts from (the run-rate rule, or the flat 5-year CAGR and average margin of models made
+  before it) is Tributary's, not the user's view, and `CHECK_RULES` tells the model not to endorse
+  it as such; the rates a year leaves at their defaults are listed (`defaulted`: tax rate,
+  interest and other, share change, FCF margin) under the same rule. The data also carries the
+  TTM run rate (`ttm_growth_pct`, `ttm_margin_pct`), each year's net income, diluted EPS and its
+  growth, share change and FCF margin, and `reported_quarters`: a model built from the current
+  year's reported quarters (F2 `ytd`) is checked on its full year, and `CHECK_RULES` says the
+  reported part isn't an assumption. If the run fails (no access, or an older Query API during a
+  deploy: "the Query API can't run models yet"), that model carries the error and the claims are
+  still checked.
 - **The base case.** A model with bear / base / bull scenarios (the Analysis tab) is checked on
   its **base** case only: `assumptions` in the saved state, which is all a model saved before
-  scenarios holds (`model_stats.scenario_assumptions`, ported from `models/model.ts`
-  `scenarioAssumptions`; the fixture's `scenario_cases` pin which assumptions each case uses).
-  The bear and bull cases never reach the data or the flags; the result's shape is unchanged.
+  scenarios holds (`model_stats.scenario_assumptions` reads it; the Query API's shared fixture's
+  `scenario_cases` pin which assumptions each case uses). The bear and bull cases never reach
+  the data or the flags; the result's shape is unchanged.
 - **The thesis is data.** The first 30,000 characters (`MAX_THESIS_CHARS`; the result says
   when the rest wasn't checked) go in a `<thesis>` block as a JSON string with `<`/`>` escaped,
   so nothing in it can close the block; Tributary's numbers in a `<check_data>` block. The chat
@@ -277,6 +278,7 @@ Config (env):
 
 `pytest services/agent`: the tool loop runs against a scripted fake model and a mocked Query API transport;
 no API key needed. `test_thesis_check.py` includes the adversarial cases (injection in the
-thesis, another user's thesis, forged citations and figures); `test_model_stats.py` checks the
-shared fixture (statistics, flags and which assumptions each scenario uses). The live suites are [tests/adversarial](../../tests/adversarial) (leaks)
+thesis, another user's thesis, forged citations and figures; its fake Query API answers the
+model route with the Query API's own `model_maths.run`); `test_model_stats.py` checks which
+assumptions each scenario uses and how a failed run is worded. The live suites are [tests/adversarial](../../tests/adversarial) (leaks)
 and [tests/citations](../../tests/citations) (citation accuracy); CI replays their recordings.

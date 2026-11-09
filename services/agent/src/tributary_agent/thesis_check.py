@@ -6,11 +6,13 @@ POST /v1/thesis-checks (server.py) with a thesis's item id:
    (`GET /v1/workspace-items/{id}`: another user's item, a missing one and an item that isn't
    a thesis are the same 404) and its workspace (`GET /v1/workspaces/{id}`) for the models the
    thesis embeds (`[[embed:<id>]]` lines naming `model` items there, the first MAX_MODELS).
-   For each model it reads the company's history as the user
-   (`get_financials`, TTM, 40 quarters: what the web app's model page reads) and computes the
-   statistics and flags in Python (`model_stats.py`, the web app's `models/model.ts` port).
-   A model with bear / base / bull scenarios is checked on its BASE case (`assumptions`;
-   `model_stats.scenario_assumptions`), so models saved before scenarios check the same.
+   For each model it reads the company's history as the user (`get_financials`, TTM, 40
+   quarters: the evidence its figures are verified against) and runs the model through the
+   Query API (`POST /v1/companies/{id}/model`, `model_stats.run_model`: the one copy of the
+   maths, query_api/model_maths.py), which returns the statistics, flags and defaults. A model
+   with bear / base / bull scenarios is checked on its BASE case, so models saved before
+   scenarios check the same; a year built from reported quarters (F2 `ytd`) is checked on its
+   full year.
    The scope: the thesis's company, the models' companies, and companies the thesis names by
    ticker that the user can read (`/v1/me`), at most MAX_SCOPE. Nothing is spent before this
    succeeds.
@@ -48,14 +50,8 @@ from tributary_agent.agent import Agent, Answer, _collect_citations
 from tributary_agent.model_stats import (
     HISTORY_METRICS,
     HISTORY_QUARTERS,
-    MAX_HISTORY,
-    RunRate,
-    annual_history,
-    check_assumptions,
-    history_stats,
-    run_rate,
+    run_model,
     scenario_assumptions,
-    user_set,
 )
 from tributary_agent.report import (
     ACCESSION,
@@ -163,7 +159,11 @@ event. Never compute a figure after the event; the filings don't give it.
 - In <check_data>, a forecast year with user_set false holds Tributary's default (the run rate \
 fading to the long run), not a number the user chose. Say the user hasn't set it; never call it \
 reasonable, supported or inside history because it matches history: a default does by \
-construction."""
+construction. The same goes for the rates a year lists under defaulted (tax rate, interest and \
+other, share change, FCF margin).
+- A forecast year with reported_quarters above 0 is the current fiscal year: those quarters are \
+reported results, and only the remainder is the user's assumption. Comment on the full year \
+given there; never call the reported part an assumption."""
 
 CHECK_QUESTION = ("Check this thesis following the check rules, then call submit_check with "
                   "the result.")
@@ -263,12 +263,14 @@ class Model:
     item_id: str
     name: str
     company_id: str
-    assumptions: list[dict]
-    history: list = field(default_factory=list)  # model_stats.HistoryYear
-    check: dict | None = None  # model_stats.check_assumptions
+    assumptions: list[dict]  # the base case as typed (model_stats.scenario_assumptions)
+    state: dict = field(default_factory=dict)  # the saved state, what the run is asked with
+    history: list[dict] = field(default_factory=list)  # the run's fiscal years
+    check: dict | None = None  # the run's cases.base.check (B2)
     error: str | None = None
-    run: RunRate | None = None  # the TTM run rate the defaults start from
+    run: dict | None = None  # the run's TTM run rate, which the defaults start from
     user_set: list[bool] = field(default_factory=list)  # per year: not one of Tributary's defaults
+    years: list[dict] = field(default_factory=list)  # the run's base-case years
 
 
 @dataclass
@@ -352,7 +354,7 @@ def _models(api: Api, job: Job) -> None:
             continue
         job.models.append(Model(ref=f"model-{n}", item_id=item["item_id"],
                                 name=_clean(str(item.get("name") or "Model"), 120),
-                                company_id=cid, assumptions=assumptions))
+                                company_id=cid, assumptions=assumptions, state=s))
 
 
 def named_tickers(markdown: str) -> list[str]:
@@ -391,8 +393,9 @@ def build_scope(api: Api, job: Job) -> None:
         job.companies[cid] = {"name": names.get(cid), "access": tiers_of(readable, everyone, cid)}
 
 
-def read_history(api: ToolRunner, job: Job) -> None:
-    """Each model's fiscal-year history, read as the user, and its assumptions against it."""
+def read_history(api: Api, job: Job) -> None:
+    """Each model's fiscal-year history, read as the user (the evidence), and the model run
+    through the Query API (the numbers)."""
     for m in job.models:
         content, is_error = api.run("get_financials", {
             "company_id": m.company_id, "metrics": HISTORY_METRICS,
@@ -402,12 +405,16 @@ def read_history(api: ToolRunner, job: Job) -> None:
                 "permission denied") else "couldn't read this company's history")
             continue
         job.prefetched.append(content)
-        body = json.loads(content)
-        rows = body.get("rows") or []
-        m.history = annual_history(rows, MAX_HISTORY)
-        m.check = check_assumptions(m.history, m.assumptions)
-        m.run = run_rate(rows)
-        m.user_set = user_set(history_stats(m.history), m.run, m.assumptions)
+        body, error = run_model(api, m.company_id, m.state)
+        if body is None:
+            m.error = error
+            continue
+        base = body["cases"]["base"]
+        m.history = [y for y in body.get("history") or [] if isinstance(y, dict)]
+        m.check = base["check"]
+        m.run = body.get("run_rate") if isinstance(body.get("run_rate"), dict) else None
+        m.user_set = [bool(x) for x in base.get("user_set") or []]
+        m.years = [y for y in base.get("years") or [] if isinstance(y, dict)]
 
 
 def _filing_ref(row: Any, forms: tuple[str, ...] | None = None) -> dict | None:
@@ -481,6 +488,25 @@ def _pct(v: float | None) -> float | None:
     return None if v is None else round(v * 100, 2)
 
 
+def _round(v: float) -> float:
+    """A percent the user typed stays as typed (25 is 25); a computed full year to 2 places."""
+    return v if float(v).is_integer() else round(v, 2)
+
+
+def _lines(year: dict) -> dict:
+    """A forecast year's lines below operating income, from the run, for the check's data."""
+    if not year:
+        return {}
+    actual = year.get("actual") or {}
+    out = {"net_income": year.get("net_income"), "eps_diluted": year.get("eps"),
+           "eps_growth_pct": _pct(year.get("eps_growth")),
+           "share_change_pct": _pct(year.get("share_change")),
+           "fcf_margin_pct": _pct(year.get("fcf_margin")),
+           "defaulted": year.get("defaulted") or [],
+           "reported_quarters": actual.get("quarters") or 0}
+    return {k: (round(v, 2) if isinstance(v, float) else v) for k, v in out.items()}
+
+
 def data_block(job: Job) -> str:
     """Tributary's numbers for the check: the scope and each model against its history."""
     models = []
@@ -491,9 +517,13 @@ def data_block(job: Job) -> str:
         else:
             s = m.check["stats"]
             entry.update({
-                "history": [{"fiscal_year": y.fy, "period_end": y.period_end,
-                             "revenue": y.revenue, "operating_income": y.operating_income,
-                             "accession_no": y.revenue_accession} for y in m.history],
+                "history": [{"fiscal_year": y.get("fy"), "period_end": y.get("period_end"),
+                             "revenue": y.get("revenue"),
+                             "operating_income": y.get("operating_income"),
+                             "net_income": y.get("net_income"), "eps_diluted": y.get("eps"),
+                             "free_cash_flow": y.get("fcf"),
+                             "accession_no": ((y.get("sources") or {}).get("revenue") or {})
+                             .get("accession_no")} for y in m.history],
                 "revenue_cagr_pct": _pct(s["cagr"]), "cagr_years": s["cagr_years"],
                 "avg_operating_margin_pct": _pct(s["avg_margin"]),
                 "margin_years": s["margin_years"],
@@ -501,11 +531,11 @@ def data_block(job: Job) -> str:
                 "margin_max_pct": _pct(m.check["margin_max"]),
                 "latest_growth_pct": _pct(s["last_growth"]),
                 "latest_margin_pct": _pct(s["last_margin"]),
-                "ttm_growth_pct": _pct(m.run.growth if m.run else None),
-                "ttm_margin_pct": _pct(m.run.margin if m.run else None),
-                "ttm_period": m.run.period if m.run else None,
-                "forecast": [{"fiscal_year": y["fy"], "growth_pct": y["growth"],
-                              "margin_pct": y["margin"],
+                "ttm_growth_pct": _pct((m.run or {}).get("growth")),
+                "ttm_margin_pct": _pct((m.run or {}).get("margin")),
+                "ttm_period": (m.run or {}).get("period"),
+                "forecast": [{"fiscal_year": y["fy"], "growth_pct": _round(y["growth"]),
+                              "margin_pct": _round(y["margin"]),
                               "growth_vs_cagr_points": None if y["growth_vs_cagr"] is None
                               else round(y["growth_vs_cagr"], 2),
                               "flags": [f for f in (
@@ -513,10 +543,12 @@ def data_block(job: Job) -> str:
                                   y["margin_flag"] and f"margin {y['margin_flag']} history")
                                   if f],
                               "user_set": mine,
-                              "user_note": a.get("note")}
-                             for y, a, mine in zip(m.check["years"], m.assumptions,
-                                                   m.user_set or [True] * len(m.assumptions),
-                                                   strict=True)],
+                              "user_note": a.get("note"),
+                              **_lines(p)}
+                             for y, a, mine, p in zip(
+                                 m.check["years"], m.assumptions,
+                                 m.user_set or [True] * len(m.assumptions),
+                                 m.years or [{}] * len(m.assumptions), strict=True)],
             })
         models.append(entry)
     data = {

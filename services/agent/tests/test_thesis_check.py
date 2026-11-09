@@ -11,7 +11,9 @@ import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
+from query_api.model_maths import run as run_model
 from query_api.thesis_checks import validate_check
+from query_api.workspaces import validate_state
 from tributary_agent.agent import SYSTEM
 from tributary_agent.server import LimitExceeded, Limits, create_app
 from tributary_agent.thesis_check import (
@@ -104,8 +106,9 @@ class FakeQueryApi:
     """The Query API as alice sees it: her thesis and model, NVDA and AMD readable, MSFT not
     (catalog closed); every request recorded with its token."""
 
-    def __init__(self, markdown=MARKDOWN, save_status=201):
+    def __init__(self, markdown=MARKDOWN, save_status=201, quarters=()):
         self.markdown = markdown
+        self.quarters = list(quarters)  # quarterly rows the model run reads (F2 ytd)
         self.save_status = save_status
         self.seen: list[httpx.Request] = []
         self.saved: list[dict] = []
@@ -139,6 +142,11 @@ class FakeQueryApi:
             return httpx.Response(200, json={"results": [
                 {"company_id": hits[q], "name": q, "matched_on": "ticker", "matched_alias": q}]
                 if q in hits else []})
+        if path == f"/v1/companies/{NVDA}/model" and method == "POST":
+            # the Query API's own maths (query_api/model_maths.py) over the same TTM rows
+            body = run_model({"ttm": fy_rows(), "quarters": self.quarters, "annual": [],
+                              "latest": {}}, validate_state("model", json.loads(request.content)))
+            return httpx.Response(200, json=json.loads(json.dumps(body, default=str)))
         if path == f"/v1/companies/{NVDA}/financials":
             if request.url.params.get("view") == "ttm":
                 return httpx.Response(200, json={"company_id": NVDA, "as_of": AS_OF,
@@ -827,3 +835,65 @@ def test_the_check_reads_the_release_and_the_events_since_the_report():
     assert "get_events_since_report" in CHECK_RULES and "get_earnings_release" in CHECK_RULES
     assert "under stale: say so and cite the" in CHECK_RULES
     assert "Never compute a figure after the event" in CHECK_RULES
+
+
+# --- F2: the model run comes from the Query API, the one copy of the maths -------------------
+
+def check_data(messages) -> dict:
+    return json.loads(messages.requests[0]["messages"][0]["content"][1]["text"].split("\n")[2])
+
+
+def test_the_model_is_run_by_the_query_api_as_the_user():
+    fake = FakeQueryApi()
+    _, messages, _ = run(fake, *script())
+    posts = [r for r in fake.seen if r.method == "POST" and r.url.path.endswith("/model")]
+    assert [r.url.path for r in posts] == [f"/v1/companies/{NVDA}/model"]
+    assert posts[0].headers["authorization"] == "Bearer alice-token"
+    assert json.loads(posts[0].content) == MODEL  # the saved state, as saved
+    forecast = check_data(messages)["models"][0]["forecast"]
+    # the lines below operating income, and which rates are still Tributary's defaults
+    assert forecast[0]["defaulted"] == ["nonOperating", "taxRate", "shareChange", "fcfMargin"]
+    assert forecast[0]["reported_quarters"] == 0 and "eps_diluted" in forecast[0]
+    assert "defaulted" in CHECK_RULES and "reported_quarters" in CHECK_RULES
+
+
+def test_an_older_query_api_without_the_route_leaves_the_model_out_not_the_check():
+    """The minute of a deploy: agent-api before the Query API. The claims are still checked."""
+    class Older(FakeQueryApi):
+        def __call__(self, request):
+            if request.url.path.endswith("/model"):
+                self.seen.append(request)
+                return httpx.Response(404, json={"detail": "Not Found"})
+            return super().__call__(request)
+
+    fake = Older()
+    run(fake, *script())
+    result = validate_check(fake.saved[0]["result"])
+    assert result["assumptions"][0]["error"] == "the Query API can't run models yet"
+    assert result["assumptions"][0]["years"] == [] and result["claims"]
+
+
+def quarter_rows(fy: int, values: list[tuple[int, float, float]]) -> list[dict]:
+    return [{"metric": m, "fiscal_period": f"FY{fy} Q{q}", "period_end": f"{fy}-0{q * 3}-28",
+             "value": str(int(v)), "citation": {"accession_no": ACC, "form": "10-Q",
+                                                "filed": "2026-08-27", "filing_url": URL}}
+            for q, rev, oi in values for m, v in (("revenue", rev), ("operating_income", oi))]
+
+
+def test_a_year_built_from_reported_quarters_is_checked_on_its_full_year(monkeypatch):
+    """F2 `ytd`: FY2026's first half is reported; the user's 25% / 30% are the second half's,
+    so the check's growth and margin are the full year's, and the data says what's reported."""
+    monkeypatch.setitem(globals(), "MODEL", {**MODEL, "ytd": True})
+    rows = (quarter_rows(2025, [(1, 35e9, 3.5e9), (2, 36e9, 3.6e9)])
+            + quarter_rows(2026, [(1, 40e9, 6e9), (2, 41e9, 6.2e9)]))
+    fake = FakeQueryApi(quarters=rows)
+    _, messages, _ = run(fake, *script())
+    year1 = check_data(messages)["models"][0]["forecast"][0]
+    assert year1["reported_quarters"] == 2
+    h2 = (146.41e9 - 71e9) * 1.25
+    full = 81e9 + h2
+    assert year1["growth_pct"] == pytest.approx((full / 146.41e9 - 1) * 100, abs=0.01)
+    assert year1["margin_pct"] == pytest.approx((12.2e9 + h2 * 0.3) / full * 100, abs=0.01)
+    result = validate_check(fake.saved[0]["result"])
+    assert result["assumptions"][0]["years"][0]["growth"] == pytest.approx(
+        year1["growth_pct"], abs=0.01)
