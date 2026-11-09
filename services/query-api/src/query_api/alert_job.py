@@ -30,10 +30,12 @@ A run:
    doesn't use goes to the next; a send under way finishes, at most webhooks.TOTAL_TIMEOUT),
    at most SENDS_PER_USER each, taken in turns across the user's webhooks (AppAlerts.due), and
    none started after SEND_BUDGET seconds. A webhook that stalls (STALLED: no answer in time, a
-   name that doesn't resolve or resolves too slowly, no connection, TLS) is skipped for the rest
+   name that doesn't resolve or resolves too slowly, no connection, TLS; or REFUSED: at send
+   time its name resolves to a private address, so nothing was sent) is skipped for the rest
    of the run, and after consecutive stalls left out of later runs too (alerts.STALL_WAITS, app
    migration 017) until anything it answers clears it: a slow, dead or hostile endpoint delays
-   only its owner's deliveries (they stay due). Each send is recorded as soon as it's made, and
+   only its owner's deliveries (they stay due), and one flipping between slow and private still
+   reaches the longer waits. Each send is recorded as soon as it's made, and
    its figures go out only while the user can still read the company's financials (layer 1
    again at send time).
    Email only with a provider configured AND a verified address for the user
@@ -87,6 +89,10 @@ MAX_DETAIL = 15_000     # bytes of a notification's detail (the table allows 163
 SEND_BUDGET = 240.0     # seconds of sending per run (the Job's deadline is 540)
 # skip that webhook for the rest of the run, and count a stall (alerts.STALL_WAITS)
 STALLED = frozenset({"timeout", "dns_timeout", "unresolvable", "connect", "tls"})
+# refused at send time (webhooks.vet: the name now resolves to a private address; the other codes
+# can't change after the save's check): nothing was sent, nothing answered, so it counts as a stall
+# too. Clearing the count on it let an endpoint flipping slow / private never reach the long waits.
+REFUSED = frozenset({"private_address", "host", "url", "scheme", "userinfo", "port"})
 SYSTEM = ""         # the filing index is public metadata: read without a user
 
 
@@ -245,7 +251,7 @@ def deliver(alerts: AppAlerts, store: Any, sender: Sender, user_id: str, *, jwt_
         body = body_of(d["format"], event(d, company, link, at), message(d, label, link))
         sent = sender.send(d["url"], body, headers(secret, d["delivery_id"], "filing", body))
         alerts.record(user_id, [(d["delivery_id"], d["attempts"], sent)], at)
-        if sent.error in STALLED:
+        if sent.error in STALLED or sent.error in REFUSED:
             stalled.add(d["webhook_id"])
             alerts.webhook_result(user_id, d["webhook_id"], True, at)
         elif d.get("stalls") and d["webhook_id"] not in cleared:

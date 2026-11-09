@@ -1004,7 +1004,8 @@ migrations 016 and 017 (owner-only, forced RLS, not streamed).
   budget (what's left over the users left, so time one doesn't use goes to the next), 10
   deliveries per user per run taken in turns across the user's webhooks (one webhook's backlog
   can't fill the batch), nothing started after 240 s. A webhook that stalls (no answer in time, a
-  name that doesn't resolve or resolves too slowly, no connection, TLS) is skipped for the rest of
+  name that doesn't resolve or resolves too slowly, no connection, TLS, or a name that now
+  resolves to a private address, refused at send time) is skipped for the rest of
   the run; after consecutive stalls it is left out of later runs for 30 min, 2 h, then 6 h each
   (app migration 017, `stalls` / `stalled_until` on the webhook, shown on the settings page), and
   anything it answers, a test that arrives or turning it off and on clears that; its deliveries

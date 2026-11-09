@@ -16,7 +16,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from query_api.alert_job import deliver, run
-from query_api.alerts import FORMS, MAX_RED_LINES_TOTAL, AppAlerts
+from query_api.alerts import FORMS, MAX_RED_LINES_TOTAL, STALL_WAITS, AppAlerts
 from query_api.app import create_app
 from query_api.webhooks import Sent, signature, webhook_secret
 
@@ -585,7 +585,8 @@ def test_one_stalled_webhook_doesnt_starve_the_users_others(conn, alerts):
     assert (ok, failed, stalled) == (1, 1, 1)
 
 
-@pytest.mark.parametrize("code", ["timeout", "dns_timeout", "unresolvable", "connect", "tls"])
+@pytest.mark.parametrize("code", ["timeout", "dns_timeout", "unresolvable", "connect", "tls",
+                                  "private_address"])
 def test_repeated_stalls_leave_a_webhook_out_of_later_runs(conn, alerts, token, code):
     hook = alerts.add_webhook(A, HOOK_URL, "json", b"s" * 16)
     store = JobStore()
@@ -610,6 +611,29 @@ def test_repeated_stalls_leave_a_webhook_out_of_later_runs(conn, alerts, token, 
     run_job(alerts, store, sender, now=NOW + timedelta(minutes=40))
     assert len(sender.sent) == 3
     assert {d["status"] for d in alerts.deliveries(A, None, 10)} == {"delivered"}
+
+
+def test_an_endpoint_flipping_between_slow_and_private_reaches_the_long_waits(conn, alerts):
+    """Pre-ship review: a send refused at send time (the name now resolves to a private address)
+    cleared the stall count, so an endpoint that answered slowly one run and resolved privately
+    the next was never left out for more than a run. A refusal counts as a stall now."""
+    hook = alerts.add_webhook(A, HOOK_URL, "json", b"s" * 16)
+    store = JobStore()
+    store.filings = [f for f in store.filings if f["accession_no"] == REL]
+    sender = Stalling(HOOK_URL)
+    at = NOW
+    for n, code in enumerate(["timeout", "private_address", "timeout", "private_address"], 1):
+        w = alerts.webhook(A, hook["webhook_id"])
+        at = max(at + timedelta(minutes=10), w["stalled_until"] or at)  # once it is due again
+        sender.code = code
+        run_job(alerts, store, sender, now=at)
+        assert len(sender.sent) == n  # tried each time it was due
+        w = alerts.webhook(A, hook["webhook_id"])
+        assert w["stalls"] == n
+        assert w["stalled_until"] == at + STALL_WAITS[min(n, len(STALL_WAITS)) - 1]
+    assert w["stalled_until"] == at + timedelta(hours=6)  # the longest wait
+    (d,) = alerts.deliveries(A, None, 10)
+    assert d["status"] == "pending" and d["last_error"] == "private_address"
 
 
 def test_turning_a_webhook_back_on_clears_its_stall(conn, alerts):

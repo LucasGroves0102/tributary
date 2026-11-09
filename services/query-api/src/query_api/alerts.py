@@ -334,7 +334,7 @@ DELIVERY_COLUMNS = ("delivery_id::text, webhook_id::text, notification_id::text,
                     " delivered_at")
 # a failed delivery is tried again after these waits, then given up (the job runs every 10 min)
 BACKOFF = (timedelta(minutes=5), timedelta(minutes=30), timedelta(hours=2), timedelta(hours=6))
-# a webhook whose sends stall (alert_job.STALLED) is left out of sends for this long after its
+# a webhook whose sends stall (alert_job.STALLED, REFUSED) is left out of sends this long after its
 # 1st, 2nd, 3rd, ... consecutive stall (the last repeats): the 1st only for the rest of the run
 STALL_WAITS = (timedelta(0), timedelta(minutes=30), timedelta(hours=2), timedelta(hours=6))
 
