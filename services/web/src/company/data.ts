@@ -231,6 +231,41 @@ export interface TableCell {
   source?: { accessionNo: string; form: string };
 }
 
+/** A 10-K or 10-Q in the filing index whose period isn't in the figures yet (H9). */
+export interface FiguresBehind {
+  form: string;
+  accessionNo: string;
+  filed: string;
+  /** the filing's period */
+  period: string;
+  /** the newest period the figures have */
+  through: string;
+  /** whole days since it was filed */
+  days: number;
+  /** quarters between the figures' newest period and the filing's */
+  quarters: number;
+}
+
+/** The figures are behind when the newest 10-K/10-Q in the index reports a period more than a week
+ * after their newest one and was filed after every filing they cite. Says how far, never when it
+ * will catch up: the SEC's XBRL data has no deadline (Humana's July 10-Q stayed out for months). */
+export function figuresBehind(
+  rows: FinancialRow[],
+  newest: { form: string; accession_no: string; filed: string; period_of_report?: string | null } | null,
+  now: number = Date.now(),
+): FiguresBehind | null {
+  if (!newest?.period_of_report || !/^10-[KQ]$/.test(newest.form) || !rows.length) return null;
+  const through = rows.reduce((m, r) => (r.period_end > m ? r.period_end : m), "");
+  const cited = rows.reduce((m, r) => (r.citation.filed > m ? r.citation.filed : m), "");
+  if (rows.some((r) => r.citation.accession_no === newest.accession_no)) return null;
+  if (Date.parse(newest.period_of_report) - Date.parse(through) <= 7 * 86_400_000 || newest.filed < cited) return null;
+  return {
+    form: newest.form, accessionNo: newest.accession_no, filed: newest.filed, period: newest.period_of_report, through,
+    days: Math.max(0, Math.floor((now - Date.parse(newest.filed.slice(0, 10))) / 86_400_000)),
+    quarters: Math.max(1, Math.round((Date.parse(newest.period_of_report) - Date.parse(through)) / (91.3 * 86_400_000))),
+  };
+}
+
 /** Where a statement's XBRL value is printed: a 10-K's Item 8, a 10-Q's Part I Item 1 (the
  * reader's section keys); other forms open at their first section. */
 export function statementSection(form: string): string | null {

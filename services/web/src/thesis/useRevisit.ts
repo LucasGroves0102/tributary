@@ -1,15 +1,15 @@
 import { useEffect, useState } from "react";
 
 import { filingIndex, thesisChecks } from "../api";
-import type { CheckFilingRef, ThesisCheckSummary } from "../types";
+import type { CheckFilingRef, IndexedFiling, ThesisCheckSummary } from "../types";
 import { checkCompany, newerFiling, PERIODIC_FORMS } from "./revisit";
 
 /** Each company's newest 10-K/10-Q (public filing index), asked once per page load and token:
  * a workspace with several theses about one company asks once. */
 let owner: string | null = null;
-const newest = new Map<string, Promise<CheckFilingRef | null>>();
+const newest = new Map<string, Promise<IndexedFiling | null>>();
 
-export function newestPeriodic(token: string, companyId: string): Promise<CheckFilingRef | null> {
+export function newestPeriodic(token: string, companyId: string): Promise<IndexedFiling | null> {
   if (owner !== token) {
     newest.clear();
     owner = token;

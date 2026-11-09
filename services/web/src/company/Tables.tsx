@@ -1,10 +1,11 @@
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { annualPerShare, financialsView, segments as fetchSegments } from "../api";
 import { NO_DATA, NO_DATA_TITLE, NOT_APPLICABLE, NOT_MEANINGFUL } from "../blanks";
 import { download } from "../download";
-import { change, pct } from "../format";
-import type { FinancialRow } from "../types";
+import { change, day, pct } from "../format";
+import { newestPeriodic } from "../thesis/useRevisit";
+import type { FinancialRow, IndexedFiling } from "../types";
 import {
   financialsCsv,
   metricTable,
@@ -23,6 +24,8 @@ import {
   withAnnualPerShare,
   withBridges,
   statementSection,
+  figuresBehind,
+  type FiguresBehind,
 } from "./data";
 import { go, href } from "../route";
 import type { StatementView } from "./statementView";
@@ -160,6 +163,22 @@ interface TableProps {
 
 const BALANCE_NOT_TTM = "A balance is a point in time, so it has no trailing twelve months. Quarterly shows every quarter end.";
 
+/** The figures stop before the newest 10-K/10-Q on EDGAR (H9): how far behind, in periods and days,
+ * and where to read it meanwhile. No promise of when it catches up: the SEC's data keeps none. */
+function BehindNotice({ behind, companyId, name, url }: { behind: FiguresBehind; companyId: string; name: string; url: string | null }) {
+  const word = behind.form === "10-K" ? "year" : "quarter";
+  return (
+    <p className="card-b stale-note" role="note">
+      ⚠ Not in these figures yet: {name}'s {behind.form} for the {word} ending {day(behind.period, true)}, filed{" "}
+      {day(behind.filed, true)} ({behind.days === 1 ? "1 day" : `${behind.days} days`} ago). These figures end with the
+      period ending {day(behind.through, true)}, {behind.quarters === 1 ? "a quarter" : `${behind.quarters} quarters`} behind
+      it. Until they include it (Data notes says why when it's known), read the filing:{" "}
+      <a href={href({ view: "filing", companyId, accessionNo: behind.accessionNo, section: statementSection(behind.form) })}>its financial statements</a>
+      {url?.startsWith("https://www.sec.gov/") && <> · <a href={url} target="_blank" rel="noopener noreferrer">EDGAR ↗</a></>}.
+    </p>
+  );
+}
+
 /** Statement, period, basis and range live in the address (route.ts), so a view can be linked,
  * bookmarked and undone with Back. Range applies to Quarterly and TTM; Annual is ten years. */
 export function Statements({ token, companyId, name, ticker, notApplicable = [], view = {} }: TableProps & { view?: StatementView }) {
@@ -182,6 +201,17 @@ export function Statements({ token, companyId, name, ticker, notApplicable = [],
     return { rows: annual ? withAnnualPerShare(fin.rows, perShare.rows, basis) : fin.rows };
   });
   const table = load?.state === "ok" ? withBridges(metricTable(load.data.rows, metrics, period, basis, notApplicable, RANGE_QUARTERS[range]), load.data.rows, kind) : null;
+  // H9: a newer 10-K/10-Q in the index than the figures hold (public index, asked once per company)
+  const [newest, setNewest] = useState<IndexedFiling | null>(null);
+  useEffect(() => {
+    let live = true;
+    setNewest(null);
+    void newestPeriodic(token, companyId).then((f) => live && setNewest(f));
+    return () => {
+      live = false;
+    };
+  }, [token, companyId]);
+  const behind = load?.state === "ok" ? figuresBehind(load.data.rows, newest) : null;
   const exportCsv = () =>
     load?.state === "ok" && table &&
     download(`${ticker.toLowerCase()}-${kind}-${period}${period !== "a" && range !== "8q" ? `-${range}` : ""}${basis === "calendar" ? "-calendar" : ""}.csv`, new Blob([financialsCsv(load.data.rows, table, req.view)], { type: "text/csv" }));
@@ -199,6 +229,7 @@ export function Statements({ token, companyId, name, ticker, notApplicable = [],
         <span className="grow" />
         <button className="btn sm" onClick={exportCsv} disabled={!table?.rows.length}>Export CSV</button>
       </div>
+      {behind && <BehindNotice behind={behind} companyId={companyId} name={name} url={newest?.filing_url ?? null} />}
       <Gate load={load} name={name} what="Financials">
         {() =>
           table!.rows.length ? (

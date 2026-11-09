@@ -592,7 +592,12 @@ the ones they can read. They need financials access, like the values they descri
 company is checked when its figures change, so its tab says when *its* figures were last checked while
 Home and Data status say when the checks last ran. A note about filings the SEC's XBRL data doesn't have
 yet dates them newest to oldest and promises "a day or two" only while that's true (over 3 days, it
-says how long the oldest has waited). What a note says follows the API's reading of a finding: a stock
+says how long the oldest has waited). The Statements tab says the same where the figures are read
+(H9, `company/data.ts` `figuresBehind`): when the newest 10-K/10-Q in the public filing index reports a
+period more than a week after the figures' newest and was filed after everything they cite, a notice
+names it, its period, when it was filed and how many days ago, how many quarters the figures are behind,
+and links its financial statements in the reader and on EDGAR. It promises no date (Citigroup was three
+quarters behind on 2026-11-08). What a note says follows the API's reading of a finding: a stock
 split is one "10-for-1 stock split" note, a restatement by a clean factor without the other side says it
 may be a split, a factor of 1,000 says the unit changed, a spike the same quarter has in other years
 is a seasonal peak.

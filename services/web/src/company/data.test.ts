@@ -4,6 +4,7 @@ import { ACC, fin, NVDA, nvdaRow } from "../fixtures";
 import type { Recap, RecapValue, SegmentRow } from "../types";
 import {
   eightKItems,
+  figuresBehind,
   filingHeadings,
   fiscalYear,
   parsedNote,
@@ -218,6 +219,32 @@ describe("segments", () => {
       deck("deck:Other", "Other Wholesale", "operating_income", "2024-12-31", 5.35),
     ]);
     expect(t!.rows[0]).toMatchObject({ yoy: null, yoyNotMeaningful: true });
+  });
+});
+
+describe("figures behind the filing index (H9)", () => {
+  // Humana, as the audit found it: revenue to Mar 31, 2026 while EDGAR had the June 10-Q of Jul 29
+  const rows = [
+    fin("revenue", "2025-12-31", "32515000000", "FY2025 Q4", { citation: { accession_no: "0000049071-26-000009", form: "10-K", filed: "2026-02-18", xbrl_tag: "Revenues", source_accessions: null, filing_url: null } }),
+    fin("revenue", "2026-03-31", "39648000000", "FY2026 Q1", { citation: { accession_no: "0000049071-26-000023", form: "10-Q", filed: "2026-04-29", xbrl_tag: "Revenues", source_accessions: null, filing_url: null } }),
+  ];
+  const june = { form: "10-Q", accession_no: "0000049071-26-000050", filed: "2026-07-29", period_of_report: "2026-06-30" };
+  const NOW = Date.parse("2026-11-06T12:00:00Z");
+
+  it("says how far behind: the filing's period, when it was filed and how many days ago", () => {
+    expect(figuresBehind(rows, june, NOW)).toEqual({
+      form: "10-Q", accessionNo: june.accession_no, filed: "2026-07-29", period: "2026-06-30", through: "2026-03-31", days: 100, quarters: 1,
+    });
+  });
+
+  it("isn't behind when the figures hold that period or cite that filing, or for an older or other filing", () => {
+    expect(figuresBehind([...rows, fin("revenue", "2026-06-30", "40867000000", "FY2026 Q2")], june, NOW)).toBeNull();
+    expect(figuresBehind(rows, { ...june, period_of_report: "2026-04-02" }, NOW)).toBeNull(); // within a week
+    expect(figuresBehind(rows, { ...june, form: "8-K" }, NOW)).toBeNull();
+    expect(figuresBehind(rows, { ...june, period_of_report: null }, NOW)).toBeNull();
+    expect(figuresBehind(rows, { ...june, filed: "2026-04-01" }, NOW)).toBeNull(); // filed before what's cited
+    expect(figuresBehind(rows, null, NOW)).toBeNull();
+    expect(figuresBehind([], june, NOW)).toBeNull();
   });
 });
 

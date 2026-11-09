@@ -8,6 +8,7 @@ import { download } from "../download";
 import { ACC, entry, fin, NVDA, nvdaRow, TESLA, TSLA } from "../fixtures";
 import type { CompanyTab } from "../route";
 import { ScopeContext, type Scope } from "../scope";
+import { clearNewest } from "../thesis/useRevisit";
 import type { ScreenerRow } from "../types";
 import { Company } from "./Company";
 
@@ -50,6 +51,7 @@ const INDEX = [
   indexRow(K_ACC, "10-K", "2026-02-26", 1, { period_of_report: "2026-01-25" }),
 ];
 let indexReadable = true;
+let newerIndex: ReturnType<typeof indexRow>[] = [];
 const CHANGES = {
   company_id: NVDA, accession_no: ACC, basis: "prior", as_of: "",
   sections: [{
@@ -108,7 +110,7 @@ function respond(url: string): Response {
     // public metadata: every user gets it; sections only where filings are readable
     const forms = u.searchParams.getAll("form");
     const offset = Number(u.searchParams.get("offset") ?? 0);
-    const rows = INDEX.filter((f) => !forms.length || forms.includes(f.form))
+    const rows = [...newerIndex, ...INDEX].filter((f) => !forms.length || forms.includes(f.form))
       .map((f) => (indexReadable ? f : { ...f, sections: null, sections_available: false }));
     return Response.json({ as_of: "", forms, from: null, to: null, limit: 25, offset, has_more: offset === 0 && !forms.length, filings: rows });
   }
@@ -157,6 +159,8 @@ beforeEach(() => {
   vi.stubGlobal("fetch", vi.fn(async (url: string) => respond(url)));
   rowFor = () => nvdaRow({ access: ["filings", "financials"] });
   indexReadable = true;
+  newerIndex = [];
+  clearNewest();
   noMargin = false;
   morePeers = 0;
   [onWatch, onChart, onChartMany, onAsk].forEach((f) => f.mockClear());
@@ -309,6 +313,20 @@ it("statements: a balance sheet has no TTM, so it shows quarters and says why", 
   const ttm = button("TTM") as HTMLButtonElement;
   expect(ttm.disabled).toBe(true);
   expect(ttm.title).toContain("point in time");
+});
+
+it("statements say how far behind EDGAR they are, and promise nothing (H9)", async () => {
+  await render("statements");
+  expect(container.textContent).not.toContain("Not in these figures yet");
+  act(() => root.unmount());
+  clearNewest();
+  newerIndex = [indexRow("0001045810-26-000120", "10-Q", "2026-11-20", 0, { period_of_report: "2026-10-25" })];
+  await render("statements");
+  const notice = $(".stale-note")!;
+  expect(notice.textContent).toContain("Not in these figures yet: Nvidia's 10-Q for the quarter ending Oct 25, 2026, filed Nov 20, 2026");
+  expect(notice.textContent).toContain("These figures end with the period ending Jul 26, 2026");
+  expect(notice.textContent).not.toMatch(/usually|day or two|soon/);
+  expect(notice.querySelector("a")?.getAttribute("href")).toBe(`#/filing/${NVDA}/0001045810-26-000120/I-1`);
 });
 
 it("statements: range is for Quarterly and TTM; Annual has its ten years", async () => {
