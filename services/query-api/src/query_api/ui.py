@@ -80,7 +80,7 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
                   readable: Callable[[str], Readable],
                   today: Callable[[], date] | None = None,
                   watchlists: Watchlists | None = None) -> None:
-    clock = today or _today_eastern
+    clock = today or today_eastern
 
     def saved(user_id: str) -> list[dict]:
         if watchlists is None:
@@ -535,7 +535,7 @@ def _expected(r: dict) -> dict:
             "last_period_end": r["last_period_end"], "last_filed": r["last_filed"]}
 
 
-def _today_eastern() -> date:
+def today_eastern() -> date:
     """EDGAR dates are US Eastern."""
     return datetime.now(ZoneInfo("America/New_York")).date()
 

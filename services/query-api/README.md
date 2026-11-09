@@ -50,6 +50,8 @@ request parameters. Dev tokens: `make token USER=alice`.
 | `GET /v1/companies/{id}/sections/{key}?form=&accession_no=&limit=&max_chars=` | filings | section text + citation; `max_chars` default 8,000, up to 1,000,000 (the reader asks for the whole section) |
 | `GET /v1/companies/{id}/filings/{accession}/changes?section=&basis=&kind=` | filings | new / removed / rewritten Risk Factors and MD&A paragraphs vs the comparable earlier filing, word diffs, citations in both filings ([What changed](#what-changed)) |
 | `GET /v1/search?q=&company=&form=&section=&from=&to=&limit=&offset=` | filings (every company searched) | best passage per section, ranked, with snippet and citation ([Search](#search)) |
+| `GET /v1/companies/{id}/events` | filings | 8-K filings since the latest 10-Q/10-K period end, newest first: items (SEC title, kind), an excerpt of the 8-K's own words, the press release exhibit, and `stale`: figures at that period end an event after it may have changed ([Earnings and events](#earnings-and-events)) |
+| `GET /v1/companies/{id}/earnings?quarters=` | filings | each quarter's earnings release (8-K Item 2.02), newest first, `quarters` 1-8 (default 4): the release, its headline, outlook passages and management's adjustments (reconciliation tables, dollar notes), each with offsets into the release; no beat or miss ([Earnings and events](#earnings-and-events)) |
 | `GET /v1/companies/{id}/data-notes` | financials | data-quality and freshness notes: gaps, overlapping quarters, restatements, derived quarters, filings companyfacts doesn't carry yet, each with its filings ([Data notes](#data-notes)) |
 | `GET /v1/companies/{id}/annual-per-share?years=` | financials | EPS and weighted shares per fiscal year, as the 10-K states them (migration 036): per-share figures don't add, so quarters can't give them |
 | `GET /v1/data-notes?limit=&company_id=` | financials (every company covered) | the newest notes across the caller's companies, or the named ones of them (at most 50), without derived-quarters notes ([Data notes](#data-notes)) |
@@ -797,6 +799,52 @@ from `readable()` (financials) and passes them into the SQL (with the catalog pu
   end; newest first: a 2033 period mustn't top the list) and
   `filings` (`role`, accession, form, filed, EDGAR `filing_url` from the public index). The
   plain-language wording is the web app's (`services/web/src/company/notes.ts`).
+
+## Earnings and events
+
+`/v1/companies/{id}/events` and `/v1/companies/{id}/earnings` (`events.py`, `releases.py`; rules
+in their docstrings) put the filings an analyst reads between 10-Qs next to the figures: what the
+company filed under Form 8-K since its last report, and each quarter's earnings release. Both
+`require(filings)` first, then read through `Store` as `query_api`: the 8-K list and its items
+are filing-index metadata (`silver.company_8ks`, migration 045, from the SEC's submissions
+history; a filing too new for the nightly load shows the items the parser found in it, under
+RLS), the excerpts and passages are section text under RLS on `silver.filing_sections`.
+
+- **Events since the last report.** `since` is the period end of the latest original 10-K or
+  10-Q (the last 400 days, `window: "recent"`, when there is none that recent); `events` are the
+  8-K and 8-K/A filed after it, at most 25, each with `items` (`{item, title, kind}`; `kind`:
+  deal, debt, agreement, leadership, impairment, non_reliance, earnings, disclosure, ...),
+  `items_from` (`index` or `parsed`), `material` (false when every item is routine: a vote,
+  nominations, exhibits alone), `event_date` (the 8-K's date of report), `excerpt` (the opening of
+  its most material item's section, cited with offsets), `release` (its first EX-99 exhibit) and
+  `affects`. **Stale figures**: an original 8-K whose event is dated after the period end flags
+  the balance-sheet figures it can change, listed once each in `stale` as of that period end with
+  the events behind them: 2.01 completed acquisition or disposition (cash, debt, net debt, total
+  assets), 2.03 new debt and 2.04 accelerated debt (debt, net debt, debt to equity; 2.03 cash
+  too), 2.06 impairment (total assets, equity), 3.02 unregistered equity sale (shares, equity),
+  1.03 bankruptcy and 4.02 non-reliance (`*`: every figure). A flag, never a recomputed figure.
+- **Earnings releases.** A quarter's release is the 8-K with Item 2.02 filed after its end (within
+  120 days, the latest quarter end before the filing), the last one on or before the quarter's
+  10-Q/10-K when there are several (`other_releases` lists the rest); a quarter whose 10-Q isn't
+  filed yet is `estimated` (gold.expected_filings' next period end). Its text is the first EX-99
+  exhibit, else the 8-K's `2.02` section. From it, by fixed rules (no model): `headline`,
+  `outlook` (the blocks under the release's own Outlook or Guidance headings) and `adjustments`
+  (reconciliation tables, and footnotes before the statements that state a dollar amount). Each
+  passage has `heading`, `text` (lines as the parser wrote them), `truncated` and a `citation`
+  with offsets into the release. A release without such a heading or table gets none: the web app
+  and the agent say so. No beat or miss: Tributary holds no estimates.
+- **Measured** (hermes, 2026-11-08, operating companies, filings since 2024-11-01): 32,188 8-Ks
+  with Item 2.02 from 3,994 companies, every one stored, 30,578 (95%) with a parsed EX-99.1;
+  of 40,588 10-Q/10-K quarters, 30,284 (75%) have a 2.02 8-K between the period end and the
+  report (+7 days) and 28,866 (71%) a parsed EX-99. On 45 releases sampled across industries (one
+  per two-digit SIC, Oct 15 - Nov 6, 2026), 33 had an Outlook or Guidance heading and the rules
+  found 32 (the miss: a release whose text breaks every printed line); every block found was the
+  release's own outlook section, some opening with its disclaimer. 8-K items of operating companies: 111,113 8-Ks, 76,711 stored;
+  material event items are stored only when the document crawl took them (`CRAWL_8K_ITEMS`,
+  doc-fetcher README): an event whose 8-K isn't stored is still listed, from the index, with
+  its EDGAR link and no excerpt.
+- Per company, bounded: one company's 8-Ks (an index probe per CIK, 1.4 ms for NVIDIA's two
+  years on hermes), the sections of at most 25 events or 8 releases. No catalog-wide form.
 
 ## What changed
 

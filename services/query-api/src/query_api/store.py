@@ -409,6 +409,75 @@ class Store:
                 """, (company_id, accession_no, accession_no, limit))
             return cur.fetchall()
 
+    def periodic_reports(self, user_id: str, company_id: str) -> list[dict]:
+        """The company's 10-K/10-Q (transition reports, amendments too) from the public filing
+        index with the period each covers; the SEC index's quirk of a period equal to the filing
+        date (NVIDIA's 2008 10-K) is left out, as in filing_index."""
+        with self._session(user_id) as cur:
+            cur.execute(
+                """
+                SELECT accession_no, form, filing_date, period_end
+                FROM silver.company_reports(ARRAY[%s]::text[])
+                WHERE period_end IS NOT NULL AND period_end <> filing_date
+                ORDER BY period_end DESC, filing_date, accession_no
+                """, (company_id,))
+            return cur.fetchall()
+
+    def company_8ks(self, user_id: str, company_id: str, since: date) -> list[dict]:
+        """The company's 8-K and 8-K/A filed on or after `since`, newest first, with their items
+        from the filing index (silver.company_8ks, migration 045); for a filing the nightly
+        submissions load doesn't have yet, `parsed_items`: the item headings the parser found
+        (RLS on silver.filing_sections: none without the filings tier)."""
+        with self._session(user_id) as cur:
+            cur.execute(
+                r"""
+                SELECT e.*,
+                       CASE WHEN e.items IS NULL THEN ARRAY(
+                           SELECT DISTINCT s.section_key FROM silver.filing_sections s
+                           WHERE s.accession_no = e.accession_no
+                             AND s.section_key ~ '^[0-9]\.[0-9]{2}$'
+                           ORDER BY 1) END AS parsed_items
+                FROM silver.company_8ks(%s, %s) e
+                ORDER BY e.filing_date DESC, e.accepted_at DESC NULLS LAST, e.accession_no DESC
+                """, (company_id, since))
+            return cur.fetchall()
+
+    def section_heads(self, user_id: str, company_id: str, accession_nos: list[str],
+                      head_chars: int) -> dict[str, list[dict]]:
+        """accession_no → its parsed sections (key, title, length, offsets, document) with the
+        first `head_chars` characters of each, in document order. A bounded list of one
+        company's filings (an events page, a few releases), never a catalog's."""
+        if not accession_nos:
+            return {}
+        with self._session(user_id) as cur:
+            cur.execute(
+                """
+                SELECT accession_no, section_key, title, left(text, %s) AS head,
+                       length(text) AS chars, char_start, char_end, document_url
+                FROM gold.filing_sections
+                WHERE company_id = %s AND accession_no = ANY(%s)
+                ORDER BY accession_no, section_key LIKE 'EX-%%', char_start, section_key
+                """, (head_chars, company_id, accession_nos))
+            out: dict[str, list[dict]] = {}
+            for r in cur.fetchall():
+                out.setdefault(r.pop("accession_no"), []).append(r)
+            return out
+
+    def section_texts(self, user_id: str, company_id: str,
+                      wanted: list[tuple[str, str]]) -> dict[tuple[str, str], str]:
+        """(accession_no, section_key) → the section's whole text, for these few sections."""
+        if not wanted:
+            return {}
+        with self._session(user_id) as cur:
+            cur.execute(
+                """
+                SELECT accession_no, section_key, text FROM gold.filing_sections
+                WHERE company_id = %s AND accession_no = ANY(%s) AND section_key = ANY(%s)
+                """, (company_id, sorted({a for a, _ in wanted}), sorted({k for _, k in wanted})))
+            pairs = set(wanted)
+            return {(r["accession_no"], r["section_key"]): r["text"] for r in cur.fetchall()
+                    if (r["accession_no"], r["section_key"]) in pairs}
+
     def filing_index(self, user_id: str, company_ids: list[str] | None, forms: list[str],
                      start: date | None, end: date | None, limit: int, offset: int,
                      sections_for: list[str] | None) -> list[dict]:

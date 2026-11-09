@@ -3,7 +3,7 @@ that list comes from authz.public_access, which RLS reads anyway, so it filters 
 queries around it timed out (hermes, 2026-11-02; migration 032). Fails if a route goes back to it.
 Also: layer 1 still blanks what it doesn't allow when no id list reaches the query."""
 
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -27,7 +27,8 @@ ROUTES = ["/v1/screener?limit=50", "/v1/screener?limit=50&access=financials",
           "/v1/screener?where=revenue_ttm:gte:1", "/v1/filings/latest", "/v1/filing-index?limit=50",
           "/v1/search?q=supply+chain", "/v1/companies/search?q=app&access=financials",
           "/v1/data-notes", f"/v1/companies/{NVDA}/peers", "/v1/watchlist",
-          "/v1/calendar/expected-filings?scope=readable"]
+          "/v1/calendar/expected-filings?scope=readable", f"/v1/companies/{NVDA}/events",
+          f"/v1/companies/{NVDA}/earnings?quarters=8"]
 
 
 def meta(cid):
@@ -86,6 +87,18 @@ class RecordingStore:
                 for c in (NVDA, OUTSIDE)] if q != "rare words" else []
 
     def answer_last_reports(self, *_):
+        return {}
+
+    def answer_company_8ks(self, user_id, company_id, since):
+        return [{"accession_no": f"0001045810-26-{n:06d}", "cik": NVDA, "form": "8-K",
+                 "filing_date": date(2026, 11, 5) - timedelta(days=n), "accepted_at": None,
+                 "report_date": None, "primary_document": "d.htm", "items": ["2.02", "8.01"],
+                 "parsed_items": None} for n in range(200)]
+
+    def answer_section_heads(self, *_):
+        return {}
+
+    def answer_section_texts(self, *_):
         return {}
 
     def answer_peers(self, *_, **__):

@@ -19,6 +19,7 @@ from query_api.authorizer import Access, Authorizer, AuthzUnavailable, Readable
 from query_api.connections import MarketData, add_connection_routes
 from query_api.csv_export import csv_response
 from query_api.demo import add_sandbox_routes, demo_company_resolver
+from query_api.events import add_event_routes
 from query_api.formula import (
     CATALOG,
     Analysis,
@@ -48,7 +49,7 @@ from query_api.shapes import period as _period
 from query_api.status import add_status_routes
 from query_api.store import QUERY_TIMEOUT, Store
 from query_api.thesis_checks import ThesisChecks, add_thesis_check_routes
-from query_api.ui import add_ui_routes
+from query_api.ui import add_ui_routes, today_eastern
 from query_api.views import Views, add_view_routes
 from query_api.watchlist import Watchlists
 from query_api.workspace_api import add_workspace_routes
@@ -224,6 +225,8 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
                         readable=readable)
     add_notes_routes(app, store=store, current_user=current_user, require=require,
                      readable=readable)
+    add_event_routes(app, store=store, current_user=current_user, require=require,
+                     today=today or today_eastern)
 
     add_workspace_routes(app, store=store, workspaces=workspaces, current_user=current_user)
     add_thesis_check_routes(app, checks=thesis_checks, current_user=current_user)

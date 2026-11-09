@@ -232,6 +232,96 @@ def test_data_notes_respect_rls(client, token):
     assert client.get("/v1/data-notes", headers=token("t-nobody")).json()["notes"] == []
 
 
+RELEASE_TEXT = ("Acme Reports Third Quarter 2026 Results\n"
+                "(1) Results include a $3.0 million benefit from tariff refunds received in the"
+                " quarter, which the Company excludes from adjusted figures.\n"
+                "Full Year 2026 Guidance\n"
+                "•Revenue is expected to be $40 to $42 million.")
+
+
+@pytest.fixture
+def events(client):
+    """For A and B: a 10-Q for Jun 30, an 8-K with Item 2.02 and its press release, an 8-K
+    completing an acquisition after the quarter end, and an 8-K too new for the submissions
+    history (bronze.filings only) whose parsed headings give its items. Layer 1 allows
+    everything: what a caller sees of the sections is RLS's doing."""
+    conn = client.app_conn
+    for cid in (A, B):
+        rows = [(f"{cid}-26-000020", "10-Q", "2026-08-05", "2026-06-30", None),
+                (f"{cid}-26-000021", "8-K", "2026-08-04", "2026-08-04", "2.02,9.01"),
+                (f"{cid}-26-000022", "8-K", "2026-08-20", "2026-08-18", "2.01,9.01")]
+        for acc, form, filed, report, items in rows:
+            conn.execute("INSERT INTO bronze.submission_filings (accession_no, cik, form,"
+                         " filing_date, report_date, primary_document, items) VALUES"
+                         " (%s, %s, %s, %s, %s, 'd.htm', %s)", (acc, cid, form, filed, report,
+                                                                   items))
+        conn.execute("INSERT INTO bronze.filings (accession_no, cik, form_type, filed_at, payload,"
+                     " kafka_partition, kafka_offset) VALUES (%s, %s, '8-K',"
+                     " '2026-08-25 20:05+00', '{}', 0, 0)", (f"{cid}-26-000023", cid))
+        sections = [(f"{cid}-26-000021", "EX-99.1", RELEASE_TEXT),
+                    (f"{cid}-26-000022", "2.01", "On August 18, 2026, Acme completed its"
+                                                 " acquisition of Widgets Inc. for $50 million."),
+                    (f"{cid}-26-000023", "2.03", "On August 25, 2026, Acme borrowed $20 million.")]
+        for acc, key, text in sections:
+            conn.execute(
+                "INSERT INTO bronze.filing_documents (accession_no, cik, form, filed,"
+                " document_name, url, content_gzip, content_sha256, size_bytes)"
+                " VALUES (%s, %s, '8-K', '2026-08-04', 'e.htm', 'u', '\\x00', 'x', 1)"
+                " ON CONFLICT DO NOTHING", (acc, cid))
+            conn.execute(
+                "INSERT INTO silver.filing_sections (accession_no, section_key, parser,"
+                " parser_version, item, title, text, char_start, char_end)"
+                " VALUES (%s, %s, 'python', 't', %s, 'Item', %s, 0, %s)",
+                (acc, key, key, text, len(text)))
+    return TestClient(create_app(AllowAll(), Store(OneConnection(conn)), SECRET,
+                                 today=lambda: date(2026, 11, 8)))
+
+
+def test_events_index_is_public_but_excerpts_and_parsed_items_respect_rls(events, token):
+    def get(user, company):
+        r = events.get(f"/v1/companies/{company}/events", headers=token(user))
+        assert r.status_code == 200, r.text
+        return r.json()
+
+    body = get("t-pro", A)
+    assert body["since"] == "2026-06-30" and body["window"] == "since_report"
+    assert [(e["accession_no"], e["items_from"]) for e in body["events"]] == [
+        (f"{A}-26-000023", "parsed"), (f"{A}-26-000022", "index"), (f"{A}-26-000021", "index")]
+    new, deal, _ = body["events"]
+    assert [i["item"] for i in new["items"]] == ["2.03"]
+    assert deal["excerpt"]["text"].startswith("On August 18, 2026, Acme completed")
+    assert {s["metric"] for s in body["stale"]} == {
+        "cash", "long_term_debt", "net_debt", "total_assets", "debt_to_equity"}
+    # B: the index is public metadata, its text isn't readable (no grant): no excerpt, and the
+    # newest 8-K's items can't be read from sections the caller can't see
+    other = get("t-pro", B)
+    assert [e["items_from"] for e in other["events"]] == [None, "index", "index"]
+    assert all(e["excerpt"] is None and not e["sections_available"] for e in other["events"])
+    assert {s["metric"] for s in other["stale"]} == {"cash", "long_term_debt", "net_debt",
+                                                     "total_assets"}
+    assert all(e["excerpt"] is None for e in get("t-free", A)["events"])  # no filings tier
+
+
+def test_earnings_text_respects_rls(events, token):
+    def quarter(user, company):
+        r = events.get(f"/v1/companies/{company}/earnings?quarters=1", headers=token(user))
+        assert r.status_code == 200, r.text
+        [q] = r.json()["quarters"]
+        return q
+
+    q = quarter("t-pro", A)
+    assert q["period_end"] == "2026-06-30" and q["report"]["accession_no"] == f"{A}-26-000020"
+    assert q["release"]["accession_no"] == f"{A}-26-000021"
+    assert q["release"]["section_key"] == "EX-99.1"
+    assert q["headline"]["text"] == "Acme Reports Third Quarter 2026 Results"
+    assert [o["heading"] for o in q["outlook"]] == ["Full Year 2026 Guidance"]
+    assert [a["kind"] for a in q["adjustments"]] == ["note"]
+    hidden = quarter("t-pro", B)  # the release is listed; its text isn't readable
+    assert hidden["release"]["accession_no"] == f"{B}-26-000021"
+    assert hidden["release"]["section_key"] is None and hidden["outlook"] == []
+    assert quarter("t-free", A)["outlook"] == []
+
+
 def test_metric_list_matches_database(client):
     served = client.get("/v1/metrics").json()
     with psycopg.connect(DSN) as conn:
