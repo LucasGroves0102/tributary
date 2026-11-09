@@ -3547,22 +3547,42 @@ button.link.num {
   gap: var(--sp-4);
 }
 
+/* one, two or three charts a row, each at least 380px; a short last row is centred, its charts the
+   same size as the rest (#199: eight charts in rows of three left an empty cell at the end) */
 .multiples {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  container: multiples / inline-size;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: var(--sp-6);
   padding: var(--sp-6);
 }
 
+.multiples > .multiples-bar {
+  flex: 1 0 100%;
+}
+
 .multiple {
+  flex: 0 0 100%;
   margin: 0;
   padding: var(--sp-4);
   min-width: 0;
 }
 
+@container multiples (min-width: 772px) {
+  .multiple {
+    flex-basis: calc((100% - var(--sp-6)) / 2);
+  }
+}
+
+@container multiples (min-width: 1164px) {
+  .multiple {
+    flex-basis: calc((100% - 2 * var(--sp-6)) / 3);
+  }
+}
+
 @media (max-width: 600px) {
   .multiples {
-    grid-template-columns: minmax(0, 1fr);
     padding: var(--sp-4);
   }
 }

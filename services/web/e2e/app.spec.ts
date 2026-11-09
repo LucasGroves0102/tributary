@@ -144,6 +144,20 @@ test("comps: target and peers with the peer median, exported as CSV", async ({ p
   await expect(multiples).toHaveCount(8);
   await expect(multiples.first().locator(".ch-title")).toHaveText("Revenue, TTM");
   await expect(multiples.first().locator(".ch-legend text")).toHaveText(["PEP", "KO", "NVDA"]);
+  // #199: eight charts in rows of three: the last row is centred, every chart the same width
+  const boxes = await multiples.evaluateAll((els) => els.map((e) => e.getBoundingClientRect()));
+  const lines = [...new Set(boxes.map((b) => Math.round(b.y)))];
+  expect(lines).toHaveLength(3);
+  expect(new Set(boxes.map((b) => Math.round(b.width))).size).toBe(1);
+  const grid = (await page.locator(".multiples").boundingBox())!;
+  const last = boxes.slice(6);
+  const left = last[0]!.x - grid.x;
+  const right = grid.x + grid.width - (last[1]!.x + last[1]!.width);
+  expect(Math.abs(left - right)).toBeLessThan(2);
+  // the instruction is for screen readers only, not printed on eight charts
+  const hints = await multiples.getByText("Click a point to open its filing").evaluateAll((els) => els.map((e) => e.getBoundingClientRect().width));
+  expect(hints).toHaveLength(8);
+  expect(hints.every((w) => w <= 1)).toBe(true);
 });
 
 test("save a chart to a new workspace and reopen it", async ({ page }) => {
@@ -345,6 +359,23 @@ test("a first visit starts with the assistant closed, and nothing floats over th
   await expect(page.locator("aside.ai-drawer")).toHaveCount(0);
   await expect(page.locator(".fab")).toHaveCount(0);
   await expect(page.getByRole("button", { name: /Assistant/ })).toBeVisible();
+});
+
+test("#68: the main screens load with a clean console", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
+  page.on("pageerror", (e) => errors.push(String(e)));
+  page.on("response", (r) => {
+    if (r.status() >= 400) errors.push(`${r.status()} ${new URL(r.url()).pathname}`);
+  });
+  await mockApi(page);
+  await startDemo(page);
+  errors.length = 0; // signed in from here (the mock has no public status page for the front door)
+  for (const hash of ["#/", "#/companies", `#/company/${NVDA}`, `#/company/${NVDA}/statements`, `#/compare?target=${PEP}&peers=${KO}`, "#/chart", "#/analysis"]) {
+    await page.goto(`/${hash}`);
+    await page.waitForLoadState("networkidle");
+  }
+  expect(errors).toEqual([]);
 });
 
 test("no screen scrolls sideways, on a phone, at 1024 or at 1440 with the panel open", async ({ page }) => {

@@ -593,7 +593,9 @@ Compare's "Side by side" draws the selected columns as small multiples (`compare
 one compact LayerChart per column, every readable company a line in the same colour on each
 (at most 8), calendar quarters over 3 years, each line one `/v1/formulas/evaluate` request built
 by the chart builder's rules and shared with its session cache; nothing is asked until the
-charts are shown.
+charts are shown. One, two or three charts a row by the room they have (`@container multiples`); a
+short last row is centred, its charts the size of the rest, so eight columns leave no empty cell. A
+company with nothing to draw on a chart isn't in its legend; the footnote names it.
 
 States and accessibility: every data panel loads with a skeleton (`components/States.tsx`),
 errors say what happened in plain words (`api.ts` `failureReason`: a 4xx detail is written for the caller, a 5xx's is for developers and never shown) and offer a retry; only a failure that clears by itself (a 5xx or no answer) adds "It usually clears in a moment", never a 4xx (a 422 is a request to change). Empty states say what to do next. The screener, watchlist and comps rows
