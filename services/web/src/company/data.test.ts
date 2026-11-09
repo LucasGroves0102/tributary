@@ -381,6 +381,36 @@ describe("segment shares", () => {
     expect(plain!.rows[0]!.share).toBeCloseTo(0.75);
   });
 
+  it("#171: the filer's All Other is a last row, only in quarters where it and the segments make the total", () => {
+    // NVIDIA's operating income as filed (production, 2026-11-09): in FY2025 Q3 the reconciling member is
+    // All Other (22,081 + 1,502 - 1,714 = 21,869, the statement's figure); in FY2027 Q2 it carries the
+    // segments' total (66,595) and doesn't tie, so it isn't shown as All Other
+    const op = (axis: SegmentRow["axis"], member: string, label: string, end: string, value: string): SegmentRow => ({
+      ...row(member, label, value), axis, metric: "operating_income", period_end: end,
+    });
+    const rows = [
+      op("business_segment", "nvda:ComputeAndNetworkingSegmentMember", "Compute and Networking", "2024-10-27", "22081000000"),
+      op("business_segment", "nvda:GraphicsSegmentMember", "Graphics", "2024-10-27", "1502000000"),
+      op("reconciliation", "us-gaap:CorporateNonSegmentMember", "Corporate", "2024-10-27", "-1714000000"),
+      op("business_segment", "nvda:ComputeAndNetworkingSegmentMember", "Compute and Networking", "2026-07-26", "62696000000"),
+      op("business_segment", "nvda:GraphicsSegmentMember", "Graphics", "2026-07-26", "3899000000"),
+      op("reconciliation", "us-gaap:CorporateNonSegmentMember", "Corporate", "2026-07-26", "66595000000"),
+    ];
+    const totals = [fin("operating_income", "2024-10-27", "21869000000", "FY2025 Q3"), fin("operating_income", "2026-07-26", "63734000000", "FY2027 Q2")];
+    const [t] = segmentTables(rows, totals);
+    expect(t!.rows.map((r) => r.label)).toEqual(["Compute and Networking", "Graphics", "All other"]);
+    const other = t!.rows.at(-1)!;
+    expect(other.reconciling).toBe(true);
+    expect(other.cells.map((c) => c?.text ?? null)).toEqual(["-$1.71B", null]);
+    expect(other.cells[0]!.title).toContain("reported outside the segments as Corporate");
+    expect(other.share).toBeNull();
+    // without the consolidated figure nothing can tie: no row
+    expect(segmentTables(rows)[0]!.rows.map((r) => r.label)).toEqual(["Compute and Networking", "Graphics"]);
+    // a reconciling member that's zero where it ties (NVIDIA's revenue) isn't a row either
+    const rev = rows.map((r) => ({ ...r, metric: "revenue", value: r.axis === "reconciliation" ? "0" : r.value }));
+    expect(segmentTables(rev, [fin("revenue", "2024-10-27", "23583000000", "FY2025 Q3")])[0]!.rows.some((r) => r.reconciling)).toBe(false);
+  });
+
   it("a member bigger than reported revenue isn't a share: the two aren't on one basis", () => {
     const [t] = segmentTables([row("x:A", "A", "900000000"), row("x:B", "B", "20000000")], [fin("revenue", "2026-07-26", "114000000", "FY2026 Q3")]);
     expect(t!.rows[0]!.shareTooBig).toBe(true);

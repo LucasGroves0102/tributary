@@ -830,6 +830,8 @@ export interface SegmentTable {
     /** the member's last period, when it stopped before the table's newest ("FY2025 Q3"): an old
      * segmentation, listed after the current members */
     until: string | null;
+    /** #171: the filer's "All Other" (its reconciling members), last, only for periods where it ties */
+    reconciling?: boolean;
   }[];
   /** consolidated: reported revenue. members: their sum, because revenue isn't known for the period.
    * none: neither can be trusted, so no share is printed. */
@@ -844,6 +846,52 @@ export interface SegmentTable {
 
 const listOf = (names: string[], most = 4) =>
   names.length <= most ? names.join(", ") : `${names.slice(0, most).join(", ")} and ${names.length - most} more`;
+
+/** Segments plus "All other" must come to the consolidated figure within this (037's 0.5%). */
+export const RECONCILE_TOLERANCE = 0.005;
+
+/** #171: the filer's "All Other" in a business-segment table: its reconciling members (corporate,
+ * unallocated items, eliminations: the API's `reconciliation` axis, summed per quarter), shown only for
+ * the quarters where the segments plus it come to the consolidated figure within RECONCILE_TOLERANCE.
+ * The same member can carry the segments' total instead (NVIDIA's after FY2026 Q1, $66.6B beside
+ * segments of $66.6B): that never ties, so it's never shown as All other. Null when nothing ties or
+ * every tied value is zero (NVIDIA's revenue). Never in a share or a sum. */
+function reconcilingRow(
+  recon: SegmentRow[], ends: string[], columns: { label: string }[],
+  consolidated: (end: string) => number | null, segmentsSum: (end: string) => number,
+): SegmentTable["rows"][number] | null {
+  if (!recon.length) return null;
+  let shown = false;
+  const values = ends.map((end) => {
+    const here = recon.filter((r) => Math.abs(Date.parse(r.period_end) - Date.parse(end)) <= 7 * DAY && num(r.value) !== null);
+    const total = consolidated(end);
+    if (!here.length || total === null || total === 0) return null;
+    const v = here.reduce((s, r) => s + num(r.value)!, 0);
+    if (Math.abs(segmentsSum(end) + v - total) > RECONCILE_TOLERANCE * Math.abs(total)) return null;
+    if (v !== 0) shown = true;
+    return { v, here };
+  });
+  if (!shown) return null;
+  const texts = moneyRow(values.map((x) => x?.v ?? null));
+  const cells = values.map((x, i): TableCell | null => {
+    if (!x) return null;
+    const first = x.here[0]!;
+    return {
+      text: texts[i] ?? fmt("usd", x.v),
+      raw: x.here.length === 1 ? first.value : String(x.v),
+      title: `All other, ${columns[i]!.label}: reported outside the segments as ${listOf(x.here.map((r) => r.member_label))}; ` +
+        `with the segments it comes to the consolidated figure. Source: ${first.citation.form} filed ${day(first.citation.filed, true)}, ` +
+        `${first.citation.accession_no}`,
+      derived: false,
+      url: first.citation.filing_url,
+      source: { accessionNo: first.citation.accession_no, form: first.citation.form },
+    };
+  });
+  return {
+    member: "reconciling", label: "All other", cells, share: null, shareTooBig: false, yoy: null,
+    yoyNotMeaningful: false, overlaps: false, until: null, reconciling: true,
+  };
+}
 
 /** One table per axis and metric (revenue, gross profit, operating income), members by period, newest
  * last; reconciliation members (corporate, eliminations) left out. A revenue share is the member over
@@ -873,12 +921,12 @@ export function segmentTables(rows: SegmentRow[], revenue: FinancialRow[] = []):
     return Object.keys(AXIS_LABELS).indexOf(axis!) * 10 + Object.keys(SEGMENT_METRICS).indexOf(metric!);
   };
   // the same quarter: gold's period end and the segment fact's can be a day or two apart
-  const revenueRows = revenue.filter((r) => r.metric === "revenue");
-  const consolidatedAt = (end: string): number | null => {
-    const at = Date.parse(end);
-    const near = revenueRows.find((r) => Math.abs(Date.parse(r.period_end) - at) <= 7 * 86_400_000);
-    return near ? num(near.value) : null;
+  const near = (end: string, d: string) => Math.abs(Date.parse(d) - Date.parse(end)) <= 7 * 86_400_000;
+  const consolidatedOf = (metric: string, end: string): number | null => {
+    const r = revenue.find((x) => x.metric === metric && near(end, x.period_end));
+    return r ? num(r.value) : null;
   };
+  const consolidatedAt = (end: string) => consolidatedOf("revenue", end);
   return [...groups.entries()].sort(([a], [b]) => order(a) - order(b)).map(([k, rs]) => {
     const [axis, metric] = k.split("|") as [string, string];
     const ends = [...new Set(rs.map((r) => r.period_end))].sort().slice(-8);
@@ -953,6 +1001,11 @@ export function segmentTables(rows: SegmentRow[], revenue: FinancialRow[] = []):
     // current members by their newest value, then the ones that stopped, by their last
     const lastValue = (r: (typeof out)[number]) => num(at(r.member, lastOf(r.member))?.value) ?? -Infinity;
     out.sort((a, b) => Number(a.until !== null) - Number(b.until !== null) || lastValue(b) - lastValue(a));
+    const other = axis === "business_segment" && !separated?.drop.size
+      ? reconcilingRow(rows.filter((r) => r.axis === "reconciliation" && r.metric === metric), ends, columns,
+        (end) => consolidatedOf(metric, end), (end) => members.reduce((s, [m]) => s + (num(at(m, end)?.value) ?? 0), 0))
+      : null;
+    if (other) out.push(other);
     // a member that stopped is said once, below; it stays out of sums either way
     const parts = out.filter((r) => r.overlaps && r.until === null).map((r) => r.label);
     const overlapNote = parts.length

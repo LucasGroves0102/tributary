@@ -762,8 +762,12 @@ to workspace" (`workspaces/SaveChart.tsx`: name and workspace, through the same 
 state cleaner as the chart builder's Save as, without becoming the chart builder's open item)
 makes it a chart item a thesis there can embed, and "Open in Chart builder" opens it there.
 Values need financials access, like Statements.
+Revenue and Segments each do one job (#115) and say so in a line at the top with a link to the other:
+Revenue is three years of trends (trailing twelve months), what drove growth and revenue quality;
+Segments is the quarters as filed, with gross profit and operating income by segment, share and YoY.
+Revenue had a Quarterly switch until F7b; its tables were Segments' revenue tables again, so it went.
 
-- **Revenue by segment and geography** (TTM or Quarterly, fiscal periods; `/v1/companies/{id}/
+- **Revenue trends by segment, geography and product** (TTM, fiscal periods; `/v1/companies/{id}/
   segments?metric=revenue`): per axis (business segment, geography, product/service) a chart and
   a members × periods table (last 8 periods), each value's hover naming its filing. A member
   missing a period shows "·", never zero; one reported in part of the window says "from FY2024
@@ -803,7 +807,13 @@ a year earlier, found by date. A member with no value in those quarters isn't li
 before the newest reads "until FY2025 Q3", dimmed, after the current members (a reorganisation:
 Deckers' UGG Wholesale became UGG Brand). A table whose newest quarter is more than 100 days behind the
 company's newest segment figure says it isn't current (Deckers reports gross profit by segment since
-2025, so its operating income ends December 2024).
+2025, so its operating income ends December 2024). A business-segment table ends with the filer's
+"All other" (#171: its reconciling members, the API's `reconciliation` axis, summed) only for quarters
+where the segments plus it come to the consolidated revenue, gross profit or operating income within
+0.5% (037's tolerance; the tab now also asks `/financials` for those two). NVIDIA's reconciling member
+is All Other in FY2025 (−$1.71B in Q3: $22.08B + $1.50B − $1.71B = the statement's $21.87B) but carries
+the segments' total from FY2026 ($66.6B beside segments of $66.6B), which never ties, so only the
+first is shown. It has no share or YoY and is in no sum.
 
 Segment layers (`chart/segments.ts`, `chart/fetch.ts`): the Revenue view's segment charts are
 chart builder layers of kind `segment` (company, segment metric, axis, 1-20 members), read from

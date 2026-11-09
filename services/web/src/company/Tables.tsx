@@ -453,8 +453,10 @@ export function Segments({ token, companyId, name }: { token: string; companyId:
   const load = useLoad(companyId, async () => {
     const [seg, fin] = await Promise.all([
       fetchSegments(token, companyId, 8),
-      // shares are of consolidated revenue; without it the table says what they're of instead
-      financialsView(token, companyId, 8, ["revenue"], "quarter").catch(() => ({ rows: [] as FinancialRow[] })),
+      // shares are of consolidated revenue; without it the table says what they're of instead. Gross
+      // profit and operating income: the totals an "All other" row must tie to (#171)
+      financialsView(token, companyId, 8, ["revenue", "gross_profit", "operating_income"], "quarter")
+        .catch(() => ({ rows: [] as FinancialRow[] })),
     ]);
     return { rows: seg.rows, revenue: fin.rows };
   });
@@ -473,6 +475,13 @@ export function Segments({ token, companyId, name }: { token: string; companyId:
           </section>
         ) : (
           <>
+            {/* #115: what this tab is for, against Revenue */}
+            <p className="tab-purpose muted">
+              {name}'s segments quarter by quarter, as filed: revenue, gross profit and operating income by segment, with
+              each segment's share of revenue and its growth on the same quarter a year earlier. Three-year trends, what
+              drove growth and revenue quality are on{" "}
+              <a href={href({ view: "company", companyId, tab: "revenue" })}>Revenue</a>.
+            </p>
             {tables.map((t) => (
               <section key={`${t.axis}|${t.metric}`} className="card">
                 <div className="card-h">
@@ -495,8 +504,10 @@ export function Segments({ token, companyId, name }: { token: string; companyId:
                     </thead>
                     <tbody>
                       {t.rows.map((r) => (
-                        <tr key={r.member} className={r.until ? "retired" : undefined}>
-                          <td className="first" title={r.until ? `${r.member}: last reported for ${r.until}` : r.member}>
+                        <tr key={r.member} className={r.until ? "retired" : r.reconciling ? "reconciling" : undefined}>
+                          <td className="first" title={r.until ? `${r.member}: last reported for ${r.until}`
+                            : r.reconciling ? "What the company reports outside its segments (corporate costs, items it doesn't allocate), shown for the quarters where it and the segments come to the reported total"
+                            : r.member}>
                             {r.label}
                             {r.until && <span className="until">until {r.until}</span>}
                           </td>
@@ -527,6 +538,13 @@ export function Segments({ token, companyId, name }: { token: string; companyId:
                 </TableScroll>
                 {t.overlapNote && <p className="small muted card-b">{t.overlapNote}</p>}
                 {t.retiredNote && <p className="small muted card-b">{t.retiredNote}</p>}
+                {t.rows.some((r) => r.reconciling) && (
+                  <p className="small muted card-b">
+                    All other: what the company reports outside its segments, as it files it, shown only for quarters where
+                    the segments and it add up to the reported {t.metric === "revenue" ? "revenue" : t.metric === "gross_profit" ? "gross profit" : "operating income"}
+                    {" "}(“{NO_DATA}” elsewhere); it's not a segment, so it has no share or growth rate.
+                  </p>
+                )}
                 {t.metric === "revenue" && t.shareOf === "none" && (
                   <p className="small muted card-b">No shares: consolidated revenue isn't known for this quarter, and these lines overlap, so their sum isn't a total either.</p>
                 )}

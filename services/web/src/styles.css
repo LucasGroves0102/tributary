@@ -2502,6 +2502,18 @@ button.chip:disabled {
   color: var(--text-3);
 }
 
+/* the filer's "All other" under its segments (#171): set apart, not a segment */
+.t tr.reconciling td {
+  border-top: 1px solid var(--line-2);
+  font-style: italic;
+}
+
+/* one line saying what a company tab is for, and where the rest is (#115) */
+.tab-purpose {
+  margin: 0 0 var(--sp-5);
+  max-width: 72em;
+}
+
 .t td.first .until {
   display: block;
   font-size: 11px;
