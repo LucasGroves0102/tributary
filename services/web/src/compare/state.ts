@@ -9,6 +9,7 @@ import { num } from "../home/data";
 import type { ScreenerRow, ValueSource } from "../types";
 import { csvCell } from "../chart/series";
 import { fyeMonth } from "../companies/screen";
+import { UNNAMED } from "../displayNames";
 
 export const MAX_PEERS = 20;
 
@@ -259,7 +260,8 @@ export function compareRows(s: CompareState, rows: ScreenerRow[], bank = false):
     }
     return [{
       companyId: id,
-      name: r.name ?? id,
+      // a missing name reads as the directory's placeholder, never the CIK (H7)
+      name: r.name ?? UNNAMED,
       ticker: r.tickers?.[0] ?? null,
       industry: r.industry,
       sic: r.sic,

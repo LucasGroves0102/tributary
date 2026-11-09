@@ -125,6 +125,12 @@ describe("the table", () => {
     expect(csv[4]).toBe("peer median (excludes target),,,,,,,,400000000000,,1 of 2 peers,,0.3,,1 of 2 peers,");
   });
 
+  it("names a company without a name as the directory does, never by its CIK", () => {
+    const [r] = compareRows({ target: NVDA }, [row(entry({ name: null }))]);
+    expect(r!.name).toBe("Company");
+    expect(compareCsv({ target: NVDA }, [r!])).not.toContain(`,${NVDA},${NVDA}`);
+  });
+
   it("guards the CSV against spreadsheet formulas in names", () => {
     const evil = compareRows({ target: NVDA }, [row(entry({ name: "=HYPERLINK(\"x\")" }))]);
     expect(compareCsv({ target: NVDA }, evil)).toContain(`"'=HYPERLINK(""x"")"`);
