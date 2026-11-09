@@ -1,6 +1,8 @@
+import { useMemo, useState, type ReactNode } from "react";
+
 import { peers as fetchPeers } from "../api";
 import { MAX_COMPANY_LINES } from "../chart/model";
-import { COMPARE_COLUMNS, compareRows, MASKED_TITLE } from "../compare/state";
+import { COMPARE_COLUMNS, compareRows, MASKED_TITLE, nextSort, sortRows, type CompareSort } from "../compare/state";
 import { FigureText } from "../components/FigureText";
 import { go, href } from "../route";
 import { useScope } from "../scope";
@@ -31,6 +33,17 @@ export function Peers({
   const match = new Map(data?.peers.map((p) => [p.company_id, p.match]) ?? []);
   const state = { target: companyId, peers: peerIds, cols: PEER_COLUMNS };
   const rows = data ? compareRows(state, [data.company, ...data.peers]) : [];
+  // the suggested order (same SIC first, then size) until a header is clicked, as on Compare
+  const [sort, setSort] = useState<CompareSort | null>(null);
+  const sorted = useMemo(() => sortRows(rows, sort), [rows, sort]);
+  const sortHead = (key: string, content: ReactNode, title?: string, unit?: string) => (
+    <button type="button" className="th-sort" title={title} onClick={() => setSort((s) => nextSort(s, key))}>
+      {content}
+      {sort?.key === key ? (sort.desc ? " ↓" : " ↑") : ""}
+      {unit && <span className="unit"> {unit}</span>}
+    </button>
+  );
+  const ariaSort = (key: string) => (sort?.key === key ? (sort.desc ? ("descending" as const) : ("ascending" as const)) : undefined);
   const readable = rows.filter((r) => r.readable).map((r) => r.companyId);
   const capped = readable.length > MAX_COMPANY_LINES;
   // a bank peer group has no operating margin to chart; net margin is what they all report
@@ -68,12 +81,12 @@ export function Peers({
               <table className="t peers">
                 <thead>
                   <tr>
-                    <th className="first">Company</th>
+                    <th className="first" aria-sort={ariaSort("name")}>{sortHead("name", "Company")}</th>
                     {PEER_COLUMNS.map((k) => {
                       const c = COMPARE_COLUMNS.find((x) => x.key === k)!;
                       return (
-                        <th key={k} className="n">
-                          {c.label} <span className="unit">{c.period}</span>
+                        <th key={k} className="n" aria-sort={ariaSort(k)}>
+                          {sortHead(k, c.label, c.long, c.period)}
                         </th>
                       );
                     })}
@@ -82,7 +95,7 @@ export function Peers({
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((r) => {
+                  {sorted.map((r) => {
                     const m = match.get(r.companyId);
                     const why = r.isTarget
                       ? "this company"
@@ -123,7 +136,8 @@ export function Peers({
       </Gate>
       <div className="foot">
         Size bands use TTM revenue, only for companies whose financials you can read. Hover a
-        value for its period and source filing.
+        value for its period and source filing. Click a column to sort (again to reverse, a third time
+        for the suggested order).
       </div>
     </section>
   );

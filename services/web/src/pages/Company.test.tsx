@@ -496,6 +496,22 @@ it("peers: suggested by SIC and size, into Compare and the chart builder", async
   expect(window.location.hash).toBe(`#/compare?target=${NVDA}&peers=${AAPL},${TSLA}`);
 });
 
+it("peers: sort by a column like Compare, then back to the suggested order", async () => {
+  await render("peers");
+  const names = () => [...container.querySelectorAll("tbody tr")].map((r) => r.querySelector(".co b")?.textContent);
+  const head = (label: string) => [...container.querySelectorAll<HTMLButtonElement>("thead .th-sort")].find((b) => b.textContent?.startsWith(label))!;
+  await click(head("Company"));
+  expect(names()).toEqual(["Apple", "Nvidia", "Tesla"]);
+  expect(head("Company").closest("th")?.getAttribute("aria-sort")).toBe("ascending");
+  await click(head("Company"));
+  expect(names()).toEqual(["Tesla", "Nvidia", "Apple"]);
+  await click(head("Company"));
+  expect(names()).toEqual(["Nvidia", "Apple", "Tesla"]);
+  await click(head("Revenue"));
+  expect(head("Revenue").closest("th")?.getAttribute("aria-sort")).toBe("descending");
+  expect(names().at(-1)).toBe("Tesla"); // no values to read: last whichever way
+});
+
 it("peers: says when a chart can carry only some of them", async () => {
   morePeers = 9; // with the company and Apple, 11 it could read
   await render("peers");

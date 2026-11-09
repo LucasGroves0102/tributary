@@ -505,7 +505,9 @@ Overview, Revenue, Analysis Numbers, Compare, thesis and report embeds), SVG, PN
 
 Compare's dollar charts can also read on a log scale or indexed to the first value in range (not
 saved; it says so when the largest company is over 100 times the smallest). "Chart these" and Peers'
-"Chart margins" draw at most 8 companies, the colours a chart tells apart, and say so.
+"Chart margins" draw at most 8 companies, the colours a chart tells apart, and say so. The Peers table
+sorts by any column like Compare (`compare/state.ts` `nextSort`/`sortRows`: high first, again to reverse,
+a third time for the suggested order; empty cells last).
 
 Revenue view (the company page's Revenue tab, `src/company/Revenue.tsx`; rules in
 `company/revenue.ts`'s docstring): three sections, each chart an ordinary chart state, so "Save
