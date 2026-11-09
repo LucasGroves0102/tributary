@@ -801,6 +801,13 @@ a.btn:hover {
   min-width: 0;
 }
 
+/* one line under a card's header, above its table (Data status' quality checks, #55) */
+.card-note {
+  margin: 0;
+  padding: var(--sp-3) var(--sp-6);
+  border-bottom: 1px solid var(--line);
+}
+
 /* a long description wraps beside its button instead of pushing the button to its own line */
 .card-h.keep {
   flex-wrap: nowrap;
@@ -2539,6 +2546,11 @@ button.chip:disabled {
 .t td.n a:hover {
   color: var(--accent);
   text-decoration: underline;
+}
+
+/* except a count that lists companies (Data status, #55): that one must look like a way in */
+.t td.n a.count-link {
+  color: var(--accent);
 }
 
 .flags {

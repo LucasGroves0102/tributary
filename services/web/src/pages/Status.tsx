@@ -225,6 +225,17 @@ function Quality({ data, when, signedIn }: { data: DataStatus; when: (iso: strin
             : "no check has run yet"}
         </span>
       </div>
+      {/* #55: say where the companies are; signed out, the page names none (it's public) */}
+      <p className="card-note small muted">
+        {signedIn ? (
+          "Select a count to list those companies in the screener."
+        ) : (
+          <>
+            <a href={href({ view: "home" })}>Sign in</a> to list the companies behind each count; this public page
+            shows counts only.
+          </>
+        )}
+      </p>
       <TableScroll label="Data-quality checks">
         <table className="t">
           <thead>
@@ -245,7 +256,7 @@ function Quality({ data, when, signedIn }: { data: DataStatus; when: (iso: strin
                 </td>
                 <td className="n">
                   {signedIn && checkName(c.check) && c.companies ? (
-                    <a href={href({ view: "companies", screen: { issue: c.check } })} title="List these companies in the screener">
+                    <a className="count-link" href={href({ view: "companies", screen: { issue: c.check } })} title="List these companies in the screener">
                       {count(c.companies)}
                     </a>
                   ) : (

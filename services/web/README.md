@@ -72,8 +72,9 @@ the commit they were recorded in, which shows only on the link's hover). It is p
 app shell (and without calling `/v1/me`), linked from the front door; signed in, from the
 sidebar footer. Every figure comes from the API; the page hard-codes none. A signed-in reader can
 follow a check's company count to the screener (`#/companies?issue=<check>`: the companies they can
-read with such a finding); the status route itself stays aggregate, and signed out there are no
-such links. The agent's page context reports it as `about` (agent-api has no `status` page) and
+read with such a finding; the counts are coloured as links and a line above the table says so); the
+status route itself stays aggregate, and signed out there are no such links, only a line saying
+that signing in lists the companies (#55). The agent's page context reports it as `about` (agent-api has no `status` page) and
 leaves the data-check filter out of the screen it sends (its filters are strict).
 
 Company names (`src/displayNames.ts`, `src/companies/directory.ts`): SEC conformed names are made
