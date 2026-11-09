@@ -40,6 +40,14 @@ comparison (041) all read it. A line a filing reports as two tags (a bank's net 
 noninterest income; NVIDIA's debt plus equity securities) is a `silver.metric_sums` row whose parts
 are `silver.metric_tags` rows with `gold_line = false` (038).
 
+A filing's facts are the company's whose CIK the filing's own XBRL names (migration 050): since July
+2026 the SEC files some multi-registrant 10-K/10-Qs only under a co-registrant's CIK (DTE Energy's under
+DTE Electric), so `gold.usable_facts` moves them to the named filer when that CIK filed it, and after a
+payload changes both jobs refresh `gold.companies_for_ciks` of the changed CIKs (`db.company_ids`): the
+CIKs' own companies plus any whose filing the SEC put under them. The named entity comes from the stored
+document's extract (`bronze.filing_xbrl.entity_cik`, the segments job), so it applies to filings the
+document crawl and doc-fetcher store.
+
 ## Segments and KPIs
 
 **`facts-fetcher-segments`** (`segments.py`, `ixbrl.py`, `labels.py`; migration
@@ -133,7 +141,7 @@ full 10-K/10-Q (the parser's fixtures) and trimmed Apple, Coca-Cola and PepsiCo 
 `tests/fixtures/ixbrl/` (made with `tests/trim_ixbrl.py`, which streams a filing and keeps only
 the segment metric facts and their contexts); `test_segments_db.py` (loader, renames, Q4, TTM,
 quality check, rebuild) with `TEST_DATABASE_URL`. `test_gold_selection.py` holds one case per rule of
-migrations 038-042, each shaped like the filing it came from (Flowserve's zero revenue, M&T's bank
+migrations 038-043 and 050, each shaped like the filing it came from (Flowserve's zero revenue, M&T's bank
 revenue, NVIDIA's securities and dividends, Ford's debt, Legacy Housing's 2033 date, ...). Also the full bronze → silver → gold path against trimmed real
 companyfacts payloads in `tests/fixtures/` (`test_pipeline.py`; shared `conn` / `loaded`
 fixtures in `conftest.py`), and the bulk loader on small zips. `test_golden_10k.py` checks gold
