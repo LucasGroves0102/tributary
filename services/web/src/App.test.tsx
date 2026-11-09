@@ -328,6 +328,13 @@ it("names Settings in the breadcrumb", async () => {
   expect($(".crumb [aria-current]")?.textContent).toBe("Settings");
 });
 
+it("#60: links Settings from the sidebar even with no data connections offered", async () => {
+  await render("#/");
+  const link = [...document.querySelectorAll<HTMLAnchorElement>(".side-links a")].find((a) => a.textContent === "Settings");
+  expect(link?.getAttribute("href")).toBe("#/settings");
+  expect(link?.title).toBe("Filing alerts");
+});
+
 describe("navigation", () => {
   it("routes to every screen", async () => {
     await render("#/chart");

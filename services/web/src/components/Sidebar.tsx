@@ -28,7 +28,7 @@ interface Props {
   workspaces?: ReactNode;
   /** narrow screens: shown as a drawer over the page */
   open?: boolean;
-  /** the server offers "Connect your data": show Settings → Connections */
+  /** the server offers "Connect your data": Settings' link says so */
   connections?: boolean;
   /** this is a temporary demo sandbox: how long until it resets ("3h 20m") */
   sandboxResetsIn?: string | null;
@@ -194,12 +194,11 @@ export function Sidebar({ route, me, workspace, lastIngested, listed = null, onA
         title="Freshness, completeness, checks">
         Data status
       </a>
-      {connections && (
-        <a className="cover-link" href={href({ view: "settings" })} aria-current={route.view === "settings" ? "page" : undefined}
-          title="Connect your market data">
-          Settings
-        </a>
-      )}
+      {/* always: Settings holds filing alerts (F6) as well as "Connect your data" (#60) */}
+      <a className="cover-link" href={href({ view: "settings" })} aria-current={route.view === "settings" ? "page" : undefined}
+        title={connections ? "Filing alerts and your market data" : "Filing alerts"}>
+        Settings
+      </a>
       {onShortcuts && (
         <button className="link cover-link" onClick={onShortcuts}>
           Keyboard shortcuts <span className="kbd">?</span>

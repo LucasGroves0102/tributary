@@ -785,7 +785,8 @@ Connect your data (Query API README, "Connect your data"; shown only when `/v1/c
 answers, i.e. the server has `DATA_CONNECTIONS_KEY`: `market/useMarketData.ts`, one request per
 token shared by every component; a 404 or an error hides everything below):
 
-- **Settings → Connections** (`#/settings`, `pages/Settings.tsx`, linked from the sidebar footer):
+- **Settings → Connections** (`#/settings`, `pages/Settings.tsx`, linked from the sidebar footer
+  whether or not a provider is offered, since Settings also holds filing alerts, #60):
   per provider (Tiingo today) a link to get a key, a password field (`autocomplete=off`) and
   Connect. The key goes out once, in the `PUT /v1/connections/{provider}` body; the field is
   cleared on success and nothing keeps it (no state, no storage). A saved key shows as provider,
