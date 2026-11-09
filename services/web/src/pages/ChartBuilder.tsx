@@ -343,6 +343,8 @@ export function ChartBuilder({ token, chart, setChart, saveBar, readable = ANYTH
     const latest = r?.state === "ok" ? toSeries(r.data, l, "", 0, frequency).points.filter((p) => p.y !== null).at(-1)?.period : null;
     return `${what} in this range${latest ? `; the latest is ${latest}` : ""}: try Max.`;
   };
+  // the chart's footnote says what the layer cards say: nothing on file isn't "in this range"
+  const emptyOnFile = frequency === "annual" ? [] : visible.filter((l) => nothingNote(l) === onFileNote).map((l) => l.id);
   const emptyNote = (() => {
     const notes = visible.map(nothingNote).filter((n): n is string => n !== null);
     if (notes.some((n) => n.endsWith("try Max."))) return `${what} for these layers in this range: try Max.`;
@@ -608,7 +610,7 @@ export function ChartBuilder({ token, chart, setChart, saveBar, readable = ANYTH
           {whyCalendar && <p className="chart-why">{whyCalendar}</p>}
           {series.some((s) => s.points.some((p) => p.y !== null)) ? (
             <LayerChart series={series} title={title} footnote={footnote} svgRef={svg}
-              markers={markers} onOpen={openSource} subtitle={subtitle} deck={!!chart.deck} from={from} />
+              markers={markers} onOpen={openSource} subtitle={subtitle} deck={!!chart.deck} from={from} emptyOnFile={emptyOnFile} />
           ) : visible.length && loading ? (
             <Skeleton chart label="Loading the series" />
           ) : visible.length && failed ? (

@@ -31,6 +31,9 @@ export function chartNotes(series: Series[], opts: {
   from?: string | null;
   /** a small multiple: its notes only, the reason goes with the group */
   brief?: boolean;
+  /** series (by id) known to have nothing on file at all, not only in this range: the chart says
+   * the same as the layer's own note ("No values on file"), never "in this range" beside it */
+  emptyOnFile?: ReadonlySet<number>;
 } = {}): string[] {
   const plan = planAxes(series);
   const plotted = series.filter((_, i) => plan.axes[i] !== null);
@@ -42,7 +45,10 @@ export function chartNotes(series: Series[], opts: {
     out.push(`Not drawn: ${s.name} reads in ${unitLabel(s.unit) || "plain numbers"}, and both axes are taken (${plan.left}, ${plan.right}). Its values are in the table.`);
   }
   const empty = series.filter((s) => !hasValues(s));
-  if (empty.length) out.push(`No values in this range: ${names(empty.map((s) => s.name))}.`);
+  const none = empty.filter((s) => opts.emptyOnFile?.has(s.id));
+  const inRange = empty.filter((s) => !opts.emptyOnFile?.has(s.id));
+  if (none.length) out.push(`No values on file: ${names(none.map((s) => s.name))}.`);
+  if (inRange.length) out.push(`No values in this range: ${names(inRange.map((s) => s.name))}.`);
 
   // what each series is missing against the chart's own axis
   const remarks: string[] = [];

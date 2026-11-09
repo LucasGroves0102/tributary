@@ -493,7 +493,9 @@ Overview, Revenue, Analysis Numbers, Compare, thesis and report embeds), SVG, PN
   words, under the chart and in its exports: a period with no value, a series that starts late or
   stops early (one quarter behind others isn't a gap: companies file at different times), a layer with
   no values, a chart with nothing as far back as it asked, a negative index. A layer with nothing to
-  draw is asked once over everything on file, so "try Max" appears only when Max has something.
+  draw is asked once over everything on file, so "try Max" appears only when Max has something, and
+  when nothing is on file the chart's footnote says "No values on file", as the layer does, never "in
+  this range" beside it (`chartNotes` `emptyOnFile`).
 - **Basis**: the Calendar / Fiscal control highlights what is applied. Fiscal quarters only line up
   within one company, so with several (counted from what the formulas really read) the chart draws calendar
   ones and says why; the choice is kept for when it's one company again.

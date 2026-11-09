@@ -30,6 +30,8 @@ interface Props {
   log?: boolean;
   /** false: no notes about gaps (a model's forecast starting where its history stops isn't one) */
   notes?: boolean;
+  /** layers (by id) with nothing on file at all: the note says so, not "in this range" */
+  emptyOnFile?: number[];
 }
 
 /** stroke opacity of a faint series (a model's bear / bull case): an SVG attribute, not a style */
@@ -50,7 +52,7 @@ export function newestSource(p: Point | undefined): Source | null {
  * On screen it is drawn for the width it has (layout.ts `chartSize`), so its text is its real size
  * whatever the window. `svgRef` always gets the standard-size drawing (hidden when that isn't the
  * one on screen), so Export SVG / PNG give the same deck-ready image from a phone or a wide monitor. */
-export function LayerChart({ series, title, footnote, svgRef, markers = [], onOpen, subtitle = "", deck = false, compact = false, from = null, log = false, notes = true }: Props) {
+export function LayerChart({ series, title, footnote, svgRef, markers = [], onOpen, subtitle = "", deck = false, compact = false, from = null, log = false, notes = true, emptyOnFile = [] }: Props) {
   const room = useRef<HTMLDivElement>(null);
   const [measured, setMeasured] = useState<number | null>(null);
   useEffect(() => {
@@ -66,8 +68,8 @@ export function LayerChart({ series, title, footnote, svgRef, markers = [], onOp
   const fixed = compact ? { width: COMPACT_WIDTH, plotHeight: COMPACT_PLOT_H } : { width: WIDTH };
   const size = compact || measured === null ? fixed : chartSize(measured);
   const said = useMemo(
-    () => (notes ? [...footnote, ...chartNotes(series, { from, brief: compact })] : footnote),
-    [footnote.join("\n"), series, from, compact, notes],
+    () => (notes ? [...footnote, ...chartNotes(series, { from, brief: compact, emptyOnFile: new Set(emptyOnFile) })] : footnote),
+    [footnote.join("\n"), series, from, compact, notes, emptyOnFile.join(",")],
   );
   const drawnFor = (o: { width?: number; plotHeight?: number }) => {
     const w = o.width ?? WIDTH;

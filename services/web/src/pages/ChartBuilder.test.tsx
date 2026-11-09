@@ -584,6 +584,25 @@ it("says only what would help when a layer has nothing to draw", async () => {
   expect(container.textContent).not.toContain("try Max");
 });
 
+it("the chart's footnote says nothing is on file when the layer does, not 'in this range'", async () => {
+  vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+    const res = respond(url, init);
+    if (!new URL(url, "http://x").pathname.endsWith("/evaluate")) return res;
+    const body = await res.json();
+    const asked = JSON.parse(String(init?.body ?? "{}")) as { formula?: string };
+    return Response.json(asked.formula?.includes("dividends_paid") ? { ...body, points: [] } : body);
+  }));
+  await render({ ...emptyChart(), layers: [
+    { id: 1, kind: "metric", companyId: NVDA, metric: "revenue", transform: "ttm", type: "line", axis: "L" },
+    { id: 2, kind: "metric", companyId: NVDA, metric: "dividends_paid", transform: "ttm", type: "line", axis: "L" },
+  ], nextId: 3 });
+  for (let i = 0; i < 3; i++) await act(async () => {});
+  expect(container.querySelectorAll(".layer")[1]?.textContent).toContain("No values on file.");
+  const svgText = container.querySelector("svg.lchart-svg")?.textContent ?? "";
+  expect(svgText).toContain("No values on file:");
+  expect(svgText).not.toContain("No values in this range");
+});
+
 it("offers a longer range only when there is something in it", async () => {
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
     const res = respond(url, init);

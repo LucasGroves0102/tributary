@@ -358,6 +358,12 @@ describe("what a chart says about what isn't on it", () => {
     expect(chartNotes([series(1, [year(2020)]), series(2, [], { name: "AMZN dividends paid" })])).toEqual(["No values in this range: AMZN dividends paid."]);
   });
 
+  it("says nothing is on file when the layer's own note does, never 'in this range' beside it", () => {
+    const notes = chartNotes([series(1, [year(2020)]), series(2, [], { name: "GUER revenue" }), series(3, [], { name: "AMZN dividends paid" })],
+      { emptyOnFile: new Set([2]) });
+    expect(notes).toEqual(["No values on file: GUER revenue.", "No values in this range: AMZN dividends paid."]);
+  });
+
   it("says when nothing goes back as far as the chart asked", () => {
     const pts = [year(2020), year(2021)];
     pts[0]!.periodEnd = "2020-01-26";
