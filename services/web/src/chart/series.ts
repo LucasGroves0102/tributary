@@ -123,6 +123,8 @@ export function toSeries(
   let unit = layer.transform === "yoy" || layer.transform === "qoq" ? "pct"
     : layer.transform === "contrib" ? "pts"
     : data.unit === "ratio" ? readsAs(layer.display ?? data.display)
+    // 057: an amount in the company's own currency ("CNY", "EUR/shares"), never a "$"
+    : data.currency && data.unit.startsWith("USD") ? data.currency + data.unit.slice(3)
     : data.unit;
   let note: string | undefined;
   if (layer.transform === "idx") {

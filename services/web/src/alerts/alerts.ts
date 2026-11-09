@@ -42,20 +42,21 @@ export function figureChange(f: AlertFigure): string | null {
   return null;
 }
 
-/** A number in a red line's display: 0.55 → "55.0%" for a percent, "1.20x" for a multiple. */
-export function inDisplay(value: string | null, display: string | null): string {
+/** A number in a red line's display: 0.55 → "55.0%" for a percent, "1.20x" for a multiple; an
+ * amount in the company's currency when the API says it (`unit`, 057), else dollars. */
+export function inDisplay(value: string | null, display: string | null, unit?: string | null): string {
   if (value === null) return "—";
   const v = Number(value);
   if (!Number.isFinite(v)) return value;
   if (display === "percent") return pct(v);
   if (display === "multiple") return `${v.toFixed(2)}x`;
-  if (Math.abs(v) >= 1e6) return money(v, "USD");
+  if (Math.abs(v) >= 1e6) return money(v, unit ?? "USD");
   return v.toLocaleString("en-US", { maximumFractionDigits: 4 });
 }
 
 /** "gross_margin below 55.0%" */
-export function ruleText(r: Pick<RedLineResult, "formula" | "op" | "threshold" | "display">): string {
-  return `${r.formula} ${OP_WORDS[r.op]} ${inDisplay(r.threshold, r.display)}`;
+export function ruleText(r: Pick<RedLineResult, "formula" | "op" | "threshold" | "display"> & { unit?: string }): string {
+  return `${r.formula} ${OP_WORDS[r.op]} ${inDisplay(r.threshold, r.display, r.unit)}`;
 }
 
 export type RedLineState = "crossed" | "clear" | "no_value";

@@ -79,6 +79,8 @@ export interface Price {
   value: number;
   /** YYYY-MM-DD */
   date: string;
+  /** the price's currency (057): absent is dollars, as every price saved before */
+  currency?: string;
 }
 
 export const SCENARIOS = ["bear", "base", "bull"] as const;
@@ -418,6 +420,10 @@ export interface Valuation {
   shares_basis: "outstanding" | "diluted";
   net_debt: Reading | null;
   market_cap: number | null;
+  /** the market cap's currency: the price's (057; absent from an older API: USD) */
+  market_cap_currency?: string;
+  /** the price's currency isn't the figures': no EV and no multiple (057) */
+  currency_mismatch?: { price: string; figures: string };
   enterprise_value: number | null;
   /** why there is no EV: absent | old | not_meaningful | not_applicable */
   ev_note: string | null;
@@ -465,6 +471,13 @@ export interface ModelRun {
   cases: Partial<Record<Scenario, RunCase>>;
   adjustments: Adjustment[];
   valuation: Valuation | null;
+  /** the company's reporting currency, every amount's (057; absent from an older API: USD) */
+  currency?: string;
+}
+
+/** A chart's unit for the run's amounts: its currency (057), "USD" from an older API. */
+export function amountUnit(run: Pick<ModelRun, "currency">): string {
+  return run.currency && /^[A-Z]{3}$/.test(run.currency) ? run.currency : "USD";
 }
 
 /** The base year (latest fiscal year with revenue) of a run. */
@@ -499,7 +512,7 @@ export function modelSeries(run: ModelRun, historyYears: number, cases: Scenario
   const history = run.history.slice(-historyYears);
   const base = runBase(run);
   const hist = (id: number, name: string, color: number, value: (y: RunYear) => number | null, src: string): Series => ({
-    id, name, unit: "USD", color, type: "line", axis: "L",
+    id, name, unit: amountUnit(run), color, type: "line", axis: "L",
     points: history.map((y) => {
       const v = value(y);
       const s = toSource(y.sources[src], run.company_id);
@@ -507,7 +520,7 @@ export function modelSeries(run: ModelRun, historyYears: number, cases: Scenario
     }),
   });
   const fore = (id: number, name: string, color: number, start: number | null, value: (p: Projected) => number, rows: Projected[], faint: boolean): Series => ({
-    id, name, unit: "USD", color, type: "line", axis: "L", dashed: true,
+    id, name, unit: amountUnit(run), color, type: "line", axis: "L", dashed: true,
     ...(faint ? { faint: true } : {}),
     points: [
       ...(base && start !== null ? [{ key: base.fy, period: fyLabel(base.fy), periodEnd: base.period_end, y: start, raw: String(start), sources: [] }] : []),
@@ -664,6 +677,8 @@ export function evBlank(v: Valuation | null): string | undefined {
       return `no EV: ${d?.reason ?? "net debt doesn't apply to this company"}`;
     case "not_meaningful":
       return `no EV: net debt is not meaningful (${d?.reason ?? "see Data notes"})`;
+    case "currency":
+      return `no EV: the price is in ${v.currency_mismatch?.price ?? "another currency"} and the figures in ${v.currency_mismatch?.figures ?? "another"}`;
     default:
       return "no EV: no net debt in the filings (Tributary derives it only where debt is tagged)";
   }
@@ -687,14 +702,15 @@ export function modelColumns(run: ModelRun, historyYears: number, forecastYears:
 }
 
 /** Formats a cell. */
-export function formatCell(v: CellValue, unit: Unit): string {
+export function formatCell(v: CellValue, unit: Unit, currency = "USD"): string {
   if (v === "n/m") return "n/m";
   if (v === null || !Number.isFinite(v)) return "—";
   switch (unit) {
     case "USD":
-      return money(v, "USD");
+      // an amount in the company's currency (057): "€2.10B", "CNY 996.35B"
+      return money(v, currency);
     case "USD/shares":
-      return `${v < 0 ? "-" : ""}$${Math.abs(v).toFixed(2)}`;
+      return money(v, `${currency}/shares`);
     case "shares": {
       const abs = Math.abs(v);
       return abs >= 1e9 ? `${(v / 1e9).toFixed(2)}B` : `${(v / 1e6).toFixed(1)}M`;

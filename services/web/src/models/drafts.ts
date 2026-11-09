@@ -36,6 +36,8 @@ export interface AdjustmentDraft {
 export interface PriceDraft {
   value: string;
   date: string;
+  /** the currency the user says the price is in (057); "" or absent: dollars */
+  currency?: string;
 }
 
 const text = (v: number | undefined) => (v === undefined ? "" : String(v));
@@ -130,5 +132,6 @@ export function parsePriceDraft(p: PriceDraft): Price | undefined | null {
   const value = parsePrice(p.value);
   const ok = /^\d{4}-\d{2}-\d{2}$/.test(p.date) && !Number.isNaN(Date.parse(`${p.date}T00:00:00Z`))
     && new Date(`${p.date}T00:00:00Z`).toISOString().slice(0, 10) === p.date;
-  return value !== null && ok ? { value, date: p.date } : null;
+  const currency = /^[A-Z]{3}$/.test(p.currency ?? "") ? p.currency : undefined;
+  return value !== null && ok ? { value, date: p.date, ...(currency ? { currency } : {}) } : null;
 }

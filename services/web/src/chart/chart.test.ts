@@ -4,7 +4,7 @@ import { fin, NVDA } from "../fixtures";
 import type { FormulaSeries } from "../types";
 import { svgText } from "./export";
 import { layout, nearest, niceScale } from "./layout";
-import { catalog, formatValue, metricLabel } from "./metrics";
+import { catalog, formatValue, metricLabel, unitLabel } from "./metrics";
 import {
   applyTemplate,
   basis,
@@ -132,6 +132,23 @@ describe("chart state", () => {
 });
 
 describe("series", () => {
+  it("draw an amount in the company's own currency, never a $ (057)", () => {
+    // Alibaba's yuan revenue charted as "$996B" before: the API now says CNY
+    const yuan = toSeries(series([[8100, "CY2025 Q1", "996347000000"]], { currency: "CNY" }), metric(), "BABA revenue", 0);
+    expect(yuan.unit).toBe("CNY");
+    expect(formatValue(996347000000, yuan.unit)).toBe("CN¥996.35B");
+    expect(formatValue(996e9, yuan.unit, true)).toBe("CN¥996B");
+    expect(unitLabel(yuan.unit)).toBe("CNY");
+    const eps = toSeries(series([[8100, "CY2025 Q1", "1.22"]], { unit: "USD/shares", currency: "EUR" }), metric(), "EPS", 0);
+    expect(eps.unit).toBe("EUR/shares");
+    expect(formatValue(1.22, eps.unit)).toBe("€1.22");
+    expect(unitLabel(eps.unit)).toBe("EUR per share");
+    expect(formatValue(2.1e9, "CAD")).toBe("CAD 2.10B");
+    // an older API, or dollars: as before
+    expect(toSeries(series([[8100, "CY2025 Q1", "1"]]), metric(), "x", 0).unit).toBe("USD");
+    expect(formatValue(96.2e9, "USD")).toBe("$96.20B");
+  });
+
   it("parse exact decimals for drawing and keep them for the CSV", () => {
     const s = toSeries(series([[8100, "CY2025 Q1", "44062000000.00"], [8101, "CY2025 Q2", "46743000000.00"]]),
       metric(), "NVDA revenue", 0);

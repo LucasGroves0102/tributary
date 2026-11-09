@@ -7,6 +7,7 @@ import { TableScroll } from "../components/TableScroll";
 import { day } from "../format";
 import { go } from "../route";
 import {
+  amountUnit,
   builtFromQuarters,
   formatCell,
   modelColumns,
@@ -127,7 +128,7 @@ export function ModelView({
                           return k === 0 ? <Fact key={col.key} run={run} line={l} col={col} rows={shown.length} /> : null;
                         }
                         const p = run.cases[c]?.years[col.index!];
-                        return <Forecast key={col.key} line={l} p={p} c={c} i={col.index!} preview={preview.includes(c)} />;
+                        return <Forecast key={col.key} line={l} p={p} c={c} i={col.index!} preview={preview.includes(c)} currency={amountUnit(run)} />;
                       })}
                     </tr>
                   ))}
@@ -155,7 +156,7 @@ function Fact({ run, line, col, rows }: { run: ModelRun; line: Line; col: Column
       if (note) {
         return (
           <td className={`n ${col.kind} basis`} rowSpan={rows} title={note}>
-            {formatCell(v, line.unit)}{v === null ? "" : "*"}
+            {formatCell(v, line.unit, amountUnit(run))}{v === null ? "" : "*"}
           </td>
         );
       }
@@ -169,16 +170,16 @@ function Fact({ run, line, col, rows }: { run: ModelRun; line: Line; col: Column
   }
   return (
     <td className={`n ${col.kind}`} rowSpan={rows} title={v === null ? line.blank ?? title : title}>
-      {formatCell(v, line.unit)}
+      {formatCell(v, line.unit, amountUnit(run))}
     </td>
   );
 }
 
-function Forecast({ line, p, c, i, preview }: { line: Line; p: Projected | undefined; c: Scenario; i: number; preview: boolean }) {
+function Forecast({ line, p, c, i, preview, currency }: { line: Line; p: Projected | undefined; c: Scenario; i: number; preview: boolean; currency: string }) {
   if (!p) return <td className="n forecast">—</td>;
   const v = line.forecast(p, c, i);
   const split = p.actual && p.remainder && (line.key === "revenue" || line.key === "oi")
-    ? `${quartersLabel(p.actual.quarters)} reported ${formatCell(line.key === "revenue" ? p.actual.revenue : p.actual.operating_income_adjusted, "USD")} + ${remainderLabel(4 - p.remainder.quarters)} ${formatCell(line.key === "revenue" ? p.remainder.revenue : p.remainder.operating_income, "USD")} forecast`
+    ? `${quartersLabel(p.actual.quarters)} reported ${formatCell(line.key === "revenue" ? p.actual.revenue : p.actual.operating_income_adjusted, "USD", currency)} + ${remainderLabel(4 - p.remainder.quarters)} ${formatCell(line.key === "revenue" ? p.remainder.revenue : p.remainder.operating_income, "USD", currency)} forecast`
     : null;
   const defaulted = rateOf(line.key);
   const isDefault = defaulted && p.defaulted.includes(defaulted);
@@ -186,7 +187,7 @@ function Forecast({ line, p, c, i, preview }: { line: Line; p: Projected | undef
     : preview ? "Not added yet: what this case would start as" : p.note ?? undefined);
   return (
     <td className={`n forecast${isDefault ? " default" : ""}`} title={v === null ? line.blank ?? title : title}>
-      {formatCell(v, line.unit)}
+      {formatCell(v, line.unit, currency)}
     </td>
   );
 }

@@ -530,7 +530,11 @@ on the folder changed last. Never just the first workspace.
   a price per share and a day you type, saved with the model, give market cap (× the latest shares
   outstanding), EV (+ net debt, only when its reading is current; Deckers' latest is from 2014, so
   EV is blank and says why) and P/E, EV/Revenue, EV/EBIT and FCF yield on history, the TTM and each
-  case. The page says it's your price: nothing is fetched or kept. **History**: every save over a
+  case. The page says it's your price: nothing is fetched or kept. A company reporting in another
+  currency (057: the run's `currency`) has its table, chart and notes in it ("€2.10B"), and the price
+  gets a currency picker (the company's or USD; a price saved before is dollars): a price in another
+  currency than the figures gives market cap in the price's currency but no EV or multiple, and the
+  card says why and to type the price in the figures' currency. **History**: every save over a
   model keeps the version it replaced (Query API, app DB 014/015); Restore loads one into the
   editor unsaved, with Undo. Only what was typed is saved, never the history or a result.
   Embedded in a thesis or report (`ModelEmbed`), a model is run from its saved state and drawn the
@@ -939,7 +943,11 @@ the ISO code (€2.10B, CAD 1.20B, €1.87 a share); a screener, Peers or Compar
 `other_currency` shows the figure in its currency and leaves sorts, filters and medians ("1 in another
 currency" in the median's hover); the company header says "figures in EUR", the statements' unit and
 note say it too (`MetricTable.currency`, from the rows' units), and a filer whose figures are fiscal
-years (`cadence: "annual"`) is told so beside the statements with a button to Annual. A bank reads "n/a (bank)" for gross and
+years (`cadence: "annual"`) is told so beside the statements with a button to Annual. Charts (057): a
+formula series whose money isn't dollars says so (`currency`), and `toSeries` draws it in that unit
+("CNY", "EUR/shares": axis "CNY", ticks CN¥996B, "EUR per share"), never "$"; a formula mixing two
+currencies is refused by the API (code `currency`) and its layer shows why; an older API reads as
+dollars. Alert red lines on an amount show its `unit` (CN¥1.00T). A bank reads "n/a (bank)" for gross and
 operating margin, FCF, FCF margin, net debt, debt to equity and the current ratio whether or not it
 tags them, by the API's `not_applicable` list. Statements: a balance sheet has no TTM (the button is off,
 and a saved one reads as quarters); EPS and diluted shares read n/a in TTM, — in a fiscal Q4 (the 10-K

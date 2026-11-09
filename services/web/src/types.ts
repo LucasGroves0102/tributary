@@ -983,7 +983,11 @@ export interface FormulaPoint {
 
 export interface FormulaSeries {
   formula: string;
+  /** the dimension from the formula catalog: "USD" means an amount of money */
   unit: string;
+  /** the currency of that money when it isn't the dollar (057: "EUR", "CNY"); absent for dollars,
+   * ratios and an older API */
+  currency?: string;
   /** how a dimensionless result reads (query-api formula/check.py); null with a unit, missing
    * from an older API */
   display?: "percent" | "multiple" | "number" | null;
@@ -1656,6 +1660,9 @@ export interface RedLineResult {
   /** true: the red line is crossed (the trouble it describes is there) */
   crossed: boolean | null;
   status: "ok" | "no_value" | "invalid";
+  /** an amount's unit in the company's currency ("EUR"; 057), absent for ratios and dollars from
+   * an older API */
+  unit?: string;
 }
 
 export interface AlertNotification {

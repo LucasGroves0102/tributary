@@ -61,10 +61,14 @@ export function catalog(columns: ColumnInfo[]): MetricInfo[] {
 
 /** A unit as a caption: axis titles, table headers. A plain number has none. */
 export function unitLabel(unit: string): string {
-  return ({
+  const known = ({
     USD: "USD", ratio: "%", pct: "% change", pts: "% points", index: "index = 100", "USD/shares": "USD per share",
     shares: "shares", multiple: "multiple (x)", number: "",
-  } as Record<string, string>)[unit] ?? unit;
+  } as Record<string, string>)[unit];
+  if (known !== undefined) return known;
+  // another currency (057): "EUR", "EUR per share"
+  const m = /^([A-Z]{3})\/shares$/.exec(unit);
+  return m ? `${m[1]} per share` : unit;
 }
 
 /** Decimals an axis needs so that ticks `step` apart don't read the same. */
@@ -109,7 +113,14 @@ export function formatValue(v: number, unit: string, compact = false, step?: num
       const text = `${(v / d).toFixed(2)}${s} sh`;
       return compact ? text.replace(/\.?0+(?=[BMK]? sh$)/, "") : text;
     }
-    default:
+    default: {
+      // an amount in another currency (057: the API's `currency`): "€2.10B", "CNY 996.35B", "€1.22"
+      if (/^[A-Z]{3}$/.test(unit)) return compact ? money(v, unit).replace(/\.?0+(?=[TBMK]$)/, "") : money(v, unit);
+      if (/^[A-Z]{3}\/shares$/.test(unit)) {
+        if (compact && Math.abs(v) >= 1000) return money(v, unit.slice(0, 3)).replace(/\.?0+(?=[TBMK]$)/, "");
+        return money(v, unit);
+      }
       return compact ? v.toPrecision(3) : v.toPrecision(6);
+    }
   }
 }

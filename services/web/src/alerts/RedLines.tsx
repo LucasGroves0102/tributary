@@ -137,7 +137,7 @@ export function RedLines({ token, companyId, name }: { token: string; companyId:
                   <b>{rule.label}</b>{" "}
                   <span className="faint small">
                     {ruleText(rule)} · {rule.view === "ttm" ? "trailing twelve months" : "quarterly"}
-                    {r?.status === "ok" && r.period_end ? ` · ${inDisplay(r.value, r.display)} at ${day(r.period_end, true)}` : ""}
+                    {r?.status === "ok" && r.period_end ? ` · ${inDisplay(r.value, r.display, r.unit)} at ${day(r.period_end, true)}` : ""}
                   </span>
                 </span>
                 <button className="btn sm ghost" aria-label={`Remove the red line ${rule.label}`} onClick={() => void remove(rule.rule_id)}>Remove</button>

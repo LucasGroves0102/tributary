@@ -3,7 +3,7 @@ import { Fragment, useEffect, useId, useMemo, useRef, useState } from "react";
 import { ApiError, earnings as fetchEarnings, failureReason, itemVersion, itemVersions, openItem, refusedByOlderApi } from "../api";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { TableScroll } from "../components/TableScroll";
-import { day, localDay } from "../format";
+import { day, localDay, money } from "../format";
 import { href } from "../route";
 import type { EarningsResponse, ItemVersion, SavedItemFull } from "../types";
 import { ITEM_NAME_MAX, nameProblem } from "../workspaces/model";
@@ -25,6 +25,7 @@ import {
 import {
   ADJUSTMENT_NAME_MAX,
   builtFromQuarters,
+  amountUnit,
   evBlank,
   formatCell,
   GROWTH_RANGE,
@@ -103,7 +104,7 @@ function editingOf(name: string, m: ModelState): Editing {
     },
     ytd: !!m.ytd,
     adjustments: (m.adjustments ?? []).map(toAdjustmentDraft),
-    price: m.price ? { value: String(m.price.value), date: m.price.date } : { value: "", date: "" },
+    price: m.price ? { value: String(m.price.value), date: m.price.date, currency: m.price.currency ?? "" } : { value: "", date: "" },
   };
 }
 
@@ -699,6 +700,11 @@ function PriceCard({ id, price, run, onChange }: { id: string; price: PriceDraft
   const v = run?.valuation ?? null;
   const shares = v?.shares_outstanding;
   const debt = v?.net_debt;
+  // 057: the figures' currency; the price's is the user's to say (absent: dollars)
+  const figures = run ? amountUnit(run) : "USD";
+  const priceIn = price.currency || "USD";
+  const capIn = v?.market_cap_currency ?? priceIn;
+  const symbol = (code: string) => money(0, code).replace(/0$/, "");
   return (
     <section className="card" aria-labelledby={`${id}-price`}>
       <div className="card-h">
@@ -707,28 +713,44 @@ function PriceCard({ id, price, run, onChange }: { id: string; price: PriceDraft
       </div>
       <div className="card-b">
         <div className="row wrap price-in">
-          <label className="small" htmlFor={`${id}-pv`}>Price per share, $</label>
+          <label className="small" htmlFor={`${id}-pv`}>Price per share{figures === "USD" && priceIn === "USD" ? ", $" : ""}</label>
           <input id={`${id}-pv`} className="field narrow" inputMode="decimal" value={price.value} placeholder="e.g. 150.00"
             aria-invalid={parsed === null && !!price.value.trim()} onChange={(e) => onChange({ ...price, value: e.target.value })} />
+          {(figures !== "USD" || priceIn !== "USD") && (
+            <>
+              <label className="small" htmlFor={`${id}-pc`}>in</label>
+              <select id={`${id}-pc`} className="field narrow price-currency" value={priceIn}
+                onChange={(e) => onChange({ ...price, currency: e.target.value === "USD" && figures === "USD" ? "" : e.target.value })}>
+                {[...new Set([figures, "USD", priceIn])].map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </>
+          )}
           <label className="small" htmlFor={`${id}-pd`}>on</label>
           <input id={`${id}-pd`} className="field narrow" type="date" value={price.date} aria-invalid={parsed === null && !!price.date}
             onChange={(e) => onChange({ ...price, date: e.target.value })} />
-          {(price.value || price.date) && <button className="btn sm ghost" onClick={() => onChange({ value: "", date: "" })}>Clear</button>}
+          {(price.value || price.date) && <button className="btn sm ghost" onClick={() => onChange({ value: "", date: "", currency: price.currency })}>Clear</button>}
           {parsed === null && <span className="err small">a price above $0 and the day it's for</span>}
         </div>
         <p className="small muted">
           The price you type here is yours: Tributary doesn't fetch or keep market prices. It's saved with this model as typed
           and gives market cap, P/E (price over diluted EPS; the TTM's is market cap over TTM net income), EV / Revenue,
           EV / EBIT and FCF yield, on history and on each case, in the table below.
+          {figures !== "USD" && ` ${run?.company_id ? "This company" : "It"} reports in ${figures}: type the price in ${figures} (its home listing) and choose ${figures}, or the multiples stay blank. Tributary converts no currency.`}
         </p>
+        {v?.currency_mismatch && (
+          <p className="small editor-warn price-mismatch" role="status">
+            The price is in {v.currency_mismatch.price} and the figures are in {v.currency_mismatch.figures}: Tributary doesn't convert
+            currencies, so P/E, EV and the other multiples are left out. Type the price in {v.currency_mismatch.figures} and choose it above.
+          </p>
+        )}
         {v && v.market_cap !== null && (
           <p className="small model-valuation">
-            Market cap {formatCell(v.market_cap, "USD")}: ${v.price.toFixed(2)} on {day(v.date, true)} × {formatCell(shares?.value ?? null, "shares")}{" "}
+            Market cap {formatCell(v.market_cap, "USD", capIn)}: {symbol(capIn)}{v.price.toFixed(2)} on {day(v.date, true)} × {formatCell(shares?.value ?? null, "shares")}{" "}
             {v.shares_basis === "outstanding" ? "shares outstanding" : "diluted shares (no shares outstanding in the filings)"}
             {shares?.period_end ? ` (${shares.citation?.form ?? "filing"} for ${day(shares.period_end, true)})` : ""}.{" "}
             {v.enterprise_value !== null
-              ? <>Net debt {formatCell(debt?.value ?? null, "USD")} ({debt?.citation?.form ?? "filing"} for {day(debt?.period_end ?? "", true)}{debt?.status === "behind" ? ", an earlier quarter" : ""}): EV {formatCell(v.enterprise_value, "USD")}.</>
-              : <span className="editor-warn">{evBlank(v)}, so EV / Revenue and EV / EBIT are blank.</span>}
+              ? <>Net debt {formatCell(debt?.value ?? null, "USD", figures)} ({debt?.citation?.form ?? "filing"} for {day(debt?.period_end ?? "", true)}{debt?.status === "behind" ? ", an earlier quarter" : ""}): EV {formatCell(v.enterprise_value, "USD", figures)}.</>
+              : v.currency_mismatch ? null : <span className="editor-warn">{evBlank(v)}, so EV / Revenue and EV / EBIT are blank.</span>}
           </p>
         )}
         {v?.note && <p className="small editor-warn">{v.note}.</p>}

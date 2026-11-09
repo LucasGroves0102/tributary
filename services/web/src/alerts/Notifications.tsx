@@ -96,7 +96,7 @@ export function NotificationList({ token, companyId, empty, limit = 50, onLoaded
                 const state = redLineState(r);
                 return (
                   <li key={r.rule_id} className={`redline ${state}`}>
-                    <b>{RED_LINE_WORDS[state]}</b> {r.label} <span className="faint">({ruleText(r)}; {inDisplay(r.value, r.display)})</span>
+                    <b>{RED_LINE_WORDS[state]}</b> {r.label} <span className="faint">({ruleText(r)}; {inDisplay(r.value, r.display, r.unit)})</span>
                   </li>
                 );
               })}

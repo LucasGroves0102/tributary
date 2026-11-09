@@ -19,6 +19,7 @@ import nvdaFixture from "./fixtures/nvda-run.json";
 import vrtOldFixture from "./fixtures/vrt-old-run.json";
 import vrtFixture from "./fixtures/vrt-run.json";
 import {
+  amountUnit,
   evBlank,
   formatCell,
   guidanceYear,
@@ -126,6 +127,23 @@ describe("drafts: what the fields hold as typed", () => {
     expect(parsePriceDraft({ value: "0", date: "2026-11-06" })).toBeNull();
     expect(parsePriceDraft({ value: "10", date: "2026-02-30" })).toBeNull();
     expect(parsePriceDraft({ value: "10", date: "" })).toBeNull();
+    // 057: the price's currency when the user says one; "" is dollars, as before
+    expect(parsePriceDraft({ value: "182.50", date: "2026-11-06", currency: "EUR" })).toEqual({ value: 182.5, date: "2026-11-06", currency: "EUR" });
+    expect(parsePriceDraft({ value: "182.50", date: "2026-11-06", currency: "" })).toEqual({ value: 182.5, date: "2026-11-06" });
+  });
+
+  it("words a euro filer's amounts in euros, and a price in another currency blocks EV (057)", () => {
+    expect(amountUnit({})).toBe("USD");
+    expect(amountUnit({ currency: "EUR" })).toBe("EUR");
+    expect(formatCell(2097429000, "USD", "EUR")).toBe("€2.10B");
+    expect(formatCell(1.22, "USD/shares", "EUR")).toBe("€1.22");
+    expect(formatCell(1.22, "USD/shares")).toBe("$1.22");
+    expect(formatCell(-0.5, "USD/shares")).toBe("-$0.50");
+    expect(formatCell(996e9, "USD", "CNY")).toBe("CN¥996.00B");
+    const euro = { ...vrt, currency: "EUR" } as ModelRun;
+    expect(modelSeries(euro, 5, ["base"])[0]!.unit).toBe("EUR");
+    const v = { ...vrt.valuation!, enterprise_value: null, ev_note: "currency", currency_mismatch: { price: "USD", figures: "EUR" } };
+    expect(evBlank(v)).toBe("no EV: the price is in USD and the figures in EUR");
   });
 });
 

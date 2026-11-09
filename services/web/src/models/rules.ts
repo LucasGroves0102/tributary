@@ -2,6 +2,7 @@
  * model_maths.py's; nothing is recomputed here): what Reset sets, and why it is defensible. */
 
 import {
+  amountUnit,
   builtFromQuarters,
   formatCell,
   LONG_RUN_GROWTH_CAP,
@@ -34,8 +35,8 @@ export function defaultRules(run: ModelRun, selected: Scenario): { key: string; 
     const change = a.margin !== null && cur.prior.margin !== null ? a.margin - cur.prior.margin : null;
     out.push({
       key: "ytd",
-      text: `FY${cur.fy}E: ${quartersLabel(cur.quarters)} ${cur.quarters === 3 ? "are" : "is"} reported (${formatCell(a.revenue, "USD")}, ${signed(a.growth)} on the same quarters a year earlier, at a ${pct(a.margin)} margin). `
-        + `${remainderLabel(cur.quarters)} starts from ${remainderLabel(cur.quarters)} FY${cur.fy - 1} (${formatCell(r.revenue, "USD")} at ${pct(r.margin)}): grown at that ${signed(a.growth)}, `
+      text: `FY${cur.fy}E: ${quartersLabel(cur.quarters)} ${cur.quarters === 3 ? "are" : "is"} reported (${formatCell(a.revenue, "USD", amountUnit(run))}, ${signed(a.growth)} on the same quarters a year earlier, at a ${pct(a.margin)} margin). `
+        + `${remainderLabel(cur.quarters)} starts from ${remainderLabel(cur.quarters)} FY${cur.fy - 1} (${formatCell(r.revenue, "USD", amountUnit(run))} at ${pct(r.margin)}): grown at that ${signed(a.growth)}, `
         + `its margin moved by this year's change so far${change === null ? "" : ` (${pts(change)})`}.`,
     });
     out.push({
