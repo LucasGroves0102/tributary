@@ -816,7 +816,8 @@ RLS), the excerpts and passages are section text under RLS on `silver.filing_sec
   deal, debt, agreement, leadership, impairment, non_reliance, earnings, disclosure, ...),
   `items_from` (`index` or `parsed`), `material` (false when every item is routine: a vote,
   nominations, exhibits alone), `event_date` (the 8-K's date of report), `excerpt` (the opening of
-  its most material item's section, cited with offsets), `release` (its first EX-99 exhibit) and
+  its most material item's section after the item's heading, cited with offsets; an item that only
+  says another is incorporated by reference gives way to the next), `release` (its first EX-99 exhibit) and
   `affects`. **Stale figures**: an original 8-K whose event is dated after the period end flags
   the balance-sheet figures it can change, listed once each in `stale` as of that period end with
   the events behind them: 2.01 completed acquisition or disposition (cash, debt, net debt, total

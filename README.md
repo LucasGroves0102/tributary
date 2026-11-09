@@ -176,7 +176,7 @@ curl "localhost:8000/v1/companies/0001045810/financials?metrics=revenue" # 401: 
 
 `services/web` (React, TypeScript, Vite): a research workspace with Home (watchlist, new and
 expected filings), guided [Analysis](#analysis) projects from filings to a checked thesis, a screener over every company, company tearsheets (statements, revenue,
-segments, ratios, filings, peers), a chart builder with formula layers, comps tables, a filing reader
+segments, ratios, filings, peers, [earnings releases and the 8-Ks since the last report](#earnings-and-events)), a chart builder with formula layers, comps tables, a filing reader
 with "what changed" diffs, and full-text search. The assistant sits on every screen, sees what
 you're looking at, and can build charts, screens and comps for you, with Undo. Model output is
 sanitized and served under a strict Content-Security-Policy. `make web` runs the dev server on
@@ -231,7 +231,7 @@ as the viewer, so it shows only what you may read.
 
 The Analysis tab is one guided project per company, the way an analyst builds a thesis from
 filings. "New analysis" picks a company you can read and its peers (suggested from the same
-industry and size); the project then walks seven steps, each with a done marker, under a header
+industry and size); the project then walks eight steps, each with a done marker, under a header
 with the company and tabs (Company · Charts · Model · Thesis · Monitor) that switch instantly
 without losing anything you typed:
 
@@ -239,21 +239,56 @@ without losing anything you typed:
 2. **Numbers**: ten fiscal years of revenue and growth, gross and operating margin, free cash
    flow (operating cash flow − capex), receivables against revenue, and debt; each chart opens
    in the chart builder or saves to the project.
-3. **What changed**: new, removed and rewritten Risk Factors and MD&A paragraphs in the latest
+3. **Earnings**: each quarter's earnings release beside its reported figures, the outlook it
+   states and management's adjustments ([below](#earnings-and-events)).
+4. **What changed**: the 8-Ks filed since the last 10-Q or 10-K (deals, debt, leadership,
+   guidance), then new, removed and rewritten Risk Factors and MD&A paragraphs in the latest
    10-K and 10-Q.
-4. **Peers**: the comps table for the company and its peers.
-5. **Model**: the revenue model with bear, base and bull cases.
-6. **Thesis**: starts from a template: core thesis (3-5 sentences), variant perception
+5. **Peers**: the comps table for the company and its peers.
+6. **Model**: the revenue model with bear, base and bull cases.
+7. **Thesis**: starts from a template: core thesis (3-5 sentences), variant perception
    (what the market misses), pillars with evidence, catalysts (the next expected filings
    prefilled), risks and mitigants, what would prove you wrong, and KPIs to watch.
-7. **Monitor**: Check my thesis and the new-filing notice; KPIs with red lines checked after
+8. **Monitor**: Check my thesis and the new-filing notice; KPIs with red lines checked after
    every filing come next.
 
 **Add to thesis** on any step pins the evidence into a section you pick: a chart or comps
-table is saved in the project and embedded, a filing passage is quoted with its form, date,
-section and an EDGAR link. Unsaved thesis edits are kept in the browser until you save. A
+table is saved in the project and embedded, a filing passage is quoted with its form, the period
+it reports on, date, section and an EDGAR link (a release's guidance table keeps its lines). Unsaved thesis edits are kept in the browser until you save. A
 project is a workspace with its company and peers on it (app database migration 012), so its
 charts, model and thesis are ordinary saved items: owner-only in both layers, granting nothing.
+
+#### Earnings and events
+
+Between 10-Qs the filings an analyst reads are 8-Ks: the quarterly earnings release and whatever
+the company did since the quarter ended. Both testers of the guided flow missed one: an
+acquisition that closed after Vertiv's balance sheet date, and the guidance and refund figures in
+Deckers' release.
+
+- **Earnings tab** (and the Analysis flow's Earnings step): each quarter's release (the 8-K with
+  Item 2.02, its first EX-99 exhibit) beside the quarter's figures from its 10-Q against a year
+  ago; the outlook quoted from the release's own Outlook or Guidance sections; management's
+  adjustments (its non-GAAP reconciliation tables and the notes that state a dollar amount). Each
+  passage links to its place in the filing reader and pins into a thesis with its quarter. Found by
+  fixed rules, not a model: where a release has no such section the page says so. No beat or miss:
+  Tributary holds no consensus estimates.
+- **Since the last report** (company Overview, top of What changed): the 8-Ks filed after the
+  latest 10-Q/10-K period end with their items (2.01 acquisition completed, 2.03 new debt, 5.02
+  officer change, 4.02 non-reliance, ...), each quoting the 8-K's own words. A balance that an
+  event after the period end may have changed (cash, debt, net debt, total assets) is flagged as
+  of that period end, with the event beside it, on the key stats too: a flag, never a pro forma.
+- The assistant has both as tools (`get_earnings_release`, `get_events_since_report`), and Check
+  my thesis reads them for what the thesis leaves out; neither changed the recorded suites (97
+  replays pass, 0 leaks), and the adversarial harness counts their results like any filings
+  tool's.
+
+Measured on production (2026-11-08): every 8-K filed since October 2024 has its items in the SEC
+index here (140,884 of 140,884, all filers); for operating companies over the last two years,
+32,188 earnings 8-Ks from 3,994 companies, all stored, 95% with a parsed EX-99.1, and 71% of
+40,588 company-quarters with a parsed release. On 45
+releases sampled across industries, the outlook rules found 32 of the 33 that have an Outlook or
+Guidance section, and nothing in the others. Rules and numbers:
+[query-api](services/query-api/README.md#earnings-and-events), [web](services/web/README.md).
 
 #### Connect your data
 
