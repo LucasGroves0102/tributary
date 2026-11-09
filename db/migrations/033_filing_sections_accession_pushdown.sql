@@ -14,10 +14,13 @@
 -- without a user still reads nothing. Hermes, the same query without RLS: 2 ms. company_id stays
 -- first in the key (025) and security_invoker is re-issued so RLS keeps applying.
 --
--- Locks: the view only, ACCESS EXCLUSIVE for an instant; no table rewrite, no index. The
--- lock_timeout makes it fail fast (and the deploy retry) rather than queue reads behind it.
+-- Locks: the view only, ACCESS EXCLUSIVE for an instant; no table rewrite, no index. The view is read
+-- on every filing page and by the hourly section-index job, whose long transactions hold it: while
+-- the migration waits for them, every reader queues behind it. So a 3 s lock_timeout: a busy moment
+-- fails the deploy hook fast (re-run the release, or pause section-index first: the B6 runbook)
+-- instead of stalling the reader for up to 30 s.
 
-SET LOCAL lock_timeout = '30s';
+SET LOCAL lock_timeout = '3s';
 
 CREATE OR REPLACE VIEW gold.filing_sections AS
 SELECT DISTINCT ON (k.company_id, s.accession_no, s.section_key)

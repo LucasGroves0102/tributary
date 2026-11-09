@@ -15,7 +15,11 @@
 --
 -- Lock impact (hermes): CREATE TABLE with a foreign key takes a SHARE ROW EXCLUSIVE lock on
 -- workspace_items for the moment it takes to create the empty table: saves of any item wait for
--- that instant, reads don't. No existing row is read or rewritten.
+-- that instant, reads don't. No existing row is read or rewritten. The lock waits for open writes
+-- to workspace_items, and saves queue behind it while it waits: 5 s at most, then the deploy hook
+-- fails and is re-run.
+
+SET LOCAL lock_timeout = '5s';
 
 CREATE TABLE item_versions (
     version_id  uuid        PRIMARY KEY DEFAULT gen_random_uuid(),

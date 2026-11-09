@@ -67,7 +67,9 @@ de-duplicating every section first.
 `033_filing_sections_accession_pushdown.sql` (listed here with its sibling) makes the view output
 `s.accession_no`, the key column: a filter on accession now reaches the base tables too. Before
 it, `gold.filing_flags` and so `/v1/filings/{acc}/recap` sorted all 1.8M sections and timed out,
-and `gold.refresh_section_search` sorted them once per batch (locally 3.3 s → 12 ms).
+and `gold.refresh_section_search` sorted them once per batch (locally 3.3 s → 12 ms). Replacing the
+view takes ACCESS EXCLUSIVE on it, so its `lock_timeout` is 3 s: if the hourly section-index job holds
+the view, the deploy hook fails fast (re-run it) instead of queueing every filing page behind it.
 `034_company_search.sql` adds `silver.search_companies(q)`, what a search box does with what
 people type: exact ticker first (`BRK.B` = `BRK-B`), then CIK, exact name, retired ticker or former
 name, then prefix, a later word, and contained (3+ characters), with spaces ignored for `JP Morgan`
@@ -104,7 +106,9 @@ has the measurements behind its thresholds.
   both: `EarningsPerShareBasicAndDiluted` gave no diluted EPS at 173 of the sample's companies; the sums;
   a loss quarter's basic EPS as diluted; without proxy statements, periods ending over 7 days after
   their filing, debt over five times both liabilities and assets, or a fallback debt tag at a bank;
-  a fallback debt total less its current portion) and `gold.best_facts(ids)` (each tag's latest filing,
+  a fallback debt total less its current portion, where it is one: equal to the current portion, or
+  above it and above all noncurrent liabilities; below the current portion it is the noncurrent line)
+  and `gold.best_facts(ids)` (each tag's latest filing,
   then for revenue: a zero loses to another tag's later or same-filing value of $1M or more; Revenues
   under 20% of contract revenue is a part; then tag priority). `gold.refresh_quarterly_financials`
   reads `best_facts` (031's series rule unchanged), drops a reported quarter rounded for a sentence
@@ -114,11 +118,13 @@ has the measurements behind its thresholds.
   median, quarters since 2019). Validated on hermes where gross profit is reported: 98.5% within a
   point; fills 7,675 quarters at 559 companies.
 - 040: `gold.refresh_derived_financials` adds a TTM from the stated year where four quarters don't
-  exist (not when a must-be-positive year is negative or below its own quarters), and net debt's
+  exist (not when a must-be-positive year is negative or below its own quarters; ends within 7 days
+  are one year, 031's rule, so ATI's FY2021 tagged ending Dec 31 and Jan 2 is in gold once), and net debt's
   rules: investments inside cash aren't subtracted twice; a recent, material investments series with
   no value at the date, where the balance sheet has room for it, makes net debt absent; so does debt
   that can't carry its interest (Ford). Net debt counts short-term investments only.
-- 041: `ops.check_financials` reads `best_facts` for the annual comparison and adds `mistagged_fact`
+- 041: `ops.check_financials` reads `best_facts` for the annual comparison, flags negative debt as an
+  `impossible_value`, and adds `mistagged_fact`
   (error: a period after its filing, debt over five times liabilities and assets),
   `net_debt_gap` (warning) and a repeated `series_gap` (the same quarter missing three or more
   years); `ops.quality_summary` lists them.

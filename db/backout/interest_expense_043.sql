@@ -5,9 +5,22 @@
 --   sudo -u postgres psql -d tributary -v ON_ERROR_STOP=1 -1 -f interest_expense_043.sql
 --   kubectl -n tributary create job --from=cronjob/financials-rebuild financials-rebuild-2
 --
--- Generated from 039 with 043 (scratch script, the same copy without 043's two edits).
+-- Generated from 039 with 043 (scratch script, the same copy without 043's two edits). 039's
+-- fallback-debt total rule was then fixed in 039, 043 and here alike (before either was deployed): a
+-- fallback tag below the current portion is the noncurrent line, never a total.
 
 SET LOCAL lock_timeout = '30s';
+
+-- Order (README): this file, then gold_rules_038_041.sql if that is wanted too; never this one after
+-- it. gold_rules_038_041.sql empties silver.metric_sums and removes 038's tags, and these bodies are
+-- 039's fact selection, which reads them: run after it, they'd bring 039 back with its sums gone.
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM silver.metric_sums) THEN
+        RAISE EXCEPTION USING MESSAGE = 'gold_rules_038_041.sql has already run (silver.metric_sums '
+            || 'is empty): interest_expense_043.sql goes before it, never after. Nothing was changed.';
+    END IF;
+END $$;
 
 CREATE OR REPLACE FUNCTION gold.usable_facts(p_company_ids text[])
 RETURNS TABLE (company_id text, metric text, tag text, taxonomy text, unit text, period_start date,
@@ -89,8 +102,11 @@ LANGUAGE sql STABLE AS $$
     CROSS JOIN LATERAL (
         SELECT l.tag IN ('LongTermDebt', 'LongTermNotesPayable', 'LongTermNotesAndLoans')
                AND b.current_debt > 0
-               AND (l.value > (b.liabilities - b.liabilities_current) * 1.01
-                    OR l.value <= b.current_debt) AS total
+               -- a total holds its current portion: equal to it (all of the debt is current), or
+               -- above it and above all noncurrent liabilities; below it, it's the noncurrent line
+               AND (l.value = b.current_debt
+                    OR (l.value > b.current_debt
+                        AND l.value > (b.liabilities - b.liabilities_current) * 1.01)) AS total
     ) c
     WHERE NOT (l.metric IN ('long_term_debt', 'long_term_debt_current')
                AND l.value > coalesce(b.liabilities * 5, 'Infinity')

@@ -5,8 +5,12 @@
 -- whose quarters are incomplete had no annual figure even with the 10-K's own total in silver: NVIDIA's
 -- FY2023 capex (1,833; its 10-Qs that year tag neither quarters nor six months in us-gaap), Amazon's
 -- FY2017 capex (11,955; no fact ends 2017-06-30). An annual-length fact (350-380 days) now fills a TTM
--- row where the sums left none, unless (for a metric that can't be negative) it is negative or smaller
--- than the quarters gold does have inside it: then it's another tag's part. On the sample that keeps
+-- row where the sums left none within 7 days of its end (031's one-period rule: ATI tags FY2021 ending
+-- 2021-12-31 in one 10-K and 2022-01-02 in a later one; of two such stated years, the one ending where
+-- gold's quarters end, then the later filing), unless (for a metric that can't be negative) it is
+-- negative or smaller than the quarters gold does have inside it: then it's another tag's part
+-- (decided before two years are made one, so a refused year never hides its neighbour). On the sample
+-- that keeps
 -- out Clover Health's 2022 revenue (1,097 against about 3,000) and Peoples Bancorp's 2018 (-127).
 -- inputs.quarters has that one fact, so anything reading it still works.
 --
@@ -102,6 +106,34 @@ BEGIN
 
     -- a year the 10-K states, where four quarters don't exist to sum (header). Not the quarters'
     -- gross_profit: a filing that printed one has it here, and revenue less cost is a quarter's rule.
+    -- Ends within 7 days are one period (031's rule): ATI's FY2021 is tagged ending 2021-12-31 in one
+    -- 10-K and 2022-01-02 in a later one, and was in gold twice.
+    WITH years AS (
+        SELECT y.*,
+               EXISTS (SELECT 1 FROM gold.quarterly_financials q
+                       WHERE q.company_id = y.company_id AND q.metric = y.metric
+                         AND q.period_end = y.period_end) AS in_series
+        FROM (
+            -- one per period end: two annual facts can end on one day (a re-labelled start)
+            SELECT DISTINCT ON (f.company_id, f.metric, f.period_end) f.*
+            FROM gold.best_facts(p_company_ids) f
+            JOIN silver.metrics m ON m.metric = f.metric AND m.kind = 'duration'
+            WHERE f.period_type = 'annual' AND f.additive
+            ORDER BY f.company_id, f.metric, f.period_end, f.priority, f.filed DESC,
+                     f.accession_no DESC, f.period_start DESC
+        ) y
+        -- a year that can't hold the quarters gold has for it is another tag's part, not the year
+        -- (Clover Health's 2022 revenue at 1,097 beside quarters of about 800 each; Peoples
+        -- Bancorp's 2018 at -127): only for the metrics that can't be negative (029's list)
+        WHERE NOT (y.metric IN ('revenue', 'cost_of_revenue', 'research_and_development', 'sga',
+                                'capex', 'depreciation_amortization', 'stock_based_compensation',
+                                'share_buybacks', 'dividends_paid')
+                   AND (y.value < 0 OR y.value < 0.99 * (
+                       SELECT coalesce(sum(q.value), 0) FROM gold.quarterly_financials q
+                       WHERE q.company_id = y.company_id AND q.metric = y.metric
+                         AND q.period_start >= y.period_start - 7
+                         AND q.period_end <= y.period_end + 7)))
+    )
     INSERT INTO gold.derived_financials
         (company_id, span, metric, period_start, period_end, value, unit, value_source,
          source_tag, inputs, accession_no, form, filed, source_accessions, ingested_at)
@@ -111,29 +143,19 @@ BEGIN
                'period_start', b.period_start, 'period_end', b.period_end, 'value', b.value,
                'accession_no', b.accession_no))),
            b.accession_no, b.form, b.filed, ARRAY[b.accession_no], b.ingested_at
-    FROM (
-        -- one per period end: two annual facts can end on one day (a re-labelled start)
-        SELECT DISTINCT ON (f.company_id, f.metric, f.period_end) f.*
-        FROM gold.best_facts(p_company_ids) f
-        JOIN silver.metrics m ON m.metric = f.metric AND m.kind = 'duration'
-        WHERE f.period_type = 'annual' AND f.additive
-        ORDER BY f.company_id, f.metric, f.period_end, f.priority, f.filed DESC, f.accession_no DESC,
-                 f.period_start DESC
-    ) b
+    FROM years b
     WHERE NOT EXISTS (
         SELECT 1 FROM gold.derived_financials d
         WHERE d.company_id = b.company_id AND d.span = 'ttm' AND d.metric = b.metric
-          AND d.period_end = b.period_end)
-      -- a year that can't hold the quarters gold has for it is another tag's part, not the year
-      -- (Clover Health's 2022 revenue at 1,097 beside quarters of about 800 each; Peoples Bancorp's
-      -- 2018 at -127): only for the metrics that can't be negative (029's list)
-      AND NOT (b.metric IN ('revenue', 'cost_of_revenue', 'research_and_development', 'sga', 'capex',
-                            'depreciation_amortization', 'stock_based_compensation',
-                            'share_buybacks', 'dividends_paid')
-               AND (b.value < 0 OR b.value < 0.99 * (
-                   SELECT coalesce(sum(q.value), 0) FROM gold.quarterly_financials q
-                   WHERE q.company_id = b.company_id AND q.metric = b.metric
-                     AND q.period_start >= b.period_start - 7 AND q.period_end <= b.period_end + 7)));
+          AND d.period_end BETWEEN b.period_end - 7 AND b.period_end + 7)
+      -- of two stated years ending within 7 days, one: the end gold's quarters use, then the
+      -- later filing, then the later end
+      AND NOT EXISTS (
+        SELECT 1 FROM years o
+        WHERE o.company_id = b.company_id AND o.metric = b.metric
+          AND o.period_end <> b.period_end
+          AND o.period_end BETWEEN b.period_end - 7 AND b.period_end + 7
+          AND (o.in_series, o.filed, o.period_end) > (b.in_series, b.filed, b.period_end));
 
     WITH facts AS (
         SELECT 'quarter' AS span, company_id, metric, period_start, period_end, value,

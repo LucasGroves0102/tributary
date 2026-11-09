@@ -154,12 +154,13 @@ def test_give_back_after_midnight_moves_usage_but_gains_nothing(db):
     fewer than the run took."""
     s, conn = db
     s.create(sandbox("demo-a"), "ip1", 5, 5)
-    s.take_question("demo-a", NOW, 4, 10, 3)  # the run, before midnight
-    tomorrow = NOW + timedelta(days=1)
-    s.take_question("demo-a", tomorrow, 4, 10, 1)  # one question after midnight
-    assert s.give_back("demo-a", tomorrow, 3) == 1
+    before = NOW.replace(hour=23, minute=58)
+    after = before + timedelta(minutes=4)  # the next UTC day
+    s.take_question("demo-a", before, 4, 10, 3)  # the run starts before midnight
+    s.take_question("demo-a", after, 4, 10, 1)  # one question after midnight
+    assert s.give_back("demo-a", after, 3) == 1
     assert rows(conn, "SELECT day, questions FROM demo_agent_usage WHERE user_id = 'demo-a'"
-                " ORDER BY day") == [(NOW.date(), 3), (tomorrow.date(), 0)]
+                " ORDER BY day") == [(before.date(), 3), (after.date(), 0)]
 
 
 def test_questions_left_reads_the_caps_and_takes_nothing(db):

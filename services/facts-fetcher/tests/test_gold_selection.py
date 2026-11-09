@@ -662,6 +662,32 @@ def test_a_total_no_larger_than_its_current_portion_isnt_counted_twice(conn):
     assert derived(conn, "net_debt", END) == 468
 
 
+def test_a_fallback_tag_below_its_current_portion_is_the_noncurrent_line(conn):
+    # the review's case: LongTermDebt 100 beside DebtCurrent 300 was read as a total and gave
+    # long-term debt -200 and net debt 50; a total can't be smaller than its own current part
+    put(
+        conn,
+        [
+            ("LongTermDebt", None, END, 100, "q", FILED),
+            ("DebtCurrent", None, END, 300, "q", FILED),
+            ("Assets", None, END, 5000, "q", FILED),
+            ("Liabilities", None, END, 2000, "q", FILED),
+            ("LiabilitiesCurrent", None, END, 900, "q", FILED),
+            ("CashAndCashEquivalentsAtCarryingValue", None, END, 50, "q", FILED),
+        ],
+    )
+    assert gold(conn, "long_term_debt", END) == (100, "LongTermDebt")
+    assert derived(conn, "net_debt", END) == 100 + 300 - 50
+    assert findings(conn, "impossible_value") == []
+
+
+def test_negative_debt_is_an_impossible_value(conn):
+    put(conn, [("LongTermDebtNoncurrent", None, END, -5, "q", FILED),
+               ("LongTermDebtCurrent", None, END, -1, "q", FILED)])
+    assert [(m, d["rule"]) for m, _, d in findings(conn, "impossible_value")] == [
+        ("long_term_debt", "negative"), ("long_term_debt_current", "negative")]
+
+
 @pytest.mark.parametrize("sic", ["6021", None])
 def test_no_fallback_debt_for_a_bank_or_an_unknown_industry(conn, sic):
     # JPMorgan's unclassified balance sheet has no noncurrent line: the golden `absent` row
@@ -905,6 +931,49 @@ def test_quarters_win_over_the_stated_year(conn):
 def test_an_annual_share_count_isnt_a_ttm(conn):
     put(conn, [("EarningsPerShareBasic", *FY, 3, "k", "2026-02-25", "10-K")])
     assert derived(conn, "eps_basic", "2025-12-31", "ttm") is None
+
+
+def ttm_ends(conn, metric):
+    return [str(r[0]) for r in conn.execute(
+        "SELECT period_end FROM gold.derived_financials WHERE company_id = %s AND span = 'ttm'"
+        " AND metric = %s ORDER BY period_end", (CO, metric)).fetchall()]
+
+
+def test_a_stated_year_a_few_days_off_its_quarters_ttm_is_the_same_year(conn):
+    # ATI: FY2021 summed from quarters ends 2021-12-31; a later 10-K tags the same year ending
+    # 2022-01-02 (a 52-53 week calendar), and gold had FY2021 twice. 031's rule: ends within 7
+    # days are one period.
+    contract = "RevenueFromContractWithCustomerExcludingAssessedTax"
+    put(
+        conn,
+        [
+            *[
+                (contract, s, e, 700, f"q{e}", "2026-02-25")
+                for s, e in [
+                    ("2025-01-01", "2025-03-31"),
+                    ("2025-04-01", "2025-06-30"),
+                    ("2025-07-01", "2025-09-30"),
+                    ("2025-10-01", "2025-12-31"),
+                ]
+            ],
+            (contract, *FY, 2800, "k1", "2026-02-25", "10-K"),
+            (contract, "2025-01-04", "2026-01-02", 2800, "k2", "2028-02-23", "10-K"),
+        ],
+    )
+    assert ttm_ends(conn, "revenue") == ["2025-12-31"]
+
+
+def test_two_stated_years_a_few_days_apart_are_one(conn):
+    # the same two ends with no quarters to sum: one row, the later filing's
+    put(
+        conn,
+        [
+            ("PaymentsToAcquireProductiveAssets", *FY, 45, "k1", "2026-02-25", "10-K"),
+            ("PaymentsToAcquireProductiveAssets", "2025-01-04", "2026-01-02", 45, "k2",
+             "2028-02-23", "10-K"),
+        ],
+    )
+    assert ttm_ends(conn, "capex") == ["2026-01-02"]
 
 
 # --- rounded sentences --------------------------------------------------------------------------

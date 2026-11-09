@@ -112,8 +112,11 @@ LANGUAGE sql STABLE AS $$
     CROSS JOIN LATERAL (
         SELECT l.tag IN ('LongTermDebt', 'LongTermNotesPayable', 'LongTermNotesAndLoans')
                AND b.current_debt > 0
-               AND (l.value > (b.liabilities - b.liabilities_current) * 1.01
-                    OR l.value <= b.current_debt) AS total
+               -- a total holds its current portion: equal to it (all of the debt is current), or
+               -- above it and above all noncurrent liabilities; below it, it's the noncurrent line
+               AND (l.value = b.current_debt
+                    OR (l.value > b.current_debt
+                        AND l.value > (b.liabilities - b.liabilities_current) * 1.01)) AS total
     ) c
     WHERE NOT (l.metric IN ('long_term_debt', 'long_term_debt_current')
                AND l.value > coalesce(b.liabilities * 5, 'Infinity')

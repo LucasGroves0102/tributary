@@ -16,13 +16,17 @@
 --
 --   series_gap gains the hole every fourth quarter (NVIDIA's capex, FY2017-21): one finding, the latest,
 --     with `repeated` years. The check needed four contiguous quarters first, which that never has.
+--   impossible_value's rule negative also covers long_term_debt and long_term_debt_current: debt can't be
+--     below zero, and a fallback total less a larger current portion (039 before its fix) made it so.
 --
 -- ops.quality_summary is 023's view plus the two checks.
 --
--- Locks on hermes: CREATE OR REPLACE of the function and of a view with no dependants, brief ACCESS
--- EXCLUSIVE on the view. New findings on `facts-fetcher --rebuild`.
+-- Locks on hermes: CREATE OR REPLACE of the function and of a view with no dependent views, brief ACCESS
+-- EXCLUSIVE on the view. The public status page reads it (028's ops.public_quality()), so a 3 s
+-- lock_timeout: a busy moment fails the deploy hook (re-run it) rather than queueing those reads. New
+-- findings on `facts-fetcher --rebuild`.
 
-SET LOCAL lock_timeout = '30s';
+SET LOCAL lock_timeout = '3s';
 
 CREATE OR REPLACE FUNCTION ops.check_financials(p_company_ids text[]) RETURNS integer
 LANGUAGE plpgsql AS $$
@@ -150,7 +154,7 @@ BEGIN
             'revenue', 'total_assets', 'current_assets', 'total_liabilities',
             'current_liabilities', 'cash', 'short_term_investments', 'inventory',
             'receivables', 'shares_outstanding', 'weighted_shares_basic',
-            'weighted_shares_diluted')
+            'weighted_shares_diluted', 'long_term_debt', 'long_term_debt_current')
         UNION ALL
         SELECT company_id, 'impossible_value', r.metric, period_end, 'error',
                jsonb_build_object('rule', r.rule)

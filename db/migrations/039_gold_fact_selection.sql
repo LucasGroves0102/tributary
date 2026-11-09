@@ -13,10 +13,12 @@
 --     Compression 2017 at 14), or a shell whose notes really are hundreds of times its assets.
 --   LongTermDebt / LongTermNotesPayable / LongTermNotesAndLoans at a bank: deposits are its debt (035),
 --     and a bank's unclassified balance sheet has no noncurrent debt line. Same with no SIC known.
---   A fallback debt tag that is the note's total, when a current portion is also reported: it can't be
---     the noncurrent line if it is larger than all noncurrent liabilities, or no larger than the current
---     portion. Then the noncurrent part is the total less the current portion, so debt isn't counted
---     twice (Peloton, Molina; Adobe, Tesla and Qualcomm tag the noncurrent line and pass unchanged).
+--   A fallback debt tag that is the note's total, when a current portion is also reported: it is the
+--     total if it equals the current portion (all of the debt is current: Advanced Energy), or is larger
+--     than both the current portion and all noncurrent liabilities (Molina). Then the noncurrent part is
+--     the total less the current portion, so debt isn't counted twice. Smaller than the current portion
+--     it can't be a total that holds it: it is the noncurrent line and stays (a total read there made
+--     long-term debt negative). Adobe, Tesla and Qualcomm tag the noncurrent line and pass unchanged.
 --   A loss quarter with no diluted EPS tag gets the basic figure: a loss makes dilution anti-dilutive,
 --     so the two are equal (ASC 260-10-45-19), and Guerrilla RF tags only basic in loss quarters.
 --
@@ -137,8 +139,11 @@ LANGUAGE sql STABLE AS $$
     CROSS JOIN LATERAL (
         SELECT l.tag IN ('LongTermDebt', 'LongTermNotesPayable', 'LongTermNotesAndLoans')
                AND b.current_debt > 0
-               AND (l.value > (b.liabilities - b.liabilities_current) * 1.01
-                    OR l.value <= b.current_debt) AS total
+               -- a total holds its current portion: equal to it (all of the debt is current), or
+               -- above it and above all noncurrent liabilities; below it, it's the noncurrent line
+               AND (l.value = b.current_debt
+                    OR (l.value > b.current_debt
+                        AND l.value > (b.liabilities - b.liabilities_current) * 1.01)) AS total
     ) c
     WHERE NOT (l.metric IN ('long_term_debt', 'long_term_debt_current')
                AND l.value > coalesce(b.liabilities * 5, 'Infinity')
