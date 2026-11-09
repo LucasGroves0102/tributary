@@ -174,7 +174,8 @@ export function Search({ token, search, companies, open = false, suggestions = N
         </p>
       ) : (
         <section className="card results">
-          <ScopeLine search={search} data={load.data} name={search.company ? directory.short(search.company) : null} />
+          <ScopeLine search={search} data={load.data}
+            name={search.company ? (directory.name(search.company) ?? directory.short(search.company)) : null} />
           {groupHits(load.data.results, load.data.sort === "date").map((c, gi) => (
             <div key={`${gi}-${c.companyId}`} className="result-co">
               <h2>
