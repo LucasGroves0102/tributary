@@ -4,7 +4,7 @@ skipped."""
 
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any, Protocol
 
@@ -386,6 +386,54 @@ class Store:
                 ORDER BY metric, period_end DESC
                 """, (company_id, view, metrics, basis, quarters))
             return cur.fetchall()
+
+    FIGURE = """
+        SELECT metric, period_start, period_end, fiscal_year, fiscal_quarter, value, unit,
+               value_source, source_tag, inputs, accession_no, form, filed, source_accessions,
+               (SELECT f.cik FROM silver.financial_facts f
+                WHERE f.accession_no = q.accession_no LIMIT 1) AS filer_cik
+        FROM gold.financials q
+        WHERE company_id = %s AND span = %s AND metric = ANY(%s) AND period_end = %s
+        """
+
+    def components(self, user_id: str, company_id: str, span: str, metric: str,
+                   period_end: date) -> dict:
+        """What query_api.components shapes, in one session under RLS: the figure's gold row,
+        its inputs' rows at the same date (and revenue and cost for a computed gross profit),
+        gold.figure_facts (049) for every row built from facts, and the derived metric's
+        definition. One company, one date: index probes."""
+        with self._session(user_id) as cur:
+            cur.execute(self.FIGURE, (company_id, span, [metric], period_end))
+            row = cur.fetchone()
+            if row is None:
+                return {"row": None, "rows": {}, "facts": {}, "definition": None,
+                        "present": set()}
+            want = {k for k in (row["inputs"] or {}) if k != "quarters"
+                    and not k.endswith("_year_ago")}
+            if metric in ("net_debt", "cash_and_investments"):
+                want.add("short_term_investments")
+            if "gross_profit" in want or row["source_tag"] == "derived:revenue-cost_of_revenue":
+                want |= {"revenue", "cost_of_revenue"}
+            rows: dict[str, dict] = {}
+            if want:
+                cur.execute(self.FIGURE, (company_id, span, sorted(want), period_end))
+                rows = {r["metric"]: r for r in cur.fetchall()}
+            facts: dict[tuple[str, date], list[dict]] = {}
+            if span == "quarter":
+                for r in [row, *rows.values()]:
+                    if r["inputs"] or (r["source_tag"] or "").startswith("derived:"):
+                        continue
+                    ends = {r["period_end"]}
+                    if r["value_source"] == "derived" and r["period_start"]:
+                        ends.add(r["period_start"] - timedelta(days=1))
+                    for end in sorted(ends):
+                        cur.execute("SELECT * FROM gold.figure_facts(%s, %s, %s)",
+                                    (company_id, r["metric"], end))
+                        facts[(r["metric"], end)] = cur.fetchall()
+            cur.execute("SELECT definition FROM gold.derived_metrics WHERE metric = %s", (metric,))
+            d = cur.fetchone()
+            return {"row": row, "rows": rows, "facts": facts,
+                    "definition": d["definition"] if d else None, "present": set(rows)}
 
     def equity_readings(self, user_id: str, company_id: str, metrics: list[str], quarters: int,
                         view: str = "quarter", basis: str = "fiscal") -> list[dict]:

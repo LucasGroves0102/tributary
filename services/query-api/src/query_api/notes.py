@@ -26,6 +26,19 @@ still reaches a note (ops.check_financials' rule: fix causes, never hide finding
   as `unit_change`.
 - A one-quarter spike is `seasonal` when the same quarter peaks in another year too (Deckers'
   December operating cash flow), instead of being called a scale error, and drops to info.
+
+Statement callouts (F5, `callouts`, on /financials with callouts=true): the same tests placed on
+the statement's own cells, so a figure far outside its series is said where it is read. A quarter
+is called out when, against the quarters beside it, it is
+- an `outlier`: ops.check_financials' (041) outlier test, OUTLIER_FACTOR times the larger of the two
+  quarters beside it, which agree (same sign, within NEIGHBOUR_SPREAD of each other); `seasonal`
+  when it is the company's habit, by the test above;
+- a `sign` change: 041's sign_flip test (the quarters beside it share a sign, it has the other), on
+  041's cost metrics and operating cash flow, where a change of sign is news. Not on the cash flow
+  subtotals or the change in cash, which change sign as a matter of course.
+The newest quarter has no quarter after it, so 041 never tests it; here it is tested against the two
+quarters before it (`edge`), which is how a step change shows (NVIDIA's dividends: 6,047M after 243M
+and 242M). A callout says what the figure is next to, never that it is wrong: every one is as filed.
 """
 
 from collections.abc import Callable, Iterable
@@ -58,6 +71,15 @@ SPLIT_EVENT_DAYS = 550  # restatements of one split arrive with comparatives for
 UNIT_FACTORS = (1e3, 1e6)
 PEAK = 3  # another year's quarter this many times its neighbours: the spike is that quarter's habit
 SEASON_YEARS = 2
+# ops.check_financials' outlier test (migration 041), for the statement callouts: a quarter at least
+# OUTLIER_FACTOR times the larger of the quarters beside it, which agree within NEIGHBOUR_SPREAD
+OUTLIER_FACTOR = 10
+NEIGHBOUR_SPREAD = 2
+# 041's sign_flip metrics (costs, where the sign is a convention) and operating cash flow (F5)
+SIGN_METRICS = frozenset({
+    "cost_of_revenue", "research_and_development", "sga", "interest_expense", "capex",
+    "depreciation_amortization", "stock_based_compensation", "dividends_paid", "share_buybacks",
+    "operating_cash_flow"})
 
 # detail keys that name a filing, and the role the UI shows for each
 FILING_KEYS = {"accession_no": "source", "annual_accession": "annual",
@@ -134,6 +156,49 @@ def _is_outlier_seasonal(series: list[tuple[date, float]], at: date) -> bool:
         if beside and v * value > 0 and abs(v) >= PEAK * max(beside):
             years += 1
     return years >= SEASON_YEARS
+
+
+def is_outlier(value: float, a: float, b: float) -> bool:
+    """041's outlier test: the quarters beside it agree (same sign, the larger at most
+    NEIGHBOUR_SPREAD times the smaller) and it is at least OUTLIER_FACTOR times the larger."""
+    if a == 0 or b == 0 or (a > 0) != (b > 0):
+        return False
+    big, small = max(abs(a), abs(b)), min(abs(a), abs(b))
+    return big <= NEIGHBOUR_SPREAD * small and abs(value) >= OUTLIER_FACTOR * big
+
+
+def is_sign_change(value: float, a: float, b: float) -> bool:
+    """041's sign_flip test: none is zero, the quarters beside it share a sign, it has the other."""
+    return value != 0 and a != 0 and b != 0 and (a > 0) == (b > 0) and (value > 0) != (a > 0)
+
+
+def callouts(metric: str, series: list[tuple[date, float]]) -> list[dict]:
+    """The statement callouts of one metric's quarters, oldest first (module docstring): interior
+    quarters against the quarters either side, the newest against the two before it."""
+    out: list[dict] = []
+    n = len(series)
+    for i, (end, value) in enumerate(series):
+        if 0 < i < n - 1:
+            beside, edge = (series[i - 1], series[i + 1]), False
+        elif i == n - 1 and n >= 3:
+            beside, edge = (series[i - 2], series[i - 1]), True
+        else:
+            continue
+        a, b = beside[0][1], beside[1][1]
+        if is_outlier(value, a, b):
+            kind = "outlier"
+        elif metric in SIGN_METRICS and is_sign_change(value, a, b):
+            kind = "sign"
+        else:
+            continue
+        out.append({
+            "metric": metric, "period_end": end, "kind": kind, "edge": edge,
+            "value": value,
+            "factor": round(abs(value) / max(abs(a), abs(b)), 1) if kind == "outlier" else None,
+            "beside": [{"period_end": d, "value": v} for d, v in beside],
+            "seasonal": kind == "outlier" and _is_outlier_seasonal(series, end),
+        })
+    return out
 
 
 def _split_events(findings: list[dict]) -> list[dict]:

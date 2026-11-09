@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 
 from query_api.auth import Unauthenticated, mint, verify_claims
 from query_api.authorizer import Access, Authorizer, AuthzUnavailable, Readable
+from query_api.components import add_components_routes
 from query_api.connections import MarketData, add_connection_routes
 from query_api.csv_export import csv_response
 from query_api.demo import add_sandbox_routes, demo_company_resolver
@@ -35,6 +36,7 @@ from query_api.formula import (
 from query_api.github import Accounts, GitHub, GitHubConfig, add_github_routes, is_github_user
 from query_api.model_api import add_model_routes
 from query_api.notes import add_notes_routes
+from query_api.notes import callouts as statement_callouts
 from query_api.password_accounts import PasswordAccounts, add_password_routes
 from query_api.passwords import is_password_user
 from query_api.research import add_research_routes
@@ -350,6 +352,9 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
         """Metric names financials accepts: reported (silver.metrics) and derived."""
         return metric_names()
 
+    add_components_routes(app, store=store, current_user=current_user, require=require,
+                          metric_names=metric_names)
+
     @app.get("/v1/companies/{company_id}/financials", response_model=dict)
     def financials(
         user_id: User, company_id: CompanyId,
@@ -367,6 +372,10 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
             description="add `not_meaningful` (why a ratio reads n/m, migration 035) to each row, "
                         "and `not_meaningful_periods` for periods a ratio has no row because of "
                         "the company's equity")]
+            = False,
+        callouts: Annotated[bool, Query(
+            description="view=quarter: add `callouts`, quarters far outside their series or "
+                        "of the other sign from the quarters beside them (query_api.notes)")]
             = False,
     ) -> dict | Response:
         names = metric_names()
@@ -393,6 +402,13 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
                 {"metric": m, "period_end": end, "reason": reason}
                 for (m, end), reason in sorted(by_equity.items(),
                                                key=lambda x: (x[0][0], -x[0][1].toordinal()))]
+        if callouts and view == "quarter" and fmt == "json":
+            # every quarter of the series, not just the window: a quarter's neighbours can be
+            # outside it (F5; only for the web's statements, so the agent's JSON is unchanged)
+            base = sorted(set(metrics or every) & set(names["metrics"]))
+            series = store.metric_series(user_id, [company_id], base) if base else {}
+            meta["callouts"] = [c for (_, m), s in sorted(series.items())
+                                for c in statement_callouts(m, s)]
         if fmt == "csv":
             return csv_response(f"{company_id}-financials-{view}-{basis}.csv", FINANCIALS_CSV, ([
                 r["metric"], view, r["period_start"], r["period_end"],

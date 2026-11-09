@@ -1019,3 +1019,32 @@ def test_sectors_co_registrants_and_peer_check_run_as_query_api(client, token):
     check = client.get(f"/v1/companies/{A}/peers/check/{B}", headers=token("t-free"))
     assert check.status_code == 200, check.text
     assert check.json()["ok"] is True  # B has gold rows; AllowAll reads it
+
+
+def test_components_and_figure_facts_read_only_what_the_rule_allows(client, token):
+    """F5: gold.figure_facts (049) is SECURITY DEFINER over silver.financial_facts' values, so its
+    only rule is authz.readable_companies: t-free reads A's facts, not B's, whatever layer 1 says."""
+    conn = client.app_conn
+    for cid in (A, B):
+        conn.execute(
+            "INSERT INTO silver.financial_facts (cik, metric, tag, unit, period_start, period_end,"
+            " value, accession_no, form, filed) VALUES (%s, 'revenue', 'Revenues', 'USD',"
+            " '2026-04-01', '2026-06-30', 5, %s, '10-Q', '2026-08-01')", (cid, f"{cid}-26-000001"))
+    conn.execute("UPDATE gold.quarterly_financials SET period_start = '2026-04-01'"
+                 " WHERE company_id IN (%s, %s) AND metric = 'revenue'", (A, B))
+    with conn.transaction(), conn.cursor() as cur:
+        cur.execute("SET LOCAL ROLE query_api")
+        cur.execute("SELECT set_config('app.user_id', 't-free', true)")
+        seen = {c: cur.execute("SELECT tag, value FROM gold.figure_facts(%s, 'revenue',"
+                               " '2026-06-30')", (c,)).fetchall() for c in (A, B)}
+        cur.execute("SELECT set_config('app.user_id', '', true)")
+        nobody = cur.execute("SELECT count(*) FROM gold.figure_facts(%s, 'revenue', '2026-06-30')",
+                             (A,)).fetchone()
+        cur.execute("RESET ROLE")
+    assert seen == {A: [("Revenues", 5)], B: []} and nobody == (0,)
+    url = "/components?metric=revenue&period_end=2026-06-30"
+    mine = client.get(f"/v1/companies/{A}{url}", headers=token("t-free"))
+    assert mine.status_code == 200, mine.text
+    assert [(f["tag"], f["used"]) for f in mine.json()["facts"]] == [("Revenues", True)]
+    # layer 1 allows everything here: RLS alone hides B's figure
+    assert client.get(f"/v1/companies/{B}{url}", headers=token("t-free")).status_code == 404

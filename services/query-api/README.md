@@ -41,7 +41,8 @@ request parameters. Dev tokens: `make token USER=alice`.
 | `GET /v1/me` | token | `catalog`: `{public, tiers, companies}`, whether every catalog company is readable to the caller and with which tiers (`companies`: how many); `companies`: with the catalog public, only what the caller reads beyond it (private grants), else every company the caller can read, with tiers; `sandbox` (expiry, plan, assistant allowance) for a demo sandbox user; `github` (login, plan, the demo's company ids, assistant allowance) for a GitHub sign-in; `account` (username, plan, `agent_questions_per_day`) for a password account |
 | `GET /v1/companies/search?q=&access=&limit=` | token | tickers, CIKs and any part of a name, best match first (`silver.search_companies`, migration 034): public identity + caller's access; `limit` 1-25, default 5; `access=financials`: only companies you can read, narrowed before the limit |
 | `GET /v1/metrics` | | metric names served by `financials`: `silver.metrics` and `gold.derived_metrics`, read once |
-| `GET /v1/companies/{id}/financials?metrics=&quarters=&view=&basis=&format=` | financials | values + citation + freshness; `quarters` 1-120 (every quarter there is, the Statements tab's Max); `format=csv`: one row per value with its source filing |
+| `GET /v1/companies/{id}/financials?metrics=&quarters=&view=&basis=&format=&readings=&callouts=` | financials | values + citation + freshness; `quarters` 1-120 (every quarter there is, the Statements tab's Max); `format=csv`: one row per value with its source filing; `callouts=true` (view quarter): quarters far outside their series ([Statement callouts](#statement-callouts)) |
+| `GET /v1/companies/{id}/components?metric=&period_end=&view=` | financials | what one figure is made of: a derived figure's inputs, a TTM's quarters, a sum's parts, and the tags, values and filings behind each ([Reported vs standardised](#reported-vs-standardised)) |
 | `GET /v1/companies/{id}/segments?axis=&metric=&quarters=&view=&basis=&format=` | financials | values per segment member (business segment, geography, product/service, reconciliation), exact decimal strings, citation per value ([Segments](#segments)) |
 | `GET /v1/companies/{id}/filings?limit=&accession_no=` | filings | recent parsed filings (or one) and their section outline, no text |
 | `GET /v1/companies/{id}/filing-index?form=&from=&to=&limit=&offset=` | token | every filing in the SEC index (public metadata), newest first; `sections` count only where the caller can read filings (OpenFGA check, then RLS) |
@@ -864,6 +865,48 @@ once-a-day refresh, rate limits, disconnect deletes the prices, valuation formul
 Tiingo adapter over `httpx.MockTransport` with `tests/fixtures/`, never Tiingo itself) and
 `test_connections_db.py` (the three tables' forced owner RLS for another user and for no user,
 WITH CHECK, cascades, checks; `APP_TEST_DATABASE_URL`).
+
+## Statement callouts
+
+`/financials?callouts=true` (F5, `query_api/notes.py` `callouts`, its docstring is the spec) adds
+`callouts` for view `quarter`: for each base metric asked for, every quarter of its gold series (not
+just the window, since a quarter's neighbours can be outside it), tested as ops.check_financials (041)
+tests it:
+
+- `outlier`: at least 10 times the larger of the quarters either side, which agree (same sign, within
+  2x of each other); `seasonal` when the same quarter peaks in two other years too (the data notes'
+  rule). NVIDIA's dividends: 6,047M after 243M and 242M (`factor` 24.9).
+- `sign`: the other sign from both quarters beside it, on 041's sign_flip metrics (costs) and operating
+  cash flow (JPMorgan's swings between -$251.8B and +$147.8B). Never on the cash flow subtotals or the
+  change in cash: they change sign as a matter of course.
+- The newest quarter has no quarter after it, so 041 never tests it: here it is tested against the two
+  quarters before it (`edge: true`). That is how a step change shows.
+
+Each callout: `metric`, `period_end`, `kind`, `edge`, `value`, `factor` (outliers), `beside` (the two
+quarters compared, with values) and `seasonal`. It says what a figure is next to, never that it is
+wrong. Without `callouts=true` the answer is unchanged (the agent's `get_financials` reads it);
+`test_callouts.py` checks the thresholds against 041's SQL text.
+
+## Reported vs standardised
+
+`GET /v1/companies/{id}/components?metric=&period_end=&view=quarter|ttm` (F5, `query_api/components.py`,
+its docstring is the spec): one figure opened into what gold made it of, the FactSet/Koyfin pattern.
+`require(financials)` first, then `Store.components` in one session under RLS: the figure's
+`gold.financials` row, its inputs' rows at the same date, `gold.figure_facts` (migration 049) for each
+row built from facts, and the derived metric's definition. One company, one date.
+
+- `how`: `derived` (net debt, cash and investments, free cash flow, gross margin...: `components` from
+  the row's stored `inputs`, each with its role `+`, `-`, `numerator`, `denominator`, its own gold
+  figure and citation; a left-out input says why: `inside_cash` or `not_reported`), `ttm` (`parts`:
+  the four quarters, or the year a 10-K states), `sum` (a line tagged as parts, 038), `computed`
+  (gross profit as revenue less cost, 039: `parts` are the two), `ytd` (a quarter from year-to-date
+  figures: the two facts), `reported`.
+- `facts` (quarter view): the fact selection, every mapped tag with a value for the period, its
+  `priority`, whether it is a `line` or only part of a sum, its filing, how many `filings` stated it,
+  and which gold `used`. `gold.figure_facts` is SECURITY DEFINER (query_api has two columns of
+  `silver.financial_facts`) with `authz.readable_companies('financials')` as its only rule, like 036.
+- Values are exact decimal strings. 404 when gold has no figure there (or RLS hides it); 422 for a
+  metric `/v1/metrics` doesn't list.
 
 ## Segments
 

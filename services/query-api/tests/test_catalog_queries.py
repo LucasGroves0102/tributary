@@ -29,7 +29,10 @@ ROUTES = ["/v1/screener?limit=50", "/v1/screener?limit=50&access=financials",
           "/v1/data-notes", f"/v1/companies/{NVDA}/peers", "/v1/watchlist",
           "/v1/calendar/expected-filings?scope=readable", f"/v1/companies/{NVDA}/events",
           f"/v1/companies/{NVDA}/earnings?quarters=8",
-          f"/v1/companies/{NVDA}/filings/0001045810-26-000021/changes?view=ranked&q=tariffs"]
+          f"/v1/companies/{NVDA}/filings/0001045810-26-000021/changes?view=ranked&q=tariffs",
+          # F5: one company's statement callouts and one figure's components
+          f"/v1/companies/{NVDA}/financials?quarters=120&callouts=true",
+          f"/v1/companies/{NVDA}/components?metric=net_debt&period_end=2026-07-26"]
 
 
 def meta(cid):
@@ -115,6 +118,20 @@ class RecordingStore:
                 "peers": [{"peer_id": c, "similarity": 0.3, "terms": ["gpu"]}
                           for c in (OUTSIDE, "0000000002")],
                 "mentions": []}
+
+    def answer_metric_names(self, *_):
+        return {"metrics": ["dividends_paid"], "derived_metrics": ["net_debt"]}
+
+    def answer_metric_series(self, *_):
+        return {(NVDA, "dividends_paid"): [(date(2026, 1, 25), 242.0), (date(2026, 4, 26), 243.0),
+                                           (date(2026, 7, 26), 6047.0)]}
+
+    def answer_components(self, *_):
+        return {"row": {"metric": "net_debt", "period_start": None, "period_end": date(2026, 7, 26),
+                        "value": Decimal(-1), "unit": "USD", "value_source": "computed",
+                        "source_tag": None, "inputs": {"cash": 1}, "accession_no": "a",
+                        "form": "10-Q", "filed": date(2026, 8, 26), "source_accessions": ["a"]},
+                "rows": {}, "facts": {}, "definition": None, "present": set()}
 
     def answer_peer_facts(self, user_id, ids, granted):
         return {c: {"sic": "3674", "sector": "Technology", "sector_industry": "Semiconductors",

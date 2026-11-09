@@ -62,6 +62,11 @@ CATALOG: dict[str, tuple[str, tuple[str, ...]]] = {
     "net_interest_income": ("USD", BOTH), "noninterest_income": ("USD", BOTH),
     "noninterest_expense": ("USD", BOTH), "provision_for_credit_losses": ("USD", BOTH),
     "loans": ("USD", BOTH), "deposits": ("USD", BOTH), "cet1_ratio": ("pure", BOTH),
+    # 049: the cash flow statement's subtotals and its ending cash, contract balances, payables
+    "investing_cash_flow": ("USD", BOTH), "financing_cash_flow": ("USD", BOTH),
+    "change_in_cash": ("USD", BOTH), "cash_and_restricted_cash": ("USD", BOTH),
+    "contract_liabilities_current": ("USD", BOTH), "contract_liabilities": ("USD", BOTH),
+    "remaining_performance_obligations": ("USD", BOTH), "accounts_payable": ("USD", BOTH),
     # derived
     "gross_margin": ("ratio", BOTH), "operating_margin": ("ratio", BOTH),
     "net_margin": ("ratio", BOTH), "free_cash_flow": ("USD", BOTH),
@@ -69,7 +74,7 @@ CATALOG: dict[str, tuple[str, tuple[str, ...]]] = {
     "net_income_growth": ("ratio", BOTH), "eps_growth": ("ratio", QUARTER),
     "payout_ratio": ("ratio", BOTH), "debt_to_equity": ("ratio", BOTH),
     "net_debt": ("USD", BOTH), "current_ratio": ("ratio", BOTH), "roe": ("ratio", TTM),
-    "efficiency_ratio": ("ratio", BOTH),
+    "efficiency_ratio": ("ratio", BOTH), "cash_and_investments": ("USD", BOTH),
 }
 UNITS = {"ratio": (0, 0), "USD": (1, 0), "shares": (0, 1), "USD/shares": (1, -1),
          "pure": (0, 0)}
@@ -82,7 +87,9 @@ BALANCES = frozenset({
     "cash", "short_term_investments", "receivables", "inventory", "current_assets",
     "total_assets", "current_liabilities", "long_term_debt_current", "long_term_debt",
     "total_liabilities", "stockholders_equity", "net_debt", "shares_outstanding",
-    "loans", "deposits", "cet1_ratio"})
+    "loans", "deposits", "cet1_ratio",
+    "cash_and_restricted_cash", "contract_liabilities_current", "contract_liabilities",
+    "remaining_performance_obligations", "accounts_payable", "cash_and_investments"})
 # everything that describes one date and so has no trailing twelve months: the balances, and the
 # ratios of two balances
 POINT_IN_TIME = BALANCES | {"debt_to_equity", "current_ratio"}
@@ -91,7 +98,7 @@ POINT_IN_TIME = BALANCES | {"debt_to_equity", "current_ratio"}
 DERIVED = frozenset({
     "gross_margin", "operating_margin", "net_margin", "free_cash_flow", "fcf_margin",
     "revenue_growth", "net_income_growth", "eps_growth", "payout_ratio", "debt_to_equity",
-    "net_debt", "current_ratio", "roe", "efficiency_ratio"})
+    "net_debt", "current_ratio", "roe", "efficiency_ratio", "cash_and_investments"})
 _NAMES = {v: k for k, v in UNITS.items() if k != "pure"}  # (0, 0) reads "ratio"
 _LABELS = {"ratio": "a ratio", "USD": "dollars", "shares": "shares",
            "USD/shares": "dollars per share"}
