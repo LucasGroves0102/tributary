@@ -5745,6 +5745,12 @@ details.routine summary {
   min-width: 240px;
 }
 
+/* narrow, "Why" moves under the name (@container tw below 1040px): it wraps there, never cut (#173) */
+.t.peers .first .co-sub {
+  white-space: normal;
+  text-overflow: clip;
+}
+
 .t.peers .alike {
   font-weight: 600;
   color: var(--text-2);

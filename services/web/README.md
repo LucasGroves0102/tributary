@@ -719,7 +719,8 @@ Compare's dollar charts can also read on a log scale or indexed to the first val
 saved; it says so when the largest company is over 100 times the smallest). "Chart these" and Peers'
 "Chart margins" draw at most 8 companies, the colours a chart tells apart, and say so. The Peers table
 sorts by any column like Compare (`compare/state.ts` `nextSort`/`sortRows`: high first, again to reverse,
-a third time for the suggested order; empty cells last).
+a third time for the suggested order; empty cells last). Revenue growth is green or red; below 1,040px
+"Why" moves under the name and wraps there instead of being cut (#173).
 
 Peers (F4, H6; the company page's Peers tab and Compare's suggestions): the Query API suggests peers by
 what companies do (their 10-K Business sections compared word by word, competitors either one names,
