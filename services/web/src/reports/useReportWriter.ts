@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { agentError, ApiError, writeReport } from "../api";
 import type { AgentEvent } from "../types";
+import { sentence } from "../components/States";
 
 /** One report run (agent-api /v1/reports): writing, then saved or failed. It lives with the
  * app, so moving to another screen doesn't stop it. */
@@ -71,7 +72,7 @@ export function useReportWriter(
             setRun({ status: "idle" });
             return;
           }
-          fail(err instanceof ApiError ? err.message : "The assistant is unreachable.");
+          fail(err instanceof ApiError ? sentence(err.message) : "The assistant is unreachable.");
         });
     },
     [token, run.status],

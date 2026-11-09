@@ -70,10 +70,18 @@ export function failureReason(e: unknown): string {
   return e instanceof ApiError && e.status < 500 && e.message ? e.message : NOT_ANSWERING;
 }
 
+/** What a refusal without a detail says: Cloudflare's own rate limit (a few requests to the assistant
+ * from one network within seconds) answers 429 with an HTML page, and over HTTP/2 there is no status
+ * text, so the message would be empty (L6). */
+export function noDetail(status: number, statusText: string): string {
+  if (status === 429) return "too many requests from this network in the last few seconds; wait a moment and try again";
+  return statusText || `the request was refused (${status})`;
+}
+
 async function json<T>(r: Response): Promise<T> {
   if (!r.ok) {
     const body = await r.json().catch(() => ({}));
-    throw new ApiError(typeof body.detail === "string" ? body.detail : r.statusText, r.status);
+    throw new ApiError(typeof body.detail === "string" ? body.detail : noDetail(r.status, r.statusText), r.status);
   }
   return displayNames(await r.json()) as T;
 }
@@ -513,7 +521,7 @@ async function formulaPost<T>(token: string, path: string, body: FormulaRequest)
     const data = await r.json().catch(() => ({}));
     const errors = data?.detail?.errors;
     if (Array.isArray(errors)) throw new FormulaApiError(errors as FormulaProblem[], r.status);
-    throw new ApiError(typeof data.detail === "string" ? data.detail : r.statusText, r.status);
+    throw new ApiError(typeof data.detail === "string" ? data.detail : noDetail(r.status, r.statusText), r.status);
   }
   return displayNames(await r.json()) as T;
 }
@@ -560,7 +568,7 @@ export function askFailure(e: unknown): string {
   if (!(e instanceof ApiError)) return "The assistant is unreachable. Try again in a moment.";
   if (e.status === 422) return "That question couldn't be sent: it's empty or longer than 2,000 characters.";
   if (e.status >= 500) return "The assistant isn't answering right now. Try again in a moment.";
-  return e.message;
+  return e.message.charAt(0).toUpperCase() + e.message.slice(1);
 }
 
 /** Reads a server-sent event stream to its end. */

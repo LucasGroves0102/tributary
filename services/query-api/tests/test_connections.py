@@ -175,7 +175,12 @@ def connect(w, token, user="alice", key=KEY):
 def test_every_route_is_absent_without_a_master_key(token):
     app = create_app(FakeAuthorizer(GRANTS), Store(), SECRET)
     c = TestClient(app)
-    for method, path in [("GET", "/v1/connections"), ("PUT", "/v1/connections/tiingo"),
+    # the question the web app asks on every load answers "nothing offered", not a 404 (an
+    # error line in every visitor's console); it still needs a token
+    r = c.get("/v1/connections", headers=token("alice"))
+    assert r.status_code == 200 and r.json() == {"providers": [], "connections": []}
+    assert c.get("/v1/connections").status_code == 401
+    for method, path in [("PUT", "/v1/connections/tiingo"),
                          ("DELETE", "/v1/connections/tiingo"),
                          ("GET", f"/v1/companies/{NVDA}/prices"),
                          ("GET", f"/v1/companies/{NVDA}/valuation")]:

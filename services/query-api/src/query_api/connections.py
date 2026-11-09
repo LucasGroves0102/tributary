@@ -1,8 +1,10 @@
 """Connect your data (Phase 9 C): each user's own market-data key, and prices fetched with it.
 
 Off unless DATA_CONNECTIONS_KEY holds a master key (query_api.keybox): without it
-`add_connection_routes` adds no route, so every path below answers 404 and the web app hides
-the feature. On, for the caller only (the user is always the JWT `sub`):
+`add_connection_routes` adds only `GET /v1/connections`, which answers no providers and no
+connections (the web app asks on every load, and a 404 would be an error line in every visitor's
+console); every other path below answers 404 and the web app hides the feature. On, for the
+caller only (the user is always the JWT `sub`):
 
   GET    /v1/connections                     providers offered + the caller's connections
                                              (provider, "…last4", dates; never the key)
@@ -356,9 +358,15 @@ def _bad(status: int, code: str, message: str) -> JSONResponse:
 def add_connection_routes(app: FastAPI, *, market: MarketData | None, store: Any,
                           current_user: Callable[..., str],
                           require: Callable[[str, str, str], None]) -> None:
-    if market is None:
-        return  # feature off: no route exists (404), the web app hides it
     User = Annotated[str, Depends(current_user)]
+    if market is None:
+        # feature off: nothing offered and nothing connected (the web app hides it); every other
+        # route of the feature is absent (404)
+        @app.get("/v1/connections")
+        def no_connections(user_id: User) -> dict:
+            return {"providers": [], "connections": []}
+
+        return
 
     @app.get("/v1/connections")
     def list_connections(user_id: User) -> dict:

@@ -63,7 +63,7 @@ request parameters. Dev tokens: `make token USER=alice`.
 | `GET /v1/companies/{id}/expected-filings?periods=` | token | estimated next 10-Q/10-K dates with their basis |
 | `GET /v1/filings/{accession}/recap?metrics=` | financials (flags: filings) | metrics vs prior quarter and year-ago, cited; one-time-item flags |
 | `GET /v1/companies/{id}/peers?limit=&columns=&access=` | token | suggested peers (SIC, size band, filer category), values where permitted |
-| `GET /v1/connections` | `DATA_CONNECTIONS_KEY`, token | providers offered and the caller's market-data connections (provider, `…last4`, dates; never the key) ([Connect your data](#connect-your-data)) |
+| `GET /v1/connections` | token | providers offered and the caller's market-data connections (provider, `…last4`, dates; never the key); both empty without `DATA_CONNECTIONS_KEY` ([Connect your data](#connect-your-data)) |
 | `PUT /v1/connections/{provider}` | `DATA_CONNECTIONS_KEY`, token | `{"api_key": "…"}`: validated with one provider call, stored encrypted |
 | `DELETE /v1/connections/{provider}` | `DATA_CONNECTIONS_KEY`, token | deletes the key and every price fetched with it |
 | `GET /v1/companies/{id}/prices?from=&to=` | `DATA_CONNECTIONS_KEY`, financials, the caller's own connection | the caller's end-of-day closes (exact decimals), refreshed at most once per US Eastern day |
@@ -612,8 +612,10 @@ end-of-day prices with that key, stores them for that user only and shows them o
 user. There is no shared price cache across users (`connections.py`, `keybox.py`,
 `providers.py`, `valuation.py`, app migration 011).
 
-**Off unless `DATA_CONNECTIONS_KEY` is set.** Without it no route below exists (404) and the web
-app hides the feature, so deploying the code changes nothing. A malformed value stops the API
+**Off unless `DATA_CONNECTIONS_KEY` is set.** Without it `GET /v1/connections` answers
+`{"providers": [], "connections": []}` (the web app asks on every load; a 404 there was an error
+line in every visitor's console), every other route below is absent (404), and the web app hides
+the feature, so deploying the code changes nothing. A malformed value stops the API
 at start (never a silent "off"). It needs `APP_DATABASE_URL`.
 
 **Provider: Tiingo** (end-of-day daily prices, US equities). Chosen because its developer guide

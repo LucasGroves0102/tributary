@@ -211,6 +211,16 @@ describe("Home", () => {
     expect($(".undo-note")).toBeNull();
   });
 
+  it("doesn't say 0 new filings while they're still loading (L6)", async () => {
+    vi.mocked(fetch).mockImplementation(async (url: string | URL | Request, init?: RequestInit) =>
+      String(url).includes("/v1/filings/latest") ? new Promise<Response>(() => undefined) : respond(String(url), init));
+    await render();
+    const tile = [...container.querySelectorAll(".status-strip .k")].find((k) => k.textContent?.startsWith("New "))!;
+    const v = tile.parentElement!.querySelector(".v")!;
+    expect(v.textContent).toBe("…");
+    expect(tile.parentElement!.textContent).not.toContain("0 filings");
+  });
+
   it("says the same thing about new filings wherever it counts them", async () => {
     await render();
     const badge = $(".nav .cnt.new")!;

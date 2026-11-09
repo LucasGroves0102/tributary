@@ -54,7 +54,7 @@ export function Home({ workspace, lastIngested, listed = null, onAdd, onExport, 
     switch (id) {
       case "status":
         return watchlist.state === "ok" ? (
-          <StatusStrip rows={rows} fresh={workspace.fresh} scope={workspace.freshScope} since={sinceLabel(since, firstVisit)} lastIngested={lastIngested} listed={listed} />
+          <StatusStrip rows={rows} fresh={workspace.filings === null ? null : workspace.fresh} scope={workspace.freshScope} since={sinceLabel(since, firstVisit)} lastIngested={lastIngested} listed={listed} />
         ) : null;
       case "recent":
         return recent ? (
@@ -176,15 +176,15 @@ function StatusStrip({
   listed,
 }: {
   rows: WatchRow[];
-  /** the new filings to count (Workspace.fresh) */
-  fresh: FilingItem[];
+  /** the new filings to count (Workspace.fresh); null while they load, which isn't "0 filings" (L6) */
+  fresh: FilingItem[] | null;
   scope: string;
   /** sinceLabel */
   since: string;
   lastIngested: string | null;
   listed: string | null;
 }) {
-  const s = status(rows, fresh);
+  const s = status(rows, fresh ?? []);
   return (
     <div className="status-strip" role="list" aria-label="Status">
       <div role="listitem">
@@ -198,12 +198,21 @@ function StatusStrip({
       </div>
       <div role="listitem">
         <div className="k">New {since}</div>
-        <div className="v">
-          {s.newFilings} {s.newFilings === 1 ? "filing" : "filings"}
-        </div>
-        <div className="p">
-          on {scope} · {s.newPeriodic} 10-K/10-Q · {s.new8k} 8-K
-        </div>
+        {fresh === null ? (
+          <>
+            <div className="v faint" aria-busy="true">…</div>
+            <div className="p">on {scope} · counting</div>
+          </>
+        ) : (
+          <>
+            <div className="v">
+              {s.newFilings} {s.newFilings === 1 ? "filing" : "filings"}
+            </div>
+            <div className="p">
+              on {scope} · {s.newPeriodic} 10-K/10-Q · {s.new8k} 8-K
+            </div>
+          </>
+        )}
       </div>
       <div role="listitem" title={s.next?.expected.basis}>
         <div className="k">Next expected</div>

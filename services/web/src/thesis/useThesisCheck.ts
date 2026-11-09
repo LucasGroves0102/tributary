@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { agentError, ApiError, checkThesis, failureReason, thesisCheck, thesisChecks } from "../api";
 import type { AgentEvent, ThesisCheck, ThesisCheckSummary } from "../types";
+import { sentence } from "../components/States";
 
 /** One thesis's checks: the history (newest first), the one shown, the one before it (what
  * "Changes since" compares with), and a run in progress. */
@@ -95,7 +96,7 @@ export function useThesisCheck(token: string, itemId: string | null): ThesisChec
       .catch((err) => {
         if (!live.current) return;
         if (err instanceof DOMException && err.name === "AbortError") setRun({ status: "idle" });
-        else setRun({ status: "error", message: err instanceof ApiError ? err.message : "The assistant is unreachable." });
+        else setRun({ status: "error", message: err instanceof ApiError ? sentence(err.message) : "The assistant is unreachable." });
       });
   }, [token, itemId, run.status]);
 

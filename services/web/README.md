@@ -687,4 +687,8 @@ plus a Chrome download didn't fit the CI and laptop budget; these sizes are the 
 `/metrics`, forwards a request ID, and passes Cloudflare's `CF-Connecting-IP` to agent-api as
 `X-Client-IP` for its per-IP limit. `deploy/headers.conf` sets CSP, HSTS, nosniff,
 Referrer-Policy and Permissions-Policy on every response. On k3s only the `cloudflared`
-namespace can reach it.
+namespace can reach it. The page itself goes out with `Cache-Control: no-transform`, so Cloudflare
+serves it as built: its Web Analytics "automatic setup" injected a beacon script from
+`static.cloudflareinsights.com`, which the CSP blocked on every load (a console error, and nothing
+measured). The CSP stays as it is; if the beacon still shows up, turn the zone's Web Analytics
+automatic setup off in the Cloudflare dashboard.
