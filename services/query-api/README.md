@@ -80,10 +80,10 @@ request parameters. Dev tokens: `make token USER=alice`.
 | `GET /v1/alerts/settings` | token, app DB | followed companies (watchlist, analysis projects) with the forms alerted, webhooks (URL masked, never the secret), whether email is on, the last check |
 | `PUT /v1/alerts/settings/{id}` | token, app DB | `{"forms": ["10-K", "10-Q", "8-K"]}` (any subset; `[]` = none) for one company |
 | `GET /v1/alerts/red-lines?company_id=&evaluate=` | token, app DB (`evaluate`: financials on the company) | the caller's red lines; with `evaluate=true` each on the company's latest figures |
-| `POST /v1/alerts/red-lines` | token, app DB | `{company_id, label, formula, view, op, threshold}`: a formula-language rule (no ticker), checked like a chart formula; at most 10 per company |
+| `POST /v1/alerts/red-lines` | token, app DB | `{company_id, label, formula, view, op, threshold}`: a formula-language rule (no ticker, printable ASCII, no control characters in the label), checked like a chart formula; at most 10 per company and 200 per user |
 | `DELETE /v1/alerts/red-lines/{rule}` | token, app DB | the caller's own; another's is the same 404 as none |
 | `GET /v1/alerts/webhooks` | token, app DB | the caller's webhooks: masked URL, format, on/off, last delivery |
-| `POST /v1/alerts/webhooks` | token (not a demo sandbox: 403), app DB | `{"url", "format"?}` parsed by hand (a 422 never echoes the URL): https to a public address only (checked after DNS); answers the signing secret once; at most 3 |
+| `POST /v1/alerts/webhooks` | token (not a demo sandbox: 403), app DB | `{"url", "format"?}` parsed by hand (a 422 never echoes the URL): https to a public address only (checked after DNS; 20 attempts an hour); stored with its scheme and host in lower case; answers the signing secret once; at most 3 |
 | `PATCH /v1/alerts/webhooks/{id}` | token, app DB | `{"enabled": bool}` |
 | `POST /v1/alerts/webhooks/{id}/rotate` | token, app DB | a new signing secret, shown once |
 | `DELETE /v1/alerts/webhooks/{id}` | token, app DB | the webhook and its delivery log |
@@ -931,18 +931,24 @@ migration 016 (owner-only, forced RLS, not streamed).
   and the red lines only for the filings that just arrived. One pod for a few seconds every 10
   minutes; no SEC requests; no Kafka.
 - **Webhooks** (`webhooks.py`, its docstring is the spec). https only, port 443, no user info, no
-  internal names; the name is resolved and refused if any answer is private, loopback, link-local
-  (169.254.169.254), shared, reserved, multicast, or an IPv6 form of one (mapped, NAT64, 6to4,
-  Teredo), when saved and again before every send, and the request goes to the address just
-  checked (no rebinding). Redirects are never followed. 3 s to connect, 8 s a send, 16 KiB body,
-  4 KiB of the answer read. Each request is signed: `X-Tributary-Signature: v1=` HMAC-SHA256 of
+  IPv6 zone, an ASCII path, no internal names; the name is resolved as an absolute name (no search
+  domains: a cluster's short service names don't resolve) and refused if any answer is private,
+  loopback, link-local (169.254.169.254), shared, reserved, multicast, site-local, or an IPv6 form
+  of one (mapped, NAT64, 6to4, Teredo), when saved and again before every send, and the request
+  goes to the address just checked (no rebinding). Redirects are never followed. 3 s per socket
+  operation and a hard 8 s for the whole send (the exchange runs on a worker thread and the socket
+  is shut down at the deadline, so an endpoint trickling bytes can't hold a thread: a test does it
+  over a real socket), 16 KiB body, 4 KiB of the answer read; any failure is a short code. Each request is signed: `X-Tributary-Signature: v1=` HMAC-SHA256 of
   `timestamp.body` with the webhook's secret, which is derived from the JWT secret, the webhook id
   and a random salt (never stored, shown once on create or rotate, never logged; rotating the JWT
   secret changes them all). The URL is stored (forced RLS) and returned masked. Delivery log with
   retries after 5 min, 30 min, 2 h and 6 h, then failed; errors are codes. The job sends after
   every user's alerts are made, users in a random order, 10 deliveries per user per run, a webhook
   that times out or can't be reached skipped for the rest of the run, nothing started after 240 s:
-  a slow or hostile endpoint delays only its owner. Webhooks need a permanent account (GitHub or a
+  a slow or hostile endpoint delays only its owner. Each send is recorded as soon as it's made,
+  and a retry sends figures only while the user can still read the company (layer 1 again).
+  Making alerts also runs users in a random order within 240 s; a user not reached waits for the
+  next run (the 3-day window covers it). Webhooks need a permanent account (GitHub or a
   password account): an anonymous demo sandbox gets a 403, so a visitor can't make the server post
   to a URL of their choosing. The Helm network policy (443 to public addresses only) is a second
   layer under these checks.
