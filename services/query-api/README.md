@@ -45,6 +45,7 @@ request parameters. Dev tokens: `make token USER=alice`.
 | `GET /v1/companies/{id}/financials?metrics=&quarters=&view=&basis=&format=&readings=&callouts=` | financials | values + citation + freshness; `quarters` 1-120 (every quarter there is, the Statements tab's Max); `format=csv`: one row per value with its source filing; `callouts=true` (view quarter): quarters far outside their series ([Statement callouts](#statement-callouts)) |
 | `GET /v1/companies/{id}/components?metric=&period_end=&view=` | financials | what one figure is made of: a derived figure's inputs, a TTM's quarters, a sum's parts, and the tags, values and filings behind each ([Reported vs standardised](#reported-vs-standardised)) |
 | `GET /v1/companies/{id}/filings/{accession}/figures` | financials | what one filing itself says: its facts as gold reads them and the net debt, cash and investments and free cash flow computed from that filing alone; the thesis check's H2 guard reads it ([Reported vs standardised](#reported-vs-standardised)) |
+| `GET /v1/companies/{id}/insiders?limit=&before=` | filings | insider filings (Forms 3, 4, 5), newest first: owners and roles, each line's code (in words), shares, price, value and shares owned after, a per-filing summary ([Insider filings](#insider-filings)) |
 | `GET /v1/companies/{id}/segments?axis=&metric=&quarters=&view=&basis=&format=` | financials | values per segment member (business segment, geography, product/service, reconciliation), exact decimal strings, citation per value ([Segments](#segments)) |
 | `GET /v1/companies/{id}/filings?limit=&accession_no=` | filings | recent parsed filings (or one) and their section outline, no text |
 | `GET /v1/companies/{id}/filing-index?form=&from=&to=&limit=&offset=` | token | every filing in the SEC index (public metadata), newest first; `sections` count only where the caller can read filings (OpenFGA check, then RLS) |
@@ -1228,6 +1229,22 @@ no stored row changes and nothing is rebuilt.
 - Per company, per filing: the same three per-accession reads as without a view plus
   `section_bases`; no catalog ids, no `@@` (the topic is matched in Python on the passages the
   caller already read under RLS).
+
+## Insider filings
+
+`GET /v1/companies/{id}/insiders` (#117, `insiders.py`, its docstring is the spec): `require(filings)`
+first (a filing's content), then `Store.insider_filings` under RLS (`silver.insider_filings` and
+`silver.insider_transactions`, migration 054, `granted_filings` on company_id): one session, the
+newest `limit` (1-100, default 50) filings filed before `before`, then their lines by accession (at
+most 101). Silver is parsed in SQL from the SEC's ownershipDocument XML (doc-fetcher stores it), so
+every figure is as filed. Per filing: `owners` (name, CIK, `roles`: Director, the officer title,
+10% owner, other), `aff10b5_one` (a Rule 10b5-1 plan), `summary` (shares and value bought (P), sold
+(S) and other), `lines` in document order (`kind` transaction or holding, `derivative`, `code` and
+`code_label` from the SEC's Form 4 codes, `shares`, `price`, `value` = shares x price for a priced
+transaction, `acquired_disposed`, `shares_after`, `direct_indirect`, `nature`, a derivative's exercise
+price and underlying), and a `citation` to the filing on EDGAR. Numbers are exact decimal strings.
+Amendments are listed as filed, never netted. Not an agent tool (yet): the recorded suites are
+unchanged.
 
 ## Search
 

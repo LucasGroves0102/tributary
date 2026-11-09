@@ -9,6 +9,10 @@ Which filings (`Coverage.scope`):
 
 Everything else (amendments, the daily index's late filings, the 8-Ks left out here, anything a
 fetch error dropped) is the document crawl's, which skips whatever this stored first.
+
+Insider filings (Forms 3/4/5, #117; `ownership.py`, FETCH_INSIDERS): each one in the live feed
+under an operating or tracked company's CIK as issuer is fetched (one request), stored in bronze
+and parsed into silver; `doc-fetcher-insiders` backfills a bounded window.
 """
 
 import json
@@ -25,6 +29,7 @@ import psycopg
 from confluent_kafka import Consumer, KafkaError, KafkaException, Producer
 from prometheus_client import Counter
 
+from doc_fetcher import ownership
 from doc_fetcher.db import (
     already_fetched,
     insert_document,
@@ -56,21 +61,28 @@ DOCUMENTS = Counter("tributary_documents_fetched_total",
 PASSED = Counter("tributary_documents_passed_total",
                  "Filings of operating companies read but not stored: 8-Ks with none of the"
                  " fetched items", ["form"])
+INSIDERS = Counter("tributary_insider_filings_fetched_total",
+                   "Insider filings (Forms 3/4/5) fetched from the live feed and stored", ["form"])
+
+
+def _on(env: Mapping[str, str], name: str) -> bool:
+    return env.get(name, "true").strip().lower() not in ("false", "0", "no")
 
 
 @dataclass(frozen=True)
 class Config:
     operating: bool = True                            # FETCH_OPERATING
     eight_k_items: frozenset[str] | None = frozenset(MATERIAL_8K_ITEMS)  # None: every 8-K
+    insiders: bool = True                             # FETCH_INSIDERS
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] = os.environ) -> "Config":
         items = env.get("FETCH_8K_ITEMS", ",".join(MATERIAL_8K_ITEMS))
         return cls(
-            operating=env.get("FETCH_OPERATING", "true").strip().lower()
-            not in ("false", "0", "no"),
+            operating=_on(env, "FETCH_OPERATING"),
             eight_k_items=(None if items.strip().lower() == "all"
                            else frozenset(i.strip() for i in items.split(",") if i.strip())),
+            insiders=_on(env, "FETCH_INSIDERS"),
         )
 
 
@@ -84,6 +96,11 @@ class Coverage:
     def load(cls, conn: psycopg.Connection, config: Config) -> "Coverage":
         return cls(frozenset(tracked_ciks(conn)),
                    frozenset(operating_ciks(conn)) if config.operating else frozenset())
+
+    @property
+    def issuers(self) -> frozenset[str]:
+        """Whose insider filings are stored: every tracked and operating company's."""
+        return self.tracked | self.operating
 
     def scope(self, event: dict) -> str | None:
         """'all': a tracked company's filing; 'live': another operating company's filing from
@@ -118,12 +135,14 @@ def main() -> None:
     with psycopg.connect(dsn, autocommit=True) as conn, \
             sec_client(os.environ["SEC_USER_AGENT"]) as client:
         coverage, refreshed = Coverage.load(conn, config), time.monotonic()
+        issuers = coverage.issuers if config.insiders else frozenset()
         log.info("consuming %s; %d tracked CIKs, %d operating CIKs", IN_TOPIC,
                  len(coverage.tracked), len(coverage.operating))
         try:
             while not stop.is_set():
                 if time.monotonic() - refreshed > TRACKED_REFRESH_SECONDS:
                     coverage, refreshed = Coverage.load(conn, config), time.monotonic()
+                    issuers = coverage.issuers if config.insiders else frozenset()
                 msg = consumer.poll(1.0)
                 if msg is None:
                     continue
@@ -134,6 +153,8 @@ def main() -> None:
                 CONSUMED.labels(IN_TOPIC).inc()
                 try:
                     event = json.loads(msg.value())
+                    if ownership.wanted(event, issuers):
+                        handle_insider(conn, client, event)
                     scope = coverage.scope(event)
                     if scope is not None:
                         handle(conn, client, producer, event,
@@ -189,6 +210,18 @@ def handle(conn: psycopg.Connection, client: httpx.Client, producer: Producer, e
              extra={"cik": cik, "form": form, "accession_no": accession,
                     "size_bytes": len(doc_resp.content)})
     return True
+
+
+def handle_insider(conn: psycopg.Connection, client: httpx.Client, event: dict) -> bool:
+    """One insider filing from the feed: stored once (idempotent on the accession)."""
+    accession, form = event["accession_no"], event["form_type"]
+    if ownership.stored(conn, accession):
+        return False
+    done = ownership.fetch(conn, client, accession, event["cik"], form,
+                           ownership.filed_on(event["filed_at"]))
+    if done:
+        INSIDERS.labels(form).inc()
+    return done
 
 
 def fetch_exhibits(conn: psycopg.Connection, client: httpx.Client, accession: str,

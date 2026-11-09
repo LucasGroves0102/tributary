@@ -8,6 +8,8 @@
 
 `filings.raw` has one event per filer, so a Form 4 produces two events (Reporting + Issuer)
 with the same accession number. Consumers must be idempotent on `(accession_no, cik)`.
+doc-fetcher stores a Form 3/4/5 once, from the event that isn't the reporting owner's, when that
+CIK is a tracked or operating company's (insider filings, migration 054); the shape is unchanged.
 
 `source` is `feed` (live poller; `filed_at` is the exact acceptance time), `daily-index`
 (backfill; `filed_at` is midnight US Eastern and `role` is `Unknown`) or `seed`

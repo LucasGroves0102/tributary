@@ -685,6 +685,51 @@ def test_public_catalog_readable_by_any_signed_in_user(client, token):
                        f" WHERE {col} IN (%s, %s)", (A, B)) == [(B,)], table
 
 
+INSIDER_XML = (  # an ownershipDocument as filed, cut down: one owner, one sale
+    "<ownershipDocument><documentType>4</documentType><periodOfReport>2026-09-16</periodOfReport>"
+    "<issuer><issuerCik>{cik}</issuerCik></issuer><reportingOwner><reportingOwnerId>"
+    "<rptOwnerCik>0001588670</rptOwnerCik><rptOwnerName>Secret Insider</rptOwnerName>"
+    "</reportingOwnerId><reportingOwnerRelationship><isOfficer>1</isOfficer>"
+    "<officerTitle>CFO</officerTitle></reportingOwnerRelationship></reportingOwner>"
+    "<nonDerivativeTable><nonDerivativeTransaction><securityTitle><value>Common</value>"
+    "</securityTitle><transactionDate><value>2026-09-16</value></transactionDate>"
+    "<transactionCoding><transactionCode>S</transactionCode></transactionCoding>"
+    "<transactionAmounts><transactionShares><value>100</value></transactionShares>"
+    "<transactionPricePerShare><value>2.5</value></transactionPricePerShare>"
+    "<transactionAcquiredDisposedCode><value>D</value></transactionAcquiredDisposedCode>"
+    "</transactionAmounts></nonDerivativeTransaction></nonDerivativeTable></ownershipDocument>")
+
+
+def add_insider_filings(conn):
+    for cid in (A, B):
+        conn.execute("INSERT INTO bronze.ownership_documents (accession_no, cik, form, filed, url,"
+                     " xml, content_sha256) VALUES (%s, %s, '4', '2026-09-18', 'u', %s, 'x')",
+                     (f"{cid}-26-000009", cid, INSIDER_XML.format(cik=cid)))
+    conn.execute("SELECT silver.refresh_insider_filings(%s)",
+                 ([f"{A}-26-000009", f"{B}-26-000009"],))
+
+
+def test_insider_filings_respect_rls(client, token):
+    """#117 (054): insider filings are filing content, the filings tier, RLS on company_id; the
+    allow-all authorizer lists both companies, RLS still hides B's."""
+    conn = client.app_conn
+    add_insider_filings(conn)
+    for table in ("silver.insider_filings", "silver.insider_transactions"):
+        assert visible(conn, "t-pro", f"SELECT DISTINCT company_id FROM {table}") == [(A,)]  # noqa: S608
+        assert visible(conn, "t-free", f"SELECT count(*) FROM {table}") == [(0,)]  # noqa: S608
+        for user in (None, ""):
+            assert visible(conn, user, f"SELECT count(*) FROM {table}") == [(0,)]  # noqa: S608
+    r = client.get(f"/v1/companies/{A}/insiders", headers=token("t-pro"))
+    assert r.status_code == 200, r.text
+    [f] = r.json()["filings"]
+    assert f["owners"] == [{"cik": "0001588670", "name": "Secret Insider", "roles": ["CFO"]}]
+    assert f["lines"][0]["value"] == "250.0" and f["summary"] == {"sold": {"shares": "100",
+                                                                           "value": "250.0"}}
+    assert client.get(f"/v1/companies/{B}/insiders", headers=token("t-pro")).json()["filings"] == []
+    open_catalog(conn, B)
+    assert visible(conn, "t-reader", "SELECT company_id FROM silver.insider_filings") == [(B,)]
+
+
 def test_public_catalog_needs_a_user_id(client):
     open_catalog(client.app_conn, A, B)
     for user in (None, ""):

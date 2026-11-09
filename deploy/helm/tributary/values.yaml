@@ -302,6 +302,21 @@ jobs:
         memory: 256Mi
       limits:
         memory: 1Gi
+  # Insider filings (#117, migration 054): the Forms 3/4/5 of operating companies filed in the last
+  # INSIDERS_DAYS days that bronze.ownership_documents doesn't have, newest first, one SEC request
+  # each at the bulk class, stored and parsed into silver. The live doc-fetcher stores new ones from
+  # the feed. Run once after the deploy: kubectl create job --from=cronjob/insiders-backfill ins-1
+  # (~179,000 filings a year: 90 days is ~45,000 requests, about 2 h when the bulk class is idle).
+  insiders-backfill:
+    image: doc-fetcher
+    command: [doc-fetcher-insiders]
+    schedule: "0 0 1 1 *"
+    suspend: true
+    uses: [postgres, sec]
+    secClass: bulk
+    env:
+      INSIDERS_DAYS: "90"
+      INSIDERS_LIMIT: "60000"
   # Run once to fill a new database: kubectl create job --from=cronjob/seed-documents seed-1
   seed-documents:
     image: doc-fetcher

@@ -32,7 +32,9 @@ ROUTES = ["/v1/screener?limit=50", "/v1/screener?limit=50&access=financials",
           f"/v1/companies/{NVDA}/filings/0001045810-26-000021/changes?view=ranked&q=tariffs",
           # F5: one company's statement callouts and one figure's components
           f"/v1/companies/{NVDA}/financials?quarters=120&callouts=true",
-          f"/v1/companies/{NVDA}/components?metric=net_debt&period_end=2026-07-26"]
+          f"/v1/companies/{NVDA}/components?metric=net_debt&period_end=2026-07-26",
+          # F7b: one company's insider filings (#117)
+          f"/v1/companies/{NVDA}/insiders?limit=100"]
 
 
 def meta(cid):

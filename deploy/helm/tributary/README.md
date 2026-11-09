@@ -36,6 +36,7 @@ Fill a new database once the services are up:
 kubectl -n tributary create job --from=cronjob/companies companies-1
 kubectl -n tributary create job --from=cronjob/financials financials-1
 kubectl -n tributary create job --from=cronjob/seed-documents seed-documents-1
+kubectl -n tributary create job --from=cronjob/insiders-backfill insiders-backfill-1  # Forms 3/4/5, last 90 days
 ```
 
 `financials-bulk` (every filer's XBRL facts) and `submissions` (every filer's filing history)

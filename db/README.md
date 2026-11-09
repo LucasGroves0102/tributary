@@ -116,6 +116,15 @@ the same filing's own total are left out (`mistagged_fact`, rule `debt_parts_sca
 to date: forfeitures, remeasured liability awards); its `sign_flip` is severity `info`, rule `benefit`,
 unless another filing reports the quarter positive. Measurements in its header. Needs
 `financials-rebuild`; backout `backout/filers_debt_050.sql`.
+`054_insider_transactions.sql` adds insider filings (#117): `bronze.ownership_documents` (each Form
+3/4/5's ownershipDocument XML as filed, from doc-fetcher), `silver.insider_filings` (issuer company,
+form, period, reporting owners with their relationship as jsonb) and `silver.insider_transactions`
+(each line of the non-derivative and derivative tables in document order), filled by
+`silver.refresh_insider_filings(accessions)`: XMLTABLE in Postgres, delete then insert, idempotent on
+the accession; a document that isn't well formed XML, or whose issuer isn't a company here, gets no
+silver rows. Both silver tables: GRANT SELECT to query_api, RLS `granted_filings` on company_id (030's
+form). New tables and functions only: nothing existing is locked. Volume and cost in the doc-fetcher
+README ("Insider filings").
 `053_segment_same_basis.sql` replaces `gold.refresh_segment_financials` (018's body + edits marked
 "053"): a segment quarter derived as a year-to-date difference (Q4 = FY - 9 months) whose later value
 was restated after it was first reported takes that value from the first filing on or after the

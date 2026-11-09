@@ -592,6 +592,40 @@ class Store:
                       "basis": basis, "periods": periods})
             return cur.fetchall()
 
+    def insider_filings(self, user_id: str, company_id: str, limit: int,
+                        before: date | None = None) -> list[dict]:
+        """One company's insider filings (Forms 3/4/5, migration 054), newest first, at most
+        `limit`, each with its `lines` in document order. Under RLS (granted_filings): one
+        session, two index-backed reads; never more than `limit` accessions in the second."""
+        with self._session(user_id) as cur:
+            cur.execute(
+                """
+                SELECT f.accession_no, f.issuer_cik, f.form, f.filed, f.period_of_report,
+                       f.owners, f.aff10b5_one
+                FROM silver.insider_filings f
+                WHERE f.company_id = %(company)s
+                  AND (%(before)s::date IS NULL OR f.filed < %(before)s)
+                ORDER BY f.filed DESC, f.accession_no DESC
+                LIMIT %(limit)s
+                """, {"company": company_id, "before": before, "limit": limit})
+            filings = cur.fetchall()
+            if not filings:
+                return []
+            cur.execute(
+                """
+                SELECT accession_no, line, kind, derivative, security_title, transaction_date,
+                       code, equity_swap, shares, price, acquired_disposed, shares_after,
+                       direct_indirect, nature, exercise_price, underlying_title,
+                       underlying_shares
+                FROM silver.insider_transactions
+                WHERE accession_no = ANY(%(accessions)s) AND company_id = %(company)s
+                ORDER BY accession_no, line
+                """, {"accessions": [f["accession_no"] for f in filings], "company": company_id})
+            lines: dict[str, list[dict]] = {}
+            for r in cur.fetchall():
+                lines.setdefault(r["accession_no"], []).append(r)
+            return [{**f, "lines": lines.get(f["accession_no"], [])} for f in filings]
+
     def filings(self, user_id: str, company_id: str, limit: int,
                 accession_no: str | None = None) -> list[dict]:
         """Recent filings (or one filing) with the sections each contains (no text)."""

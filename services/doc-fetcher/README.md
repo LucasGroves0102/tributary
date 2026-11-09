@@ -29,7 +29,7 @@ filing a minute or two.
 | | |
 |---|---|
 | Input | `filings.raw` (consumer group `doc-fetcher`); tracked CIKs (`silver.companies.tracked`) and operating CIKs (companies with `gold.quarterly_financials`) via `silver.company_ciks`, re-read every 5 minutes |
-| Output | `bronze.filing_documents`, `bronze.filing_exhibits`, `documents.fetched` |
+| Output | `bronze.filing_documents`, `bronze.filing_exhibits`, `documents.fetched`; insider filings: `bronze.ownership_documents` → `silver.insider_filings`, `silver.insider_transactions` (below) |
 | Metrics | `tributary_documents_fetched_total{form}`, `tributary_documents_passed_total{form}` (8-Ks of operating companies with none of `FETCH_8K_ITEMS`), shared Kafka counters from [libs/telemetry](../../libs/telemetry) |
 
 Documents are referenced, not embedded, in `documents.fetched`: a 10-K is ~2 MB of HTML,
@@ -44,16 +44,44 @@ over Kafka's default 1 MB message limit. Event shapes are in
 | `doc-fetcher-seed` | `make seed-documents` | publishes each tracked company's last 2 10-Ks and last 4 10-Qs (within 2 years) and last 180 days of 8-Ks to `filings.raw` with `source: seed` and the acceptance time corrected to UTC (`tributary_sec.acceptance_time`), so history flows through the same path as live filings without counting as live in the freshness views |
 | `doc-fetcher-exhibits` | `make exhibits` | fetches EX-99.x exhibits for stored 8-Ks that have none, then `make exhibits` re-parses |
 | `doc-crawler` | `make crawl` | the document crawl below: every operating company's filings, not just tracked ones |
+| `doc-fetcher-insiders` | (Helm `insiders-backfill`) | the bounded insider backfill below |
 
 On k3s, `seed-documents` is a suspended CronJob for filling a new database
 (`kubectl -n tributary create job --from=cronjob/seed-documents seed-1`).
 
 Config (env): `SEC_USER_AGENT`, `DATABASE_URL` (both required), `KAFKA_BOOTSTRAP_SERVERS`
 (default `localhost:9092`), `FETCH_OPERATING` (default `true`), `FETCH_8K_ITEMS` (default the
-material items above; `all` for every 8-K), `METRICS_PORT`, `LOG_LEVEL`, and the Kafka authentication variables of [libs/kafka](../../libs/kafka) (SASL/SCRAM on k3s).
+material items above; `all` for every 8-K), `FETCH_INSIDERS` (default `true`), `METRICS_PORT`, `LOG_LEVEL`, and the Kafka authentication variables of [libs/kafka](../../libs/kafka) (SASL/SCRAM on k3s).
 SEC requests share one rate limit with every other service (`libs/sec`): `SEC_CALLER_CLASS`
 (`live` for the consumer, `bulk` for the seed job, default `batch`) and
 `SEC_LIMITER_DATABASE_URL` (default `DATABASE_URL`).
+
+## Insider filings (Forms 3, 4, 5)
+
+A Form 3/4/5 is the SEC's structured ownershipDocument XML, so it's read, not guessed (#117;
+`ownership.py`, migration 054). One request per filing: the full submission text
+(`<accession>.txt`), whose `<ownershipDocument>` element is stored as filed in
+`bronze.ownership_documents` and parsed in the same transaction by
+`silver.refresh_insider_filings` into `silver.insider_filings` (owners, roles, period) and
+`silver.insider_transactions` (each line: code, shares, price, acquired/disposed, owned after,
+direct/indirect). Idempotent on the accession; a paper filing without the XML is logged and
+skipped. No new Kafka client or topic: the live doc-fetcher already reads `filings.raw`.
+
+- **Live** (`FETCH_INSIDERS`): every Form 3/4/5 in the feed under a tracked or operating company's
+  CIK, other than the reporting owner's own line (the feed lists a Form 4 once per filer).
+- **Backfill** (`doc-fetcher-insiders`, Helm `insiders-backfill`, suspended; run once): the
+  operating companies' Forms 3/4/5 in `bronze.submission_filings` over the last `INSIDERS_DAYS`
+  (90) days that bronze doesn't have, newest first, at most `INSIDERS_LIMIT` (60,000), at the
+  bulk class. Running it again resumes (it only takes what's missing); a longer window is
+  `INSIDERS_DAYS=365`.
+
+Volume and cost, measured 2026-11-09 on hermes' submissions index: operating issuers had 178,877
+insider filings in the last 365 days (160,099 Form 4, 14,933 Form 3, 2,438 4/A, 927 Form 5, the
+rest amendments) from 4,699 issuers, ~490 a day: one request each, a fraction of the live class.
+NVIDIA had 84. The five fixtures' XML averages 8.6 KB, 1.7 KB as Postgres stores it (TOAST), with
+about five lines of ~130 bytes each. So a year is ~300 MB of bronze and ~110 MB of silver before
+indexes; the 90-day backfill ~44,000 requests (about 2 h at the full 7/s when the bulk class is
+idle, longer while the document crawl runs), ~75 MB and ~30 MB.
 
 ## Document crawl
 
