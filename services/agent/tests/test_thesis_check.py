@@ -767,6 +767,27 @@ def test_a_supported_claim_whose_figure_isnt_in_the_data_is_downgraded():
     assert "$10.92B" not in {f["text"] for f in result["verification"]["figures"]}
 
 
+def test_a_figure_read_at_another_tables_scale_doesnt_keep_a_claim_supported(monkeypatch):
+    """Review blocker 3: with "(In millions)" on the statements and "(in thousands)" in a share
+    note of the same section, "$46.7 million" against the statement's 46,743 was quoted (read
+    in thousands), so a supported claim kept a figure 1,000 times off."""
+    monkeypatch.setitem(globals(), "SECTION", {"company_id": NVDA, "as_of": AS_OF, "sections": [{
+        "accession_no": ACC, "form": "10-Q", "filed": "2026-08-27", "section_key": "I-2",
+        "title": "MD&A", "truncated": False,
+        "text": "(In millions)\nRevenue $ 46,743 $ 30,040\nSupply of Blackwell remained "
+                "constrained.\n(Shares in thousands)\nDiluted 24,532"}]})
+    fake = FakeQueryApi()
+    submission = {**SUBMISSION, "claims": [
+        {**SUBMISSION["claims"][0], "explanation": "The MD&A table shows $46.7 million.",
+         "citations": [{"accession_no": ACC, "section_key": "I-2"}]},
+        {**SUBMISSION["claims"][0], "explanation": "The MD&A table shows $46.7 billion.",
+         "citations": [{"accession_no": ACC, "section_key": "I-2"}]}]}
+    run(fake, *script(submission))
+    claims = validate_check(fake.saved[0]["result"])["claims"]
+    assert [c["status"] for c in claims] == ["unverifiable", "supported"]
+    assert "$46.7 million is not in the data" in claims[0]["explanation"]
+
+
 def test_check_result_refuses_a_supported_claim_with_figures_not_in_the_data():
     """query_api.thesis_checks.CheckResult enforces the same rule (they change together)."""
     fake = FakeQueryApi()

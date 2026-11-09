@@ -164,3 +164,78 @@ def test_sums_and_differences_only_of_comparable_periods():
                        [rows])
     assert figs == {"$99.9B": "unverified", "$10.1B": "derived", "$40.1B": "derived",
                     "$5.0B": "unverified", "$0.5B": "unverified"}
+
+
+# --- review: one scale per cell, like with like, the search echo ------------------------------
+# A 10-Q's statements "(In millions)" and, further down the same section, a share note "(in
+# thousands)" and a debt table "(in billions)".
+MIXED = json.dumps({"company_id": NVDA, "sections": [{
+    "section_key": "I-1", "title": "Financial Statements",
+    "text": "Condensed Consolidated Statements of Income\n(In millions, except per share data)\n"
+            "Revenue $ 96,221 $ 81,615\nCost of revenue 23,450 20,111\n"
+            "Note 3. Earnings per share\n(Shares in thousands)\nDiluted shares 24,532 24,611\n"
+            "Note 9. Debt\n(Dollars in billions)\nSenior notes 8,500.5"}]})
+
+
+def test_a_cell_is_read_only_at_the_scale_that_governs_it():
+    """Before: every number in the result was read at every scale stated anywhere in it, so
+    "$96.2 million" (96,221 read in thousands) and "$96.2 trillion" (in billions) were quoted."""
+    figs, _ = statuses("Revenue was $96.2B, not $96.2 million or $96.2 trillion; diluted shares "
+                       "$24.5M (sic); notes $8.5T, not $8.5B.", [MIXED], set())
+    assert figs == {"$96.2B": "quoted", "$96.2 million": "unverified",
+                    "$96.2 trillion": "unverified", "$24.5M": "quoted", "$8.5T": "quoted",
+                    "$8.5B": "unverified"}
+
+
+def test_no_cell_verifies_a_thousandfold_error():
+    cells = {"96,221": 96.221e9, "81,615": 81.615e9, "23,450": 23.45e9, "20,111": 20.111e9,
+             "24,532": 24.532e6, "24,611": 24.611e6, "8,500.5": 8.5005e12}
+    for value in cells.values():
+        for wrong in (value * 1000, value / 1000, value * 1e6, value / 1e6):
+            answer = f"It was ${wrong:,.0f}." if wrong >= 1 else f"It was ${wrong:.6f}."
+            figs, _ = statuses(answer, [MIXED], set())
+            assert set(figs.values()) == {"unverified"}, answer
+
+
+def test_a_section_without_a_note_beside_one_in_thousands_isnt_read():
+    """Which scale a note-less section is in can't be told when the same result states another
+    scale elsewhere; a result that states none (or only millions) still reads in millions."""
+    two = json.dumps({"sections": [
+        {"section_key": "7", "text": "(in thousands)\nNet sales 1,425,123"},
+        {"section_key": "1A", "text": "a backlog of 46,743 at year end"}]})
+    figs, _ = statuses("Sales $1.43B; backlog $46.7B; backlog $46.7M.", [two], set())
+    assert figs == {"$1.43B": "quoted", "$46.7B": "unverified", "$46.7M": "unverified"}
+    plain = json.dumps({"sections": [{"section_key": "1A", "text": "a backlog of 46,743"}]})
+    assert statuses("Backlog $46.7B.", [plain], set())[0] == {"$46.7B": "quoted"}
+
+
+def test_cells_before_a_sections_first_note_read_at_that_note():
+    section = json.dumps({"sections": [{"section_key": "7", "text":
+                                        "Net sales 1,425,123\n(in thousands)\n46,743"}]})
+    figs, _ = statuses("$1.43B; $1.43T; $46.7M.", [section], set())
+    assert figs == {"$1.43B": "quoted", "$1.43T": "unverified", "$46.7M": "quoted"}
+
+
+def test_a_ttm_never_pairs_with_one_of_its_own_quarters():
+    """Before: a TTM row's quarters were grouped under the TTM's metric, so TTM plus or less the
+    adjacent quarter (reported nowhere) was "derived". Quarters still pair with quarters."""
+    figs, _ = statuses("$384.58B; $221.35B; up $14.61B on the quarter.", [NVDA_DERIVED])
+    assert figs == {"$384.58B": "unverified", "$221.35B": "unverified",
+                    "$14.61B": "derived"}
+    ttm_view = json.dumps({"company_id": NVDA, "view": "ttm", "rows": [
+        {"metric": "revenue", "period_end": "2026-07-26", "value": 302969000000},
+        {"metric": "revenue", "period_end": "2026-04-26", "value": 253590000000}]})
+    quarters = financials(("revenue", "2026-04-26", 81615000000, Q1))
+    figs, _ = statuses("$384.58B; up $49.38B on the quarter.", [ttm_view, quarters])
+    assert figs == {"$384.58B": "unverified", "$49.38B": "derived"}
+
+
+def test_the_search_echo_of_a_query_is_not_evidence():
+    """/v1/search returns the query it ran: a searched "$46.7B" quoted itself. Its snippets are
+    filing text and still count, read without the « » marks."""
+    search = json.dumps({"query": "revenue $46.7B", "as_of": "2026-11-02", "results": [
+        {"company_id": NVDA, "accession_no": Q2, "form": "10-Q", "section_key": "I-2",
+         "snippet": "Data Center «revenue» was $41.1 billion"}]}, separators=(",", ":"))
+    figs, _ = statuses("Revenue was $46.7B; Data Center revenue was $41.1 billion.", [search],
+                       {Q2})
+    assert figs == {"$46.7B": "unverified", "$41.1 billion": "quoted"}

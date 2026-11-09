@@ -5,21 +5,25 @@ A figure is, in this order:
 1. verified when it equals a returned value at the precision written ($96.2B for
    96,221,000,000);
 2. derived when it is the difference or sum of two returned values of one metric that can be
-   compared: one company's adjacent quarters or the same quarter a year apart, or two
-   companies' periods ending within 45 days (`_comparable`; any two of forty TTM quarters made
-   coincidences);
+   compared: like with like (one span: quarters with quarters, TTMs with TTMs; a TTM plus one
+   of its quarters is reported nowhere), one company's adjacent quarters or the same quarter a
+   year apart, or two companies' periods ending within 45 days (`_comparable`; any two of forty
+   TTM quarters made coincidences);
 3. quoted when it appears in returned filing text: as written ("$50.3 billion"), or as a table
-   cell (a number with thousands separators, "82,886") read at the scale the text states;
+   cell (a number with thousands separators, "82,886") read at the scale that governs it;
 4. verified when it equals one of a derived metric's inputs (`inputs` on a /financials row:
    net debt's cash and debt, a growth rate's year-ago value, a TTM's four quarters), or derived
    from them as in 2;
 5. unverified otherwise.
 
-Table cells: a result whose text says "(in thousands" / "(in millions" / "(in billions" (also
-"($ in millions)", "(Dollars in thousands)") is read at each scale it states; text that states
-none is read in millions (SEC filings mostly are). A cell may carry decimals ("1,234.5") at a
-stated scale. A filing in thousands doesn't read as millions: its "46,743" is $46.7M, never
-$46.7B.
+Table cells: each is read at one scale only, the one that governs it: the nearest scale note
+("(in thousands" / "(in millions" / "(in billions", also "($ in millions)", "(Dollars in
+thousands)") before it in its section; before a section's first note, that note's. A section
+that states none is read in millions (SEC filings mostly are), unless another section of the
+same result states another scale (then it isn't read). So an income statement "(In millions)"
+beside a share note "(in thousands)" reads its 96,221 as $96.2B only, and a figure 1,000 times
+off never verifies. A cell may carry decimals ("1,234.5") at a stated scale. /v1/search's echo
+of the query is never evidence (the model's own words); its snippets are, without the « » marks.
 
 Rule 4 and the decimal and stated-scale cells came after the recorded suites (tests/adversarial,
 tests/citations): they run only for a figure 1-3 left unverified, so a recorded answer verifies
@@ -49,6 +53,8 @@ DECIMAL_CELL = re.compile(r"(?<![\d.,])\d{1,3}(?:,\d{3})+\.\d+(?![\d,]|\.\d)")
 # "(In millions, except per share data)", "($ in thousands)", "(Dollars in millions)"
 SCALE_NOTE = re.compile(r"\([^()]{0,30}?\bin\s+(thousands|millions|billions)\b", re.IGNORECASE)
 SCALES = {"thousands": 1e3, "millions": 1e6, "billions": 1e9}
+# where one section of a sections result begins in its JSON (text is escaped: no bare quote)
+SECTION_START = re.compile(r'"section_key"\s*:')
 FRESHNESS = re.compile(r"fresh|as of|as_of", re.IGNORECASE)
 
 
@@ -94,6 +100,9 @@ def figures_in(text: str) -> list[tuple[str, float, float]]:
 class _Evidence:
     rows: list[dict]
     texts: list[str]
+    # texts for a figure written without a unit ("$96,221"): cells under a scale note masked,
+    # since that number is a multiple of dollars, never dollars
+    plain_texts: list[str]
     cells: list[float]  # table cells in millions where no other scale is stated (rule 3)
     scaled: list[float]  # cells at a stated scale, decimals too (rule 3, after the suites)
     inputs: list[dict]  # derived metrics' inputs (rule 4)
@@ -103,14 +112,16 @@ def verify(answer: str, tool_results: list[str], cited: set[str]) -> Verificatio
     """tool_results: the raw content of every successful tool call; cited: accession numbers
     those results contain."""
     sections = [c for c in tool_results if '"sections"' in c]
+    by_content = {c: _cells(c) for c in sections}
+    cells = [cell for c in sections for cell in by_content[c]]
+    texts = [_normalize(_evidence_text(c)) for c in tool_results]
     ev = _Evidence(
         rows=[r for content in tool_results for r in _financial_rows(content)],
-        texts=[_normalize(c) for c in tool_results],
-        cells=sorted({float(n.replace(",", "")) * 1e6 for c in sections if _in_millions(c)
-                      for n in TABLE_CELL.findall(c)}),
-        scaled=sorted({float(n.replace(",", "")) * scale for c in sections
-                       for scale in _stated_scales(c)
-                       for n in [*TABLE_CELL.findall(c), *DECIMAL_CELL.findall(c)]}),
+        texts=texts,
+        plain_texts=[_normalize(_masked(c, by_content[c])) if c in by_content else t
+                     for c, t in zip(tool_results, texts, strict=True)],
+        cells=sorted({c.value for c in cells if c.scale == 1e6 and not c.decimal}),
+        scaled=sorted({c.value for c in cells if c.stated}),
         inputs=_dedupe([r for content in tool_results for r in _input_rows(content)]),
     )
     v = Verification(
@@ -136,7 +147,8 @@ def _check(written: str, value: float, step: float, ev: _Evidence) -> Figure:
     pair = _pair(_by_metric(ev.rows), close)
     if pair:
         return Figure(written, value, "derived", pair)
-    if any(form in t for form in _spellings(written) for t in ev.texts) or \
+    texts = ev.texts if re.search(r"[a-z]", written, re.IGNORECASE) else ev.plain_texts
+    if any(form in t for form in _spellings(written) for t in texts) or \
             any(close(c) for c in ev.cells):
         return Figure(written, value, "quoted")
     # added after the recorded suites: only what 1-3 left unverified gets here
@@ -152,15 +164,18 @@ def _check(written: str, value: float, step: float, ev: _Evidence) -> Figure:
     return Figure(written, value, "unverified")
 
 
-def _by_metric(rows: list[dict]) -> dict[str, list[dict]]:
-    by: dict[str, list[dict]] = {}
+def _by_metric(rows: list[dict]) -> dict[tuple[str, str], list[dict]]:
+    """Like with like: one metric (a year-ago input with its metric) at one span. A TTM and
+    one of its own quarters are both "revenue", but their sum or difference is reported
+    nowhere."""
+    by: dict[tuple[str, str], list[dict]] = {}
     for r in rows:
-        by.setdefault(r.get("base") or r["metric"], []).append(r)
+        by.setdefault((r.get("base") or r["metric"], r.get("_span", "quarter")), []).append(r)
     return by
 
 
-def _pair(by_metric: dict[str, list[dict]], close: Any) -> dict | None:
-    for metric, rs in by_metric.items():
+def _pair(by_metric: dict[tuple[str, str], list[dict]], close: Any) -> dict | None:
+    for (metric, _span), rs in by_metric.items():
         for a, b in combinations(rs, 2):
             if not _comparable(a, b):
                 continue
@@ -192,14 +207,71 @@ def _comparable(a: dict, b: dict) -> bool:
     return 80 <= days <= 100 or 350 <= days <= 380
 
 
-def _stated_scales(content: str) -> set[float]:
-    return {SCALES[m.lower()] for m in SCALE_NOTE.findall(content)}
+@dataclass
+class _Cell:
+    start: int  # where it is in the tool result's content
+    end: int
+    value: float  # at its scale
+    scale: float
+    stated: bool  # a scale note governs it (else millions by default)
+    decimal: bool
 
 
-def _in_millions(content: str) -> bool:
-    """Table cells read in millions unless the text states only other scales."""
-    stated = _stated_scales(content)
-    return not stated or 1e6 in stated
+def _cells(content: str) -> list[_Cell]:
+    """Every table cell of a sections result, each read at the one scale that governs it: the
+    nearest scale note before it in its section (before the section's first note, that first
+    note's). A section with no note reads in millions, unless another section of the result
+    states a scale other than millions: then nobody can say which, and its cells aren't read.
+    Decimal cells need a stated scale."""
+    starts = [0, *(m.start() for m in SECTION_START.finditer(content)), len(content)]
+    other_scale = any(SCALES[m.lower()] != 1e6 for m in SCALE_NOTE.findall(content))
+    out = []
+    for a, b in zip(starts, starts[1:], strict=False):
+        notes = [(m.start(), SCALES[m.group(1).lower()])
+                 for m in SCALE_NOTE.finditer(content, a, b)]
+        for pattern, decimal in ((TABLE_CELL, False), (DECIMAL_CELL, True)):
+            for m in pattern.finditer(content, a, b):
+                before = [scale for at, scale in notes if at < m.start()]
+                scale = before[-1] if before else notes[0][1] if notes else None
+                if scale is None and (decimal or other_scale):
+                    continue
+                number = float(m.group(0).replace(",", ""))
+                out.append(_Cell(m.start(), m.end(), number * (scale or 1e6), scale or 1e6,
+                                 scale is not None, decimal))
+    return out
+
+
+def _masked(content: str, cells: list[_Cell]) -> str:
+    """The content with every cell under a scale note blanked (see _Evidence.plain_texts)."""
+    out, at = [], 0
+    for c in sorted((c for c in cells if c.stated), key=lambda c: c.start):
+        out.append(content[at:c.start] + "#")
+        at = c.end
+    return "".join(out) + content[at:]
+
+
+def _evidence_text(content: str) -> str:
+    """A tool result as evidence for quoted figures: /v1/search's echo of the query is the
+    model's own words, not the data, so it never counts (a searched "$46.7B" would quote
+    itself); its snippets are filing text, read without their « » match marks."""
+    try:
+        data = json.loads(content)
+    except ValueError:
+        return content
+    if not isinstance(data, dict) or "query" not in data or not isinstance(
+            data.get("results"), list):
+        return content
+    rest = {k: v for k, v in data.items() if k != "query"}
+    return json.dumps(rest, separators=(",", ":"), default=str).replace("«", "").replace("»", "")
+
+
+def _span(data: dict, r: dict) -> str:
+    """A /financials row's span: "ttm" from a view=ttm answer, or a row summed from quarters."""
+    inputs = r.get("inputs")
+    if data.get("view") == "ttm" or (isinstance(inputs, dict)
+                                     and isinstance(inputs.get("quarters"), list)):
+        return "ttm"
+    return "quarter"
 
 
 def _financial_rows(content: str) -> list[dict]:
@@ -210,7 +282,7 @@ def _financial_rows(content: str) -> list[dict]:
     if not isinstance(data, dict) or not isinstance(data.get("rows"), list):
         return []
     company = data.get("company_id")
-    return [{**r, "company_id": company, "value": float(r["value"])}
+    return [{**r, "company_id": company, "value": float(r["value"]), "_span": _span(data, r)}
             for r in data["rows"] if isinstance(r, dict) and "value" in r and "metric" in r]
 
 
@@ -240,14 +312,16 @@ def _input_rows(content: str) -> list[dict]:
         if not isinstance(r, dict) or not isinstance(r.get("inputs"), dict) or "metric" not in r:
             continue
         cite = r.get("citation") if isinstance(r.get("citation"), dict) else {}
+        span = _span(data, r)
         for name, v in r["inputs"].items():
             if name == "quarters" and isinstance(v, list):
-                for q in v:
+                for q in v:  # a TTM's quarters: quarters, never paired with the TTM itself
                     value = _number(q.get("value")) if isinstance(q, dict) else None
                     if value is not None:
                         out.append({"metric": str(r["metric"]), "value": value,
                                     "company_id": company, "period_end": q.get("period_end"),
-                                    "citation": {"accession_no": q.get("accession_no")}})
+                                    "citation": {"accession_no": q.get("accession_no")},
+                                    "_span": "quarter"})
                 continue
             value = _number(v)
             if value is None:
@@ -256,7 +330,7 @@ def _input_rows(content: str) -> list[dict]:
             row = {"metric": str(name), "base": str(name).removesuffix("_year_ago"),
                    "value": value, "company_id": company,
                    "period_end": None if year_ago else r.get("period_end"),
-                   "citation": {} if year_ago else cite}
+                   "citation": {} if year_ago else cite, "_span": span}
             end = _end(r)
             if year_ago and end is not None:  # a year before the row's: for pairing only
                 row["_end"] = (end - timedelta(days=364)).isoformat()
@@ -268,7 +342,8 @@ def _dedupe(rows: list[dict]) -> list[dict]:
     seen: set[tuple] = set()
     out = []
     for r in rows:
-        key = (r["company_id"], r.get("base") or r["metric"], r["period_end"], r["value"])
+        key = (r["company_id"], r.get("base") or r["metric"], r["period_end"], r["value"],
+               r.get("_span"))
         if key not in seen:
             seen.add(key)
             out.append(r)
