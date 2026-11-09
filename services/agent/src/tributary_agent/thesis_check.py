@@ -754,11 +754,11 @@ def filing_checks(texts: list[str], rows: list[dict], cites: list[dict],
                                  and f.get("period_end") == row["period_end"]
                                  and (f.get("period_start") or None)
                                  == (row["period_start"] or None)), None)
+                    if mine is None:
+                        continue
                     try:
-                        theirs = float(mine["value"]) if mine else None
-                    except (TypeError, ValueError):
-                        theirs = None
-                    if theirs is None:
+                        theirs = float(mine["value"])
+                    except (KeyError, TypeError, ValueError):
                         continue
                     agrees = abs(abs(theirs) - abs(value)) <= max(tol, FILING_TOLERANCE
                                                                   * abs(value))
