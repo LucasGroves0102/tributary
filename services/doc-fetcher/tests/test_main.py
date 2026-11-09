@@ -182,29 +182,37 @@ def test_tracked_8k_ignores_items():
 DSN = os.environ.get("TEST_DATABASE_URL")
 
 
+def stored_document(conn, acc: str, target: str | None = "claimed") -> None:
+    conn.execute(
+        "INSERT INTO bronze.filing_documents (accession_no, cik, form, filed,"
+        " document_name, url, content_gzip, content_sha256, size_bytes) VALUES"
+        " (%s, %s, '8-K', '2026-11-09', 'd.htm', 'https://sec/d.htm', %s, 'abc', 4)",
+        (acc, NVDA, gzip.compress(b"<h/>")))
+    if target:
+        conn.execute(
+            "INSERT INTO ops.doc_crawl_targets (accession_no, cik, company_id, form,"
+            " filing_date, priority, status, claimed_at) VALUES (%s, %s, %s, '8-K',"
+            " '2026-11-09', 0, %s, now())", (acc, NVDA, NVDA, target))
+
+
 @pytest.mark.skipif(not DSN, reason="TEST_DATABASE_URL not set")
-def test_owed_events_are_republished_and_the_crawl_never_marks_them_published():
+def test_owed_events_are_republished_and_the_crawl_never_sends_them_again():
+    """Pre-ship review: the crawl left a filing the live side owed an event for unpublished and
+    sent documents.backfill for it too, so it was parsed twice. The live outbox announces it."""
     psycopg = pytest.importorskip("psycopg")
     with psycopg.connect(DSN, autocommit=True) as conn, conn.transaction(force_rollback=True):
         for acc in ("tm-owed", "tm-paid"):
-            conn.execute(
-                "INSERT INTO bronze.filing_documents (accession_no, cik, form, filed,"
-                " document_name, url, content_gzip, content_sha256, size_bytes) VALUES"
-                " (%s, %s, '8-K', '2026-11-09', 'd.htm', 'https://sec/d.htm', %s, 'abc', 4)",
-                (acc, NVDA, gzip.compress(b"<h/>")))
-            conn.execute(
-                "INSERT INTO ops.doc_crawl_targets (accession_no, cik, company_id, form,"
-                " filing_date, priority, status, claimed_at) VALUES (%s, %s, %s, '8-K',"
-                " '2026-11-09', 0, 'claimed', now())", (acc, NVDA, NVDA))
+            stored_document(conn, acc)
         db.owe_event(conn, "tm-owed")  # stored by the live consumer, event not confirmed yet
         conn.execute("UPDATE ops.document_outbox SET queued_at = now() - interval '5 minutes'")
 
-        # the crawl finds both stored: only the one with no owed event counts as published
+        # the crawl finds both stored: the live side's events announce both, owed or sent
         crawl_db.mark_already_stored(conn, ["tm-owed", "tm-paid"])
         published = dict(conn.execute(
             "SELECT accession_no, published_at IS NOT NULL FROM ops.doc_crawl_targets"
             " WHERE accession_no LIKE 'tm-%'").fetchall())
-        assert published == {"tm-owed": False, "tm-paid": True}
+        assert published == {"tm-owed": True, "tm-paid": True}
+        assert crawl_db.unpublished(conn, 10) == []
 
         down, up = FakeProducer(fail=True), FakeProducer()
         assert sweep(conn, down) == 0
@@ -218,3 +226,42 @@ def test_owed_events_are_republished_and_the_crawl_never_marks_them_published():
         # a row just written is left to the send in progress
         db.owe_event(conn, "tm-paid")
         assert db.owed_events(conn, 10) == []
+
+
+@pytest.mark.skipif(not DSN, reason="TEST_DATABASE_URL not set")
+def test_a_crawl_target_the_live_side_also_stored_is_announced_once():
+    """The race: the crawl stored the filing and marked it done, and the live consumer stored it
+    too and owes its event. The crawl's publish skips it (marked published, nothing sent); a done
+    target with no owed event is still sent as documents.backfill."""
+    psycopg = pytest.importorskip("psycopg")
+    with psycopg.connect(DSN, autocommit=True) as conn, conn.transaction(force_rollback=True):
+        for acc in ("tm-race", "tm-crawl"):
+            stored_document(conn, acc, target="done")
+        db.owe_event(conn, "tm-race")
+        assert [e["accession_no"] for e in crawl_db.unpublished(conn, 10)] == ["tm-crawl"]
+        published = dict(conn.execute(
+            "SELECT accession_no, published_at IS NOT NULL FROM ops.doc_crawl_targets"
+            " WHERE accession_no LIKE 'tm-%'").fetchall())
+        assert published == {"tm-race": True, "tm-crawl": False}  # sent on delivery only
+        assert [e["accession_no"] for e in crawl_db.unpublished(conn, 10)] == ["tm-crawl"]
+
+
+@pytest.mark.skipif(not DSN, reason="TEST_DATABASE_URL not set")
+def test_owed_rows_whose_document_is_gone_never_block_the_outbox():
+    """Pre-ship review: owed_events took the 500 oldest outbox rows before joining documents, so
+    500 rows whose documents were deleted would have held every other event back for good. The
+    oldest are taken among rows with a document, and the orphans are cleared."""
+    psycopg = pytest.importorskip("psycopg")
+    with psycopg.connect(DSN, autocommit=True) as conn, conn.transaction(force_rollback=True):
+        for i in range(3):
+            db.owe_event(conn, f"tm-gone-{i}")
+        stored_document(conn, "tm-here", target=None)
+        db.owe_event(conn, "tm-here")
+        conn.execute("UPDATE ops.document_outbox SET queued_at = now() - interval '5 minutes'"
+                     " - CASE WHEN accession_no LIKE 'tm-gone%' THEN interval '1 hour'"
+                     "        ELSE interval '0' END")  # the orphans are the oldest
+        assert [e["accession_no"] for e in db.owed_events(conn, 2)] == ["tm-here"]
+        assert conn.execute("SELECT array_agg(accession_no) FROM ops.document_outbox"
+                            ).fetchone() == (["tm-here"],)
+        up = FakeProducer()
+        assert sweep(conn, up) == 1 and [e["accession_no"] for e in up.events] == ["tm-here"]

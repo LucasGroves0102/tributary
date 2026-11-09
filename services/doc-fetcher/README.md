@@ -9,7 +9,9 @@ A filing is stored whole or not at all (migration 059): the index, the document 
 are fetched first, then the document, its exhibits and an `ops.document_outbox` row commit in one
 transaction. The outbox row is deleted when Kafka confirms `documents.fetched`; an unconfirmed
 event (Kafka down, a crash in between) is sent again at start and every minute
-(`tributary_documents_republished_total`). A fetch error stores nothing, so the
+(`tributary_documents_republished_total`). The oldest owed rows are taken among those whose
+document is still there, and a row whose document was deleted is cleared, so no number of those
+can hold the others back. A fetch error stores nothing, so the
 [document crawl](#document-crawl) plans the filing like any other. (Before, an 8-K whose exhibit
 fetch failed was committed without exhibits or an event, and the crawl then counted it as
 published: it was never parsed.) A database error about one event's data skips that event
@@ -154,8 +156,10 @@ How it runs:
   `done` mark in one transaction. A killed run's claims are taken back when the lease expires;
   on SIGTERM unstarted targets are released at once. Re-planning and re-running never
   duplicate anything (keys: accession number); a filing the live doc-fetcher stored meanwhile is
-  marked done without a request, and published only when the live side owes no event for it
-  (`ops.document_outbox`); otherwise the crawl sends `documents.backfill` for it too.
+  marked done and published without a request or an event: the live side's `documents.fetched`
+  announces it, sent or still owed in `ops.document_outbox`. A filing both stored in a race (the
+  live side owes its event) is skipped the same way when the crawl publishes, so it is parsed
+  once.
 - **Requests**: 10-K/10-Q fetch the primary document named in the submissions history directly
   (one request); 8-Ks read the filing index for the primary document and exhibits, like
   doc-fetcher. All through `sec_client` with `SEC_CALLER_CLASS=bulk`, so the crawl only gets

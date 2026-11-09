@@ -160,9 +160,10 @@ gold rows, as JPMorgan's did. Catalog only (one function, nothing locked on a ta
 `backout/banks_058.sql`.
 `059_fetch_outbox_insider_queue.sql` (pre-ship review B2, B3) is doc-fetcher's: `ops.document_outbox`
 (a live document's `documents.fetched` event is owed until Kafka confirms it; written in the
-document's own transaction, read by the crawl so it never counts an unannounced document as
-published), `ops.insider_queue` (feed Forms 3/4/5 waiting for an idle consumer, or kept as `failed`
-with the error so nothing fetches them again) and `ops.insider_findings` (what parsing one noticed:
+document's own transaction; the crawl sends no `documents.backfill` for a document the live side
+announces, sent or owed), `ops.insider_queue` (feed Forms 3/4/5 waiting for an idle consumer, or
+kept as `failed` with the error: the live queue leaves those, the daily catch-up retakes them once a
+run; a transient error never fails one) and `ops.insider_findings` (what parsing one noticed:
 `bad_date`, `several_values`, `not_well_formed`, `parse_failed`). `silver.xml_date` returns NULL for
 a date that doesn't exist (it raised, and one bad Form 4 crash-looped the live consumer);
 `silver.refresh_insider_filings` (054's body, edits marked "059") takes the first node of every

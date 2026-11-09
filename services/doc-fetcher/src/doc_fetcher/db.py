@@ -96,15 +96,22 @@ def paid_events(conn: psycopg.Connection, accessions: list[str]) -> None:
 def owed_events(conn: psycopg.Connection, limit: int, older_than_seconds: int = 30) -> list[dict]:
     """documents.fetched events still owed, oldest first, as the consumer first sent them
     (rows queued in the last `older_than_seconds` are left to the send in progress). Marks
-    each as attempted."""
+    each as attempted. An owed row whose document is gone (deleted by hand: the row commits
+    with its document) is cleared, never sent; the `limit` oldest are taken among the rows that
+    have a document, so no number of such rows can hold the others back (pre-ship review)."""
+    conn.execute(
+        "DELETE FROM ops.document_outbox o WHERE o.queued_at < now() - make_interval(secs => %s)"
+        " AND NOT EXISTS (SELECT 1 FROM bronze.filing_documents d"
+        "                 WHERE d.accession_no = o.accession_no)", (older_than_seconds,))
     rows = conn.execute(
         """
         UPDATE ops.document_outbox o SET attempts = attempts + 1, last_attempt = now()
         FROM bronze.filing_documents d
         WHERE d.accession_no = o.accession_no
-          AND o.accession_no IN (SELECT accession_no FROM ops.document_outbox
-                                 WHERE queued_at < now() - make_interval(secs => %s)
-                                 ORDER BY queued_at LIMIT %s)
+          AND o.accession_no IN (SELECT x.accession_no FROM ops.document_outbox x
+                                 JOIN bronze.filing_documents y USING (accession_no)
+                                 WHERE x.queued_at < now() - make_interval(secs => %s)
+                                 ORDER BY x.queued_at LIMIT %s)
         RETURNING d.accession_no, d.cik, d.form, d.document_name, d.url, d.content_sha256,
                   d.size_bytes, o.queued_at
         """,
