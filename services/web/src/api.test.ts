@@ -14,6 +14,8 @@ import {
   NOT_ANSWERING,
   olderState,
   recentDataNotes,
+  refusedByOlderApi,
+  runModel,
   screener,
   section,
   SseParser,
@@ -148,6 +150,23 @@ describe("a Query API one release older (the minute of a deploy)", () => {
     await expect(addItem("t", "w", "chart", "n", chart)).rejects.toThrow("name: too long");
     vi.unstubAllGlobals();
     expect(olderState({ layers: [{ kind: "metric" }] })).toBeNull();
+  });
+
+  it("F2: a model run reads as unavailable (null) from an API without the route; a save of F2's fields isn't stripped", async () => {
+    const seen = older((s) => (s.url.pathname.endsWith("/model") ? Response.json({ detail: "Not Found" }, { status: 404 })
+      : Response.json({ detail: "invalid model state: 1 validation error\nytd\n  Extra inputs are not permitted" }, { status: 422 })));
+    expect(await runModel("t", "0001674101", { companyId: "0001674101", assumptions: [] })).toBeNull();
+    const model = { companyId: "0001674101", historyYears: 8, ytd: true, assumptions: [{ growth: 1, margin: 1, taxRate: 21 }] };
+    const err = await updateItem("t", "i", { state: model }).catch((e: unknown) => e);
+    vi.unstubAllGlobals();
+    // the user's model is never saved without its new fields: the page says to try again
+    expect(seen.filter((s) => s.url.pathname.startsWith("/api/query/v1/workspace-items")).map((s) => s.body)).toEqual([{ state: model }]);
+    expect(olderState(model)).toBeNull();
+    expect(refusedByOlderApi(err)).toBe(true);
+    expect(refusedByOlderApi(new ApiError("name: too long", 422))).toBe(false);
+    older(() => Response.json({ detail: "not permitted to read financials for this company" }, { status: 403 }));
+    await expect(runModel("t", "0001674101", {})).rejects.toMatchObject({ status: 403 });
+    vi.unstubAllGlobals();
   });
 
   it("no versions, notes of the companies asked for, and no unfiltered data-check screen", async () => {

@@ -394,6 +394,9 @@ export interface ItemVersion {
   saved_at: string;
   replaced_at: string;
   characters?: number;
+  /** a model's (F2): its forecast years and whether it had bear and bull; absent from an older API */
+  years?: number | null;
+  cases?: boolean;
 }
 
 /** An item with its state: the web app's own chart/comps/screen state, validated by the API. */

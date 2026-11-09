@@ -4270,6 +4270,172 @@ mark.claim-mark {
   width: 40%;
 }
 
+.assumptions tbody th.first {
+  vertical-align: top;
+  padding-top: 10px;
+}
+
+/* F2: the rate fields are narrower; blank shows the default as a placeholder */
+.assumptions td:nth-child(n + 4):not(.note-cell) .pct-in .field {
+  width: 64px;
+}
+
+.assumptions .field::placeholder {
+  color: var(--text-3);
+}
+
+/* a column or row heading's second line: "Q1–Q3 reported + Q4", "FY2026 Q3" */
+.col-sub {
+  display: block;
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+/* one line per default, under the case switch */
+.model-rules {
+  margin: 0;
+  padding: var(--sp-4) var(--sp-6) var(--sp-2) calc(var(--sp-6) + 14px);
+  line-height: 1.5;
+  max-width: 1100px;
+}
+
+.model-rules li + li {
+  margin-top: var(--sp-1);
+}
+
+/* the company's outlook beside the year it covers: quoted, never an input */
+.guidance-row td {
+  white-space: normal;
+  background: var(--panel-2);
+}
+
+.guidance-row summary {
+  cursor: pointer;
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+
+.guidance-quote {
+  margin: var(--sp-3) 0 0;
+  padding: var(--sp-2) var(--sp-4);
+  border-left: 3px solid var(--line-2);
+  font-size: var(--fs-sm);
+  max-width: 1000px;
+}
+
+.guidance-quote p {
+  margin: 0 0 var(--sp-1);
+}
+
+.guidance-quote cite {
+  display: block;
+  font-style: normal;
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+}
+
+/* the three-case table: line groups, a case column, the edited case marked */
+.model-table .group-row th {
+  padding-top: var(--sp-4);
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: var(--fs-xs);
+  position: static;
+}
+
+.model-table tbody th.first {
+  position: sticky;
+  top: auto;
+  vertical-align: top;
+  font-weight: 500;
+  color: var(--text);
+  white-space: normal;
+  min-width: 150px;
+  max-width: 220px;
+}
+
+.model-table tr.line-start > * {
+  border-top: 1px solid var(--line-2);
+}
+
+.model-table td.case {
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+}
+
+.model-table td.case.bear,
+.model-table td.case.bull {
+  color: var(--text-3);
+}
+
+.model-table tr.selected td.case {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.model-table td.forecast {
+  font-style: italic;
+}
+
+/* a split or an earlier share basis: said in the cell's title, marked * */
+.model-table td.basis {
+  color: var(--text-3);
+  cursor: help;
+}
+
+.model-table td.forecast.default {
+  color: var(--text-2);
+}
+
+.model-table td.ytd,
+.model-table th.ytd {
+  background: var(--panel-2);
+}
+
+.model-table th.forecast {
+  font-style: italic;
+}
+
+.model-pending {
+  margin: 0 0 var(--sp-2);
+}
+
+.model-upgrade {
+  margin: 0 0 var(--sp-5);
+}
+
+.model-adj-note {
+  margin: 0;
+  max-width: 900px;
+  line-height: 1.5;
+}
+
+.adjustments .field {
+  min-width: 0;
+}
+
+.adjustments td.first .field {
+  width: 240px;
+}
+
+.adjustments .field.narrow {
+  width: 84px;
+}
+
+.price-in {
+  gap: var(--sp-3);
+  align-items: center;
+  margin-bottom: var(--sp-3);
+}
+
+.model-valuation {
+  margin: var(--sp-3) 0 0;
+  line-height: 1.5;
+}
+
 .new-work .save-form {
   width: min(320px, calc(100vw - 32px));
 }

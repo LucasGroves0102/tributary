@@ -2,8 +2,7 @@ import { useId, useState, type FormEvent } from "react";
 
 import { failureReason } from "../api";
 import { CompanySearch } from "../components/CompanySearch";
-import { DEFAULT_HISTORY, DEFAULT_YEARS, modelState } from "../models/model";
-import { newModelAssumptions } from "../models/useHistory";
+import { newModelState } from "../models/useModelRun";
 import { go, href } from "../route";
 import { thesisState } from "../thesis/model";
 import type { WrittenKind } from "../types";
@@ -67,8 +66,9 @@ function NewWorkForm({ kind, token, saved, company: fixed, workspaceId, onDone }
     try {
       let state: object;
       if (kind === "model") {
-        // start from the company's own history: its revenue CAGR and average margin
-        state = modelState({ companyId: company!.id, historyYears: DEFAULT_HISTORY, assumptions: await newModelAssumptions(token, company!.id, DEFAULT_YEARS) });
+        // start from the company's own history: the current year's reported quarters, then the
+        // run rate fading to the long run (the Query API's defaults)
+        state = await newModelState(token, company!.id);
       } else {
         state = thesisState({ companyId: company?.id ?? null, markdown: "" });
       }

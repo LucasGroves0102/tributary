@@ -1,4 +1,5 @@
 import { displayNames } from "./format";
+import type { ModelRun } from "./models/model";
 import type {
   AgentEvent,
   Allowance,
@@ -516,6 +517,18 @@ function orNullOn404<T>(p: Promise<T>): Promise<T | null> {
     if (e instanceof ApiError && e.status === 404) return null;
     throw e;
   });
+}
+
+/** A model run (F2): the Query API's one copy of the maths over a model state (saved or as
+ * typed). null from a Query API one release older (no such route yet: the deploy window). */
+export const runModel = (token: string, companyId: string, state: object) =>
+  orNullOn404(sendJson<ModelRun>(token, "POST", `/v1/companies/${companyId}/model`, state));
+
+/** A save an older Query API refused for a field it doesn't know yet (its states are strict):
+ * the minute of a deploy. A model's new fields are the user's work, so the model page says to
+ * try again rather than saving without them (`olderState` leaves models alone). */
+export function refusedByOlderApi(e: unknown): boolean {
+  return e instanceof ApiError && e.status === 422 && /Extra inputs are not permitted/.test(e.message);
 }
 
 /** 8-Ks since the latest 10-Q/10-K period end, and the figures they may have made stale. */

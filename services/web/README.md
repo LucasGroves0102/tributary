@@ -331,7 +331,7 @@ on the folder changed last. Never just the first workspace.
   Clicking a claim's quote marks it in the preview (only text nodes are wrapped in
   `<mark class="claim-mark">`; nothing is parsed) or selects it in the editor in Write mode. Then
   each embedded model's assumptions per forecast year against its 5-year revenue CAGR and margin
-  range (computed by agent-api with `models/model.ts`' definitions; flagged years marked), what
+  range (the Query API's model run, read by agent-api; flagged years marked), what
   the latest 10-K/10-Q says that the thesis doesn't mention, the summary, notes (e.g. "only the
   first 30,000 characters were checked") and as-of, with model and cost behind Details. A
   quote shows without the Markdown it was written in (`plainQuote`; finding it still uses the
@@ -355,45 +355,60 @@ on the folder changed last. Never just the first workspace.
   checked claims, model assumption flags that changed (by model and fiscal year), models added or
   removed, and the count of points not mentioned. Quotes there are plain text (React-escaped),
   statuses are labels; the assistant's prose still renders only in the claims below.
-- **Model** (`#/model/{id}`, `ModelPage.tsx`, pure parts in `models/model.ts`): a company's
-  fiscal years of revenue and operating income, read live from `/v1/companies/{id}/financials`
-  (`view=ttm`, 40 quarters: the TTM at each fiscal Q4 is the fiscal year, as the Statements tab's
-  annual view), and your assumptions per forecast year (1-10, default 3): revenue growth %,
-  operating margin % and a note. Each assumption shows its default beside it ("default 44.2%"),
-  and a line above the table says the rule with the company's numbers: the TTM run rate, the
-  revenue CAGR and mean operating margin over the last 5 fiscal years (fewer when the history is
-  shorter) and the long-run rate. The projection starts at the latest fiscal
-  year with revenue: revenue_t = revenue_(t-1) × (1 + growth_t), operating income_t = revenue_t ×
-  margin_t. The chart draws history solid and forecast dashed in the same colour (a series'
-  `dashed`), joined at the base year; history points open their filing. The table labels each
-  year Reported or Forecast (`FY2027E`). History years shown: 3-10 (default 8). **Defaults**
-  (`runRate`, `defaultAssumptions`): year 1 at the trailing-twelve-month run rate (the newest TTM
-  revenue against the TTM a year earlier, and its operating margin; the latest fiscal year's
-  without one), then each year closes half the gap (`FADE`) to the long run: growth to the 5-year
-  CAGR held between 0% and 5% (`LONG_RUN_GROWTH_CAP`), margin to the 5-year average. NVIDIA
-  (TTM +83.4% at 65.2%) starts 83.4 / 44.2 / 24.6% at 65.2 / 55.6 / 50.8% instead of a flat 66.9%
-  at 46.0% to $1.00T; Vertiv starts at 35.3% and 20.1%, Deckers at 6.3% (not its 16.5% CAGR); a
-  shrinking company's long run is 0%, not a permanent decline. "Reset to defaults" sets exactly
-  the defaults shown. Only the assumptions are saved, never the history. A model embeds in a thesis like a
-  chart (its chart and table from the saved assumptions and the live history). Per-segment
-  growth isn't there yet. **Bear / base / bull**: a Scenario switch above the assumptions picks
-  the case being edited; "Add bear and bull cases" starts them from the base case minus / plus
-  half its growth (at least 5 points) and a fifth of its margin (at least 3), per year
-  (`SCENARIO_SPREAD`): in proportion, so NVIDIA's bear case about doubles revenue in three years
-  while base more than triples it and bull grows it over five times (a fixed 5 points left bear
-  more than quadrupling it). Same forecast years (changing the number of years changes every
-  case). The chart draws the base forecast dashed and the bear and bull ones lighter (a series'
-  `faint`: thinner, `stroke-opacity`, an SVG attribute, not a style); the table shows the
-  selected case: before bear and bull are added, what that case would start as, labelled a
-  preview; while a case's numbers don't parse, its last valid ones (marked), never the base case
-  under the bear tab. Saved as `scenarios: {bear, bull}` beside
-  `assumptions`, which stays the base case: a model saved before scenarios is base only and
-  saves exactly as before, and Check my thesis checks the base case (`scenarioAssumptions`,
-  ported to agent-api; the fixture's `scenario_cases`). An embedded model draws all three.
-  `checkAssumptions` / `marginRange` hold the thesis check's flag rule
-  (growth more than 10 points from the CAGR, a margin outside the 5-year [min, max]);
-  `models/stats-fixture.json` is shared with agent-api's Python port (`model_stats.py`), and
-  both test suites check the same numbers.
+- **Model** (`#/model/{id}`, `ModelPage.tsx`; what was typed in `models/drafts.ts`, the saved state,
+  the run's answer, the chart and the table in `models/model.ts`, the one-line rules in
+  `models/rules.ts`): your assumptions for a company, run by the Query API. **The maths aren't
+  here**: every change (300 ms after the last keystroke, `useModelRun`) posts the state to `POST
+  /v1/companies/{id}/model`, the one copy of a model's maths (Query API README, "Models: one copy
+  of the maths", whose `model_maths.py` docstring is the spec); the thesis check and later MCP call
+  the same route. Before F2 the web app and agent-api each kept a copy.
+  Per forecast year (1-10, default 3) and case: revenue growth %, operating margin %, and four
+  rates, blank meaning Tributary's default from history (shown as the placeholder): interest and
+  other (% of revenue: operating income less pretax income), tax rate, share change (buybacks less
+  issuance, % a year) and FCF margin (FCF as one rate on revenue rather than cash flow less capex:
+  both move with revenue, and the table shows operating cash flow, capex and FCF behind it); a
+  note. Each field shows its default ("default 39.3%"), and one line per default says the rule
+  with the company's numbers (`defaultRules`). **The current year from actuals** (`ytd`, every new
+  model): year 1 is the current fiscal year's reported quarters plus the remainder, its growth and
+  margin the remainder's ("FY2026E · Q4 (Q1–Q3 reported)"); the remainder starts at the year to
+  date's growth over the same quarters a year earlier and those quarters' margin a year earlier
+  moved by this year's change so far. Vertiv's FY2026E is Q1–Q3 as reported ($10.24B, +39.3%) plus
+  a Q4 starting at +39.3% and 23.3%; Deckers' FY2027E is H1 plus H2; NVIDIA's FY2027E is H1 plus H2.
+  Later years start at the TTM run rate and close half the gap each year to the long run (B7,
+  unchanged). A model saved before F2 opens unchanged (year 1 a full-year guess, labelled so) and
+  offers "Build FY2026E from Q1–Q3 reported", which sets each case's remainder to what its full
+  year implied (`implied_remainder`), so no year changes until the user edits it.
+  **The table** (`modelColumns`, `modelLines`, `ModelView`): one table with every line (revenue,
+  growth, organic growth with acquired revenue, operating income and margin, reported beside
+  adjusted with one-offs, interest and other, tax rate, net income, diluted EPS and its growth,
+  diluted shares and their change, FCF and its margin, buybacks, and with a price the multiples)
+  and bear, base and bull side by side: history years, the TTM (when it isn't a fiscal year end)
+  and the current year's reported quarters once per line, then a row per case for the forecast
+  years, the case being edited marked. A split or merger year (the API's `share_break`) shows no
+  share change or EPS growth, and per-share figures before it are marked * with why. The chart
+  draws revenue and operating income, history solid, each case dashed (bear and bull lighter,
+  `faint`). **Bear / base / bull**: a switch picks the case being edited; "Add bear and bull cases"
+  copies the run's preview of them (the base case moved by half its growth, at least 5 points, and
+  a fifth of its margin, at least 3; the rates the user set), and waits for the run of the latest
+  numbers so a case never starts from stale ones. Before they're added, a bear or bull tab shows
+  that case's preview beside base; a case whose numbers don't parse keeps its last valid ones
+  (marked ⚠), never another case's. Check my thesis checks the base case. **Adjustments** (yours,
+  labelled so): a named one-off in a fiscal quarter's operating income (Deckers' "IEEPA tariff
+  refunds", $46M, Q2 FY2027: its H1 margin reads 19.9% adjusted beside 21.8% reported, and the
+  defaults read the clean year), or acquired revenue, which only organic growth leaves out.
+  **Guidance** (`guidanceYear`): the latest earnings release's outlook (F1's `/earnings`) sits in a
+  collapsed row beside the forecast year it covers (the fiscal year of the quarter after the
+  release's), quoted with its 8-K citation, never read into a field. **Valuation at your price**:
+  a price per share and a day you type, saved with the model, give market cap (× the latest shares
+  outstanding), EV (+ net debt, only when its reading is current; Deckers' latest is from 2014, so
+  EV is blank and says why) and P/E, EV/Revenue, EV/EBIT and FCF yield on history, the TTM and each
+  case. The page says it's your price: nothing is fetched or kept. **History**: every save over a
+  model keeps the version it replaced (Query API, app DB 014/015); Restore loads one into the
+  editor unsaved, with Undo. Only what was typed is saved, never the history or a result.
+  Embedded in a thesis or report (`ModelEmbed`), a model is run from its saved state and drawn the
+  same way. Tests: `model.test.ts` on real run answers (`models/fixtures/*-run.json`: the branch's
+  route over production inputs of 2026-11-09; `synthetic-runs.json` for the UI tests' history),
+  regenerated, not hand-edited.
 
 Analysis (`src/analysis/`, `#/analysis`, sidebar "Analysis", `g p`): a guided research project
 per company, from its filings to a thesis that's checked after every filing. Rules are in
@@ -433,8 +448,8 @@ per company, from its filings to a thesis that's checked after every filing. Rul
   then the filing page's `Changes` for the latest 10-Q and 10-K;
   5 **Peers**: Compare with the target fixed and the peers saved in the project (`embedded`:
   changes come back instead of going to the URL), Save to project / Add to thesis for the comps;
-  6 **Model**: the project's models (ModelPage embedded, bear/base/bull), "Create the model"
-  from the company's history; 7 **Thesis**: ThesisPage embedded (no back link, no company
+  6 **Model**: the project's models (ModelPage embedded, bear/base/bull side by side), "Create
+  the model" from the company's history (this year from its reported quarters); 7 **Thesis**: ThesisPage embedded (no back link, no company
   picker); 8 **Monitor**: Check my thesis (disabled while the thesis has unsaved changes or only
   template text; checks run when the user asks), where the filings stand (Revisit's new-filing
   notice with a re-check, or which 10-K/10-Q the last check read), and the check panel (a quote
@@ -756,6 +771,7 @@ React.lazy); once signed in and idle the app prefetches them, so switching scree
 | + Revenue tab, Revisit (2026-11-02) | Company 30.0 kB (9.5 kB) with the Revenue view and its chart renderer; ThesisPage 22.8 kB (8.1 kB) | |
 | + Price tab, Settings (`#/settings`) (2026-11-02, Connect your data) | Company 37.1 kB (11.7 kB) with the Price tab; Settings 3.1 kB (1.4 kB); shell 358.7 kB (114.3 kB) | |
 | + Analysis (`#/analysis…`) (2026-11-02) | AnalysisPage 35.7 kB (12.0 kB) + ThesisPage 32.3 kB (11.8 kB), ModelPage 9.9 kB (3.8 kB), Compare 10.8 kB (4.0 kB), Company chunks; shell 361.0 kB (114.9 kB) | 48.6 kB (10.3 kB) |
+| + Model depth (2026-11-09, F2) | ModelPage 27.7 kB (9.6 kB), useModelRun 14.1 kB (5.0 kB), ModelView 6.2 kB (2.7 kB), model 3.3 kB (1.7 kB); shell 433.6 kB (142.4 kB) | 65.4 kB (13.6 kB) |
 
 Before splitting, everything was one 493.6 kB (156.3 kB gzip) script; the first screen now
 loads a third less. Most of what remains is React DOM. Chart data is cached in memory per
@@ -769,7 +785,11 @@ after query-api), so for a minute this page can talk to a Query API one release 
 of the newer API degrades rather than breaks (`api.ts`, tested in `api.test.ts`): a refused 1,000,000
 `max_chars` or 120 `quarters` is asked again at the old caps (50,000, 40); a save refused for a field
 the older strict models don't know (a chart layer's `display`, a screen's `issue`) is saved again
-without it, so no work is lost; versions answer an empty list on 404; data notes asked for some
+without it, so no work is lost (a model's F2 fields are the user's work, so a save the older API
+refuses for them says to try again in a minute instead of dropping them); a model run (`POST
+/v1/companies/{id}/model`) answering 404 shows "being updated, draws again in a minute" with Try
+again, and a new model then starts at zeros in the older shape; versions answer an empty list on
+404; data notes asked for some
 companies keep only those; a data-check screen the API didn't echo (`issue`) is a failure with Try
 again, never every company; `/annual-per-share`, `readings` and agent-api's `/v1/allowance` were
 already optional.
