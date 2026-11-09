@@ -152,7 +152,10 @@ services:
     secClass: bulk
     terminationGracePeriodSeconds: 60
     env:
-      CRAWL_YEARS: "5"
+      # 11 years reaches November 2015: the pre-2021 document backfill from 2016 (Lucas, 2026-11-09; measured in
+      # the doc-fetcher README: ~288k filings, ~+53 GB, ~29 h fetching at the spare rate, then search indexing).
+      # Once the features branch ships, CRAWL_SINCE: "2016-01-01" fixes the start instead of rolling.
+      CRAWL_YEARS: "11"
       # results, Reg FD and other events, plus the material events the company page lists since the last
       # report (deals, debt, leadership, impairments, auditor, non-reliance): ~65k more 8-Ks over 5 years
       CRAWL_8K_ITEMS: "1.01,1.02,1.03,1.05,2.01,2.02,2.03,2.04,2.05,2.06,3.01,3.02,3.03,4.01,4.02,5.01,5.02,5.03,7.01,8.01"
