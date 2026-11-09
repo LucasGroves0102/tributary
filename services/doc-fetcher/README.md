@@ -3,7 +3,8 @@
 FR2b, week 1. Consumes `filings.raw`; for 10-K, 10-Q and 8-K filings, fetches the filing index
 page, then the primary document, stores it gzip-compressed in `bronze.filing_documents` and
 publishes `documents.fetched` for the [parser](../parser). For 8-Ks it also stores the EX-99.x
-exhibits (press releases) in `bronze.filing_exhibits`. Each accession is fetched once.
+exhibits (press releases) in `bronze.filing_exhibits`. Each accession is fetched once. Forms 3, 4
+and 5 in the same feed are queued and stored as [insider filings](#insider-filings-forms-3-4-5).
 
 A filing is stored whole or not at all (migration 059): the index, the document and every exhibit
 are fetched first, then the document, its exhibits and an `ops.document_outbox` row commit in one
@@ -32,7 +33,11 @@ filings, the 8-Ks left out here, anything a fetch error dropped) at its next pla
 this stored first. Before 2026-11-09 untracked companies waited for that plan: over the week to
 2026-11-09 (feed 10-K/10-Q/8-K of operating companies), the median document arrived 138 minutes after
 acceptance for 10-Qs (90th percentile 323) and 140 for 8-Ks (322), against 1-2 minutes for tracked
-companies; sections followed within a minute either way. This costs 2-3 SEC requests per filing
+companies; sections followed within a minute either way. After the change went live (2026-11-09,
+from 3 pm ET to the day's last filing at 5:19 pm), 413 of the feed's 428 10-K/10-Q/8-Ks were
+stored and parsed, the median 53 s after acceptance and the 95th percentile 77 s (at most 139 s),
+including the 4 pm hour's 363 filings; the other 15 were 8-Ks with none of the items or filings of
+companies without financials. This costs 2-3 SEC requests per filing
 (index, document, exhibits) at the `live` class of the shared limit: ~3,800 filings a week. The
 busiest 10 minutes of that fortnight (2026-11-05, 16:00 ET) brought 244 filings, ~1.2 requests/s;
 one consumer takes 1-2 s a filing, so the end of such a burst waits 5-15 minutes, a quiet hour's
@@ -65,9 +70,11 @@ On k3s, `seed-documents` is a suspended CronJob for filling a new database
 Config (env): `SEC_USER_AGENT`, `DATABASE_URL` (both required), `KAFKA_BOOTSTRAP_SERVERS`
 (default `localhost:9092`), `FETCH_OPERATING` (default `true`), `FETCH_8K_ITEMS` (default the
 material items above; `all` for every 8-K), `FETCH_INSIDERS` (default `true`), `METRICS_PORT`, `LOG_LEVEL`, and the Kafka authentication variables of [libs/kafka](../../libs/kafka) (SASL/SCRAM on k3s).
+The insider job reads `INSIDERS_DAYS` and `INSIDERS_LIMIT` ([below](#insider-filings-forms-3-4-5)),
+the crawl its `CRAWL_*` settings ([Document crawl](#document-crawl)).
 SEC requests share one rate limit with every other service (`libs/sec`): `SEC_CALLER_CLASS`
-(`live` for the consumer, `bulk` for the seed job, default `batch`) and
-`SEC_LIMITER_DATABASE_URL` (default `DATABASE_URL`).
+(`live` for the consumer; `bulk` for the crawl, the seed and the insider jobs in the Helm values;
+default `batch`) and `SEC_LIMITER_DATABASE_URL` (default `DATABASE_URL`).
 
 ## Insider filings (Forms 3, 4, 5)
 
@@ -185,14 +192,15 @@ Section text is 9-21% of the HTML. Tracked-company averages in bronze (parser-rs
 10-K 3.3 MB, 10-Q 2.3 MB, 8-K 44 KB, EX-99 exhibit 310 KB. `ops.doc_crawl_status` reports the
 measured compression ratio and the projected final stored size as the crawl goes.
 
-### Documents before 2021 (F8b: measured, not started)
+### Documents before 2021
 
-Stored documents start 2021-10-21 (the first 5-year plan); XBRL figures go back to 2009. A backfill is
-one setting, `CRAWL_SINCE` (e.g. `2013-01-01`) on the doc-crawler: the plan then reaches back to it,
-newest first, so recent filings still go first, and the window never shortens. `CRAWL_YEARS` alone
-isn't the same: it rolls (14 years reaches 2012-11-09 today and moves a day each day) and can't stage
-2016 then 2013. Measured on hermes (2026-11-09, read only) for 2013-01-01 to 2021-10-20, operating
-companies, production's 20 8-K items:
+The first 5-year plan stored documents from 2021-10-21; XBRL figures go back to 2009. Since 2026-11-09
+production's window is 11 years (`CRAWL_YEARS`), so the crawl fetches the documents of 2016 onward
+(the "From 2016" figures below), newest first. Reaching further back is one setting, `CRAWL_SINCE`
+(e.g. `2013-01-01`, not set): the plan then reaches back to that date, and the window never shortens.
+`CRAWL_YEARS` alone rolls (14 years reaches 2012-11-09 on that day and moves a day each day), so it
+can't stage 2016 then 2013. Measured on hermes (2026-11-09, read only, before the change) for
+2013-01-01 to 2021-10-20, operating companies, production's 20 8-K items:
 
 | | 10-K | 10-K/A | 10-Q | 10-Q/A | 8-K | Total |
 |---|---|---|---|---|---|---|
@@ -203,20 +211,22 @@ companies, production's 20 8-K items:
 | Search passages (gold) | 13.0 GB | 0.6 GB | 14.2 GB | 0.3 GB | 7.5 GB | 35.6 GB |
 | What changed (gold) | 1.5 GB | | 5.9 GB | | | 7.5 GB |
 
-About 74 GB more database (97 GB today), the weekly full backup about 26 GB larger, ~41 hours of
-fetching at the crawl's 10,000 filings an hour (the 5-year crawl's rate; parsing keeps pace) and ~53
+About 74 GB more database (97 GB on 2026-11-09), the weekly full backup about 26 GB larger, ~41
+hours of fetching at the crawl's 10,000 filings an hour (the 5-year crawl's rate; parsing keeps pace) and ~53
 hours of section-index. From 2016 instead: 287,853 filings, ~53 GB and ~19 GB, ~29 and ~37 hours.
 Pre-2019 HTML (no inline XBRL) stores at 0.67 (10-K) and 0.72 (10-Q) of today's per-filing size: 24
 sampled 2015 documents beside the same companies' 2025 ones. The parser reads them: of the 24, Item 1A
 in 11 of 12 10-Ks, Item 7 in 12 (one a cross-reference), MD&A in 11 of 12 10-Qs. Where it costs: the
-weekly full dump and the Sunday restore test (`FREE_SPACE_FACTOR` x the dump) on the same disk; the
-steps, the disk budget and the decisions are in the F8b runbook (docs/analyst-test, local).
+weekly full dump and the Sunday restore test (`FREE_SPACE_FACTOR` x the dump) on the same disk
+([deploy/host](../../deploy/host/README.md)).
 
-Before starting on hermes, check the target count without writing anything:
+Before changing the window or the items on hermes, check how many filings it adds without writing
+anything (here `CRAWL_SINCE=2013-01-01` with production's 20 items; the function returns the count):
 
 ```sql
 BEGIN;
-SELECT ops.doc_crawl_plan((current_date - interval '5 years')::date, '{2.02,7.01,8.01}');
+SELECT ops.doc_crawl_plan('2013-01-01',
+  '{1.01,1.02,1.03,1.05,2.01,2.02,2.03,2.04,2.05,2.06,3.01,3.02,3.03,4.01,4.02,5.01,5.02,5.03,7.01,8.01}');
 SELECT form, count(*) FROM ops.doc_crawl_targets GROUP BY form;
 ROLLBACK;
 ```
@@ -228,4 +238,9 @@ selection against saved EDGAR pages and submissions in `tests/fixtures/`; the li
 coverage and 8-K item filter (`test_main.py`, fakes for the connection and producer); the crawl (`test_crawl.py`: fetching behind
 `httpx.MockTransport`, batching, retries, resume, disk guard and publishing with an in-memory
 queue and producer; `test_crawl_db.py`: planning, claim order, leases, storing and the ops views,
-with `TEST_DATABASE_URL`).
+with `TEST_DATABASE_URL`); the outbox (`test_main.py`: one transaction per filing, republishing
+what Kafka didn't confirm, no second event when the crawl and the live side both store a filing);
+insider filings (`test_ownership.py`: the XML read from real NVIDIA submissions in
+`tests/fixtures/ownership`, bad dates and repeated elements, a parse failure kept in bronze, the
+queue's backoff through a simulated outage, the backfill going on after an error; the database
+cases need `TEST_DATABASE_URL`).

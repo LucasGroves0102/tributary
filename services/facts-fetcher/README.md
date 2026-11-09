@@ -1,12 +1,14 @@
 # facts-fetcher
 
 FR2a. XBRL company facts → `bronze.company_facts` → `silver.financial_facts` →
-`gold.quarterly_financials`. Two jobs share the bronze format and the set-based SQL refreshes
-(`silver.refresh_financial_facts(text[])`, `gold.refresh_quarterly_financials(text[])`,
-`db/migrations/011_bulk_financials.sql`; gold ties broken deterministically since
-`015_gold_tiebreaks.sql`, latest gold rules in `031_gold_one_quarter_series.sql`: one
-non-overlapping series of quarters per company and metric, see [db](../../db/README.md)). The tracked-company list and CIK mapping come from
-[company-loader](../company-loader); the [Query API](../query-api) serves the gold rows.
+`gold.quarterly_financials`. The companyfacts jobs share the bronze format and the set-based SQL
+refreshes (`silver.refresh_financial_facts(text[])`, then `gold.refresh_financials(text[])`:
+quarters, derived and TTM metrics, the quality check). The rules live in those SQL functions, and
+[db/transforms](../../db/transforms/README.md) lists the migration that holds each one's latest
+definition (one non-overlapping series of quarters per company and metric since 031, which fact
+gold believes since 039, currencies since 056; see [db](../../db/README.md)). The tracked-company
+list and CIK mapping come from [company-loader](../company-loader); the
+[Query API](../query-api) serves the gold rows.
 
 **`facts-fetcher`**: the companyfacts API for every CIK of every tracked company, one
 transaction per company. Unchanged payloads (same SHA-256) only bump `last_checked_at`.
@@ -14,7 +16,8 @@ transaction per company. Unchanged payloads (same SHA-256) only bump `last_check
 **`facts-fetcher-bulk`**: every SEC filer, from the nightly `companyfacts.zip` (one request,
 streamed to `$BULK_DIR`; `If-Modified-Since` skips an unchanged file). Entries are read one at
 a time; only those whose hash differs from the stored payload are parsed and written, in
-transactions of 50 that also advance the checkpoint in `bronze.bulk_loads`. A run stops after
+transactions of 50 (or fewer, once their compressed payloads reach 32 MB) that also advance the
+checkpoint in `bronze.bulk_loads`. A run stops after
 `--limit` changed entries (`$BULK_LIMIT`, default 500) and the next run resumes after the last
 committed entry, so the first load is a series of short runs and a crash loses one batch at
 most. When a run reaches the end it also builds gold for companies that have silver facts but
@@ -61,6 +64,11 @@ so a filer of annual reports has fiscal years and year-end balances, and one who
 has those. Rebuilt from production's payloads of the 517 listed 20-F/40-F filers without gold: 490
 get figures (74 s locally), Birkenstock's FY2025 revenue €2,097.4M and its December 2025 quarter's
 €401.9M among them.
+
+Nothing here converts currencies. Every gold row keeps its `unit`, and where a reading needs a
+company's currency it asks `gold.amount_currency` (migration 057: its latest quarterly revenue or net
+income row, and since 060 an annual-only filer's stated-year TTM rows). 035's dollar bases (revenue
+under $100K, growth from under $10M) apply to dollar amounts only. Details in [db](../../db/README.md).
 
 ## Filings companyfacts lacks
 
@@ -156,8 +164,9 @@ shows up 1-5 weeks later). Their size: September 2026, a light month, is a 53 MB
 `num.tsv` 108 MB and `txt.tsv` 142 MB uncompressed; quarterly zips run to 630 MB, ~35 GB for
 the history. The documents give exact dates, full QNames and exact decimals per filing as soon
 as the document is stored, at zero extra SEC traffic. Their limit: inline XBRL started in
-2019-2021 (phase-in), and the crawl covers `CRAWL_YEARS` (5); deeper history would need the data
-sets (or each older filing's separate instance file) later.
+2019-2021 (phase-in), so the older documents the crawl stores (`CRAWL_YEARS` is 11 on hermes since
+2026-11-09, back to late 2015) are extracted as `no_ixbrl`; their segments would need the data sets
+or each filing's separate instance file.
 
 How it runs (module docstrings hold the exact rules):
 
@@ -210,15 +219,23 @@ make segments LIMIT=2000                           # facts-fetcher-segments
 make segments-rebuild                              # facts-fetcher-segments --rebuild
 ```
 
-On k3s: `financials` CronJob nightly (04:00 New York) and `financials-bulk` (05:00, 12 rounds
-of 500 with 10 minute pauses; ships suspended); `segments` hourly at :20 (ships suspended, running on hermes;
-1 Gi memory limit, no SEC access).
+CronJobs on k3s (New York time; [helm chart](../../deploy/helm/tributary/README.md)):
+
+| Job | Command | When |
+|---|---|---|
+| `financials` | `facts-fetcher` | nightly 04:00 |
+| `financials-bulk` | `facts-fetcher-bulk` | nightly 05:00, up to 60 rounds of 500 changed companies, no pause |
+| `filing-facts` | `facts-fetcher-filings` | daily 09:30; ships suspended until its first run by hand |
+| `segments` | `facts-fetcher-segments` | hourly at :20; ships suspended, unsuspended in the Flux release; no SEC access |
+| `financials-rebuild` | `facts-fetcher --rebuild` | suspended, run by hand after a change to tags or gold rules; no SEC access |
 
 Config (env): `DATABASE_URL`, `SEC_USER_AGENT` (both required; the bulk job needs no
-`SEC_USER_AGENT` with `--zip`), `BULK_DIR` (default the system temp dir), `BULK_LIMIT`
-(default 500), `BULK_ROUNDS` (default 1), `BULK_PAUSE_SECONDS` (default 0), `LOG_LEVEL`.
+`SEC_USER_AGENT` with `--zip`, the segments job and `--rebuild` none at all), `BULK_DIR` (default
+the system temp dir), `BULK_LIMIT` (default 500), `BULK_ROUNDS` (default 1), `BULK_PAUSE_SECONDS`
+(default 0), `SEGMENTS_LIMIT` (2000), `SEGMENTS_BATCH` (25), `SEGMENTS_ROUNDS` (1),
+`SEGMENTS_PAUSE_SECONDS` (0), the `FILING_FACTS_*` settings above, `LOG_LEVEL`.
 SEC requests share one rate limit with every other service (`libs/sec`): `SEC_CALLER_CLASS`
-(`batch` for both jobs) and `SEC_LIMITER_DATABASE_URL` (default `DATABASE_URL`).
+(`batch` for every job here) and `SEC_LIMITER_DATABASE_URL` (default `DATABASE_URL`).
 
 ## Tests
 
@@ -227,8 +244,9 @@ full 10-K/10-Q (the parser's fixtures) and trimmed Apple, Coca-Cola and PepsiCo 
 `tests/fixtures/ixbrl/` (made with `tests/trim_ixbrl.py`, which streams a filing and keeps only
 the segment metric facts and their contexts); `test_segments_db.py` (loader, renames, Q4, TTM,
 quality check, rebuild) with `TEST_DATABASE_URL`. `test_gold_selection.py` holds one case per rule of
-migrations 038-043 and 050, each shaped like the filing it came from (Flowserve's zero revenue, M&T's bank
-revenue, NVIDIA's securities and dividends, Ford's debt, Legacy Housing's 2033 date, ...). Also the full bronze → silver → gold path against trimmed real
+migrations 038-043, 050 and 057's debt check, each shaped like the filing it came from (Flowserve's zero
+revenue, M&T's bank revenue, NVIDIA's securities and dividends, Ford's debt, Legacy Housing's 2033 date,
+DTE Energy's 10-Qs under DTE Electric, ...); `test_bank_metrics.py` a bank's own lines (048). Also the full bronze → silver → gold path against trimmed real
 companyfacts payloads in `tests/fixtures/` (`test_pipeline.py`; shared `conn` / `loaded`
 fixtures in `conftest.py`), and the bulk loader on small zips. `test_filings.py`: instances (trimmed real
 ones in `tests/fixtures/instance/`, made with `tests/trim_instance.py`), projection, and with a database the

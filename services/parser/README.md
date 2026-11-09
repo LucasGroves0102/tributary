@@ -14,7 +14,10 @@ citations from the `gold.filing_sections` view.
 
 Section keys: 10-K `1A`, 10-Q `II-1A`, 8-K `2.02`, 8-K exhibits `EX-99.1`. Re-parsing an
 accession replaces its rows from either parser, so a document always has one parser's sections
-([parser-rs](../parser-rs) is the Rust build of this service).
+([parser-rs](../parser-rs) is the Rust build of this service). Production runs the Rust build
+(`services.parser.image: parser-rs` in the Helm values, since 2026-10-20); this service is the
+reference it must match, the image one value away for a rollback, and what docker-compose runs.
+The same image holds the batch jobs below (`parser-index`, `parser-peers`).
 
 The algorithm is specified in the docstring of `src/filing_parser/sections.py` so the Rust
 rewrite ([parser-rs](../parser-rs), week 4) can produce identical output for benchmarking. It
@@ -63,7 +66,7 @@ WHERE d.accession_no = t.accession_no AND t.status = 'done' AND d.form ~ '^10-[K
 -- 3. progress: unpublished goes to 0, then the parser-backfill lag drains
 SELECT unpublished FROM ops.doc_crawl_status;
 SELECT parser_version, count(DISTINCT accession_no) FROM silver.filing_sections
-WHERE parser_version IN ('python-4', 'rust-4') GROUP BY 1;
+WHERE parser_version IN ('python-5', 'rust-5') GROUP BY 1;   -- the current PARSER_VERSION
 ```
 
 Re-running step 1 afterwards lists the documents rule 9 could not split (no Item headings and no
@@ -133,8 +136,11 @@ sections into:
   same quarter a year earlier. Paragraph-level, focused on substance: new, removed and rewritten
   paragraphs (with word-diff opcodes) are stored; unchanged ones, minor edits and number-only
   updates are counted. The algorithm and thresholds are specified in `filing_parser/diff.py`'s
-  docstring (bump `ALGORITHM` with any change: every diff is recomputed). Diffs are Python, not
-  SQL like the other transforms, because alignment needs fuzzy matching and difflib.
+  docstring (bump `ALGORITHM`, now `diff-1`, with any change: every diff is recomputed, oldest
+  first, for hours). Diffs are Python, not SQL like the other transforms, because alignment needs
+  fuzzy matching and difflib. The Query API reads the stored diff a second time on each request
+  ([What changed](../query-api/README.md#what-changed): page furniture, split paragraphs, calendar
+  rollovers, periods, ranking), so a noise or ranking rule belongs there and needs no recompute.
 
 Incremental: `ops.section_index` is the checkpoint (one row per filing: when its sections were
 parsed, which filings its diffs used). `ops.section_index_pending` returns filings whose sections
@@ -147,19 +153,21 @@ resumes and a re-run is a no-op. One run at a time (advisory lock).
 make section-index LIMIT=5000   # parser-index --limit 5000 [--batch 25]
 ```
 
-Config: `DATABASE_URL`, `SECTION_INDEX_LIMIT` (default 5000), `SECTION_INDEX_BATCH` (25). Helm:
-CronJob `section-index` (hourly; ships suspended, running on hermes since the crawl finished). Progress: `ops.section_index_status`;
-counts per compared section: `ops.section_change_summary`.
+Config: `DATABASE_URL`, `SECTION_INDEX_LIMIT` (default 5000; 20,000 in the Helm values),
+`SECTION_INDEX_BATCH` (25). Helm: CronJob `section-index` (hourly at :40; ships suspended, the Flux
+release turns it on). Progress: `ops.section_index_status`; counts per compared section:
+`ops.section_change_summary`.
 
 Cost on a sample of 78 real filings (10 companies, 12.8 MB of section text): 3 s of
 `to_tsvector` for passages, ~35 ms per section diff. Search table + indexes: ~1.3x the raw
 section text when the GIN index is freshly built (tsvectors ~1x, GIN 0.25x, b-trees 0.04x); the
 GIN index grows to ~0.5-0.7x under incremental inserts, so REINDEX it after a bulk load.
 
-## Peers by business (`parser-peers`)
+## Peers by business
 
-A weekly batch job in the same image (`filing_parser/business.py`, its docstring is the spec;
-migration 047) that compares what companies say they do. For every company with financials it
+`parser-peers`, a weekly batch job in the same image (`filing_parser/business.py`, its docstring is
+the spec; `ALGORITHM` stored with each profile; migration 047), compares what companies say they
+do. For every company with financials it
 reads Item 1 (Business) of its latest 10-K from the last three years that has a usable one (at
 least 3,000 characters and not mis-parsed: Intel's, GE's and McDonald's are cross-references, so no profile),
 turns the first 80,000 characters into words and two-word phrases (stop words, places and
@@ -190,7 +198,9 @@ characters, mostly pointers to the rest of its 10-K.
 parser-peers   # DATABASE_URL; no options
 ```
 
-Helm: CronJob `business-peers` (Sundays 05:30); run it once after the deploy that adds migration 047.
+Helm: CronJob `business-peers` (Sundays 05:30 ET, not suspended, 1 GiB limit); run it once by hand
+after the deploy that adds migration 047. Until a run has stored peers, the Query API ranks them by
+SIC and size.
 
 ## Tests
 

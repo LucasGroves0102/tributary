@@ -27,7 +27,8 @@ requests in any one-second window and 7/s sustained. Tune with
 `UPDATE ops.sec_rate_limit` / `ops.sec_rate_classes`; callers pick it up on their next request.
 
 - **Priorities.** Each caller has a class, `SEC_CALLER_CLASS`: `live` (poller, doc-fetcher
-  for new filings), `batch` (nightly jobs) or `bulk` (crawls). A class only takes a token if
+  for new filings), `batch` (nightly jobs) or `bulk` (the document crawl, the seed and the
+  insider-filings jobs). A class only takes a token if
   its reserve (0, 0.5, 1) is left afterwards, so batch and bulk always leave a token for live,
   and stop entirely while live keeps the bucket low. Bulk still gets the full rate when nothing
   else is asking. Callers of one class race for tokens with jittered waits, which shares them

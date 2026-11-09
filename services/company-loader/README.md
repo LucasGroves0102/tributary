@@ -40,7 +40,8 @@ Loads the SEC's nightly `submissions.zip` (~1.6 GB, one JSON per CIK plus
 
 - `bronze.submissions`: each CIK's metadata (the JSON without its filing arrays) and content hash
 - `bronze.submission_filings`: every filing per (accession, CIK): form, filing date, acceptance
-  time, period of report, primary document
+  time, period of report, primary document, and an 8-K's item numbers (`items`, "2.02,9.01"),
+  which the Query API's earnings and events read through `silver.company_8ks` (migration 045)
 - `silver.companies` metadata for known companies: SIC and industry, tickers, exchanges, fiscal
   year end (MMDD), state of incorporation, filer categories; former names as aliases
   (`silver.refresh_company_metadata`)
@@ -69,9 +70,13 @@ set -a; . ./.env; set +a
 Config (env): `DATABASE_URL`, `SEC_USER_AGENT` (unless `--zip`), `SUBMISSIONS_DBNAME` (load
 another database on the same server; same as `--dbname`).
 
-On k3s this is the `submissions` CronJob (20,000 CIKs x 10 rounds, 10 minute pauses). It ships
-suspended; start a run with `kubectl -n tributary create job --from=cronjob/submissions
-submissions-1`.
+On k3s this is the `submissions` CronJob, nightly at 05:30 New York (`--max-ciks 20000 --rounds
+60`, no pause; a night with an unchanged zip ends at the 304). Start an extra run with
+`kubectl -n tributary create job --from=cronjob/submissions submissions-1`.
+
+Sectors aren't loaded: the screener's 12 sectors and 88 industries are Tributary's own fixed
+grouping of the SIC code this load stores (`silver.sic_sectors`, migration 046), and the fiscal
+year end month people see is read from `fiscal_year_end` by `silver.fiscal_year_end_month` (042).
 
 ## Tests
 

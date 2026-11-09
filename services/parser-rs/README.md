@@ -1,6 +1,9 @@
 # parser-rs
 
-FR3, week 4. Rust rewrite of the parser with output identical to the Python version, benchmarked against it on the same filings. Runs in the pipeline when the chart's `services.parser.image` is `parser-rs`; the default is still the Python service.
+FR3, week 4. Rust rewrite of the parser with output identical to the Python version, benchmarked
+against it on the same filings. The live parser since 2026-10-20: the chart's `services.parser.image`
+and `services.parser-backfill.image` are `parser-rs`, and setting them to `parser` rolls back to the
+Python service. docker-compose still runs the Python one.
 
 The algorithm is the one specified in `services/parser/src/filing_parser/sections.py`, and the
 output is identical: same sections, keys, titles, text and character offsets. Rule 1 depends on
@@ -32,9 +35,12 @@ TLS-only server (CI). `parser-rs` reads JSON lines on stdin,
 `{"id", "path", "form"}` or `{"id", "path", "exhibit_type", "description"}` (`path` may be
 gzipped), and prints each document's sections (`--bench`: size and parse time).
 
-Building needs make and a C++ compiler for the bundled librdkafka. `services/parser/tests/
-test_rust_service.py` runs both services' `--reparse-all` on the same documents and compares the
-rows and log fields (`TEST_DATABASE_URL`, `PARSER_RS_BIN`).
+Building needs make, a C++ compiler for the bundled librdkafka and the OpenSSL headers. CI builds
+it (Rust 1.99.1): the `rust` job runs `cargo fmt --check`, clippy with warnings as errors and
+`cargo test`, and the Python job builds the `parser` binary for `services/parser/tests/
+test_rust_service.py`, which runs both services' `--reparse-all` on the same documents and compares
+the rows and log fields (`TEST_DATABASE_URL`, `PARSER_RS_BIN`). The image (`Dockerfile`) is a
+release build on a distroless runtime with both binaries.
 
 ## Equivalence and benchmark
 
@@ -71,9 +77,9 @@ decides ~2,500 of each 20,000 documents per form): 20,000 documents (`--tokens 6
 Rule 10 (clean titles, 2026-11-09, `rust-5` / `python-5`): `section_title` in `src/sections.rs`
 mirrors `_title` in sections.py line by line (the lead set is `TITLE_LEAD` plus two ranges, the
 wrapped-title words come from the same `TITLES_10K` / `TITLES_10Q` and `title_core`/`fold_title`).
-Written without a local build (the laptop can't run cargo): its unit tests in `tests/sections.rs`
-copy the Python ones, and CI's `cargo test`, clippy and fmt are the first check. Before deploying,
-run `scripts/bench.py` over a corpus as above: zero differences expected, titles included.
+Written without a local build: its unit tests in `tests/sections.rs` copy the Python ones, and CI's
+`cargo test`, clippy, fmt and `test_rust_service.py` (both services' rows on the fixtures) checked it.
+The corpus and fuzz comparison above was not rerun for rule 10.
 
 Known gap: documents declaring a legacy encoding other than UTF-8/16, ISO-8859-x, windows-1252
 or ASCII are decoded with encoding_rs, whose Shift_JIS, GB2312 and Mac Roman tables differ from

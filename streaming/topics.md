@@ -8,8 +8,11 @@
 
 `filings.raw` has one event per filer, so a Form 4 produces two events (Reporting + Issuer)
 with the same accession number. Consumers must be idempotent on `(accession_no, cik)`.
-doc-fetcher stores a Form 3/4/5 once, from the event that isn't the reporting owner's, when that
-CIK is a tracked or operating company's (insider filings, migration 054); the shape is unchanged.
+doc-fetcher stores a Form 3/4/5 once, from the live `feed` event that isn't the reporting owner's,
+when that CIK is a tracked or operating company's (insider filings, migration 054): it queues the
+filing in `ops.insider_queue` (059) and fetches it when the consumer is idle, so no SEC request sits in
+the message path. The daily `doc-fetcher-insiders` catch-up reads the submissions index, not Kafka.
+The shape is unchanged.
 
 `source` is `feed` (live poller; `filed_at` is the exact acceptance time), `daily-index`
 (backfill; `filed_at` is midnight US Eastern and `role` is `Unknown`) or `seed`

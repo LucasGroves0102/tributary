@@ -3,7 +3,8 @@
 FR1, week 1. Polls the EDGAR latest-filings feed and publishes each new filing to the
 `filings.raw` Kafka topic, keyed by CIK. Downstream, [bronze-loader](../bronze-loader) writes
 the events to `bronze.filings` and [doc-fetcher](../doc-fetcher) fetches the documents of tracked
-companies and every operating company's new 10-K, 10-Q and material 8-K.
+companies, every operating company's new 10-K, 10-Q and material 8-K, and their insiders' Forms
+3, 4 and 5.
 
 Feed: https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&output=atom
 
@@ -56,8 +57,9 @@ make backfill DAYS=7
 
 On k3s it runs nightly as the `backfill` CronJob over a rolling 30 days (`--days 30`, 02:00 New
 York), so a day keeps being rechecked for a month and `missing` drops to 0 after a republish.
-Filings it republishes have no 8-K items (the index doesn't carry them), so the document crawl's
-8-K item filter won't fetch their documents.
+Filings it republishes carry no 8-K items (the index doesn't have them). Until the nightly
+submissions load has a filing's items, the document crawl's 8-K item filter keeps it
+(`ops.doc_crawl_plan`, migration 020: unknown items are kept).
 
 ## Tests
 
