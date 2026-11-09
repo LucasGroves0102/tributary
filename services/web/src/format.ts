@@ -47,6 +47,14 @@ export function day(isoDate: string, withYear = false): string {
   return `${MONTHS[m! - 1]} ${d}${withYear ? `, ${y}` : ""}`;
 }
 
+/** A moment's date where the viewer is: "2026-11-07T03:00:00Z" is Nov 6 in Phoenix, Nov 7 in
+ * London. A timestamp without a zone is local already; one that doesn't parse reads as written. */
+export function localDay(timestamp: string, withYear = false): string {
+  const at = new Date(timestamp);
+  if (Number.isNaN(at.getTime())) return day(timestamp, withYear);
+  return `${MONTHS[at.getMonth()]} ${at.getDate()}${withYear ? `, ${at.getFullYear()}` : ""}`;
+}
+
 /** A filing's "period of report": the period a 10-K or 10-Q covers, but on an 8-K the date of the
  * event it reports, which covers no period. */
 export function periodPhrase(form: string | null | undefined, isoDate: string): string {

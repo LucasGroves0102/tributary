@@ -250,7 +250,8 @@ function CompanyFilter({ token, value, open, companies, suggestions, set }: {
       live = false;
     };
   }, [token, value, named, offered]);
-  const shown = value ? (named?.companyId === value ? named : { companyId: value, name: value }) : null;
+  // never the id as a name: "…" until the search answers (the directory's UNNAMED)
+  const shown = value ? (named?.companyId === value ? named : { companyId: value, name: UNNAMED }) : null;
   return (
     <CompanyPicker token={token} label="Company" value={shown} emptyLabel={open ? "All companies" : "All you can read"}
       placeholder="Name or ticker" readable={readable} suggestions={offered}

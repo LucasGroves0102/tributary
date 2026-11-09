@@ -410,6 +410,34 @@ def test_financials_reads_not_meaningful_only_when_asked(conn, token):
     assert "under $100K" in asked["rows"][0]["not_meaningful"]
 
 
+def test_financials_say_where_equity_makes_a_ratio_meaningless(conn, token):
+    """The web's Ratios table read negative equity itself (equity <= 0 means n/m): the API says
+    it now, by 035's rule, both for a period gold has no ratio row for (014's guard) and over a
+    row's own reading. Only with readings: the agent's tool shape doesn't change."""
+    c = api(conn)
+    q = {"metrics": ["debt_to_equity", "roe", "stockholders_equity"], "quarters": 8}
+    plain = c.get(f"/v1/companies/{NEGATIVE}/financials", headers=token(USER), params=q).json()
+    assert "not_meaningful_periods" not in plain
+    asked = c.get(f"/v1/companies/{NEGATIVE}/financials", headers=token(USER),
+                  params={**q, "readings": "true"}).json()
+    assert asked["not_meaningful_periods"] == [
+        {"metric": "debt_to_equity", "period_end": "2026-09-30",
+         "reason": "stockholders' equity is negative"},
+        {"metric": "roe", "period_end": "2026-09-30", "reason": "stockholders' equity is negative"}]
+    # a ratio row at a negative-equity date reads n/m for that reason, whatever its own value
+    derived(conn, NEGATIVE, "debt_to_equity", LATEST, Decimal("3.1"), {}, span="quarter")
+    asked = c.get(f"/v1/companies/{NEGATIVE}/financials", headers=token(USER),
+                  params={**q, "readings": "true"}).json()
+    de = [r for r in asked["rows"] if r["metric"] == "debt_to_equity"]
+    assert de[0]["period_end"] == "2026-09-30" and de[0]["value"] == "3.1"
+    assert de[0]["not_meaningful"] == "stockholders' equity is negative"
+    assert [p["metric"] for p in asked["not_meaningful_periods"]] == ["roe"]
+    # the CSV is the figures as they are
+    csv = c.get(f"/v1/companies/{NEGATIVE}/financials", headers=token(USER),
+                params={**q, "readings": "true", "format": "csv"})
+    assert csv.status_code == 200 and "not_meaningful" not in csv.text
+
+
 @pytest.mark.parametrize(
     ("metric", "value", "inputs", "equity", "says"),
     [

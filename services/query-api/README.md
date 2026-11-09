@@ -166,7 +166,8 @@ them for nothing.
 counted; `q` and `issue` list a company whatever it has, and with the catalog closed a company you
 can't read is listed anyway. `issue` (a data-quality check's name, the status page's rows) lists only
 companies with a finding of it, read under RLS: one the caller can't read never matches, so it says
-nothing about them. Columns are `<metric>_ttm` (trailing twelve months; balance-sheet metrics at the
+nothing about them. The JSON echoes `issue`, so a client can tell an older API that ignored it (and
+listed everyone) from an answer. Columns are `<metric>_ttm` (trailing twelve months; balance-sheet metrics at the
 quarter end) or `<metric>_q` (latest fiscal quarter) for every metric in the formula catalog,
 each the latest value with its own `sources[key]` (`period_end`, `accession_no`, `form`,
 `filed`). Filters: `sic` (4-digit, repeatable), `sic_prefix` (1-3 digits), `industry` (SIC
@@ -197,8 +198,12 @@ net debt, debt to equity and current ratio, whether or not a value exists. `old`
 before the company's `latest_period` (the newest of its revenue, net income and total assets, never a
 future date). `behind`: more than 45. `values` keeps the exact figure in every case, but all except
 `behind` sort after real values and never pass a `where` or a size band: sorting by gross margin
-doesn't open on 209,828%. `/financials?readings=true` adds the row's `not_meaningful`; off by default,
-so the agent's tool sees what it always did.
+doesn't open on 209,828%. `/financials?readings=true` adds the row's `not_meaningful` (debt/equity and
+ROE on that period's negative equity first) and `not_meaningful_periods: [{metric, period_end,
+reason}]`, the periods a requested metric has no row because of the company's equity there (gold has
+no debt/equity or ROE on negative equity), both by `gold.not_meaningful` (`Store.equity_readings`); off
+by default, so the agent's tool sees what it always did. The web app reads these instead of working
+out equity itself.
 
 Companies you can't read financials for are **listed with metadata only** (values and sources
 null, `access` without `financials`), because identity is public and the screener is how you

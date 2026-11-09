@@ -359,7 +359,9 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
             alias="format", description="csv: one row per value, with its source filing")]
             = "json",
         readings: Annotated[bool, Query(
-            description="add `not_meaningful` (why a ratio reads n/m, migration 035) to each row")]
+            description="add `not_meaningful` (why a ratio reads n/m, migration 035) to each row, "
+                        "and `not_meaningful_periods` for periods a ratio has no row because of "
+                        "the company's equity")]
             = False,
     ) -> dict | Response:
         names = metric_names()
@@ -370,6 +372,19 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
         require(user_id, "financials", company_id)
         rows = store.financials(user_id, company_id, metrics or every, quarters, view, basis)
         meta = {"company_id": company_id, "view": view, "basis": basis, "as_of": _now()}
+        # equity's reasons (035): over a row's own, and where gold has no row (negative equity)
+        by_equity: dict[tuple[str, date], str] = {}
+        if readings and fmt == "json":
+            ends = sorted({r["period_end"] for r in rows})
+            for e in store.equity_readings(user_id, company_id, metrics or every, view, ends):
+                by_equity[(e["metric"], e["period_end"])] = e["reason"]
+            for r in rows:
+                if (r["metric"], r["period_end"]) in by_equity:
+                    r["not_meaningful"] = by_equity.pop((r["metric"], r["period_end"]))
+            meta["not_meaningful_periods"] = [
+                {"metric": m, "period_end": end, "reason": reason}
+                for (m, end), reason in sorted(by_equity.items(),
+                                               key=lambda x: (x[0][0], -x[0][1].toordinal()))]
         if fmt == "csv":
             return csv_response(f"{company_id}-financials-{view}-{basis}.csv", FINANCIALS_CSV, ([
                 r["metric"], view, r["period_start"], r["period_end"],

@@ -292,6 +292,27 @@ class Store:
                 """, (company_id, view, metrics, basis, quarters))
             return cur.fetchall()
 
+    def equity_readings(self, user_id: str, company_id: str, metrics: list[str], view: str,
+                        ends: list[date]) -> list[dict]:
+        """Why a metric reads n/m at these period ends because of the company's stockholders'
+        equity there, by migration 035's gold.not_meaningful (debt/equity and ROE on negative
+        equity: gold has no row then, 014's guard). [{metric, period_end, reason}]."""
+        if not ends or not metrics:
+            return []
+        with self._session(user_id) as cur:
+            cur.execute(
+                """
+                SELECT m.metric, e.period_end, r.reason
+                FROM gold.financials e
+                CROSS JOIN unnest(%s::text[]) AS m(metric)
+                CROSS JOIN LATERAL (
+                    SELECT gold.not_meaningful(m.metric, NULL, NULL, e.value) AS reason) r
+                WHERE e.company_id = %s AND e.span = %s AND e.metric = 'stockholders_equity'
+                  AND e.period_end = ANY(%s::date[]) AND r.reason IS NOT NULL
+                ORDER BY m.metric, e.period_end DESC
+                """, (metrics, company_id, view, ends))
+            return cur.fetchall()
+
     def annual_per_share(self, user_id: str, company_id: str, years: int) -> list[dict]:
         """The 10-K's own EPS and weighted shares per fiscal year (gold.annual_per_share,
         migration 036): gold's quarters have no annual per-share figure, and these don't add."""

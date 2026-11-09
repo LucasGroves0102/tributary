@@ -6,7 +6,7 @@ import {
   activeFilters,
   BAND_LABELS,
   BANDS,
-  CHECKS,
+  checkName,
   countWords,
   DEFAULT_SORT,
   describe,
@@ -292,7 +292,7 @@ function FilterRail({ screen, set, scoped }: {
           <span className="small muted">From the data status page</span>
           <button type="button" className="chip removable" onClick={() => apply({ issue: undefined })}
             title="Remove the data-check filter">
-            {CHECKS[screen.issue] ?? screen.issue} ✕
+            {checkName(screen.issue) ?? screen.issue} ✕
           </button>
           <p className="faint small">
             Each company's Data notes tab shows what was found. Only companies you can read are listed.

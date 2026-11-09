@@ -2,7 +2,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import type { ScreenFilters } from "../companies/screen";
+import { checkName, parseScreen, type ScreenFilters } from "../companies/screen";
 import { download } from "../download";
 import { entry, NVDA, TESLA, TSLA } from "../fixtures";
 import { ScopeContext, type Scope } from "../scope";
@@ -30,11 +30,12 @@ beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   vi.stubGlobal(
     "fetch",
-    vi.fn(async (url: string) =>
-      new URL(url, "http://x").searchParams.get("format") === "csv"
-        ? new Response("company_id,name\n", { headers: { "Content-Type": "text/csv" } })
-        : Response.json(SCREEN),
-    ),
+    vi.fn(async (url: string) => {
+      const p = new URL(url, "http://x").searchParams;
+      if (p.get("format") === "csv") return new Response("company_id,name\n", { headers: { "Content-Type": "text/csv" } });
+      // the Query API echoes the data check it screened for
+      return Response.json({ ...SCREEN, ...(p.get("issue") ? { issue: p.get("issue") } : {}) });
+    }),
   );
   onWatch.mockClear();
   onChart.mockClear();
@@ -171,6 +172,21 @@ it("a data check from the status page is a filter you can see and remove", async
   const chip = [...container.querySelectorAll("button.chip")].find((b) => b.textContent?.includes("Impossible values"))!;
   await act(async () => (chip as HTMLElement).click());
   expect(window.location.hash.includes("issue")).toBe(false);
+});
+
+it("a data check an older API ignores lists nobody, and says to try again", async () => {
+  // the minute of a deploy: an API without the filter answers with every company
+  vi.mocked(fetch).mockImplementation(async () => Response.json(SCREEN));
+  await render({ issue: "impossible_value" });
+  expect(container.querySelectorAll("tbody tr").length).toBe(0);
+  expect(container.textContent).toContain("Try again");
+});
+
+it("an address's issue=constructor is no data check", () => {
+  expect(parseScreen("issue=constructor")).toEqual({});
+  expect(parseScreen("issue=toString")).toEqual({});
+  expect(checkName("constructor")).toBeUndefined();
+  expect(checkName("impossible_value")).toContain("Impossible values");
 });
 
 it("watches, unwatches and charts from a row", async () => {

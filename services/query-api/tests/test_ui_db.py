@@ -362,6 +362,10 @@ def test_screener_lists_a_data_check_only_for_companies_the_caller_can_read(reca
     assert listed("t-free", "outlier") == []
     assert listed("t-nobody", "impossible_value") == []
     assert api.get("/v1/screener?issue=DROP%20TABLE", headers=token("t-free")).status_code == 422
+    # echoed, so the web app can tell this from an older API that ignored it and listed everyone
+    echoed = api.get("/v1/screener?issue=outlier", headers=token("t-free")).json()
+    assert echoed["issue"] == "outlier"
+    assert "issue" not in api.get("/v1/screener", headers=token("t-free")).json()
 
 
 S_APPLE, S_APPLEBY, S_ACME, S_GS, S_SPROUT, S_SPROUTS = (

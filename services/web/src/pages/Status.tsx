@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { dataStatus } from "../api";
-import { CHECKS } from "../companies/screen";
+import { checkName } from "../companies/screen";
 import { ago, day, duration } from "../format";
 import { href } from "../route";
 import type { DataStatus, RecordedRun } from "../types";
@@ -239,12 +239,12 @@ function Quality({ data, when, signedIn }: { data: DataStatus; when: (iso: strin
           <tbody>
             {q.checks.map((c) => (
               <tr key={c.check}>
-                <td>{CHECKS[c.check] ?? c.check}</td>
+                <td>{checkName(c.check) ?? c.check}</td>
                 <td>
                   <span className={`tag sev-${c.severity}`}>{c.severity}</span>
                 </td>
                 <td className="n">
-                  {signedIn && CHECKS[c.check] && c.companies ? (
+                  {signedIn && checkName(c.check) && c.companies ? (
                     <a href={href({ view: "companies", screen: { issue: c.check } })} title="List these companies in the screener">
                       {count(c.companies)}
                     </a>

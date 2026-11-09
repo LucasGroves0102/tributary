@@ -25,7 +25,7 @@ export const EXCHANGES = ["NYSE", "Nasdaq", "CBOE", "OTC"] as const;
 /** What each data-quality check flags (migrations 014, 018, 023: ops.check_financials). The status
  * page's rows, and the screener's "with a finding of this check" filter. */
 export const CHECKS: Record<string, string> = {
-  impossible_value: "Impossible values: negative revenue, assets or share counts, or a part larger than its total",
+  impossible_value: "Impossible values: negative revenue, assets, debt or share counts, or a part larger than its total",
   overlapping_quarters: "A quarter starting before the previous one ended",
   calendar_collision: "Two quarters of a metric in one calendar quarter",
   annual_sum: "Four quarters differing from the reported year by more than 1%",
@@ -39,6 +39,12 @@ export const CHECKS: Record<string, string> = {
   segment_sum_product_service: "Product and service lines not adding up to the company total (±1%)",
   restatement: "A figure a later filing changed by more than 0.5%",
 };
+
+/** A check's description, or undefined when `check` isn't one: own keys only, so an address's
+ * `issue=constructor` or `toString` (Object.prototype's) is no check. */
+export function checkName(check: string | null | undefined): string | undefined {
+  return check && Object.prototype.hasOwnProperty.call(CHECKS, check) ? CHECKS[check] : undefined;
+}
 
 /** Value columns the screener shows, in order. Ratios are fractions in the API. */
 export const SCREEN_COLUMNS: { key: string; label: string; period: string; kind: "usd" | "pct" | "growth" | "x" }[] = [
@@ -115,7 +121,7 @@ export function parseScreen(query: string): ScreenFilters {
     filer: (FILER_CATEGORIES as readonly string[]).includes(p.get("filer") ?? "")
       ? (p.get("filer") as FilerCategory)
       : undefined,
-    issue: CHECKS[p.get("issue") ?? ""] ? p.get("issue")! : undefined,
+    issue: checkName(p.get("issue")) ? p.get("issue")! : undefined,
     mine: p.get("mine") === "1" ? true : undefined,
     sort: SORTS.has((p.get("sort") ?? "").replace(/^-/, "")) ? p.get("sort")! : undefined,
     page: int(p.get("page"), 1, 10000),
@@ -214,7 +220,7 @@ export function describe(f: ScreenFilters): string {
     f.fye && `fiscal year ends in ${MONTHS[f.fye - 1]}`,
     f.exchange && `on ${f.exchange}`,
     f.filer && FILER_LABELS[f.filer].toLowerCase() + " filers",
-    f.issue && `data check: ${CHECKS[f.issue] ?? f.issue}`,
+    f.issue && `data check: ${checkName(f.issue) ?? f.issue}`,
     f.mine && "only companies you can read",
   ].filter(Boolean);
   return parts.length ? parts.join(", ") : "no filters";

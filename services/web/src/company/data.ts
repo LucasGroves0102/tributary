@@ -10,7 +10,7 @@ import { change, day, money, moneyRow, pct } from "../format";
 import { num } from "../home/data";
 import { EIGHT_K_ITEMS } from "../reader/sections";
 import { separateMembers } from "../chart/segments";
-import type { FinancialRow, Recap, RecapValue, ScreenerRow, SegmentRow, ValueSource } from "../types";
+import type { FinancialRow, NotMeaningfulPeriod, Recap, RecapValue, ScreenerRow, SegmentRow, ValueSource } from "../types";
 
 export type Fmt = "usd" | "pct" | "growth" | "x" | "eps" | "shares";
 
@@ -294,7 +294,6 @@ const Q4_PER_SHARE = "not reported. A 10-K gives the year's figure, not its four
 const TTM_PER_SHARE = "not applicable. Per-share figures don't add across quarters, because the share count changes. " +
   "Annual shows the 10-K's figure for each fiscal year.";
 const BANK_TITLE = "not applicable. This is a bank: deposits are its debt and lending its operations, so the figure has no comparable meaning.";
-const EQUITY_RATIOS = new Set(["debt_to_equity", "roe"]);
 
 function blankCell(metric: string, name: string, period: Period, column: string, notApplicable: string[]): BlankCell {
   if (notApplicable.includes(metric)) return { text: BANK_NA, title: `${name}: ${BANK_TITLE}` };
@@ -337,6 +336,9 @@ export function metricTable(
   notApplicable: string[] = [],
   /** how many quarterly or TTM columns to keep (annual always shows ANNUAL_YEARS) */
   columnsWanted = RANGE_QUARTERS["8q"],
+  /** the API's `not_meaningful_periods`: why a period a metric has no row for reads n/m (debt/equity
+   * and ROE on negative equity, migration 035). Never worked out here; an older API sends none. */
+  meaningless: NotMeaningfulPeriod[] = [],
 ): MetricTable {
   const periodOf = (r: FinancialRow) => (basis === "calendar" ? r.calendar_period : r.fiscal_period) ?? null;
   const kept = period === "a" ? rows.filter((r) => periodOf(r)?.endsWith("Q4")) : rows;
@@ -350,10 +352,7 @@ export function metricTable(
   };
   const columns = ends.map((end) => ({ periodEnd: end, label: label(end), sub: day(end, true) }));
   const by = new Map(kept.map((r) => [`${r.metric}|${r.period_end}`, r]));
-  const equityAt = (end: string) => {
-    const r = by.get(`stockholders_equity|${end}`);
-    return r ? num(r.value) : null;
-  };
+  const why = new Map(meaningless.map((p) => [`${p.metric}|${p.period_end}`, p.reason]));
   return {
     columns,
     rows: metrics
@@ -372,11 +371,12 @@ export function metricTable(
           cells: ends.map((end, i): TableCell | null => {
             const r = by.get(`${metric}|${end}`);
             const v = r ? num(r.value) : null;
-            // gold has no debt/equity or ROE on negative equity: it isn't a gap, it means nothing
-            if (EQUITY_RATIOS.has(metric) && (equityAt(end) ?? 1) <= 0) {
+            // no row because the figure means nothing there (the API says why): not a gap
+            const reason = why.get(`${metric}|${end}`);
+            if (reason && (!r || v === null)) {
               return {
-                text: NOT_MEANINGFUL, raw: v === null ? "" : String(r!.value), derived: false, url: null,
-                title: `${name}: not meaningful, because stockholders' equity is negative at ${day(end, true)}.`,
+                text: NOT_MEANINGFUL, raw: "", derived: false, url: null,
+                title: `${name}: not meaningful, because ${reason} at ${day(end, true)}.`,
               };
             }
             if (!r || v === null) return null;

@@ -1,7 +1,7 @@
 import DOMPurify from "dompurify";
 import { marked } from "marked";
 
-import { day } from "./format";
+import { day, localDay } from "./format";
 import type { Citation } from "./types";
 
 const ACCESSION = /\b\d{10}-\d{2}-\d{6}\b/;
@@ -29,7 +29,8 @@ function readable(raw: string): Node {
     span.textContent = conceptWords(raw);
     return span;
   }
-  return document.createTextNode(day(raw, true));
+  // a timestamp is a moment: its date where the reader is, not its UTC date
+  return document.createTextNode(/T\d{2}:\d{2}/.test(raw) ? localDay(raw, true) : day(raw, true));
 }
 
 /**

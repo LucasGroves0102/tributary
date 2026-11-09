@@ -141,7 +141,8 @@ thousands of rows). Display only: the API decides.
 
 Filing reader (`components/explore/FilingReader.tsx`, pure parts in `reader/text.ts`): the section
 is read in full (`max_chars`, the API's cap is 1,000,000: the old 50,000 hid later matches and
-cited passages). A search lists its matches above the outline, opens the section at the first
+cited passages; an API still at 50,000 answers 422, and the page asks again at 50,000, see
+Production). A search lists its matches above the outline, opens the section at the first
 highlight (or the first at a cited passage), and steps with the ↑ ↓ buttons or Enter / Shift+Enter
 in the box. Two counts, labelled, because they count different things: the outline and heading show
 *passages* (the search index's chunks of about 2,000 characters holding all the words, from the
@@ -172,7 +173,8 @@ it shows nothing. A question a page wrote for the user ("Summarize … in this 1
 that page, unless they edited it. The footer's date is "Newest filing cited": it knows what an answer
 cites, not what the answer relied on. Model name, tokens and cost sit behind Details; `renderAnswer` writes
 timestamps, dates, `as_of` and XBRL concepts the model copied from a tool in words (display only, the concept
-on hover; a thesis, which is the user's, isn't touched).
+on hover; a thesis, which is the user's, isn't touched). A timestamp reads as the viewer's own date
+(`format.ts` `localDay`: 03:00 UTC on the 7th is the 6th in Phoenix); a plain date as written.
 
 Tags: colour says the form (10-K, 10-Q) or, on saved work, the kind; an expected filing has a dashed outline,
 not a colour, so a colour never means "not filed yet". Bold marks new rows on Home only when some rows aren't,
@@ -524,7 +526,11 @@ Values need financials access, like Statements.
   into "Other (n members)" (the sum of those reporting each period). Members that overlap the rest
   (a parent beside its children, a second cut of the same revenue: `chart/segments.ts`
   `separateMembers`, rules in its docstring) are listed as reported, marked "overlaps the others",
-  and left out of every sum. A "Sum vs reported revenue" row compares the rest with `/financials`
+  and left out of every sum. Finding them is a subset sum over 10,000 buckets of revenue, kept in one
+  typed array of bitmask picks: at most 24 members x 10,074 steps a period, about 25 ms for 40 periods
+  of 20 countries and a region overlapping three (5.9 s before), and remembered by input, so a
+  re-render, the decomposition and saved charts don't search again (`overlap.test.ts` checks the
+  answer equals the unbounded search's and the time). A "Sum vs reported revenue" row compares the rest with `/financials`
   revenue: bars stack only when every period is within 2% of 100%, otherwise each member is a line
   and the table says the breakdown is partial or can't be separated.
 - **Growth decomposition** (TTM, year over year): each member's contribution in percentage points
@@ -631,7 +637,9 @@ What a table shows where there's no usable figure is one vocabulary, in `src/bla
 reported, **·** no data in this period, **n/a** not applicable, **n/m** not meaningful, **$0** a real
 zero. Whether a value is n/m, n/a or old is the database's call (migration 035), sent as `readings` so
 the screener, Peers, Compare, Key stats and Home can't disagree with the sort behind them; `readFigure`
-only words it. An n/m keeps its exact figure and reason in the hover. An old figure (about a year or
+only words it. An n/m keeps its exact figure and reason in the hover. Ratios on negative equity (gold has
+no debt/equity or ROE row there) read n/m only where `/financials?readings=true` lists the period in
+`not_meaningful_periods`; the page never works out equity itself. An old figure (about a year or
 more behind the company's latest period) shows dimmed with its date; one merely behind shows its date
 and still counts. Neither n/m, n/a nor old enters a median. A bank reads "n/a (bank)" for gross and
 operating margin, FCF, FCF margin, net debt, debt to equity and the current ratio whether or not it
@@ -707,6 +715,16 @@ loads a third less. Most of what remains is React DOM. Chart data is cached in m
 plus a Chrome download didn't fit the CI and laptop budget; these sizes are the tracked number.
 
 ## Production
+
+One Helm upgrade rolls every service at once (same image tag, rolling updates, nothing orders web
+after query-api), so for a minute this page can talk to a Query API one release older. What it asks
+of the newer API degrades rather than breaks (`api.ts`, tested in `api.test.ts`): a refused 1,000,000
+`max_chars` or 120 `quarters` is asked again at the old caps (50,000, 40); a save refused for a field
+the older strict models don't know (a chart layer's `display`, a screen's `issue`) is saved again
+without it, so no work is lost; versions answer an empty list on 404; data notes asked for some
+companies keep only those; a data-check screen the API didn't echo (`issue`) is a failure with Try
+again, never every company; `/annual-per-share`, `readings` and agent-api's `/v1/allowance` were
+already optional.
 
 `Dockerfile` builds the bundle and serves it from `nginx-unprivileged` on port 8080
 (`deploy/nginx.conf`). nginx returns 404 for the APIs' `/docs`, `/redoc`, `/openapi.json` and

@@ -23,6 +23,21 @@ describe("model text a person reads", () => {
     expect(dom(html).textContent).toBe("Freshness: latest filing Aug 26, 2026; data as of Nov 6, 2026.\n");
   });
 
+  it("a timestamp reads as the viewer's date, not its UTC date", () => {
+    const was = process.env.TZ;
+    try {
+      process.env.TZ = "America/Phoenix"; // UTC-7: 03:00Z on the 7th is the evening of the 6th
+      expect(dom(renderAnswer("as_of 2026-11-07T03:00:00Z", [])).textContent).toBe("as of Nov 6, 2026\n");
+      process.env.TZ = "Asia/Tokyo"; // UTC+9: 20:00Z on the 6th is the morning of the 7th
+      expect(dom(renderAnswer("as_of 2026-11-06T20:00:00+00:00", [])).textContent).toBe("as of Nov 7, 2026\n");
+      // a plain date is a date wherever it's read
+      expect(dom(renderAnswer("filed 2026-11-07", [])).textContent).toBe("filed Nov 7, 2026\n");
+    } finally {
+      if (was === undefined) delete process.env.TZ;
+      else process.env.TZ = was;
+    }
+  });
+
   it("writes an XBRL concept in words, the tag on its hover", () => {
     const html = renderAnswer("| Line | Source |\n|---|---|\n| Buybacks | us-gaap:PaymentsForRepurchaseOfCommonStock |", []);
     const span = dom(html).querySelector("td span")!;

@@ -323,13 +323,18 @@ describe("what a blank means in a period table", () => {
       fin("stockholders_equity", "2026-07-26", "-5000000", "FY2027 Q2"),
       fin("gross_margin", "2026-07-26", "0.7", "FY2027 Q2"),
     ];
-    const t = metricTable(rows, RATIOS, "ttm");
+    // the API's not_meaningful_periods says so (migration 035); the table doesn't read equity itself
+    const said = [{ metric: "debt_to_equity", period_end: "2026-07-26", reason: "stockholders' equity is negative" }];
+    const t = metricTable(rows, RATIOS, "ttm", "fiscal", [], undefined, said);
     const de = t.rows.find((r) => r.metric === "debt_to_equity")!;
     expect(de.cells[0]).toMatchObject({ text: "n/m" });
     expect(de.cells[0]!.title).toContain("over 100 times equity");
     expect(de.cells[0]!.title).toContain("563.30x");
     expect(de.cells[1]).toMatchObject({ text: "n/m" });
     expect(de.cells[1]!.title).toContain("equity is negative at Jul 26, 2026");
+    // an older API, which doesn't say: a gap, as any other, never a rule re-derived here
+    const older = metricTable(rows, RATIOS, "ttm").rows.find((r) => r.metric === "debt_to_equity")!;
+    expect(older.cells[1]).toBeNull();
   });
 });
 

@@ -175,8 +175,11 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
             return csv_response("screener.csv", [*META_CSV, "access", *compiled.columns, "notes"], (
                 [*(r[k] for k in META_CSV), r["access"],
                  *(r["values"][k] for k in compiled.columns), notes_of(r)] for r in rows))
+        # `issue` echoed: an API that ignored it (older than the filter) would list everyone, and
+        # the web app can tell the two apart
         return {"as_of": _now(), "total": total, "limit": limit, "offset": offset, "sort": sort,
-                "columns": column_info(compiled.columns), "rows": rows}
+                "columns": column_info(compiled.columns), "rows": rows,
+                **({"issue": issue} if issue else {})}
 
     @app.get("/v1/companies/{company_id}/expected-filings", response_model=dict)
     def expected_filings(

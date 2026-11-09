@@ -36,6 +36,7 @@ import type {
   ThesisCheck,
   ThesisCheckSummary,
   ItemVersion,
+  NotMeaningfulPeriod,
   SavedItemFull,
   SavedKind,
   WrittenKind,
@@ -233,8 +234,42 @@ export const deleteWorkspace = (token: string, id: string) =>
 export const duplicateWorkspace = (token: string, id: string) =>
   sendJson<SavedWorkspace>(token, "POST", `/v1/workspaces/${enc(id)}/duplicate`, {});
 
+/** The state without what this app saves that a Query API one release older refuses (its state
+ * models are strict): a chart layer's `display`, a screen's `issue`. Null when there is none. */
+export function olderState(state: object): object | null {
+  const s = state as Record<string, unknown>;
+  let changed = false;
+  const out: Record<string, unknown> = { ...s };
+  if ("issue" in out) {
+    delete out.issue;
+    changed = true;
+  }
+  if (Array.isArray(s.layers)) {
+    out.layers = s.layers.map((l: unknown) => {
+      if (!l || typeof l !== "object" || !("display" in l)) return l;
+      changed = true;
+      const { display: _display, ...rest } = l as Record<string, unknown>;
+      return rest;
+    });
+  }
+  return changed ? out : null;
+}
+
+/** Saves a state; refused by an older Query API for a field it doesn't know yet (the minute a
+ * deploy rolls the web app before the API), saves it again without that field, so the work is
+ * kept: the older API reads such a layer as it always did. */
+async function tolerantSave<T>(save: (state: object) => Promise<T>, state: object): Promise<T> {
+  try {
+    return await save(state);
+  } catch (e) {
+    const older = e instanceof ApiError && e.status === 422 && /Extra inputs are not permitted/.test(e.message) ? olderState(state) : null;
+    if (!older) throw e;
+    return save(older);
+  }
+}
+
 export const addItem = (token: string, workspaceId: string, kind: SavedKind | WrittenKind, name: string, state: object) =>
-  sendJson<SavedItemFull>(token, "POST", `/v1/workspaces/${enc(workspaceId)}/items`, { kind, name, state });
+  tolerantSave((s) => sendJson<SavedItemFull>(token, "POST", `/v1/workspaces/${enc(workspaceId)}/items`, { kind, name, state: s }), state);
 
 /** The item with its state, without recording it as opened. */
 export const getItem = (token: string, id: string) =>
@@ -245,7 +280,9 @@ export const openItem = (token: string, id: string) =>
   sendJson<SavedItemFull>(token, "POST", `/v1/workspace-items/${enc(id)}/open`);
 
 export const updateItem = (token: string, id: string, patch: { name?: string; state?: object }) =>
-  sendJson<SavedItemFull>(token, "PUT", `/v1/workspace-items/${enc(id)}`, patch);
+  patch.state
+    ? tolerantSave((s) => sendJson<SavedItemFull>(token, "PUT", `/v1/workspace-items/${enc(id)}`, { ...patch, state: s }), patch.state)
+    : sendJson<SavedItemFull>(token, "PUT", `/v1/workspace-items/${enc(id)}`, patch);
 
 export const duplicateItem = (token: string, id: string) =>
   sendJson<SavedItemFull>(token, "POST", `/v1/workspace-items/${enc(id)}/duplicate`, {});
@@ -327,7 +364,12 @@ export const resetViewPref = (token: string, view: ViewName) =>
 
 /** One page of the screener (params from companies/screen.ts `screenParams`). */
 export const screener = (token: string, params: Params) =>
-  get<Screener>(token, "/v1/screener", params);
+  get<Screener>(token, "/v1/screener", params).then((r) => {
+    // a data-check screen answered without the check (an API older than it, the minute of a
+    // deploy) would list every company as having a finding: a failure to retry, not a result
+    if (params.issue && r.issue !== params.issue) throw new ApiError("the data-check filter isn't available yet", 503);
+    return r;
+  });
 
 /** Rows in one CSV export: the API's cap (JSON pages are capped at 500). */
 export const SCREENER_CSV_ROWS = 5000;
@@ -344,7 +386,10 @@ export const dataNotes = (token: string, companyId: string) =>
 /** The newest notes across the companies whose financials the user can read. */
 /** The newest data notes: of these companies (at most 50), or of every company the user can read. */
 export const recentDataNotes = (token: string, limit = 8, companies?: string[]) =>
-  get<DataNotes>(token, "/v1/data-notes", { limit, ...(companies ? { company_id: companies } : {}) });
+  get<DataNotes>(token, "/v1/data-notes", { limit, ...(companies ? { company_id: companies } : {}) }).then((r) =>
+    // an older Query API ignores company_id and answers for every company: keep these
+    companies ? { ...r, notes: r.notes.filter((n) => companies.includes(n.company_id)) } : r,
+  );
 
 /** The 10-K's own EPS and weighted shares per fiscal year: quarters can't give them. */
 export const annualPerShare = (token: string, companyId: string, years = 10) =>
@@ -412,13 +457,27 @@ export const searchFilings = (token: string, query: SearchQuery) =>
 
 /** The Query API's cap on a section's text (app.py). */
 const SECTION_ALL_CHARS = 1_000_000;
+/** The caps of a Query API one release older: during a deploy the new page can reach it, and it
+ * answers 422 to more; asked again within them, the page still opens (cut short, `truncated`). */
+const OLDER_SECTION_CHARS = 50_000;
+const OLDER_QUARTERS = 40;
+
+/** A GET that an older Query API refuses (422) for a cap it doesn't have yet, asked again at its cap. */
+async function withinOlderCap<T>(ask: (older: boolean) => Promise<T>, over: boolean): Promise<T> {
+  try {
+    return await ask(false);
+  } catch (e) {
+    if (!over || !(e instanceof ApiError) || e.status !== 422) throw e;
+    return ask(true);
+  }
+}
 
 export const section = (token: string, companyId: string, key: string, accessionNo: string) =>
-  get<{ sections: Section[] }>(token, `/v1/companies/${companyId}/sections/${encodeURIComponent(key)}`, {
+  withinOlderCap((older) => get<{ sections: Section[] }>(token, `/v1/companies/${companyId}/sections/${encodeURIComponent(key)}`, {
     accession_no: accessionNo,
     // the whole section: matches and cited passages can be anywhere in it
-    max_chars: SECTION_ALL_CHARS,
-  }).then((r) => r.sections[0] ?? null);
+    max_chars: older ? OLDER_SECTION_CHARS : SECTION_ALL_CHARS,
+  }), true).then((r) => r.sections[0] ?? null);
 
 export const latestFilings = (token: string, limit = 20) =>
   get<{ as_of: string; filings: LatestFiling[] }>(token, "/v1/filings/latest", { limit });
@@ -476,16 +535,16 @@ export const financialsView = (
   metrics: string[],
   view: "quarter" | "ttm",
   basis: "fiscal" | "calendar" = "fiscal",
-  /** ask why a ratio reads n/m (`not_meaningful` on each row) */
+  /** ask why a ratio reads n/m (`not_meaningful` on each row, `not_meaningful_periods`) */
   readings = false,
 ) =>
-  get<{ as_of: string; rows: FinancialRow[] }>(token, `/v1/companies/${companyId}/financials`, {
+  withinOlderCap((older) => get<{ as_of: string; rows: FinancialRow[]; not_meaningful_periods?: NotMeaningfulPeriod[] }>(token, `/v1/companies/${companyId}/financials`, {
     ...(readings ? { readings: "true" } : {}),
-    quarters,
+    quarters: older ? OLDER_QUARTERS : quarters,
     metrics,
     view,
     ...(basis === "calendar" ? { basis } : {}),
-  });
+  }), quarters > OLDER_QUARTERS);
 
 export const screenerColumns = (token: string) =>
   get<ScreenerColumns>(token, "/v1/screener/columns");
@@ -620,7 +679,11 @@ export async function checkThesis(
 
 /** A thesis's earlier versions, newest first, without their text (app DB 014). */
 export const itemVersions = (token: string, itemId: string) =>
-  get<{ item_id: string; versions: ItemVersion[] }>(token, `/v1/workspace-items/${itemId}/versions`);
+  get<{ item_id: string; versions: ItemVersion[] }>(token, `/v1/workspace-items/${itemId}/versions`).catch((e) => {
+    // a Query API without versions (the minute of a deploy) has none to list
+    if (e instanceof ApiError && e.status === 404) return { item_id: itemId, versions: [] as ItemVersion[] };
+    throw e;
+  });
 
 /** One earlier version with its state. */
 export const itemVersion = (token: string, itemId: string, versionId: string) =>

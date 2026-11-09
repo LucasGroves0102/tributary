@@ -541,6 +541,14 @@ export interface FinancialRow {
   freshness: { filed: string; ingested_at: string };
 }
 
+/** /financials with `readings`: a period a metric has no row for because the figure means nothing
+ * there (debt/equity and ROE on negative equity), and why (migration 035's words). */
+export interface NotMeaningfulPeriod {
+  metric: string;
+  period_end: string;
+  reason: string;
+}
+
 export interface Filing {
   accession_no: string;
   form: string;
@@ -827,6 +835,8 @@ export interface Screener {
   sort: string;
   columns: ColumnInfo[];
   rows: ScreenerRow[];
+  /** the data check screened for, echoed (absent from an API older than the filter) */
+  issue?: string;
 }
 
 /** /v1/companies/{id}/peers: suggested peers (same SIC first, then size), screener-style rows,

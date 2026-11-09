@@ -54,7 +54,7 @@ import {
   type Layer,
 } from "../chart/model";
 import { pngBlob, slug, svgText } from "../chart/export";
-import { useDirectory } from "../companies/directory";
+import { UNNAMED, useDirectory } from "../companies/directory";
 import { chartCsv, latestSource, toSeries, type Series, type Source } from "../chart/series";
 import type { Readable } from "../access";
 import { CompanyPicker, CompanySearch, resultTicker } from "../components/CompanySearch";
@@ -741,16 +741,16 @@ function LayerEditor({
       <div className="row layer-company">
         <span className="small">{layer.kind === "formula" ? "Default" : "Company"}</span>
         {segment ? (
-          <span className="grow">{company ? (company.ticker ?? company.name) : layer.companyId}</span>
+          <span className="grow">{company ? (company.ticker ?? company.name) : UNNAMED}</span>
         ) : layer.kind === "metric" || price ? (
-          <CompanyPicker token={token} label="Company" value={company ?? (companyId ? { companyId, name: companyId } : null)}
+          <CompanyPicker token={token} label="Company" value={company ?? (companyId ? { companyId, name: UNNAMED } : null)}
             emptyLabel="Choose a company" readable={readable}
             onChange={(c) => {
               learn({ companyId: c.companyId, name: c.name, ticker: c.ticker ?? null });
               set({ companyId: c.companyId });
             }} />
         ) : (
-          <CompanyPicker token={token} label="Default company" value={company ?? (companyId ? { companyId, name: companyId } : null)}
+          <CompanyPicker token={token} label="Default company" value={company ?? (companyId ? { companyId, name: UNNAMED } : null)}
             emptyLabel="None (tickers only)" readable={readable}
             title="The company for metrics written without a ticker; TICKER.metric reads another company"
             onChange={(c) => {
