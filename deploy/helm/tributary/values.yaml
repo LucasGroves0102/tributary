@@ -165,10 +165,14 @@ services:
     secClass: bulk
     terminationGracePeriodSeconds: 60
     env:
-      CRAWL_YEARS: "5"
-      # CRAWL_SINCE: "2013-01-01"  # a backfill's fixed start (F8b, doc-fetcher README "Documents
-      # before 2021"): measured ~408k filings, ~74 GB of database, ~41 h; not started
-      CRAWL_8K_ITEMS: "2.02,7.01,8.01"
+      # 11 years reaches November 2015: the pre-2021 document backfill from 2016 (Lucas, 2026-11-09; doc-fetcher
+      # README "Documents before 2021": ~288k filings, ~+53 GB, ~29 h at the spare rate, then search indexing).
+      # CRAWL_SINCE (a fixed start that can only reach further back) is left unset: the rolling 11 years already
+      # covers 2016, and the crawl planned from November 2015 on 2026-11-09.
+      CRAWL_YEARS: "11"
+      # results, Reg FD and other events, plus the material events the company page lists since the last
+      # report (deals, debt, leadership, impairments, auditor, non-reliance): ~65k more 8-Ks over 5 years
+      CRAWL_8K_ITEMS: "1.01,1.02,1.03,1.05,2.01,2.02,2.03,2.04,2.05,2.06,3.01,3.02,3.03,4.01,4.02,5.01,5.02,5.03,7.01,8.01"
       CRAWL_MIN_FREE_GB: "50"
       CRAWL_WORKERS: "4"
       CRAWL_BATCH: "32"

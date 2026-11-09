@@ -117,6 +117,12 @@ years (or since `CRAWL_SINCE`, a date, when that is earlier: a backfill's fixed 
 bronze tables, in the same gzip format the live doc-fetcher writes and
 both parsers read. 8-Ks only with an item in `CRAWL_8K_ITEMS` (default `2.02,7.01,8.01`:
 results, Reg FD and other events, where the press releases are; `all` for every 8-K).
+Production also takes the material-event items (1.01-1.03, 1.05, 2.01, 2.03-2.06, 3.01-3.03, 4.01,
+4.02, 5.01-5.03: deals, debt, leadership, impairments, auditor changes, non-reliance), set in the
+Helm values: about 65,000 more 8-Ks over the 5 years, about 1.2 GB.
+Production's window is 11 years since 2026-11-09 (`CRAWL_YEARS`), reaching back to late 2015 for the
+documents of 2016 onward: about 288,000 more filings, roughly +53 GB in the database and 29 hours of fetching at
+the crawl's spare rate, then search indexing.
 
 | | |
 |---|---|
