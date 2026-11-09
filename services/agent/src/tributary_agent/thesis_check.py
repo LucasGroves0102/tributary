@@ -731,7 +731,10 @@ def filing_checks(texts: list[str], rows: list[dict], cites: list[dict],
                   lookup: FilingLookup) -> list[dict]:
     """Each figure in `texts` that is one of the computed `rows`, against the same figure
     computed from each verified citation's own facts: [{metric, period_end, accession_no,
-    figure, filing_value, agrees}]. A filing that doesn't give that figure isn't compared."""
+    figure, filing_value, agrees, unit}]. A filing that doesn't give that figure isn't compared.
+    A figure written in dollars ("$2,097M") never agrees with a filing's figure in another
+    currency (057's `unit`: €2,097M is not $2,097M). `unit` is for the note; it isn't stored
+    (query_api FilingFigure is strict)."""
     out: list[dict] = []
     seen: set[tuple] = set()
     for text in texts:
@@ -760,11 +763,14 @@ def filing_checks(texts: list[str], rows: list[dict], cites: list[dict],
                         theirs = float(mine["value"])
                     except (KeyError, TypeError, ValueError):
                         continue
+                    unit = str(mine.get("unit") or "USD")
                     agrees = abs(abs(theirs) - abs(value)) <= max(tol, FILING_TOLERANCE
-                                                                  * abs(value))
+                                                                  * abs(value)) \
+                        and not (written.lstrip().startswith("$") and not unit.startswith("USD"))
                     out.append({"metric": row["metric"], "period_end": row["period_end"],
                                 "accession_no": acc, "figure": written[:60],
-                                "filing_value": _decimal(mine["value"]), "agrees": agrees})
+                                "filing_value": _decimal(mine["value"]), "agrees": agrees,
+                                "unit": unit})
     return out[:MAX_FILING_FIGURES]
 
 
@@ -773,13 +779,19 @@ def _decimal(v: Any) -> str:
     return text if re.fullmatch(r"-?\d{1,20}(?:\.\d{1,10})?", text) else f"{float(v):.0f}"
 
 
-def _money(v: float) -> str:
+CURRENCY_SYMBOLS = {"USD": "$", "EUR": "€", "GBP": "£", "JPY": "¥"}
+
+
+def _money(v: float, unit: str = "USD") -> str:
+    """$2.1B; in another currency its own symbol or code (€2.1B, CNY 996.3B; 057)."""
+    code = unit.split("/")[0] or "USD"
+    prefix = CURRENCY_SYMBOLS.get(code, f"{code} ")
     sign = "-" if v < 0 else ""
     v = abs(v)
-    for scale, unit in ((1e12, "T"), (1e9, "B"), (1e6, "M"), (1e3, "K")):
+    for scale, suffix in ((1e12, "T"), (1e9, "B"), (1e6, "M"), (1e3, "K")):
         if v >= scale:
-            return f"{sign}${v / scale:,.1f}{unit}"
-    return f"{sign}${v:,.0f}"
+            return f"{sign}{prefix}{v / scale:,.1f}{suffix}"
+    return f"{sign}{prefix}{v:,.0f}"
 
 
 def _disagreement_note(wrong: list[dict], cites: list[dict]) -> str:
@@ -788,7 +800,8 @@ def _disagreement_note(wrong: list[dict], cites: list[dict]) -> str:
     filing = f"the {cite.get('form') or 'filing'}" + (f" filed {cite['filed']}"
                                                        if cite.get("filed") else "")
     return (f" (Marked unverifiable: {filing} gives {GUARDED_LABEL[w['metric']]} of "
-            f"{_money(float(w['filing_value']))} at {w['period_end']} from its own figures, not "
+            f"{_money(float(w['filing_value']), w.get('unit') or 'USD')} at {w['period_end']} "
+            "from its own figures, not "
             f"{w['figure']}: Tributary's computed figure doesn't match the filing.)")
 
 
@@ -844,7 +857,8 @@ def assemble(job: Job, submitted: dict, answer: Answer, results: list[str], now:
             checked = filing_checks([quote, *(c.get("figure") or "" for c in cites)], guarded,
                                     cites, filing_figures)
             if checked:
-                claim["filing_figures"] = checked
+                claim["filing_figures"] = [{k: v for k, v in c.items() if k != "unit"}
+                                           for c in checked]
             wrong = [c for c in checked if not c["agrees"]]
             if wrong:
                 claim["status"] = "unverifiable"

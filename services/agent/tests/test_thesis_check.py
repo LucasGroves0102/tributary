@@ -830,14 +830,14 @@ NET_DEBT_CLAIM = {"quote": "Net debt was $10.92B.", "status": "supported",
                   "citations": [{"accession_no": ACC}]}
 
 
-def net_debt_check(monkeypatch, filing_value):
+def net_debt_check(monkeypatch, filing_value, unit=None):
     """Riley #2: Tributary's computed net debt ($10.92B) left out NVIDIA's $99.37B of marketable
     securities; the claim matched it and was certified. The cited 10-Q's own figures say
     otherwise."""
     monkeypatch.setitem(globals(), "QUARTER", {**QUARTER,
                                                "rows": [*QUARTER["rows"], NET_DEBT_ROW]})
     figures = {ACC: [{"metric": "net_debt", "period_start": None, "period_end": "2026-07-26",
-                      "value": filing_value, "how": "computed"},
+                      "value": filing_value, "how": "computed", **({"unit": unit} if unit else {})},
                      {"metric": "cash", "period_start": None, "period_end": "2026-07-26",
                       "value": "23422000000", "how": "reported"}]}
     fake = FakeQueryApi(markdown=MARKDOWN + "\nNet debt was $10.92B.\n", figures=figures)
@@ -866,6 +866,18 @@ def test_a_computed_figure_the_filing_agrees_with_stays_supported(monkeypatch):
     claims, _ = net_debt_check(monkeypatch, "10921000000")  # within the claim's rounding
     assert claims[1]["status"] == "supported"
     assert claims[1]["filing_figures"][0]["agrees"] is True
+
+
+def test_a_dollar_figure_against_a_filing_in_another_currency_isnt_supported(monkeypatch):
+    """057: the filing's figures say their unit; "$10.92B" isn't a figure of €10.92B, and the
+    note says the filing's currency. The stored filing figure has no unit (a strict model)."""
+    claims, _ = net_debt_check(monkeypatch, "10921000000", unit="EUR")
+    net_debt = claims[1]
+    assert net_debt["status"] == "unverifiable"
+    assert "gives net debt of €10.9B at 2026-07-26" in net_debt["explanation"]
+    assert net_debt["filing_figures"] == [{
+        "metric": "net_debt", "period_end": "2026-07-26", "accession_no": ACC,
+        "figure": "$10.92B", "filing_value": "10921000000", "agrees": False}]
 
 
 def test_an_older_query_api_without_filing_figures_changes_nothing(monkeypatch):

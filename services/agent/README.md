@@ -76,6 +76,18 @@ income of July 2025 less April 2018's "verified" a made-up $99.9B). `/v1/search`
 query is never evidence (a searched figure would quote itself); its snippets are filing text,
 read without the « » marks. Every verdict in the recordings is unchanged, so they replay as
 recorded.
+Currencies (F8b): since migration 056 a foreign filer's figures are in its own currency, and
+`get_financials` says so per row (`unit` "EUR", "EUR/shares") and on the answer (`currency`, only
+when not USD). The system prompt still says to write dollars (changing it needs a re-record), so
+`verify.py` guards the other side: a figure written with "$" that the rules verified or derived from
+a row or input in another currency is checked again with dollar rows only, and is unverified unless
+those verify it ("$2,097M" about Birkenstock's €2,097M fails; "2,097 million" still matches). Every
+row in the recordings is in USD (a test reads them), so they replay as recorded. Not covered: a "$"
+figure quoted from a euro filing's text ("2,097 million" in a 20-F) still counts as quoted.
+The thesis check's H2 guard (`filing_checks`) reads the cited filing's figures with their `unit`
+(057): a "$" figure never agrees with a figure in another currency, and its note words the
+filing's figure in it ("net debt of €10.9B"); the stored filing figure keeps its fields (no unit:
+query_api's `FilingFigure` is strict).
 
 ## agent-api
 
