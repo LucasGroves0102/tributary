@@ -78,6 +78,18 @@ sandbox. Reads all 33,000 aliases per call (25-38 ms on hermes); no index was ne
 `044_company_search_order.sql` breaks ties within a rank by whether the company has figures here
 (`gold.financials_coverage`, public ids) and the normalized name's length, so "bank of" lists Bank
 of America before Bank of Chile (a 20-F filer) and isn't pushed down by an SEC suffix (`/DE/`).
+`046_sectors.sql` (F4) adds `silver.sic_sectors`, Tributary's own open grouping of the SEC's SIC
+codes into 12 sectors and 88 industries (ranges, never overlapping; the judgment calls are in its
+header), and the view `silver.company_sectors`. `047_business_peers.sql` adds what the parser image's
+weekly `parser-peers` job derives from 10-K Item 1 text: `gold.business_profiles`, `gold.business_peers`
+(cosine similarity, shared terms) and `gold.business_mentions` (competitors named, with the sentence's
+offsets), all under RLS at `filings` (a peer row needs both companies readable), and
+`silver.co_registrants()`, companies filing one combined 10-K (PG&E Corp and Pacific Gas & Electric).
+`048_bank_metrics.sql` adds a bank's own lines: `net_interest_income`, `noninterest_income`,
+`noninterest_expense`, `provision_for_credit_losses`, `loans` (net of the allowance), `deposits`,
+`cet1_ratio` (where tagged) and the derived `efficiency_ratio`; its header has the tags measured on
+every bank's companyfacts and why net interest margin, tangible book value and ROTCE are left out.
+Needs `make financials-rebuild` (production: the `financials-rebuild` job) to fill gold.
 `045_filing_events.sql` lets the Query API read 8-K item numbers: a column grant on
 `bronze.submission_filings (accession_no, cik, items)` (filing-index metadata, public like
 `silver.filings`) and `silver.company_8ks(company, from)`, one company's 8-K and 8-K/A with their
