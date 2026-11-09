@@ -582,7 +582,8 @@ class Store:
         """What a model run reads (query_api.model_maths), in one session under RLS: TTM rows
         (fiscal, `quarters` per metric), quarterly rows (`recent` per metric), the 10-K's
         per-share figures (gold.annual_per_share, 036) and the latest reading of each `latest`
-        metric (gold.latest_reading, 035: value, date, status, reason). Rows carry filer_cik."""
+        metric (gold.latest_reading, 035: value, date, status, reason, unit, and period_status,
+        its age alone). Rows carry filer_cik."""
         rows = """
             SELECT metric, period_start, period_end, fiscal_year, fiscal_quarter, value, unit,
                    value_source, source_tag, accession_no, form, filed,
@@ -607,7 +608,11 @@ class Store:
             cur.execute(
                 """
                 SELECT m.metric, x.period_end, x.value, x.accession_no, x.form, x.filed,
-                       x.status, x.reason,
+                       x.status, x.reason, x.unit,
+                       -- the reading's age alone (035's rule): how an amount in another
+                       -- currency (status other_currency) reads in that currency; net debt and
+                       -- shares have no not-meaningful rule
+                       gold.period_status(x.period_end, lp.latest) AS period_status,
                        (SELECT f.cik FROM silver.financial_facts f
                         WHERE f.accession_no = x.accession_no LIMIT 1) AS filer_cik
                 FROM silver.companies c

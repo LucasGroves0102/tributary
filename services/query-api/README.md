@@ -509,7 +509,10 @@ and P/E, EV/Revenue, EV/EBIT and FCF yield for every history year, the TTM and e
 every amount is in it) and the price says its own (`price.currency`, three capitals; a price saved
 without one is in dollars, as before). When they differ, market cap is still price x shares, in the
 price's currency (`market_cap_currency`), but EV and every multiple are left out (`ev_note`
-"currency", `currency_mismatch: {price, figures}`): a dollar price never divides euro EPS.
+"currency", `currency_mismatch: {price, figures}`): a dollar price never divides euro EPS. When
+they agree, net debt in that currency (its reading says `other_currency`: not a dollar figure) is
+read by its age alone, as a dollar company's is, so a euro price gives a euro company's EV and EV
+multiples in euros.
 
 Measured on the real inputs in `tests/fixtures/model` (production answers of 2026-11-09):
 Vertiv's FY2026 is Q1-Q3 reported ($10.24B, 39.3% over the same nine months) plus a Q4 whose

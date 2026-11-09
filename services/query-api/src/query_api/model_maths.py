@@ -92,7 +92,10 @@ Currency (057): every amount is in the company's reporting currency (056), `curr
 currency the user says (`price.currency`; a price saved without one is in dollars, as every price
 was before). When the two differ nothing divides one by the other: market cap is still price x
 shares (in the price's currency, `market_cap_currency`), but enterprise value and every multiple
-are left out and `currency_mismatch` says which two, since Tributary converts no currency."""
+are left out and `currency_mismatch` says which two, since Tributary converts no currency. When
+they agree, everything is in that one currency: net debt in it (its reading says
+`other_currency`, which means "not a dollar figure", so it is read by its age alone, 035's
+period status, as a dollar company's would be) gives EV and the EV multiples in it too."""
 
 from __future__ import annotations
 
@@ -779,6 +782,17 @@ def currency_of(inputs: dict) -> str:
     return "USD"
 
 
+def _in_currency(r: dict | None, currency: str) -> dict | None:
+    """A reading in the run's own currency, read as a dollar company's is: `other_currency`
+    (056: not a dollar amount, never compared with one) gives way to the reading's age alone
+    (Store.model_inputs' period_status) when its unit is the figures' currency. Any other
+    reading, or one without period_status (an older Store), is as given."""
+    if (not r or r.get("status") != "other_currency" or "period_status" not in r
+            or str(r.get("unit") or "").split("/")[0] != currency):
+        return r
+    return {**r, "status": r["period_status"], "reason": None}
+
+
 def valuation(price: dict | None, latest: dict, years: list[dict], ttm: dict | None,
               cases: dict[str, list[dict]], latest_shares: float | None,
               currency: str = "USD") -> dict | None:
@@ -787,7 +801,7 @@ def valuation(price: dict | None, latest: dict, years: list[dict], ttm: dict | N
     p = float(price["value"])
     price_currency = price.get("currency") or "USD"
     shares = _reading(latest.get("shares_outstanding"))
-    debt = _reading(latest.get("net_debt"))
+    debt = _reading(_in_currency(latest.get("net_debt"), currency))
     out: dict[str, Any] = {"price": p, "date": price["date"], "shares_outstanding": shares,
                            "shares_basis": "outstanding", "net_debt": debt,
                            "market_cap": None, "enterprise_value": None, "ev_note": None,

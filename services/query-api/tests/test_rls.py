@@ -343,6 +343,46 @@ def test_model_runs_read_only_what_rls_allows(client, token):
     assert r.status_code == 200 and r.json()["history"] == [] and r.json()["base_fy"] is None
 
 
+def test_a_euro_companys_ev_is_in_euros_at_a_euro_price(client, token):
+    """Pre-ship review: a euro company's net debt reads other_currency (056), which the model took
+    for unusable, so EV was blank even at a price in euros. Store.model_inputs now gives the
+    reading's unit and age (under RLS, as before); at a euro price EV is in euros, at a dollar
+    price nothing is divided."""
+    conn, acc = client.app_conn, f"{A}-26-000001"
+    conn.execute("UPDATE gold.quarterly_financials SET unit = 'EUR' WHERE company_id = %s", (A,))
+    conn.execute(
+        "INSERT INTO gold.quarterly_financials (company_id, metric, period_end, value, unit,"
+        " value_source, source_tag, accession_no, filed, source_accessions, ingested_at) VALUES"
+        " (%s, 'shares_outstanding', '2026-06-30', 1000, 'shares', 'reported',"
+        " 'dei:EntityCommonStockSharesOutstanding', %s, '2026-08-01', ARRAY[%s], now())",
+        (A, acc, acc))
+    conn.execute(
+        "INSERT INTO gold.derived_financials (company_id, span, metric, period_end, value, unit,"
+        " value_source, inputs, accession_no, filed, source_accessions, ingested_at) VALUES"
+        " (%s, 'quarter', 'net_debt', '2026-06-30', 500, 'EUR', 'computed', '{}', %s,"
+        " '2026-08-01', ARRAY[%s], now())", (A, acc, acc))
+    store = Store(OneConnection(conn))
+    latest = store.model_inputs("t-free", A, ["revenue"], 40, 12, 12,
+                                ["net_debt", "shares_outstanding"])["latest"]
+    debt = latest["net_debt"]
+    assert (debt["status"], debt["unit"], debt["period_status"]) == ("other_currency", "EUR", None)
+    hidden = store.model_inputs("t-free", B, ["revenue"], 40, 12, 12, ["net_debt"])["latest"]
+    assert hidden["net_debt"]["value"] is None and hidden["net_debt"]["unit"] is None
+
+    state = {"companyId": A, "assumptions": [{"growth": 5, "margin": 10}],
+             "price": {"value": 2, "date": "2026-11-06", "currency": "EUR"}}
+    r = client.post(f"/v1/companies/{A}/model", json=state, headers=token("t-free"))
+    assert r.status_code == 200, r.text
+    v = r.json()["valuation"]
+    assert r.json()["currency"] == "EUR" and v["market_cap_currency"] == "EUR"
+    assert (v["market_cap"], v["enterprise_value"], v["ev_note"]) == (2000, 2500, None)
+    state["price"]["currency"] = "USD"
+    v = client.post(f"/v1/companies/{A}/model", json=state, headers=token("t-free")).json()[
+        "valuation"]
+    assert v["enterprise_value"] is None
+    assert v["currency_mismatch"] == {"price": "USD", "figures": "EUR"}
+
+
 def test_metric_list_matches_database(client):
     served = client.get("/v1/metrics").json()
     with psycopg.connect(DSN) as conn:

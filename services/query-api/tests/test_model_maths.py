@@ -286,14 +286,21 @@ def test_a_typed_price_gives_multiples_on_history_and_each_case():
     assert v["cases"]["bull"][1]["fcf_yield"] == pytest.approx(bull["fcf"] / v["market_cap"])
 
 
-def as_euros(inputs: dict) -> dict:
+def as_euros(inputs: dict, debt_age: str | None = None) -> dict:
     """Vertiv's inputs as a euro filer's would read after 056: every amount row in EUR (the
-    fixture's rows were captured without their unit, which is USD)."""
+    fixture's rows were captured without their unit, which is USD), and net debt's latest
+    reading as gold.latest_reading gives a euro amount (other_currency), with Store.model_inputs'
+    unit and period status (`debt_age`)."""
     out = json.loads(json.dumps(inputs))
     for key in ("ttm", "quarters", "annual"):
         for r in out[key]:
             r["unit"] = ("shares" if "shares" in r["metric"] else
                          "EUR/shares" if r["metric"].startswith("eps") else "EUR")
+    out["latest"]["net_debt"].update({
+        "status": "other_currency", "unit": "EUR", "period_status": debt_age,
+        "reason": "reported in EUR, so it isn't sorted, filtered or averaged with US-dollar "
+                  "figures"})
+    out["latest"]["shares_outstanding"].update({"unit": "shares", "period_status": None})
     return out
 
 
@@ -320,6 +327,43 @@ def test_a_price_in_another_currency_than_the_figures_gives_no_multiple():
     usd = run(real("vrt"), model(VRT, years(2), price={"value": 150, "date": "2026-11-06"}))
     assert "currency_mismatch" not in usd["valuation"]
     assert usd["valuation"]["history"] == v["history"]
+
+
+def test_a_euro_price_gives_a_euro_companys_ev_and_multiples():
+    """Pre-ship review: net debt in euros reads `other_currency` (056: not a dollar figure), which
+    the valuation took for unusable, so EV was blank for every non-USD company even at a price in
+    its own currency. With the price, the figures and net debt in one currency, net debt is read
+    by its age alone, as a dollar company's is, and EV and the EV multiples are in that currency."""
+    price = {"value": 150, "date": "2026-11-06", "currency": "EUR"}
+    out = run(as_euros(real("vrt")), model(VRT, years(2), price=price))
+    v = out["valuation"]
+    cap = 150 * 385027873
+    assert v["market_cap"] == pytest.approx(cap) and v["market_cap_currency"] == "EUR"
+    assert v["enterprise_value"] == pytest.approx(cap - 783200000) and v["ev_note"] is None
+    assert v["net_debt"]["value"] == -783200000 and v["net_debt"]["status"] is None
+    assert v["net_debt"]["reason"] is None
+    fy = out["history"][-1]
+    assert v["history"][-1]["ev_ebit"] == pytest.approx(
+        v["enterprise_value"] / fy["operating_income_adjusted"])
+    assert v["cases"]["base"][0]["ev_revenue"] is not None
+    # read by its age, as a dollar company's: an earlier quarter still gives EV, an old one not
+    behind = run(as_euros(real("vrt"), "behind"), model(VRT, years(2), price=price))["valuation"]
+    assert behind["enterprise_value"] == pytest.approx(cap - 783200000)
+    assert behind["net_debt"]["status"] == "behind"
+    old = run(as_euros(real("vrt"), "old"), model(VRT, years(2), price=price))["valuation"]
+    assert old["enterprise_value"] is None and old["ev_note"] == "old"
+    # a dollar price beside euro figures still divides nothing
+    usd = run(as_euros(real("vrt")), model(VRT, years(2), price={**price, "currency": "USD"}))
+    assert usd["valuation"]["enterprise_value"] is None
+    assert usd["valuation"]["ev_note"] == "currency"
+    # net debt in a third currency (never the case since 056's one currency per company) or from
+    # an older Store without its age is left out, as before
+    odd = as_euros(real("vrt"))
+    odd["latest"]["net_debt"]["unit"] = "GBP"
+    assert run(odd, model(VRT, years(2), price=price))["valuation"]["ev_note"] == "other_currency"
+    del odd["latest"]["net_debt"]["period_status"]
+    odd["latest"]["net_debt"]["unit"] = "EUR"
+    assert run(odd, model(VRT, years(2), price=price))["valuation"]["ev_note"] == "other_currency"
 
 
 def test_a_price_currency_is_three_capitals():
