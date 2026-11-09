@@ -4,7 +4,7 @@ migrated Postgres when TEST_DATABASE_URL is set; each is rolled back."""
 
 import gzip
 import os
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from pathlib import Path
 
@@ -255,8 +255,8 @@ def queue(conn) -> dict:
 @db
 def test_queued_feed_filings_are_drained_and_one_failure_never_stops_the_rest(conn):
     """Priority (10-K/Q/8-K first): the consumer only queues a Form 3/4/5, then drains the queue
-    when idle. A filing gone from EDGAR is kept as failed, a 503 retries later, and the next one
-    is still stored."""
+    when idle. A 404 just after the feed waits for EDGAR, a 503 retries later, and the next one
+    is still stored; a 404 a day after the feed is gone, kept as failed."""
     feed = {"cik": NVDA, "form_type": "4", "role": "Issuer", "source": "feed",
             "filed_at": "2026-09-18T20:05:00+00:00"}
     for acc in ("0000000001-26-000001", "0000000002-26-000002", KRESS):
@@ -277,10 +277,16 @@ def test_queued_feed_filings_are_drained_and_one_failure_never_stops_the_rest(co
     client = httpx.Client(transport=httpx.MockTransport(respond))
     assert ownership.drain(conn, client, 60.0, on_stored=stored_forms.append) == 1
     assert stored_forms == ["4"]
-    assert queue(conn) == {"0000000001-26-000001": ("failed", 1, False, True),
+    assert queue(conn) == {"0000000001-26-000001": ("pending", 1, True, True),
                            "0000000002-26-000002": ("pending", 1, True, True)}
     assert conn.execute("SELECT count(*) FROM silver.insider_filings").fetchone() == (1,)
-    assert ownership.drain(conn, client, 60.0) == 0  # the 503 waits for its backoff
+    assert ownership.drain(conn, client, 60.0) == 0  # both wait for their backoff
+    # a day on, the 404 is still there: gone, kept as failed (the 503 is still retried)
+    conn.execute("UPDATE ops.insider_queue SET not_before = now(),"
+                 " queued_at = now() - interval '25 hours'")
+    assert ownership.drain(conn, client, 60.0) == 0
+    assert queue(conn) == {"0000000001-26-000001": ("failed", 2, False, True),
+                           "0000000002-26-000002": ("pending", 2, True, True)}
 
 
 @db
@@ -298,7 +304,8 @@ def test_the_drain_stops_at_its_budget(conn):
 @db
 def test_the_backfill_records_a_filing_it_cannot_store_and_goes_on(conn):
     """Review B3: the backfill caught only HTTP errors and worked newest first, so it died at the
-    same filing every run. Now a refused filing is kept as failed and never fetched again."""
+    same filing every run. Now a refused filing is kept as failed and the run goes on; the next
+    run tries it once more, after the filings never tried (pre-ship review)."""
     conn.execute("INSERT INTO gold.quarterly_financials (company_id, metric, period_start,"
                  " period_end, value, unit, value_source, source_tag, accession_no, filed,"
                  " source_accessions, ingested_at) VALUES (%s, 'revenue', '2026-04-27',"
@@ -318,4 +325,101 @@ def test_the_backfill_records_a_filing_it_cannot_store_and_goes_on(conn):
     client = httpx.Client(transport=httpx.MockTransport(respond))
     assert ownership.backfill(conn, client, date(2026, 11, 9), 365, 10) == 1
     assert queue(conn)[KRESS][:2] == ("failed", 1)
-    assert ownership.pending(conn, date(2026, 1, 1), 10) == []  # neither is taken again
+    assert [a for a, *_ in ownership.pending(conn, date(2026, 1, 1), 10)] == [KRESS]
+    assert ownership.backfill(conn, client, date(2026, 11, 9), 365, 10) == 0
+    assert queue(conn)[KRESS][:2] == ("failed", 2)  # refused again, recorded, the run went on
+
+
+def outage_client(failure: str, requests: list[str]) -> httpx.Client:
+    def down(request: httpx.Request) -> httpx.Response:
+        requests.append(request.url.path)
+        if failure == "connect":
+            raise httpx.ConnectError("connection refused", request=request)
+        if failure == "timeout":
+            raise httpx.ReadTimeout("timed out", request=request)
+        return httpx.Response(int(failure))
+    return httpx.Client(transport=httpx.MockTransport(down))
+
+
+def test_what_counts_as_transient():
+    req = httpx.Request("GET", "https://www.sec.gov/x")
+
+    def status(code: int, body: bytes = b"") -> httpx.HTTPStatusError:
+        return httpx.HTTPStatusError("e", request=req,
+                                     response=httpx.Response(code, content=body, request=req))
+    assert all(ownership.transient(e) for e in (
+        status(500), status(503), status(429),
+        status(403, b"<h1>Request Rate Threshold Exceeded</h1>"),
+        httpx.ConnectError("x", request=req), httpx.ReadTimeout("x", request=req)))
+    assert not any(ownership.transient(e) for e in (
+        status(404), status(403, b"undeclared automated tool"), status(400),
+        ownership.Unstorable("no XML"), ValueError("x")))
+    waits = [ownership.backoff(n) for n in range(12)]
+    assert [w.total_seconds() / 60 for w in waits[:8]] == [2, 4, 8, 16, 32, 64, 128, 180]
+    assert set(waits[7:]) == {ownership.RETRY_CAP}
+    assert ownership.backoff(30000) == ownership.RETRY_CAP
+
+
+@db
+@pytest.mark.parametrize("outage, failure", [(timedelta(minutes=40), "connect"),
+                                             (timedelta(minutes=40), "503"),
+                                             (timedelta(hours=6), "timeout"),
+                                             (timedelta(hours=6), "429")])
+def test_an_outage_never_fails_a_queued_filing(conn, outage, failure):
+    """Pre-ship review: after 5 attempts (2+4+8+16 minutes of backoff) any transient error failed a
+    queued filing for good, and the catch-up skipped failed ones: an outage of about 30 minutes
+    lost every Form 4 queued in it. Now the queue retries for as long as the outage lasts, one
+    request per try, the wait capped at RETRY_CAP, and the filing lands once the SEC is back."""
+    ownership.enqueue(conn, {"accession_no": KRESS, "cik": NVDA, "form_type": "4",
+                             "filed_at": "2026-09-18T20:05:00+00:00"})
+    requests: list[str] = []
+    down = outage_client(failure, requests)
+    elapsed = timedelta(0)
+    while elapsed < outage:
+        assert ownership.drain(conn, down, 60.0) == 0
+        status, wait = conn.execute("SELECT status, not_before - now()"
+                                    " FROM ops.insider_queue").fetchone()
+        assert status == "pending" and timedelta(0) < wait <= ownership.RETRY_CAP
+        assert ownership.drain(conn, down, 60.0) == 0  # inside its wait: no request
+        elapsed += wait  # the wait passes
+        conn.execute("UPDATE ops.insider_queue SET not_before = now(),"
+                     " queued_at = queued_at - %s", (wait,))
+    assert len(requests) == (5 if outage < timedelta(hours=1) else 8)
+    assert queue(conn)[KRESS][:2] == ("pending", len(requests))
+    up = httpx.Client(transport=httpx.MockTransport(
+        lambda r: httpx.Response(200, content=raw(KRESS))))
+    assert ownership.drain(conn, up, 60.0) == 1
+    assert queue(conn) == {}
+    assert conn.execute("SELECT count(*) FROM silver.insider_filings").fetchone() == (1,)
+
+
+@db
+def test_a_filing_failed_by_an_outage_or_edgars_lag_is_retaken_by_the_catch_up(conn):
+    """A queued filing kept as failed (a 404 past its grace; or, before this fix, an outage)
+    isn't taken by the live queue again, but the daily catch-up retakes it, after the filings it
+    never tried, and stores it once EDGAR has it."""
+    ownership.enqueue(conn, {"accession_no": KRESS, "cik": NVDA, "form_type": "4",
+                             "filed_at": "2026-09-18T20:05:00+00:00"})
+    conn.execute("UPDATE ops.insider_queue SET queued_at = now() - interval '25 hours'")
+    requests: list[str] = []
+    assert ownership.drain(conn, outage_client("404", requests), 60.0) == 0
+    assert queue(conn)[KRESS][:2] == ("failed", 1)
+    conn.execute("UPDATE ops.insider_queue SET not_before = now() - interval '1 day'")
+    assert ownership.drain(conn, outage_client("404", requests), 60.0) == 0
+    assert len(requests) == 1  # the live queue leaves it
+
+    conn.execute("INSERT INTO gold.quarterly_financials (company_id, metric, period_start,"
+                 " period_end, value, unit, value_source, source_tag, accession_no, filed,"
+                 " source_accessions, ingested_at) VALUES (%s, 'revenue', '2026-04-27',"
+                 " '2026-07-26', 1, 'USD', 'reported', 't', 'a', '2026-08-26', '{a}', now())",
+                 (NVDA,))
+    for acc, filed in ((KRESS, "2026-09-18"), (STEVENS, "2026-09-08")):
+        conn.execute("INSERT INTO bronze.submission_filings (accession_no, cik, form,"
+                     " filing_date) VALUES (%s, %s, '4', %s)", (acc, NVDA, filed))
+    # never tried first, though older; then the failed one
+    assert [a for a, *_ in ownership.pending(conn, date(2026, 1, 1), 10)] == [STEVENS, KRESS]
+    client = httpx.Client(transport=httpx.MockTransport(
+        lambda r: httpx.Response(200, content=raw(r.url.path.rsplit("/", 1)[-1][:-4]))))
+    assert ownership.backfill(conn, client, date(2026, 9, 25), 30, 10) == 2
+    assert queue(conn) == {}
+    assert ownership.pending(conn, date(2026, 1, 1), 10) == []

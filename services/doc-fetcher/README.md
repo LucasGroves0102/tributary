@@ -95,10 +95,16 @@ skipped. No new Kafka client or topic: the live doc-fetcher already reads `filin
 One filing never stops the others: a date that doesn't exist (`2026-02-30`) is read as NULL and a
 repeated element as its first value, each with a row in `ops.insider_findings` (`bad_date`,
 `several_values`; also `not_well_formed`, and `parse_failed` when Postgres refused the parse: the
-filing is then kept in bronze alone). A filing that can't be stored at all (404, no
-ownershipDocument, a value Postgres refuses) is kept in `ops.insider_queue` as `failed` with its
-error and never fetched again by any path; an SEC or network error is retried with backoff (queue,
-5 attempts) or by the next run (backfill, catch-up).
+filing is then kept in bronze alone).
+
+An outage never loses one. A transient error (no connection, a timeout, a 5xx, a 429 or the SEC's
+rate-limit 403) never fails a queued filing: it is retried after 2, 4, 8 ... 128 minutes, then
+every 3 hours for as long as the outage lasts (the backfill and the catch-up log it and take it
+again next run). A 404 within 24 hours of the feed is EDGAR lagging the feed and is retried the
+same way; after that it counts as gone. A filing that can't be stored (gone, no ownershipDocument,
+a value Postgres refuses), or that hit any other error 5 times, is kept in `ops.insider_queue` as
+`failed` with its error: the live queue leaves it, and the daily catch-up retakes it once a run
+while it is inside its 7 days, after the filings it never tried.
 
 Volume and cost, measured 2026-11-09 on hermes' submissions index: operating issuers had 178,877
 insider filings in the last 365 days (160,099 Form 4, 14,933 Form 3, 2,438 4/A, 927 Form 5, the

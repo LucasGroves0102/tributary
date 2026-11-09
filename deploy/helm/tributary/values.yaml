@@ -357,8 +357,9 @@ jobs:
       INSIDERS_LIMIT: "60000"
   # The daily catch-up: the same job over the last 7 days, after the nightly submissions load
   # (05:30), for insider filings the live feed missed (a doc-fetcher outage, a feed gap). Filings
-  # kept as failed in ops.insider_queue (gone, no XML, refused) are never fetched again. Usually a
-  # handful of requests; a week of total outage is ~3,500 (~10 min at the bulk class).
+  # kept as failed in ops.insider_queue (gone, no XML, refused) are retaken once a run, after the
+  # rest, while inside the 7 days. Usually a handful of requests; a week of total outage is ~3,500
+  # (~10 min at the bulk class).
   insiders-catchup:
     image: doc-fetcher
     command: [doc-fetcher-insiders]

@@ -48,7 +48,8 @@ and `section-index`, which read the crawled documents; on hermes both run hourly
 after the nightly `submissions` load, and is not suspended: the same command as `insiders-backfill`
 over the last 7 days (`INSIDERS_DAYS`), so an insider filing the live doc-fetcher missed (an outage,
 a feed gap) is stored the next morning. Filings kept as failed in `ops.insider_queue` (gone, no XML,
-refused by Postgres) are never fetched again. `insiders-backfill` has a 17 h deadline (a 90-day run
+refused by Postgres) are left by the live queue and retaken once a run, after every filing never
+tried, while they are inside the run's window. `insiders-backfill` has a 17 h deadline (a 90-day run
 is 2 h with the bulk class idle, up to ~15 h beside the document crawl); one cut off loses nothing,
 the next run takes only what is still missing.
 
