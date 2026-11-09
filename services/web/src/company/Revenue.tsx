@@ -122,7 +122,9 @@ function ChartActions({ chart, saved, onOpenChart, label }: { chart: ChartState;
 }
 
 function Axes({ rows, totals, view, ...c }: Common & { rows: SegmentRow[]; totals: Map<number, number>; view: View }) {
-  const axes = axesOf(rows);
+  const axes = useMemo(() => axesOf(rows), [rows]);
+  // once per answer, not per render (totalsByKey gives the same Map for the same rows)
+  const tables = useMemo(() => axes.map((axis) => axisTable(rows, axis, totals)), [axes, rows, totals]);
   if (!axes.length) {
     return (
       <p className="empty">
@@ -133,7 +135,7 @@ function Axes({ rows, totals, view, ...c }: Common & { rows: SegmentRow[]; total
   }
   return (
     <>
-      {axes.map((axis) => <AxisBlock key={axis} t={axisTable(rows, axis, totals)} view={view} {...c} />)}
+      {axes.map((axis, i) => <AxisBlock key={axis} t={tables[i]!} view={view} {...c} />)}
       <div className="foot">
         Charts draw the last 3 years; tables list the latest {PERIODS} periods. Members missing a period show “{NO_DATA}”, never zero. Beyond the {SHOWN} largest, members are folded into “Other”. Bars stack only
         when the members add up to reported revenue (within {pct(COVERAGE_TOLERANCE, 0)}) in every period; otherwise each

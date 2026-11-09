@@ -91,14 +91,22 @@ const num = (v: string | undefined | null): number | null => {
   return Number.isFinite(n) ? n : null;
 };
 
-/** Company totals by fiscal period key, for one metric. */
+const TOTALS = new WeakMap<FinancialRow[], Map<string, Map<number, number>>>();
+
+/** Company totals by fiscal period key, for one metric. The same rows give the same Map (don't
+ * change it), so a component's memo keyed on it holds across renders. */
 export function totalsByKey(rows: FinancialRow[], metric: string): Map<number, number> {
+  const byMetric = TOTALS.get(rows) ?? new Map<string, Map<number, number>>();
+  TOTALS.set(rows, byMetric);
+  const known = byMetric.get(metric);
+  if (known) return known;
   const out = new Map<number, number>();
   for (const r of rows) {
     const k = periodKey(r.fiscal_period);
     const v = num(r.value);
     if (r.metric === metric && k !== null && v !== null) out.set(k, v);
   }
+  byMetric.set(metric, out);
   return out;
 }
 

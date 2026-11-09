@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { fin, seg } from "../fixtures";
-import { contributionPlan, segmentSeries, separateMembers, type SegmentRequest } from "./segments";
+import { contributionPlan, partition, segmentSeries, separateMembers, type SegmentRequest } from "./segments";
 
 const periods = (rows: Record<string, Record<string, number>>) =>
   new Map(Object.entries(rows).map(([k, m]) => [Number(k), new Map(Object.entries(m))]));
@@ -66,6 +66,97 @@ describe("separateMembers", () => {
     const s = separateMembers(periods({ 1: { A: 70, B: 40 } }), totals({ 1: 100 }));
     expect(s.drop.size).toBe(0);
     expect([...s.unreliable]).toEqual([1]);
+  });
+});
+
+/** The subset search before the review (a Map of arrays copied per member): the reference the
+ * bounded one must agree with. */
+function referencePartition(members: [string, number][], total: number): Set<string> | null {
+  const tiers = [0.0002, 0.001, 0.005];
+  const largerFirst = (a: number[], b: number[]) => {
+    const at = a.findIndex((x, i) => x !== b[i]);
+    return at < 0 ? 0 : a[at]! - b[at]!;
+  };
+  const ordered = members.filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+  const scale = 10_000 / total;
+  const limit = Math.ceil(10_000 * 1.005) + ordered.length;
+  let best = new Map<number, number[]>([[0, []]]);
+  ordered.forEach(([, v], i) => {
+    const size = Math.round(v * scale);
+    const next = new Map(best);
+    for (const [sum, picks] of best) {
+      const to = sum + size;
+      if (to > limit) continue;
+      const seen = next.get(to);
+      const mine = [...picks, i];
+      if (!seen || mine.length < seen.length || (mine.length === seen.length && largerFirst(mine, seen) < 0)) next.set(to, mine);
+    }
+    best = next;
+  });
+  const candidates = [...best.values()].filter((p) => p.length >= 2)
+    .map((picks) => ({ picks, off: Math.abs(picks.reduce((s, i) => s + ordered[i]![1], 0) - total) / total }));
+  for (const tier of tiers) {
+    const found = candidates.filter((c) => c.off <= tier).sort((a, b) => a.picks.length - b.picks.length || largerFirst(a.picks, b.picks))[0];
+    if (found) return new Set(found.picks.map((i) => ordered[i]![0]));
+  }
+  return null;
+}
+
+/** 20 countries that make revenue, and one member that is three of them (the review's case). */
+function countries(n: number, seed = 7): { periods: Map<number, Map<string, number>>; totals: Map<number, number> } {
+  let x = seed;
+  const rand = () => ((x = (x * 1103515245 + 12345) % 2147483648) / 2147483648);
+  const periods_ = new Map<number, Map<string, number>>();
+  const totals_ = new Map<number, number>();
+  for (let p = 1; p <= n; p++) {
+    const m = new Map<string, number>();
+    for (let c = 0; c < 20; c++) m.set(`country:C${c}`, Math.round(200 + rand() * 5000));
+    const sum = [...m.values()].reduce((s, v) => s + v, 0);
+    m.set("geo:Americas", m.get("country:C3")! + m.get("country:C7")! + m.get("country:C11")!);
+    periods_.set(p, m);
+    totals_.set(p, sum);
+  }
+  return { periods: periods_, totals: totals_ };
+}
+
+describe("the subset search's cost (review: the Revenue tab froze for 5.9 s)", () => {
+  it("gives the same partition as the unbounded search", () => {
+    let x = 11;
+    const rand = () => ((x = (x * 1103515245 + 12345) % 2147483648) / 2147483648);
+    for (let trial = 0; trial < 300; trial++) {
+      const n = 2 + Math.floor(rand() * 9);
+      const members: [string, number][] = Array.from({ length: n }, (_, i) => [`m${i}`, Math.round(1 + rand() * 1000) / (rand() < 0.3 ? 10 : 1)]);
+      const parts = members.filter(() => rand() < 0.6).reduce((s, [, v]) => s + v, 0);
+      const total = rand() < 0.7 && parts > 0 ? parts * (1 + (rand() - 0.5) * 0.004) : 100 + rand() * 4000;
+      expect([...partition(members, total) ?? []].sort()).toEqual([...referencePartition(members, total) ?? []].sort());
+    }
+    for (const [key, members] of PRODUCTS) {
+      expect(partition([...members], REVENUE.get(key)!)).toEqual(referencePartition([...members], REVENUE.get(key)!));
+    }
+    const vertiv: [string, number][] = [["Products", 3637.1], ["ProductExSpares", 3593.8], ["ServicesAndSpares", 719.0], ["Services", 675.7]];
+    expect(partition(vertiv, 4312.8)).toEqual(referencePartition(vertiv, 4312.8));
+  });
+
+  it("40 periods of 20 countries and an overlapping region: under 50 ms, the same answer as before", () => {
+    // the fastest of three different inputs (each new to the cache), so a busy test machine
+    // doesn't fail it; ~25 ms each on a laptop, 5.9 s before
+    const took = [7, 8, 9].map((seed) => {
+      const { periods: p, totals: t } = countries(40, seed);
+      const start = performance.now();
+      separateMembers(p, t);
+      return performance.now() - start;
+    });
+    expect(Math.min(...took)).toBeLessThan(50);
+    const { periods: p, totals: t } = countries(40);
+    // asked again (a re-render, the decomposition, the Segments tab): remembered
+    const again = performance.now();
+    separateMembers(p, t);
+    expect(performance.now() - again).toBeLessThan(5);
+    // the unbounded search took ~150 ms a period here; two of them are enough to compare
+    for (const key of [1, 40]) {
+      const members = [...p.get(key)!];
+      expect(partition(members, t.get(key)!)).toEqual(referencePartition(members, t.get(key)!));
+    }
   });
 });
 

@@ -99,47 +99,94 @@ export interface Separation {
   unreliable: Set<number>;
 }
 
-/** Picks are indexes into members sorted largest first: the lower wins, so the largest member does. */
-const largerFirst = (a: number[], b: number[]): number => {
-  const at = a.findIndex((x, i) => x !== b[i]);
-  return at < 0 ? 0 : a[at]! - b[at]!;
+/** Members in a pick, a bitmask over members sorted largest first (at most MAX_SEPARABLE bits). */
+const bits = (x: number): number => {
+  x -= (x >>> 1) & 0x55555555;
+  x = (x & 0x33333333) + ((x >>> 2) & 0x33333333);
+  return (((x + (x >>> 4)) & 0x0f0f0f0f) * 0x01010101) >>> 24;
+};
+
+/** Of two picks, the fewer members, then the one holding the larger member: bit i is the i-th
+ * largest, so at the lowest bit where they differ the pick holding it wins. */
+const better = (a: number, b: number): boolean => {
+  const na = bits(a);
+  const nb = bits(b);
+  return na !== nb ? na < nb : (a & (a ^ b) & -(a ^ b)) !== 0;
 };
 
 /** The members that make `total`, by the rule in the module's docstring; null without any. A
- * subset-sum over buckets of total / 10,000, so a filer's 24 members cost nothing. */
-function partition(members: [string, number][], total: number): Set<string> | null {
+ * subset-sum over buckets of total / 10,000 kept in place (0/1 knapsack, one Int32Array of picks as
+ * bitmasks), so the work is bounded by members x buckets: 24 x 10,074 steps at most, whatever the
+ * filing (the earlier Map of arrays copied every reachable sum per member: 5.9 s on 40 periods of
+ * 20 countries and a member overlapping three of them). Only sums that can be within the widest
+ * tier are measured. */
+export function partition(members: [string, number][], total: number): Set<string> | null {
   const ordered = members.filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+  const n = ordered.length;
+  if (n > MAX_SEPARABLE) return null;
   const widest = PARTITION_TIERS.at(-1)!;
   const scale = PARTITION_BUCKETS / total;
-  const limit = Math.ceil(PARTITION_BUCKETS * (1 + widest)) + ordered.length;
-  let best = new Map<number, number[]>([[0, []]]);
+  const limit = Math.ceil(PARTITION_BUCKETS * (1 + widest)) + n;
+  const best = new Int32Array(limit + 1).fill(-1); // best[sum]: the pick reaching it, -1 none
+  const count = new Uint8Array(limit + 1); // its number of members
+  best[0] = 0;
+  let reach = 0; // the highest sum reached so far: nothing above it to read
   ordered.forEach(([, v], i) => {
     const size = Math.round(v * scale);
-    const next = new Map(best);
-    for (const [sum, picks] of best) {
+    const bit = 1 << i;
+    // downwards, so best[sum] is still the pick without member i when it's read
+    for (let sum = Math.min(limit - size, reach); sum >= 0; sum--) {
+      const picks = best[sum]!;
+      if (picks < 0) continue;
       const to = sum + size;
-      if (to > limit) continue;
-      const seen = next.get(to);
-      const mine = [...picks, i];
-      if (!seen || mine.length < seen.length || (mine.length === seen.length && largerFirst(mine, seen) < 0)) next.set(to, mine);
+      const seen = best[to]!;
+      const n = count[sum]! + 1;
+      // fewer members wins; as many, the one holding the larger member (lowest differing bit)
+      if (seen < 0 || n < count[to]! || (n === count[to]! && ((picks | bit) & (seen ^ (picks | bit)) & -(seen ^ (picks | bit))) !== 0)) {
+        best[to] = picks | bit;
+        count[to] = n;
+      }
     }
-    best = next;
+    reach = Math.min(limit, reach + size);
   });
-  const candidates = [...best.values()]
-    .filter((p) => p.length >= 2)
-    .map((picks) => ({ picks, off: Math.abs(picks.reduce((s, i) => s + ordered[i]![1], 0) - total) / total }));
+  // a bucket sum is off the exact one by at most half a bucket per member
+  const lowest = Math.max(0, Math.floor(PARTITION_BUCKETS * (1 - widest) - n / 2) - 1);
+  const candidates: { picks: number; off: number }[] = [];
+  for (let sum = lowest; sum <= limit; sum++) {
+    const picks = best[sum]!;
+    if (picks < 0 || count[sum]! < 2) continue;
+    let value = 0;
+    for (let i = 0; i < n; i++) if (picks & (1 << i)) value += ordered[i]![1];
+    candidates.push({ picks, off: Math.abs(value - total) / total });
+  }
   for (const tier of PARTITION_TIERS) {
-    const found = candidates
-      .filter((c) => c.off <= tier)
-      .sort((a, b) => a.picks.length - b.picks.length || largerFirst(a.picks, b.picks))[0];
-    if (found) return new Set(found.picks.map((i) => ordered[i]![0]));
+    let found: number | null = null;
+    for (const c of candidates) if (c.off <= tier && (found === null || better(c.picks, found))) found = c.picks;
+    if (found !== null) return new Set(ordered.filter((_, i) => found! & (1 << i)).map(([m]) => m));
   }
   return null;
 }
 
+/** separateMembers' answers by their input: the Revenue tab, its decomposition, the Segments tab
+ * and saved contribution charts ask about the same periods, and a re-render asks again. */
+const SEPARATIONS = new Map<string, Separation>();
+const SEPARATIONS_KEPT = 64;
+
 /** Which members overlap, over these periods: see the module's docstring. Period keys can be
- * anything; `totals` holds the consolidated figure per key (no total: nothing to measure against). */
+ * anything; `totals` holds the consolidated figure per key (no total: nothing to measure against).
+ * Remembered by input (pure), so asking twice costs a lookup. */
 export function separateMembers(periods: Map<number, Map<string, number>>, totals: Map<number, number>): Separation {
+  const key = JSON.stringify([[...periods].map(([k, m]) => [k, [...m]]), [...totals]]);
+  let known = SEPARATIONS.get(key);
+  if (!known) {
+    known = separate(periods, totals);
+    if (SEPARATIONS.size >= SEPARATIONS_KEPT) SEPARATIONS.delete(SEPARATIONS.keys().next().value!);
+    SEPARATIONS.set(key, known);
+  }
+  return { drop: new Set(known.drop), unreliable: new Set(known.unreliable) };
+}
+
+function separate(periods: Map<number, Map<string, number>>, totals: Map<number, number>): Separation {
   const looked = new Map<string, number>();
   const left = new Map<string, number>();
   const over = new Set<number>();
