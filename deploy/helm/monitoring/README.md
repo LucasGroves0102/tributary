@@ -54,4 +54,5 @@ helm upgrade --install monitoring deploy/helm/monitoring --namespace monitoring
 kubectl -n monitoring port-forward svc/monitoring-grafana 3000:80
 ```
 
-CI runs `helm lint --strict` and kubeconform on the rendered chart.
+CI runs `helm lint --strict` and kubeconform on the rendered chart. It caches `charts/` per
+`Chart.lock` and downloads the dependencies (three tries) only when that changes.
