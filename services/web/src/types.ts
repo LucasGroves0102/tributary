@@ -1214,7 +1214,11 @@ export interface DataNote {
   detail: Record<string, unknown>;
   checked_at: string | null;
   filings: NoteFiling[];
+  /** how much it matters (query_api notes.py, M2); absent from an older API: read as "note" */
+  rank?: NoteRank;
 }
+
+export type NoteRank = "attention" | "note" | "minor";
 
 /** /v1/companies/{id}/data-notes and /v1/data-notes. */
 export interface DataNotes {
@@ -1222,6 +1226,8 @@ export interface DataNotes {
   as_of: string;
   checked_at: string | null;
   companies?: number;
+  /** notes per rank and the findings behind them (absent from an older API) */
+  summary?: { attention: number; note: number; minor: number; findings: number };
   notes: DataNote[];
 }
 

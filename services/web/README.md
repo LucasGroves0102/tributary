@@ -803,8 +803,14 @@ Data notes (`src/company/notes.ts`, Query API `/v1/companies/{id}/data-notes`, `
 the tearsheet's Data notes tab groups what the automated checks found (freshness, restated
 figures, gaps and overlapping periods, values to double-check, derived quarters) in plain
 language, each with links to its filings (the reader for 10-K/10-Q text the user can read,
-else EDGAR); groups run newest first, by their newest note, with derived quarters last. Home lists
-the newest notes of the user's own companies, by name: with the catalog open, the ones they watch or
+else EDGAR); groups run by their most important note, then their newest, with derived quarters last.
+The API ranks and groups the findings (M2: `rank` attention / note / minor, a series' repeats as one
+note with `repeats` and its period range, a `summary`): the tab opens on a line like "1 needs attention
+· 3 worth a look · 40 minor or old, from 312 check findings", each group shows what needs attention or
+is worth a look and keeps its minor and old notes behind "Show all" (`shownNotes`), and a note that
+needs attention is outlined. Against an older API (no rank, no summary) every note reads as a plain
+note and no summary shows. Home lists what needs attention first, then the newest notes of the user's
+own companies, by name: with the catalog open, the ones they watch or
 analyse (`/v1/data-notes?company_id=`, at most 50), since every company is readable; while it's closed,
 the ones they can read. They need financials access, like the values they describe. A
 company is checked when its figures change, so its tab says when *its* figures were last checked while

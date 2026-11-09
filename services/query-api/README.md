@@ -1061,9 +1061,21 @@ from `readable()` (financials) and passes them into the SQL (with the catalog pu
   `unit_change`. An `outlier` the same quarter also has in two other years gets `seasonal` and
   severity info. No check is suppressed: every finding still reaches a note.
 - Every note has `date` (restating or missing filing, a mistagged fact's filing, else the period
-  end; newest first: a 2033 period mustn't top the list) and
+  end: a 2033 period mustn't top the list) and
   `filings` (`role`, accession, form, filed, EDGAR `filing_url` from the public index). The
   plain-language wording is the web app's (`services/web/src/company/notes.ts`).
+- **Ranked, grouped, summarised (F7a, M2).** The checks cried wolf (on hermes the median company had
+  34 findings, the 90th percentile 114). Nothing is dropped; instead a series' repeats are one note
+  (same company, kind, metric, segment axis, rule, unit change, possible split, season: `detail`
+  gains `repeats`, `first_period_end`, `last_period_end`, `periods`, and the note keeps the newest
+  filings), and every note has a `rank`: `attention`, `note` or `minor`, scored from severity,
+  materiality (a 5% restatement or annual mismatch, a 10x spike, an impossible value), recency (2 and
+  5 years) and whether it's a headline metric; missing filings are always attention, derived
+  quarters, stock-based compensation benefits (050), unit changes and seasonal peaks always minor,
+  segment sums and left-out figures at most a note (`notes.py` docstring has the table). Notes come
+  attention first, then note, then minor, each newest first. Both routes add `summary` (notes per
+  rank, findings behind them). On 220 random companies' real findings: median 35 findings became 15
+  notes (0 attention, 1 note, 13 minor); 42 companies have anything needing attention, at most 6.
 
 ## Earnings and events
 

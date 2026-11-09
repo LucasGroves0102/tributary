@@ -5,7 +5,7 @@ import { Empty } from "../components/States";
 import { ago, day } from "../format";
 import { href } from "../route";
 import type { DataNote, NoteFiling } from "../types";
-import { edgarUrl, explain, groupNotes, ROLE_LABEL, severityLabel } from "./notes";
+import { edgarUrl, explain, groupNotes, rankOf, ROLE_LABEL, severityLabel, summaryText } from "./notes";
 import { Gate } from "./Tables";
 import { useLoad } from "./useLoad";
 
@@ -40,8 +40,10 @@ export function DataNotes({ token, companyId, name, canReadFilings }: {
               </Empty>
             );
           }
+          const summary = summaryText(load.data.summary);
           return (
             <>
+              {summary && <p className="notes-summary">{summary}</p>}
               {groupNotes(notes).map((g) => (
                 <NoteGroup key={g.key} label={g.label} notes={g.notes} companyId={companyId} canReadFilings={canReadFilings} />
               ))}
@@ -57,22 +59,34 @@ export function DataNotes({ token, companyId, name, canReadFilings }: {
   );
 }
 
+/** Notes that need attention or are worth a look show first (NOTES_SHOWN of them); minor or old
+ * ones (the API's rank) wait behind the button, so a group of 40 small restatements doesn't bury
+ * the one that matters. Nothing is hidden for good: "Show all" lists every note. */
+export function shownNotes(notes: DataNote[], all: boolean): DataNote[] {
+  if (all) return notes;
+  return notes.filter((n) => rankOf(n) !== "minor").slice(0, NOTES_SHOWN);
+}
+
 function NoteGroup({ label, notes, companyId, canReadFilings }: { label: string; notes: DataNote[]; companyId: string; canReadFilings: boolean }) {
   const [all, setAll] = useState(false);
-  const shown = all ? notes : notes.slice(0, NOTES_SHOWN);
+  const shown = shownNotes(notes, all);
+  const collapsed = all ? shownNotes(notes, false).length : shown.length;
+  const minor = notes.filter((n) => rankOf(n) === "minor").length;
   return (
     <div className="notes-group">
       <h3>
-        {label} <span className="faint">({notes.length})</span>
+        {label} <span className="faint">({notes.length}{minor ? `, ${minor} minor` : ""})</span>
       </h3>
-      <ul className="notes">
-        {shown.map((n, i) => (
-          <NoteItem key={`${n.kind}-${n.metric}-${n.period_end}-${i}`} note={n} companyId={companyId} canReadFilings={canReadFilings} />
-        ))}
-      </ul>
-      {notes.length > NOTES_SHOWN && (
+      {shown.length > 0 && (
+        <ul className="notes">
+          {shown.map((n, i) => (
+            <NoteItem key={`${n.kind}-${n.metric}-${n.period_end}-${i}`} note={n} companyId={companyId} canReadFilings={canReadFilings} />
+          ))}
+        </ul>
+      )}
+      {notes.length > collapsed && (
         <button className="btn sm ghost" onClick={() => setAll(!all)}>
-          {all ? "Show fewer" : `Show all ${notes.length}`}
+          {all ? "Show fewer" : collapsed ? `Show all ${notes.length}` : `Show ${notes.length} minor or old note${notes.length === 1 ? "" : "s"}`}
         </button>
       )}
     </div>
@@ -88,9 +102,12 @@ export function NoteItem({ note, companyId, canReadFilings, company }: {
   company?: string;
 }) {
   const { title, text } = explain(note);
+  const rank = rankOf(note);
   return (
-    <li className={`note ${note.severity}`}>
-      <span className={`tag sev-${note.severity}`}>{severityLabel(note.severity)}</span>
+    <li className={`note ${note.severity} rank-${rank}`}>
+      <span className={`tag sev-${note.severity}`} title={rank === "attention" ? "Needs attention: severe, recent and about a headline figure" : undefined}>
+        {severityLabel(note.severity)}
+      </span>
       <div className="note-b">
         <div className="note-t">
           {company && (

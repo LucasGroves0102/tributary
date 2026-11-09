@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { DataNote } from "../types";
-import { edgarUrl, explain, groupNotes } from "./notes";
+import { edgarUrl, explain, groupNotes, rankOf, summaryText } from "./notes";
 
 const note = (kind: string, detail: Record<string, unknown> = {}, over: Partial<DataNote> = {}): DataNote => ({
   company_id: "0000320193", kind, severity: "warning", metric: "revenue", period_end: "2025-03-29", date: "2025-03-29",
@@ -193,4 +193,46 @@ it("says a computed gross profit is revenue less cost", () => {
   const e = explain(note("derived_quarters", { quarters: 12, first_period_end: "2023-12-31", latest_period_end: "2026-09-30", computed: true }, { metric: "gross_profit" }));
   expect(e.title).toBe("Gross profit: revenue less cost of revenue");
   expect(e.text).toContain("the filing prints no gross profit");
+});
+
+describe("ranked and grouped notes (M2)", () => {
+  it("says where else a grouped series was found", () => {
+    const e = explain(note("segment_sum_product_service", { axis: "product_service", members: 6, deviation: 1, repeats: 24, first_period_end: "2021-03-31", last_period_end: "2026-06-30" }));
+    expect(e.title).toBe("Revenue: products and services don't add up (24 periods)");
+    expect(e.text).toContain("The same check found this in 24 periods, from Mar 31, 2021 to Jun 30, 2026; this is the newest.");
+  });
+
+  it("leaves a single finding's words alone", () => {
+    expect(explain(note("outlier", { vs_neighbours: 12.5, repeats: 1 })).title).toBe("Revenue: one-quarter spike");
+  });
+
+  it("reads a note without a rank, from an older API, as a plain note", () => {
+    expect(rankOf(note("outlier"))).toBe("note");
+    expect(rankOf(note("outlier", {}, { rank: "minor" }))).toBe("minor");
+  });
+
+  it("puts the group with what needs attention first, whatever its date", () => {
+    const groups = groupNotes([
+      note("restatement", {}, { date: "2026-10-30", rank: "minor" }),
+      note("impossible_value", { rule: "negative" }, { date: "2025-03-31", rank: "attention" }),
+    ]);
+    expect(groups.map((g) => g.key)).toEqual(["values", "restated"]);
+  });
+
+  it("summarises by rank, and says nothing from an older API", () => {
+    expect(summaryText({ attention: 1, note: 3, minor: 40, findings: 312 })).toBe(
+      "1 needs attention · 3 worth a look · 40 minor or old, from 312 check findings");
+    expect(summaryText({ attention: 0, note: 0, minor: 2, findings: 5 })).toBe(
+      "nothing needs attention · 2 minor or old, from 5 check findings");
+    expect(summaryText(undefined)).toBeNull();
+  });
+
+  it("words a stock compensation benefit and debt parts in the wrong scale (050)", () => {
+    const benefit = explain(note("sign_flip", { rule: "benefit" }, { metric: "stock_based_compensation", severity: "info" }));
+    expect(benefit.title).toBe("Stock based compensation: a benefit this quarter");
+    expect(benefit.text).toContain("isn't a slip");
+    const parts = explain(note("mistagged_fact", { rule: "debt_parts_scale", form: "10-K", filed: "2020-03-11", factor: 1000 }, { metric: "long_term_debt_current", period_end: "2019-12-31" }));
+    expect(parts.title).toBe("Debt: left out, parts in the wrong scale");
+    expect(parts.text).toContain("add up to 1,000 times the total debt");
+  });
 });

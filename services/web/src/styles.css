@@ -3468,6 +3468,17 @@ button.link.num {
   line-height: 1.5;
 }
 
+.notes-summary {
+  margin: 0;
+  padding: var(--sp-4) var(--sp-6) 0;
+  color: var(--text-2);
+}
+
+/* the API's rank (M2): what needs attention stands out from the minor and old */
+.note.rank-attention > .tag {
+  box-shadow: 0 0 0 2px var(--neg);
+}
+
 .note-f {
   display: flex;
   flex-wrap: wrap;

@@ -292,12 +292,103 @@ def test_one_other_year_is_a_coincidence_not_a_season():
     assert "seasonal" not in n["detail"] and n["severity"] == "warning"
 
 
+def covered(notes):
+    return sum(n["detail"]["findings"] if n["kind"] == "stock_split"
+               else n["detail"].get("repeats", 1) for n in notes)
+
+
 def test_every_finding_still_reaches_a_note():
     findings = [*TEN_FOR_ONE, restated("net_income", date(2023, 7, 30), 0.06),
-                spike(date(2024, 12, 31))]
+                spike(date(2024, 12, 31)), *VERTIV_SEGMENTS]
     notes = shape(findings, [], [], {})
-    covered = sum(n["detail"]["findings"] if n["kind"] == "stock_split" else 1 for n in notes)
-    assert covered == len(findings)
+    assert covered(notes) == len(findings)
+
+
+# --- M2: ranked, grouped, summarised -----------------------------------------------------------
+
+NOW = datetime(2026, 11, 9, tzinfo=UTC)
+# Vertiv's product/service revenue members, double counted every quarter since 2021 (24 findings)
+VERTIV_SEGMENTS = [
+    {"company_id": NVDA, "check_name": "segment_sum_product_service", "severity": "warning",
+     "metric": "revenue", "period_end": date(2021 + i // 4, 3 * (i % 4) + 1, 28),
+     "detail": {"axis": "product_service", "members": 6, "deviation": 1.0, "accession_no": Q4},
+     "checked_at": CHECKED} for i in range(24)]
+
+
+def finding(kind, metric, end, severity="warning", **detail):
+    return {"company_id": NVDA, "check_name": kind, "severity": severity, "metric": metric,
+            "period_end": end, "detail": detail, "checked_at": CHECKED}
+
+
+def test_a_series_repeats_are_one_note_with_its_periods():
+    (n,) = shape(VERTIV_SEGMENTS, [], [], {}, now=NOW)
+    assert n["kind"] == "segment_sum_product_service"
+    assert n["detail"]["repeats"] == 24
+    assert n["detail"]["first_period_end"] == "2021-01-28"
+    assert n["detail"]["last_period_end"] == "2026-10-28"
+    assert len(n["detail"]["periods"]) == 24 and n["period_end"] == date(2026, 10, 28)
+    assert n["filings"] == [{"role": "source", "accession_no": Q4, "form": None, "filed": None,
+                             "filing_url": None}]
+
+
+def test_different_rules_or_metrics_stay_apart():
+    notes = shape([finding("impossible_value", "revenue", date(2026, 3, 31), "error",
+                           rule="negative"),
+                   finding("impossible_value", "revenue", date(2026, 6, 30), "error",
+                           rule="gross_profit > revenue"),
+                   finding("impossible_value", "cash", date(2026, 6, 30), "error",
+                           rule="negative")], [], [], {}, now=NOW)
+    assert len(notes) == 3 and all("repeats" not in n["detail"] for n in notes)
+
+
+def test_what_matters_comes_first_whatever_its_date():
+    notes = shape([
+        restated("revenue", date(2026, 6, 30), 0.003, filed="2026-10-30"),       # small: minor
+        finding("impossible_value", "revenue", date(2025, 3, 31), "error", rule="negative"),
+        finding("outlier", "net_income", date(2026, 3, 31), vs_neighbours=14.0),  # attention
+        finding("impossible_value", "gross_profit", date(2012, 3, 31), "error",
+                rule="gross_profit > revenue"),
+        finding("sign_flip", "stock_based_compensation", date(2026, 6, 30), "info",
+                rule="benefit"),                                                  # 050: minor
+        finding("series_gap", "revenue", date(2025, 9, 30)),                      # note
+    ], [{"company_id": NVDA, "metric": "revenue", "quarters": 9,
+         "first_period_end": date(2017, 1, 29), "latest_period_end": date(2026, 9, 30),
+         "latest_accession": Q4}], [], {}, now=NOW)
+    got = [(n["rank"], n["kind"], n["metric"], str(n["period_end"])) for n in notes]
+    assert got == [
+        ("attention", "outlier", "net_income", "2026-03-31"),
+        ("attention", "impossible_value", "revenue", "2025-03-31"),
+        ("note", "series_gap", "revenue", "2025-09-30"),
+        ("note", "impossible_value", "gross_profit", "2012-03-31"),  # old, still a note
+        ("minor", "restatement", "revenue", "2026-06-30"),  # dated by its filing, Oct 30
+        ("minor", "derived_quarters", "revenue", "2026-09-30"),
+        ("minor", "sign_flip", "stock_based_compensation", "2026-06-30"),
+    ]
+
+
+def test_missing_filings_always_need_attention_and_segment_sums_never_do():
+    notes = shape([finding("segment_sum_geography", "revenue", date(2026, 6, 30), "warning",
+                           axis="geography", deviation=0.4)], [], [
+        {"company_id": NVDA, "facts_filed": date(2026, 5, 28), "accession_no": Q4, "form": "10-Q",
+         "filing_date": date(2018, 8, 27), "cik": NVDA}], {}, now=NOW)
+    assert [(n["kind"], n["rank"]) for n in notes] == [
+        ("companyfacts_behind", "attention"), ("segment_sum_geography", "note")]
+
+
+def test_a_group_takes_its_most_important_members_rank(token):
+    old = [finding("outlier", "revenue", date(2012 + i, 3, 31), vs_neighbours=11.0)
+           for i in range(3)]
+    (n,) = shape([*old, finding("outlier", "revenue", date(2026, 3, 31), vs_neighbours=11.0)],
+                 [], [], {}, now=NOW)
+    assert n["rank"] == "attention" and n["detail"]["repeats"] == 4
+
+
+def test_both_routes_summarise_notes_by_rank(token):
+    c = client()
+    body = c.get(f"/v1/companies/{NVDA}/data-notes", headers=token("bob")).json()
+    assert body["summary"] == {"attention": 1, "note": 0, "minor": 3, "findings": 2}
+    recent = c.get("/v1/data-notes", headers=token("bob")).json()
+    assert recent["summary"]["findings"] == 2 and recent["notes"][0]["rank"] == "attention"
 
 
 def test_a_mistagged_fact_is_dated_by_its_filing_not_its_period():
