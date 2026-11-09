@@ -66,6 +66,7 @@ from query_api.authorizer import Readable
 from query_api.connections import Limiter
 from query_api.formula import FormulaError, analyze, compile_formula, parse
 from query_api.formula.check import PERCENT
+from query_api.sandbox import is_sandbox_user
 from query_api.shapes import filing_url
 from query_api.webhooks import (
     FORMATS,
@@ -787,6 +788,7 @@ def add_alert_routes(app: FastAPI, *, alerts: AppAlerts | None, store: Any,
                               for f in follows],
                 "webhooks": [webhook_out(w) for w in a.webhooks(user_id)],
                 "formats": list(FORMATS), "max_webhooks": MAX_WEBHOOKS,
+                "webhooks_allowed": not is_sandbox_user(user_id),
                 "email": {"available": False},
                 "last_check": status["last_check"],
                 "schedule": "every 10 minutes", "lookback_days": LOOKBACK_DAYS,
@@ -871,6 +873,10 @@ def add_alert_routes(app: FastAPI, *, alerts: AppAlerts | None, store: Any,
         """{"url", "format"?}: refused unless https to a public address (query_api.webhooks),
         checked now and before every send. The answer carries the signing secret, this once.
         The body is parsed by hand: FastAPI's 422 would echo the URL, which carries a token."""
+        if is_sandbox_user(user_id):
+            # an anonymous, day-long demo user doesn't get to make the server post anywhere
+            return _bad(403, "permanent_account", "webhooks need a permanent account: sign in "
+                                                  "with GitHub or with an account")
         body = await json_body(request)
         if isinstance(body, JSONResponse):
             return body

@@ -231,7 +231,9 @@ function Webhooks({ token, settings, onChanged }: { token: string; settings: Ale
           ))}
         </ul>
       )}
-      {!full ? (
+      {settings.webhooks_allowed === false ? (
+        <p className="faint small">Webhooks need a permanent account: sign in with GitHub, or with an account, to send alerts to a channel.</p>
+      ) : !full ? (
         <form className="row wrap webhook-form" onSubmit={(e) => void add(e)}>
           <label className="visually-hidden" htmlFor="webhook-url">Webhook URL</label>
           <input id="webhook-url" className="field grow" type="url" inputMode="url" autoComplete="off" spellCheck={false} maxLength={2048}

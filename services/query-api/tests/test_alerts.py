@@ -207,3 +207,10 @@ def test_red_line_bodies_are_strict(token):
     ticker = {**nan, "threshold": "0.5", "formula": "MSFT.gross_margin"}
     r = c.post("/v1/alerts/red-lines", headers=token("alice"), json=ticker)
     assert r.status_code == 422 and "ticker" in r.json()["detail"]
+
+
+def test_a_demo_sandbox_cant_add_a_webhook(token):
+    # anonymous day-long users don't get to make the server post to a URL of their choosing
+    r = client().post("/v1/alerts/webhooks", headers=token("demo-0123456789abcdef"),
+                      json={"url": "https://discord.com/api/webhooks/1/x"})
+    assert r.status_code == 403 and r.json()["code"] == "permanent_account"

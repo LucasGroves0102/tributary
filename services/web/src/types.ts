@@ -1630,6 +1630,8 @@ export interface AlertSettings {
   webhooks: Webhook[];
   formats: WebhookFormat[];
   max_webhooks: number;
+  /** false for a demo sandbox (an older API leaves it out: allowed) */
+  webhooks_allowed?: boolean;
   email: { available: boolean };
   last_check: AlertCheck | null;
   schedule: string;

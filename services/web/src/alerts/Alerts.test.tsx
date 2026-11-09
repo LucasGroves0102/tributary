@@ -199,6 +199,17 @@ it("Settings: forms per company, and a webhook refused for plain http, then adde
   expect(container.textContent).not.toContain(SECRET);
 });
 
+it("a demo sandbox sees why it can't add a webhook", async () => {
+  vi.mocked(fetch).mockImplementation(async (url: string | URL | Request, init?: RequestInit) => {
+    const r = respond(String(url), init);
+    if (!String(url).endsWith("/v1/alerts/settings")) return r;
+    return Response.json({ ...(await r.json()), webhooks_allowed: false });
+  });
+  await render("#/settings", "table.alert-forms");
+  expect(container.querySelector("#webhook-url")).toBeNull();
+  expect(container.textContent).toContain("Webhooks need a permanent account");
+});
+
 // --- the Monitor step's red lines ---------------------------------------------------------------
 
 const RULES: RedLine[] = [
