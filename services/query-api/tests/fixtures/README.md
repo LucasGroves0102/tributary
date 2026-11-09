@@ -17,3 +17,9 @@
   1,200 characters (events.HEAD_CHARS) of each 7.01, 8.01 and EX-99 section, which is what
   `announcements.read` gets. The file name says what each announces; `test_announcements.py` and
   `test_events_api.py` read them.
+- `changes/*.json.gz`: four compared sections as the `/changes` route reads them: Deckers' 10-Q
+  of 2026-10-29 (0001628280-26-068116) MD&A against its year-ago and prior 10-Q, Vertiv's 10-Q of
+  2026-10-28 (0001628280-26-067893) MD&A against the prior 10-Q and Risk Factors against a year
+  ago. Both section texts from production's sections route (2026-11-09) and `stored`, the rows
+  `gold.section_changes` holds for them (the parser's diff-1 over those texts; their counts equal
+  production's). gzip because the texts are 26-42 KB each; `test_changes.py` reads them.

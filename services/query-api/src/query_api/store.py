@@ -662,6 +662,23 @@ class Store:
                 """, (company_id, accession_no, basis, section_key, section_key))
             return cur.fetchall()
 
+    def section_bases(self, user_id: str, company_id: str, accession_no: str) -> list[dict]:
+        """What this filing was compared with, one row per basis (gold.section_diffs under
+        RLS, a PK prefix probe): basis, this filing's form, the compared filing."""
+        with self._session(user_id) as cur:
+            cur.execute(
+                """
+                SELECT DISTINCT ON (d.basis) d.basis, d.form, d.prior_accession_no,
+                       d.prior_form, d.prior_filed,
+                       pdoc.period_of_report AS prior_period_of_report
+                FROM gold.section_diffs d
+                LEFT JOIN bronze.filing_documents pdoc
+                       ON pdoc.accession_no = d.prior_accession_no
+                WHERE d.company_id = %s AND d.accession_no = %s
+                ORDER BY d.basis, d.section_key
+                """, (company_id, accession_no))
+            return cur.fetchall()
+
     def section_changes(self, user_id: str, accession_no: str, section_keys: list[str],
                         basis: str, kind: str | None) -> list[dict]:
         """gold.section_changes rows in reading order."""

@@ -48,7 +48,7 @@ request parameters. Dev tokens: `make token USER=alice`.
 | `GET /v1/filing-index?company_id=&form=&from=&to=&limit=&offset=` | token | the same across up to 50 companies (default: the caller's readable companies) |
 | `GET /v1/filings/latest?limit=` | token | newest parsed filings across the companies the caller can read filings for |
 | `GET /v1/companies/{id}/sections/{key}?form=&accession_no=&limit=&max_chars=` | filings | section text + citation; `max_chars` default 8,000, up to 1,000,000 (the reader asks for the whole section) |
-| `GET /v1/companies/{id}/filings/{accession}/changes?section=&basis=&kind=` | filings | new / removed / rewritten Risk Factors and MD&A paragraphs vs the comparable earlier filing, word diffs, citations in both filings ([What changed](#what-changed)) |
+| `GET /v1/companies/{id}/filings/{accession}/changes?section=&basis=&kind=&view=&q=&numbers=` | filings | new / removed / rewritten Risk Factors and MD&A paragraphs vs the comparable earlier filing, word diffs, citations in both filings; with `view` read for materiality (noise hidden and counted, periods, figures, score and why; a 10-Q against a year ago by default; topic and new-figure filters) ([What changed](#what-changed)) |
 | `GET /v1/search?q=&company=&form=&section=&from=&to=&limit=&offset=` | filings (every company searched) | best passage per section, ranked, with snippet and citation ([Search](#search)) |
 | `GET /v1/companies/{id}/events` | filings | 8-K filings since the latest 10-Q/10-K period end, newest first: items (SEC title, kind), an excerpt of the 8-K's own words, the press release exhibit, `announced` (a completed deal or new financing read from a 7.01/8.01 announcement), and `stale`: figures at that period end an event after it may have changed ([Earnings and events](#earnings-and-events)) |
 | `GET /v1/companies/{id}/earnings?quarters=` | filings | each quarter's earnings release (8-K Item 2.02), newest first, `quarters` 1-8 (default 4): the release, its headline, outlook passages and management's adjustments (reconciliation tables, dollar notes), each with offsets into the release; no beat or miss ([Earnings and events](#earnings-and-events)) |
@@ -950,6 +950,60 @@ built by the parser's `parser-index`; algorithm in `services/parser/src/filing_p
   returned with `stale: true` and no changes until the job recomputes it.
 - An accession that isn't a parsed filing of this company → 404 (the same for another company's
   filing); a parsed filing with nothing compared yet → 200 with `sections: []` and a `note`.
+
+### Read for materiality (F3: `view`, `q`, `numbers`)
+
+The stored diff counts every paragraph a page break split, every "second quarter" that became
+"third", every table row whose figures moved: Deckers' Q2 FY27 10-Q had 121 changes against its
+Q1 10-Q, half of them fragments, and its three-month text was diffed against six-month text
+(analyst tests, audit H4). With `view` the route runs a second pass over the stored changes at
+query time (`changes.py`, rules in its docstring), from the two section texts it already reads:
+no stored row changes and nothing is rebuilt.
+
+- `view=reading` (reading order) or `view=ranked` (highest score first); `q` or `numbers` alone
+  imply `reading`. Without any of the three the answer is exactly as above (the agent's
+  `get_section_changes` and an older web app read that).
+- `basis` defaults, with `view`, to the same quarter a year earlier for a 10-Q that has one
+  (else the prior filing); `comparisons` lists the filings this one was compared with
+  (`basis`, accession, form, filed, period), from `Store.section_bases` (one PK probe of
+  `gold.section_diffs` under RLS, 1.6 ms on hermes).
+- The pass: page furniture dropped ("Table of Contents 25", running headers with their page
+  number masked, never a table row); paragraphs a page break or a line-wrapped document split
+  joined; then hidden and counted per section in `material.hidden`: `resplit` (only split or
+  rejoined, or only furniture differed), `calendar` (equal once month names, "second/third
+  quarter" and the quarter's three months vs the year to date's six or nine months are masked),
+  `figures_only` (a table row whose words didn't change) and `minor` (similarity >= 0.9, the
+  stored diff's threshold). Pairs are re-made over what's left: never a quarter's passage with a
+  year-to-date one, a split-and-edited paragraph takes in its neighbours, and two passages with
+  the same run-in heading ("Gross Profit.") and period pair even when rewritten past
+  recognition.
+- Per change, besides the stored fields: `period` (10-Q: "three months", "six months", "nine
+  months", "three and six months"; from the passage, else its period heading), `figures`
+  (`new`: figures the compared passage doesn't state, `removed`), `moved` (the largest relative
+  change of a replaced figure), `risk_terms` (risk wording new to the passage), `subsection`,
+  `score`, `why` (what counted, in words: "new passage", "5 new figures", "0.2% → 4.8%", "new
+  risk wording: tariff", "Liquidity and capital resources") and `merged` (stored paragraphs
+  behind it). Score = where it sits (Risk Factors 1.5; MD&A liquidity 1.3, results 1.0, critical
+  accounting 0.8, non-GAAP 0.6, boilerplate 0.3) x (new 2, removed 1.5, rewritten 1-3 by how
+  much; + new and removed figures; + how far figures moved; + new risk wording), halved under
+  12 words. `ranking` is the one line that says so.
+- Filters, after the pass: `q` (2-100 characters; every word must appear in the passage or its
+  compared one, as a word prefix with a plural dropped, so "tariffs" finds "tariff"; "quoted
+  phrases" as written), `numbers=new` (passages with a new figure), `kind`, `section`. The answer
+  echoes `view` and `filters` (`terms` is what was matched), and counts `matched` (shown) and
+  `total` (after the pass, before filters). A web app that gets no `view` back is talking to an
+  older API.
+- Measured on production's texts (the stored rows reproduced exactly from them with the parser's
+  diff), changes shown after the pass, before filters: Deckers 10-Q Q2 FY27 against Q2 FY26
+  147 → 91 (against Q1: 121 → 80, of which 51 six-month passages new in Q2, now labelled);
+  Vertiv 10-Q Q3 2026 against the prior 10-Q 39 → 22 (9 calendar rollovers hidden), against Q3
+  2025 62 → 54; NVIDIA 10-K FY26 133 → 122, 10-Q Q2 FY27 against a year ago 129 → 119; Vertiv
+  10-K 2025 112 → 93; Deckers 10-K FY26 379 → 264. With `q=tariffs` Deckers' 10-Q shows 10
+  passages, the $46.0M IEEPA refund second. The pass costs 20-70 ms per 10-Q section and up to
+  145 ms for Deckers' 10-K Risk Factors (178 stored changes), in the request.
+- Per company, per filing: the same three per-accession reads as without a view plus
+  `section_bases`; no catalog ids, no `@@` (the topic is matched in Python on the passages the
+  caller already read under RLS).
 
 ## Search
 

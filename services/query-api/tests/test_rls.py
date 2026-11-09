@@ -507,6 +507,22 @@ def test_section_changes_with_both_citations(texts, token):
     assert c["citation"]["char_end"] == 12 and c["prior_citation"]["char_end"] == 9
 
 
+def test_material_view_reads_the_bases_and_changes_under_rls(texts, token):
+    """F3: view=ranked asks gold.section_diffs for its bases and runs the pass, as query_api."""
+    r = changes(texts, token, "t-pro", A, "view=ranked")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["view"] == "ranked" and body["basis"] == "prior"
+    assert body["comparisons"] == [{"basis": "prior", "accession_no": f"{A}-25-000002",
+                                    "form": "10-K", "filed": "2025-02-01",
+                                    "period_of_report": None}]
+    [s] = body["sections"]
+    assert s["material"]["shown"] == len(s["changes"])
+    # layer 1 allows everything here: RLS alone hides B's rows and the free plan's
+    for user, company in (("t-pro", B), ("t-free", A), ("t-nobody", A)):
+        assert changes(texts, token, user, company, "view=ranked").status_code == 404
+
+
 def test_section_changes_hidden_without_filings_grant(texts, token):
     # layer 1 allows everything here: RLS alone hides B's and the free plan's rows
     for user, company in (("t-pro", B), ("t-free", A), ("t-nobody", A)):
