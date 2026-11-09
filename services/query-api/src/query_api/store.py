@@ -268,6 +268,99 @@ class Store:
                       "limit": limit, "granted_only": granted_only})
             return cur.fetchall()
 
+    def business_peers(self, user_id: str, company_id: str) -> dict:
+        """Peers by business (migration 047) for one company, under RLS (`filings` on both
+        sides): its profile (None: no usable Item 1, or the caller can't read its filings), its
+        stored neighbours, and competitor mentions both ways with the sentence to cite. Primary-
+        key and index reads of one company only."""
+        with self._session(user_id) as cur:
+            cur.execute("SELECT accession_no, section_key, filed, terms, computed_at"
+                        " FROM gold.business_profiles WHERE company_id = %s", (company_id,))
+            profile = cur.fetchone()
+            if profile is None:
+                return {"profile": None, "peers": [], "mentions": []}
+            cur.execute("SELECT peer_id, similarity, terms FROM gold.business_peers"
+                        " WHERE company_id = %s", (company_id,))
+            peers = cur.fetchall()
+            cur.execute(
+                "SELECT company_id, named_id, accession_no, section_key, char_start, char_end"
+                " FROM gold.business_mentions WHERE company_id = %(c)s OR named_id = %(c)s"
+                " ORDER BY company_id, named_id, char_start", {"c": company_id})
+            return {"profile": profile, "peers": peers, "mentions": cur.fetchall()}
+
+    def peer_facts(self, user_id: str, company_ids: list[str],
+                   granted: list[str] | None) -> dict[str, dict]:
+        """company_id -> sic, sector, filer category, and TTM revenue read like Store.peers (only
+        for `granted`; None: RLS alone). For at most a page of candidates, never the catalog."""
+        gate = "" if granted is None else "WHERE c.company_id = ANY(%(granted)s)"
+        with self._session(user_id) as cur:
+            cur.execute(
+                f"""
+                SELECT c.company_id, c.sic, s.sector, s.industry AS sector_industry,
+                       gold.filer_category(c.filer_categories) AS filer_category, r.value AS revenue
+                FROM silver.companies c
+                LEFT JOIN silver.sic_sectors s ON c.sic BETWEEN s.sic_from AND s.sic_to
+                LEFT JOIN LATERAL (
+                    SELECT CASE WHEN x.status IS NULL OR x.status = 'behind'
+                                THEN x.value END AS value
+                    FROM gold.latest_period(c.company_id) lp
+                    CROSS JOIN LATERAL gold.latest_reading(c.company_id, 'ttm', 'revenue',
+                                                           c.sic, lp.latest) x
+                    {gate}
+                ) r ON true
+                WHERE c.company_id = ANY(%(ids)s)
+                """, {"ids": company_ids, "granted": granted})
+            return {r.pop("company_id"): r for r in cur.fetchall()}
+
+    def sectors(self, user_id: str) -> list[dict]:
+        """The sector classification (migration 046): one row per SIC range, and how many
+        companies with financials each covers (public metadata, like the SIC codes)."""
+        with self._session(user_id) as cur:
+            cur.execute(
+                "SELECT s.sector, s.industry, s.sic_from, s.sic_to,"
+                "       count(v.company_id) AS companies"
+                " FROM silver.sic_sectors s"
+                " LEFT JOIN silver.companies c ON c.sic BETWEEN s.sic_from AND s.sic_to"
+                "      AND c.sic ~ '^\\d{4}$'"
+                " LEFT JOIN gold.financials_coverage v ON v.company_id = c.company_id"
+                " GROUP BY 1, 2, 3, 4 ORDER BY 1, 2, 3")
+            return cur.fetchall()
+
+    def co_registrants(self, user_id: str) -> list[dict]:
+        """Every pair of companies filing one combined 10-K (silver.co_registrants, 047): public
+        filing-index metadata, a few dozen rows."""
+        with self._session(user_id) as cur:
+            cur.execute("SELECT r.company_id, r.other_id, r.accession_no, r.filing_date,"
+                        "       r.filed_by, c.name AS other_name"
+                        " FROM silver.co_registrants() r"
+                        " JOIN silver.companies c ON c.company_id = r.other_id"
+                        " ORDER BY r.company_id, r.other_id")
+            return cur.fetchall()
+
+    def annual_reports(self, user_id: str, company_id: str) -> dict:
+        """Public index metadata for why a company has no figures to compare: whether gold has
+        any (gold.financials_coverage), and its latest annual report of each kind (10-K, 20-F,
+        40-F) from the filing index. One company: index probes on its CIKs."""
+        with self._session(user_id) as cur:
+            cur.execute(
+                """
+                SELECT EXISTS (SELECT 1 FROM gold.financials_coverage v
+                               WHERE v.company_id = %(c)s) AS has_financials,
+                       (SELECT c.sic FROM silver.companies c WHERE c.company_id = %(c)s) AS sic,
+                       (SELECT jsonb_object_agg(kind, latest) FROM (
+                            SELECT CASE WHEN f.form LIKE '20-F%%' THEN '20-F'
+                                        WHEN f.form LIKE '40-F%%' THEN '40-F'
+                                        ELSE '10-K' END AS kind,
+                                   max(f.filing_date) AS latest
+                            FROM silver.filings f
+                            WHERE f.cik IN (SELECT k.cik FROM silver.company_ciks k
+                                            WHERE k.company_id = %(c)s)
+                              AND f.form IN ('10-K', '10-K/A', '10-KT', '20-F', '20-F/A',
+                                             '40-F', '40-F/A')
+                            GROUP BY 1) a) AS annual
+                """, {"c": company_id})
+            return cur.fetchone() or {}
+
     def financials(self, user_id: str, company_id: str, metrics: list[str], quarters: int,
                    view: str = "quarter", basis: str = "fiscal") -> list[dict]:
         """view: quarter | ttm. basis: fiscal (every fiscal period) | calendar (one row per

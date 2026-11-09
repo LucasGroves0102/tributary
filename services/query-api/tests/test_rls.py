@@ -973,3 +973,49 @@ def test_expected_filings_recent_covers_only_readable_companies(client):
         for r in fn]
     assert rows(store.expected_filings("t-reader", None, as_of, 2)) == rows(
         store.expected_filings("t-reader", [B], as_of, 2))
+
+
+def business_rows(conn):
+    """A's and B's Item 1 compared (migration 047): profiles, a peer row each way, and A's 10-K
+    naming B as a competitor."""
+    for cid, other in ((A, B), (B, A)):
+        conn.execute("INSERT INTO gold.business_profiles (company_id, accession_no, section_key,"
+                     " filed, parser, terms, algorithm) VALUES (%s, %s, '1', '2026-02-01',"
+                     " 'python', '{secret term}', 'business-1')", (cid, f"{cid}-26-000002"))
+        conn.execute("INSERT INTO gold.business_peers (company_id, peer_id, similarity, terms)"
+                     " VALUES (%s, %s, 0.4, '{secret term}')", (cid, other))
+    conn.execute("INSERT INTO gold.business_mentions (company_id, named_id, accession_no,"
+                 " section_key, char_start, char_end) VALUES (%s, %s, %s, '1', 0, 12)",
+                 (A, B, f"{A}-26-000002"))
+
+
+def test_business_peers_need_filings_on_both_companies(client, token):
+    """F4: similarities come from Item 1 text. t-pro reads A's filings but not B's: A's profile
+    and its own sentence naming B (A's text) show, the A-B similarity and its terms don't."""
+    business_rows(client.app_conn)
+    body = client.get(f"/v1/companies/{A}/peers", headers=token("t-pro")).json()
+    assert body["basis"] == "business" and body["business"]["terms"] == ["secret term"]
+    (b,) = body["peers"]
+    assert b["company_id"] == B and b["match"]["similarity"] == 0 and b["match"]["terms"] == []
+    assert b["match"]["named_by_target"]["char_end"] == 12
+    assert b["values"]["revenue_ttm"] is None  # and no financials on B either
+    # financials only: no Item 1 for this caller, so SIC and size
+    free = client.get(f"/v1/companies/{A}/peers", headers=token("t-free")).json()
+    assert free["basis"] == "sic" and free["business"] is None
+
+
+def test_sectors_co_registrants_and_peer_check_run_as_query_api(client, token):
+    """046's view and 047's function are public metadata the query_api role can read."""
+    r = client.get("/v1/sectors", headers=token("t-nobody"))
+    assert r.status_code == 200, r.text
+    staples = next(s for s in r.json()["sectors"] if s["name"] == "Consumer Staples")
+    beverages = next(i for i in staples["industries"] if i["name"] == "Beverages")
+    assert beverages["companies"] >= 1 and "2080-2089" in beverages["sic"]
+    rows = client.get(f"/v1/screener?company_id={A}&company_id={B}",
+                      headers=token("t-free")).json()["rows"]
+    by_id = {x["company_id"]: x for x in rows}
+    assert (by_id[A]["sector"], by_id[A]["sector_industry"]) == ("Consumer Staples", "Beverages")
+    assert by_id[B]["sector"] is None and by_id[A]["co_registrants"] == []
+    check = client.get(f"/v1/companies/{A}/peers/check/{B}", headers=token("t-free"))
+    assert check.status_code == 200, check.text
+    assert check.json()["ok"] is True  # B has gold rows; AllowAll reads it

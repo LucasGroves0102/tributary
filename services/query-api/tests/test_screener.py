@@ -49,6 +49,11 @@ class ScreenStore:
             rows.append(row)
         return rows
 
+    def co_registrants(self, user_id):
+        """PG&E Corp and its utility file one 10-K (silver.co_registrants, migration 047)."""
+        return [{"company_id": NVDA, "other_id": TSLA, "accession_no": "0001004980-26-000009",
+                 "filing_date": "2026-02-12", "filed_by": NVDA, "other_name": "Tesla, Inc."}]
+
 
 @pytest.fixture
 def client():

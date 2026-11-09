@@ -21,6 +21,9 @@ from fastapi.responses import Response
 
 from query_api.authorizer import Readable
 from query_api.csv_export import csv_response
+from query_api.peers import Candidate as PeerCandidate
+from query_api.peers import rank as rank_peers
+from query_api.peers import sic_match
 from query_api.screener import (
     COLUMNS,
     FILER_CATEGORIES,
@@ -58,10 +61,15 @@ RECAP_FORMS = ("10-K", "10-Q", "10-K/A", "10-Q/A")
 Band = Literal["lt100m", "100m-1b", "1b-10b", "10b-100b", "gte100b"]
 Format = Annotated[Literal["json", "csv"], Query(alias="format")]
 MAX_JSON_ROWS = 500
+JOINT_TTL = 3600  # seconds a process keeps the co-registrant pairs
 MAX_COMPANY_IDS = 21  # a comps table: a target and up to 20 peers
 DEFAULT_PEER_COLUMNS: tuple[str, ...] = ("revenue_ttm", "revenue_growth_ttm", "gross_margin_ttm",
                         "operating_margin_ttm", "net_margin_ttm", "free_cash_flow_ttm",
                         "debt_to_equity_q")
+# a bank's peers compare banks (048): revenue first, so the size band still reads it
+BANK_PEER_COLUMNS: tuple[str, ...] = ("revenue_ttm", "net_interest_income_ttm",
+                                      "efficiency_ratio_ttm", "provision_for_credit_losses_ttm",
+                                      "loans_q", "deposits_q", "roe_ttm", "net_margin_ttm")
 WATCHLIST_COLUMNS: tuple[str, ...] = ("revenue_ttm", "revenue_growth_q", "operating_margin_ttm",
                      "free_cash_flow_ttm")
 FORM_TYPE = r"^[A-Z0-9][A-Z0-9 ./-]{0,19}$"  # SEC form types: 10-K, 8-K/A, SC 13G, DEF 14A
@@ -86,6 +94,27 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
         if watchlists is None:
             raise HTTPException(503, "watchlists unavailable")
         return watchlists.list(user_id)
+
+    joint_cache: dict = {}
+
+    def co_registrants(user_id: str) -> dict[str, list[dict]]:
+        """company_id -> the companies it files one combined 10-K with (#135), public index
+        metadata cached JOINT_TTL per process (silver.co_registrants is ~190 ms cold)."""
+        now = datetime.now(UTC)
+        if joint_cache.get("at") is None or (now - joint_cache["at"]).total_seconds() > JOINT_TTL:
+            try:
+                rows = store.co_registrants(user_id)
+            except psycopg.Error as e:  # optional: never take the screener down for a note
+                log.warning("co-registrants unavailable: %s", type(e).__name__)
+                return joint_cache.get("map", {})
+            joint: dict[str, list[dict]] = {}
+            for r in rows:
+                joint.setdefault(r["company_id"], []).append(
+                    {"company_id": r["other_id"], "name": r["other_name"],
+                     "accession_no": r["accession_no"], "filed": r["filing_date"],
+                     "filed_by": r["filed_by"]})
+            joint_cache.update(at=now, map=joint)
+        return joint_cache["map"]
 
     def run_screen(user_id: str, screen: Screen, access: Readable):
         try:
@@ -118,6 +147,10 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
         exchange: Annotated[list[str] | None, Query(description="e.g. NYSE, Nasdaq")] = None,
         fiscal_year_end_month: Annotated[list[int] | None, Query()] = None,
         filer_category: Annotated[list[FilerCategory] | None, Query()] = None,
+        sector: Annotated[list[str] | None, Query(
+            max_length=40, description="sector names (/v1/sectors)")] = None,
+        sector_industry: Annotated[list[str] | None, Query(
+            max_length=60, description="industry names within sectors (/v1/sectors)")] = None,
         issue: Annotated[str | None, Query(
             pattern=r"^[a-z_]{1,64}$", description="a data-quality check's name "
             "(the status page's rows): only companies you can read with a finding of it")] = None,
@@ -147,7 +180,8 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
             raise HTTPException(422, "sic: 4-digit codes")
         if any(not 1 <= m <= 12 for m in fiscal_year_end_month or []):
             raise HTTPException(422, "fiscal_year_end_month: 1-12")
-        if any(len(e) > 20 for e in exchange or []) or len(where or []) > 10:
+        if any(len(e) > 20 for e in exchange or []) or len(where or []) > 10 \
+                or len(sector or []) > 12 or len(sector_industry or []) > 20:
             raise HTTPException(422, "too many or too long filters")
         if company_id is not None and (
                 len(company_id) > MAX_COMPANY_IDS
@@ -169,8 +203,12 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
             sic=sic or [], sic_prefix=sic_prefix, industry=industry, q=q,
             exchanges=exchange or [], fye_months=fiscal_year_end_month or [],
             filer_categories=list(filer_category or []), issue=issue, filters=filters,
+            sectors=sector or [], sector_industries=sector_industry or [],
             granted_only=access == "financials", sort=sort, limit=limit, offset=offset)
         compiled, rows, total = run_screen(user_id, screen, readable(user_id))
+        joint = co_registrants(user_id)
+        for r in rows:
+            r["co_registrants"] = joint.get(r["company_id"], [])
         if fmt == "csv":
             return csv_response("screener.csv", [*META_CSV, "access", *compiled.columns, "notes"], (
                 [*(r[k] for k in META_CSV), r["access"],
@@ -401,21 +439,33 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
     def peers(
         user_id: Annotated[str, Depends(current_user)], company_id: CompanyId,
         limit: Annotated[int, Query(ge=1, le=50)] = 10,
-        columns: Annotated[list[str] | None, Query(description="screener column keys")] = None,
+        columns: Annotated[list[str] | None, Query(
+            description="screener column keys; default: a standard set, a bank's own for a "
+                        "bank")] = None,
         access_filter: Annotated[Literal["all", "financials"], Query(
             alias="access", description="all: any company; financials: only companies you can "
                                         "read (a demo sandbox lists nothing else)")] = "all",
     ) -> dict:
-        """Suggested peers: same SIC (then 3- and 2-digit groups), then the same revenue size
-        band, then the same filer category. Metadata is public; metric values and size bands
-        only for companies the caller can read financials for (the company's own revenue is
-        used only if the caller can read it)."""
+        """Suggested peers by business (query_api/peers.py is the spec): similarity of the two
+        10-Ks' Item 1, competitors either one names, SIC division and size as weak signals; by
+        SIC and size when there is no business text to compare. require(financials) first;
+        candidates, mentions and revenue are read under RLS (filings for the text, financials
+        for revenue); a company the caller can't read never gets a size."""
+        require(user_id, "financials", company_id)
         access = readable(user_id)
-        cols = columns if columns is not None else list(DEFAULT_PEER_COLUMNS)
+        bank_cols = None
+        if columns is None:
+            _, probe, _ = run_screen(user_id, Screen(columns=["revenue_ttm"],
+                                                     company_ids=[company_id], coverage=False,
+                                                     sort="name", limit=1), access)
+            bank_cols = bool(probe and probe[0]["not_applicable"])
+        cols = columns if columns is not None else list(
+            BANK_PEER_COLUMNS if bank_cols else DEFAULT_PEER_COLUMNS)
         _, target, _ = run_screen(user_id, Screen(columns=cols, company_ids=[company_id],
                                                   coverage=False, sort="name", limit=1), access)
         if not target:
             raise HTTPException(404, "unknown company")
+
         def current(row: dict) -> Decimal | None:
             # the size band's revenue is read as the screener sorts it (035): an old or not
             # meaningful TTM has no band, like a peer's (Store.peers)
@@ -430,34 +480,157 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
                                                    company_ids=[company_id], coverage=False,
                                                    sort="name", limit=1), access)
             revenue = current(own[0]) if own else None
-        ranked = store.peers(user_id, company_id, granted, revenue, limit,
-                             granted_only=access_filter == "financials")
-        ids = [p["company_id"] for p in ranked]
+        own_band = band_of(revenue)
+        only_readable = access_filter == "financials"
+
+        business = store.business_peers(user_id, company_id)
+        profile = business["profile"]
+        matches: dict[str, dict] = {}
+        if profile is not None:
+            mentions = business["mentions"]
+            ids = sorted({p["peer_id"] for p in business["peers"]}
+                         | {m["named_id"] for m in mentions if m["company_id"] == company_id}
+                         | {m["company_id"] for m in mentions if m["named_id"] == company_id})
+            facts = store.peer_facts(user_id, ids, granted) if ids else {}
+            stored = {p["peer_id"]: p for p in business["peers"]}
+            candidates = []
+            for cid in ids:
+                f = facts.get(cid)
+                if f is None:
+                    continue  # not a company (any more)
+                can_read = "financials" in access.get(cid, set())
+                if only_readable and not can_read:
+                    continue
+                p = stored.get(cid, {})
+                candidates.append(PeerCandidate(
+                    cid, f["sic"], float(p.get("similarity") or 0), list(p.get("terms") or []),
+                    named_by_target=any(m["company_id"] == company_id and m["named_id"] == cid
+                                        for m in mentions),
+                    names_target=any(m["company_id"] == cid for m in mentions),
+                    revenue=f["revenue"] if can_read else None, readable=can_read))
+            target_sic = target[0]["sic"]
+            ranked_business = rank_peers(target_sic, revenue, candidates)[:limit]
+            for c in ranked_business:
+                f = facts[c.company_id]
+                matches[c.company_id] = {
+                    "score": round(c.score, 4), "similarity": round(c.similarity, 4),
+                    "terms": c.terms,
+                    "named_by_target": _cite(next((m for m in mentions
+                                                   if m["company_id"] == company_id
+                                                   and m["named_id"] == c.company_id), None)),
+                    "names_target": _cite(next((m for m in mentions
+                                                if m["company_id"] == c.company_id
+                                                and m["named_id"] == company_id), None)),
+                    "sic_level": sic_match(target_sic, c.sic) or 0,
+                    "same_industry": bool(f["sector_industry"])
+                    and f["sector_industry"] == target[0].get("sector_industry"),
+                    "same_sector": bool(f["sector"]) and f["sector"] == target[0].get("sector"),
+                    "same_filer_category": f["filer_category"] is not None
+                    and f["filer_category"] == target[0]["filer_category"],
+                    "revenue_band": band_label(band_of(c.revenue)) if c.readable else None,
+                    "same_revenue_band": own_band is not None and c.readable
+                    and band_of(c.revenue) == own_band,
+                }
+        basis = "business" if matches else "sic"
+        if basis == "sic":
+            ranked = store.peers(user_id, company_id, granted, revenue, limit,
+                                 granted_only=only_readable)
+            for p in ranked:
+                matches[p["company_id"]] = {
+                    "sic_level": p["sic_level"], "same_filer_category": p["same_filer_category"],
+                    "revenue_band": band_label(p["revenue_band"]),
+                    "same_revenue_band": own_band is not None and p["revenue_band"] == own_band}
+        ids = list(matches)
         compiled, rows, _ = run_screen(user_id, Screen(columns=cols, company_ids=ids,
                                                        coverage=False, sort="company_id",
                                                        limit=max(len(ids), 1)), access)
         by_id = {r["company_id"]: r for r in rows}
-        own_band = band_of(revenue)
+        if basis == "business":
+            method = ("By business: how alike the two 10-Ks' Business sections (Item 1) are, "
+                      "competitors either one names there, then SIC division and TTM revenue size "
+                      "(companies you can read) as weak signals.")
+        elif profile is None and not allowed(user_id, "filings", company_id):
+            method = ("By SIC and size: business descriptions are part of filings text, which your "
+                      "plan doesn't include for this company.")
+        else:
+            method = ("By SIC and size: this company has no 10-K Business section on file to "
+                      "compare (none in the last three years, or only a cross-reference). Same "
+                      "4-digit SIC first, then 3- and 2-digit groups; within a level, the same TTM "
+                      "revenue size band (companies you can read), the same SEC filer category, "
+                      "then closest revenue.")
         return {
             "company_id": company_id, "as_of": _now(), "columns": column_info(compiled.columns),
             "company": {**target[0], "revenue_band": band_label(own_band)},
-            "method": "Same 4-digit SIC first, then 3- and 2-digit SIC groups; within a level, "
-                      "the same TTM revenue size band (companies you can read), the same SEC "
-                      "filer category, then closest revenue.",
-            "peers": [{**by_id[p["company_id"]],
-                       "match": {"sic_level": p["sic_level"],
-                                 "same_filer_category": p["same_filer_category"],
-                                 "revenue_band": band_label(p["revenue_band"]),
-                                 "same_revenue_band": own_band is not None
-                                 and p["revenue_band"] == own_band}}
-                      for p in ranked if p["company_id"] in by_id],
+            "basis": basis, "method": method,
+            "business": None if profile is None else {
+                "accession_no": profile["accession_no"], "section_key": profile["section_key"],
+                "filed": profile["filed"], "terms": profile["terms"][:10],
+                "computed_at": profile["computed_at"]},
+            "peers": [{**by_id[cid], "match": matches[cid]} for cid in ids if cid in by_id],
         }
+
+    @app.get("/v1/companies/{company_id}/peers/check/{candidate_id}", response_model=dict)
+    def peer_check(user_id: Annotated[str, Depends(current_user)], company_id: CompanyId,
+                   candidate_id: CompanyId) -> dict:
+        """Can this company join the comps of `company_id`, and if not, why: it has no figures
+        here because it files 20-F/40-F annual reports (a foreign private issuer, IFRS), or its
+        10-K's XBRL isn't in yet, or it files no annual report. require(financials) on the comps'
+        company; the answer is public filing-index metadata about the candidate."""
+        require(user_id, "financials", company_id)
+        info = store.annual_reports(user_id, candidate_id)
+        if not info.get("sic") and not info.get("annual") and not info.get("has_financials"):
+            raise HTTPException(404, "unknown company")
+        annual = info.get("annual") or {}
+        if info.get("has_financials"):
+            reason = None if "financials" in readable(user_id).get(candidate_id, set()) \
+                else "metadata_only"
+        elif annual.get("20-F") or annual.get("40-F"):
+            reason = "foreign_filer"
+        elif annual.get("10-K"):
+            reason = "no_xbrl"
+        else:
+            reason = "no_annual_report"
+        latest = max(annual.items(), key=lambda kv: kv[1]) if annual else None
+        return {"company_id": company_id, "candidate_id": candidate_id,
+                "ok": reason in (None, "metadata_only"), "reason": reason,
+                "annual_form": latest[0] if latest else None,
+                "annual_filed": latest[1] if latest else None}
+
+    sector_cache: dict = {}
+
+    @app.get("/v1/sectors", response_model=dict)
+    def sectors(user_id: Annotated[str, Depends(current_user)]) -> dict:
+        """The open sector and industry grouping over SIC codes (migration 046), with each
+        industry's SIC ranges and how many companies with financials it holds. A classification,
+        not company data: it changes only with a migration, so a process reads it once."""
+        if "rows" not in sector_cache:
+            sector_cache["rows"] = store.sectors(user_id)
+        out: dict[str, dict[str, dict]] = {}
+        for r in sector_cache["rows"]:
+            ind = out.setdefault(r["sector"], {}).setdefault(
+                r["industry"], {"name": r["industry"], "sic": [], "companies": 0})
+            ind["sic"].append(r["sic_from"] if r["sic_from"] == r["sic_to"]
+                              else f"{r['sic_from']}-{r['sic_to']}")
+            ind["companies"] += r["companies"]
+        return {"sectors": [{"name": s, "companies": sum(i["companies"] for i in inds.values()),
+                             "industries": sorted(inds.values(), key=lambda i: i["name"])}
+                            for s, inds in sorted(out.items())],
+                "note": "Tributary's own grouping of the SEC's SIC codes (not GICS); the SIC "
+                        "code stays the filing's own classification."}
 
     @app.get("/v1/screener/columns")
     def screener_columns() -> dict:
         return {"columns": column_info(sorted(COLUMNS)),
                 "filer_categories": list(FILER_CATEGORIES),
                 "bands": list(get_args(Band))}
+
+
+def _cite(m: dict | None) -> dict | None:
+    """A competitor mention as a citation: the sentence's place in the 10-K's Item 1."""
+    if m is None:
+        return None
+    return {"accession_no": m["accession_no"], "section_key": m["section_key"],
+            "char_start": m["char_start"], "char_end": m["char_end"]}
 
 
 def _recap_metrics(rows: list[dict], cik: str | None) -> list[dict]:

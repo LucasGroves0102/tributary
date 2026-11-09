@@ -299,6 +299,9 @@ AAPL = "0000320193"
 
 
 class PeerStore(UIStore):
+    def business_peers(self, user_id, company_id):
+        return {"profile": None, "peers": [], "mentions": []}  # no Item 1: SIC and size
+
     def peers(self, user_id, company_id, granted, revenue, limit, granted_only=False):
         self.calls.append(("peers", company_id, tuple(granted), revenue, limit)
                           + (("granted_only",) if granted_only else ()))
@@ -330,12 +333,15 @@ def test_peers_metrics_only_where_permitted(token):
     assert ("peers", NVDA, (NVDA,), Decimal("130497000000"), 5) in c.store.calls
 
 
-def test_peers_of_an_ungranted_company_ignore_its_revenue(token):
+def test_peers_of_an_ungranted_company_are_refused(token):
+    """F4: the route calls require(financials) first, like every company route; ungranted and
+    unknown look the same (no existence oracle), and nothing is read."""
     c = peer_client({"carol": {}})
-    body = c.get(f"/v1/companies/{TSLA}/peers", headers=token("carol")).json()
-    assert body["company"]["revenue_band"] is None
-    assert ("peers", TSLA, (), None, 10) in c.store.calls
-    assert all(v is None for p in body["peers"] for v in p["values"].values())
+    denied = c.get(f"/v1/companies/{TSLA}/peers", headers=token("carol"))
+    unknown = c.get(f"/v1/companies/{AAPL}/peers", headers=token("carol"))
+    assert denied.status_code == unknown.status_code == 403
+    assert denied.json() == unknown.json()
+    assert not any(call[0] in ("peers", "business_peers") for call in c.store.calls)
 
 
 def test_peers_can_be_only_readable_companies(token):
@@ -346,7 +352,8 @@ def test_peers_can_be_only_readable_companies(token):
 
 
 def test_peers_of_unknown_company(token):
-    c = peer_client({})
+    """Granted (as a demo could be) but not a company: 404 after require()."""
+    c = peer_client({"carol": {AAPL: {"financials"}}})
     assert c.get(f"/v1/companies/{AAPL}/peers", headers=token("carol")).status_code == 404
 
 

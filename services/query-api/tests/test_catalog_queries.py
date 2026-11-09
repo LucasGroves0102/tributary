@@ -108,6 +108,18 @@ class RecordingStore:
     def answer_peers(self, *_, **__):
         return []
 
+    def answer_business_peers(self, user_id, company_id):
+        """NVDA's stored neighbours, OUTSIDE among them as if RLS let it through."""
+        return {"profile": {"accession_no": "0001045810-26-000021", "section_key": "1",
+                            "filed": date(2026, 2, 25), "terms": ["gpu"], "computed_at": None},
+                "peers": [{"peer_id": c, "similarity": 0.3, "terms": ["gpu"]}
+                          for c in (OUTSIDE, "0000000002")],
+                "mentions": []}
+
+    def answer_peer_facts(self, user_id, ids, granted):
+        return {c: {"sic": "3674", "sector": "Technology", "sector_industry": "Semiconductors",
+                    "filer_category": "large_accelerated", "revenue": Decimal(5)} for c in ids}
+
 
 class Watchlist:
     def list(self, user_id):

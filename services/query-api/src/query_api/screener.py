@@ -44,7 +44,9 @@ META_SORT = {"name": "b.name", "company_id": "b.company_id", "sic": "lower(b.ind
              # the month the fiscal year ends in (migration 042), so J&J's "0103" sorts as December
              "fiscal_year_end": "silver.fiscal_year_end_month(b.fiscal_year_end)",
              "filer_category": "b.filer_category",
-             "state_of_incorporation": "b.state_of_incorporation"}
+             "state_of_incorporation": "b.state_of_incorporation",
+             # sector, then industry within it (migration 046): the screener's grouping
+             "sector": "lower(b.sector || ' / ' || b.sector_industry)"}
 OPS = {"gt": ">", "gte": ">=", "lt": "<", "lte": "<="}
 FilerCategory = Literal["large_accelerated", "accelerated", "non_accelerated"]
 FILER_CATEGORIES: tuple[str, ...] = get_args(FilerCategory)
@@ -91,6 +93,8 @@ class Screen:
     exchanges: list[str] = field(default_factory=list)
     fye_months: list[int] = field(default_factory=list)
     filer_categories: list[str] = field(default_factory=list)
+    sectors: list[str] = field(default_factory=list)      # 046's sectors, exact names
+    sector_industries: list[str] = field(default_factory=list)  # and industries
     issue: str | None = None               # a data check's name: companies with a finding of it
     filters: list[Filter] = field(default_factory=list)
     sort: str = "-revenue_ttm"
@@ -266,6 +270,12 @@ def compile_screen(s: Screen, granted: list[str] | None) -> Compiled:
     if s.filer_categories:
         meta.append("gold.filer_category(c.filer_categories) = ANY(%(filer_categories)s)")
         params["filer_categories"] = s.filer_categories
+    if s.sectors:
+        meta.append("ss.sector = ANY(%(sectors)s)")
+        params["sectors"] = s.sectors
+    if s.sector_industries:
+        meta.append("ss.industry = ANY(%(sector_industries)s)")
+        params["sector_industries"] = s.sector_industries
     if s.issue:
         # under RLS on ops.quality_findings: a company the caller can't read never matches, so
         # this says nothing about it (the public status page has the counts only)
@@ -300,8 +310,10 @@ WITH base AS (
            c.sic_description AS industry, c.fiscal_year_end,
            gold.filer_category(c.filer_categories) AS filer_category, c.filer_categories,
            c.state_of_incorporation,
-           gold.not_applicable_metrics(c.company_id, c.sic) AS not_applicable
+           gold.not_applicable_metrics(c.company_id, c.sic) AS not_applicable,
+           ss.sector, ss.industry AS sector_industry
     FROM silver.companies c
+    LEFT JOIN silver.sic_sectors ss ON c.sic BETWEEN ss.sic_from AND ss.sic_to
     WHERE {' AND '.join(meta)}
 ),
 ranked AS (
@@ -329,6 +341,9 @@ def shape(row: dict, compiled: Compiled, financials: bool) -> dict:
     out = {k: row[k] for k in ("company_id", "name", "tickers", "exchanges", "sic", "industry",
                                 "fiscal_year_end", "filer_category", "filer_categories",
                                 "state_of_incorporation")}
+    # additive (046): the open sector/industry grouping over the SIC code, public like it
+    out["sector"] = row.get("sector")
+    out["sector_industry"] = row.get("sector_industry")
     out["values"] = {k: row[f"v{compiled.slots[k]}"] if financials else None
                      for k in compiled.columns}
     out["sources"] = {k: row[f"src{compiled.slots[k]}"] if financials else None

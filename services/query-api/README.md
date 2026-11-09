@@ -64,7 +64,9 @@ request parameters. Dev tokens: `make token USER=alice`.
 | `GET /v1/calendar/expected-filings?days=&scope=&format=` | token | expected 10-Q/10-K filings in the next N days (watchlist or readable companies) |
 | `GET /v1/companies/{id}/expected-filings?periods=` | token | estimated next 10-Q/10-K dates with their basis |
 | `GET /v1/filings/{accession}/recap?metrics=` | financials (flags: filings) | metrics vs prior quarter and year-ago, cited; one-time-item flags |
-| `GET /v1/companies/{id}/peers?limit=&columns=&access=` | token | suggested peers (SIC, size band, filer category), values where permitted |
+| `GET /v1/companies/{id}/peers?limit=&columns=&access=` | financials | suggested peers by business (10-K Item 1 similarity, competitors named, SIC division and size), each with why; a bank's peers on bank columns; values where permitted ([Peers](#peers)) |
+| `GET /v1/companies/{id}/peers/check/{candidate}` | financials on `{id}` | can `candidate` join these comps, and if not why: a foreign filer (20-F/40-F), no XBRL figures yet, no annual report ([Peers](#peers)) |
+| `GET /v1/sectors` | token | the open sector and industry grouping over SIC codes (migration 046), each industry's SIC ranges and company count |
 | `GET /v1/connections` | token | providers offered and the caller's market-data connections (provider, `…last4`, dates; never the key); both empty without `DATA_CONNECTIONS_KEY` ([Connect your data](#connect-your-data)) |
 | `PUT /v1/connections/{provider}` | `DATA_CONNECTIONS_KEY`, token | `{"api_key": "…"}`: validated with one provider call, stored encrypted |
 | `DELETE /v1/connections/{provider}` | `DATA_CONNECTIONS_KEY`, token | deletes the key and every price fetched with it |
@@ -174,7 +176,8 @@ quarter end) or `<metric>_q` (latest fiscal quarter) for every metric in the for
 each the latest value with its own `sources[key]` (`period_end`, `accession_no`, `form`,
 `filed`). Filters: `sic` (4-digit, repeatable), `sic_prefix` (1-3 digits), `industry` (SIC
 description contains), `q` (name contains or exact ticker), `exchange`,
-`fiscal_year_end_month`, `company_id` (repeatable, at most 21: only these companies, including
+`fiscal_year_end_month`, `sector` / `sector_industry` (repeatable, exact names from `/v1/sectors`),
+`company_id` (repeatable, at most 21: only these companies, including
 ones without gold financials, for a comps table or a tearsheet), `filer_category` (`large_accelerated`, `accelerated`,
 `non_accelerated`), `revenue_band` / `assets_band` (`lt100m`, `100m-1b`, `1b-10b`, `10b-100b`,
 `gte100b` on `revenue_ttm` / `total_assets_q`) and `where=<column>:<gt|gte|lt|lte>:<number>`
@@ -182,14 +185,30 @@ ones without gold financials, for a comps table or a tearsheet), `filer_category
 `fiscal_year_end` sort read `silver.fiscal_year_end_month` (migration 042): a 52/53-week year ending
 in a month's first week belongs to the month before (J&J's `0103` is December), while the row keeps
 the SEC's MMDD. `sort` is a column key or `name`, `sic` (the
-Industry column: by its name, not the code), `fiscal_year_end`, `filer_category`,
-`state_of_incorporation`, `-` for descending; nulls last.
+Industry column: by its name, not the code), `sector` (sector, then industry: the web app's grouping),
+`fiscal_year_end`, `filer_category`, `state_of_incorporation`, `-` for descending; nulls last.
 `limit` (500 as JSON, 5000 as CSV), `offset`, `format=json|csv`. JSON:
 `{as_of, total, limit, offset, sort, columns: [{key, metric, span, unit, balance}], rows: [{company_id,
 name, tickers, exchanges, sic, industry, fiscal_year_end, filer_category, filer_categories,
 state_of_incorporation, access: [tiers], values: {key: value}, sources: {key: {...}},
-readings: {key: {status, reason}}, latest_period, not_applicable: [metrics]}]}`. CSV adds a `notes`
+readings: {key: {status, reason}}, latest_period, not_applicable: [metrics], sector, sector_industry,
+co_registrants: [{company_id, name, accession_no, filed, filed_by}]}]}`. CSV adds a `notes`
 column. `balance`: a point in time, so its `_ttm` column is the same number as its `_q` one.
+
+**Sectors** (migration 046, `GET /v1/sectors`): Tributary's own grouping of the SEC's SIC codes into
+12 sectors and 88 industries (not GICS or any licensed scheme), one row per SIC range in
+`silver.sic_sectors`; the judgment calls (Alphabet's 7370 stays Technology, Walmart's 5331 is
+Consumer Staples retail, UnitedHealth's 6324 Health Care, blank checks and commodity trusts "Funds &
+Vehicles") are listed in the migration's header. Rows carry `sector` and `sector_industry` beside the
+SIC `industry`, which stays the filing's own label.
+
+**Co-registrants** (#135, migration 047): some companies file one combined 10-K as separate
+registrants, a parent and its subsidiary (PG&E Corp and Pacific Gas & Electric, Southern Co and
+Georgia Power, Corteva and EIDP) or a REIT and its operating partnership. They are two companies
+with their own figures, not a duplicate; `co_registrants` names the other one(s), from the 10-K
+accessions filed under more than one company's CIKs in the last 400 days (`silver.co_registrants()`,
+10 such filings on 2026-11-09). Read once an hour per process (~190 ms cold); a failure leaves the
+list empty rather than failing the screener.
 
 **How a value reads** (`readings`, migration 035, the only definition, used by the screener, watchlist
 and peers): `not_meaningful` (with `reason`): a margin on under $100K of revenue, a gross or operating
@@ -258,7 +277,43 @@ explains a plan without `filings`).
 
 ## Peers
 
-`GET /v1/companies/{id}/peers`: companies with financials in the same 4-digit SIC, then the
+`GET /v1/companies/{id}/peers` (F4, H6): `require(financials)` on the company first, like every
+company route, then by business when its 10-K has a Business section on file (`basis: "business"`),
+else by SIC and size (`basis: "sic"`). The ranking is specified in `query_api/peers.py`'s docstring:
+
+- **Candidates**: the 60 companies whose latest 10-K Item 1 is most similar to this one's (cosine of
+  TF-IDF term vectors, `gold.business_peers`, built weekly by the parser image's `parser-peers` job,
+  [services/parser](../parser/README.md#peers-by-business)), plus any company either Item 1 names in
+  a sentence about competition (`gold.business_mentions`). All three tables read under RLS at
+  `filings` (a similarity needs both companies' filings readable), so a plan without filings text
+  falls back to SIC.
+- **Score** = similarity x SIC division (same SIC x1.15, same group x1.10, same division x1.0,
+  another division x0.80: a maker vs its customers) x size (1 / (1 + 0.3 x |log10 revenue ratio|), only
+  when the caller reads both revenues) + 0.05 if this company's 10-K names it + 0.03 if it names this
+  company. Blank checks (SIC 6770) are never suggested for an operating company.
+- **`match`** says why: `similarity`, `terms` (the shared terms that add the most), `named_by_target` /
+  `names_target` (the sentence: accession, section, offsets, to cite), `sic_level`, `same_sector`,
+  `same_industry`, `same_filer_category`, `revenue_band`, `same_revenue_band`. `business` is the
+  company's own profile (filing, its most distinctive terms). The old fields stay, so an older web app
+  still reads `sic_level` and the bands.
+- **A bank** (035's rule) without `columns` gets bank columns: revenue, net interest income, efficiency
+  ratio, provision for credit losses, loans, deposits, ROE, net margin (migration 048).
+
+Measured on hermes' Item 1 texts of 2026-11-09 (run locally; top 10 before vs after):
+VRT LG Display, Impinj... vs Eaton and Johnson Controls (both named in Vertiv's 10-K), nVent, AAON,
+Forgent Power, Super Micro, EnerSys; DECK CSL, Silverton Energy... vs Crocs, Columbia, Steve Madden,
+Under Armour, Nike, Kontoor, Wolverine; NVDA AMD, Ambarella, Qualcomm, Super Micro, Broadcom, Micron,
+Marvell; JPM PNC, Bank of America, Morgan Stanley, U.S. Bancorp, Capital One, Huntington, Wells Fargo.
+Gaps: a 10-K whose Item 1 is a cross-reference (Intel, IBM, Citigroup) or mis-parsed has no profile,
+so it is suggested only by SIC.
+
+`GET /v1/companies/{id}/peers/check/{candidate}`: `require(financials)` on the comps' company, then
+public filing-index metadata about the candidate: `ok`, `reason` (`null`; `metadata_only`: it has
+figures your plan doesn't cover; `foreign_filer`: its annual reports are 20-F/40-F, IFRS, which
+Tributary doesn't read, e.g. Birkenstock; `no_xbrl`: it files 10-Ks but no XBRL figures are here yet;
+`no_annual_report`), `annual_form`, `annual_filed`. The web app asks before adding a peer and says why.
+
+By SIC and size (`basis: "sic"`): companies with financials in the same 4-digit SIC, then the
 3- and 2-digit groups; within a level, the same TTM revenue size band first (only for
 companies you can read, and only if you can read the company's own revenue), then the same
 filer category, revenue closeness and name. A revenue is read as the screener sorts it
