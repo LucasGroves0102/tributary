@@ -22,7 +22,9 @@ A run:
    item headings with the filings tier); a 10-K/10-Q's figures and red lines, after layer 1
    (`can`, OpenFGA) and through Store as that user (RLS). Never another user's access.
 4. Deliveries due (a new ready alert x each enabled webhook, and earlier failures whose backoff
-   ran out), through HttpsSender; each result in the delivery log.
+   ran out), through HttpsSender; each result in the delivery log. Email only with a provider
+   configured AND a verified address for the user (query_api/alert_email.py: neither exists
+   yet, so none is sent): one digest of the alerts that became ready.
 5. alert_checks (the Monitor step's last check); notifications older than KEEP_DAYS deleted.
 
 One user's failure (OpenFGA down: fail closed) is logged and the run goes on; the next run
@@ -39,6 +41,7 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from query_api.alert_email import EmailProvider, digest, email_from_env, no_recipients
 from query_api.alerts import (
     FORMS,
     KEEP_DAYS,
@@ -73,6 +76,7 @@ class Report:
     skipped: int = 0
     delivered: int = 0
     failed: int = 0
+    emailed: int = 0
     errors: int = 0
 
 
@@ -197,9 +201,27 @@ def deliver(alerts: AppAlerts, store: Any, sender: Sender, user_id: str, *, jwt_
     return ok, len(results) - ok
 
 
+def email_digest(alerts: AppAlerts, store: Any, email: EmailProvider, to: str, user_id: str,
+                 ready: list[str], app_url: str) -> None:
+    """One message with the alerts that just became ready (alert_email.digest)."""
+    rows = [n for n in alerts.notifications(user_id, None, 100) if n["notification_id"] in ready]
+    if not rows:
+        return
+    ids = sorted({n["company_id"] for n in rows})
+    names, tickers = store.profiles(user_id, ids), store.tickers(user_id, ids)
+
+    def label(cid: str) -> str:
+        name = (names.get(cid) or {}).get("name") or cid
+        ticker = (tickers.get(cid) or [None])[0]
+        return f"{name} ({ticker})" if ticker else name
+    subject, body = digest([message(n, label(n["company_id"]), links(app_url, n)) for n in rows])
+    email.send(to, subject, body)
+
+
 def run(*, alerts: AppAlerts, store: Any, can: Callable[[str, str, str], bool], sender: Sender,
         jwt_secret: str, now: datetime, app_url: str = DEFAULT_APP_URL,
-        users: list[str] | None = None) -> Report:
+        users: list[str] | None = None, email: EmailProvider | None = None,
+        recipients: Callable[[str], str | None] = no_recipients) -> Report:
     report = Report()
     today = now.astimezone(ET).date()
     since = today - timedelta(days=LOOKBACK_DAYS)
@@ -230,6 +252,14 @@ def run(*, alerts: AppAlerts, store: Any, can: Callable[[str, str, str], bool], 
                     updates.append(u)
             ready = alerts.finish(user_id, updates, now)
             report.ready += len(ready)
+            to = recipients(user_id) if email is not None and ready else None
+            if email is not None and to:
+                try:
+                    email_digest(alerts, store, email, to, user_id, ready, app_url)
+                    report.emailed += 1
+                except Exception as e:  # the in-app alert and webhook stand; logged, no retry
+                    log.warning("alerts: email not sent: %s", type(e).__name__,
+                                extra={"user_id": user_id})
             report.skipped += sum(1 for u in updates if u["status"] == "skipped")
             ok, failed = deliver(alerts, store, sender, user_id, jwt_secret=jwt_secret,
                                  app_url=app_url, at=now)
@@ -262,7 +292,8 @@ def main() -> None:
                      sender=HttpsSender(),
                      jwt_secret=check_secret(os.environ["QUERY_API_JWT_SECRET"]),
                      now=datetime.now(UTC),
-                     app_url=os.environ.get("PUBLIC_APP_URL", DEFAULT_APP_URL).rstrip("/"))
+                     app_url=os.environ.get("PUBLIC_APP_URL", DEFAULT_APP_URL).rstrip("/"),
+                     email=email_from_env(os.environ))
     finally:
         pool.close()
         app_pool.close()

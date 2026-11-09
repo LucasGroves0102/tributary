@@ -300,11 +300,11 @@ def recap_rows(acc):
             row("gross_margin", "current", "0.735", "ratio")]
 
 
-def run_job(alerts, store, sender, grants=None, now=NOW):
+def run_job(alerts, store, sender, grants=None, now=NOW, **kw):
     auth = FakeAuthorizer(grants if grants is not None else {A: {NVDA: {"financials",
                                                                         "filings"}}})
     return run(alerts=alerts, store=store, can=auth.can, sender=sender, jwt_secret=SECRET,
-               now=now, app_url="https://app.example", users=[A, B])
+               now=now, app_url="https://app.example", users=[A, B], **kw)
 
 
 def test_the_job_alerts_followed_filings_once_and_completes_them(conn, alerts):
@@ -372,3 +372,26 @@ def test_a_failed_delivery_is_retried_after_its_backoff(conn, alerts):
     run_job(alerts, store, sender, now=NOW + timedelta(minutes=6))
     (d,) = alerts.deliveries(A, None, 10)
     assert (d["status"], d["attempts"], len(sender.sent)) == ("delivered", 2, 2)
+
+
+class Outbox:
+    def __init__(self):
+        self.sent = []
+
+    def send(self, to, subject, text):
+        self.sent.append((to, subject, text))
+
+
+def test_email_needs_a_provider_and_a_verified_address(conn, alerts):
+    store, outbox = JobStore(), Outbox()
+    # a provider but no verified address (today's state): nothing is emailed
+    run_job(alerts, store, RecordingSender(), email=outbox)
+    assert outbox.sent == []
+    conn.execute("DELETE FROM notifications WHERE user_id = %s", (A,))
+    # with an address for A only: one digest of A's ready alerts, nothing for B
+    report = run_job(alerts, store, RecordingSender(), email=outbox,
+                     recipients=lambda u: "a@example.org" if u == A else None)
+    assert report.emailed == 1
+    ((to, subject, text),) = outbox.sent
+    assert to == "a@example.org" and subject == "Tributary: 2 new filing alerts"
+    assert "NVIDIA (NVDA) filed an 8-K" in text and "Items: 2.02" in text

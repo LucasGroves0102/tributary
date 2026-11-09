@@ -239,7 +239,8 @@ def plain_value(value: str | None, unit: str | None, display: str | None = None)
 
 def message(n: dict, company: str, links: dict[str, str]) -> str:
     """The text a Discord or Slack channel shows for a notification."""
-    lines = [f"{company} filed a {n['form']} on {n['filed']}"
+    article = "an" if n["form"].startswith("8") else "a"
+    lines = [f"{company} filed {article} {n['form']} on {n['filed']}"
              + (f" (period ended {n['period_end']})" if n.get("period_end") and n["form"] != "8-K"
                 else "")]
     detail = n.get("detail") or {}

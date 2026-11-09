@@ -146,7 +146,8 @@ def test_figures_are_stripped_once_the_company_isnt_readable():
 
 def test_the_channel_message():
     text = message(notification(), "NVIDIA (NVDA)", {"Open": "https://x/#/company/1"})
-    assert text.splitlines()[0] == "NVIDIA (NVDA) filed a 10-Q on 2026-11-19 (period ended 2026-10-26)"
+    assert text.splitlines()[0] == ("NVIDIA (NVDA) filed a 10-Q on 2026-11-19"
+                                    " (period ended 2026-10-26)")
     assert "Revenue: $1 (+50.0% on a year earlier)" in text
     assert "Red line GM floor: CROSSED (73.5%)" in text
     eight_k = message(notification(form="8-K", items=["5.02"], detail={}), "NVIDIA", {})
