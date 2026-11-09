@@ -1022,8 +1022,9 @@ def test_sectors_co_registrants_and_peer_check_run_as_query_api(client, token):
 
 
 def test_components_and_figure_facts_read_only_what_the_rule_allows(client, token):
-    """F5: gold.figure_facts (049) is SECURITY DEFINER over silver.financial_facts' values, so its
-    only rule is authz.readable_companies: t-free reads A's facts, not B's, whatever layer 1 says."""
+    """F5: gold.figure_facts (049) is SECURITY DEFINER over silver.financial_facts' values, so
+    its only rule is authz.readable_companies: t-free reads A's facts, not B's, whatever layer 1
+    says."""
     conn = client.app_conn
     for cid in (A, B):
         conn.execute(
