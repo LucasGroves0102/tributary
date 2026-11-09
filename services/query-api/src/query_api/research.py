@@ -147,7 +147,8 @@ def shape_material(d: dict, rows: list[dict], view: str, terms: list[str],
             continue
         shown.append({
             "kind": c.kind, "similarity": c.similarity, "text": text, "prior_text": prior_text,
-            "words": material.render_words(prior_text or "", text or "", c.words)
+            "words": material.quiet_calendar(material.render_words(prior_text or "",
+                                                                   text or "", c.words))
                      if c.words is not None else None,
             "citation": _citation(this, c.new.flat()) if c.new else None,
             "prior_citation": _citation(prior, c.old.flat()) if c.old else None,

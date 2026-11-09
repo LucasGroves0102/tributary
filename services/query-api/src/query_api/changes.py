@@ -53,8 +53,10 @@ The rules (the spec; the README's "What changed" says the same):
 5. Figures: dollar amounts, percentages and basis points, numbers with thousands separators or
    decimals (not years, dates, item or note numbers). `figures.new` are those of the passage
    its comparable passage doesn't state (all of a new one's), `figures.removed` the reverse.
-   `moved`: in a rewritten passage, the largest relative change of a figure replaced by one
-   figure of the same kind ($, %, plain), |b - a| / max(|a|, |b|).
+   `moved`: in a rewritten passage, of the figures replaced one for one by a figure of the same
+   kind that changed by MOVED_MIN or more, the most significant (a dollar amount, then a
+   percentage, then a plain number; the largest first), with its relative change
+   |b - a| / max(|a|, |b|).
 6. Risk wording: RISK_TERMS (stems) in the passage and not in its comparable one.
 7. Weight, by where the passage sits: Risk Factors RISK_FACTORS_WEIGHT; in MD&A the nearest
    subsection heading before it (a line of at most SUBSECTION_MAX characters, no digit, not a
@@ -70,6 +72,10 @@ The rules (the spec; the README's "What changed" says the same):
 9. Filters (the route's): a topic (every term in the passage or its comparable one: a quoted
    phrase as written, else a word prefix with a plural s/es/ies dropped; case ignored), only
    passages with a new figure, a kind. They narrow what is shown, never the hidden counts.
+10. Word diffs (rewritten): a calendar-only swap inside a passage that changed otherwise
+   ("second" → "third" quarter, "June 30, 2025" → "September 30, 2026": a "-" run then a "+"
+   run of month names, ordinals, three/six/nine, years and day numbers only) shows as the new
+   words, unmarked (`quiet_calendar`); every other word change is marked.
 """
 
 import re
@@ -93,8 +99,7 @@ PAGE_ROW_NUMBERS = 3  # a line with this many numbers is a table row, never page
 
 RANKING = ("Ranked by what changed: new or removed figures and how far figures moved, new risk "
            "wording, and where the passage sits (Risk Factors and Liquidity above results, "
-           "boilerplate last). Not shown: calendar rollovers, paragraphs only split or "
-           "rejoined, figure-only table rows and minor edits.")
+           "boilerplate last); a new passage counts more than a rewritten one.")
 
 _SENTENCE_END = re.compile(r"[.:;!?][\"'”’)\]]*$")
 _FOLD = str.maketrans({"’": "'", "‘": "'", "“": '"', "”": '"', "–": "-", "—": "-", "‑": "-"})
@@ -441,9 +446,16 @@ def new_figures(text: str, other: str) -> tuple[list[str], list[str]]:
     return added, removed
 
 
+MOVED_MIN = 0.1  # a replaced figure that moved less than this is not "moved"
+_KIND_ORDER = {"$": 0, "%": 1, "n": 2}
+
+
 def moved(runs: list[list[str]]) -> dict | None:
-    """Rule 5's largest relative change of a figure replaced in a word diff."""
-    best = None
+    """Rule 5's figure that moved: of the figures replaced one for one in a word diff (same kind),
+    those that changed by MOVED_MIN or more, the most significant: a dollar amount before a
+    percentage before a plain number, then the largest; its relative change |b - a| / max(|a|,
+    |b|). A small figure swinging wildly ("$7.2 → $0.3") doesn't outrank net sales."""
+    found = []
     for i in range(len(runs) - 1):
         (op1, t1), (op2, t2) = runs[i], runs[i + 1]
         if (op1, op2) != ("-", "+"):
@@ -456,12 +468,11 @@ def moved(runs: list[list[str]]) -> dict | None:
             if not vo or not vn or vo[0] != vn[0]:
                 continue
             top = max(abs(vo[1]), abs(vn[1]))
-            if top == 0:
-                continue
-            change = abs(vn[1] - vo[1]) / top
-            if best is None or change > best["change"]:
-                best = {"from": o, "to": n, "change": round(change, 3)}
-    return best
+            change = abs(vn[1] - vo[1]) / top if top else 0.0
+            if change >= MOVED_MIN:
+                found.append((_KIND_ORDER[vo[0]], -top, len(found),
+                              {"from": o, "to": n, "change": round(change, 3)}))
+    return min(found)[3] if found else None
 
 
 def risk_terms(text: str, other: str | None) -> list[str]:
@@ -721,6 +732,32 @@ def _same_heading(new_units: list[Unit], old_units: list[Unit]) -> list[tuple[Un
     return pairs
 
 
+_CALENDAR_WORD = re.compile(
+    r"^(?:" + "|".join(sorted(MONTHS | {"may"})) + r"|first|second|third|fourth|1st|2nd|3rd|4th|"
+    r"three|six|nine|twelve|(?:19|20)\d\d|\d{1,2})[,.;:)]*$", re.I)
+
+
+def quiet_calendar(runs: list[list[str]]) -> list[list[str]]:
+    """Word runs with each calendar-only swap (a "-" run then a "+" run whose words are all month
+    names, ordinals, "three/six/nine", years or day numbers: "second" → "third", "June 30, 2025"
+    → "September 30, 2026") shown as the new words, unmarked (rule 10), merged into the "="
+    runs around them."""
+    out: list[list[str]] = []
+    i = 0
+    while i < len(runs):
+        op, text = runs[i]
+        if op == "-" and i + 1 < len(runs) and runs[i + 1][0] == "+" and all(
+                _CALENDAR_WORD.match(w) for w in (text + " " + runs[i + 1][1]).split()):
+            op, text = "=", runs[i + 1][1]
+            i += 1
+        if out and out[-1][0] == op == "=":
+            out[-1][1] += " " + text
+        else:
+            out.append([op, text])
+        i += 1
+    return out
+
+
 def render_words(old: str, new: str, opcodes: list[list]) -> list[list[str]]:
     """research.render_words (diff.py's), here so the pass needs nothing else."""
     a, b = old.split(), new.split()
@@ -769,7 +806,7 @@ def _features(c: Change, section_key: str, ctx: Context) -> None:
     if c.figures_removed:
         n = len(c.figures_removed)
         why.append(f"{n} figure{'s' if n != 1 else ''} gone")
-    if c.moved and c.moved["change"] >= 0.1:
+    if c.moved:
         why.append(f"{c.moved['from']} → {c.moved['to']}")
     if c.risk:
         why.append("new risk wording: " + ", ".join(c.risk[:3]))

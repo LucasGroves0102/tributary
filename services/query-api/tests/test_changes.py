@@ -20,6 +20,7 @@ from query_api.changes import (
     new_figures,
     normalize,
     periods_in,
+    quiet_calendar,
     read_section,
     roles,
     topic_terms,
@@ -199,7 +200,11 @@ def test_figures_and_how_far_they_moved():
     assert (added, removed) == (["4.8%", "$740,359"], ["0.2%", "$706,785"])
     m = moved([["=", "sales"], ["-", "$706,785."], ["+", "$740,359."], ["=", "and"],
                ["-", "0.2%"], ["+", "4.8%"]])
+    # $706,785 → $740,359 moved 4.5%, under MOVED_MIN: the percentage is the figure that moved
     assert m == {"from": "0.2%", "to": "4.8%", "change": 0.958}
+    m = moved([["=", "sales"], ["-", "$3,274.3 and $7.2"], ["+", "$4,312.8 and $0.3"],
+               ["=", "or"], ["-", "24.1%"], ["+", "61.2%"]])
+    assert m == {"from": "$3,274.3", "to": "$4,312.8", "change": 0.241}  # not $7.2 → $0.3
 
 
 def test_topic_terms_and_matching():
@@ -214,3 +219,17 @@ def test_inline_headings():
     assert inline_heading("Gross Profit. Gross margin increased") == "gross profit"
     assert inline_heading("Total Other Income, Net. The decrease") == "total other income, net"
     assert inline_heading("We are a global leader. We sell") is None
+
+
+def test_calendar_swaps_inside_a_rewritten_passage_are_not_marked():
+    runs = [["=", "Net sales were"], ["-", "$3,274.3"], ["+", "$4,312.8"], ["=", "in the"],
+            ["-", "second"], ["+", "third"], ["=", "quarter of 2026, compared with"],
+            ["-", "June 30, 2025."], ["+", "September 30, 2026."], ["-", "Strong."],
+            ["+", "Weak."]]
+    assert quiet_calendar(runs) == [
+        ["=", "Net sales were"], ["-", "$3,274.3"], ["+", "$4,312.8"],
+        ["=", "in the third quarter of 2026, compared with September 30, 2026."],
+        ["-", "Strong."], ["+", "Weak."]]
+    # figures are never calendar words; a run that mixes them stays marked
+    assert quiet_calendar([["-", "second $5.0"], ["+", "third $6.0"]]) == [
+        ["-", "second $5.0"], ["+", "third $6.0"]]

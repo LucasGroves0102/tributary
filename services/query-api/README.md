@@ -979,14 +979,16 @@ no stored row changes and nothing is rebuilt.
   recognition.
 - Per change, besides the stored fields: `period` (10-Q: "three months", "six months", "nine
   months", "three and six months"; from the passage, else its period heading), `figures`
-  (`new`: figures the compared passage doesn't state, `removed`), `moved` (the largest relative
-  change of a replaced figure), `risk_terms` (risk wording new to the passage), `subsection`,
+  (`new`: figures the compared passage doesn't state, `removed`), `moved` (the most significant
+  replaced figure that moved 10% or more: a dollar amount first, the largest first), `risk_terms` (risk wording new to the passage), `subsection`,
   `score`, `why` (what counted, in words: "new passage", "5 new figures", "0.2% → 4.8%", "new
   risk wording: tariff", "Liquidity and capital resources") and `merged` (stored paragraphs
   behind it). Score = where it sits (Risk Factors 1.5; MD&A liquidity 1.3, results 1.0, critical
   accounting 0.8, non-GAAP 0.6, boilerplate 0.3) x (new 2, removed 1.5, rewritten 1-3 by how
   much; + new and removed figures; + how far figures moved; + new risk wording), halved under
-  12 words. `ranking` is the one line that says so.
+  12 words. `ranking` is the one line that says so. In a rewritten passage's `words`, a
+  calendar-only swap ("second" → "third" quarter, "June 30, 2025" → "September 30, 2026") is shown
+  as the new words, unmarked; every other word change is marked.
 - Filters, after the pass: `q` (2-100 characters; every word must appear in the passage or its
   compared one, as a word prefix with a plural dropped, so "tariffs" finds "tariff"; "quoted
   phrases" as written), `numbers=new` (passages with a new figure), `kind`, `section`. The answer
