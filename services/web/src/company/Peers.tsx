@@ -14,7 +14,7 @@ import {
   statText,
   type CompareSort,
 } from "../compare/state";
-import { similarityWord, whyParts, whyText } from "../compare/peers";
+import { possessive, similarityWord, whyParts, whyText } from "../compare/peers";
 import { FigureText } from "../components/FigureText";
 import { NOT_APPLICABLE } from "../blanks";
 import { day } from "../format";
@@ -109,7 +109,7 @@ export function Peers({
             <>
               {business && data?.business && (
                 <p className="peers-basis small">
-                  <span className="faint">{name}'s 10-K Business section (filed {day(data.business.filed, true)}) is most distinctive for </span>
+                  <span className="faint">{possessive(name)} 10-K Business section (filed {day(data.business.filed, true)}) is most distinctive for </span>
                   {data.business.terms.slice(0, 6).join(", ")}
                   <span className="faint">. Peers are the companies whose 10-Ks read most alike, or that either names as a competitor.</span>
                 </p>

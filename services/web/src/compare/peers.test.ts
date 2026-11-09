@@ -25,6 +25,8 @@ describe("why a peer was suggested", () => {
     expect(similarityWord(0.063)).toBe("somewhat similar");
     expect(similarityWord(0.25)).toBe("very similar");
     expect(similarityWord(0)).toBeNull();
+    expect(whyParts(match, ETN, { companyId: VRT.companyId, name: "Vertiv Holdings" })[0]!.text)
+      .toBe("named as a competitor in Vertiv Holdings' 10-K");
   });
 
   it("names the target, from the peer's own 10-K, and the same industry", () => {

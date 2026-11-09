@@ -16,12 +16,18 @@ export interface Reason {
 
 const short = (name: string | null | undefined): string => name ?? "this company";
 
+/** "Vertiv Holdings'", "Nvidia's": a name's possessive. */
+export const possessive = (name: string | null | undefined): string => {
+  const n = short(name);
+  return /s$/i.test(n) ? `${n}'` : `${n}'s`;
+};
+
 /** Why a peer was suggested, strongest first. `target`: the company the peers are of. */
 export function whyParts(match: PeerMatch | undefined, peer: ScreenerRow, target: { companyId: string; name: string | null }): Reason[] {
   if (!match) return [];
   const out: Reason[] = [];
   if (match.named_by_target) {
-    out.push({ text: `named as a competitor in ${short(target.name)}'s 10-K`, cite: { companyId: target.companyId, mention: match.named_by_target } });
+    out.push({ text: `named as a competitor in ${possessive(target.name)} 10-K`, cite: { companyId: target.companyId, mention: match.named_by_target } });
   }
   if (match.names_target) {
     out.push({ text: `its 10-K names ${short(target.name)} as a competitor`, cite: { companyId: peer.company_id, mention: match.names_target } });
