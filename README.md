@@ -1,6 +1,8 @@
 # Tributary
 
-**A real-time SEC filings research platform where an AI analyst answers with citations, and only from the data you're allowed to see.**
+**An SEC filings research platform: an analyst's workflow from filings to a checked thesis, on a
+real-time data platform where an AI analyst answers with citations, and only from the data you're
+allowed to see.**
 
 **[Live demo → tributary.lucasgroves.dev](https://tributary.lucasgroves.dev)** · click *Try the demo* for your own
 sandbox: every company's financials and filings, with a starter watchlist (PepsiCo, Coca-Cola,
@@ -9,15 +11,100 @@ Microsoft, Nvidia, Costco, JPMorgan) and workspace.
 latency, completeness against EDGAR's daily indexes, coverage, data-quality checks and the last
 recorded test-suite runs, live from the production database.
 
+Measured on production on 2026-11-09 unless a report is linked:
+
 | | |
 |---|---|
 | **0 of 59** | permission attacks leaked data ([adversarial suite](tests/adversarial/report.md)) |
 | **128 of 128** | figures in the agent's answers traced to a filing or XBRL fact ([citation suite](tests/citations/report.md)) |
-| **< 0.2 s** | to revoke access everywhere after a grant changes: 0.11–0.17 s over 16 revocations in the recorded run ([report](tests/propagation/report.md)), up to 0.19 s in others; measured on every CI run, which fails above 3 s (BRD target: 30 s) |
-| **43 s / 1.8 min** | p50 / p95 from EDGAR acceptance to Postgres during EDGAR business hours (5,312 filings, last 7 days; target 2 min). Overall p95 is 2.9 min: filings accepted after 5:30 pm ET mostly reach EDGAR's feed the next morning |
-| **989,666** | SEC filers indexed; 6,024 operating companies with quarterly financials from XBRL |
-| **265,625** | 10-K, 10-Q and 8-K filings from 5,342 companies over 5 years, crawled in 27 h at the SEC's 10 requests/s with 0 failures and parsed into 1.78M sections; 272 GB of HTML stored as 17.9 GB |
-| **26M + 26M** | filing records and XBRL facts, kept current by nightly batch loads on one self-managed server |
+| **< 0.2 s** | to revoke access everywhere after a grant changes: 0.11–0.17 s over 16 revocations in the recorded run ([report](tests/propagation/report.md)); measured on every CI run, which fails above 3 s (BRD target: 30 s) |
+| **45 s / 1.6 min** | p50 / p95 from EDGAR acceptance to Postgres, over 18,843 filings from the live feed in the last 7 days (target 2 min) |
+| **53 s / 77 s** | p50 / p95 from EDGAR acceptance to a 10-K, 10-Q or 8-K's parsed sections in the reader, for any operating company (413 filings, the first afternoon after the live fetch was widened to them) |
+| **0 missing** | of 61,485 filings in EDGAR's daily indexes over the last 30 days, at the nightly completeness check |
+| **6,047** | companies with financials from XBRL, of 992,106 SEC filers indexed |
+| **377,071** | 10-K, 10-Q and 8-K filings from 5,362 companies since late 2015, parsed into 2.16M sections; 266 GB of HTML kept in 19 GB |
+| **27M + 26M** | filing records and XBRL facts, kept current by nightly batch loads on one self-managed server |
+| **~4,000** | tests on every push: 2,790 Python, 1,123 web unit, 18 browser end-to-end, 62 Rust |
+
+## What it does
+
+Each item links to the rules and measurements behind it.
+
+- **Open access.** Every signed-in user (a demo sandbox, a GitHub account or an owner-created
+  account) reads every company's financials and filings. One app-database row opens the public
+  catalog, and every read still goes through both permission layers ([Access control](#access-control)).
+- **Statements, reported vs standardised.** Every quarter on file; a standardised line (net debt,
+  free cash flow, a computed gross profit) opens into the tags and filings it is made of. The cash
+  flow statement shows its subtotals and whether start + change = end: 15,620 of 16,062 quarters
+  since 2019 tie within 0.5% on 613 companies. Customer advances, remaining performance obligations
+  and accounts payable sit on the balance sheet; a quarter far outside its series or of the other
+  sign is marked with its filing ([query-api](services/query-api/README.md#statement-callouts),
+  [web](services/web/README.md)).
+- **Revenue view.** Revenue by segment, geography and product from the filings' XBRL, each
+  segment's contribution to growth, and receivables against revenue. Overlapping members are never
+  summed ([web](services/web/README.md)).
+- **Earnings and events.** Each quarter's earnings release beside the 10-Q's figures, the outlook
+  quoted from the release's own Outlook or Guidance section, and management's adjustments; then the
+  8-Ks filed since the last report (acquisitions, new debt, leadership, non-reliance), with the
+  balances such an event may have changed flagged. Fixed rules, no model: on 45 releases sampled
+  across industries the outlook rules found 32 of the 33 that have such a section, and nothing in
+  the others ([query-api](services/query-api/README.md#earnings-and-events)).
+- **What changed.** A 10-Q against the same quarter a year earlier, read for materiality at query
+  time: paragraphs split by a page break joined, page furniture, calendar rollovers and figure-only
+  rows hidden and counted, the most material change first, with a topic filter. Deckers' Q2 FY27
+  10-Q went from 147 changes to 91, 10 of them about tariffs
+  ([query-api](services/query-api/README.md#what-changed)).
+- **Peers by business, sectors and banks.** Suggested peers come from what each 10-K's Business
+  section says and the competitors it names, not the SIC code (TF-IDF and cosine similarity,
+  standard library only): Vertiv's went from LG Display, Advanced Energy and Vicor to Eaton and
+  Johnson Controls (both named in its 10-K), AAON and nVent. 12 sectors and 88 industries over SIC
+  (an open mapping, not GICS). Banks are shown and compared on a bank's own lines: net interest
+  income, efficiency ratio, provision, loans, deposits, CET1
+  ([query-api](services/query-api/README.md#peers), [parser](services/parser/README.md#peers-by-business)).
+- **Backlog and orders from the text.** Figures companies state in words but don't tag, read by
+  fixed rules with every value checked against its sentence: 174 values at 13 companies, then 88
+  at 7 held-out companies, all correct by hand
+  ([query-api](services/query-api/README.md#backlog-and-orders-from-the-text)).
+- **Model.** A forecast from revenue down to EPS and free cash flow, this fiscal year starting from
+  its reported quarters, bear, base and bull side by side, and a valuation at a price you type. The
+  maths run once, in the Query API, for the page and the thesis check; every save keeps the version
+  it replaced ([query-api](services/query-api/README.md#models-one-copy-of-the-maths)).
+- **Thesis and Check my thesis.** Write your argument with charts, comps, models and pinned filing
+  passages embedded as cards; it is Markdown underneath, and export and import round-trip byte for
+  byte (tested). The check reads the thesis as you, marks each claim Supported, Contradicted or
+  Can't verify with citations that open the filing, compares the model's growth and margins with
+  five years of history, and lists what the latest 10-K or 10-Q says that you don't. When the company
+  files again, Revisit shows the verdicts that flipped ([agent](services/agent/README.md),
+  [web](services/web/README.md)).
+- **Analysis.** One guided project per company in eight steps: Business, Numbers, Earnings, What
+  changed, Peers, Model, Thesis, Monitor. "Add to thesis" on any step pins the evidence, with its
+  form, period and EDGAR link, into the section you pick ([web](services/web/README.md)).
+- **Filing alerts.** A bell and an Alerts page for new 10-Ks, 10-Qs and material 8-Ks of the
+  companies you follow, with headline figures against a year earlier and your red lines ("gross
+  margin below 70%", in the chart formula language) evaluated on each; optional signed webhooks to
+  Discord, Slack or any https URL. The webhook sender is SSRF-safe by construction: public addresses
+  only, checked after DNS and again on the address actually connected to, no redirects (tested on
+  `169.254.169.254` and every private range). A database poll every 10 minutes, about 13 ms per 50
+  followed companies ([query-api](services/query-api/README.md#filing-alerts)).
+- **Insider filings.** Forms 3, 4 and 5 parsed in SQL from the SEC's ownership XML: the insider and
+  their role, each line's code, shares, price and value, 10b5-1 plans, amendments as filed. 2,088
+  filings from 882 companies stored by the end of the first day
+  ([query-api](services/query-api/README.md#insider-filings),
+  [doc-fetcher](services/doc-fetcher/README.md#insider-filings-forms-3-4-5)).
+- **Search.** Full-text search over every parsed section: phrases, form, section and date filters,
+  relevance or newest first, and a total. It runs under the same read rule as everything else
+  ([query-api](services/query-api/README.md#search)).
+- **Foreign filers in their own currency.** IFRS tags are read, and each company is read in its
+  reporting currency, never converted. An amount in another currency stays out of sorts, filters,
+  size bands and medians, and every reader (charts, the model, alerts, the citation verifier) says
+  its currency. Rebuilt from production's payloads, 490 of 517 20-F and 40-F filers that had no
+  financials got them ([db](db/README.md), [facts-fetcher](services/facts-fetcher/README.md)).
+- **The assistant** sits on every screen, sees what you're looking at, answers through ten
+  Query API tools with every figure verified, and can build charts, screens and comps for you, with
+  Undo ([Agent](#agent)).
+- **Connect your data** (off until the deployment has its key): bring your own market-data key for
+  daily prices and a valuation, stored encrypted and owner-only, never shared between users
+  ([query-api](services/query-api/README.md#connect-your-data)).
 
 ## Architecture
 
@@ -27,31 +114,34 @@ flowchart LR
     feed[latest-filings feed]
     idx[daily index + bulk submissions]
     xbrl[XBRL companyfacts]
-    docs[10-K / 10-Q / 8-K documents]
+    docs[10-K / 10-Q / 8-K documents, Forms 3/4/5]
   end
   subgraph ingest["Ingestion (Python, shared SEC rate limiter)"]
-    poller[poller]
+    poller[poller + completeness check]
     loaders[bulk loaders]
     fetcher[doc fetcher + crawler]
   end
   subgraph kafka["Kafka"]
     raw[(filings.raw)]
-    fetched[(documents.fetched)]
+    fetched[(documents.fetched, documents.backfill)]
     cdc[(app CDC topics)]
   end
   parser["parser (Rust)"]
+  jobs["jobs: search index, diffs, peers, segments"]
   subgraph pg["Postgres medallion"]
     bronze[(bronze: raw)]
     silver[(silver: conformed, one company id)]
-    gold[(gold: quarterly financials, sections, provenance)]
+    gold[(gold: financials, sections, search, provenance)]
   end
   subgraph access["Access path"]
-    appdb[(app DB: users, plans, grants)]
+    appdb[(app DB: users, plans, grants, saved work)]
     sync[authz-sync]
     fga[OpenFGA]
     rls[(authz tables + RLS)]
   end
   api[Query API]
+  alerts[alerts job]
+  hooks[webhooks]
   agent["Claude agent (tools = Query API)"]
   web[Web app]
 
@@ -60,6 +150,7 @@ flowchart LR
   xbrl --> loaders
   docs --> fetcher --> fetched --> parser --> silver
   bronze --> silver --> gold
+  silver --> jobs --> gold
   appdb -- Debezium --> cdc --> sync --> fga
   sync --> rls
   web --> api
@@ -67,12 +158,26 @@ flowchart LR
   api -- check first --> fga
   api -- then query as the user --> gold
   rls -. filters rows .- gold
+  alerts -- as each user --> api
+  alerts --> hooks
 ```
+
+The poller reads EDGAR's latest-filings feed into Kafka, and a nightly job compares 30 days of
+EDGAR's daily indexes with what arrived and republishes anything missing. The doc fetcher stores
+every operating company's new 10-K, 10-Q and material 8-K from the feed, plus insiders' Forms 3, 4
+and 5; the crawler takes the rest (amendments, other 8-Ks, history back to late 2015) on a topic
+of its own so the live parser never queues behind it. Nightly batch loads keep company identity,
+the SEC's bulk submissions and XBRL company facts current; hourly jobs build the search index,
+the Risk Factors and MD&A diffs and the segment data, and a weekly one the peers by business. The
+alerts job runs every 10 minutes from the Query API's image and reads each user's data as that
+user.
 
 Everything runs on one server ("hermes"): k3s, Helm charts deployed by Flux (GitOps) from this
 repo, secrets encrypted with SOPS/age, Prometheus + Grafana + Loki with alerts, an outside
 uptime check from GitHub Actions, nightly backups with a restore check, and a Cloudflare Tunnel
-in front (Terraform-managed GitOps bootstrap and Cloudflare edge). GitHub Actions runs every test and builds the images; Flux deploys them.
+in front (Terraform-managed GitOps bootstrap and Cloudflare edge). GitHub Actions runs every test
+and builds the images; Flux deploys them. Every Deployment and CronJob is listed with its
+schedule in [deploy/helm/tributary](deploy/helm/tributary/README.md).
 
 ## Design decisions
 
@@ -92,19 +197,23 @@ in front (Terraform-managed GitOps bootstrap and Cloudflare edge). GitHub Action
 - **Medallion in SQL, provenance on every row.** Bronze keeps raw SEC payloads, silver resolves
   every CIK, ticker and former name to one company id, gold carries the filing, section or XBRL
   tag, ingested-at and freshness that the agent cites. Transforms are SQL functions, rebuildable
-  from bronze.
+  from bronze; how a figure may be read (not meaningful, not applicable to a bank, old, another
+  currency) is defined once, in SQL, and the screener, charts and web app only word it.
+- **Rules, not a model, where the answer must be exact.** Earnings outlooks, events since the last
+  report, What changed's ranking, backlog from the text and peers by business are fixed rules with
+  their spec in the code's docstrings, measured on real filings both ways before they shipped.
 - **One SEC rate limit across every pod.** A token bucket in Postgres (one locked row) keeps all
-  services together under the SEC's 10 requests/s, with live traffic ahead of bulk crawls.
+  services together under the SEC's 10 requests/s, with live traffic ahead of bulk crawls. The
+  first 5-year document crawl took 265,625 filings in 27 h at that limit with 0 failures.
 - **Rust where it pays.** The document parser was rewritten in Rust against a written spec and
   swapped in after producing identical sections to the Python reference on every test filing;
-  it has parsed every filing since, including the 5-year crawl ([benchmarks](benchmarks)).
+  it has parsed every filing since ([benchmarks](benchmarks)).
 - **Batch, don't flood.** Bulk loads are capped batches with checkpoints and content hashes, so a
   re-run only touches what changed and a crash resumes where it stopped.
 
 ## Quickstart
 
 Runs the whole stack locally with Docker Compose.
-
 
 ```bash
 cp .env.example .env   # set SEC_USER_AGENT to your name/email
@@ -119,7 +228,7 @@ make financials        # XBRL financials for tracked companies → gold.quarterl
 make seed-documents    # load recent 10-K/10-Q/8-K history (fetched and parsed by up-all)
 make exhibits          # 8-K press releases (EX-99.x) for 8-Ks already stored
 make up-all            # + poller, bronze-loader, doc-fetcher, parser, authz-sync, query-api,
-                       #   agent-api, and the chat UI on http://localhost:3000
+                       #   agent-api, and the web app on http://localhost:3000
 make backfill DAYS=7   # fill in filings missing vs EDGAR's daily indexes
 make psql              # query it: SELECT * FROM bronze.filings ORDER BY filed_at DESC LIMIT 10;
 make consume           # watch filings arrive (or open the Kafka UI at http://localhost:8080)
@@ -128,20 +237,13 @@ make consume           # watch filings arrive (or open the Kafka UI at http://lo
 ## Access control
 
 Every signed-in user (a demo sandbox, a GitHub account, an owner-created password account, the
-named test users) reads every
-company's financials and filings, within their plan's tiers: the **public catalog** `catalog:sec`
-holds every company with gold financials or a stored filing, and while it is public OpenFGA lets
-every user read it (`catalog:sec#reader@user:*`) and row-level security accepts its companies
-(`authz.public_access`). A request without a user reads nothing. Per-company grants (to a user
-or an organization) still work for anything outside the catalog, and saved work (workspaces,
-theses, models, reports, views) and a user's own market-data key and prices stay owner-only.
-
-There is no public signup. Besides the demo and GitHub, the owner can create username/password
-accounts for testers with `query-api-account create <username> --questions-per-day N` inside the
-Query API pod: one app-DB transaction (user, plan, and the GitHub account's grants while the
-catalog is closed) that CDC turns into access like any other, scrypt-hashed passwords, one 401
-for every refusal, a lockout after 10 failures, a per-address attempt limit, and each account's
-own daily assistant cap (Query API README, "Password accounts").
+named test users) reads every company's financials and filings, within their plan's tiers: the
+**public catalog** `catalog:sec` holds every company with gold financials or a stored filing, and
+while it is public OpenFGA lets every user read it (`catalog:sec#reader@user:*`) and row-level
+security accepts its companies (`authz.public_access`). A request without a user reads nothing.
+Per-company grants (to a user or an organization) still work for anything outside the catalog,
+and saved work (workspaces, theses, models, reports, views, alerts and webhooks) and a user's own
+market-data key and prices stay owner-only, with row-level security forced on their tables.
 
 The switch is one app-database row, streamed like any grant:
 
@@ -160,6 +262,13 @@ app DB ─(Debezium CDC)─▶ Kafka ─▶ authz-sync ─┬─▶ OpenFGA (che
                                                   (row-level security)
 ```
 
+There is no public signup. Besides the demo and *Sign in with GitHub* (no scopes, public profile
+only), the owner can create username/password accounts for testers with
+`query-api-account create <username> --questions-per-day N` inside the Query API pod: one
+app-database transaction that CDC turns into access like any other, scrypt-hashed passwords, one
+401 for every refusal, a lockout after 10 failures, a per-address attempt limit, and each
+account's own daily assistant cap ([query-api](services/query-api/README.md#password-accounts)).
+
 ### Query API
 
 Every data request is checked twice: OpenFGA before any query, then Postgres row-level
@@ -174,252 +283,21 @@ curl "localhost:8000/v1/companies/0001045810/financials?metrics=revenue" # 401: 
 
 ### Web app
 
-`services/web` (React, TypeScript, Vite): a research workspace with Home (start an analysis, the
-watchlist, new filings, data notes), [filing alerts](#filing-alerts) for the companies you follow,
-guided [Analysis](#analysis) projects from filings to a checked thesis, a screener over every company, company tearsheets (statements, revenue,
-segments, ratios, filings, peers, [earnings releases and the 8-Ks since the last report](#earnings-and-events)), a chart builder with formula layers, comps tables, a filing reader
-with "what changed" diffs, and full-text search. The assistant sits on every screen, sees what
-you're looking at, and can build charts, screens and comps for you, with Undo. Model output is
-sanitized and served under a strict Content-Security-Policy. `make web` runs the dev server on
-:5173. Besides *Try the demo*, you can *Sign in with GitHub* (no scopes, public profile only) for
-a permanent account that keeps your saved work, or *Sign in* with the username and password of
-an account the owner created.
+`services/web` (React, TypeScript, Vite): Home, Alerts, Analysis projects, a screener over every
+company with sectors, company tearsheets, a chart builder with formula layers, comps, a filing
+reader with What changed, search, theses, models and reports, Settings and the public Data
+status page. Model output is sanitized and served under a strict Content-Security-Policy.
+`make web` runs the dev server on :5173 ([web](services/web/README.md)).
 
-#### Thesis and Model
-
-Research ends in your own argument, so a workspace holds what you write next to what you chart.
-The [Analysis](#analysis) tab strings all of this into one guided path per company; the pieces
-also work on their own:
-
-- **Revenue view** (a company's Revenue tab): revenue by business segment, geography and
-  product over time from the filings' XBRL (members missing a period shown as gaps, never zeros;
-  bars stack only when the members add up to reported revenue), each segment's contribution to
-  revenue growth in percentage points, and receivables against revenue (DSO, flagged when
-  receivables grow more than 10 points faster than revenue). Each chart saves to a workspace so
-  a thesis can embed it.
-- **Model**: a forecast for one company, from revenue down to EPS and free cash flow. Its
-  history comes live from the filings (as you, through the permission-checked API), and the
-  current fiscal year starts from its reported quarters: Vertiv's FY2026 is Q1-Q3 as reported
-  plus the Q4 you set, Deckers' FY2027 is H1 plus H2. Per forecast year (1-10) you type growth
-  and operating margin, and optionally interest, tax rate, share change (buybacks) and FCF
-  margin; anything left blank follows the company's own history, and one line per default says
-  how. Name one-off adjustments (Deckers' $46M of tariff refunds) to see margins reported and
-  adjusted, and acquired revenue for organic growth. The company's latest outlook sits beside the
-  year it covers, quoted with its 8-K. Type a price and its date to get market cap, P/E,
-  EV/Revenue, EV/EBIT and FCF yield on history and every case; it's your price, nothing is
-  fetched. **Bear, base and bull** sit side by side in one table, every line, and on one chart.
-  Every save keeps the version it replaced. Only your inputs are saved; the maths run in one
-  place, the Query API (`POST /v1/companies/{id}/model`), for the page, the thesis check and
-  later MCP.
-- **Thesis**: your argument about a company, with any chart, comps table, screen or model from
-  the same workspace embedded where you put it, drawn live, and the filing passages you pinned.
-  Write shows them as cards you move (buttons or Alt+↑/↓) and remove (with Undo), never as
-  `[[embed:…]]` lines; a comps set stays its table; a quote says its form and the period it reports
-  on. Underneath it is still Markdown, so export and import round-trip byte for byte (tested on a
-  pinned thesis, and shown in the screenshot harness) and versions and drafts work as before; a
-  Markdown view shows the text as saved. Rendered through the same sanitizer as model output.
-- **Check my thesis**: the agent reads your saved thesis as you, marks each factual claim
-  Supported, Contradicted (with what the filing says) or Can't verify, each with citations that
-  open the filing; compares each embedded model's growth and margin per year (its base case)
-  with the company's 5-year history (computed in code, flagged when growth is more than 10 points off the CAGR or a
-  margin is outside the 5-year range); and lists what the latest 10-K/10-Q says that you don't.
-  Every figure goes through the same verifier as chat; anything it can't trace is flagged.
-  Checks are kept with the thesis (history, stale once the text changes) and count as 4
-  questions. The thesis reaches the model as escaped data, and its tools stay limited to the
-  thesis's companies.
-- **Revisit**: each check records the newest 10-K/10-Q in the SEC index for every company it
-  covered, and the newest filing its citations rely on. When the company files a newer one, the
-  thesis (and its workspace's list) says "New 10-Q filed <date> since your last check —
-  re-check?"; after the re-check, "Changes since <date>" lists the claims whose verdict flipped
-  (matched by quote), new and dropped claims, and model assumption flags that changed.
-
-Both start from a company page or a workspace ("New thesis", "New model"), are owner-only in
-both layers like all saved work (the Query API filters on the token's user; the app database's
-row-level security is forced), and grant nothing: an embedded chart or a model's history is read
-as the viewer, so it shows only what you may read.
-
-#### Analysis
-
-The Analysis tab is one guided project per company, the way an analyst builds a thesis from
-filings. "New analysis" picks a company you can read and its peers (suggested by what they do,
-[below](#peers-by-business)); the project then walks eight steps, each with a done marker, under a header
-with the company and tabs (Company · Charts · Model · Thesis · Monitor) that switch instantly
-without losing anything you typed:
-
-1. **Business**: the latest 10-K's Item 1, the segments, and your "how it makes money" notes.
-2. **Numbers**: ten fiscal years of revenue and growth, gross and operating margin, free cash
-   flow (operating cash flow − capex), buybacks and dividends, shares outstanding, inventory,
-   receivables against revenue, a backlog proxy and customer advances, and debt, each ending with
-   the year in progress (the latest TTM or quarter, marked as partial); each chart opens in the
-   chart builder or saves to the project.
-3. **Earnings**: each quarter's earnings release beside its reported figures, the outlook it
-   states and management's adjustments ([below](#earnings-and-events)).
-4. **What changed**: the 8-Ks filed since the last 10-Q or 10-K (deals, debt, leadership,
-   guidance), then new, removed and rewritten Risk Factors and MD&A paragraphs in the latest
-   10-K and 10-Q, a 10-Q against the same quarter a year earlier, the most material first, with
-   a topic filter ([What changed](#what-changed)).
-5. **Peers**: the comps table for the company and its peers; each median says how many of them it
-   uses ("3 of 4") and why the others are left out.
-6. **Model**: the model, this year from its reported quarters, with bear, base and bull side by
-   side.
-7. **Thesis**: starts from a template: core thesis (3-5 sentences), variant perception
-   (what the market misses), pillars with evidence, catalysts (the next expected filings
-   prefilled), risks and mitigants, what would prove you wrong, and KPIs to watch.
-8. **Monitor**: the company's new filings as alerts arrive, your red lines on its figures (each
-   Clear or Crossed now, and checked on every new 10-K and 10-Q), and Check my thesis with the
-   new-filing notice.
-
-**Add to thesis** on any step pins the evidence into a section you pick: a chart or comps
-table is saved in the project and embedded, a filing passage is quoted with its form, the period
-it reports on, date, section and an EDGAR link (a release's guidance table keeps its lines). Unsaved thesis edits are kept in the browser until you save. A
-project is a workspace with its company and peers on it (app database migration 012), so its
-charts, model and thesis are ordinary saved items: owner-only in both layers, granting nothing.
-
-#### Earnings and events
-
-Between 10-Qs the filings an analyst reads are 8-Ks: the quarterly earnings release and whatever
-the company did since the quarter ended. Both testers of the guided flow missed one: an
-acquisition that closed after Vertiv's balance sheet date, and the guidance and refund figures in
-Deckers' release.
-
-- **Earnings tab** (and the Analysis flow's Earnings step): each quarter's release (the 8-K with
-  Item 2.02, its first EX-99 exhibit) beside the quarter's figures from its 10-Q against a year
-  ago; the outlook quoted from the release's own Outlook or Guidance sections; management's
-  adjustments (its non-GAAP reconciliation tables and the notes that state a dollar amount). Each
-  passage links to its place in the filing reader and pins into a thesis with its quarter. Found by
-  fixed rules, not a model: where a release has no such section the page says so. No beat or miss:
-  Tributary holds no consensus estimates.
-- **Since the last report** (company Overview, top of What changed): the 8-Ks filed after the
-  latest 10-Q/10-K period end with their items (2.01 acquisition completed, 2.03 new debt, 5.02
-  officer change, 4.02 non-reliance, ...), each quoting the 8-K's own words. A balance that an
-  event after the period end may have changed (cash, debt, net debt, total assets) is flagged as
-  of that period end, with the event beside it, on the key stats too: a flag, never a pro forma.
-  A closed acquisition or a new financing announced only in a 7.01 or 8.01 press release (Vertiv
-  closed KES that way on Oct 26, 2026) is flagged too, read by fixed phrases from the release, with
-  the words that triggered it shown; an agreement to acquire, an earnings release or a buyback is
-  not.
-- The assistant has both as tools (`get_earnings_release`, `get_events_since_report`), and Check
-  my thesis reads them for what the thesis leaves out; neither changed the recorded suites (97
-  replays pass, 0 leaks), and the adversarial harness counts their results like any filings
-  tool's.
-
-Measured on production (2026-11-08): every 8-K filed since October 2024 has its items in the SEC
-index here (140,884 of 140,884, all filers); for operating companies over the last two years,
-32,188 earnings 8-Ks from 3,994 companies, all stored, 95% with a parsed EX-99.1, and 71% of
-40,588 company-quarters with a parsed release. On 45
-releases sampled across industries, the outlook rules found 32 of the 33 that have an Outlook or
-Guidance section, and nothing in the others. Rules and numbers:
-[query-api](services/query-api/README.md#earnings-and-events), [web](services/web/README.md).
-
-#### Filing alerts
-
-When a company on your watchlist or in one of your analyses files a 10-K, a 10-Q or an 8-K with a
-material item, a bell counts it and the Alerts page lists it: the form, the period, an 8-K's items,
-a 10-K or 10-Q's revenue, margin and EPS against a year earlier once the SEC's XBRL data has them,
-your red lines evaluated on it, and links to What changed, the earnings view, the reader and EDGAR.
-You choose the forms per company, and can send alerts on to a Discord, Slack or any https webhook,
-signed with a secret shown once. The webhook is SSRF-safe by construction: https to public
-addresses only, checked after DNS and again before each send on the address actually connected to,
-no redirects, short timeouts and size caps; `http://169.254.169.254` and every private, loopback,
-link-local or metadata address are refused (tests and the settings page show it). A red line is a
-rule in the chart formula language ("gross margin below 70%", "receivables growth over revenue
-growth by more than 10 points"), compiled with bound parameters only. Alerts are made by a database
-poll every 10 minutes, not a Kafka consumer (what an alert says arrives later than the filing, and
-a consumer needs credentials only the owner can create); each run re-reads three days of the index
-and is idempotent on the filing, at about 13 ms per 50 followed companies on hermes. Everything is
-owner-only with forced row-level security, and a user can't read, mark, test or see the deliveries
-of another's alerts or webhooks (tested on the real tables). Email is behind a provider interface
-and off: no provider is chosen. Rules and numbers: [query-api](services/query-api/README.md#filing-alerts),
-[web](services/web/README.md).
-
-#### Statements: cash flow, KPIs, reported vs standardised
-
-The cash flow statement shows its operating, investing and financing subtotals, exchange rates and
-other, the change in cash, the cash it starts and ends with, and whether start + change = end; outflows
-are negative, as filings print them. Measured on 613 companies rebuilt with migration 049: 15,620 of
-16,062 quarters since 2019 tie within 0.5%, and where one doesn't the page says by how much. The
-balance sheet adds customer advances (contract liabilities: Vertiv's $1.13B to $4.12B in a year, beside
-current liabilities of $3.58B to $8.71B), accounts payable, remaining performance obligations (the
-nearest tagged figure to a backlog: Caterpillar $49.4B) and cash and short-term investments, read by net
-debt's own rule. A quarter far outside its series (NVIDIA's dividends: $6.05B after $243M) or of the
-other sign (JPMorgan's operating cash flow, six sign changes in eight quarters) is marked, with its
-filing, by the same tests as the data notes. A standardised line (net debt, free cash flow, a computed
-gross profit, a line tagged as parts) opens into what it is made of: each part's value, the tag the
-filing used, its filing, and the other tags reported for that date. Existing figures didn't move: the
-same 613 companies rebuilt before and after the migration gave identical rows. Rules and numbers:
-[db](db/README.md), [query-api](services/query-api/README.md#statement-callouts),
-[web](services/web/README.md).
-
-#### What changed
-
-Both testers read filing diffs before earnings and both found them noisy: Deckers' Q2 10-Q against
-its Q1 10-Q had 121 changes, half of them fragments of paragraphs a page break split, its
-three-month text diffed against six-month text; Vertiv's showed "second" becoming "third" quarter.
-What changed now compares a 10-Q with the same quarter a year earlier by default and reads the
-stored diff a second time, at query time (nothing is rebuilt): split paragraphs are joined, page
-furniture dropped, calendar rollovers, figure-only table rows and minor edits hidden and counted,
-and a quarter's passage is never paired with a year-to-date one. Each change says its period, the
-figures it adds or drops, and why it ranks where it does (new figures, how far a figure moved, new
-risk wording, Risk Factors and Liquidity above boilerplate); a topic ("tariffs") and "only passages
-with new figures" filter it. Measured on production's texts: Deckers' Q2 FY27 10-Q 147 changes
-against a year ago before, 91 after, 10 about tariffs (the $46.0M IEEPA refund second); Vertiv's Q3
-10-Q against Q2 39 → 22, nine of the hidden ones calendar rollovers; Deckers' 10-K 379 → 264. The
-assistant asks for the same view with `get_material_changes`. Rules and numbers:
-[query-api](services/query-api/README.md#what-changed), [web](services/web/README.md).
-
-#### Connect your data
-
-Share prices can't be shown publicly (vendors license them for personal use, not
-redistribution), so each user brings their own: in Settings → Connections you add your own
-market-data API key (Tiingo first, behind a small adapter interface). Tributary validates it
-with one call, stores it encrypted (AES-256-GCM envelope; the master key lives in the
-deployment's secrets, never in the database; the ciphertext is bound to your user), and shows
-you only the provider and its last four characters. End-of-day prices are fetched with your
-key when you open a company, at most once a day, and stored for you alone: no cache is shared
-between users. With a connection, a company's Price tab shows the daily close and a valuation
-(market cap, P/E, P/S, EV/EBIT from your latest close and the latest filed figures, each with
-its date), and the chart builder gets a price layer. Another user never sees your key or your
-prices, in either permission layer (OpenFGA on the company, then owner-only row-level
-security). Disconnecting deletes the key and every price fetched with it.
-
-**Off until configured:** the feature exists only when the deployment has the
-`data-connections-key` secret ([deploy/helm/tributary](deploy/helm/tributary/README.md#connect-your-data));
-without it the routes are absent and the UI hides it. The assistant has no price tool yet.
-
-### Peers by business
-
-Suggested peers come from what companies say they do, not their SIC code: each company's latest
-10-K Business section (Item 1) as a TF-IDF term vector (words and two-word phrases, standard
-library only, no paid embeddings or external calls), cosine similarity between them, and the
-competitors either 10-K names in a sentence about competition; SIC division and size count a little.
-A weekly job in the parser image computes it for every company (79 s, 410 MB peak on 4,888 Item 1
-sections; `services/parser` README). Each suggestion says why, and a named competitor links to the
-sentence. Measured on the testers' companies, top 10 before (SIC and size) and after:
-
-| Company | Before | After |
-|---|---|---|
-| Vertiv (VRT) | LG Display, Advanced Energy, Vicor, Impinj, Varex Imaging, ... | Eaton and Johnson Controls (named in Vertiv's 10-K), AAON, nVent, Forgent Power, Super Micro, Ciena, Flex, Amphenol |
-| Deckers (DECK) | Crocs, Nike, Silverton Energy, Carlisle, Newell, AptarGroup, Entegris, ... | Crocs, Columbia, Steve Madden, Under Armour, Nike, Kontoor, Wolverine, Levi Strauss, Tapestry, VF |
-| NVIDIA (NVDA) | Micron, Tigo Energy, Broadcom, Intel, AMD, Applied Materials, TI, ADI, NXP, ST | AMD, Ambarella, Qualcomm, Super Micro, Broadcom, Micron, Marvell, HPE, Arista, GSI Technology |
-| JPMorgan (JPM) | Bank of America, Wells Fargo, Citigroup, Capital One, U.S. Bancorp, PNC, Truist, Shinhan, ... | PNC, Morgan Stanley, Bank of America, U.S. Bancorp, Capital One, Huntington, Wells Fargo, Truist, KeyCorp, Citizens |
-
-A company whose 10-K Item 1 is only a cross-reference (Intel, General Electric, McDonald's) or
-wasn't parsed (Citigroup) has no profile, so it is never suggested by business; the NVIDIA and
-JPMorgan lists lose Intel and Citigroup for that reason.
-A bank is compared on a bank's own lines (net interest income, efficiency ratio, provision for
-credit losses, loans, deposits, CET1 where tagged: migration 048, whose header has the tags measured
-on every bank's XBRL and why net interest margin and tangible book value are left out). The screener
-groups companies into 12 sectors and 88 industries over SIC (Tributary's own open mapping, not GICS;
-the SIC label stays), and a company filing one combined 10-K with another (PG&E Corp and Pacific Gas &
-Electric) says it isn't a duplicate.
-
-### Agent
+## Agent
 
 A Claude tool loop over the Query API (`services/agent`), served by `agent-api` as
-server-sent events with per-user rate limits and a daily spend cap. Its tools take no user
-parameter: the agent holds the asking user's token, so it sees exactly what that user may
-read, and it cites the filing, section or XBRL tag, and freshness for every figure. Needs
-`ANTHROPIC_API_KEY` in `.env`; the model is `AGENT_MODEL`. Tests use a scripted fake model.
+server-sent events with per-user and per-address rate limits and a daily spend cap. Its ten tools
+(financials, filings, sections, What changed, earnings releases, events since the last report,
+search, ...) take no user parameter: the agent holds the asking user's token, so it sees exactly
+what that user may read, and it cites the filing, section or XBRL tag, and freshness for every
+figure. Needs `ANTHROPIC_API_KEY` in `.env`; the model is `AGENT_MODEL`. Tests use a scripted
+fake model.
 
 ```bash
 make ask USER=alice Q="How has Nvidia's revenue changed over the last 4 quarters?"
@@ -429,11 +307,11 @@ make ask USER=alice Q="What are Nvidia's main risk factors?"
 ### Citation accuracy
 
 Every answer is checked before it reaches the user (`services/agent/.../verify.py`): each
-dollar figure must match a value a tool returned, be arithmetic on returned values, or appear
-in returned filing text, and each accession number must have come from a tool. The chat shows
-the result, and flags any figure it couldn't trace. On 32 questions across the demo users:
-**32 of 32 answers fully verified, 128 of 128 figures traced** ([report](tests/citations/report.md)).
-`make citations` runs it live; CI replays it.
+figure must match a value a tool returned (in its currency), be arithmetic on returned values,
+or appear in returned filing text, and each accession number must have come from a tool. The
+chat shows the result, and flags any figure it couldn't trace. On 32 questions across the demo
+users: **32 of 32 answers fully verified, 128 of 128 figures traced**
+([report](tests/citations/report.md)). `make citations` runs it live; CI replays it.
 
 ### Adversarial suite
 
@@ -444,17 +322,23 @@ stack with the catalog closed (per-company grants only): **0 leaks**
 recordings. With the catalog open its targets move to what stays private (other users' saved
 work, prompt injection in filings); see its [README](tests/adversarial/README.md).
 
+### Golden figures
+
+149 figures printed in five 10-Ks (NVIDIA, Costco, JPMorgan, ExxonMobil, Home Depot), each
+compared with what gold serves, and 12 derived metrics recomputed from them
+([tests/golden](tests/golden/README.md)).
+
 ## Layout
 
 | Path | What |
 |---|---|
 | `services/` | One folder per deployable service or job (poller, bronze-loader, company-loader, facts-fetcher, doc-fetcher, parser, parser-rs, authz-sync, query-api, agent, web) |
 | `libs/` | Shared Python packages (`sec`: SEC client with User-Agent and rate limiting; `authz`: OpenFGA client; `kafka`: Kafka client config from the environment, SASL/SCRAM included; `telemetry`: JSON logs and Prometheus metrics) |
-| `db/` | Analytics migrations (`db/migrations`) and the app database (`db/app`) |
+| `db/` | Analytics migrations (`db/migrations`), the app database (`db/app`), backouts (`db/backout`) and the transforms' index (`db/transforms`) |
 | `streaming/` | Debezium configs and Kafka topic docs |
 | `authz/` | OpenFGA authorization model and its tests (`make authz-test`) |
-| `tests/` | Adversarial, citation, integration, propagation, Kafka ACL and golden 10-K figure tests |
-| `deploy/` | Helm charts (services, platform, monitoring), Flux, SOPS secrets, Terraform, host backup scripts |
+| `tests/` | Adversarial, citation, integration, propagation, Kafka ACL, uptime and golden 10-K figure tests |
+| `deploy/` | Helm charts (services, platform, monitoring), Flux, SOPS secrets, Terraform, host backup scripts, the uptime check |
 | `benchmarks/` | Python vs Rust parser |
 
 ## License
