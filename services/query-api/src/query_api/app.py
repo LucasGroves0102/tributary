@@ -14,6 +14,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from prometheus_client import Counter
 from pydantic import BaseModel, Field
 
+from query_api.alerts import AppAlerts, add_alert_routes
 from query_api.auth import Unauthenticated, mint, verify_claims
 from query_api.authorizer import Access, Authorizer, AuthzUnavailable, Readable
 from query_api.components import add_components_routes
@@ -55,6 +56,7 @@ from query_api.thesis_checks import ThesisChecks, add_thesis_check_routes
 from query_api.ui import add_ui_routes, today_eastern
 from query_api.views import Views, add_view_routes
 from query_api.watchlist import Watchlists
+from query_api.webhooks import Sender
 from query_api.workspace_api import add_workspace_routes
 from query_api.workspaces import Workspaces
 from tributary_telemetry.http import instrument
@@ -115,6 +117,9 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
                thesis_checks: ThesisChecks | None = None,
                market_data: MarketData | None = None,
                password_accounts: PasswordAccounts | None = None,
+               alerts: AppAlerts | None = None,
+               webhook_sender: Sender | None = None,
+               webhook_resolver: Callable[..., Any] | None = None,
                monotonic: Callable[[], float] = time.monotonic) -> FastAPI:
     """demo_users: accounts anyone may sign in as without a password (empty disables it).
     today: the current US Eastern date (EDGAR's), injectable for tests.
@@ -130,7 +135,10 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
     market_data: "Connect your data" (query_api.connections); None (no DATA_CONNECTIONS_KEY):
     its routes don't exist.
     password_accounts: owner-created username/password accounts (query_api.password_accounts);
-    None (no app database): POST /v1/auth/password answers 404 and "pw-" tokens are refused."""
+    None (no app database): POST /v1/auth/password answers 404 and "pw-" tokens are refused.
+    alerts: filing alerts in the app database (query_api.alerts; None: its routes answer 503);
+    webhook_sender, webhook_resolver: how a webhook test send connects and resolves names
+    (query_api.webhooks; injected in tests)."""
     app = FastAPI(title="Tributary Query API", version="1")
     instrument(app)
 
@@ -239,6 +247,9 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
                           require=require)
 
     now = clock or (lambda: datetime.now(UTC))
+    add_alert_routes(app, alerts=alerts, store=store, current_user=current_user, require=require,
+                     readable=readable, jwt_secret=jwt_secret, sender=webhook_sender,
+                     resolver=webhook_resolver, clock=now)
     add_status_routes(app, store=store, clock=now)
     demo_companies = demo_company_resolver(store)
     sandbox_info = add_sandbox_routes(

@@ -1029,3 +1029,35 @@ class Store:
                 ) i ON true
                 """, (accessions,))
             return {r.pop("accession_no"): r for r in cur.fetchall()}
+
+    def alert_filings(self, user_id: str, company_ids: list[str], forms: list[str],
+                      since: date) -> list[dict]:
+        """Filing alerts (query_api/alert_job.py): these companies' original filings of `forms`
+        filed on or after `since`, one row per (accession, company), newest first, with an 8-K's
+        items from the filing index (migration 045; NULL until the nightly submissions load has
+        it). Public index metadata (silver.filings runs as its owner, 017). A bounded id list
+        (the job passes at most alert_job.CHUNK followed companies), never the catalog's."""
+        if not company_ids:
+            return []
+        with self._session(user_id) as cur:
+            cur.execute(
+                r"""
+                SELECT DISTINCT ON (f.accession_no, f.company_id)
+                       f.company_id, f.accession_no, f.cik, f.form, f.filing_date, f.accepted_at,
+                       CASE WHEN f.form ~ '^10-[KQ]' AND f.report_date = f.filing_date
+                            THEN NULL ELSE f.report_date END AS period_end,
+                       CASE WHEN btrim(coalesce(h.items, '')) <> ''
+                            THEN regexp_split_to_array(btrim(h.items), '\s*,\s*') END AS items
+                FROM silver.filings f
+                LEFT JOIN bronze.submission_filings h
+                       ON h.accession_no = f.accession_no AND h.cik = f.cik
+                WHERE f.company_id = ANY(%(ids)s) AND f.form = ANY(%(forms)s)
+                  AND f.filing_date >= %(since)s
+                  AND f.filed_on >= %(since)s::date - %(margin)s
+                ORDER BY f.accession_no, f.company_id, h.items IS NULL, f.report_date IS NULL,
+                         f.cik
+                """, {"ids": company_ids, "forms": forms, "since": since,
+                      "margin": FILED_ON_MARGIN_DAYS})
+            rows = cur.fetchall()
+        rows.sort(key=lambda r: (r["filing_date"], r["accession_no"]), reverse=True)
+        return rows
