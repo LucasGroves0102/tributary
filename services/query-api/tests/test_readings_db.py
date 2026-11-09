@@ -772,6 +772,42 @@ def test_a_yen_companys_small_base_is_not_a_dollar_one(conn, token):
     assert point["points"] and "not_meaningful" not in point["points"][-1]
 
 
+def test_an_annual_only_yen_filers_currency_is_yen(conn, token):
+    """060: a 20-F filer reports no quarters; its revenue and net income are stated years, kept
+    only as TTM rows of gold.derived_financials. 057's gold.amount_currency and latest_reading's
+    base lookup read quarterly rows alone, so such a yen filer read USD and its ¥50,000 base got
+    the dollar rule ("revenue is under $100K"). Both now read the TTM rows."""
+    conn.execute("INSERT INTO silver.companies (company_id, name, current_cik, sic,"
+                 " sic_description) VALUES (%s, 'Yen 20-F Co', %s, '3711', 'Motor Vehicles')",
+                 (YEN, YEN))
+    conn.execute("INSERT INTO silver.company_ciks (cik, company_id) VALUES (%s, %s)", (YEN, YEN))
+    conn.execute("INSERT INTO authz.public_access (company_id, tier) VALUES (%s, 'financials')",
+                 (YEN,))
+    reported(conn, YEN, "total_assets", LATEST, 9_000_000, unit="JPY")  # no quarterly P&L
+    derived(conn, YEN, "revenue", LATEST, 50_000, None, unit="JPY")
+    derived(conn, YEN, "net_income", LATEST, 20_000, None, unit="JPY")
+    derived(conn, YEN, "gross_margin", LATEST, Decimal("0.4"), {"revenue": 50_000})
+    derived(conn, YEN, "net_income_growth", LATEST, Decimal("22.7"),
+            {"net_income_year_ago": 4.9e6 / 5})
+    with conn.cursor() as cur:
+        cur.execute("SET LOCAL ROLE query_api")
+        cur.execute("SELECT set_config('app.user_id', %s, true)", (USER,))
+        cur.execute("SELECT gold.amount_currency(%s)", (YEN,))
+        assert cur.fetchone() == ("JPY",)  # 057: USD
+        for metric in ("gross_margin", "net_income_growth"):
+            cur.execute("SELECT x.status, x.reason FROM gold.latest_period(%s) lp,"
+                        " gold.latest_reading(%s, 'ttm', %s, NULL, lp.latest) x",
+                        (YEN, YEN, metric))
+            assert cur.fetchone() == (None, None), metric  # 057: not_meaningful, in dollars
+        cur.execute("RESET ROLE")
+    rows = api(conn).get(f"/v1/companies/{YEN}/financials", headers=token(USER),
+                         params={"view": "ttm", "metrics": ["revenue", "gross_margin"],
+                                 "readings": "true"}).json()
+    assert rows["currency"] == "JPY"
+    assert {r["metric"]: r["not_meaningful"] for r in rows["rows"]} == {
+        "revenue": None, "gross_margin": None}
+
+
 def test_latest_reading_stays_inlinable(conn):
     """The screener's plan depends on it, like 032's gold.latest_value (no SET, not DEFINER, a
     single SQL statement, not volatile)."""

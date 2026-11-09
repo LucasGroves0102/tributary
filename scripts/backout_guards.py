@@ -28,6 +28,7 @@ BACKOUT = ROOT / "db" / "backout"
 
 # Newest first: the order they run in. Undoing one migration means running every file before it too.
 CHAIN = [
+    "annual_currency_060.sql",
     "banks_058.sql",
     "currency_readings_057.sql",
     "ifrs_currencies_056.sql",

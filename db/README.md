@@ -170,6 +170,12 @@ a date that doesn't exist (it raised, and one bad Form 4 crash-looped the live c
 column path (a repeated element raised) and records both as findings. No FK to
 `bronze.filing_documents` (the nightly slim dump). Locks: three new tables and two replaced
 functions only (054's, used by doc-fetcher alone).
+`060_annual_filer_currency.sql` (pre-ship review): `gold.amount_currency` also reads a company's
+latest TTM revenue, then net income, in `gold.derived_financials` when it has no quarterly one: a
+20-F or 40-F filer's revenue and net income are only its stated years there, so 057 read Toyota's yen
+or a euro filer as dollars and gave its readings the dollar bases. `gold.latest_reading` takes its
+base's currency from `gold.amount_currency` (057's body otherwise). Locks: two functions replaced, a
+catalog change only (no table locked or read, no rebuild); backout `backout/annual_currency_060.sql`.
 `055_filing_xbrl_facts.sql` (F8a) reads a filing's own XBRL where SEC companyfacts doesn't carry it:
 the filings companyfacts never received (52 of 12,006 10-K/10-Qs in 200 days: Citigroup's 2026 10-Qs,
 Clorox's FY2026 10-K), a company's own tags proven to be a standard line (NVIDIA's 10-K capex tag,
