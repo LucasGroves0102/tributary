@@ -556,9 +556,20 @@ export const segmentsOf = (
     ...(q.basis === "calendar" ? { basis: q.basis } : {}),
   });
 
+/** What a What changed request asks for (F3: `view`, `q`, `numbers`; an older API ignores them
+ * and answers without `view`). */
+export interface ChangesQuery {
+  basis?: "prior" | "year_ago";
+  view?: "reading" | "ranked";
+  q?: string;
+  numbers?: "new";
+  section?: string;
+}
+
 /** Paragraphs of Risk Factors and MD&A that changed since the comparable earlier filing. */
-export const sectionChanges = (token: string, companyId: string, accessionNo: string) =>
-  get<SectionChanges>(token, `/v1/companies/${companyId}/filings/${accessionNo}/changes`);
+export const sectionChanges = (token: string, companyId: string, accessionNo: string, q: ChangesQuery = {}) =>
+  get<SectionChanges>(token, `/v1/companies/${companyId}/filings/${accessionNo}/changes`,
+    Object.fromEntries(Object.entries(q).filter(([, v]) => v !== undefined && v !== "")) as Params);
 
 /** The next `periods` (1-4) estimated 10-Q/10-K filings (public index metadata). */
 export const expectedFilingsOf = (token: string, companyId: string, periods = 1) =>

@@ -178,7 +178,7 @@ docstring; the Query API's `/earnings` and `/events`, rules in its README, "Earn
   figure is as of that period end or earlier: "⚑ before the Oct 27, 2026 8-K (Acquisition or
   disposition)" ("... and 1 more 8-K" when several; the hover names each), the figure itself
   unchanged. The Overview asks `/events` once for both. An event the API flags from its 7.01 / 8.01
-  announcement (F1b, `announced`) says so under its head: "⚑ a completed acquisition or
+  announcement (F1b, `announced`) says so under its head: "⚑ A completed acquisition or
   disposition, read from its Item 7.01 announcement (it has no Item 2.01): the words “Completes
   Acquisition” in Press release", linking the reader at that sentence, then the sentence quoted;
   the stale list names it the same way. An older API without `announced` words it by its items.
@@ -200,6 +200,31 @@ migration 014; `filingHeadings`: on a newest-first page a heading only moves bac
 10-K for FY2026 is filed in FY2027 beside that quarter's 8-Ks), and says "not parsed yet" only on
 forms that get parsed. What changed sits under the table, so the table has the page's width; its
 actions stay in view on narrow pages (sticky) and long 8-K item lists wrap.
+
+What changed (F3; `company/Filings.tsx` `Changes`, wording in `company/changes.ts`'s docstring; the
+Query API's `/changes` with `view`, rules in its README, "Read for materiality"): a 10-Q opens
+against the **same quarter a year earlier** (Previous 10-Q one click away; a 10-K against the
+previous 10-K), **most material first** (Reading order beside it), with a **topic** box ("tariffs":
+matches marked), **Only passages with new figures** and a section choice. Above the list, in words:
+what it was compared with ("Compared with the 10-Q for the quarter ended Sep 30, 2025, filed Oct 31,
+2025."), the ranking line, and what the pass left out ("Not shown: 9 calendar rollovers ..., 2
+paragraphs only split, rejoined or page furniture, ..."), then "10 of 91 changes about “tariffs”".
+Each change says New / Removed / Rewritten, its section, its period ("3 months", "6 months, year to
+date", "3 and 6 months": a 10-Q's quarter text is never read as its half-year text), the passage
+with its word diff (a "second" → "third" swap inside it unmarked), "Why it ranks here: new passage ·
+5 new figures · new risk wording: tariff, refund · Results of operations" and Read it in the filing;
+the first 30, then Show all. In Analysis the same list pins each passage with its period ("MD&A (6
+months, year to date)"). The filing reader's side by side asks the same view, a 10-Q a year earlier
+with the comparison switchable, and puts each passage's period beside it. When the year-ago 10-Q
+isn't indexed the page falls back to the previous one once and says so. An older Query API (no
+`view` in its answer) gets the plain list it always had, the comparison still choosable; the
+"unchanged or minor" count no longer adds minor edits twice. Verified (2026-11-09) through a harness
+serving the built app: the branch's `/changes` over production's section texts (its stored rows
+reproduced exactly from them), every other read from production: Deckers' Q2 FY27 10-Q against Q2
+FY26 (91 changes, "tariffs" 10, with new figures 4), against Q1 (its six-month text labelled, not
+paired with Q1's three-month text), Vertiv's Q3 10-Q (against Q2: 9 calendar rollovers hidden,
+"third quarter" unmarked inside rewritten passages; against Q3 2025: its new covenant risk factors
+ranked), NVIDIA's 10-K against the previous 10-K, at desktop and phone widths.
 
 Freshness has two clocks, labelled, explained on hover (`home/useFeedStatus.ts`): a filing is *listed*
 (`GET /v1/status`, the same time as Data status's "Newest filing listed here") minutes after EDGAR accepts
@@ -450,7 +475,8 @@ per company, from its filings to a thesis that's checked after every filing. Rul
   thesis; 3 **Earnings**: the company page's Earnings view (below), every outlook block, note and
   reconciliation pinnable; 4 **What changed**: "Since the last report" (the 8-Ks filed after the
   latest 10-Q/10-K period end, each excerpt pinnable, the balances they may have changed flagged),
-  then the filing page's `Changes` for the latest 10-Q and 10-K;
+  then the filing page's `Changes` for the latest 10-Q and 10-K (a 10-Q against a year earlier,
+  ranked, filters; each pin names the passage's period);
   5 **Peers**: Compare with the target fixed and the peers saved in the project (`embedded`:
   changes come back instead of going to the URL), Save to project / Add to thesis for the comps;
   6 **Model**: the project's models (ModelPage embedded, bear/base/bull side by side), "Create

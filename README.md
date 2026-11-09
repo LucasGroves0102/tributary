@@ -250,7 +250,8 @@ without losing anything you typed:
    states and management's adjustments ([below](#earnings-and-events)).
 4. **What changed**: the 8-Ks filed since the last 10-Q or 10-K (deals, debt, leadership,
    guidance), then new, removed and rewritten Risk Factors and MD&A paragraphs in the latest
-   10-K and 10-Q.
+   10-K and 10-Q, a 10-Q against the same quarter a year earlier, the most material first, with
+   a topic filter ([What changed](#what-changed)).
 5. **Peers**: the comps table for the company and its peers.
 6. **Model**: the model, this year from its reported quarters, with bear, base and bull side by
    side.
@@ -301,6 +302,23 @@ index here (140,884 of 140,884, all filers); for operating companies over the la
 releases sampled across industries, the outlook rules found 32 of the 33 that have an Outlook or
 Guidance section, and nothing in the others. Rules and numbers:
 [query-api](services/query-api/README.md#earnings-and-events), [web](services/web/README.md).
+
+#### What changed
+
+Both testers read filing diffs before earnings and both found them noisy: Deckers' Q2 10-Q against
+its Q1 10-Q had 121 changes, half of them fragments of paragraphs a page break split, its
+three-month text diffed against six-month text; Vertiv's showed "second" becoming "third" quarter.
+What changed now compares a 10-Q with the same quarter a year earlier by default and reads the
+stored diff a second time, at query time (nothing is rebuilt): split paragraphs are joined, page
+furniture dropped, calendar rollovers, figure-only table rows and minor edits hidden and counted,
+and a quarter's passage is never paired with a year-to-date one. Each change says its period, the
+figures it adds or drops, and why it ranks where it does (new figures, how far a figure moved, new
+risk wording, Risk Factors and Liquidity above boilerplate); a topic ("tariffs") and "only passages
+with new figures" filter it. Measured on production's texts: Deckers' Q2 FY27 10-Q 147 changes
+against a year ago before, 91 after, 10 about tariffs (the $46.0M IEEPA refund second); Vertiv's Q3
+10-Q against Q2 39 → 22, nine of the hidden ones calendar rollovers; Deckers' 10-K 379 → 264. The
+assistant asks for the same view with `get_material_changes`. Rules and numbers:
+[query-api](services/query-api/README.md#what-changed), [web](services/web/README.md).
 
 #### Connect your data
 

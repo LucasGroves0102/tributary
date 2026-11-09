@@ -953,13 +953,33 @@ export interface ChangeCitation {
   char_end: number;
 }
 
-/** /v1/companies/{id}/filings/{accession}/changes: what changed in Risk Factors and MD&A. */
+/** What a filing was compared with (the materiality view's `comparisons`). */
+export interface ChangeComparison {
+  basis: "prior" | "year_ago";
+  accession_no: string;
+  form: string;
+  filed: string;
+  period_of_report: string | null;
+}
+
+/** /v1/companies/{id}/filings/{accession}/changes: what changed in Risk Factors and MD&A. With
+ * `view` (F3) the API reads it for materiality: the fields marked F3 are there only then, and an
+ * older API (or a request without `view`) leaves them out. */
 export interface SectionChanges {
   company_id: string;
   accession_no: string;
   basis: "prior" | "year_ago";
   as_of: string;
   note?: string;
+  /** F3: echoed when the API ran the materiality pass */
+  view?: "reading" | "ranked";
+  comparisons?: ChangeComparison[];
+  filters?: { q: string | null; terms: string[]; numbers: "new" | null; kind: string | null; section: string | null };
+  /** F3: the one-line explanation of the ranking */
+  ranking?: string;
+  /** F3: changes shown after the filters / after the pass, before them */
+  matched?: number;
+  total?: number;
   sections: {
     section_key: string;
     title: string | null;
@@ -984,6 +1004,14 @@ export interface SectionChanges {
       removed: number;
       rewritten: number;
     };
+    /** F3: after the pass; hidden = what it left out, counted */
+    material?: {
+      new: number;
+      removed: number;
+      rewritten: number;
+      shown: number;
+      hidden: { resplit: number; calendar: number; figures_only: number; minor: number };
+    };
     changes: {
       kind: "new" | "removed" | "rewritten";
       similarity: number | null;
@@ -993,6 +1021,18 @@ export interface SectionChanges {
       words: [string, string][] | null;
       citation: ChangeCitation | null;
       prior_citation: ChangeCitation | null;
+      /** F3 */
+      section_key?: string;
+      /** F3, 10-Q: "three months", "six months", "nine months", "three and six months" */
+      period?: string | null;
+      subsection?: string | null;
+      figures?: { new: string[]; removed: string[] };
+      moved?: { from: string; to: string; change: number } | null;
+      risk_terms?: string[];
+      score?: number;
+      /** F3: what counted toward the score, in words */
+      why?: string[];
+      merged?: number;
     }[];
   }[];
 }

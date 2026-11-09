@@ -149,7 +149,7 @@ it("lists the 8-Ks since the last report and flags the balances an acquisition a
   expect([...kes.querySelectorAll(".event-head .tag")].map((t) => t.textContent)).toEqual([
     "8-K", "Regulation FD disclosure", "may change cash, debt, net debt, total assets"]);
   const note = kes.querySelector(".event-announced")!;
-  expect(note.textContent).toMatch(/^⚑ a completed acquisition or disposition, read from its Item 7\.01 announcement \(it has no Item 2\.01\): the words “Completes Acquisition” in /);
+  expect(note.textContent).toMatch(/^⚑ A completed acquisition or disposition, read from its Item 7\.01 announcement \(it has no Item 2\.01\): the words “Completes Acquisition” in /);
   expect(note.querySelector("mark")?.textContent).toBe("“Completes Acquisition”");
   expect(note.textContent).toContain("“Vertiv Completes Acquisition of King Environmental Services Ltd.");
   expect(note.querySelector("a")?.getAttribute("href")).toMatch(new RegExp(`^#/filing/${VRT}/0001628280-26-067127/EX-99\\.1\\?at=\\d+$`));

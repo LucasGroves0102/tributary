@@ -30,6 +30,7 @@ import {
 } from "../../reader/text";
 import { go, href } from "../../route";
 import type { IndexedFiling, SectionChanges, SectionHit } from "../../types";
+import { type Basis, comparisonLabel, defaultBasis, fallBack, periodLabel } from "../../company/changes";
 
 interface Props {
   token: string;
@@ -83,7 +84,16 @@ export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q,
     fetchSection(token, companyId, active!.section_key, accessionNo),
   );
   const form = f ? comparableForm(f.form) : null;
-  const changes = useLoad(form ? accessionNo : null, () => sectionChanges(token, companyId, accessionNo));
+  // F3: read for materiality (calendar rollovers and split paragraphs hidden), a 10-Q against the
+  // same quarter a year earlier unless that isn't indexed (then the previous one, once)
+  const [readerBasis, setReaderBasis] = useState<Basis | null>(null);
+  const basis = readerBasis ?? defaultBasis(f?.form);
+  const changes = useLoad(form ? `${accessionNo}|${basis}` : null, () =>
+    sectionChanges(token, companyId, accessionNo, { view: "reading", basis }));
+  useEffect(() => {
+    if (changes?.state === "ok" && fallBack(changes.data, basis, readerBasis !== null)) setReaderBasis("prior");
+  }, [changes]);
+  useEffect(() => setReaderBasis(null), [accessionNo]);
   const stepped = f ? steppedForm(f.form) : null;
   const prior = useLoad(stepped && f ? accessionNo : null, () =>
     filingIndex(token, companyId, { forms: [stepped!], to: f!.filed, limit: 5 }).then((r) => priorComparable(r.filings, f!)),
@@ -269,13 +279,16 @@ export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q,
               )}
               {diff && (
                 <button className="btn sm" aria-pressed={diffOn} onClick={() => setDiffFor(diffOn ? null : active.section_key)}>
-                  {diffOn ? "Back to text" : `What changed (${diff.summary.new + diff.summary.removed + diff.summary.rewritten})`}
+                  {diffOn ? "Back to text" : `What changed (${diff.material
+                    ? diff.material.new + diff.material.removed + diff.material.rewritten
+                    : diff.summary.new + diff.summary.removed + diff.summary.rewritten})`}
                 </button>
               )}
             </div>
           )}
           {active && diffOn && diff ? (
-            <SideBySide diff={diff} companyId={companyId} />
+            <SideBySide diff={diff} companyId={companyId} basis={changes?.state === "ok" ? changes.data.basis : basis}
+              form={f?.form ?? null} onBasis={f?.form.startsWith("10-Q") ? setReaderBasis : undefined} />
           ) : (
             active && <SectionBody load={text} terms={terms} at={at} current={match} onOpen={setMatch} />
           )}
@@ -441,17 +454,36 @@ function FilingStep({ load, dir, form, companyId, sectionKey, q }: { load: Load<
 type DiffSection = SectionChanges["sections"][number];
 
 /** What changed in this section since the comparable filing: prior on the left, this filing on
- * the right; rewritten paragraphs mark removed words on the left and added words on the right. */
-function SideBySide({ diff, companyId }: { diff: DiffSection; companyId: string }) {
+ * the right; rewritten paragraphs mark removed words on the left and added words on the right. A
+ * 10-Q can switch between the same quarter a year earlier and the previous 10-Q (`onBasis`); a
+ * passage that names its period says so (F3). */
+function SideBySide({ diff, companyId, basis, form, onBasis }: {
+  diff: DiffSection;
+  companyId: string;
+  basis: Basis;
+  form: string | null;
+  onBasis?: (b: Basis) => void;
+}) {
   const c = diff.compared_to;
+  const m = diff.material;
+  const hidden = m ? m.hidden.calendar + m.hidden.resplit + m.hidden.figures_only + m.hidden.minor : 0;
   return (
     <div className="sbs-wrap">
       <div className="row wrap">
-        <span className="tag q">{diff.summary.new} new</span>
-        <span className="tag e">{diff.summary.rewritten} rewritten</span>
-        <span className="tag warn">{diff.summary.removed} removed</span>
+        {onBasis && (
+          <span className="seg" role="group" aria-label="Compare with">
+            {(["year_ago", "prior"] as const).map((b) => (
+              <button key={b} className={basis === b ? "on" : undefined} aria-pressed={basis === b} onClick={() => onBasis(b)}>
+                {comparisonLabel(b, form)}
+              </button>
+            ))}
+          </span>
+        )}
+        <span className="tag q">{m ? m.new : diff.summary.new} new</span>
+        <span className="tag e">{m ? m.rewritten : diff.summary.rewritten} rewritten</span>
+        <span className="tag warn">{m ? m.removed : diff.summary.removed} removed</span>
         <span className="faint">
-          · {diff.summary.unchanged + diff.summary.minor_edits + diff.summary.numbers_only} unchanged or minor, hidden
+          · {diff.summary.unchanged + hidden} unchanged or minor, hidden
         </span>
       </div>
       {diff.stale ? (
@@ -463,7 +495,7 @@ function SideBySide({ diff, companyId }: { diff: DiffSection; companyId: string 
           <div className="sbs-h" role="row">
             <span role="columnheader">
               <a href={href({ view: "filing", companyId, accessionNo: c.accession_no, section: c.section_key })}>
-                Prior {c.form}, filed {day(c.filed, true)}
+                {basis === "year_ago" ? `${c.form} a year earlier` : `Prior ${c.form}`}, filed {day(c.filed, true)}
               </a>
             </span>
             <span role="columnheader">This filing</span>
@@ -471,6 +503,7 @@ function SideBySide({ diff, companyId }: { diff: DiffSection; companyId: string 
           {diff.changes.map((ch, i) => (
             <div key={i} className={`sbs-r ${ch.kind}`} role="row">
               <div role="cell" className="old">
+                {ch.kind === "removed" && periodLabel(ch.period) && <><span className="tag period">{periodLabel(ch.period)}</span>{" "}</>}
                 {ch.kind === "new" ? (
                   <span className="faint">not in the prior filing</span>
                 ) : ch.kind === "rewritten" && ch.words ? (
@@ -480,6 +513,7 @@ function SideBySide({ diff, companyId }: { diff: DiffSection; companyId: string 
                 )}
               </div>
               <div role="cell" className="new">
+                {ch.kind !== "removed" && periodLabel(ch.period) && <><span className="tag period">{periodLabel(ch.period)}</span>{" "}</>}
                 {ch.kind === "removed" ? (
                   <span className="faint">removed</span>
                 ) : ch.kind === "rewritten" && ch.words ? (

@@ -2575,6 +2575,82 @@ button.chip:disabled {
   color: var(--neg);
 }
 
+/* What changed read for materiality (F3): comparison, order and filters above one list */
+.changes-tools {
+  gap: var(--sp-4);
+  padding: var(--sp-5) var(--sp-6) 0;
+  align-items: center;
+}
+
+.changes-topic {
+  gap: var(--sp-2);
+  flex: 1 1 240px;
+  max-width: 420px;
+}
+
+.changes-topic .field {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.changes-check {
+  gap: var(--sp-2);
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+
+.changes-basis,
+.changes-why,
+.changes-hidden {
+  margin: var(--sp-3) var(--sp-6) 0;
+  line-height: 1.45;
+  max-width: 900px;
+}
+
+.changes-basis {
+  color: var(--text-2);
+}
+
+.diff p .change-head {
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-2);
+}
+
+.diff p .change-head .tag {
+  margin-left: 0;
+}
+
+.tag.period {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: transparent;
+  font-weight: 500;
+}
+
+.diff p .change-why,
+.diff p .change-links {
+  display: block;
+  margin-top: var(--sp-2);
+}
+
+.diff p .change-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+  align-items: center;
+}
+
+.diff mark {
+  background: var(--warn-soft);
+  color: inherit;
+  outline: 1px solid var(--warn);
+  border-radius: 2px;
+}
+
+.changes-count {
+  margin-bottom: var(--sp-1);
+}
+
 /* Filing reader: outline groups, search, cited passage, What changed side by side */
 
 .reader-tools {

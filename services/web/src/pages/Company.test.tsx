@@ -440,7 +440,7 @@ it("filings: form filters, 8-K items, the reader, and what changed", async () =>
   const diff = $(".diff")!;
   expect(diff.textContent).toContain("Risk Factors");
   expect(diff.textContent).toContain("1 new");
-  expect(diff.textContent).toContain("38 unchanged or minor, hidden");
+  expect(diff.textContent).toContain("37 unchanged or minor, hidden"); // unchanged already counts minor edits
   expect(diff.querySelector("p.new")?.textContent).toContain("Export controls");
   expect(diff.querySelector("p.rewritten ins")?.textContent).toBe("could ");
   expect(diff.querySelector("p.rewritten del")?.textContent).toBe("may ");
@@ -471,7 +471,9 @@ it("what changed says which filing it is, in words, and closes when a filter hid
   for (let i = 0; i < 2; i++) await act(async () => {});
   expect(row.className).toBe("sel");
   const head = () => [...container.querySelectorAll(".card-h")].find((h) => h.textContent?.startsWith("What changed"))!;
-  expect(head().textContent).toMatch(/10-[KQ] filed .*, against the previous 10-[KQ]/);
+  expect(head().textContent).toMatch(/10-Q filed Aug 26, 2026/);
+  // F3: the comparison is the card's first line, in words (this mock is an older API's answer)
+  expect(container.querySelector(".changes-basis")?.textContent).toBe("Compared with the 10-Q filed May 28, 2026.");
   expect(head().querySelector(".sub")?.getAttribute("title")).toContain("Accession ");
   expect(head().querySelector(".mono")).toBeNull();
   await click(button("10-K"));

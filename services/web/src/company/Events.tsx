@@ -106,7 +106,7 @@ function EventRow({ companyId, e }: { companyId: string; e: FilingEvent }) {
       </div>
       {(e.announced ?? []).map((a) => (
         <p key={a.kind} className="event-announced" role="note">
-          <b>⚑ {ANNOUNCED_LABEL[a.kind] ?? a.kind}</b>, read from its Item {a.item} announcement
+          <b>⚑ {capital(ANNOUNCED_LABEL[a.kind] ?? a.kind)}</b>, read from its Item {a.item} announcement
           {e.items.some((i) => i.item === ANNOUNCED_ITEM[a.kind]) ? "" : ` (it has no Item ${ANNOUNCED_ITEM[a.kind]})`}: the words{" "}
           <mark>“{a.words}”</mark> in{" "}
           <a href={href({ view: "filing", companyId, accessionNo: e.accession_no, section: a.section_key, ...(a.citation.char_start !== undefined ? { at: a.citation.char_start } : {}) })}>
@@ -151,3 +151,5 @@ function EventRow({ companyId, e }: { companyId: string; e: FilingEvent }) {
     </li>
   );
 }
+
+const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);

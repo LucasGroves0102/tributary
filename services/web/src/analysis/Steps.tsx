@@ -12,6 +12,7 @@ import { stateOf } from "../workspaces/model";
 import type { ChartState } from "../chart/model";
 import { EarningsView } from "../company/Earnings";
 import { EventsCard } from "../company/Events";
+import { periodLabel } from "../company/changes";
 import { Changes, type Change, type ChangedSection } from "../company/Filings";
 import { Gate, Segments } from "../company/Tables";
 import { useLoad } from "../company/useLoad";
@@ -233,9 +234,12 @@ const changePassage = (companyId: string, c: Change, s: ChangedSection): Passage
   const cite = removed ? c.prior_citation : c.citation;
   const text = removed ? c.prior_text : c.text;
   if (!cite || !text) return null;
+  // F3: a 10-Q passage says which period it describes ("MD&A (6 months, year to date)")
+  const period = periodLabel(c.period);
+  const section = s.title ?? `Item ${s.section_key}`;
   return {
     text, companyId, accessionNo: cite.accession_no, form: cite.form, filed: cite.filed,
-    period: cite.period_of_report, section: s.title ?? `Item ${s.section_key}`, change: c.kind,
+    period: cite.period_of_report, section: period ? `${section} (${period})` : section, change: c.kind,
   };
 };
 
@@ -263,14 +267,14 @@ export function WhatChanged({ token, companyId, name, canReadFilings }: StepComm
             ))}
           </span>
         )}
-        <span className="sub">vs the previous filing of the same type · pin a paragraph to quote it in your thesis</span>
+        <span className="sub">pin a paragraph to quote it in your thesis</span>
       </div>
       <Gate load={index} name={name} what="Filings">
         {() => !shown ? (
           <p className="empty">No parsed 10-K or 10-Q for {name} yet, so there's nothing to compare.</p>
         ) : (
           <Changes key={shown.accession_no} token={token} companyId={companyId} accessionNo={shown.accession_no} name={name}
-            pin={(c, s) => {
+            form={shown.form} pin={(c, s) => {
               const p = changePassage(companyId, c, s);
               return p ? <PinButton compact what="passage" make={async () => quoteBlock(p)} /> : null;
             }} />
