@@ -653,7 +653,7 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
             "basis": body.basis, "view": body.view,
             "alignment": compiled.alignment, "as_of": _now(),
             "inputs": _inputs(a, companies),
-            "points": [_point(r, compiled.alignment) for r in rows],
+            "points": [_point(r, compiled.alignment, [i.ref for i in a.inputs]) for r in rows],
         }
 
     return app
@@ -671,19 +671,31 @@ def _inputs(a: Analysis, companies: dict[str | None, str | None]) -> list[dict]:
             for i, inp in enumerate(a.inputs)]
 
 
-def _point(r: dict, align: str) -> dict:
+def _point(r: dict, align: str, refs: list[str] | None = None) -> dict:
+    """One point with its inputs' provenance. `not_meaningful` (F7a, item 7): the reason an input
+    reads n/m by migration 035, the tables' rule, so a chart leaves a gap and says why instead of
+    plotting the raw ratio; with several inputs it names the input. `value` stays the exact
+    figure, so an older web app that ignores the field draws what it always drew."""
     year, quarter = divmod(r["period_key"], 4)
     prefix = "FY" if align == "fiscal" and r["fiscal_key"] else "CY"
     inputs = [{
         "input": x["input"], "period_start": x["period_start"], "period_end": x["period_end"],
         "value": x["value"], "value_source": x["value_source"],
+        **({"not_meaningful": x["not_meaningful"]} if x.get("not_meaningful") else {}),
         "citation": {"accession_no": x["accession_no"], "form": x["form"], "filed": x["filed"],
                      "source_accessions": x["source_accessions"],
                      "filing_url": filing_url(x.get("filer_cik"), x["accession_no"])},
         "freshness": {"filed": x["filed"], "ingested_at": x["ingested_at"]},
     } for x in r["inputs"]]
+    nm = next((x for x in r["inputs"] if x.get("not_meaningful")), None)
+    reason = None
+    if nm is not None:
+        ref = (refs or [])[nm["input"]] if nm["input"] < len(refs or []) else None
+        reason = nm["not_meaningful"] if not refs or len(refs) == 1 or ref is None \
+            else f"{ref}: {nm['not_meaningful']}"
     return {"period": f"{prefix}{year} Q{quarter + 1}", "period_key": r["period_key"],
             "period_end": r["period_end"], "value": r["value"], "inputs": inputs,
+            **({"not_meaningful": reason} if reason else {}),
             "source_accessions": sorted({a for x in r["inputs"] for a in x["source_accessions"]})}
 
 

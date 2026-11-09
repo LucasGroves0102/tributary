@@ -129,6 +129,10 @@ company_id of metrics written without a ticker.
   in the data is a gap. `view` picks quarter or TTM inputs; `ttm(...)` forces TTM inside it. The rows are
   also filtered on the input companies' ids as a bound array: `gold.financials` is a UNION
   view, and a company filter that arrives only through a join can't reach its indexes.
+- **n/m** (F7a): each input row carries migration 035's `gold.not_meaningful` reason, the tables'
+  rule, and a point built from one says `not_meaningful` (the reason; with several inputs, which
+  one: "PEP.operating_margin: ..."). `value` stays the exact figure, so an older web app draws what
+  it drew; the web app leaves the point as a gap and says why under the chart.
 - **Errors**: `{"code", "message", "pos", "length", "hint"}`. `validate` returns them with
   200 and `valid: false`; `evaluate` returns 422 (formula) or 403 (company) with
   `{"detail": {"errors": [...]}}`.

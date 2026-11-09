@@ -55,7 +55,8 @@ export function chartNotes(series: Series[], opts: {
   // what each series is missing against the chart's own axis
   const remarks: string[] = [];
   for (const s of plotted.filter(hasValues)) {
-    const at = ticks.map((t) => s.points.some((p) => p.key === t.key && p.y !== null));
+    // a point that reads n/m has its own sentence (series.ts notMeaningfulNote), not "no value"
+    const at = ticks.map((t) => s.points.some((p) => p.key === t.key && (p.y !== null || !!p.notMeaningful)));
     const first = at.indexOf(true);
     const last = at.lastIndexOf(true);
     const parts: string[] = [];

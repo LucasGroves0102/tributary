@@ -908,6 +908,9 @@ export interface FormulaPoint {
   period_end: string;
   /** exact decimal */
   value: string;
+  /** why the point reads n/m (migration 035, the tables' rule; F7a): drawn as a gap, the reason
+   * under the chart. Absent when it reads, and from an older API. */
+  not_meaningful?: string;
   inputs: {
     input: number;
     period_start: string | null;

@@ -26,7 +26,7 @@ export function DataNotes({ token, companyId, name, canReadFilings }: {
     <section className="card">
       <div className="card-h">
         <h2>Data notes</h2>
-        <span className="sub">newest first · gaps, restatements, splits, overlapping periods and freshness, from automated checks</span>
+        <span className="sub">what needs attention first, then the newest · gaps, restatements, splits, overlapping periods and freshness, from automated checks</span>
       </div>
       <Gate load={load} name={name} what="Data notes">
         {() => {

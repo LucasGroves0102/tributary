@@ -234,3 +234,22 @@ def test_validate_errors(client, token, formula, message, pos):
     body = r.json()
     assert not body["valid"]
     assert (body["errors"][0]["message"], body["errors"][0]["pos"]) == (message, pos)
+
+
+def test_a_point_built_from_a_ratio_that_reads_nm_says_why(client, token):
+    """F7a item 7: the chart's points carry the tables' n/m reading (migration 035) per input;
+    value stays the exact figure, so an older web app draws what it always drew."""
+    nm = {**ROW, "inputs": [{**ROW["inputs"][0],
+                             "not_meaningful": "revenue is under $100K, too small a base"},
+                            ROW["inputs"][1]]}
+    client.store.formula = lambda user_id, compiled: [nm]
+    one = evaluate(client, token, "bob", formula="PEP.revenue").json()["points"][0]
+    assert one["value"] == 1.8128
+    assert one["not_meaningful"] == "revenue is under $100K, too small a base"
+    assert one["inputs"][0]["not_meaningful"] == one["not_meaningful"]
+    assert "not_meaningful" not in one["inputs"][1]
+    two = evaluate(client, token, "bob", formula="PEP.revenue / KO.revenue").json()["points"][0]
+    assert two["not_meaningful"] == "PEP.revenue: revenue is under $100K, too small a base"
+    client.store.formula = lambda user_id, compiled: [ROW]
+    plain = evaluate(client, token, "bob", formula="PEP.revenue").json()["points"][0]
+    assert "not_meaningful" not in plain

@@ -7,7 +7,9 @@ or more than one company) the key is the calendar quarter of gold.financials' ca
 over calendar_primary rows only. If two rows of an input share a key, the latest period end wins.
 
 A lag of n quarters moves an input's rows to key + n. A point exists for each key where the
-expression is not NULL: a missing input or a division by zero (NULLIF) gives no point.
+expression is not NULL: a missing input or a division by zero (NULLIF) gives no point. Each
+input row carries `not_meaningful`, migration 035's reason a ratio can't be read (the tables'
+n/m); the route marks a point built from one (F7a, B5's charts plotted the raw ratio).
 The SQL text is built only from fixed fragments and input indexes; companies, metrics, spans,
 lags, constants and dates are all bind parameters. The keyed rows also filter on the input
 companies as a literal array so the filter reaches gold.financials' base tables.
@@ -54,6 +56,7 @@ keyed AS (
     SELECT DISTINCT ON (l.i, k) l.i, l.lag, k, f.period_start, f.period_end, f.value,
            f.value_source, f.accession_no, f.form, f.filed, f.source_accessions,
            f.ingested_at, f.fiscal_year IS NOT NULL AS fiscal_key,
+           gold.not_meaningful(l.metric, f.value, f.inputs) AS not_meaningful,
            (SELECT ff.cik FROM silver.financial_facts ff
             WHERE ff.accession_no = f.accession_no LIMIT 1) AS filer_cik
     FROM input l
@@ -75,7 +78,8 @@ points AS (
                'input', i, 'period_start', period_start, 'period_end', period_end,
                'value', value, 'value_source', value_source, 'accession_no', accession_no,
                'form', form, 'filed', filed, 'source_accessions', source_accessions,
-               'ingested_at', ingested_at, 'filer_cik', filer_cik) ORDER BY i) AS inputs,
+               'ingested_at', ingested_at, 'filer_cik', filer_cik,
+               'not_meaningful', not_meaningful) ORDER BY i) AS inputs,
            {pivots}
     FROM keyed
     GROUP BY k + lag

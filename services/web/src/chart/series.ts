@@ -29,6 +29,19 @@ export interface Point {
   /** an annual chart's latest point when it isn't a fiscal year end (F5): the trailing twelve months
    * to the newest quarter ("ttm"), or that quarter's balance ("quarter"). Drawn lighter, marked "*". */
   partial?: "ttm" | "quarter";
+  /** why the value isn't drawn: it reads n/m by the tables' rule (the API's reason, F7a) */
+  notMeaningful?: string;
+}
+
+/** "Operating margin reads n/m in FY2024 Q1 and FY2024 Q2 (revenue is under $100K, too small a
+ * base): left as gaps." for the points of a series the API marked not meaningful, else null. */
+export function notMeaningfulNote(name: string, points: Point[]): string | null {
+  const nm = points.filter((p) => p.notMeaningful);
+  if (!nm.length) return null;
+  const reasons = [...new Set(nm.map((p) => p.notMeaningful!))];
+  const when = nm.length <= 3 ? `in ${nm.map((p) => p.period).join(nm.length === 2 ? " and " : ", ")}` : `in ${nm.length} periods`;
+  const why = reasons.length === 1 ? reasons[0] : `${reasons[0]}, and ${reasons.length - 1} other reason${reasons.length > 2 ? "s" : ""}`;
+  return `${name} reads n/m ${when} (${why}): left as ${nm.length === 1 ? "a gap" : "gaps"}, as in the tables.`;
 }
 
 export interface Series {
@@ -90,13 +103,16 @@ export function toSeries(
         ...(companyId ? { companyId } : {}),
       });
     }
+    // a ratio that reads n/m in the tables (035) is a gap here too, never an absurd value (F7a)
+    const nm = typeof p.not_meaningful === "string" && p.not_meaningful ? p.not_meaningful : null;
     return {
       key: p.period_key,
       period: p.period,
       periodEnd: p.period_end,
-      y: Number.isFinite(y) ? y : null,
+      y: Number.isFinite(y) && !nm ? y : null,
       raw: p.value,
       sources: [...seen.values()],
+      ...(nm ? { notMeaningful: nm } : {}),
     };
   });
   // the year in progress: TTM to the newest quarter, or its balance when every input is one
@@ -120,6 +136,8 @@ export function toSeries(
     if (base !== null && base <= 0) note = `${name} can't be indexed: its first value in this range is zero or negative.`;
     else if (points.some((p) => p.y !== null && p.y < 0)) note = `${name} is below 0 where the value itself is negative: read those periods as losses, not as an index.`;
   }
+  const nm = notMeaningfulNote(name, points);
+  if (nm) note = note ? `${note} ${nm}` : nm;
   return { id: layer.id, name, unit, color: color % COLORS, type: layer.type, axis: layer.axis, points, ...(note ? { note } : {}) };
 }
 

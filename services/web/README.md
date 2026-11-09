@@ -851,7 +851,10 @@ zero. Whether a value is n/m, n/a or old is the database's call (migration 035),
 the screener, Peers, Compare, Key stats and Home can't disagree with the sort behind them; `readFigure`
 only words it. An n/m keeps its exact figure and reason in the hover. Ratios on negative equity (gold has
 no debt/equity or ROE row there) read n/m only where `/financials?readings=true` lists the period in
-`not_meaningful_periods`; the page never works out equity itself. An old figure (about a year or
+`not_meaningful_periods`; the page never works out equity itself. Charts read the same rule (F7a): a
+point `/v1/formulas/evaluate` marks `not_meaningful` is a gap, never the raw ratio (Triton's 1,047%
+operating margin), and the chart says under it which periods read n/m and why (`series.ts`
+`notMeaningfulNote`); the CSV keeps the exact figure. An old figure (about a year or
 more behind the company's latest period) shows dimmed with its date; one merely behind shows its date
 and still counts. Neither n/m, n/a nor old enters a median. A bank reads "n/a (bank)" for gross and
 operating margin, FCF, FCF margin, net debt, debt to equity and the current ratio whether or not it

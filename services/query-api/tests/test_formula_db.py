@@ -218,3 +218,24 @@ def test_crafted_formulas_never_reach_sql(conn, token):
         assert r.status_code == 422
     assert conn.execute("SELECT count(*) FROM gold.quarterly_financials"
                         " WHERE company_id = %s", (PEP,)).fetchone()[0] == 6
+
+
+def test_a_margin_that_reads_nm_in_the_tables_reads_nm_on_the_chart(conn, token):
+    """F7a item 7: gold.not_meaningful (035) per input row: an operating margin of 1,200% on
+    $50K of revenue is a gap with its reason on a chart, as in a table."""
+    conn.execute(
+        "INSERT INTO gold.derived_financials (company_id, span, metric, period_start, period_end,"
+        " value, unit, value_source, inputs, accession_no, form, filed, source_accessions,"
+        " ingested_at) VALUES (%s, 'quarter', 'operating_margin', '2025-03-23', '2025-06-14',"
+        " 12.0, 'ratio', 'computed', '{\"operating_income\": 600000, \"revenue\": 50000}',"
+        " '0000077476-25-000044', '10-Q', '2025-07-17', ARRAY['0000077476-25-000044'], now()),"
+        " (%s, 'quarter', 'operating_margin', '2025-06-15', '2025-09-06', 0.12, 'ratio',"
+        " 'computed', '{\"operating_income\": 2873000000, \"revenue\": 23937000000}',"
+        " '0000077476-25-000053', '10-Q', '2025-10-09', ARRAY['0000077476-25-000053'], now())",
+        (PEP, PEP))
+    r = evaluate(client_for(conn, Grants()), token, "f-bob", "PEP.operating_margin")
+    assert r.status_code == 200, r.text
+    by = {p["period_end"]: p for p in r.json()["points"]}
+    assert by["2025-06-14"]["not_meaningful"] == "revenue is under $100K, too small a base"
+    assert float(by["2025-06-14"]["value"]) == 12.0  # the exact figure is still there
+    assert "not_meaningful" not in by["2025-09-06"]
