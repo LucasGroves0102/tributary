@@ -6,8 +6,12 @@ import type { ExpectedFiling, ProjectState } from "../types";
 import { projectRows } from "./AnalysisHome";
 import { draftKey, restoreDraft } from "./bridge";
 import { numbersCharts } from "./charts";
+import { pinMenu } from "./Pin";
 import {
   appendToSection,
+  nextPillarName,
+  pillarsOf,
+  placePin,
   catalystLines,
   coreWritten,
   edgarFilingUrl,
@@ -151,6 +155,43 @@ describe("appendToSection", () => {
     expect(appendToSection("# T\n\nText.\n\n", "pillars", "P")).toBe("# T\n\nText.\n\n## Pillars\n\nP\n");
     expect(appendToSection("", "core", "C")).toBe("## Core thesis\n\nC\n");
     expect(appendToSection("```\n## Pillars\n```\n", "pillars", "P")).toBe("```\n## Pillars\n```\n\n## Pillars\n\nP\n");
+  });
+});
+
+describe("pinning under a chosen pillar (L5)", () => {
+  const doc = "# T\n\n## Pillars\n\n### Data center demand\n\nOne.\n\n### Margins hold\n\nTwo.\n\n## Catalysts\n\n- soon\n";
+
+  it("lists the pillars by their sub-headings, renamed ones included", () => {
+    expect(pillarsOf(doc)).toEqual(["Data center demand", "Margins hold"]);
+    expect(pillarsOf(thesisTemplate({ company: "X", catalysts: [] }))).toEqual(["Pillar 1"]);
+    expect(pillarsOf("# T\n\n## Pillars\n\nNo sub-headings.\n")).toEqual([]);
+    expect(pillarsOf("## Pillars\n```\n### not a pillar\n```\n")).toEqual([]);
+  });
+
+  it("puts a pin at the end of the chosen pillar, not the last one", () => {
+    expect(placePin(doc, { section: "pillars", pillar: "Data center demand" }, "[[embed:x]]")).toBe(
+      "# T\n\n## Pillars\n\n### Data center demand\n\nOne.\n\n[[embed:x]]\n\n### Margins hold\n\nTwo.\n\n## Catalysts\n\n- soon\n");
+    expect(placePin(doc, { section: "pillars", pillar: "Margins hold" }, "Y")).toBe(appendToSection(doc, "pillars", "Y"));
+  });
+
+  it("starts a new pillar after the others, named after the next free number", () => {
+    expect(placePin(doc, { section: "pillars", newPillar: true }, "Z")).toBe(
+      "# T\n\n## Pillars\n\n### Data center demand\n\nOne.\n\n### Margins hold\n\nTwo.\n\n### Pillar 3\n\nZ\n\n## Catalysts\n\n- soon\n");
+    expect(nextPillarName("## Pillars\n\n### Pillar 1\n\n### Pillar 2\n")).toBe("Pillar 3");
+    expect(nextPillarName("## Pillars\n\n### Pillar 2\n")).toBe("Pillar 3"); // never a second "Pillar 2"
+  });
+
+  it("the menu offers each pillar and a new one, the first the default; no pillars, Pillars itself", () => {
+    expect(pinMenu(["Data center demand", "Margins hold"]).slice(0, 4).map((m) => [m.text, m.hint ?? ""])).toEqual([
+      ["Pillars › Data center demand", "default"], ["Pillars › Margins hold", ""], ["Pillars › New pillar", ""], ["Core thesis", ""],
+    ]);
+    expect(pinMenu([])[0]).toMatchObject({ text: "Pillars", hint: "default", target: { section: "pillars" } });
+    expect(pinMenu([]).map((m) => m.target.section)).toEqual(["pillars", "core", "variant", "catalysts", "risks", "wrong", "kpis"]);
+  });
+
+  it("a pillar the text no longer has, or another section, goes where it did before", () => {
+    expect(placePin(doc, { section: "pillars", pillar: "Gone" }, "Q")).toBe(appendToSection(doc, "pillars", "Q"));
+    expect(placePin(doc, { section: "catalysts" }, "C")).toBe(appendToSection(doc, "catalysts", "C"));
   });
 });
 

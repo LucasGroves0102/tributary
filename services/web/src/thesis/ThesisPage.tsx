@@ -2,7 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState, type ChangeEvent, type Mut
 
 import type { Readable } from "../access";
 import { draftKey, restoreDraft, type StoredDraft, type ThesisHandle, type ThesisStatus } from "../analysis/bridge";
-import { appendToSection, hasOwnText } from "../analysis/project";
+import { hasOwnText, placePin } from "../analysis/project";
 import { ApiError, failureReason, itemVersion, itemVersions, openItem, screenerColumns, workspace as fetchWorkspace } from "../api";
 import { slug } from "../chart/export";
 import { catalog } from "../chart/metrics";
@@ -232,9 +232,9 @@ function ThesisEditor({ token, item, initial, items, saved, label, readable, onO
     if (!bridge) return;
     const handle: ThesisHandle = {
       itemId: item.item_id,
-      pin: async (section, block) => {
+      pin: async (target, block) => {
         const cur = latest.current;
-        const next = appendToSection(cur.markdown, section, block);
+        const next = placePin(cur.markdown, target, block);
         if (next.length > MAX_MARKDOWN) throw new Error(`A thesis holds up to ${MAX_MARKDOWN.toLocaleString("en-US")} characters.`);
         setMarkdown(next);
         if (cur.dirty) return "draft";
@@ -243,6 +243,7 @@ function ThesisEditor({ token, item, initial, items, saved, label, readable, onO
         setSavedAs(savedPrint(res.name, restoreThesis(res.state)));
         return "saved";
       },
+      markdown: () => latest.current.markdown,
       showQuote: (q) => showQuoteRef.current(q),
     };
     bridge.current = handle;

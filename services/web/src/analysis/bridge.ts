@@ -4,13 +4,15 @@
  * racing it, and reports its status (unsaved changes, the saved text) for the step markers
  * and the Monitor step's check button. */
 
-import type { SectionKey } from "./project";
+import type { PinTarget } from "./project";
 
 export interface ThesisHandle {
   itemId: string;
   /** appends `block` to a section: saved at once when there were no unsaved changes
    * ("saved"), else left in the editor as an unsaved change ("draft") */
-  pin: (section: SectionKey, block: string) => Promise<"saved" | "draft">;
+  pin: (target: PinTarget, block: string) => Promise<"saved" | "draft">;
+  /** the text being edited (unsaved changes included), for the pin menu's pillars */
+  markdown: () => string;
   /** marks a check's quote in the preview, or selects it in the editor */
   showQuote: (quote: string) => void;
 }

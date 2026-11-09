@@ -179,9 +179,10 @@ const pinTo = async (pin: HTMLButtonElement, section: string) => {
   await click(pin);
   const menu = container.querySelector<HTMLElement>(".pin-menu")!;
   expect([...menu.querySelectorAll("button")].map((b) => b.textContent)).toEqual([
-    "Pillars · default", "Core thesis", "Variant perception", "Catalysts", "Risks and mitigants", "What would prove me wrong", "KPIs to watch",
+    "Pillars › Pillar 1 · default", "Pillars › New pillar", "Core thesis", "Variant perception", "Catalysts", "Risks and mitigants",
+    "What would prove me wrong", "KPIs to watch",
   ]);
-  expect(document.activeElement).toBe(menu.querySelector("button")); // Pillars, the default, has focus
+  expect(document.activeElement).toBe(menu.querySelector("button")); // the first pillar, the default, has focus
   await click([...menu.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent?.startsWith(section))!);
 };
 
@@ -236,6 +237,28 @@ it("lists projects in the Analysis tab, and creates one from a readable company 
   const post = writes.find((w) => w.method === "POST" && w.path === "/v1/workspaces")!;
   expect(post.body).toEqual({ name: "Nvidia", project: { companyId: NVDA, peers: [AMD], notes: "", done: [] } });
   expect(window.location.hash).toMatch(/^#\/analysis\/dddddddd-[^/]+\/business$/);
+});
+
+it("L5: a company page's Start an analysis opens New analysis on that company, saying what an analysis is", async () => {
+  await render(`#/analysis?start=${AMD}`, 'form[aria-label="New analysis"]');
+  const form = container.querySelector<HTMLFormElement>('form[aria-label="New analysis"]')!;
+  expect(form.querySelector('input[aria-label="Company to analyse"]')).toBeNull(); // already chosen
+  expect(button("Start the analysis", form).disabled).toBe(false);
+  expect(form.textContent).toContain("seven guided steps");
+  expect(form.textContent).toContain("New thesis or New model is a single item in a folder");
+});
+
+it("L5: a pin chooses its pillar, or starts a new one", async () => {
+  await render(`#/analysis/${PID}/changes`, ".diff p.new");
+  await click(container.querySelector<HTMLButtonElement>(".diff p.new .pin-btn")!);
+  const menu = container.querySelector<HTMLElement>(".pin-menu")!;
+  await click([...menu.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === "Pillars › New pillar")!);
+  const put = writes.find((w) => w.method === "PUT" && w.path === `/v1/workspace-items/${THESIS_ID}`)!;
+  const md = String((put.body.state as { markdown: string }).markdown);
+  expect(md.indexOf("### Pillar 2")).toBeGreaterThan(md.indexOf("### Pillar 1"));
+  expect(md.indexOf("> Export controls")).toBeGreaterThan(md.indexOf("### Pillar 2"));
+  expect(md.indexOf("> Export controls")).toBeLessThan(md.indexOf("## Catalysts"));
+  expect(container.querySelector(".pin-toast")?.textContent).toContain("under Pillars, Pillar 2 (new)");
 });
 
 it("switches steps from the rail and the header's tabs without losing an unsaved thesis", async () => {

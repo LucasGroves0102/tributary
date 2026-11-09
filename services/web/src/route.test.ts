@@ -95,6 +95,7 @@ it("round-trips analysis routes and refuses odd ids and steps", () => {
     { view: "analysis", projectId: id, step: "model", itemId: item },
     { view: "analysis", projectId: id, step: "thesis", itemId: item },
     { view: "analysis", projectId: id, step: "monitor" },
+    { view: "analysis", start: "0001045810" },
   ];
   for (const r of routes) expect(parse(href(r))).toEqual(r);
   expect(href({ view: "analysis", projectId: id, step: "numbers" })).toBe(`#/analysis/${id}/numbers`);
@@ -102,6 +103,9 @@ it("round-trips analysis routes and refuses odd ids and steps", () => {
   expect(parse(`#/analysis/${id}/numbers/${item}`)).toEqual({ view: "analysis", projectId: id, step: "numbers" });
   expect(parse(`#/analysis/${id}/model/<img>`)).toEqual({ view: "analysis", projectId: id, step: "model" });
   expect(parse("#/analysis/..%2F..%2Fadmin")).toEqual({ view: "analysis" });
+  // L5: a company page starts an analysis of itself; anything but a CIK is no company
+  expect(href({ view: "analysis", start: "0001045810" })).toBe("#/analysis?start=0001045810");
+  expect(parse("#/analysis?start=NVDA")).toEqual({ view: "analysis" });
   expect(href({ view: "analysis", projectId: id, step: "numbers", itemId: item })).toBe(`#/analysis/${id}/numbers`);
 });
 

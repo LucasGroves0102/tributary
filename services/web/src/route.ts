@@ -68,7 +68,7 @@ export type Route =
   | { view: "model"; itemId: string }
   /** the Analysis tab: your projects (no projectId), or one project at a guided step (a model
    * or thesis step may name which of the project's items) */
-  | { view: "analysis"; projectId?: string; step?: ProjectStep; itemId?: string };
+  | { view: "analysis"; projectId?: string; step?: ProjectStep; itemId?: string; start?: string };
 
 /** Screens in the left nav: routes without parameters. */
 export type NavView = "home" | "analysis" | "companies" | "chart" | "compare" | "ask";
@@ -113,7 +113,11 @@ export function parse(hash: string): Route {
   if (view && SIMPLE.has(view)) return { view: view as "chart" | "ask" | "about" | "status" | "settings" };
   if (view === "explore") return { view: "companies" }; // links from before the v3 shell
   if (view === "analysis") {
-    if (!a || !ID.test(a)) return { view: "analysis" };
+    if (!a || !ID.test(a)) {
+      // "#/analysis?start=<company>": the projects list with New analysis open on that company (L5)
+      const start = new URLSearchParams(query).get("start");
+      return start && CIK.test(start) ? { view: "analysis", start } : { view: "analysis" };
+    }
     if (!b || !STEP_SET.has(b)) return { view: "analysis", projectId: a };
     const step = b as ProjectStep;
     return c && ITEM_STEPS.has(step) && ID.test(c) ? { view, projectId: a, step, itemId: c } : { view, projectId: a, step };
@@ -164,7 +168,7 @@ export function href(route: Route): string {
     case "workspace":
       return `#/workspace/${encodeURIComponent(route.workspaceId)}`;
     case "analysis":
-      if (!route.projectId) return "#/analysis";
+      if (!route.projectId) return route.start ? `#/analysis?start=${route.start}` : "#/analysis";
       return `#/analysis/${encodeURIComponent(route.projectId)}` +
         (route.step ? `/${route.step}` : "") +
         (route.step && route.itemId && ITEM_STEPS.has(route.step) ? `/${encodeURIComponent(route.itemId)}` : "");

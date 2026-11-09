@@ -24,7 +24,9 @@ import type { Saved } from "../workspaces/useSaved";
 import type { ThesisHandle, ThesisStatus } from "./bridge";
 import { PinButton, PinContext, type Pinning } from "./Pin";
 import {
-  appendToSection,
+  nextPillarName,
+  pillarsOf,
+  placePin,
   catalystLines,
   coreWritten,
   firstOpenStep,
@@ -40,7 +42,7 @@ import {
   toggleDone,
   workHint,
   type Facts,
-  type SectionKey,
+  type PinTarget,
 } from "./project";
 import { Business, Numbers, PeersStep, WhatChanged } from "./Steps";
 
@@ -200,28 +202,40 @@ function Project({ token, user, projectId, step: asked, itemId, saved, readable,
 
   /** The project's thesis, from the template (Catalysts prefilled with expected filings), with
    * `first` already pinned into it when the thesis is created for a pin. */
-  const createThesis = useCallback(async (first?: { section: SectionKey; block: string }) => {
+  const createThesis = useCallback(async (first?: { target: PinTarget; block: string }) => {
     const expected = await expectedFilingsOf(token, companyId, 4).then((r) => r.expected).catch(() => []);
     let markdown = thesisTemplate({ company: ticker !== name ? `${name} (${ticker})` : name, catalysts: catalystLines(expected) });
-    if (first) markdown = appendToSection(markdown, first.section, first.block);
+    if (first) markdown = placePin(markdown, first.target, first.block);
     const item = await saved.create("thesis", `${ticker} thesis`.slice(0, 120), thesisState({ companyId, markdown }), { workspaceId: projectId });
     reload();
     return item;
   }, [token, companyId, ticker, name, saved, projectId, reload]);
 
+  // the pillars a pin can go under: the editor's text (unsaved included), else the saved one, else
+  // the template's (a pin with no thesis yet starts it)
+  const thesisSaved = thesisStatus?.saved ?? null;
   const pinning: Pinning = useMemo(() => ({
-    pin: async (section, make, what) => {
-      const where = sectionOf(section).heading;
+    pillars: () => {
+      const handle = bridge.current;
+      if (!thesisId) return pillarsOf(thesisTemplate({ company: "", catalysts: [] }));
+      return pillarsOf(handle && handle.itemId === thesisId ? handle.markdown() : thesisSaved ?? "");
+    },
+    pin: async (target, make, what) => {
+      const section = target.section;
+      const heading = sectionOf(section).heading;
       try {
         const block = await make();
+        const current = !thesisId ? thesisTemplate({ company: "", catalysts: [] })
+          : bridge.current && bridge.current.itemId === thesisId ? bridge.current.markdown() : thesisSaved ?? "";
+        const where = target.pillar ? `${heading}, ${target.pillar}` : target.newPillar ? `${heading}, ${nextPillarName(current)} (new)` : heading;
         if (!thesisId) {
-          await createThesis({ section, block });
+          await createThesis({ target, block });
           setToast({ text: `Started your thesis from the template and pinned the ${what} under ${where}.`, thesis: true });
           return;
         }
         const handle = bridge.current;
         if (handle && handle.itemId === thesisId) {
-          const r = await handle.pin(section, block);
+          const r = await handle.pin(target, block);
           setToast({
             text: r === "saved" ? `Pinned the ${what} under ${where} in your thesis.`
               : `Added the ${what} under ${where} to your unsaved thesis; save it on the Thesis tab.`,
@@ -231,7 +245,7 @@ function Project({ token, user, projectId, step: asked, itemId, saved, readable,
           // the editor isn't loaded yet: write the saved text, then load the editor again
           const item = await getItem(token, thesisId);
           const md = typeof item.state.markdown === "string" ? item.state.markdown : "";
-          await saved.update(thesisId, { state: { ...item.state, markdown: appendToSection(md, section, block) } });
+          await saved.update(thesisId, { state: { ...item.state, markdown: placePin(md, target, block) } });
           setThesisEpoch((n) => n + 1);
           setToast({ text: `Pinned the ${what} under ${where} in your thesis.`, thesis: true });
         }
@@ -240,7 +254,7 @@ function Project({ token, user, projectId, step: asked, itemId, saved, readable,
         setToast({ text: `Couldn't pin it: ${e instanceof ApiError || e instanceof Error ? e.message : "try again"}.`, error: true });
       }
     },
-  }), [thesisId, createThesis, token, saved, itemsChanged]);
+  }), [thesisId, thesisSaved, createThesis, token, saved, itemsChanged]);
 
   const goStep = (s: ProjectStep) => go({ view: "analysis", projectId, step: s });
   const doneCount = STEPS.filter((s) => stepDone(s.key, project)).length;

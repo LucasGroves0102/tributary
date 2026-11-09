@@ -10,6 +10,7 @@ import type { CompanyTab } from "../route";
 import { ScopeContext, type Scope } from "../scope";
 import { clearNewest } from "../thesis/useRevisit";
 import type { ScreenerRow } from "../types";
+import type { Saved } from "../workspaces/useSaved";
 import { Company } from "./Company";
 
 vi.mock("../download", () => ({ download: vi.fn() }));
@@ -192,6 +193,32 @@ const $ = (sel: string) => container.querySelector<HTMLElement>(sel);
 const paths = () => vi.mocked(fetch).mock.calls.map(([u]) => new URL(String(u), "http://x"));
 const button = (text: string) => [...container.querySelectorAll("button")].find((b) => b.textContent === text)!;
 const click = (el: Element | null | undefined) => act(async () => (el as HTMLElement).click());
+
+it("L5: the header offers the analysis beside New thesis and New model, and the forms say which is which", async () => {
+  const PID = "22222222-2222-4222-8222-222222222222";
+  const savedWith = (workspaces: object[]) => ({ list: { state: "ok", workspaces }, version: 0 }) as unknown as Saved;
+  const show = async (saved: Saved) => {
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    await act(async () => root.render(
+      <Company token="t" companyId={NVDA} tab="overview" watched={false} onWatch={onWatch} onChart={onChart}
+        onChartMany={onChartMany} onAsk={onAsk} saved={saved} />,
+    ));
+    for (let i = 0; i < 3; i++) await act(async () => {});
+  };
+  await show(savedWith([]));
+  const start = [...container.querySelectorAll("a.btn")].find((a) => a.textContent === "Start an analysis")!;
+  expect(start.getAttribute("href")).toBe(`#/analysis?start=${NVDA}`);
+  expect(start.getAttribute("title")).toContain("New thesis and New model make a single item instead");
+  await click(button("New thesis"));
+  expect($("form.save-form")?.textContent).toContain("A thesis on its own, in a workspace");
+  expect($(".new-work-why a")?.getAttribute("href")).toBe(`#/analysis?start=${NVDA}`);
+  act(() => root.unmount());
+  await show(savedWith([{ workspace_id: PID, name: "Nvidia", created_at: "", updated_at: "", items: [],
+    project: { companyId: NVDA, peers: [], notes: "", done: [] } }]));
+  expect([...container.querySelectorAll("a.btn")].find((a) => a.textContent === "Open analysis")?.getAttribute("href")).toBe(`#/analysis/${PID}`);
+});
 
 it("heads the page with public metadata, the next expected filing and the tabs", async () => {
   await render();

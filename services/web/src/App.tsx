@@ -818,6 +818,7 @@ export function App(props: Props = {}) {
                 projectId={route.projectId}
                 step={route.step}
                 itemId={route.itemId}
+                start={route.start}
                 saved={saved}
                 readable={financialsFor}
                 label={companyShort}

@@ -4,7 +4,7 @@ import { failureReason } from "../api";
 import { CompanySearch } from "../components/CompanySearch";
 import { DEFAULT_HISTORY, DEFAULT_YEARS, modelState } from "../models/model";
 import { newModelAssumptions } from "../models/useHistory";
-import { go } from "../route";
+import { go, href } from "../route";
 import { thesisState } from "../thesis/model";
 import type { WrittenKind } from "../types";
 import { defaultWorkspace, ITEM_NAME_MAX, nameProblem, NEW_WORKSPACE, WORKSPACE_NAME_MAX } from "./model";
@@ -132,6 +132,13 @@ function NewWorkForm({ kind, token, saved, company: fixed, workspaceId, onDone }
             </>
           )}
         </>
+      )}
+      {fixed && (
+        <p className="faint small new-work-why">
+          A {LABEL[kind]} on its own, in a workspace. To work through {fixed.name} step by step (business, numbers, what
+          changed, peers, model, thesis, monitor) with the {LABEL[kind]} inside, <a href={href({ view: "analysis", start: fixed.id })}>start
+          an analysis</a> instead.
+        </p>
       )}
       {error && <p className="err small" role="alert">{error}</p>}
       <div className="row">

@@ -248,11 +248,70 @@ export function appendToSection(markdown: string, key: SectionKey, block: string
     const head = markdown.replace(/\s+$/, "");
     return `${head}${head ? "\n\n" : ""}## ${sectionOf(key).heading}\n\n${body.join("\n")}\n`;
   }
+  return insertAtEnd(lines, s, body);
+}
+
+/** `body` after the last text of a span, a blank line around it. */
+function insertAtEnd(lines: string[], s: Span, body: string[]): string {
   let at = s.end;
-  while (at > s.start + 1 && lines[at - 1]!.trim() === "") at--; // after the section's last text
+  while (at > s.start + 1 && lines[at - 1]!.trim() === "") at--; // after the span's last text
   const before = lines.slice(0, at);
   const after = lines.slice(s.end);
   return [...before, "", ...body, ...(after.length ? ["", ...after] : [""])].join("\n");
+}
+
+// --- pins: which pillar (L5) ---------------------------------------------------------------
+
+/** Where a pin goes: a section; under Pillars, one pillar (its sub-heading's text) or a new one. */
+export interface PinTarget {
+  section: SectionKey;
+  pillar?: string;
+  newPillar?: boolean;
+}
+
+/** The pillars of a thesis, each a sub-heading of its Pillars section, with where each runs. */
+function pillarSpans(lines: string[]): { name: string; level: number; span: Span }[] {
+  const s = findSection(lines, "pillars");
+  if (!s) return [];
+  const level = HEADING.exec(lines[s.start]!.trim())![1]!.length;
+  const heads: { name: string; level: number; at: number }[] = [];
+  let fence = false;
+  for (let i = s.start + 1; i < s.end; i++) {
+    if (/^\s*(```|~~~)/.test(lines[i]!)) fence = !fence;
+    const m = fence ? null : HEADING.exec(lines[i]!.trim());
+    if (m && m[1]!.length > level && m[2]!.trim()) heads.push({ name: m[2]!.trim(), level: m[1]!.length, at: i });
+  }
+  const top = Math.min(...heads.map((h) => h.level));
+  const pillars = heads.filter((h) => h.level === top);
+  return pillars.map((h, k) => ({ name: h.name, level: h.level, span: { start: h.at, end: pillars[k + 1]?.at ?? s.end } }));
+}
+
+/** The pillars a thesis has, in order ("Pillar 1", or what the user renamed them). */
+export const pillarsOf = (markdown: string): string[] =>
+  pillarSpans(markdown.replace(/\r\n?/g, "\n").split("\n")).map((p) => p.name);
+
+/** The next "Pillar N" no pillar has. */
+export function nextPillarName(markdown: string): string {
+  const names = new Set(pillarsOf(markdown).map((n) => n.toLowerCase()));
+  let n = names.size + 1;
+  while (names.has(`pillar ${n}`)) n++;
+  return `Pillar ${n}`;
+}
+
+/** `block` at a pin target: a section's end (appendToSection); a pillar's end, under its own
+ * sub-heading; or a new pillar ("### Pillar N", one level under Pillars) at the end of Pillars. A
+ * pillar the text no longer has goes at the end of Pillars. */
+export function placePin(markdown: string, target: PinTarget, block: string): string {
+  if (target.section !== "pillars" || (!target.pillar && !target.newPillar)) return appendToSection(markdown, target.section, block);
+  const lines = markdown.replace(/\r\n?/g, "\n").split("\n");
+  const body = block.trim().split("\n");
+  if (target.newPillar) {
+    const s = findSection(lines, "pillars");
+    const level = s ? HEADING.exec(lines[s.start]!.trim())![1]!.length + 1 : 3;
+    return appendToSection(markdown, "pillars", `${"#".repeat(Math.min(level, 6))} ${nextPillarName(markdown)}\n\n${block.trim()}`);
+  }
+  const p = pillarSpans(lines).find((x) => x.name === target.pillar);
+  return p ? insertAtEnd(lines, p.span, body) : appendToSection(markdown, "pillars", block);
 }
 
 // --- pins: filing passages ----------------------------------------------------------------

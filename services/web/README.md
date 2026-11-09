@@ -53,7 +53,7 @@ builder (each layer a `/v1/formulas/evaluate` request; plain SVG; CSV, SVG and P
 (an answer's figures not found in the data are named under it, each a button that scrolls to and
 flashes its mark in the answer: `components/FigureFlags.tsx`, the same in the check panel; a
 question that got no answer says it didn't count, after agent-api's `refunded` event);
-`#/compare` the comps table; `#/analysis` the Analysis tab (guided research projects, below); `#/about` says what Tributary covers and doesn't (no prices, consensus or
+`#/compare` the comps table; `#/analysis` the Analysis tab (guided research projects, below; `#/analysis?start=<company_id>` opens New analysis on that company, from the company page's "Start an analysis", which reads "Open analysis" when there is one: beside New thesis and New model, whose forms say a thesis or model there is a single item, without the steps); `#/about` says what Tributary covers and doesn't (no prices, consensus or
 transcripts; estimated dates; banks; EDGAR timing), linked from the sidebar footer and the
 assistant's empty state; `#/status` the data status page (`pages/Status.tsx`, `GET
 /v1/status/data`), in words an analyst or a reviewer reads, with every time in its zone: feed
@@ -404,10 +404,12 @@ per company, from its filings to a thesis that's checked after every filing. Rul
   next expected 10-Q/10-K dates, `/expected-filings?periods=4`, labelled estimated), Risks and
   mitigants, What would prove me wrong, KPIs to watch, each with its guidance as an HTML comment
   (invisible in the preview; DOMPurify drops comments). Theses outside projects are unchanged.
-- **Add to thesis** (`Pin.tsx`, a pushpin button with a menu of the thesis's sections, Pillars
-  first and focused; arrows, Escape): a chart or comps set is saved as an item of the project,
-  then its `[[embed:<id>]]` line goes at the end of the chosen section (`appendToSection`; a
-  missing section is added); a filing passage (Item 1, a what-changed paragraph; removed ones
+- **Add to thesis** (`Pin.tsx`, a pushpin button with a menu of where it goes: under Pillars each
+  pillar the thesis has, by its `###` sub-heading as the user named it, and "New pillar", the first
+  pillar focused as the default; then the other sections; arrows, Escape): a chart or comps set is
+  saved as an item of the project, then its `[[embed:<id>]]` line goes at the end of the chosen
+  pillar or section (`placePin`: a new pillar is `### Pillar N`, the next free number, after the
+  others; a missing section is added); a filing passage (Item 1, a what-changed paragraph; removed ones
   quote the earlier filing) goes in as a blockquote, escaped so it renders as written, with a
   citation line: form, the period it reports on ("10-Q for the quarter ended 2026-09-30", so
   six-month wording reads in its filing), filed date, section, and the accession linked to EDGAR

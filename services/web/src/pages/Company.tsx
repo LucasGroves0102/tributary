@@ -16,6 +16,7 @@ import { day } from "../format";
 import { COMPANY_TABS, go, href, type CompanyTab } from "../route";
 import { NewWork } from "../workspaces/NewWork";
 import type { Saved } from "../workspaces/useSaved";
+import { restoreProject } from "../analysis/project";
 
 interface Props {
   token: string;
@@ -123,6 +124,7 @@ export function Company({ token, companyId, tab, statements, watched, onWatch, o
             )}
             <button className="btn" onClick={() => go({ view: "compare", compare: { target: companyId } })}>Compare</button>
             <button className="btn" onClick={() => onAsk(`Summarize ${h.name}'s latest quarter.`)}>Ask</button>
+            {saved && row.access.includes("financials") && <AnalysisLink saved={saved} companyId={companyId} ticker={ticker} />}
             {saved && <NewWork token={token} saved={saved} company={{ id: companyId, name: ticker }} />}
           </div>
         </div>
@@ -147,5 +149,24 @@ export function Company({ token, companyId, tab, statements, watched, onWatch, o
       {tab === "peers" && <Peers token={token} companyId={companyId} name={h.name} onChart={onChartMany} />}
       {tab === "price" && <Price token={token} companyId={companyId} name={h.name} />}
     </div>
+  );
+}
+
+/** The two ways to start research, side by side where the user chooses (L5): an analysis (the
+ * guided project, its thesis and model inside it) or, beside it, a single thesis or model in a
+ * folder (NewWork). Opens the company's analysis if there is one. */
+function AnalysisLink({ saved, companyId, ticker }: { saved: Saved; companyId: string; ticker: string }) {
+  const list = saved.list.state === "ok" ? saved.list.workspaces : [];
+  const project = list.find((w) => restoreProject(w.project)?.companyId === companyId);
+  return project ? (
+    <a className="btn" href={href({ view: "analysis", projectId: project.workspace_id })}
+      title={`Your guided analysis of ${ticker}: business, numbers, what changed, peers, model, thesis and monitor`}>
+      Open analysis
+    </a>
+  ) : (
+    <a className="btn" href={href({ view: "analysis", start: companyId })}
+      title={`Seven guided steps for ${ticker} (business, numbers, what changed, peers, model, thesis, monitor), with its thesis and model inside. New thesis and New model make a single item instead.`}>
+      Start an analysis
+    </a>
   );
 }
