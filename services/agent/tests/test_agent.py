@@ -410,6 +410,31 @@ def test_financials_quarters_stay_within_the_schema():
                                                 "description": "default 4"}
 
 
+def test_null_or_wrong_numbers_are_a_validation_message_not_a_crash():
+    """F7a: the model sends null for "no preference"; int(None) raised a TypeError out of run()."""
+    api, seen = query_api(ok)
+    acc = "0001045810-26-000021"
+    assert api.run("get_section", {"company_id": NVDA, "section_key": "1A",
+                                   "max_chars": None})[1] is False
+    assert seen[-1].url.params["max_chars"] == "8000"
+    assert api.run("get_section", {"company_id": NVDA, "section_key": "1A",
+                                   "max_chars": 50000})[1] is False
+    assert seen[-1].url.params["max_chars"] == "20000"
+    assert api.run("search_filings", {"query": "x", "limit": None, "offset": None})[1] is False
+    assert dict(seen[-1].url.params) == {"q": "x", "limit": "10", "offset": "0"}
+    assert api.run("get_section_changes", {"company_id": NVDA, "accession_no": acc,
+                                           "max_changes": None})[1] is False
+    for name, args in (("get_section", {"company_id": NVDA, "section_key": "1A",
+                                        "max_chars": "lots"}),
+                       ("search_filings", {"query": "x", "limit": [3]}),
+                       ("get_section_changes", {"company_id": NVDA, "accession_no": acc,
+                                                "max_changes": "all"})):
+        before = len(seen)
+        content, is_error = api.run(name, args)
+        assert is_error and content.startswith(f"invalid call to {name}: "), content
+        assert "whole number" in content and len(seen) == before
+
+
 def test_section_changes_tool_validates_and_routes():
     api, seen = query_api(ok)
     acc = "0001045810-26-000021"

@@ -289,6 +289,8 @@ class QueryApi:
         """(tool_result content, is_error). Never raises for API errors: the model is told."""
         try:
             path, params = _route(name, args)
+            max_changes = (_whole(args, "max_changes", 20, MAX_CHANGES)
+                           if name == "get_section_changes" else 0)
         except (KeyError, ValueError) as e:
             return f"invalid call to {name}: {e}", True
         try:
@@ -298,7 +300,7 @@ class QueryApi:
         if r.status_code == 200:
             body = r.json()
             if name == "get_section_changes":
-                body = _first_changes(body, int(args.get("max_changes", 20)))
+                body = _first_changes(body, max_changes)
             if name == "get_material_changes":
                 body = _top_changes(body, args.get("max_changes", MATERIAL_CHANGES))
             if name == "get_earnings_release":
@@ -336,7 +338,7 @@ def _route(name: str, a: dict[str, Any]) -> tuple[str, dict]:
         return f"/v1/companies/{company()}/filings", {"limit": a.get("limit", 8)}
     if name == "get_section":
         key = section_key(a["section_key"])
-        params = {"max_chars": min(int(a.get("max_chars", 8000)), 20_000)}
+        params = {"max_chars": _whole(a, "max_chars", 8000, 20_000)}
         for k in ("form", "accession_no"):
             if a.get(k):
                 params[k] = a[k]
@@ -380,8 +382,8 @@ def _route(name: str, a: dict[str, Any]) -> tuple[str, dict]:
     if name == "get_events_since_report":
         return f"/v1/companies/{company()}/events", {}
     if name == "search_filings":
-        params = {"q": str(a["query"]), "limit": min(int(a.get("limit", 10)), 20),
-                  "offset": int(a.get("offset", 0))}
+        params = {"q": str(a["query"]), "limit": _whole(a, "limit", 10, 20),
+                  "offset": _whole(a, "offset", 0, 10_000)}
         if a.get("company_id"):
             params["company"] = company()
         if a.get("form"):
@@ -395,6 +397,18 @@ def _route(name: str, a: dict[str, Any]) -> tuple[str, dict]:
                 params[param] = a[arg]
         return "/v1/search", params
     raise ValueError(f"unknown tool {name}")
+
+
+def _whole(a: dict[str, Any], key: str, default: int, top: int) -> int:
+    """a[key] as a whole number, capped at `top`. Missing or null is the default: a model sends
+    null for "no preference", and int(None) was a TypeError the caller didn't catch."""
+    value = a.get(key)
+    if value is None:
+        return default
+    try:
+        return min(int(value), top)
+    except (TypeError, ValueError):
+        raise ValueError(f"{key} must be a whole number up to {top}") from None
 
 
 def _quarters(value: Any) -> int:
