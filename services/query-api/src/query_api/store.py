@@ -734,6 +734,33 @@ class Store:
             return {(r["accession_no"], r["section_key"]): r["text"] for r in cur.fetchall()
                     if (r["accession_no"], r["section_key"]) in pairs}
 
+    def kpi_sections(self, user_id: str, company_id: str, since: date, releases: list[str],
+                     limit: int) -> dict:
+        """What query_api.text_kpis reads (F8b, H11), under RLS on the section text (the
+        filings tier): the company's name, and its 10-K Items 1 and 7, 10-Q Part I Item 2 and
+        these earnings releases' EX-99.1 (EX-99, EX-99.01), filed on or after `since`, that
+        mention backlog or orders, newest first. One company and bounded (`releases` is the
+        route's newest few, `limit` sections), never a catalog's."""
+        with self._session(user_id) as cur:
+            cur.execute("SELECT name FROM silver.companies WHERE company_id = %s", (company_id,))
+            row = cur.fetchone()
+            cur.execute(
+                r"""
+                SELECT accession_no, form, filed, period_of_report, section_key, char_start,
+                       document_url, text
+                FROM gold.filing_sections
+                WHERE company_id = %(company)s AND filed >= %(since)s
+                  AND ((form = '10-K' AND section_key IN ('1', '7'))
+                       OR (form = '10-Q' AND section_key = 'I-2')
+                       OR (form = '8-K' AND accession_no = ANY(%(releases)s)
+                           AND section_key ~ '^EX-99(\.0?1)?$'))
+                  AND (text ILIKE '%%backlog%%' OR text ILIKE '%%orders%%')
+                ORDER BY filed DESC, accession_no, section_key
+                LIMIT %(limit)s
+                """, {"company": company_id, "since": since, "releases": releases,
+                      "limit": limit})
+            return {"name": row["name"] if row else None, "sections": cur.fetchall()}
+
     def filing_index(self, user_id: str, company_ids: list[str] | None, forms: list[str],
                      start: date | None, end: date | None, limit: int, offset: int,
                      sections_for: list[str] | None) -> list[dict]:

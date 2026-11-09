@@ -34,7 +34,9 @@ ROUTES = ["/v1/screener?limit=50", "/v1/screener?limit=50&access=financials",
           f"/v1/companies/{NVDA}/financials?quarters=120&callouts=true",
           f"/v1/companies/{NVDA}/components?metric=net_debt&period_end=2026-07-26",
           # F7b: one company's insider filings (#117)
-          f"/v1/companies/{NVDA}/insiders?limit=100"]
+          f"/v1/companies/{NVDA}/insiders?limit=100",
+          # F8b: one company's backlog and orders from its filings' text (H11)
+          f"/v1/companies/{NVDA}/text-kpis?years=15"]
 
 
 def meta(cid):
@@ -109,6 +111,9 @@ class RecordingStore:
 
     def answer_section_texts(self, *_):
         return {}
+
+    def answer_kpi_sections(self, *_):
+        return {"name": "NVIDIA CORP", "sections": []}
 
     def answer_peers(self, *_, **__):
         return []

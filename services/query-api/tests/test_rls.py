@@ -730,6 +730,26 @@ def test_insider_filings_respect_rls(client, token):
     assert visible(conn, "t-reader", "SELECT company_id FROM silver.insider_filings") == [(B,)]
 
 
+def test_text_kpis_respect_rls(client, token):
+    """F8b (H11): the backlog read from a 10-K's MD&A is section text, the filings tier; the
+    allow-all authorizer lets every call through, RLS alone hides B's and the free plan's."""
+    conn = client.app_conn
+    for cid in (A, B):
+        conn.execute(
+            "INSERT INTO silver.filing_sections (accession_no, section_key, parser, parser_version,"
+            " item, title, text, char_start, char_end) VALUES (%s, '7', 'python', 't', '7', 'MD&A',"
+            " 'Our backlog was $1.2 billion at December 31, 2025.', 100, 150)",
+            (f"{cid}-26-000002",))
+
+    def backlog(user, company):
+        r = client.get(f"/v1/companies/{company}/text-kpis", headers=token(user))
+        assert r.status_code == 200, r.text
+        return [(p["period_end"], p["value"]) for p in r.json()["metrics"]["backlog"]["points"]]
+
+    assert backlog("t-pro", A) == [("2025-12-31", 1.2e9)]
+    assert backlog("t-pro", B) == [] and backlog("t-free", A) == []
+
+
 def test_public_catalog_needs_a_user_id(client):
     open_catalog(client.app_conn, A, B)
     for user in (None, ""):

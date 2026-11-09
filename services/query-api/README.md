@@ -46,6 +46,7 @@ request parameters. Dev tokens: `make token USER=alice`.
 | `GET /v1/companies/{id}/components?metric=&period_end=&view=` | financials | what one figure is made of: a derived figure's inputs, a TTM's quarters, a sum's parts, and the tags, values and filings behind each ([Reported vs standardised](#reported-vs-standardised)) |
 | `GET /v1/companies/{id}/filings/{accession}/figures` | financials | what one filing itself says: its facts as gold reads them and the net debt, cash and investments and free cash flow computed from that filing alone; the thesis check's H2 guard reads it ([Reported vs standardised](#reported-vs-standardised)) |
 | `GET /v1/companies/{id}/insiders?limit=&before=` | filings | insider filings (Forms 3, 4, 5), newest first: owners and roles, each line's code (in words), shares, price, value and shares owned after, a per-filing summary ([Insider filings](#insider-filings)) |
+| `GET /v1/companies/{id}/text-kpis?years=` | filings | backlog, orders and order growth as the filings state them in words (MD&A, the 10-K's Item 1, earnings releases), each value with the passages that state it; `years` 1-15, default 10 ([Backlog and orders from the text](#backlog-and-orders-from-the-text)) |
 | `GET /v1/companies/{id}/segments?axis=&metric=&quarters=&view=&basis=&format=` | financials | values per segment member (business segment, geography, product/service, reconciliation), exact decimal strings, citation per value ([Segments](#segments)) |
 | `GET /v1/companies/{id}/filings?limit=&accession_no=` | filings | recent parsed filings (or one) and their section outline, no text |
 | `GET /v1/companies/{id}/filing-index?form=&from=&to=&limit=&offset=` | token | every filing in the SEC index (public metadata), newest first; `sections` count only where the caller can read filings (OpenFGA check, then RLS) |
@@ -1248,6 +1249,56 @@ transaction, `acquired_disposed`, `shares_after`, `direct_indirect`, `nature`, a
 price and underlying), and a `citation` to the filing on EDGAR. Numbers are exact decimal strings.
 Amendments are listed as filed, never netted. Not an agent tool (yet): the recorded suites are
 unchanged.
+
+## Backlog and orders from the text
+
+`GET /v1/companies/{id}/text-kpis` (F8b, H11; `text_kpis.py`, its docstring is the spec): figures a
+company states in words but doesn't tag in XBRL. `require(filings)` first (they are read from filing
+text), then, under RLS: the filing index's 10-K/10-Q period ends (`Store.periodic_reports`), its 8-Ks
+(`Store.company_8ks`; the newest 60 with Item 2.02 are earnings releases, each dated by the quarter it
+reports, as `/earnings` does), and `Store.kpi_sections`: the company's name and its 10-K Items 1 and 7,
+10-Q Part I Item 2 and those releases' EX-99.1 filed in the last `years`, that mention backlog or
+orders (at most 160 sections; one company, never a catalog's ids). Fixed rules, no model:
+
+- **Backlog**: a sentence whose subject is the company's ("Vertiv's estimated combined order backlog
+  was $15.0 billion and $7.2 billion as of December 31, 2025 and 2024, respectively"; "the dollar
+  amount of backlog believed to be firm was approximately $20.6 billion"; "Backlog totaled $109.6
+  billion"), or a table's "Total backlog" row (its first column, at the document's period end, when the
+  table states a scale in dollars, its header's first year is the period's and it isn't split into
+  funded and unfunded columns). A segment's backlog, funded or unfunded backlog, a part of it, a bound
+  ("more than $5 billion") and guidance are never read.
+- **Orders** for a quarter: "GE Vernova orders of $9.7 billion" in a 10-Q or earnings release that
+  names the quarter (a company subject: "Orders of $5.0 billion" under a segment's heading has none),
+  or a "Total orders" row of a three-months table. **Order growth**: "third quarter organic orders up
+  ~60% compared to prior year period", with `basis` organic or reported; never sequential or TTM.
+- Each value is kept only when its number as written is in its passage, and cites every passage that
+  states it (`sources`: written, sentence or table, the passage, a citation with offsets the reader
+  opens at). Dates the filings disagree on keep a table's total, then a company-wide subject, then the
+  figure more filings state, else they are left out; `conflicts` lists each.
+
+The answer has `metrics.{backlog, orders, orders_growth}` with `points` (values as numbers: dollars, or
+percentage points for growth) and never a `rows` or `sections` key (verify.py reads those). Not an
+agent tool: the recorded suites are unchanged. Cost: 70-150 ms of Python per company over five years
+of sections (CAT, 3.4M characters: 68 ms).
+
+Measured by hand on 2026-11-09, on production's sections (2021-2026), every kept value checked against
+its passage. Built on 21 companies: Vertiv, Caterpillar, GE Vernova, Boeing, Lockheed Martin, Eaton,
+Northrop Grumman, General Dynamics, RTX, Honeywell, Emerson, Rockwell, Parker-Hannifin, Flowserve,
+Hubbell, Xylem, Deere, and NVIDIA, Coca-Cola, Deckers, Sprouts (which state none): 174 values at 13
+companies (161 backlog, 1 orders, 12 order growth), all correct after the rules above; the errors found
+on the way, each now a rule and a test: General Dynamics' segment sentences (15 wrong values),
+Northrop's funded column (15), Emerson's table with last year first (5), Honeywell's segment "Orders
+grew 19%" (1), Vertiv's "as of the end of August" (1); and, caught as conflicts rather than kept,
+Xylem's comparative year-end figures dated at the quarter (9 quarters lost), RTX's segment paragraphs,
+Boeing's line broken mid-sentence, Quanta's "remaining performance obligations and backlog were".
+Then held
+out, untouched: Textron, Huntington Ingalls, L3Harris, GE Aerospace, AMETEK, Dover, ITT, PulteGroup,
+Apple, Pfizer, Wabtec, Cummins, Jacobs, Quanta, Trane: 88 backlog values at 7 companies, all correct;
+none at the other 8 (no backlog stated, or not in these ways: L3Harris, AMETEK). Recall is lower by
+design: Flowserve's identical total and segment sentences tie on 10 of 21 quarters (left out), Lockheed
+Martin's 2021-22 release tables have their scale note too far up, and orders and order growth are
+stated in many ways (ITT's "Q4 orders up 9% (10% organic)" has no year-on-year words): only Vertiv's
+and GE Vernova's wording is read today.
 
 ## Search
 

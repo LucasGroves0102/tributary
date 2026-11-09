@@ -54,6 +54,7 @@ from query_api.shapes import filing_url
 from query_api.shapes import period as _period
 from query_api.status import add_status_routes
 from query_api.store import QUERY_TIMEOUT, Store
+from query_api.text_kpis import add_text_kpi_routes
 from query_api.thesis_checks import ThesisChecks, add_thesis_check_routes
 from query_api.ui import add_ui_routes, today_eastern
 from query_api.views import Views, add_view_routes
@@ -242,6 +243,8 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
                      today=today or today_eastern)
     add_model_routes(app, store=store, current_user=current_user, require=require)
     add_insider_routes(app, store=store, current_user=current_user, require=require)
+    add_text_kpi_routes(app, store=store, current_user=current_user, require=require,
+                        today=today or today_eastern)
 
     add_workspace_routes(app, store=store, workspaces=workspaces, current_user=current_user)
     add_thesis_check_routes(app, checks=thesis_checks, current_user=current_user)
