@@ -44,6 +44,14 @@ also ship suspended; their comments in `values.yaml` describe the first run. So 
 and `section-index`, which read the crawled documents; on hermes both run hourly
 (`suspend: false` in the Flux release) since the crawl finished.
 
+`insiders-catchup` (doc-fetcher image, `doc-fetcher-insiders`, migration 059) runs daily at 08:45,
+after the nightly `submissions` load, and is not suspended: the same command as `insiders-backfill`
+over the last 7 days (`INSIDERS_DAYS`), so an insider filing the live doc-fetcher missed (an outage,
+a feed gap) is stored the next morning. Filings kept as failed in `ops.insider_queue` (gone, no XML,
+refused by Postgres) are never fetched again. `insiders-backfill` has a 17 h deadline (a 90-day run
+is 2 h with the bulk class idle, up to ~15 h beside the document crawl); one cut off loses nothing,
+the next run takes only what is still missing.
+
 `business-peers` (parser image, `parser-peers`, migration 047) runs weekly (Sundays 05:30) and is
 not suspended: it reads each company's latest 10-K Item 1 and replaces the peers-by-business tables
 in one transaction (79 s, 406 MB on 2026-11-09's 4,888 documents; limit 1 GiB). Until its first run
@@ -59,8 +67,11 @@ uses `postgres`, `app-postgres`, `openfga`, `jwt` (webhook signing secrets are d
 `webhooks`: HTTPS to public addresses only, under the code's own checks; no Kafka, no SEC. Its
 `PUBLIC_APP_URL` is where alert links point. Email stays off: setting `ALERT_SMTP_HOST`,
 `ALERT_SMTP_FROM` (and `ALERT_SMTP_USER` / `ALERT_SMTP_PASSWORD` from the secret) in its env would
-turn the SMTP provider on, but nothing is sent until users can verify an address. query-api also
-`uses: webhooks`, for the settings page's "Send a test".
+turn the SMTP provider on, but nothing is sent until users can verify an address. `allow-internet`
+opens port 443 only, so email also needs `alertEmail.enabled: true` (and `alertEmail.port`, 587 by
+default, equal to `ALERT_SMTP_PORT`): that renders `allow-smtp`, the SMTP port to public addresses
+for pods that `uses: email` (only the alerts job; `tests/check_alert_email.py` checks both renders
+in CI). query-api also `uses: webhooks`, for the settings page's "Send a test".
 
 `filing-facts` (facts-fetcher image, `facts-fetcher-filings`, migration 055) reads filings SEC
 companyfacts lacks from their own XBRL, daily at 09:30 once enabled (`uses: postgres, sec`: an
@@ -121,6 +132,7 @@ decides its environment variables, which Secret keys it can read, and its networ
 | `github` | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` (`github-client-id` / `github-client-secret`, both `optional: true`), `GITHUB_REDIRECT_URI` (`github.redirectUri`) | HTTPS to public addresses |
 | `market-data` | `DATA_CONNECTIONS_KEY` (`data-connections-key`, `optional: true`) | HTTPS to public addresses |
 | `webhooks` | | HTTPS to public addresses (users' alert webhooks: query-api's test send, the `alerts` job; query_api/webhooks.py refuses private addresses first) |
+| `email` | | SMTP (`alertEmail.port`, 587) to public addresses, only when `alertEmail.enabled` (the `alerts` job's email digest; off) |
 | `jwt` | `QUERY_API_JWT_SECRET` | |
 | `query-api` | `QUERY_API_URL` | |
 | `demo` | `DEMO_USERS` when `demo.enabled` (off on hermes: the named users are test personas); `DEMO_SANDBOX_*`, `DEMO_AGENT_*` when `demo.sandbox.enabled` | |

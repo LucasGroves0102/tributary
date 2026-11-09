@@ -647,10 +647,14 @@ filing first: form, company, filed date and period, an 8-K's items, a 10-K/10-Q'
 their change on a year earlier, your red lines on it (Clear / Crossed), and links to What changed
 (the company's Filings tab opened on that filing's comparison: `#/company/<id>/filings?changes=<accession>`),
 Earnings, the reader and EDGAR; opening the list marks what it shows read. Settings → Filing alerts
-(`AlertSettings.tsx`): 10-K / 10-Q / 8-K per followed company, saved at once; webhooks (the URL
+(`AlertSettings.tsx`): 10-K / 10-Q / 8-K per followed company, saved at once, and a 7.01 / 8.01
+column (8-Ks filed only under Regulation FD or Other events, off by default; disabled while 8-Ks
+are off) shown only when the API's settings list `other_8k_items`: an older API is sent the forms
+alone, so a save during a deploy never meets a strict refusal; webhooks (the URL
 typed once and cleared, shown masked; the API's refusal sentence for anything but https to a
 public address; the signing secret shown once with Copy, kept only in the component's state;
-Send a test, New secret, Remove, on/off; a demo sandbox is told webhooks need a permanent account)
+Send a test, New secret, Remove, on/off; a webhook the alerts job is leaving out after repeated
+stalls says until when, `stallNote`; a demo sandbox is told webhooks need a permanent account)
 and the delivery log in words ("Retrying: it answered 500; tried 2 times"); email says it isn't set up. `alerts/alerts.ts` only words what the API
 decided.
 

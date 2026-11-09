@@ -81,7 +81,7 @@ request parameters. Dev tokens: `make token USER=alice`.
 | `GET /v1/alerts/notifications?company_id=&limit=` | token, app DB (figures: financials now) | the caller's alerts, newest filing first: form, dates, an 8-K's items, a 10-K/10-Q's key figures and red-line results (stripped for a company the caller can no longer read), the filer's EDGAR link |
 | `POST /v1/alerts/notifications/read` | token, app DB | `{"ids": [...]}`, `{"company_id": ...}` or `{"all": true}`: marks the caller's own read |
 | `GET /v1/alerts/settings` | token, app DB | followed companies (watchlist, analysis projects) with the forms alerted, webhooks (URL masked, never the secret), whether email is on, the last check |
-| `PUT /v1/alerts/settings/{id}` | token, app DB | `{"forms": ["10-K", "10-Q", "8-K"]}` (any subset; `[]` = none) for one company |
+| `PUT /v1/alerts/settings/{id}` | token, app DB | `{"forms": ["10-K", "10-Q", "8-K"], "other_8ks": false}` (any subset; `[]` = none; `other_8ks`: 8-Ks under 7.01/8.01 alone alert too, absent = unchanged) for one company |
 | `GET /v1/alerts/red-lines?company_id=&evaluate=` | token, app DB (`evaluate`: financials on the company) | the caller's red lines; with `evaluate=true` each on the company's latest figures |
 | `POST /v1/alerts/red-lines` | token, app DB | `{company_id, label, formula, view, op, threshold}`: a formula-language rule (no ticker, printable ASCII, no control characters in the label), checked like a chart formula; at most 10 per company and 200 per user |
 | `DELETE /v1/alerts/red-lines/{rule}` | token, app DB | the caller's own; another's is the same 404 as none |
@@ -920,8 +920,10 @@ stripped without access, the webhook form refusing `http://169.254.169.254` and 
 before anything is stored, strict bodies), `test_alerts_db.py` (forced RLS on all six tables, binding
 the owner; one user can't read, mark, change, test, rotate, delete or see the deliveries of another's
 alerts and webhooks; the secret never in a later response or a log; the job end to end over a fake
-index: follow dates, forms, routine 8-Ks skipped, pending then ready with red lines, idempotent runs,
-retries after backoff, email only with a verified address), `test_alert_filings_db.py` (the job's
+index: follow dates, forms, routine 8-Ks skipped, 7.01/8.01-only 8-Ks only when asked, pending then
+ready with red lines, idempotent runs, retries after backoff, email only with a verified address,
+a stalled webhook not starving the user's others, stalls across runs, each user's fair share of the
+send budget), `test_alert_filings_db.py` (the job's
 index query as query_api without a user) and `test_alert_email.py`.
 
 ## Filing alerts
@@ -930,15 +932,24 @@ F6 (Phase 9 E, #154): when a company a user watches or analyses files a 10-K, a 
 with a material item, the user gets an alert in the app (the bell, the Alerts page, the Monitor
 step) and, if they add one, at a webhook (Discord, Slack or any https endpoint), with the key
 figures and their red lines evaluated on it. Rules are `alerts.py`'s docstring; storage is app
-migration 016 (owner-only, forced RLS, not streamed).
+migrations 016 and 017 (owner-only, forced RLS, not streamed).
 
 - **Who follows what.** The watchlist (from the day a company was added) and each analysis
   project's company (from the day the project was made). Per company the user can turn any of the
-  three forms off. Watching grants nothing: figures and red lines are read as the user, through
-  OpenFGA and RLS, or not at all (`figures_status: no_access`).
-- **What alerts.** Originals only. An 8-K alerts when any item isn't routine (5.07, 5.08 and 9.01
-  alone are; `events.ROUTINE`); its items come from the filing index, else the parsed item headings
-  (filings tier). A 10-Q or 10-K waits until gold has its figures (its recap cites the filing),
+  three forms off, and turn on 8-Ks under 7.01 / 8.01 alone (`other_8ks`). Watching grants nothing:
+  figures and red lines are read as the user, through OpenFGA and RLS, or not at all
+  (`figures_status: no_access`).
+- **What alerts.** Originals only. An 8-K alerts when it has a material item: results (2.02), a
+  deal, debt, leadership, an impairment, non-reliance, a delisting and so on. Routine items alone
+  never alert (5.07, 5.08, 9.01: `events.ROUTINE`), and by default neither do 8-Ks whose only items
+  are 7.01 (Regulation FD: presentations, press releases) and/or 8.01 (Other events): the owner's
+  default of 2026-11-09 (`OTHER_8K_ITEMS`). `PUT /v1/alerts/settings/{id}` with `"other_8ks": true`
+  turns those on for one company (app migration 017; absent from the body = unchanged, so an older
+  web app's save keeps it; settings answer `other_8k_items` so the web app knows it may offer the
+  choice). Rows saved before 017 read false. An 8-K that doesn't alert is kept `skipped` (never
+  shown; `detail.quiet` for a 7.01/8.01 one), so turning the choice on applies from then on. Its
+  items come from the filing index, else the parsed item headings (filings tier). A 10-Q or 10-K
+  waits until gold has its figures (its recap cites the filing),
   then shows revenue with its change on a year earlier, gross (else operating) margin, and diluted
   EPS (net income for a 10-K's year); after 3 days without them it shows without.
 - **Red lines.** A formula in the [formula language](#formulas) (catalog metrics, + - * /, lags,
@@ -968,17 +979,26 @@ migration 016 (owner-only, forced RLS, not streamed).
   loopback, link-local (169.254.169.254), shared, reserved, multicast, site-local, or an IPv6 form
   of one (mapped, NAT64, 6to4, Teredo), when saved and again before every send, and the request
   goes to the address just checked (no rebinding). Redirects are never followed. 3 s per socket
-  operation and a hard 8 s for the whole send (the exchange runs on a worker thread and the socket
-  is shut down at the deadline, so an endpoint trickling bytes can't hold a thread: a test does it
-  over a real socket), 16 KiB body, 4 KiB of the answer read; any failure is a short code. Each request is signed: `X-Tributary-Signature: v1=` HMAC-SHA256 of
+  operation and a hard 8 s for the whole send, the name's lookup included (it all runs on a worker
+  thread and the socket is shut down at the deadline, so a slow resolver or an endpoint trickling
+  bytes can't hold the job: tests do both, one over a real socket; past the deadline nothing is
+  connected or sent, `dns_timeout` if the name hadn't resolved), 16 KiB body, 4 KiB of the answer
+  read; any failure is a short code. Each request is signed: `X-Tributary-Signature: v1=` HMAC-SHA256 of
   `timestamp.body` with the webhook's secret, which is derived from the JWT secret, the webhook id
   and a random salt (never stored, shown once on create or rotate, never logged; rotating the JWT
   secret changes them all). The URL is stored (forced RLS) and returned masked. Delivery log with
   retries after 5 min, 30 min, 2 h and 6 h, then failed; errors are codes. The job sends after
-  every user's alerts are made, users in a random order, 10 deliveries per user per run, a webhook
-  that times out or can't be reached skipped for the rest of the run, nothing started after 240 s:
-  a slow or hostile endpoint delays only its owner. Each send is recorded as soon as it's made,
-  and a retry sends figures only while the user can still read the company (layer 1 again).
+  every user's alerts are made, users in a random order, each with a fair share of the 240 s
+  budget (what's left over the users left, so time one doesn't use goes to the next), 10
+  deliveries per user per run taken in turns across the user's webhooks (one webhook's backlog
+  can't fill the batch), nothing started after 240 s. A webhook that stalls (no answer in time, a
+  name that doesn't resolve or resolves too slowly, no connection, TLS) is skipped for the rest of
+  the run; after consecutive stalls it is left out of later runs for 30 min, 2 h, then 6 h each
+  (app migration 017, `stalls` / `stalled_until` on the webhook, shown on the settings page), and
+  anything it answers, a test that arrives or turning it off and on clears that; its deliveries
+  stay due. A slow, dead or hostile endpoint delays only its owner. Each send is recorded as soon
+  as it's made, and a retry sends figures only while the user can still read the company (layer
+  1 again).
   Making alerts also runs users in a random order within 240 s; a user not reached waits for the
   next run (the 3-day window covers it). Webhooks need a permanent account (GitHub or a
   password account): an anonymous demo sandbox gets a 403, so a visitor can't make the server post
@@ -987,6 +1007,8 @@ migration 016 (owner-only, forced RLS, not streamed).
 - **Email** (`alert_email.py`): a provider interface, off. `ALERT_SMTP_HOST` + `ALERT_SMTP_FROM`
   (any SMTP relay, TLS) turn a provider on in the job, but a user also needs an address they
   proved they own and none is stored yet, so nothing is sent; the settings say email isn't set up.
+  The network policy opens only 443, so SMTP also needs `alertEmail.enabled` in the Helm values
+  (`allow-smtp`, port 587 by default; deploy/helm/tributary README).
 
 ## Statement callouts
 
