@@ -327,6 +327,49 @@ class Store:
                         " ORDER BY metric, period_end DESC", (company_id, years))
             return cur.fetchall()
 
+    def model_inputs(self, user_id: str, company_id: str, metrics: list[str], quarters: int,
+                     recent: int, years: int, latest: list[str]) -> dict:
+        """What a model run reads (query_api.model_maths), in one session under RLS: TTM rows
+        (fiscal, `quarters` per metric), quarterly rows (`recent` per metric), the 10-K's
+        per-share figures (gold.annual_per_share, 036) and the latest reading of each `latest`
+        metric (gold.latest_reading, 035: value, date, status, reason). Rows carry filer_cik."""
+        rows = """
+            SELECT metric, period_start, period_end, fiscal_year, fiscal_quarter, value, unit,
+                   value_source, source_tag, accession_no, form, filed,
+                   (SELECT f.cik FROM silver.financial_facts f
+                    WHERE f.accession_no = q.accession_no LIMIT 1) AS filer_cik
+            FROM (
+                SELECT *, row_number() OVER (PARTITION BY metric ORDER BY period_end DESC)
+                FROM gold.financials
+                WHERE company_id = %s AND span = %s AND metric = ANY(%s)
+            ) q
+            WHERE row_number <= %s
+            ORDER BY metric, period_end DESC
+            """
+        with self._session(user_id) as cur:
+            cur.execute(rows, (company_id, "ttm", metrics, quarters))
+            ttm = cur.fetchall()
+            cur.execute(rows, (company_id, "quarter", metrics, recent))
+            by_quarter = cur.fetchall()
+            cur.execute("SELECT * FROM gold.annual_per_share(%s, %s)"
+                        " ORDER BY metric, period_end DESC", (company_id, years))
+            annual = cur.fetchall()
+            cur.execute(
+                """
+                SELECT m.metric, x.period_end, x.value, x.accession_no, x.form, x.filed,
+                       x.status, x.reason,
+                       (SELECT f.cik FROM silver.financial_facts f
+                        WHERE f.accession_no = x.accession_no LIMIT 1) AS filer_cik
+                FROM silver.companies c
+                CROSS JOIN LATERAL gold.latest_period(c.company_id) lp
+                CROSS JOIN unnest(%s::text[]) AS m(metric)
+                CROSS JOIN LATERAL gold.latest_reading(c.company_id, 'quarter', m.metric,
+                                                       c.sic, lp.latest) x
+                WHERE c.company_id = %s
+                """, (latest, company_id))
+            readings = {r["metric"]: r for r in cur.fetchall()}
+        return {"ttm": ttm, "quarters": by_quarter, "annual": annual, "latest": readings}
+
     def feed_status(self) -> dict:
         """When the newest filing was accepted by EDGAR and reached bronze (ops.feed_status,
         migration 026): public, no user."""

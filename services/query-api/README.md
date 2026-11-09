@@ -301,7 +301,8 @@ first) and `PUT /v1/recent/filings` (the reader records what you open; the newes
   (`test_workspaces_db.py` proves it as the table owner).
 - **Validated.** Each kind's state has a strict schema (unknown fields refused) mirroring the web
   app's state; names are 1-100 (workspace) / 1-120 (item) characters without control
-  characters; a state is at most 16,000 bytes of compact UTF-8 JSON (a thesis 120,000); item
+  characters; a state is at most 16,000 bytes of compact UTF-8 JSON (a thesis 120,000, a model
+  60,000: app migration 015); item
   create/save bodies over 160,000 bytes, other saved-work bodies over 32 KiB (or any without a
   Content-Length) are refused before they are read. Caps: 50 workspaces, 100 items per
   workspace, 500 items per user (409 beyond).
@@ -329,29 +330,80 @@ rename), owner-only and validated like every item:
   reports). Lines `[[embed:<item id>]]` draw another item of the same workspace in the web app;
   they aren't checked here (an embedded item may be deleted later) and the web app drops any
   that don't resolve. `GET /v1/workspaces/{id}` leaves a thesis's state out (null, like a
-  report's); `/v1/workspace-items/{id}` returns it. **Versions** (app migration 014): a save that
-  changes a thesis's state keeps the version it replaced (`item_versions`, in the same
-  transaction; the newest `MAX_VERSIONS` = 30 per thesis; a rename or a save that changes nothing
-  keeps none). `GET /v1/workspace-items/{id}/versions` lists them newest first without their text
-  (`version_id`, `name`, `saved_at`, `replaced_at`, `characters`), `GET
+  report's); `/v1/workspace-items/{id}` returns it. **Versions** (app migration 014; models too
+  since F2): a save that changes a thesis's or a model's state keeps the version it replaced
+  (`item_versions`, in the same transaction; the newest `MAX_VERSIONS` = 30 per item; a rename or
+  a save that changes nothing keeps none). `GET /v1/workspace-items/{id}/versions` lists them
+  newest first without their state (`version_id`, `name`, `saved_at`, `replaced_at`, `characters`
+  of a thesis's text, a model's forecast `years` and whether it had bear and bull `cases`), `GET
   /v1/workspace-items/{id}/versions/{version_id}` returns one with its state; restoring is the web
   app loading it into the editor, and saving it is an ordinary save. Owner-only like the item
-  (another user's is the same 404), forced RLS on `app.user_id`, deleted with the thesis.
+  (another user's is the same 404), forced RLS on `app.user_id`, deleted with the item.
 - **`model`** (`ModelState`): `{companyId, historyYears (3-10, default 8), assumptions: [{growth,
   margin, note?}] (1-10)}`, growth -100..1000 and operating margin -1000..100, in percent; notes
   up to 500 characters (blank ones dropped). Optional `scenarios: {bear?, bull?}`, each a list
   of the same per-year assumptions for exactly as many years as `assumptions`, which is the
   **base** case (a model saved before scenarios is base only and validates unchanged); the
-  thesis check reads the base case only. Only the assumptions are stored: the web app reads
-  the history from `/v1/companies/{id}/financials?view=ttm` as the viewer, so a model of a
-  company you can't read draws nothing (the financials route answers 403 as always).
+  thesis check reads the base case only. F2 adds, all optional so a model saved before
+  validates and saves unchanged: per year `nonOperating` (interest and other, % of revenue,
+  -100..100), `taxRate` (-100..100), `shareChange` (diluted shares, % a year, -50..100) and
+  `fcfMargin` (-1000..100), absent meaning the default from history; `ytd: true` (year 1 is the
+  current fiscal year's reported quarters plus the remainder, its growth and margin the
+  remainder's); `adjustments` (up to 20 `{name (1-80), fy, quarter (1-4), kind: one_off |
+  acquired, amount (USD)}`, the user's own one-offs and acquired revenue); `price` (`{value > 0,
+  date}`, a price per share the user typed). Numbers in these are JSON numbers (a string or a
+  `"yes"` is refused). Only what the user typed is stored: every run reads the history again
+  ([Models](#models-one-copy-of-the-maths)), as the caller, so a model of a company you can't
+  read draws nothing (403 as always).
 
 Both grant nothing (a company id, the user's text and numbers). A thesis can be checked by the
 assistant ([Thesis checks](#thesis-checks)). Reports never include them:
 `ReportItem` still accepts only charts, comps and screens, and agent-api's report writer skips
-them. Tests: `test_workspaces.py` (states, sizes, bodies, scenarios, projects, another user's
-thesis, model or project is a 404 for every route), `test_workspaces_db.py` (forced RLS as the
-table owner, the 128 KiB check for theses only, projects and their 16 KiB check).
+them. Tests: `test_workspaces.py` (states, sizes, bodies, scenarios, F2's fields, model
+versions, projects, another user's thesis, model or project is a 404 for every route),
+`test_workspaces_db.py` (forced RLS as the table owner, the 128 KiB check for theses, 64 KiB for
+models, a full model's versions, projects and their 16 KiB check).
+
+## Models: one copy of the maths
+
+`POST /v1/companies/{id}/model` (`model_api.py`) runs a model: the body is a model item's state
+(`ModelState` above, strict; its `companyId` must be the path's), the answer everything the model
+page shows. The maths exist only here, in `model_maths.py`, whose docstring is the spec: the web
+app's model page and thesis embeds, agent-api's thesis check, and later MCP all call this route
+(before F2 they were two hand-kept copies, the web's `models/model.ts` and agent-api's
+`model_stats.py`). `require(financials)` comes first (the same 403 for any company you can't
+read), then `Store.model_inputs` reads in one session under RLS: TTM rows (40 quarters) and
+quarterly rows (12) of revenue, operating income, pretax income, income tax, net income,
+operating cash flow, capex, free cash flow, buybacks and diluted weighted shares; the 10-K's EPS
+and diluted shares (`gold.annual_per_share`, 036); the latest net debt and shares outstanding
+with their readings (`gold.latest_reading`, 035). A run stores nothing; bodies over 128 KiB are
+refused before they are read.
+
+The answer: `history` (fiscal years: reported and adjusted operating income and margin, interest
+and other, tax rate, net income, the 10-K's diluted EPS and shares, share change, operating cash
+flow, capex, FCF and its margin, buybacks, each figure's filing), `ttm` (the latest TTM when it
+isn't a fiscal year end), `current` (the current fiscal year's reported quarters and the same
+quarters a year earlier), `stats` and `run_rate` (B2 and B7's, unchanged), and per case (`bear`,
+`base`, `bull`; bear and bull `preview`ed from the base case until the user adds them) the
+`defaults` (what Reset sets, per year) and the projected `years` (revenue, growth, organic growth,
+operating income reported and adjusted, margin, pretax and net income, shares, EPS and its
+growth, FCF; which rates were `defaulted`; for a `ytd` year 1 its `actual` and `remainder`). The
+base case also has the B2 `check` and `user_set` the thesis check reads. With a `price`,
+`valuation`: market cap (price x latest shares outstanding), net debt with its date and reading,
+EV (only when net debt is current or merely behind; `ev_note` says why not: `old`, `absent`, ...)
+and P/E, EV/Revenue, EV/EBIT and FCF yield for every history year, the TTM and each case's years;
+`"n/m"` over losses.
+
+Measured on the real inputs in `tests/fixtures/model` (production answers of 2026-11-09):
+Vertiv's FY2026 is Q1-Q3 reported ($10.24B, 39.3% over the same nine months) plus a Q4 whose
+default grows Q4 FY2025's $2.88B at that 39.3%, at Q4 FY2025's margin moved by this year's
+change so far (23.3%); Deckers' FY2027 is H1 reported plus H2, with diluted shares down 8.4% a
+year (FY2027 Q2 against FY2026 Q2) as the default share change, and a $46M one-off in Q2 FY2027
+taking the year-to-date margin from 21.8% to 19.9%; Deckers' latest net debt reading is from
+2014 (`old`), so its EV multiples stay blank with that reason. B2 and B7's shared cases
+(`fixtures/model/b2-b7-cases.json`) give the same statistics, flags, run rates, defaults and
+`user_set` as before. Tests: `test_model_maths.py`, `test_model_api.py` (403 first and the same
+for any company, strict states, body cap), `test_rls.py` (the Store read under RLS alone).
 
 ## Reports
 

@@ -33,6 +33,7 @@ from query_api.formula import (
     to_dict,
 )
 from query_api.github import Accounts, GitHub, GitHubConfig, add_github_routes, is_github_user
+from query_api.model_api import add_model_routes
 from query_api.notes import add_notes_routes
 from query_api.password_accounts import PasswordAccounts, add_password_routes
 from query_api.passwords import is_password_user
@@ -227,6 +228,7 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
                      readable=readable)
     add_event_routes(app, store=store, current_user=current_user, require=require,
                      today=today or today_eastern)
+    add_model_routes(app, store=store, current_user=current_user, require=require)
 
     add_workspace_routes(app, store=store, workspaces=workspaces, current_user=current_user)
     add_thesis_check_routes(app, checks=thesis_checks, current_user=current_user)

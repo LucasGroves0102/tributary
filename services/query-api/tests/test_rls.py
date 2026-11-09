@@ -322,6 +322,27 @@ def test_earnings_text_respects_rls(events, token):
     assert quarter("t-free", A)["outlook"] == []
 
 
+def test_model_runs_read_only_what_rls_allows(client, token):
+    """F2: POST /v1/companies/{id}/model reads gold through Store.model_inputs under RLS; with
+    layer one allowing everything, an ungranted company or user still reads no rows."""
+    store = Store(OneConnection(client.app_conn))
+
+    def inputs(user, company):
+        return store.model_inputs(user, company, ["revenue", "net_margin"], 40, 12, 12,
+                                  ["net_debt", "shares_outstanding"])
+
+    mine = inputs("t-free", A)
+    assert [r["metric"] for r in mine["quarters"]] == ["revenue"]
+    assert [r["metric"] for r in mine["ttm"]] == ["net_margin"]
+    for user, company in (("t-free", B), ("t-nobody", A)):
+        hidden = inputs(user, company)
+        assert hidden["ttm"] == hidden["quarters"] == hidden["annual"] == []
+        assert all(r["value"] is None for r in hidden["latest"].values())
+    state = {"companyId": B, "ytd": True, "assumptions": [{"growth": 5, "margin": 10}]}
+    r = client.post(f"/v1/companies/{B}/model", json=state, headers=token("t-free"))
+    assert r.status_code == 200 and r.json()["history"] == [] and r.json()["base_fy"] is None
+
+
 def test_metric_list_matches_database(client):
     served = client.get("/v1/metrics").json()
     with psycopg.connect(DSN) as conn:
