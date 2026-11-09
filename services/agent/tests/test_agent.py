@@ -451,3 +451,43 @@ def test_search_tool_routes_filters():
                                         "from": "2026-01-01", "to": "2026-12-31"}
     content, is_error = api.run("search_filings", {"query": "x", "filed_from": "last year"})
     assert is_error and len(seen) == 2
+
+
+def test_earnings_and_events_tools_validate_and_route():
+    api, seen = query_api(ok)
+    for bad in ({"company_id": "../me"}, {"company_id": NVDA, "quarters": None},
+                {"company_id": NVDA, "quarters": "latest"}):
+        content, is_error = api.run("get_earnings_release", bad)
+        assert is_error and content.startswith("invalid call")
+    assert api.run("get_events_since_report", {"company_id": "1045810/x"})[1] is True
+    assert seen == []
+    for asked, sent in ((None, "1"), (3, "3"), (9, "4"), (0, "1")):
+        args = {"company_id": NVDA} if asked is None else {"company_id": NVDA, "quarters": asked}
+        assert api.run("get_earnings_release", args)[1] is False
+        assert seen[-1].url.path == f"/v1/companies/{NVDA}/earnings"
+        assert dict(seen[-1].url.params) == {"quarters": sent}
+    assert api.run("get_events_since_report", {"company_id": NVDA})[1] is False
+    assert seen[-1].url.path == f"/v1/companies/{NVDA}/events" and not seen[-1].url.params
+    for name in ("get_earnings_release", "get_events_since_report"):
+        schema = next(t for t in TOOLS if t["name"] == name)["input_schema"]
+        assert schema["required"] == ["company_id"]
+
+
+def test_earnings_tool_keeps_long_tables_to_their_citation():
+    """A release's reconciliation tables can run to many thousand characters: whole up to
+    ADJUSTMENT_CHARS a quarter, then heading and citation only (get_section reads the rest)."""
+    table = {"kind": "reconciliation", "heading": "Reconciliation", "text": "x" * 4000,
+             "citation": {"accession_no": "0001045810-26-000073", "section_key": "EX-99.1"}}
+
+    def earnings(request):
+        return httpx.Response(200, json={"quarters": [
+            {"outlook": [{"text": "y" * 9000}], "adjustments": [dict(table), dict(table)]}]})
+
+    api, _ = query_api(earnings)
+    content, is_error = api.run("get_earnings_release", {"company_id": NVDA})
+    [quarter] = json.loads(content)["quarters"]
+    first, second = quarter["adjustments"]
+    assert not is_error and len(quarter["outlook"][0]["text"]) == 9000  # outlook stays whole
+    assert first["text"] == "x" * 4000 and "omitted" not in first
+    assert second["text"] is None and "get_section" in second["omitted"]
+    assert second["citation"]["section_key"] == "EX-99.1"

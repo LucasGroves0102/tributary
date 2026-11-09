@@ -124,16 +124,20 @@ refute (figures, growth, margins, segment mix, what management said, risks, even
 forecasts and valuation views are unverifiable. At most 20 claims, the most material first.
 2. Check each with the tools: get_financials (view ttm for annual or trailing figures), \
 list_filings, get_section (MD&A "7" or "I-2", risk factors "1A" or "II-1A"), \
-get_section_changes, search_filings. Status: supported (the data agrees), contradicted (the \
+get_section_changes, search_filings, get_earnings_release (what the latest release says: its \
+outlook and management's adjustments), get_events_since_report (8-Ks filed after the latest \
+10-K or 10-Q period end). Status: supported (the data agrees), contradicted (the \
 data disagrees: say what it shows), unverifiable (an opinion, or not in the data). A \
 supported or contradicted claim cites the filing it rests on: its accession number from a tool \
 result, and the section key for text or the figure for a number.
 3. For each model in <check_data>, one or two sentences per forecast year on its growth and \
 margin against the history given there (use its CAGR, average and range as given; don't \
 recompute them), citing MD&A or results that bear on it. Flagged years matter most.
-4. Up to 5 material points from the company's latest 10-K or 10-Q that the thesis doesn't \
-address: new or rewritten risk factors (get_section_changes), MD&A trends. Each cites its \
-filing and section.
+4. Up to 5 material points the thesis doesn't address, from the company's latest 10-K or 10-Q \
+(new or rewritten risk factors with get_section_changes, MD&A trends), its latest earnings \
+release (the outlook it states, its adjustments: get_earnings_release) and its 8-Ks since that \
+report's period end (deals, new debt, impairments, leadership changes: \
+get_events_since_report). Each cites its filing and section.
 5. Call submit_check once with all of it, then reply with one short line.
 
 Quote each claim exactly as the thesis writes it: one sentence or phrase, copied character for \
@@ -153,6 +157,9 @@ leave out, the claim is contradicted or unverifiable; say what's missing. Never 
 supported when the filing you cite shows something else.
 - Call a risk factor or disclosure new or rewritten only when get_section_changes shows it new \
 or rewritten in that filing.
+- A balance-sheet figure as of the latest report's period end (cash, debt, net debt, assets, \
+equity) is out of date when get_events_since_report lists it under stale: say so and cite the \
+event. Never compute a figure after the event; the filings don't give it.
 - In <check_data>, a forecast year with user_set false holds Tributary's default (the run rate \
 fading to the long run), not a number the user chose. Say the user hasn't set it; never call it \
 reasonable, supported or inside history because it matches history: a default does by \

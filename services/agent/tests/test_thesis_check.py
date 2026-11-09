@@ -385,7 +385,9 @@ def test_prompt_injection_in_the_thesis_does_not_widen_the_scope():
                  tool_use("t2", "list_filings", {"company_id": "0000789019"}),
                  tool_use("t3", "search_filings", {"query": "bob workspace"}),
                  tool_use("t4", "get_section", {"company_id": "0000320193",
-                                                "section_key": "7"})),
+                                                "section_key": "7"}),
+                 tool_use("t6", "get_earnings_release", {"company_id": MSFT}),
+                 tool_use("t7", "get_events_since_report", {"company_id": "0000320193"})),
         response("tool_use", tool_use("t5", "submit_check", {
             "summary": "Checked.", "claims": [], "assumptions": [], "not_mentioned": []})),
         response("end_turn", text("Done.")))
@@ -816,3 +818,12 @@ def test_the_check_data_says_which_years_the_user_set(monkeypatch):
     assert [f["user_set"] for f in model["forecast"]] == [False, False, True]
     assert (model["ttm_growth_pct"], model["ttm_margin_pct"]) == (10.0, 10.0)
     assert "user_set false" in CHECK_RULES
+
+
+def test_the_check_reads_the_release_and_the_events_since_the_report():
+    """C11: the fact that changed tester 1's thesis (an acquisition after the quarter end) came
+    only from the check; the rules now send it to the events and the release, and say what a
+    stale balance-sheet figure means."""
+    assert "get_events_since_report" in CHECK_RULES and "get_earnings_release" in CHECK_RULES
+    assert "under stale: say so and cite the" in CHECK_RULES
+    assert "Never compute a figure after the event" in CHECK_RULES

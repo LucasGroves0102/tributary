@@ -15,7 +15,8 @@ from typing import Any
 from tributary_agent.agent import Agent, Answer
 
 TOOL_TIER = {"get_financials": "financials", "list_filings": "filings", "get_section": "filings",
-             "get_section_changes": "filings", "search_filings": "filings"}
+             "get_section_changes": "filings", "search_filings": "filings",
+             "get_earnings_release": "filings", "get_events_since_report": "filings"}
 ACCESSION = re.compile(r"\b\d{10}-\d{2}-\d{6}\b")
 COMPANY_IN_RESULT = re.compile(r'"company_id":"(\d{10})"')
 

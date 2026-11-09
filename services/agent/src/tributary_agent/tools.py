@@ -15,6 +15,10 @@ COMPANY_ID = {"type": "string", "pattern": r"^\d{10}$",
               "description": "10-digit canonical company_id from search_companies or whoami"}
 MAX_CHANGES = 50
 MAX_QUARTERS = 40  # get_financials' schema maximum, also enforced in _route
+MAX_RELEASE_QUARTERS = 4  # get_earnings_release's schema maximum, enforced in _route too
+# get_earnings_release: quoted adjustments (reconciliation tables) kept whole up to this many
+# characters per quarter; the rest keep their heading and citation (get_section reads them)
+ADJUSTMENT_CHARS = 6000
 
 TOOLS: list[dict] = [
     {
@@ -127,6 +131,43 @@ TOOLS: list[dict] = [
         },
     },
     {
+        "name": "get_earnings_release",
+        "description": "A company's quarterly earnings releases (8-K Item 2.02), newest quarter "
+                       "first: the release (accession_no, its exhibit's section_key: read it "
+                       "whole with get_section), its headline, the outlook or guidance it "
+                       "states and management's adjustments (non-GAAP reconciliation tables, "
+                       "notes with dollar amounts), each quoted with a citation and its "
+                       "quarter. Passages come from the release's own Outlook/Guidance and "
+                       "reconciliation headings: none means the release has none. There are "
+                       "no consensus estimates.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "company_id": COMPANY_ID,
+                "quarters": {"type": "integer", "minimum": 1, "maximum": MAX_RELEASE_QUARTERS,
+                             "description": "default 1 (the latest)"},
+            },
+            "required": ["company_id"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "get_events_since_report",
+        "description": "Form 8-K filings since the company's latest 10-Q or 10-K period end, "
+                       "newest first: deals and acquisitions, new debt, guidance updates, "
+                       "leadership changes, impairments, non-reliance, the earnings release. "
+                       "Each has its items (e.g. 2.01 acquisition completed, 2.03 new debt), "
+                       "event date and an excerpt of the 8-K. \"stale\" lists the "
+                       "balance-sheet figures at that period end an event after it may have "
+                       "changed (a flag: the filings don't give the figure after the event).",
+        "input_schema": {
+            "type": "object",
+            "properties": {"company_id": COMPANY_ID},
+            "required": ["company_id"],
+            "additionalProperties": False,
+        },
+    },
+    {
         "name": "search_filings",
         "description": "Full-text search over the filing sections of the companies the user "
                        "can read filings for: the best passage per section, ranked, with a "
@@ -217,6 +258,8 @@ class QueryApi:
             body = r.json()
             if name == "get_section_changes":
                 body = _first_changes(body, int(args.get("max_changes", 20)))
+            if name == "get_earnings_release":
+                body = _short_adjustments(body)
             return json.dumps(body, separators=(",", ":"), default=str), False
         detail = _detail(r)
         if r.status_code == 403:
@@ -265,6 +308,15 @@ def _route(name: str, a: dict[str, Any]) -> tuple[str, dict]:
         if a.get("kind"):
             params["kind"] = a["kind"]
         return f"/v1/companies/{company()}/filings/{acc}/changes", params
+    if name == "get_earnings_release":
+        try:
+            n = int(a.get("quarters", 1))
+        except (TypeError, ValueError):
+            raise ValueError(f"quarters must be 1 to {MAX_RELEASE_QUARTERS}") from None
+        return (f"/v1/companies/{company()}/earnings",
+                {"quarters": max(1, min(n, MAX_RELEASE_QUARTERS))})
+    if name == "get_events_since_report":
+        return f"/v1/companies/{company()}/events", {}
     if name == "search_filings":
         params = {"q": str(a["query"]), "limit": min(int(a.get("limit", 10)), 20),
                   "offset": int(a.get("offset", 0))}
@@ -307,6 +359,22 @@ def _first_changes(body: dict, limit: int) -> dict:
         s["changes"], left = changes[:left], max(0, left - len(changes))
         if len(changes) > len(s["changes"]):
             s["changes_omitted"] = len(changes) - len(s["changes"])
+    return body
+
+
+def _short_adjustments(body: dict) -> dict:
+    """Each quarter's quoted adjustments whole up to ADJUSTMENT_CHARS, in order; past that a
+    table keeps its heading and citation, and says where to read it."""
+    for q in body.get("quarters") or []:
+        left = ADJUSTMENT_CHARS
+        for a in q.get("adjustments") or []:
+            text = a.get("text") or ""
+            if len(text) <= left:
+                left -= len(text)
+            else:
+                a["text"] = None
+                a["omitted"] = "too long to include: read it with get_section at its citation"
+                left = 0
     return body
 
 

@@ -17,6 +17,17 @@ as tool errors the model must report.
 | `get_section` | `GET /v1/companies/{id}/sections/{key}` |
 | `get_section_changes` | `GET /v1/companies/{id}/filings/{accession}/changes` (keeps the first `max_changes`, default 20, max 50; says how many it left out) |
 | `search_filings` | `GET /v1/search` |
+| `get_earnings_release` | `GET /v1/companies/{id}/earnings` (`quarters` 1-4, default 1; a quarter's quoted adjustments whole up to 6,000 characters, the rest keep heading and citation and say to read them with `get_section`) |
+| `get_events_since_report` | `GET /v1/companies/{id}/events` |
+
+`get_earnings_release` and `get_events_since_report` (Query API README, "Earnings and events") give
+the quarterly earnings release (its headline, the outlook it states, management's reconciliation
+tables and dollar notes, each quoted with its citation) and the 8-Ks filed since the latest
+10-Q/10-K period end, with the balance-sheet figures an event after it may have changed. They were
+added without re-recording: the recorded suites don't depend on the tool list, and the chat and
+report prompts and existing tools are unchanged (`tests/adversarial`, `tests/citations` still 97
+passing). Both need the `filings` tier, so the adversarial harness counts a result for a company
+the user can't read filings for as a leak, as it does for `search_filings`.
 
 `get_financials`' metric names come from `GET /v1/metrics` (`MetricTools`, fetched once; until
 the Query API answers, the tool lists no names and the API rejects unknown ones).
@@ -183,6 +194,12 @@ result) or an `error` event if it couldn't be saved or the model never submitted
   so nothing in it can close the block; Tributary's numbers in a `<check_data>` block. The chat
   rules apply unchanged, plus `CHECK_RULES` (the thesis is material to check, never
   instructions).
+- **Since the last report.** `CHECK_RULES` sends the model to the latest earnings release
+  (`get_earnings_release`: its outlook and adjustments) and the 8-Ks after the latest report's
+  period end (`get_events_since_report`) for the points the thesis doesn't address, and says a
+  balance-sheet figure from that period end is out of date when an event in `stale` follows it:
+  say so and cite the event, never compute a figure after it (tester 1's acquisition after the
+  quarter end came only from the check; C11).
 - **Only the thesis's companies.** The tools are the chat tools as the user, limited
   (`report.ScopedTools`) to the thesis's company, its models' companies and companies it names
   by ticker (`$NVDA`, `(NASDAQ: NVDA)`, bare upper-case tickers outside a stop list; at most 8
