@@ -1,6 +1,6 @@
-"""A bank's own lines (migration 048) through bronze -> silver -> gold on real Postgres: net interest
-income, noninterest income and expense, the provision, loans, deposits, CET1 and the efficiency
-ratio. Skipped unless TEST_DATABASE_URL is set; rolled back."""
+"""A bank's own lines (migration 048) through bronze -> silver -> gold on real Postgres: net
+interest income, noninterest income and expense, the provision, loans, deposits, CET1 and the
+efficiency ratio. Skipped unless TEST_DATABASE_URL is set; rolled back."""
 
 import json
 import os
@@ -53,7 +53,8 @@ def payload():
     g |= instant("FinancingReceivableExcludingAccruedInterestAfterAllowanceForCreditLoss", 9000)
     g |= instant("Deposits", 12000)
     g |= instant("CommonEquityTierOneCapitalRatio", 0.118, unit="pure")
-    return json.dumps({"cik": int(BANK), "entityName": "Test Bank", "facts": {"us-gaap": g}}).encode()
+    doc = {"cik": int(BANK), "entityName": "Test Bank", "facts": {"us-gaap": g}}
+    return json.dumps(doc).encode()
 
 
 @pytest.fixture
@@ -93,7 +94,8 @@ def test_efficiency_ratio_is_expense_over_net_revenue(bank):
     q = gold(bank, "efficiency_ratio")
     assert q[date(2025, 3, 31)] == round(Decimal(90) / 150, 6)
     assert q[date(2025, 12, 31)] == round(Decimal(105) / 190, 6)
-    assert gold(bank, "efficiency_ratio", "ttm") == {date(2025, 12, 31): round(Decimal(390) / 680, 6)}
+    assert gold(bank, "efficiency_ratio", "ttm") == {
+        date(2025, 12, 31): round(Decimal(390) / 680, 6)}
     (inputs,), = bank.execute(
         "SELECT inputs FROM gold.derived_financials WHERE company_id = %s AND span = 'ttm'"
         " AND metric = 'efficiency_ratio'", (BANK,)).fetchall()

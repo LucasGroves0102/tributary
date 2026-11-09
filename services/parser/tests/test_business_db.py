@@ -52,7 +52,7 @@ def store(c, key, v, form="10-K", filed=None):
                                           filed or "2026-02-20"))
     c.execute("INSERT INTO silver.filing_sections (accession_no, section_key, parser,"
               " parser_version, item, title, text, char_start, char_end) VALUES (%s, '1', 'rust',"
-              " 'x', '1', %s, %s, 0, %s)", (v["accession_no"], title, text, len(text)))
+              " 'x', '1', %s, %s, 1000, %s)", (v["accession_no"], title, text, 1000 + len(text)))
 
 
 def rows(c, sql, *args):
@@ -76,7 +76,7 @@ def test_run_writes_profiles_peers_and_mentions(conn):
                                       " gold.business_mentions WHERE company_id = %s"
                                       " AND named_id = %s", vrt, etn)
     text = (FIX / "vrt.txt").read_text()
-    assert "Eaton" in text[start:end]
+    assert "Eaton" in text[start - 1000:end - 1000]  # document offsets: the section starts at 1000
     # a second run replaces everything (same answer, no duplicates)
     again = b.run(conn)
     assert again == counts

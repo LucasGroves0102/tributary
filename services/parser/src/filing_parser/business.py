@@ -24,7 +24,7 @@ Spec (the Query API's peer ranking reads what this writes; query_api/peers.py ha
 5. Competitors named. Sentences of Item 1 that mention competition (`compet`) are searched for
    other companies' names (`Names`: SEC names and former names, normalised like
    silver.normalize_name; short or common single words never count). Each hit is stored with the
-   sentence's offsets in the section text, to cite.
+   sentence's offsets in the document's text (like silver.filing_sections' char_start), to cite.
 
 Everything is replaced in one transaction per run, so readers see the old or the new answer.
 Cost, measured on hermes' Item 1 texts of 2026-11-09 loaded into a local Postgres (the read alone
@@ -368,8 +368,10 @@ class Mention:
     char_end: int
 
 
-def mentions(company_id: str, text: str, names: Names, own: Iterable[str] = ()) -> list[Mention]:
-    """Spec 5: other companies named in a sentence about competition, with its offsets."""
+def mentions(company_id: str, text: str, names: Names, own: Iterable[str] = (),
+             base: int = 0) -> list[Mention]:
+    """Spec 5: other companies named in a sentence about competition, with its offsets (+ base:
+    where the text starts in the document)."""
     skip = set(own) | {company_id}
     out: list[Mention] = []
     for start, end in sentences(text):
@@ -377,7 +379,7 @@ def mentions(company_id: str, text: str, names: Names, own: Iterable[str] = ()) 
         if not _COMPETE.search(s):
             continue
         for named in sorted(names.find(s) - skip):
-            out.append(Mention(company_id, named, start, end))
+            out.append(Mention(company_id, named, base + start, base + end))
     return out
 
 
@@ -429,20 +431,22 @@ SELECT company_id, alias FROM silver.company_aliases WHERE alias_type = 'ticker'
 """
 
 
-def texts(conn, docs: Sequence[Doc], batch: int = FETCH_BATCH) -> Iterator[tuple[Doc, str]]:
-    """Each document's Item 1 (first TEXT_CHARS characters), fetched by primary key in batches."""
+def texts(conn, docs: Sequence[Doc],
+          batch: int = FETCH_BATCH) -> Iterator[tuple[Doc, str, int]]:
+    """Each document's Item 1 (first TEXT_CHARS characters) and where the section starts in the
+    document's text, fetched by primary key in batches."""
     for i in range(0, len(docs), batch):
         part = docs[i:i + batch]
         rows = conn.execute(
-            "SELECT accession_no, parser, left(text, %s) FROM silver.filing_sections"
+            "SELECT accession_no, parser, char_start, left(text, %s) FROM silver.filing_sections"
             " WHERE (accession_no, parser) IN (SELECT * FROM unnest(%s::text[], %s::text[]))"
             "   AND section_key = '1'",
             (TEXT_CHARS, [d.accession_no for d in part], [d.parser for d in part])).fetchall()
-        by_key = {(a, p): t for a, p, t in rows}
+        by_key = {(a, p): (t, base) for a, p, base, t in rows}
         for d in part:
-            t = by_key.get((d.accession_no, d.parser))
-            if t is not None:
-                yield d, t
+            found = by_key.get((d.accession_no, d.parser))
+            if found is not None:
+                yield d, found[0], found[1]
 
 
 @dataclass
@@ -461,11 +465,13 @@ class Inputs:
     tickers: dict[str, list[str]]
 
 
-def compute(read: Callable[[Sequence[Doc]], Iterable[tuple[Doc, str]]], inputs: Inputs) -> Result:
-    """Two passes over the documents (spec 1-5); nothing written. `read` yields (doc, text)."""
+def compute(read: Callable[[Sequence[Doc]], Iterable[tuple]], inputs: Inputs) -> Result:
+    """Two passes over the documents (spec 1-5); nothing written. `read` yields (doc, text) or
+    (doc, text, where the section starts in the document's text: mentions are stored as document
+    offsets, like a section's own char_start, so the reader opens at them)."""
     vocab = Vocabulary()
     t0 = time.monotonic()
-    for _, text in read(inputs.docs):
+    for _, text, *_ in read(inputs.docs):
         vocab.add(terms(text))
     vocab.close()
     log.info("pass 1: %d documents, %d usable terms, %.0f s", vocab.docs, len(vocab.names),
@@ -477,10 +483,10 @@ def compute(read: Callable[[Sequence[Doc]], Iterable[tuple[Doc, str]]], inputs: 
     vectors: dict[str, dict[int, float]] = {}
     found: list[Mention] = []
     kept: list[Doc] = []
-    for d, text in read(inputs.docs):
+    for d, text, *base in read(inputs.docs):
         own = own_words(by_company.get(d.company_id, []), inputs.tickers.get(d.company_id, []))
         vectors[d.company_id] = vector(terms(text), vocab, own)
-        found.extend(mentions(d.company_id, text, names))
+        found.extend(mentions(d.company_id, text, names, base=base[0] if base else 0))
         kept.append(d)
     log.info("pass 2: %d vectors, %d competitor mentions, %.0f s", len(vectors), len(found),
              time.monotonic() - t0)

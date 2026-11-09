@@ -8,7 +8,8 @@
 --   gold.business_peers     its NEIGHBOURS (60) most similar companies, cosine similarity of the
 --                           two term vectors, and the shared terms that add the most
 --   gold.business_mentions  other companies its Item 1 names in a sentence about competition,
---                           with the sentence's offsets in silver.filing_sections' text
+--                           with the sentence's offsets in the document's text (as
+--                           silver.filing_sections' char_start/char_end, so the reader opens there)
 --
 -- Access: all three derive from Item 1 text, so they read like it (`filings`). A peer row needs
 -- both companies readable: its terms are words of both texts. Same policy form as 030 (a single
@@ -47,7 +48,7 @@ CREATE TABLE gold.business_mentions (
     named_id     text NOT NULL,          -- the company named
     accession_no text NOT NULL,
     section_key  text NOT NULL,
-    char_start   int  NOT NULL,          -- the sentence, in that section's text
+    char_start   int  NOT NULL,          -- the sentence, in the document's text
     char_end     int  NOT NULL,
     PRIMARY KEY (company_id, named_id, char_start)
 );
