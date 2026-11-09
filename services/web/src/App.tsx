@@ -74,6 +74,7 @@ import { Recent } from "./workspaces/Recent";
 import { SaveBar } from "./workspaces/SaveBar";
 import { useSaved } from "./workspaces/useSaved";
 import { WorkspaceTree } from "./workspaces/WorkspaceTree";
+import { UndoDeletes } from "./workspaces/Actions";
 
 const DRAWER_KEY = "tributary.assistant";
 
@@ -893,6 +894,7 @@ export function App(props: Props = {}) {
         )}
       </div>
       {help && <ShortcutSheet onClose={() => setHelp(false)} />}
+      <UndoDeletes saved={saved} />
       {palette !== null && (
         <Palette
           key={palette}

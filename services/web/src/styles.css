@@ -2287,6 +2287,30 @@ button.chip:disabled {
   border-radius: var(--radius);
 }
 
+/* deleted workspaces and items waiting out their undo window (workspaces/Actions UndoDeletes, #158):
+   on document.body, at the foot of the window, above the page and the assistant panel */
+.undo-stack {
+  position: fixed;
+  left: 50%;
+  bottom: var(--sp-7);
+  transform: translateX(-50%);
+  z-index: 60;
+  display: grid;
+  gap: var(--sp-3);
+  width: max-content;
+  max-width: calc(100vw - 32px);
+}
+
+.undo-stack .undo-note {
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+  box-shadow: 0 6px 18px -8px var(--edge-shadow);
+}
+
+.undo-stack .undo-note.failed {
+  color: var(--neg);
+}
+
 .th-sort {
   border: 0;
   padding: 0;

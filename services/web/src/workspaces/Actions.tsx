@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import { failureReason } from "../api";
 import type { SavedItem } from "../types";
 import { ITEM_NAME_MAX, nameProblem, WORKSPACE_NAME_MAX } from "./model";
-import type { Saved } from "./useSaved";
+import { UNDO_MS, type Saved } from "./useSaved";
 
 /** A name being edited in place: Enter saves, Escape cancels, a bad name is refused before the API. */
 export function NameInput({
@@ -72,7 +72,7 @@ export function ConfirmDelete({ text, onYes, onNo }: { text: string; onYes: () =
     <div className="sheet-overlay" onClick={(e) => e.target === e.currentTarget && onNo()} onKeyDown={onKey}>
       <div className="card ws-confirm" role="alertdialog" aria-modal="true" aria-label={text}>
         <p>{text}</p>
-        <p className="faint small">This can't be undone.</p>
+        <p className="faint small">You can undo it for {UNDO_MS / 1000} seconds.</p>
         <div className="row">
           <span className="grow" />
           <button ref={del} className="btn danger" onClick={onYes}>
@@ -83,6 +83,31 @@ export function ConfirmDelete({ text, onYes, onNo }: { text: string; onYes: () =
           </button>
         </div>
       </div>
+    </div>,
+    document.body,
+  );
+}
+
+/** Deletes waiting out their undo window (#158), and one that failed once sent: a strip at the foot
+ * of the window, on document.body like ConfirmDelete, so it stays while the page changes (a deleted
+ * workspace's own page closes at once). */
+export function UndoDeletes({ saved }: { saved: Pick<Saved, "pendingDeletes" | "undoDelete" | "deleteFailure" | "dismissDeleteFailure"> }) {
+  const { pendingDeletes, deleteFailure } = saved;
+  if (!pendingDeletes.length && !deleteFailure) return null;
+  return createPortal(
+    <div className="undo-stack">
+      {pendingDeletes.map((p) => (
+        <p key={p.id} className="undo-note" role="status">
+          <span>Deleted {p.what}.</span>
+          <button className="btn sm" onClick={() => saved.undoDelete(p.id)} aria-label={`Undo deleting ${p.what}`}>Undo</button>
+        </p>
+      ))}
+      {deleteFailure && (
+        <p className="undo-note failed" role="alert">
+          <span>{deleteFailure}</span>
+          <button className="btn sm ghost" onClick={saved.dismissDeleteFailure}>Dismiss</button>
+        </p>
+      )}
     </div>,
     document.body,
   );
@@ -142,7 +167,11 @@ export function WorkspaceActions({
         <ConfirmDelete
           text={`Delete “${workspace.name}” and its ${n} ${n === 1 ? "item" : "items"}?`}
           onNo={() => setMode(null)}
-          onYes={() => run(`delete the ${what}`, saved.deleteWorkspace(id), onDeleted)}
+          onYes={() => {
+            setMode(null);
+            saved.deleteWithUndo("workspace", id);
+            onDeleted();
+          }}
         />
       )}
     </div>
@@ -182,7 +211,10 @@ export function ItemActions({ item, saved }: { item: Pick<SavedItem, "item_id" |
         <ConfirmDelete
           text={`Delete “${item.name}”?`}
           onNo={() => setMode(null)}
-          onYes={() => run("delete it", saved.deleteItem(item.item_id))}
+          onYes={() => {
+            setMode(null);
+            saved.deleteWithUndo("item", item.item_id);
+          }}
         />
       )}
     </span>

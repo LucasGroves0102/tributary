@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { addItem, ApiError, createWorkspace, deleteItem as apiDeleteItem, deleteWorkspace, duplicateItem as apiDuplicateItem, duplicateWorkspace, failureReason, openItem, readFiling, recentWork, renameWorkspace, updateItem, workspaces as fetchWorkspaces } from "../api";
 import { load, save as store } from "../storage";
@@ -23,6 +23,19 @@ export type SavedList =
 /** Where Save as puts the item: an existing workspace, or a new one by name. */
 export type Target = { workspaceId: string } | { newWorkspace: string };
 
+/** How long a deleted workspace or item can be brought back (#158). The delete is sent when this
+ * runs out, or at once when the page is closed or the user changes, so nothing is ever deleted
+ * that the user could still undo, and nothing confirmed is kept by closing the tab. */
+export const UNDO_MS = 10_000;
+
+/** A confirmed delete waiting out UNDO_MS: hidden from the lists, not yet sent. */
+export interface PendingDelete {
+  kind: "workspace" | "item";
+  id: string;
+  /** what goes, in words: “Semis” and its 3 items */
+  what: string;
+}
+
 export interface Saved {
   list: SavedList;
   recent: RecentWork | null;
@@ -35,6 +48,14 @@ export interface Saved {
   renameItem: (id: string, name: string) => Promise<void>;
   duplicateItem: (id: string) => Promise<void>;
   deleteItem: (id: string) => Promise<void>;
+  /** A delete the user confirmed: hidden at once, sent after UNDO_MS unless undone (#158).
+   * `deleteWorkspace`/`deleteItem` stay immediate for the assistant's own Undo of a save. */
+  deleteWithUndo: (kind: PendingDelete["kind"], id: string) => void;
+  undoDelete: (id: string) => void;
+  pendingDeletes: PendingDelete[];
+  /** a delete that failed once its undo window ran out (the thing is back in the list) */
+  deleteFailure: string | null;
+  dismissDeleteFailure: () => void;
   /** saves what's on screen as a new item, which becomes the page's open item */
   saveAs: (current: Current, name: string, target: Target) => Promise<SavedItemFull>;
   /** saves over the page's open item */
@@ -303,6 +324,68 @@ export function useSaved(token: string | null, user: string | null): Saved {
     refresh();
   }, [forget, refresh]);
 
+  // #158: confirmed deletes wait UNDO_MS, hidden; a timer (or a flush) sends them
+  const [pendingDeletes, setPendingDeletes] = useState<PendingDelete[]>([]);
+  const [deleteFailure, setDeleteFailure] = useState<string | null>(null);
+  const waiting = useRef(new Map<string, { timer: ReturnType<typeof setTimeout>; send: (keepalive: boolean) => void }>());
+
+  const deleteWithUndo = useCallback((kind: PendingDelete["kind"], id: string) => {
+    const token = tok.current;
+    if (!token || waiting.current.has(id)) return;
+    const ws = listRef.current;
+    let what = "it";
+    if (kind === "workspace") {
+      const w = ws.find((x) => x.workspace_id === id);
+      const n = w?.items.length ?? 0;
+      what = w ? `“${w.name}” and its ${n} ${n === 1 ? "item" : "items"}` : "the workspace";
+    } else {
+      const it = ws.flatMap((w) => w.items).find((i) => i.item_id === id);
+      what = it ? `“${it.name}”` : "the item";
+    }
+    const p: PendingDelete = { kind, id, what };
+    const send = (keepalive: boolean) => {
+      const entry = waiting.current.get(id);
+      if (!entry) return; // undone, or sent already
+      clearTimeout(entry.timer);
+      waiting.current.delete(id);
+      const call = kind === "workspace" ? deleteWorkspace(token, id, { keepalive }) : apiDeleteItem(token, id, { keepalive });
+      call
+        .catch((e) => {
+          if (e instanceof ApiError && e.status === 404) return; // gone already
+          setDeleteFailure(`Couldn't delete ${what}: ${failureReason(e)}. It's back in the list.`);
+          throw e;
+        })
+        .then(() => forget((o) => (kind === "workspace" ? o.workspaceId === id : o.itemId === id)))
+        .catch(() => undefined)
+        .finally(() => {
+          setPendingDeletes((ps) => ps.filter((x) => x.id !== id));
+          refresh();
+        });
+    };
+    waiting.current.set(id, { timer: setTimeout(() => send(false), UNDO_MS), send });
+    setPendingDeletes((ps) => [...ps.filter((x) => x.id !== id), p]);
+  }, [forget, refresh]);
+
+  const undoDelete = useCallback((id: string) => {
+    const entry = waiting.current.get(id);
+    if (!entry) return;
+    clearTimeout(entry.timer);
+    waiting.current.delete(id);
+    setPendingDeletes((ps) => ps.filter((x) => x.id !== id));
+  }, []);
+
+  // closing the page, or another user signing in, sends what's waiting: the user confirmed it
+  useEffect(() => {
+    const flush = () => {
+      for (const { send } of [...waiting.current.values()]) send(true);
+    };
+    window.addEventListener("pagehide", flush);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      flush();
+    };
+  }, [token]);
+
   const close = useCallback(
     (kind: SavedKind) =>
       setOpenItems((o) => {
@@ -321,9 +404,31 @@ export function useSaved(token: string | null, user: string | null): Saved {
       .catch(() => undefined);
   }, []);
 
+  const gone = useMemo(() => new Set(pendingDeletes.map((p) => p.id)), [pendingDeletes]);
+  const shownList = useMemo<SavedList>(() => {
+    if (list.state !== "ok" || !gone.size) return list;
+    return {
+      state: "ok",
+      workspaces: list.workspaces
+        .filter((w) => !gone.has(w.workspace_id))
+        .map((w) => (w.items.some((i) => gone.has(i.item_id)) ? { ...w, items: w.items.filter((i) => !gone.has(i.item_id)) } : w)),
+    };
+  }, [list, gone]);
+  const shownRecent = useMemo(
+    () => (recent && gone.size
+      ? { ...recent, items: recent.items.filter((i) => !gone.has(i.item_id) && !gone.has(i.workspace_id)) }
+      : recent),
+    [recent, gone],
+  );
+
   return {
-    list,
-    recent,
+    list: shownList,
+    recent: shownRecent,
+    deleteWithUndo,
+    undoDelete,
+    pendingDeletes,
+    deleteFailure,
+    dismissDeleteFailure: () => setDeleteFailure(null),
     open: open.user === user ? open.items : storedOpen(user),
     createWorkspace: create,
     renameWorkspace: renameWs,

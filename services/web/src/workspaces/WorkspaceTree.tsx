@@ -194,7 +194,11 @@ function Folder({
       {deleting && (
         <ConfirmDelete
           text={`Delete “${w.name}” and its ${w.items.length} ${w.items.length === 1 ? "item" : "items"}?`}
-          onYes={() => run("delete the workspace", saved.deleteWorkspace(w.workspace_id))}
+          onYes={() => {
+            setMenu(null);
+            edit(null);
+            saved.deleteWithUndo("workspace", w.workspace_id);
+          }}
           onNo={() => edit(null)}
         />
       )}
@@ -264,7 +268,11 @@ function Item({
       {editing?.type === "delete-item" && editing.id === i.item_id && (
         <ConfirmDelete
           text={`Delete “${i.name}”?`}
-          onYes={() => run("delete it", saved.deleteItem(i.item_id))}
+          onYes={() => {
+            setMenu(null);
+            edit(null);
+            saved.deleteWithUndo("item", i.item_id);
+          }}
           onNo={() => edit(null)}
         />
       )}

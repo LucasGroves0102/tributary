@@ -191,8 +191,10 @@ function send<T>(token: string, method: "PUT" | "DELETE", path: string) {
   );
 }
 
-/** A request with a JSON body (saved work). */
-function sendJson<T>(token: string, method: "POST" | "PUT" | "PATCH" | "DELETE", path: string, body?: unknown) {
+/** A request with a JSON body (saved work). `keepalive`: it outlives the page (a delete whose undo
+ * window was cut short by closing the tab). */
+function sendJson<T>(token: string, method: "POST" | "PUT" | "PATCH" | "DELETE", path: string, body?: unknown,
+  opts: { keepalive?: boolean } = {}) {
   return fetch(url(path, {}), {
     method,
     headers: {
@@ -200,6 +202,7 @@ function sendJson<T>(token: string, method: "POST" | "PUT" | "PATCH" | "DELETE",
       ...(body === undefined ? {} : { "Content-Type": "application/json" }),
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    ...(opts.keepalive ? { keepalive: true } : {}),
   }).then((r) => json<T>(r));
 }
 
@@ -259,8 +262,8 @@ export const updateProject = async (token: string, id: string, project: ProjectS
 export const renameWorkspace = (token: string, id: string, name: string) =>
   sendJson<SavedWorkspace>(token, "PATCH", `/v1/workspaces/${enc(id)}`, { name });
 
-export const deleteWorkspace = (token: string, id: string) =>
-  sendJson<{ deleted: boolean }>(token, "DELETE", `/v1/workspaces/${enc(id)}`);
+export const deleteWorkspace = (token: string, id: string, opts: { keepalive?: boolean } = {}) =>
+  sendJson<{ deleted: boolean }>(token, "DELETE", `/v1/workspaces/${enc(id)}`, undefined, opts);
 
 export const duplicateWorkspace = (token: string, id: string) =>
   sendJson<SavedWorkspace>(token, "POST", `/v1/workspaces/${enc(id)}/duplicate`, {});
@@ -340,8 +343,8 @@ export const updateItem = (token: string, id: string, patch: { name?: string; st
 export const duplicateItem = (token: string, id: string) =>
   sendJson<SavedItemFull>(token, "POST", `/v1/workspace-items/${enc(id)}/duplicate`, {});
 
-export const deleteItem = (token: string, id: string) =>
-  sendJson<{ deleted: boolean }>(token, "DELETE", `/v1/workspace-items/${enc(id)}`);
+export const deleteItem = (token: string, id: string, opts: { keepalive?: boolean } = {}) =>
+  sendJson<{ deleted: boolean }>(token, "DELETE", `/v1/workspace-items/${enc(id)}`, undefined, opts);
 
 export const recentWork = (token: string, limit = 8) => get<RecentWork>(token, "/v1/recent", { limit });
 

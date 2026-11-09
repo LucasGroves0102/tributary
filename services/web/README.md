@@ -288,7 +288,13 @@ and an 8-K's period of report reads as the event date it is (`format.ts` `period
 Home: the sidebar badge and the status tile count the same filings (`Workspace.fresh`: the
 watchlist's with the catalog open, since the feed is then everyone's latest 50) and say the same
 thing (`home/data.ts` `sinceLabel`: since your last visit, or the last 7 days on a first visit in
-this browser). Removing a watchlist company offers Undo for 15 seconds. "New chart" starts empty
+this browser). Removing a watchlist company offers Undo for 15 seconds. Deleting a workspace or a
+saved item (#158, `useSaved` `deleteWithUndo`) hides it at once and offers Undo for 10 seconds at
+the foot of the window (`UndoDeletes`); the DELETE goes out when that runs out, or at once (as a
+`keepalive` request) when the page closes or another user signs in, so closing the tab never keeps
+something the user confirmed. It's an undo window in the browser, not a soft delete: nothing
+changes in the API or the app DB, and once sent a delete is final. The assistant's own Undo of a
+save still deletes immediately. "New chart" starts empty
 and detached from any saved chart (the nav's Chart builder still reopens the draft). Anything that
 replaces a chart with work in it (New chart, a template, a Chart button, opening a saved chart) keeps
 that draft: the builder says what happened and can restore it until the next replacement.
