@@ -216,3 +216,21 @@ def test_screener_rows_carry_co_registrants_and_sector_filters(token):
     rows = {x["company_id"]: x for x in r.json()["rows"]}
     assert rows[NVDA]["co_registrants"][0]["company_id"] == TSLA
     assert rows[TSLA]["co_registrants"] == []
+
+
+def test_saved_comps_and_screens_accept_f4_fields():
+    """A bank's comps columns and a screen's sector filter and grouping save (web
+    compare/state.ts COMPARE_COLUMNS, companies/screen.ts); unknown ones are still refused."""
+    from pydantic import ValidationError
+
+    from query_api.workspaces import CompsState, ScreenState
+
+    comps = CompsState(target=NVDA, cols=["revenue_ttm", "net_interest_income_ttm", "deposits_q",
+                                          "cet1_ratio_q"])
+    assert comps.cols is not None and comps.cols[-1] == "cet1_ratio_q"
+    screen = ScreenState(sector="Financials", sector_industry="Banks & thrifts", sort="sector")
+    assert screen.sort == "sector"
+    with pytest.raises(ValidationError):
+        CompsState(target=NVDA, cols=["salary_ttm"])  # type: ignore[list-item]
+    with pytest.raises(ValidationError):
+        ScreenState(sort="-salary")

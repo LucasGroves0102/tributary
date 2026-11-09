@@ -184,13 +184,18 @@ CompareColumn = Literal["revenue_ttm", "revenue_growth_ttm", "gross_margin_ttm",
                         "operating_margin_ttm", "net_margin_ttm", "free_cash_flow_ttm",
                         "fcf_margin_ttm", "net_debt_q", "debt_to_equity_q", "roe_ttm",
                         "current_ratio_q"]
+# a bank's own columns (F4, migration 048; web compare/state.ts COMPARE_COLUMNS `bank`)
+BankColumn = Literal["net_interest_income_ttm", "efficiency_ratio_ttm",
+                     "provision_for_credit_losses_ttm", "loans_q", "deposits_q", "cet1_ratio_q"]
 
 
 class CompsState(_Strict):
-    """compare/state.ts CompareState: a target, its peers and the columns (unset: defaults)."""
+    """compare/state.ts CompareState: a target, its peers and the columns (unset: defaults; a
+    bank's own columns for a bank target, F4)."""
     target: str = Field(pattern=CIK)
     peers: list[Annotated[str, Field(pattern=CIK)]] = Field(default=[], max_length=20)
-    cols: list[CompareColumn] | None = Field(default=None, min_length=1, max_length=11)
+    cols: list[CompareColumn | BankColumn] | None = Field(default=None, min_length=1,
+                                                          max_length=17)
 
     @model_validator(mode="after")
     def _distinct(self) -> CompsState:
@@ -203,7 +208,7 @@ class CompsState(_Strict):
 
 SCREEN_SORTS = ("name", "sic", "fiscal_year_end", "revenue_ttm", "revenue_growth_ttm",
                 "gross_margin_ttm", "operating_margin_ttm", "free_cash_flow_ttm", "net_debt_q",
-                "debt_to_equity_q")
+                "debt_to_equity_q", "sector")
 
 
 class ScreenState(_Strict):
@@ -211,6 +216,9 @@ class ScreenState(_Strict):
     q: str | None = Field(default=None, min_length=1, max_length=100)
     industry: str | None = Field(default=None, min_length=1, max_length=100)
     sic: str | None = Field(default=None, pattern=r"^\d{4}$")
+    # F4: the open sector grouping (migration 046), names as /v1/sectors gives them
+    sector: str | None = Field(default=None, min_length=1, max_length=40)
+    sector_industry: str | None = Field(default=None, min_length=1, max_length=60)
     band: Literal["lt100m", "100m-1b", "1b-10b", "10b-100b", "gte100b"] | None = None
     growth: float | None = Field(default=None, ge=-1000, le=100000)
     margin: float | None = Field(default=None, ge=-1000, le=100)
