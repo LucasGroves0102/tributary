@@ -299,13 +299,18 @@ else by SIC and size (`basis: "sic"`). The ranking is specified in `query_api/pe
 - **A bank** (035's rule) without `columns` gets bank columns: revenue, net interest income, efficiency
   ratio, provision for credit losses, loans, deposits, ROE, net margin (migration 048).
 
-Measured on hermes' Item 1 texts of 2026-11-09 (run locally; top 10 before vs after):
-VRT LG Display, Impinj... vs Eaton and Johnson Controls (both named in Vertiv's 10-K), nVent, AAON,
-Forgent Power, Super Micro, EnerSys; DECK CSL, Silverton Energy... vs Crocs, Columbia, Steve Madden,
-Under Armour, Nike, Kontoor, Wolverine; NVDA AMD, Ambarella, Qualcomm, Super Micro, Broadcom, Micron,
-Marvell; JPM PNC, Bank of America, Morgan Stanley, U.S. Bancorp, Capital One, Huntington, Wells Fargo.
-Gaps: a 10-K whose Item 1 is a cross-reference (Intel, IBM, Citigroup) or mis-parsed has no profile,
-so it is suggested only by SIC.
+Measured on hermes' Item 1 texts of 2026-11-09 (run locally through this route; before = production's
+SIC and size answer the same day; the root README has the full table):
+VRT before LG Display, Impinj...; after Eaton and Johnson Controls (both named in Vertiv's 10-K),
+AAON, nVent, Forgent Power, Super Micro, Ciena, Flex, Amphenol. DECK before Crocs, Nike, Silverton
+Energy, Carlisle...; after Crocs, Columbia, Steve Madden, Under Armour, Nike, Kontoor, Wolverine.
+NVDA before Micron, Tigo Energy, Broadcom, Intel...; after AMD, Ambarella, Qualcomm, Super Micro,
+Broadcom, Micron, Marvell. JPM before Bank of America, Wells Fargo, Citigroup...; after PNC, Morgan
+Stanley, Bank of America, U.S. Bancorp, Capital One, Huntington, Wells Fargo. Precision at 10 against
+hand-written lists for nine companies: 47 of 90 (services/parser README).
+Gaps: a 10-K whose Item 1 is a cross-reference (Intel, General Electric) or wasn't parsed
+(Citigroup) has no profile, so it is never suggested by business (NVIDIA's list loses Intel, TI and
+ADI; JPMorgan's loses Citigroup).
 
 `GET /v1/companies/{id}/peers/check/{candidate}`: `require(financials)` on the comps' company, then
 public filing-index metadata about the candidate: `ok`, `reason` (`null`; `metadata_only`: it has

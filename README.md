@@ -237,8 +237,8 @@ as the viewer, so it shows only what you may read.
 #### Analysis
 
 The Analysis tab is one guided project per company, the way an analyst builds a thesis from
-filings. "New analysis" picks a company you can read and its peers (suggested from the same
-industry and size); the project then walks eight steps, each with a done marker, under a header
+filings. "New analysis" picks a company you can read and its peers (suggested by what they do,
+[below](#peers-by-business)); the project then walks eight steps, each with a done marker, under a header
 with the company and tabs (Company · Charts · Model · Thesis · Monitor) that switch instantly
 without losing anything you typed:
 
@@ -252,7 +252,8 @@ without losing anything you typed:
    guidance), then new, removed and rewritten Risk Factors and MD&A paragraphs in the latest
    10-K and 10-Q, a 10-Q against the same quarter a year earlier, the most material first, with
    a topic filter ([What changed](#what-changed)).
-5. **Peers**: the comps table for the company and its peers.
+5. **Peers**: the comps table for the company and its peers; each median says how many of them it
+   uses ("3 of 4") and why the others are left out.
 6. **Model**: the model, this year from its reported quarters, with bear, base and bull side by
    side.
 7. **Thesis**: starts from a template: core thesis (3-5 sentences), variant perception
@@ -338,6 +339,33 @@ security). Disconnecting deletes the key and every price fetched with it.
 **Off until configured:** the feature exists only when the deployment has the
 `data-connections-key` secret ([deploy/helm/tributary](deploy/helm/tributary/README.md#connect-your-data));
 without it the routes are absent and the UI hides it. The assistant has no price tool yet.
+
+### Peers by business
+
+Suggested peers come from what companies say they do, not their SIC code: each company's latest
+10-K Business section (Item 1) as a TF-IDF term vector (words and two-word phrases, standard
+library only, no paid embeddings or external calls), cosine similarity between them, and the
+competitors either 10-K names in a sentence about competition; SIC division and size count a little.
+A weekly job in the parser image computes it for every company (79 s, 410 MB peak on 4,888 Item 1
+sections; `services/parser` README). Each suggestion says why, and a named competitor links to the
+sentence. Measured on the testers' companies, top 10 before (SIC and size) and after:
+
+| Company | Before | After |
+|---|---|---|
+| Vertiv (VRT) | LG Display, Advanced Energy, Vicor, Impinj, Varex Imaging, ... | Eaton and Johnson Controls (named in Vertiv's 10-K), AAON, nVent, Forgent Power, Super Micro, Ciena, Flex, Amphenol |
+| Deckers (DECK) | Crocs, Nike, Silverton Energy, Carlisle, Newell, AptarGroup, Entegris, ... | Crocs, Columbia, Steve Madden, Under Armour, Nike, Kontoor, Wolverine, Levi Strauss, Tapestry, VF |
+| NVIDIA (NVDA) | Micron, Tigo Energy, Broadcom, Intel, AMD, Applied Materials, TI, ADI, NXP, ST | AMD, Ambarella, Qualcomm, Super Micro, Broadcom, Micron, Marvell, HPE, Arista, GSI Technology |
+| JPMorgan (JPM) | Bank of America, Wells Fargo, Citigroup, Capital One, U.S. Bancorp, PNC, Truist, Shinhan, ... | PNC, Morgan Stanley, Bank of America, U.S. Bancorp, Capital One, Huntington, Wells Fargo, Truist, KeyCorp, Citizens |
+
+A company whose 10-K Item 1 is only a cross-reference (Intel, General Electric, McDonald's) or
+wasn't parsed (Citigroup) has no profile, so it is never suggested by business; the NVIDIA and
+JPMorgan lists lose Intel and Citigroup for that reason.
+A bank is compared on a bank's own lines (net interest income, efficiency ratio, provision for
+credit losses, loans, deposits, CET1 where tagged: migration 048, whose header has the tags measured
+on every bank's XBRL and why net interest margin and tangible book value are left out). The screener
+groups companies into 12 sectors and 88 industries over SIC (Tributary's own open mapping, not GICS;
+the SIC label stays), and a company filing one combined 10-K with another (PG&E Corp and Pacific Gas &
+Electric) says it isn't a duplicate.
 
 ### Agent
 

@@ -121,7 +121,7 @@ GIN index grows to ~0.5-0.7x under incremental inserts, so REINDEX it after a bu
 A weekly batch job in the same image (`filing_parser/business.py`, its docstring is the spec;
 migration 047) that compares what companies say they do. For every company with financials it
 reads Item 1 (Business) of its latest 10-K from the last three years that has a usable one (at
-least 3,000 characters and not mis-parsed: Intel's and IBM's are cross-references, so no profile),
+least 3,000 characters and not mis-parsed: Intel's, GE's and McDonald's are cross-references, so no profile),
 turns the first 80,000 characters into words and two-word phrases (stop words, places and
 human-capital words removed, simple singulars), and weights them TF-IDF: terms in 20 to 25% of the
 documents, the company's own name and corporate-structure phrases (SPAC mergers, share classes)
@@ -143,8 +143,8 @@ No TF-IDF library: the standard library only, no paid embeddings, no external ca
 How the settings were chosen: precision at 10 against hand-written peer lists for nine companies
 (VRT, DECK, NVDA, JPM, RCKY, KO, UNH, HD, XOM), on the full corpus, through the Query API's ranking.
 A minimum document frequency of 20 scored 47 of 90, 10 scored 45, 5 scored 44; 250 vs 400 terms and
-40,000 vs 80,000 characters moved it by at most one. XOM scores 1: Exxon's Item 1 is a
-cross-reference, so it has no profile.
+40,000 vs 80,000 characters moved it by at most one. XOM scores 1: Exxon's Item 1 is 6,600
+characters, mostly pointers to the rest of its 10-K.
 
 ```bash
 parser-peers   # DATABASE_URL; no options
