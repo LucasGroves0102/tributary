@@ -136,6 +136,19 @@ ASML, Canadian National...) move from scraps of convenience-translated dollars t
 currency. Every gold row of the 46-company replica (all USD) was identical. Needs the
 financials-rebuild job (re-projects the stored payloads with the IFRS tags, no SEC requests).
 Catalog changes and small inserts only.
+`057_currency_readings.sql` (F8b) reads the ~700 companies in their own currency where 056 still read
+dollars. `gold.amount_currency(company)`: its amounts' currency (the latest revenue row's unit, else
+net income's, else USD). 035's not-meaningful rules gain a currency (`gold.not_meaningful`'s fifth
+argument): the absolute bases (revenue under $100K, growth over 1,000% from under $10M) apply only to
+dollar amounts, the ratio bounds to every currency; the four-argument form reads as dollars (an older
+Query API). Why not per-currency equivalents: there are no exchange rates here, a fixed table would
+drift unnoticed, and the bases exist for shells and pre-revenue filers, which file in dollars.
+`gold.latest_reading` passes the base's currency (one PK probe, six metrics only; still inlinable).
+`gold.filing_figures` (051) returns each figure's `unit` (DROP and CREATE, 051's grants).
+`ops.check_financials` (050's body) compares a debt fact with liabilities and assets in its own unit (a
+20-F's convenience dollars beside yen debt read as a scale slip). Catalog only, no rebuild; findings
+change at each company's next check. Backout `backout/currency_readings_057.sql` (tested: functions
+equal to a database at 056).
 `055_filing_xbrl_facts.sql` (F8a) reads a filing's own XBRL where SEC companyfacts doesn't carry it:
 the filings companyfacts never received (52 of 12,006 10-K/10-Qs in 200 days: Citigroup's 2026 10-Qs,
 Clorox's FY2026 10-K), a company's own tags proven to be a standard line (NVIDIA's 10-K capex tag,

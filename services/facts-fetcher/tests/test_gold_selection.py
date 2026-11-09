@@ -725,6 +725,35 @@ def test_a_debt_figure_many_times_total_liabilities_is_a_scale_slip(conn):
     assert metric == "long_term_debt" and detail["rule"] == "debt_above_liabilities"
 
 
+def test_debt_is_compared_with_liabilities_in_its_own_currency(conn):
+    """057: a yen filer's 20-F also tags a convenience dollar translation (filed after it here, so
+    the check's latest-first lookup met it): ¥5T of debt against $200B of liabilities and $400B of
+    assets read as a scale slip. Compared in yen (¥30T, ¥60T) it is ordinary debt."""
+    conn.execute("UPDATE silver.companies SET sic = '3711' WHERE company_id = %s", (CO,))
+    conn.execute("DELETE FROM silver.financial_facts")
+    for tag, metric, value, unit, filed in (
+            ("LongTermDebtNoncurrent", "long_term_debt", 5_000_000_000_000, "JPY", FILED),
+            ("Liabilities", "total_liabilities", 30_000_000_000_000, "JPY", FILED),
+            ("Assets", "total_assets", 60_000_000_000_000, "JPY", FILED),
+            ("Liabilities", "total_liabilities", 200_000_000_000, "USD", "2026-11-03"),
+            ("Assets", "total_assets", 400_000_000_000, "USD", "2026-11-03")):
+        conn.execute(
+            "INSERT INTO silver.financial_facts (cik, metric, tag, unit, period_start, period_end,"
+            " value, accession_no, form, filed, ingested_at) VALUES (%s, %s, %s, %s, NULL, %s, %s,"
+            " %s, '20-F', %s, '2026-11-03')",
+            (CO, metric, tag, unit, END, value, "k" if unit == "JPY" else "k2", filed))
+    conn.execute("SELECT ops.check_financials(ARRAY[%s])", (CO,))
+    assert [f for f in findings(conn, "mistagged_fact")
+            if f[2].get("rule") == "debt_above_liabilities"] == []
+    # debt over five times yen liabilities and assets is still a slip
+    conn.execute("UPDATE silver.financial_facts SET value = value / 7 WHERE unit = 'JPY'"
+                 " AND tag IN ('Liabilities', 'Assets')")
+    conn.execute("UPDATE silver.financial_facts SET value = value * 10 WHERE unit = 'JPY'"
+                 " AND tag = 'LongTermDebtNoncurrent'")
+    conn.execute("SELECT ops.check_financials(ARRAY[%s])", (CO,))
+    assert [f[2]["rule"] for f in findings(conn, "mistagged_fact")] == ["debt_above_liabilities"]
+
+
 def test_debt_a_little_above_a_partial_liabilities_tag_stays(conn):
     # FirstEnergy 2008: LongTermDebt 9,100 against a Liabilities tag of 7,098
     put(

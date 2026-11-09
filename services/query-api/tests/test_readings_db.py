@@ -583,6 +583,90 @@ def test_financials_say_their_currency_and_that_they_are_years(conn, token):
     assert "currency" not in usd and "cadence" not in usd  # a dollar filer's JSON is as before
 
 
+@pytest.mark.parametrize(
+    ("metric", "value", "inputs", "currency", "says"),
+    [
+        # the dollar bases (035) only for dollar amounts; every ratio bound for every currency
+        ("gross_margin", "0.4", {"revenue": 5e4}, "USD", "under $100K"),
+        ("gross_margin", "0.4", {"revenue": 5e4}, "JPY", None),  # ¥50,000 is $330
+        ("gross_margin", "0.4", {"revenue": 5e4}, None, "under $100K"),  # unknown: dollars
+        ("gross_margin", "1.2", {"revenue": 5e4}, "JPY", "larger than revenue"),
+        ("operating_margin", "12", {"revenue": 5e4}, "KRW", "larger than revenue"),
+        ("net_margin", "-11", {"revenue": 5e10}, "JPY", "ten times revenue"),
+        ("revenue_growth", "22.7", {"revenue_year_ago": 4.9e6}, "USD", "under $10M"),
+        ("revenue_growth", "22.7", {"revenue_year_ago": 4.9e6}, "JPY", None),
+        ("revenue_growth", "0.5", {"revenue_year_ago": 5e4}, "EUR", None),
+        ("revenue_growth", "-1.4", {"revenue_year_ago": 5e8}, "JPY", "negative"),
+        ("net_income_growth", "15", {"net_income_year_ago": 9e6}, "KRW", None),
+        ("net_income_growth", "-3", {"net_income_year_ago": 5e8}, "KRW", "profit to a loss"),
+        ("debt_to_equity", "563", {}, "JPY", "over 100 times"),
+    ],
+)
+def test_the_dollar_bases_apply_only_to_dollars(conn, metric, value, inputs, currency, says):
+    """057: 035's absolute bases are in dollars; against yen or won they never fired (¥100K is
+    $650), so they apply only to dollar amounts and the ratio bounds to every currency. The
+    four-argument form (an older Query API) reads as dollars, as before."""
+    got = conn.execute(
+        "SELECT gold.not_meaningful(%s, %s::numeric, %s::jsonb, NULL, %s)",
+        (metric, value, json.dumps(inputs), currency),
+    ).fetchone()[0]
+    if says is None:
+        assert got is None
+    else:
+        assert says in got
+    if currency in (None, "USD"):
+        four = conn.execute("SELECT gold.not_meaningful(%s, %s::numeric, %s::jsonb)",
+                            (metric, value, json.dumps(inputs))).fetchone()[0]
+        assert four == got
+
+
+YEN = "9200000011"
+
+
+def yen_co(conn, revenue):
+    """Toyota's shape after 056: every amount in yen, here a ¥50,000 revenue (a small base in
+    dollars it isn't) with a 40% margin and +2,270% growth from ¥4.9M."""
+    conn.execute("INSERT INTO silver.companies (company_id, name, current_cik, sic,"
+                 " sic_description) VALUES (%s, 'Yen Co', %s, '3711', 'Motor Vehicles')",
+                 (YEN, YEN))
+    conn.execute("INSERT INTO silver.company_ciks (cik, company_id) VALUES (%s, %s)", (YEN, YEN))
+    conn.execute("INSERT INTO authz.public_access (company_id, tier) VALUES (%s, 'financials')",
+                 (YEN,))
+    reported(conn, YEN, "revenue", LATEST, revenue, unit="JPY")
+    derived(conn, YEN, "gross_margin", LATEST, Decimal("0.4"), {"revenue": revenue})
+    derived(conn, YEN, "revenue_growth", LATEST, Decimal("22.7"), {"revenue_year_ago": 4.9e6})
+
+
+def test_a_yen_companys_small_base_is_not_a_dollar_one(conn, token):
+    """057 through every reader: the screener's reading, /financials with readings and a chart's
+    point read a yen company's margin and growth as figures; a dollar company with the same
+    numbers reads n/m, as before."""
+    yen_co(conn, 50_000)
+    reported(conn, BLANK, "revenue", LATEST, 50_000)
+    derived(conn, BLANK, "gross_margin", LATEST, Decimal("0.4"), {"revenue": 50_000})
+    with conn.cursor() as cur:
+        cur.execute("SET LOCAL ROLE query_api")
+        cur.execute("SELECT set_config('app.user_id', %s, true)", (USER,))
+        for cid, expect in ((YEN, None), (BLANK, "not_meaningful")):
+            cur.execute("SELECT x.status FROM gold.latest_period(%s) lp, gold.latest_reading("
+                        "%s, 'ttm', 'gross_margin', NULL, lp.latest) x", (cid, cid))
+            assert cur.fetchone()[0] == expect, cid
+        cur.execute("SELECT gold.amount_currency(%s), gold.amount_currency(%s)", (YEN, BLANK))
+        assert cur.fetchone() == ("JPY", "USD")
+        cur.execute("RESET ROLE")
+    c = api(conn)
+    rows = c.get(f"/v1/companies/{YEN}/financials", headers=token(USER),
+                 params={"view": "ttm", "metrics": ["gross_margin", "revenue_growth"],
+                         "readings": "true"}).json()["rows"]
+    assert [r["not_meaningful"] for r in rows] == [None, None]
+    usd = c.get(f"/v1/companies/{BLANK}/financials", headers=token(USER),
+                params={"view": "ttm", "metrics": ["gross_margin"], "readings": "true"}).json()
+    assert "under $100K" in usd["rows"][0]["not_meaningful"]
+    point = c.post("/v1/formulas/evaluate", headers=token(USER),
+                   json={"formula": "gross_margin", "view": "ttm", "default_company": YEN}).json()
+    assert point["points"] and "not_meaningful" not in point["points"][-1]
+
+
 def test_latest_reading_stays_inlinable(conn):
     """The screener's plan depends on it, like 032's gold.latest_value (no SET, not DEFINER, a
     single SQL statement, not volatile)."""
