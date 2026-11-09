@@ -48,6 +48,73 @@ CIKs' own companies plus any whose filing the SEC put under them. The named enti
 document's extract (`bronze.filing_xbrl.entity_cik`, the segments job), so it applies to filings the
 document crawl and doc-fetcher store.
 
+## Filings companyfacts lacks
+
+**`facts-fetcher-filings`** (`filings.py`, `instance.py`; migration `055_filing_xbrl_facts.sql`):
+reads a filing's own XBRL where SEC companyfacts doesn't carry it. companyfacts never received 52 of
+the 12,006 10-K/10-Qs filed in the 200 days to 2026-11-02 (Citigroup's 2026 10-Qs, Clorox's FY2026
+10-K, Cardinal Health's, Molson Coors'...), and it never carries a company's own tags or dimensional
+facts. A run:
+
+1. **Caught up**: filings read here that companyfacts now has (a filer's latest payload carries one
+   of their facts) leave silver: `silver.supersede_filing_facts`, then those CIKs' companyfacts
+   payloads are refreshed into silver again and the companies' gold rebuilt. A filing's facts are in
+   silver once, from one source.
+2. **Gaps**: 10-K and 10-Q filings with XBRL, filed from `--since` (default 400 days back) to
+   `--after-days` ago (default 3; companyfacts normally has a filing within a day), at a company
+   here, with no fact in silver under any CIK. Amendments only when their stored document has been
+   extracted (most are Part III alone). The stored document's extract (`bronze.filing_xbrl.raw_gzip`,
+   every numeric fact, from the segments job) when it has at least 10 undimensioned facts of mapped
+   tags, else the filing's **instance**: the folder's `index.json`, then `<document>_htm.xml` (EDGAR's
+   extract of an inline filing, which holds every document's facts: Clorox's statements are in its
+   annual-report exhibit) or, before inline XBRL, the dated `.xml`. Two SEC requests, through
+   `libs/sec`'s shared limit (`SEC_CALLER_CLASS`, batch); the instance is stored gzip-compressed in
+   `bronze.filing_instances` and never fetched again.
+3. **Extras**: the stored documents of companies with their own tags (`silver.metric_tags.company_id`:
+   NVIDIA's capex extension tag) or member sums (`silver.member_sums`: Ford's and GM's debt filed only
+   by segment), not read yet.
+4. `--accessions A,B`: these filings whatever they are, fetching the instance when no document is
+   stored (history before the document crawl: NVIDIA's FY2018 and FY2020 10-Ks).
+
+Each filing becomes one `bronze.filing_facts` row: its undimensioned facts of mapped tags (only the
+company's own tags when companyfacts has the filing) and the member facts a sum needs, with `source`
+(`ixbrl` or `instance`) and `document` (where they were read). `silver.refresh_filing_facts` maps them
+into `silver.financial_facts` with `source = 'filing'` (a filing companyfacts lacks) or `'filing_extra'`
+(what companyfacts never carries), and `gold.refresh_financials` rebuilds the companies; one
+transaction per batch of 25 filings. Re-running changes nothing (delete-then-insert on the accession).
+`--rebuild` re-projects every stored row from its source after a change to the tags or sums, without
+the SEC.
+
+What the extract reads is what companyfacts carries: on 705 filings both have (the 46 companies the
+gaps touch, 2019-2026), 59,054 of 59,097 shared values are identical; the 43 others are a figure
+stated twice, rounded in the text and exact in a table, where `ixbrl.py` keeps the first and
+companyfacts the more precise (`instance.py` keeps the more precise). companyfacts has 146 facts the
+extracts lack (0.25%, mostly EPS), the extracts 15 it lacks.
+
+A member sum is made only when every listed member is in the filing for the date, no other member of
+the axis is, and the filing has no undimensioned fact of the concept for that date (that would be the
+consolidated figure itself, which companyfacts carries). Why each sum is the consolidated figure is in
+migration 055's header (each member is itself a line of the consolidated balance sheet: current
+liabilities add up with them in all 42 of Ford's and GM's stored 10-K/10-Qs).
+
+On k3s: the `filing-facts` CronJob (daily 09:30 New York, after the nightly companyfacts loads; ships
+suspended). The first run, by hand after the deploy, goes back to 2019 and reads NVIDIA's two
+pre-crawl 10-Ks:
+
+```bash
+kubectl -n tributary create job --from=cronjob/filing-facts filing-facts-1 \
+  --dry-run=client -o json \
+  | jq '.spec.template.spec.containers[0].command += ["--since", "2019-01-01",
+        "--accessions", "0001045810-18-000010,0001045810-20-000010"]' \
+  | kubectl apply -f -
+```
+
+Measured for that run on hermes (2026-11-09): 217 10-K/10-Qs since 2019 at companies here with no
+companyfacts fact, 143 with a usable extract; about 75 instance fetches (≤ 150 requests) plus
+NVIDIA's 2 (4 requests). Then a day's run reads a handful of new gaps. Config (env):
+`FILING_FACTS_SINCE`, `FILING_FACTS_AFTER_DAYS`, `FILING_FACTS_LIMIT` (500 gaps and 500 extras per
+run), `FILING_FACTS_ACCESSIONS`.
+
 ## Segments and KPIs
 
 **`facts-fetcher-segments`** (`segments.py`, `ixbrl.py`, `labels.py`; migration
@@ -122,6 +189,7 @@ How it runs (module docstrings hold the exact rules):
 make financials                                    # facts-fetcher for tracked companies
 make financials-rebuild                            # facts-fetcher --rebuild
 make financials-bulk ZIP=/path/to/companyfacts.zip LIMIT=500   # facts-fetcher-bulk, local zip
+.venv/bin/facts-fetcher-filings --since 2019-01-01  # filings companyfacts lacks (SEC for instances)
 make segments LIMIT=2000                           # facts-fetcher-segments
 make segments-rebuild                              # facts-fetcher-segments --rebuild
 ```
@@ -146,7 +214,9 @@ quality check, rebuild) with `TEST_DATABASE_URL`. `test_gold_selection.py` holds
 migrations 038-043 and 050, each shaped like the filing it came from (Flowserve's zero revenue, M&T's bank
 revenue, NVIDIA's securities and dividends, Ford's debt, Legacy Housing's 2033 date, ...). Also the full bronze → silver → gold path against trimmed real
 companyfacts payloads in `tests/fixtures/` (`test_pipeline.py`; shared `conn` / `loaded`
-fixtures in `conftest.py`), and the bulk loader on small zips. `test_golden_10k.py` checks gold
+fixtures in `conftest.py`), and the bulk loader on small zips. `test_filings.py`: instances (trimmed real
+ones in `tests/fixtures/instance/`, made with `tests/trim_instance.py`), projection, and with a database the
+gap, catch-up, instance, extension-tag and member-sum paths. `test_golden_10k.py` checks gold
 against 149 figures printed in five companies' 10-Ks, loading their companyfacts from
 `tests/fixtures/golden/` ([tests/golden](../../tests/golden/README.md)). Database tests
 need `TEST_DATABASE_URL`.

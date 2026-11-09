@@ -62,6 +62,13 @@ uses `postgres`, `app-postgres`, `openfga`, `jwt` (webhook signing secrets are d
 turn the SMTP provider on, but nothing is sent until users can verify an address. query-api also
 `uses: webhooks`, for the settings page's "Send a test".
 
+`filing-facts` (facts-fetcher image, `facts-fetcher-filings`, migration 055) reads filings SEC
+companyfacts lacks from their own XBRL, daily at 09:30 once enabled (`uses: postgres, sec`: an
+instance fetch is two requests at the batch class). It ships suspended; the first run goes back to
+2019 and is started by hand with its arguments
+([facts-fetcher](../../../services/facts-fetcher/README.md), "Filings companyfacts lacks"), then
+`suspend: false` in the Flux release.
+
 `financials-rebuild` ships suspended and never runs on a schedule: it re-derives silver and gold from
 the payloads already in bronze (`facts-fetcher --rebuild`, no SEC requests, only `uses: postgres`),
 after a change to `silver.metric_tags` or to gold's SQL rules. Run it once by hand after such a

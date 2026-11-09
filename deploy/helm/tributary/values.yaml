@@ -260,6 +260,26 @@ jobs:
         memory: 256Mi
       limits:
         memory: 1Gi
+  # Filings companyfacts lacks, read from their own XBRL (facts-fetcher-filings, migration 055):
+  # 10-K/10-Qs at least 3 days old with no fact in silver (the stored document's extract, else the
+  # filing's instance: two SEC requests), the stored documents of companies with their own tags or
+  # member sums (NVIDIA's capex, Ford's and GM's debt), and filings companyfacts has since caught up
+  # with (their own facts leave silver). Each batch refreshes its companies' gold. Ships suspended:
+  # run the backfill once (services/facts-fetcher README, "Filings companyfacts lacks"), then set
+  # suspend: false in the Flux release for the daily run.
+  filing-facts:
+    image: facts-fetcher
+    command: [facts-fetcher-filings]
+    schedule: "30 9 * * *"
+    suspend: true
+    timeoutSeconds: 7200
+    uses: [postgres, sec]
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        memory: 1Gi
   # Every SEC filer's XBRL facts from the nightly companyfacts.zip (one ~1.4 GB download per
   # night). A run loads batches of BULK_LIMIT changed companies back to back, saving progress
   # after each; a stopped run resumes where it left off. Once caught up, a night only touches the

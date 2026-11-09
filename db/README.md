@@ -116,6 +116,22 @@ the same filing's own total are left out (`mistagged_fact`, rule `debt_parts_sca
 to date: forfeitures, remeasured liability awards); its `sign_flip` is severity `info`, rule `benefit`,
 unless another filing reports the quarter positive. Measurements in its header. Needs
 `financials-rebuild`; backout `backout/filers_debt_050.sql`.
+`055_filing_xbrl_facts.sql` (F8a) reads a filing's own XBRL where SEC companyfacts doesn't carry it:
+the filings companyfacts never received (52 of 12,006 10-K/10-Qs in 200 days: Citigroup's 2026 10-Qs,
+Clorox's FY2026 10-K), a company's own tags proven to be a standard line (NVIDIA's 10-K capex tag,
+FY2016-22) and balance sheet lines filed only by segment member (Ford's and GM's debt, summed where
+the members are lines of the consolidated balance sheet). `silver.financial_facts` gains `taxonomy` and
+`source` (`companyfacts`, `filing`: the filing's own XBRL while companyfacts lacks it, `filing_extra`:
+what companyfacts never carries); `silver.metric_tags` gains `company_id` (a company's own tag) and a
+primary key with the taxonomy; `silver.member_sums` names each sum. `bronze.filing_instances` keeps
+instance documents fetched from EDGAR, `bronze.filing_facts` each filing's facts as read (with where
+from), `silver.refresh_filing_facts` maps them into silver, `silver.filing_facts_caught_up` and
+`silver.supersede_filing_facts` hand a filing back to companyfacts once it has it, so a filing's
+facts are never in silver twice. `gold.usable_facts` joins tags by taxonomy and company. Filled by
+facts-fetcher's `facts-fetcher-filings` ([README](../services/facts-fetcher/README.md), "Filings
+companyfacts lacks"); measurements and the proofs in its header. Locks: two ADD COLUMNs with constant
+defaults and a NOT VALID CHECK on `silver.financial_facts` in one statement (no rewrite, an instant of
+ACCESS EXCLUSIVE; lock_timeout 3 s), the primary key of the 122-row `silver.metric_tags` rebuilt.
 `054_insider_transactions.sql` adds insider filings (#117): `bronze.ownership_documents` (each Form
 3/4/5's ownershipDocument XML as filed, from doc-fetcher), `silver.insider_filings` (issuer company,
 form, period, reporting owners with their relationship as jsonb) and `silver.insider_transactions`

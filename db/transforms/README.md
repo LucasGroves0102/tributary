@@ -5,7 +5,8 @@ functions defined in the migrations, latest definitions first:
 
 | Function | Defined in |
 |---|---|
-| `gold.usable_facts(text[])` (which facts gold may read: tags, sums, dropped facts; interest expense without its sign) | `043_interest_expense_sign.sql` (before: `039_gold_fact_selection.sql`) |
+| `gold.usable_facts(text[])` (which facts gold may read: tags by taxonomy and company, sums, dropped facts; interest expense and debt without their sign; a filing's facts to the filer its XBRL names) | `055_filing_xbrl_facts.sql` (before: `050_filers_debt_signs.sql`, `043_interest_expense_sign.sql`, `039_gold_fact_selection.sql`) |
+| `silver.refresh_filing_facts(text[])` (a filing's own XBRL into silver: a filing companyfacts lacks, a company's own tags, member sums), `silver.filing_facts_caught_up()`, `silver.supersede_filing_facts(text[])` | `055_filing_xbrl_facts.sql` |
 | `gold.best_facts(text[])` (which fact gold believes: revenue's zero and part rules, then tag priority) | `039_gold_fact_selection.sql` |
 | `gold.refresh_quarterly_financials(text[])` | `043_interest_expense_sign.sql` (a negative derived interest expense quarter is left out; before: `039_gold_fact_selection.sql` reads `gold.best_facts`; drops a quarter rounded for a sentence; gross profit as revenue less cost behind a guard; before: `031_gold_one_quarter_series.sql` one non-overlapping series of quarters per company and metric, chosen by calendar votes; before: `029_gold_quality_fixes.sql` instants only for balance-sheet metrics, no negative derived quarter for metrics that can't be negative; `024_gold_ignores_proxy_statements.sql` skips proxy-statement facts, `015_gold_tiebreaks.sql` deterministic tie-breaks, `011_bulk_financials.sql`, `003_financials.sql`) |
 | `silver.refresh_financial_facts(text[])` | `011_bulk_financials.sql` (first in `003_financials.sql`); metric tags in `012_more_metrics.sql` (+ one in `024`) |
