@@ -11,8 +11,8 @@ use crate::pystr::{
     CharIndex, char_len, fold_letter, is_decimal, is_space, is_word, py_strip, upper,
 };
 
-pub const PARSER_VERSION: &str = "rust-4"; // 4: title headings (rule 9); 3: MD&A by
-// reference, exhibits, SGML envelope
+pub const PARSER_VERSION: &str = "rust-5"; // 5: clean titles (rule 10); 4: title headings
+// (rule 9); 3: MD&A by reference, exhibits, SGML envelope
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Section {
@@ -63,6 +63,7 @@ struct Heading {
     span: usize,
     title_part: Option<&'static str>, // rule 9 title heading: the Part its title belongs to
     xref: bool, // Part heading followed by ",": "Part I, Item 2" (rule 9 ignores it)
+    title_end: usize, // rule 10: byte offset where the title's line ends ('\n' or the text's end)
 }
 
 pub fn find_sections(text: &str, form: &str) -> Result<Vec<Section>, Error> {
@@ -128,7 +129,7 @@ fn sections(text: &str, mut body: Vec<Heading>, form: &str) -> Vec<Section> {
             key: h.key.clone(),
             part: h.part.clone(),
             item: h.item.clone().unwrap_or_default(),
-            title: h.title.clone(),
+            title: section_title(h, text, form),
             text: py_strip(&text[h.start..end.0]).to_string(),
             char_start: h.cstart,
             char_end: end.1,
@@ -256,14 +257,18 @@ fn headings(text: &str) -> Vec<Heading> {
                 span: 0,
                 title_part: None,
                 xref: m.rest.starts_with(','),
+                title_end: 0,
             },
             Number::Item(item) => {
                 let inline = py_strip(m.rest).to_string();
                 let mut title = inline.as_str();
+                let mut title_end = end;
                 if title.is_empty() && end < text.len() {
                     // title on the next line, as in many tables of contents
                     let next = &text[end + 1..];
-                    title = py_strip(&next[..next.find('\n').unwrap_or(next.len())]);
+                    let line = next.find('\n').unwrap_or(next.len());
+                    title = py_strip(&next[..line]);
+                    title_end = end + 1 + line;
                 }
                 let title = match title.char_indices().nth(200) {
                     Some((i, _)) => title[..i].to_string(),
@@ -280,6 +285,7 @@ fn headings(text: &str) -> Vec<Heading> {
                     span: 0,
                     title_part: None,
                     xref: false,
+                    title_end,
                 }
             }
         };
@@ -510,6 +516,7 @@ fn title_headings(text: &str, form: &str) -> Vec<Heading> {
             span: 0,
             title_part: Some(part),
             xref: false,
+            title_end: start + line.len(),
         });
     }
     out
@@ -540,6 +547,96 @@ fn fold_title(c: char) -> char {
         return '\'';
     }
     fold_letter(c).unwrap_or(c)
+}
+
+/// Rule 10a: `_TITLE_LEAD` in sections.py, what a title may not start with besides whitespace:
+/// these, U+2010-U+2015 (hyphens and dashes) and U+200B-U+200F, U+FEFF (invisible).
+const TITLE_LEAD: &str = ".,:;|-*)\\\u{b7}\u{201d}\u{2019}\u{2018}\u{2026}";
+
+fn title_lead(c: char) -> bool {
+    let dash = ('\u{2010}'..='\u{2015}').contains(&c);
+    let invisible = ('\u{200b}'..='\u{200f}').contains(&c) || c == '\u{feff}';
+    is_space(c) || dash || invisible || TITLE_LEAD.contains(c)
+}
+
+/// Rule 10: the section's title from its heading's.
+fn section_title(h: &Heading, text: &str, form: &str) -> String {
+    let mut t = h.title.trim_start_matches(title_lead).to_string();
+    let quotes = [('"', '"'), ('\u{201c}', '\u{201d}')];
+    if let Some(&(open, close)) = quotes.iter().find(|q| t.starts_with(q.0)) {
+        let rest = &t[open.len_utf8()..];
+        t = match rest.find(close) {
+            Some(i) => rest[..i].trim_end_matches([',', ' ']).to_string(),
+            None => rest.to_string(),
+        };
+    }
+    if t.ends_with('\u{2026}') || t.ends_with("..") {
+        t = t
+            .trim_end_matches(['.', '\u{2026}'])
+            .trim_end_matches(' ')
+            .to_string();
+    }
+    let wanted = wanted_titles(h, form);
+    let mut words = title_words(&t);
+    let mut end = h.title_end;
+    for _ in 0..3 {
+        let shorter = |w: &Vec<&str>| w.len() > words.len() && starts(w, &words);
+        if words.is_empty() || end >= text.len() || !wanted.iter().any(shorter) {
+            break;
+        }
+        let rest = &text[end + 1..];
+        let line = &rest[..rest.find('\n').unwrap_or(rest.len())];
+        let joined = format!("{t} {line}");
+        let more = title_words(&joined);
+        if line.is_empty()
+            || char_len(line) > 120
+            || more.len() <= words.len()
+            || !wanted.iter().any(|w| starts(w, &more))
+        {
+            break;
+        }
+        t = joined;
+        words = more;
+        end += 1 + line.len();
+    }
+    match t.char_indices().nth(200) {
+        Some((i, _)) => t[..i].to_string(),
+        None => t,
+    }
+}
+
+/// Rule 10d: the words of the titles a wrapped title may be the start of: TITLES_10K with its
+/// item, TITLES_10Q with its Part and item; none for other forms.
+fn wanted_titles(h: &Heading, form: &str) -> Vec<Vec<&'static str>> {
+    let q = form.starts_with("10-Q");
+    if !q && !form.starts_with("10-K") {
+        return Vec::new();
+    }
+    let Some(item) = h.item.as_deref() else {
+        return Vec::new();
+    };
+    let part = h.part.as_deref();
+    let titles = if q { TITLES_10Q } else { TITLES_10K };
+    titles
+        .iter()
+        .filter(|t| t.2 == item && (!q || Some(t.1) == part))
+        .map(|t| t.0.split(' ').collect())
+        .collect()
+}
+
+/// Rule 10d: rule 9's core of a title, folded, split on whitespace (`_title_words`).
+fn title_words(title: &str) -> Vec<String> {
+    let folded: String = title_core(title).chars().map(fold_title).collect();
+    folded
+        .split(is_space)
+        .filter(|w| !w.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
+/// Whether `words` are the start of (or all of) a title's words.
+fn starts(title: &[&str], words: &[String]) -> bool {
+    title.len() >= words.len() && title[..words.len()] == *words
 }
 
 const MDNA_1: &str =

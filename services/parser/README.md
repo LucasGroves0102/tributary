@@ -79,6 +79,27 @@ Config (env): `DATABASE_URL` (required), `KAFKA_BOOTSTRAP_SERVERS` (default `loc
 `parser-backfill` for the [document crawl](../doc-fetcher/README.md#document-crawl), so crawled
 documents are parsed by a separate consumer and never queue ahead of live filings.
 
+## Section titles (rule 10)
+
+`python-5` / `rust-5` clean the stored `title` and nothing else (text, offsets, keys and which
+heading is kept are rules 1-9's; the audit's M4): leading separators and invisible marks go ("‑
+Exhibits", "| Risk Factors", an LRM, ", “Regulation FD Disclosure”"), a quoted or cross-referencing
+title keeps what's between its quotes (Deckers' Item 7, ', “Management’s Discussion …,” of our
+Annual' → the title), dot leaders go, and on a 10-K or 10-Q a title cut where its line wrapped
+("MANAGEMENT’S") takes the following lines while they continue one of the standard item titles of
+`TITLES_10K` / `TITLES_10Q` (at most 3 lines of at most 120 characters). Measured on production's
+stored titles (2026-11-09; the rule re-derived from each section's own first lines): a 0.5%
+random sample changes 181 of 8,106 titles (2.2%; about 44,000 of 1.97M), all wrapped titles
+completed; of the 1,980 titles starting with punctuation other than "[", "(" or "{", 1,968 change
+and 109 that were only punctuation become empty (the web app then names the section from its key).
+"[Reserved]" (13,878 titles) is a real title and stays. An 8-K whose kept heading is a sentence
+(", including Exhibit 99.1, is furnished …") keeps the sentence without its comma: the heading
+itself is in the text, which rule 10 doesn't change.
+
+Existing rows change only when re-parsed (`make reparse`, or the crawl outbox for some documents);
+a reparse rewrites the sections' rows and so their `parsed_at`, which makes `parser-index` recompute
+their search passages and diffs. New filings get clean titles as soon as both parsers are deployed.
+
 ## Tables in the text
 
 `html_to_text` (rule 1) ends every block element, `<tr>` included, with a newline and every cell with

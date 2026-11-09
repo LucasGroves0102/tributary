@@ -49,6 +49,28 @@ The algorithm is specified precisely so the Rust rewrite (week 4) can match it e
    when its key is the current section's. Its title is the line as written. Rule 7 applies.
    If no title heading is kept in rule 4, the result of rules 2-6 without rule 9 stands
    (no sections, or the error of a text without Part or Item headings).
+10. Titles. Only a section's `title` changes here: text, offsets, keys and rules 2-9 (rule 4
+   still compares the raw same-line titles) are as above; exhibits (rule 8) keep theirs. A
+   section's title starts as its kept heading's: the same-line title, else the next line (rule 2),
+   or the line (rule 9); the title's line is the line it was taken from. Then, in order:
+   a. Leading characters are dropped while the first is whitespace (str.isspace) or one of
+      . , : ; | - * · ) ” ’ ‘ U+005C (backslash) U+2010-U+2015 U+2026 U+200B-U+200F U+FEFF
+      ("‑ Exhibits", "… CONTROLS", ", Item", "| Risk Factors", an en space).
+   b. Quotes: if it then starts with " or “ and the same quote's closing " or ” occurs later, the
+      title is what lies between them, without trailing commas and spaces (“Risk Factors”, and the
+      cross-reference ', “Management’s Discussion and Analysis ...,” of our Annual Report'); a
+      starting quote with no closing one is dropped.
+   c. A title ending in "…" or ".." loses its trailing dots and ellipses, then trailing spaces
+      ("CONTROLS AND PROCEDURES….." is a dot leader).
+   d. Wrapped titles, forms starting "10-K" or "10-Q": the title's words are rule 9's core of the
+      title, folded, split on whitespace. While they are at least one, fewer than, and the start
+      of, the words of a title in TITLES_10K (any with this item) or TITLES_10Q (this Part and
+      item), the next line after the title's line, if it exists, isn't empty and has at most 120
+      characters (as written: rule 1 already trimmed it), is appended with one space between,
+      when the result has more words and they are still the start of (or all of) such a title;
+      otherwise, or after 3 lines, stop ("MANAGEMENT’S" + "DISCUSSION AND ANALYSIS OF FINANCIAL
+      CONDITION AND RESULTS OF OPERATIONS").
+   e. The first 200 characters are the title ("" when nothing is left).
 """
 
 import re
@@ -56,7 +78,8 @@ from dataclasses import dataclass
 
 from lxml import html
 
-PARSER_VERSION = "python-4"  # 4: title headings (rule 9); 3: MD&A by reference, exhibits, SGML
+# 5: clean titles (rule 10); 4: title headings (rule 9); 3: MD&A by reference, exhibits, SGML
+PARSER_VERSION = "python-5"
 
 _BLOCK = {"p", "div", "br", "tr", "li", "h1", "h2", "h3", "h4", "h5", "h6", "table", "section"}
 _CELL = {"td", "th"}
@@ -179,6 +202,7 @@ class _Heading:
     span: int = 0
     title_part: str | None = None  # rule 9 title heading: the Part its title belongs to
     xref: bool = False  # Part heading followed by ",": "Part I, Item 2" (rule 9 ignores it)
+    title_end: int = 0  # rule 10: where the title's line ends (its "\n", or the text's end)
 
 
 def find_sections(text: str, form: str) -> list[Section]:
@@ -209,8 +233,8 @@ def _sections(text: str, body: list[_Heading], form: str) -> list[Section]:
     for i, h in enumerate(kept):
         end = kept[i + 1].start if i + 1 < len(kept) else len(text)
         end = min([end] + [p for p in part_starts if h.start < p < end])
-        sections.append(Section(h.key, h.part, h.item, h.title, text[h.start:end].strip(),
-                                h.start, end))
+        sections.append(Section(h.key, h.part, h.item, _title(h, text, form),
+                                text[h.start:end].strip(), h.start, end))
     if form.startswith("10-K"):
         sections = [_mdna_by_reference(text, s) if s.key == "7" else s for s in sections]
     return sections
@@ -252,10 +276,13 @@ def _headings(text: str):
                            xref=m.group("rest").startswith(","))
             continue
         inline = title = m.group("rest").strip()
+        title_end = m.end()
         if not title:  # title on the next line, as in many tables of contents
             nxt = text.find("\n", m.end() + 1)
-            title = text[m.end() + 1 : nxt if nxt != -1 else len(text)].strip()
-        yield _Heading(m.start(), None, m.group("item").upper(), title[:200], inline)
+            title_end = nxt if nxt != -1 else len(text)
+            title = text[m.end() + 1 : title_end].strip()
+        yield _Heading(m.start(), None, m.group("item").upper(), title[:200], inline,
+                       title_end=title_end)
 
 
 def _title_headings(text: str, form: str):
@@ -264,8 +291,49 @@ def _title_headings(text: str, form: str):
     pos = 0
     for line in text.split("\n"):
         if len(line) <= 120 and (hit := titles.get(_title_core(line).translate(_FOLD))):
-            yield _Heading(pos, None, hit[1], line, title_part=hit[0])
+            yield _Heading(pos, None, hit[1], line, title_part=hit[0], title_end=pos + len(line))
         pos += len(line) + 1
+
+
+# rule 10a: what a title may not start with (besides whitespace)
+_TITLE_LEAD = frozenset(".,:;|-*·)\\”’‘…​‌‍‎‏﻿"
+                        + "".join(map(chr, range(0x2010, 0x2016))))
+_CLOSE_QUOTE = {'"': '"', "“": "”"}
+
+
+def _title(h: _Heading, text: str, form: str) -> str:
+    """Rule 10."""
+    t, i = h.title, 0
+    while i < len(t) and (t[i] in _TITLE_LEAD or t[i].isspace()):
+        i += 1
+    t = t[i:]
+    if t[:1] in _CLOSE_QUOTE:
+        close = t.find(_CLOSE_QUOTE[t[0]], 1)
+        t = t[1:close].rstrip(", ") if close != -1 else t[1:]
+    if t.endswith(("…", "..")):
+        t = t.rstrip(".…").rstrip(" ")
+    if form.startswith(("10-K", "10-Q")) and h.item is not None:
+        q = form.startswith("10-Q")
+        wanted = [title.split() for title, (part, item) in (TITLES_10Q if q else TITLES_10K).items()
+                  if item == h.item and (not q or part == h.part)]
+        words, end = _title_words(t), h.title_end
+        for _ in range(3):
+            if not words or end >= len(text) or not any(
+                    len(words) < len(w) and w[:len(words)] == words for w in wanted):
+                break
+            nxt = text.find("\n", end + 1)
+            nxt = len(text) if nxt == -1 else nxt
+            line = text[end + 1:nxt]
+            more = _title_words(t + " " + line)
+            if (not line or len(line) > 120 or len(more) <= len(words)
+                    or not any(w[:len(more)] == more for w in wanted)):
+                break
+            t, words, end = t + " " + line, more, nxt
+    return t[:200]
+
+
+def _title_words(title: str) -> list[str]:
+    return _title_core(title).translate(_FOLD).split()
 
 
 def _title_core(line: str) -> str:

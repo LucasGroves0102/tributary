@@ -68,6 +68,13 @@ titles, their punctuation and parenthetical variants and "Part I, Item 2" cross-
 decides ~2,500 of each 20,000 documents per form): 20,000 documents (`--tokens 60`) and 3,000
 (`--tokens 2000`), four parses each, zero differences.
 
+Rule 10 (clean titles, 2026-11-09, `rust-5` / `python-5`): `section_title` in `src/sections.rs`
+mirrors `_title` in sections.py line by line (the lead set is `TITLE_LEAD` plus two ranges, the
+wrapped-title words come from the same `TITLES_10K` / `TITLES_10Q` and `title_core`/`fold_title`).
+Written without a local build (the laptop can't run cargo): its unit tests in `tests/sections.rs`
+copy the Python ones, and CI's `cargo test`, clippy and fmt are the first check. Before deploying,
+run `scripts/bench.py` over a corpus as above: zero differences expected, titles included.
+
 Known gap: documents declaring a legacy encoding other than UTF-8/16, ISO-8859-x, windows-1252
 or ASCII are decoded with encoding_rs, whose Shift_JIS, GB2312 and Mac Roman tables differ from
 the libiconv lxml uses. Every stored document is ASCII.

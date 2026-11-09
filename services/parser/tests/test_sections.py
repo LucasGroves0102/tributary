@@ -234,6 +234,82 @@ def test_titles_10k():
     assert [(s.key, s.part) for s in sections] == [("1", "I"), ("1A", "I"), ("16", "IV")]
 
 
+def _titles(text: str, form: str) -> dict[str, str]:
+    return {s.key: s.title for s in find_sections(text, form)}
+
+
+def test_rule_10_leading_punctuation_and_quotes():
+    """M4 (audit 2026-11-06): titles from production that started with punctuation."""
+    body = "Text. " * 20
+    text = "\n".join([
+        "Item 2.02, \"Results of Operations and Financial Condition\"", body,
+        "Item 7.01 ‑  Regulation FD Disclosure", body,
+        "Item 8.01‎ Other Events.", body,
+        "Item 9.01 , “Financial Statements and Exhibits.” and more", body,
+    ])
+    assert _titles(text, "8-K") == {
+        "2.02": "Results of Operations and Financial Condition",
+        "7.01": "Regulation FD Disclosure",
+        "8.01": "Other Events.",
+        "9.01": "Financial Statements and Exhibits.",
+    }
+    text = "\n".join(["Item 1. | Business", body, "Item 1A. “Risk", body,
+                      "Item 6. [Reserved]", body, "Item 9A. …..CONTROLS AND PROCEDURES…..", body,
+                      "Item 9B. ,", body])
+    assert _titles(text, "10-K") == {"1": "Business", "1A": "Risk", "6": "[Reserved]",
+                                     "9A": "CONTROLS AND PROCEDURES", "9B": ""}
+
+
+def test_rule_10_cross_reference_title_is_the_quoted_one():
+    """Deckers' 10-K: the Item 7 heading kept is a cross-reference into a quoted title."""
+    text = "\n".join([
+        "Item 7, “Management’s Discussion and Analysis of Financial Condition and Results of"
+        " Operations,” of our Annual", "Report. " * 30])
+    assert _titles(text, "10-K")["7"] == ("Management’s Discussion and Analysis of Financial"
+                                          " Condition and Results of Operations")
+
+
+def test_rule_10_wrapped_titles_are_completed():
+    text = "\n".join([
+        "Item 7. MANAGEMENT’S", "DISCUSSION AND ANALYSIS OF FINANCIAL CONDITION AND",
+        "RESULTS OF OPERATIONS", "Revenue grew. " * 30,
+        "Item 7A. Quantitative and Qualitative Disclosures", "about Market Risk.", "Rates. " * 30,
+        # the filer's own short title: the next line doesn't continue it, so it stays
+        "Item 9. Changes in and Disagreements", "None.",
+        "Item 9A. Controls", "Our controls work. " * 10,
+    ])
+    titles = _titles(text, "10-K")
+    assert titles["7"] == ("MANAGEMENT’S DISCUSSION AND ANALYSIS OF FINANCIAL CONDITION AND"
+                           " RESULTS OF OPERATIONS")
+    assert titles["7A"] == "Quantitative and Qualitative Disclosures about Market Risk."
+    assert titles["9"] == "Changes in and Disagreements"
+    assert titles["9A"] == "Controls"
+    # a 10-Q's title by its Part: Part I item 2 is MD&A, never Part II item 2's title
+    text = "\n".join(["PART I", "Item 2. Management’s Discussion and Analysis",
+                      "of Financial Condition and Results of Operations", "Sales. " * 30,
+                      "PART II", "Item 2. Unregistered Sales of Equity Securities",
+                      "and Use of Proceeds", "None. " * 5])
+    assert _titles(text, "10-Q") == {
+        "I-2": ("Management’s Discussion and Analysis of Financial Condition and Results"
+                " of Operations"),
+        "II-2": "Unregistered Sales of Equity Securities and Use of Proceeds",
+    }
+
+
+def test_rule_10_wrapping_stops_after_three_lines_and_at_long_lines():
+    text = "\n".join(["Item 7. Management's", "Discussion", "and", "Analysis",
+                      "of Financial Condition", "Body. " * 30])
+    assert _titles(text, "10-K")["7"] == "Management's Discussion and Analysis"
+    text = "\n".join(["Item 7. Management's Discussion and Analysis of", "Financial " + "x" * 120,
+                      "Body. " * 30])
+    assert _titles(text, "10-K")["7"] == "Management's Discussion and Analysis of"
+
+
+def test_rule_10_changes_titles_only(ten_k):
+    """Same keys, text and offsets as rules 1-9 give; the NVIDIA fixtures' titles were clean."""
+    assert [s.title for s in ten_k][:3] == ["Business", "Risk Factors", "Unresolved Staff Comments"]
+
+
 def test_no_titles_keeps_previous_result():
     assert find_sections("PART I\nNothing numbered or titled here.", "10-Q") == []
     with pytest.raises(ValueError):
