@@ -163,6 +163,73 @@ def test_a_bank_is_compared_on_bank_columns(token):
     assert [col["key"] for col in asked["columns"]] == ["revenue_ttm"]  # what was asked wins
 
 
+def test_the_text_rule_is_parser_peers_own():
+    business = pytest.importorskip("filing_parser.business")
+    assert (P.TEXT_MAX_AGE_DAYS, P.TEXT_MIN_CHARS) == (business.MAX_AGE_DAYS, business.MIN_CHARS)
+
+
+# the latest 10-Ks' Item 1 on hermes, 2026-11-09 (accession, length, title)
+INTEL = {"accession_no": "0000050863-26-000011", "chars": 143, "title": "Business:"}
+GE = {"accession_no": "0000040545-26-000008", "chars": 34, "title": "Business 4-7, 9-10, 71-73"}
+MCD = {"accession_no": "0000063908-26-000035", "chars": 23, "title": "Business Page 3"}
+CITI = {"accession_no": "0000831001-26-000011", "chars": None, "title": None}  # no sections
+
+
+@pytest.mark.parametrize("profile,can_read,text,reason", [
+    (False, True, INTEL, "cross_reference"),
+    (False, True, GE, "cross_reference"),
+    (False, True, MCD, "cross_reference"),
+    (False, True, CITI, "no_business_section"),
+    (False, True, {"chars": 40_000, "title": "Financial Statements"}, "no_business_section"),
+    (False, True, {"chars": 40_000, "title": "Business"}, "not_profiled"),
+    (False, True, None, "no_annual_report"),
+    (False, False, None, "filings_access"),
+    (True, True, None, "no_close_peers"),
+])
+def test_why_peers_fall_back_to_sic_and_size(profile, can_read, text, reason):
+    assert P.fallback_reason(profile, can_read, text) == reason
+    assert reason in P.FALLBACK_REASONS and P.FALLBACK_METHOD[reason].endswith(".")
+
+
+class TextStore(PeerStore):
+    """No business profile; the latest 10-K's Item 1 is `text` (Store.business_text)."""
+
+    def __init__(self, text):
+        super().__init__()
+        self.text = text
+
+    def business_text(self, user_id, company_id, days):
+        self.calls.append(("business_text", company_id, days))
+        return self.text
+
+
+@pytest.mark.parametrize("text,reason,words", [
+    (INTEL, "cross_reference", "cross-reference to pages elsewhere"),
+    (CITI, "no_business_section", "no Business section (Item 1)"),
+    (None, "no_annual_report", "no 10-K on file")])
+def test_peers_by_sic_and_size_say_why_there_is_no_business_text(token, text, reason, words):
+    c = client({"alice": {NVDA: {"financials", "filings"}}}, TextStore(text))
+    body = c.get(f"/v1/companies/{NVDA}/peers", headers=token("alice")).json()
+    assert body["basis"] == "sic" and body["basis_reason"] == reason
+    assert body["method"].startswith("By SIC and size: ") and words in body["method"]
+    assert "Same 4-digit SIC first" in body["method"]
+    assert ("business_text", NVDA, P.TEXT_MAX_AGE_DAYS) in c.store.calls
+    assert [p["company_id"] for p in body["peers"]] == [NVDA, TSLA]  # SIC and size, as before
+
+
+def test_without_filings_the_text_isnt_read_and_the_plan_is_why(token):
+    c = client({"alice": {NVDA: {"financials"}}}, TextStore(INTEL))
+    body = c.get(f"/v1/companies/{NVDA}/peers", headers=token("alice")).json()
+    assert body["basis_reason"] == "filings_access" and "your plan" in body["method"]
+    assert not any(call[0] == "business_text" for call in c.store.calls)
+
+
+def test_by_business_has_no_fallback_reason(token):
+    c = client({"alice": {NVDA: {"financials", "filings"}, AMD: {"financials"}}})
+    body = c.get(f"/v1/companies/{NVDA}/peers", headers=token("alice")).json()
+    assert body["basis"] == "business" and body["basis_reason"] is None
+
+
 class CheckStore(BusinessStore):
     REPORTS = {AMD: {"has_financials": True, "sic": "3674", "annual": {"10-K": "2026-02-04"}},
                "0001977102": {"has_financials": False, "sic": "3140",

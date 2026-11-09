@@ -316,6 +316,31 @@ class Store:
                 " ORDER BY company_id, named_id, char_start", {"c": company_id})
             return {"profile": profile, "peers": peers, "mentions": cur.fetchall()}
 
+    def business_text(self, user_id: str, company_id: str, days: int) -> dict | None:
+        """The company's latest stored 10-K filed in the last `days` and its Item 1 as parsed
+        (the longest parse: `chars`, `title`; both None without one), to say why it has no
+        business profile (query_api/peers.py). None: no 10-K stored. The 10-Ks come from the
+        filing index by the company's CIKs (= ANY(ARRAY(...)) reaches both branches of the UNION
+        view), each probed by primary key; the section reads under RLS (filings tier)."""
+        with self._session(user_id) as cur:
+            cur.execute(
+                """
+                SELECT f.accession_no, f.filing_date AS filed, s.chars, s.title
+                FROM silver.filings f
+                JOIN bronze.filing_documents d ON d.accession_no = f.accession_no
+                LEFT JOIN LATERAL (
+                    SELECT x.char_end - x.char_start AS chars, x.title
+                    FROM silver.filing_sections x
+                    WHERE x.accession_no = f.accession_no AND x.section_key = '1'
+                    ORDER BY x.char_end - x.char_start DESC LIMIT 1) s ON true
+                WHERE f.cik = ANY(ARRAY(SELECT k.cik FROM silver.company_ciks k
+                                        WHERE k.company_id = %(c)s))
+                  AND f.form = '10-K' AND f.filing_date > current_date - %(days)s::int
+                ORDER BY f.filing_date DESC, f.accession_no DESC
+                LIMIT 1
+                """, {"c": company_id, "days": days})
+            return cur.fetchone()
+
     def peer_facts(self, user_id: str, company_ids: list[str],
                    granted: list[str] | None) -> dict[str, dict]:
         """company_id -> sic, sector, filer category, and TTM revenue read like Store.peers (only

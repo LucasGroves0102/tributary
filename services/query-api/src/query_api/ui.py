@@ -21,7 +21,10 @@ from fastapi.responses import Response
 
 from query_api.authorizer import Readable
 from query_api.csv_export import csv_response
+from query_api.peers import FALLBACK_METHOD as PEER_FALLBACK_METHOD
+from query_api.peers import TEXT_MAX_AGE_DAYS as PEER_TEXT_DAYS
 from query_api.peers import Candidate as PeerCandidate
+from query_api.peers import fallback_reason as peer_fallback_reason
 from query_api.peers import rank as rank_peers
 from query_api.peers import sic_match
 from query_api.screener import (
@@ -546,23 +549,26 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
                                                        coverage=False, sort="company_id",
                                                        limit=max(len(ids), 1)), access)
         by_id = {r["company_id"]: r for r in rows}
+        reason = None
         if basis == "business":
             method = ("By business: how alike the two 10-Ks' Business sections (Item 1) are, "
                       "competitors either one names there, then SIC division and TTM revenue size "
                       "(companies you can read) as weak signals.")
-        elif profile is None and not allowed(user_id, "filings", company_id):
-            method = ("By SIC and size: business descriptions are part of filings text, which your "
-                      "plan doesn't include for this company.")
         else:
-            method = ("By SIC and size: this company has no 10-K Business section on file to "
-                      "compare (none in the last three years, or only a cross-reference). Same "
-                      "4-digit SIC first, then 3- and 2-digit groups; within a level, the same TTM "
-                      "revenue size band (companies you can read), the same SEC filer category, "
-                      "then closest revenue.")
+            # why there is no business text to rank by (peers.py's docstring); the 10-K's Item 1
+            # is read only with the filings tier, under RLS
+            can_read_text = allowed(user_id, "filings", company_id)
+            text = (store.business_text(user_id, company_id, PEER_TEXT_DAYS)
+                    if profile is None and can_read_text else None)
+            reason = peer_fallback_reason(profile is not None, can_read_text, text or None)
+            method = (f"By SIC and size: {PEER_FALLBACK_METHOD[reason]} Same 4-digit SIC first, "
+                      "then 3- and 2-digit groups; within a level, the same TTM revenue size band "
+                      "(companies you can read), the same SEC filer category, then closest "
+                      "revenue.")
         return {
             "company_id": company_id, "as_of": _now(), "columns": column_info(compiled.columns),
             "company": {**target[0], "revenue_band": band_label(own_band)},
-            "basis": basis, "method": method,
+            "basis": basis, "method": method, "basis_reason": reason,
             "business": None if profile is None else {
                 "accession_no": profile["accession_no"], "section_key": profile["section_key"],
                 "filed": profile["filed"], "terms": profile["terms"][:10],

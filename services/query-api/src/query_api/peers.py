@@ -27,6 +27,18 @@ No text on file for the company (no 10-K Item 1 in the last three years, or the 
 its filings): SIC and size, as before F4 (`basis` "sic"). Blank-check shells (SIC 6770) are never
 suggested for an operating company. The answer says what made each one similar (`why`), in words
 the web app shows as they are.
+
+Why SIC and size (`basis_reason`, `fallback_reason`), from the company's latest 10-K stored in the
+last TEXT_MAX_AGE_DAYS and its Item 1 as parsed (parser-peers' own test, business.py's spec):
+* `filings_access`: the caller's plan doesn't include this company's filings text;
+* `no_annual_report`: no 10-K stored from the last three years (a 20-F filer, or none yet);
+* `no_business_section`: the 10-K is stored but has no Item 1, or one titled as financial
+  statements (a mis-parse): Citigroup's 10-K follows its annual report's own layout, with the
+  form's items only in a cross-reference index, so the parser finds no Item heading at all;
+* `cross_reference`: Item 1 is shorter than TEXT_MIN_CHARS: a pointer to pages elsewhere in the
+  report ("Item 1. Business: Pages 3-5": Intel, General Electric, McDonald's), not text to compare;
+* `not_profiled`: a usable Item 1 the weekly parser-peers job hasn't read yet;
+* `no_close_peers`: a profile, but no stored neighbour or named competitor is a company here.
 """
 
 from __future__ import annotations
@@ -42,6 +54,29 @@ SIZE_FLOOR = Decimal(10_000_000)
 DIVISION = {4: 1.15, 3: 1.10, 2: 1.10, 1: 1.0, 0: 0.80}
 NO_SIC = 0.90
 SHELL = "6770"
+# parser-peers' document rule (services/parser filing_parser/business.py MAX_AGE_DAYS, MIN_CHARS;
+# test_peers keeps them equal)
+TEXT_MAX_AGE_DAYS = 1100
+TEXT_MIN_CHARS = 3_000
+FALLBACK_REASONS = ("filings_access", "no_annual_report", "no_business_section",
+                    "cross_reference", "not_profiled", "no_close_peers")
+# what `method` says after "By SIC and size: " for each reason
+FALLBACK_METHOD = {
+    "filings_access": "business descriptions are part of filings text, which your plan doesn't "
+                      "include for this company.",
+    "no_annual_report": "this company has no 10-K on file from the last three years, so there is "
+                        "no Business section to compare.",
+    "no_business_section": "this company's latest 10-K has no Business section (Item 1) to "
+                           "compare: the report follows its own layout, with the form's items "
+                           "only in a cross-reference index.",
+    "cross_reference": "this company's latest 10-K gives its Business section (Item 1) as a "
+                       "cross-reference to pages elsewhere in the report, so there is no business "
+                       "text to compare.",
+    "not_profiled": "this company's latest 10-K Business section hasn't been read for peers yet "
+                    "(new 10-Ks are read weekly).",
+    "no_close_peers": "no other company's Business section reads close to this one's, and none "
+                      "is named as a competitor.",
+}
 
 
 def division(sic: str | None) -> str | None:
@@ -105,3 +140,21 @@ def rank(target_sic: str | None, target_revenue: Decimal | None,
                    + (NAMED if c.named_by_target else 0.0) + (NAMES if c.names_target else 0.0))
         out.append(c)
     return sorted(out, key=lambda c: (-c.score, c.company_id))
+
+
+def fallback_reason(profile: bool, can_read_filings: bool, text: dict | None) -> str:
+    """Why peers are by SIC and size (module docstring). `profile`: the company has a stored
+    business profile; `text`: its latest stored 10-K in the window and Item 1's length and title
+    (Store.business_text; None or empty: no 10-K stored)."""
+    if profile:
+        return "no_close_peers"
+    if not can_read_filings:
+        return "filings_access"
+    if not text:
+        return "no_annual_report"
+    chars, title = text.get("chars"), text.get("title") or ""
+    if chars is None or "financial statements" in title.lower():
+        return "no_business_section"
+    if chars < TEXT_MIN_CHARS:
+        return "cross_reference"
+    return "not_profiled"
