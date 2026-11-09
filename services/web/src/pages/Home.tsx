@@ -37,12 +37,14 @@ interface Props {
   readableCompanies?: number;
   /** "New chart": an empty chart, the current draft kept for one Restore */
   onNewChart?: () => void;
+  /** the first step (home/StartCard: start or continue an analysis), above the cards */
+  start?: ReactNode;
 }
 
 /** Cards shown side by side when next to each other. */
 const HALF = new Set<HomeCardId>(["filings", "expected"]);
 
-export function Home({ workspace, lastIngested, listed = null, onAdd, onExport, recent, notes, layout, onCustomize, editor, columnPicker, readableCompanies = 0, onNewChart }: Props) {
+export function Home({ workspace, lastIngested, listed = null, onAdd, onExport, recent, notes, layout, onCustomize, editor, columnPicker, readableCompanies = 0, onNewChart, start }: Props) {
   const { watchlist, rows, filings, expected, since, firstVisit } = workspace;
   // bold tells the new rows from the rest, so it says nothing when they're all new or none are
   const shownFilings = filings?.slice(0, FEED_ROWS) ?? [];
@@ -150,18 +152,20 @@ export function Home({ workspace, lastIngested, listed = null, onAdd, onExport, 
             Customize
           </button>
         )}
-        <button className="btn" onClick={() => go({ view: "companies" })}>
+        {/* #127: one way in leads (the start card); these are the others, quietly */}
+        <button className="btn ghost" onClick={() => go({ view: "companies" })}>
           Screen companies
         </button>
-        <button className="btn" onClick={() => go({ view: "compare" })}>
+        <button className="btn ghost" onClick={() => go({ view: "compare" })}>
           New comps
         </button>
-        <button className="btn primary" onClick={() => (onNewChart ? onNewChart() : go({ view: "chart" }))}>
+        <button className="btn ghost" onClick={() => (onNewChart ? onNewChart() : go({ view: "chart" }))}>
           New chart
         </button>
       </div>
 
       {editor}
+      {start}
       {blocks}
     </div>
   );

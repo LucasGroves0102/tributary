@@ -28,8 +28,11 @@ const OPTIONS = [
 ];
 
 it("Home layout: saved order, unknown cards dropped, missing ones appended", () => {
-  expect(homeLayout(null).map((c) => c.id)).toEqual([...HOME_CARDS]);
+  // F6 (#127): nothing saved is the watchlist, new filings and data notes; the rest off
+  expect(homeLayout(null).map((c) => `${c.id}${c.hidden ? "-" : ""}`)).toEqual(["watchlist", "filings", "notes", "recent-", "status-", "expected-"]);
+  expect(new Set(homeLayout(null).map((c) => c.id))).toEqual(new Set(HOME_CARDS));
   expect(isDefaultHome(homeLayout(null))).toBe(true);
+  expect(isDefaultHome(homeLayout({ cards: HOME_CARDS.map((id) => ({ id, hidden: false })) }))).toBe(false);
   const saved = homeLayout({ cards: [{ id: "notes", hidden: false }, { id: "ads", hidden: false }, { id: "status", hidden: true }, { id: "notes", hidden: true }] });
   expect(saved.map((c) => `${c.id}${c.hidden ? "-" : ""}`)).toEqual(["notes", "status-", "recent", "watchlist", "filings", "expected"]);
   expect(isDefaultHome(saved)).toBe(false);

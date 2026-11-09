@@ -63,6 +63,11 @@ function respond(url: string, init?: RequestInit): Response {
   if (path === "/v1/demo/users") return Response.json({ users: ["alice"] });
   if (path === "/v1/demo/token") return Response.json({ token: "t" });
   if (path === "/v1/me") return Response.json(ME);
+  // Home with Continue where you left off on (F6 turned it off by default)
+  if (path === "/v1/views" && method === "GET") {
+    return Response.json({ views: { home: { cards: [{ id: "recent", hidden: false }] }, screener: null, watchlist: null },
+      options: { home_cards: [], columns: [], max_columns: { screener: 12, watchlist: 8 } } });
+  }
   if (path === "/v1/watchlist") return Response.json({ as_of: "", columns: [], expected_method: "", companies: [entry()] });
   if (path === "/v1/screener/columns") return Response.json(COLUMNS);
   if (path === "/v1/screener") {

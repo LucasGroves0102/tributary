@@ -33,8 +33,10 @@ export const DEFAULT_WATCHLIST_COLUMNS = [...WATCHLIST_COLUMNS];
 
 const isCard = (id: string): id is HomeCardId => (HOME_CARDS as readonly string[]).includes(id);
 
-/** Every card once: the saved order (unknown ids dropped), then any card it doesn't list. */
+/** Every card once: the saved order (unknown ids dropped), then any card it doesn't list (shown);
+ * nothing saved is DEFAULT_HOME. */
 export function homeLayout(saved: { cards: HomeCardPref[] } | null | undefined): HomeCard[] {
+  if (!saved?.cards?.some((c) => isCard(c.id))) return DEFAULT_HOME.map((c) => ({ ...c }));
   const out: HomeCard[] = [];
   for (const c of saved?.cards ?? []) {
     if (isCard(c.id) && !out.some((x) => x.id === c.id)) out.push({ id: c.id, hidden: c.hidden === true });
@@ -43,10 +45,24 @@ export function homeLayout(saved: { cards: HomeCardPref[] } | null | undefined):
   return out;
 }
 
+/** Home with nothing saved (F6, #127): the start card (always first, not a card) is the way in,
+ * then the watchlist, new filings and data notes, the three testers said work; the status strip,
+ * Continue where you left off (the start card lists your analyses) and Expected filings (the
+ * watchlist has each next filing) are off until turned on in Customize. Mirrors
+ * query_api/views.py DEFAULTS["home"]. */
+export const DEFAULT_HOME: readonly HomeCard[] = [
+  { id: "watchlist", hidden: false },
+  { id: "filings", hidden: false },
+  { id: "notes", hidden: false },
+  { id: "recent", hidden: true },
+  { id: "status", hidden: true },
+  { id: "expected", hidden: true },
+];
+
 export const defaultHome = (): HomeCard[] => homeLayout(null);
 
 export function isDefaultHome(cards: HomeCard[]): boolean {
-  return cards.every((c, i) => c.id === HOME_CARDS[i] && !c.hidden);
+  return cards.length === DEFAULT_HOME.length && cards.every((c, i) => c.id === DEFAULT_HOME[i]!.id && c.hidden === DEFAULT_HOME[i]!.hidden);
 }
 
 /** Moves a card (or column) one place up (-1) or down (1); unchanged at the ends. */

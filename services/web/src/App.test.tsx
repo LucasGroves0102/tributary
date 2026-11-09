@@ -28,8 +28,17 @@ const ANSWER = {
 
 const asked: { question: string }[] = [];
 
+/** Home with every card on: a returning user's arrangement, so the cards' own tests see them (F6
+ * turned the status strip, Continue and Expected filings off by default; `homeDefault` sees that) */
+let homeDefault = false;
+const EVERY_CARD = { cards: ["status", "recent", "watchlist", "filings", "expected", "notes"].map((id) => ({ id, hidden: false })) };
+
 function respond(url: string, init?: RequestInit): Response {
   const path = new URL(url, "http://x").pathname;
+  if (path.endsWith("/v1/views") && (init?.method ?? "GET") === "GET") {
+    return Response.json({ views: { home: homeDefault ? null : EVERY_CARD, screener: null, watchlist: null },
+      options: { home_cards: [], columns: [], max_columns: { screener: 12, watchlist: 8 } } });
+  }
   if (path.endsWith("/v1/demo/users")) return Response.json({ users: ["alice", "bob"] });
   if (path.endsWith("/v1/demo/token")) return Response.json({ token: "t", expires_in: 3600 });
   if (path.endsWith("/v1/me")) return Response.json(ME);
@@ -126,6 +135,7 @@ beforeEach(() => {
   Object.defineProperty(window, "innerWidth", { value: 1440, configurable: true });
   forgetVisits();
   asked.length = 0;
+  homeDefault = false;
 });
 
 afterEach(() => {
@@ -230,6 +240,20 @@ describe("Home", () => {
     expect(label).toBe("in the last 7 days"); // a first visit in this browser, not "your last visit"
     expect(badge.getAttribute("title")).toContain(`${badge.textContent} new`);
     expect(tile.parentElement!.querySelector(".v")?.textContent).toContain(badge.textContent!);
+  });
+
+  it("F6 (#127): with nothing saved, Home starts with Start an analysis, then the watchlist, new filings and notes", async () => {
+    homeDefault = true;
+    await render();
+    const start = $(".start-card")!;
+    expect(start.querySelector("h2")?.textContent).toBe("Start an analysis");
+    expect(start.querySelector('input[aria-label="Company to analyse"]')).not.toBeNull();
+    expect([...container.querySelectorAll(".page > .card h2, .page > section.card h2")].map((h) => h.textContent?.split(" ")[0]))
+      .toEqual(["Start", "Watchlist", "New", "Recent"]);
+    expect($(".status-strip")).toBeNull();
+    expect(container.textContent).not.toContain("Expected filings");
+    // one primary way in: the other actions are quiet
+    expect(container.querySelectorAll(".page-bar .btn.primary")).toHaveLength(0);
   });
 
   it("counts every readable company in the feed's heading with the catalog open", async () => {
