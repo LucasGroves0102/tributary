@@ -6231,3 +6231,66 @@ details.routine summary {
 .start-alerts {
   font-weight: 650;
 }
+
+/* Backlog and orders from the filings' text (F8b, company/TextKpis.tsx) */
+.text-kpi {
+  margin-top: var(--sp-6);
+  min-width: 0;
+}
+
+.text-kpi h3 {
+  margin: 0 0 var(--sp-3);
+  font-size: 13px;
+}
+
+.text-kpi-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.text-kpi-table th,
+.text-kpi-table td {
+  text-align: left;
+  vertical-align: top;
+  padding: var(--sp-2) var(--sp-4) var(--sp-2) 0;
+  border-bottom: 1px solid var(--line);
+  overflow-wrap: anywhere;
+}
+
+.text-kpi-table th {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+
+.text-kpi-table th:nth-child(1) {
+  width: 22%;
+}
+
+.text-kpi-table th:nth-child(2) {
+  width: 14%;
+}
+
+.text-kpi-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.text-kpi-table q.passage {
+  display: block;
+  margin-top: var(--sp-1);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-2);
+}
+
+@media (max-width: 640px) {
+  .text-kpi-table th:nth-child(1) {
+    width: 30%;
+  }
+
+  .text-kpi-table th:nth-child(2) {
+    width: 22%;
+  }
+}

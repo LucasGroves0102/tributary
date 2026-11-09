@@ -245,6 +245,15 @@ export async function mockApi(page: Page): Promise<Fake> {
     }
     m = path.match(/^\/v1\/companies\/(\d{10})\/earnings$/);
     if (m) return json({ company_id: m[1], as_of: "", quarters: [], method: "" });
+    // F8b: the Overview's and Numbers' backlog and orders from the filings' text
+    m = path.match(/^\/v1\/companies\/(\d{10})\/text-kpis$/);
+    if (m) {
+      const none = { points: [], conflicts: [] };
+      return json({ company_id: m[1], as_of: "", since: "2016-11-09", method: "", read: { sections: 0, filings: 0, from: null },
+        metrics: { backlog: { label: "Backlog", unit: "USD", span: "instant", ...none },
+          orders: { label: "Orders in the quarter", unit: "USD", span: "quarter", ...none },
+          orders_growth: { label: "Order growth in the quarter, year on year", unit: "percent", span: "quarter", ...none } } });
+    }
     // F7b: the Filings tab's insider filings (Insider and All)
     m = path.match(/^\/v1\/companies\/(\d{10})\/insiders$/);
     if (m) return json({ company_id: m[1], filings: [], has_more: false });

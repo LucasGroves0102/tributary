@@ -1567,6 +1567,58 @@ export interface EarningsResponse {
   method: string;
 }
 
+// --- backlog and orders from the filings' text (F8b, H11; Query API query_api/text_kpis.py) ---
+
+export type TextKpiMetric = "backlog" | "orders" | "orders_growth";
+
+/** One passage that states a figure: the number as written and where (reader offsets). */
+export interface TextKpiSource {
+  written: string;
+  how: "sentence" | "table";
+  passage: string;
+  citation: {
+    accession_no: string;
+    form: string;
+    filed: string;
+    section_key: string;
+    char_start: number;
+    char_end: number;
+    document_url: string | null;
+  };
+}
+
+export interface TextKpiPoint {
+  period_end: string;
+  /** dollars (backlog, orders) or percentage points (order growth: 60 is 60%) */
+  value: number;
+  /** the rounding of what's written, in the value's units ($15.0 billion: 1e8) */
+  precision: number;
+  unit: "USD" | "percent";
+  span: "instant" | "quarter";
+  /** order growth: "organic" (organic or excluding currency) or "reported" */
+  basis?: "organic" | "reported";
+  /** newest filing first */
+  sources: TextKpiSource[];
+}
+
+export interface TextKpiSeries {
+  label: string;
+  unit: "USD" | "percent";
+  span: "instant" | "quarter";
+  points: TextKpiPoint[];
+  /** dates whose filings disagree: what was kept (null: left out) */
+  conflicts: { period_end: string; basis?: string; values: number[]; kept: number | null }[];
+}
+
+export interface TextKpis {
+  company_id: string;
+  as_of: string;
+  since: string;
+  metrics: Record<TextKpiMetric, TextKpiSeries>;
+  read: { sections: number; filings: number; from: string | null };
+  method: string;
+}
+
 // --- filing alerts (F6; Query API /v1/alerts, query_api/alerts.py) ---------------------------
 
 export type AlertForm = "10-K" | "10-Q" | "8-K";

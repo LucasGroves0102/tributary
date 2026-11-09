@@ -90,7 +90,7 @@ export function numbersCharts(companyId: string, ticker: string): NumbersChart[]
     },
     {
       key: "backlog",
-      read: "Remaining performance obligations are revenue under contract not yet recognised, the nearest tagged figure to a backlog; contract liabilities are customer advances. Rising faster than revenue means demand ahead of output. Not every company tags them, and a backlog in MD&A text isn't here.",
+      read: "Remaining performance obligations are revenue under contract not yet recognised, the nearest tagged figure to a backlog; contract liabilities are customer advances. Rising faster than revenue means demand ahead of output. Not every company tags them; the backlog and orders the filings state in words are in the next card, from the filing's text.",
       chart: annual(`${ticker}: backlog proxy and customer advances against revenue`, [
         { id: 1, kind: "metric", companyId, metric: "remaining_performance_obligations", transform: "q", type: "bar", axis: "L", name: "Remaining performance obligations", color: 0 },
         { id: 2, kind: "metric", companyId, metric: "contract_liabilities_current", transform: "q", type: "bar", axis: "L", name: "Contract liabilities (customer advances)", color: 4 },

@@ -11,6 +11,7 @@ import { ErrorPanel, sentence, Skeleton } from "../components/States";
 import { EventsCard } from "./Events";
 import { keyStatFlag, staleFlags } from "./events";
 import { RecapTable } from "./RecapTable";
+import { TextKpisCard } from "./TextKpis";
 import { Gate } from "./Tables";
 import { useLoad } from "./useLoad";
 
@@ -18,7 +19,8 @@ const EXCERPT_CHARS = 1500;
 
 /** Key stats (a balance a later 8-K may have changed is flagged, never recomputed), what the
  * company filed since its last report, the latest quarter vs the prior and year-ago quarters, the
- * business description (10-K Item 1) and quarterly revenue. */
+ * business description (10-K Item 1), quarterly revenue, and backlog and orders as the filings
+ * state them in words (F8b). */
 export function Overview({
   token,
   companyId,
@@ -76,6 +78,7 @@ export function Overview({
           <Revenue token={token} companyId={companyId} />
         </section>
       )}
+      <TextKpisCard token={token} companyId={companyId} name={name} canRead={canRead} />
     </>
   );
 }

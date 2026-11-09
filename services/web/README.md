@@ -203,6 +203,21 @@ docstring; the Query API's `/earnings` and `/events`, rules in its README, "Earn
   the stale list names it the same way. An older API without `announced` words it by its items.
 - An older Query API without the routes (404) reads as "not available here yet", never an error
   (`api.ts` `orNullOn404`); e2e's mock answers both routes so the clean-console check holds.
+
+Backlog and orders from the filings' text (F8b, H11; `company/TextKpis.tsx`, wording in
+`company/textKpis.ts`; the Query API's `/text-kpis`, rules in its README): a card on the company
+page's Overview (last) and in the Numbers step (after the backlog proxy chart), headed "Backlog and
+orders", every figure labelled "from the filing's text". A chart (backlog and orders as bars, order
+growth as a line on the right, one basis: organic when the filings say so more often; points open the
+reader at their passage) and per figure a table, newest first (six, then Show all): as of (a date for
+backlog, "quarter to ..." for orders), the figure as the API states it, and where it's written ("10-Q
+filed Oct 22, 2025 · MD&A", linking the reader at the passage's offset; "also in N more filings")
+with the passage quoted around its number. With nothing stated it says what it looked for and where,
+and that a company can state these otherwise or only by segment. The figures, their dates and which
+one wins a disagreement are the API's; nothing is read from text in the browser. An older API (404)
+reads "not available here yet"; without the filings tier it asks nothing. e2e's mock answers the
+route (empty). Fixtures `company/fixtures/{vrt,nvda}-text-kpis.json`: the branch's route over
+production's sections (2026-11-09).
 - Verified (2026-11-08) against production's data through a harness: the branch's routes over rows
   read from hermes, every other read from production: Vertiv's Sep 30 cash, debt, net debt and total
   assets flagged before the Oct 27 UIG acquisition (tester 1's missed 8-K) with its 8-K quoted;
@@ -557,7 +572,8 @@ per company, from its filings to a thesis that's checked after every filing. Rul
   inventory, remaining performance obligations and customer advances against revenue, ten fiscal
   years annually then the year in progress; the Revenue tab's receivables vs revenue; long-term debt
   with debt to equity), each drawn by `ChartView`, with Open in Chart builder, Save to project and Add
-  to thesis. Outflows are drawn below zero (`-capex` formula layers); 3 **Earnings**: the company page's Earnings view (below), every outlook block, note and
+  to thesis. Outflows are drawn below zero (`-capex` formula layers). After the backlog proxy, the
+  backlog and orders the filings state in words (F8b, below); 3 **Earnings**: the company page's Earnings view (below), every outlook block, note and
   reconciliation pinnable; 4 **What changed**: "Since the last report" (the 8-Ks filed after the
   latest 10-Q/10-K period end, each excerpt pinnable, the balances they may have changed flagged),
   then the filing page's `Changes` for the latest 10-Q and 10-K (a 10-Q against a year earlier,

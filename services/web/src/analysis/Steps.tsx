@@ -5,7 +5,7 @@
  * changed), Compare (Peers). Data is read through the Query API as the viewer, like on
  * those screens; the project grants nothing. */
 
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { filingIndex, latestSection } from "../api";
 import { stateOf } from "../workspaces/model";
@@ -15,6 +15,7 @@ import { EventsCard } from "../company/Events";
 import { periodLabel } from "../company/changes";
 import { Changes, type Change, type ChangedSection } from "../company/Filings";
 import { Gate, Segments } from "../company/Tables";
+import { TextKpisCard } from "../company/TextKpis";
 import { useLoad } from "../company/useLoad";
 import { day } from "../format";
 import { Compare } from "../pages/Compare";
@@ -159,7 +160,9 @@ export function Business({ token, companyId, name, project, onNotes, notesStatus
 
 // --- 2 Numbers ---------------------------------------------------------------------------------
 
-export function Numbers({ token, companyId, name, ticker, label, saved, projectId, charts, onOpenChart, onSaved }: StepCommon & {
+export function Numbers({ token, companyId, name, ticker, label, saved, projectId, charts, onOpenChart, onSaved, canReadFilings = false }: StepCommon & {
+  /** the filings tier: backlog and orders from the filings' text (F8b) */
+  canReadFilings?: boolean;
   saved: Saved;
   projectId: string;
   /** the project's saved charts */
@@ -186,8 +189,13 @@ export function Numbers({ token, companyId, name, ticker, label, saved, projectI
       {sets.map((s) => {
         const state = done[s.key];
         const already = state === "saved" || savedNames.has(s.chart.title);
+        // F8b: after the backlog proxy, what the filings state in words
+        const text = s.key === "backlog" ? (
+          <TextKpisCard token={token} companyId={companyId} name={name} canRead={canReadFilings} compact />
+        ) : null;
         return (
-          <section key={s.key} className="card numbers-chart" aria-label={s.chart.title}>
+          <Fragment key={s.key}>
+          <section className="card numbers-chart" aria-label={s.chart.title}>
             <div className="card-b">
               <ChartView token={token} chart={s.chart} name={s.chart.title} label={label} hasTtm={everyMetric} />
               <p className="small muted read-hint">{s.read}</p>
@@ -206,6 +214,8 @@ export function Numbers({ token, companyId, name, ticker, label, saved, projectI
               </div>
             </div>
           </section>
+          {text}
+          </Fragment>
         );
       })}
       <p className="faint small">

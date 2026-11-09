@@ -65,6 +65,7 @@ import type {
   WebhookCreated,
   WebhookDelivery,
   WebhookFormat,
+  TextKpis,
 } from "./types";
 
 const QUERY = "/api/query";
@@ -597,6 +598,11 @@ export function refusedByOlderApi(e: unknown): boolean {
 /** 8-Ks since the latest 10-Q/10-K period end, and the figures they may have made stale. */
 export const companyEvents = (token: string, companyId: string) =>
   orNullOn404(get<EventsResponse>(token, `/v1/companies/${companyId}/events`));
+
+/** Backlog and orders as the filings state them in words (F8b), each value with its passages.
+ * null from a Query API one release older (no such route yet: the deploy window). */
+export const textKpis = (token: string, companyId: string) =>
+  orNullOn404(get<TextKpis>(token, `/v1/companies/${companyId}/text-kpis`));
 
 /** Each quarter's earnings release (8-K Item 2.02), its outlook and adjustments, newest first. */
 export const earnings = (token: string, companyId: string, quarters = 4) =>

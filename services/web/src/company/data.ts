@@ -212,7 +212,7 @@ export const DEFINITIONS: Record<string, string> = {
     "Customer advances and billings ahead of revenue, due within a year (contract liabilities; filers that kept the older name tag it as deferred revenue).",
   contract_liabilities: "All contract liabilities, current and noncurrent: the filing's total, or its two lines added up.",
   remaining_performance_obligations:
-    "Revenue under contract not yet recognised (remaining performance obligations, from the revenue note): the nearest tagged figure to a backlog. Not a balance-sheet line. Many companies don't tag it, and backlog in MD&A text isn't here.",
+    "Revenue under contract not yet recognised (remaining performance obligations, from the revenue note): the nearest tagged figure to a backlog. Not a balance-sheet line. Many companies don't tag it; the backlog a company states in words is on its Overview, from the filing's text.",
   investing_cash_flow: "Net cash from investing activities, as the filing totals it: capex, acquisitions, and buying and selling investments.",
   financing_cash_flow: "Net cash from financing activities, as the filing totals it: borrowing and repayment, dividends, buybacks, shares issued.",
   change_in_cash: "Net change in cash, cash equivalents and restricted cash, after exchange-rate effects, as the cash flow statement totals it.",

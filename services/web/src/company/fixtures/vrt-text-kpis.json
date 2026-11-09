@@ -1,0 +1,606 @@
+{
+ "company_id": "0001674101",
+ "as_of": "2026-11-09T16:48:10.246487+00:00",
+ "since": "2016-11-09",
+ "metrics": {
+  "backlog": {
+   "label": "Backlog",
+   "unit": "USD",
+   "span": "instant",
+   "points": [
+    {
+     "period_end": "2025-12-31",
+     "value": 15000000000.0,
+     "precision": 100000000.0,
+     "unit": "USD",
+     "span": "instant",
+     "sources": [
+      {
+       "written": "15.0",
+       "how": "sentence",
+       "passage": "Vertiv\u2019s estimated combined order backlog was $15.0 billion and $7.2 billion as of December 31, 2025 and 2024, respectively, as continued strong demand has contributed to an increase in customer orders being placed in advance of our ability to fulfill them.",
+       "citation": {
+        "accession_no": "0001674101-26-000008",
+        "form": "10-K",
+        "filed": "2026-02-13",
+        "section_key": "1",
+        "char_start": 24029,
+        "char_end": 24286,
+        "document_url": null
+       }
+      },
+      {
+       "written": "15.0",
+       "how": "sentence",
+       "passage": "Fourth quarter 2025 book-to-bill ratio was ~2.9x and backlog increased to $15.0 billion, up 109% compared to the same period last year.",
+       "citation": {
+        "accession_no": "0001674101-26-000006",
+        "form": "8-K",
+        "filed": "2026-02-11",
+        "section_key": "EX-99.1",
+        "char_start": 2155,
+        "char_end": 2290,
+        "document_url": null
+       }
+      }
+     ]
+    },
+    {
+     "period_end": "2025-09-30",
+     "value": 9500000000.0,
+     "precision": 100000000.0,
+     "unit": "USD",
+     "span": "instant",
+     "sources": [
+      {
+       "written": "9.5",
+       "how": "sentence",
+       "passage": "Third quarter 2025 book-to-bill ratio was ~1.4x and backlog increased to $9.5 billion.",
+       "citation": {
+        "accession_no": "0001674101-25-000020",
+        "form": "8-K",
+        "filed": "2025-10-22",
+        "section_key": "EX-99.1",
+        "char_start": 1713,
+        "char_end": 1799,
+        "document_url": null
+       }
+      }
+     ]
+    },
+    {
+     "period_end": "2025-03-31",
+     "value": 7900000000.0,
+     "precision": 100000000.0,
+     "unit": "USD",
+     "span": "instant",
+     "sources": [
+      {
+       "written": "7.9",
+       "how": "sentence",
+       "passage": "First quarter 2025 book-to-bill ratio was ~1.4x and backlog increased to $7.9 billion, growing ~10% from the end of fourth quarter 2024.",
+       "citation": {
+        "accession_no": "0001628280-25-018915",
+        "form": "8-K",
+        "filed": "2025-04-23",
+        "section_key": "EX-99.1",
+        "char_start": 1575,
+        "char_end": 1711,
+        "document_url": null
+       }
+      }
+     ]
+    },
+    {
+     "period_end": "2024-12-31",
+     "value": 7178800000.0,
+     "precision": 100000.0,
+     "unit": "USD",
+     "span": "instant",
+     "sources": [
+      {
+       "written": "7.2",
+       "how": "sentence",
+       "passage": "Vertiv\u2019s estimated combined order backlog was $15.0 billion and $7.2 billion as of December 31, 2025 and 2024, respectively, as continued strong demand has contributed to an increase in customer orders being placed in advance of our ability to fulfill them.",
+       "citation": {
+        "accession_no": "0001674101-26-000008",
+        "form": "10-K",
+        "filed": "2026-02-13",
+        "section_key": "1",
+        "char_start": 24029,
+        "char_end": 24286,
+        "document_url": null
+       }
+      },
+      {
+       "written": "7,178.8",
+       "how": "table",
+       "passage": "Total Backlog $ 7,178.8 $ 5,526.7",
+       "citation": {
+        "accession_no": "0001628280-25-005905",
+        "form": "10-K",
+        "filed": "2025-02-18",
+        "section_key": "1",
+        "char_start": 24614,
+        "char_end": 24647,
+        "document_url": null
+       }
+      }
+     ]
+    },
+    {
+     "period_end": "2023-12-31",
+     "value": 5526700000.0,
+     "precision": 100000.0,
+     "unit": "USD",
+     "span": "instant",
+     "sources": [
+      {
+       "written": "5,526.7",
+       "how": "table",
+       "passage": "Total Backlog $ 5,526.7 $ 4,754.4",
+       "citation": {
+        "accession_no": "0001628280-24-006498",
+        "form": "10-K",
+        "filed": "2024-02-23",
+        "section_key": "1",
+        "char_start": 25399,
+        "char_end": 25432,
+        "document_url": null
+       }
+      }
+     ]
+    },
+    {
+     "period_end": "2022-12-31",
+     "value": 4754400000.0,
+     "precision": 100000.0,
+     "unit": "USD",
+     "span": "instant",
+     "sources": [
+      {
+       "written": "4,754.4",
+       "how": "table",
+       "passage": "Total Backlog $ 4,754.4 $ 3,191.0",
+       "citation": {
+        "accession_no": "0001628280-23-005248",
+        "form": "10-K",
+        "filed": "2023-02-27",
+        "section_key": "1",
+        "char_start": 25926,
+        "char_end": 25959,
+        "document_url": null
+       }
+      }
+     ]
+    },
+    {
+     "period_end": "2021-12-31",
+     "value": 3191000000.0,
+     "precision": 100000.0,
+     "unit": "USD",
+     "span": "instant",
+     "sources": [
+      {
+       "written": "3,191.0",
+       "how": "table",
+       "passage": "Total Backlog $ 3,191.0 $ 1,844.8",
+       "citation": {
+        "accession_no": "0001628280-22-004533",
+        "form": "10-K",
+        "filed": "2022-03-01",
+        "section_key": "1",
+        "char_start": 30669,
+        "char_end": 30702,
+        "document_url": null
+       }
+      }
+     ]
+    },
+    {
+     "period_end": "2021-09-30",
+     "value": 2400000000.0,
+     "precision": 100000000.0,
+     "unit": "USD",
+     "span": "instant",
+     "sources": [
+      {
+       "written": "2.4",
+       "how": "sentence",
+       "passage": "Robust end-market demand continued with double-digit order growth and\nrecord backlog of $2.4 billion.",
+       "citation": {
+        "accession_no": "0001193125-21-308643",
+        "form": "8-K",
+        "filed": "2021-10-27",
+        "section_key": "EX-99.1",
+        "char_start": 109,
+        "char_end": 210,
+        "document_url": null
+       }
+      }
+     ]
+    }
+   ],
+   "conflicts": []
+  },
+  "orders": {
+   "label": "Orders in the quarter",
+   "unit": "USD",
+   "span": "quarter",
+   "points": [],
+   "conflicts": []
+  },
+  "orders_growth": {
+   "label": "Order growth in the quarter, year on year",
+   "unit": "percent",
+   "span": "quarter",
+   "points": [
+    {
+     "period_end": "2025-12-31",
+     "value": 252.0,
+     "precision": 1,
+     "unit": "percent",
+     "span": "quarter",
+     "basis": "organic",
+     "sources": [
+      {
+       "written": "252",
+       "how": "sentence",
+       "passage": "Orders momentum accelerated significantly with fourth quarter organic orders up approximately 252% compared to last year's fourth quarter and up 117% sequentially from third quarter 2025.",
+       "citation": {
+        "accession_no": "0001674101-26-000006",
+        "form": "8-K",
+        "filed": "2026-02-11",
+        "section_key": "EX-99.1",
+        "char_start": 1608,
+        "char_end": 1795,
+        "document_url": null
+       }
+      }
+     ]
+    },
+    {
+     "period_end": "2025-09-30",
+     "value": 60.0,
+     "precision": 1,
+     "unit": "percent",
+     "span": "quarter",
+     "basis": "organic",
+     "sources": [
+      {
+       "written": "60",
+       "how": "sentence",
+       "passage": "Orders accelerated, with third quarter 2025 organic orders increasing approximately 60% year-over-year and 20% sequentially from second quarter 2025.",
+       "citation": {
+        "accession_no": "0001674101-25-000020",
+        "form": "8-K",
+        "filed": "2025-10-22",
+        "section_key": "EX-99.1",
+        "char_start": 1372,
+        "char_end": 1521,
+        "document_url": null
+       }
+      },
+      {
+       "written": "60",
+       "how": "sentence",
+       "passage": "\u2022Third quarter organic orders up ~60% compared to prior year period and up 20% sequentially from second quarter 2025.",
+       "citation": {
+        "accession_no": "0001674101-25-000020",
+        "form": "8-K",
+        "filed": "2025-10-22",
+        "section_key": "EX-99.1",
+        "char_start": 135,
+        "char_end": 252,
+        "document_url": null
+       }
+      }
+     ]
+    },
+    {
+     "period_end": "2025-06-30",
+     "value": 15.0,
+     "precision": 1,
+     "unit": "percent",
+     "span": "quarter",
+     "basis": "organic",
+     "sources": [
+      {
+       "written": "15",
+       "how": "sentence",
+       "passage": "Orders momentum remained robust, with second quarter 2025 organic orders increasing approximately 15% year-over-year and 11% sequentially from first quarter 2025.",
+       "citation": {
+        "accession_no": "0001674101-25-000006",
+        "form": "8-K",
+        "filed": "2025-07-30",
+        "section_key": "EX-99.1",
+        "char_start": 1078,
+        "char_end": 1240,
+        "document_url": null
+       }
+      }
+     ]
+    },
+    {
+     "period_end": "2025-03-31",
+     "value": 13.0,
+     "precision": 1,
+     "unit": "percent",
+     "span": "quarter",
+     "basis": "reported",
+     "sources": [
+      {
+       "written": "13",
+       "how": "sentence",
+       "passage": "\u2022Strong first quarter trailing twelve-month (TTM) orders growth of ~20%, with first quarter orders up ~13% compared to last year\u2019s first quarter and up ~21% sequentially from fourth quarter 2024",
+       "citation": {
+        "accession_no": "0001628280-25-018915",
+        "form": "8-K",
+        "filed": "2025-04-23",
+        "section_key": "EX-99.1",
+        "char_start": 49,
+        "char_end": 243,
+        "document_url": null
+       }
+      }
+     ]
+    },
+    {
+     "period_end": "2024-09-30",
+     "value": 17.0,
+     "precision": 1,
+     "unit": "percent",
+     "span": "quarter",
+     "basis": "organic",
+     "sources": [
+      {
+       "written": "17",
+       "how": "sentence",
+       "passage": "Third quarter organic orders (excluding foreign exchange) increased ~17% compared to last year\u2019s third quarter.",
+       "citation": {
+        "accession_no": "0001628280-24-043343",
+        "form": "8-K",
+        "filed": "2024-10-23",
+        "section_key": "EX-99.1",
+        "char_start": 1580,
+        "char_end": 1691,
+        "document_url": null
+       }
+      },
+      {
+       "written": "17",
+       "how": "sentence",
+       "passage": "Third quarter organic orders growth of ~17% vs. prior year",
+       "citation": {
+        "accession_no": "0001628280-24-043343",
+        "form": "8-K",
+        "filed": "2024-10-23",
+        "section_key": "EX-99.1",
+        "char_start": 400,
+        "char_end": 458,
+        "document_url": null
+       }
+      }
+     ]
+    },
+    {
+     "period_end": "2024-06-30",
+     "value": 57.0,
+     "precision": 1,
+     "unit": "percent",
+     "span": "quarter",
+     "basis": "organic",
+     "sources": [
+      {
+       "written": "57",
+       "how": "sentence",
+       "passage": "Organic orders (excluding foreign exchange) increased 57% from last year\u2019s second quarter and the book-to-bill ratio was 1.4x in the second quarter.",
+       "citation": {
+        "accession_no": "0001628280-24-032675",
+        "form": "8-K",
+        "filed": "2024-07-24",
+        "section_key": "EX-99.1",
+        "char_start": 1438,
+        "char_end": 1586,
+        "document_url": null
+       }
+      }
+     ]
+    },
+    {
+     "period_end": "2024-03-31",
+     "value": 60.0,
+     "precision": 1,
+     "unit": "percent",
+     "span": "quarter",
+     "basis": "organic",
+     "sources": [
+      {
+       "written": "60",
+       "how": "sentence",
+       "passage": "The book-to-bill ratio was 1.5x in the first quarter and organic orders (excluding foreign exchange) increased 60% from last year\u2019s first quarter as underlying market demand remains strong, benefiting from AI deployments, including liquid cooling technologies, that are ramping up.",
+       "citation": {
+        "accession_no": "0001628280-24-017513",
+        "form": "8-K",
+        "filed": "2024-04-24",
+        "section_key": "EX-99.1",
+        "char_start": 1272,
+        "char_end": 1553,
+        "document_url": null
+       }
+      }
+     ]
+    },
+    {
+     "period_end": "2023-12-31",
+     "value": 23.0,
+     "precision": 1,
+     "unit": "percent",
+     "span": "quarter",
+     "basis": "organic",
+     "sources": [
+      {
+       "written": "23",
+       "how": "sentence",
+       "passage": "The book-to-bill ratio was 1.3x in the fourth quarter and organic orders increased 23% from last year\u2019s fourth quarter, as underlying market demand remained strong.",
+       "citation": {
+        "accession_no": "0001628280-24-005765",
+        "form": "8-K",
+        "filed": "2024-02-21",
+        "section_key": "EX-99.1",
+        "char_start": 1530,
+        "char_end": 1694,
+        "document_url": null
+       }
+      }
+     ]
+    },
+    {
+     "period_end": "2023-09-30",
+     "value": 11.0,
+     "precision": 1,
+     "unit": "percent",
+     "span": "quarter",
+     "basis": "organic",
+     "sources": [
+      {
+       "written": "11",
+       "how": "sentence",
+       "passage": "\u2022Third quarter orders up 11% (excluding foreign exchange) from last year.",
+       "citation": {
+        "accession_no": "0001628280-23-035032",
+        "form": "8-K",
+        "filed": "2023-10-25",
+        "section_key": "EX-99.1",
+        "char_start": 203,
+        "char_end": 276,
+        "document_url": null
+       }
+      }
+     ]
+    },
+    {
+     "period_end": "2022-06-30",
+     "value": 17.0,
+     "precision": 1,
+     "unit": "percent",
+     "span": "quarter",
+     "basis": "reported",
+     "sources": [
+      {
+       "written": "17",
+       "how": "sentence",
+       "passage": "Vertiv\u2019s second quarter orders increased 17% compared to the prior year quarter, with 11% from higher volume and 10% from pricing, partially offset by a 4% foreign exchange headwind.",
+       "citation": {
+        "accession_no": "0001628280-22-020319",
+        "form": "8-K",
+        "filed": "2022-08-03",
+        "section_key": "EX-99.1",
+        "char_start": 1755,
+        "char_end": 1937,
+        "document_url": null
+       }
+      },
+      {
+       "written": "17",
+       "how": "sentence",
+       "passage": "Second quarter orders up 17% (10% from price) from last year.",
+       "citation": {
+        "accession_no": "0001628280-22-020319",
+        "form": "8-K",
+        "filed": "2022-08-03",
+        "section_key": "EX-99.1",
+        "char_start": 157,
+        "char_end": 218,
+        "document_url": null
+       }
+      }
+     ]
+    },
+    {
+     "period_end": "2022-03-31",
+     "value": 34.0,
+     "precision": 1,
+     "unit": "percent",
+     "span": "quarter",
+     "basis": "reported",
+     "sources": [
+      {
+       "written": "34",
+       "how": "sentence",
+       "passage": "First quarter orders were up 34% compared to the prior year quarter and backlog reached another record level of $4.1 billion at the end of March 2022, increasing 29% from the end of 2021.",
+       "citation": {
+        "accession_no": "0001628280-22-010664",
+        "form": "8-K",
+        "filed": "2022-04-27",
+        "section_key": "EX-99.1",
+        "char_start": 1514,
+        "char_end": 1701,
+        "document_url": null
+       }
+      },
+      {
+       "written": "34",
+       "how": "sentence",
+       "passage": "\u2022End-market demand continued to be strong with first quarter 2022 orders up 34% from last year\u2019s first quarter and record-high backlog of $4.1 billion",
+       "citation": {
+        "accession_no": "0001628280-22-010664",
+        "form": "8-K",
+        "filed": "2022-04-27",
+        "section_key": "EX-99.1",
+        "char_start": 99,
+        "char_end": 249,
+        "document_url": null
+       }
+      }
+     ]
+    },
+    {
+     "period_end": "2021-12-31",
+     "value": 51.2,
+     "precision": 0.1,
+     "unit": "percent",
+     "span": "quarter",
+     "basis": "reported",
+     "sources": [
+      {
+       "written": "51.2",
+       "how": "sentence",
+       "passage": "Vertiv\u2019s fourth quarter orders increased 51.2% compared with the prior year quarter, benefiting from large project orders from colocation data center customers.",
+       "citation": {
+        "accession_no": "0001628280-22-003424",
+        "form": "8-K",
+        "filed": "2022-02-23",
+        "section_key": "EX-99.1",
+        "char_start": 2285,
+        "char_end": 2445,
+        "document_url": null
+       }
+      },
+      {
+       "written": "51",
+       "how": "sentence",
+       "passage": "\u2022End-market demand remained strong with fourth quarter 2021 orders up 51% from last year\u2019s fourth quarter and record-high Vertiv backlog of $3.2 billion.",
+       "citation": {
+        "accession_no": "0001628280-22-003424",
+        "form": "8-K",
+        "filed": "2022-02-23",
+        "section_key": "EX-99.1",
+        "char_start": 176,
+        "char_end": 329,
+        "document_url": null
+       }
+      }
+     ]
+    }
+   ],
+   "conflicts": []
+  }
+ },
+ "read": {
+  "sections": 45,
+  "filings": 43,
+  "from": "2021-10-27"
+ },
+ "method": "Backlog and orders as the filings' own words state them, read by fixed rules from MD&A, the 10-K's Item 1 and earnings releases (query_api/text_kpis.py): each value cites its passage and is kept only when its number is in that passage. A company may state them in ways these rules don't read; nothing is estimated or computed."
+}

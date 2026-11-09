@@ -367,7 +367,8 @@ function Project({ token, user, projectId, step: asked, itemId, saved, readable,
                 onNotes={(notes) => void saveProject({ ...project, notes }, "notes")} />
             ))}
             {pane("numbers", (
-              <Numbers {...common} saved={saved} projectId={projectId} charts={charts} onOpenChart={onOpenChart} onSaved={itemsChanged} />
+              <Numbers {...common} saved={saved} projectId={projectId} charts={charts} onOpenChart={onOpenChart} onSaved={itemsChanged}
+                canReadFilings={canFilings} />
             ))}
             {pane("earnings", <EarningsStep {...common} canReadFilings={canFilings} canReadFinancials={canFinancials} />)}
             {pane("changes", <WhatChanged {...common} canReadFilings={canFilings} />)}
