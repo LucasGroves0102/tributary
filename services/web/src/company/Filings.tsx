@@ -157,6 +157,8 @@ export function Filings({ token, companyId, name, canRead, initialDiff, fiscalYe
                               ? eightK.join(" · ")
                               : insiderLines.has(f.accession_no)
                                 ? insiderLines.get(f.accession_no)
+                              : insiderLines.size && /^[345](\/A)?$/.test(f.form)
+                                ? <span className="faint">details not read yet</span>
                               : f.sections
                                 ? note
                                 : note && <span className="faint">{note}</span>}
