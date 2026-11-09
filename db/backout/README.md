@@ -10,6 +10,7 @@ removes the rows they added, and the rebuild job then rebuilds gold the old way.
 | [`gold_rules_038_041.sql`](gold_rules_038_041.sql) | 038's tags and sums, 039's fact selection and computed gross profit, 040's net debt and annual TTM, 041's checks (back to 031, 014 and 023; with 043 applied, it undoes 043 too) | `financials-rebuild` job ([helm chart](../../deploy/helm/tributary/README.md)) |
 | [`interest_expense_043.sql`](interest_expense_043.sql) | 043 alone: interest expense read with the filing's sign again, a negative derived quarter kept (back to 039's two functions) | `financials-rebuild` job |
 | [`bank_metrics_048.sql`](bank_metrics_048.sql) | 048: a bank's metrics, tags and rows removed, `gold.refresh_derived_financials` back to 040's body. Independent of the two above | `financials-rebuild` job |
+| [`kpis_049.sql`](kpis_049.sql) | 049: the cash flow subtotals, contract balances, RPO, payables and cash and investments removed, `gold.refresh_derived_financials` back to 048's body and `gold.not_applicable_metrics` to 035's (`gold.figure_facts` stays: see its header). Tested on 60 companies of the sample: gold equal to before 049 row for row | `financials-rebuild` job |
 
 ## Order
 
@@ -20,3 +21,7 @@ Run after it, `interest_expense_043.sql` would put back 039's fact selection wit
 emptied and 038's tags gone, a state no migration ever built: so it refuses (it checks that
 `silver.metric_sums` still has rows and changes nothing otherwise). Then run the rebuild job once,
 after the last file.
+
+`kpis_049.sql` runs before `bank_metrics_048.sql`, never after: 048's file puts back 040's
+`gold.refresh_derived_financials`, and 049's would then bring back 048's (with the efficiency ratio its rows
+no longer have).

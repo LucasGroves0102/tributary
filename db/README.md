@@ -91,6 +91,18 @@ one combined 10-K (PG&E Corp and Pacific Gas & Electric).
 `cet1_ratio` (where tagged) and the derived `efficiency_ratio`; its header has the tags measured on
 every bank's companyfacts and why net interest margin, tangible book value and ROTCE are left out.
 Needs `make financials-rebuild` (production: the `financials-rebuild` job) to fill gold.
+`049_kpis_cash_flow.sql` (F5) maps what the analysts asked for that filings tag but gold didn't read:
+the cash flow statement's `investing_cash_flow`, `financing_cash_flow`, `change_in_cash` and its ending
+`cash_and_restricted_cash` (what the change reconciles to; `cash` stays the balance sheet's line),
+`contract_liabilities_current` (customer advances and billings ahead of revenue), `contract_liabilities`
+(the total, or current + noncurrent as a 038 sum), `remaining_performance_obligations` (revenue under
+contract not yet recognised: the nearest us-gaap element to a backlog) and `accounts_payable`; plus the
+derived `cash_and_investments` (cash and short-term investments by net debt's own reading, so net debt =
+debt - cash and investments; n/a for a bank, like net debt) and `gold.figure_facts`, the facts behind
+one figure for the Query API's `/components` (SECURITY DEFINER under `authz.readable_companies`, like
+036). Tags and coverage measured on 599 random companies are in its header; on the 613-company sample
+rebuilt before and after it, every existing gold row was identical. Needs `financials-rebuild`;
+backout `backout/kpis_049.sql`.
 `045_filing_events.sql` lets the Query API read 8-K item numbers: a column grant on
 `bronze.submission_filings (accession_no, cik, items)` (filing-index metadata, public like
 `silver.filings`) and `silver.company_8ks(company, from)`, one company's 8-K and 8-K/A with their
