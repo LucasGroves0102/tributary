@@ -65,9 +65,9 @@ Measured on 45 releases sampled across industries (2026-11-08): 33 had an Outloo
 heading, these rules found 32. No rule reads outlook from words alone ("expects" with a figure):
 on the same sample every such line outside those blocks was a CEO quote, a fragment or a side
 remark, so a release without an Outlook or Guidance heading gets no outlook and the web app and
-the agent say so. Known miss: a release whose text breaks every printed line ("2026 Outlook" / "The" /
-"Company now expects ..."), where the block ends at the fragment. Callers quote what this
-returns, with its offsets; nothing here reads a figure.
+the agent say so. Known miss: a release whose text breaks every printed line ("2026 Outlook" /
+"The" / "Company now expects ..."), where the block ends at the fragment. Callers quote what
+this returns, with its offsets; nothing here reads a figure.
 """
 
 import re

@@ -13,9 +13,11 @@ from query_api.events import (
     affects,
     assign_releases,
     excerpt,
+    excerpt_section,
     items_of,
     material,
     next_quarter_end,
+    opening,
     periods,
     release_section,
 )
@@ -145,6 +147,41 @@ def test_the_press_release_is_the_lowest_ex99():
 ])
 def test_next_quarter_end(end, expected):
     assert next_quarter_end(end) == expected
+
+
+@pytest.mark.parametrize("head,item,words", [
+    # real 8-K item sections (hermes, 2026-11-08): heading, title lines, then the item's own words
+    ("Item 2.03\nCreation of a Direct Financial Obligation\nThe information set forth in Item 1.01",
+     "2.03", "The information set forth"),
+    ("Item 8.01\nOther Events.\nBoard Approval of Forward Stock Split and Authorized Share"
+     " Increase\nOn July 9, 2024, the board of directors", "8.01", "On July 9, 2024"),
+    ("Item 5.02\nDeparture of Directors or Certain Officers; Election of Directors; Appointment of "
+     "Certain Officers; Compensatory Arrangements of Certain Officers.\nThe Board appointed",
+     "5.02", "The Board appointed"),
+    ("Item 2.02 Results of Operations and Financial Condition.\nOn August 28, 2024, NVIDIA",
+     "2.02", "On August 28, 2024"),
+    ("Item 7.01\nRegulation FD Disclosure.**\nOn May 22, 2025, the Company issued", "7.01",
+     "On May 22, 2025"),
+    ("On October 27, 2026, Vertiv completed", "2.01", "On October 27, 2026"),  # no heading
+])
+def test_an_excerpt_starts_after_the_items_heading(head, item, words):
+    assert head[opening(head, item):].startswith(words)
+
+
+def test_an_item_that_only_points_to_another_gives_way():
+    """NVIDIA's 2026-08-17 8-K: its Item 2.03 says only that Item 1.01 is incorporated by
+    reference; the excerpt quotes Item 1.01 instead."""
+    secs = [section("2.03", "Item 2.03. Creation of a Direct Financial Obligation\nThe information"
+                            " set forth in Item 1.01 above is hereby incorporated by reference into"
+                            " this Item 2.03.\n"),
+            section("1.01", "Item 1.01 Entry into a Material Definitive Agreement.\nOn August 17,"
+                            " 2026, NVIDIA issued $10.0 billion of senior notes.\n")]
+    quoted, start = excerpt_section(["1.01", "2.03", "7.01"], secs)
+    assert quoted["section_key"] == "1.01"
+    assert quoted["head"][start:].startswith("On August 17, 2026, NVIDIA issued")
+    only, start = excerpt_section(["2.03"], secs[:1])  # nothing else: the pointer it is
+    assert only["section_key"] == "2.03" and only["head"][start:].startswith("The information")
+    assert excerpt_section(["8.01"], []) == (None, 0)
 
 
 def test_excerpt_cuts_at_a_sentence():

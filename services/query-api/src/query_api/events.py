@@ -26,8 +26,10 @@ at most MAX_EVENTS. With no such report, or one more than RECENT_DAYS old, the w
 RECENT_DAYS days and `window` says "recent". `stale` lists each affected metric once, as of that
 period end, with the events that may have changed it: a flag, never a recomputed figure. Each
 event's excerpt is the opening of the section of its first item in EXCERPT_ORDER that the parser
-found (the 8-K's own words, "On October 27, 2026, Vertiv completed ..."), cut at a sentence end
-within EXCERPT_CHARS; `release` names its lowest-numbered EX-99 exhibit (the press release).
+found (the 8-K's own words, "On October 27, 2026, Vertiv completed ...", after the item's heading
+and title lines: `opening`; an item that only points to another, "The information set forth in
+Item 1.01 is incorporated by reference", gives way to the next), cut at a sentence end within
+EXCERPT_CHARS; `release` names its lowest-numbered EX-99 exhibit (the press release).
 
 Earnings releases. Period ends: the company's original 10-K/10-Q period ends, plus up to two
 estimated quarter ends after the latest (gold.expected_filings' rule: + 3 months, snapped to the
@@ -112,6 +114,10 @@ EXCERPT_ORDER = ("4.02", "1.03", "2.01", "2.03", "2.04", "2.06", "1.01", "1.02",
                  "5.02", "3.01", "3.02", "3.03", "4.01", "1.05", "2.02", "7.01", "8.01", "5.03",
                  "5.04", "5.05", "5.06", "5.07", "5.08", "1.04")
 ITEM = re.compile(r"^\d\.\d\d$")
+ITEM_HEADING = re.compile(r"^item\s+\d\.\d\d\b", re.I)
+CROSS_REFERENCE = re.compile(
+    r"^(?:the )?(?:information|disclosures?)\s+(?:set forth|contained|included|provided|described)"
+    r"\b.{0,200}?\bincorporated\b", re.I | re.S)
 EXHIBIT_99 = re.compile(r"^EX-99(?:\.(\d{1,2}))?$")
 PERIODIC = ("10-K", "10-Q", "10-KT", "10-QT")
 MAX_EVENTS = 25
@@ -185,6 +191,42 @@ def release_section(keys: list[str]) -> str | None:
     return "2.02" if "2.02" in keys else None
 
 
+def opening(head: str, item: str) -> int:
+    """Where an item's own words start in its section: after its heading line ("Item 2.03" or
+    "Item 2.02 Results of Operations and Financial Condition.", up to 250 characters) and up to 3
+    title lines after it (one that starts like the item's SEC title, or of up to 30 characters, or
+    up to 80 not ending in "."), never the last line read (prose cut short). 0 when the section
+    doesn't start with an Item heading."""
+    lines = head.split("\n")
+    if not lines or len(lines[0]) > 250 or not ITEM_HEADING.match(lines[0]):
+        return 0
+    title = ITEMS.get(item, ("",))[0].lower()[:20]
+    at = len(lines[0]) + 1
+    for ln in lines[1:min(4, len(lines) - 1)]:  # the last line may be prose cut short
+        bare = ln.strip().rstrip("*")
+        if len(ln) <= 160 and ((title and bare.lower().startswith(title)) or len(bare) <= 30
+                               or (len(bare) <= 80 and not bare.endswith("."))):
+            at += len(ln) + 1
+        else:
+            break
+    return at if at < len(head) else 0
+
+
+def excerpt_section(items: list[str], sections: list[dict]) -> tuple[dict | None, int]:
+    """The section an event's excerpt quotes and where its own words start: the first of its items
+    in EXCERPT_ORDER (else any item section) with words that aren't only a cross-reference to
+    another item ("The information set forth in Item 1.01 is incorporated by reference"), else
+    the first such section anyway."""
+    by_key = {s["section_key"]: s for s in sections if s["head"].strip()}
+    keys = [i for i in EXCERPT_ORDER if i in items and i in by_key]
+    keys += [k for k in by_key if ITEM.match(k) and k not in keys]
+    found = [(by_key[k], opening(by_key[k]["head"], k)) for k in keys]
+    for s, start in found:
+        if not CROSS_REFERENCE.match(s["head"][start:].lstrip()):
+            return s, start
+    return found[0] if found else (None, 0)
+
+
 def excerpt(text: str, limit: int = EXCERPT_CHARS) -> str:
     """The opening of a section, whitespace collapsed, cut at a sentence end (else a word)."""
     t = " ".join(text.split())
@@ -230,11 +272,7 @@ def shape_events(company_id: str, report: dict | None, since: date, window: str,
         by_key = {s["section_key"]: s for s in secs}
         event_date = r.get("report_date") or r["filing_date"]
         hit = affects(items, r["form"], event_date, period_end)
-        quoted = next((by_key[i] for i in EXCERPT_ORDER if i in items and i in by_key
-                       and by_key[i]["head"].strip()), None)
-        if quoted is None:
-            quoted = next((s for s in secs if ITEM.match(s["section_key"])
-                           and s["head"].strip()), None)
+        quoted, start = excerpt_section(items, secs)
         rel = release_section(list(by_key))
         events.append({
             "accession_no": r["accession_no"], "form": r["form"], "filed": r["filing_date"],
@@ -242,8 +280,8 @@ def shape_events(company_id: str, report: dict | None, since: date, window: str,
             "items": [item_info(i) for i in items], "items_from": source,
             "material": material(items), "amendment": r["form"] != "8-K", "affects": hit,
             "sections_available": bool(secs),
-            "excerpt": {"item": quoted["section_key"], "text": excerpt(quoted["head"]),
-                        "citation": _citation(company_id, r.get("cik"), r, quoted, 0,
+            "excerpt": {"item": quoted["section_key"], "text": excerpt(quoted["head"][start:]),
+                        "citation": _citation(company_id, r.get("cik"), r, quoted, start,
                                               len(quoted["head"]))}
             if quoted else None,
             "release": {"section_key": rel, "title": by_key[rel].get("title")} if rel else None,
