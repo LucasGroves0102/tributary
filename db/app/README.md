@@ -8,12 +8,13 @@ market-data connection and prices ("Connect your data", Query API README).
 In production this would belong to a different service, so other components learn about
 changes through Debezium CDC ([streaming/debezium](../../streaming/debezium)), never by querying
 it directly. [authz-sync](../../services/authz-sync) turns those changes into OpenFGA tuples and
-`authz.user_access`.
+the `authz` tables row-level security reads (`user_access`, `user_tiers`, `public_access`).
 
 | Table | Streamed by CDC |
 |---|---|
 | `users` (with optional `org_id`), `subscriptions` (user → plan), `plan_tiers` (plan → tier), `company_grants` (company → user or organization) | yes |
 | `public_catalogs` (migration 008: catalog → public or not; the open-access switch, below) | yes |
+| `debezium_heartbeat` (migration 002: Debezium writes it every few seconds so its replication slot advances while the app tables are idle) | yes |
 | `organizations`, `plans`, `watchlists` | no |
 | `workspaces`, `workspace_items` (saved charts, comps sets, screens; reports the agent writes, migration 005; theses and models the user writes, migration 009: state up to 128 KiB for reports and theses, 64 KiB for models since migration 015 (F2's per-year rates, adjustments and price), 16 KiB otherwise), `recent_filings` (migration 004; owner-only, forced RLS on `app.user_id`). Migration 012 adds `workspaces.project` (NULL for a plain folder; for an analysis project the company, peers, "How it makes money" notes and steps marked done, up to 16 KiB), covered by the same forced RLS | no: they grant nothing |
 | `user_views` (per-user layout of Home, the screener and the watchlist; migration 006; owner-only, forced RLS) | no: it grants nothing |
@@ -65,12 +66,14 @@ cross-database foreign key. Tests: `tests/integration/test_app_schema.py` (needs
 ## Open access
 
 `public_catalogs` holds one row per catalog, `('sec', public)`. `catalog:sec` is every company
-with gold financials or parsed documents (authz-sync keeps that list). While the row says
-public, every signed-in user (named users, sandboxes, GitHub accounts: anyone with a JWT) reads
+with gold financials or a stored filing document (`authz.catalog_companies()`; authz-sync keeps that
+list). While the row says public, every signed-in user (named users, sandboxes, GitHub and password
+accounts: anyone with a JWT) reads
 every catalog company within their plan's tiers: authz-sync writes
 `catalog:sec#reader@user:*` to OpenFGA and `authz.public_access` rows for RLS. A request
 without a user reads nothing, as before. Company grants keep working for anything outside the
-catalog. Migration 008 ships the row **off**.
+catalog. Migration 008 ships the row **off**; production runs with it open and both plans
+reading both tiers (checked 2026-11-09).
 
 Open it (on hermes: `sudo -u postgres psql -d app`), one transaction:
 
@@ -91,7 +94,7 @@ UPDATE public_catalogs SET public = false WHERE catalog_id = 'sec';
 Both reach OpenFGA and `authz.public_access` through CDC in well under a second
 (`tests/propagation`). The plan-tier insert ships with the flip, not with migration 008, so
 deploying the migration changes no one's access; it only affects the free plan (alice, dave),
-since sandboxes and GitHub accounts are on pro.
+since sandboxes, GitHub and password accounts are on pro.
 
 On a deployment where the connector already ran before 008 (hermes), Debezium does not
 snapshot the new table, so `app.public.public_catalogs` appears with the row's first update.
