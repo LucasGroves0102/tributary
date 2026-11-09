@@ -286,7 +286,9 @@ test("reports: write one from a workspace, read it with its charts, download and
   // each saved item drawn in place, from its saved state, with live data
   await expect(report.locator(".report-embed")).toHaveCount(2);
   await expect(report.locator('.report-embed[aria-label="PEP margins"] .ch-legend text')).not.toHaveCount(0);
-  await expect(report.locator('.report-embed[aria-label="PEP vs KO"] .multiple')).toHaveCount(2);
+  // comps stay a table (F6), never charts
+  await expect(report.locator('.report-embed[aria-label="PEP vs KO"] table.comps tbody tr:not(.agg)')).toHaveCount(2);
+  await expect(report.locator('.report-embed[aria-label="PEP vs KO"] .multiple')).toHaveCount(0);
   // the unverified figure is flagged; the cited filing links to EDGAR
   await expect(report.locator(".figure.unverified")).toHaveText("$99.9B");
   await expect(report.locator(".report-meta")).toContainText("1 of 2 figures unverified");
@@ -314,16 +316,20 @@ test("reports: write one from a workspace, read it with its charts, download and
 test("customizable views: Home arrangement and table columns, saved and reset", async ({ page }) => {
   const fake = await mockApi(page);
   await startDemo(page);
-  const titles = page.locator(".page section.card h2");
-  await expect(titles.first()).toHaveText("Continue where you left off");
+  // the start card leads (F6, #127); then the cards: the watchlist first, the status strip off
+  const titles = page.locator(".page section.card:not(.start-card) h2");
+  await expect(page.locator(".start-card h2")).toHaveText("Start an analysis");
+  await expect(titles.first()).toHaveText("Watchlist");
+  await expect(page.locator(".status-strip")).toHaveCount(0);
   await page.getByRole("button", { name: "Customize Home" }).click();
   const editor = page.getByRole("region", { name: "Customize Home" });
-  await editor.getByRole("checkbox", { name: "Status strip" }).uncheck();
-  await editor.getByRole("button", { name: "Move Watchlist up" }).click();
+  await editor.getByRole("checkbox", { name: "Continue where you left off" }).check();
+  await editor.getByRole("button", { name: "Move Continue where you left off up" }).click();
+  await editor.getByRole("button", { name: "Move Continue where you left off up" }).click();
+  await editor.getByRole("button", { name: "Move Continue where you left off up" }).click();
   await page.getByRole("button", { name: "Done" }).click();
-  await expect(page.locator(".status-strip")).toHaveCount(0);
-  await expect(titles.first()).toHaveText("Watchlist");
-  expect((fake.views.home as { cards: unknown[] }).cards.slice(0, 2)).toEqual([{ id: "status", hidden: true }, { id: "watchlist", hidden: false }]);
+  await expect(titles.first()).toHaveText("Continue where you left off");
+  expect((fake.views.home as { cards: unknown[] }).cards.slice(0, 2)).toEqual([{ id: "recent", hidden: false }, { id: "watchlist", hidden: false }]);
 
   // watchlist columns
   const watch = page.locator("section.card", { has: page.getByRole("heading", { name: "Watchlist" }) });
@@ -337,7 +343,7 @@ test("customizable views: Home arrangement and table columns, saved and reset", 
   // it's all there after a reload
   await page.reload();
   await expect(page.locator(".sandbox-banner")).toBeVisible();
-  await expect(titles.first()).toHaveText("Watchlist");
+  await expect(titles.first()).toHaveText("Continue where you left off");
   await expect(page.locator("table.watchlist thead")).toContainText("Gross mgn");
   expect(fake.calls.some((c) => c.startsWith("GET /api/query/v1/watchlist?") && c.includes("columns=gross_margin_ttm"))).toBe(true);
 
