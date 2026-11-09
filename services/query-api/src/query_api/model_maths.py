@@ -177,7 +177,8 @@ def _fq(row: dict) -> tuple[int, int] | None:
 
 
 def _source(row: dict) -> dict:
-    cit = row.get("citation") if isinstance(row.get("citation"), dict) else row
+    nested = row.get("citation")
+    cit: dict = nested if isinstance(nested, dict) else row
     return {"accession_no": cit.get("accession_no"), "form": cit.get("form"),
             "filed": _iso(cit.get("filed")), "filing_url": cit.get("filing_url"),
             "period_end": _iso(row.get("period_end"))}
@@ -280,7 +281,8 @@ def _year(fy: int, period_end: str, v: dict, src: dict, one_off: float,
     pretax, tax, ni = v.get("pretax_income"), v.get("income_tax"), v.get("net_income")
     shares, eps = v.get("weighted_shares_diluted"), v.get("eps_diluted")
     fcf = v.get("free_cash_flow")
-    tax_used = _first(_tax_rate(tax, pretax), TAX_FALLBACK)
+    tax_used = _tax_rate(tax, pretax)
+    tax_used = TAX_FALLBACK if tax_used is None else tax_used
     oi_adj = None if oi is None else oi - one_off
     ni_adj = None if ni is None else ni - one_off * (1 - tax_used / 100)
     eps_adj = eps if not one_off or eps is None or not shares else (
@@ -491,7 +493,8 @@ def current_year(inputs: dict, adjustments: list[dict], years: list[dict]) -> di
         "fcf": total(fy, "free_cash_flow"),
     }
     a = out["actual"]
-    tax_used = _first(_tax_rate(a["income_tax"], a["pretax_income"]), TAX_FALLBACK)
+    tax_used = _tax_rate(a["income_tax"], a["pretax_income"])
+    tax_used = TAX_FALLBACK if tax_used is None else tax_used
     a["net_income_adjusted"] = None if a["net_income"] is None else (
         a["net_income"] - actual_off * (1 - tax_used / 100))
     a["margin"] = _div(a["operating_income_adjusted"], rev)
@@ -773,12 +776,13 @@ def valuation(price: dict | None, latest: dict, years: list[dict], ttm: dict | N
         return out
     cap = p * count
     out["market_cap"] = cap
-    if debt is None or debt["value"] is None and debt["status"] is None:
+    debt_value = None if debt is None else debt["value"]
+    if debt is None or debt_value is None and debt["status"] is None:
         out["ev_note"] = "absent"
-    elif debt["status"] not in USABLE:
-        out["ev_note"] = debt["status"]
+    elif debt["status"] not in USABLE or debt_value is None:
+        out["ev_note"] = debt["status"] or "absent"
     else:
-        out["enterprise_value"] = cap + debt["value"]
+        out["enterprise_value"] = cap + debt_value
     ev = out["enterprise_value"]
     out["history"] = [{"fy": y["fy"], **_multiples(y, p, cap, ev)} for y in years]
     out["ttm"] = None if ttm is None else _multiples(ttm, p, cap, ev, ttm=True)
