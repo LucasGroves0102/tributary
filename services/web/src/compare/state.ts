@@ -293,6 +293,8 @@ export interface PeerStat {
   banks: number;
   /** readable peers whose figure reads n/m or old, left out too */
   unusable: number;
+  /** readable peers whose amount is in another currency (migration 056), left out of a dollar median */
+  currency: number;
   /** readable peers whose filings give no figure (—) */
   unreported: number;
   /** peers shown with metadata only (the plan doesn't cover their financials) */
@@ -311,11 +313,12 @@ export function peerStats(rows: CompareRow[], cols: string[]) {
     const status = (r: CompareRow) => r.cells[key]?.status;
     const banks = readable.filter((r) => status(r) === "not_applicable").length;
     const unusable = readable.filter((r) => status(r) === "not_meaningful" || status(r) === "old").length;
+    const currency = readable.filter((r) => status(r) === "other_currency").length;
     const unreported = readable.filter((r) => r.cells[key]?.value == null && !status(r)).length;
     out[key] = {
       median: median(v), n: v.length, of: peers.length,
       high: v.length ? Math.max(...v) : null, low: v.length ? Math.min(...v) : null,
-      banks, unusable, unreported, masked: peers.length - readable.length,
+      banks, unusable, currency, unreported, masked: peers.length - readable.length,
     };
   }
   return out;
@@ -331,6 +334,7 @@ export function medianTitle(s: PeerStat): string {
     s.unreported && `${s.unreported} not reported (—)`,
     s.banks && `${s.banks} not applicable (n/a: the metric doesn't describe ${s.banks === 1 ? "a bank" : "banks"})`,
     s.unusable && `${s.unusable} not meaningful or years old (n/m, dimmed)`,
+    s.currency && `${s.currency} in another currency (not averaged with dollars)`,
     s.masked && `${s.masked} metadata only (your plan doesn't cover ${s.masked === 1 ? "its" : "their"} financials)`,
   ].filter(Boolean);
   return `Median of ${s.n} of ${s.of} peers' values; the target is excluded` +

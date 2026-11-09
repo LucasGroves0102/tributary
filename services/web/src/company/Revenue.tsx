@@ -26,6 +26,7 @@ import {
   type AxisTable,
   type View,
 } from "./revenue";
+import { rowsCurrency } from "./data";
 import { Gate } from "./Tables";
 import { useLoad } from "./useLoad";
 import { TableScroll } from "../components/TableScroll";
@@ -284,6 +285,8 @@ function Decomposition({ rows, totals, ...c }: Common & { rows: SegmentRow[]; to
 
 function Quality({ rows, ...c }: Common & { rows: FinancialRow[] }) {
   const q = useMemo(() => revenueQuality(rows), [rows]);
+  // a company reporting in another currency (migration 056): its rows say which
+  const currency = rowsCurrency(rows);
   const chart = useMemo(() => qualityChart(c.companyId, c.ticker), [c.companyId, c.ticker]);
   const flagged = q.filter((r) => r.flagged).length;
   return (
@@ -320,8 +323,8 @@ function Quality({ rows, ...c }: Common & { rows: FinancialRow[] }) {
                 {q.map((r) => (
                   <tr key={r.label} className={r.flagged ? "flagged" : undefined}>
                     <td className="first">{r.label}</td>
-                    <td className="n">{money(r.revenue, "USD")}</td>
-                    <td className="n">{money(r.receivables, "USD")}</td>
+                    <td className="n">{money(r.revenue, currency)}</td>
+                    <td className="n">{money(r.receivables, currency)}</td>
                     <td className="n">{r.dso.toFixed(0)}</td>
                     <td className="n">{r.revenueGrowth === null ? NO_DATA : change(r.revenueGrowth)}</td>
                     <td className="n">{r.receivablesGrowth === null ? NO_DATA : change(r.receivablesGrowth)}</td>

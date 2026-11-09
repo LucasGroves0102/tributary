@@ -27,13 +27,13 @@ const COMPANIES: Co[] = [
   { id: PEP, ticker: "PEP", name: "PEPSICO INC", industry: "Beverages", sic: "2080", fye: "1231", revenue: 91.9e9, growth: 0.01, margin: 0.13 },
   { id: KO, ticker: "KO", name: "COCA COLA CO", industry: "Beverages", sic: "2080", fye: "1231", revenue: 47.1e9, growth: 0.03, margin: 0.29 },
 ];
-const byId = new Map(COMPANIES.map((c) => [c.id, c]));
+export const byId = new Map(COMPANIES.map((c) => [c.id, c]));
 const byTicker = new Map(COMPANIES.map((c) => [c.ticker, c]));
 
 const SRC = (c: Co) => ({ period_end: "2026-06-30", accession_no: `${c.id}-26-000040`, form: "10-Q", filed: "2026-07-30" });
 const HOUR = 3_600_000;
 
-function screenerRow(c: Co) {
+export function screenerRow(c: Co) {
   const values: Record<string, string | null> = {
     revenue_ttm: String(c.revenue),
     revenue_growth_ttm: String(c.growth),

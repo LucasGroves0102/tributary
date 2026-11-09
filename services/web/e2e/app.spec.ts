@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 
 import { expect, test } from "@playwright/test";
 
-import { KO, mockApi, NVDA, PEP, startDemo } from "./mockApi";
+import { byId, KO, mockApi, NVDA, PEP, screenerRow, startDemo } from "./mockApi";
 
 test("try the demo lands on Home with the sandbox and its watchlist", async ({ page }) => {
   await mockApi(page);
@@ -438,4 +438,53 @@ test("workspace actions: from the page, with a confirmation over the whole scree
   await expect(dialog.getByRole("button", { name: "Keep" })).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
+});
+
+test("a company reporting in euros: labelled everywhere, never ranked or averaged with dollars (056)", async ({ page }) => {
+  await mockApi(page);
+  // Coca-Cola's mock answers, reshaped as a 20-F filer in euros that reports once a year
+  const euro = (row: Record<string, unknown>) => ({
+    ...row,
+    values: { ...(row.values as Record<string, unknown>), revenue_ttm: "2097429000", free_cash_flow_ttm: "307573000", net_debt_q: "816076000" },
+    readings: Object.fromEntries(["revenue_ttm", "free_cash_flow_ttm", "net_debt_q"].map((k) => [k, {
+      status: "other_currency", unit: "EUR", reason: "reported in EUR, so it isn't sorted, filtered or averaged with US-dollar figures" }])),
+  });
+  await page.route("**/api/query/v1/screener?**", async (route) => {
+    const ids = new URL(route.request().url()).searchParams.getAll("company_id");
+    if (!ids.includes(KO)) return route.fallback();
+    const rows = ids.map((id) => byId.get(id)).filter((c) => !!c).map((c) => (c!.id === KO ? euro(screenerRow(c!)) : screenerRow(c!)));
+    return route.fulfill({ json: { as_of: "", total: rows.length, limit: 50, offset: 0, sort: "name", columns: [], rows } });
+  });
+  await page.route(`**/api/query/v1/companies/${KO}/financials?**`, async (route) => {
+    const view = new URL(route.request().url()).searchParams.get("view");
+    const row = (metric: string, end: string, value: string, fiscal: string) => ({
+      metric, period_start: metric === "total_assets" ? null : `${Number(end.slice(0, 4)) - 1}-10-01`, period_end: end,
+      fiscal_period: fiscal, calendar_period: null, value, unit: "EUR", value_source: "ttm",
+      citation: { accession_no: `${KO}-25-000001`, form: "20-F", filed: "2025-12-18", xbrl_tag: "ifrs-full:Revenue", source_accessions: null, filing_url: null },
+      freshness: { filed: "2025-12-18", ingested_at: "2025-12-19T00:00:00Z" },
+    });
+    const rows = view === "ttm"
+      ? [row("revenue", "2025-09-30", "2097429000", "FY2025 Q4"), row("revenue", "2024-09-30", "1804690000", "FY2024 Q4"),
+         row("net_income", "2025-09-30", "348327000", "FY2025 Q4"), row("net_income", "2024-09-30", "191603000", "FY2024 Q4")]
+      : [row("total_assets", "2025-09-30", "4942120000", "FY2025 Q4")];
+    await route.fulfill({ json: { company_id: KO, view, basis: "fiscal", as_of: "", currency: "EUR", cadence: "annual", rows } });
+  });
+  await startDemo(page);
+  await page.goto(`/#/company/${KO}`);
+  await expect(page.locator(".meta").first()).toContainText("figures in EUR");
+  await expect(page.getByText("€2.10B").first()).toBeVisible();
+  await page.screenshot({ path: test.info().outputPath("euro-company.png") });
+
+  await page.goto(`/#/company/${KO}/statements`);
+  await expect(page.getByText(/reports once a year/)).toBeVisible();
+  await expect(page.getByText(/Figures in EUR/)).toBeVisible();
+  await page.getByRole("button", { name: "Show Annual" }).click();
+  await expect(page.locator("table").first()).toContainText("€2.10B");
+  await page.screenshot({ path: test.info().outputPath("euro-statements.png"), fullPage: true });
+
+  // in a comps table its revenue shows in euros and stays out of the dollar median
+  await page.goto(`/#/compare?target=${PEP}&peers=${KO},${NVDA}`);
+  await expect(page.locator("tr", { hasText: "Coca-Cola" }).first()).toContainText("€2.10B");
+  await expect(page.locator("td[title*='in another currency']").first()).toBeAttached();
+  await page.screenshot({ path: test.info().outputPath("euro-compare.png"), fullPage: true });
 });

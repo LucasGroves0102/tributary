@@ -6,7 +6,7 @@ import { financialSeries } from "../chart/series";
 import { day } from "../format";
 import { go, href } from "../route";
 import type { ScreenerRow, Tier } from "../types";
-import { BANK_NOT_SHOWN, isBankRow, keyStats, recapAccession } from "./data";
+import { BANK_NOT_SHOWN, header, isBankRow, keyStats, recapAccession } from "./data";
 import { ErrorPanel, sentence, Skeleton } from "../components/States";
 import { EventsCard } from "./Events";
 import { keyStatFlag, staleFlags } from "./events";
@@ -41,7 +41,7 @@ export function Overview({
       <section className="card">
         <div className="card-h">
           <h2>Key stats</h2>
-          <span className="sub">the latest period of each figure · USD · hover for the source filing, or for why a figure reads n/m</span>
+          <span className="sub">the latest period of each figure · {header(row).currency ?? "USD"} · hover for the source filing, or for why a figure reads n/m</span>
         </div>
         {canFin ? (
           <div className="kv stats">

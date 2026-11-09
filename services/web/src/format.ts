@@ -5,27 +5,42 @@ const SCALES: [number, string][] = [
   [1e3, "K"],
 ];
 
-/** USD amounts as $96.22B / -$1.30B; per-share values (EPS) as $1.05. */
+/** Currencies with a symbol of their own; any other reads as its ISO code ("CAD 1.20B"). */
+const SYMBOLS: Record<string, string> = { USD: "$", EUR: "€", GBP: "£", JPY: "¥", CNY: "CN¥", INR: "₹", KRW: "₩" };
+
+/** The currency of a unit: "EUR" of "EUR" and "EUR/shares"; USD for anything else (shares, pure). */
+export function currencyOf(unit: string | null | undefined): string {
+  const code = (unit ?? "").split("/")[0]!;
+  return /^[A-Z]{3}$/.test(code) ? code : "USD";
+}
+
+const prefix = (code: string) => SYMBOLS[code] ?? `${code} `;
+
+/** Amounts as $96.22B / -$1.30B (€2.10B, CAD 1.20B in another currency, migration 056); per-share
+ * values (EPS: a unit like "USD/shares") as $1.05. */
 export function money(value: number, unit: string): string {
   const sign = value < 0 ? "-" : "";
   const abs = Math.abs(value);
-  if (unit !== "USD") return `${sign}$${abs.toFixed(2)}`;
+  const p = prefix(currencyOf(unit));
+  if (!/^[A-Z]{3}$/.test(unit)) return `${sign}${p}${abs.toFixed(2)}`;
   for (const [size, suffix] of SCALES) {
-    if (abs >= size) return `${sign}$${(abs / size).toFixed(2)}${suffix}`;
+    if (abs >= size) return `${sign}${p}${(abs / size).toFixed(2)}${suffix}`;
   }
-  return `${sign}$${abs.toFixed(0)}`;
+  return `${sign}${p}${abs.toFixed(0)}`;
 }
 
-/** A row of USD amounts in one unit, the largest value's, so periods compare at a glance: $0.05M,
+/** A row of amounts in one unit, the largest value's, so periods compare at a glance: $0.05M,
  * $0.96M, $2.43M instead of $54.74K, $963.57K, $2.43M. A value that would round to nothing in that
- * unit keeps its own: a figure never reads as $0.00. */
-export function moneyRow(values: (number | null)[]): (string | null)[] {
+ * unit keeps its own: a figure never reads as $0.00. `currency`: the row's (USD unless a company
+ * reports in another, migration 056). */
+export function moneyRow(values: (number | null)[], currency = "USD"): (string | null)[] {
   const top = Math.max(0, ...values.map((v) => (v === null ? 0 : Math.abs(v))));
   const scale = SCALES.find(([size]) => top >= size);
+  const p = prefix(currency);
   return values.map((v) => {
     if (v === null) return null;
-    if (!scale || v === 0 || Math.abs(v) / scale[0] < 0.005) return money(v, "USD");
-    return `${v < 0 ? "-" : ""}$${(Math.abs(v) / scale[0]).toFixed(2)}${scale[1]}`;
+    if (!scale || v === 0 || Math.abs(v) / scale[0] < 0.005) return money(v, currency);
+    return `${v < 0 ? "-" : ""}${p}${(Math.abs(v) / scale[0]).toFixed(2)}${scale[1]}`;
   });
 }
 

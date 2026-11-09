@@ -288,7 +288,7 @@ export function Statements({ token, companyId, name, ticker, notApplicable = [],
   // standard statement then, as before
   const bank = notApplicable.length > 0;
   const annual = period === "a" && kind === "is";
-  const load = useLoad(`${companyId}|${kind}|${period}|${basis}|${req.quarters}|${bank}`, async (): Promise<{ rows: FinancialRow[]; metrics: Line[]; callouts: Callout[] }> => {
+  const load = useLoad(`${companyId}|${kind}|${period}|${basis}|${req.quarters}|${bank}`, async (): Promise<{ rows: FinancialRow[]; metrics: Line[]; callouts: Callout[]; annualOnly: boolean }> => {
     const once = (rows: Line[]) => financialsView(token, companyId, req.quarters, rows.map(([m]) => m), req.view, basis, false, period === "q")
       .then((f) => ({ f, metrics: rows }));
     // an API older than migration 049 refuses its metrics (422): the statement without them
@@ -308,7 +308,9 @@ export function Statements({ token, companyId, name, ticker, notApplicable = [],
       // a company with no annual per-share facts, or an older API, still has its statement
       annual ? annualPerShare(token, companyId).catch(() => ({ rows: [] as FinancialRow[] })) : { rows: [] as FinancialRow[] },
     ]);
-    return { rows: annual ? withAnnualPerShare(fin.f.rows, perShare.rows, basis) : fin.f.rows, metrics: fin.metrics, callouts: fin.f.callouts ?? [] };
+    return { rows: annual ? withAnnualPerShare(fin.f.rows, perShare.rows, basis) : fin.f.rows, metrics: fin.metrics, callouts: fin.f.callouts ?? [],
+      // a 20-F/40-F filer's figures are years (migration 056); an older API doesn't say
+      annualOnly: fin.f.cadence === "annual" };
   });
   const metrics = load?.state === "ok" ? load.data.metrics : (bank ? BANK_STATEMENTS : STATEMENTS)[kind].rows;
   const table = load?.state === "ok"
@@ -347,11 +349,24 @@ export function Statements({ token, companyId, name, ticker, notApplicable = [],
           off={kind === "bs" ? { ttm: BALANCE_NOT_TTM } : undefined} />
         {period !== "a" && <Seg label="Range" value={range} set={(r) => set({ range: r })} options={RANGES} />}
         <Seg label="Basis" value={basis} set={(b) => set({ basis: b })} options={BASES} />
-        <span className="sub">{basis === "calendar" ? "calendar quarters" : "fiscal periods"} · USD · hover a value for its filing</span>
+        <span className="sub">{basis === "calendar" ? "calendar quarters" : "fiscal periods"} · {table?.currency ?? "USD"} · hover a value for its filing</span>
         <span className="grow" />
         <button className="btn sm" onClick={exportCsv} disabled={!table?.rows.length}>Export CSV</button>
       </div>
       {behind && <BehindNotice behind={behind} companyId={companyId} name={name} url={newest?.filing_url ?? null} />}
+      {load?.state === "ok" && load.data.annualOnly && (
+        <p className="foot" role="note">
+          {name} reports once a year (an annual report on Form 20-F or 40-F), so its figures are fiscal years and the
+          balance sheets at their ends. A year is never split into quarters here.
+          {period !== "a" && <> <button className="btn sm" onClick={() => set({ period: "a" })}>Show Annual</button></>}
+        </p>
+      )}
+      {load?.state === "ok" && table?.currency && (
+        <p className="foot" role="note">
+          Figures in {table.currency}, as {name} reports them. They aren't converted, and screens and peer medians leave
+          them out of US-dollar comparisons.
+        </p>
+      )}
       {bank && load?.state === "ok" && metrics !== STATEMENTS[kind].rows && (
         <p className="foot bank-note">{name} is a bank, so it is shown with a bank's own lines. {BANK_NOT_SHOWN}</p>
       )}

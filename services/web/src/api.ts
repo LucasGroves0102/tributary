@@ -658,7 +658,7 @@ export const financialsView = (
   /** view quarter: ask for the statement callouts (F5); an older API ignores it and sends none */
   callouts = false,
 ) =>
-  withinOlderCap((older) => get<{ as_of: string; rows: FinancialRow[]; not_meaningful_periods?: NotMeaningfulPeriod[]; callouts?: Callout[] }>(token, `/v1/companies/${companyId}/financials`, {
+  withinOlderCap((older) => get<{ as_of: string; rows: FinancialRow[]; not_meaningful_periods?: NotMeaningfulPeriod[]; callouts?: Callout[]; currency?: string; cadence?: "annual" }>(token, `/v1/companies/${companyId}/financials`, {
     ...(readings ? { readings: "true" } : {}),
     ...(callouts ? { callouts: "true" } : {}),
     quarters: older ? OLDER_QUARTERS : quarters,

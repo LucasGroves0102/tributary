@@ -106,6 +106,7 @@ export function Company({ token, companyId, tab, statements, changes, watched, o
                 h.fye && `fiscal year ends ${h.fye}`,
                 h.filer && `${h.filer.toLowerCase()} filer`,
                 h.state && `incorporated in ${h.state}`,
+                h.currency && `figures in ${h.currency}`,
                 `CIK ${companyId}`,
               ].filter(Boolean).join(" · ")}
             </div>

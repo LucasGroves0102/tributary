@@ -13,9 +13,10 @@
  * Whether a value is n/m, n/a or old is decided once, in the database (migration 035), so sorts,
  * filters and the agent's data can't disagree with the screen: the API sends `readings` and this
  * module only words them. A value marked old also shows, dimmed, with its date, and leaves sorts,
- * range filters and medians; one merely behind shows its date and still counts. */
+ * range filters and medians; one merely behind shows its date and still counts. An amount in
+ * another currency (056: a 20-F filer's euros) shows in that currency and leaves them too. */
 
-import { day, quarter } from "./format";
+import { currencyOf, day, money, quarter } from "./format";
 import type { Num, ValueReading, ValueSource } from "./types";
 
 export const NOT_REPORTED = "—";
@@ -116,6 +117,16 @@ export function readFigure({ label, columnKey, raw, reading, source, latestPerio
         asOf: source ? quarter(source.period_end) : null,
         title: `${sourceTitle} This company's latest period is ${latestPeriod ? day(latestPeriod, true) : "later"}.`,
       };
+    case "other_currency": {
+      // an amount in the company's own currency (migration 056): shown in it, labelled, and never
+      // ranked or averaged with dollars
+      const unit = reading?.unit ?? "";
+      const inIt = exact === null ? null : money(exact, unit);
+      return {
+        value: null, text: inIt ?? NOT_REPORTED, asOf: null, old: false, status,
+        title: `${label}: ${inIt ? `${inIt}, ` : ""}reported in ${currencyOf(unit)}, so it isn't sorted, filtered or averaged with US-dollar figures.${source_}`,
+      };
+    }
     default:
       return exact === null
         ? { value: null, text: NOT_REPORTED, title: notReportedTitle(label, columnKey), asOf: null, old: false, status: null }

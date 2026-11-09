@@ -917,7 +917,13 @@ point `/v1/formulas/evaluate` marks `not_meaningful` is a gap, never the raw rat
 operating margin), and the chart says under it which periods read n/m and why (`series.ts`
 `notMeaningfulNote`); the CSV keeps the exact figure. An old figure (about a year or
 more behind the company's latest period) shows dimmed with its date; one merely behind shows its date
-and still counts. Neither n/m, n/a nor old enters a median. A bank reads "n/a (bank)" for gross and
+and still counts. Neither n/m, n/a nor old enters a median. A company reporting in another currency (a
+20-F/40-F filer, migration 056) shows its amounts in it, never converted: `money()` writes the symbol or
+the ISO code (€2.10B, CAD 1.20B, €1.87 a share); a screener, Peers or Compare cell the API reads
+`other_currency` shows the figure in its currency and leaves sorts, filters and medians ("1 in another
+currency" in the median's hover); the company header says "figures in EUR", the statements' unit and
+note say it too (`MetricTable.currency`, from the rows' units), and a filer whose figures are fiscal
+years (`cadence: "annual"`) is told so beside the statements with a button to Annual. A bank reads "n/a (bank)" for gross and
 operating margin, FCF, FCF margin, net debt, debt to equity and the current ratio whether or not it
 tags them, by the API's `not_applicable` list. Statements: a balance sheet has no TTM (the button is off,
 and a saved one reads as quarters); EPS and diluted shares read n/a in TTM, — in a fiscal Q4 (the 10-K

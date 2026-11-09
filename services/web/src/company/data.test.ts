@@ -51,7 +51,7 @@ describe("header and key stats", () => {
   it("names the company from public metadata", () => {
     expect(header(nvdaRow())).toEqual({
       name: "Nvidia", tickers: ["NVDA"], exchanges: ["Nasdaq"], industry: "Semiconductors & Related Devices",
-      sic: "3674", fye: "January", filer: "Large accelerated", state: "DE",
+      sic: "3674", fye: "January", filer: "Large accelerated", state: "DE", currency: null,
     });
   });
 
@@ -59,6 +59,27 @@ describe("header and key stats", () => {
     expect(recapAccession(nvdaRow())).toBe(ACC);
     expect(recapAccession(nvdaRow({ sources: { revenue_q: { ...SRC, form: "8-K" } } }))).toBeNull();
     expect(recapAccession(nvdaRow({ sources: {} }))).toBeNull();
+  });
+});
+
+describe("a company reporting in euros (migration 056)", () => {
+  const eur = (metric: string, end: string, value: string, fiscal: string) =>
+    ({ ...fin(metric, end, value, fiscal), unit: metric === "eps_diluted" ? "EUR/shares" : "EUR" });
+
+  it("its statements read in euros and say so", () => {
+    const t = metricTable([eur("revenue", "2025-09-30", "2097429000", "FY2025 Q4"), eur("eps_diluted", "2025-09-30", "1.87", "FY2025 Q4")],
+      STATEMENTS.is.rows, "q");
+    expect(t.currency).toBe("EUR");
+    expect(t.rows[0]!.cells[0]).toMatchObject({ text: "€2.10B" });
+    expect(t.rows[1]!.cells[0]).toMatchObject({ text: "€1.87" });
+    expect(metricTable([fin("revenue", "2026-07-26", "46743000000", "FY2027 Q2")], STATEMENTS.is.rows, "q").currency).toBeUndefined();
+  });
+
+  it("its header and key stats name the currency", () => {
+    const row = nvdaRow({ values: { revenue_ttm: "2097429000" }, readings: { revenue_ttm: { status: "other_currency", unit: "EUR", reason: "reported in EUR" } } });
+    expect(header(row).currency).toBe("EUR");
+    expect(keyStats(row).find((s) => s.key === "revenue_ttm")!.text).toBe("€2.10B");
+    expect(header(nvdaRow()).currency).toBeNull();
   });
 });
 

@@ -6,7 +6,7 @@ import { csvCell } from "../chart/series";
 import { calendarLabel } from "../compare/state";
 import { FILER_LABELS, fyeMonth, type FilerCategory } from "../companies/screen";
 import { BANK_NA, NO_DATA, NO_DATA_TITLE, NOT_APPLICABLE, NOT_MEANINGFUL, NOT_REPORTED, readFigure } from "../blanks";
-import { change, day, money, moneyRow, pct } from "../format";
+import { change, currencyOf, day, money, moneyRow, pct } from "../format";
 import { num } from "../home/data";
 import { EIGHT_K_ITEMS } from "../reader/sections";
 import { separateMembers } from "../chart/segments";
@@ -14,12 +14,13 @@ import type { Callout, FinancialRow, NotMeaningfulPeriod, Recap, RecapValue, Scr
 
 export type Fmt = "usd" | "pct" | "growth" | "x" | "eps" | "shares";
 
-export function fmt(kind: Fmt, v: number): string {
+/** `currency`: the company's (USD unless it reports in another, migration 056). */
+export function fmt(kind: Fmt, v: number, currency = "USD"): string {
   switch (kind) {
     case "usd":
-      return money(v, "USD");
+      return money(v, currency);
     case "eps":
-      return money(v, "USD/shares");
+      return money(v, `${currency}/shares`);
     case "pct":
       return pct(v);
     case "growth":
@@ -156,9 +157,12 @@ export interface Header {
   fye: string | null;
   filer: string | null;
   state: string | null;
+  /** the company reports in another currency (migration 056): its code, from the readings */
+  currency: string | null;
 }
 
 export function header(row: ScreenerRow): Header {
+  const other = Object.values(row.readings ?? {}).find((r) => r?.status === "other_currency");
   return {
     name: row.name ?? row.company_id,
     tickers: row.tickers ?? [],
@@ -168,6 +172,7 @@ export function header(row: ScreenerRow): Header {
     fye: fyeMonth(row.fiscal_year_end),
     filer: row.filer_category ? (FILER_LABELS[row.filer_category as FilerCategory] ?? row.filer_category) : null,
     state: row.state_of_incorporation,
+    currency: other ? currencyOf(other.unit) : null,
   };
 }
 
@@ -410,6 +415,8 @@ export interface BlankCell {
 
 export interface MetricTable {
   columns: { periodEnd: string; label: string; sub: string }[];
+  /** the amounts' currency (migration 056: a 20-F filer's own); absent = USD */
+  currency?: string;
   /** `blanks[i]` is what `cells[i]` reads when it's null */
   rows: { metric: string; label: string; cells: (TableCell | null)[]; blanks: BlankCell[]; opts?: LineOpts }[];
 }
@@ -504,8 +511,10 @@ export function metricTable(
   const by = new Map(kept.map((r) => [`${r.metric}|${r.period_end}`, r]));
   const why = new Map(meaningless.map((p) => [`${p.metric}|${p.period_end}`, p.reason]));
   const called = new Map(period === "q" ? callouts.map((c) => [`${c.metric}|${c.period_end}`, c]) : []);
+  const currency = rowsCurrency(rows);
   return {
     columns,
+    ...(currency !== "USD" ? { currency } : {}),
     rows: metrics
       .map(([metric, name, kind, opts]) => {
         const sign = opts?.outflow ? -1 : 1;
@@ -515,7 +524,7 @@ export function metricTable(
               const r = by.get(`${metric}|${end}`);
               const v = r ? num(r.value) : null;
               return v === null ? null : sign * v;
-            }))
+            }), currency)
           : null;
         return {
           metric,
@@ -534,7 +543,7 @@ export function metricTable(
               };
             }
             if (!r || v === null) return null;
-            const figure = row?.[i] ?? fmt(kind, sign * v);
+            const figure = row?.[i] ?? fmt(kind, sign * v, currency);
             const source = {
               raw: sign < 0 ? negated(String(r.value)) : String(r.value),
               derived: r.value_source === "derived",
@@ -550,7 +559,7 @@ export function metricTable(
               return { ...source, derived: false, text: NOT_MEANINGFUL, title: `${name}: not meaningful, because ${r.not_meaningful}. The figure on file: ${figure}. ${cellTitle(name, r)}` };
             }
             const callout = called.get(`${metric}|${end}`);
-            const outflow = sign < 0 ? ` Shown negative: an ${OUTFLOW}; the filing tags the amount paid, ${fmt(kind, v)}.` : "";
+            const outflow = sign < 0 ? ` Shown negative: an ${OUTFLOW}; the filing tags the amount paid, ${fmt(kind, v, currency)}.` : "";
             return { ...source, text: figure, title: cellTitle(name, r) + outflow, ...(callout ? { callout } : {}) };
           }),
         };
@@ -558,6 +567,12 @@ export function metricTable(
       // an n/a row stays, so its absence is explained: a bank's FCF, EPS in a TTM view
       .filter((r) => r.cells.some(Boolean) || (ends.length > 0 && r.blanks.every((b) => b.text === BANK_NA || b.text === NOT_APPLICABLE))),
   };
+}
+
+/** The currency a company's rows are in: the unit of its first amount (USD without one). Gold keeps
+ * every company in one currency (migration 056), so the first says it. */
+export function rowsCurrency(rows: { unit: string }[]): string {
+  return currencyOf(rows.find((r) => /^[A-Z]{3}$/.test(r.unit ?? ""))?.unit);
 }
 
 /** Revenue already net of interest expense: a bank's net revenue tag, or its net interest income plus
@@ -575,7 +590,7 @@ function computedRow(metric: string, label: string, table: MetricTable, value: (
   const ends = table.columns.map((c) => c.periodEnd);
   const values = ends.map(value);
   if (!values.some((v) => v !== null)) return null;
-  const figures = moneyRow(values);
+  const figures = moneyRow(values, table.currency);
   return {
     metric,
     label,
@@ -685,14 +700,15 @@ function cashBridges(table: MetricTable, rows: FinancialRow[], by: Map<string, F
     cells: checks.map((x, i): TableCell | null => {
       if (!x) return null;
       const period = table.columns[i]!.label;
-      const sum = `${money(x.b, "USD")} + ${money(x.c, "USD")} = ${money(x.b + x.c, "USD")}`;
+      const cur = table.currency ?? "USD";
+      const sum = `${money(x.b, cur)} + ${money(x.c, cur)} = ${money(x.b + x.c, cur)}`;
       if (x.ok) {
         return { text: "✓ ties", raw: "", derived: true, url: null, tone: "ok",
-          title: `${period}: beginning cash ${sum}, the ending cash (${money(x.e, "USD")}). It ties.` };
+          title: `${period}: beginning cash ${sum}, the ending cash (${money(x.e, cur)}). It ties.` };
       }
       const gap = x.b + x.c - x.e;
-      return { text: `off ${money(Math.abs(gap), "USD")}`, raw: String(gap), derived: true, url: null, tone: "warn",
-        title: `${period}: beginning cash ${sum}, but the ending cash is ${money(x.e, "USD")}, ${money(Math.abs(gap), "USD")} ${gap > 0 ? "less" : "more"}. ` +
+      return { text: `off ${money(Math.abs(gap), cur)}`, raw: String(gap), derived: true, url: null, tone: "warn",
+        title: `${period}: beginning cash ${sum}, but the ending cash is ${money(x.e, cur)}, ${money(Math.abs(gap), cur)} ${gap > 0 ? "less" : "more"}. ` +
           "The figures are as filed: usually one side covers more than the other (cash held for sale, restricted cash) or a quarter was restated. The filing's cash flow statement shows its own reconciliation." };
     }),
   });

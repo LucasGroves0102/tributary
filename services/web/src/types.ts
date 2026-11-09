@@ -802,8 +802,10 @@ export interface ColumnInfo {
 /** How to read a screener value (migration 035): not_applicable and not_meaningful give a reason,
  * old and behind are about its date (blanks.ts has what each shows). */
 export interface ValueReading {
-  status: "not_applicable" | "not_meaningful" | "old" | "behind";
+  /** other_currency (migration 056): an amount in a currency other than the dollar, with `unit` */
+  status: "not_applicable" | "not_meaningful" | "old" | "behind" | "other_currency";
   reason?: string | null;
+  unit?: string | null;
 }
 
 /** Where a screener/watchlist value came from: the latest period's filing. */
