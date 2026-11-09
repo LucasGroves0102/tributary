@@ -31,7 +31,8 @@ const FALLBACK_SENTENCE: Record<PeerFallback, (name: string) => string> = {
   filings_access: (n) => `Business sections are filing text, which your plan doesn't include for ${n}.`,
   no_annual_report: (n) => `${n} has no 10-K on file from the last three years, so there is no Business section to compare.`,
   no_business_section: (n) => `${possessive(n)} latest 10-K has no Business section (Item 1) to compare: the report follows its own layout, with the form's items only in a cross-reference index.`,
-  cross_reference: (n) => `${possessive(n)} latest 10-K gives its Business section (Item 1) only as a cross-reference to pages elsewhere in the report ("Item 1. Business: Pages 3-5"), so there is no business text to compare.`,
+  // no quoted line: it would be one company's words (Intel's "Pages 3-5") under every other name
+  cross_reference: (n) => `${possessive(n)} latest 10-K gives its Business section (Item 1) only as a cross-reference to pages elsewhere in the report, so there is no business text to compare.`,
   not_profiled: (n) => `${possessive(n)} latest 10-K Business section hasn't been compared with other companies' yet (new 10-Ks are read weekly).`,
   no_close_peers: (n) => `No other company's 10-K Business section reads close to ${possessive(n)}, and none names it as a competitor.`,
 };

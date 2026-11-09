@@ -577,7 +577,9 @@ it("peers: by SIC and size, the Why column says there is no business text and wh
   expect(body[1]!.querySelector("td.why")!.textContent).toContain("same 3-digit SIC group");
   expect(body[0]!.querySelector("td.why")!.textContent).toBe("this company");
   expect($(".peers-basis")?.textContent).toBe("Nvidia's latest 10-K gives its Business section (Item 1) only as a cross-reference to " +
-    "pages elsewhere in the report (\"Item 1. Business: Pages 3-5\"), so there is no business text to compare. These peers are by SIC code and size instead.");
+    "pages elsewhere in the report, so there is no business text to compare. These peers are by SIC code and size instead.");
+  // never one company's quoted line (Intel's "Pages 3-5") under another's name
+  expect($(".peers-basis")?.textContent).not.toContain("Pages 3-5");
 });
 
 it("peers: a named user's ranking covers every company", async () => {
