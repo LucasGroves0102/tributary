@@ -5232,7 +5232,13 @@ details.routine summary {
 
 .release-blocks {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--sp-8);
+}
+
+/* a grid item is as wide as its widest line unless told otherwise: a table's pre would widen the page */
+.release-blocks > * {
+  min-width: 0;
 }
 
 .release-block {
