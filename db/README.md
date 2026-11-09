@@ -149,6 +149,17 @@ drift unnoticed, and the bases exist for shells and pre-revenue filers, which fi
 20-F's convenience dollars beside yen debt read as a scale slip). Catalog only, no rebuild; findings
 change at each company's next check. Backout `backout/currency_readings_057.sql` (tested: functions
 equal to a database at 056).
+`059_fetch_outbox_insider_queue.sql` (pre-ship review B2, B3) is doc-fetcher's: `ops.document_outbox`
+(a live document's `documents.fetched` event is owed until Kafka confirms it; written in the
+document's own transaction, read by the crawl so it never counts an unannounced document as
+published), `ops.insider_queue` (feed Forms 3/4/5 waiting for an idle consumer, or kept as `failed`
+with the error so nothing fetches them again) and `ops.insider_findings` (what parsing one noticed:
+`bad_date`, `several_values`, `not_well_formed`, `parse_failed`). `silver.xml_date` returns NULL for
+a date that doesn't exist (it raised, and one bad Form 4 crash-looped the live consumer);
+`silver.refresh_insider_filings` (054's body, edits marked "059") takes the first node of every
+column path (a repeated element raised) and records both as findings. No FK to
+`bronze.filing_documents` (the nightly slim dump). Locks: three new tables and two replaced
+functions only (054's, used by doc-fetcher alone).
 `055_filing_xbrl_facts.sql` (F8a) reads a filing's own XBRL where SEC companyfacts doesn't carry it:
 the filings companyfacts never received (52 of 12,006 10-K/10-Qs in 200 days: Citigroup's 2026 10-Qs,
 Clorox's FY2026 10-K), a company's own tags proven to be a standard line (NVIDIA's 10-K capex tag,
