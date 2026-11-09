@@ -5,6 +5,16 @@ page, then the primary document, stores it gzip-compressed in `bronze.filing_doc
 publishes `documents.fetched` for the [parser](../parser). For 8-Ks it also stores the EX-99.x
 exhibits (press releases) in `bronze.filing_exhibits`. Each accession is fetched once.
 
+A filing is stored whole or not at all (migration 059): the index, the document and every exhibit
+are fetched first, then the document, its exhibits and an `ops.document_outbox` row commit in one
+transaction. The outbox row is deleted when Kafka confirms `documents.fetched`; an unconfirmed
+event (Kafka down, a crash in between) is sent again at start and every minute
+(`tributary_documents_republished_total`). A fetch error stores nothing, so the
+[document crawl](#document-crawl) plans the filing like any other. (Before, an 8-K whose exhibit
+fetch failed was committed without exhibits or an event, and the crawl then counted it as
+published: it was never parsed.) A database error about one event's data skips that event
+(`SKIPPED{reason="db"}`) instead of crash-looping the consumer; a lost connection still restarts it.
+
 Which filings (`main.py` `Coverage`):
 
 - **tracked companies**: every 10-K, 10-Q and 8-K event, from any source (feed, daily index, seed);
@@ -30,7 +40,8 @@ filing a minute or two.
 |---|---|
 | Input | `filings.raw` (consumer group `doc-fetcher`); tracked CIKs (`silver.companies.tracked`) and operating CIKs (companies with `gold.quarterly_financials`) via `silver.company_ciks`, re-read every 5 minutes |
 | Output | `bronze.filing_documents`, `bronze.filing_exhibits`, `documents.fetched`; insider filings: `bronze.ownership_documents` → `silver.insider_filings`, `silver.insider_transactions` (below) |
-| Metrics | `tributary_documents_fetched_total{form}`, `tributary_documents_passed_total{form}` (8-Ks of operating companies with none of `FETCH_8K_ITEMS`), shared Kafka counters from [libs/telemetry](../../libs/telemetry) |
+| Metrics | `tributary_documents_fetched_total{form}`, `tributary_documents_passed_total{form}` (8-Ks of operating companies with none of `FETCH_8K_ITEMS`), `tributary_documents_republished_total` (owed events sent again), `tributary_insider_filings_fetched_total{form}`, shared Kafka counters from [libs/telemetry](../../libs/telemetry) |
+| Ops tables | `ops.document_outbox` (events owed), `ops.insider_queue` (Forms 3/4/5 waiting, or `failed` with the error), `ops.insider_findings` (what parsing one noticed) |
 
 Documents are referenced, not embedded, in `documents.fetched`: a 10-K is ~2 MB of HTML,
 over Kafka's default 1 MB message limit. Event shapes are in
@@ -44,7 +55,7 @@ over Kafka's default 1 MB message limit. Event shapes are in
 | `doc-fetcher-seed` | `make seed-documents` | publishes each tracked company's last 2 10-Ks and last 4 10-Qs (within 2 years) and last 180 days of 8-Ks to `filings.raw` with `source: seed` and the acceptance time corrected to UTC (`tributary_sec.acceptance_time`), so history flows through the same path as live filings without counting as live in the freshness views |
 | `doc-fetcher-exhibits` | `make exhibits` | fetches EX-99.x exhibits for stored 8-Ks that have none, then `make exhibits` re-parses |
 | `doc-crawler` | `make crawl` | the document crawl below: every operating company's filings, not just tracked ones |
-| `doc-fetcher-insiders` | (Helm `insiders-backfill`) | the bounded insider backfill below |
+| `doc-fetcher-insiders` | (Helm `insiders-backfill`, `insiders-catchup`) | the bounded insider backfill below, and its daily 7-day catch-up |
 
 On k3s, `seed-documents` is a suspended CronJob for filling a new database
 (`kubectl -n tributary create job --from=cronjob/seed-documents seed-1`).
@@ -68,12 +79,26 @@ direct/indirect). Idempotent on the accession; a paper filing without the XML is
 skipped. No new Kafka client or topic: the live doc-fetcher already reads `filings.raw`.
 
 - **Live** (`FETCH_INSIDERS`): every Form 3/4/5 in the feed under a tracked or operating company's
-  CIK, other than the reporting owner's own line (the feed lists a Form 4 once per filer).
+  CIK, other than the reporting owner's own line (the feed lists a Form 4 once per filer). The
+  consumer only queues it (`ops.insider_queue`, migration 059) and fetches the queue, oldest first,
+  when Kafka has nothing for it (up to 10 s per idle second), or for 5 s after 5 minutes of
+  continuous traffic: 10-Ks, 10-Qs and 8-Ks never wait behind Form 4s (3,268 of them on
+  2026-03-03 used to go through the same sequential consumer first).
 - **Backfill** (`doc-fetcher-insiders`, Helm `insiders-backfill`, suspended; run once): the
   operating companies' Forms 3/4/5 in `bronze.submission_filings` over the last `INSIDERS_DAYS`
   (90) days that bronze doesn't have, newest first, at most `INSIDERS_LIMIT` (60,000), at the
   bulk class. Running it again resumes (it only takes what's missing); a longer window is
-  `INSIDERS_DAYS=365`.
+  `INSIDERS_DAYS=365`. Deadline 17 h.
+- **Daily catch-up** (Helm `insiders-catchup`, 08:45 after the nightly submissions load): the same
+  job over 7 days, for what the live path missed (an outage, a feed gap).
+
+One filing never stops the others: a date that doesn't exist (`2026-02-30`) is read as NULL and a
+repeated element as its first value, each with a row in `ops.insider_findings` (`bad_date`,
+`several_values`; also `not_well_formed`, and `parse_failed` when Postgres refused the parse: the
+filing is then kept in bronze alone). A filing that can't be stored at all (404, no
+ownershipDocument, a value Postgres refuses) is kept in `ops.insider_queue` as `failed` with its
+error and never fetched again by any path; an SEC or network error is retried with backoff (queue,
+5 attempts) or by the next run (backfill, catch-up).
 
 Volume and cost, measured 2026-11-09 on hermes' submissions index: operating issuers had 178,877
 insider filings in the last 365 days (160,099 Form 4, 14,933 Form 3, 2,438 4/A, 927 Form 5, the
@@ -117,7 +142,8 @@ How it runs:
   `done` mark in one transaction. A killed run's claims are taken back when the lease expires;
   on SIGTERM unstarted targets are released at once. Re-planning and re-running never
   duplicate anything (keys: accession number); a filing the live doc-fetcher stored meanwhile is
-  marked done without a request.
+  marked done without a request, and published only when the live side owes no event for it
+  (`ops.document_outbox`); otherwise the crawl sends `documents.backfill` for it too.
 - **Requests**: 10-K/10-Q fetch the primary document named in the submissions history directly
   (one request); 8-Ks read the filing index for the primary document and exhibits, like
   doc-fetcher. All through `sec_client` with `SEC_CALLER_CLASS=bulk`, so the crawl only gets

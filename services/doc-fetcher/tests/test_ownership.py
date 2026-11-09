@@ -12,7 +12,7 @@ import httpx
 import pytest
 
 from doc_fetcher import ownership
-from doc_fetcher.main import Config, Coverage, handle_insider
+from doc_fetcher.main import Config, Coverage, drain_insiders
 
 FIXTURES = Path(__file__).parent / "fixtures" / "ownership"
 NVDA = "0001045810"
@@ -37,6 +37,23 @@ def test_the_ownership_document_comes_out_of_the_full_submission():
         "0001588670-26-000014.txt")
     # acceptance at 21:30 New York is 01:30 UTC the next day: the filing date is New York's
     assert ownership.filed_on("2026-09-19T01:30:00+00:00") == date(2026, 9, 18)
+
+
+def test_a_namespaced_or_attributed_root_is_read():
+    """The SEC's root is bare in practice; one with attributes, a default namespace or a prefix
+    must still be found, and come out with unqualified names (silver's XPath reads those)."""
+    bare = ownership.ownership_xml(raw(KRESS))
+    body = bare.removeprefix("<ownershipDocument>").removesuffix("</ownershipDocument>")
+    xsi = ('<ownershipDocument xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"'
+           ' xsi:noNamespaceSchemaLocation="x.xsd">' + body + "</ownershipDocument>")
+    assert ownership.ownership_xml(b"<XML>" + xsi.encode() + b"</XML>") == xsi  # as filed
+    default = '<ownershipDocument xmlns="urn:sec:own">' + body + "</ownershipDocument>"
+    assert ownership.ownership_xml(default.encode()) == bare
+    prefixed = ('<o:ownershipDocument xmlns:o="urn:sec:own">'
+                + body.replace("<", "<o:").replace("<o:/", "</o:")
+                + "</o:ownershipDocument>")
+    assert ownership.ownership_xml(prefixed.encode()) == bare
+    assert ownership.ownership_xml(b"<ownershipDocumentation>x</ownershipDocumentation>") is None
 
 
 def test_the_feed_line_under_the_issuer_is_the_one_taken():
@@ -135,9 +152,13 @@ def test_the_live_path_fetches_once(conn):
     client = httpx.Client(transport=httpx.MockTransport(respond))
     event = {"accession_no": KRESS, "cik": NVDA, "form_type": "4", "role": "Issuer",
              "source": "feed", "filed_at": "2026-09-18T20:05:00+00:00"}
-    assert handle_insider(conn, client, event) is True
-    assert handle_insider(conn, client, event) is False  # stored: no second request
+    ownership.enqueue(conn, event)
+    ownership.enqueue(conn, event)
+    assert drain_insiders(conn, client, 60.0) == 1
+    ownership.enqueue(conn, event)  # the same filing again (its other line, a replay)
+    assert drain_insiders(conn, client, 60.0) == 0  # stored: no second request
     assert requests == ["/Archives/edgar/data/1045810/000158867026000014/0001588670-26-000014.txt"]
+    assert conn.execute("SELECT count(*) FROM ops.insider_queue").fetchone() == (0,)
     assert conn.execute("SELECT filed FROM bronze.ownership_documents").fetchone() == (
         date(2026, 9, 18),)
 
@@ -159,3 +180,142 @@ def test_the_backfill_takes_operating_issuers_missing_filings_newest_first(conn)
         lambda r: httpx.Response(200, content=raw(r.url.path.rsplit("/", 1)[-1][:-4]))))
     assert ownership.backfill(conn, client, date(2026, 11, 9), 365, 10) == 2
     assert ownership.pending(conn, date(2026, 1, 1), 10) == []
+
+
+def kress_with(old: str, new: str) -> str:
+    xml = ownership.ownership_xml(raw(KRESS))
+    assert xml.count(old) >= 1
+    return xml.replace(old, new, 1)
+
+
+@db
+def test_a_date_that_does_not_exist_is_null_with_a_finding(conn):
+    """Review B3: silver.xml_date('2026-02-30') raised out of range, which aborted the filing's
+    transaction and crash-looped the live consumer on the same event."""
+    assert conn.execute("SELECT silver.xml_date('2026-02-30'), silver.xml_date('2026-09-16-05:00'),"
+                        " silver.xml_date('0000-01-01'), silver.xml_date('n/a')").fetchone() == (
+        None, date(2026, 9, 16), None, None)
+    xml = kress_with("<periodOfReport>2026-09-16", "<periodOfReport>2026-02-30")
+    xml = xml.replace("<transactionDate>\n                <value>2026-09-16",
+                      "<transactionDate>\n                <value>2026-09-31", 1)
+    assert ownership.store(conn, KRESS, NVDA, "4", date(2026, 9, 20), "u", xml) == 1
+    assert conn.execute("SELECT period_of_report FROM silver.insider_filings").fetchone() == (None,)
+    assert conn.execute("SELECT count(*) FROM silver.insider_transactions").fetchone() == (12,)
+    finding = conn.execute("SELECT detail FROM ops.insider_findings WHERE accession_no = %s"
+                           " AND kind = 'bad_date'", (KRESS,)).fetchone()[0]
+    assert finding == "periodOfReport 2026-02-30; line 1 transactionDate 2026-09-31"
+    assert conn.execute("SELECT transaction_date FROM silver.insider_transactions WHERE line = 1"
+                        ).fetchone() == (None,)
+    # storing it again with a good date clears the finding
+    store_all(conn)
+    assert conn.execute("SELECT count(*) FROM ops.insider_findings").fetchone() == (0,)
+
+
+@db
+def test_a_repeated_element_takes_the_first_with_a_finding(conn):
+    """Review B3: a column path matching two nodes raised 'more than one value returned by column
+    XPath expression'."""
+    xml = kress_with("<transactionCode>F</transactionCode>",
+                     "<transactionCode>F</transactionCode><transactionCode>S</transactionCode>")
+    xml = xml.replace("<periodOfReport>2026-09-16</periodOfReport>",
+                      "<periodOfReport>2026-09-16</periodOfReport>"
+                      "<periodOfReport>2026-09-17</periodOfReport>")
+    assert ownership.store(conn, KRESS, NVDA, "4", date(2026, 9, 20), "u", xml) == 1
+    assert conn.execute("SELECT period_of_report FROM silver.insider_filings").fetchone() == (
+        date(2026, 9, 16),)
+    assert conn.execute("SELECT code FROM silver.insider_transactions WHERE line = 1").fetchone() \
+        == ("F",)
+    assert conn.execute("SELECT detail FROM ops.insider_findings WHERE kind = 'several_values'"
+                        ).fetchone() == ("issuer, period or a reporting owner; lines 1",)
+
+
+@db
+def test_a_parse_that_fails_keeps_bronze_and_records_it(conn):
+    """Whatever else Postgres refuses while parsing: the filing is stored in bronze alone with a
+    parse_failed finding, and the caller goes on (the transaction rolls back only the parse)."""
+    conn.execute("ALTER FUNCTION silver.refresh_insider_filings(text[])"
+                 " RENAME TO refresh_insider_filings_real")
+    conn.execute("CREATE FUNCTION silver.refresh_insider_filings(p text[]) RETURNS int"
+                 " LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'more than one value'"
+                 " USING ERRCODE = 'cardinality_violation'; END $$")
+    xml = ownership.ownership_xml(raw(KRESS))
+    assert ownership.store(conn, KRESS, NVDA, "4", date(2026, 9, 20), "u", xml) == 0
+    assert conn.execute("SELECT count(*) FROM bronze.ownership_documents").fetchone() == (1,)
+    assert conn.execute("SELECT count(*) FROM silver.insider_filings").fetchone() == (0,)
+    kind, detail = conn.execute("SELECT kind, detail FROM ops.insider_findings").fetchone()
+    assert kind == "parse_failed" and detail.startswith("CardinalityViolation")
+
+
+def queue(conn) -> dict:
+    return {r[0]: r[1:] for r in conn.execute(
+        "SELECT accession_no, status, attempts, not_before IS NOT NULL, last_error IS NOT NULL"
+        " FROM ops.insider_queue ORDER BY accession_no")}
+
+
+@db
+def test_queued_feed_filings_are_drained_and_one_failure_never_stops_the_rest(conn):
+    """Priority (10-K/Q/8-K first): the consumer only queues a Form 3/4/5, then drains the queue
+    when idle. A filing gone from EDGAR is kept as failed, a 503 retries later, and the next one
+    is still stored."""
+    feed = {"cik": NVDA, "form_type": "4", "role": "Issuer", "source": "feed",
+            "filed_at": "2026-09-18T20:05:00+00:00"}
+    for acc in ("0000000001-26-000001", "0000000002-26-000002", KRESS):
+        ownership.enqueue(conn, {**feed, "accession_no": acc})
+        conn.execute("UPDATE ops.insider_queue SET queued_at = clock_timestamp()"
+                     " WHERE accession_no = %s", (acc,))
+    ownership.enqueue(conn, {**feed, "accession_no": KRESS})  # the feed again: queued once
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        name = request.url.path.rsplit("/", 1)[-1]
+        if name.startswith("0000000001"):
+            return httpx.Response(404)
+        if name.startswith("0000000002"):
+            return httpx.Response(503)
+        return httpx.Response(200, content=raw(KRESS))
+
+    stored_forms: list[str] = []
+    client = httpx.Client(transport=httpx.MockTransport(respond))
+    assert ownership.drain(conn, client, 60.0, on_stored=stored_forms.append) == 1
+    assert stored_forms == ["4"]
+    assert queue(conn) == {"0000000001-26-000001": ("failed", 1, False, True),
+                           "0000000002-26-000002": ("pending", 1, True, True)}
+    assert conn.execute("SELECT count(*) FROM silver.insider_filings").fetchone() == (1,)
+    assert ownership.drain(conn, client, 60.0) == 0  # the 503 waits for its backoff
+
+
+@db
+def test_the_drain_stops_at_its_budget(conn):
+    for acc in (KRESS, STEVENS):
+        ownership.enqueue(conn, {"accession_no": acc, "cik": NVDA, "form_type": "4",
+                                 "filed_at": "2026-09-18T20:05:00+00:00"})
+    ticks = iter([0.0, 0.0, 99.0])
+    client = httpx.Client(transport=httpx.MockTransport(
+        lambda r: httpx.Response(200, content=raw(r.url.path.rsplit("/", 1)[-1][:-4]))))
+    assert ownership.drain(conn, client, 10.0, clock=lambda: next(ticks)) == 1
+    assert len(queue(conn)) == 1
+
+
+@db
+def test_the_backfill_records_a_filing_it_cannot_store_and_goes_on(conn):
+    """Review B3: the backfill caught only HTTP errors and worked newest first, so it died at the
+    same filing every run. Now a refused filing is kept as failed and never fetched again."""
+    conn.execute("INSERT INTO gold.quarterly_financials (company_id, metric, period_start,"
+                 " period_end, value, unit, value_source, source_tag, accession_no, filed,"
+                 " source_accessions, ingested_at) VALUES (%s, 'revenue', '2026-04-27',"
+                 " '2026-07-26', 1, 'USD', 'reported', 't', 'a', '2026-08-26', '{a}', now())",
+                 (NVDA,))
+    for acc, filed in ((KRESS, "2026-09-18"), (STEVENS, "2026-09-08")):
+        conn.execute("INSERT INTO bronze.submission_filings (accession_no, cik, form,"
+                     " filing_date) VALUES (%s, %s, '4', %s)", (acc, NVDA, filed))
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        accession = request.url.path.rsplit("/", 1)[-1][:-4]
+        body = raw(accession)
+        if accession == KRESS:  # the newest: a NUL byte Postgres text refuses
+            body = body.replace(b"Kress Colette", b"Kress\x00Colette")
+        return httpx.Response(200, content=body)
+
+    client = httpx.Client(transport=httpx.MockTransport(respond))
+    assert ownership.backfill(conn, client, date(2026, 11, 9), 365, 10) == 1
+    assert queue(conn)[KRESS][:2] == ("failed", 1)
+    assert ownership.pending(conn, date(2026, 1, 1), 10) == []  # neither is taken again

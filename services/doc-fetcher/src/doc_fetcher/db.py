@@ -81,6 +81,40 @@ def insert_exhibit(conn: psycopg.Connection, accession_no: str, exhibit: Exhibit
     )
 
 
+def owe_event(conn: psycopg.Connection, accession_no: str) -> None:
+    """A documents.fetched event is owed for this stored document (migration 059's outbox):
+    written in the document's own transaction, deleted when Kafka confirms the event."""
+    conn.execute(
+        "INSERT INTO ops.document_outbox (accession_no) VALUES (%s)"
+        " ON CONFLICT (accession_no) DO NOTHING", (accession_no,))
+
+
+def paid_events(conn: psycopg.Connection, accessions: list[str]) -> None:
+    conn.execute("DELETE FROM ops.document_outbox WHERE accession_no = ANY(%s)", (accessions,))
+
+
+def owed_events(conn: psycopg.Connection, limit: int, older_than_seconds: int = 30) -> list[dict]:
+    """documents.fetched events still owed, oldest first, as the consumer first sent them
+    (rows queued in the last `older_than_seconds` are left to the send in progress). Marks
+    each as attempted."""
+    rows = conn.execute(
+        """
+        UPDATE ops.document_outbox o SET attempts = attempts + 1, last_attempt = now()
+        FROM bronze.filing_documents d
+        WHERE d.accession_no = o.accession_no
+          AND o.accession_no IN (SELECT accession_no FROM ops.document_outbox
+                                 WHERE queued_at < now() - make_interval(secs => %s)
+                                 ORDER BY queued_at LIMIT %s)
+        RETURNING d.accession_no, d.cik, d.form, d.document_name, d.url, d.content_sha256,
+                  d.size_bytes, o.queued_at
+        """,
+        (older_than_seconds, limit),
+    ).fetchall()
+    keys = ("accession_no", "cik", "form", "document_name", "url", "content_sha256",
+            "size_bytes")
+    return [dict(zip(keys, r[:7], strict=True)) for r in sorted(rows, key=lambda r: r[7])]
+
+
 def eight_ks_without_exhibits(conn: psycopg.Connection) -> list[tuple[str, str]]:
     """(accession_no, cik) of stored 8-Ks with no exhibits fetched yet."""
     return conn.execute(

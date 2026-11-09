@@ -10,9 +10,18 @@ Which filings (`Coverage.scope`):
 Everything else (amendments, the daily index's late filings, the 8-Ks left out here, anything a
 fetch error dropped) is the document crawl's, which skips whatever this stored first.
 
+A filing is stored whole or not at all (review B2): the index, the document and an 8-K's exhibits
+are fetched first; then the document, the exhibits and an ops.document_outbox row commit in one
+transaction; the outbox row goes only when Kafka confirms documents.fetched. An unconfirmed event
+is republished (`sweep`, at start and every OUTBOX_SWEEP_SECONDS), so a stored document is never
+left unannounced; a fetch error stores nothing, and the crawl plans the filing like any other.
+
 Insider filings (Forms 3/4/5, #117; `ownership.py`, FETCH_INSIDERS): each one in the live feed
-under an operating or tracked company's CIK as issuer is fetched (one request), stored in bronze
-and parsed into silver; `doc-fetcher-insiders` backfills a bounded window.
+under an operating or tracked company's CIK as issuer is queued (ops.insider_queue) and fetched
+(one request), stored in bronze and parsed into silver when the consumer is idle, or for
+INSIDER_BUSY_BUDGET seconds after INSIDER_MAX_WAIT of continuous traffic: 10-Ks, 10-Qs and 8-Ks
+go first. A filing that fails is recorded and the consumer moves on (review B3).
+`doc-fetcher-insiders` backfills a bounded window and, daily, catches up what the feed missed.
 """
 
 import json
@@ -31,13 +40,17 @@ from prometheus_client import Counter
 
 from doc_fetcher import ownership
 from doc_fetcher.db import (
+    Blob,
     already_fetched,
     insert_document,
     insert_exhibit,
     operating_ciks,
+    owe_event,
+    owed_events,
+    paid_events,
     tracked_ciks,
 )
-from doc_fetcher.index import parse_exhibits, parse_index, parse_items
+from doc_fetcher.index import Exhibit, parse_exhibits, parse_index, parse_items
 from tributary_kafka import client_config
 from tributary_sec import sec_client
 from tributary_telemetry import CONSUMED, SKIPPED, configure_logging, count_delivery, serve_metrics
@@ -47,6 +60,11 @@ OUT_TOPIC = "documents.fetched"
 GROUP_ID = "doc-fetcher"
 FORMS = {"10-K", "10-Q", "8-K"}
 TRACKED_REFRESH_SECONDS = 300
+OUTBOX_SWEEP_SECONDS = 60      # republish documents.fetched events Kafka didn't confirm
+INSIDER_IDLE_BUDGET = 10.0     # seconds of queued insider filings per idle poll
+INSIDER_MAX_WAIT = 300.0       # without an idle poll this long, drain anyway ...
+INSIDER_BUSY_BUDGET = 5.0      # ... for this long
+DELIVERY_TIMEOUT = 10.0
 # Results, Reg FD and other events, and the material events (deals, debt, leadership,
 # impairments, auditor, non-reliance). Keep in step with the crawl's CRAWL_8K_ITEMS in
 # deploy/helm/tributary/values.yaml, so the live path and the crawl store the same 8-Ks.
@@ -63,6 +81,8 @@ PASSED = Counter("tributary_documents_passed_total",
                  " fetched items", ["form"])
 INSIDERS = Counter("tributary_insider_filings_fetched_total",
                    "Insider filings (Forms 3/4/5) fetched from the live feed and stored", ["form"])
+REPUBLISHED = Counter("tributary_documents_republished_total",
+                      "documents.fetched events sent again because Kafka hadn't confirmed them")
 
 
 def _on(env: Mapping[str, str], name: str) -> bool:
@@ -138,13 +158,25 @@ def main() -> None:
         issuers = coverage.issuers if config.insiders else frozenset()
         log.info("consuming %s; %d tracked CIKs, %d operating CIKs", IN_TOPIC,
                  len(coverage.tracked), len(coverage.operating))
+        sweep(conn, producer)
+        swept = drained = time.monotonic()
         try:
             while not stop.is_set():
-                if time.monotonic() - refreshed > TRACKED_REFRESH_SECONDS:
-                    coverage, refreshed = Coverage.load(conn, config), time.monotonic()
+                now = time.monotonic()
+                if now - refreshed > TRACKED_REFRESH_SECONDS:
+                    coverage, refreshed = Coverage.load(conn, config), now
                     issuers = coverage.issuers if config.insiders else frozenset()
+                if now - swept > OUTBOX_SWEEP_SECONDS:
+                    sweep(conn, producer)
+                    swept = now
+                if config.insiders and now - drained > INSIDER_MAX_WAIT:
+                    drain_insiders(conn, client, INSIDER_BUSY_BUDGET)
+                    drained = time.monotonic()
                 msg = consumer.poll(1.0)
-                if msg is None:
+                if msg is None:  # idle: the queued insider filings' turn
+                    if config.insiders:
+                        drain_insiders(conn, client, INSIDER_IDLE_BUDGET)
+                        drained = time.monotonic()
                     continue
                 if msg.error():
                     if msg.error().code() == KafkaError.UNKNOWN_TOPIC_OR_PART:
@@ -154,14 +186,18 @@ def main() -> None:
                 try:
                     event = json.loads(msg.value())
                     if ownership.wanted(event, issuers):
-                        handle_insider(conn, client, event)
+                        ownership.enqueue(conn, event)  # fetched when idle: 10-K/Q/8-K first
                     scope = coverage.scope(event)
                     if scope is not None:
                         handle(conn, client, producer, event,
                                eight_k_items=config.eight_k_items if scope == "live" else None)
-                except (ValueError, KeyError, httpx.HTTPError) as e:
-                    # TODO: route to a dead-letter topic instead of dropping
-                    reason = "sec" if isinstance(e, httpx.HTTPError) else "invalid"
+                except (ValueError, KeyError, httpx.HTTPError, psycopg.DataError,
+                        psycopg.IntegrityError) as e:
+                    # TODO: route to a dead-letter topic instead of dropping. A database error
+                    # here is about this event's data (a lost connection still crashes and
+                    # restarts): nothing was stored, so the crawl plans the filing later.
+                    reason = ("sec" if isinstance(e, httpx.HTTPError)
+                              else "db" if isinstance(e, psycopg.Error) else "invalid")
                     SKIPPED.labels(IN_TOPIC, reason).inc()
                     log.error("skipping %d:%d: %s", msg.partition(), msg.offset(), e)
                 consumer.commit(msg, asynchronous=False)
@@ -174,7 +210,9 @@ def main() -> None:
 def handle(conn: psycopg.Connection, client: httpx.Client, producer: Producer, event: dict,
            eight_k_items: frozenset[str] | None = None) -> bool:
     """Fetch, store and announce one filing; False when it was stored already or is an 8-K
-    with none of `eight_k_items` (None: every 8-K)."""
+    with none of `eight_k_items` (None: every 8-K). Every file is fetched before anything is
+    stored (an HTTP error stores nothing); the document, its exhibits and the owed event commit
+    together; the event's outbox row goes when Kafka confirms it, else `sweep` sends it again."""
     accession, cik, form = event["accession_no"], event["cik"], event["form_type"]
     if already_fetched(conn, accession):
         return False
@@ -191,20 +229,19 @@ def handle(conn: psycopg.Connection, client: httpx.Client, producer: Producer, e
     index = parse_index(index_resp.content, form)
     doc_resp = client.get(index.url)
     doc_resp.raise_for_status()
-    digest = insert_document(conn, accession, cik, form, index, doc_resp.content)
-    if form == "8-K":
-        fetch_exhibits(conn, client, accession, index_resp.content)
-    producer.produce(
-        OUT_TOPIC,
-        key=cik.encode(),
-        value=json.dumps({
+    exhibits = exhibit_bodies(client, index_resp.content) if form == "8-K" else []
+    blob = Blob.of(doc_resp.content)
+    with conn.transaction():
+        insert_document(conn, accession, cik, form, index, blob)
+        for exhibit, content in exhibits:
+            insert_exhibit(conn, accession, exhibit, content)
+        owe_event(conn, accession)
+    if not publish(conn, producer, [{
             "accession_no": accession, "cik": cik, "form": form,
             "document_name": index.document_name, "url": index.url,
-            "content_sha256": digest, "size_bytes": len(doc_resp.content),
-        }).encode(),
-        on_delivery=count_delivery,
-    )
-    producer.flush(10)
+            "content_sha256": blob.sha256, "size_bytes": blob.size}]):
+        log.warning("%s %s %s: event not confirmed yet; the outbox sends it again", cik, form,
+                    accession, extra={"cik": cik, "form": form, "accession_no": accession})
     DOCUMENTS.labels(form).inc()
     log.info("%s %s %s: %d KB", cik, form, accession, len(doc_resp.content) // 1024,
              extra={"cik": cik, "form": form, "accession_no": accession,
@@ -212,26 +249,61 @@ def handle(conn: psycopg.Connection, client: httpx.Client, producer: Producer, e
     return True
 
 
-def handle_insider(conn: psycopg.Connection, client: httpx.Client, event: dict) -> bool:
-    """One insider filing from the feed: stored once (idempotent on the accession)."""
-    accession, form = event["accession_no"], event["form_type"]
-    if ownership.stored(conn, accession):
-        return False
-    done = ownership.fetch(conn, client, accession, event["cik"], form,
-                           ownership.filed_on(event["filed_at"]))
-    if done:
-        INSIDERS.labels(form).inc()
-    return done
+def publish(conn: psycopg.Connection, producer: Producer, events: list[dict]) -> int:
+    """Send documents.fetched events and clear the outbox rows of those Kafka confirms within
+    DELIVERY_TIMEOUT; returns how many were confirmed."""
+    delivered: list[str] = []
+
+    def on_delivery(err: object, msg: object, accession: str) -> None:
+        count_delivery(err, msg)
+        if err is None:
+            delivered.append(accession)
+
+    for e in events:
+        producer.produce(OUT_TOPIC, key=e["cik"].encode(), value=json.dumps(e).encode(),
+                         on_delivery=lambda err, msg, a=e["accession_no"]: on_delivery(err, msg, a))
+    producer.flush(DELIVERY_TIMEOUT)
+    if delivered:
+        paid_events(conn, delivered)
+    return len(delivered)
+
+
+def sweep(conn: psycopg.Connection, producer: Producer) -> int:
+    """Republish the events still owed (a failed delivery, a crash between commit and
+    confirmation); returns how many were confirmed now."""
+    events = owed_events(conn, 500)
+    if not events:
+        return 0
+    sent = publish(conn, producer, events)
+    REPUBLISHED.inc(sent)
+    log.info("outbox: %d of %d owed documents.fetched events confirmed", sent, len(events))
+    return sent
+
+
+def drain_insiders(conn: psycopg.Connection, client: httpx.Client, budget: float) -> int:
+    """The queued insider filings' turn (`ownership.drain`): one that fails is recorded there."""
+    return ownership.drain(conn, client, budget,
+                           on_stored=lambda form: INSIDERS.labels(form).inc())
+
+
+def exhibit_bodies(client: httpx.Client, index_html: bytes) -> list[tuple[Exhibit, bytes]]:
+    """Every EX-99.x exhibit of an index, fetched; an HTTP error raises (nothing is stored)."""
+    bodies = []
+    for exhibit in parse_exhibits(index_html):
+        resp = client.get(exhibit.url)
+        resp.raise_for_status()
+        bodies.append((exhibit, resp.content))
+    return bodies
 
 
 def fetch_exhibits(conn: psycopg.Connection, client: httpx.Client, accession: str,
                    index_html: bytes) -> int:
-    exhibits = parse_exhibits(index_html)
-    for exhibit in exhibits:
-        resp = client.get(exhibit.url)
-        resp.raise_for_status()
-        insert_exhibit(conn, accession, exhibit, resp.content)
-    return len(exhibits)
+    """A stored 8-K's exhibits (`doc-fetcher-exhibits`): all fetched, then stored together."""
+    bodies = exhibit_bodies(client, index_html)
+    with conn.transaction():
+        for exhibit, content in bodies:
+            insert_exhibit(conn, accession, exhibit, content)
+    return len(bodies)
 
 
 if __name__ == "__main__":

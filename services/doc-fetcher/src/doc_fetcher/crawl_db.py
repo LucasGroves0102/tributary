@@ -53,13 +53,17 @@ def already_stored(conn: psycopg.Connection, accessions: list[str]) -> set[str]:
 
 
 def mark_already_stored(conn: psycopg.Connection, accessions: list[str]) -> None:
-    """Stored by someone else (the live doc-fetcher), who also published its event."""
+    """Stored by someone else (the live doc-fetcher). Published only when no live event is owed
+    for it (ops.document_outbox, migration 059); otherwise left unpublished, so this crawl's
+    outbox sends documents.backfill too (both parsers are idempotent per accession)."""
     conn.execute(
         """
-        UPDATE ops.doc_crawl_targets
-        SET status = 'done', finished_at = now(), published_at = now(), files = 0,
-            last_error = 'already stored'
-        WHERE accession_no = ANY(%s)
+        UPDATE ops.doc_crawl_targets t
+        SET status = 'done', finished_at = now(), files = 0, last_error = 'already stored',
+            published_at = CASE WHEN EXISTS (SELECT 1 FROM ops.document_outbox o
+                                             WHERE o.accession_no = t.accession_no)
+                                THEN NULL ELSE now() END
+        WHERE t.accession_no = ANY(%s)
         """,
         (accessions,),
     )
