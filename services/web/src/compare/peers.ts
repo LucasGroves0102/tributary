@@ -3,7 +3,7 @@
  * ranks, scores or re-derives a reason; it only says what `match` and `/peers/check` carry. */
 
 import { day } from "../format";
-import type { MentionCite, PeerCheck, PeerMatch, Peers, ScreenerRow } from "../types";
+import type { MentionCite, PeerCheck, PeerFallback, PeerMatch, Peers, ScreenerRow } from "../types";
 
 const SIC_LEVEL: Record<number, string> = { 4: "same SIC", 3: "same 3-digit SIC group", 2: "same 2-digit SIC group" };
 
@@ -12,6 +12,43 @@ export interface Reason {
   text: string;
   /** the company whose 10-K the sentence is in, and where */
   cite?: { companyId: string; mention: MentionCite };
+  /** the longer sentence, for a hover */
+  title?: string;
+}
+
+/** Why there is no business text to rank by, short, after "by SIC and size" in each row. */
+const FALLBACK_SHORT: Record<PeerFallback, (name: string) => string> = {
+  filings_access: (n) => `${possessive(n)} filings text isn't in your plan`,
+  no_annual_report: (n) => `${n} has no 10-K from the last three years`,
+  no_business_section: (n) => `no Business section found in ${possessive(n)} 10-K`,
+  cross_reference: (n) => `${possessive(n)} 10-K Business section is a cross-reference`,
+  not_profiled: (n) => `${possessive(n)} newest Business section isn't compared yet`,
+  no_close_peers: () => "no close business match",
+};
+
+/** The same, as a sentence: the line above the table and the hover. */
+const FALLBACK_SENTENCE: Record<PeerFallback, (name: string) => string> = {
+  filings_access: (n) => `Business sections are filing text, which your plan doesn't include for ${n}.`,
+  no_annual_report: (n) => `${n} has no 10-K on file from the last three years, so there is no Business section to compare.`,
+  no_business_section: (n) => `${possessive(n)} latest 10-K has no Business section (Item 1) to compare: the report follows its own layout, with the form's items only in a cross-reference index.`,
+  cross_reference: (n) => `${possessive(n)} latest 10-K gives its Business section (Item 1) only as a cross-reference to pages elsewhere in the report ("Item 1. Business: Pages 3-5"), so there is no business text to compare.`,
+  not_profiled: (n) => `${possessive(n)} latest 10-K Business section hasn't been compared with other companies' yet (new 10-Ks are read weekly).`,
+  no_close_peers: (n) => `No other company's 10-K Business section reads close to ${possessive(n)}, and none names it as a competitor.`,
+};
+
+/** Why these peers are by SIC code and size, in a sentence ending in what they are instead; null
+ * by business. An older API sends no `basis_reason`: its `method` says it. */
+export function fallbackSentence(data: Pick<Peers, "basis" | "basis_reason" | "method">, name: string | null): string | null {
+  if (data.basis === "business") return null;
+  const why = data.basis_reason ? FALLBACK_SENTENCE[data.basis_reason]?.(short(name)) : null;
+  return why ? `${why} These peers are by SIC code and size instead.` : null;
+}
+
+/** The first part of each row's Why when the peers are by SIC and size: says so, and why. */
+export function fallbackPart(data: Pick<Peers, "basis" | "basis_reason" | "method">, name: string | null): Reason | null {
+  if (data.basis === "business") return null;
+  const why = data.basis_reason ? FALLBACK_SHORT[data.basis_reason]?.(short(name)) : null;
+  return { text: why ? `by SIC and size (${why})` : "by SIC and size", title: fallbackSentence(data, name) ?? data.method };
 }
 
 const short = (name: string | null | undefined): string => name ?? "this company";

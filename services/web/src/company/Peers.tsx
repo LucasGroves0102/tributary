@@ -14,7 +14,7 @@ import {
   statText,
   type CompareSort,
 } from "../compare/state";
-import { possessive, similarityWord, whyParts, whyText } from "../compare/peers";
+import { fallbackPart, fallbackSentence, possessive, similarityWord, whyParts, whyText } from "../compare/peers";
 import { FigureText } from "../components/FigureText";
 import { NOT_APPLICABLE } from "../blanks";
 import { day } from "../format";
@@ -75,6 +75,9 @@ export function Peers({
   const chartNet = rows.length > 0 && rows.every((r) => !r.readable || r.cells.operating_margin_ttm?.value == null);
   const business = data?.basis === "business";
   const target = { companyId, name };
+  // by SIC and size: every row's Why starts by saying so, and why (the API's basis_reason)
+  const fallback = data ? fallbackPart(data, name) : null;
+  const fallbackLine = data ? fallbackSentence(data, name) : null;
 
   return (
     <section className="card">
@@ -114,6 +117,7 @@ export function Peers({
                   <span className="faint">. Peers are the companies whose 10-Ks read most alike, or that either names as a competitor.</span>
                 </p>
               )}
+              {fallbackLine && <p className="peers-basis small faint">{fallbackLine}</p>}
               <TableScroll label="Peers">
                 <table className="t peers">
                   <thead>
@@ -134,7 +138,7 @@ export function Peers({
                   <tbody>
                     {sorted.map((r) => {
                       const p = byId.get(r.companyId);
-                      const reasons = r.isTarget || !p ? [] : whyParts(p.match, p, target);
+                      const reasons = r.isTarget || !p ? [] : [...(fallback ? [fallback] : []), ...whyParts(p.match, p, target)];
                       const alike = similarityWord(p?.match.similarity);
                       const why = r.isTarget ? "this company" : whyText(reasons);
                       return (
@@ -169,7 +173,7 @@ export function Peers({
                                         title="Open the sentence in the filing reader">
                                         {x.text}
                                       </a>
-                                    ) : x.text}
+                                    ) : x.title ? <span className="why-basis" title={x.title}>{x.text}</span> : x.text}
                                   </Fragment>
                                 ))}
                               </>

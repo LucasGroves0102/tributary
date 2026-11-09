@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { entry } from "../fixtures";
-import type { PeerCheck, PeerMatch, ScreenerRow } from "../types";
-import { coRegistrantNote, peerRefusal, sectorLine, similarityWord, whyParts, whyText } from "./peers";
+import type { PeerCheck, PeerMatch, Peers, ScreenerRow } from "../types";
+import { coRegistrantNote, fallbackPart, fallbackSentence, peerRefusal, sectorLine, similarityWord, whyParts, whyText } from "./peers";
 
 const VRT = { companyId: "0001674101", name: "Vertiv" };
 const ETN: ScreenerRow = { ...entry({ company_id: "0001551182", name: "Eaton" }), filer_categories: null, state_of_incorporation: null, sector: "Industrials", sector_industry: "Machinery & tools" };
@@ -40,6 +40,30 @@ describe("why a peer was suggested", () => {
   it("an older API's SIC and size match reads as before", () => {
     const match: PeerMatch = { sic_level: 3, same_filer_category: true, revenue_band: "$1B-$10B", same_revenue_band: true };
     expect(whyText(whyParts(match, ETN, VRT))).toBe("same 3-digit SIC group; same filer category; similar size ($1B-$10B)");
+  });
+});
+
+describe("peers by SIC and size say why there is no business text", () => {
+  const sic = (basis_reason?: Peers["basis_reason"]) => ({ basis: "sic" as const, basis_reason, method: "By SIC and size: the API's words." });
+
+  it.each([
+    ["cross_reference", "Intel", "by SIC and size (Intel's 10-K Business section is a cross-reference)", "only as a cross-reference to pages elsewhere"],
+    ["no_business_section", "Citigroup", "by SIC and size (no Business section found in Citigroup's 10-K)", "follows its own layout"],
+    ["no_annual_report", "Birkenstock", "by SIC and size (Birkenstock has no 10-K from the last three years)", "no 10-K on file"],
+    ["filings_access", "Nvidia", "by SIC and size (Nvidia's filings text isn't in your plan)", "your plan doesn't include for Nvidia"],
+    ["not_profiled", "NewCo", "by SIC and size (NewCo's newest Business section isn't compared yet)", "read weekly"],
+    ["no_close_peers", "Odd Co", "by SIC and size (no close business match)", "none names it as a competitor"],
+  ] as const)("%s", (reason, name, label, sentence) => {
+    const part = fallbackPart(sic(reason), name)!;
+    expect(part.text).toBe(label);
+    expect(part.title).toContain(sentence);
+    expect(fallbackSentence(sic(reason), name)).toMatch(/These peers are by SIC code and size instead\.$/);
+  });
+
+  it("by business says nothing; an older API's answer falls back to its method", () => {
+    expect(fallbackPart({ basis: "business", basis_reason: null, method: "x" }, "Nvidia")).toBeNull();
+    expect(fallbackPart(sic(undefined), "Nvidia")).toEqual({ text: "by SIC and size", title: "By SIC and size: the API's words." });
+    expect(fallbackSentence(sic(undefined), "Nvidia")).toBeNull();
   });
 });
 
