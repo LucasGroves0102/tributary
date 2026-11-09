@@ -376,8 +376,10 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
         # equity's reasons (035): over a row's own, and where gold has no row (negative equity)
         by_equity: dict[tuple[str, date], str] = {}
         if readings and fmt == "json":
-            ends = sorted({r["period_end"] for r in rows})
-            for e in store.equity_readings(user_id, company_id, metrics or every, view, ends):
+            # the company's own equity periods in the window, not just the rows' ends: a request
+            # for debt_to_equity alone has no row at a negative-equity date to hang it on
+            for e in store.equity_readings(user_id, company_id, metrics or every, quarters, view,
+                                           basis):
                 by_equity[(e["metric"], e["period_end"])] = e["reason"]
             for r in rows:
                 if (r["metric"], r["period_end"]) in by_equity:

@@ -292,25 +292,31 @@ class Store:
                 """, (company_id, view, metrics, basis, quarters))
             return cur.fetchall()
 
-    def equity_readings(self, user_id: str, company_id: str, metrics: list[str], view: str,
-                        ends: list[date]) -> list[dict]:
-        """Why a metric reads n/m at these period ends because of the company's stockholders'
-        equity there, by migration 035's gold.not_meaningful (debt/equity and ROE on negative
-        equity: gold has no row then, 014's guard). [{metric, period_end, reason}]."""
-        if not ends or not metrics:
+    def equity_readings(self, user_id: str, company_id: str, metrics: list[str], quarters: int,
+                        view: str = "quarter", basis: str = "fiscal") -> list[dict]:
+        """Why a metric reads n/m because of the company's stockholders' equity, at each of its
+        latest `quarters` equity periods (the window financials() reads), whatever metrics the
+        rows hold: by migration 035's gold.not_meaningful (debt/equity and ROE on negative
+        equity, where gold has no row: 014's guard). Under RLS like every read.
+        [{metric, period_end, reason}]."""
+        if not metrics:
             return []
         with self._session(user_id) as cur:
             cur.execute(
                 """
                 SELECT m.metric, e.period_end, r.reason
-                FROM gold.financials e
+                FROM (
+                    SELECT period_end, value FROM gold.financials
+                    WHERE company_id = %s AND span = %s AND metric = 'stockholders_equity'
+                      AND (%s = 'fiscal' OR calendar_primary)
+                    ORDER BY period_end DESC LIMIT %s
+                ) e
                 CROSS JOIN unnest(%s::text[]) AS m(metric)
                 CROSS JOIN LATERAL (
                     SELECT gold.not_meaningful(m.metric, NULL, NULL, e.value) AS reason) r
-                WHERE e.company_id = %s AND e.span = %s AND e.metric = 'stockholders_equity'
-                  AND e.period_end = ANY(%s::date[]) AND r.reason IS NOT NULL
+                WHERE r.reason IS NOT NULL
                 ORDER BY m.metric, e.period_end DESC
-                """, (metrics, company_id, view, ends))
+                """, (company_id, view, basis, quarters, metrics))
             return cur.fetchall()
 
     def annual_per_share(self, user_id: str, company_id: str, years: int) -> list[dict]:

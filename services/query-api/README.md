@@ -201,7 +201,9 @@ future date). `behind`: more than 45. `values` keeps the exact figure in every c
 doesn't open on 209,828%. `/financials?readings=true` adds the row's `not_meaningful` (debt/equity and
 ROE on that period's negative equity first) and `not_meaningful_periods: [{metric, period_end,
 reason}]`, the periods a requested metric has no row because of the company's equity there (gold has
-no debt/equity or ROE on negative equity), both by `gold.not_meaningful` (`Store.equity_readings`); off
+no debt/equity or ROE on negative equity), taken from the company's own latest `quarters` equity
+periods whatever metrics were asked (`debt_to_equity` alone still gets them), both by
+`gold.not_meaningful` (`Store.equity_readings`, under RLS, after `require()`); off
 by default, so the agent's tool sees what it always did. The web app reads these instead of working
 out equity itself.
 

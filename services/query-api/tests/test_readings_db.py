@@ -424,6 +424,21 @@ def test_financials_say_where_equity_makes_a_ratio_meaningless(conn, token):
         {"metric": "debt_to_equity", "period_end": "2026-09-30",
          "reason": "stockholders' equity is negative"},
         {"metric": "roe", "period_end": "2026-09-30", "reason": "stockholders' equity is negative"}]
+    # from the company's equity periods, not the rows': debt_to_equity alone has no row there
+    alone = c.get(f"/v1/companies/{NEGATIVE}/financials", headers=token(USER),
+                  params={"metrics": ["debt_to_equity"], "quarters": 8, "readings": "true"}).json()
+    assert [r["period_end"] for r in alone["rows"]] == ["2021-04-30"]
+    assert alone["not_meaningful_periods"] == [
+        {"metric": "debt_to_equity", "period_end": "2026-09-30",
+         "reason": "stockholders' equity is negative"}]
+    # still behind require() and RLS: a user who can't read the company gets the 403, nothing else
+    denied = api(conn, Closed()).get(f"/v1/companies/{NEGATIVE}/financials", headers=token(USER),
+                                     params={"metrics": ["debt_to_equity"], "readings": "true"})
+    assert denied.status_code == 403 and "not_meaningful_periods" not in denied.text
+    # and with every check passing (an allow-all authorizer), RLS alone reads no equity for them
+    nobody = c.get(f"/v1/companies/{NEGATIVE}/financials", headers=token("t-nobody"),
+                   params={"metrics": ["debt_to_equity"], "readings": "true"}).json()
+    assert nobody["rows"] == [] and nobody["not_meaningful_periods"] == []
     # a ratio row at a negative-equity date reads n/m for that reason, whatever its own value
     derived(conn, NEGATIVE, "debt_to_equity", LATEST, Decimal("3.1"), {}, span="quarter")
     asked = c.get(f"/v1/companies/{NEGATIVE}/financials", headers=token(USER),
