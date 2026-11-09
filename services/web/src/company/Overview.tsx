@@ -7,9 +7,10 @@ import { day } from "../format";
 import { go, href } from "../route";
 import type { ScreenerRow, Tier } from "../types";
 import { keyStats, recapAccession, recapRows } from "./data";
-import { ErrorPanel, Skeleton } from "../components/States";
+import { ErrorPanel, sentence, Skeleton } from "../components/States";
 import { Gate } from "./Tables";
 import { useLoad } from "./useLoad";
+import { TableScroll } from "../components/TableScroll";
 
 const EXCERPT_CHARS = 1500;
 
@@ -34,12 +35,12 @@ export function Overview({
       <section className="card">
         <div className="card-h">
           <h2>Key stats</h2>
-          <span className="sub">latest reported periods · USD · hover for the source filing</span>
+          <span className="sub">the latest period of each figure · USD · hover for the source filing, or for why a figure reads n/m</span>
         </div>
         {canFin ? (
-          <div className="kv">
+          <div className="kv stats">
             {keyStats(row).map((s) => (
-              <div key={s.label} title={s.title}>
+              <div key={s.label} title={s.title} className={s.old ? "old" : undefined}>
                 <div className="k">{s.label}</div>
                 <div className="v">{s.text}</div>
                 <div className="p">{s.period}</div>
@@ -54,9 +55,13 @@ export function Overview({
         <Recap token={token} companyId={companyId} name={name} accession={canFin ? recapAccession(row) : null} canFin={canFin} />
         <section className="card">
           <Business token={token} companyId={companyId} name={name} canRead={access.includes("filings")} />
-          {canFin && <Revenue token={token} companyId={companyId} />}
         </section>
       </div>
+      {canFin && (
+        <section className="card">
+          <Revenue token={token} companyId={companyId} />
+        </section>
+      )}
     </>
   );
 }
@@ -82,7 +87,7 @@ function Recap({ token, companyId, name, accession, canFin }: { token: string; c
         <Gate load={load} name={name} what="Financials">
           {() => (
             <>
-              <div className="tw">
+              <TableScroll label="Latest quarter">
                 <table className="t">
                   <thead>
                     <tr>
@@ -107,7 +112,7 @@ function Recap({ token, companyId, name, accession, canFin }: { token: string; c
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </TableScroll>
               {data!.flags && data!.flags.length > 0 && (
                 <div className="card-b">
                   <b>Flagged in the filing text</b>
@@ -124,7 +129,7 @@ function Recap({ token, companyId, name, accession, canFin }: { token: string; c
                 </div>
               )}
               <div className="foot">
-                {data!.flags_unavailable ? "One-time-item flags from the filing text need the filings tier. " : ""}
+                {data!.flags_unavailable ? `${sentence(data!.flags_unavailable)} ` : ""}
                 Margins change in basis points. Values as currently reported; a restated value cites the restating filing.
               </div>
             </>
@@ -186,11 +191,14 @@ function Revenue({ token, companyId }: { token: string; companyId: string }) {
         financialSeries(load.data.rows, "operating_margin", { id: 2, name: "Operating margin", color: 1, type: "line", axis: "R" }, companyId),
       ].filter((s) => s.points.length)
     : [];
+  // the heading says what's drawn: a bank reports no operating margin, so it gets revenue alone
+  const heading = series.length === 1 ? series[0]!.name : "Revenue and operating margin";
+  const without = series.length === 1 ? (series[0]!.id === 1 ? " · no operating margin reported" : " · no revenue reported") : "";
   return (
     <>
       <div className="card-h">
-        <h2>Revenue and operating margin</h2>
-        <span className="sub">fiscal quarters, last 12 · hover for each value's filing</span>
+        <h2>{heading}</h2>
+        <span className="sub">fiscal quarters, last 12{without} · hover for each value's filing</span>
         <span className="grow" />
         <a className="btn sm ghost" href={href({ view: "company", companyId, tab: "statements" })}>Statements</a>
       </div>

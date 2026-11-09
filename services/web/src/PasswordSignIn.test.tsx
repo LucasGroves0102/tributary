@@ -134,6 +134,30 @@ describe("Sign in with a username and password", () => {
     expect(input("Username")).toBeNull();
   });
 
+  it("says a refused sign-in beside the form, not above the demo's caption", async () => {
+    signIn = () => Response.json({ detail: "no" }, { status: 401 });
+    await mount();
+    await submit("morgan", "wrong");
+    expect(container.querySelector(".welcome-account [role=\"alert\"]")?.textContent).toBe("Wrong username or password, or the account is locked.");
+    expect(container.querySelector(".welcome-try [role=\"alert\"]")).toBeNull();
+  });
+
+  it("keeps its buttons where they are, with one primary at a time", async () => {
+    await mount();
+    const demo = button("Try the demo")!;
+    expect(demo.className).toContain("primary");
+    const toggle = button("Sign in")!;
+    act(() => toggle.click());
+    // the same button, now closing the form; the demo stays above it and steps back
+    expect(toggle.textContent).toBe("Cancel");
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(demo.className).not.toContain("primary");
+    expect(container.querySelectorAll(".welcome-card .btn.primary").length).toBe(1);
+    // the sandbox's caption stays with its button, not under the form
+    expect(container.querySelector(".welcome-try")?.contains(demo)).toBe(true);
+    expect(container.querySelector(".welcome-try form")).toBeNull();
+  });
+
   it("stores an account session (login = username) and never the password", async () => {
     await mount();
     await submit("Tester", PASSWORD);

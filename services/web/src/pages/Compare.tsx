@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
-import { ApiError, peers as fetchPeers, screener } from "../api";
+import { failureReason, peers as fetchPeers, screener } from "../api";
+import { NOT_APPLICABLE, NOT_REPORTED } from "../blanks";
+import { UNNAMED } from "../displayNames";
 import {
   chartMetric,
   COMPARE_COLUMNS,
@@ -12,14 +14,18 @@ import {
   MASKED_TITLE,
   MAX_PEERS,
   medianTitle,
+  nextSort,
   peerStats,
   short,
+  sortRows,
   statText,
+  type CompareSort,
   type CompareState,
 } from "../compare/state";
 import { MAX_COMPANY_LINES } from "../chart/model";
 import { SmallMultiples } from "../compare/SmallMultiples";
 import { CompanySearch } from "../components/CompanySearch";
+import { FigureText } from "../components/FigureText";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { navRow, onTableKey } from "../components/tableNav";
 import { download } from "../download";
@@ -27,12 +33,13 @@ import { day } from "../format";
 import { go, href } from "../route";
 import { inScope, useScope } from "../scope";
 import type { Peers, Screener } from "../types";
+import { TableScroll } from "../components/TableScroll";
 
 interface Props {
   token: string;
   compare: CompareState;
   /** "Chart these": one line per company for a metric */
-  onChart: (companyIds: string[], metric: string, transform: "ttm" | "q" | "yoy", title: string) => void;
+  onChart: (companyIds: string[], metric: string, transform: "ttm" | "q" | "yoy") => void;
   /** Save / Save as (workspaces/SaveBar) */
   saveBar?: ReactNode;
   /** inside an analysis project: the comps are the project's (state handed in, changes handed
@@ -73,6 +80,7 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
   const [attempt, setAttempt] = useState(0);
   const [chosen, setChartKey] = useState(cols[0]!);
   const [multiples, setMultiples] = useState(false);
+  const [sort, setSort] = useState<CompareSort | null>(null);
   const chartKey = cols.includes(chosen) ? chosen : cols[0]!;
 
   useEffect(() => {
@@ -87,7 +95,7 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
       .catch(
         (e) =>
           live &&
-          setTable({ state: "error", message: e instanceof ApiError ? e.message : "the Query API didn't answer" }),
+          setTable({ state: "error", message: failureReason(e) }),
       );
     return () => {
       live = false;
@@ -123,8 +131,19 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
     [table, compare],
   );
   const stats = useMemo(() => peerStats(rows, cols), [rows, cols]);
+  const sorted = useMemo(() => sortRows(rows, sort), [rows, sort]);
+  /** A sortable header: a button in the th, so the keyboard reaches it. */
+  const sortHead = (key: string, content: ReactNode, title?: string, unit?: string) => (
+    <button type="button" className="th-sort" title={title} onClick={() => setSort((s) => nextSort(s, key))}>
+      {content}
+      {sort?.key === key ? (sort.desc ? " ↓" : " ↑") : ""}
+      {unit && <span className="unit"> {unit}</span>}
+    </button>
+  );
+  const ariaSort = (key: string) =>
+    sort?.key === key ? (sort.desc ? ("descending" as const) : ("ascending" as const)) : undefined;
   const bankCols = cols
-    .filter((k) => rows.some((r) => r.cells[k]?.bank))
+    .filter((k) => rows.some((r) => r.cells[k]?.status === "not_applicable"))
     .map((k) => COMPARE_COLUMNS.find((c) => c.key === k)!.long.toLowerCase());
   const target = rows.find((r) => r.isTarget);
   const names = new Map(rows.map((r) => [r.companyId, r.ticker ?? r.name]));
@@ -141,7 +160,7 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
     );
   const chartThese = () => {
     const m = chartMetric(chartKey);
-    if (m && readableIds.length) onChart(readableIds, m.metric, m.transform, m.title);
+    if (m && readableIds.length) onChart(readableIds, m.metric, m.transform);
   };
 
   return (
@@ -162,7 +181,7 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
             <span className="faint">Target</span>
             {compare.target ? (
               <span className="tag">
-                {names.get(compare.target) ?? compare.target}{" "}
+                {names.get(compare.target) ?? UNNAMED}{" "}
                 {!embedded && <button className="link" aria-label="Change target" onClick={() => set({ target: undefined })}>✕</button>}
               </span>
             ) : (
@@ -174,8 +193,8 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
             <span className="faint">Peers ({peerIds.length}/{MAX_PEERS})</span>
             {peerIds.map((p) => (
               <span key={p} className="tag">
-                {names.get(p) ?? p}{" "}
-                <button className="link" aria-label={`Remove ${names.get(p) ?? p}`} onClick={() => removePeer(p)}>✕</button>
+                {names.get(p) ?? UNNAMED}{" "}
+                <button className="link" aria-label={`Remove ${names.get(p) ?? "this company"}`} onClick={() => removePeer(p)}>✕</button>
               </span>
             ))}
             {peerIds.length < MAX_PEERS && (
@@ -245,7 +264,7 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
                 ))}
               </select>
               <button className="btn sm" onClick={chartThese} disabled={!readableIds.length}
-                title="One line per company you can read, calendar quarters">
+                title={`One line per company you can read, calendar quarters${readableIds.length > MAX_COMPANY_LINES ? `: the first ${MAX_COMPANY_LINES} of ${readableIds.length}` : ""}`}>
                 Chart these
               </button>
             </>
@@ -257,7 +276,7 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
             similar size). Or open a company and choose Compare.
           </p>
         ) : table?.state === "error" ? (
-          <ErrorPanel what="the comps" detail={`The Query API said: ${table.message}.`}
+          <ErrorPanel what="the comps" detail={`${table.message}. Fewer columns or peers may help`}
             onRetry={() => {
               setTable({ state: "loading" });
               setAttempt((n) => n + 1);
@@ -265,17 +284,17 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
         ) : !table || table.state === "loading" ? (
           <Skeleton lines={Math.min(ids.length, 8) + 2} label="Loading the comps" />
         ) : (
-          <div className="tw">
+          <TableScroll label="Comparable companies">
             <table className="t comps">
               <thead>
                 <tr>
-                  <th className="first">Company</th>
-                  <th>Latest quarter</th>
+                  <th className="first" aria-sort={ariaSort("name")}>{sortHead("name", "Company")}</th>
+                  <th aria-sort={ariaSort("latest")}>{sortHead("latest", "Latest quarter")}</th>
                   {cols.map((k) => {
                     const c = COMPARE_COLUMNS.find((x) => x.key === k)!;
                     return (
-                      <th key={k} className="n" title={c.long}>
-                        {c.label} <span className="unit">{c.period}</span>
+                      <th key={k} className="n" aria-sort={ariaSort(k)}>
+                        {sortHead(k, c.label, c.long, c.period)}
                       </th>
                     );
                   })}
@@ -283,7 +302,7 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
                 </tr>
               </thead>
               <tbody onKeyDown={onTableKey}>
-                {rows.map((r, i) => (
+                {sorted.map((r, i) => (
                   <tr key={r.companyId} className={[r.isTarget ? "sel" : "", r.readable ? "" : "masked"].join(" ").trim() || undefined}
                     {...navRow(i, r.name)}>
                     <td className="first">
@@ -294,11 +313,11 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
                         {!r.readable && <span className="tag" title={MASKED_TITLE}>metadata only</span>}
                       </a>
                     </td>
-                    <td className="muted" title={r.latest ? `Period ended ${day(r.latest.periodEnd, true)}; ${r.latest.form} filed ${day(r.latest.filed, true)}` : undefined}>
+                    <td className="muted" title={r.latest ? `${r.latest.fiscal ? `${short(r.latest.fiscal)}. ` : ""}Period ended ${day(r.latest.periodEnd, true)}; ${r.latest.form} filed ${day(r.latest.filed, true)}` : undefined}>
                       {r.latest ? (
                         <>
                           {short(r.latest.calendar)}
-                          {r.latest.fiscal && <span className="faint"> ({short(r.latest.fiscal)})</span>}
+                          {r.latest.fiscal && <span className="faint wide-only"> ({short(r.latest.fiscal)})</span>}
                         </>
                       ) : (
                         "—"
@@ -310,7 +329,7 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
                       return (
                         <td key={k} className={`n ${cell.value === null ? "faint" : growth ? (cell.value >= 0 ? "pos" : "neg") : ""}`}
                           title={cell.title}>
-                          {cell.text}
+                          <FigureText cell={cell} />
                         </td>
                       );
                     })}
@@ -331,33 +350,40 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
                 ))}
                 <tr className="agg">
                   <td className="first">Peer median</td>
-                  <td className="faint">{rows.filter((r) => !r.isTarget && r.readable).length} readable peers</td>
+                  <td className="faint" title="Peers you can read, excluding the target">{rows.filter((r) => !r.isTarget && r.readable).length} readable</td>
                   {cols.map((k) => (
                     <td key={k} className="n" title={medianTitle(stats[k]!)}>
-                      {statText(k, stats[k]!.median)}
-                      {stats[k]!.banks > 0 && <span className="unit"> excl. banks</span>}
+                      {stats[k]!.n === 0 && stats[k]!.banks > 0 ? NOT_APPLICABLE : statText(k, stats[k]!.median)}
+                      {stats[k]!.n > 0 && stats[k]!.banks > 0 && <span className="unit"> excl. banks</span>}
                     </td>
                   ))}
                   <td />
                 </tr>
                 <tr className="agg">
-                  <td className="first">High / low</td>
+                  <td className="first">High</td>
                   <td />
                   {cols.map((k) => (
-                    <td key={k} className="n">
-                      {stats[k]!.n ? `${statText(k, stats[k]!.high)} / ${statText(k, stats[k]!.low)}` : "—"}
-                    </td>
+                    <td key={k} className="n">{stats[k]!.n ? statText(k, stats[k]!.high) : stats[k]!.banks ? NOT_APPLICABLE : NOT_REPORTED}</td>
+                  ))}
+                  <td />
+                </tr>
+                <tr className="agg">
+                  <td className="first">Low</td>
+                  <td />
+                  {cols.map((k) => (
+                    <td key={k} className="n">{stats[k]!.n ? statText(k, stats[k]!.low) : stats[k]!.banks ? NOT_APPLICABLE : NOT_REPORTED}</td>
                   ))}
                   <td />
                 </tr>
               </tbody>
             </table>
-          </div>
+          </TableScroll>
         )}
         <div className="foot">
           USD. No valuation multiples: Tributary has no market prices. Each company's own latest
           quarter, labelled by calendar quarter (fiscal in brackets); hover a value for its
-          period and source filing. Keyboard: ↑ ↓ move between rows, Enter opens the company.
+          period and source filing. Click a column to sort, again to reverse, a third time for
+          the order you added them. Keyboard: ↑ ↓ move between rows, Enter opens the company.
           {bankCols.length > 0 &&
             ` Banks show n/a for ${bankCols.join(", ")} (deposits are a bank's debt and lending its operations) and are left out of ${bankCols.length === 1 ? "that column's" : "those columns'"} median.`}
           {fyes.length > 1 &&` Fiscal years end in different months (${fyes.join(", ")}); TTM figures compare regardless.`}
@@ -372,7 +398,7 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
             <h2>Side by side</h2>
             <span className="sub">
               one chart per column · every company you can read a line, in the same colour on each · calendar quarters, last 3 years
-              {readableIds.length > MAX_COMPANY_LINES ? ` · first ${MAX_COMPANY_LINES} companies` : ""}
+              {readableIds.length > MAX_COMPANY_LINES ? ` · the first ${MAX_COMPANY_LINES} of ${readableIds.length} companies` : ""}
             </span>
             <span className="grow" />
             <button className="btn sm" aria-expanded={multiples} onClick={() => setMultiples((m) => !m)}
@@ -381,7 +407,7 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
             </button>
           </div>
           {multiples ? (
-            <SmallMultiples token={token} companyIds={readableIds} cols={cols} label={(id) => names.get(id) ?? id} />
+            <SmallMultiples token={token} companyIds={readableIds} cols={cols} label={(id) => names.get(id) ?? UNNAMED} />
           ) : (
             <p className="empty">
               {readableIds.length

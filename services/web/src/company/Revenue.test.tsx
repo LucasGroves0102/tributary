@@ -99,23 +99,32 @@ it("draws segments and geography over time, the growth decomposition and revenue
   const dec = container.querySelector("table.decomposition")!;
   expect(dec.textContent).toContain("+46.2 pts"); // Compute, FY2027 Q2: (170 − 110) / 130
   expect(dec.textContent).toContain("−3.1 pts"); // Graphics: (16 − 20) / 130
-  expect(dec.querySelector("tr.unattributed")?.textContent).toBe("Not attributed——+0.0 pts+0.0 pts"); // they cover revenue
+  expect(dec.querySelector("tr.unattributed")?.textContent).toBe("Not attributed··+0.0 pts+0.0 pts"); // they cover revenue
   expect(dec.querySelector("tr.total")?.textContent).toContain("+43.1%"); // 186 / 130 − 1
   // quality: receivables 25 vs 13 a year earlier (+92%) while revenue grew 43%: flagged
   const quality = container.querySelector("table.quality")!;
   expect(quality.querySelector("tr.flagged td")?.textContent).toBe("FY2027 Q2");
-  expect(container.textContent).toContain("Receivables grew more than 10 points faster than revenue in 1 of the last 6 quarters");
+  expect(container.textContent).toContain("Receivables grew more than 10 points faster than the quarter's revenue in 1 of the last 6 quarters");
+  // H3: receivables are read against the quarter's revenue, not a TTM
+  const fins = asked.filter((u) => u.pathname.endsWith("/financials"));
+  const withReceivables = fins.filter((u) => u.searchParams.getAll("metrics").includes("receivables"));
+  expect(withReceivables.map((u) => u.searchParams.get("view"))).toEqual(["quarter"]);
+  expect(withReceivables[0]!.searchParams.getAll("metrics")).toEqual(["revenue", "receivables"]);
+  expect(quality.querySelector("thead")?.textContent).toContain("Revenue (quarter)");
 });
 
 it("saves a chart to a workspace as a chart item, and opens one in the chart builder", async () => {
   await render();
   await act(async () => buttons("Save to workspace")[0]!.click());
   const form = container.querySelector<HTMLFormElement>("form.save-form")!;
+  // #119: not the first workspace ("Semis" says nothing of NVDA): a new one named after it
+  expect(form.querySelector("select")!.value).toBe("__new__");
+  expect(form.querySelectorAll("input")[1]!.value).toBe("NVDA");
   await act(async () => form.requestSubmit());
   for (let i = 0; i < 5; i++) await act(async () => new Promise((r) => setTimeout(r, 0)));
   expect(create).toHaveBeenCalledTimes(1);
   const [kind, name, state, target] = create.mock.calls[0]!;
-  expect([kind, name, target]).toEqual(["chart", "NVDA: revenue by business segment (TTM)", { workspaceId: "w1" }]);
+  expect([kind, name, target]).toEqual(["chart", "NVDA: revenue by business segment (TTM)", { newWorkspace: "NVDA" }]);
   const layers = (state as { layers: Record<string, unknown>[] }).layers;
   expect(layers.map((l) => [l.kind, l.members, l.type, l.transform])).toEqual([
     ["segment", [CN], "sbar", "ttm"], ["segment", [GR], "sbar", "ttm"],

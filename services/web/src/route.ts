@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { parseScreen, screenQuery, type ScreenFilters } from "./companies/screen";
+import { parseStatementView, statementQuery, type StatementView } from "./company/statementView";
 import { compareQuery, parseCompare, type CompareState } from "./compare/state";
 import { parseSearch, searchQuery, type SearchState } from "./search/state";
 import type { ProjectStep } from "./types";
@@ -30,7 +31,13 @@ const TABS = new Set<string>(COMPANY_TABS.map(([t]) => t));
 export type Route =
   | { view: "home" }
   | { view: "companies"; screen?: ScreenFilters }
-  | { view: "company"; companyId: string; tab?: CompanyTab }
+  | {
+      view: "company";
+      companyId: string;
+      tab?: CompanyTab;
+      /** the Statements tab's choices, in the address so they can be linked */
+      statements?: StatementView;
+    }
   | {
       view: "filing";
       companyId: string;
@@ -61,7 +68,7 @@ export type Route =
   | { view: "model"; itemId: string }
   /** the Analysis tab: your projects (no projectId), or one project at a guided step (a model
    * or thesis step may name which of the project's items) */
-  | { view: "analysis"; projectId?: string; step?: ProjectStep; itemId?: string };
+  | { view: "analysis"; projectId?: string; step?: ProjectStep; itemId?: string; start?: string };
 
 /** Screens in the left nav: routes without parameters. */
 export type NavView = "home" | "analysis" | "companies" | "chart" | "compare" | "ask";
@@ -106,7 +113,11 @@ export function parse(hash: string): Route {
   if (view && SIMPLE.has(view)) return { view: view as "chart" | "ask" | "about" | "status" | "settings" };
   if (view === "explore") return { view: "companies" }; // links from before the v3 shell
   if (view === "analysis") {
-    if (!a || !ID.test(a)) return { view: "analysis" };
+    if (!a || !ID.test(a)) {
+      // "#/analysis?start=<company>": the projects list with New analysis open on that company (L5)
+      const start = new URLSearchParams(query).get("start");
+      return start && CIK.test(start) ? { view: "analysis", start } : { view: "analysis" };
+    }
     if (!b || !STEP_SET.has(b)) return { view: "analysis", projectId: a };
     const step = b as ProjectStep;
     return c && ITEM_STEPS.has(step) && ID.test(c) ? { view, projectId: a, step, itemId: c } : { view, projectId: a, step };
@@ -115,9 +126,14 @@ export function parse(hash: string): Route {
     return view === "workspace" ? { view, workspaceId: a! } : { view, itemId: a! };
   }
   if (view === "company" && CIK.test(a ?? "")) {
-    return b && b !== "overview" && TABS.has(b)
-      ? { view: "company", companyId: a!, tab: b as CompanyTab }
-      : { view: "company", companyId: a! };
+    if (!b || b === "overview" || !TABS.has(b)) return { view: "company", companyId: a! };
+    const statements = b === "statements" ? parseStatementView(query) : {};
+    return {
+      view: "company",
+      companyId: a!,
+      tab: b as CompanyTab,
+      ...(Object.keys(statements).length ? { statements } : {}),
+    };
   }
   if (view === "filing" && CIK.test(a ?? "") && ACCESSION.test(b ?? "")) {
     const params = new URLSearchParams(query);
@@ -152,7 +168,7 @@ export function href(route: Route): string {
     case "workspace":
       return `#/workspace/${encodeURIComponent(route.workspaceId)}`;
     case "analysis":
-      if (!route.projectId) return "#/analysis";
+      if (!route.projectId) return route.start ? `#/analysis?start=${route.start}` : "#/analysis";
       return `#/analysis/${encodeURIComponent(route.projectId)}` +
         (route.step ? `/${route.step}` : "") +
         (route.step && route.itemId && ITEM_STEPS.has(route.step) ? `/${encodeURIComponent(route.itemId)}` : "");
@@ -160,8 +176,10 @@ export function href(route: Route): string {
     case "thesis":
     case "model":
       return `#/${route.view}/${encodeURIComponent(route.itemId)}`;
-    case "company":
-      return `#/company/${route.companyId}` + (route.tab && route.tab !== "overview" ? `/${route.tab}` : "");
+    case "company": {
+      const q = route.tab === "statements" && route.statements ? statementQuery(route.statements) : "";
+      return `#/company/${route.companyId}` + (route.tab && route.tab !== "overview" ? `/${route.tab}` : "") + (q ? `?${q}` : "");
+    }
     case "filing": {
       const params = new URLSearchParams();
       if (route.at !== undefined) params.set("at", String(route.at));

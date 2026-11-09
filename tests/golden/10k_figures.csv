@@ -14,7 +14,7 @@ NVIDIA,NVDA,0001045810,2026,2026-01-25,eps_diluted,4.90,USD/shares,0.01,income,D
 NVIDIA,NVDA,0001045810,2026,2026-01-25,weighted_shares_basic,24359000000,shares,1000000,income,Basic,annual_silver,0001045810-26-000021,,
 NVIDIA,NVDA,0001045810,2026,2026-01-25,weighted_shares_diluted,24514000000,shares,1000000,income,Diluted,annual_silver,0001045810-26-000021,,
 NVIDIA,NVDA,0001045810,2026,2026-01-25,cash,10605000000,USD,1000000,balance,Cash and cash equivalents,annual,0001045810-26-000021,,
-NVIDIA,NVDA,0001045810,2026,2026-01-25,short_term_investments,51951000000,USD,1000000,balance,Marketable securities,absent,0001045810-26-000021,"Lucas Groves, 2026-10-27","FY2026 10-K tags this line with Nvidia's own extension (nvda:MarketableSecuritiesAndEquitySecuritiesFVNI); gold maps us-gaap tags only, so there is no value and net_debt treats it as 0"
+NVIDIA,NVDA,0001045810,2026,2026-01-25,short_term_investments,51951000000,USD,1000000,balance,Marketable securities,annual,0001045810-26-000021,"Lucas Groves, 2026-10-27","FY2026 10-K tags this line with Nvidia's own extension (nvda:MarketableSecuritiesAndEquitySecuritiesFVNI), which companyfacts doesn't carry; gold sums its two us-gaap parts from the next 10-Qs' comparatives: DebtSecuritiesCurrent 39,065 + EquitySecuritiesFvNi 12,886 (migration 038)"
 NVIDIA,NVDA,0001045810,2026,2026-01-25,receivables,38466000000,USD,1000000,balance,"Accounts receivable, net",annual,0001045810-26-000021,,
 NVIDIA,NVDA,0001045810,2026,2026-01-25,inventory,21403000000,USD,1000000,balance,Inventories,annual,0001045810-26-000021,,
 NVIDIA,NVDA,0001045810,2026,2026-01-25,current_assets,125605000000,USD,1000000,balance,Total current assets,annual,0001045810-26-000021,,

@@ -36,9 +36,18 @@ it("completes tickers for upper-case words and metrics after TICKER.", () => {
   expect(labels("ZZZ")).toBeNull();
 });
 
-it("offers operators and lags after an operand, functions and metrics at the start", () => {
-  expect(labels("revenue ")).toEqual(["+", "−", "×", "÷", "[-4q]", "[-1q]"]);
-  expect(labels("ttm(revenue) ")?.[0]).toBe("+");
+it("stops offering once a name is complete, whatever could still be typed after it", () => {
+  // the list sits over the controls below: nothing after a whole token or an operand
+  expect(labels("revenue")).toBeNull();
+  expect(labels("revenue ")).toBeNull();
+  expect(labels("ttm(revenue) ")).toBeNull();
+  expect(labels("KO.revenue")).toBeNull();
+  expect(labels("revenue[-4q")).toBeNull();
+  // a name that's only the start of others keeps offering until it's whole
+  expect(labels("reven")?.[0]).toBe("revenue");
+});
+
+it("offers functions and metrics at the start and after an operator", () => {
   expect(labels("")?.slice(0, 3)).toEqual(["ttm( )", "abs( )", "cash"]);
   expect(labels("revenue / ")?.slice(0, 2)).toEqual(["ttm( )", "abs( )"]);
 });
@@ -47,8 +56,6 @@ it("replaces the word at the cursor, including the rest of it", () => {
   const text = "net_inc / revenue";
   const c = complete(text, 5, VOCAB)!; // cursor inside "net_inc"
   expect(apply(text, c, c.items[0]!)).toEqual({ text: "net_income / revenue", cursor: 10 });
-  const ops = complete("revenue ", 8, VOCAB)!;
-  expect(apply("revenue ", ops, ops.items[3]!)).toEqual({ text: "revenue / ", cursor: 10 });
 });
 
 const TODAY = new Date(Date.UTC(2026, 9, 21));

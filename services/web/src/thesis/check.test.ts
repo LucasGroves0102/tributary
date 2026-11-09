@@ -1,6 +1,18 @@
 import { describe, expect, it } from "vitest";
 
-import { asCitations, clearHighlights, findQuote, highlightQuote, normalize, points, textHash } from "./check";
+import { asCitations, clearHighlights, findQuote, highlightQuote, normalize, plainQuote, points, textHash } from "./check";
+
+describe("plainQuote", () => {
+  it.each([
+    ["**Export controls** matter.", "Export controls matter."],
+    ["__Margins__ fell", "Margins fell"],
+    ["It *really* grew.", "It really grew."],
+    ["Uses `code` here", "Uses code here"],
+    ["- A bullet", "A bullet"],
+    ["## A heading", "A heading"],
+    ["No markup, 5 * 3 = 15.", "No markup, 5 * 3 = 15."],
+  ])("%s", (q, want) => expect(plainQuote(q)).toBe(want));
+});
 
 describe("textHash", () => {
   it("is agent-api's thesis_check.text_hash (same hex for the same company and text)", async () => {

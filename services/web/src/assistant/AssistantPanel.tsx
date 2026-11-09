@@ -1,8 +1,9 @@
 import { lazy, Suspense, useEffect, useRef, type RefObject } from "react";
 
-import { isAttack, type PageContext } from "./context";
+import type { PageContext } from "./context";
 import { href } from "../route";
-import { useScope } from "../scope";
+import type { Allowance } from "../types";
+import { limitsText, meterText, tightest } from "./useAllowance";
 import type { Assistant } from "./useAssistant";
 
 // answers render through marked + DOMPurify (markdown.ts): loaded with the first answer, or
@@ -21,6 +22,8 @@ interface Props {
   variant: "drawer" | "page";
   inputRef: RefObject<HTMLTextAreaElement | null>;
   onClose?: () => void;
+  /** the questions left: shown before one is spent (null: unknown, so nothing is claimed) */
+  allowance?: Allowance | null;
 }
 
 export function AssistantPanel({
@@ -32,24 +35,10 @@ export function AssistantPanel({
   variant,
   inputRef,
   onClose,
+  allowance = null,
 }: Props) {
   const { turns, draft, busy, setDraft, submit, stop, clear } = assistant;
   const bottom = useRef<HTMLDivElement>(null);
-  // a demo visitor gets the permission tests labelled as such, after the ordinary prompts
-  const labelAttacks = useScope() !== null;
-  const prompts = labelAttacks ? context.suggestions.filter((p) => !isAttack(p)) : context.suggestions;
-  const attacks = labelAttacks ? context.suggestions.filter(isAttack) : [];
-  const chip = (p: string) => (
-    <button
-      key={p}
-      className="btn sm suggestion"
-      disabled={!signedIn || busy}
-      onClick={() => void submit(p)}
-    >
-      {p}
-    </button>
-  );
-
   useEffect(() => {
     bottom.current?.scrollIntoView?.({ behavior: "smooth", block: "end" });
   }, [turns]);
@@ -82,7 +71,7 @@ export function AssistantPanel({
           <div className="empty">
             Ask about any company you can read: revenue, margins, cash flow, what a filing says
             or what changed since the last one. Every answer cites its filing and section, and I
-            only see the companies your plan covers.
+            only read what you can read.
             <p className="faint">
               I can't give stock prices, valuation multiples, consensus estimates or call
               transcripts: Tributary has SEC filings and XBRL only.{" "}
@@ -107,13 +96,11 @@ export function AssistantPanel({
 
       {context.suggestions.length > 0 && (
         <div className="ai-s">
-          {prompts.map(chip)}
-          {attacks.length > 0 && (
-            <span className="ai-s-label" title="These try to get data this demo can't read; the assistant should refuse">
-              Try to break it:
-            </span>
-          )}
-          {attacks.map(chip)}
+          {context.suggestions.map((p) => (
+            <button key={p} className="btn sm suggestion" disabled={!signedIn || busy} onClick={() => void submit(p)}>
+              {p}
+            </button>
+          ))}
         </div>
       )}
 
@@ -151,6 +138,7 @@ export function AssistantPanel({
           </button>
         )}
       </form>
+      {allowance && <Meter allowance={allowance} />}
       <div className="ai-f">
         Enter to send · Shift+Enter new line · {variant === "drawer" && (
           <>
@@ -160,5 +148,16 @@ export function AssistantPanel({
         <span className="kbd">/</span> focus
       </div>
     </aside>
+  );
+}
+
+function Meter({ allowance }: { allowance: Allowance }) {
+  const { left, of } = tightest(allowance);
+  const low = allowance.paused || left <= Math.min(3, of);
+  return (
+    <div className={low ? "ai-meter low" : "ai-meter"} title={limitsText(allowance)}>
+      <meter min={0} max={of} value={left} aria-hidden="true" />
+      <span>{meterText(allowance)}</span>
+    </div>
   );
 }

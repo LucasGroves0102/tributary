@@ -53,6 +53,18 @@ export function searchQuery(s: SearchState): string {
   return p.toString();
 }
 
+/** "Filed from" after "filed to": no filing can match, so it's never asked and never blamed on
+ * the words. */
+export function datesInverted(s: Pick<SearchState, "from" | "to">): boolean {
+  return !!s.from && !!s.to && s.from > s.to;
+}
+
+/** Whether a date field holds a date worth searching: while a year is being typed, the browser
+ * reports years like 0002. EDGAR's electronic filings start in the 1990s. */
+export function usableDate(v: string | undefined): boolean {
+  return !v || (DATE.test(v) && v >= "1990-01-01");
+}
+
 export interface FilingGroup {
   accessionNo: string;
   form: string;

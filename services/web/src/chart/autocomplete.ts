@@ -1,11 +1,13 @@
 /** Formula autocomplete for the chart builder: what can come next at the cursor, from the
  * formula language (query-api formula/grammar.py): metric names (the API's catalog), tickers
- * of the user's readable companies (TICKER.metric), ttm() / abs(), operators and lags. Pure;
+ * of the user's readable companies (TICKER.metric) and ttm() / abs(). It offers while a name is
+ * unfinished or one is due, and stops once a whole name is typed: the list sits over the controls
+ * below, and after a complete token the next thing is an operator the user already knows. Pure;
  * FormulaInput renders the list. The API still validates every formula (inline errors). */
 
 import type { MetricInfo } from "./metrics";
 
-export type SuggestionKind = "metric" | "ticker" | "function" | "operator" | "lag";
+export type SuggestionKind = "metric" | "ticker" | "function";
 
 export interface Suggestion {
   kind: SuggestionKind;
@@ -28,19 +30,11 @@ export interface Vocabulary {
   tickers: { ticker: string; name: string }[];
 }
 
-export const MAX_SUGGESTIONS = 8;
+export const MAX_SUGGESTIONS = 6;
 
 const FUNCTIONS: Suggestion[] = [
   { kind: "function", label: "ttm( )", insert: "ttm(", detail: "trailing twelve months of a quarterly metric" },
   { kind: "function", label: "abs( )", insert: "abs(", detail: "absolute value" },
-];
-const OPERATORS: Suggestion[] = [
-  { kind: "operator", label: "+", insert: "+ ", detail: "add" },
-  { kind: "operator", label: "−", insert: "- ", detail: "subtract" },
-  { kind: "operator", label: "×", insert: "* ", detail: "multiply" },
-  { kind: "operator", label: "÷", insert: "/ ", detail: "divide" },
-  { kind: "lag", label: "[-4q]", insert: "[-4q] ", detail: "the value a year earlier" },
-  { kind: "lag", label: "[-1q]", insert: "[-1q] ", detail: "the value a quarter earlier" },
 ];
 
 /** Metrics matching `word`: name prefix first, then label prefix, then containing it. */
@@ -65,8 +59,9 @@ export function complete(text: string, cursor: number, vocab: Vocabulary, max = 
   const dotted = /([A-Za-z][A-Za-z0-9]{0,9})\.([a-z_]*)$/.exec(before);
   if (dotted) {
     const word = dotted[2]!;
+    if (vocab.metrics.some((m) => m.name === word + tail)) return null;
     const items = metricItems(word, vocab.metrics);
-    if (!items.length || (items.length === 1 && items[0]!.insert === word + tail)) return null;
+    if (!items.length) return null;
     return { from: cursor - word.length, to, items: items.slice(0, max) };
   }
 
@@ -74,6 +69,9 @@ export function complete(text: string, cursor: number, vocab: Vocabulary, max = 
   const word = /([A-Za-z_][A-Za-z0-9_]*)$/.exec(before)?.[1];
   if (word) {
     const full = word + tail;
+    // inside brackets it's a lag's unit ("[-4q"), not a name
+    if (/\[[^\]]*$/.test(before)) return null;
+    if (vocab.metrics.some((m) => m.name === full)) return null;
     const upper = /[A-Z]/.test(word);
     const tickers = vocab.tickers
       .filter((t) => t.ticker.startsWith(word.toUpperCase()))
@@ -88,9 +86,6 @@ export function complete(text: string, cursor: number, vocab: Vocabulary, max = 
     if (!items.length) return null;
     return { from: cursor - word.length, to, items: items.slice(0, max) };
   }
-
-  // after a complete operand and a space → operators and lags
-  if (/[A-Za-z0-9_)\]]\s+$/.test(before)) return { from: cursor, to: cursor, items: OPERATORS.slice(0, max) };
 
   // at the start, or after an operator or "(" → functions and the most common metrics
   if (/(^|[-+*/(]\s*)$/.test(before)) {

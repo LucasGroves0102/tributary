@@ -34,13 +34,13 @@
     "companies": 5,
     "filings": 5,
     "checks": {
-      "absent": 2,
-      "annual": 129,
+      "absent": 1,
+      "annual": 130,
       "annual_silver": 18
     },
     "hand_checked": 21,
     "readme": "tests/golden/README.md",
-    "commit": "9d9f318",
-    "committed": "2026-10-26"
+    "commit": "4943765",
+    "committed": "2026-11-08"
   }
 }

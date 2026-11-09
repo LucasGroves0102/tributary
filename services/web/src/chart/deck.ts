@@ -3,8 +3,8 @@
  * SVG, so SVG and PNG exports carry them. */
 
 import { day } from "../format";
+import { planAxes } from "./axes";
 import type { Align, Frequency } from "./model";
-import { unitLabel } from "./metrics";
 import { xAxis, type Series } from "./series";
 
 /** "Fiscal quarters, FY2024 Q1–FY2026 Q2 · USD (left), % (right)". */
@@ -14,12 +14,10 @@ export function autoSubtitle(series: Series[], frequency: Frequency, basis: Alig
     ? basis === "fiscal" ? "Fiscal years" : "Calendar years"
     : basis === "fiscal" ? "Fiscal quarters" : "Calendar quarters";
   const span = ticks.length ? `, ${ticks[0]!.period}${ticks.length > 1 ? `–${ticks.at(-1)!.period}` : ""}` : "";
-  const units = (axis: "L" | "R") => [...new Set(series.filter((s) => s.axis === axis).map((s) => unitLabel(s.unit)))];
-  const left = units("L");
-  const right = units("R");
-  const unitText = right.length
-    ? `${left.join(", ") || "—"} (left), ${right.join(", ")} (right)`
-    : left.join(", ");
+  const { left, right } = planAxes(series);
+  const unitText = right
+    ? `${left || "—"} (left), ${right} (right)`
+    : left ?? "";
   return `${what}${span}${unitText ? ` · ${unitText}` : ""}`;
 }
 

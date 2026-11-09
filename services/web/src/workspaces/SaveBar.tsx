@@ -1,12 +1,15 @@
 import { useId, useState, type FormEvent } from "react";
 
-import { ApiError } from "../api";
+import { failureReason } from "../api";
 import {
   canSave,
+  companyOf,
   currentFingerprint,
+  defaultWorkspace,
   ITEM_NAME_MAX,
   KIND_LABELS,
   nameProblem,
+  NEW_WORKSPACE,
   suggestName,
   WORKSPACE_NAME_MAX,
   type Current,
@@ -20,10 +23,10 @@ interface Props {
   label: (companyId: string) => string;
 }
 
-const NEW = "__new__";
+const NEW = NEW_WORKSPACE;
 
 function message(e: unknown): string {
-  return e instanceof ApiError ? e.message : "the Query API didn't answer";
+  return failureReason(e);
 }
 
 /** Save / Save as for the page's chart, comps or screen, with the open item's workspace and an
@@ -103,6 +106,7 @@ export function SaveBar({ current, saved, label }: Props) {
           saved={saved}
           initial={open ? `${open.name}` : suggestName(current, label)}
           defaultWorkspace={open?.workspaceId}
+          label={label}
           onDone={() => setForm(false)}
         />
       )}
@@ -114,20 +118,25 @@ function SaveForm({
   current,
   saved,
   initial,
-  defaultWorkspace,
+  defaultWorkspace: openIn,
+  label,
   onDone,
 }: {
   current: Current;
   saved: Saved;
   initial: string;
   defaultWorkspace?: string;
+  label: (companyId: string) => string;
   onDone: () => void;
 }) {
   const id = useId();
   const list = saved.list.state === "ok" ? saved.list.workspaces : [];
   const [name, setName] = useState(initial);
-  const [workspace, setWorkspace] = useState(defaultWorkspace ?? list[0]?.workspace_id ?? NEW);
-  const [newName, setNewName] = useState("");
+  // #119: the open item's workspace, else the company's project or folder, else a new workspace
+  // named after it; a screen goes to the folder changed last
+  const company = companyOf(current);
+  const [workspace, setWorkspace] = useState(() => openIn ?? defaultWorkspace(list, company ? { id: company, names: [label(company)] } : null));
+  const [newName, setNewName] = useState(() => (company ? label(company).slice(0, WORKSPACE_NAME_MAX) : ""));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -152,9 +161,9 @@ function SaveForm({
   return (
     <form className="save-form card" onSubmit={(e) => void submit(e)} aria-label={`Save ${KIND_LABELS[current.kind].toLowerCase()}`}>
       <label htmlFor={`${id}-name`}>Name</label>
-      <input id={`${id}-name`} value={name} maxLength={ITEM_NAME_MAX} onChange={(e) => setName(e.target.value)} autoFocus />
+      <input id={`${id}-name`} className="field" value={name} maxLength={ITEM_NAME_MAX} onChange={(e) => setName(e.target.value)} autoFocus />
       <label htmlFor={`${id}-ws`}>Workspace</label>
-      <select id={`${id}-ws`} value={workspace} onChange={(e) => setWorkspace(e.target.value)}>
+      <select id={`${id}-ws`} className="field" value={workspace} onChange={(e) => setWorkspace(e.target.value)}>
         {list.map((w) => (
           <option key={w.workspace_id} value={w.workspace_id}>
             {w.name}
@@ -167,6 +176,7 @@ function SaveForm({
           <label htmlFor={`${id}-new`}>New workspace</label>
           <input
             id={`${id}-new`}
+            className="field"
             value={newName}
             maxLength={WORKSPACE_NAME_MAX}
             placeholder="e.g. Beverages"

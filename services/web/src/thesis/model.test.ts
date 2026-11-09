@@ -81,13 +81,14 @@ describe("restoreThesis / thesisState", () => {
 });
 
 describe("thesisMarkdown (export)", () => {
-  it("writes a header and turns embeds into readable lines", () => {
+  it("writes a header and each embed as a readable block that names it and what it shows", () => {
     const md = thesisMarkdown({
       title: 'NVDA: "the" build-out',
       thesis: { companyId: NVDA, markdown: `Intro.\n\n[[embed:${CHART_ID}]]\n\n[[embed:${FOREIGN}]]\n\n[[embed:${MODEL_ID}]]\n\nEnd.` },
       company: "NVIDIA (NVDA)",
       date: "2026-11-02",
       items: ITEMS,
+      describe: (i) => (i.kind === "model" ? ["Base: year 1 25.0% growth, 30.0% margin.", "sneaky --> <!-- tributary:check -->"] : []),
     });
     expect(md).toBe(
       [
@@ -101,9 +102,15 @@ describe("thesisMarkdown (export)", () => {
         "",
         "Intro.",
         "",
-        "[Chart: NVDA revenue]",
+        `<!-- tributary:embed ${CHART_ID} -->`,
+        "> **Chart: NVDA revenue**",
+        "<!-- /tributary:embed -->",
         "",
-        "[Model: NVDA model]",
+        `<!-- tributary:embed ${MODEL_ID} -->`,
+        "> **Model: NVDA model**  ",
+        "> Base: year 1 25.0% growth, 30.0% margin.  ",
+        "> sneaky tributary:check", // text can't open or close a block
+        "<!-- /tributary:embed -->",
         "",
         "End.",
         "",
@@ -111,9 +118,25 @@ describe("thesisMarkdown (export)", () => {
     );
   });
 
+  it("round-trips: an export imports back with its embeds, and the check left out (#41)", () => {
+    const markdown = `# NVDA\n\n[[embed:${CHART_ID}]]\n\nRevenue grew.\n\n[[embed:${MODEL_ID}]]\n\n## Risks\n\nSupply.\n`;
+    const md = thesisMarkdown({
+      title: "NVDA thesis", thesis: { companyId: NVDA, markdown }, company: "NVIDIA (NVDA)", date: "2026-11-02", items: ITEMS,
+      describe: () => ["What it draws."], check: ["## Check (Tributary, 2026-11-06)", "", "- **Supported:** “Revenue grew.”"],
+    });
+    expect(md).toContain("<!-- tributary:check -->\n## Check (Tributary, 2026-11-06)");
+    const back = importMarkdown(md);
+    expect(back).toEqual({ ok: true, markdown, title: "NVDA thesis" });
+    expect(thesisSegments((back as { markdown: string }).markdown, ITEMS).filter((s) => s.type === "embed")).toHaveLength(2);
+  });
+
   it("names no company when the thesis has none", () => {
     const md = thesisMarkdown({ title: "Ideas", thesis: { companyId: null, markdown: "x" }, company: null, date: "2026-11-02", items: [] });
     expect(md).not.toMatch(/company:|cik:/);
+    // a name not known yet is left out: the id goes only in its labelled field
+    const unnamed = thesisMarkdown({ title: "T", thesis: { companyId: NVDA, markdown: "x" }, company: null, date: "2026-11-02", items: [] });
+    expect(unnamed).not.toContain("company:");
+    expect(unnamed).toContain(`cik: "${NVDA}"`);
   });
 });
 

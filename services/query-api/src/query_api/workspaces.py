@@ -50,6 +50,9 @@ KINDS = ("chart", "comps", "screen", "thesis", "model")
 Kind = Literal["chart", "comps", "screen", "thesis", "model"]
 REPORT = "report"
 LARGE = ("report", "thesis")  # kinds whose state the workspace listing leaves out
+# a save over a thesis keeps the version it replaced (app DB 014, item_versions), the newest these
+VERSIONED = ("thesis",)
+MAX_VERSIONS = 30
 
 CIK = r"^\d{10}$"
 ISO_DATE = r"^\d{4}-\d{2}-\d{2}$"
@@ -103,6 +106,8 @@ class ChartLayer(_Strict):
     hidden: bool = False
     name: str | None = Field(default=None, max_length=80)  # legend name
     color: int | None = Field(default=None, ge=0, le=7)    # tokens.css --series-N
+    # how a dimensionless layer reads, instead of what its formula's shape says (formula/check.py)
+    display: Literal["percent", "multiple", "number"] | None = None
 
     @field_validator("name")
     @classmethod
@@ -111,6 +116,8 @@ class ChartLayer(_Strict):
 
     @model_validator(mode="after")
     def _complete(self) -> ChartLayer:
+        if self.display is not None and self.kind not in ("metric", "formula"):
+            raise ValueError("display is for metric and formula layers")
         if self.kind == "segment":
             if (not self.companyId or not self.metric or not self.segmentAxis or not self.members
                     or self.formula is not None or self.defaultCompany is not None):
@@ -196,6 +203,7 @@ class ScreenState(_Strict):
     fye: int | None = Field(default=None, ge=1, le=12)
     exchange: str | None = Field(default=None, min_length=1, max_length=20)
     filer: Literal["large_accelerated", "accelerated", "non_accelerated"] | None = None
+    issue: str | None = Field(default=None, pattern=r"^[a-z_]{1,64}$")
     mine: bool | None = None
     sort: str | None = Field(default=None, pattern=rf"^-?({'|'.join(SCREEN_SORTS)})$")
 
@@ -362,6 +370,9 @@ class Workspaces(Protocol):
                       state: dict) -> dict | None: ...
     def update_item(self, user_id: str, item_id: str, name: str | None,
                     state: dict | None) -> dict | None: ...
+    # a VERSIONED item's earlier versions, newest first (None: not the caller's item)
+    def versions(self, user_id: str, item_id: str) -> list[dict] | None: ...
+    def version(self, user_id: str, item_id: str, version_id: str) -> dict | None: ...
     def duplicate_item(self, user_id: str, item_id: str, workspace_id: str | None,
                        name: str | None) -> dict | None: ...
     def delete_item(self, user_id: str, item_id: str) -> bool: ...
@@ -537,12 +548,48 @@ class AppWorkspaces:
 
     def update_item(self, user_id: str, item_id: str, name: str | None,
                     state: dict | None) -> dict | None:
+        """Saves over an item; a VERSIONED one whose state changes keeps the version it replaces
+        (app DB 014), the newest MAX_VERSIONS, in the same transaction."""
         with self._tx(user_id) as cur:
+            if state is not None:
+                cur.execute("INSERT INTO item_versions (item_id, user_id, name, state, saved_at)"
+                            " SELECT item_id, user_id, name, state, updated_at"
+                            " FROM workspace_items"
+                            " WHERE item_id = %s AND user_id = %s AND kind = ANY(%s)"
+                            "   AND state IS DISTINCT FROM %s::jsonb",
+                            (item_id, user_id, list(VERSIONED), _jsonb(state)))
+                if cur.rowcount:
+                    cur.execute("DELETE FROM item_versions v WHERE v.item_id = %s"
+                                " AND v.user_id = %s AND v.version_id NOT IN ("
+                                "   SELECT version_id FROM item_versions"
+                                "   WHERE item_id = %s AND user_id = %s"
+                                "   ORDER BY replaced_at DESC, version_id DESC LIMIT %s)",
+                                (item_id, user_id, item_id, user_id, MAX_VERSIONS))
             cur.execute("UPDATE workspace_items i SET name = coalesce(%s, i.name),"
                         " state = coalesce(%s, i.state), updated_at = statement_timestamp()"
                         " WHERE i.item_id = %s AND i.user_id = %s"
                         f" RETURNING {ITEM_SUMMARY}, i.state",
                         (name, _jsonb(state) if state is not None else None, item_id, user_id))
+            return cur.fetchone()
+
+    def versions(self, user_id: str, item_id: str) -> list[dict] | None:
+        with self._tx(user_id) as cur:
+            cur.execute("SELECT 1 FROM workspace_items WHERE item_id = %s AND user_id = %s",
+                        (item_id, user_id))
+            if cur.fetchone() is None:
+                return None
+            cur.execute("SELECT version_id::text, name, saved_at, replaced_at,"
+                        "       char_length(coalesce(state->>'markdown', '')) AS characters"
+                        " FROM item_versions WHERE item_id = %s AND user_id = %s"
+                        " ORDER BY replaced_at DESC, version_id DESC", (item_id, user_id))
+            return cur.fetchall()
+
+    def version(self, user_id: str, item_id: str, version_id: str) -> dict | None:
+        with self._tx(user_id) as cur:
+            cur.execute("SELECT version_id::text, item_id::text, name, state, saved_at,"
+                        "       replaced_at FROM item_versions"
+                        " WHERE version_id = %s AND item_id = %s AND user_id = %s",
+                        (version_id, item_id, user_id))
             return cur.fetchone()
 
     def duplicate_item(self, user_id: str, item_id: str, workspace_id: str | None,

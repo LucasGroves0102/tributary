@@ -1,7 +1,7 @@
 import { useId, useState } from "react";
 
 import type { ColumnInfo } from "../types";
-import { columnSpec, HOME_CARD_LABELS, isDefaultHome, move, sameColumns, toggleCard, type HomeCard } from "./model";
+import { columnSpec, HOME_CARD_LABELS, isDefaultHome, move, offeredColumn, sameColumns, toggleCard, type HomeCard } from "./model";
 
 /** Home's "Customize": show or hide each card and change their order; saved per user. */
 export function HomeLayoutEditor({
@@ -70,6 +70,7 @@ export function ColumnPicker({
   onReset: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [find, setFind] = useState("");
   const id = useId();
   const byKey = new Map((options ?? []).map((o) => [o.key, o]));
   const spec = (k: string) => columnSpec(k, byKey.get(k));
@@ -78,9 +79,11 @@ export function ColumnPicker({
     return `${s.long} (${s.period})`;
   };
   const rest = (options ?? [])
-    .filter((o) => !columns.includes(o.key))
+    .filter((o) => !columns.includes(o.key) && offeredColumn(o))
     .map((o) => ({ key: o.key, name: name(o.key) }))
     .sort((a, b) => a.name.localeCompare(b.name));
+  const words = find.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const found = rest.filter((o) => words.every((w) => o.name.toLowerCase().includes(w)));
 
   return (
     <div className="col-picker">
@@ -109,20 +112,33 @@ export function ColumnPicker({
               </li>
             ))}
           </ol>
-          <div className="row">
-            <select
+          <div className="col-add">
+            <input
+              className="field"
+              type="search"
               aria-label={`Add a ${table} column`}
-              value=""
+              placeholder={columns.length >= max ? `At most ${max} columns` : `Add a column: find one of ${rest.length}`}
+              value={find}
               disabled={columns.length >= max}
-              onChange={(e) => e.target.value && onChange([...columns, e.target.value])}
-            >
-              <option value="">{columns.length >= max ? `At most ${max} columns` : "+ Add a column…"}</option>
-              {rest.map((o) => (
-                <option key={o.key} value={o.key}>
-                  {o.name}
-                </option>
-              ))}
-            </select>
+              onChange={(e) => setFind(e.target.value)}
+            />
+            {columns.length < max && (
+              <ul className="col-found" aria-label="Columns you can add">
+                {found.map((o) => (
+                  <li key={o.key}>
+                    <button className="link" onClick={() => {
+                      onChange([...columns, o.key]);
+                      setFind("");
+                    }}>
+                      + {o.name}
+                    </button>
+                  </li>
+                ))}
+                {found.length === 0 && <li className="faint">No column matches.</li>}
+              </ul>
+            )}
+          </div>
+          <div className="row">
             <span className="grow" />
             <button className="btn sm ghost" onClick={onReset} disabled={sameColumns(columns, defaults)}>
               Reset

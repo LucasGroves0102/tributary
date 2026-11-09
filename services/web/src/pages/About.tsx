@@ -1,4 +1,6 @@
+import { limitsText } from "../assistant/useAllowance";
 import { href } from "../route";
+import type { Allowance } from "../types";
 
 /** What the product covers and what it deliberately doesn't, in one place, for readers who'd
  * otherwise look for a P/E or a consensus beat. Static copy: keep it in step with the agent's
@@ -24,16 +26,20 @@ export const GOOD_TO_KNOW: { title: string; text: string }[] = [
     text: "From each company's own filing history, capped at the SEC deadline, not dates the company announced.",
   },
   {
+    title: "Figures that read n/m or old",
+    text: "n/m means a figure exists but says nothing: what it divides by is close to zero, negative or on another basis, such as a gross margin over 100% or debt 500 times equity. The exact figure and the reason are in the hover. A figure about a year or more behind the company's latest period reads old and shows its date. Neither wins a sort, passes a filter or enters a median.",
+  },
+  {
     title: "Banks: some metrics are n/a",
-    text: "Operating margin, free cash flow and net debt show \"n/a (bank)\": deposits are a bank's funding and lending its operations, so those measures don't describe it.",
+    text: "Gross and operating margin, free cash flow, net debt, debt to equity and the current ratio show \"n/a (bank)\" for every bank, whatever it tags: deposits are a bank's funding and lending its operations, so those measures don't describe it.",
   },
   {
     title: "After-hours filings arrive the next morning",
-    text: "EDGAR accepts filings until 10 pm ET, but most accepted after 5:30 pm ET reach its feed the next business morning. The SEC's XBRL data can lag a filing by a day or two; each company's Data notes say when.",
+    text: "EDGAR accepts filings until 10 pm ET, but most accepted after 5:30 pm ET reach its feed the next business morning. The SEC's XBRL data usually lags a filing by a day or two and sometimes much longer; each company's Data notes say when.",
   },
   {
-    title: "A report counts as 3 assistant questions",
-    text: "\"Write a report\" on a workspace has the assistant read every saved chart, comps table and screen (up to 8) and write a cited note, so it uses 3 of your hourly questions, or of a demo sandbox's daily ones. Figures it can't trace to the data are flagged in the report.",
+    title: "Reports read everything you saved",
+    text: "\"Write a report\" on a workspace has the assistant read every saved chart, comps table and screen (up to 8) and write a cited note. Figures it can't trace to the data are flagged in the report.",
   },
   {
     title: "Derived and restated figures",
@@ -41,7 +47,7 @@ export const GOOD_TO_KNOW: { title: string; text: string }[] = [
   },
 ];
 
-export function About() {
+export function About({ allowance = null, open = false }: { allowance?: Allowance | null; open?: boolean }) {
   return (
     <div className="page about">
       <div className="row">
@@ -66,8 +72,17 @@ export function About() {
               <span>Each value links to the filing it came from, with its unit and period; the assistant answers only from the same data and cites it.</span>
             </li>
             <li>
-              <b>Only what your plan grants</b>
-              <span>Values need financials access to a company, filing text the pro plan; watching a company grants nothing.</span>
+              {open ? (
+                <>
+                  <b>Every company in the catalog</b>
+                  <span>Signed in, you read the financials and filing text of every company with either stored here. Others show only the SEC's filing index. Watching a company changes nothing about what you can read.</span>
+                </>
+              ) : (
+                <>
+                  <b>Only what your plan grants</b>
+                  <span>Values need financials access to a company, filing text the pro plan; watching a company grants nothing.</span>
+                </>
+              )}
             </li>
           </ul>
         </section>
@@ -89,6 +104,10 @@ export function About() {
             <h2>Good to know</h2>
           </div>
           <ul className="cover-list">
+            <li>
+              <b>Assistant limits</b>
+              <span>{limitsText(allowance)}</span>
+            </li>
             {GOOD_TO_KNOW.map((x) => (
               <li key={x.title}>
                 <b>{x.title}</b>

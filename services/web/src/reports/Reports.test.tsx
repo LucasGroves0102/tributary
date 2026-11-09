@@ -61,6 +61,11 @@ function respond(url: string, init?: RequestInit): Response {
   if (p === "/v1/me") return Response.json(ME);
   if (p === "/v1/watchlist") return Response.json({ as_of: "", columns: [], expected_method: "", companies: [entry()] });
   if (p === "/v1/screener/columns") return Response.json({ columns: [{ key: "revenue_ttm", metric: "revenue", span: "ttm", unit: "USD" }], filer_categories: [], bands: [] });
+  if (p === "/v1/screener") {
+    const ids = new URL(String(url), "http://x").searchParams.getAll("company_id");
+    return Response.json({ as_of: "", total: ids.length, limit: 50, offset: 0, sort: "name", columns: [], rows: ids.map((id) => ({
+      company_id: id, name: id === NVDA ? "Nvidia" : "Apple Inc.", tickers: [id === NVDA ? "NVDA" : "AAPL"], values: {}, sources: {}, access: [] })) });
+  }
   if (p === "/v1/formulas/evaluate") return Response.json({ formula: "revenue", unit: "USD", basis: "calendar", view: "ttm", alignment: "calendar", as_of: "", inputs: [], points: [] });
   const listed = () => [...items.values()].map(({ state: _s, ...rest }) => rest);
   if (p === "/v1/workspaces") return Response.json({ workspaces: [{ workspace_id: "w1", name: "Semis", created_at: "", updated_at: "", items: listed() }] });
@@ -154,7 +159,10 @@ it("writes a report from the workspace page and opens it", async () => {
   const evaluate = vi.mocked(fetch).mock.calls.find(([u]) => String(u).includes("/v1/formulas/evaluate"))!;
   expect(JSON.parse(String(evaluate[1]!.body))).toMatchObject({ formula: "revenue", default_company: NVDA, view: "ttm" });
   // the comps' ungranted peer isn't read: no access, as anywhere else
-  expect(report.textContent).toContain("No access to 0000320193");
+  await waitFor(".report-embed");
+  await act(async () => new Promise((r) => setTimeout(r, 0)));
+  expect(report.textContent).toContain("No access to AAPL");
+  expect(report.textContent).not.toContain("0000320193");
   // the unverified figure is flagged; the cited filing links to EDGAR
   expect([...report.querySelectorAll(".figure.unverified")].map((e) => e.textContent)).toEqual(["$61.2B"]);
   expect(container.querySelector(".report-meta")?.textContent).toContain("1 of 2 figures unverified");
@@ -211,5 +219,5 @@ it("opening a report from the sidebar goes to its page", async () => {
   const open = [...container.querySelectorAll<HTMLButtonElement>(".side .ws-row.it .ws-open")].find((b) => b.textContent?.includes("Report: Semis"))!;
   await click(open);
   expect(window.location.hash).toBe("#/report/r1");
-  expect(container.querySelector<HTMLAnchorElement>('a[aria-label^="Open workspace Semis"]')?.getAttribute("href")).toBe("#/workspace/w1");
+  expect(container.querySelector<HTMLAnchorElement>(".side .ws-row.fd a.ws-open")?.getAttribute("href")).toBe("#/workspace/w1");
 });

@@ -13,12 +13,17 @@ export function AnalysisPage(props: {
   projectId?: string;
   step?: ProjectStep;
   itemId?: string;
+  /** a company to start a new analysis of (from its company page) */
+  start?: string;
   saved: Saved;
   readable: Readable;
+  /** company id → ticker or name (companies/directory.ts `short`) */
   label: (companyId: string) => string;
   onOpenChart: (s: ChartState) => void;
-  onChartMany: (ids: string[], metric: string, transform: "ttm" | "q" | "yoy", title: string) => void;
+  onChartMany: (ids: string[], metric: string, transform: "ttm" | "q" | "yoy") => void;
 }) {
-  if (!props.projectId) return <AnalysisHome token={props.token} saved={props.saved} readable={props.readable} label={props.label} />;
+  if (!props.projectId) {
+    return <AnalysisHome key={props.start ?? ""} token={props.token} saved={props.saved} readable={props.readable} label={props.label} start={props.start} />;
+  }
   return <ProjectPage key={props.projectId} {...props} projectId={props.projectId} />;
 }

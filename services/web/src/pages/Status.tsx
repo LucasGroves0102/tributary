@@ -1,26 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { dataStatus } from "../api";
-import { ago, day } from "../format";
+import { checkName } from "../companies/screen";
+import { ago, day, duration } from "../format";
 import { href } from "../route";
 import type { DataStatus, RecordedRun } from "../types";
+import { TableScroll } from "../components/TableScroll";
 
 const REPO = "https://github.com/LucasGroves0102/tributary";
-
-/** What each data-quality check flags (migrations 014, 018, 023: ops.check_financials). */
-export const CHECKS: Record<string, string> = {
-  impossible_value: "Impossible values: negative revenue, assets or share counts, or a part larger than its total",
-  overlapping_quarters: "A quarter starting before the previous one ended",
-  calendar_collision: "Two quarters of a metric in one calendar quarter",
-  annual_sum: "Four quarters differing from the reported year by more than 1%",
-  series_gap: "A quarter missing after four contiguous ones",
-  sign_flip: "An expense or outflow whose sign differs from both neighbouring quarters",
-  outlier: "A one-quarter spike of 10× or more, typically a scale error",
-  segment_sum_business_segment: "Business segments not adding up to the company total (±1%)",
-  segment_sum_geography: "Geographic segments not adding up to the company total (±1%)",
-  segment_sum_product_service: "Product and service lines not adding up to the company total (±1%)",
-  restatement: "A figure a later filing changed by more than 0.5%",
-};
 
 type State = { kind: "loading" } | { kind: "ok"; data: DataStatus } | { kind: "error" };
 
@@ -33,16 +20,13 @@ interface Props {
 
 const count = (n: number | null | undefined) => (n === null || n === undefined ? "—" : n.toLocaleString("en-US"));
 
-/** 43 → "43 s", 108 → "1.8 min", 7200 → "2.0 h". */
-export function duration(seconds: number | null): string {
-  if (seconds === null) return "—";
-  if (seconds < 90) return `${Math.round(seconds)} s`;
-  if (seconds < 5400) return `${(seconds / 60).toFixed(1)} min`;
-  return `${(seconds / 3600).toFixed(1)} h`;
-}
+export { duration };
 
+/** "Nov 6, 2026, 3:30 PM PST": a time means little without its zone, beside "10 pm ET". */
 function stamp(iso: string): string {
-  return new Date(iso).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
+  const d = new Date(iso);
+  const zone = d.toLocaleTimeString("en-US", { timeZoneName: "short" }).split(" ").at(-1);
+  return `${d.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })} ${zone}`;
 }
 
 /** The public status page: how fresh, complete and checked the data is, live from the
@@ -73,7 +57,7 @@ export function Status({ load = dataStatus, now = Date.now, signedOut = false }:
         <h1>Data status</h1>
         <p className="muted">
           How fresh, complete and checked the data is, read live from the production database (counts
-          and timestamps only), with the last recorded run of each test suite.
+          and timestamps only), with the last recorded results of the tests on the assistant and the figures.
           {state.kind === "ok" && (
             <span className="faint">
               {" "}
@@ -91,12 +75,12 @@ export function Status({ load = dataStatus, now = Date.now, signedOut = false }:
           </button>
         </p>
       )}
-      {state.kind === "ok" && <Body data={state.data} now={now()} />}
+      {state.kind === "ok" && <Body data={state.data} now={now()} signedIn={!signedOut} />}
     </div>
   );
 }
 
-function Body({ data, now }: { data: DataStatus; now: number }) {
+function Body({ data, now, signedIn }: { data: DataStatus; now: number; signedIn: boolean }) {
   const { freshness: f, ingest: i, coverage: c } = data;
   const when = (iso: string | null) => (iso ? ago(iso, now) : "—");
   return (
@@ -108,17 +92,15 @@ function Body({ data, now }: { data: DataStatus; now: number }) {
           {f.last_accepted_at && <div className="p">{stamp(f.last_accepted_at)}</div>}
         </div>
         <div>
-          <div className="k">Newest filing in the database</div>
+          <div className="k">Newest filing listed here</div>
           <div className="v">{when(f.last_ingested_at)}</div>
           {f.last_ingested_at && <div className="p">{stamp(f.last_ingested_at)}</div>}
         </div>
         <div>
-          <div className="k">EDGAR acceptance → database, p50 / p95</div>
-          <div className="v">
-            {duration(i.p50_seconds)} / {duration(i.p95_seconds)}
-          </div>
+          <div className="k">From EDGAR to here, typically</div>
+          <div className="v">{duration(i.p50_seconds)}</div>
           <div className="p">
-            {count(i.via_feed)} live-feed filings, last {i.window_days} days
+            95% within {duration(i.p95_seconds)} · {count(i.via_feed)} live-feed filings, last {i.window_days} days
           </div>
         </div>
         <div>
@@ -156,12 +138,12 @@ function Body({ data, now }: { data: DataStatus; now: number }) {
             <div>
               <div className="k">Sections served</div>
               <div className="v">{count(c.sections)}</div>
-              <div className="p">last indexed {when(c.last_indexed_at)}</div>
+              <div className="p">search index last updated {when(c.last_indexed_at)}</div>
             </div>
           </div>
         </section>
       </div>
-      <Quality data={data} when={when} />
+      <Quality data={data} when={when} signedIn={signedIn} />
       <Recorded data={data} />
     </>
   );
@@ -173,7 +155,7 @@ function Completeness({ data, when }: { data: DataStatus; when: (iso: string | n
     <section className="card">
       <div className="card-h">
         <h2>Completeness against EDGAR</h2>
-        <span className="sub">last {c.window_days} days</span>
+        <span className="sub">last {c.window_days} calendar days</span>
       </div>
       {c.days_checked === 0 ? (
         <p className="empty">
@@ -188,29 +170,30 @@ function Completeness({ data, when }: { data: DataStatus; when: (iso: string | n
               <div className="k">Filings in EDGAR's daily indexes</div>
               <div className="v">{count(c.indexed)}</div>
               <div className="p">
-                {c.days_checked} {c.days_checked === 1 ? "day" : "days"} checked
+                {c.days_checked} {c.days_checked === 1 ? "day" : "days"} checked: EDGAR publishes an index only on business days
               </div>
             </div>
             <div>
-              <div className="k">Missing at the check</div>
+              <div className="k">Missing when checked</div>
               <div className="v">{count(c.missing)}</div>
               <div className="p">
-                on {count(c.days_with_missing)} {c.days_with_missing === 1 ? "day" : "days"}
+                {c.days_with_missing ? `all on ${count(c.days_with_missing)} of those days` : "on none of those days"}
               </div>
             </div>
             <div>
-              <div className="k">Republished</div>
+              <div className="k">Fetched again</div>
               <div className="v">{count(c.republished)}</div>
-              <div className="p">one per filer</div>
+              <div className="p">one per filer, and a filing can have several, so this can pass Missing</div>
             </div>
             <div>
               <div className="k">Last check</div>
               <div className="v">{when(c.last_checked_at)}</div>
+              {c.last_checked_at && <div className="p">{stamp(c.last_checked_at)}</div>}
             </div>
           </div>
           <p className="foot">
-            Missing is what each day's latest check found before republishing it, so a day reads 0 at its
-            next check.
+            Each night the last {c.window_days} days of EDGAR's indexes are compared with the database. Missing is what
+            each day's latest check found before fetching it again, so a day reads 0 at its next check.
           </p>
         </>
       )}
@@ -225,8 +208,13 @@ export function share(part: number, total: number): string {
   return `${pct < 0.1 && part > 0 ? "<0.1" : pct.toFixed(1)}%`;
 }
 
-function Quality({ data, when }: { data: DataStatus; when: (iso: string | null) => string }) {
+/** This page is public and aggregate: never a company here. A signed-in reader follows a row to the
+ * screener, which lists the companies they can read with such a finding, under their own access. */
+function Quality({ data, when, signedIn }: { data: DataStatus; when: (iso: string | null) => string; signedIn: boolean }) {
   const q = data.quality;
+  const withSeries = data.coverage.companies_with_financials;
+  // every company with XBRL figures is checked; not all of them have a quarterly series to show
+  const noSeries = withSeries !== null && q.companies_checked > withSeries ? q.companies_checked - withSeries : 0;
   return (
     <section className="card">
       <div className="card-h">
@@ -237,7 +225,7 @@ function Quality({ data, when }: { data: DataStatus; when: (iso: string | null) 
             : "no check has run yet"}
         </span>
       </div>
-      <div className="tw">
+      <TableScroll label="Data-quality checks">
         <table className="t">
           <thead>
             <tr>
@@ -251,20 +239,30 @@ function Quality({ data, when }: { data: DataStatus; when: (iso: string | null) 
           <tbody>
             {q.checks.map((c) => (
               <tr key={c.check}>
-                <td>{CHECKS[c.check] ?? c.check}</td>
+                <td>{checkName(c.check) ?? c.check}</td>
                 <td>
                   <span className={`tag sev-${c.severity}`}>{c.severity}</span>
                 </td>
-                <td className="n">{count(c.companies)}</td>
+                <td className="n">
+                  {signedIn && checkName(c.check) && c.companies ? (
+                    <a href={href({ view: "companies", screen: { issue: c.check } })} title="List these companies in the screener">
+                      {count(c.companies)}
+                    </a>
+                  ) : (
+                    count(c.companies)
+                  )}
+                </td>
                 <td className="n">{share(c.companies, q.companies_checked)}</td>
                 <td className="n">{count(c.findings)}</td>
               </tr>
             ))}
           </tbody>
         </table>
-      </div>
+      </TableScroll>
       <p className="foot">
-        Run on every company's financials after each refresh. A finding is one company, metric and quarter;
+        A company is checked whenever its figures change, so its own last check can be days old while the latest run
+        is minutes old. {noSeries > 0 && `${count(q.companies_checked)} companies have XBRL figures to check; ${count(noSeries)} of them have no quarterly series, which is why ${count(withSeries)} show as having quarterly financials. `}
+        A finding is one company, metric and quarter;
         one bad source figure can raise several. SEC data is messy: companies mis-tag figures and restate
         them, and these checks are how we find it. Findings are shown to readers as Data notes on the
         company. Errors and warnings flag figures to double-check (a derived quarter that comes out impossible
@@ -281,9 +279,9 @@ function source(commit: string, path: string): string {
 function RunLine({ run, path }: { run: RecordedRun; path: string }) {
   return (
     <span className="faint small">
-      Recorded {day(run.recorded_at, true)} with {run.models.join(", ")} ·{" "}
-      <a href={source(run.commit, path)} target="_blank" rel="noreferrer">
-        report at {run.commit}
+      Recorded {day(run.recorded_at, true)} ·{" "}
+      <a href={source(run.commit, path)} target="_blank" rel="noreferrer" title={`The full report on GitHub, as recorded (${run.commit})`}>
+        Read the report
       </a>
     </span>
   );
@@ -294,17 +292,17 @@ function Recorded({ data }: { data: DataStatus }) {
   return (
     <section className="card">
       <div className="card-h">
-        <h2>Verification</h2>
-        <span className="sub">last recorded runs, not live</span>
+        <h2>Tests on the assistant and the figures</h2>
+        <span className="sub">last recorded results, not live</span>
       </div>
       <ul className="cover-list">
         <li>
           <b>
-            Permission attacks: {a.leaks} {a.leaks === 1 ? "leak" : "leaks"} in {a.attacks}
+            Access: {a.attacks} attempts to reach data a user can't read, {a.leaks} succeeded
           </b>
           <span>
             {a.attacks} prompts in {a.categories} categories tried to get the assistant to reveal data outside
-            the user's access; {a.controls_answered} of {a.controls} legitimate questions were answered with data
+            the user's access; {a.controls_answered} of {a.controls} ordinary questions were still answered with data
             and a citation.
           </span>
           <RunLine run={a} path={a.report} />
@@ -315,32 +313,32 @@ function Recorded({ data }: { data: DataStatus }) {
           </b>
           <span>
             {c.questions} questions; {c.verified_answers} answers fully verified; {c.data_answers_citing} of{" "}
-            {c.data_answers} answers using data cite a filing and its freshness; {c.untraced_accessions} accession
-            numbers not returned by a tool.
+            {c.data_answers} answers using data cite a filing and say how fresh it is; {c.untraced_accessions} citations
+            of a filing the assistant hadn't read.
           </span>
           <RunLine run={c} path={c.report} />
         </li>
         <li>
           <b>
-            Golden figures: {g.figures} figures printed in {g.filings} 10-Ks
+            Figures against the filings: {g.figures} numbers printed in {g.filings} 10-Ks
           </b>
           <span>
             The financials pipeline must reproduce what {g.companies} companies printed in their 10-Ks
             {g.checks.absent ? `, with ${g.checks.absent} known gaps asserted absent` : ""}; {g.hand_checked} of the
-            figures were also checked by hand against the filings. Asserted on every CI run, and images deploy only
-            after it passes.
+            figures were also checked by hand against the filings. Re-checked on every code change, and a new version
+            ships only after it passes.
           </span>
           <span className="faint small">
             Figures last changed {day(g.committed, true)} ·{" "}
-            <a href={source(g.commit, g.readme)} target="_blank" rel="noreferrer">
-              method at {g.commit}
+            <a href={source(g.commit, g.readme)} target="_blank" rel="noreferrer" title={`How it's done, on GitHub (${g.commit})`}>
+              How it's checked
             </a>
           </span>
         </li>
       </ul>
       <p className="foot">
-        The attack and citation runs call the model, so they aren't re-run live; CI replays every recorded answer
-        and re-checks it on each change.
+        The access and citation tests call the AI model, so they aren't re-run live; their recorded answers are
+        re-checked automatically on every code change.
       </p>
     </section>
   );

@@ -6,16 +6,18 @@ import type { ExpectedFiling, ProjectState } from "../types";
 import { projectRows } from "./AnalysisHome";
 import { draftKey, restoreDraft } from "./bridge";
 import { numbersCharts } from "./charts";
+import { pinMenu } from "./Pin";
 import {
   appendToSection,
-  autoDone,
+  nextPillarName,
+  pillarsOf,
+  placePin,
   catalystLines,
   coreWritten,
   edgarFilingUrl,
   firstOpenStep,
-  groupOf,
-  GROUPS,
   hasOwnText,
+  hasWork,
   nextStep,
   quoteBlock,
   quoteText,
@@ -25,6 +27,7 @@ import {
   STEPS,
   thesisTemplate,
   toggleDone,
+  workHint,
   type Facts,
 } from "./project";
 import { paragraphs } from "./Steps";
@@ -32,7 +35,6 @@ import { paragraphs } from "./Steps";
 const NVDA = "0001045810";
 const AAPL = "0000320193";
 const P: ProjectState = { companyId: NVDA, peers: [AAPL], notes: "", done: [] };
-const NONE: Facts = { charts: 0, models: 0, thesisWritten: false, checks: 0 };
 
 describe("projects", () => {
   it("restores a project from untrusted JSON and refuses what isn't one", () => {
@@ -50,28 +52,32 @@ describe("projects", () => {
     expect(toggleDone(a, "peers").done).toEqual(["business"]);
   });
 
-  it("counts a step done when its work exists", () => {
-    expect(STEPS.map((s) => autoDone(s.key, P, NONE))).toEqual([false, false, false, true, false, false, false]);
+  it("a step is done only when the user marked it; its work is a hint (#71, M3)", () => {
     const f: Facts = { charts: 1, models: 1, thesisWritten: true, checks: 2 };
     const notes = { ...P, notes: "Sells GPUs" };
-    expect(STEPS.map((s) => autoDone(s.key, notes, f))).toEqual([true, true, false, true, true, true, true]);
-    // What changed is marked by hand only
-    expect(stepDone("changes", { ...P, done: ["changes"] }, NONE)).toBe(true);
+    // peers suggested at creation, a chart, a model, a stub thesis, a check: work, not done
+    expect(STEPS.map((s) => hasWork(s.key, notes, f))).toEqual([true, true, false, true, true, true, true]);
+    expect(STEPS.map((s) => stepDone(s.key, notes))).toEqual([false, false, false, false, false, false, false]);
+    expect(STEPS.map((s) => workHint(s.key, notes, f))).toEqual([
+      "Notes written", "1 chart saved here", null, "1 peer picked", "1 model here", "Core thesis written", "Checked 2 times"]);
+    const marked = { ...notes, done: ["numbers" as const] };
+    expect(stepDone("numbers", marked)).toBe(true);
+    expect(workHint("numbers", marked, f)).toBeNull(); // done: no hint
   });
 
-  it("opens at the first step that isn't done", () => {
-    expect(firstOpenStep({ ...P, peers: [] }, NONE)).toBe("business");
-    expect(firstOpenStep({ ...P, notes: "x" }, NONE)).toBe("numbers");
-    const all: ProjectState = { ...P, notes: "x", done: ["changes"] };
-    expect(firstOpenStep(all, { charts: 1, models: 1, thesisWritten: true, checks: 1 })).toBe("monitor");
+  it("opens at the first step the user hasn't marked done", () => {
+    expect(firstOpenStep({ ...P, notes: "x" })).toBe("business"); // notes alone don't finish it
+    expect(firstOpenStep({ ...P, done: ["business", "numbers"] })).toBe("changes");
+    expect(firstOpenStep({ ...P, done: STEPS.map((s) => s.key) })).toBe("monitor");
   });
 
-  it("groups the steps under the header's tabs", () => {
-    expect(GROUPS.map((g) => g.label)).toEqual(["Company", "Charts", "Model", "Thesis", "Monitor"]);
-    expect(STEPS.map((s) => groupOf(s.key))).toEqual(["company", "charts", "company", "company", "model", "thesis", "monitor"]);
-    expect(GROUPS.flatMap((g) => g.steps).sort()).toEqual(STEPS.map((s) => s.key).sort());
+  it("steps come in order, and Monitor promises only what it does (#154)", () => {
+    expect(STEPS.map((s) => s.label)).toEqual(["Business", "Numbers", "What changed", "Peers", "Model", "Thesis", "Monitor"]);
     expect(nextStep("business")).toBe("numbers");
     expect(nextStep("monitor")).toBeNull();
+    const monitor = STEPS.find((s) => s.key === "monitor")!.why;
+    expect(monitor).toContain("when you choose");
+    expect(monitor).not.toMatch(/each new filing checked/i);
   });
 
   it("lists projects newest edit first, folders left out", () => {
@@ -152,6 +158,43 @@ describe("appendToSection", () => {
   });
 });
 
+describe("pinning under a chosen pillar (L5)", () => {
+  const doc = "# T\n\n## Pillars\n\n### Data center demand\n\nOne.\n\n### Margins hold\n\nTwo.\n\n## Catalysts\n\n- soon\n";
+
+  it("lists the pillars by their sub-headings, renamed ones included", () => {
+    expect(pillarsOf(doc)).toEqual(["Data center demand", "Margins hold"]);
+    expect(pillarsOf(thesisTemplate({ company: "X", catalysts: [] }))).toEqual(["Pillar 1"]);
+    expect(pillarsOf("# T\n\n## Pillars\n\nNo sub-headings.\n")).toEqual([]);
+    expect(pillarsOf("## Pillars\n```\n### not a pillar\n```\n")).toEqual([]);
+  });
+
+  it("puts a pin at the end of the chosen pillar, not the last one", () => {
+    expect(placePin(doc, { section: "pillars", pillar: "Data center demand" }, "[[embed:x]]")).toBe(
+      "# T\n\n## Pillars\n\n### Data center demand\n\nOne.\n\n[[embed:x]]\n\n### Margins hold\n\nTwo.\n\n## Catalysts\n\n- soon\n");
+    expect(placePin(doc, { section: "pillars", pillar: "Margins hold" }, "Y")).toBe(appendToSection(doc, "pillars", "Y"));
+  });
+
+  it("starts a new pillar after the others, named after the next free number", () => {
+    expect(placePin(doc, { section: "pillars", newPillar: true }, "Z")).toBe(
+      "# T\n\n## Pillars\n\n### Data center demand\n\nOne.\n\n### Margins hold\n\nTwo.\n\n### Pillar 3\n\nZ\n\n## Catalysts\n\n- soon\n");
+    expect(nextPillarName("## Pillars\n\n### Pillar 1\n\n### Pillar 2\n")).toBe("Pillar 3");
+    expect(nextPillarName("## Pillars\n\n### Pillar 2\n")).toBe("Pillar 3"); // never a second "Pillar 2"
+  });
+
+  it("the menu offers each pillar and a new one, the first the default; no pillars, Pillars itself", () => {
+    expect(pinMenu(["Data center demand", "Margins hold"]).slice(0, 4).map((m) => [m.text, m.hint ?? ""])).toEqual([
+      ["Pillars › Data center demand", "default"], ["Pillars › Margins hold", ""], ["Pillars › New pillar", ""], ["Core thesis", ""],
+    ]);
+    expect(pinMenu([])[0]).toMatchObject({ text: "Pillars", hint: "default", target: { section: "pillars" } });
+    expect(pinMenu([]).map((m) => m.target.section)).toEqual(["pillars", "core", "variant", "catalysts", "risks", "wrong", "kpis"]);
+  });
+
+  it("a pillar the text no longer has, or another section, goes where it did before", () => {
+    expect(placePin(doc, { section: "pillars", pillar: "Gone" }, "Q")).toBe(appendToSection(doc, "pillars", "Q"));
+    expect(placePin(doc, { section: "catalysts" }, "C")).toBe(appendToSection(doc, "catalysts", "C"));
+  });
+});
+
 describe("quoting a filing", () => {
   it("links the accession to EDGAR only when both ids have the API's shape", () => {
     expect(edgarFilingUrl(NVDA, "0001045810-26-000075")).toBe(
@@ -180,6 +223,17 @@ describe("quoting a filing", () => {
     expect(html).toContain("<blockquote>");
     expect(html).not.toContain("<script");
     expect(html).toContain('href="https://www.sec.gov/Archives/edgar/data/1045810/');
+  });
+
+  it("says which period the quoted filing reports on (H13: six-month wording under Q2 figures)", () => {
+    const at = (form: string, period: string | null) => quoteBlock({
+      text: "HOKA brand net sales increased.", companyId: NVDA, accessionNo: "0001045810-26-000075",
+      form, filed: "2026-10-24", period, section: "Item 2. MD&A",
+    }).split("\n")[2];
+    expect(at("10-Q", "2026-09-30")).toMatch(/^> — 10-Q for the quarter ended 2026-09-30, filed 2026-10-24, Item 2\. MD&A · /);
+    expect(at("10-K", "2026-03-31")).toMatch(/^> — 10-K for the fiscal year ended 2026-03-31, filed 2026-10-24,/);
+    expect(at("10-Q", null)).toMatch(/^> — 10-Q filed 2026-10-24, Item 2/); // unknown: as before
+    expect(at("10-Q", "<b>x</b>")).toMatch(/^> — 10-Q filed 2026-10-24,/); // only a date
   });
 
   it("splits section text into paragraphs, joining short headings to what follows", () => {

@@ -1,16 +1,16 @@
 import { useId, useState, type FormEvent } from "react";
 
-import { ApiError } from "../api";
+import { failureReason } from "../api";
 import { CompanySearch } from "../components/CompanySearch";
-import { defaultAssumptions, DEFAULT_HISTORY, DEFAULT_YEARS, historyStats, modelState } from "../models/model";
-import { loadHistory } from "../models/useHistory";
-import { go } from "../route";
+import { DEFAULT_HISTORY, DEFAULT_YEARS, modelState } from "../models/model";
+import { newModelAssumptions } from "../models/useHistory";
+import { go, href } from "../route";
 import { thesisState } from "../thesis/model";
 import type { WrittenKind } from "../types";
-import { ITEM_NAME_MAX, nameProblem, WORKSPACE_NAME_MAX } from "./model";
+import { defaultWorkspace, ITEM_NAME_MAX, nameProblem, NEW_WORKSPACE, WORKSPACE_NAME_MAX } from "./model";
 import type { Saved, Target } from "./useSaved";
 
-const NEW = "__new__";
+const NEW = NEW_WORKSPACE;
 const LABEL: Record<WrittenKind, string> = { thesis: "thesis", model: "model" };
 
 interface Fixed {
@@ -48,8 +48,11 @@ function NewWorkForm({ kind, token, saved, company: fixed, workspaceId, onDone }
   const suggested = (c: { name: string } | null) => (c ? `${c.name} ${LABEL[kind]}` : `Untitled ${LABEL[kind]}`).slice(0, ITEM_NAME_MAX);
   const [name, setName] = useState(() => suggested(fixed ?? null));
   const [touched, setTouched] = useState(false);
-  const [workspace, setWorkspace] = useState(workspaceId ?? list[0]?.workspace_id ?? NEW);
-  const [newName, setNewName] = useState("");
+  // #119: the company's project or folder, else a new workspace named after it; never just the first
+  const startOn = (c: { id: string; name: string } | null) => defaultWorkspace(list, c ? { id: c.id, names: [c.name] } : null);
+  const [workspace, setWorkspace] = useState(() => workspaceId ?? startOn(fixed ?? null));
+  const [wsTouched, setWsTouched] = useState(false);
+  const [newName, setNewName] = useState(() => (fixed ? fixed.name.slice(0, WORKSPACE_NAME_MAX) : ""));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -65,8 +68,7 @@ function NewWorkForm({ kind, token, saved, company: fixed, workspaceId, onDone }
       let state: object;
       if (kind === "model") {
         // start from the company's own history: its revenue CAGR and average margin
-        const years = await loadHistory(token, company!.id).then((h) => h.years).catch(() => []);
-        state = modelState({ companyId: company!.id, historyYears: DEFAULT_HISTORY, assumptions: defaultAssumptions(historyStats(years), DEFAULT_YEARS) });
+        state = modelState({ companyId: company!.id, historyYears: DEFAULT_HISTORY, assumptions: await newModelAssumptions(token, company!.id, DEFAULT_YEARS) });
       } else {
         state = thesisState({ companyId: company?.id ?? null, markdown: "" });
       }
@@ -74,7 +76,7 @@ function NewWorkForm({ kind, token, saved, company: fixed, workspaceId, onDone }
       onDone();
       go({ view: kind, itemId: item.item_id });
     } catch (err) {
-      setError(`Couldn't create it: ${err instanceof ApiError ? err.message : "the Query API didn't answer"}.`);
+      setError(`Couldn't create it: ${failureReason(err)}.`);
       setBusy(false);
     }
   };
@@ -96,6 +98,10 @@ function NewWorkForm({ kind, token, saved, company: fixed, workspaceId, onDone }
               onPick={(cid, n) => {
                 setCompany({ id: cid, name: n });
                 if (!touched) setName(suggested({ name: n }));
+                if (!wsTouched && !workspaceId) {
+                  setWorkspace(startOn({ id: cid, name: n }));
+                  setNewName((v) => v || n.slice(0, WORKSPACE_NAME_MAX));
+                }
               }} />
           )}
         </>
@@ -109,7 +115,10 @@ function NewWorkForm({ kind, token, saved, company: fixed, workspaceId, onDone }
       {!workspaceId && (
         <>
           <label htmlFor={`${id}-ws`}>Workspace</label>
-          <select id={`${id}-ws`} value={workspace} onChange={(e) => setWorkspace(e.target.value)}>
+          <select id={`${id}-ws`} value={workspace} onChange={(e) => {
+            setWorkspace(e.target.value);
+            setWsTouched(true);
+          }}>
             {list.map((w) => (
               <option key={w.workspace_id} value={w.workspace_id}>{w.name}</option>
             ))}
@@ -123,6 +132,13 @@ function NewWorkForm({ kind, token, saved, company: fixed, workspaceId, onDone }
             </>
           )}
         </>
+      )}
+      {fixed && (
+        <p className="faint small new-work-why">
+          A {LABEL[kind]} on its own, in a workspace. To work through {fixed.name} step by step (business, numbers, what
+          changed, peers, model, thesis, monitor) with the {LABEL[kind]} inside, <a href={href({ view: "analysis", start: fixed.id })}>start
+          an analysis</a> instead.
+        </p>
       )}
       {error && <p className="err small" role="alert">{error}</p>}
       <div className="row">

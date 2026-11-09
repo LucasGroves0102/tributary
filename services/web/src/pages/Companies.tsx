@@ -1,10 +1,13 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 
-import { ApiError, screener, screenerCsv, SCREENER_CSV_ROWS } from "../api";
+import { failureReason, screener, SCREENER_CSV_ROWS, screenerCsv } from "../api";
 import { DEFAULT_SPECS, MASKED_TITLE, screenRow } from "../companies/rows";
 import {
+  activeFilters,
   BAND_LABELS,
   BANDS,
+  checkName,
+  countWords,
   DEFAULT_SORT,
   describe,
   EXCHANGES,
@@ -20,6 +23,7 @@ import {
   type FilerCategory,
   type ScreenFilters,
 } from "../companies/screen";
+import { FigureText } from "../components/FigureText";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { navRow, onTableKey } from "../components/tableNav";
 import { download } from "../download";
@@ -27,6 +31,7 @@ import { go, href } from "../route";
 import { useScope } from "../scope";
 import type { Screener } from "../types";
 import type { ColumnSpec } from "../views/model";
+import { TableScroll } from "../components/TableScroll";
 
 interface Props {
   token: string;
@@ -34,7 +39,7 @@ interface Props {
   /** company ids on the user's watchlist (null while it loads or is unavailable) */
   watched: Set<string> | null;
   onWatch: (companyId: string, watch: boolean) => Promise<void>;
-  onChart?: (companyId: string, name: string) => void;
+  onChart?: (companyId: string) => void;
   /** Save / Save as (workspaces/SaveBar) */
   saveBar?: ReactNode;
   /** the value columns, as the user chose them (views); default: SCREEN_COLUMNS */
@@ -77,7 +82,7 @@ export function Companies({ token, screen: asked, watched, onWatch, onChart, sav
           live &&
           setResult({
             state: "error",
-            message: e instanceof ApiError ? e.message : "the Query API didn't answer",
+            message: failureReason(e),
           }),
       );
     return () => {
@@ -105,7 +110,7 @@ export function Companies({ token, screen: asked, watched, onWatch, onChart, sav
 
   return (
     <div className="page">
-      <div className="row">
+      <div className="row page-bar">
         <h1 className="grow">Companies</h1>
         {total !== null && (
           <span className="muted">
@@ -113,7 +118,7 @@ export function Companies({ token, screen: asked, watched, onWatch, onChart, sav
               ? isEmpty(screen)
                 ? `${total} ${total === 1 ? "company" : "companies"} in your demo`
                 : `${total} of the ${scope.ids.size} companies in your demo`
-              : `${total.toLocaleString()} ${total === 1 ? "company" : "companies"} with financials`}
+              : `${total.toLocaleString()} ${total === 1 ? "company" : "companies"}${countWords(screen)}`}
           </span>
         )}
         <button
@@ -130,10 +135,10 @@ export function Companies({ token, screen: asked, watched, onWatch, onChart, sav
       {note && <p className="empty error">{note}</p>}
 
       <div className="screener">
-        <FilterRail key={JSON.stringify(screen)} screen={screen} set={set} scoped={scope !== null} />
+        <FilterRail screen={screen} set={set} scoped={scope !== null} />
 
-        <section className="card grow">
-          <div className="card-h">
+        <section className="card">
+          <div className="card-h keep">
             <h2>Screen</h2>
             <span className="sub">{describe(screen)}</span>
             <span className="grow" />
@@ -144,31 +149,34 @@ export function Companies({ token, screen: asked, watched, onWatch, onChart, sav
             )}
           </div>
           {result.state === "error" ? (
-            <ErrorPanel what="this screen" detail={`The Query API said: ${result.message}.`}
+            <ErrorPanel what="this screen" detail={`${result.message}. Fewer columns or filters may help`}
               onRetry={() => {
                 setResult({ state: "loading" });
                 setAttempt((n) => n + 1);
               }} />
           ) : result.state === "loading" ? (
             <Skeleton lines={8} label="Running the screen" />
-          ) : rows.length === 0 ? (
-            <p className="empty">
-              {scope ? "None of the companies in your demo match." : "No companies match."}{" "}
-              {hasValueFilter(screen) && !scope
-                ? "Value filters only match companies your plan covers; loosen a filter or clear it."
-                : "Loosen a filter."}
-            </p>
           ) : (
-            <Table
-              rows={rows}
-              columns={columns}
-              sort={screen.sort ?? DEFAULT_SORT}
-              watched={watched}
-              onSort={(sort) => set({ sort })}
-              onSic={(sic) => set({ sic, industry: undefined })}
-              onWatch={onWatch}
-              onChart={onChart}
-            />
+            <>
+              <Table
+                rows={rows}
+                columns={columns}
+                sort={screen.sort ?? DEFAULT_SORT}
+                watched={watched}
+                onSort={(sort) => set({ sort })}
+                onSic={(sic) => set({ sic, industry: undefined })}
+                onWatch={onWatch}
+                onChart={onChart}
+              />
+              {rows.length === 0 && (
+                <p className="empty">
+                  {scope ? "None of the companies in your demo match." : "No companies match."}{" "}
+                  {hasValueFilter(screen) && !scope
+                    ? "Value filters only match figures that are current and meaningful; loosen a filter or clear it."
+                    : "Loosen a filter."}
+                </p>
+              )}
+            </>
           )}
           {data && rows.length > 0 && (
             <Pager
@@ -181,6 +189,9 @@ export function Companies({ token, screen: asked, watched, onWatch, onChart, sav
           <div className="foot">
             USD. TTM = trailing twelve months to each company's latest reported quarter; net debt
             and debt/equity at that quarter's end. Hover a value for its period and source filing.
+            A figure from an earlier period than the company's latest shows its date; about a year or
+            more behind it reads old, dimmed, and leaves sorts and filters. n/m = not meaningful,
+            n/a = doesn't apply, — = not reported; hover for why.
             Keyboard: ↑ ↓ move between rows, Home/End jump, Enter opens the company.
             {masked > 0 && (
               <>
@@ -201,17 +212,25 @@ export function Companies({ token, screen: asked, watched, onWatch, onChart, sav
   );
 }
 
+/** A typed filter applies this long after the last keystroke. */
+const APPLY_AFTER_MS = 400;
+/** Up to this wide the filters start folded: all nine would fill a phone's first screen. */
+const FOLD_FILTERS_PX = 700;
+
 function FilterRail({ screen, set, scoped }: {
   screen: ScreenFilters;
   set: (p: Partial<ScreenFilters>) => void;
   /** a demo sandbox: only its companies, so no "Only companies I can read" */
   scoped: boolean;
 }) {
-  // text and number inputs apply on Enter or when they lose focus; selects apply at once
+  // every filter applies by itself: selects at once, typed ones a moment after typing stops (or
+  // on Enter or leaving the field), so nothing needs a second step
   const [q, setQ] = useState(screen.q ?? "");
   const [industry, setIndustry] = useState(screen.industry ?? "");
   const [growth, setGrowth] = useState(screen.growth?.toString() ?? "");
   const [margin, setMargin] = useState(screen.margin?.toString() ?? "");
+  const [open, setOpen] = useState(() => window.innerWidth > FOLD_FILTERS_PX);
+  const active = activeFilters(screen);
 
   const n = (s: string) => (s.trim() === "" || !Number.isFinite(Number(s)) ? undefined : Number(s));
   const drafts = () => ({
@@ -237,16 +256,56 @@ function FilterRail({ screen, set, scoped }: {
     e.preventDefault();
     commit();
   };
+  // the rail stays mounted while typing (a remount would drop the cursor): the address moved by
+  // something else (Back, Reset filters, a shared link) sets the fields
+  const fromUrl = `${screen.q ?? ""}|${screen.industry ?? ""}|${screen.growth ?? ""}|${screen.margin ?? ""}`;
+  const typed = useRef(fromUrl);
+  useEffect(() => {
+    if (fromUrl === typed.current) return;
+    typed.current = fromUrl;
+    setQ(screen.q ?? "");
+    setIndustry(screen.industry ?? "");
+    setGrowth(screen.growth?.toString() ?? "");
+    setMargin(screen.margin?.toString() ?? "");
+    // only when the address changes
+  }, [fromUrl]);
+  const draftKey = `${q.trim()}|${industry.trim()}|${n(growth) ?? ""}|${n(margin) ?? ""}`;
+  useEffect(() => {
+    if (draftKey === typed.current) return;
+    const t = setTimeout(() => {
+      typed.current = draftKey;
+      commit();
+    }, APPLY_AFTER_MS);
+    return () => clearTimeout(t);
+    // commit reads the drafts this key describes
+  }, [draftKey]);
 
   return (
-    <form className="card card-b filters" onSubmit={submit} aria-label="Screen filters">
+    <details className="card filter-band" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
+      <summary>
+        <b>Filters</b>
+        <span className="faint small">{active ? `${active} active` : "none set"} · apply as you change them</span>
+      </summary>
+      <form className="filters" onSubmit={submit} aria-label="Screen filters">
+      {screen.issue && (
+        <div className="filter-note">
+          <span className="small muted">From the data status page</span>
+          <button type="button" className="chip removable" onClick={() => apply({ issue: undefined })}
+            title="Remove the data-check filter">
+            {checkName(screen.issue) ?? screen.issue} ✕
+          </button>
+          <p className="faint small">
+            Each company's Data notes tab shows what was found. Only companies you can read are listed.
+          </p>
+        </div>
+      )}
       <div>
         <label htmlFor="f-q">Name or ticker</label>
         <input id="f-q" className="field" type="search" value={q} maxLength={100}
           placeholder="e.g. PEP or Pepsi" onChange={(e) => setQ(e.target.value)} onBlur={commit} />
       </div>
       <div>
-        <label htmlFor="f-ind">Industry (SIC description)</label>
+        <label htmlFor="f-ind">Industry (SIC)</label>
         <input id="f-ind" className="field" value={industry} maxLength={100}
           placeholder="e.g. beverages, semiconductors" onChange={(e) => setIndustry(e.target.value)}
           onBlur={commit} />
@@ -258,7 +317,7 @@ function FilterRail({ screen, set, scoped }: {
         )}
       </div>
       <div>
-        <label htmlFor="f-band">Size: revenue TTM</label>
+        <label htmlFor="f-band">Revenue TTM</label>
         <select id="f-band" className="field" value={screen.band ?? ""}
           onChange={(e) => apply({ band: (e.target.value || undefined) as Band | undefined })}>
           <option value="">Any</option>
@@ -268,12 +327,12 @@ function FilterRail({ screen, set, scoped }: {
         </select>
       </div>
       <div>
-        <label htmlFor="f-growth">Revenue growth YoY at least (%)</label>
+        <label htmlFor="f-growth">Rev growth YoY, min %</label>
         <input id="f-growth" className="field" type="number" step="any" value={growth}
           placeholder="any" onChange={(e) => setGrowth(e.target.value)} onBlur={commit} />
       </div>
       <div>
-        <label htmlFor="f-margin">Operating margin TTM at least (%)</label>
+        <label htmlFor="f-margin">Op margin TTM, min %</label>
         <input id="f-margin" className="field" type="number" step="any" value={margin}
           placeholder="any" onChange={(e) => setMargin(e.target.value)} onBlur={commit} />
       </div>
@@ -315,7 +374,8 @@ function FilterRail({ screen, set, scoped }: {
         </label>
       )}
       <button type="submit" className="visually-hidden">Apply</button>
-    </form>
+      </form>
+    </details>
   );
 }
 
@@ -336,7 +396,7 @@ function Table({
   onSort: (sort: string) => void;
   onSic: (sic: string) => void;
   onWatch: (companyId: string, watch: boolean) => Promise<void>;
-  onChart?: (companyId: string, name: string) => void;
+  onChart?: (companyId: string) => void;
 }) {
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -362,20 +422,19 @@ function Table({
   return (
     <>
       {error && <p className="empty error">{error}</p>}
-      <div className="tw">
+      <TableScroll label="Screener results">
         <table className="t screen">
           <thead>
             <tr>
               <th className="first sort" {...th("name", false)}>Company{arrow("name")}</th>
-              <th className="sort" {...th("sic", false)}>Industry (SIC){arrow("sic")}</th>
+              <th className="ind sort" {...th("sic", false)}>Industry (SIC){arrow("sic")}</th>
               {columns.map((c) =>
                 sortable(c.key) ? (
-                  <th key={c.key} className="n sort" {...th(c.key, true)}>
-                    {c.label} <span className="unit">{c.period}</span>
-                    {arrow(c.key)}
+                  <th key={c.key} className={c.label.length > 14 ? "n long sort" : "n sort"} {...th(c.key, true)}>
+                    {c.label}{arrow(c.key)} <span className="unit">{c.period}</span>
                   </th>
                 ) : (
-                  <th key={c.key} className="n" title={c.long}>
+                  <th key={c.key} className={c.label.length > 14 ? "n long" : "n"} title={c.long}>
                     {c.label} <span className="unit">{c.period}</span>
                   </th>
                 ),
@@ -395,24 +454,27 @@ function Table({
                   <td className="first">
                     <a className="co" href={href({ view: "company", companyId: r.companyId })}
                       onClick={(e) => e.stopPropagation()}>
-                      <b>{r.name}</b>
+                      <b title={r.name}>{r.name}</b>
                       {r.ticker && <span className="faint mono">{r.ticker}</span>}
                       {!r.readable && (
                         <span className="tag" title={MASKED_TITLE}>metadata only</span>
                       )}
                     </a>
+                    {r.industry && <div className="co-sub faint small" title={r.industry}>{r.industry}</div>}
                   </td>
-                  <td className="muted">
-                    {r.industry ?? "—"}{" "}
-                    {r.sic && (
-                      <button className="link faint mono" title={`Only SIC ${r.sic}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onSic(r.sic!);
-                        }}>
-                        {r.sic}
-                      </button>
-                    )}
+                  <td className="muted ind" title={r.industry ?? undefined}>
+                    <span className="ind-in">
+                      <span className="ind-name">{r.industry ?? "—"}</span>
+                      {r.sic && (
+                        <button className="link faint mono" title={`Only SIC ${r.sic}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onSic(r.sic!);
+                          }}>
+                          {r.sic}
+                        </button>
+                      )}
+                    </span>
                   </td>
                   {columns.map((c) => {
                     const cell = r.cells[c.key]!;
@@ -423,14 +485,14 @@ function Table({
                         : "";
                     return (
                       <td key={c.key} className={`n ${tone}`} title={cell.title}>
-                        {cell.text}
+                        <FigureText cell={cell} />
                       </td>
                     );
                   })}
-                  <td className="muted">{r.fye ?? "—"}</td>
+                  <td className="muted" title={r.fye ?? undefined}>{r.fye?.slice(0, 3) ?? "—"}</td>
                   <td className="n actions" onClick={(e) => e.stopPropagation()}>
                     {r.readable && onChart && (
-                      <button className="btn sm ghost" onClick={() => onChart(r.companyId, r.name)}
+                      <button className="btn sm ghost" onClick={() => onChart(r.companyId)}
                         aria-label={`Chart ${r.name}`}>
                         Chart
                       </button>
@@ -452,7 +514,7 @@ function Table({
             })}
           </tbody>
         </table>
-      </div>
+      </TableScroll>
     </>
   );
 }

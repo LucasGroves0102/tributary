@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { Readable } from "../access";
-import { ApiError, FormulaApiError } from "../api";
+import { failureReason } from "../api";
 import { cached, remember } from "../chart/cache";
 import { fetchLayer } from "../chart/fetch";
 import { autoSubtitle, methodNote, sourceFootnote } from "../chart/deck";
+import { drawnIds } from "../chart/axes";
 import { LayerChart } from "../chart/LayerChart";
 import { metricLabel } from "../chart/metrics";
-import { basis, frequencyOf, layerColor, layerKey, layerName, type ChartState, type TtmCatalog } from "../chart/model";
+import { basis, frequencyOf, layerColor, layerKey, layerName, type ChartState, type TtmCatalog, chartTitle, rangeDates } from "../chart/model";
 import { toSeries, type Series, type Source } from "../chart/series";
 import { BAND_LABELS, FILER_LABELS } from "../companies/screen";
 import { SmallMultiples } from "../compare/SmallMultiples";
@@ -115,7 +116,7 @@ export function ChartView({ token, chart, name, label, hasTtm }: {
         })
         .catch((e) => live.current && setResults((r) => ({
           ...r,
-          [key]: { state: "error", message: e instanceof FormulaApiError || e instanceof ApiError ? e.message : "the Query API didn't answer" },
+          [key]: { state: "error", message: failureReason(e) },
         })));
     }
     // results is read only to skip what's already asked
@@ -155,16 +156,19 @@ export function ChartView({ token, chart, name, label, hasTtm }: {
     );
   }
   const effective = basis(chart);
+  const drawn = drawnIds(series);
+  const answered = new Set(series.map((x) => x.id));
   return (
     <>
       <LayerChart
         series={series}
-        title={chart.title}
+        title={chartTitle(chart, label, metricLabel, (l) => !answered.has(l.id) || drawn.has(l.id))}
         subtitle={chart.deck ? chart.subtitle?.trim() || autoSubtitle(series, frequency, effective) : ""}
         footnote={[sourceFootnote(series, label, asOf), methodNote(effective, frequency, new Set(visible.map((l) => l.transform)))]}
         svgRef={svg}
         deck={chart.deck}
         onOpen={open}
+        from={rangeDates(chart).from}
       />
       {errors.length > 0 && <p className="faint small">{errors.length} line{errors.length === 1 ? "" : "s"} couldn't be drawn: {[...new Set(errors)].join("; ")}.</p>}
     </>

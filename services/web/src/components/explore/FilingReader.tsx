@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 
 import {
   filingIndex,
@@ -8,30 +8,36 @@ import {
   sectionChanges,
 } from "../../api";
 import { edgarLink } from "../../company/Filings";
+import { addDays } from "../../home/data";
 import { formTag } from "../../company/data";
 import { useLoad, type Load } from "../../company/useLoad";
 import { ErrorPanel, Skeleton } from "../States";
-import { day } from "../../format";
+import { day, periodPhrase } from "../../format";
 import {
   comparableForm,
   countMatches,
+  firstMatchFrom,
   highlight,
+  nextComparable,
   outlineGroups,
   paragraphAt,
   paragraphs,
   priorComparable,
   searchTerms,
   snippetRuns,
+  steppedForm,
   type Run,
 } from "../../reader/text";
 import { go, href } from "../../route";
-import type { SectionChanges, SectionHit } from "../../types";
+import type { IndexedFiling, SectionChanges, SectionHit } from "../../types";
 
 interface Props {
   token: string;
   companyId: string;
   accessionNo: string;
   sectionKey: string | null;
+  /** what's open in words, once it has loaded: "10-K filed Feb 21, 2026" */
+  onFiling?: (label: string) => void;
   /** a document character offset to scroll to (a citation's char_start) */
   at?: number;
   /** words to highlight, and to search the filing for */
@@ -45,16 +51,30 @@ interface Props {
 }
 
 const SEARCH_FORMS = /^(10-K|10-Q|8-K)(\/A)?$/;
+/** The filing index's largest page. */
+const INDEX_MAX = 100;
+const NEXT_8K_WITHIN_DAYS = 400;
 
-/** A parsed filing: its outline on the left (grouped by Part, with search matches), the selected
- * section on the right, highlighted and scrolled to a cited passage. A 10-K or 10-Q also links
- * to the same section of the previous one and shows What changed side by side. */
-export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q, name, onAsk, onRead }: Props) {
+/** A parsed filing: its outline on the left (grouped by Part, with search matches above it), the
+ * selected section on the right, highlighted and scrolled to a cited passage or the first match,
+ * with next and previous match. It steps to the previous and next filing of the same form, at
+ * the same section with the same search. A 10-K or 10-Q also shows What changed side by side.
+ *
+ * Two counts on purpose, each labelled: the outline shows *passages* (the search index's units of
+ * about 2,000 characters that hold all the words, from the API), the section heading shows the
+ * same passages and *highlights* (each word marked in the text, counted here, what next and
+ * previous step through). */
+export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q, name, onAsk, onRead, onFiling }: Props) {
   const filing = useLoad(`${companyId}|${accessionNo}`, () => parsedFiling(token, companyId, accessionNo));
   const f = filing?.state === "ok" ? filing.data : null;
   const active = f ? (f.sections.find((s) => s.section_key === sectionKey) ?? f.sections[0] ?? null) : null;
   const readRef = useRef(onRead);
   readRef.current = onRead;
+  // the breadcrumb and tab title say what's open in words
+  const openLabel = f ? `${f.form} filed ${day(f.filed, true)}` : null;
+  useEffect(() => {
+    if (openLabel) onFiling?.(openLabel);
+  }, [openLabel]);
   const readKey = f ? `${accessionNo}|${active?.section_key ?? ""}` : null;
   useEffect(() => {
     if (readKey) readRef.current?.(readKey.split("|")[1] || null);
@@ -64,8 +84,16 @@ export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q,
   );
   const form = f ? comparableForm(f.form) : null;
   const changes = useLoad(form ? accessionNo : null, () => sectionChanges(token, companyId, accessionNo));
-  const prior = useLoad(form && f ? accessionNo : null, () =>
-    filingIndex(token, companyId, { forms: [form!], to: f!.filed, limit: 5 }).then((r) => priorComparable(r.filings, f!)),
+  const stepped = f ? steppedForm(f.form) : null;
+  const prior = useLoad(stepped && f ? accessionNo : null, () =>
+    filingIndex(token, companyId, { forms: [stepped!], to: f!.filed, limit: 5 }).then((r) => priorComparable(r.filings, f!)),
+  );
+  const later = useLoad(stepped && f ? accessionNo : null, () =>
+    // newest first, so a year's window for the form that can have more than a page of later ones
+    filingIndex(token, companyId, {
+      forms: [stepped!], from: f!.filed, limit: INDEX_MAX,
+      ...(stepped === "8-K" ? { to: addDays(f!.filed, NEXT_8K_WITHIN_DAYS) } : {}),
+    }).then((r) => nextComparable(r.filings, f!)),
   );
 
   const [draft, setDraft] = useState(q ?? "");
@@ -84,7 +112,10 @@ export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q,
       limit: 50,
     }).then((r) => r.results.filter((h) => h.citation.accession_no === accessionNo)),
   );
-  const terms = searchTerms(query);
+  const terms = useMemo(() => searchTerms(query), [query]);
+  // which highlight is current; -1: SectionBody sets it to where the section opens
+  const [match, setMatch] = useState(-1);
+  useEffect(() => setMatch(-1), [accessionNo, active?.section_key, query, at]);
   // the section whose What changed is open (closes when another section opens)
   const [diffFor, setDiffFor] = useState<string | null>(null);
 
@@ -110,7 +141,7 @@ export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q,
       <div className="page">
         {back}
         {filing.state === "error" ? (
-          <ErrorPanel what="this filing" detail={`The Query API said: ${filing.message}.`} onRetry={filing.retry} />
+          <ErrorPanel what="this filing" detail={filing.message} onRetry={filing.retry} />
         ) : (
           <p className="empty">
             Filing {accessionNo} hasn't been parsed into sections yet. The company's Filings tab
@@ -124,11 +155,25 @@ export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q,
   const diff = changes?.state === "ok" ? changes.data.sections.find((s) => s.section_key === active?.section_key) : undefined;
   const diffOn = !!active && diffFor === active.section_key;
   const hitsBySection = new Map<string, SectionHit>(hits?.state === "ok" ? hits.data.map((h) => [h.section_key, h]) : []);
+  const sectionText = text?.state === "ok" ? text.data : null;
+  const matches = terms.length && sectionText ? countMatches(sectionText.text, terms) : 0;
+  const step = (by: 1 | -1) => matches > 0 && setMatch((m) => ((m < 0 ? (by > 0 ? -1 : 0) : m) + by + matches) % matches);
   const submit = (e: FormEvent) => {
     e.preventDefault();
     const words = draft.trim();
+    // Enter on the words already searched: the next match, as in a browser's find
+    if (words && words === query && matches > 0) {
+      step(1);
+      return;
+    }
     go({ view: "filing", companyId, accessionNo, section: active?.section_key ?? null, ...(words ? { q: words } : {}) });
     setQuery(words);
+  };
+  const onSearchKey = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" && e.shiftKey && draft.trim() === query && matches > 0) {
+      e.preventDefault();
+      step(-1);
+    }
   };
   const index = f.sections.findIndex((s) => s.section_key === active?.section_key);
   const neighbour = (i: number) => f.sections[i] && (
@@ -147,7 +192,7 @@ export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q,
           </h1>
           <p className="muted">
             <span className="mono">{accessionNo}</span>
-            {f.period_of_report && ` · period ending ${day(f.period_of_report, true)}`}
+            {f.period_of_report && ` · ${periodPhrase(f.form, f.period_of_report)}`}
           </p>
         </div>
         <div className="row wrap">
@@ -166,13 +211,22 @@ export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q,
       <div className="reader-tools row wrap">
         <form className="row grow" role="search" onSubmit={submit}>
           <input className="field" type="search" aria-label="Search this filing" placeholder="Search this filing…"
-            value={draft} maxLength={200} onChange={(e) => setDraft(e.target.value)} />
+            value={draft} maxLength={200} onChange={(e) => setDraft(e.target.value)} onKeyDown={onSearchKey} />
           <button className="btn sm" type="submit">Search</button>
         </form>
-        {form && active && <PriorLink prior={prior} form={form} companyId={companyId} sectionKey={active.section_key} />}
+        {stepped && active && (
+          <span className="filing-steps" role="group" aria-label={`Other ${stepped} filings`}>
+            <FilingStep load={prior} dir="prior" form={stepped} companyId={companyId} sectionKey={active.section_key} q={query} />
+            <FilingStep load={later} dir="next" form={stepped} companyId={companyId} sectionKey={active.section_key} q={query} />
+          </span>
+        )}
       </div>
       <div className="reader-body">
         <nav className="toc" aria-label="Sections">
+          {query && <SearchHits hits={hits} query={query} companyId={companyId} accessionNo={accessionNo} />}
+          <p className="toc-legend faint small">
+            {query ? "Number: passages that match, about 2,000 characters each" : "Number: section length in characters"}
+          </p>
           {outlineGroups(f.sections).map((g) => (
             <div key={g.label} className="grp">
               <div className="grp-h">{g.label}</div>
@@ -190,15 +244,14 @@ export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q,
                       <span className="cnt" title={`${hit.passages_matched} matching passage${hit.passages_matched === 1 ? "" : "s"}`}>
                         {hit.passages_matched}
                       </span>
-                    ) : (
-                      <span className="size faint">{size(s.chars)}</span>
+                    ) : query ? null : (
+                      <span className="size faint" title={`${s.chars.toLocaleString("en-US")} characters`}>{size(s.chars)}</span>
                     )}
                   </a>
                 );
               })}
             </div>
           ))}
-          {query && <SearchHits hits={hits} query={query} companyId={companyId} accessionNo={accessionNo} />}
         </nav>
         <article className="section-text">
           {sectionKey && active && active.section_key !== sectionKey && (
@@ -210,10 +263,9 @@ export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q,
               <h2 className="grow">
                 {active.section_key} · {active.title ?? "Untitled"}
               </h2>
-              {terms.length > 0 && text?.state === "ok" && text.data && (
-                <span className="faint">
-                  {countMatches(text.data.text, terms)} match{countMatches(text.data.text, terms) === 1 ? "" : "es"} for “{query}”
-                </span>
+              {terms.length > 0 && sectionText && !diffOn && (
+                <MatchNav matches={matches} current={match} passages={hitsBySection.get(active.section_key)?.passages_matched ?? 0}
+                  searched={hits?.state === "ok"} query={query} onStep={step} />
               )}
               {diff && (
                 <button className="btn sm" aria-pressed={diffOn} onClick={() => setDiffFor(diffOn ? null : active.section_key)}>
@@ -225,7 +277,7 @@ export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q,
           {active && diffOn && diff ? (
             <SideBySide diff={diff} companyId={companyId} />
           ) : (
-            active && <SectionBody load={text} terms={terms} at={at} />
+            active && <SectionBody load={text} terms={terms} at={at} current={match} onOpen={setMatch} />
           )}
           {active && (
             <div className="row section-nav">
@@ -247,16 +299,61 @@ function Marked({ runs }: { runs: Run[] }) {
   return <>{runs.map((r, i) => (typeof r === "string" ? r : <mark key={i}>{r.mark}</mark>))}</>;
 }
 
-function SectionBody({ load, terms, at }: { load: Load<Awaited<ReturnType<typeof fetchSection>>> | null; terms: string[]; at?: number }) {
+/** "Highlight 3 of 40" with previous and next, and the section's passage count: the outline's
+ * number, so the two can be read together. */
+function MatchNav({ matches, current, passages, searched, query, onStep }: {
+  matches: number;
+  current: number;
+  passages: number;
+  /** the passage count has come back (0 then means none hold all the words) */
+  searched: boolean;
+  query: string;
+  onStep: (by: 1 | -1) => void;
+}) {
+  const of = passages === 1 ? "1 passage" : `${passages} passages`;
+  return (
+    <span className="match-nav" role="status">
+      <span className="faint">
+        {searched && `${of} match “${query}” · `}
+        {matches === 0
+          ? "no words to highlight here"
+          : `highlight ${Math.max(current, 0) + 1} of ${matches}`}
+      </span>
+      {matches > 1 && (
+        <>
+          <button type="button" className="btn sm ghost icon" aria-label="Previous match" title="Previous match (Shift+Enter in the search box)" onClick={() => onStep(-1)}>↑</button>
+          <button type="button" className="btn sm ghost icon" aria-label="Next match" title="Next match (Enter in the search box)" onClick={() => onStep(1)}>↓</button>
+        </>
+      )}
+    </span>
+  );
+}
+
+function SectionBody({ load, terms, at, current, onOpen }: {
+  load: Load<Awaited<ReturnType<typeof fetchSection>>> | null;
+  terms: string[];
+  at?: number;
+  /** the current highlight; -1: not chosen yet, onOpen sets where the section opens */
+  current: number;
+  onOpen: (highlight: number) => void;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const section = load?.state === "ok" ? load.data : null;
-  const ps = section ? paragraphs(section.text) : [];
+  const ps = useMemo(() => (section ? paragraphs(section.text) : []), [section]);
   const start = section?.citation.char_start;
   const target = at !== undefined && start !== undefined ? paragraphAt(ps, at - start) : -1;
   const beyond = section && at !== undefined && start !== undefined && at - start >= section.text.length;
+  const hasTerms = terms.length > 0;
+  // opening a section with a search: the first highlight, or the first at the cited passage
   useEffect(() => {
-    ref.current?.querySelector(".hit")?.scrollIntoView?.({ block: "center" });
-  }, [section, target]);
+    if (section && hasTerms && current < 0) onOpen(firstMatchFrom(ps, terms, target));
+  }, [section, hasTerms, current, ps, terms, target, onOpen]);
+  useEffect(() => {
+    if (!section) return;
+    const el = ref.current?.querySelector(current >= 0 ? "mark.cur" : ".hit") ?? ref.current?.querySelector(".hit");
+    el?.scrollIntoView?.({ block: "center" });
+  }, [section, target, current]);
+  let marks = 0;
 
   if (!load || load.state === "loading") return <Skeleton lines={6} label="Loading the section" />;
   if (load.state === "denied") return <p className="empty locked">This section isn't included in your access.</p>;
@@ -267,7 +364,11 @@ function SectionBody({ load, terms, at }: { load: Load<Awaited<ReturnType<typeof
     <div ref={ref}>
       {ps.map((p, i) => (
         <p key={p.start} className={i === target ? "hit" : undefined}>
-          <Marked runs={highlight(p.text, terms)} />
+          {highlight(p.text, terms).map((r, j) => {
+            if (typeof r === "string") return r;
+            const n = marks++;
+            return <mark key={j} className={n === current ? "cur" : undefined}>{r.mark}</mark>;
+          })}
         </p>
       ))}
       {section.truncated && (
@@ -308,18 +409,31 @@ function SearchHits({ hits, query, companyId, accessionNo }: { hits: Load<Sectio
   );
 }
 
-function PriorLink({ prior, form, companyId, sectionKey }: { prior: Load<Awaited<ReturnType<typeof priorComparable>>> | null; form: string; companyId: string; sectionKey: string }) {
-  if (prior?.state !== "ok") return null;
-  const p = prior.data;
-  if (!p) return <span className="faint small">No earlier {form} on file</span>;
-  const label = `Same section in the prior ${form} (filed ${day(p.filed, true)})`;
+/** The filing before or after this one of the same form, opened at the same section with the same
+ * search; one that isn't parsed links to EDGAR. */
+function FilingStep({ load, dir, form, companyId, sectionKey, q }: { load: Load<IndexedFiling | null> | null; dir: "prior" | "next"; form: string; companyId: string; sectionKey: string; q: string }) {
+  if (load?.state !== "ok") return null;
+  const p = load.data;
+  const word = dir === "prior" ? "Prior" : "Next";
+  if (!p) {
+    // a later 8-K is only looked for within a year (see above), so no "latest" claim for it
+    return dir === "next" && form === "8-K" ? null : (
+      <span className="faint small">{dir === "prior" ? `No earlier ${form} on file` : `Latest ${form} on file`}</span>
+    );
+  }
+  const label = `${word} ${form}, filed ${day(p.filed, true)}`;
   if (p.sections_available) {
-    return <a className="btn sm ghost" href={href({ view: "filing", companyId, accessionNo: p.accession_no, section: sectionKey })}>{label} →</a>;
+    return (
+      <a className="btn sm ghost" title="The same section, with the same search"
+        href={href({ view: "filing", companyId, accessionNo: p.accession_no, section: sectionKey, ...(q ? { q } : {}) })}>
+        {dir === "prior" ? `← ${label}` : `${label} →`}
+      </a>
+    );
   }
   const edgar = edgarLink(p);
   return edgar ? (
     <a className="btn sm ghost" href={edgar} target="_blank" rel="noopener noreferrer" title="Not parsed in Tributary">
-      Prior {form} on EDGAR ↗
+      {word} {form} on EDGAR ↗
     </a>
   ) : null;
 }

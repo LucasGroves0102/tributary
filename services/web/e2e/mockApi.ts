@@ -253,7 +253,7 @@ export async function mockApi(page: Page): Promise<Fake> {
     if (path === "/v1/companies/search") {
       const s = (q.get("q") ?? "").toUpperCase();
       return json({ results: COMPANIES.filter((c) => c.ticker.startsWith(s) || c.name.includes(s)).map((c) => ({
-        company_id: c.id, name: c.name, matched_on: "ticker", matched_alias: c.ticker, is_current: true, access: ["financials", "filings"],
+        company_id: c.id, name: c.name, matched_on: "ticker", matched_alias: c.ticker, is_current: true, tickers: [c.ticker], access: ["financials", "filings"],
       })) });
     }
     if (path === "/v1/screener/columns") {
@@ -340,6 +340,14 @@ export async function mockApi(page: Page): Promise<Fake> {
       return json({ items, filings: [] });
     }
     if (path === "/v1/recent/filings") return json({ recorded: true });
+    // Connect your data off: the API offers no providers (not a 404)
+    if (path === "/v1/connections" && method === "GET") return json({ providers: [], connections: [] });
+    if (path === "/v1/status") return json({ last_accepted_at: now(), last_ingested_at: now() });
+    m = path.match(/^\/v1\/companies\/(\d{10})\/expected-filings$/);
+    if (m) return json({ company_id: m[1], as_of: "", method: "", expected: [] });
+    if (u.pathname === "/api/agent/v1/allowance") {
+      return json({ per_hour: 30, left_this_hour: 30, per_day: 100, left_today: 100, network_per_hour: 60, report_questions: 3, check_questions: 4, paused: false });
+    }
 
     return json({ detail: "not found in the e2e mock" }, 404);
   });

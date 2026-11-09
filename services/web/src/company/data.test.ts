@@ -4,6 +4,10 @@ import { ACC, fin, NVDA, nvdaRow } from "../fixtures";
 import type { Recap, RecapValue, SegmentRow } from "../types";
 import {
   eightKItems,
+  figuresBehind,
+  filingHeadings,
+  fiscalYear,
+  parsedNote,
   financialsCsv,
   formMatches,
   header,
@@ -14,7 +18,21 @@ import {
   recapRows,
   segmentTables,
   STATEMENTS,
+  listingLine,
+  withAnnualPerShare,
+  withBridges,
 } from "./data";
+
+describe("the header's listing line", () => {
+  it("names the main ticker and counts the rest, whose tickers go in the hover", () => {
+    expect(listingLine(["JPM", "JPM-PC", "JPM-PD", "VYLD"], ["NYSE"])).toEqual({
+      text: "JPM +3 more · NYSE",
+      more: "Also listed: JPM-PC, JPM-PD, VYLD",
+    });
+    expect(listingLine(["NVDA"], ["Nasdaq"])).toEqual({ text: "NVDA · Nasdaq", more: null });
+    expect(listingLine([], [])).toEqual({ text: "", more: null });
+  });
+});
 
 const SRC = { period_end: "2026-07-26", accession_no: ACC, form: "10-Q", filed: "2026-08-26" };
 
@@ -116,6 +134,17 @@ describe("recap", () => {
     expect(rows[1]).toMatchObject({ current: "60.0%", qoq: { text: "-200 bp", sign: -1 }, yoy: { text: "+200 bp" } });
     expect(rows[0]!.title).toContain(`FY2027 Q1: 10-Q filed Aug 26, 2026, ${ACC}`);
   });
+
+  it("a margin that isn't meaningful reads n/m, moves no delta, and keeps its figure in the hover", () => {
+    const margin = recap.metrics[0]!;
+    const { rows } = recapRows({
+      ...recap,
+      metrics: [{ ...margin, current: { ...margin.current!, value: "20.9", not_meaningful: "the amount is more than ten times revenue" } }],
+    });
+    expect(rows[0]).toMatchObject({ current: "n/m", qoq: null, yoy: null });
+    expect(rows[0]!.title).toContain("because the amount is more than ten times revenue");
+    expect(rows[0]!.title).toContain("2090.0%");
+  });
 });
 
 describe("segments", () => {
@@ -144,6 +173,79 @@ describe("segments", () => {
     expect(geo!.title).toBe("Revenue by geography");
     expect(segmentTables([])).toEqual([]);
   });
+
+  // M8: Deckers reorganised in 2025 (UGG Wholesale and Direct to Consumer became UGG Brand) and has
+  // reported gross profit, not operating income, by segment since; production rows, 2026-11-08
+  const deck = (member: string, label: string, metric: string, end: string, value: number): SegmentRow =>
+    ({ ...seg(member, label, end, String(value * 1e6)), metric });
+  const QUARTERS = ["2024-12-31", "2025-03-31", "2025-06-30", "2025-09-30", "2025-12-31", "2026-03-31", "2026-06-30", "2026-09-30"];
+  const DECK = [
+    ...["2023-09-30", "2023-12-31", "2024-09-30", "2024-12-31"].flatMap((e, i) => [
+      deck("deck:UGGWholesaleSegmentMember", "UGG Wholesale", "revenue", e, [512, 467, 512, 467][i]!),
+      deck("deck:UGGWholesaleSegmentMember", "UGG Wholesale", "operating_income", e, [180, 170, 195, 190][i]!),
+      deck("deck:DirectToConsumerSegmentMember", "Direct to Consumer", "operating_income", e, [130, 401, 143, 481][i]!),
+    ]),
+    deck("deck:SanukWholesaleSegmentMember", "Sanuk Wholesale", "revenue", "2024-09-30", 1),
+    ...QUARTERS.map((e, i) => deck("deck:UGGBrandSegmentMember", "UGG Brand", "revenue", e, [1244, 374, 265, 759, 1305, 408, 278, 786][i]!)),
+    ...QUARTERS.map((e, i) => deck("deck:UGGBrandSegmentMember", "UGG Brand", "gross_profit", e, [783, 226, 139, 421, 808, 253, 152, 480][i]!)),
+  ];
+
+  it("M8: a table that ended long ago says it isn't current, and YoY finds the year-ago quarter by date", () => {
+    const tables = segmentTables(DECK);
+    expect(tables.map((t) => t.title)).toEqual([
+      "Revenue by business segments", "Gross profit by business segments", "Operating income by business segments",
+    ]);
+    const oi = tables[2]!;
+    expect(oi.staleNote).toContain("Not current: the last operating income by business segments is for CY2024 Q4");
+    expect(oi.staleNote).toContain("to Sep 30, 2026");
+    // 2024-12-31 against 2023-12-31, with no quarter in between on file
+    expect(oi.rows.find((r) => r.label === "UGG Wholesale")!.yoy).toBeCloseTo(190 / 170 - 1);
+    expect(oi.rows.find((r) => r.label === "Direct to Consumer")!.yoy).toBeCloseTo(481 / 401 - 1);
+    expect(tables[0]!.staleNote).toBeNull();
+    expect(tables[1]!.staleNote).toBeNull();
+  });
+
+  it("M8: members that stopped read 'until' after the current ones; members out of the window aren't empty rows", () => {
+    const [rev] = segmentTables(DECK);
+    expect(rev!.rows.map((r) => [r.label, r.until])).toEqual([["UGG Brand", null], ["UGG Wholesale", "CY2024 Q4"]]);
+    expect(rev!.rows.some((r) => r.label === "Sanuk Wholesale")).toBe(false); // only before the eight quarters shown
+    expect(rev!.retiredNote).toContain("UGG Wholesale was last reported for CY2024 Q4");
+    expect(rev!.rows[0]!.yoy).toBeCloseTo(786 / 759 - 1);
+  });
+
+  it("M8: a change from a year-ago loss isn't a growth rate (Teva Wholesale's -491.9%)", () => {
+    const [t] = segmentTables([
+      deck("deck:Other", "Other Wholesale", "operating_income", "2023-12-31", -1.36),
+      deck("deck:Other", "Other Wholesale", "operating_income", "2024-12-31", 5.35),
+    ]);
+    expect(t!.rows[0]).toMatchObject({ yoy: null, yoyNotMeaningful: true });
+  });
+});
+
+describe("figures behind the filing index (H9)", () => {
+  // Humana, as the audit found it: revenue to Mar 31, 2026 while EDGAR had the June 10-Q of Jul 29
+  const rows = [
+    fin("revenue", "2025-12-31", "32515000000", "FY2025 Q4", { citation: { accession_no: "0000049071-26-000009", form: "10-K", filed: "2026-02-18", xbrl_tag: "Revenues", source_accessions: null, filing_url: null } }),
+    fin("revenue", "2026-03-31", "39648000000", "FY2026 Q1", { citation: { accession_no: "0000049071-26-000023", form: "10-Q", filed: "2026-04-29", xbrl_tag: "Revenues", source_accessions: null, filing_url: null } }),
+  ];
+  const june = { form: "10-Q", accession_no: "0000049071-26-000050", filed: "2026-07-29", period_of_report: "2026-06-30" };
+  const NOW = Date.parse("2026-11-06T12:00:00Z");
+
+  it("says how far behind: the filing's period, when it was filed and how many days ago", () => {
+    expect(figuresBehind(rows, june, NOW)).toEqual({
+      form: "10-Q", accessionNo: june.accession_no, filed: "2026-07-29", period: "2026-06-30", through: "2026-03-31", days: 100, quarters: 1,
+    });
+  });
+
+  it("isn't behind when the figures hold that period or cite that filing, or for an older or other filing", () => {
+    expect(figuresBehind([...rows, fin("revenue", "2026-06-30", "40867000000", "FY2026 Q2")], june, NOW)).toBeNull();
+    expect(figuresBehind(rows, { ...june, period_of_report: "2026-04-02" }, NOW)).toBeNull(); // within a week
+    expect(figuresBehind(rows, { ...june, form: "8-K" }, NOW)).toBeNull();
+    expect(figuresBehind(rows, { ...june, period_of_report: null }, NOW)).toBeNull();
+    expect(figuresBehind(rows, { ...june, filed: "2026-04-01" }, NOW)).toBeNull(); // filed before what's cited
+    expect(figuresBehind(rows, null, NOW)).toBeNull();
+    expect(figuresBehind([], june, NOW)).toBeNull();
+  });
 });
 
 it("labels 8-K items and filters forms", () => {
@@ -154,17 +256,218 @@ it("labels 8-K items and filters forms", () => {
 });
 
 describe("banks on the tearsheet", () => {
-  it("key stats and ratio rows read n/a where the metric doesn't describe a bank", () => {
-    const bank = nvdaRow({ industry: "National Commercial Banks", values: { revenue_ttm: "180000000000" } });
+  const BANK_METRICS = ["gross_margin", "operating_margin", "free_cash_flow", "fcf_margin", "net_debt", "debt_to_equity", "current_ratio"];
+  it("key stats and ratio rows read n/a for what doesn't describe a bank, by the API's rule", () => {
+    const reason = "this is a bank: deposits are its debt and lending its operations";
+    const bank = nvdaRow({
+      values: { revenue_ttm: "180000000000" },
+      readings: { operating_margin_ttm: { status: "not_applicable", reason }, net_debt_q: { status: "not_applicable", reason } },
+    });
     const stats = keyStats(bank);
     expect(stats.find((s) => s.label === "Operating margin")).toMatchObject({ text: "n/a (bank)", period: "not applicable" });
-    expect(stats.find((s) => s.label === "Net debt")!.title).toContain("doesn't describe a bank");
-    expect(stats.find((s) => s.label === "Gross margin")).toMatchObject({ text: "—" });
-    const rows = [fin("roe", "2026-07-26", "0.17", "FY2026 Q2")];
-    const t = metricTable(rows, RATIOS, "ttm", "fiscal", "National Commercial Banks");
-    expect(t.rows.map((r) => r.metric)).toEqual(["operating_margin", "fcf_margin", "roe"]);
-    expect(t.rows[0]).toMatchObject({ bank: true, cells: [null] });
+    expect(stats.find((s) => s.label === "Net debt")!.title).toContain("This is a bank");
+    const rows = [fin("roe", "2026-07-26", "0.17", "FY2026 Q2"), fin("fcf_margin", "2026-07-26", "1.56", "FY2026 Q2")];
+    const t = metricTable(rows, RATIOS, "ttm", "fiscal", BANK_METRICS);
+    expect(t.rows.map((r) => r.metric)).toEqual(["gross_margin", "operating_margin", "fcf_margin", "roe", "debt_to_equity", "current_ratio"]);
+    // a figure on file doesn't change what it reads: it moves to the hover
+    const fcf = t.rows.find((r) => r.metric === "fcf_margin")!;
+    expect(fcf.cells[0]).toMatchObject({ text: "n/a (bank)", url: "https://www.sec.gov/x/" });
+    expect(fcf.cells[0]!.title).toContain("156.0%");
+    expect(t.rows[0]).toMatchObject({ cells: [null], blanks: [{ text: "n/a (bank)" }] });
     // not a bank: empty rows are dropped as before
-    expect(metricTable(rows, RATIOS, "ttm").rows.map((r) => r.metric)).toEqual(["roe"]);
+    expect(metricTable(rows, RATIOS, "ttm").rows.map((r) => r.metric)).toEqual(["fcf_margin", "roe"]);
+  });
+});
+
+describe("what a blank means in a period table", () => {
+  it("no data in this period is ·; a fiscal Q4's EPS is not reported, and says why", () => {
+    const rows = [
+      fin("revenue", "2025-10-26", "57", "FY2026 Q3"), fin("revenue", "2026-01-25", "68", "FY2026 Q4"),
+      fin("eps_diluted", "2025-10-26", "1.3", "FY2026 Q3"),
+      fin("cash", "2025-10-26", "0", "FY2026 Q3"),
+    ];
+    const t = metricTable(rows, [["revenue", "Revenue", "usd"], ["eps_diluted", "EPS (diluted)", "eps"], ["cash", "Cash", "usd"]], "q");
+    const eps = t.rows[1]!;
+    expect(eps.cells[1]).toBeNull();
+    expect(eps.blanks[1]).toMatchObject({ text: "—" });
+    expect(eps.blanks[1]!.title).toContain("year less nine months isn't the quarter");
+    const cash = t.rows[2]!;
+    expect(cash.blanks[1]).toMatchObject({ text: "·" });
+    // a real zero is a figure
+    expect(cash.cells[0]!.text).toBe("$0");
+  });
+
+  it("TTM keeps the per-share rows, as n/a, so they don't just vanish", () => {
+    const rows = [fin("revenue", "2026-07-26", "302", "FY2027 Q2")];
+    const t = metricTable(rows, [["revenue", "Revenue", "usd"], ["eps_diluted", "EPS (diluted)", "eps"]], "ttm");
+    expect(t.rows.map((r) => r.metric)).toEqual(["revenue", "eps_diluted"]);
+    expect(t.rows[1]!.blanks[0]).toMatchObject({ text: "n/a" });
+    expect(t.rows[1]!.blanks[0]!.title).toContain("don't add across quarters");
+  });
+
+  it("Annual takes EPS from the 10-K, in the column of the year it ends, a day's difference allowed", () => {
+    const ttm = [fin("revenue", "2026-01-25", "216", "FY2026 Q4"), fin("revenue", "2025-01-26", "130", "FY2025 Q4")];
+    const annual = [
+      fin("eps_diluted", "2026-01-26", "4.90", "", { fiscal_period: null }),
+      fin("eps_diluted", "2019-01-27", "6.63", "", { fiscal_period: null }), // no such column
+    ];
+    const t = metricTable(withAnnualPerShare(ttm, annual, "fiscal"), [["revenue", "Revenue", "usd"], ["eps_diluted", "EPS (diluted)", "eps"]], "a");
+    expect(t.columns.map((c) => c.label)).toEqual(["FY2025", "FY2026"]);
+    expect(t.rows[1]!.cells.map((c) => c?.text ?? null)).toEqual([null, "$4.90"]);
+  });
+
+  it("a ratio on negative equity reads n/m, not as a gap, and a ratio the API calls n/m keeps its figure in the hover", () => {
+    const rows = [
+      { ...fin("debt_to_equity", "2026-04-26", "563.3", "FY2027 Q1"), not_meaningful: "debt is over 100 times equity, so equity is close to zero" },
+      fin("stockholders_equity", "2026-04-26", "6700000", "FY2027 Q1"),
+      fin("stockholders_equity", "2026-07-26", "-5000000", "FY2027 Q2"),
+      fin("gross_margin", "2026-07-26", "0.7", "FY2027 Q2"),
+    ];
+    // the API's not_meaningful_periods says so (migration 035); the table doesn't read equity itself
+    const said = [{ metric: "debt_to_equity", period_end: "2026-07-26", reason: "stockholders' equity is negative" }];
+    const t = metricTable(rows, RATIOS, "ttm", "fiscal", [], undefined, said);
+    const de = t.rows.find((r) => r.metric === "debt_to_equity")!;
+    expect(de.cells[0]).toMatchObject({ text: "n/m" });
+    expect(de.cells[0]!.title).toContain("over 100 times equity");
+    expect(de.cells[0]!.title).toContain("563.30x");
+    expect(de.cells[1]).toMatchObject({ text: "n/m" });
+    expect(de.cells[1]!.title).toContain("equity is negative at Jul 26, 2026");
+    // an older API, which doesn't say: a gap, as any other, never a rule re-derived here
+    const older = metricTable(rows, RATIOS, "ttm").rows.find((r) => r.metric === "debt_to_equity")!;
+    expect(older.cells[1]).toBeNull();
+  });
+});
+
+describe("segment shares", () => {
+  // NVIDIA's FY2027 Q2, as filed: Data Center is Hyperscale + AI Clouds, and with Edge is revenue
+  const row = (member: string, label: string, value: string): SegmentRow => ({
+    axis: "product_service", member, member_label: label, member_aliases: [], metric: "revenue", period_start: null,
+    period_end: "2026-07-26", fiscal_period: null, calendar_period: null, value, unit: "USD", value_source: "reported",
+    citation: { accession_no: ACC, form: "10-Q", filed: "2026-08-26", xbrl_tag: "Revenues", xbrl_axis: "srt:ProductOrServiceAxis",
+      xbrl_member: member, source_accessions: null, filing_url: null },
+    freshness: { filed: "", ingested_at: "" },
+  });
+  const NVDA_ROWS = [
+    row("nvda:DataCenterMember", "Data Center", "89023000000"),
+    row("nvda:HyperscaleMember", "Hyperscale", "48710000000"),
+    row("nvda:AICloudsMember", "AI Clouds", "40313000000"),
+    row("nvda:EdgeComputingMember", "Edge Computing", "7198000000"),
+  ];
+  const REVENUE = [fin("revenue", "2026-07-26", "96221000000", "FY2027 Q2")];
+
+  it("are of consolidated revenue, so a parent beside its children reads its true share", () => {
+    const [t] = segmentTables(NVDA_ROWS, REVENUE);
+    expect(t!.shareOf).toBe("consolidated");
+    expect(t!.rows.find((r) => r.label === "Data Center")!.share).toBeCloseTo(0.9252, 3);
+    expect(t!.rows.find((r) => r.label === "Hyperscale")!.share).toBeCloseTo(0.5062, 3);
+    expect(t!.overlapNote).toContain("Hyperscale, AI Clouds are part of another line");
+    expect(t!.rows.filter((r) => r.overlaps).map((r) => r.label)).toEqual(["Hyperscale", "AI Clouds"]);
+  });
+
+  it("two cuts of the same revenue: Vertiv's Products read 84.3%, and the larger cut is the one kept", () => {
+    const [t] = segmentTables([
+      row("vrt:Products", "Products", "3637100000"),
+      row("vrt:ProductExSpares", "Product excluding Spares", "3593800000"),
+      row("vrt:ServicesAndSpares", "Services and Spares", "719000000"),
+      row("vrt:Services", "Services", "675700000"),
+    ], [fin("revenue", "2026-07-26", "4312800000", "FY2026 Q3")]);
+    expect(t!.rows.find((r) => r.label === "Products")!.share).toBeCloseTo(0.8433, 3);
+    expect(t!.rows.filter((r) => r.overlaps).map((r) => r.label)).toEqual(["Product excluding Spares", "Services and Spares"]);
+  });
+
+  it("without revenue: of the members' sum if nothing shows they overlap, and none if something does", () => {
+    const [plain] = segmentTables([row("x:A", "A", "75"), row("x:B", "B", "25")]);
+    expect(plain!.shareOf).toBe("members");
+    expect(plain!.rows[0]!.share).toBeCloseTo(0.75);
+  });
+
+  it("a member bigger than reported revenue isn't a share: the two aren't on one basis", () => {
+    const [t] = segmentTables([row("x:A", "A", "900000000"), row("x:B", "B", "20000000")], [fin("revenue", "2026-07-26", "114000000", "FY2026 Q3")]);
+    expect(t!.rows[0]!.shareTooBig).toBe(true);
+    expect(t!.rows[1]!.shareTooBig).toBe(false);
+  });
+});
+
+describe("the Filings tab's headings and notes", () => {
+  it("names a filing's fiscal year as gold does, 52/53-week ends included", () => {
+    expect(fiscalYear("2026-07-26", "0126")).toBe(2027); // Nvidia's FY2027 Q2
+    expect(fiscalYear("2026-01-25", "0126")).toBe(2026);
+    expect(fiscalYear("2024-09-01", "0831")).toBe(2024); // Costco's year, a day past the nominal end
+    expect(fiscalYear("2024-11-24", "0831")).toBe(2025);
+    expect(fiscalYear("2026-12-31", "1231")).toBe(2026);
+    expect(fiscalYear("2027-01-02", "1231")).toBe(2026); // a 53-week December year
+  });
+
+  it("heads a newest-first page with years that only move back", () => {
+    const f = (form: string, filed: string, period_of_report: string | null = null) => ({ form, filed, period_of_report });
+    const page = [
+      f("10-Q", "2026-05-20", "2026-04-26"), // FY2027
+      f("8-K", "2026-03-02", "2026-03-02"), // FY2027
+      f("10-K", "2026-02-25", "2026-01-25"), // FY2026
+      f("8-K", "2026-02-25", "2026-02-25"), // dated FY2027, but the page is past it: stays under FY2026
+      f("4", "2026-01-30", "2020-01-01"), // not a reporting period: the date filed, FY2027, stays too
+      f("10-Q", "2025-11-19", "2025-10-26"), // FY2026
+      f("10-K", "2025-02-26", "2025-01-26"), // FY2025
+    ];
+    expect(filingHeadings(page, "0125")).toEqual(["FY2027", null, "FY2026", null, null, null, "FY2025"]);
+    expect(filingHeadings(page.slice(5), null)).toEqual(["Filed in 2025", null]);
+    expect(filingHeadings([], "0125")).toEqual([]);
+  });
+
+  it("says 'not parsed' only where a parsed filing was to be expected", () => {
+    expect(parsedNote({ form: "4", sections: 0 })).toBeNull();
+    expect(parsedNote({ form: "144", sections: null })).toBeNull();
+    expect(parsedNote({ form: "10-Q", sections: 0 })).toBe("not parsed yet");
+    expect(parsedNote({ form: "8-K", sections: null })).toBe("index only");
+    expect(parsedNote({ form: "10-K", sections: 12 })).toBe("12 sections");
+  });
+});
+
+describe("what a statement's own lines can't say", () => {
+  const row = (metric: string, value: string, extra: Partial<ReturnType<typeof fin>> = {}) =>
+    fin(metric, "2026-09-30", value, "FY2026 Q3", extra);
+  const table = (rows: ReturnType<typeof fin>[], kind: "is" | "bs") =>
+    withBridges(metricTable(rows, STATEMENTS[kind].rows, "q"), rows, kind);
+
+  it("bridges operating to net income where no pretax line is tagged (Guerrilla RF)", () => {
+    const t = table([row("operating_income", "2428257"), row("interest_expense", "186257"), row("net_income", "-3731159")], "is");
+    const bridge = t.rows.find((r) => r.metric === "other_items")!;
+    expect(bridge.label).toBe("Other items, net");
+    expect(bridge.cells[0]).toMatchObject({ text: "-$6.16M", derived: true, url: null });
+    expect(bridge.cells[0]!.title).toContain("where the filing tags no pretax income");
+    expect(t.rows.map((r) => r.metric)).toEqual(["operating_income", "interest_expense", "other_items", "net_income"]);
+  });
+
+  it("adds no bridge where a pretax line says it all", () => {
+    const t = table([row("operating_income", "100"), row("pretax_income", "90"), row("net_income", "70")], "is");
+    expect(t.rows.some((r) => r.metric === "other_items")).toBe(false);
+  });
+
+  it("says a bank's interest expense is already out of revenue", () => {
+    const tag = { citation: { ...fin("revenue", "2026-09-30", "1", "FY2026 Q3").citation, xbrl_tag: "us-gaap:RevenuesNetOfInterestExpense" } };
+    const t = table([row("revenue", "50170000000", tag), row("interest_expense", "26020000000")], "is");
+    expect(t.rows.find((r) => r.metric === "interest_expense")!.label).toBe("Interest expense (already taken out of revenue)");
+    const sum = { citation: { ...tag.citation, xbrl_tag: "us-gaap:InterestIncomeExpenseNet+NoninterestIncome" } };
+    const t2 = table([row("revenue", "2791000000", sum), row("interest_expense", "1320000000")], "is");
+    expect(t2.rows.find((r) => r.metric === "interest_expense")!.label).toContain("already taken out");
+    const t3 = table([row("revenue", "100"), row("interest_expense", "5")], "is");
+    expect(t3.rows.find((r) => r.metric === "interest_expense")!.label).toBe("Interest expense");
+  });
+
+  it("shows what assets less liabilities and equity leave, when it's real (Guerrilla RF's $20M)", () => {
+    const t = table([row("total_assets", "23327718"), row("total_liabilities", "25742723"), row("stockholders_equity", "-22448560")], "bs");
+    const gap = t.rows.find((r) => r.metric === "other_equity")!;
+    expect(gap.label).toBe("Not itemised");
+    expect(gap.cells[0]).toMatchObject({ text: "$20.03M", derived: true });
+    expect(gap.cells[0]!.title).toContain("redeemable or mezzanine equity");
+    const tied = table([row("total_assets", "100"), row("total_liabilities", "60"), row("stockholders_equity", "40")], "bs");
+    expect(tied.rows.some((r) => r.metric === "other_equity")).toBe(false);
+  });
+
+  it("never puts a computed row in the CSV", () => {
+    const rows = [row("operating_income", "100"), row("net_income", "70")];
+    const csv = financialsCsv(rows, table(rows, "is"), "quarter");
+    expect(csv).not.toContain("other_items");
+    expect(csv).toContain("net_income");
   });
 });

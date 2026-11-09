@@ -13,6 +13,7 @@ const ME = {
   companies: [{ company_id: NVDA, name: "Nvidia", industry: null, tiers: ["financials"] }],
 };
 const EDGAR = "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000075/";
+const APPLE = "0000320193";
 const ANSWER = {
   text: `Revenue was $46.74B in the quarter (${ACC}).`,
   stop: "end_turn",
@@ -32,8 +33,15 @@ function respond(url: string, init?: RequestInit): Response {
   if (path.endsWith("/v1/demo/users")) return Response.json({ users: ["alice", "bob"] });
   if (path.endsWith("/v1/demo/token")) return Response.json({ token: "t", expires_in: 3600 });
   if (path.endsWith("/v1/me")) return Response.json(ME);
+  if (/\/v1\/watchlist\/\d+$/.test(path)) return Response.json({ company_id: path.split("/").at(-1), removed: true, added: true });
   if (path.endsWith("/v1/watchlist")) {
     return Response.json({ as_of: "2026-10-21T12:00:00Z", columns: [], expected_method: "", companies: [entry(), TESLA] });
+  }
+  if (path.endsWith("/v1/status")) {
+    return Response.json({ status: "ok", as_of: "", last_accepted_at: null, last_ingested_at: new Date().toISOString() });
+  }
+  if (path.endsWith("/api/agent/v1/allowance")) {
+    return Response.json({ per_hour: 30, network_per_hour: 40, left_this_hour: 28, paused: false, per_day: 1000, left_today: 998, report_questions: 3, check_questions: 4 });
   }
   if (path.endsWith("/v1/filings/latest")) {
     return Response.json({ as_of: "", filings: [feedFiling({ ingested_at: new Date().toISOString() })] });
@@ -59,6 +67,14 @@ function respond(url: string, init?: RequestInit): Response {
     const q = new URL(url, "http://x").searchParams.get("q");
     const ids: Record<string, string> = { NVDA, TSLA };
     return Response.json({ results: q && ids[q] ? [{ company_id: ids[q], name: q, matched_on: "ticker", matched_alias: q, is_current: true, access: [] }] : [] });
+  }
+  if (path.endsWith("/v1/screener")) {
+    // identity for any id asked (companies/directory.ts); Apple is on no list of this user's
+    const ids = new URL(url, "http://x").searchParams.getAll("company_id");
+    return Response.json({ as_of: "", total: ids.length, limit: 50, offset: 0, sort: "name", columns: [], rows: ids.map((id) => ({
+      company_id: id, name: id === APPLE ? "Apple Inc." : "Nvidia", tickers: [id === APPLE ? "AAPL" : "NVDA"], exchanges: [], sic: null,
+      industry: null, fiscal_year_end: null, filer_category: null, filer_categories: [], state_of_incorporation: null,
+      values: {}, sources: {}, access: [] })) });
   }
   if (path.endsWith("/api/agent/v1/ask")) {
     asked.push(JSON.parse(String(init?.body)));
@@ -105,7 +121,8 @@ beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => respond(url, init)));
   window.localStorage.clear();
-  // wide enough for the drawer to open beside the page by default
+  // a returning user who keeps the assistant open (a first visit starts closed: its own test)
+  window.localStorage.setItem("tributary.assistant", "open");
   Object.defineProperty(window, "innerWidth", { value: 1440, configurable: true });
   forgetVisits();
   asked.length = 0;
@@ -142,7 +159,10 @@ describe("Home", () => {
     expect(strip).toContain("2 companies");
     expect(strip).toContain("NVDA 10-Q ~Nov 19");
     expect(strip).toContain("+69.0%");
-    expect(strip).toContain("Live");
+    expect(strip).toContain("Newest filing listed");
+    expect(strip).toContain("just now");
+    expect(strip).toContain("newest filing text parsed just now");
+    expect(strip).not.toContain("Live");
     expect($(".feed")?.textContent).toContain("Nvidia");
     const feed = [...container.querySelectorAll(".feed li")];
     // Tesla's 8-K from the public index: listed, opened on its Filings tab (no grant to read it)
@@ -163,7 +183,7 @@ describe("Home", () => {
   it("lists recent data notes for companies with financials, linked to their Data notes tab", async () => {
     await render();
     const card = [...container.querySelectorAll("section.card")].find((c) => c.querySelector("h2")?.textContent === "Recent data notes for your companies")!;
-    expect(card.querySelector(".note")?.textContent).toContain("Nvidia · Revenue restated · Feb 26, 2026");
+    expect(card.querySelector(".note")?.textContent).toContain("Nvidia (NVDA) · Revenue restated · Feb 26, 2026");
     expect(card.querySelector(".note a")?.getAttribute("href")).toBe(`#/company/${NVDA}/notes`);
     // alice reads NVDA's financials, not its filings: the filing opens on EDGAR
     expect(card.querySelector(".note-f a")?.getAttribute("href")).toBe(EDGAR);
@@ -177,6 +197,111 @@ describe("Home", () => {
     const calls = vi.mocked(fetch).mock.calls.filter(([, init]) => init?.method === "DELETE");
     expect(String(calls[0]?.[0])).toBe(`/api/query/v1/watchlist/${TSLA}`);
   });
+
+  it("offers to undo a removal, which puts the company back", async () => {
+    await render();
+    await act(async () => container.querySelector<HTMLButtonElement>(`button[aria-label="Remove Tesla from watchlist"]`)!.click());
+    await settle();
+    const note = $(".undo-note")!;
+    expect(note.textContent).toContain("Removed Tesla from your watchlist");
+    await act(async () => note.querySelector("button")!.click());
+    await settle();
+    const puts = vi.mocked(fetch).mock.calls.filter(([, init]) => init?.method === "PUT").map(([u]) => String(u));
+    expect(puts).toContain(`/api/query/v1/watchlist/${TSLA}`);
+    expect($(".undo-note")).toBeNull();
+  });
+
+  it("doesn't say 0 new filings while they're still loading (L6)", async () => {
+    vi.mocked(fetch).mockImplementation(async (url: string | URL | Request, init?: RequestInit) =>
+      String(url).includes("/v1/filings/latest") ? new Promise<Response>(() => undefined) : respond(String(url), init));
+    await render();
+    const tile = [...container.querySelectorAll(".status-strip .k")].find((k) => k.textContent?.startsWith("New "))!;
+    const v = tile.parentElement!.querySelector(".v")!;
+    expect(v.textContent).toBe("…");
+    expect(tile.parentElement!.textContent).not.toContain("0 filings");
+  });
+
+  it("says the same thing about new filings wherever it counts them", async () => {
+    await render();
+    const badge = $(".nav .cnt.new")!;
+    const tile = [...container.querySelectorAll(".status-strip .k")].find((k) => k.textContent?.startsWith("New "))!;
+    const label = tile.textContent!.replace(/^New /, "");
+    expect(badge.getAttribute("title")).toContain(label);
+    expect(label).toBe("in the last 7 days"); // a first visit in this browser, not "your last visit"
+    expect(badge.getAttribute("title")).toContain(`${badge.textContent} new`);
+    expect(tile.parentElement!.querySelector(".v")?.textContent).toContain(badge.textContent!);
+  });
+
+  it("counts every readable company in the feed's heading with the catalog open", async () => {
+    vi.mocked(fetch).mockImplementation(async (url: string | URL | Request, init?: RequestInit) =>
+      String(url).endsWith("/v1/me")
+        ? Response.json({ ...ME, companies: [], catalog: { public: true, tiers: ["financials", "filings"], companies: 6039 } })
+        : respond(String(url), init));
+    await render();
+    expect(container.textContent).toContain("New filings for the 6,039 companies you can read");
+  });
+});
+
+describe("new chart", () => {
+  it("Home's New chart starts empty, and the draft it replaced can be restored", async () => {
+    await render("#/chart");
+    const box = () => container.querySelector<HTMLInputElement>('input[aria-label="Chart title"]')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(box(), "My draft");
+      box().dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    window.location.hash = "#/";
+    await settle();
+    await act(async () => [...container.querySelectorAll("button")].find((b) => b.textContent?.trim() === "New chart")!.click());
+    await settle();
+    expect($("h1")?.textContent).toBe("Chart builder");
+    expect(box().value).toBe("");
+    const restore = [...container.querySelectorAll(".undo-note button")].find((b) => b.textContent === "Restore the previous draft")!;
+    await act(async () => (restore as HTMLElement).click());
+    await settle();
+    expect(box().value).toBe("My draft");
+    expect($(".undo-note")).toBeNull();
+    // the builder's own New: the same thing, offered there too
+    await act(async () => [...container.querySelectorAll("button")].find((b) => b.textContent?.trim() === "New chart")!.click());
+    await settle();
+    expect(box().value).toBe("");
+  });
+
+  it("a template over your layers says so, and Restore brings them back", async () => {
+    await render("#/chart");
+    const box = () => container.querySelector<HTMLInputElement>('input[aria-label="Chart title"]')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(box(), "Mine");
+      box().dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => [...container.querySelectorAll("button")].find((b) => b.textContent === "Margins")!.click());
+    await settle();
+    expect(box().value).toBe("");
+    expect($(".undo-note")?.textContent).toContain("Replaced your layers with the Margins template.");
+    await act(async () => [...container.querySelectorAll<HTMLElement>(".undo-note button")].find((b) => b.textContent === "Restore the previous draft")!.click());
+    await settle();
+    expect(box().value).toBe("Mine");
+    expect($(".undo-note")).toBeNull();
+  });
+
+  it("the nav's Chart builder still reopens the draft", async () => {
+    await render("#/chart");
+    const box = () => container.querySelector<HTMLInputElement>('input[aria-label="Chart title"]')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(box(), "Keep me");
+      box().dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    window.location.hash = "#/";
+    await settle();
+    window.location.hash = "#/chart";
+    await settle();
+    expect(box().value).toBe("Keep me");
+  });
+});
+
+it("names Settings in the breadcrumb", async () => {
+  await render("#/settings");
+  expect($(".crumb [aria-current]")?.textContent).toBe("Settings");
 });
 
 describe("navigation", () => {
@@ -196,8 +321,51 @@ describe("navigation", () => {
     expect($('.nav a[aria-current="page"]')?.textContent).toContain("Companies");
     window.location.hash = `#/company/${NVDA}`;
     await settle();
-    expect($(".crumb")?.textContent).toBe("Companies/Nvidia");
+    expect($(".crumb")?.textContent).toBe("Companies/Nvidia (NVDA)");
     expect($('.nav a[aria-current="page"]')?.textContent).toContain("Companies");
+  });
+
+  it("the browser tab says what's on screen", async () => {
+    await render("#/companies");
+    expect(document.title).toBe("Companies · Tributary");
+    window.location.hash = `#/company/${NVDA}/statements`;
+    await settle();
+    expect(document.title).toBe("Nvidia (NVDA) · Statements · Tributary");
+    window.location.hash = "#/status";
+    await settle();
+    expect(document.title).toBe("Data status · Tributary");
+  });
+
+  it("keeps the shell when a page fails to render", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.mocked(fetch).mockImplementation(async (url, init) => {
+      if (new URL(String(url), "http://x").pathname.endsWith("/v1/data-notes")) return Response.json({ notes: "not a list", checked_at: null, companies: 1 });
+      return respond(String(url), init);
+    });
+    await render();
+    expect($(".content [role=alert] h1")?.textContent).toBe("This page didn't load");
+    expect($(".side")).not.toBeNull();
+    window.location.hash = "#/about";
+    await settle();
+    expect($(".content h1")?.textContent).toBe("What Tributary covers");
+    vi.restoreAllMocks();
+  });
+
+  it("shows no demo badge on a real account or a persona", async () => {
+    await render();
+    expect($(".brand .env")).toBeNull();
+    expect($(".side .fresh")?.textContent).toContain("Signed in as alice");
+  });
+
+  it("names a company it knows only by id: breadcrumb and assistant, never the CIK", async () => {
+    await render(`#/company/${APPLE}`);
+    // the watchlist and /v1/me don't hold Apple: the name comes from the shared directory
+    await settle();
+    expect($(".crumb")?.textContent).toBe("Companies/Apple (AAPL)");
+    expect(chip()).toBe("Apple (AAPL) · Overview");
+    expect($(".top")?.textContent).not.toContain(APPLE);
+    expect($(".ai")?.textContent).not.toContain(APPLE);
+    expect($(".ai-s")?.textContent).toContain("Apple");
   });
 
   it("? shows the keyboard shortcut sheet; Escape closes it and focus returns", async () => {
@@ -317,7 +485,7 @@ describe("assistant drawer", () => {
     expect(drawer()).not.toBeNull();
     await key("j", { ctrlKey: true });
     expect(drawer()).toBeNull();
-    expect($(".fab")).not.toBeNull();
+    expect(window.localStorage.getItem("tributary.assistant")).toBe("closed");
     await key("/", {}, document.body);
     expect(drawer()).not.toBeNull();
     expect(document.activeElement).toBe($("aside.ai-drawer textarea"));
@@ -329,17 +497,54 @@ describe("assistant drawer", () => {
     expect($("aside.ai-page")).not.toBeNull();
   });
 
+  it("starts closed on a first visit, whatever the width, with one way in that covers nothing", async () => {
+    window.localStorage.clear();
+    await render();
+    expect(drawer()).toBeNull();
+    // no floating button over the page: the top bar's Assistant is the way in
+    expect($(".fab")).toBeNull();
+    const open = [...container.querySelectorAll<HTMLButtonElement>(".top button")].find((b) => b.textContent?.includes("Assistant"))!;
+    expect(open.getAttribute("aria-pressed")).toBe("false");
+    act(() => open.click());
+    await settle();
+    expect(drawer()).not.toBeNull();
+    expect(window.localStorage.getItem("tributary.assistant")).toBe("open");
+  });
+
+  it("shows the questions left before one is spent, and looks again after one is", async () => {
+    await render();
+    await settle();
+    expect($(".ai-meter")?.textContent).toBe("28 of 30 questions left this hour · 998 of 1,000 today");
+    expect($(".ai-meter")?.getAttribute("title")).toMatch(/30 questions an hour.*1,000 a day.*midnight UTC/);
+    const asks = () => vi.mocked(fetch).mock.calls.filter(([u]) => String(u).endsWith("/v1/allowance")).length;
+    const before = asks();
+    await act(async () => container.querySelector<HTMLButtonElement>(".ai-s button")!.click());
+    await settle();
+    expect(asks()).toBe(before + 1);
+  });
+
+  it("a question a page wrote for you leaves when you do, unless you edited it", async () => {
+    await render(`#/company/${NVDA}`);
+    await act(async () => [...container.querySelectorAll<HTMLButtonElement>(".co-head button")].find((b) => b.textContent === "Ask")!.click());
+    await settle();
+    const box = () => $("textarea") as HTMLTextAreaElement;
+    expect(box().value).toContain("latest quarter");
+    window.location.hash = "#/companies";
+    await settle();
+    expect(box().value).toBe("");
+  });
+
   it("follows the page: context chip and suggestions", async () => {
     await render();
     expect(chip()).toBe("Home · watchlist");
     window.location.hash = `#/company/${NVDA}`;
     await settle();
-    expect(chip()).toBe("Nvidia · Overview");
+    expect(chip()).toBe("Nvidia (NVDA) · Overview");
     const prompts = () => [...container.querySelectorAll(".ai-s button")].map((b) => b.textContent);
     expect(prompts()).toContain("Summarize Nvidia's latest quarter.");
     window.location.hash = `#/company/${NVDA}/ratios`;
     await settle();
-    expect(chip()).toBe("Nvidia · Ratios");
+    expect(chip()).toBe("Nvidia (NVDA) · Ratios");
     expect(prompts()).toContain("Is Nvidia's leverage rising or falling?");
   });
 
@@ -348,13 +553,23 @@ describe("assistant drawer", () => {
     const suggestion = container.querySelector<HTMLButtonElement>(".ai-s button")!;
     await act(async () => suggestion.click());
     await settle();
-    expect(asked[0]?.question).toBe("What did my companies file recently?");
+    expect(asked[0]?.question).toBe("What did Nvidia and Tesla file recently?");
     const link = container.querySelector<HTMLAnchorElement>(".ai-m .answer a.accession");
     expect(link?.href).toBe(EDGAR);
-    expect($(".ai-m .sources")?.textContent).toContain(ACC);
+    // two links that say which is which: the section here, the filing on EDGAR
+    const edgar = $(".ai-m .sources a.edgar-link") as HTMLAnchorElement;
+    expect(edgar.textContent).toBe("EDGAR ↗");
+    expect(edgar.href).toBe(EDGAR);
+    expect(edgar.title).toContain(ACC);
     // a section the tools returned opens the reader there; anything else is dropped
     const reader = [...container.querySelectorAll<HTMLAnchorElement>(".ai-m .sources a.reader-link")];
     expect(reader.map((a) => a.getAttribute("href"))).toEqual([`#/filing/${NVDA}/${ACC}/I-2`]);
+    expect(reader[0]!.textContent).toBe("Read MD&A");
+    // the answer's own footer is about the answer: no model name, tokens or cost until asked for
+    const meta = $(".ai-m .meta") as HTMLElement;
+    expect(meta.textContent).toContain("Newest filing cited: Aug 26, 2026");
+    expect(meta.querySelector("details:not([open]) summary")?.textContent).toBe("Details");
+    expect(meta.querySelector("details")?.textContent).toContain("claude-test");
   });
 });
 
@@ -365,9 +580,9 @@ it("a named user keeps the full index: other companies' pages, search and unlabe
   expect(container.textContent).not.toContain("in this demo");
   window.location.hash = "#/ask";
   await settle();
-  const items = [...container.querySelectorAll(".ai-s > *")].map((e) => e.textContent);
-  expect(items).toContain("I'm bob. Show me Microsoft's financials.");
-  expect(items).not.toContain("Try to break it:");
+  // no test strings among the prompts: the adversarial suite has them, the product doesn't
+  const items = [...container.querySelectorAll(".ai-s > *")].map((e) => e.textContent).join(" ");
+  expect(items).not.toMatch(/I'm bob|SYSTEM:|Try to break it/);
   await key("k", { ctrlKey: true });
   const input = $(".pal input") as HTMLInputElement;
   await act(async () => {
@@ -416,6 +631,29 @@ it("switches theme and remembers it per user", async () => {
   await act(async () => button.click());
   expect(document.documentElement.dataset.theme).toBe("light");
   expect(window.localStorage.getItem("tributary.theme.alice")).toBe("light");
+});
+
+describe("the sidebar", () => {
+  it("keeps the logo and screens fixed, the lists scrolling and the footer whole", async () => {
+    await render();
+    const part = (s: string) => $(`.side > ${s}`)!;
+    expect(part(".side-top").querySelector("nav.nav")).not.toBeNull();
+    expect(part(".side-top").querySelector(".brand")).not.toBeNull();
+    expect(part(".side-lists").querySelector(".wl")).not.toBeNull();
+    expect(part(".side-foot").querySelector(".fresh")).not.toBeNull();
+    expect(part(".side-foot").querySelector(".cover-link")).not.toBeNull();
+    // nothing outside those three: nothing else scrolls with the lists
+    expect($(".side")!.children.length).toBe(3);
+  });
+
+  it("opens at the top of its lists, wherever they were left", async () => {
+    await render();
+    const lists = $(".side-lists")!;
+    lists.scrollTop = 400;
+    expect(lists.scrollTop).toBe(400);
+    await act(async () => $('button[aria-label="Menu"]')!.click());
+    expect(lists.scrollTop).toBe(0);
+  });
 });
 
 describe("narrow screens", () => {

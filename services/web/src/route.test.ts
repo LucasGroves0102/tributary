@@ -95,6 +95,7 @@ it("round-trips analysis routes and refuses odd ids and steps", () => {
     { view: "analysis", projectId: id, step: "model", itemId: item },
     { view: "analysis", projectId: id, step: "thesis", itemId: item },
     { view: "analysis", projectId: id, step: "monitor" },
+    { view: "analysis", start: "0001045810" },
   ];
   for (const r of routes) expect(parse(href(r))).toEqual(r);
   expect(href({ view: "analysis", projectId: id, step: "numbers" })).toBe(`#/analysis/${id}/numbers`);
@@ -102,5 +103,31 @@ it("round-trips analysis routes and refuses odd ids and steps", () => {
   expect(parse(`#/analysis/${id}/numbers/${item}`)).toEqual({ view: "analysis", projectId: id, step: "numbers" });
   expect(parse(`#/analysis/${id}/model/<img>`)).toEqual({ view: "analysis", projectId: id, step: "model" });
   expect(parse("#/analysis/..%2F..%2Fadmin")).toEqual({ view: "analysis" });
+  // L5: a company page starts an analysis of itself; anything but a CIK is no company
+  expect(href({ view: "analysis", start: "0001045810" })).toBe("#/analysis?start=0001045810");
+  expect(parse("#/analysis?start=NVDA")).toEqual({ view: "analysis" });
   expect(href({ view: "analysis", projectId: id, step: "numbers", itemId: item })).toBe(`#/analysis/${id}/numbers`);
+});
+
+it("round-trips the Statements tab's choices, dropping defaults and anything unknown", () => {
+  const id = "0001045810";
+  const views: Route[] = [
+    { view: "company", companyId: id, tab: "statements" },
+    { view: "company", companyId: id, tab: "statements", statements: { kind: "bs" } },
+    { view: "company", companyId: id, tab: "statements", statements: { kind: "cf", period: "ttm", basis: "calendar", range: "max" } },
+    { view: "company", companyId: id, tab: "statements", statements: { period: "a" } },
+  ];
+  for (const r of views) expect(parse(href(r))).toEqual(r);
+  expect(href(views[2]!)).toBe(`#/company/${id}/statements?kind=cf&period=ttm&basis=calendar&range=max`);
+  expect(parse(`#/company/${id}/statements?kind=is&period=q&basis=fiscal&range=8q`)).toEqual({ view: "company", companyId: id, tab: "statements" });
+  expect(parse(`#/company/${id}/statements?kind=drop&period=weekly&range=99y`)).toEqual({ view: "company", companyId: id, tab: "statements" });
+  // only that tab reads them
+  expect(parse(`#/company/${id}/filings?kind=bs`)).toEqual({ view: "company", companyId: id, tab: "filings" });
+  expect(href({ view: "company", companyId: id, tab: "filings", statements: { kind: "bs" } })).toBe(`#/company/${id}/filings`);
+});
+
+it("keeps a known data check in the screener's address and drops anything else", () => {
+  expect(parse("#/companies?issue=impossible_value")).toEqual({ view: "companies", screen: { issue: "impossible_value" } });
+  expect(href({ view: "companies", screen: { issue: "impossible_value" } })).toBe("#/companies?issue=impossible_value");
+  expect(parse("#/companies?issue=drop_table")).toEqual({ view: "companies" });
 });

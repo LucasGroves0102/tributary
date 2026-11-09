@@ -1,14 +1,17 @@
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { ApiError, demoUsers, login, me as fetchMe, watchlistCsv } from "./api";
 import { AssistantPanel } from "./assistant/AssistantPanel";
 import { metricLabel } from "./chart/metrics";
-import { companiesChart, companyChart, type Transform } from "./chart/model";
+import { chartTitle, companiesChart, companyChart, emptyChart, MAX_COMPANY_LINES, type ChartState, type Transform } from "./chart/model";
 import { useChart } from "./chart/useChart";
+import { directoryFor, DirectoryContext, UNNAMED } from "./companies/directory";
 import { uiContext } from "./assistant/actions";
 import { pageContext } from "./assistant/context";
+import { AllowanceContext, useAllowance } from "./assistant/useAllowance";
 import { useAssistant } from "./assistant/useAssistant";
 import { useUiActions } from "./assistant/useUiActions";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { NotInDemo } from "./components/NotInDemo";
 import { Palette, WATCH_PREFIX, type PaletteActions, type PaletteCompany } from "./components/Palette";
 import { ShortcutSheet } from "./components/ShortcutSheet";
@@ -18,6 +21,7 @@ import { TopBar } from "./components/TopBar";
 import { download } from "./download";
 import { lastIngested, watchColumns } from "./home/data";
 import { RecentNotes } from "./home/RecentNotes";
+import { useFeedStatus } from "./home/useFeedStatus";
 import { useWorkspace } from "./home/useWorkspace";
 import { Home } from "./pages/Home";
 import {
@@ -42,7 +46,7 @@ import { go, href, parse, useRoute } from "./route";
 import { resolveTicker } from "./palette/commands";
 import { useShortcuts } from "./shortcuts";
 import { inScope, ScopeContext, scopeOf } from "./scope";
-import { catalogOpen, readableFor } from "./access";
+import { accountName, catalogOpen, readableFor, readableTotal } from "./access";
 import {
   clearFragment,
   clearSession,
@@ -56,6 +60,7 @@ import {
 import { load, save } from "./storage";
 import { useReportWriter } from "./reports/useReportWriter";
 import { useTheme } from "./theme";
+import { screenTitle } from "./title";
 import { ColumnPicker, HomeLayoutEditor } from "./views/Editors";
 import { columnSpecs, DEFAULT_SCREENER_COLUMNS, DEFAULT_WATCHLIST_COLUMNS } from "./views/model";
 import { useViews } from "./views/useViews";
@@ -68,7 +73,6 @@ import { useSaved } from "./workspaces/useSaved";
 import { WorkspaceTree } from "./workspaces/WorkspaceTree";
 
 const DRAWER_KEY = "tributary.assistant";
-const DRAWER_FITS_PX = 1200;
 
 const SANDBOX_EXPIRED = "Your demo sandbox expired and was reset. Start a new one.";
 const GITHUB_EXPIRED = "Your sign-in expired. Sign in with GitHub again.";
@@ -109,10 +113,9 @@ export function App(props: Props = {}) {
   // is closed; with it open every company is readable, so nothing is scoped
   const open = !!me?.catalog?.public;
   const scope = useMemo(() => (open ? null : scopeOf(session)), [session, open]);
-  // open by default where it fits beside the page; below that it floats over it (styles.css)
-  const [drawerOpen, setDrawerOpen] = useState(
-    () => (load(DRAWER_KEY) ?? (window.innerWidth > DRAWER_FITS_PX ? "open" : "closed")) === "open",
-  );
+  // closed until asked for: a first visit sees the page at full width, and the top bar's Assistant
+  // is one click (or Ctrl J) away. The choice is remembered per browser.
+  const [drawerOpen, setDrawerOpen] = useState(() => load(DRAWER_KEY) === "open");
   const [palette, setPalette] = useState<string | null>(null);
   const [help, setHelp] = useState(false);
   const [focusTick, setFocusTick] = useState(0);
@@ -153,6 +156,12 @@ export function App(props: Props = {}) {
     if (views.error) setError(views.error);
   }, [views.error]);
   const [chart, setChart] = useChart(user);
+  const [replacedChart, setReplacedChart] = useState<{ state: ChartState; why: string } | null>(null);
+  const [chartNotice, setChartNotice] = useState<string | null>(null);
+  useEffect(() => {
+    setReplacedChart(null); // never another user's draft
+    setChartNotice(null);
+  }, [user]);
   // read when the assistant sends a question or applies an action, so always the latest
   const chartRef = useRef(chart);
   chartRef.current = chart;
@@ -173,6 +182,13 @@ export function App(props: Props = {}) {
     onAction: uiActions.apply,
   });
 
+  const allowanceState = useAllowance(token, assistant.busy);
+  const { allowance, refresh: refreshAllowance } = allowanceState;
+  // a report ran: it counted, several times over
+  useEffect(() => {
+    if (writer.run.status !== "writing") refreshAllowance();
+  }, [writer.run.status, refreshAllowance]);
+
   useEffect(() => {
     if (!picker) return;
     demoUsers()
@@ -180,7 +196,10 @@ export function App(props: Props = {}) {
         setUsers(u);
         setUser(u[0] ?? null);
       })
-      .catch(() => setError("Can't reach the Query API."));
+      // only a failure that clears by itself says to try again soon (a 404: no demo users here)
+      .catch((e) => setError(e instanceof ApiError && e.status < 500
+        ? "Signing in as a demo user isn't available on this server."
+        : "Can't reach the server. Try again in a moment."));
   }, [picker]);
 
   const signIn = useCallback((s: Session, m: Me | null) => {
@@ -290,14 +309,39 @@ export function App(props: Props = {}) {
     setFocusTick((n) => n + 1);
   }, [route.view, setDrawer]);
 
+  // a question a page wrote for the user ("… in this 10-Q") means nothing on another page: it goes
+  // when they leave, unless they've made it their own by editing it
+  const prefilled = useRef<string | null>(null);
+  const askAbout = useCallback((q: string) => {
+    prefilled.current = q;
+    assistant.setDraft(q);
+    focusAssistant();
+  }, [assistant.setDraft, focusAssistant]);
+  useEffect(() => {
+    if (prefilled.current !== null && assistant.draft === prefilled.current) assistant.setDraft("");
+    prefilled.current = null;
+  }, [route]);
+
+  /** Anything that replaces the chart keeps the draft for one Restore, when there's work in it. */
+  const keepDraft = useCallback((why: string) => {
+    const before = chartRef.current;
+    if (before.layers.length || before.title) setReplacedChart({ state: before, why });
+    setChartNotice(null);
+  }, []);
+  const OPENED = "Opened a new chart.";
+
   /** Compare's "Chart these" and the peers tab: one line per company for a metric. */
   const chartMany = useCallback(
-    (ids: string[], metric: string, transform: Transform, title: string) => {
-      setChart((s) => companiesChart(s, ids, metric, transform, title));
+    (ids: string[], metric: string, transform: Transform) => {
+      keepDraft(OPENED);
+      setChart((s) => companiesChart(s, ids, metric, transform));
+      if (ids.length > MAX_COMPANY_LINES) {
+        setChartNotice(`Showing the first ${MAX_COMPANY_LINES} of ${ids.length} companies: a chart tells ${MAX_COMPANY_LINES} colours apart.`);
+      }
       saved.close("chart"); // a new chart, not an edit of the saved one
       go({ view: "chart" });
     },
-    [setChart, saved],
+    [setChart, saved, keepDraft],
   );
 
   /** Opens a saved item: its state on its page (the page then reads data as usual). */
@@ -309,12 +353,15 @@ export function App(props: Props = {}) {
           if (item.kind === "report" || item.kind === "thesis" || item.kind === "model") {
             return go({ view: item.kind, itemId: item.item_id });
           }
-          if (item.kind === "chart") setChart(() => restoreChartState(item.state));
+          if (item.kind === "chart") {
+            keepDraft(`Opened ${item.name}.`);
+            setChart(() => restoreChartState(item.state));
+          }
           go(itemRoute(item.kind, item.state));
         })
         .catch(() => setError("Couldn't open that item. It may have been deleted; the list is refreshed."));
     },
-    [saved, setChart],
+    [saved, setChart, keepDraft],
   );
 
   // a thesis or model of an analysis project opens inside the project (its header and steps)
@@ -357,12 +404,16 @@ export function App(props: Props = {}) {
     }
   });
 
-  const names = useMemo(() => {
-    const out = new Map<string, string>();
-    for (const r of workspace.rows) out.set(r.companyId, r.name);
-    for (const c of me?.companies ?? []) if (c.name) out.set(c.company_id, c.name);
-    return out;
-  }, [me, workspace.rows]);
+  // names for anything that holds only an id (companies/directory.ts): with the catalog open
+  // `me.companies` has only private grants, so most companies are known only by asking
+  const directory = useMemo(() => directoryFor(token), [token]);
+  const namesVersion = useSyncExternalStore(directory.subscribe, directory.snapshot);
+  useEffect(() => {
+    directory.learn([
+      ...(me?.companies ?? []).flatMap((c) => (c.name ? [{ companyId: c.company_id, name: c.name, ticker: null }] : [])),
+      ...workspace.rows.map((r) => ({ companyId: r.companyId, name: r.name, ticker: r.ticker })),
+    ]);
+  }, [directory, me, workspace.rows]);
   const watched = useMemo(
     () =>
       workspace.watchlist.state === "ok"
@@ -370,14 +421,44 @@ export function App(props: Props = {}) {
         : null,
     [workspace.watchlist],
   );
-  const companyName = useCallback((id: string) => names.get(id) ?? null, [names]);
+  const watchedIds = useMemo(() => workspace.rows.map((r) => r.companyId), [workspace.rows]);
+  // Home's data notes with the catalog open: what this user chose, not every company (null: still loading)
+  const ownCompanies = useMemo(() => {
+    if (workspace.watchlist.state === "loading") return null;
+    const projects = saved.list.state === "ok" ? saved.list.workspaces.flatMap((w) => (w.project ? [w.project.companyId] : [])) : [];
+    return [...new Set([...watchedIds, ...projects])];
+  }, [workspace.watchlist.state, watchedIds, saved.list]);
+  const searchSuggestions = useMemo(
+    () => workspace.rows.map((r) => ({ companyId: r.companyId, name: r.name, ticker: r.ticker })),
+    [workspace.rows],
+  );
+  // new identities whenever a name arrives, so what's built from them follows
+  const companyName = useCallback((id: string) => directory.name(id), [directory, namesVersion]);
+  const companyLabel = useCallback((id: string) => directory.label(id), [directory, namesVersion]);
+  const companyShort = useCallback((id: string) => directory.short(id), [directory, namesVersion]);
   const filingsFor = useMemo(() => readableFor(me, "filings"), [me]);
   const financialsFor = useMemo(() => readableFor(me, "financials"), [me]);
   watchedRef.current = watched;
   nameRef.current = companyName;
+  // what the reader has open, in words (it knows the form and date once the filing has loaded)
+  const [readerFiling, setReaderFiling] = useState<{ accessionNo: string; label: string } | null>(null);
+  const filingText = route.view === "filing" && readerFiling?.accessionNo === route.accessionNo ? readerFiling.label : null;
+  const chartCompany = chart.layers.find((l) => l.companyId ?? l.defaultCompany);
+  const researchCompany = useMemo(() => {
+    if (route.view === "chart") return chartCompany?.companyId ?? chartCompany?.defaultCompany ?? null;
+    if (route.view !== "analysis" || saved.list.state !== "ok") return null;
+    return saved.list.workspaces.find((w) => w.workspace_id === route.projectId)?.project?.companyId ?? null;
+  }, [route, chartCompany, saved.list]);
   const context = useMemo(
-    () => pageContext(route, companyName, (id) => inScope(scope, id)),
-    [route, companyName, scope],
+    () => pageContext(route, companyName, (id) => inScope(scope, id), {
+      watchlist: watchedIds,
+      company: researchCompany,
+      charted: chart.layers.flatMap((l) => l.companyId ?? l.defaultCompany ?? []),
+      chartHasLayers: chart.layers.length > 0,
+      filing: filingText,
+      title: companyLabel,
+    }),
+    [route, companyName, companyLabel, scope, watchedIds, researchCompany, chart.layers, filingText],
   );
 
   const paletteCompanies = useMemo((): PaletteCompany[] => {
@@ -394,7 +475,7 @@ export function App(props: Props = {}) {
       if (!out.has(c.company_id)) {
         out.set(c.company_id, {
           companyId: c.company_id,
-          name: c.name ?? c.company_id,
+          name: c.name ?? UNNAMED,
           sub: `company · ${c.tiers.join(", ")}`,
         });
       }
@@ -433,7 +514,7 @@ export function App(props: Props = {}) {
         resolveTicker(token, ticker, scope !== null)
           .then((found) => {
             if (!found) return setError(noTicker([ticker], scope !== null));
-            chartMany([found.companyId], metric, "ttm", `${ticker} ${metricLabel(metric).toLowerCase()}`);
+            chartMany([found.companyId], metric, "ttm");
           })
           .catch(() => setError("Couldn't look that ticker up. Try again."));
       },
@@ -441,13 +522,44 @@ export function App(props: Props = {}) {
     [workspace, focusAssistant, assistant, toggleTheme, exportWatchlist, token, chartMany, scope],
   );
 
+  // "New chart" empties the builder (and detaches it from a saved chart, so Save can't overwrite
+  // it), keeping the draft for one Restore; "Chart builder" in the nav still reopens the draft
+  const newChart = () => {
+    keepDraft("Started a new chart.");
+    setChart(() => emptyChart());
+    saved.close("chart");
+    go({ view: "chart" });
+  };
+  const restoreChartDraft = () => {
+    if (replacedChart) setChart(() => replacedChart.state);
+    setReplacedChart(null);
+    setChartNotice(null);
+  };
+
   const saveBar = (current: Current) =>
     saved.list.state === "unavailable" ? null : (
-      <SaveBar current={current} saved={saved} label={(id) => companyName(id) ?? id} />
+      <SaveBar current={current} saved={saved} label={(id) => companyName(id) ?? UNNAMED} />
     );
+
+  // the browser tab says what's on screen
+  const savedName = useCallback((id: string) => {
+    if (saved.list.state !== "ok") return null;
+    for (const w of saved.list.workspaces) {
+      if (w.workspace_id === id) return w.name;
+      const item = w.items.find((i) => i.item_id === id);
+      if (item) return item.name;
+    }
+    return null;
+  }, [saved.list]);
+  useEffect(() => {
+    document.title = !picker && !token
+      ? route.view === "status" ? screenTitle(route, { company: () => null }) : "Tributary"
+      : screenTitle(route, { company: companyLabel, filing: filingText, chart: chartTitle(chart, companyShort, metricLabel), saved: savedName });
+  }, [picker, token, route, companyLabel, companyShort, filingText, chart, savedName]);
 
   const showDrawer = drawerOpen && route.view !== "ask";
   const ingested = lastIngested(workspace.latest ?? []);
+  const listed = useFeedStatus(token !== null);
   const panelProps = {
     assistant,
     onUndo: (id: number) => void uiActions.undo(id),
@@ -455,6 +567,7 @@ export function App(props: Props = {}) {
     context,
     signedIn: token !== null,
     inputRef: input,
+    allowance,
   };
 
   // the status page is public: signed out, it shows without the app shell
@@ -483,6 +596,8 @@ export function App(props: Props = {}) {
 
   return (
     <ScopeContext.Provider value={scope}>
+      <DirectoryContext.Provider value={directory}>
+      <AllowanceContext.Provider value={allowanceState}>
       <div className={showDrawer ? "app with-ai" : "app"}>
         <Sidebar
           open={navOpen}
@@ -490,11 +605,14 @@ export function App(props: Props = {}) {
           me={me}
           workspace={workspace}
           lastIngested={ingested}
+          listed={listed}
           onAdd={() => setPalette(WATCH_PREFIX)}
           onExport={exportWatchlist}
           onShortcuts={() => setHelp(true)}
           connections={market?.enabled ?? false}
+          sandboxResetsIn={session?.kind === "sandbox" ? resetsIn(session.expiresAt, clock) : null}
           workspaces={token ? <WorkspaceTree saved={saved} onOpen={openSaved} onError={setError} /> : null}
+          onSignOut={(session?.kind === "github" || session?.kind === "account") ? () => signOut(null) : undefined}
         />
         {navOpen && <div className="scrim" aria-hidden="true" onClick={() => setNavOpen(false)} />}
         <div className="main">
@@ -502,11 +620,13 @@ export function App(props: Props = {}) {
             menuOpen={navOpen}
             onMenu={() => setNavOpen((o) => !o)}
             route={route}
-            companyName={companyName}
+            companyName={companyLabel}
+            companyShort={companyShort}
+            filingLabel={filingText}
             users={users}
             user={session?.kind === "sandbox" ? "demo sandbox" : user}
             account={(session?.kind === "github" || session?.kind === "account") && session.login
-              ? { login: session.login, onSignOut: () => signOut(null) }
+              ? { login: me ? accountName(me) : session.login, onSignOut: () => signOut(null) }
               : undefined}
             busy={assistant.busy}
             theme={theme}
@@ -531,6 +651,7 @@ export function App(props: Props = {}) {
             </div>
           )}
           <main className="content">
+            <ErrorBoundary resetKey={window.location.hash}>
             <Suspense fallback={<div className="page"><Skeleton lines={6} label="Loading the page" /></div>}>
             {route.view === "status" ? (
               <Status />
@@ -540,10 +661,13 @@ export function App(props: Props = {}) {
               <Home
                 workspace={workspace}
                 lastIngested={ingested}
+                listed={listed}
                 onAdd={() => setPalette(WATCH_PREFIX)}
                 onExport={exportWatchlist}
+                readableCompanies={me ? readableTotal(me) : 0}
+                onNewChart={newChart}
                 recent={saved.list.state === "unavailable" ? null : <Recent recent={saved.recent} onOpen={openSaved} />}
-                notes={<RecentNotes token={token} name={companyName} filingsFor={filingsFor} />}
+                notes={<RecentNotes token={token} name={companyLabel} filingsFor={filingsFor} catalogOpen={catalogOpen(me, "financials")} companies={ownCompanies} />}
                 layout={views.home}
                 onCustomize={views.editable ? () => setCustomizing((c) => !c) : undefined}
                 editor={customizing && views.editable ? (
@@ -573,8 +697,9 @@ export function App(props: Props = {}) {
                 screen={route.screen ?? {}}
                 watched={watched}
                 onWatch={(id, on) => (on ? workspace.watch(id) : workspace.unwatch(id))}
-                onChart={(id, name) => {
-                  setChart((s) => companyChart(s, id, name));
+                onChart={(id) => {
+                  keepDraft(OPENED);
+                  setChart((s) => companyChart(s, id));
                   saved.close("chart");
                   go({ view: "chart" });
                 }}
@@ -601,27 +726,27 @@ export function App(props: Props = {}) {
                 token={token}
                 companyId={route.companyId}
                 tab={route.tab ?? "overview"}
+                statements={route.statements}
                 watched={watched ? watched.has(route.companyId) : null}
                 onWatch={(on) =>
                   (on ? workspace.watch(route.companyId) : workspace.unwatch(route.companyId)).catch(() =>
                     setError("Couldn't update the watchlist. Try again."),
                   )
                 }
-                onChart={(name) => {
-                  setChart((s) => companyChart(s, route.companyId, name));
+                onChart={() => {
+                  keepDraft(OPENED);
+                  setChart((s) => companyChart(s, route.companyId));
                   saved.close("chart");
                   go({ view: "chart" });
                 }}
                 onChartMany={chartMany}
                 onOpenChart={(s) => {
+                  keepDraft(OPENED);
                   setChart(() => s);
                   saved.close("chart");
                   go({ view: "chart" });
                 }}
-                onAsk={(q) => {
-                  assistant.setDraft(q);
-                  focusAssistant();
-                }}
+                onAsk={askAbout}
                 saved={saved.list.state === "ok" ? saved : null}
               />
             ) : route.view === "filing" ? (
@@ -634,15 +759,13 @@ export function App(props: Props = {}) {
                 at={route.at}
                 q={route.q}
                 name={companyName(route.companyId)}
-                onAsk={(q) => {
-                  assistant.setDraft(q);
-                  focusAssistant();
-                }}
+                onAsk={askAbout}
                 onRead={(section) => saved.recordFiling(route.companyId, route.accessionNo, section)}
+                onFiling={(label) => setReaderFiling({ accessionNo: route.accessionNo, label })}
               />
             ) : route.view === "search" ? (
               <Search key={user} token={token} search={route.search} companies={me?.companies ?? []}
-                open={catalogOpen(me, "filings")} />
+                open={catalogOpen(me, "filings")} suggestions={searchSuggestions} />
             ) : route.view === "chart" ? (
               <ChartBuilder
                 key={user}
@@ -650,6 +773,13 @@ export function App(props: Props = {}) {
                 chart={chart}
                 setChart={setChart}
                 saveBar={saveBar({ kind: "chart", chart })}
+                readable={financialsFor}
+                preferred={watchedIds}
+                onNew={newChart}
+                onRestore={replacedChart ? restoreChartDraft : null}
+                restoreNote={replacedChart?.why ?? null}
+                onReplace={keepDraft}
+                notice={chartNotice}
               />
             ) : route.view === "ask" ? (
               <div className="page ask-page">
@@ -665,7 +795,7 @@ export function App(props: Props = {}) {
                 </p>
               </div>
             ) : route.view === "about" ? (
-              <About />
+              <About allowance={allowance} open={catalogOpen(me, "financials")} />
             ) : route.view === "settings" ? (
               <Settings key={user} token={token} />
             ) : route.view === "workspace" ? (
@@ -688,10 +818,12 @@ export function App(props: Props = {}) {
                 projectId={route.projectId}
                 step={route.step}
                 itemId={route.itemId}
+                start={route.start}
                 saved={saved}
                 readable={financialsFor}
-                label={(id) => companyName(id) ?? id}
+                label={companyShort}
                 onOpenChart={(s) => {
+                  keepDraft(OPENED);
                   setChart(() => s);
                   saved.close("chart");
                   go({ view: "chart" });
@@ -705,9 +837,10 @@ export function App(props: Props = {}) {
                 user={user}
                 itemId={route.itemId}
                 saved={saved}
-                label={(id) => companyName(id) ?? id}
+                label={companyShort}
                 readable={financialsFor}
                 onOpenChart={(s) => {
+                  keepDraft(OPENED);
                   setChart(() => s);
                   saved.close("chart");
                   go({ view: "chart" });
@@ -715,16 +848,17 @@ export function App(props: Props = {}) {
               />
             ) : route.view === "model" ? (
               <ModelPage key={`${user}-${route.itemId}`} token={token} itemId={route.itemId} saved={saved}
-                label={(id) => companyName(id) ?? id} />
+                label={companyLabel} />
             ) : route.view === "report" ? (
               <ReportView
                 key={`${user}-${route.itemId}`}
                 token={token}
                 itemId={route.itemId}
                 writer={writer}
-                label={(id) => companyName(id) ?? id}
+                label={companyShort}
                 readable={financialsFor}
                 onOpenChart={(s) => {
+                  keepDraft(OPENED);
                   setChart(() => s);
                   saved.close("chart");
                   go({ view: "chart" });
@@ -740,17 +874,13 @@ export function App(props: Props = {}) {
               />
             )}
             </Suspense>
+            </ErrorBoundary>
           </main>
         </div>
         {showDrawer && (
           <AssistantPanel variant="drawer" {...panelProps} onClose={() => setDrawer(false)} />
         )}
       </div>
-      {!showDrawer && route.view !== "ask" && (
-        <button className="btn primary fab" onClick={focusAssistant}>
-          ✦ Ask the assistant
-        </button>
-      )}
       {help && <ShortcutSheet onClose={() => setHelp(false)} />}
       {palette !== null && (
         <Palette
@@ -758,10 +888,14 @@ export function App(props: Props = {}) {
           token={token}
           initial={palette}
           companies={paletteCompanies}
+          watched={watched}
           actions={actions}
+          catalogOpen={catalogOpen(me, "financials")}
           onClose={() => setPalette(null)}
         />
       )}
+      </AllowanceContext.Provider>
+      </DirectoryContext.Provider>
     </ScopeContext.Provider>
   );
 }

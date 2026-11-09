@@ -1,6 +1,7 @@
 import { displayNames } from "./format";
 import type {
   AgentEvent,
+  Allowance,
   AuthProviders,
   PasswordSignedIn,
   Calendar,
@@ -34,6 +35,8 @@ import type {
   RecentWork,
   ThesisCheck,
   ThesisCheckSummary,
+  ItemVersion,
+  NotMeaningfulPeriod,
   SavedItemFull,
   SavedKind,
   WrittenKind,
@@ -57,10 +60,29 @@ export class ApiError extends Error {
   }
 }
 
+/** what failureReason says for every 5xx and network failure: the only kind that clears by
+ * itself, so the only one ErrorPanel says "usually clears in a moment" for */
+export const NOT_ANSWERING = "the server didn't answer in time";
+
+/** Why a request failed, for a person, as a sentence fragment ("Couldn't save it: ..."). A 4xx
+ * detail is written for the caller (a validation message, a limit); a 5xx's is for developers
+ * and API clients ("query took longer than 5s; narrow it"), and a person can only try again. */
+export function failureReason(e: unknown): string {
+  return e instanceof ApiError && e.status < 500 && e.message ? e.message : NOT_ANSWERING;
+}
+
+/** What a refusal without a detail says: Cloudflare's own rate limit (a few requests to the assistant
+ * from one network within seconds) answers 429 with an HTML page, and over HTTP/2 there is no status
+ * text, so the message would be empty (L6). */
+export function noDetail(status: number, statusText: string): string {
+  if (status === 429) return "too many requests from this network in the last few seconds; wait a moment and try again";
+  return statusText || `the request was refused (${status})`;
+}
+
 async function json<T>(r: Response): Promise<T> {
   if (!r.ok) {
     const body = await r.json().catch(() => ({}));
-    throw new ApiError(typeof body.detail === "string" ? body.detail : r.statusText, r.status);
+    throw new ApiError(typeof body.detail === "string" ? body.detail : noDetail(r.status, r.statusText), r.status);
   }
   return displayNames(await r.json()) as T;
 }
@@ -90,6 +112,17 @@ export async function createSandbox(): Promise<SandboxCreated> {
 /** The public status page's data: no token. */
 export async function dataStatus(): Promise<DataStatus> {
   return json<DataStatus>(await fetch(`${QUERY}/v1/status/data`));
+}
+
+/** When the newest filing reached the database (public, the outside uptime check's route). */
+export async function feedStatus(): Promise<{ last_accepted_at: string | null; last_ingested_at: string | null }> {
+  return json(await fetch(`${QUERY}/v1/status`));
+}
+
+/** The questions left before spending any; null on an agent-api without the route. */
+export async function allowance(token: string): Promise<Allowance | null> {
+  const r = await fetch(`${AGENT}/v1/allowance`, { headers: { Authorization: `Bearer ${token}` } });
+  return r.ok ? ((await r.json()) as Allowance) : null;
 }
 
 /** Sign-in providers the Query API has configured. */
@@ -201,8 +234,42 @@ export const deleteWorkspace = (token: string, id: string) =>
 export const duplicateWorkspace = (token: string, id: string) =>
   sendJson<SavedWorkspace>(token, "POST", `/v1/workspaces/${enc(id)}/duplicate`, {});
 
+/** The state without what this app saves that a Query API one release older refuses (its state
+ * models are strict): a chart layer's `display`, a screen's `issue`. Null when there is none. */
+export function olderState(state: object): object | null {
+  const s = state as Record<string, unknown>;
+  let changed = false;
+  const out: Record<string, unknown> = { ...s };
+  if ("issue" in out) {
+    delete out.issue;
+    changed = true;
+  }
+  if (Array.isArray(s.layers)) {
+    out.layers = s.layers.map((l: unknown) => {
+      if (!l || typeof l !== "object" || !("display" in l)) return l;
+      changed = true;
+      const { display: _display, ...rest } = l as Record<string, unknown>;
+      return rest;
+    });
+  }
+  return changed ? out : null;
+}
+
+/** Saves a state; refused by an older Query API for a field it doesn't know yet (the minute a
+ * deploy rolls the web app before the API), saves it again without that field, so the work is
+ * kept: the older API reads such a layer as it always did. */
+async function tolerantSave<T>(save: (state: object) => Promise<T>, state: object): Promise<T> {
+  try {
+    return await save(state);
+  } catch (e) {
+    const older = e instanceof ApiError && e.status === 422 && /Extra inputs are not permitted/.test(e.message) ? olderState(state) : null;
+    if (!older) throw e;
+    return save(older);
+  }
+}
+
 export const addItem = (token: string, workspaceId: string, kind: SavedKind | WrittenKind, name: string, state: object) =>
-  sendJson<SavedItemFull>(token, "POST", `/v1/workspaces/${enc(workspaceId)}/items`, { kind, name, state });
+  tolerantSave((s) => sendJson<SavedItemFull>(token, "POST", `/v1/workspaces/${enc(workspaceId)}/items`, { kind, name, state: s }), state);
 
 /** The item with its state, without recording it as opened. */
 export const getItem = (token: string, id: string) =>
@@ -213,7 +280,9 @@ export const openItem = (token: string, id: string) =>
   sendJson<SavedItemFull>(token, "POST", `/v1/workspace-items/${enc(id)}/open`);
 
 export const updateItem = (token: string, id: string, patch: { name?: string; state?: object }) =>
-  sendJson<SavedItemFull>(token, "PUT", `/v1/workspace-items/${enc(id)}`, patch);
+  patch.state
+    ? tolerantSave((s) => sendJson<SavedItemFull>(token, "PUT", `/v1/workspace-items/${enc(id)}`, { ...patch, state: s }), patch.state)
+    : sendJson<SavedItemFull>(token, "PUT", `/v1/workspace-items/${enc(id)}`, patch);
 
 export const duplicateItem = (token: string, id: string) =>
   sendJson<SavedItemFull>(token, "POST", `/v1/workspace-items/${enc(id)}/duplicate`, {});
@@ -230,11 +299,14 @@ export const readFiling = (token: string, companyId: string, accessionNo: string
     ...(sectionKey ? { section_key: sectionKey } : {}),
   });
 
-/** readableOnly: only companies the user can read (a demo sandbox lists nothing else). */
-export const searchCompanies = (token: string, q: string, readableOnly = false) =>
+/** Tickers, CIKs and any part of a name, best match first (silver.search_companies).
+ * readableOnly: only companies the user can read (a demo sandbox lists nothing else).
+ * limit: 1-25; the API's default is 5. */
+export const searchCompanies = (token: string, q: string, readableOnly = false, limit?: number) =>
   get<{ results: SearchResult[] }>(token, "/v1/companies/search", {
     q,
     ...(readableOnly ? { access: "financials" } : {}),
+    ...(limit ? { limit } : {}),
   }).then((r) => r.results);
 
 export const financials = (
@@ -292,7 +364,12 @@ export const resetViewPref = (token: string, view: ViewName) =>
 
 /** One page of the screener (params from companies/screen.ts `screenParams`). */
 export const screener = (token: string, params: Params) =>
-  get<Screener>(token, "/v1/screener", params);
+  get<Screener>(token, "/v1/screener", params).then((r) => {
+    // a data-check screen answered without the check (an API older than it, the minute of a
+    // deploy) would list every company as having a finding: a failure to retry, not a result
+    if (params.issue && r.issue !== params.issue) throw new ApiError("the data-check filter isn't available yet", 503);
+    return r;
+  });
 
 /** Rows in one CSV export: the API's cap (JSON pages are capped at 500). */
 export const SCREENER_CSV_ROWS = 5000;
@@ -307,7 +384,16 @@ export const dataNotes = (token: string, companyId: string) =>
   get<DataNotes>(token, `/v1/companies/${companyId}/data-notes`);
 
 /** The newest notes across the companies whose financials the user can read. */
-export const recentDataNotes = (token: string, limit = 8) => get<DataNotes>(token, "/v1/data-notes", { limit });
+/** The newest data notes: of these companies (at most 50), or of every company the user can read. */
+export const recentDataNotes = (token: string, limit = 8, companies?: string[]) =>
+  get<DataNotes>(token, "/v1/data-notes", { limit, ...(companies ? { company_id: companies } : {}) }).then((r) =>
+    // an older Query API ignores company_id and answers for every company: keep these
+    companies ? { ...r, notes: r.notes.filter((n) => companies.includes(n.company_id)) } : r,
+  );
+
+/** The 10-K's own EPS and weighted shares per fiscal year: quarters can't give them. */
+export const annualPerShare = (token: string, companyId: string, years = 10) =>
+  get<{ as_of: string; rows: FinancialRow[] }>(token, `/v1/companies/${companyId}/annual-per-share`, { years });
 
 export const expectedFilings = (token: string, days: number, scope: "watchlist" | "readable") =>
   get<Calendar>(token, "/v1/calendar/expected-filings", { days, scope });
@@ -369,11 +455,29 @@ export const searchFilings = (token: string, query: SearchQuery) =>
     Object.fromEntries(Object.entries(query).filter(([, v]) => v !== undefined && v !== "")) as Params,
   );
 
+/** The Query API's cap on a section's text (app.py). */
+const SECTION_ALL_CHARS = 1_000_000;
+/** The caps of a Query API one release older: during a deploy the new page can reach it, and it
+ * answers 422 to more; asked again within them, the page still opens (cut short, `truncated`). */
+const OLDER_SECTION_CHARS = 50_000;
+const OLDER_QUARTERS = 40;
+
+/** A GET that an older Query API refuses (422) for a cap it doesn't have yet, asked again at its cap. */
+async function withinOlderCap<T>(ask: (older: boolean) => Promise<T>, over: boolean): Promise<T> {
+  try {
+    return await ask(false);
+  } catch (e) {
+    if (!over || !(e instanceof ApiError) || e.status !== 422) throw e;
+    return ask(true);
+  }
+}
+
 export const section = (token: string, companyId: string, key: string, accessionNo: string) =>
-  get<{ sections: Section[] }>(token, `/v1/companies/${companyId}/sections/${encodeURIComponent(key)}`, {
+  withinOlderCap((older) => get<{ sections: Section[] }>(token, `/v1/companies/${companyId}/sections/${encodeURIComponent(key)}`, {
     accession_no: accessionNo,
-    max_chars: 50000,
-  }).then((r) => r.sections[0] ?? null);
+    // the whole section: matches and cited passages can be anywhere in it
+    max_chars: older ? OLDER_SECTION_CHARS : SECTION_ALL_CHARS,
+  }), true).then((r) => r.sections[0] ?? null);
 
 export const latestFilings = (token: string, limit = 20) =>
   get<{ as_of: string; filings: LatestFiling[] }>(token, "/v1/filings/latest", { limit });
@@ -431,13 +535,16 @@ export const financialsView = (
   metrics: string[],
   view: "quarter" | "ttm",
   basis: "fiscal" | "calendar" = "fiscal",
+  /** ask why a ratio reads n/m (`not_meaningful` on each row, `not_meaningful_periods`) */
+  readings = false,
 ) =>
-  get<{ as_of: string; rows: FinancialRow[] }>(token, `/v1/companies/${companyId}/financials`, {
-    quarters,
+  withinOlderCap((older) => get<{ as_of: string; rows: FinancialRow[]; not_meaningful_periods?: NotMeaningfulPeriod[] }>(token, `/v1/companies/${companyId}/financials`, {
+    ...(readings ? { readings: "true" } : {}),
+    quarters: older ? OLDER_QUARTERS : quarters,
     metrics,
     view,
     ...(basis === "calendar" ? { basis } : {}),
-  });
+  }), quarters > OLDER_QUARTERS);
 
 export const screenerColumns = (token: string) =>
   get<ScreenerColumns>(token, "/v1/screener/columns");
@@ -473,7 +580,7 @@ async function formulaPost<T>(token: string, path: string, body: FormulaRequest)
     const data = await r.json().catch(() => ({}));
     const errors = data?.detail?.errors;
     if (Array.isArray(errors)) throw new FormulaApiError(errors as FormulaProblem[], r.status);
-    throw new ApiError(typeof data.detail === "string" ? data.detail : r.statusText, r.status);
+    throw new ApiError(typeof data.detail === "string" ? data.detail : noDetail(r.status, r.statusText), r.status);
   }
   return displayNames(await r.json()) as T;
 }
@@ -506,6 +613,21 @@ export class SseParser {
     }
     return events;
   }
+}
+
+/** An agent-api error event's message, for a person: "model unavailable" is the one written for
+ * logs (server.py), the others are already sentences or fragments. */
+export function agentError(message: string): string {
+  return message === "model unavailable" ? "the model didn't answer; try again in a moment" : message;
+}
+
+/** Why a question couldn't be asked: a limit's message as written (429), the request refused
+ * as invalid (422: what the user can change), or the assistant not answering (5xx, network). */
+export function askFailure(e: unknown): string {
+  if (!(e instanceof ApiError)) return "The assistant is unreachable. Try again in a moment.";
+  if (e.status === 422) return "That question couldn't be sent: it's empty or longer than 2,000 characters.";
+  if (e.status >= 500) return "The assistant isn't answering right now. Try again in a moment.";
+  return e.message.charAt(0).toUpperCase() + e.message.slice(1);
 }
 
 /** Reads a server-sent event stream to its end. */
@@ -554,6 +676,18 @@ export async function checkThesis(
   });
   await stream(r, onEvent);
 }
+
+/** A thesis's earlier versions, newest first, without their text (app DB 014). */
+export const itemVersions = (token: string, itemId: string) =>
+  get<{ item_id: string; versions: ItemVersion[] }>(token, `/v1/workspace-items/${itemId}/versions`).catch((e) => {
+    // a Query API without versions (the minute of a deploy) has none to list
+    if (e instanceof ApiError && e.status === 404) return { item_id: itemId, versions: [] as ItemVersion[] };
+    throw e;
+  });
+
+/** One earlier version with its state. */
+export const itemVersion = (token: string, itemId: string, versionId: string) =>
+  get<ItemVersion & { item_id: string; state: Record<string, unknown> }>(token, `/v1/workspace-items/${itemId}/versions/${versionId}`);
 
 /** A thesis's checks, newest first (no results). */
 export const thesisChecks = (token: string, itemId: string) =>

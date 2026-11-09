@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { ApiError } from "../api";
+import { ApiError, failureReason } from "../api";
 
 /** A request's state: denied is a 403 (no grant, or the plan's tier doesn't cover it). */
 export type Load<T> =
@@ -28,7 +28,7 @@ export function useLoad<T>(key: string | null, fetch: () => Promise<T>): Load<T>
         else {
           setOut({
             state: "error",
-            message: e instanceof ApiError ? e.message : "the Query API didn't answer",
+            message: failureReason(e),
             retry: () => setAttempt((n) => n + 1),
           });
         }

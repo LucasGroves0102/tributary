@@ -257,6 +257,7 @@ def test_company_profile_is_public_metadata(client, token):
     assert r["results"][0] | {"access": None} == {
         "company_id": A, "name": f"Test {A}", "matched_on": "cik", "matched_alias": A,
         "is_current": True, "sic": "2080", "industry": "Beverages", "exchanges": ["NYSE"],
+        "tickers": None,
         "access": None}
 
 

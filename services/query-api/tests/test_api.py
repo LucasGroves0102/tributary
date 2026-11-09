@@ -109,8 +109,9 @@ class FakeStore:
                            None if company_ids is None else tuple(company_ids)))
         return []
 
-    def search(self, user_id, q, only=None, readable_only=False):
+    def search(self, user_id, q, limit=5, only=None, readable_only=False):
         self.calls.append(("search", q, None if only is None else tuple(only)))
+        self.search_limit = limit
         return [{"company_id": NVDA, "name": "NVIDIA CORP", "matched_on": "ticker",
                  "matched_alias": "NVDA", "is_current": True, "sic": "3674",
                  "industry": "Semiconductors & Related Devices", "exchanges": ["Nasdaq"]},
@@ -243,6 +244,30 @@ def test_search_can_list_only_readable_companies(client, token):
     client.get("/v1/companies/search?q=n", headers=token("alice"))
     assert client.store.calls[-1] == ("search", "n", None)
     assert client.get("/v1/companies/search?q=n&access=mine",
+                      headers=token("alice")).status_code == 422
+
+
+def test_financials_can_ask_for_every_quarter_there_is_but_not_without_a_cap(client, token):
+    ok = client.get(f"/v1/companies/{NVDA}/financials?quarters=120", headers=token("alice"))
+    assert ok.status_code == 200, ok.text
+    too_many = client.get(f"/v1/companies/{NVDA}/financials?quarters=121", headers=token("alice"))
+    assert too_many.status_code == 422
+
+
+def test_a_section_can_be_asked_for_whole_but_not_without_a_cap(client, token):
+    ok = client.get(f"/v1/companies/{NVDA}/sections/1A?max_chars=1000000", headers=token("bob"))
+    assert ok.status_code != 422
+    too_many = client.get(f"/v1/companies/{NVDA}/sections/1A?max_chars=1000001",
+                          headers=token("bob"))
+    assert too_many.status_code == 422
+
+
+def test_search_limit_defaults_to_five_and_is_capped(client, token):
+    client.get("/v1/companies/search?q=n", headers=token("alice"))
+    assert client.store.search_limit == 5
+    client.get("/v1/companies/search?q=n&limit=25", headers=token("alice"))
+    assert client.store.search_limit == 25
+    assert client.get("/v1/companies/search?q=n&limit=26",
                       headers=token("alice")).status_code == 422
 
 

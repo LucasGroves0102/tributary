@@ -7,7 +7,7 @@
 
 import { useState, type FormEvent } from "react";
 
-import { ApiError, connectMarketData, disconnectMarketData } from "../api";
+import { connectMarketData, disconnectMarketData, failureReason } from "../api";
 import { Skeleton } from "../components/States";
 import { day } from "../format";
 import { refreshMarketData, useMarketData } from "../market/useMarketData";
@@ -67,7 +67,7 @@ function Provider({ token, provider, connection }: { token: string; provider: Ma
       setDone(`Connected to ${provider.name}.`);
       await refreshMarketData(token);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "the Query API didn't answer; try again");
+      setError(failureReason(err));
     } finally {
       setBusy(false);
     }
@@ -82,7 +82,7 @@ function Provider({ token, provider, connection }: { token: string; provider: Ma
       setDone(`Disconnected: your ${provider.name} key and its prices are deleted.`);
       await refreshMarketData(token);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "the Query API didn't answer; try again");
+      setError(failureReason(err));
     } finally {
       setBusy(false);
     }

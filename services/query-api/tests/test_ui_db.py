@@ -208,6 +208,35 @@ def test_recap_vs_prior_and_year_ago(recap_conn, token):
             rev["prior_quarter"]["pct_change"]) == ("120", "10", "0.083333")
     assert (rev["year_ago"]["value"], rev["year_ago"]["pct_change"]) == ("100", "0.300000")
     assert body["flags"] == []  # layer 1 allows all here; RLS has no filings rows for t-free
+    assert rev["current"]["not_meaningful"] is None  # a reported figure: nothing to say
+
+
+def test_recap_says_when_a_margin_isnt_meaningful(recap_conn, token):
+    recap_conn.execute(
+        "INSERT INTO gold.derived_financials (company_id, span, metric, period_start, period_end,"
+        " value, unit, value_source, inputs, accession_no, form, filed, source_accessions,"
+        " ingested_at) VALUES (%s, 'quarter', 'gross_margin', '2026-04-01', '2026-06-30', 20.9,"
+        " 'ratio', 'computed', %s, %s, '10-Q', '2026-07-30', ARRAY[%s], now())",
+        (R, '{"revenue": 420, "gross_profit": 8778}', ACC, ACC))
+    r = client(recap_conn).get(f"/v1/filings/{ACC}/recap?metrics=gross_margin",
+                               headers=token("t-free"))
+    assert r.status_code == 200, r.text
+    [margin] = r.json()["metrics"]
+    assert float(margin["current"]["value"]) == 20.9
+    assert "under $100K" in margin["current"]["not_meaningful"]
+
+
+def test_a_filter_on_accession_reaches_the_sections_table(recap_conn):
+    """033: outputting s.accession_no lets the filter into the DISTINCT ON, as query_api too; on
+    d.accession_no it stayed on a Subquery Scan above a sort of every section (recap 503)."""
+    with recap_conn.cursor() as cur:
+        cur.execute("SET LOCAL ROLE query_api")
+        cur.execute("SELECT set_config('app.user_id', 't-pro', true)")
+        cur.execute("EXPLAIN SELECT * FROM gold.filing_sections WHERE accession_no = %s", (ACC,))
+        plan = "\n".join(r[0] for r in cur.fetchall())
+        cur.execute("RESET ROLE")
+    assert ACC not in plan.split("Unique")[0], plan  # no filter left above the DISTINCT ON
+    assert ACC in plan
 
 
 def test_recap_and_flags_respect_rls(recap_conn, token):
@@ -274,6 +303,27 @@ def test_peers_rank_by_sic_then_size_band(peer_conn, token):
         (P2, 4, True, "150"), (P4, 4, False, None), (P3, 3, True, "210")]
 
 
+def test_a_peers_old_revenue_gives_no_size_band(peer_conn, token):
+    """An old TTM (over 300 days behind the company's own latest period, 035) is no size: P2's
+    revenue stops in 2024 while its balance sheet goes on, so it isn't 'same size band'."""
+    peer_conn.execute("UPDATE gold.derived_financials SET period_start = '2023-07-01',"
+                      " period_end = '2024-06-30' WHERE company_id = %s AND metric = 'revenue'",
+                      (P2,))
+    peer_conn.execute("UPDATE gold.quarterly_financials SET period_start = '2024-04-01',"
+                      " period_end = '2024-06-30' WHERE company_id = %s AND metric = 'revenue'",
+                      (P2,))
+    acc = f"{P2}-26-000002"
+    peer_conn.execute(
+        "INSERT INTO gold.quarterly_financials (company_id, metric, period_start, period_end,"
+        " value, unit, value_source, source_tag, accession_no, filed, source_accessions,"
+        " ingested_at) VALUES (%s, 'total_assets', NULL, '2026-06-30', 900, 'USD',"
+        " 'reported', 'us-gaap:Assets', %s, '2026-08-01', ARRAY[%s], now())", (P2, acc, acc))
+    body = peers(peer_conn, token, "t-free")
+    p2 = next(p for p in body["peers"] if p["company_id"] == P2)
+    assert p2["match"]["revenue_band"] is None and p2["match"]["same_revenue_band"] is False
+    assert next(p for p in body["peers"] if p["company_id"] == P3)["match"]["same_revenue_band"]
+
+
 def test_peers_without_access_rank_by_public_metadata_only(peer_conn, token):
     body = peers(peer_conn, token, "t-nobody")
     assert body["company"]["revenue_band"] is None
@@ -291,6 +341,137 @@ def test_peers_and_search_can_be_only_granted_companies(peer_conn):
     assert [r["company_id"] for r in store.search("t-free", P2)] == [P2]
     assert store.search("t-free", P2, only=[P1, P3]) == []
     assert [r["company_id"] for r in store.search("t-free", P3, only=[P3])] == [P3]
+
+
+def test_screener_lists_a_data_check_only_for_companies_the_caller_can_read(recap_conn, token):
+    """The status page's drill-through: same RLS as everything, so an unreadable company with a
+    finding simply isn't there (no oracle), and the check's name goes in as a bind parameter."""
+    run = recap_conn.execute("INSERT INTO ops.quality_runs (companies, findings) VALUES (1, 1)"
+                             " RETURNING run_id").fetchone()[0]
+    recap_conn.execute("INSERT INTO ops.quality_findings (company_id, check_name, metric,"
+                       " period_end, severity, run_id) VALUES (%s, 'impossible_value', 'revenue',"
+                       " '2026-06-30', 'error', %s)", (R, run))
+    api = client(recap_conn)
+
+    def listed(user, issue):
+        r = api.get(f"/v1/screener?issue={issue}", headers=token(user))
+        assert r.status_code == 200, r.text
+        return [row["company_id"] for row in r.json()["rows"]]
+
+    assert listed("t-free", "impossible_value") == [R]
+    assert listed("t-free", "outlier") == []
+    assert listed("t-nobody", "impossible_value") == []
+    assert api.get("/v1/screener?issue=DROP%20TABLE", headers=token("t-free")).status_code == 422
+    # echoed, so the web app can tell this from an older API that ignored it and listed everyone
+    echoed = api.get("/v1/screener?issue=outlier", headers=token("t-free")).json()
+    assert echoed["issue"] == "outlier"
+    assert "issue" not in api.get("/v1/screener", headers=token("t-free")).json()
+
+
+S_APPLE, S_APPLEBY, S_ACME, S_GS, S_SPROUT, S_SPROUTS = (
+    "9100000021", "9100000022", "9100000023", "9100000024", "9100000025", "9100000026")
+
+
+@pytest.fixture
+def search_conn(conn):
+    """Fictional names (no SEC data in fixtures): rows the search must rank, in every shape."""
+    for cid, name, filer, tickers, former in (
+        (S_APPLE, "ZQAPPLE Inc.", "Large accelerated filer", ["ZQAP"], "Zqfruit Computer Corp"),
+        (S_APPLEBY, "ZQAPPLE Hospitality REIT", "Accelerated filer", ["ZQAH"], None),
+        (S_ACME, "Holding of ZQAPPLE Trust", None, None, None),
+        (S_GS, "ZQGOLD SACHSEN GROUP INC", "Large accelerated filer", ["ZQG"], None),
+        (S_SPROUT, "ZQSprout Social, Inc.", "Large accelerated filer", ["ZQS"], None),
+        (S_SPROUTS, "ZQSprouts Farmers Market, Inc.", "Accelerated filer", ["ZQSF"], None),
+    ):
+        conn.execute("INSERT INTO silver.companies (company_id, name, current_cik,"
+                     " filer_categories, tickers) VALUES (%s, %s, %s, %s, %s)",
+                     (cid, name, cid, [filer] if filer else None, tickers))
+        conn.execute("INSERT INTO silver.company_ciks (cik, company_id) VALUES (%s, %s)",
+                     (cid, cid))
+        conn.execute("INSERT INTO silver.company_aliases (company_id, cik, alias_type, alias,"
+                     " source) VALUES (%s, %s, 'name', %s, 'sec_submissions')", (cid, cid, name))
+        for t in tickers or []:
+            conn.execute("INSERT INTO silver.company_aliases (company_id, cik, alias_type, alias,"
+                         " source) VALUES (%s, %s, 'ticker', %s, 'sec_tickers')", (cid, cid, t))
+        if former:
+            conn.execute("INSERT INTO silver.company_aliases (company_id, cik, alias_type, alias,"
+                         " valid_to, source) VALUES (%s, %s, 'name', %s, '2020-01-01',"
+                         " 'sec_submissions')", (cid, cid, former))
+    # a retired ticker on one company, the same letters starting another's current ticker
+    conn.execute("INSERT INTO silver.company_aliases (company_id, cik, alias_type, alias,"
+                 " valid_to, source) VALUES (%s, %s, 'ticker', 'ZQO', '2020-01-01', 'curated')",
+                 (S_ACME, S_ACME))
+    return conn
+
+
+def found(conn, q, **kw):
+    return [r["company_id"] for r in Store(OneConnection(conn)).search("t-free", q, 25, **kw)]
+
+
+def test_search_exact_ticker_first_then_prefix(search_conn):
+    assert found(search_conn, "zqs")[:2] == [S_SPROUT, S_SPROUTS]
+    assert found(search_conn, "ZQSF") == [S_SPROUTS]
+    assert found(search_conn, "ZQA")[:2] == [S_APPLE, S_APPLEBY]  # prefix: bigger filer first
+    row = Store(OneConnection(search_conn)).search("t-free", "ZQAP", 25)[0]
+    assert (row["matched_on"], row["matched_alias"], row["tickers"]) == ("ticker", "ZQAP", ["ZQAP"])
+
+
+def test_search_name_prefix_word_and_contains(search_conn):
+    # a whole-word prefix beats the same letters run together: Sprouts isn't Sprout Social
+    assert found(search_conn, "ZQSprouts")[:2] == [S_SPROUTS, S_SPROUT]
+    assert found(search_conn, "zqapple")[:2] == [S_APPLE, S_APPLEBY]  # exact name, then prefix
+    assert found(search_conn, "zqapple")[2] == S_ACME  # a later word
+    assert found(search_conn, "sachsen") == [S_GS]  # a word that isn't the first
+    assert found(search_conn, "achsen") == [S_GS]  # contained
+    assert found(search_conn, "zq gold") == [S_GS]  # spaces ignored
+
+
+def test_search_ranks_a_company_with_figures_and_a_short_name_first(conn):
+    """044: "bank of" found Bank of Chile (a 20-F filer, no figures here) and banks with shorter
+    raw names before BANK OF AMERICA CORP /DE/."""
+    rows = (("9100000071", "ZQBANK OF CHILE", False),
+            ("9100000072", "ZQBANK OF HAWAIIAN ISLES CORP", True),
+            ("9100000073", "ZQBANK OF AMERICA CORP /DE/", True))
+    for cid, name, figures in rows:
+        conn.execute("INSERT INTO silver.companies (company_id, name, current_cik,"
+                     " filer_categories, exchanges) VALUES (%s, %s, %s,"
+                     " ARRAY['Large accelerated filer'], ARRAY['NYSE'])", (cid, name, cid))
+        conn.execute("INSERT INTO silver.company_ciks (cik, company_id) VALUES (%s, %s)",
+                     (cid, cid))
+        conn.execute("INSERT INTO silver.company_aliases (company_id, cik, alias_type, alias,"
+                     " source) VALUES (%s, %s, 'name', %s, 'sec_submissions')", (cid, cid, name))
+        if figures:
+            acc = f"{cid}-26-000001"
+            conn.execute(
+                "INSERT INTO gold.quarterly_financials (company_id, metric, period_start,"
+                " period_end, value, unit, value_source, source_tag, accession_no, filed,"
+                " source_accessions, ingested_at) VALUES (%s, 'revenue', '2026-04-01',"
+                " '2026-06-30', 1, 'USD', 'reported', 'us-gaap:Revenues', %s, '2026-08-01',"
+                " ARRAY[%s], now())", (cid, acc, acc))
+    assert found(conn, "zqbank of") == ["9100000073", "9100000072", "9100000071"]
+
+
+def test_search_former_names_and_retired_tickers_rank_below_current(search_conn):
+    rows = Store(OneConnection(search_conn)).search("t-free", "Zqfruit Computer", 25)
+    assert [(r["company_id"], r["is_current"]) for r in rows] == [(S_APPLE, False)]
+    assert found(search_conn, "ZQO") == [S_ACME]
+
+
+def test_search_takes_no_pattern_from_what_is_typed(search_conn):
+    assert found(search_conn, "zq%") == found(search_conn, "zq")
+    assert found(search_conn, "z_apple") == []
+    assert found(search_conn, "%") == found(search_conn, "_") == []
+
+
+def test_search_finds_a_cik_and_narrows_before_the_limit(search_conn):
+    assert found(search_conn, S_GS.lstrip("0")) == [S_GS]
+    assert found(search_conn, "ZQ", only=[S_ACME]) == [S_ACME]
+    # identity is public: t-free reads nothing here and still finds it, unless asked to narrow
+    assert S_GS in found(search_conn, "ZQ")
+    assert found(search_conn, "ZQ", readable_only=True) == []
+    search_conn.execute("INSERT INTO authz.user_access (user_id, company_id, tier)"
+                        " VALUES ('t-free', %s, 'financials')", (S_ACME,))
+    assert found(search_conn, "ZQ", readable_only=True) == [S_ACME]
 
 
 def test_filings_meta_reads_the_public_index_as_query_api(conn):
@@ -358,7 +539,8 @@ def test_status_data_runs_as_query_api_without_bronze_or_ops_access(conn):
                               " FROM ops.public_completeness()") == [(2, 150, 1, 2, 1)]
     coverage = as_query_api(conn, "SELECT * FROM ops.public_coverage()")[0]
     assert coverage[:4] == (before[0] + 1, before[1] + 1, before[2] + 1, before[3] + 7)
-    assert len(as_query_api(conn, "SELECT * FROM ops.public_quality()")) == 11
+    # 023's eleven checks, plus 041's mistagged_fact and net_debt_gap
+    assert len(as_query_api(conn, "SELECT * FROM ops.public_quality()")) == 13
 
     body = client(conn).get("/v1/status/data").json()  # no token
     assert body["ingest"]["filings"] == 2 and body["ingest"]["live_pct"] == 50.0
@@ -367,3 +549,19 @@ def test_status_data_runs_as_query_api_without_bronze_or_ops_access(conn):
         with pytest.raises(psycopg.errors.InsufficientPrivilege):
             with conn.transaction():
                 as_query_api(conn, f"SELECT 1 FROM {table} LIMIT 1")
+
+
+def test_a_filing_index_period_on_the_filing_date_reads_as_unknown(conn):
+    """NVIDIA's 2008 10-K: the SEC's index gives the filing date as the period. An 8-K's event can
+    be the day it's filed, so only periodic reports lose it."""
+    for accession, form, filed, period in (
+            (f"{C}-08-000001", "10-K", "2008-03-21", "2008-03-21"),
+            (f"{C}-08-000002", "10-Q", "2008-05-21", "2008-04-27"),
+            (f"{C}-08-000003", "8-K", "2008-05-08", "2008-05-08")):
+        conn.execute("INSERT INTO bronze.submission_filings (accession_no, cik, form, filing_date,"
+                     " report_date) VALUES (%s, %s, %s, %s, %s)",
+                     (accession, C, form, filed, period))
+    rows = Store(OneConnection(conn)).filing_index(
+        "t-nobody", [C], [], date(2008, 1, 1), date(2008, 12, 31), 10, 0, None)
+    assert {r["form"]: r["period_of_report"] for r in rows} == {
+        "10-K": None, "10-Q": date(2008, 4, 27), "8-K": date(2008, 5, 8)}

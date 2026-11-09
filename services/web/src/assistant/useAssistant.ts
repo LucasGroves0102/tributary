@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { ApiError, ask } from "../api";
+import { agentError, ask, askFailure } from "../api";
 import type { AssistantTurn } from "../components/AssistantMessage";
 import type { AgentEvent, HistoryTurn, UiAction, UiContext } from "../types";
 
@@ -88,7 +88,10 @@ export function useAssistant(token: string | null, user: string | null, screen?:
             update(id, (t) => ({ ...t, answer: e.answer }));
             break;
           case "error":
-            update(id, (t) => ({ ...t, error: e.message }));
+            update(id, (t) => ({ ...t, error: agentError(e.message) }));
+            break;
+          case "refunded":
+            update(id, (t) => ({ ...t, refunded: true }));
         }
       };
 
@@ -103,8 +106,7 @@ export function useAssistant(token: string | null, user: string | null, screen?:
         );
       } catch (err) {
         if (!(err instanceof DOMException && err.name === "AbortError")) {
-          const msg = err instanceof ApiError ? err.message : "The agent is unreachable.";
-          update(id, (t) => ({ ...t, error: msg }));
+          update(id, (t) => ({ ...t, error: askFailure(err) }));
         }
       } finally {
         setBusy(false);

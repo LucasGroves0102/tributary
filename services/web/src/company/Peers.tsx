@@ -1,9 +1,14 @@
+import { useMemo, useState, type ReactNode } from "react";
+
 import { peers as fetchPeers } from "../api";
-import { COMPARE_COLUMNS, compareRows, MASKED_TITLE } from "../compare/state";
+import { MAX_COMPANY_LINES } from "../chart/model";
+import { COMPARE_COLUMNS, compareRows, MASKED_TITLE, nextSort, sortRows, type CompareSort } from "../compare/state";
+import { FigureText } from "../components/FigureText";
 import { go, href } from "../route";
 import { useScope } from "../scope";
 import { Gate } from "./Tables";
 import { useLoad } from "./useLoad";
+import { TableScroll } from "../components/TableScroll";
 
 export const PEER_COLUMNS = ["revenue_ttm", "revenue_growth_ttm", "gross_margin_ttm", "operating_margin_ttm", "free_cash_flow_ttm", "net_debt_q"];
 const SIC_LEVEL: Record<number, string> = { 4: "same SIC", 3: "same 3-digit SIC group", 2: "same 2-digit SIC group" };
@@ -18,7 +23,7 @@ export function Peers({
   token: string;
   companyId: string;
   name: string;
-  onChart: (ids: string[], metric: string, transform: "ttm", title: string) => void;
+  onChart: (ids: string[], metric: string, transform: "ttm") => void;
 }) {
   // a demo sandbox ranks only its own companies (scope.ts)
   const scoped = useScope() !== null;
@@ -28,7 +33,21 @@ export function Peers({
   const match = new Map(data?.peers.map((p) => [p.company_id, p.match]) ?? []);
   const state = { target: companyId, peers: peerIds, cols: PEER_COLUMNS };
   const rows = data ? compareRows(state, [data.company, ...data.peers]) : [];
+  // the suggested order (same SIC first, then size) until a header is clicked, as on Compare
+  const [sort, setSort] = useState<CompareSort | null>(null);
+  const sorted = useMemo(() => sortRows(rows, sort), [rows, sort]);
+  const sortHead = (key: string, content: ReactNode, title?: string, unit?: string) => (
+    <button type="button" className="th-sort" title={title} onClick={() => setSort((s) => nextSort(s, key))}>
+      {content}
+      {sort?.key === key ? (sort.desc ? " ↓" : " ↑") : ""}
+      {unit && <span className="unit"> {unit}</span>}
+    </button>
+  );
+  const ariaSort = (key: string) => (sort?.key === key ? (sort.desc ? ("descending" as const) : ("ascending" as const)) : undefined);
   const readable = rows.filter((r) => r.readable).map((r) => r.companyId);
+  const capped = readable.length > MAX_COMPANY_LINES;
+  // a bank peer group has no operating margin to chart; net margin is what they all report
+  const chartNet = rows.length > 0 && rows.every((r) => !r.readable || r.cells.operating_margin_ttm?.value == null);
 
   return (
     <section className="card">
@@ -40,9 +59,9 @@ export function Peers({
           Open in Compare
         </button>
         <button className="btn sm" disabled={readable.length < 2}
-          onClick={() => onChart(readable, "operating_margin", "ttm", "Operating margin, TTM")}
-          title="Operating margin, TTM: one line per company you can read">
-          Chart margins
+          onClick={() => onChart(readable, chartNet ? "net_margin" : "operating_margin", "ttm")}
+          title={`${chartNet ? `Net margin, TTM: ${rows.some((r) => r.cells.operating_margin_ttm?.status === "not_applicable") ? "operating margin doesn't describe a bank" : "too few of these report an operating margin"}, so this` : "Operating margin, TTM:"} one line per company you can read${capped ? `, the first ${MAX_COMPANY_LINES} (a chart tells ${MAX_COMPANY_LINES} colours apart)` : ""}`}>
+          Chart {chartNet ? "net " : ""}margins{capped ? ` (first ${MAX_COMPANY_LINES} of ${readable.length})` : ""}
         </button>
       </div>
       <Gate load={load} name={name} what="Peers">
@@ -58,26 +77,33 @@ export function Peers({
               <a href={href({ view: "compare", compare: { target: companyId } })}>Compare</a>.
             </p>
           ) : (
-            <div className="tw">
-              <table className="t">
+            <TableScroll label="Peers">
+              <table className="t peers">
                 <thead>
                   <tr>
-                    <th className="first">Company</th>
+                    <th className="first" aria-sort={ariaSort("name")}>{sortHead("name", "Company")}</th>
                     {PEER_COLUMNS.map((k) => {
                       const c = COMPARE_COLUMNS.find((x) => x.key === k)!;
                       return (
-                        <th key={k} className="n">
-                          {c.label} <span className="unit">{c.period}</span>
+                        <th key={k} className="n" aria-sort={ariaSort(k)}>
+                          {sortHead(k, c.label, c.long, c.period)}
                         </th>
                       );
                     })}
                     <th>FYE</th>
-                    <th>Why</th>
+                    <th className="why">Why</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((r) => {
+                  {sorted.map((r) => {
                     const m = match.get(r.companyId);
+                    const why = r.isTarget
+                      ? "this company"
+                      : m
+                        ? [SIC_LEVEL[m.sic_level] ?? "SIC", m.same_revenue_band && "same size band", m.same_filer_category && "same filer category"]
+                            .filter(Boolean)
+                            .join(", ")
+                        : "";
                     return (
                       <tr key={r.companyId} className={[r.isTarget ? "sel" : "", r.readable ? "" : "masked"].join(" ").trim() || undefined}>
                         <td className="first">
@@ -86,37 +112,32 @@ export function Peers({
                             {r.ticker && <span className="faint mono">{r.ticker}</span>}
                             {!r.readable && <span className="tag" title={MASKED_TITLE}>metadata only</span>}
                           </a>
+                          {why && <div className="co-sub faint small" title={why}>{why}</div>}
                         </td>
                         {PEER_COLUMNS.map((k) => {
                           const cell = r.cells[k]!;
+                          const tone = cell.value === null ? "faint" : k === "revenue_growth_ttm" ? (cell.value >= 0 ? "pos" : "neg") : "";
                           return (
-                            <td key={k} className={cell.value === null ? "n faint" : "n"} title={cell.title}>
-                              {cell.text}
+                            <td key={k} className={`n ${tone}`} title={cell.title}>
+                              <FigureText cell={cell} />
                             </td>
                           );
                         })}
-                        <td className="muted">{r.fye ?? "—"}</td>
-                        <td className="muted">
-                          {r.isTarget
-                            ? "this company"
-                            : m
-                              ? [SIC_LEVEL[m.sic_level] ?? "SIC", m.same_revenue_band && "same size band", m.same_filer_category && "same filer category"]
-                                  .filter(Boolean)
-                                  .join(", ")
-                              : ""}
-                        </td>
+                        <td className="muted" title={r.fye ?? undefined}>{r.fye?.slice(0, 3) ?? "—"}</td>
+                        <td className="muted why">{why}</td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
-            </div>
+            </TableScroll>
           )
         }
       </Gate>
       <div className="foot">
         Size bands use TTM revenue, only for companies whose financials you can read. Hover a
-        value for its period and source filing.
+        value for its period and source filing. Click a column to sort (again to reverse, a third time
+        for the suggested order).
       </div>
     </section>
   );

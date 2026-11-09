@@ -6,11 +6,12 @@
  * A saved item grants nothing: it holds company ids and settings, and each page reads the data
  * through the Query API as usual. */
 
-import { emptyChart, restoreChart, type ChartState } from "../chart/model";
-import { parseScreen, screenQuery, type ScreenFilters } from "../companies/screen";
+import { metricLabel } from "../chart/metrics";
+import { chartTitle, emptyChart, layerCompanies, restoreChart, type ChartState } from "../chart/model";
+import { describe, isEmpty, parseScreen, screenQuery, type ScreenFilters } from "../companies/screen";
 import { cleanCompare, compareQuery, parseCompare, type CompareState } from "../compare/state";
 import type { Route } from "../route";
-import type { ItemKind, SavedKind } from "../types";
+import type { ItemKind, SavedKind, SavedWorkspace } from "../types";
 
 export const KIND_LABELS: Record<ItemKind, string> = {
   chart: "Chart",
@@ -67,6 +68,7 @@ export function stateOf(c: Current): Record<string, unknown> {
           if (l.hidden) out.hidden = true;
           if (l.name) out.name = l.name;
           if (l.color !== undefined) out.color = l.color;
+          if (l.display) out.display = l.display;
           return out;
         }),
         ...(c.chart.markers ? { markers: true } : {}),
@@ -217,12 +219,47 @@ export function findWorkspace<T extends { name: string }>(list: T[], name: strin
   return list.find((w) => w.name.trim().toLowerCase() === key);
 }
 
-/** A default name for what's on screen: the chart title, the comps' target ticker. */
+/** A default name for what's on screen: the chart's title (typed or automatic), the comps'
+ * target ticker. */
+/** The one company a page's item is about: comps' target, a chart whose visible layers all
+ * read one company; null for a screen or a chart across companies. */
+export function companyOf(c: Current): string | null {
+  if (c.kind === "comps") return cleanCompare(c.compare).target ?? null;
+  if (c.kind === "screen") return null;
+  // a formula's other tickers count as other companies ("ticker:KO")
+  const ids = new Set(c.chart.layers.filter((l) => !l.hidden).flatMap(layerCompanies));
+  const only = ids.size === 1 ? [...ids][0]! : null;
+  return only && !only.startsWith("ticker:") ? only : null;
+}
+
+export const NEW_WORKSPACE = "__new__";
+
+const words = (s: string) => ` ${s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()} `;
+
+/** Where a Save or New form starts (#119: it started on the first workspace, "PepsiCo vs
+ * Coca-Cola" for an NVDA thesis). With a company: its analysis project, else a plain folder whose
+ * name names it (a ticker or name as whole words), else a new workspace (`NEW_WORKSPACE`, the form
+ * fills in the company's name). Without one: the plain folder changed most recently, else a new
+ * one. Never another company's analysis project. */
+export function defaultWorkspace(list: SavedWorkspace[], company: { id: string; names: string[] } | null): string {
+  const folders = list.filter((w) => !w.project);
+  if (company) {
+    const project = list.find((w) => w.project?.companyId === company.id);
+    if (project) return project.workspace_id;
+    const names = company.names.map((n) => n.trim()).filter((n) => n.length >= 2).map(words);
+    const named = folders.find((w) => names.some((n) => words(w.name).includes(n)));
+    return named?.workspace_id ?? NEW_WORKSPACE;
+  }
+  const recent = [...folders].sort((a, b) => b.updated_at.localeCompare(a.updated_at))[0];
+  return recent?.workspace_id ?? NEW_WORKSPACE;
+}
+
 export function suggestName(c: Current, label: (companyId: string) => string): string {
-  if (c.kind === "chart") return c.chart.title.trim().slice(0, ITEM_NAME_MAX) || "Chart";
+  if (c.kind === "chart") return chartTitle(c.chart, label, metricLabel).slice(0, ITEM_NAME_MAX) || "Chart";
   if (c.kind === "comps") {
     const s = cleanCompare(c.compare);
     return s.target ? `${label(s.target)} comps`.slice(0, ITEM_NAME_MAX) : "Comps";
   }
-  return "Screen";
+  const what = isEmpty(c.screen) ? "All companies" : describe(c.screen);
+  return (what.charAt(0).toUpperCase() + what.slice(1)).slice(0, ITEM_NAME_MAX);
 }

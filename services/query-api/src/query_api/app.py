@@ -77,6 +77,9 @@ PERMISSION_CHECKS = Counter("tributary_permission_checks_total",
                             "(allowed, denied, error)", ["tier", "result"])
 
 log = logging.getLogger("query_api")
+# /v1/companies/{id}/financials: the web app's "Max" statements. XBRL facts start around 2009, so
+# this is every quarter there is; one company's rows through an index, not a scan.
+MAX_FINANCIAL_QUARTERS = 120
 
 
 class DemoLogin(BaseModel):
@@ -316,14 +319,17 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
         access_filter: Annotated[Literal["all", "financials"], Query(
             alias="access", description="all: every company; financials: only companies you "
                                         "can read (a demo sandbox lists nothing else)")] = "all",
+        limit: Annotated[int, Query(ge=1, le=25)] = 5,
     ) -> dict:
-        """Company identity is public metadata; `access` says what the caller can read."""
+        """Tickers, CIKs and any part of a name, best match first (silver.search_companies).
+        Company identity is public metadata; `access` says what the caller can read."""
         access = readable(user_id)
         narrow = access_filter == "financials"
         only = access.ids("financials") if narrow else None
         return {"results": [
             {**r, "access": sorted(access.get(r["company_id"], set()))}
-            for r in store.search(user_id, q, only=only, readable_only=narrow and only is None)
+            for r in store.search(user_id, q, limit, only=only,
+                                  readable_only=narrow and only is None)
         ]}
 
     known: dict[str, list[str]] = {}
@@ -343,7 +349,7 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
     def financials(
         user_id: User, company_id: CompanyId,
         metrics: Annotated[list[str] | None, Query(description="default: all")] = None,
-        quarters: Annotated[int, Query(ge=1, le=40)] = 4,
+        quarters: Annotated[int, Query(ge=1, le=MAX_FINANCIAL_QUARTERS)] = 4,
         view: Annotated[Literal["quarter", "ttm"], Query(
             description="quarter, or trailing twelve months ending each quarter")] = "quarter",
         basis: Annotated[Literal["fiscal", "calendar"], Query(
@@ -352,6 +358,11 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
         fmt: Annotated[Literal["json", "csv"], Query(
             alias="format", description="csv: one row per value, with its source filing")]
             = "json",
+        readings: Annotated[bool, Query(
+            description="add `not_meaningful` (why a ratio reads n/m, migration 035) to each row, "
+                        "and `not_meaningful_periods` for periods a ratio has no row because of "
+                        "the company's equity")]
+            = False,
     ) -> dict | Response:
         names = metric_names()
         every = names["metrics"] + names["derived_metrics"]
@@ -360,7 +371,23 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
             raise HTTPException(422, f"unknown metrics: {sorted(unknown)}")
         require(user_id, "financials", company_id)
         rows = store.financials(user_id, company_id, metrics or every, quarters, view, basis)
-        meta = {"company_id": company_id, "view": view, "basis": basis, "as_of": _now()}
+        meta: dict[str, Any] = {"company_id": company_id, "view": view, "basis": basis,
+                                "as_of": _now()}
+        # equity's reasons (035): over a row's own, and where gold has no row (negative equity)
+        by_equity: dict[tuple[str, date], str] = {}
+        if readings and fmt == "json":
+            # the company's own equity periods in the window, not just the rows' ends: a request
+            # for debt_to_equity alone has no row at a negative-equity date to hang it on
+            for e in store.equity_readings(user_id, company_id, metrics or every, quarters, view,
+                                           basis):
+                by_equity[(e["metric"], e["period_end"])] = e["reason"]
+            for r in rows:
+                if (r["metric"], r["period_end"]) in by_equity:
+                    r["not_meaningful"] = by_equity.pop((r["metric"], r["period_end"]))
+            meta["not_meaningful_periods"] = [
+                {"metric": m, "period_end": end, "reason": reason}
+                for (m, end), reason in sorted(by_equity.items(),
+                                               key=lambda x: (x[0][0], -x[0][1].toordinal()))]
         if fmt == "csv":
             return csv_response(f"{company_id}-financials-{view}-{basis}.csv", FINANCIALS_CSV, ([
                 r["metric"], view, r["period_start"], r["period_end"],
@@ -379,10 +406,34 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
                                            r.get("calendar_quarter")),
                 "value": r["value"], "unit": r["unit"], "value_source": r["value_source"],
                 **({"inputs": r["inputs"]} if r.get("inputs") else {}),
+                **({"not_meaningful": r.get("not_meaningful")} if readings else {}),
                 "citation": {"accession_no": r["accession_no"], "form": r["form"],
                              "filed": r["filed"], "xbrl_tag": r["source_tag"],
                              "source_accessions": r["source_accessions"],
                              "filing_url": filing_url(r.get("filer_cik"), r["accession_no"])},
+                "freshness": {"filed": r["filed"], "ingested_at": r["ingested_at"]},
+            } for r in rows
+        ]}
+
+    @app.get("/v1/companies/{company_id}/annual-per-share", response_model=dict)
+    def annual_per_share(
+        user_id: User, company_id: CompanyId,
+        years: Annotated[int, Query(ge=1, le=30)] = 10,
+    ) -> dict:
+        """EPS and weighted shares for each fiscal year, as the 10-K states them. Quarterly and TTM
+        figures come from /financials; these exist only here, because per-share amounts don't add
+        across quarters (the share count changes), so gold derives neither a TTM nor a fiscal Q4."""
+        require(user_id, "financials", company_id)
+        rows = store.annual_per_share(user_id, company_id, years)
+        return {"company_id": company_id, "as_of": _now(), "rows": [
+            {
+                "metric": r["metric"], "period_start": r["period_start"],
+                "period_end": r["period_end"], "fiscal_period": None, "calendar_period": None,
+                "value": r["value"], "unit": r["unit"], "value_source": "reported",
+                "citation": {"accession_no": r["accession_no"], "form": r["form"],
+                             "filed": r["filed"], "xbrl_tag": r["source_tag"],
+                             "source_accessions": [r["accession_no"]],
+                             "filing_url": filing_url(r["filer_cik"], r["accession_no"])},
                 "freshness": {"filed": r["filed"], "ingested_at": r["ingested_at"]},
             } for r in rows
         ]}
@@ -481,7 +532,8 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
         form: Annotated[str | None, Query(pattern=r"^(10-K|10-Q|8-K)$")] = None,
         accession_no: Annotated[str | None, Query(pattern=r"^\d{10}-\d{2}-\d{6}$")] = None,
         limit: Annotated[int, Query(ge=1, le=5)] = 1,
-        max_chars: Annotated[int, Query(ge=100, le=50_000)] = 8_000,
+        max_chars: Annotated[int, Query(ge=100, le=1_000_000, description=(
+            "the web reader asks for the whole section; the longest are about 400,000"))] = 8_000,
     ) -> dict:
         require(user_id, "filings", company_id)
         rows = store.sections(user_id, company_id, section_key, form, accession_no, limit,
@@ -504,7 +556,7 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
             ast = parse(body.formula)
             a = analyze(ast, body.view)
         except FormulaError as e:
-            raise HTTPException(422, {"errors": [e.to_dict()]}) from None
+            raise HTTPException(422, {"errors": [x.to_dict() for x in e.all()]}) from None
         if a.bare and not body.default_company:
             raise HTTPException(422, {"errors": [_no_default(a.bare).to_dict()]})
         return ast, a
@@ -538,7 +590,8 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
             if bad:
                 return {"valid": False, "errors": not_yours(user_id, bad)}
         ids = {resolved[t] for t in a.tickers} | ({body.default_company} if a.bare else set())
-        return {"valid": True, "unit": a.unit, "alignment": alignment(body.basis, ids),
+        return {"valid": True, "unit": a.unit, "display": a.display,
+                "alignment": alignment(body.basis, ids),
                 "ast": to_dict(ast), "inputs": _inputs(a, {**resolved, None: body.default_company})}
 
     @app.post("/v1/formulas/evaluate")
@@ -564,7 +617,8 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
         compiled = compile_formula(ast, a, companies, body.basis, body.start, body.end)
         rows = store.formula(user_id, compiled)
         return {
-            "formula": body.formula, "unit": a.unit, "basis": body.basis, "view": body.view,
+            "formula": body.formula, "unit": a.unit, "display": a.display,
+            "basis": body.basis, "view": body.view,
             "alignment": compiled.alignment, "as_of": _now(),
             "inputs": _inputs(a, companies),
             "points": [_point(r, compiled.alignment) for r in rows],
@@ -575,7 +629,7 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
 
 def _no_default(at: tuple[int, int]) -> FormulaError:
     return FormulaError("Metrics without a ticker need a default company", at[0], at[1],
-                        "Pass default_company, or write TICKER.metric", code="company")
+                        "Choose a default company, or write TICKER.metric", code="company")
 
 
 def _inputs(a: Analysis, companies: dict[str | None, str | None]) -> list[dict]:

@@ -82,6 +82,11 @@ def run(args):
     return UiActions(api()).run(args)
 
 
+def seen(events):
+    """The events the browser gets: the agent's `usage` events stay in the server."""
+    return [e for e in events if e["type"] != "usage"]
+
+
 # --- actions ------------------------------------------------------------------------------
 
 def test_chart_layers_resolve_to_readable_companies():
@@ -374,7 +379,7 @@ def test_accepted_actions_are_events_and_refused_ones_are_tool_errors():
         response("end_turn", text("Charted NVDA revenue; Tesla isn't on your plan.")),
     )
     q = api()
-    events = list(Agent(fake, q, "claude-haiku-5-5", ui=UiActions(q)).events("chart NVDA, TSLA"))
+    events = seen(Agent(fake, q, "claude-haiku-5-5", ui=UiActions(q)).events("chart NVDA, TSLA"))
     kinds = [e["type"] for e in events]
     assert kinds == ["tool", "action", "tool", "done"]
     assert events[1]["action"]["layers"][0]["company_id"] == NVDA
@@ -458,7 +463,7 @@ def test_agent_tells_the_ui_runner_what_the_screen_shows():
         response("end_turn", text("Saved.")),
     )
     q = api()
-    events = list(Agent(fake, q, "claude-haiku-5-5", ui=UiActions(q)).events(
+    events = seen(Agent(fake, q, "claude-haiku-5-5", ui=UiActions(q)).events(
         "save this chart", context=UiContext.model_validate(CHART_CTX)))
     assert [e["type"] for e in events] == ["tool", "action", "done"]
     assert events[1]["action"]["item"] == "chart"

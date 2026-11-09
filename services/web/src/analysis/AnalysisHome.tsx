@@ -1,9 +1,10 @@
 import { useEffect, useId, useMemo, useState, type FormEvent } from "react";
 
 import type { Readable } from "../access";
-import { ApiError, createWorkspace, peers as fetchPeers, screener, thesisChecks } from "../api";
+import { createWorkspace, failureReason, peers as fetchPeers, screener, thesisChecks } from "../api";
 import { CompanySearch } from "../components/CompanySearch";
 import { Skeleton } from "../components/States";
+import { UNNAMED } from "../displayNames";
 import { ago, day } from "../format";
 import { go, href } from "../route";
 import { STATUS_LABELS } from "../thesis/check";
@@ -23,6 +24,8 @@ interface Props {
   /** companies whose financials the user can read (access.ts): the only ones offered */
   readable: Readable;
   label: (companyId: string) => string;
+  /** a company page's "Start an analysis": New analysis opens on that company */
+  start?: string;
 }
 
 export interface ProjectRow {
@@ -80,8 +83,8 @@ function useLastChecks(token: string, thesisIds: string[]): Record<string, Thesi
 }
 
 /** The Analysis tab's home: your projects and "New analysis". */
-export function AnalysisHome({ token, saved, readable, label }: Props) {
-  const [creating, setCreating] = useState(false);
+export function AnalysisHome({ token, saved, readable, label, start }: Props) {
+  const [creating, setCreating] = useState(Boolean(start && readable.has(start)));
   const list = saved.list.state === "ok" ? saved.list.workspaces : [];
   const rows = useMemo(() => projectRows(list), [list]);
   const names = useNames(token, rows.map((r) => r.companyId));
@@ -104,7 +107,10 @@ export function AnalysisHome({ token, saved, readable, label }: Props) {
         in the latest filings, how it compares with its peers, a model with bear, base and bull cases, the thesis itself, and a
         check of it after every new 10-Q or 10-K. Everything you pin, chart and write stays in the project, visible only to you.
       </p>
-      {creating && <NewAnalysis token={token} saved={saved} readable={readable} onDone={() => setCreating(false)} />}
+      {creating && (
+        <NewAnalysis token={token} saved={saved} readable={readable} onDone={() => setCreating(false)}
+          start={start && readable.has(start) ? { id: start, name: label(start) } : null} />
+      )}
       {saved.list.state === "loading" ? (
         <Skeleton lines={4} label="Loading your analyses" />
       ) : offline ? (
@@ -164,12 +170,22 @@ export function AnalysisHome({ token, saved, readable, label }: Props) {
 
 /** Pick a company (only ones you can read), tick peers (suggested by the peers route), name
  * it: a new project (a workspace with `project` set) opens at its first step. */
-function NewAnalysis({ token, saved, readable, onDone }: Omit<Props, "label"> & { onDone: () => void }) {
+function NewAnalysis({ token, saved, readable, onDone, start }: Omit<Props, "label" | "start"> & {
+  onDone: () => void;
+  start: { id: string; name: string } | null;
+}) {
   const id = useId();
-  const [company, setCompany] = useState<{ id: string; name: string } | null>(null);
+  const [company, setCompany] = useState<{ id: string; name: string } | null>(start);
   const [suggested, setSuggested] = useState<{ id: string; name: string }[] | null>(null);
   const [peers, setPeers] = useState<{ id: string; name: string }[]>([]);
-  const [name, setName] = useState("");
+  const [name, setName] = useState(start ? start.name.slice(0, WORKSPACE_NAME_MAX) : "");
+  // a company page's company: its name may arrive after the form opens
+  const startName = start?.name;
+  useEffect(() => {
+    if (!start || !startName) return;
+    setCompany((c) => (c?.id === start.id ? { ...c, name: startName } : c));
+    setName((n) => (n === "" || n === UNNAMED ? startName.slice(0, WORKSPACE_NAME_MAX) : n));
+  }, [startName]);
   const [touched, setTouched] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -214,7 +230,7 @@ function NewAnalysis({ token, saved, readable, onDone }: Omit<Props, "label"> & 
       onDone();
       go({ view: "analysis", projectId: ws.workspace_id, step: "business" });
     } catch (err) {
-      setError(`Couldn't create it: ${err instanceof ApiError ? err.message : "the Query API didn't answer"}.`);
+      setError(`Couldn't create it: ${failureReason(err)}.`);
       setBusy(false);
     }
   };
@@ -271,7 +287,11 @@ function NewAnalysis({ token, saved, readable, onDone }: Omit<Props, "label"> & 
             setName(e.target.value);
             setTouched(true);
           }} />
-        <p className="faint small">A project is a workspace: it also shows under Workspaces in the sidebar, with its charts, model and thesis.</p>
+        <p className="faint small">
+          An analysis is a project: one company's research in seven guided steps, with its charts, model and thesis kept inside
+          it, and a workspace of its own under Workspaces in the sidebar. A company page's New thesis or New model is a single
+          item in a folder, without the steps.
+        </p>
         {error && <p className="err small" role="alert">{error}</p>}
         <div className="row">
           <span className="grow" />

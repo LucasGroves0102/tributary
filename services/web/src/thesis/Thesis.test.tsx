@@ -7,6 +7,7 @@ import { clearChartCache } from "../chart/cache";
 import { entry, fin, NVDA, nvdaRow, TSLA } from "../fixtures";
 import { forgetVisits } from "../home/lastVisit";
 import { textHash } from "./check";
+import { importMarkdown } from "./model";
 import { clearNewest } from "./useRevisit";
 
 const ME = {
@@ -31,11 +32,14 @@ const HISTORY = [2021, 2022, 2023, 2024, 2025].flatMap((fy, i) => {
   return [
     fin("revenue", end, String(revenue), `FY${fy} Q4`, { citation: { accession_no: `0001045810-${String(fy).slice(2)}-000001`, form: "10-K", filed: `${fy}-02-26`, xbrl_tag: "Revenues", source_accessions: null, filing_url: null } }),
     fin("operating_income", end, String(revenue * 0.2), `FY${fy} Q4`),
-    fin("revenue", `${fy}-10-26`, "1", `FY${fy + 1} Q3`), // a TTM at Q3: not a fiscal year
+    fin("revenue", `${fy}-10-26`, String(revenue * 1.1 ** 0.75), `FY${fy + 1} Q3`), // a TTM at Q3: not a fiscal year (the run rate)
   ];
 });
 
 const ACC = "0001045810-26-000021";
+/** M5: the long draft a short save replaced */
+const LONG_DRAFT = `# The long version\n\n${"Evidence. ".repeat(700)}\n`;
+const VERSION = { version_id: "abababab-abab-4bab-8bab-abababababab", name: "NVDA: the long one", saved_at: "2026-11-05T14:05:00Z", replaced_at: "2026-11-06T09:00:00Z", characters: LONG_DRAFT.length };
 const CHECK_ID = "66666666-6666-4666-8666-666666666666";
 const CITE = { accession_no: ACC, form: "10-Q", filed: "2026-08-27", company_id: NVDA, url: "https://www.sec.gov/Archives/edgar/data/1045810/x.htm", section_key: "I-2", figure: null, figure_status: null, as_of: "2026-11-02T08:00:00+00:00", verified: true };
 /** a check as agent-api stores it (thesis_check.assemble), for the thesis text `hash` */
@@ -73,6 +77,8 @@ const summary = (hash: string, id = CHECK_ID) => ({
 let stored: { check_id: string; text_hash: string }[];
 /** what the next check returns (default: checkResult) */
 let recheck: ((hash: string) => ReturnType<typeof checkResult> & { filings?: unknown[] }) | null;
+/** the check's stream ends with this error and its questions given back (C1) */
+let failCheck: string | null;
 /** NVDA's newest 10-K/10-Q in the filing index */
 let indexRows: Record<string, unknown>[];
 const NEW_10Q = "0001045810-26-000030";
@@ -106,6 +112,10 @@ function respond(url: string, init?: RequestInit): Response {
   if (p === "/v1/companies/search") return Response.json({ results: [{ company_id: TSLA, name: "Tesla", matched_on: "ticker", matched_alias: "TSLA", access: ["financials"] }] });
   if (p === "/api/agent/v1/thesis-checks" && method === "POST") {
     asked.push(body);
+    if (failCheck) {
+      return sse([{ type: "tool", round: 0, name: "get_financials", input: {}, is_error: false }, { type: "error", message: failCheck },
+        { type: "refunded", questions: 4 }, { type: "done", answer: {} }]);
+    }
     const hash = stored[0]?.text_hash ?? "0".repeat(64);
     const result: ReturnType<typeof checkResult> & { filings?: unknown[] } = recheck ? recheck(hash) : checkResult(hash);
     const fresh = { ...summary(hash, "77777777-7777-4777-8777-777777777777"), company_id: NVDA, checked_at: result.checked_at, filings: result.filings ?? [] };
@@ -116,6 +126,10 @@ function respond(url: string, init?: RequestInit): Response {
     return Response.json({ company_id: NVDA, as_of: "", forms: ["10-K", "10-Q"], from: null, to: null, limit: 1, offset: 0, has_more: false, filings: indexRows });
   }
   if (p === `/v1/workspace-items/${THESIS_ID}/checks`) return Response.json({ item_id: THESIS_ID, checks: stored.map((c) => summary(c.text_hash, c.check_id)) });
+  if (p === `/v1/workspace-items/${THESIS_ID}/versions`) return Response.json({ item_id: THESIS_ID, versions: [VERSION] });
+  if (p === `/v1/workspace-items/${THESIS_ID}/versions/${VERSION.version_id}`) {
+    return Response.json({ ...VERSION, item_id: THESIS_ID, state: { companyId: NVDA, markdown: LONG_DRAFT } });
+  }
   const one = p.match(/^\/v1\/workspace-items\/[^/]+\/checks\/([^/]+)$/);
   if (one) {
     const c = stored.find((x) => x.check_id === one[1]);
@@ -194,6 +208,7 @@ beforeEach(() => {
   clearChartCache();
   clearNewest();
   recheck = null;
+  failCheck = null;
   indexRows = [];
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => respond(url, init)));
@@ -274,9 +289,56 @@ it("exports Markdown with a header and readable embed lines", async () => {
   await click(button("Export .md"));
   const text = await blobText(created.mock.calls[0]![0] as Blob);
   expect(text).toMatch(/^---\ntitle: "NVDA: the build-out"\ncompany: ".+"\ncik: "0001045810"\ndate: \d{4}-\d{2}-\d{2}\nsource: Tributary thesis\n---\n\n# Why NVDA/);
-  expect(text).toContain("[Chart: NVDA revenue]");
-  expect(text).toContain("[Model: NVDA model]");
+  // M6: each embed says what it is and shows; a model its assumptions
+  expect(text).toContain(`<!-- tributary:embed ${CHART_ID} -->\n> **Chart: NVDA revenue**`);
+  expect(text).toContain("> **Model: NVDA model**  \n> NVDA: revenue growth and operating margin per forecast year (your assumptions, not data).  \n" +
+    "> Base: year 1 25.0% growth, 50.0% margin; year 2 10.0% growth, 45.0% margin.");
   expect(text).not.toContain("[[embed:");
+  // #41: and it imports back with the embeds live
+  const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
+  Object.defineProperty(input, "files", { value: [new File([text], "nvda.md", { type: "text/markdown" })], configurable: true });
+  await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));
+  await settle();
+  expect(textarea().value).toContain(`[[embed:${CHART_ID}]]`);
+  expect(textarea().value).toContain(`[[embed:${MODEL_ID}]]`);
+  expect(textarea().value).not.toContain("tributary:embed");
+});
+
+it("exports the last check with it, saying when it's stale (M6)", async () => {
+  stored = [{ check_id: CHECK_ID, text_hash: "0".repeat(64) }]; // checked another text: stale
+  await render(`#/thesis/${THESIS_ID}`, ".check-panel .claims");
+  const created = vi.fn((_b: Blob) => "blob:thesis");
+  Object.assign(URL, { createObjectURL: created, revokeObjectURL: () => {} });
+  await click(button("Export .md"));
+  const text = await blobText(created.mock.calls[0]![0] as Blob);
+  expect(text).toMatch(/<!-- tributary:check -->\n## Check \(Tributary, \d{4}-\d{2}-\d{2}\)\n\n\*\*Stale:\*\* the thesis changed after this check/);
+  expect(text).toContain("1 supported, 0 contradicted, 1 can't verify; figures not found in the data: $99.9B.");
+  expect(text).toContain("- **Supported:** “Data centers keep buying.”");
+  expect(importMarkdown(text)).toMatchObject({ ok: true, markdown: expect.not.stringContaining("tributary:check") });
+});
+
+it("an embed goes at the end until the cursor is placed, never above the title (#62)", async () => {
+  items.set(THESIS_ID, item(THESIS_ID, "thesis", "NVDA", { markdown: "# NVDA\n\nBody." }));
+  await render(`#/thesis/${THESIS_ID}`, "textarea.thesis-text");
+  const picker = container.querySelector<HTMLSelectElement>(".thesis-tools select")!;
+  await act(async () => type(picker, CHART_ID));
+  await settle();
+  expect(textarea().value).toBe(`# NVDA\n\nBody.\n\n[[embed:${CHART_ID}]]\n\n`);
+});
+
+it("lists earlier versions and restores one into the editor, unsaved, with an undo (M5)", async () => {
+  await render(`#/thesis/${THESIS_ID}`, "textarea.thesis-text");
+  await click(button("History"));
+  await waitFor(".version-list li");
+  const row = container.querySelector(".version-list li")!;
+  expect(row.textContent).toContain(`${LONG_DRAFT.length.toLocaleString("en-US")} characters · NVDA: the long one`);
+  await click(button("Restore", row as HTMLElement));
+  expect(textarea().value).toBe(LONG_DRAFT);
+  expect(container.querySelector<HTMLInputElement>("input.title-input")?.value).toBe("NVDA: the long one");
+  expect(container.textContent).toContain("● unsaved changes");
+  expect(writes.filter((w) => w.method === "PUT")).toHaveLength(0); // nothing saved until Save
+  await click(button("Undo restore"));
+  expect(textarea().value).toBe(BODY);
 });
 
 it("imports a .md file, refuses a binary one, and can undo the import", async () => {
@@ -312,9 +374,12 @@ it("edits a model's assumptions next to their history and saves them", async () 
   await render(`#/model/${MODEL_ID}`, ".model-table");
   const growth = container.querySelector<HTMLInputElement>('input[aria-label="FY2026E revenue growth, percent"]')!;
   expect(growth.value).toBe("25");
-  // each assumption sits next to its history: 10% a year over 4 years, 20% margins
-  expect(container.querySelector(".assumptions")?.textContent).toContain("4-yr CAGR 10.0%");
-  expect(container.querySelector(".assumptions")?.textContent).toContain("5-yr avg 20.0%");
+  // each assumption sits next to its default; the rule above says the history (10% a year over
+  // 4 years, 20% margins) and the run rate it starts from
+  expect(container.querySelector(".model-rule")?.textContent).toContain("4-yr CAGR 10.0%");
+  expect(container.querySelector(".model-rule")?.textContent).toContain("5-yr avg 20.0%");
+  expect([...container.querySelectorAll(".assumptions td .faint")].map((h) => h.textContent)).toEqual([
+    "default 10.0%", "default 20.0%", "default 7.5%", "default 20.0%"]);
   const forecastRows = () => [...container.querySelectorAll(".model-page .model-table tr.forecast")].map((r) => [...r.querySelectorAll("td")].map((c) => c.textContent));
   expect(forecastRows()[0]).toEqual(["Forecast", "$183.01B", "25.0%", "50.0%", "$91.51B"]);
   await act(async () => type(growth, "0"));
@@ -352,12 +417,18 @@ it("creates a model from the company page, starting from the company's own histo
   await render(`#/company/${NVDA}`, ".co-head h1");
   await click(button("New model"));
   const form = container.querySelector<HTMLFormElement>('form[aria-label="New model"]')!;
-  expect(form.querySelector("select")).not.toBeNull(); // which workspace
+  // #119: it doesn't start on the first workspace ("Semis" says nothing of NVDA): a new one named
+  // after the company, unless the user picks another
+  const select = form.querySelector<HTMLSelectElement>("select")!;
+  expect(select.value).toBe("__new__");
+  expect(form.querySelector<HTMLInputElement>('input[id$="-new"]')?.value).toBe("NVDA");
+  await act(async () => type(select, "w1"));
   await click(button("Create model", form));
   const post = writes.find((w) => w.method === "POST")!;
   expect(post.body).toMatchObject({
     kind: "model",
-    state: { companyId: NVDA, historyYears: 8, assumptions: [{ growth: 10, margin: 20 }, { growth: 10, margin: 20 }, { growth: 10, margin: 20 }] },
+    // the latest year's 10% and 20% (no newer TTM here), growth fading half the gap to 5% a year
+    state: { companyId: NVDA, historyYears: 8, assumptions: [{ growth: 10, margin: 20 }, { growth: 7.5, margin: 20 }, { growth: 6.3, margin: 20 }] },
   });
   expect(window.location.hash).toMatch(/^#\/model\/55555555-/);
 });
@@ -370,6 +441,14 @@ it("checks the saved thesis and shows claims, assumptions, what's not mentioned 
   expect([...panel.querySelectorAll(".claim .status-badge")].map((b) => b.textContent)).toEqual(["Supported", "Can't verify"]);
   expect(panel.querySelector("[onerror], script")).toBeNull(); // DOMPurify, as in chat answers
   expect(panel.querySelector(".claims .figure.unverified")?.textContent).toBe("$99.9B");
+  // #57: the warning names the figure, and the name finds its mark
+  const flag = panel.querySelector<HTMLButtonElement>(".figure-flags button")!;
+  expect(panel.querySelector(".figure-flags")?.textContent).toBe("⚠ 1 figure not found in the data: $99.9B");
+  Element.prototype.scrollIntoView = function (this: Element) {
+    this.classList.add("seen");
+  };
+  await click(flag);
+  expect(panel.querySelector(".claims .figure.unverified")?.classList.contains("seen")).toBe(true);
   expect(panel.querySelector(".claims .accession.unverified")?.textContent).toContain("0000000000-26-000001");
   // a cited section opens the filing reader there
   const reader = panel.querySelector<HTMLAnchorElement>(".check-cites a.reader-link")!;
@@ -463,4 +542,19 @@ it("shows no check panel until a check exists", async () => {
   await render(`#/thesis/${THESIS_ID}`, "textarea.thesis-text");
   expect(container.querySelector(".check-panel")).toBeNull();
   expect(button("Check my thesis").disabled).toBe(false);
+});
+
+it("a check that couldn't finish says why, that it didn't count, and keeps the last saved check (C1)", async () => {
+  const hash = await textHash(NVDA, BODY);
+  stored = [{ check_id: CHECK_ID, text_hash: hash }];
+  failCheck = "its result was longer than one reply can hold, even when asked to shorten it, so there was nothing to save";
+  await render(`#/thesis/${THESIS_ID}`, ".check-panel .claims");
+  await click(button("Check my thesis"));
+  await waitFor(".check-panel .report-status.error");
+  const panel = container.querySelector<HTMLElement>(".check-panel")!;
+  expect(panel.querySelector(".report-status.error")?.textContent).toBe(
+    "The check wasn't finished: its result was longer than one reply can hold, even when asked to shorten it, so there was " +
+    "nothing to save. It didn't count: the 4 questions it took were given back. The last saved check is below.");
+  expect([...panel.querySelectorAll(".claim .status-badge")].map((b) => b.textContent)).toEqual(["Supported", "Can't verify"]);
+  expect([...panel.querySelectorAll<HTMLOptionElement>("select option")].map((o) => o.value)).toEqual([CHECK_ID]);
 });

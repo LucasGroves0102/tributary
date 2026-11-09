@@ -143,6 +143,11 @@ NOTE = (f"# Semis\n\n## Summary\n\nNVIDIA's revenue was $46.7B in the quarter to
         "2026-10-21T08:00Z.")
 
 
+def seen(events):
+    """The events the browser gets: the agent's `usage` events stay in the server."""
+    return [e for e in events if e["type"] != "usage"]
+
+
 def run(fake_api, *responses, report_id=None):
     http = httpx.Client(base_url="http://query-api", transport=httpx.MockTransport(fake_api))
     api = QueryApi("http://query-api", "alice-token", http=http)
@@ -151,7 +156,7 @@ def run(fake_api, *responses, report_id=None):
                                                  rules=REPORT_RULES, max_rounds=12),
                         clock=lambda: NOW)
     job = reporter.prepare(WS, report_id)
-    return list(reporter.events(job)), messages, job
+    return seen(reporter.events(job)), messages, job
 
 
 def test_writes_a_report_from_the_workspace():

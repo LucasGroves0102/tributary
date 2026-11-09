@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { ApiError, writeReport } from "../api";
+import { agentError, ApiError, writeReport } from "../api";
 import type { AgentEvent } from "../types";
+import { sentence } from "../components/States";
 
 /** One report run (agent-api /v1/reports): writing, then saved or failed. It lives with the
  * app, so moving to another screen doesn't stop it. */
@@ -57,7 +58,9 @@ export function useReportWriter(
           setRun({ status: "done", workspaceId, itemId: e.item.item_id, ok: e.verification.ok, unverified: e.verification.unverified });
           saved.current(e.item.item_id, workspaceId);
         } else if (e.type === "error") {
-          fail(`The report wasn't finished: ${e.message}.`);
+          fail(`The report wasn't finished: ${agentError(e.message)}.`);
+        } else if (e.type === "refunded") {
+          setRun((r) => (r.status === "error" ? { ...r, message: `${r.message} It didn't count against your questions.` } : r));
         }
       };
       writeReport(token, workspaceId, reportId, onEvent, ctl.signal)
@@ -69,7 +72,7 @@ export function useReportWriter(
             setRun({ status: "idle" });
             return;
           }
-          fail(err instanceof ApiError ? err.message : "The assistant is unreachable.");
+          fail(err instanceof ApiError ? sentence(err.message) : "The assistant is unreachable.");
         });
     },
     [token, run.status],

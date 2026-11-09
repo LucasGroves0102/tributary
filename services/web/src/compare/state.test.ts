@@ -15,7 +15,9 @@ import {
   median,
   medianTitle,
   parseCompare,
+  nextSort,
   peerStats,
+  sortRows,
 } from "./state";
 
 const AAPL = "0000320193";
@@ -97,7 +99,7 @@ describe("the table", () => {
     expect(rows[1]!.cells.revenue_ttm!.title).toContain("doesn't cover");
     const stats = peerStats(rows, s.cols);
     // peers: TSLA (no values) and AAPL; NVDA is the target and doesn't count
-    expect(stats.operating_margin_ttm).toEqual({ median: 0.3, n: 1, high: 0.3, low: 0.3, banks: 0 });
+    expect(stats.operating_margin_ttm).toEqual({ median: 0.3, n: 1, high: 0.3, low: 0.3, banks: 0, unusable: 0 });
   });
 
   it("medians of even and odd counts", () => {
@@ -110,12 +112,12 @@ describe("the table", () => {
     const csv = compareCsv(s, rows).split("\r\n");
     expect(csv[0]).toBe(
       "role,company_id,ticker,company,access,latest_quarter_calendar,latest_quarter_fiscal,latest_period_end," +
-        "revenue_ttm,revenue_ttm_period_end,revenue_ttm_source_accession," +
-        "operating_margin_ttm,operating_margin_ttm_period_end,operating_margin_ttm_source_accession",
+        "revenue_ttm,revenue_ttm_period_end,revenue_ttm_source_accession,revenue_ttm_note," +
+        "operating_margin_ttm,operating_margin_ttm_period_end,operating_margin_ttm_source_accession,operating_margin_ttm_note",
     );
     expect(csv[1]).toContain(`target,${NVDA},NVDA,Nvidia,financials,CY2026 Q2,FY2027 Q2,2026-07-26,130497000000,2026-07-26,`);
-    expect(csv[2]).toBe(`peer,${TSLA},TSLA,Tesla,metadata only,,,,,,,,,`);
-    expect(csv[4]).toBe("peer median (excludes target),,,,,,,,400000000000,,1 peers,0.3,,1 peers");
+    expect(csv[2]).toBe(`peer,${TSLA},TSLA,Tesla,metadata only,,,,,,,,,,,`);
+    expect(csv[4]).toBe("peer median (excludes target),,,,,,,,400000000000,,1 peers,,0.3,,1 peers,");
   });
 
   it("guards the CSV against spreadsheet formulas in names", () => {
@@ -125,35 +127,74 @@ describe("the table", () => {
 });
 
 it("charts a column as its metric in the chart builder", () => {
-  expect(chartMetric("operating_margin_ttm")).toEqual({ metric: "operating_margin", transform: "ttm", title: "Operating margin, TTM" });
-  expect(chartMetric("net_debt_q")).toEqual({ metric: "net_debt", transform: "q", title: "Net debt, quarter end" });
+  expect(chartMetric("operating_margin_ttm")).toEqual({ metric: "operating_margin", transform: "ttm" });
+  expect(chartMetric("net_debt_q")).toEqual({ metric: "net_debt", transform: "q" });
   expect(chartMetric("revenue_growth_ttm")).toMatchObject({ metric: "revenue", transform: "yoy" });
   expect(chartMetric("salary_ttm")).toBeNull();
 });
 
-describe("banks", () => {
+describe("what can't be compared", () => {
   const JPM = "0000019617";
+  const reason = "this is a bank: deposits are its debt";
   const BANK = (over: Record<string, string | null>): ScreenerRow => ({
     ...row(entry({ company_id: JPM, name: "JPMorgan Chase", tickers: ["JPM"], industry: "National Commercial Banks" })),
     values: { revenue_ttm: "180000000000", operating_margin_ttm: null, net_debt_q: null, ...over },
+    readings: { operating_margin_ttm: { status: "not_applicable", reason }, net_debt_q: { status: "not_applicable", reason } },
   });
   const s = { target: NVDA, peers: [AAPL, JPM], cols: ["revenue_ttm", "operating_margin_ttm", "net_debt_q"] };
 
-  it("show n/a for operating margin and net debt, and stay out of those medians", () => {
-    const rows = compareRows(s, [row(entry()), APPLE("0.3"), BANK({})]);
-    const jpm = rows.find((r) => r.companyId === JPM)!;
-    expect(jpm.cells.operating_margin_ttm).toMatchObject({ text: "n/a (bank)", bank: true });
-    expect(jpm.cells.operating_margin_ttm!.title).toContain("doesn't describe a bank");
-    expect(jpm.cells.revenue_ttm!.bank).toBeUndefined();
-    const stats = peerStats(rows, s.cols);
-    expect(stats.operating_margin_ttm).toMatchObject({ median: 0.3, n: 1, banks: 1 });
-    expect(stats.revenue_ttm).toMatchObject({ n: 2, banks: 0 });
-    expect(medianTitle(stats.operating_margin_ttm!)).toContain("1 bank left out");
+  it("a bank shows n/a, with or without a figure, and stays out of those medians", () => {
+    for (const over of [{}, { operating_margin_ttm: "0.9" }] as Record<string, string | null>[]) {
+      const rows = compareRows(s, [row(entry()), APPLE("0.3"), BANK(over)]);
+      const jpm = rows.find((r) => r.companyId === JPM)!;
+      expect(jpm.cells.operating_margin_ttm).toMatchObject({ text: "n/a (bank)", status: "not_applicable", value: null });
+      expect(jpm.cells.operating_margin_ttm!.title).toContain("Left out of the peer median");
+      expect(jpm.cells.revenue_ttm!.status).toBeNull();
+      const stats = peerStats(rows, s.cols);
+      expect(stats.operating_margin_ttm).toMatchObject({ median: 0.3, n: 1, banks: 1 });
+      expect(stats.revenue_ttm).toMatchObject({ n: 2, banks: 0 });
+      expect(medianTitle(stats.operating_margin_ttm!)).toContain("1 bank left out");
+    }
   });
 
-  it("leave a bank's value out of the median even when the API has one", () => {
-    const rows = compareRows(s, [row(entry()), APPLE("0.3"), BANK({ operating_margin_ttm: "0.9" })]);
-    expect(rows[2]!.cells.operating_margin_ttm).toMatchObject({ text: "90.0%", bank: true });
-    expect(peerStats(rows, s.cols).operating_margin_ttm!.median).toBe(0.3);
+  it("n/m and old figures leave the median, the sort and the high, and keep their exact figure for the CSV", () => {
+    const margin = { target: NVDA, peers: [AAPL, TSLA], cols: ["operating_margin_ttm"] };
+    const absurd: ScreenerRow = { ...APPLE("10.47"), readings: { operating_margin_ttm: { status: "not_meaningful", reason: "operating income is larger than revenue" } } };
+    const old: ScreenerRow = { ...row(TESLA), access: ["financials"], values: { operating_margin_ttm: "0.5" }, sources: { operating_margin_ttm: { period_end: "2018-12-31", accession_no: "a", form: "10-K", filed: "2019-02-19" } }, readings: { operating_margin_ttm: { status: "old" } }, latest_period: "2026-09-30" };
+    const rows = compareRows(margin, [row(entry()), absurd, old]);
+    const apple = rows.find((r) => r.companyId === AAPL)!.cells.operating_margin_ttm!;
+    expect(apple).toMatchObject({ text: "n/m", value: null, raw: "10.47" });
+    const tesla = rows.find((r) => r.companyId === TSLA)!.cells.operating_margin_ttm!;
+    expect(tesla).toMatchObject({ text: "50.0%", value: null, old: true, asOf: "Dec '18" });
+    const stats = peerStats(rows, margin.cols).operating_margin_ttm!;
+    expect(stats).toMatchObject({ median: null, n: 0, high: null, unusable: 2 });
+    expect(medianTitle(stats)).toContain("2 left out (not meaningful, or years old)");
+    expect(sortRows(rows, { key: "operating_margin_ttm", desc: true })[0]!.companyId).toBe(NVDA);
+    expect(compareCsv(margin, rows)).toMatch(/10\.47,[^,]*,[^,]*,not meaningful/);
+  });
+});
+
+describe("sorting a comps table", () => {
+  const s = { target: NVDA, peers: [TSLA], cols: ["revenue_ttm"] };
+  const rows = () => compareRows(s, [row(entry()), row(TESLA)]);
+
+  it("starts high-first on values, A-Z on names, and the third click clears it", () => {
+    const one = nextSort(null, "revenue_ttm");
+    expect(one).toEqual({ key: "revenue_ttm", desc: true });
+    const two = nextSort(one, "revenue_ttm");
+    expect(two).toEqual({ key: "revenue_ttm", desc: false });
+    expect(nextSort(two, "revenue_ttm")).toBeNull();
+    expect(nextSort(two, "name")).toEqual({ key: "name", desc: false });
+    expect(nextSort({ key: "name", desc: false }, "name")).toEqual({ key: "name", desc: true });
+  });
+
+  it("keeps empty cells last whichever way, and doesn't change the rows it was given", () => {
+    const given = rows();
+    const masked = given.find((r) => r.companyId === TSLA)!;
+    expect(masked.cells.revenue_ttm!.value).toBeNull(); // TESLA has no grant in the fixture
+    expect(sortRows(given, { key: "revenue_ttm", desc: true })[1]!.companyId).toBe(TSLA);
+    expect(sortRows(given, { key: "revenue_ttm", desc: false })[1]!.companyId).toBe(TSLA);
+    expect(given.map((r) => r.companyId)).toEqual([NVDA, TSLA]);
+    expect(sortRows(given, null)).toBe(given);
   });
 });

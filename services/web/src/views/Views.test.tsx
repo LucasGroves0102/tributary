@@ -80,12 +80,9 @@ const click = async (el: HTMLElement) => {
   await act(async () => el.click());
   await settle();
 };
-const choose = async (select: HTMLSelectElement, value: string) => {
-  await act(async () => {
-    select.value = value;
-    select.dispatchEvent(new Event("change", { bubbles: true }));
-  });
-  await settle();
+const addColumn = async (name: string) => {
+  const found = [...container.querySelectorAll<HTMLButtonElement>(".col-found button")].find((b) => b.textContent === `+ ${name}`)!;
+  await act(async () => found.click());
 };
 const headings = () => [...container.querySelectorAll(".page h2")].map((h) => h.textContent?.trim().split(" ")[0]);
 const requests = (path: string) =>
@@ -137,7 +134,14 @@ it("watchlist and screener columns: choose, order, saved, read from the API", as
   await render("#/", "table.watchlist");
   const picker = container.querySelector<HTMLButtonElement>(".card .col-picker button")!;
   await click(picker);
-  await choose(byLabel("Add a watchlist column") as HTMLSelectElement, "net_income_ttm");
+  // typing narrows a long list down to what's asked for
+  const find = byLabel("Add a watchlist column") as HTMLInputElement;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(find, "income ttm");
+    find.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  expect([...container.querySelectorAll(".col-found button")].map((b) => b.textContent)).toEqual(["+ Net income (TTM)"]);
+  await addColumn("Net income (TTM)");
   expect(saved.watchlist).toEqual({ columns: ["revenue_ttm", "revenue_growth_ttm", "operating_margin_ttm", "free_cash_flow_ttm", "net_debt_q", "net_income_ttm"] });
   await click(byLabel("Move Net income (TTM) left"));
   await click(byLabel("Remove Free cash flow (TTM)"));
@@ -154,7 +158,7 @@ it("watchlist and screener columns: choose, order, saved, read from the API", as
   const params = requests("/v1/screener").at(-1)!.url.searchParams;
   expect(params.getAll("columns")).toEqual(["net_income_ttm", "revenue_ttm"]);
   const th = [...container.querySelectorAll("table.screen th")].map((t) => t.textContent);
-  expect(th.slice(2, 4)).toEqual(["Net income TTM", "Revenue TTM ↓"]); // sorted by revenue
+  expect(th.slice(2, 4)).toEqual(["Net income TTM", "Revenue ↓ TTM"]); // sorted by revenue
   await click(container.querySelector<HTMLButtonElement>(".col-picker button")!);
   await click(button("Reset"));
   expect(saved.screener).toBeUndefined();

@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import type { Readable } from "../access";
-import { ApiError, expectedFilingsOf, getItem, screener, updateProject, workspace as fetchWorkspace } from "../api";
+import { ApiError, expectedFilingsOf, failureReason, getItem, screener, updateProject, workspace as fetchWorkspace } from "../api";
 import type { ChartState } from "../chart/model";
-import { header, HEADER_COLUMNS } from "../company/data";
+import { header, HEADER_COLUMNS, listingLine } from "../company/data";
+import { leftText, useAllowanceContext } from "../assistant/useAllowance";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { day } from "../format";
-import { defaultAssumptions, DEFAULT_HISTORY, DEFAULT_YEARS, historyStats, modelState } from "../models/model";
+import { DEFAULT_HISTORY, DEFAULT_YEARS, modelState } from "../models/model";
 import { ModelPage } from "../models/ModelPage";
-import { loadHistory } from "../models/useHistory";
+import { newModelAssumptions } from "../models/useHistory";
 import { go, href } from "../route";
 import { textHash } from "../thesis/check";
 import { CheckPanel } from "../thesis/CheckPanel";
@@ -18,16 +19,17 @@ import { useNewerFiling } from "../thesis/useRevisit";
 import { useThesisCheck } from "../thesis/useThesisCheck";
 import { embedMarker } from "../thesis/model";
 import type { ProjectState, ProjectStep, SavedWorkspaceFull, ScreenerRow } from "../types";
+import { WorkspaceActions } from "../workspaces/Actions";
 import type { Saved } from "../workspaces/useSaved";
 import type { ThesisHandle, ThesisStatus } from "./bridge";
 import { PinButton, PinContext, type Pinning } from "./Pin";
 import {
-  appendToSection,
+  nextPillarName,
+  pillarsOf,
+  placePin,
   catalystLines,
   coreWritten,
   firstOpenStep,
-  groupOf,
-  GROUPS,
   hasOwnText,
   nextStep,
   restoreProject,
@@ -38,10 +40,9 @@ import {
   STEPS,
   thesisTemplate,
   toggleDone,
-  autoDone,
+  workHint,
   type Facts,
-  type Group,
-  type SectionKey,
+  type PinTarget,
 } from "./project";
 import { Business, Numbers, PeersStep, WhatChanged } from "./Steps";
 
@@ -58,7 +59,7 @@ interface Props {
   readable: Readable;
   label: (companyId: string) => string;
   onOpenChart: (s: ChartState) => void;
-  onChartMany: (ids: string[], metric: string, transform: "ttm" | "q" | "yoy", title: string) => void;
+  onChartMany: (ids: string[], metric: string, transform: "ttm" | "q" | "yoy") => void;
 }
 
 type Loaded =
@@ -89,7 +90,7 @@ export function ProjectPage(props: Props) {
       })
       .catch((e) => live && setLoaded((l) => l.state === "ok" ? l : {
         state: "error",
-        message: e instanceof ApiError ? e.message : "the Query API didn't answer",
+        message: failureReason(e),
         notFound: e instanceof ApiError && e.status === 404,
       }));
     return () => {
@@ -163,14 +164,14 @@ function Project({ token, user, projectId, step: asked, itemId, saved, readable,
     checks: checks.history.length,
   };
   // without a step in the route: where the project stood when it was opened (not a moving target)
-  const [opened] = useState(() => firstOpenStep(initial, facts));
+  const [opened] = useState(() => firstOpenStep(initial));
   const step = asked ?? opened;
   const [visited, setVisited] = useState<Set<ProjectStep>>(() => new Set([step]));
-  const [lastIn, setLastIn] = useState<Partial<Record<Group, ProjectStep>>>({});
   useEffect(() => {
     setVisited((v) => (v.has(step) ? v : new Set([...v, step])));
-    setLastIn((l) => ({ ...l, [groupOf(step)]: step }));
   }, [step]);
+  // M3: the rail says when the last check no longer covers the thesis or the filings
+  const recheck = useRecheckReason(token, companyId, checks, thesisStatus);
   useEffect(() => {
     if (!toast) return;
     const t = window.setTimeout(() => setToast(null), 8000);
@@ -190,7 +191,7 @@ function Project({ token, user, projectId, step: asked, itemId, saved, readable,
       saved.reload();
     } catch (e) {
       if (what === "notes") setNotesStatus("error");
-      else setProjectError(`Couldn't save the project: ${e instanceof ApiError ? e.message : "the Query API didn't answer"}.`);
+      else setProjectError(`Couldn't save the project: ${failureReason(e)}.`);
     }
   }, [token, projectId, saved]);
 
@@ -201,28 +202,40 @@ function Project({ token, user, projectId, step: asked, itemId, saved, readable,
 
   /** The project's thesis, from the template (Catalysts prefilled with expected filings), with
    * `first` already pinned into it when the thesis is created for a pin. */
-  const createThesis = useCallback(async (first?: { section: SectionKey; block: string }) => {
+  const createThesis = useCallback(async (first?: { target: PinTarget; block: string }) => {
     const expected = await expectedFilingsOf(token, companyId, 4).then((r) => r.expected).catch(() => []);
     let markdown = thesisTemplate({ company: ticker !== name ? `${name} (${ticker})` : name, catalysts: catalystLines(expected) });
-    if (first) markdown = appendToSection(markdown, first.section, first.block);
+    if (first) markdown = placePin(markdown, first.target, first.block);
     const item = await saved.create("thesis", `${ticker} thesis`.slice(0, 120), thesisState({ companyId, markdown }), { workspaceId: projectId });
     reload();
     return item;
   }, [token, companyId, ticker, name, saved, projectId, reload]);
 
+  // the pillars a pin can go under: the editor's text (unsaved included), else the saved one, else
+  // the template's (a pin with no thesis yet starts it)
+  const thesisSaved = thesisStatus?.saved ?? null;
   const pinning: Pinning = useMemo(() => ({
-    pin: async (section, make, what) => {
-      const where = sectionOf(section).heading;
+    pillars: () => {
+      const handle = bridge.current;
+      if (!thesisId) return pillarsOf(thesisTemplate({ company: "", catalysts: [] }));
+      return pillarsOf(handle && handle.itemId === thesisId ? handle.markdown() : thesisSaved ?? "");
+    },
+    pin: async (target, make, what) => {
+      const section = target.section;
+      const heading = sectionOf(section).heading;
       try {
         const block = await make();
+        const current = !thesisId ? thesisTemplate({ company: "", catalysts: [] })
+          : bridge.current && bridge.current.itemId === thesisId ? bridge.current.markdown() : thesisSaved ?? "";
+        const where = target.pillar ? `${heading}, ${target.pillar}` : target.newPillar ? `${heading}, ${nextPillarName(current)} (new)` : heading;
         if (!thesisId) {
-          await createThesis({ section, block });
+          await createThesis({ target, block });
           setToast({ text: `Started your thesis from the template and pinned the ${what} under ${where}.`, thesis: true });
           return;
         }
         const handle = bridge.current;
         if (handle && handle.itemId === thesisId) {
-          const r = await handle.pin(section, block);
+          const r = await handle.pin(target, block);
           setToast({
             text: r === "saved" ? `Pinned the ${what} under ${where} in your thesis.`
               : `Added the ${what} under ${where} to your unsaved thesis; save it on the Thesis tab.`,
@@ -232,7 +245,7 @@ function Project({ token, user, projectId, step: asked, itemId, saved, readable,
           // the editor isn't loaded yet: write the saved text, then load the editor again
           const item = await getItem(token, thesisId);
           const md = typeof item.state.markdown === "string" ? item.state.markdown : "";
-          await saved.update(thesisId, { state: { ...item.state, markdown: appendToSection(md, section, block) } });
+          await saved.update(thesisId, { state: { ...item.state, markdown: placePin(md, target, block) } });
           setThesisEpoch((n) => n + 1);
           setToast({ text: `Pinned the ${what} under ${where} in your thesis.`, thesis: true });
         }
@@ -241,10 +254,10 @@ function Project({ token, user, projectId, step: asked, itemId, saved, readable,
         setToast({ text: `Couldn't pin it: ${e instanceof ApiError || e instanceof Error ? e.message : "try again"}.`, error: true });
       }
     },
-  }), [thesisId, createThesis, token, saved, itemsChanged]);
+  }), [thesisId, thesisSaved, createThesis, token, saved, itemsChanged]);
 
   const goStep = (s: ProjectStep) => go({ view: "analysis", projectId, step: s });
-  const doneCount = STEPS.filter((s) => stepDone(s.key, project, facts)).length;
+  const doneCount = STEPS.filter((s) => stepDone(s.key, project)).length;
   const modelId = (itemId && models.some((m) => m.item_id === itemId) ? itemId : models[0]?.item_id) ?? null;
   // the header row says what the viewer reads; until it arrives, ask (the API decides: 403 shows as no access)
   const canFilings = row ? access.includes("filings") : true;
@@ -252,8 +265,8 @@ function Project({ token, user, projectId, step: asked, itemId, saved, readable,
 
   const pane = (key: ProjectStep, body: ReactNode) => {
     const info = stepInfo(key);
-    const done = stepDone(key, project, facts);
-    const auto = autoDone(key, project, facts);
+    const done = stepDone(key, project);
+    const hint = workHint(key, project, facts);
     const next = nextStep(key);
     if (!visited.has(key) && !(key === "thesis" && thesisId)) return null;
     return (
@@ -264,11 +277,13 @@ function Project({ token, user, projectId, step: asked, itemId, saved, readable,
             <h2 id={`step-${key}`}>{info.label}</h2>
             <p className="muted small">{info.why}</p>
           </div>
-          <label className="chk step-done" title={auto ? "Done: its work is in the project" : "Mark this step done when you're happy with it"}>
-            <input type="checkbox" checked={done} disabled={auto && !project.done.includes(key)}
-              onChange={() => void saveProject(toggleDone(project, key))} />
-            {done ? "Done" : "Mark done"}
-          </label>
+          <div className="step-done-box">
+            <label className="chk step-done" title={done ? "You marked this step done; untick to reopen it" : "Mark this step done when you're happy with it"}>
+              <input type="checkbox" checked={done} onChange={() => void saveProject(toggleDone(project, key))} />
+              {done ? "Done" : "Mark done"}
+            </label>
+            {hint && <span className="faint small step-work">{hint}</span>}
+          </div>
         </div>
         {body}
         {next && (
@@ -289,7 +304,7 @@ function Project({ token, user, projectId, step: asked, itemId, saved, readable,
               <div className="eyebrow"><a href={href({ view: "analysis" })}>Analysis</a> · {ws.name}</div>
               <div className="row wrap">
                 <h1>{name}</h1>
-                {h && <span className="mono muted">{[h.tickers.join(", "), h.exchanges.join(", ")].filter(Boolean).join(" · ")}</span>}
+                {h && <span className="mono muted" title={listingLine(h.tickers, h.exchanges).more ?? undefined}>{listingLine(h.tickers, h.exchanges).text}</span>}
               </div>
               {h && (
                 <div className="meta">
@@ -302,19 +317,17 @@ function Project({ token, user, projectId, step: asked, itemId, saved, readable,
               <span className="small muted">{doneCount} of {STEPS.length} steps done</span>
               <span className="bar" aria-hidden="true"><span className={`fill f${doneCount}`} /></span>
               <a className="btn sm ghost" href={href({ view: "company", companyId })}>Company page</a>
+              <WorkspaceActions workspace={ws} saved={saved} what="analysis" onDeleted={() => go({ view: "analysis" })} />
             </div>
           </div>
+          {/* #153: the same steps under the same names as the rail; each tab opens its own step */}
           <nav className="tabs" aria-label="Project">
-            {GROUPS.map((g) => {
-              const target = lastIn[g.key] ?? g.steps[0]!;
-              const on = groupOf(step) === g.key;
-              return (
-                <a key={g.key} href={href({ view: "analysis", projectId, step: target })} aria-current={on ? "page" : undefined}>
-                  {g.label}
-                  {g.key === "thesis" && thesisStatus?.dirty && <span className="dirty" title="Unsaved changes"> ●</span>}
-                </a>
-              );
-            })}
+            {STEPS.map((s) => (
+              <a key={s.key} href={href({ view: "analysis", projectId, step: s.key })} aria-current={step === s.key ? "page" : undefined}>
+                {s.label}
+                {s.key === "thesis" && thesisStatus?.dirty && <span className="dirty" title="Unsaved changes"> ●</span>}
+              </a>
+            ))}
           </nav>
         </section>
         {projectError && <div className="banner" role="alert">{projectError} <button className="btn sm ghost" onClick={() => setProjectError(null)}>Dismiss</button></div>}
@@ -329,14 +342,16 @@ function Project({ token, user, projectId, step: asked, itemId, saved, readable,
           <nav className="step-rail" aria-label="Guided steps">
             <ol>
               {STEPS.map((s, i) => {
-                const done = stepDone(s.key, project, facts);
+                const done = stepDone(s.key, project);
+                const alert = s.key === "monitor" ? recheck : null;
                 return (
                   <li key={s.key}>
                     <a href={href({ view: "analysis", projectId, step: s.key })} aria-current={step === s.key ? "step" : undefined}
                       className={done ? "done" : undefined}>
                       <span className="n" aria-hidden="true">{done ? "✓" : i + 1}</span>
                       <span className="grow">{s.label}</span>
-                      <span className="visually-hidden">{done ? ", done" : ", not done"}</span>
+                      {alert && <span className="step-alert" title={alert}>re-check</span>}
+                      <span className="visually-hidden">{done ? ", done" : ", not done"}{alert ? `, ${alert}` : ""}</span>
                     </a>
                   </li>
                 );
@@ -369,7 +384,7 @@ function Project({ token, user, projectId, step: asked, itemId, saved, readable,
                 try {
                   await createThesis();
                 } catch (e) {
-                  setToast({ text: `Couldn't start the thesis: ${e instanceof ApiError ? e.message : "the Query API didn't answer"}.`, error: true });
+                  setToast({ text: `Couldn't start the thesis: ${failureReason(e)}.`, error: true });
                 }
               }} />
             ))}
@@ -430,13 +445,12 @@ function ModelStep({ token, companyId, ticker, models, modelId, saved, projectId
     setBusy(true);
     setError(null);
     try {
-      const years = await loadHistory(token, companyId).then((h) => h.years).catch(() => []);
-      const state = modelState({ companyId, historyYears: DEFAULT_HISTORY, assumptions: defaultAssumptions(historyStats(years), DEFAULT_YEARS) });
+      const state = modelState({ companyId, historyYears: DEFAULT_HISTORY, assumptions: await newModelAssumptions(token, companyId, DEFAULT_YEARS) });
       const item = await saved.create("model", `${ticker} model`.slice(0, 120), state, { workspaceId: projectId });
       onChanged();
       go({ view: "analysis", projectId, step: "model", itemId: item.item_id });
     } catch (e) {
-      setError(`Couldn't create it: ${e instanceof ApiError ? e.message : "the Query API didn't answer"}.`);
+      setError(`Couldn't create it: ${failureReason(e)}.`);
     } finally {
       setBusy(false);
     }
@@ -447,8 +461,8 @@ function ModelStep({ token, companyId, ticker, models, modelId, saved, projectId
         <div className="card-b">
           <p>
             A revenue-first model: the company's fiscal years of revenue and operating income from its filings, then your
-            growth and margin per forecast year, as base, bear and bull cases. It starts at {ticker}'s own 5-year revenue CAGR
-            and average operating margin.
+            growth and margin per forecast year, as base, bear and bull cases. It starts at {ticker}'s trailing-twelve-month
+            growth and operating margin, fading each year toward its long-run rate; change any of it.
           </p>
           <button className="btn primary" disabled={busy} onClick={() => void create()}>{busy ? "Creating…" : "Create the model"}</button>
           {error && <p className="err small" role="alert">{error}</p>}
@@ -477,8 +491,31 @@ function ModelStep({ token, companyId, ticker, models, modelId, saved, projectId
   );
 }
 
-/** Step 7: Check my thesis (the shared check, beside the project's thesis) and Revisit's
- * new-filing notice; KPIs and red lines come next (phase 3). */
+/** Why the last check no longer covers the thesis (its text changed since) or the filings (a
+ * newer 10-K/10-Q is in the index), for the rail; null when it does or there's no check. */
+function useRecheckReason(token: string, companyId: string, checks: ReturnType<typeof useThesisCheck>,
+  status: ThesisStatus | null): string | null {
+  const last = checks.history[0];
+  const newer = useNewerFiling(token, last, companyId);
+  const [hash, setHash] = useState<string | null>(null);
+  const savedText = status?.saved ?? null;
+  useEffect(() => {
+    if (savedText === null) return;
+    let live = true;
+    textHash(companyId, savedText).then((x) => live && setHash(x)).catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [companyId, savedText]);
+  if (!last) return null;
+  if (newer) return `a newer ${newer.form} was filed ${day(newer.filed, true)} after your last check`;
+  if (hash !== null && hash !== last.text_hash) return "the thesis changed after your last check";
+  return null;
+}
+
+/** Step 7: Check my thesis (the shared check, beside the project's thesis) and where the last
+ * check stands against the filing index (Revisit): a newer 10-K/10-Q offers a re-check, and
+ * otherwise the step says which filing the last check read. Checks run when the user asks. */
 function Monitor({ token, companyId, projectId, thesisId, status, checks, label, onQuote }: {
   token: string;
   companyId: string;
@@ -500,19 +537,21 @@ function Monitor({ token, companyId, projectId, thesisId, status, checks, label,
       live = false;
     };
   }, [companyId, savedText]);
+  const { allowance } = useAllowanceContext();
   const checking = checks.run.status === "running";
   const written = savedText !== null && hasOwnText(savedText);
   const why = !status ? "Loading the thesis…" : status.dirty ? "Save the thesis first: the check reads the saved text"
     : !written ? "Write the thesis first: headings and guidance alone have nothing to check"
-    : "The assistant checks each factual claim and your models' base cases against the filings (counts as 4 questions)";
+    : `The assistant checks each factual claim and your models' base cases against the filings (counts as 4 questions${allowance ? `; you have ${leftText(allowance)}` : ""})`;
   if (!thesisId) {
     return (
       <p className="empty card">
-        Nothing to monitor yet: <a href={href({ view: "analysis", projectId, step: "thesis" })}>write the thesis</a> first. Each
-        new 10-K or 10-Q is then checked against it here.
+        Nothing to monitor yet: <a href={href({ view: "analysis", projectId, step: "thesis" })}>write the thesis</a> first. Then
+        check it here; when the company files a newer 10-K or 10-Q than your last check read, this step says so.
       </p>
     );
   }
+  const read = checks.history[0]?.filings?.find((f) => f.company_id === companyId)?.latest ?? null;
   return (
     <>
       <div className="row wrap monitor-bar">
@@ -524,24 +563,22 @@ function Monitor({ token, companyId, projectId, thesisId, status, checks, label,
           {status?.dirty && " · the thesis has unsaved changes"}
         </span>
       </div>
-      {newer && !checking && (
+      {/* #154: the new-filing notice the guide promises, always in its place */}
+      {newer && !checking ? (
         <div className="report-status revisit" role="status">
           New {newer.form} filed {day(newer.filed, true)} since your last check — re-check?{" "}
           <button className="btn sm" onClick={checks.start} disabled={!status || status.dirty || !written} title={why}>Re-check</button>
         </div>
+      ) : (
+        <p className="faint small filing-watch" role="status">
+          {!checks.history.length
+            ? "Once you've checked the thesis, a newer 10-K or 10-Q than that check read shows here, with a re-check."
+            : read
+              ? `No newer 10-K or 10-Q since your last check, which read the ${read.form} filed ${day(read.filed, true)}. A newer one shows here, with a re-check.`
+              : "A 10-K or 10-Q filed after your last check shows here, with a re-check."}
+        </p>
       )}
       <CheckPanel checks={checks} stale={!!checks.shown && hash !== null && checks.shown.text_hash !== hash} onQuote={onQuote} label={label} />
-      <section className="card coming-next" aria-label="Coming next: KPIs and red lines">
-        <div className="card-h">
-          <h3>KPIs and red lines</h3>
-          <span className="tag e">coming next</span>
-        </div>
-        <p className="empty">
-          Next: the 5-7 KPIs from your thesis as rules with red lines (e.g. “gross margin below 60%”), checked automatically
-          after each new filing, so the project says whether the latest 10-Q confirms, is neutral to or challenges the thesis.
-          Until then, list them under “KPIs to watch” and re-check when a filing arrives.
-        </p>
-      </section>
     </>
   );
 }

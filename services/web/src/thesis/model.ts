@@ -7,7 +7,16 @@
  * the data through the Query API as the viewer. Anything else (an id that isn't in this
  * workspace, another kind, a malformed marker) is dropped, never shown or fetched. The text is
  * rendered only through markdown.ts (marked + DOMPurify): a thesis is untrusted like any
- * imported file. Pure functions, tested without rendering. */
+ * imported file. Pure functions, tested without rendering.
+ *
+ * Export and import round-trip (#41, M6): `thesisMarkdown` writes each embed as a readable block
+ * (what it is and what it shows, from its saved state) between `<!-- tributary:embed <id> -->`
+ * and `<!-- /tributary:embed -->`, and the last check (date, stale or not, each claim's status,
+ * explanation and filing) between `<!-- tributary:check -->` and `<!-- /tributary:check -->`.
+ * `importMarkdown` turns each embed block back into its `[[embed:<id>]]` line and drops the
+ * check block (it's the check's, not the user's text). HTML comments don't show in a Markdown
+ * viewer; text written into the blocks has "<!--" and "-->" removed so it can't close them. An
+ * embed only draws when its id is an item of the same workspace, as for anything typed. */
 
 import type { ItemKind } from "../types";
 
@@ -112,8 +121,19 @@ export function embeddedIds(markdown: string): string[] {
 
 const yamlString = (s: string) => `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, " ")}"`;
 
+/** Text written into an export block: one line, and nothing that opens or closes a comment. */
+export const blockText = (s: string) => s.replace(/<!--|-->/g, "").replace(/\s+/g, " ").trim();
+
+const EMBED_OPEN = (id: string) => `<!-- tributary:embed ${id} -->`;
+const EMBED_CLOSE = "<!-- /tributary:embed -->";
+const CHECK_OPEN = "<!-- tributary:check -->";
+const CHECK_CLOSE = "<!-- /tributary:check -->";
+const EMBED_BLOCK = new RegExp(`^<!-- tributary:embed (${UUID}) -->\\n[\\s\\S]*?^<!-- /tributary:embed -->[ \\t]*$`, "gm");
+const CHECK_BLOCK = /^<!-- tributary:check -->\n[\s\S]*?^<!-- \/tributary:check -->[ \t]*\n?/m;
+
 /** The thesis as a Markdown file: a front-matter header (title, company, date), then the text
- * with each embed as a readable line `[Chart: <name>]` (unknown embeds dropped, as on screen). */
+ * with each embed as a readable block that imports back as the embed (unknown embeds dropped, as
+ * on screen), then the last check when there is one. */
 export function thesisMarkdown(opts: {
   title: string;
   thesis: Thesis;
@@ -122,20 +142,30 @@ export function thesisMarkdown(opts: {
   /** YYYY-MM-DD */
   date: string;
   items: EmbedItem[];
+  /** what an embedded item shows, a line each (thesis/export.ts `embedSummary`) */
+  describe?: (item: EmbedItem) => string[];
+  /** the last check, as lines of Markdown (thesis/export.ts `checkSection`) */
+  check?: string[] | null;
 }): string {
-  const { title, thesis, company, date, items } = opts;
+  const { title, thesis, company, date, items, describe, check } = opts;
   const head = [
     "---",
     `title: ${yamlString(title)}`,
-    ...(thesis.companyId ? [`company: ${yamlString(company ?? thesis.companyId)}`, `cik: "${thesis.companyId}"`] : []),
+    ...(company ? [`company: ${yamlString(company)}`] : []),
+    ...(thesis.companyId ? [`cik: "${thesis.companyId}"`] : []),
     `date: ${date}`,
     "source: Tributary thesis",
     "---",
   ].join("\n");
   const body = thesisSegments(thesis.markdown, items)
-    .map((s) => (s.type === "text" ? s.markdown : `[${EMBED_LABELS[s.item.kind] ?? "Item"}: ${s.item.name}]`))
+    .map((s) => {
+      if (s.type === "text") return s.markdown;
+      const lines = [`**${EMBED_LABELS[s.item.kind] ?? "Item"}: ${blockText(s.item.name)}**`, ...(describe?.(s.item) ?? []).map(blockText)];
+      return [EMBED_OPEN(s.item.item_id), ...lines.map((l, i) => `> ${l}${i < lines.length - 1 ? "  " : ""}`), EMBED_CLOSE].join("\n");
+    })
     .join("\n\n");
-  return `${head}\n\n${body}\n`;
+  const tail = check?.length ? `\n\n${CHECK_OPEN}\n${check.join("\n")}\n${CHECK_CLOSE}` : "";
+  return `${head}\n\n${body}${tail}\n`;
 }
 
 export type Imported = { ok: true; markdown: string; title: string | null } | { ok: false; error: string };
@@ -156,6 +186,9 @@ export function importMarkdown(raw: string): Imported {
     if (t) title = t.replace(/^"(.*)"$/, "$1").replace(/^'(.*)'$/, "$1").replace(/\\"/g, '"').replace(/\\\\/g, "\\").trim().slice(0, 120) || null;
     text = text.slice(fm[0].length).replace(/^\n+/, "");
   }
+  // an export's own blocks: embeds back to their lines, the check (not the user's text) dropped
+  if (CHECK_BLOCK.test(text)) text = `${text.replace(CHECK_BLOCK, "").trimEnd()}\n`;
+  text = text.replace(EMBED_BLOCK, (_, id: string) => embedMarker(id));
   if (text.length > MAX_MARKDOWN) {
     return { ok: false, error: `That file is too long: a thesis holds up to ${MAX_MARKDOWN.toLocaleString("en-US")} characters.` };
   }

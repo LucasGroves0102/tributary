@@ -3,6 +3,7 @@
 from datetime import date
 from decimal import Decimal
 
+import psycopg
 import pytest
 from fastapi.testclient import TestClient
 
@@ -124,8 +125,8 @@ def test_watchlist_csv(client, token):
     r = client.get("/v1/watchlist?format=csv", headers=token("alice"))
     assert r.status_code == 200
     header, *lines = r.text.splitlines()
-    assert header.split(",")[-4:] == ["revenue_ttm", "revenue_growth_q", "operating_margin_ttm",
-                                      "free_cash_flow_ttm"]
+    assert header.split(",")[-5:] == ["revenue_ttm", "revenue_growth_q", "operating_margin_ttm",
+                                      "free_cash_flow_ttm", "notes"]
     tsla = next(line for line in lines if line.startswith(TSLA))
     assert tsla.endswith(",,,,") and "2026-11-19" in tsla
 
@@ -255,6 +256,21 @@ def test_recap_flags_with_filings_access(token):
         "accession_no": ACC_NVDA, "form": "10-Q", "filed": "2026-08-26", "section_key": "I-2",
         "char_start": 51234, "document_url": "https://www.sec.gov/x.htm"}
     assert "flags_unavailable" not in body
+
+
+def test_recap_survives_flags_failing(token):
+    """Flags are optional: a timeout there still answers with the metrics, and says why."""
+    c = recap_client({"bob": {NVDA: {"financials", "filings"}}})
+
+    def too_slow(user_id, accession_no):
+        raise psycopg.errors.QueryCanceled("canceling statement due to statement timeout")
+
+    c.store.filing_flags = too_slow
+    r = c.get(f"/v1/filings/{ACC_NVDA}/recap", headers=token("bob"))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["metrics"] and body["flags"] is None
+    assert body["flags_unavailable"] == "one-time-item flags couldn't be read just now"
 
 
 def test_recap_denied_and_unknown_look_the_same(token):

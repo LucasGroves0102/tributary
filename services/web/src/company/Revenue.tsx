@@ -3,7 +3,8 @@ import { useMemo, useState } from "react";
 import { financialsView, segmentsOf } from "../api";
 import type { ChartState } from "../chart/model";
 import type { SegmentAxisKind } from "../chart/segments";
-import { change, money, pct } from "../format";
+import { NO_DATA, NO_DATA_TITLE } from "../blanks";
+import { change, money, moneyRow, pct, UNNAMED } from "../format";
 import { ChartView } from "../reports/Embeds";
 import type { FinancialRow, SegmentRow } from "../types";
 import { SaveChart } from "../workspaces/SaveChart";
@@ -27,6 +28,7 @@ import {
 } from "./revenue";
 import { Gate } from "./Tables";
 import { useLoad } from "./useLoad";
+import { TableScroll } from "../components/TableScroll";
 
 interface Props {
   token: string;
@@ -41,6 +43,7 @@ interface Props {
 const QUARTERS = PERIODS + 4;
 const everyMetric = () => true;
 const points = (v: number) => `${v >= -0.05 ? "+" : "−"}${Math.abs(v).toFixed(1)} pts`; // −0.0 reads as +0.0
+const BLOCKED_TITLE = "No contribution: these members changed by more than revenue did, so they overlap or changed basis between the two years.";
 
 /** The Revenue tab: revenue by segment and geography over time, growth decomposition and
  * revenue quality (company/revenue.ts has the rules). Every chart is a chart state: it can be
@@ -51,16 +54,18 @@ export function Revenue({ token, companyId, name, ticker, saved, onOpenChart }: 
   const ttm = useLoad(`${companyId}|ttm`, () =>
     Promise.all([
       segmentsOf(token, companyId, { metric: "revenue", quarters: QUARTERS, view: "ttm", basis: "fiscal" }),
-      financialsView(token, companyId, QUARTERS, ["revenue", "receivables"], "ttm"),
+      financialsView(token, companyId, QUARTERS, ["revenue"], "ttm"),
     ]),
   );
+  // revenue quality reads quarters, receivables against the quarter's own revenue (H3)
+  const quality = useLoad(`${companyId}|quality`, () => financialsView(token, companyId, QUARTERS, ["revenue", "receivables"], "quarter"));
   const quarter = useLoad(view === "quarter" ? `${companyId}|quarter` : null, () =>
     Promise.all([
       segmentsOf(token, companyId, { metric: "revenue", quarters: PERIODS, view: "quarter", basis: "fiscal" }),
       financialsView(token, companyId, PERIODS, ["revenue"], "quarter"),
     ]),
   );
-  const label = (id: string) => (id === companyId ? ticker : id);
+  const label = (id: string) => (id === companyId ? ticker : UNNAMED);
   const shown = view === "quarter" ? quarter : ttm;
 
   return (
@@ -87,13 +92,11 @@ export function Revenue({ token, companyId, name, ticker, saved, onOpenChart }: 
       <Gate load={ttm} name={name} what="Financials">
         {() => {
           const [seg, fin] = (ttm as { state: "ok"; data: [{ rows: SegmentRow[] }, { rows: FinancialRow[] }] }).data;
-          return (
-            <>
-              <Decomposition rows={seg.rows} totals={totalsByKey(fin.rows, "revenue")} {...{ companyId, ticker, name, saved, onOpenChart, token, label }} />
-              <Quality rows={fin.rows} {...{ companyId, ticker, name, saved, onOpenChart, token, label }} />
-            </>
-          );
+          return <Decomposition rows={seg.rows} totals={totalsByKey(fin.rows, "revenue")} {...{ companyId, ticker, name, saved, onOpenChart, token, label }} />;
         }}
+      </Gate>
+      <Gate load={quality} name={name} what="Financials">
+        {() => <Quality rows={(quality as { state: "ok"; data: { rows: FinancialRow[] } }).data.rows} {...{ companyId, ticker, name, saved, onOpenChart, token, label }} />}
       </Gate>
     </>
   );
@@ -109,17 +112,19 @@ interface Common {
   label: (id: string) => string;
 }
 
-function ChartActions({ chart, saved, onOpenChart }: { chart: ChartState; saved: Saved | null; onOpenChart?: (s: ChartState) => void }) {
+function ChartActions({ chart, saved, onOpenChart, label }: { chart: ChartState; saved: Saved | null; onOpenChart?: (s: ChartState) => void; label: (id: string) => string }) {
   return (
     <div className="row wrap chart-actions">
       {onOpenChart && <button className="btn sm ghost" onClick={() => onOpenChart(chart)}>Open in Chart builder</button>}
-      {saved && <SaveChart saved={saved} chart={chart} />}
+      {saved && <SaveChart saved={saved} chart={chart} label={label} />}
     </div>
   );
 }
 
 function Axes({ rows, totals, view, ...c }: Common & { rows: SegmentRow[]; totals: Map<number, number>; view: View }) {
-  const axes = axesOf(rows);
+  const axes = useMemo(() => axesOf(rows), [rows]);
+  // once per answer, not per render (totalsByKey gives the same Map for the same rows)
+  const tables = useMemo(() => axes.map((axis) => axisTable(rows, axis, totals)), [axes, rows, totals]);
   if (!axes.length) {
     return (
       <p className="empty">
@@ -130,9 +135,9 @@ function Axes({ rows, totals, view, ...c }: Common & { rows: SegmentRow[]; total
   }
   return (
     <>
-      {axes.map((axis) => <AxisBlock key={axis} t={axisTable(rows, axis, totals)} view={view} {...c} />)}
+      {axes.map((axis, i) => <AxisBlock key={axis} t={tables[i]!} view={view} {...c} />)}
       <div className="foot">
-        Members missing a period show “—”, never zero. Beyond the {SHOWN} largest, members are folded into “Other”. Bars stack only
+        Charts draw the last 3 years; tables list the latest {PERIODS} periods. Members missing a period show “{NO_DATA}”, never zero. Beyond the {SHOWN} largest, members are folded into “Other”. Bars stack only
         when the members add up to reported revenue (within {pct(COVERAGE_TOLERANCE, 0)}) in every period; otherwise each
         member is a line.
       </div>
@@ -147,8 +152,8 @@ function AxisBlock({ t, view, token, companyId, ticker, saved, onOpenChart, labe
     <div className="rev-axis">
       <h3>{AXIS_TITLES[t.axis]}</h3>
       <ChartView token={token} chart={chart} name={chart.title} label={label} hasTtm={everyMetric} />
-      <ChartActions chart={chart} saved={saved} onOpenChart={onOpenChart} />
-      <div className="tw">
+      <ChartActions chart={chart} saved={saved} onOpenChart={onOpenChart} label={label} />
+      <TableScroll label="Revenue by member">
         <table className="t">
           <thead>
             <tr>
@@ -157,36 +162,46 @@ function AxisBlock({ t, view, token, companyId, ticker, saved, onOpenChart, labe
             </tr>
           </thead>
           <tbody>
-            {t.rows.map((r) => (
-              <tr key={r.members.join("|")}>
-                <td className="first" title={r.members.join(", ")}>
-                  {r.label}
-                  {r.note && <span className="faint small"> · {r.note}</span>}
-                </td>
-                {r.values.map((v, i) => (
-                  <td key={t.periods[i]!.key} className={v === null ? "n faint" : "n"} title={r.sources[i] ?? undefined}>
-                    {v === null ? "—" : money(v, "USD")}
+            {t.rows.map((r) => {
+              const texts = moneyRow(r.values);
+              return (
+                <tr key={r.members.join("|")}>
+                  <td className="first" title={r.members.join(", ")}>
+                    {r.label}
+                    {r.note && <span className="faint small"> · {r.note}</span>}
                   </td>
-                ))}
-              </tr>
-            ))}
+                  {r.values.map((v, i) => (
+                    <td key={t.periods[i]!.key} className={v === null ? "n faint" : "n"} title={r.sources[i] ?? (v === null ? NO_DATA_TITLE : undefined)}>
+                      {texts[i] ?? NO_DATA}
+                    </td>
+                  ))}
+                </tr>
+              );
+            })}
             <tr className="coverage">
               <td className="first faint">Sum vs reported revenue</td>
               {t.coverage.map((x, i) => (
                 <td key={t.periods[i]!.key}
                   className={x === null ? "n faint" : Math.abs(x - 1) > COVERAGE_TOLERANCE ? "n warn" : "n faint"}>
-                  {x === null ? "—" : pct(x, 0)}
+                  {x === null ? NO_DATA : pct(x, 0)}
                 </td>
               ))}
             </tr>
           </tbody>
         </table>
-      </div>
+      </TableScroll>
+      {t.rows.some((r) => r.overlaps) && (
+        <p className="small muted">
+          {t.rows.filter((r) => r.overlaps).map((r) => r.label).join(", ")}
+          {t.moreOverlapping > 0 ? ` and ${t.moreOverlapping} more` : ""} overlap the other lines: part of one of them, or another
+          cut of the same revenue. They're listed as reported, and left out of the sum.
+        </p>
+      )}
       {off.length > 0 && (
         <p className="small muted">
           In {off.length} of {t.coverage.length} periods these members don't add up to reported revenue: the breakdown
-          {view === "ttm" ? " (TTM needs four quarters of a member)" : ""} names only part of it, or overlaps. Read it as
-          {" "}reported, not as shares of the total.
+          {view === "ttm" ? " (TTM needs four quarters of a member)" : ""} names only part of it
+          {t.unreliable.some(Boolean) ? ", or overlaps in a way the data can't separate" : ""}. Read it as reported, not as shares of the total.
         </p>
       )}
     </div>
@@ -220,8 +235,8 @@ function Decomposition({ rows, totals, ...c }: Common & { rows: SegmentRow[]; to
       ) : (
         <>
           <ChartView token={c.token} chart={chart} name={chart.title} label={c.label} hasTtm={everyMetric} />
-          <ChartActions chart={chart} saved={c.saved} onOpenChart={c.onOpenChart} />
-          <div className="tw">
+          <ChartActions chart={chart} saved={c.saved} onOpenChart={c.onOpenChart} label={c.label} />
+          <TableScroll label="Growth decomposition">
             <table className="t decomposition">
               <thead>
                 <tr>
@@ -234,8 +249,9 @@ function Decomposition({ rows, totals, ...c }: Common & { rows: SegmentRow[]; to
                   <tr key={r.members.join("|")}>
                     <td className="first">{r.label}</td>
                     {r.points.map((v, i) => (
-                      <td key={d.periods[i]!.key} className={v === null ? "n faint" : v >= 0 ? "n pos" : "n neg"}>
-                        {v === null ? "—" : points(v)}
+                      <td key={d.periods[i]!.key} className={v === null ? "n faint" : v >= 0 ? "n pos" : "n neg"}
+                        title={v === null ? (d.blocked[i] ? BLOCKED_TITLE : NO_DATA_TITLE) : undefined}>
+                        {v === null ? NO_DATA : points(v)}
                       </td>
                     ))}
                   </tr>
@@ -244,19 +260,25 @@ function Decomposition({ rows, totals, ...c }: Common & { rows: SegmentRow[]; to
                   <td className="first faint" title="Members missing a period, a breakdown that doesn't add up to revenue, rounding">
                     Not attributed
                   </td>
-                  {d.unattributed.map((v, i) => <td key={d.periods[i]!.key} className="n faint">{v === null ? "—" : points(v)}</td>)}
+                  {d.unattributed.map((v, i) => <td key={d.periods[i]!.key} className="n faint">{v === null ? NO_DATA : points(v)}</td>)}
                 </tr>
                 <tr className="total">
                   <td className="first"><b>Revenue growth</b></td>
-                  {d.total.map((v, i) => <td key={d.periods[i]!.key} className="n"><b>{v === null ? "—" : change(v / 100)}</b></td>)}
+                  {d.total.map((v, i) => <td key={d.periods[i]!.key} className="n"><b>{v === null ? NO_DATA : change(v / 100)}</b></td>)}
                 </tr>
               </tbody>
             </table>
-          </div>
+          </TableScroll>
+          {d.blocked.some(Boolean) && (
+            <p className="small muted card-b">
+              {d.periods.filter((_, i) => d.blocked[i]).map((p) => p.label).join(", ")}: no contributions. These members changed
+              by more than revenue did, so they overlap or changed basis between the two years, and bars would overshoot the total.
+            </p>
+          )}
           <div className="foot">
             A member's contribution = its TTM revenue change over four quarters / the company's TTM revenue four quarters
-            earlier, over members reporting both periods. They add up to revenue growth only when the members cover revenue;
-            the rest is “Not attributed”.
+            earlier, over members reporting both periods and leaving out members that overlap the rest. They add up to revenue
+            growth only when the members cover revenue; the rest is “Not attributed”.
           </div>
         </>
       )}
@@ -272,25 +294,25 @@ function Quality({ rows, ...c }: Common & { rows: FinancialRow[] }) {
     <section className="card">
       <div className="card-h">
         <h2>Revenue quality: receivables vs revenue</h2>
-        <span className="sub">receivables at quarter ends · revenue TTM</span>
+        <span className="sub">receivables at each quarter end · that quarter's revenue · each against the same quarter a year earlier</span>
       </div>
       {!q.length ? (
         <p className="empty">No receivables reported for {c.name} in these periods (common for banks, insurers and some retailers).</p>
       ) : (
         <>
           <ChartView token={c.token} chart={chart} name={chart.title} label={c.label} hasTtm={everyMetric} />
-          <ChartActions chart={chart} saved={c.saved} onOpenChart={c.onOpenChart} />
+          <ChartActions chart={chart} saved={c.saved} onOpenChart={c.onOpenChart} label={c.label} />
           {flagged > 0 && (
             <p className="badge warn" role="status">
-              ⚠ Receivables grew more than {QUALITY_FLAG_POINTS} points faster than revenue in {flagged} of the last {q.length} quarters
+              ⚠ Receivables grew more than {QUALITY_FLAG_POINTS} points faster than the quarter's revenue in {flagged} of the last {q.length} quarters
             </p>
           )}
-          <div className="tw">
+          <TableScroll label="Revenue quality">
             <table className="t quality">
               <thead>
                 <tr>
                   <th className="first">Quarter</th>
-                  <th className="n">Revenue (TTM)</th>
+                  <th className="n">Revenue (quarter)</th>
                   <th className="n">Receivables</th>
                   <th className="n">DSO (days)</th>
                   <th className="n">Revenue YoY</th>
@@ -305,21 +327,24 @@ function Quality({ rows, ...c }: Common & { rows: FinancialRow[] }) {
                     <td className="n">{money(r.revenue, "USD")}</td>
                     <td className="n">{money(r.receivables, "USD")}</td>
                     <td className="n">{r.dso.toFixed(0)}</td>
-                    <td className="n">{r.revenueGrowth === null ? "—" : change(r.revenueGrowth)}</td>
-                    <td className="n">{r.receivablesGrowth === null ? "—" : change(r.receivablesGrowth)}</td>
-                    <td className={r.flagged ? "n flag" : "n"} title={r.flagged ? `More than ${QUALITY_FLAG_POINTS} points faster than revenue` : undefined}>
-                      {r.gap === null ? "—" : `${points(r.gap)}${r.flagged ? " ⚠" : ""}`}
+                    <td className="n">{r.revenueGrowth === null ? NO_DATA : change(r.revenueGrowth)}</td>
+                    <td className="n">{r.receivablesGrowth === null ? NO_DATA : change(r.receivablesGrowth)}</td>
+                    <td className={r.flagged ? "n flag" : "n"} title={r.flagged ? `More than ${QUALITY_FLAG_POINTS} points faster than the quarter's revenue` : undefined}>
+                      {r.gap === null ? NO_DATA : `${points(r.gap)}${r.flagged ? " ⚠" : ""}`}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          </div>
+          </TableScroll>
           <div className="foot">
-            DSO = receivables at the quarter end / TTM revenue × 365. A quarter is flagged when receivables grew more than
-            {" "}{QUALITY_FLAG_POINTS} percentage points faster than TTM revenue over the same four quarters: sales booked faster
-            than cash comes in, or customers paying later. A flag is a reason to read the 10-Q's MD&A and receivables note,
-            not a verdict.
+            Like with like: receivables at a quarter end are what that quarter's sales left unpaid, so they're compared with
+            that quarter's revenue, not a trailing twelve months (which lags a fast-growing company's latest quarter).
+            DSO = receivables at the quarter end / the quarter's revenue × its days. A quarter is flagged when receivables grew
+            more than {QUALITY_FLAG_POINTS} percentage points faster than the same quarter's revenue a year earlier, roughly
+            DSO up by a tenth: sales booked faster than cash comes in, or customers paying later. Comparing a quarter with the
+            same quarter a year earlier keeps seasons out of it. A flag is a reason to read the 10-Q's MD&A and receivables
+            note, not a verdict.
           </div>
         </>
       )}

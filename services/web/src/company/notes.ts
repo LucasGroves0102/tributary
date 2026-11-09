@@ -16,9 +16,10 @@ export interface Explained {
 /** Groups on the Data notes tab, in order, with the kinds each holds. */
 export const NOTE_GROUPS: { key: string; label: string; kinds: (k: string) => boolean }[] = [
   { key: "freshness", label: "Freshness", kinds: (k) => k === "companyfacts_behind" },
+  { key: "splits", label: "Stock splits", kinds: (k) => k === "stock_split" },
   { key: "restated", label: "Restated figures", kinds: (k) => k === "restatement" || k === "annual_sum" },
-  { key: "periods", label: "Gaps and overlapping periods", kinds: (k) => ["series_gap", "overlapping_quarters", "calendar_collision"].includes(k) },
-  { key: "values", label: "Values to double-check", kinds: (k) => ["impossible_value", "sign_flip", "outlier"].includes(k) || k.startsWith("segment_sum_") },
+  { key: "periods", label: "Gaps and overlapping periods", kinds: (k) => ["series_gap", "overlapping_quarters", "calendar_collision", "net_debt_gap"].includes(k) },
+  { key: "values", label: "Values to double-check", kinds: (k) => ["impossible_value", "sign_flip", "outlier", "mistagged_fact"].includes(k) || k.startsWith("segment_sum_") },
   { key: "derived", label: "Derived quarters", kinds: (k) => k === "derived_quarters" },
 ];
 
@@ -31,7 +32,9 @@ export function severityLabel(s: DataNote["severity"]): string {
 const str = (v: unknown): string | null => (typeof v === "string" && v ? v : null);
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 const date = (v: unknown): string => (str(v) ? day(str(v)!, true) : "an unknown date");
-const signedPct = (r: number): string => `${r >= 0 ? "+" : "−"}${Math.abs(r * 100).toFixed(Math.abs(r) < 0.1 ? 1 : 0)}%`;
+const signedPct = (r: number): string => `${r >= 0 ? "+" : "−"}${Math.abs(r * 100).toLocaleString("en-US", { maximumFractionDigits: Math.abs(r) < 0.1 ? 1 : 0, minimumFractionDigits: Math.abs(r) < 0.1 ? 1 : 0 })}%`;
+/** A restatement this many times the original (1,000%) isn't a correction of the same figure. */
+const BIG_CHANGE = 10;
 
 /** "the 10-Q filed Feb 25, 2026", from the note's filing with that role. */
 function filingPhrase(n: DataNote, role: NoteFiling["role"], fallbackDate?: unknown): string {
@@ -47,8 +50,12 @@ const AXES: Record<string, string> = {
   product_service: "products and services",
 };
 
+/** The SEC's XBRL data usually follows a filing within this many days; past it the note says so
+ * rather than promising the usual. */
+const USUAL_LAG_DAYS = 3;
+
 /** A note in words. Every number keeps its unit (%, days, ×) and period. */
-export function explain(n: DataNote): Explained {
+export function explain(n: DataNote, now = Date.now()): Explained {
   const d = n.detail;
   const m = n.metric ? metricLabel(n.metric) : "A figure";
   const pe = n.period_end ? `the period ending ${day(n.period_end, true)}` : "one period";
@@ -56,22 +63,48 @@ export function explain(n: DataNote): Explained {
     case "companyfacts_behind": {
       const count = num(d.missing_filings) ?? n.filings.length;
       const newest = n.filings[0];
+      // the filings come newest first, so the last is the one that has waited longest
+      const oldestFiled = n.filings.at(-1)?.filed ?? str(d.missing_filed);
+      const waited = oldestFiled ? Math.floor((now - Date.parse(oldestFiled.slice(0, 10))) / 86_400_000) : 0;
+      const which = count === 1
+        ? `a ${newest?.form ?? "10-Q/10-K"} filed ${date(d.missing_filed)}`
+        : `${count} 10-K/10-Q filings, the newest filed ${date(d.missing_filed)} and the oldest ${date(oldestFiled)},`;
       return {
-        title: "A newer filing isn't in the figures yet",
+        title: count === 1 ? "A newer filing isn't in the figures yet" : "Newer filings aren't in the figures yet",
         text:
-          `EDGAR has ${count === 1 ? `a ${newest?.form ?? "10-Q/10-K"}` : `${count} 10-K/10-Q filings`} filed ${date(d.missing_filed)} ` +
-          `that the SEC's XBRL data (companyfacts) doesn't include yet, so the financials here end with the filing of ${date(d.facts_latest_filed)}. ` +
-          "They update once the SEC publishes that data, usually within a day or two.",
+          `EDGAR has ${which} that the SEC's XBRL data (companyfacts) doesn't include yet, so the financials here end with the filing of ${date(d.facts_latest_filed)}. ` +
+          (waited > USUAL_LAG_DAYS
+            ? `${count === 1 ? "It has" : "The oldest has"} been waiting ${waited} days, longer than the usual day or two. The figures update only when the SEC publishes that data; until then, read the filing itself.`
+            : "They update once the SEC publishes that data, usually within a day or two."),
+      };
+    }
+    case "stock_split": {
+      const split = str(d.split) ?? "A split";
+      const periods = num(d.periods) ?? 0;
+      return {
+        title: `${split} ${d.reverse ? "reverse " : ""}stock split`,
+        text:
+          `Later filings restated share counts and per-share figures for ${periods} ${periods === 1 ? "period" : "periods"} from ${date(d.first_period_end)} to ${date(d.last_period_end)} ` +
+          "by the split's ratio, share counts and EPS moving opposite ways in the same filing. That isn't a correction. Periods no filing restated stay on the old share count, so read per-share figures across the split with care.",
       };
     }
     case "restatement": {
       const change = num(d.change);
+      const unit = d.unit_change === true;
+      const maybeSplit = str(d.may_be_split);
+      const big = change !== null && Math.abs(change) >= BIG_CHANGE;
       return {
-        title: `${m} restated`,
+        title: unit ? `${m}: unit changed between filings` : `${m} restated`,
         text:
           `${m} for ${pe} was first reported in ${filingPhrase(n, "original", d.original_filed)} and ` +
           `changed${change !== null ? ` by ${signedPct(change)}` : ""} in ${filingPhrase(n, "restated", d.restated_filed)}. ` +
-          "Tributary shows the latest figure; growth rates against the original would differ.",
+          (unit
+            ? "That's the size of a unit change (thousands against ones) in the filing's XBRL, not a change in the figure."
+            : maybeSplit
+              ? `That's exactly what a ${maybeSplit} stock split does, so it may be a split; nothing else here confirms it, so check the filing.`
+              : big
+                ? "A change this large usually means the two filings describe different things (a shell company before a merger, say) or a scale slip in one, rather than a correction. Tributary shows the latest figure."
+                : "Tributary shows the latest figure; growth rates against the original would differ."),
       };
     }
     case "annual_sum": {
@@ -84,13 +117,35 @@ export function explain(n: DataNote): Explained {
           "usually because a quarter was later restated or reclassified. TTM uses the quarters.",
       };
     }
-    case "series_gap":
+    case "series_gap": {
+      const years = num(d.repeated);
       return {
-        title: `${m}: missing quarter`,
+        title: years ? `${m}: the same quarter missing in ${years} years` : `${m}: missing quarter`,
         text:
-          `No quarterly ${m.toLowerCase()} is reported or derivable from ${date(d.missing_from)} to ${date(d.missing_to)}. ` +
+          `No quarterly ${m.toLowerCase()} is reported or derivable from ${date(d.missing_from)} to ${date(d.missing_to)}` +
+          (years ? `, and the same quarter is missing in ${years} fiscal years: the 10-K tags the year in a way the 10-Qs don't, often with the company's own tag. ` : ". ") +
           "TTM, year-over-year growth and charts that need that quarter are left blank rather than guessed.",
       };
+    }
+    case "net_debt_gap":
+      return {
+        title: "Net debt: left out",
+        text: d.investments_end
+          ? `Debt and cash are on file for ${pe}, but net debt is left out rather than guessed: short-term investments were last tagged at ${date(d.investments_end)}, and this balance sheet has room for them under a line the filing doesn't tag in a standard way. Check the filing's balance sheet.`
+          : `Debt and cash are on file for ${pe}, but net debt is left out: interest expense is more than half of the debt tagged, so the tagged debt can only be part of it. Check the filing's debt note.`,
+      };
+    case "mistagged_fact": {
+      const filed = d.filed ? ` filed ${date(d.filed)}` : "";
+      return str(d.rule) === "debt_above_liabilities"
+        ? {
+            title: `${m}: left out, larger than total liabilities`,
+            text: `The ${str(d.form) ?? "filing"}${filed} tags ${m.toLowerCase()} for ${pe} above the company's total liabilities at that date, which can't be right, usually a scale slip in its XBRL. The figure isn't used.`,
+          }
+        : {
+            title: `${m}: left out, a period after its filing`,
+            text: `The ${str(d.form) ?? "filing"}${filed} tags ${m.toLowerCase()} for ${pe}, a period that hadn't ended when it was filed, almost always a typing slip in its XBRL. The figure isn't used.`,
+          };
+    }
     case "overlapping_quarters": {
       const days = num(d.overlap_days);
       return {
@@ -130,15 +185,27 @@ export function explain(n: DataNote): Explained {
       };
     case "outlier": {
       const x = num(d.vs_neighbours);
-      return {
-        title: `${m}: one-quarter spike`,
-        text:
-          `${m} for ${pe} is ${x !== null ? `${Math.abs(x).toFixed(1)}×` : "many times"} the size of the quarters around it, ` +
-          "typically a scale error (thousands entered as units) in the filing's XBRL.",
-      };
+      const size = `${x !== null ? `${Math.abs(x).toFixed(1)}×` : "many times"} the size of the quarters around it`;
+      return d.seasonal === true
+        ? {
+            title: `${m}: seasonal peak`,
+            text: `${m} for ${pe} is ${size}, and the same quarter peaks in other years too: the business's season, not an error.`,
+          }
+        : {
+            title: `${m}: one-quarter spike`,
+            text: `${m} for ${pe} is ${size}, and other years' same quarter doesn't do this. That can be a one-off event, or a scale error (thousands entered as units) in the filing's XBRL: check the filing.`,
+          };
     }
     case "derived_quarters": {
       const q = num(d.quarters) ?? 0;
+      if (d.computed === true) {
+        return {
+          title: `${m}: revenue less cost of revenue`,
+          text:
+            `For ${q} quarter${q === 1 ? "" : "s"} between ${date(d.first_period_end)} and ${date(d.latest_period_end)} the filing prints no gross profit, so it's revenue less its cost of revenue. ` +
+            "That only reads as a gross margin for some businesses, so it's left blank for banks, insurers, utilities, oil and gas, telecoms, restaurants and any quarter where cost is under 15% of revenue or the result looks out of line.",
+        };
+      }
       return {
         title: `${m}: ${q} derived quarter${q === 1 ? "" : "s"}`,
         text:
@@ -150,11 +217,16 @@ export function explain(n: DataNote): Explained {
       if (n.kind.startsWith("segment_sum_")) {
         const dev = num(d.deviation);
         const axis = AXES[str(d.axis) ?? ""] ?? "segments";
+        // a segment's profit leaves out what no segment carries, so these two differing is normal
+        const unallocated = n.metric === "operating_income";
         return {
           title: `${m}: ${axis} don't add up`,
           text:
             `For ${pe}, ${num(d.members) ?? "the"} ${axis} sum to ${dev !== null ? `${Math.abs(dev * 100).toFixed(1)}% ${dev > 0 ? "more" : "less"} than` : "something other than"} ` +
-            `consolidated ${m.toLowerCase()}. Segment data may overlap or omit a member; read segment shares with care.`,
+            `consolidated ${m.toLowerCase()}. ` +
+            (unallocated
+              ? "Costs no segment carries, such as unallocated corporate costs, usually explain this; the 10-K's segment note reconciles it."
+              : "Some members overlap or one is missing; each share on the Segments tab is of consolidated revenue, so don't add them up."),
         };
       }
       return { title: `${m}: ${n.kind.replace(/_/g, " ")}`, text: `A data check flagged ${m.toLowerCase()} for ${pe}.` };
@@ -178,10 +250,13 @@ export function edgarUrl(f: NoteFiling): string | null {
   return f.filing_url?.startsWith("https://www.sec.gov/") ? f.filing_url : null;
 }
 
-/** Notes by group (NOTE_GROUPS order), dropping empty groups. Notes keep the API's order
- * (newest first). */
+/** Notes by group, dropping empty groups. Notes keep the API's order (newest first), and so do the
+ * groups, by their newest note: a tab opening on a 2021 restatement above 2026 gaps reads as if
+ * nothing newer happened. Derived quarters aren't events, so they stay last whatever their date. */
 export function groupNotes(notes: DataNote[]): { key: string; label: string; notes: DataNote[] }[] {
+  const newest = (g: { notes: DataNote[] }) => g.notes.reduce((d, n) => ((n.date ?? "") > d ? n.date ?? "" : d), "");
   return NOTE_GROUPS.map((g) => ({ key: g.key, label: g.label, notes: notes.filter((n) => g.kinds(n.kind)) }))
     .concat([{ key: "other", label: "Other", notes: notes.filter((n) => !NOTE_GROUPS.some((g) => g.kinds(n.kind))) }])
-    .filter((g) => g.notes.length > 0);
+    .filter((g) => g.notes.length > 0)
+    .sort((a, b) => Number(a.key === "derived") - Number(b.key === "derived") || newest(b).localeCompare(newest(a)));
 }

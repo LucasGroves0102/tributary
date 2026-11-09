@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { Fragment, useRef, useState, type ReactNode } from "react";
 
 import { filingIndex, filings as fetchFilings, sectionChanges } from "../api";
 import { day } from "../format";
@@ -9,9 +9,10 @@ export type ChangedSection = SectionChanges["sections"][number];
 export type Change = ChangedSection["changes"][number];
 /** "📌 Add to thesis" beside each changed paragraph (the Analysis tab's What changed step) */
 export type PinChange = (change: Change, section: ChangedSection) => ReactNode;
-import { eightKItems, FORM_FILTERS, formsOf, formTag, type FormFilter } from "./data";
+import { eightKItems, filingHeadings, FORM_FILTERS, formsOf, formTag, parsedNote, type FormFilter } from "./data";
 import { Gate } from "./Tables";
 import { useLoad } from "./useLoad";
+import { TableScroll } from "../components/TableScroll";
 
 export const INDEX_PAGE = 25;
 
@@ -22,18 +23,20 @@ export function edgarLink(f: Pick<IndexedFiling, "document_url" | "filing_url">)
 }
 
 /** Every filing in the SEC index (public metadata, so free plans see it too), newest first,
- * filtered and paged by the Query API. Read opens the reader where the user can read the
- * parsed text; What changed shows the Risk Factors and MD&A paragraphs changed since the prior
- * filing; everything else links to EDGAR. */
-export function Filings({ token, companyId, name, canRead, initialDiff }: {
+ * filtered and paged by the Query API, reports first and headed by fiscal year so history is easy
+ * to scan. Read opens the reader where the user can read the parsed text; What changed shows the
+ * Risk Factors and MD&A paragraphs changed since the prior filing; everything else links to EDGAR. */
+export function Filings({ token, companyId, name, canRead, initialDiff, fiscalYearEnd = null }: {
   token: string;
   companyId: string;
   name: string;
   /** the user's tiers include filings for this company */
   canRead: boolean;
   initialDiff?: string;
+  /** MMDD, for the fiscal-year headings; without it they go by the year filed */
+  fiscalYearEnd?: string | null;
 }) {
-  const [filter, setFilter] = useState<FormFilter>("all");
+  const [filter, setFilter] = useState<FormFilter>("reports");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [offset, setOffset] = useState(0);
@@ -47,17 +50,33 @@ export function Filings({ token, companyId, name, canRead, initialDiff }: {
   const items = new Map(
     parsed?.state === "ok" ? parsed.data.map((f) => [f.accession_no, eightKItems(f.sections.map((s) => s.section_key))]) : [],
   );
+  const [diffFiling, setDiffFiling] = useState<IndexedFiling | null>(null);
+  const closeDiff = () => {
+    setDiff(null);
+    setDiffFiling(null);
+  };
+  // another filter lists other filings: a comparison left open would belong to none of them
   const refilter = (f: () => void) => {
     f();
     setOffset(0);
+    closeDiff();
   };
+  const changes = useRef<HTMLElement>(null);
+  const showDiff = (f: IndexedFiling) => {
+    setDiff(f.accession_no);
+    setDiffFiling(f);
+    requestAnimationFrame(() => changes.current?.scrollIntoView?.({ block: "start" }));
+  };
+  const headings = filingHeadings(rows, fiscalYearEnd);
 
   return (
-    <div className="grid2">
+    <>
       <section className="card">
         <div className="card-h wrap">
           <h2>Filings</h2>
-          <span className="sub">SEC filing index, newest first</span>
+          <span className="sub">
+            SEC filing index, newest first{fiscalYearEnd ? " · headed by fiscal year" : ""}{filter === "reports" ? " · 10-K, 10-Q, 8-K (All has insider forms and the rest)" : ""}
+          </span>
           <span className="grow" />
           <span className="seg" role="group" aria-label="Form">
             {FORM_FILTERS.map(([f, label]) => (
@@ -81,10 +100,15 @@ export function Filings({ token, companyId, name, canRead, initialDiff }: {
         <Gate load={load} name={name} what="Filings">
           {() =>
             rows.length === 0 ? (
-              <p className="empty">No {filter === "all" ? "" : `${FORM_FILTERS.find(([f]) => f === filter)![1]} `}filings{from || to ? " in these dates" : ""}.</p>
+              <p className="empty">
+                No {filter === "all" ? "" : `${FORM_FILTERS.find(([f]) => f === filter)![1].toLowerCase()} `}filings{from || to ? " in these dates" : ""}.{" "}
+                {filter !== "all" && (
+                  <button className="btn sm" onClick={() => refilter(() => setFilter("all"))}>Show all filings</button>
+                )}
+              </p>
             ) : (
-              <div className="tw">
-                <table className="t">
+              <TableScroll label="Filings">
+                <table className="t filings">
                   <thead>
                     <tr>
                       <th>Filed</th>
@@ -96,23 +120,32 @@ export function Filings({ token, companyId, name, canRead, initialDiff }: {
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.map((f) => {
+                    {rows.map((f, i) => {
                       const eightK = f.form.startsWith("8-K") ? (items.get(f.accession_no) ?? []) : [];
                       const periodic = /^10-[KQ]/.test(f.form);
                       const edgar = edgarLink(f);
+                      const note = parsedNote(f);
                       return (
-                        <tr key={f.accession_no} className={diff === f.accession_no ? "sel" : undefined}>
+                        <Fragment key={f.accession_no}>
+                        {headings[i] && (
+                          <tr className="year-h">
+                            <th colSpan={6} scope="rowgroup">{headings[i]}</th>
+                          </tr>
+                        )}
+                        <tr className={diff === f.accession_no ? "sel" : undefined}>
                           <td className="muted">{day(f.filed, true)}</td>
                           <td>
                             <span className={`tag ${formTag(f.form)}`}>{f.form}</span>
                           </td>
-                          <td className="muted">{f.period_of_report ? day(f.period_of_report, true) : "—"}</td>
                           <td className="muted">
+                            {f.period_of_report ? (f.form.startsWith("8-K") ? `event ${day(f.period_of_report, true)}` : day(f.period_of_report, true)) : "—"}
+                          </td>
+                          <td className="muted items">
                             {eightK.length
                               ? eightK.join(" · ")
                               : f.sections
-                                ? `${f.sections} section${f.sections === 1 ? "" : "s"}`
-                                : <span className="faint">{f.sections === 0 ? "not parsed" : "index only"}</span>}
+                                ? note
+                                : note && <span className="faint">{note}</span>}
                           </td>
                           <td className="mono faint">{f.accession_no}</td>
                           <td className="n actions">
@@ -126,17 +159,18 @@ export function Filings({ token, companyId, name, canRead, initialDiff }: {
                               </a>
                             ) : null}
                             {periodic && f.sections_available && (
-                              <button className="btn sm ghost" onClick={() => setDiff(f.accession_no)}>
+                              <button className="btn sm ghost" onClick={() => showDiff(f)}>
                                 What changed
                               </button>
                             )}
                           </td>
                         </tr>
+                        </Fragment>
                       );
                     })}
                   </tbody>
                 </table>
-              </div>
+              </TableScroll>
             )
           }
         </Gate>
@@ -160,10 +194,16 @@ export function Filings({ token, companyId, name, canRead, initialDiff }: {
             : "Reading parsed text needs filings access (the pro plan and a grant); until then each filing links to EDGAR."}
         </div>
       </section>
-      <section className="card">
+      <section className="card" ref={changes}>
         <div className="card-h">
           <h2>What changed</h2>
-          {diff && <span className="sub mono">{diff}</span>}
+          {diff && (
+            <span className="sub" title={`Accession ${diff}`}>
+              {diffFiling ? `${diffFiling.form} filed ${day(diffFiling.filed, true)}, against the previous ${diffFiling.form}` : "the filing you chose, against the previous one of its type"}
+            </span>
+          )}
+          {diff && <span className="grow" />}
+          {diff && <button className="btn sm ghost" onClick={closeDiff}>Close</button>}
         </div>
         {diff ? (
           <Changes key={diff} token={token} companyId={companyId} accessionNo={diff} name={name} />
@@ -174,7 +214,7 @@ export function Filings({ token, companyId, name, canRead, initialDiff }: {
           </p>
         )}
       </section>
-    </div>
+    </>
   );
 }
 

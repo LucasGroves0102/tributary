@@ -99,6 +99,7 @@ beforeEach(() => {
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => respond(url, init)));
   window.localStorage.clear();
   Object.defineProperty(window, "innerWidth", { value: 1440, configurable: true });
+  window.localStorage.setItem("tributary.assistant", "open");
   forgetVisits();
   asked.length = 0;
   script = [];

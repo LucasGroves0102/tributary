@@ -1,9 +1,15 @@
+import { UNNAMED } from "../companies/directory";
 import { href, NAV, type Route } from "../route";
 import type { Theme } from "../theme";
 
 interface Props {
   route: Route;
+  /** "Nvidia (NVDA)" (companies/directory.ts) */
   companyName: (companyId: string) => string | null;
+  /** "NVDA": beside a filing, where the room goes to the filing */
+  companyShort?: (companyId: string) => string;
+  /** what the reader has open: "10-K filed Feb 21, 2026" */
+  filingLabel?: string | null;
   users: string[];
   user: string | null;
   busy: boolean;
@@ -30,9 +36,14 @@ export function TopBar(props: Props) {
           ☰
         </button>
       )}
-      <Breadcrumb route={route} companyName={props.companyName} />
+      <Breadcrumb route={route} companyName={props.companyName} companyShort={props.companyShort} filingLabel={props.filingLabel ?? null} />
       <button className="search-box" onClick={props.onSearch} aria-label="Search (Ctrl K)">
-        <span>Search companies, filings, pages, actions</span>
+        <svg className="search-ic" width="13" height="13" viewBox="0 0 16 16" aria-hidden="true">
+          <circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+          <path d="M11 11l4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        </svg>
+        <span className="sb-long">Search companies, filings, pages, actions</span>
+        <span className="sb-short">Search</span>
         <span className="grow" />
         <kbd>Ctrl K</kbd>
       </button>
@@ -86,12 +97,16 @@ export function TopBar(props: Props) {
 function Breadcrumb({
   route,
   companyName,
+  companyShort,
+  filingLabel,
 }: {
   route: Route;
   companyName: (companyId: string) => string | null;
+  companyShort?: (companyId: string) => string;
+  filingLabel: string | null;
 }) {
   if (route.view === "company" || route.view === "filing") {
-    const name = companyName(route.companyId) ?? `CIK ${route.companyId}`;
+    const name = companyName(route.companyId) ?? UNNAMED;
     return (
       <nav className="crumb" aria-label="Breadcrumb">
         <a href={href({ view: "companies" })}>Companies</a>
@@ -100,9 +115,9 @@ function Breadcrumb({
           <span aria-current="page">{name}</span>
         ) : (
           <>
-            <a href={href({ view: "company", companyId: route.companyId })}>{name}</a>
+            <a href={href({ view: "company", companyId: route.companyId })} title={name}>{companyShort?.(route.companyId) ?? name}</a>
             <span className="sep">/</span>
-            <span aria-current="page">Filing {route.accessionNo}</span>
+            <span aria-current="page">{filingLabel ?? "Filing"}</span>
           </>
         )}
       </nav>
@@ -117,6 +132,7 @@ function Breadcrumb({
   }
   const label = route.view === "about" ? "What Tributary covers"
     : route.view === "status" ? "Data status"
+    : route.view === "settings" ? "Settings"
     : route.view === "workspace" ? "Workspace"
     : route.view === "report" ? "Report"
     : route.view === "thesis" ? "Thesis"

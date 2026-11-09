@@ -13,6 +13,8 @@ XOM, XOM_HOLDINGS = "0000034088", "0002115436"
 HD = "0000354950"
 # company_id → CIKs; Exxon's holdings CIK belongs to the original company
 COMPANIES = {NVDA: [NVDA], COST: [COST], JPM: [JPM], XOM: [XOM, XOM_HOLDINGS], HD: [HD]}
+# their real SICs: gold's rules read the industry (migration 039: gross profit, fallback debt tags)
+SIC = {NVDA: "3674", COST: "5331", JPM: "6021", XOM: "2911", HD: "5211"}
 
 
 @pytest.fixture
@@ -38,8 +40,9 @@ def conn():
                   " bronze.company_facts, silver.company_aliases, silver.company_ciks,"
                   " silver.companies")
         for company_id, ciks in COMPANIES.items():
-            c.execute("INSERT INTO silver.companies (company_id, name, current_cik, tracked)"
-                      " VALUES (%s, %s, %s, true)", (company_id, company_id, ciks[-1]))
+            c.execute("INSERT INTO silver.companies (company_id, name, current_cik, tracked, sic)"
+                      " VALUES (%s, %s, %s, true, %s)",
+                      (company_id, company_id, ciks[-1], SIC[company_id]))
             for cik in ciks:
                 c.execute("INSERT INTO silver.company_ciks (cik, company_id) VALUES (%s, %s)",
                           (cik, company_id))

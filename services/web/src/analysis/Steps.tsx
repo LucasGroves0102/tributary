@@ -127,7 +127,8 @@ export function Business({ token, companyId, name, project, onNotes, notesStatus
                     {p}{" "}
                     <PinButton compact what="passage" make={async () => quoteBlock({
                       text: p, companyId, accessionNo: section.citation.accession_no, form: section.citation.form,
-                      filed: section.citation.filed, section: section.title ? `Item 1. ${section.title.replace(/^item\s*1\.?\s*/i, "")}` : "Item 1",
+                      filed: section.citation.filed, period: section.citation.period_of_report ?? null,
+                      section: section.title ? `Item 1. ${section.title.replace(/^item\s*1\.?\s*/i, "")}` : "Item 1",
                     })} />
                   </p>
                 ))}
@@ -204,7 +205,7 @@ export function Numbers({ token, companyId, name, ticker, label, saved, projectI
         );
       })}
       <p className="faint small">
-        Ten fiscal years of {name}, one point per year (flows are the year's total, balances the year end); receivables vs
+        Up to ten fiscal years of {name}, one point per year (flows are the year's total, balances the year end); receivables vs
         revenue is quarterly. Values link to their filings. Charts you save here, or from the Chart builder into this project,
         show under Charts in the project's workspace.
       </p>
@@ -221,7 +222,7 @@ const changePassage = (companyId: string, c: Change, s: ChangedSection): Passage
   if (!cite || !text) return null;
   return {
     text, companyId, accessionNo: cite.accession_no, form: cite.form, filed: cite.filed,
-    section: s.title ?? `Item ${s.section_key}`, change: c.kind,
+    period: cite.period_of_report, section: s.title ?? `Item ${s.section_key}`, change: c.kind,
   };
 };
 
@@ -269,7 +270,7 @@ export function WhatChanged({ token, companyId, name, canReadFilings }: StepComm
 export function PeersStep({ token, companyId, project, onPeers, onChart, saved, projectId, onSaved }: StepCommon & {
   project: ProjectState;
   onPeers: (peers: string[]) => void;
-  onChart: (companyIds: string[], metric: string, transform: "ttm" | "q" | "yoy", title: string) => void;
+  onChart: (companyIds: string[], metric: string, transform: "ttm" | "q" | "yoy") => void;
   saved: Saved;
   projectId: string;
   onSaved: () => void;

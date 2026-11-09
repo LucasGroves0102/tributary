@@ -27,10 +27,10 @@ the CSV's `check` column:
 
 | check | Rows | Assertion |
 |---|---|---|
-| `annual` | 129 | gold's fiscal-year value equals the printed figure within half its last printed digit (`printed_unit`; ±0.5 million when printed in millions). Flows: the TTM ending at year-end; balance sheet: the year-end value. |
+| `annual` | 130 | gold's fiscal-year value equals the printed figure within half its last printed digit (`printed_unit`; ±0.5 million when printed in millions). Flows: the TTM ending at year-end; balance sheet: the year-end value. |
 | (same rows, flows) | 75 | gold's four fiscal quarters (Q4 usually derived as year minus nine months) sum to the printed year. |
 | `annual_silver` | 18 | EPS and weighted shares: never summed or derived, so gold keeps quarters only; silver must hold the 10-K's fiscal-year fact at the printed value. |
-| `absent` | 2 | printed, but gold has no value; asserted so the gap stays visible (see below). |
+| `absent` | 1 | printed, but gold has no value; asserted so the gap stays visible (see below). |
 
 Every TTM derived metric (gross/operating/net/FCF margin, free cash flow, revenue and net income
 growth, payout ratio, debt to equity, net debt, current ratio, ROE: 12 x 5 companies) must equal
@@ -49,11 +49,9 @@ The test runs in CI's `python` job (it sets `TEST_DATABASE_URL`) and is skipped 
   Depot.
 - Figures not on the face of the statements: JPMorgan's stock-based compensation, Exxon's
   stock-based compensation and weighted shares.
-- `absent`: Nvidia's marketable securities (51,951) are tagged with Nvidia's own extension
-  (`nvda:MarketableSecuritiesAndEquitySecuritiesFVNI`) in the FY2026 10-K; gold maps us-gaap
-  tags only, so short-term investments are missing and net debt counts them as 0. JPMorgan's
-  long-term debt: an unclassified bank balance sheet has no noncurrent-debt tag, so gold has
-  none by design (migration 012) and debt ratios aren't computed.
+- `absent`: JPMorgan's long-term debt: an unclassified bank balance sheet has no noncurrent-debt
+  tag, so gold has none by design (migration 012; 039 keeps the fallback debt tags away from banks)
+  and debt ratios aren't computed.
 - Definitional matches, noted per row: Exxon's revenue is total revenues and other income;
   JPMorgan's cash is cash and due from banks plus deposits with banks (the cash-flow
   statement's total); Home Depot's D&A is the cash-flow line, not the smaller income-statement
@@ -74,6 +72,18 @@ Two pipeline gaps, fixed in `db/migrations/024_gold_ignores_proxy_statements.sql
    `IncomeLossAttributableToParent`; added as the third pretax_income tag.
 
 Production needs `facts-fetcher --rebuild` (`make financials-rebuild`) once 024 is deployed.
+
+A third gap, closed by migration 038. Its row was `absent` until then, written to flip when it did:
+
+3. **Nvidia's marketable securities.** The FY2026 10-K tags the 51,951 line with Nvidia's own extension
+   (`nvda:MarketableSecuritiesAndEquitySecuritiesFVNI`), which companyfacts doesn't carry, so gold had no
+   value and net debt counted it as 0. The two 10-Qs filed after it (0001045810-26-000052 and -000075)
+   give the same date's line as two us-gaap parts: `DebtSecuritiesCurrent` 39,065 and
+   `EquitySecuritiesFvNi` 12,886. Gold now sums parts like these (`silver.metric_sums`, only both
+   from one filing for one date) and gets the hand-checked 51,951, so the row's `check` went from
+   `absent` to `annual`; its `value`, `verified_by` and every other figure in the CSV are unchanged. Net
+   debt at FY2026 is now 7,469 + 999 - 10,605 - 51,951 = -54,088 million; the formula test used to
+   require -2,137, with the 51,951 counted as zero.
 
 ## How the figures were extracted
 
@@ -100,6 +110,11 @@ Production needs `facts-fetcher --rebuild` (`make financials-rebuild`) once 024 
    `bronze.company_facts.raw_gzip`, trimmed by [`trim_facts.py`](trim_facts.py) to the mapped
    us-gaap tags and to periods ending in the two fiscal years up to year-end. Facts filed after
    the 10-K (later 10-Qs, proxy statements) are kept: they are what the pipeline really sees.
+   Mapping a new tag doesn't re-trim them: re-running `trim_facts.py` on today's payloads would also
+   bring every comparative filed since. For 038 only the tags its fix needs were added, from the
+   payload in bronze on hermes (fetched from the SEC 2026-10-19), with `trim_facts.py`'s own window:
+   Nvidia's `DebtSecuritiesCurrent` and `EquitySecuritiesFvNi`, two facts each. No other fixture
+   changed; a test that needs another new tag's facts adds them the same way.
 
 ## Hand check
 

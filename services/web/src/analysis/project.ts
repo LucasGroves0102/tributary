@@ -4,13 +4,14 @@
  * by query_api/workspaces.py ProjectState): `{companyId, peers, notes, done}`; its charts,
  * models and thesis are ordinary items in the workspace. Pure, tested without rendering.
  *
- * - Steps: STEPS (order, labels, guidance); the project header's tabs group them (GROUPS:
- *   Company = Business, What changed, Peers; Charts = Numbers; Model; Thesis; Monitor).
- * - Done: a step is done when the user marked it (`done`) or its work exists (`autoDone`):
- *   Business = notes written; Numbers = a chart saved in the project; Peers = at least one
- *   peer; Model = a model in the project; Thesis = the saved thesis's Core thesis section has
- *   text of the user's own; Monitor = the thesis was checked at least once. What changed is
- *   marked by hand.
+ * - Steps: STEPS (order, labels, guidance). The project header's tabs and the rail are the same
+ *   seven steps under the same names (a tab always opens its own step).
+ * - Done: a step is done only when the user marked it (`done`): a box they can always tick and
+ *   untick. Work in a step (`hasWork`: Business = notes written; Numbers = a chart saved in the
+ *   project; Peers = at least one peer; Model = a model in the project; Thesis = the saved
+ *   thesis's Core thesis section has text of the user's own; Monitor = the thesis was checked)
+ *   is a hint beside the box, never a tick: peers suggested at creation, one pinned chart or a
+ *   stub save don't make a step done, and nothing locks.
  * - Thesis template (`thesisTemplate`): plain Markdown headings (THESIS_SECTIONS) with the
  *   guidance under each as an HTML comment (invisible in the preview, one line to delete);
  *   Catalysts prefilled with the company's expected 10-Q/10-K dates (estimates, labelled so).
@@ -38,7 +39,7 @@ export const STEPS: StepInfo[] = [
   { key: "peers", label: "Peers", why: "The same numbers for comparable companies: is this business better or worse than its peers?" },
   { key: "model", label: "Model", why: "Revenue and operating income forward: base, bear and bull cases next to the company's own history." },
   { key: "thesis", label: "Thesis", why: "Your argument in plain words: core thesis, what the market misses, pillars with evidence, risks." },
-  { key: "monitor", label: "Monitor", why: "Each new filing checked against your thesis: which claims still hold, and what changed." },
+  { key: "monitor", label: "Monitor", why: "Check your thesis against the filings when you choose; when the company files a newer 10-K or 10-Q than your last check read, this step says so and offers a re-check." },
 ];
 
 export const STEP_KEYS = STEPS.map((s) => s.key);
@@ -46,16 +47,6 @@ export const stepInfo = (key: ProjectStep): StepInfo => STEPS.find((s) => s.key 
 export const stepNumber = (key: ProjectStep): number => STEP_KEYS.indexOf(key) + 1;
 export const nextStep = (key: ProjectStep): ProjectStep | null => STEP_KEYS[STEP_KEYS.indexOf(key) + 1] ?? null;
 
-export type Group = "company" | "charts" | "model" | "thesis" | "monitor";
-/** The project header's tabs: each opens the last step visited in it (or its first). */
-export const GROUPS: { key: Group; label: string; steps: ProjectStep[] }[] = [
-  { key: "company", label: "Company", steps: ["business", "changes", "peers"] },
-  { key: "charts", label: "Charts", steps: ["numbers"] },
-  { key: "model", label: "Model", steps: ["model"] },
-  { key: "thesis", label: "Thesis", steps: ["thesis"] },
-  { key: "monitor", label: "Monitor", steps: ["monitor"] },
-];
-export const groupOf = (step: ProjectStep): Group => GROUPS.find((g) => g.steps.includes(step))!.key;
 
 export const MAX_PEERS = 20;
 export const MAX_NOTES = 4000;
@@ -91,8 +82,8 @@ export interface Facts {
   checks: number;
 }
 
-/** A step whose work exists counts as done without being marked (the rules above). */
-export function autoDone(step: ProjectStep, p: ProjectState, f: Facts): boolean {
+/** The step has work in the project (the rules above): a hint, not done. */
+export function hasWork(step: ProjectStep, p: ProjectState, f: Facts): boolean {
   switch (step) {
     case "business":
       return p.notes.trim().length > 0;
@@ -111,11 +102,33 @@ export function autoDone(step: ProjectStep, p: ProjectState, f: Facts): boolean 
   }
 }
 
-export const stepDone = (step: ProjectStep, p: ProjectState, f: Facts): boolean => p.done.includes(step) || autoDone(step, p, f);
+/** Done means the user marked it. */
+export const stepDone = (step: ProjectStep, p: ProjectState): boolean => p.done.includes(step);
 
-/** Where a project opens: the first step that isn't done (the last one when all are). */
-export function firstOpenStep(p: ProjectState, f: Facts): ProjectStep {
-  return STEP_KEYS.find((s) => !stepDone(s, p, f)) ?? "monitor";
+/** What the box beside a step says when its work exists but it isn't marked done. */
+export function workHint(step: ProjectStep, p: ProjectState, f: Facts): string | null {
+  if (!hasWork(step, p, f) || stepDone(step, p)) return null;
+  switch (step) {
+    case "business":
+      return "Notes written";
+    case "numbers":
+      return `${f.charts} chart${f.charts === 1 ? "" : "s"} saved here`;
+    case "peers":
+      return `${p.peers.length} peer${p.peers.length === 1 ? "" : "s"} picked`;
+    case "model":
+      return `${f.models} model${f.models === 1 ? "" : "s"} here`;
+    case "thesis":
+      return "Core thesis written";
+    case "monitor":
+      return `Checked ${f.checks} time${f.checks === 1 ? "" : "s"}`;
+    case "changes":
+      return null;
+  }
+}
+
+/** Where a project opens: the first step the user hasn't marked done (the last one when all are). */
+export function firstOpenStep(p: ProjectState): ProjectStep {
+  return STEP_KEYS.find((s) => !stepDone(s, p)) ?? "monitor";
 }
 
 // --- the thesis template ----------------------------------------------------------------
@@ -235,11 +248,70 @@ export function appendToSection(markdown: string, key: SectionKey, block: string
     const head = markdown.replace(/\s+$/, "");
     return `${head}${head ? "\n\n" : ""}## ${sectionOf(key).heading}\n\n${body.join("\n")}\n`;
   }
+  return insertAtEnd(lines, s, body);
+}
+
+/** `body` after the last text of a span, a blank line around it. */
+function insertAtEnd(lines: string[], s: Span, body: string[]): string {
   let at = s.end;
-  while (at > s.start + 1 && lines[at - 1]!.trim() === "") at--; // after the section's last text
+  while (at > s.start + 1 && lines[at - 1]!.trim() === "") at--; // after the span's last text
   const before = lines.slice(0, at);
   const after = lines.slice(s.end);
   return [...before, "", ...body, ...(after.length ? ["", ...after] : [""])].join("\n");
+}
+
+// --- pins: which pillar (L5) ---------------------------------------------------------------
+
+/** Where a pin goes: a section; under Pillars, one pillar (its sub-heading's text) or a new one. */
+export interface PinTarget {
+  section: SectionKey;
+  pillar?: string;
+  newPillar?: boolean;
+}
+
+/** The pillars of a thesis, each a sub-heading of its Pillars section, with where each runs. */
+function pillarSpans(lines: string[]): { name: string; level: number; span: Span }[] {
+  const s = findSection(lines, "pillars");
+  if (!s) return [];
+  const level = HEADING.exec(lines[s.start]!.trim())![1]!.length;
+  const heads: { name: string; level: number; at: number }[] = [];
+  let fence = false;
+  for (let i = s.start + 1; i < s.end; i++) {
+    if (/^\s*(```|~~~)/.test(lines[i]!)) fence = !fence;
+    const m = fence ? null : HEADING.exec(lines[i]!.trim());
+    if (m && m[1]!.length > level && m[2]!.trim()) heads.push({ name: m[2]!.trim(), level: m[1]!.length, at: i });
+  }
+  const top = Math.min(...heads.map((h) => h.level));
+  const pillars = heads.filter((h) => h.level === top);
+  return pillars.map((h, k) => ({ name: h.name, level: h.level, span: { start: h.at, end: pillars[k + 1]?.at ?? s.end } }));
+}
+
+/** The pillars a thesis has, in order ("Pillar 1", or what the user renamed them). */
+export const pillarsOf = (markdown: string): string[] =>
+  pillarSpans(markdown.replace(/\r\n?/g, "\n").split("\n")).map((p) => p.name);
+
+/** The next "Pillar N" no pillar has. */
+export function nextPillarName(markdown: string): string {
+  const names = new Set(pillarsOf(markdown).map((n) => n.toLowerCase()));
+  let n = names.size + 1;
+  while (names.has(`pillar ${n}`)) n++;
+  return `Pillar ${n}`;
+}
+
+/** `block` at a pin target: a section's end (appendToSection); a pillar's end, under its own
+ * sub-heading; or a new pillar ("### Pillar N", one level under Pillars) at the end of Pillars. A
+ * pillar the text no longer has goes at the end of Pillars. */
+export function placePin(markdown: string, target: PinTarget, block: string): string {
+  if (target.section !== "pillars" || (!target.pillar && !target.newPillar)) return appendToSection(markdown, target.section, block);
+  const lines = markdown.replace(/\r\n?/g, "\n").split("\n");
+  const body = block.trim().split("\n");
+  if (target.newPillar) {
+    const s = findSection(lines, "pillars");
+    const level = s ? HEADING.exec(lines[s.start]!.trim())![1]!.length + 1 : 3;
+    return appendToSection(markdown, "pillars", `${"#".repeat(Math.min(level, 6))} ${nextPillarName(markdown)}\n\n${block.trim()}`);
+  }
+  const p = pillarSpans(lines).find((x) => x.name === target.pillar);
+  return p ? insertAtEnd(lines, p.span, body) : appendToSection(markdown, "pillars", block);
 }
 
 // --- pins: filing passages ----------------------------------------------------------------
@@ -273,6 +345,8 @@ export interface Passage {
   form: string;
   /** YYYY-MM-DD */
   filed: string;
+  /** the period the filing reports on (YYYY-MM-DD), so the quote reads in its period (H13) */
+  period?: string | null;
   /** "Item 1A. Risk Factors", "Item 1" */
   section: string;
   /** what-changed: "new", "rewritten" or "removed" (removed text is the earlier filing's) */
@@ -280,13 +354,19 @@ export interface Passage {
 }
 
 const CHANGE_NOTE = { new: "new in this filing", rewritten: "rewritten in this filing", removed: "removed since this filing" } as const;
+const PERIOD_WORD: Record<string, string> = { "10-Q": "quarter", "10-K": "fiscal year" };
+const ISO = /^\d{4}-\d{2}-\d{2}$/;
 
-/** A filing passage pinned into a thesis: a blockquote, then its citation (form, filed date,
- * section, the accession linked to EDGAR when the link can be built). */
+/** A filing passage pinned into a thesis: a blockquote, then its citation (form, the period it
+ * reports on when known, filed date, section, the accession linked to EDGAR when the link can be
+ * built). A 10-Q's MD&A can speak of six or nine months: the period says which filing it is. */
 export function quoteBlock(p: Passage): string {
   const url = edgarFilingUrl(p.companyId, p.accessionNo);
   const acc = url ? `[${p.accessionNo}](${url})` : p.accessionNo;
   const section = quoteText(p.section, 120);
   const note = p.change ? ` (${CHANGE_NOTE[p.change]})` : "";
-  return `> ${quoteText(p.text)}\n>\n> — ${p.form} filed ${p.filed}, ${section}${note} · ${acc}`;
+  const when = p.period && ISO.test(p.period)
+    ? `${p.form} for the ${PERIOD_WORD[p.form] ?? "period"} ended ${p.period}, filed ${p.filed}`
+    : `${p.form} filed ${p.filed}`;
+  return `> ${quoteText(p.text)}\n>\n> — ${when}, ${section}${note} · ${acc}`;
 }

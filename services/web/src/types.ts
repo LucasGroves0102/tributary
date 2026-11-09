@@ -55,6 +55,21 @@ export interface AccountInfo {
   agent_questions_per_day: number;
 }
 
+/** agent-api GET /v1/allowance: the questions left, before spending any. The day's are null where
+ * the Query API doesn't count them. */
+export interface Allowance {
+  per_hour: number;
+  network_per_hour: number;
+  /** the tighter of the user's and the network address's */
+  left_this_hour: number;
+  /** the day's model budget is used up, for everyone */
+  paused: boolean;
+  per_day: number | null;
+  left_today: number | null;
+  report_questions: number;
+  check_questions: number;
+}
+
 /** GET /v1/auth/providers: which sign-in buttons to show. */
 export interface AuthProviders {
   github: boolean;
@@ -140,6 +155,9 @@ export type AgentEvent =
   | { type: "action"; round: number; action: UiAction }
   | { type: "done"; answer: Answer }
   | { type: "error"; message: string }
+  /** the run ended without its result (no answer, no saved report or check): its questions
+   * were given back (agent-api server.Charge), before "done" or the error */
+  | { type: "refunded"; questions: number }
   /** /v1/reports: the report was saved (before "done") */
   | { type: "report"; item: { item_id: string; workspace_id: string; name: string }; verification: { ok: boolean; unverified: number } }
   /** /v1/thesis-checks: the check was saved (before "done") */
@@ -368,6 +386,16 @@ export interface SavedItem {
   opened_at: string | null;
 }
 
+/** A thesis's earlier version (Query API /v1/workspace-items/{id}/versions, app DB 014): what a
+ * save replaced. `characters` is its Markdown's length. */
+export interface ItemVersion {
+  version_id: string;
+  name: string;
+  saved_at: string;
+  replaced_at: string;
+  characters?: number;
+}
+
 /** An item with its state: the web app's own chart/comps/screen state, validated by the API. */
 export interface SavedItemFull extends SavedItem {
   state: Record<string, unknown>;
@@ -486,6 +514,8 @@ export interface SearchResult {
   matched_on: string;
   matched_alias: string;
   is_current: boolean;
+  /** the company's current tickers, primary first; null or empty when it has none */
+  tickers?: string[] | null;
   access: Tier[];
 }
 
@@ -498,6 +528,8 @@ export interface FinancialRow {
   value: string;
   unit: string;
   value_source: "reported" | "derived";
+  /** why this ratio reads n/m (asked for with `readings`) */
+  not_meaningful?: string | null;
   citation: {
     accession_no: string;
     form: string;
@@ -507,6 +539,14 @@ export interface FinancialRow {
     filing_url: string | null;
   };
   freshness: { filed: string; ingested_at: string };
+}
+
+/** /financials with `readings`: a period a metric has no row for because the figure means nothing
+ * there (debt/equity and ROE on negative equity), and why (migration 035's words). */
+export interface NotMeaningfulPeriod {
+  metric: string;
+  period_end: string;
+  reason: string;
 }
 
 export interface Filing {
@@ -611,6 +651,15 @@ export interface ColumnInfo {
   metric: string;
   span: "quarter" | "ttm";
   unit: string;
+  /** a point in time: its _ttm column is the same number as its _q one */
+  balance?: boolean;
+}
+
+/** How to read a screener value (migration 035): not_applicable and not_meaningful give a reason,
+ * old and behind are about its date (blanks.ts has what each shows). */
+export interface ValueReading {
+  status: "not_applicable" | "not_meaningful" | "old" | "behind";
+  reason?: string | null;
 }
 
 /** Where a screener/watchlist value came from: the latest period's filing. */
@@ -638,6 +687,9 @@ export interface ExpectedFiling {
 }
 
 export interface WatchlistEntry {
+  /** how to read each value (ScreenerRow) */
+  readings?: Record<string, ValueReading>;
+  latest_period?: string | null;
   company_id: string;
   name: string | null;
   tickers: string[] | null;
@@ -696,6 +748,12 @@ export interface ScreenerRow {
   access: Tier[];
   values: Record<string, Num | null>;
   sources: Record<string, ValueSource | null>;
+  /** only where there's something to say; the exact figure stays in `values` */
+  readings?: Record<string, ValueReading>;
+  /** what "old" is measured against */
+  latest_period?: string | null;
+  /** metrics that don't describe this company, whatever a filing tags (banks) */
+  not_applicable?: string[];
 }
 
 /** /v1/screener/columns: every column key, i.e. every formula metric with each span it has. */
@@ -726,7 +784,7 @@ export interface FormulaInput {
 }
 
 export type FormulaValidation =
-  | { valid: true; unit: string; alignment: "fiscal" | "calendar"; inputs: FormulaInput[] }
+  | { valid: true; unit: string; display?: "percent" | "multiple" | "number" | null; alignment: "fiscal" | "calendar"; inputs: FormulaInput[] }
   | { valid: false; errors: FormulaProblem[] };
 
 export interface FormulaPoint {
@@ -757,6 +815,9 @@ export interface FormulaPoint {
 export interface FormulaSeries {
   formula: string;
   unit: string;
+  /** how a dimensionless result reads (query-api formula/check.py); null with a unit, missing
+   * from an older API */
+  display?: "percent" | "multiple" | "number" | null;
   basis: "fiscal" | "calendar";
   view: "quarter" | "ttm";
   alignment: "fiscal" | "calendar";
@@ -774,6 +835,8 @@ export interface Screener {
   sort: string;
   columns: ColumnInfo[];
   rows: ScreenerRow[];
+  /** the data check screened for, echoed (absent from an API older than the filter) */
+  issue?: string;
 }
 
 /** /v1/companies/{id}/peers: suggested peers (same SIC first, then size), screener-style rows,
@@ -795,6 +858,8 @@ export interface Peers {
 }
 
 export interface RecapValue {
+  /** why this ratio reads n/m */
+  not_meaningful?: string | null;
   value: Num;
   period_start: string | null;
   period_end: string;

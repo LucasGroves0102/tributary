@@ -174,6 +174,10 @@ class Sandboxes(Protocol):
     def expires_at(self, user_id: str) -> datetime | None: ...
     def take_question(self, user_id: str, now: datetime, per_user: int, per_day: int,
                       questions: int = 1) -> int: ...  # left today; raises QuotaExceeded
+    def questions_left(self, user_id: str, now: datetime, per_user: int,
+                       per_day: int) -> tuple[int, int]: ...  # (daily cap, left); takes nothing
+    def give_back(self, user_id: str, now: datetime,
+                  questions: int) -> int: ...  # how many; never more than today's use
     def delete_expired(self, now: datetime) -> dict[str, int]: ...
     def catalog_public(self) -> bool: ...
 
@@ -304,6 +308,60 @@ class AppSandboxes:
                         "     = demo_agent_usage.questions + EXCLUDED.questions",
                         (user_id, day, questions))
             return cap - mine - questions
+
+    def give_back(self, user_id: str, now: datetime, questions: int) -> int:
+        """Gives back up to `questions` of today's (UTC) count for a run agent-api gives back:
+        never below zero, so it can't add questions; the shared day goes down with a sandbox's
+        or GitHub account's (a password account never counted there). Locks as take_question
+        does (the day's row first), so a refund and a take can't interleave. Returns how many
+        were given back. A run that started before midnight UTC took yesterday's questions but
+        is given back from today's, up to what today has used: usage can move from today to
+        yesterday, but never more than the run took, so no questions are gained."""
+        day = now.astimezone(UTC).date()
+        with self._pool.connection() as conn, conn.transaction(), conn.cursor() as cur:
+            shared = not is_password_user(user_id)
+            if shared:
+                cur.execute("SELECT questions FROM demo_agent_daily WHERE day = %s FOR UPDATE",
+                            (day,))
+            cur.execute("SELECT questions FROM demo_agent_usage WHERE user_id = %s AND day = %s"
+                        " FOR UPDATE", (user_id, day))
+            given = min(max(0, questions), _count(cur))
+            if given:
+                cur.execute("UPDATE demo_agent_usage SET questions = questions - %s"
+                            " WHERE user_id = %s AND day = %s", (given, user_id, day))
+                if shared:
+                    cur.execute("UPDATE demo_agent_daily SET questions"
+                                " = GREATEST(questions - %s, 0) WHERE day = %s", (given, day))
+            return given
+
+    def questions_left(self, user_id: str, now: datetime, per_user: int,
+                       per_day: int) -> tuple[int, int]:
+        """The user's daily cap and what take_question would still allow today, taking nothing
+        and locking nothing: for the assistant panel's meter, so it may be a question out by the
+        time one is asked. Same rules as take_question; anyone it refuses is SandboxGone."""
+        day = now.astimezone(UTC).date()
+        with self._pool.connection() as conn, conn.transaction(), conn.cursor() as cur:
+            if is_password_user(user_id):
+                cur.execute("SELECT questions_per_day, disabled FROM password_accounts"
+                            " WHERE user_id = %s", (user_id,))
+                row = cur.fetchone()
+                if row is None or row[1]:
+                    raise SandboxGone(user_id)
+                cap = int(row[0])
+                cur.execute("SELECT questions FROM demo_agent_usage"
+                            " WHERE user_id = %s AND day = %s", (user_id, day))
+                return cap, max(0, cap - _count(cur))
+            cur.execute("SELECT expires_at > %s FROM demo_sandboxes WHERE user_id = %s"
+                        " UNION ALL SELECT true FROM github_accounts WHERE user_id = %s",
+                        (now, user_id, user_id))
+            row = cur.fetchone()
+            if row is None or not row[0]:
+                raise SandboxGone(user_id)
+            cur.execute("SELECT questions FROM demo_agent_usage WHERE user_id = %s AND day = %s",
+                        (user_id, day))
+            mine = _count(cur)
+            cur.execute("SELECT questions FROM demo_agent_daily WHERE day = %s", (day,))
+            return per_user, max(0, min(per_user - mine, per_day - _count(cur)))
 
     def catalog_public(self) -> bool:
         """Whether every company is open to signed-in users (app migration 008's switch), so the

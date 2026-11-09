@@ -31,28 +31,31 @@ request parameters. Dev tokens: `make token USER=alice`.
 | `POST /v1/demo/token` | `DEMO_USERS` set | an 8-hour token for a demo account (never a sandbox user) |
 | `GET /v1/demo/sandbox` | `DEMO_SANDBOX_ENABLED` | what "Try the demo" creates: lifetime, plan, tickers, whether every company is open (`catalog_public`), assistant allowance ([Demo sandboxes](#demo-sandboxes)) |
 | `POST /v1/demo/sandbox` | `DEMO_SANDBOX_ENABLED` | 201: a new temporary user and its token (expires with the sandbox); 429 when the per-IP or live-sandbox cap is hit. Takes no input |
+| `GET /v1/demo/agent-quota` | token | agent-api only (nginx hides it): what POST would still allow today, taking nothing: `{"capped": true, "per_day": n, "left_today": n}`, or `{"capped": false}` for users not limited here |
 | `POST /v1/demo/agent-quota` | token | agent-api only (nginx hides it): takes one assistant question (or `{"questions": n}`, 1-5, all or none: a report counts as 3) from a sandbox's or GitHub account's daily caps, or from a password account's own daily cap; 429 with the message to show; `{"demo": false}` for other users |
+| `POST /v1/demo/agent-quota/refund` | token | agent-api only (nginx hides it): gives back `{"questions": n}` (1-5) taken for a run agent-api gives back (a model error before any output, a thesis check cut off at max_tokens; at most twice a day per user: agent README, Limits), at most what the caller used today (UTC) and never below zero (a run that started before midnight comes off today's count: usage moves a day, no question is gained); `{"demo": true, "refunded": n}`, or `{"demo": false}` for users not capped here |
 | `GET /v1/auth/providers` | | `{"github": true\|false, "password": true\|false}`: which sign-in buttons the web app shows |
 | `POST /v1/auth/password` | `APP_DATABASE_URL` | `{"username", "password"}` → `{"token", "expires_in"}` (a 7-day JWT) for an owner-created account; 401 with one body for every refusal, 429 per client address, 422 never echoes the input ([Password accounts](#password-accounts)) |
 | `GET /v1/auth/github/start` | `GITHUB_CLIENT_ID` + `GITHUB_CLIENT_SECRET` | 302 to GitHub's authorize page (no scopes) with a signed `state`, and the state's nonce in a short-lived cookie (404 when not configured; [GitHub sign-in](#github-sign-in)) |
 | `GET /v1/auth/github/callback?code=&state=` | `GITHUB_CLIENT_ID` + `GITHUB_CLIENT_SECRET` | GitHub's redirect back: 302 to `/#/signed-in?token=…&expires_in=…` (a 7-day JWT, in the URL fragment), or `/#/signed-in?error=<code>` |
 | `GET /v1/me` | token | `catalog`: `{public, tiers, companies}`, whether every catalog company is readable to the caller and with which tiers (`companies`: how many); `companies`: with the catalog public, only what the caller reads beyond it (private grants), else every company the caller can read, with tiers; `sandbox` (expiry, plan, assistant allowance) for a demo sandbox user; `github` (login, plan, the demo's company ids, assistant allowance) for a GitHub sign-in; `account` (username, plan, `agent_questions_per_day`) for a password account |
-| `GET /v1/companies/search?q=&access=` | token | candidates (public identity) + caller's access; `access=financials`: only companies you can read |
+| `GET /v1/companies/search?q=&access=&limit=` | token | tickers, CIKs and any part of a name, best match first (`silver.search_companies`, migration 034): public identity + caller's access; `limit` 1-25, default 5; `access=financials`: only companies you can read, narrowed before the limit |
 | `GET /v1/metrics` | | metric names served by `financials`: `silver.metrics` and `gold.derived_metrics`, read once |
-| `GET /v1/companies/{id}/financials?metrics=&quarters=&view=&basis=&format=` | financials | values + citation + freshness; `format=csv`: one row per value with its source filing |
+| `GET /v1/companies/{id}/financials?metrics=&quarters=&view=&basis=&format=` | financials | values + citation + freshness; `quarters` 1-120 (every quarter there is, the Statements tab's Max); `format=csv`: one row per value with its source filing |
 | `GET /v1/companies/{id}/segments?axis=&metric=&quarters=&view=&basis=&format=` | financials | values per segment member (business segment, geography, product/service, reconciliation), exact decimal strings, citation per value ([Segments](#segments)) |
 | `GET /v1/companies/{id}/filings?limit=&accession_no=` | filings | recent parsed filings (or one) and their section outline, no text |
 | `GET /v1/companies/{id}/filing-index?form=&from=&to=&limit=&offset=` | token | every filing in the SEC index (public metadata), newest first; `sections` count only where the caller can read filings (OpenFGA check, then RLS) |
 | `GET /v1/filing-index?company_id=&form=&from=&to=&limit=&offset=` | token | the same across up to 50 companies (default: the caller's readable companies) |
 | `GET /v1/filings/latest?limit=` | token | newest parsed filings across the companies the caller can read filings for |
-| `GET /v1/companies/{id}/sections/{key}?form=&accession_no=&limit=&max_chars=` | filings | section text + citation |
+| `GET /v1/companies/{id}/sections/{key}?form=&accession_no=&limit=&max_chars=` | filings | section text + citation; `max_chars` default 8,000, up to 1,000,000 (the reader asks for the whole section) |
 | `GET /v1/companies/{id}/filings/{accession}/changes?section=&basis=&kind=` | filings | new / removed / rewritten Risk Factors and MD&A paragraphs vs the comparable earlier filing, word diffs, citations in both filings ([What changed](#what-changed)) |
 | `GET /v1/search?q=&company=&form=&section=&from=&to=&limit=&offset=` | filings (every company searched) | best passage per section, ranked, with snippet and citation ([Search](#search)) |
 | `GET /v1/companies/{id}/data-notes` | financials | data-quality and freshness notes: gaps, overlapping quarters, restatements, derived quarters, filings companyfacts doesn't carry yet, each with its filings ([Data notes](#data-notes)) |
-| `GET /v1/data-notes?limit=` | financials (every company covered) | the newest notes across the caller's companies, without derived-quarters notes ([Data notes](#data-notes)) |
+| `GET /v1/companies/{id}/annual-per-share?years=` | financials | EPS and weighted shares per fiscal year, as the 10-K states them (migration 036): per-share figures don't add, so quarters can't give them |
+| `GET /v1/data-notes?limit=&company_id=` | financials (every company covered) | the newest notes across the caller's companies, or the named ones of them (at most 50), without derived-quarters notes ([Data notes](#data-notes)) |
 | `POST /v1/formulas/validate` | token | AST, unit and inputs, or errors with positions |
 | `POST /v1/formulas/evaluate` | financials, every company in the formula | series; each point cites every input's filing |
-| `GET /v1/screener?columns=&where=&...&format=` | token | companies with financials: public metadata + latest values where permitted ([Screener](#screener)) |
+| `GET /v1/screener?columns=&where=&...&format=` | token | companies with a figure in these columns: public metadata + latest values where permitted, each with how to read it ([Screener](#screener)) |
 | `GET /v1/screener/columns` | | column keys, filer categories, size bands |
 | `GET /v1/watchlist?columns=&sort=&format=` | token, app DB | the caller's watchlist: metadata, last report, next expected filing, values where permitted |
 | `PUT` / `DELETE /v1/watchlist/{id}` | token, app DB | add / remove a company (grants nothing) |
@@ -60,7 +63,7 @@ request parameters. Dev tokens: `make token USER=alice`.
 | `GET /v1/companies/{id}/expected-filings?periods=` | token | estimated next 10-Q/10-K dates with their basis |
 | `GET /v1/filings/{accession}/recap?metrics=` | financials (flags: filings) | metrics vs prior quarter and year-ago, cited; one-time-item flags |
 | `GET /v1/companies/{id}/peers?limit=&columns=&access=` | token | suggested peers (SIC, size band, filer category), values where permitted |
-| `GET /v1/connections` | `DATA_CONNECTIONS_KEY`, token | providers offered and the caller's market-data connections (provider, `…last4`, dates; never the key) ([Connect your data](#connect-your-data)) |
+| `GET /v1/connections` | token | providers offered and the caller's market-data connections (provider, `…last4`, dates; never the key); both empty without `DATA_CONNECTIONS_KEY` ([Connect your data](#connect-your-data)) |
 | `PUT /v1/connections/{provider}` | `DATA_CONNECTIONS_KEY`, token | `{"api_key": "…"}`: validated with one provider call, stored encrypted |
 | `DELETE /v1/connections/{provider}` | `DATA_CONNECTIONS_KEY`, token | deletes the key and every price fetched with it |
 | `GET /v1/companies/{id}/prices?from=&to=` | `DATA_CONNECTIONS_KEY`, financials, the caller's own connection | the caller's end-of-day closes (exact decimals), refreshed at most once per US Eastern day |
@@ -83,9 +86,16 @@ company_id of metrics written without a ticker.
   unary minus, parentheses. A recursive-descent parser builds an AST; nothing is evaluated.
   Limits: 500 characters, 24 levels of nesting, 100 nodes, 40 quarters of lag, 5 companies,
   20 distinct input series.
-- **Checks** (`check.py`): unknown metrics (with "did you mean"), metrics without values in
-  the requested view (`ttm(eps_diluted)`), and units: + and - need the same unit (a constant
-  takes the other side's), * and / combine them (USD / shares = USD/shares, USD / USD = ratio).
+- **Checks** (`check.py`): unknown metrics (every one at once, each with "did you mean" when
+  there's a close name; `GET /v1/metrics` lists them), metrics without values in the requested
+  view (`ttm(eps_diluted)`), a division by a constant that is zero (`revenue / 0`), and units: +
+  and - need the same unit (a constant takes the other side's), * and / combine them (USD /
+  shares = USD/shares, USD / USD = ratio).
+- **Display** (rules in `check.py`'s docstring): a dimensionless result isn't necessarily a
+  percent, so both routes also say `display`: `percent` (`net_income / revenue`,
+  `revenue / revenue[-4q] - 1`), `multiple` (`NVDA.revenue / MSFT.revenue`, `debt_to_equity`) or
+  `number` (`receivables / revenue * 365`, days); `null` when the result has a unit. Values don't
+  change, only how a chart reads them. A saved chart layer's `display` overrides it.
 - **Tickers** resolve through `silver.resolve_company` (best ticker match). A ticker that
   matches nothing and one the caller can't read give the same error
   ("KO isn't one of your companies"); suggestions come only from the caller's own companies.
@@ -94,7 +104,7 @@ company_id of metrics written without a ticker.
   fiscal quarter; otherwise (basis `calendar`, or several companies) the calendar quarter of
   migration 014's rule, using `calendar_primary` rows. A lag of n moves an input's rows n keys
   later. A point exists where the expression is not NULL: a missing input or a division by zero
-  is a gap. `view` picks quarter or TTM inputs; `ttm(...)` forces TTM inside it. The rows are
+  in the data is a gap. `view` picks quarter or TTM inputs; `ttm(...)` forces TTM inside it. The rows are
   also filtered on the input companies' ids as a bound array: `gold.financials` is a UNION
   view, and a company filter that arrives only through a join can't reach its indexes.
 - **Errors**: `{"code", "message", "pos", "length", "hint"}`. `validate` returns them with
@@ -135,7 +145,7 @@ route passes a catalog-sized list. What changes per route when public:
 
 | Route | With the catalog public | Why it has to differ |
 |---|---|---|
-| `/v1/screener`, `/v1/watchlist`, `/peers` | two stages: `gold.latest_value` per company for the sort and value filters, the other columns only for the page | pivoting `gold.latest_financials` read and sorted 1.6M rows for a page of 50 |
+| `/v1/screener`, `/v1/watchlist`, `/peers` | two stages: `gold.latest_reading` per company for the sort and value filters, the other columns only for the page | pivoting `gold.latest_financials` read and sorted 1.6M rows for a page of 50 |
 | `/v1/filings/latest` | documents newest first, stop at `limit` with sections, then the same grouping | grouped every section under RLS, then `LIMIT` |
 | `/v1/filing-index` (no `company_id`) | filing-date windows (3, 14, 90, 365 days, all time) on CIKs and `filed_on`, stopping at the first that fills the page: the same rows, because the query sorts newest first | `silver.filings` joined and de-duplicated 5M rows, then `LIMIT` |
 | `/v1/search` (no `company`) | ranks the newest window that fills the page (30, 180, 730 days, all time): **`searched_from` in the response says how far back** | can't rank 276,000 passages ("supply chain") in 8 s; see Search |
@@ -151,8 +161,13 @@ them for nothing.
 
 ## Screener
 
-`GET /v1/screener`: every company with gold financials (`access=financials`: only companies you
-can read). Columns are `<metric>_ttm` (trailing twelve months; balance-sheet metrics at the
+`GET /v1/screener`: every company with a figure in at least one of the requested columns
+(`access=financials`: only companies you can read). A row of blanks isn't a result, so it isn't
+counted; `q` and `issue` list a company whatever it has, and with the catalog closed a company you
+can't read is listed anyway. `issue` (a data-quality check's name, the status page's rows) lists only
+companies with a finding of it, read under RLS: one the caller can't read never matches, so it says
+nothing about them. The JSON echoes `issue`, so a client can tell an older API that ignored it (and
+listed everyone) from an answer. Columns are `<metric>_ttm` (trailing twelve months; balance-sheet metrics at the
 quarter end) or `<metric>_q` (latest fiscal quarter) for every metric in the formula catalog,
 each the latest value with its own `sources[key]` (`period_end`, `accession_no`, `form`,
 `filed`). Filters: `sic` (4-digit, repeatable), `sic_prefix` (1-3 digits), `industry` (SIC
@@ -161,12 +176,36 @@ description contains), `q` (name contains or exact ticker), `exchange`,
 ones without gold financials, for a comps table or a tearsheet), `filer_category` (`large_accelerated`, `accelerated`,
 `non_accelerated`), `revenue_band` / `assets_band` (`lt100m`, `100m-1b`, `1b-10b`, `10b-100b`,
 `gte100b` on `revenue_ttm` / `total_assets_q`) and `where=<column>:<gt|gte|lt|lte>:<number>`
-(ratios as fractions: `operating_margin_ttm:gte:0.2`). `sort` is a column key or `name`, `sic`,
-`fiscal_year_end`, `filer_category`, `state_of_incorporation`, `-` for descending; nulls last.
+(ratios as fractions: `operating_margin_ttm:gte:0.2`). `fiscal_year_end_month` and the
+`fiscal_year_end` sort read `silver.fiscal_year_end_month` (migration 042): a 52/53-week year ending
+in a month's first week belongs to the month before (J&J's `0103` is December), while the row keeps
+the SEC's MMDD. `sort` is a column key or `name`, `sic` (the
+Industry column: by its name, not the code), `fiscal_year_end`, `filer_category`,
+`state_of_incorporation`, `-` for descending; nulls last.
 `limit` (500 as JSON, 5000 as CSV), `offset`, `format=json|csv`. JSON:
-`{as_of, total, limit, offset, sort, columns: [{key, metric, span, unit}], rows: [{company_id,
+`{as_of, total, limit, offset, sort, columns: [{key, metric, span, unit, balance}], rows: [{company_id,
 name, tickers, exchanges, sic, industry, fiscal_year_end, filer_category, filer_categories,
-state_of_incorporation, access: [tiers], values: {key: value}, sources: {key: {...}}}]}`.
+state_of_incorporation, access: [tiers], values: {key: value}, sources: {key: {...}},
+readings: {key: {status, reason}}, latest_period, not_applicable: [metrics]}]}`. CSV adds a `notes`
+column. `balance`: a point in time, so its `_ttm` column is the same number as its `_q` one.
+
+**How a value reads** (`readings`, migration 035, the only definition, used by the screener, watchlist
+and peers): `not_meaningful` (with `reason`): a margin on under $100K of revenue, a gross or operating
+margin over 100%, any margin over ±1,000%, growth of over 1,000% from under $10M or from a base under
+$100K, debt over 100 times equity, debt or equity below zero, ROE or payout over ten times, a current
+ratio over 100x. `not_applicable` (with `reason`): a bank's gross and operating margin, FCF, FCF margin,
+net debt, debt to equity and current ratio, whether or not a value exists. `old`: more than 300 days
+before the company's `latest_period` (the newest of its revenue, net income and total assets, never a
+future date). `behind`: more than 45. `values` keeps the exact figure in every case, but all except
+`behind` sort after real values and never pass a `where` or a size band: sorting by gross margin
+doesn't open on 209,828%. `/financials?readings=true` adds the row's `not_meaningful` (debt/equity and
+ROE on that period's negative equity first) and `not_meaningful_periods: [{metric, period_end,
+reason}]`, the periods a requested metric has no row because of the company's equity there (gold has
+no debt/equity or ROE on negative equity), taken from the company's own latest `quarters` equity
+periods whatever metrics were asked (`debt_to_equity` alone still gets them), both by
+`gold.not_meaningful` (`Store.equity_readings`, under RLS, after `require()`); off
+by default, so the agent's tool sees what it always did. The web app reads these instead of working
+out equity itself.
 
 Companies you can't read financials for are **listed with metadata only** (values and sources
 null, `access` without `financials`), because identity is public and the screener is how you
@@ -211,14 +250,19 @@ citation and freshness, and `change` / `pct_change` (6 decimals; null for ratios
 cites the restating filing. With `filings` access, `flags` lists one-time-item keyword matches
 (impairment, restructuring, one-time/non-recurring, gain or loss on sale, write-down,
 litigation settlement) in MD&A and EX-99 sections, each citing section and character offset;
-without it `flags` is null.
+without it `flags` is null. Flags are optional: they run under their own 2 s timeout, and if they
+fail the recap still answers with `flags: null` and `flags_unavailable` saying why (the same field
+explains a plan without `filings`).
 
 ## Peers
 
 `GET /v1/companies/{id}/peers`: companies with financials in the same 4-digit SIC, then the
 3- and 2-digit groups; within a level, the same TTM revenue size band first (only for
 companies you can read, and only if you can read the company's own revenue), then the same
-filer category, revenue closeness and name. Each peer has screener-style metadata, `values`
+filer category, revenue closeness and name. A revenue is read as the screener sorts it
+(`gold.latest_reading`, migration 035): a TTM over 300 days behind the company's own latest period,
+or not meaningful, gives no band and no closeness, for a peer or the company itself (a peer whose
+revenue stopped in 2024 isn't "same size band"). Each peer has screener-style metadata, `values`
 where permitted and `match` (`sic_level`, `same_filer_category`, `revenue_band`,
 `same_revenue_band`). `access=financials` ranks only companies you can read (the web app asks
 for that in a demo sandbox, which lists nothing else); the default ranks every company.
@@ -229,7 +273,8 @@ Workspaces are named folders of saved items in the app database (`workspace_api.
 `workspaces.py`, app migrations 004 and 009): a chart builder state (`chart`: title, range,
 alignment, up to 12 layers: `metric`, `formula`, or `segment` (company, segment metric,
 `segmentAxis`, 1-20 `members` as XBRL QNames, transforms q / ttm / yoy / contrib; the web app's
-Revenue view saves these, and reads their values from `/segments`)), a comps set (`comps`: target, up to 20 peers, columns), a screener
+Revenue view saves these, and reads their values from `/segments`); a metric or formula layer may
+say how a dimensionless value reads, `display`: percent, multiple or number), a comps set (`comps`: target, up to 20 peers, columns), a screener
 screen (`screen`: filters and sort), a thesis (`thesis`) or a model (`model`; both below).
 A workspace can also be an **analysis project** (app migration 012, the web app's Analysis
 tab): its `project` is `{companyId, peers (up to 20), notes (up to 4,000 characters, "How it
@@ -282,7 +327,14 @@ rename), owner-only and validated like every item:
   reports). Lines `[[embed:<item id>]]` draw another item of the same workspace in the web app;
   they aren't checked here (an embedded item may be deleted later) and the web app drops any
   that don't resolve. `GET /v1/workspaces/{id}` leaves a thesis's state out (null, like a
-  report's); `/v1/workspace-items/{id}` returns it.
+  report's); `/v1/workspace-items/{id}` returns it. **Versions** (app migration 014): a save that
+  changes a thesis's state keeps the version it replaced (`item_versions`, in the same
+  transaction; the newest `MAX_VERSIONS` = 30 per thesis; a rename or a save that changes nothing
+  keeps none). `GET /v1/workspace-items/{id}/versions` lists them newest first without their text
+  (`version_id`, `name`, `saved_at`, `replaced_at`, `characters`), `GET
+  /v1/workspace-items/{id}/versions/{version_id}` returns one with its state; restoring is the web
+  app loading it into the editor, and saving it is an ordinary save. Owner-only like the item
+  (another user's is the same 404), forced RLS on `app.user_id`, deleted with the thesis.
 - **`model`** (`ModelState`): `{companyId, historyYears (3-10, default 8), assumptions: [{growth,
   margin, note?}] (1-10)}`, growth -100..1000 and operating margin -1000..100, in percent; notes
   up to 500 characters (blank ones dropped). Optional `scenarios: {bear?, bull?}`, each a list
@@ -337,7 +389,9 @@ checks"), one row per check in `thesis_checks`, kept with the thesis they checke
   `checked_at` and `filings` (`[]` for checks stored before Revisit).
   `GET /v1/workspace-items/{item_id}/checks/{check_id}` returns one with its result.
 - **Validated.** `CheckResult` is strict: a supported or contradicted claim and every "not
-  mentioned" point cites at least one filing the agent's tools returned (`verified`); citation
+  mentioned" point cites at least one filing the agent's tools returned (`verified`); a
+  supported claim has no figure that isn't in the data (none of its `figures` and no citation's
+  `figure_status` is `unverified`: the agent downgrades such a claim to unverifiable); citation
   URLs only `https://www.sec.gov/`; accession numbers, section keys, the text hash and
   timestamps by pattern; numbers finite; at most 30 claims, 10 points, 4 models; the
   verification's `ok` recomputed. `filings` (Revisit, optional so older results still
@@ -568,8 +622,10 @@ end-of-day prices with that key, stores them for that user only and shows them o
 user. There is no shared price cache across users (`connections.py`, `keybox.py`,
 `providers.py`, `valuation.py`, app migration 011).
 
-**Off unless `DATA_CONNECTIONS_KEY` is set.** Without it no route below exists (404) and the web
-app hides the feature, so deploying the code changes nothing. A malformed value stops the API
+**Off unless `DATA_CONNECTIONS_KEY` is set.** Without it `GET /v1/connections` answers
+`{"providers": [], "connections": []}` (the web app asks on every load; a 404 there was an error
+line in every visitor's console), every other route below is absent (404), and the web app hides
+the feature, so deploying the code changes nothing. A malformed value stops the API
 at start (never a silent "off"). It needs `APP_DATABASE_URL`.
 
 **Provider: Tiingo** (end-of-day daily prices, US equities). Chosen because its developer guide
@@ -717,15 +773,28 @@ from `readable()` (financials) and passes them into the SQL (with the catalog pu
 
 - Findings from `ops.check_financials` / `ops.check_segments` (`kind` = check name: `series_gap`,
   `overlapping_quarters`, `calendar_collision`, `annual_sum`, `impossible_value`, `sign_flip`,
-  `outlier`, `segment_sum_*`, `restatement`), with `severity` error / warning / info and
-  `detail` as the check wrote it (dates, filings, relative sizes; never values).
+  `outlier`, `segment_sum_*`, `restatement`, `mistagged_fact`, `net_debt_gap`), with `severity`
+  error / warning / info and `detail` as the check wrote it (dates, filings, relative sizes; never
+  values). Migration 041: `mistagged_fact` is a fact gold leaves out (`rule`
+  `period_after_filing`, with `filed` and `periods`; `debt_above_liabilities`); `net_debt_gap` is
+  the latest balance sheet with debt and cash but no net debt (`investments_end` when an investments
+  series stopped, else debt that can't carry its interest); a `series_gap` with `repeated` is the same
+  quarter missing that many years.
 - `derived_quarters` (company route only): per metric, how many quarters are derived from
-  year-to-date differences, the period range and the latest one's filing.
+  year-to-date differences, the period range and the latest one's filing; `computed: true` when
+  they're gross profit as revenue less cost of revenue (migration 039), not a year-to-date difference.
 - `companyfacts_behind`: 10-K/10-Q filings in the public index (`silver.filings`), filed on or
   after the latest filing in the company's gold rows and within the last 120 days
   (`store.BEHIND_DAYS`; companyfacts lags by days, not months), that no XBRL fact cites yet.
   The companies' CIKs are looked up first and `silver.filings` is filtered on that array.
-- Every note has `date` (restating or missing filing, else the period end; newest first) and
+- `stock_split`: what a split's restatements read as, one note per split (`detail`: `split`
+  "10-for-1", `reverse`, `findings`, `periods`, `metrics`, first and last period). Needs a share count
+  restated by a clean ratio and EPS by its reciprocal in the same period and filing. Without the other
+  side a finding stays a `restatement`, with `may_be_split`; a factor of 1,000 or 1,000,000 gets
+  `unit_change`. An `outlier` the same quarter also has in two other years gets `seasonal` and
+  severity info. No check is suppressed: every finding still reaches a note.
+- Every note has `date` (restating or missing filing, a mistagged fact's filing, else the period
+  end; newest first: a 2033 period mustn't top the list) and
   `filings` (`role`, accession, form, filed, EDGAR `filing_url` from the public index). The
   plain-language wording is the web app's (`services/web/src/company/notes.ts`).
 

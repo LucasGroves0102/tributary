@@ -17,7 +17,7 @@ import {
   project,
   resizeAssumptions,
   restoreModel,
-  SCENARIO_SHIFT,
+  runRate,
   SCENARIOS,
   scenarioAssumptions,
   shiftedCase,
@@ -185,11 +185,12 @@ describe("modelSeries", () => {
 });
 
 describe("assumptions", () => {
-  it("defaults to the historical CAGR and average margin", () => {
+  it("defaults start at the latest year without a run rate and fade to the long run", () => {
+    // growth 8.14% and margin 20% last year; long run: the CAGR held to 5%, the 15% average margin
     const s = historyStats([year(2024, 100, 10), year(2025, 108.14, 21.628)]);
     expect(defaultAssumptions(s, 2)).toEqual([
-      { growth: 8.1, margin: 15 },
-      { growth: 8.1, margin: 15 },
+      { growth: 8.1, margin: 20 },
+      { growth: 6.6, margin: 17.5 },
     ]);
     expect(defaultAssumptions(historyStats([]), 1)).toEqual([{ growth: 0, margin: 0 }]);
     expect(defaultAssumptions(historyStats([]), 50)).toHaveLength(10);
@@ -303,11 +304,14 @@ describe("scenarios (bear / base / bull)", () => {
     expect(caseOf(m, "bull")).toEqual(base); // no bull case: the base one
   });
 
-  it("starts a new case from the base one, shifted and without notes", () => {
+  it("starts a new case from the base one, moved in proportion and without notes", () => {
+    // half the growth (at least 5 points), a fifth of the margin (at least 3 points)
     expect(shiftedCase(base, "bear")).toEqual([
-      { growth: 25 - SCENARIO_SHIFT.growth, margin: 30 - SCENARIO_SHIFT.margin },
-      { growth: 10 - SCENARIO_SHIFT.growth, margin: 28 - SCENARIO_SHIFT.margin },
+      { growth: 12.5, margin: 24 },
+      { growth: 5, margin: 22.4 },
     ]);
+    expect(shiftedCase([{ growth: 4, margin: 10 }], "bull")).toEqual([{ growth: 9, margin: 13 }]); // the minimums
+    expect(shiftedCase([{ growth: -10, margin: -5 }], "bear")).toEqual([{ growth: -15, margin: -8 }]);
     expect(shiftedCase([{ growth: 999, margin: 99 }], "bull")).toEqual([{ growth: 1000, margin: 100 }]); // clamped
   });
 
@@ -332,3 +336,70 @@ describe("scenarios (bear / base / bull)", () => {
       "Revenue", "Revenue (forecast)", "Operating income", "Operating income (forecast)"]);
   });
 });
+
+describe("defaults on real shapes (stats-fixture.json default_cases, the agent's port checks the same)", () => {
+  const cases = (fixture as unknown as { default_cases: DefaultCase[] }).default_cases;
+  for (const c of cases) {
+    it(c.name, () => {
+      const rows = c.rows.map((r) => row(r.metric, r.fiscal_period, r.period_end, r.value));
+      const run = runRate(rows);
+      expect(run.period).toBe(c.expected.run_rate.period);
+      close(run.growth, c.expected.run_rate.growth);
+      close(run.margin, c.expected.run_rate.margin);
+      const stats = historyStats(annualHistory(rows, 10));
+      expect(defaultAssumptions(stats, c.years, run)).toEqual(c.expected.defaults);
+    });
+  }
+
+  /** each case's revenue three years out, as a multiple of the base year's */
+  const outcomes = (c: DefaultCase) => {
+    const rows = c.rows.map((r) => row(r.metric, r.fiscal_period, r.period_end, r.value));
+    const history = annualHistory(rows, 10);
+    const base = defaultAssumptions(historyStats(history), 3, runRate(rows));
+    const at = (a: typeof base) => project(history, a).at(-1)!.revenue / baseYear(history)!.revenue!;
+    return { base, bear: at(shiftedCase(base, "bear")), mid: at(base), bull: at(shiftedCase(base, "bull")) };
+  };
+  const shape = (name: string) => cases.find((c) => c.name.startsWith(name))!;
+
+  it("NVIDIA starts at its run rate and fades; bear no longer more than quadruples revenue (H5, #72, #73)", () => {
+    const o = outcomes(shape("hyper-growth"));
+    expect(o.base.map((a) => a.growth)).toEqual([83.4, 44.2, 24.6]);
+    expect(o.base.map((a) => a.margin)).toEqual([65.2, 55.6, 50.8]);
+    expect(o.bear).toBeLessThan(2); // was about 4.2x: a flat 66.9% less 5 points
+    expect(o.mid).toBeGreaterThan(3);
+    expect(o.bull).toBeGreaterThan(o.mid * 1.4);
+  });
+
+  it("Vertiv starts at its 35% TTM growth and 20% TTM margin, not 18.5% and 11.4%", () => {
+    expect(outcomes(shape("accelerating")).base[0]).toEqual({ growth: 35.3, margin: 20.1 });
+  });
+
+  it("Deckers starts at its 6.3%, not its 16.5% CAGR, and its cases stay apart", () => {
+    const o = outcomes(shape("steady"));
+    expect(o.base[0]).toEqual({ growth: 6.3, margin: 23.6 });
+    expect(o.mid - o.bear).toBeGreaterThan(0.1);
+    expect(o.bull - o.mid).toBeGreaterThan(0.1);
+  });
+
+  it("a shrinking company's long run is held at 0%, never a permanent decline", () => {
+    const intel = outcomes(shape("shrinking"));
+    expect(intel.base.at(-1)!.growth).toBeGreaterThanOrEqual(0);
+    const falling = shape("synthetic").expected.defaults.map((a) => a.growth);
+    expect(falling.slice(0, 3)).toEqual([-20, -10, -5]);
+  });
+});
+
+interface DefaultCase {
+  name: string;
+  years: number;
+  rows: { metric: string; period_end: string; fiscal_period: string; value: string }[];
+  expected: {
+    run_rate: { growth: number | null; margin: number | null; period: string | null };
+    defaults: { growth: number; margin: number }[];
+  };
+}
+
+function close(a: number | null, b: number | null) {
+  if (a === null || b === null) expect(a).toBe(b);
+  else expect(a).toBeCloseTo(b, 12);
+}

@@ -6,8 +6,12 @@ bind parameter.
 
 Columns are `<metric>_ttm` (trailing twelve months; balance-sheet metrics at the quarter end)
 or `<metric>_q` (latest fiscal quarter), for every metric in the formula CATALOG with values in
-that view. Each value is the latest one of that metric and span (gold.latest_value: an index
-lookup per company and column, migration 032) and carries its own period_end and filing.
+that view. Each value is the latest one of that metric and span (gold.latest_reading: an index
+lookup per company and column, migrations 032 and 035) and carries its own period_end, filing and
+how to read it: not applicable, not meaningful, old, or just behind the company's latest period.
+The rules are in 035, once; this module only asks. Sorts and range filters take the comparable
+value, `k<i>`, which is NULL for all of them but "behind": the exact figure stays in `v<i>`, so a
+209,828% gross margin is still returned, with its reason, and doesn't win a sort or pass a filter.
 
 The query has two stages, so its cost follows what the screen asks for and not how many
 companies the caller can read: the values filters and the sort need are read for every company
@@ -26,7 +30,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 from typing import Literal, get_args
 
-from query_api.formula import CATALOG
+from query_api.formula import CATALOG, DERIVED, POINT_IN_TIME
 
 SPAN_SUFFIX = {"quarter": "q", "ttm": "ttm"}
 # column key → (metric, span, unit)
@@ -34,9 +38,12 @@ COLUMNS: dict[str, tuple[str, str, str]] = {
     f"{metric}_{SPAN_SUFFIX[span]}": (metric, span, unit)
     for metric, (unit, spans) in CATALOG.items() for span in spans
 }
-# sortable metadata → SQL over the base CTE (fixed fragments)
-META_SORT = {"name": "b.name", "company_id": "b.company_id", "sic": "b.sic",
-             "fiscal_year_end": "b.fiscal_year_end", "filer_category": "b.filer_category",
+# sortable metadata → SQL over the base CTE (fixed fragments). "sic" is the Industry column, which
+# shows the SIC's name: it sorts by that name, not by the code.
+META_SORT = {"name": "b.name", "company_id": "b.company_id", "sic": "lower(b.industry)",
+             # the month the fiscal year ends in (migration 042), so J&J's "0103" sorts as December
+             "fiscal_year_end": "silver.fiscal_year_end_month(b.fiscal_year_end)",
+             "filer_category": "b.filer_category",
              "state_of_incorporation": "b.state_of_incorporation"}
 OPS = {"gt": ">", "gte": ">=", "lt": "<", "lte": "<="}
 FilerCategory = Literal["large_accelerated", "accelerated", "non_accelerated"]
@@ -72,6 +79,10 @@ class Screen:
     columns: list[str] = field(default_factory=lambda: list(DEFAULT_COLUMNS))
     company_ids: list[str] | None = None   # restrict the universe (watchlist, peers)
     coverage: bool = True                  # only companies with gold financials
+    # only companies with a value in at least one of the columns: a row of blanks isn't a result,
+    # and the count must not claim it (ungranted companies stay: nothing here may depend on values
+    # they can't read). Off when someone looks for a company by name or a data check.
+    hide_blank: bool = False
     granted_only: bool = False             # only companies the caller can read financials for
     sic: list[str] = field(default_factory=list)
     sic_prefix: str | None = None
@@ -80,6 +91,7 @@ class Screen:
     exchanges: list[str] = field(default_factory=list)
     fye_months: list[int] = field(default_factory=list)
     filer_categories: list[str] = field(default_factory=list)
+    issue: str | None = None               # a data check's name: companies with a finding of it
     filters: list[Filter] = field(default_factory=list)
     sort: str = "-revenue_ttm"
     limit: int = 50
@@ -137,9 +149,22 @@ def _like(text: str) -> str:
     return "%" + text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
 
 
-def _values(slots: dict[str, int], company: str, granted: list[str] | None) -> str:
-    """A lateral row with v<i> and src<i> of these slots, for the company in the column
-    `company`. Closed catalog: a one-time filter, so an ungranted company reads no value."""
+def _gate(company: str, granted: list[str] | None) -> str:
+    """Closed catalog: a one-time filter, so an ungranted company reads nothing."""
+    return "" if granted is None else f" WHERE {company} = ANY(%(granted)s)"
+
+
+def _latest(company: str, granted: list[str] | None) -> str:
+    """Lateral: the company's latest period (gold.latest_period): what "old" is against."""
+    return ("LEFT JOIN LATERAL (SELECT p.latest FROM gold.latest_period("
+            f"{company}) p{_gate(company, granted)}) a ON true")
+
+
+def _values(slots: dict[str, int], company: str, sic: str, latest: str,
+            granted: list[str] | None) -> str:
+    """A lateral row with v<i> (the value), src<i> (its filing), st<i> and why<i> (how to read it)
+    and k<i> (what it sorts and filters by) of these slots, for the company in the column
+    `company`."""
     if not slots:
         return "(SELECT 1)"
     outputs, joins = [], []
@@ -147,11 +172,39 @@ def _values(slots: dict[str, int], company: str, granted: list[str] | None) -> s
         outputs += [f"x{i}.value AS v{i}",
                     f"CASE WHEN x{i}.period_end IS NOT NULL THEN jsonb_build_object("
                     f"'period_end', x{i}.period_end, 'accession_no', x{i}.accession_no,"
-                    f" 'form', x{i}.form, 'filed', x{i}.filed) END AS src{i}"]
-        joins.append(f"LEFT JOIN LATERAL gold.latest_value({company}, %(s{i})s, %(m{i})s) x{i}"
-                     " ON true")
-    gate = "" if granted is None else f" WHERE {company} = ANY(%(granted)s)"
-    return f"(SELECT {', '.join(outputs)} FROM (SELECT 1{gate}) one {' '.join(joins)})"
+                    f" 'form', x{i}.form, 'filed', x{i}.filed) END AS src{i}",
+                    f"x{i}.status AS st{i}", f"x{i}.reason AS why{i}",
+                    f"CASE WHEN x{i}.status IS NULL OR x{i}.status = 'behind'"
+                    f" THEN x{i}.value END AS k{i}"]
+        joins.append(f"LEFT JOIN LATERAL gold.latest_reading({company}, %(s{i})s, %(m{i})s,"
+                     f" {sic}, {latest}) x{i} ON true")
+    return (f"(SELECT {', '.join(outputs)} FROM (SELECT 1{_gate(company, granted)}) one "
+            f"{' '.join(joins)})")
+
+
+def _has_value(columns: list[str], granted: list[str] | None, params: dict) -> str:
+    """Whether a company has a value in any of these columns: one lookup per place a value can
+    live, each a set of primary-key probes that stops at the first hit. Scalar subqueries with a
+    LIMIT, not EXISTS: under an OR the planner turns EXISTS into a hashed subplan, a seq scan of
+    all 5M rows of gold.derived_financials per query (1.7 s on a copy of this size, as query_api).
+    Under RLS as usual. With the catalog closed, a company the caller can't read stays listed
+    whatever it has."""
+    tests = []
+    for span in ("quarter", "ttm"):
+        names = sorted({COLUMNS[k][0] for k in columns if COLUMNS[k][1] == span})
+        if names:
+            params[f"has_{span}"] = names
+            tests.append("(SELECT true FROM gold.derived_financials d"
+                         f" WHERE d.company_id = c.company_id AND d.span = '{span}'"
+                         f" AND d.metric = ANY(%(has_{span})s::text[]) LIMIT 1) IS NOT NULL")
+    reported = sorted({COLUMNS[k][0] for k in columns if COLUMNS[k][0] not in DERIVED})
+    if reported:
+        params["has_reported"] = reported
+        tests.append("(SELECT true FROM gold.quarterly_financials q"
+                     " WHERE q.company_id = c.company_id"
+                     " AND q.metric = ANY(%(has_reported)s::text[]) LIMIT 1) IS NOT NULL")
+    test = " OR ".join(tests) or "FALSE"
+    return f"({test})" if granted is None else f"(c.company_id <> ALL(%(granted)s) OR {test})"
 
 
 def compile_screen(s: Screen, granted: list[str] | None) -> Compiled:
@@ -183,6 +236,8 @@ def compile_screen(s: Screen, granted: list[str] | None) -> Compiled:
     if s.coverage:
         meta.append("EXISTS (SELECT 1 FROM gold.financials_coverage v"
                     " WHERE v.company_id = c.company_id)")
+    if s.hide_blank:
+        meta.append(_has_value(s.columns, granted, params))
     if s.company_ids is not None:
         meta.append("c.company_id = ANY(%(ids)s)")
         params["ids"] = s.company_ids
@@ -206,48 +261,63 @@ def compile_screen(s: Screen, granted: list[str] | None) -> Compiled:
                     " WHERE upper(e) = ANY(%(exchanges)s))")
         params["exchanges"] = [e.upper() for e in s.exchanges]
     if s.fye_months:
-        meta.append("left(c.fiscal_year_end, 2)::int = ANY(%(fye_months)s)")
+        meta.append("silver.fiscal_year_end_month(c.fiscal_year_end) = ANY(%(fye_months)s)")
         params["fye_months"] = s.fye_months
     if s.filer_categories:
         meta.append("gold.filer_category(c.filer_categories) = ANY(%(filer_categories)s)")
         params["filer_categories"] = s.filer_categories
+    if s.issue:
+        # under RLS on ops.quality_findings: a company the caller can't read never matches, so
+        # this says nothing about it (the public status page has the counts only)
+        meta.append("EXISTS (SELECT 1 FROM ops.quality_findings f"
+                    " WHERE f.company_id = c.company_id AND f.check_name = %(issue)s)")
+        params["issue"] = s.issue
 
     for key, i in slots.items():
         params[f"m{i}"], params[f"s{i}"] = COLUMNS[key][0], COLUMNS[key][1]
 
     where = ["TRUE"]
     for j, f in enumerate(s.filters):
-        where.append(f"v.v{slots[f.column]} {OPS[f.op]} %(w{j})s")
+        where.append(f"v.k{slots[f.column]} {OPS[f.op]} %(w{j})s")
         params[f"w{j}"] = f.value
 
     needed = {f.column for f in s.filters} | ({sort_key} if sort_key in COLUMNS else set())
     ranked = {k: i for k, i in slots.items() if k in needed}
     page = {k: i for k, i in slots.items() if k not in needed}
     direction = "DESC" if descending else "ASC"
-    order = f"v.v{slots[sort_key]}" if sort_key in COLUMNS else META_SORT[sort_key]
-    final = order.replace("v.v", "r.v").replace("b.", "r.")
-    ranked_outputs = "".join(f", v.v{i}, v.src{i}" for i in ranked.values())
-    page_outputs = "".join(f", w.v{i}, w.src{i}" for i in page.values())
+    order = f"v.k{slots[sort_key]}" if sort_key in COLUMNS else META_SORT[sort_key]
+    final = order.replace("v.k", "r.k").replace("b.", "r.")
+    ranked_outputs = "".join(f", v.v{i}, v.src{i}, v.st{i}, v.why{i}, v.k{i}"
+                             for i in ranked.values())
+    page_outputs = "".join(f", w.v{i}, w.src{i}, w.st{i}, w.why{i}" for i in page.values())
+    # the latest period is read once per row: for every company when a sort or filter needs it,
+    # else only for the page
+    early = bool(ranked)
+    page_latest = "r.latest_period" if early else "a.latest"
     sql = f"""
 WITH base AS (
     SELECT c.company_id, c.name, c.tickers, c.exchanges, c.sic,
            c.sic_description AS industry, c.fiscal_year_end,
            gold.filer_category(c.filer_categories) AS filer_category, c.filer_categories,
-           c.state_of_incorporation
+           c.state_of_incorporation,
+           gold.not_applicable_metrics(c.company_id, c.sic) AS not_applicable
     FROM silver.companies c
     WHERE {' AND '.join(meta)}
 ),
 ranked AS (
-    SELECT b.*{ranked_outputs}, count(*) OVER () AS total
+    SELECT b.*{', a.latest AS latest_period' if early else ''}{ranked_outputs},
+           count(*) OVER () AS total
     FROM base b
-    LEFT JOIN LATERAL {_values(ranked, 'b.company_id', granted)} v ON true
+    {_latest('b.company_id', granted) if early else ''}
+    LEFT JOIN LATERAL {_values(ranked, 'b.company_id', 'b.sic', 'a.latest', granted)} v ON true
     WHERE {' AND '.join(where)}
     ORDER BY {order} {direction} NULLS LAST, b.company_id
     LIMIT %(limit)s OFFSET %(offset)s
 )
-SELECT r.*{page_outputs}
+SELECT r.*{'' if early else ', a.latest AS latest_period'}{page_outputs}
 FROM ranked r
-LEFT JOIN LATERAL {_values(page, 'r.company_id', granted)} w ON true
+{'' if early else _latest('r.company_id', granted)}
+LEFT JOIN LATERAL {_values(page, 'r.company_id', 'r.sic', page_latest, granted)} w ON true
 ORDER BY {final} {direction} NULLS LAST, r.company_id
 """
     return Compiled(sql, params, list(dict.fromkeys(s.columns)), slots)
@@ -263,9 +333,25 @@ def shape(row: dict, compiled: Compiled, financials: bool) -> dict:
                      for k in compiled.columns}
     out["sources"] = {k: row[f"src{compiled.slots[k]}"] if financials else None
                       for k in compiled.columns}
+    # additive: how to read each value, only where there's something to say (035)
+    out["readings"] = {} if not financials else {
+        k: {"status": row[f"st{compiled.slots[k]}"], "reason": row.get(f"why{compiled.slots[k]}")}
+        for k in compiled.columns if row.get(f"st{compiled.slots[k]}")}
+    out["latest_period"] = row.get("latest_period") if financials else None
+    # from the public SIC, so also for a company the caller can't read
+    out["not_applicable"] = row.get("not_applicable") or []
     return out
 
 
+def notes_of(row: dict) -> str:
+    """A CSV cell: what the readings say, since the export keeps the exact figures."""
+    return "; ".join(f"{k}: {r['status'].replace('_', ' ')}"
+                     f"{' (' + r['reason'] + ')' if r.get('reason') else ''}"
+                     for k, r in row.get("readings", {}).items() if r["status"] != "behind")
+
+
 def column_info(keys: list[str]) -> list[dict]:
-    return [{"key": k, "metric": COLUMNS[k][0], "span": COLUMNS[k][1], "unit": COLUMNS[k][2]}
+    """`balance`: a point in time, so its _ttm column is the same number as its _q one."""
+    return [{"key": k, "metric": COLUMNS[k][0], "span": COLUMNS[k][1], "unit": COLUMNS[k][2],
+             "balance": COLUMNS[k][0] in POINT_IN_TIME}
             for k in keys]

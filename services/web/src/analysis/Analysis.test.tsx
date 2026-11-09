@@ -179,9 +179,10 @@ const pinTo = async (pin: HTMLButtonElement, section: string) => {
   await click(pin);
   const menu = container.querySelector<HTMLElement>(".pin-menu")!;
   expect([...menu.querySelectorAll("button")].map((b) => b.textContent)).toEqual([
-    "Pillars · default", "Core thesis", "Variant perception", "Catalysts", "Risks and mitigants", "What would prove me wrong", "KPIs to watch",
+    "Pillars › Pillar 1 · default", "Pillars › New pillar", "Core thesis", "Variant perception", "Catalysts", "Risks and mitigants",
+    "What would prove me wrong", "KPIs to watch",
   ]);
-  expect(document.activeElement).toBe(menu.querySelector("button")); // Pillars, the default, has focus
+  expect(document.activeElement).toBe(menu.querySelector("button")); // the first pillar, the default, has focus
   await click([...menu.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent?.startsWith(section))!);
 };
 
@@ -238,13 +239,40 @@ it("lists projects in the Analysis tab, and creates one from a readable company 
   expect(window.location.hash).toMatch(/^#\/analysis\/dddddddd-[^/]+\/business$/);
 });
 
+it("L5: a company page's Start an analysis opens New analysis on that company, saying what an analysis is", async () => {
+  await render(`#/analysis?start=${AMD}`, 'form[aria-label="New analysis"]');
+  const form = container.querySelector<HTMLFormElement>('form[aria-label="New analysis"]')!;
+  expect(form.querySelector('input[aria-label="Company to analyse"]')).toBeNull(); // already chosen
+  expect(button("Start the analysis", form).disabled).toBe(false);
+  expect(form.textContent).toContain("seven guided steps");
+  expect(form.textContent).toContain("New thesis or New model is a single item in a folder");
+});
+
+it("L5: a pin chooses its pillar, or starts a new one", async () => {
+  await render(`#/analysis/${PID}/changes`, ".diff p.new");
+  await click(container.querySelector<HTMLButtonElement>(".diff p.new .pin-btn")!);
+  const menu = container.querySelector<HTMLElement>(".pin-menu")!;
+  await click([...menu.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === "Pillars › New pillar")!);
+  const put = writes.find((w) => w.method === "PUT" && w.path === `/v1/workspace-items/${THESIS_ID}`)!;
+  const md = String((put.body.state as { markdown: string }).markdown);
+  expect(md.indexOf("### Pillar 2")).toBeGreaterThan(md.indexOf("### Pillar 1"));
+  expect(md.indexOf("> Export controls")).toBeGreaterThan(md.indexOf("### Pillar 2"));
+  expect(md.indexOf("> Export controls")).toBeLessThan(md.indexOf("## Catalysts"));
+  expect(container.querySelector(".pin-toast")?.textContent).toContain("under Pillars, Pillar 2 (new)");
+});
+
 it("switches steps from the rail and the header's tabs without losing an unsaved thesis", async () => {
   await render(`#/analysis/${PID}/thesis`, "textarea.thesis-text");
   const head = container.querySelector(".project-head")!;
   expect(head.querySelector("h1")?.textContent).toBe("Nvidia");
-  expect([...head.querySelectorAll(".tabs a")].map((a) => a.textContent)).toEqual(["Company", "Charts", "Model", "Thesis", "Monitor"]);
-  expect([...container.querySelectorAll(".step-rail a")].map((a) => a.textContent?.replace(/,.*$/, ""))).toEqual([
-    "1Business", "2Numbers", "3What changed", "✓Peers", "✓Model", "6Thesis", "7Monitor"]); // a peer and a model exist
+  // #153: the tabs are the rail's steps, under the same names
+  const labels = ["Business", "Numbers", "What changed", "Peers", "Model", "Thesis", "Monitor"];
+  expect([...head.querySelectorAll(".tabs a")].map((a) => a.textContent)).toEqual(labels);
+  expect([...head.querySelectorAll<HTMLAnchorElement>(".tabs a")].map((a) => a.getAttribute("href")!.split("/").pop())).toEqual(
+    ["business", "numbers", "changes", "peers", "model", "thesis", "monitor"]);
+  // #71: a peer and a model exist, but nothing is done until the user says so
+  expect([...container.querySelectorAll(".step-rail a")].map((a) => a.textContent?.replace(/,.*$/, ""))).toEqual(
+    labels.map((l, i) => `${i + 1}${l}`));
   await act(async () => type(thesisText(), `${TEMPLATE}\nMy own words.`));
   await settle();
   expect(head.querySelector(".tabs .dirty")).not.toBeNull();
@@ -254,7 +282,9 @@ it("switches steps from the rail and the header's tabs without losing an unsaved
   expect(container.querySelector(".step-pane:not([hidden]) h2")?.textContent).toBe("Monitor");
   expect(button("Check my thesis").disabled).toBe(true);
   expect(button("Check my thesis").title).toContain("Save the thesis first");
-  expect(container.querySelector(".coming-next .tag")?.textContent).toBe("coming next");
+  // #154: no promise of what isn't there; where the filings stand is always said
+  expect(container.querySelector(".coming-next")).toBeNull();
+  expect(container.querySelector(".filing-watch")?.textContent).toContain("a newer 10-K or 10-Q than that check read shows here");
   // the rail: another step, then back; the thesis editor stayed mounted with the draft
   await goTo(`#/analysis/${PID}/business`, ".notes-text");
   await goTo(`#/analysis/${PID}/thesis`, "textarea.thesis-text");
@@ -286,8 +316,11 @@ it("pins a chart from Numbers into the chosen section of the thesis, saving it",
   expect(md.indexOf(`[[embed:${chartId}]]`)).toBeGreaterThan(risks);
   expect(md.indexOf(`[[embed:${chartId}]]`)).toBeLessThan(md.indexOf("## What would prove me wrong"));
   expect(container.querySelector(".pin-toast")?.textContent).toContain("Pinned the chart under Risks and mitigants in your thesis.");
-  // the Numbers step is done: a chart is saved in the project
-  expect(container.querySelector('.step-rail a[href$="/numbers"]')?.className).toBe("done");
+  // a chart saved in the project is work in the Numbers step, not a tick (#71)
+  expect(container.querySelector('.step-rail a[href$="/numbers"]')?.className).toBe("");
+  await goTo(`#/analysis/${PID}/numbers`, ".step-pane:not([hidden]) .step-work");
+  expect(visible(".step-work").textContent).toBe("1 chart saved here");
+  expect((visible(".step-done input") as HTMLInputElement).disabled).toBe(false);
   // the thesis draws it: its preview resolves the new item
   await goTo(`#/analysis/${PID}/thesis`, ".thesis-doc");
   await waitFor('.thesis-doc .report-embed[aria-label^="NVDA: free cash flow"]');
@@ -319,25 +352,53 @@ it("adds bear and bull cases to the project's model, switches between them and s
   expect(switchBtn("Base").getAttribute("aria-pressed")).toBe("true");
   await click(switchBtn("Bear"));
   expect(page.querySelector(".scenario-empty")?.textContent).toContain("No bear case yet");
+  // #156: before it's added, the bear tab's table shows the case it would start as, labelled so
+  const tags = () => [...page.querySelectorAll(".model-table tr.forecast .tag")].map((t) => t.textContent);
+  expect(tags()).toEqual(["Bear case (preview)", "Bear case (preview)"]);
   await click(button("Add bear and bull cases", page));
   const growth = page.querySelector<HTMLInputElement>('input[aria-label="FY2026E bear case revenue growth, percent"]')!;
-  expect(growth.value).toBe("5"); // the base case minus 5 points
+  expect(growth.value).toBe("5"); // 10% less half of it, at least 5 points
   await act(async () => type(growth, "-2"));
   await settle();
   // the table shows the selected case; the chart all three, bear and bull lighter
-  expect([...page.querySelectorAll(".model-table tr.forecast .tag")].map((t) => t.textContent)).toEqual(["Bear case", "Bear case"]);
+  expect(tags()).toEqual(["Bear case", "Bear case"]);
   expect(page.querySelectorAll(".lchart-svg path[stroke-opacity]").length).toBe(4);
+  // #98: a number that doesn't parse keeps the bear case on screen (last valid), not the base one
+  await act(async () => type(growth, "-2x"));
+  await settle();
+  expect(tags()).toEqual(["Bear case", "Bear case"]);
+  expect(page.querySelectorAll(".lchart-svg path[stroke-opacity]").length).toBe(4);
+  expect(page.textContent).toContain("the chart and table show the last ones that did");
+  await act(async () => type(growth, "-2"));
+  await settle();
   await click(switchBtn("Bull"));
   expect(page.querySelector<HTMLInputElement>('input[aria-label="FY2026E bull case revenue growth, percent"]')!.value).toBe("15");
   await click(switchBtn("Base"));
-  expect([...page.querySelectorAll(".model-table tr.forecast .tag")].map((t) => t.textContent)).toEqual(["Base case", "Base case"]);
+  expect(tags()).toEqual(["Base case", "Base case"]);
   await click(button("Save", page));
   const put = writes.find((w) => w.method === "PUT" && w.path === `/v1/workspace-items/${MODEL_ID}`)!;
   expect(put.body.state).toEqual({
     companyId: NVDA, historyYears: 8,
     assumptions: [{ growth: 10, margin: 20 }, { growth: 10, margin: 20 }],
-    scenarios: { bear: [{ growth: -2, margin: 17 }, { growth: 5, margin: 17 }], bull: [{ growth: 15, margin: 23 }, { growth: 15, margin: 23 }] },
+    scenarios: { bear: [{ growth: -2, margin: 16 }, { growth: 5, margin: 16 }], bull: [{ growth: 15, margin: 24 }, { growth: 15, margin: 24 }] },
   });
+});
+
+it("Reset to defaults sets exactly the default shown beside each field, in every case (#48)", async () => {
+  await render(`#/analysis/${PID}/model`, ".model-table");
+  const page = visible(".model-page");
+  const switchBtn = (s: string) => [...page.querySelectorAll<HTMLButtonElement>(".scenario-switch button")].find((b) => b.textContent?.startsWith(s))!;
+  await click(switchBtn("Bull"));
+  await click(button("Add bear and bull cases", page));
+  const inputs = () => [...page.querySelectorAll<HTMLInputElement>(".assumptions input[inputmode=decimal]")];
+  const hints = () => [...page.querySelectorAll(".assumptions td .faint")].map((h) => h.textContent);
+  await act(async () => type(inputs()[0]!, "99"));
+  await settle();
+  await click(button("Reset to defaults", page));
+  const shown = hints().map((h) => h!.replace(/^default /, "").replace(/%$/, ""));
+  expect(shown.every((h) => /^-?\d+\.\d$/.test(h))).toBe(true);
+  expect(inputs().map((i) => Number(i.value).toFixed(1))).toEqual(shown);
+  expect(page.querySelector(".model-rule")?.textContent).toContain("close half the gap each year to the long run");
 });
 
 it("opens a project's thesis or model inside the project, and plain ones as before", async () => {
@@ -363,10 +424,17 @@ it("saves the business notes and marks steps done by hand", async () => {
   await settle();
   const patch = writes.find((w) => w.method === "PATCH")!;
   expect(patch.body).toEqual({ project: { companyId: NVDA, peers: [AAPL], notes: "GPUs to clouds.", done: [] } });
+  // notes are work, not done: the box stays the user's to tick (#71)
+  expect(container.querySelector('.step-rail a[href$="/business"]')?.className).toBe("");
+  expect(visible(".step-work").textContent).toBe("Notes written");
+  await click(visible(".step-done input") as HTMLInputElement);
   expect(container.querySelector('.step-rail a[href$="/business"]')?.className).toBe("done");
   await goTo(`#/analysis/${PID}/changes`, ".diff");
   const mark = visible(".step-done input") as HTMLInputElement;
   await click(mark);
-  expect(writes.filter((w) => w.method === "PATCH").at(-1)!.body).toMatchObject({ project: { done: ["changes"] } });
-  expect(container.querySelector(".project-progress")?.getAttribute("aria-label")).toBe("4 of 7 steps done");
+  expect(writes.filter((w) => w.method === "PATCH").at(-1)!.body).toMatchObject({ project: { done: ["business", "changes"] } });
+  expect(container.querySelector(".project-progress")?.getAttribute("aria-label")).toBe("2 of 7 steps done");
+  // and unticked again: nothing locks
+  await click(visible(".step-done input") as HTMLInputElement);
+  expect(writes.filter((w) => w.method === "PATCH").at(-1)!.body).toMatchObject({ project: { done: ["business"] } });
 });

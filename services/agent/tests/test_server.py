@@ -3,13 +3,21 @@
 import json
 from types import SimpleNamespace as NS
 
+import anthropic
 import httpx
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from tributary_agent.agent import Agent
-from tributary_agent.server import LimitExceeded, Limits, create_app, query_api_quota
+from tributary_agent.server import (
+    LimitExceeded,
+    Limits,
+    create_app,
+    query_api_daily_count,
+    query_api_quota,
+    query_api_refund,
+)
 
 
 class Clock:
@@ -173,6 +181,87 @@ def test_demo_quota_is_taken_after_the_in_process_limits():
     assert len(taken) == 2  # an invalid token never reaches the quota
 
 
+def allowance(c, token="alice-token", ip=None):
+    headers = {"Authorization": f"Bearer {token}"}
+    if ip:
+        headers["X-Client-IP"] = ip
+    return c.get("/v1/allowance", headers=headers)
+
+
+def test_allowance_says_what_is_left_and_spends_nothing():
+    clock = Clock()
+    limits = Limits(per_hour=3, per_ip_per_hour=10, daily_budget_usd=5, clock=clock)
+    c, messages = client(limits)
+    for _ in range(2):
+        body = allowance(c).json()
+        assert (body["per_hour"], body["left_this_hour"]) == (3, 3)
+    assert messages.requests == []
+    assert body["paused"] is False
+    # what a report and a check take, so the page can say; no daily count without the Query API's
+    assert (body["report_questions"], body["check_questions"]) == (3, 4)
+    assert (body["per_day"], body["left_today"]) == (None, None)
+    assert ask(c).status_code == 200
+    assert allowance(c).json()["left_this_hour"] == 2
+    clock.t += 3601
+    assert allowance(c).json()["left_this_hour"] == 3
+
+
+def test_allowance_is_the_tighter_of_user_and_network():
+    limits = Limits(per_hour=30, per_ip_per_hour=2, daily_budget_usd=5)
+    c, _ = client(limits)
+    limits.acquire("someone-else", "203.0.113.9", 2)
+    r = allowance(c, ip="203.0.113.9").json()
+    assert (r["left_this_hour"], r["per_hour"], r["network_per_hour"]) == (0, 30, 2)
+    assert allowance(c, ip="203.0.113.10").json()["left_this_hour"] == 2
+
+
+def test_allowance_says_when_the_budget_has_run_out():
+    limits = Limits(per_hour=30, per_ip_per_hour=30, daily_budget_usd=5)
+    c, _ = client(limits)
+    limits.spend(6)
+    assert allowance(c).json()["paused"] is True
+
+
+def test_allowance_needs_a_token():
+    c, _ = client()
+    assert c.get("/v1/allowance").status_code == 401
+    assert allowance(c, token="forged").status_code == 401
+
+
+def test_allowance_carries_the_query_apis_daily_count():
+    c = TestClient(create_app(lambda tok: None, who_is, Limits(30, 30, 5),
+                              daily_count=lambda tok: {"per_day": 10, "left_today": 7}))
+    r = allowance(c).json()
+    assert (r["per_day"], r["left_today"]) == (10, 7)
+
+
+@pytest.mark.parametrize("status,body,want", [
+    (200, {"capped": True, "per_day": 10, "left_today": 7}, (10, 7)),
+    (200, {"capped": False}, (None, None)),
+    (404, {}, (None, None)),
+    (500, {}, (None, None)),
+])
+def test_query_api_daily_count(status, body, want):
+    seen = []
+
+    def handler(request):
+        seen.append(request)
+        return httpx.Response(status, json=body)
+
+    http = httpx.Client(transport=httpx.MockTransport(handler))
+    r = query_api_daily_count("http://q", http=http)("tok")
+    assert (r["per_day"], r["left_today"]) == want
+    assert seen[0].method == "GET" and seen[0].headers["authorization"] == "Bearer tok"
+
+
+def test_query_api_daily_count_unreachable_shows_no_count():
+    def handler(request):
+        raise httpx.ConnectError("down")
+
+    http = httpx.Client(transport=httpx.MockTransport(handler))
+    assert query_api_daily_count("http://q", http=http)("tok")["per_day"] is None
+
+
 def quota_with(status, body=None):
     seen = []
 
@@ -231,3 +320,183 @@ def test_query_api_quota_unreachable_fails_closed():
     with pytest.raises(HTTPException) as e:
         take("tok")
     assert e.value.status_code == 503
+
+
+# --- charging: what a run that produced nothing gives back ------------------------------------
+
+class FailingMessages:
+    """The model API fails on the first call: nothing was produced."""
+
+    def __init__(self, text_first=False):
+        self.text_first = text_first
+
+    def create(self, **kwargs):
+        raise anthropic.APIConnectionError(request=httpx.Request("POST", "https://api"))
+
+    def stream(self, **kwargs):
+        return self
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def __iter__(self):
+        if self.text_first:
+            yield NS(type="text", text="Nvidia's revenue was")
+        raise anthropic.APIConnectionError(request=httpx.Request("POST", "https://api"))
+
+
+def charged_client(messages, stream=True):
+    ledger = []
+
+    def take_quota(tok, questions=1):
+        ledger.append(questions)
+
+    def refund_quota(tok, questions=1):
+        ledger.append(-questions)
+
+    limits = Limits(per_hour=2, per_ip_per_hour=10, daily_budget_usd=5)
+    app = create_app(lambda tok: Agent(messages, NoTools(), "claude-haiku-5-5", stream=stream),
+                     who_is, limits, take_quota=take_quota, refund_quota=refund_quota)
+    return TestClient(app), ledger, limits
+
+
+def test_a_question_the_model_never_answered_is_given_back():
+    c, ledger, limits = charged_client(FailingMessages())
+    evs = events(ask(c))
+    assert [e["type"] for e in evs] == ["refunded", "error"] and evs[0]["questions"] == 1
+    assert ledger == [1, -1]
+    assert allowance(c).json()["left_this_hour"] == 2  # the hour's allowance is back too
+    limits.acquire("alice", "testclient", 2)
+
+
+def test_an_answer_that_started_streaming_counts():
+    """No free answers by failing late: text already streamed is a result."""
+    c, ledger, _ = charged_client(FailingMessages(text_first=True))
+    evs = events(ask(c))
+    assert [e["type"] for e in evs] == ["text", "error"] and ledger == [1]
+
+
+def test_an_answer_counts():
+    c, ledger, _ = charged_client(ScriptedMessages(), stream=False)
+    assert [e["type"] for e in events(ask(c))] == ["done"] and ledger == [1]
+
+
+def test_a_refused_quota_gives_the_hours_allowance_back():
+    def take_quota(tok, questions=1):
+        raise HTTPException(429, "Your account has used its 10 assistant questions for today.")
+
+    limits = Limits(per_hour=2, per_ip_per_hour=10, daily_budget_usd=5)
+    c = TestClient(create_app(lambda tok: Agent(ScriptedMessages(), NoTools(), "m"), who_is,
+                              limits, take_quota=take_quota))
+    assert ask(c).status_code == 429 and ask(c).status_code == 429
+    assert allowance(c).json()["left_this_hour"] == 2
+
+
+def test_release_gives_back_only_what_that_request_took():
+    clock = Clock()
+    limits = Limits(per_hour=10, per_ip_per_hour=10, daily_budget_usd=5, clock=clock)
+    first = limits.acquire("alice", "ip", 4, what="A thesis check")
+    clock.t += 1
+    limits.acquire("alice", "ip", 1)
+    limits.release("alice", "ip", 4, first)
+    limits.release("alice", "ip", 4, first)  # twice: nothing more
+    assert limits.left("alice", "ip")["left_this_hour"] == 9
+
+
+def test_query_api_refund_never_raises():
+    seen = []
+
+    def handler(request):
+        seen.append(request)
+        return httpx.Response(500)
+
+    refund = query_api_refund("http://q", http=httpx.Client(transport=httpx.MockTransport(handler)))
+    refund("tok", 4)
+    assert seen[0].url.path == "/v1/demo/agent-quota/refund"
+    assert json.loads(seen[0].content) == {"questions": 4}
+    assert seen[0].headers["Authorization"] == "Bearer tok"
+
+    def down(request):
+        raise httpx.ConnectError("down")
+
+    query_api_refund("http://q", http=httpx.Client(transport=httpx.MockTransport(down)))("t", 1)
+
+
+# --- review blockers 1 and 2: what can't be had for free -------------------------------------
+
+class OverflowingMessages:
+    """The reviewer's attack: round 0 asks for every metric over 120 quarters (a paid call);
+    round 1 fails because the tool result pushed the context past the model's limit."""
+
+    def __init__(self):
+        self.calls = 0
+
+    def create(self, **kwargs):
+        self.calls += 1
+        if self.calls % 2:
+            return NS(stop_reason="tool_use",
+                      content=[NS(type="tool_use", id=f"t{self.calls}", name="get_financials",
+                                  input={"company_id": "0001045810", "quarters": 120})],
+                      usage=NS(input_tokens=1_000_000, output_tokens=0))
+        raise anthropic.BadRequestError(
+            "prompt is too long", body=None,
+            response=httpx.Response(400, request=httpx.Request("POST", "https://api")))
+
+
+class Rows:
+    def run(self, name, args):
+        return json.dumps({"rows": []}), False
+
+
+def test_a_model_error_after_a_paid_round_counts_and_its_spend_is_recorded():
+    """Before: each such run was given back (net quota 0) and recorded no spend ($0.00), so no
+    quota, hourly limit or budget bounded the user. Now the question stays taken and the paid
+    call is in the day's spend."""
+    ledger = []
+    limits = Limits(per_hour=100, per_ip_per_hour=100, daily_budget_usd=100)
+    messages = OverflowingMessages()
+    app = create_app(lambda tok: Agent(messages, Rows(), "claude-haiku-5-5"), who_is, limits,
+                     take_quota=lambda tok, n=1: ledger.append(n),
+                     refund_quota=lambda tok, n=1: ledger.append(-n))
+    c = TestClient(app)
+    for _ in range(10):
+        # no "refunded": it counted
+        assert [e["type"] for e in events(ask(c))] == ["tool", "error"]
+    assert sum(ledger) == 10
+    assert limits.spent() == pytest.approx(10 * 0.10)  # ten paid rounds of 1M input tokens
+    assert allowance(c).json()["left_this_hour"] == 90
+
+
+def test_the_hourly_limit_holds_against_late_model_errors():
+    limits = Limits(per_hour=2, per_ip_per_hour=100, daily_budget_usd=100)
+    messages = OverflowingMessages()
+    c = TestClient(create_app(lambda tok: Agent(messages, Rows(), "claude-haiku-5-5"), who_is,
+                              limits))
+    assert [ask(c).status_code for _ in range(4)] == [200, 200, 429, 429]
+
+
+def test_early_model_errors_are_given_back_at_most_twice_a_day():
+    """An outage before any output is ours, so it's given back, but only REFUNDS_PER_DAY times
+    per user per day: anything that turned out to be reachable on purpose stays bounded."""
+    clock = Clock()
+    ledger = []
+    limits = Limits(per_hour=100, per_ip_per_hour=100, daily_budget_usd=5, clock=clock)
+    app = create_app(lambda tok: Agent(FailingMessages(), NoTools(), "claude-haiku-5-5",
+                                       stream=True),
+                     who_is, limits, take_quota=lambda tok, n=1: ledger.append(n),
+                     refund_quota=lambda tok, n=1: ledger.append(-n))
+    c = TestClient(app)
+    kinds = [[e["type"] for e in events(ask(c))] for _ in range(3)]
+    assert kinds == [["refunded", "error"], ["refunded", "error"], ["error"]]
+    assert ledger == [1, -1, 1, -1, 1]
+    assert limits.spent() == 0  # nothing returned, nothing billed
+    clock.t += 86400  # a new UTC day
+    assert [e["type"] for e in events(ask(c))] == ["refunded", "error"]
+
+
+def test_usage_events_stay_in_the_server():
+    c, _ = client()
+    assert [e["type"] for e in events(ask(c))] == ["done"]

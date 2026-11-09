@@ -6,6 +6,7 @@ import { ACC, NVDA } from "../../fixtures";
 import { FilingReader } from "./FilingReader";
 
 const PRIOR = "0001045810-26-000050";
+const LATER = "0001045810-26-000090";
 const TEXT = "Our business depends on demand.\n\nExport controls on our data center products may tighten.\n\nCompetition could reduce margins.";
 const START = 5000; // where II-1A starts in the document
 
@@ -112,7 +113,7 @@ it("shows the outline by part, the section, the prior filing's section and asks 
   expect(container.querySelectorAll(".section-text p")).toHaveLength(3);
   // the outline is this one filing, whatever its age
   expect(paths().find((u) => u.pathname.endsWith("/filings"))?.searchParams.get("accession_no")).toBe(ACC);
-  const prior = [...container.querySelectorAll("a")].find((a) => a.textContent?.startsWith("Same section in the prior 10-Q"));
+  const prior = [...container.querySelectorAll(".filing-steps a")].find((a) => a.textContent?.includes("Prior 10-Q"));
   expect(prior?.getAttribute("href")).toBe(`#/filing/${NVDA}/${PRIOR}/II-1A`);
   const index = paths().find((u) => u.pathname.endsWith("/filing-index"))!;
   expect(index.searchParams.getAll("form")).toEqual(["10-Q"]);
@@ -141,7 +142,10 @@ it("opens at a cited passage with the search words marked, and lists this filing
   await render("II-1A", { at: START + 40, q: "export controls" });
   expect($("p.hit")?.textContent).toContain("Export controls on our data center");
   expect([...container.querySelectorAll(".section-text mark")].map((m) => m.textContent)).toEqual(["Export", "controls"]);
-  expect(container.textContent).toContain("2 matches for “export controls”");
+  // the same two passages as the outline, and what next/previous steps through: both labelled
+  expect($(".match-nav")?.textContent).toContain("2 passages match “export controls”");
+  expect($(".match-nav")?.textContent).toContain("highlight 1 of 2");
+  expect($("mark.cur")?.textContent).toBe("Export");
   const search = paths().find((u) => u.pathname === "/api/query/v1/search")!;
   expect(Object.fromEntries(search.searchParams)).toMatchObject({ q: "export controls", company: NVDA, form: "10-Q", from: "2026-08-26", to: "2026-08-26" });
   const hits = [...container.querySelectorAll(".search-hits li")];
@@ -149,6 +153,77 @@ it("opens at a cited passage with the search words marked, and lists this filing
   expect(hits[0]!.querySelector("a")?.getAttribute("href")).toBe(`#/filing/${NVDA}/${ACC}/II-1A?at=${START + 33}&q=export+controls`);
   expect([...hits[0]!.querySelectorAll("mark")].map((m) => m.textContent)).toEqual(["Export", "controls"]);
   expect($('.toc a[aria-current="page"] .cnt')?.textContent).toBe("2");
+});
+
+it("jumps to the first match when a section opens, and steps through them both ways", async () => {
+  const scrolled: string[] = [];
+  const proto = Element.prototype as unknown as { scrollIntoView?: () => void };
+  const before = proto.scrollIntoView;
+  proto.scrollIntoView = function (this: Element) {
+    scrolled.push(this.textContent ?? "");
+  };
+  try {
+    await render("II-1A", { q: "export controls" });
+    expect($("mark.cur")?.textContent).toBe("Export");
+    expect(scrolled.at(-1)).toBe("Export");
+    await act(async () => $('button[aria-label="Next match"]')!.click());
+    expect($("mark.cur")?.textContent).toBe("controls");
+    expect($(".match-nav")?.textContent).toContain("highlight 2 of 2");
+    expect(scrolled.at(-1)).toBe("controls");
+    await act(async () => $('button[aria-label="Next match"]')!.click());
+    expect($("mark.cur")?.textContent).toBe("Export"); // wraps
+    await act(async () => $('button[aria-label="Previous match"]')!.click());
+    expect($("mark.cur")?.textContent).toBe("controls");
+    // Enter on the same words: the next match, not another search
+    const input = container.querySelector<HTMLInputElement>('input[aria-label="Search this filing"]')!;
+    const searches = () => paths().filter((u) => u.pathname === "/api/query/v1/search").length;
+    const asked = searches();
+    await act(async () => input.form!.requestSubmit());
+    expect($("mark.cur")?.textContent).toBe("Export");
+    expect(searches()).toBe(asked);
+  } finally {
+    proto.scrollIntoView = before;
+  }
+});
+
+it("says what the outline's numbers are, and shows only one kind at a time", async () => {
+  await render("II-1A");
+  expect($(".toc-legend")?.textContent).toBe("Number: section length in characters");
+  expect($('.toc a[aria-current="page"] .size')?.textContent).toBe("12k");
+  act(() => root.unmount());
+  await render("II-1A", { q: "export controls" });
+  expect($(".toc-legend")?.textContent).toContain("passages that match");
+  expect($(".toc .size")).toBeNull();
+  // the matches come before the long list of sections
+  const toc = $(".toc")!;
+  expect(toc.firstElementChild?.className).toContain("search-hits");
+});
+
+it("steps to the previous and next filing of the form, keeping the section and the search", async () => {
+  vi.mocked(fetch).mockImplementation(async (url: string | URL | Request) => {
+    const u = new URL(String(url), "http://x");
+    return u.pathname.endsWith("/filing-index")
+      ? Response.json({ as_of: "", forms: ["10-Q"], from: null, to: null, limit: 5, offset: 0, has_more: false,
+          filings: [indexRow(LATER, "2026-11-20"), indexRow(ACC, "2026-08-26"), indexRow(PRIOR, "2026-05-28")] })
+      : respond(String(url));
+  });
+  await render("II-1A", { q: "export controls" });
+  const links = [...container.querySelectorAll(".filing-steps a")].map((a) => [a.textContent, a.getAttribute("href")]);
+  expect(links).toEqual([
+    ["← Prior 10-Q, filed May 28, 2026", `#/filing/${NVDA}/${PRIOR}/II-1A?q=export+controls`],
+    ["Next 10-Q, filed Nov 20, 2026 →", `#/filing/${NVDA}/${LATER}/II-1A?q=export+controls`],
+  ]);
+});
+
+it("says when a filing is the latest of its form", async () => {
+  await render("II-1A");
+  expect($(".filing-steps")?.textContent).toContain("Latest 10-Q on file");
+});
+
+it("asks for the whole section, so matches and citations past the old 50,000 cut are there", async () => {
+  await render("II-1A");
+  const section = paths().find((u) => u.pathname.includes("/sections/"))!;
+  expect(Number(section.searchParams.get("max_chars"))).toBeGreaterThanOrEqual(500_000);
 });
 
 it("searches from the box: the words go into the address", async () => {

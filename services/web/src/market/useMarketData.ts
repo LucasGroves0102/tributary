@@ -2,9 +2,10 @@
  *
  * One `/v1/connections` request per token, shared by every component (the sidebar link, the
  * company Price tab, the chart builder's "+ Price"); `refreshMarketData` re-asks after a
- * connect or disconnect. The server answers 404 when it has no master key: then `enabled` is
- * false and the feature stays hidden everywhere. A failed request also hides it (nothing
- * price-related is shown on a guess). Display only: the API checks every price request. */
+ * connect or disconnect. Without a master key the server offers no providers (an older one
+ * answers 404): then `enabled` is false and the feature stays hidden everywhere. A failed
+ * request also hides it (nothing price-related is shown on a guess). Display only: the API
+ * checks every price request. */
 
 import { useEffect, useState } from "react";
 
@@ -28,7 +29,7 @@ function ask(token: string): Promise<MarketData> {
   }
   if (!pending) {
     pending = marketConnections(token)
-      .then((r): MarketData => (r ? { enabled: true, ...r } : { enabled: false }))
+      .then((r): MarketData => (r && r.providers.length ? { enabled: true, ...r } : { enabled: false }))
       .catch((): MarketData => ({ enabled: false }));
     void pending.then((m) => {
       if (owner !== token) return;

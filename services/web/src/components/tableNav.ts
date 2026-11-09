@@ -27,8 +27,10 @@ function focusRow(rows: HTMLTableRowElement[], row: HTMLTableRowElement) {
   row.focus();
 }
 
+/** The row's cells on screen: a table hides columns as it narrows (styles.css "Tables"). */
 const cellsOf = (row: HTMLTableRowElement) =>
-  [...row.children].filter((c): c is HTMLTableCellElement => c instanceof HTMLTableCellElement);
+  [...row.children].filter((c): c is HTMLTableCellElement =>
+    c instanceof HTMLTableCellElement && window.getComputedStyle(c).display !== "none");
 
 /** Focuses a cell (focusable by script only: the row stays the table's tab stop). */
 function focusCell(rows: HTMLTableRowElement[], row: HTMLTableRowElement, col: number) {

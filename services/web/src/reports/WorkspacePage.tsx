@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 
-import { ApiError, workspace as fetchWorkspace } from "../api";
+import { ApiError, failureReason, workspace as fetchWorkspace } from "../api";
+import { leftText, useAllowanceContext } from "../assistant/useAllowance";
 import { ErrorPanel, Skeleton } from "../components/States";
+import { ItemActions, WorkspaceActions } from "../workspaces/Actions";
 import { ago, day } from "../format";
-import { href } from "../route";
+import { go, href } from "../route";
 import { useNewerFilings } from "../thesis/useRevisit";
 import type { SavedWorkspaceFull } from "../types";
 import { isPageKind, KIND_LABELS, KIND_PAGES } from "../workspaces/model";
@@ -34,6 +36,7 @@ type Loaded =
 /** One workspace: your theses and models, its saved items and reports; "New thesis", "New
  * model" and "Write a report". */
 export function WorkspacePage({ token, workspaceId, writer, onOpen, version, saved }: Props) {
+  const { allowance } = useAllowanceContext();
   const [loaded, setLoaded] = useState<Loaded>({ state: "loading" });
   const [retry, setRetry] = useState(0);
 
@@ -43,7 +46,7 @@ export function WorkspacePage({ token, workspaceId, writer, onOpen, version, sav
       .then((ws) => live && setLoaded({ state: "ok", ws }))
       .catch((e) => live && setLoaded({
         state: "error",
-        message: e instanceof ApiError ? e.message : "the Query API didn't answer",
+        message: failureReason(e),
         notFound: e instanceof ApiError && e.status === 404,
       }));
     return () => {
@@ -77,8 +80,10 @@ export function WorkspacePage({ token, workspaceId, writer, onOpen, version, sav
 
   return (
     <div className="page">
-      <div className="row wrap">
-        <h1 className="grow">{ws.name}</h1>
+      <div className="row wrap page-bar">
+        <h1>{ws.name}</h1>
+        {saved && <WorkspaceActions workspace={ws} saved={saved} onDeleted={() => go({ view: "home" })} />}
+        <span className="grow" />
         {saved && <NewWork token={token} saved={saved} workspaceId={workspaceId} />}
         <button
           className="btn primary"
@@ -93,7 +98,7 @@ export function WorkspacePage({ token, workspaceId, writer, onOpen, version, sav
         The assistant writes a research note from the saved items below: a summary, a section per
         item with the chart or table drawn in place, and what changed in the latest filings where
         your plan includes them. Every number is checked against the data and cited; anything it
-        can't verify is flagged. A report counts as {REPORT_QUESTIONS} assistant questions
+        can't verify is flagged. A report counts as {REPORT_QUESTIONS} assistant questions{allowance ? ` (you have ${leftText(allowance)})` : ""}
         {items.length > MAX_REPORT_ITEMS ? ` and covers the first ${MAX_REPORT_ITEMS} items` : ""}.
       </p>
       {ws.project && (
@@ -118,6 +123,7 @@ export function WorkspacePage({ token, workspaceId, writer, onOpen, version, sav
                   <b>{i.name}</b>
                 </button>{" "}
                 <span className="faint">updated {ago(i.updated_at)}</span>
+                {saved && <ItemActions item={i} saved={saved} />}
                 {newer[i.item_id] && (
                   <>
                     {" "}
@@ -152,6 +158,7 @@ export function WorkspacePage({ token, workspaceId, writer, onOpen, version, sav
                   <b>{r.name}</b>
                 </button>{" "}
                 <span className="faint">updated {ago(r.updated_at)}</span>
+                {saved && <ItemActions item={r} saved={saved} />}
               </li>
             ))}
           </ul>
@@ -173,6 +180,7 @@ export function WorkspacePage({ token, workspaceId, writer, onOpen, version, sav
                 <button className="link" onClick={() => onOpen(i.item_id)} title={`Open in ${KIND_PAGES[i.kind]}`}>
                   <b>{i.name}</b>
                 </button>
+                {saved && <ItemActions item={i} saved={saved} />}
               </li>
             ))}
           </ul>

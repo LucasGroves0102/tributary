@@ -26,7 +26,7 @@ export function DataNotes({ token, companyId, name, canReadFilings }: {
     <section className="card">
       <div className="card-h">
         <h2>Data notes</h2>
-        <span className="sub">gaps, restatements, overlapping periods, derived quarters and freshness, from automated checks</span>
+        <span className="sub">newest first · gaps, restatements, splits, overlapping periods and freshness, from automated checks</span>
       </div>
       <Gate load={load} name={name} what="Data notes">
         {() => {
@@ -35,7 +35,7 @@ export function DataNotes({ token, companyId, name, canReadFilings }: {
           if (!notes.length) {
             return (
               <Empty>
-                Nothing to flag for {name}: {checked_at ? `the last check (${ago(checked_at)})` : "the checks"} found no gaps,
+                Nothing to flag for {name}: {checked_at ? `the last check of its figures (${ago(checked_at)})` : "the checks"} found no gaps,
                 overlapping quarters or restatements, and the figures include every 10-K and 10-Q on EDGAR.
               </Empty>
             );
@@ -46,7 +46,7 @@ export function DataNotes({ token, companyId, name, canReadFilings }: {
                 <NoteGroup key={g.key} label={g.label} notes={g.notes} companyId={companyId} canReadFilings={canReadFilings} />
               ))}
               <div className="foot">
-                {checked_at ? `Checked ${ago(checked_at)} after the latest refresh. ` : ""}
+                {checked_at ? `This company's figures were last checked ${ago(checked_at)}, the last time they changed. ` : ""}
                 Notes describe the data Tributary extracted from SEC filings, not the company's business.
               </div>
             </>

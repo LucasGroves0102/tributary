@@ -2,11 +2,13 @@ import { useEffect, useId, useMemo, useRef, useState, type ChangeEvent, type Mut
 
 import type { Readable } from "../access";
 import { draftKey, restoreDraft, type StoredDraft, type ThesisHandle, type ThesisStatus } from "../analysis/bridge";
-import { appendToSection, hasOwnText } from "../analysis/project";
-import { ApiError, openItem, screenerColumns, workspace as fetchWorkspace } from "../api";
+import { hasOwnText, placePin } from "../analysis/project";
+import { ApiError, failureReason, itemVersion, itemVersions, openItem, screenerColumns, workspace as fetchWorkspace } from "../api";
 import { slug } from "../chart/export";
 import { catalog } from "../chart/metrics";
 import type { ChartState } from "../chart/model";
+import { leftText, useAllowanceContext } from "../assistant/useAllowance";
+import { useDirectory } from "../companies/directory";
 import { CompanySearch } from "../components/CompanySearch";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { download } from "../download";
@@ -15,12 +17,13 @@ import { renderMarkdown } from "../markdown";
 import { Embed } from "../reports/Embeds";
 import { href } from "../route";
 import { load, remove, save as store } from "../storage";
-import type { SavedItemFull } from "../types";
+import type { ItemVersion, SavedItemFull } from "../types";
 import { ITEM_NAME_MAX, KIND_LABELS, nameProblem } from "../workspaces/model";
 import { useEditorKeys } from "../workspaces/useEditor";
 import type { Saved } from "../workspaces/useSaved";
 import { clearHighlights, findQuote, highlightQuote, textHash } from "./check";
 import { CheckPanel } from "./CheckPanel";
+import { checkSection, embedSummary } from "./export";
 import {
   EMBEDDABLE,
   embeddedIds,
@@ -120,7 +123,7 @@ export function ThesisPage(props: Props) {
       })
       .catch((e) => live && setLoaded({
         state: "error",
-        message: e instanceof ApiError ? e.message : e instanceof Error && e.message === "not a thesis" ? "This item isn't a thesis." : "the Query API didn't answer",
+        message: e instanceof Error && e.message === "not a thesis" ? "This item isn't a thesis." : failureReason(e),
         notFound: e instanceof ApiError && e.status === 404,
       }));
     return () => {
@@ -177,7 +180,11 @@ function ThesisEditor({ token, item, initial, items, saved, label, readable, onO
   const [offered, setOffered] = useState<{ draft: StoredDraft; resumed: boolean } | null>(draft ? { draft, resumed: resume } : null);
   const [mode, setModeState] = useState<Mode>(storedMode);
   const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState<{ text: string; undo?: string; error?: boolean } | null>(null);
+  const [notice, setNotice] = useState<{ text: string; undo?: { label: string; to: { name: string; companyId: string | null; markdown: string } }; error?: boolean } | null>(null);
+  // M5: the versions earlier saves replaced (app DB 014), read when the list is opened
+  const [versions, setVersions] = useState<{ state: "loading" } | { state: "ok"; list: ItemVersion[] } | { state: "error"; message: string } | null>(null);
+  // #62: where the user put the cursor; until they do, an embed goes at the end, not above the title
+  const placed = useRef(false);
   const text = useRef<HTMLTextAreaElement>(null);
   const file = useRef<HTMLInputElement>(null);
   const cursor = useRef<number | null>(null);
@@ -225,9 +232,9 @@ function ThesisEditor({ token, item, initial, items, saved, label, readable, onO
     if (!bridge) return;
     const handle: ThesisHandle = {
       itemId: item.item_id,
-      pin: async (section, block) => {
+      pin: async (target, block) => {
         const cur = latest.current;
-        const next = appendToSection(cur.markdown, section, block);
+        const next = placePin(cur.markdown, target, block);
         if (next.length > MAX_MARKDOWN) throw new Error(`A thesis holds up to ${MAX_MARKDOWN.toLocaleString("en-US")} characters.`);
         setMarkdown(next);
         if (cur.dirty) return "draft";
@@ -236,6 +243,7 @@ function ThesisEditor({ token, item, initial, items, saved, label, readable, onO
         setSavedAs(savedPrint(res.name, restoreThesis(res.state)));
         return "saved";
       },
+      markdown: () => latest.current.markdown,
       showQuote: (q) => showQuoteRef.current(q),
     };
     bridge.current = handle;
@@ -243,8 +251,15 @@ function ThesisEditor({ token, item, initial, items, saved, label, readable, onO
       if (bridge.current === handle) bridge.current = null;
     };
   }, [bridge, item.item_id, saved]);
+  const { allowance, refresh: refreshAllowance } = useAllowanceContext();
+  // a check ran: it counted, several times over
+  useEffect(() => {
+    if (checks.run.status !== "running") refreshAllowance();
+  }, [checks.run.status, refreshAllowance]);
   const nameError = nameProblem(name, ITEM_NAME_MAX);
-  const company = companyId ? (companyName ?? label(companyId)) : null;
+  const directory = useDirectory(token);
+  const named = companyId ? directory.company(companyId) : null;
+  const company = companyId ? (named ? directory.label(companyId) : companyName) : null;
   const missing = useMemo(() => {
     const known = new Set(items.map((i) => i.item_id));
     return new Set(embeddedIds(markdown).filter((x) => !known.has(x))).size;
@@ -296,7 +311,7 @@ function ThesisEditor({ token, item, initial, items, saved, label, readable, onO
       setNotice(null);
       setOffered(null);
     } catch (e) {
-      setNotice({ text: `Couldn't save: ${e instanceof ApiError ? e.message : "the Query API didn't answer"}.`, error: true });
+      setNotice({ text: `Couldn't save: ${failureReason(e)}.`, error: true });
     } finally {
       setBusy(false);
     }
@@ -327,7 +342,8 @@ function ThesisEditor({ token, item, initial, items, saved, label, readable, onO
 
   const embed = (itemId: string) => {
     if (!itemId) return;
-    const at = text.current?.selectionStart ?? markdown.length;
+    const at = placed.current && mode !== "preview" && text.current ? text.current.selectionStart : markdown.length;
+    placed.current = true; // the cursor goes after the marker
     const r = insertEmbed(markdown, at, itemId);
     if (r.text.length > MAX_MARKDOWN) {
       setNotice({ text: `A thesis holds up to ${MAX_MARKDOWN.toLocaleString("en-US")} characters.`, error: true });
@@ -358,15 +374,46 @@ function ThesisEditor({ token, item, initial, items, saved, label, readable, onO
       setNotice({ text: r.error, error: true });
       return;
     }
-    const before = markdown;
+    const before = { name, companyId, markdown };
     setMarkdown(r.markdown);
     if (r.title && /^untitled/i.test(name.trim())) setName(r.title);
-    setNotice({ text: `Imported ${f.name}. Save to keep it.`, ...(before ? { undo: before } : {}) });
+    setNotice({ text: `Imported ${f.name}. Save to keep it.`, ...(before.markdown ? { undo: { label: "Undo import", to: before } } : {}) });
   };
 
+  // M6: embeds say what they show and the last check comes along (stale or not); #41: both
+  // import back (embeds as their lines, the check dropped)
   const exportMd = () => {
-    const md = thesisMarkdown({ title: name.trim() || "Thesis", thesis, company, date: today(), items });
+    const md = thesisMarkdown({
+      title: name.trim() || "Thesis", thesis, company, date: today(), items,
+      describe: (i) => embedSummary(i, label),
+      check: checks.shown ? checkSection(checks.shown, stale, label) : null,
+    });
     download(`${slug(name.trim() || "thesis")}.md`, new Blob([md], { type: "text/markdown" }));
+  };
+
+  const showVersions = () => {
+    if (versions) {
+      setVersions(null);
+      return;
+    }
+    setVersions({ state: "loading" });
+    itemVersions(token, item.item_id)
+      .then((r) => setVersions({ state: "ok", list: r.versions }))
+      .catch((e) => setVersions({ state: "error", message: failureReason(e) }));
+  };
+  const restoreVersion = async (v: ItemVersion) => {
+    try {
+      const got = await itemVersion(token, item.item_id, v.version_id);
+      const r = restoreThesis(got.state);
+      const before = { name, companyId, markdown };
+      setName(got.name);
+      setCompanyId(r.companyId);
+      setMarkdown(r.markdown);
+      setVersions(null);
+      setNotice({ text: `Restored the version saved ${when(v.saved_at)} (${r.markdown.length.toLocaleString("en-US")} characters). Save to keep it.`, undo: { label: "Undo restore", to: before } });
+    } catch (e) {
+      setNotice({ text: `Couldn't read that version: ${failureReason(e)}.`, error: true });
+    }
   };
 
   const embeddable = items.filter((i) => i.item_id !== item.item_id);
@@ -396,7 +443,16 @@ function ThesisEditor({ token, item, initial, items, saved, label, readable, onO
         maxLength={MAX_MARKDOWN}
         spellCheck
         placeholder={"# The thesis in one line\n\nWhy now, what the filings show, what would prove it wrong.\n\nPick “Embed a saved item” to draw a chart or model here."}
-        onChange={(e) => setMarkdown(e.target.value)}
+        onChange={(e) => {
+          placed.current = true;
+          setMarkdown(e.target.value);
+        }}
+        onMouseUp={() => {
+          placed.current = true;
+        }}
+        onKeyUp={(e) => {
+          if (e.key !== "Tab") placed.current = true; // tabbing in places nothing
+        }}
       />
       <p className="faint small">
         Markdown: # headings, **bold**, lists, tables, links. An embed is a line of its own; items from other workspaces
@@ -424,12 +480,16 @@ function ThesisEditor({ token, item, initial, items, saved, label, readable, onO
         <button className="btn sm" onClick={() => file.current?.click()} title="Replace the text with a .md or .txt file (not saved until you Save)">
           Import .md
         </button>
-        <button className="btn sm" onClick={exportMd} title="Download as Markdown; embeds become a line naming the item">
+        <button className="btn sm" onClick={exportMd}
+          title="Download as Markdown: embeds say what they show and import back as embeds; the last check comes along">
           Export .md
+        </button>
+        <button className="btn sm" onClick={showVersions} aria-expanded={!!versions} title="Earlier saved versions of this thesis">
+          History
         </button>
         <button className="btn sm" onClick={checks.start} disabled={dirty || checking || !written}
           title={dirty ? "Save first: the check reads the saved thesis" : !written ? "Write the thesis first: headings and guidance alone have nothing to check"
-            : "The assistant checks each factual claim and your models' assumptions against the filings (counts as 4 questions)"}>
+            : `The assistant checks each factual claim and your models' assumptions against the filings (counts as 4 questions${allowance ? `; you have ${leftText(allowance)}` : ""})`}>
           {checking ? "Checking…" : "Check my thesis"}
         </button>
         <button className="btn primary" onClick={() => void save()} disabled={!dirty || busy || !!nameError} title="Save (Ctrl+S)">
@@ -441,14 +501,46 @@ function ThesisEditor({ token, item, initial, items, saved, label, readable, onO
           {notice.text}{" "}
           {notice.undo !== undefined && (
             <button className="btn sm ghost" onClick={() => {
-              setMarkdown(notice.undo!);
+              const to = notice.undo!.to;
+              setName(to.name);
+              setCompanyId(to.companyId);
+              setMarkdown(to.markdown);
               setNotice(null);
             }}>
-              Undo import
+              {notice.undo.label}
             </button>
           )}
           <button className="btn sm ghost" onClick={() => setNotice(null)}>Dismiss</button>
         </div>
+      )}
+      {versions && (
+        <section className="card versions no-print" aria-label="Earlier versions">
+          <div className="card-h">
+            <h3>Earlier versions</h3>
+            <span className="sub">each save keeps the one it replaced, the newest 30</span>
+            <span className="grow" />
+            <button className="btn sm ghost" onClick={() => setVersions(null)}>Close</button>
+          </div>
+          {versions.state === "loading" ? <p className="faint small">Loading…</p>
+            : versions.state === "error" ? <p className="err small" role="alert">Couldn't list them: {versions.message}.</p>
+            : !versions.list.length ? <p className="empty">No earlier versions yet: each save from now keeps the one it replaces.</p>
+            : (
+              <ol className="version-list">
+                {versions.list.map((v) => (
+                  <li key={v.version_id}>
+                    <span className="grow">
+                      Saved {when(v.saved_at)}
+                      <span className="faint"> · {v.characters?.toLocaleString("en-US") ?? "?"} characters · {v.name}</span>
+                    </span>
+                    <button className="btn sm" onClick={() => void restoreVersion(v)}
+                      title="Put this version in the editor; nothing is saved until you Save">
+                      Restore
+                    </button>
+                  </li>
+                ))}
+              </ol>
+            )}
+        </section>
       )}
       {offered && (
         <div className="report-status draft-status no-print" role="status">

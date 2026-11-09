@@ -17,6 +17,47 @@ function dom(html: string): HTMLElement {
   return div;
 }
 
+describe("model text a person reads", () => {
+  it("writes timestamps, dates and field names as words", () => {
+    const html = renderAnswer("Freshness: latest filing 2026-08-26; data as_of 2026-11-06T23:08:36Z.", []);
+    expect(dom(html).textContent).toBe("Freshness: latest filing Aug 26, 2026; data as of Nov 6, 2026.\n");
+  });
+
+  it("a timestamp reads as the viewer's date, not its UTC date", () => {
+    const was = process.env.TZ;
+    try {
+      process.env.TZ = "America/Phoenix"; // UTC-7: 03:00Z on the 7th is the evening of the 6th
+      expect(dom(renderAnswer("as_of 2026-11-07T03:00:00Z", [])).textContent).toBe("as of Nov 6, 2026\n");
+      process.env.TZ = "Asia/Tokyo"; // UTC+9: 20:00Z on the 6th is the morning of the 7th
+      expect(dom(renderAnswer("as_of 2026-11-06T20:00:00+00:00", [])).textContent).toBe("as of Nov 7, 2026\n");
+      // a plain date is a date wherever it's read
+      expect(dom(renderAnswer("filed 2026-11-07", [])).textContent).toBe("filed Nov 7, 2026\n");
+    } finally {
+      if (was === undefined) delete process.env.TZ;
+      else process.env.TZ = was;
+    }
+  });
+
+  it("writes an XBRL concept in words, the tag on its hover", () => {
+    const html = renderAnswer("| Line | Source |\n|---|---|\n| Buybacks | us-gaap:PaymentsForRepurchaseOfCommonStock |", []);
+    const span = dom(html).querySelector("td span")!;
+    expect(span.textContent).toBe("Payments for repurchase of common stock");
+    expect(span.getAttribute("title")).toBe("us-gaap:PaymentsForRepurchaseOfCommonStock");
+    expect(dom(html).textContent).not.toContain("us-gaap");
+  });
+
+  it("leaves accession numbers alone, and still flags a figure", () => {
+    const html = renderAnswer("0001045810-26-000075 reported $5B on 2026-08-26.", [], ["$5B"]);
+    expect(dom(html).querySelector(".accession")?.textContent).toBe("0001045810-26-000075");
+    expect(dom(html).querySelector(".figure.unverified")?.textContent).toBe("$5B");
+    expect(dom(html).textContent).toContain("Aug 26, 2026");
+  });
+
+  it("leaves a thesis as its author wrote it", () => {
+    expect(dom(renderMarkdown("Filed 2026-08-26 under us-gaap:Revenues.")).textContent).toContain("2026-08-26 under us-gaap:Revenues");
+  });
+});
+
 describe("renderAnswer", () => {
   it("links accession numbers that came from tool results", () => {
     const html = renderAnswer("Revenue was $96.2B (10-Q, 0001045810-26-000075).", [NVDA_10Q]);

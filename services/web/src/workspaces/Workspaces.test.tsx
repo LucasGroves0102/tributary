@@ -92,6 +92,9 @@ function respond(url: string, init?: RequestInit): Response {
       db.items.set(item.item_id, item);
       return Response.json(item, { status: 201 });
     }
+    if (method === "GET" && !m[2]) {
+      return Response.json({ ...w, items: [...db.items.values()].filter((i) => i.workspace_id === w.workspace_id) });
+    }
     if (method === "PATCH") {
       w.name = body.name;
       return Response.json(w);
@@ -187,6 +190,7 @@ beforeEach(() => {
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => respond(url, init)));
   window.localStorage.clear();
   Object.defineProperty(window, "innerWidth", { value: 1440, configurable: true });
+  window.localStorage.setItem("tributary.assistant", "open");
   forgetVisits();
   seq = 0;
   script = [];
@@ -275,8 +279,12 @@ it("a saved chart for a company you lost shows the same no-access state", async 
   expect($(".layer .err")?.textContent).toContain("AAPL isn't one of your companies");
 });
 
-it("renames, duplicates and deletes from the sidebar", async () => {
+it("renames, duplicates and deletes from a row's menu, which leaves the row's name its room", async () => {
   await render("#/");
+  // the actions aren't in the row: "⋯" opens a strip under it
+  expect(buttons(/Rename NVDA revenue/)).toEqual([]);
+  await click(buttons(/Actions for NVDA revenue/)[0]!);
+  expect(container.querySelector(".ws-row.it .ws-dots[aria-expanded='true']")).not.toBeNull();
   await click(buttons(/Rename NVDA revenue/)[0]!);
   const input = container.querySelector<HTMLInputElement>('.side input[aria-label="Item name"]')!;
   await type(input, "Revenue");
@@ -284,17 +292,62 @@ it("renames, duplicates and deletes from the sidebar", async () => {
   await settle();
   expect(calls("PUT").at(-1)).toEqual(["/api/query/v1/workspace-items/i1", { name: "Revenue" }]);
   expect(sidebarItem("Revenue")).toBeTruthy();
+  await click(buttons(/Actions for Revenue/)[0]!);
   await click(buttons(/Duplicate Revenue/)[0]!);
   expect(calls("POST").at(-1)?.[0]).toBe("/api/query/v1/workspace-items/i1/duplicate");
   expect(sidebarItem("Revenue (copy)")).toBeTruthy();
+  await click(buttons(/Actions for Lost access/)[0]!);
   await click(buttons(/Delete Lost access/)[0]!);
-  await click(container.querySelector<HTMLButtonElement>(".ws-confirm button")!);
+  // over the whole screen, not in the sidebar's narrow column; the safe answer has the focus
+  const confirm = () => document.querySelector<HTMLElement>(".sheet-overlay .ws-confirm");
+  expect(confirm()?.closest(".side")).toBeNull();
+  expect(document.activeElement?.textContent).toBe("Keep");
+  await click(confirm()!.querySelector("button")!);
   expect(calls("DELETE").map(([u]) => u)).toEqual(["/api/query/v1/workspace-items/i2"]);
   expect(sidebarItem("Lost access")).toBeUndefined();
-  await click(buttons(/Delete workspace Semis/)[0]!);
-  expect($(".ws-confirm")?.textContent).toContain("Delete “Semis” and its 3 items?");
-  await click(container.querySelector<HTMLButtonElement>(".ws-confirm button")!);
+  await click(buttons(/Actions for workspace Semis/)[0]!);
+  const del = buttons(/Delete workspace Semis/)[0]!;
+  del.focus();
+  await click(del);
+  expect(confirm()?.textContent).toContain("Delete “Semis” and its 3 items?");
+  // Keep goes back to where it was asked from, with the focus there
+  await click([...confirm()!.querySelectorAll("button")].find((b) => b.textContent === "Keep")!);
+  expect(confirm()).toBeNull();
+  expect(document.activeElement).toBe(del);
+  await click(del);
+  await click(confirm()!.querySelector("button")!);
   expect($(".side .ws")?.textContent).toContain("Save a chart, comps table or screen");
+});
+
+it("a folder's arrow folds it, and its name opens the workspace instead of folding it", async () => {
+  await render("#/");
+  const name = container.querySelector<HTMLAnchorElement>(".ws-row.fd a.ws-open")!;
+  expect(name.getAttribute("href")).toBe("#/workspace/w1");
+  expect([...container.querySelectorAll(".side .ws-row.it")].length).toBeGreaterThan(0);
+  await click(buttons(/Hide the items of Semis/)[0]!);
+  expect(container.querySelectorAll(".side .ws-row.it").length).toBe(0);
+  await click(buttons(/Show the items of Semis/)[0]!);
+  expect(container.querySelectorAll(".side .ws-row.it").length).toBeGreaterThan(0);
+});
+
+it("a workspace's page has its rename, duplicate and delete in the open", async () => {
+  await render("#/workspace/w1");
+  await settle();
+  const page = () => container.querySelector<HTMLElement>("main.content")!;
+  const inPage = (name: string) => [...page().querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === name || b.getAttribute("aria-label") === name);
+  await click(inPage("Rename")!);
+  const input = page().querySelector<HTMLInputElement>('input[aria-label="New name for the workspace"]')!;
+  await type(input, "Chips");
+  await act(async () => input.form!.requestSubmit());
+  await settle();
+  expect(calls("PATCH").at(-1)).toEqual(["/api/query/v1/workspaces/w1", { name: "Chips" }]);
+  await click(inPage("Delete")!);
+  expect(document.querySelector(".sheet-overlay .ws-confirm")?.textContent).toContain("3 items");
+  await click([...document.querySelectorAll<HTMLButtonElement>(".ws-confirm button")].find((b) => b.textContent === "Keep")!);
+  expect(document.querySelector(".ws-confirm")).toBeNull();
+  await click(inPage("Delete Lost access")!);
+  await click(document.querySelector<HTMLButtonElement>(".ws-confirm button")!);
+  expect(calls("DELETE").map(([u]) => u)).toContain("/api/query/v1/workspace-items/i2");
 });
 
 it("Home continues where you left off, newest first", async () => {

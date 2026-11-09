@@ -1,18 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 
-import { catalogOpen } from "../access";
+import { accountName, catalogOpen } from "../access";
 import {
   ApiError,
   authProviders,
   createSandbox,
+  dataStatus,
   GITHUB_SIGN_IN,
   me as fetchMe,
   passwordSignIn,
   sandboxOffer,
 } from "../api";
+import { duration } from "../format";
 import { href } from "../route";
 import { saveSession, type Session } from "../session";
-import type { Me, SandboxOffer } from "../types";
+import type { DataStatus, Me, SandboxOffer } from "../types";
 
 /** What a refused username/password sign-in says (the API gives every refusal the same 401). */
 export const WRONG_PASSWORD = "Wrong username or password, or the account is locked.";
@@ -106,7 +108,7 @@ export function Welcome({ onReady, notice, github, pollMs = 1000, now = Date.now
         kind: "account",
         token,
         userId: m.user_id,
-        login: m.user_id,
+        login: accountName(m),
         expiresAt: new Date(now() + expiresIn * 1000).toISOString(),
         companies: [],
       };
@@ -218,72 +220,143 @@ export function Welcome({ onReady, notice, github, pollMs = 1000, now = Date.now
 
   const busy = phase.kind === "creating" || phase.kind === "propagating";
   const o = offer && offer !== "off" ? offer : null;
+  // what its plan reads, instead of a plan's name a visitor has no way to know
+  const reads = o?.plan === "pro" ? "financials and filing text" : "financials";
   return (
     <main className="welcome">
-      <section className="card pad welcome-card" aria-labelledby="welcome-title">
-        <h1 id="welcome-title">Tributary</h1>
-        <p className="muted">
-          SEC filings and XBRL financials as they're filed, with an assistant that cites the filing
-          behind every number.
-        </p>
-        {notice && (
-          <p className="welcome-notice" role="status">
-            {notice}
+      <div className="welcome-layout">
+        <header className="welcome-head">
+          <h1 id="welcome-title" className="welcome-brand">
+            <img src="/favicon.svg" alt="" width={22} height={22} />
+            Tributary
+          </h1>
+          <p className="welcome-lead">
+            SEC filings and XBRL financials as they're filed, with an assistant that cites the filing
+            behind every number.
           </p>
-        )}
-        <div className="row">
-          <button
-            className="btn primary"
-            disabled={busy || offer === "off" || offer === null}
-            onClick={() => void start()}
-          >
-            Try the demo
-          </button>
-          {githubOn && !busy && (
-            <a className="btn" href={GITHUB_SIGN_IN}>
-              Sign in with GitHub
-            </a>
-          )}
-          {passwordOn && !busy && !formOpen && (
-            <button className="btn" onClick={() => setFormOpen(true)}>
-              Sign in
-            </button>
-          )}
-        </div>
-        {passwordOn && formOpen && (
-          <PasswordForm
-            busy={busy}
-            onSubmit={(u, p) => void signInWithPassword(u, p)}
-            onCancel={() => setFormOpen(false)}
-          />
-        )}
-        {offer === "off" ? (
-          <p className="small muted">The demo isn't available right now.</p>
-        ) : (
-          o && (
-            <p className="small faint">
-              Starts a private sandbox for {o.ttl_hours} hours: a {o.plan} account with access to{" "}
-              {o.catalog_public ? "every company" : `${o.tickers.length} companies (${o.tickers.join(", ")})`}
-              {o.agent
-                ? ` and ${o.agent_questions_per_day} assistant questions a day`
-                : "; the assistant is off for demo sandboxes"}
-              . No sign-up. It's deleted when it expires.
+        </header>
+        <section className="card pad welcome-card" aria-labelledby="welcome-title">
+          {notice && (
+            <p className="welcome-notice" role="status">
+              {notice}
             </p>
-          )
-        )}
-        {githubOn && (
+          )}
+          <div className="welcome-try">
+            {/* one primary button at a time: the form's Sign in takes over while it's open */}
+            <button
+              className={formOpen ? "btn" : "btn primary"}
+              disabled={busy || offer === "off" || offer === null}
+              onClick={() => void start()}
+            >
+              Try the demo
+            </button>
+            {offer === "off" ? (
+              <p className="small muted">The demo isn't available right now.</p>
+            ) : (
+              o && (
+                <p className="small faint">
+                  Starts a private sandbox for {o.ttl_hours} hours with access to{" "}
+                  {o.catalog_public ? `every company's ${reads}` : `the ${reads} of ${o.tickers.length} companies (${o.tickers.join(", ")})`}
+                  {o.agent
+                    ? `, and ${o.agent_questions_per_day} assistant questions a day`
+                    : "; the assistant is off for demo sandboxes"}
+                  . No sign-up. It's deleted when it expires.
+                </p>
+              )
+            )}
+            {!formOpen && <Progress phase={phase} onContinue={continueAnyway} />}
+          </div>
+          {(githubOn || passwordOn) && (
+            <div className="welcome-account">
+              <div className="row wrap">
+                {githubOn && !busy && (
+                  <a className="btn" href={GITHUB_SIGN_IN}>
+                    Sign in with GitHub
+                  </a>
+                )}
+                {/* stays where it is: it opens the form below, then closes it */}
+                {passwordOn && !busy && (
+                  <button className="btn" aria-expanded={formOpen} onClick={() => setFormOpen((f) => !f)}>
+                    {formOpen ? "Cancel" : "Sign in"}
+                  </button>
+                )}
+              </div>
+              {githubOn && (
+                <p className="small faint">
+                  Signing in with GitHub gives you the same {o?.catalog_public ? "access" : "companies"} in an account that stays, with your
+                  saved work. It reads only your public GitHub profile.
+                </p>
+              )}
+              {passwordOn && formOpen && (
+                <PasswordForm busy={busy} onSubmit={(u, p) => void signInWithPassword(u, p)} />
+              )}
+              {formOpen && <Progress phase={phase} onContinue={continueAnyway} />}
+            </div>
+          )}
+        </section>
+        <section className="welcome-proof" aria-label="What's in Tributary">
+          <Proof />
+          <ul className="welcome-list">
+            <li>Screen companies on revenue, growth, margins and debt, and save the screen.</li>
+            <li>Read 10-K, 10-Q and 8-K filings by section, and see what changed since the last one.</li>
+            <li>Chart any metric or your own formula; every point opens the filing behind it.</li>
+            <li>Compare a company with its peers, then build a guided analysis with a thesis and a model.</li>
+            <li>Ask the assistant: it answers from the filings and cites them. No stock prices, consensus estimates or call transcripts.</li>
+          </ul>
           <p className="small faint">
-            Signing in with GitHub gives you the same {o?.catalog_public ? "access" : "companies"} in an account that stays, with your
-            saved work. It reads only your public GitHub profile.
+            <a href={href({ view: "status" })}>Data status</a>: how fresh, complete and checked the data is,
+            live.
           </p>
-        )}
-        <Progress phase={phase} onContinue={continueAnyway} />
-        <p className="small faint">
-          <a href={href({ view: "status" })}>Data status</a>: how fresh, complete and checked the data is,
-          live.
-        </p>
-      </section>
+        </section>
+      </div>
     </main>
+  );
+}
+
+/** The figures beside the sign-in: the public status route's own, so they can't drift from it. None
+ * is hard-coded; a figure the API hasn't got is left out. */
+export function proofFigures(d: DataStatus): { value: string; what: string }[] {
+  const n = (v: number) => v.toLocaleString("en-US");
+  const { coverage: c, ingest: i, recorded: r } = d;
+  return [
+    c.companies_with_financials !== null && { value: n(c.companies_with_financials), what: "companies with quarterly financials from XBRL" },
+    c.documents !== null && { value: n(c.documents), what: "10-K, 10-Q and 8-K documents stored" },
+    i.p50_seconds !== null && {
+      value: duration(i.p50_seconds),
+      what: `typically from EDGAR to here${i.p95_seconds !== null ? `; 95% within ${duration(i.p95_seconds)}` : ""}`,
+    },
+    r.citations.figures > 0 && { value: `${n(r.citations.figures_traced)} of ${n(r.citations.figures)}`, what: "figures in the assistant's test answers traced to the data" },
+    r.adversarial.attacks > 0 && { value: `${n(r.adversarial.leaks)} of ${n(r.adversarial.attacks)}`, what: "attempts to reach data a user can't read succeeded in testing" },
+  ].filter((f): f is { value: string; what: string } => !!f);
+}
+
+function Proof() {
+  const [data, setData] = useState<DataStatus | null>(null);
+  useEffect(() => {
+    let live = true;
+    dataStatus().then((d) => live && setData(d)).catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, []);
+  // the page reads the same with these or without them; an old or partial answer shows none
+  const figures = (() => {
+    try {
+      return data ? proofFigures(data) : [];
+    } catch {
+      return [];
+    }
+  })();
+  if (!figures.length) return null;
+  return (
+    <dl className="proof">
+      {figures.map((f) => (
+        <div key={f.what}>
+          <dt>{f.value}</dt>
+          <dd>{f.what}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 
@@ -292,11 +365,9 @@ export function Welcome({ onReady, notice, github, pollMs = 1000, now = Date.now
 function PasswordForm({
   busy,
   onSubmit,
-  onCancel,
 }: {
   busy: boolean;
   onSubmit: (username: string, password: string) => void;
-  onCancel: () => void;
 }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -341,9 +412,6 @@ function PasswordForm({
         <button className="btn primary" type="submit" disabled={busy}>
           Sign in
         </button>
-        <button className="btn" type="button" onClick={onCancel} disabled={busy}>
-          Cancel
-        </button>
       </div>
       <p className="small faint">For accounts the owner created. There is no sign-up.</p>
     </form>
@@ -378,8 +446,7 @@ function Progress({ phase, onContinue }: { phase: Phase; onContinue: () => void 
       </div>
       <progress value={phase.visible} max={phase.total} aria-label="Companies readable" />
       <p className="small faint">
-        Your user and its grants are in the app database. Access reaches the Query API through
-        Debezium, Kafka and authz-sync into OpenFGA and Postgres row-level security, usually in
+        Your account is created. Permission to read each company is on its way through the system, usually in
         under 30 s.
       </p>
       {slow && (

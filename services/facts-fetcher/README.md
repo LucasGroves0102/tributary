@@ -30,7 +30,15 @@ payload of each CIK. Measured on a 400-company sample of the bulk file, extrapol
 
 `facts-fetcher --rebuild` skips the SEC: it re-projects each CIK's stored raw payload with the
 current `silver.metric_tags`, then re-derives silver and gold. Use it after changing the tags
-or the gold rules.
+or the gold rules. `--ciks 0001045810,0000320187` limits it to those CIKs, to look at a few
+companies first. On k3s it's the suspended `financials-rebuild` CronJob
+([helm chart](../../deploy/helm/tributary/README.md)).
+
+Which fact gold believes is one SQL function, `gold.best_facts` (migration 039, over
+`gold.usable_facts`): the quarters, the annual fallback for TTM (040) and the checks' annual
+comparison (041) all read it. A line a filing reports as two tags (a bank's net interest plus
+noninterest income; NVIDIA's debt plus equity securities) is a `silver.metric_sums` row whose parts
+are `silver.metric_tags` rows with `gold_line = false` (038).
 
 ## Segments and KPIs
 
@@ -94,7 +102,9 @@ How it runs (module docstrings hold the exact rules):
   `segment_sum_<axis>`.
 - `--rebuild` re-projects `raw_gzip` with the current axes and labels and re-derives silver
   and gold, without reading a document (after changing `segment_axes`, `segment_metric_tags`
-  or label rules; label rule changes need it).
+  or label rules; label rule changes need it). The web app repairs labels stored before the
+  run-on rule (`Assetand Wealth Management`) as it displays them (`displayNames.ts`
+  `segmentLabel`, the same rule: change both), so a rebuild for labels alone can wait.
 
 ## Run
 
@@ -122,7 +132,9 @@ SEC requests share one rate limit with every other service (`libs/sec`): `SEC_CA
 full 10-K/10-Q (the parser's fixtures) and trimmed Apple, Coca-Cola and PepsiCo documents in
 `tests/fixtures/ixbrl/` (made with `tests/trim_ixbrl.py`, which streams a filing and keeps only
 the segment metric facts and their contexts); `test_segments_db.py` (loader, renames, Q4, TTM,
-quality check, rebuild) with `TEST_DATABASE_URL`. Also the full bronze → silver → gold path against trimmed real
+quality check, rebuild) with `TEST_DATABASE_URL`. `test_gold_selection.py` holds one case per rule of
+migrations 038-042, each shaped like the filing it came from (Flowserve's zero revenue, M&T's bank
+revenue, NVIDIA's securities and dividends, Ford's debt, Legacy Housing's 2033 date, ...). Also the full bronze → silver → gold path against trimmed real
 companyfacts payloads in `tests/fixtures/` (`test_pipeline.py`; shared `conn` / `loaded`
 fixtures in `conftest.py`), and the bulk loader on small zips. `test_golden_10k.py` checks gold
 against 149 figures printed in five companies' 10-Ks, loading their companyfacts from

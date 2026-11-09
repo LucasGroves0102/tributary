@@ -104,6 +104,23 @@ const rows = () => [...container.querySelectorAll("table.comps tbody tr")];
 
 const COMPS = { target: NVDA, peers: [TSLA, AAPL], cols: ["revenue_ttm", "operating_margin_ttm", "revenue_growth_ttm"] };
 
+it("sorts by a column header, empty values last, and back to the order added", async () => {
+  await render(COMPS);
+  const names = () => rows().slice(0, 3).map((r) => r.querySelector("b")!.textContent);
+  expect(names()).toEqual(["Nvidia", "Tesla", "Apple"]);
+  const head = () => [...container.querySelectorAll<HTMLElement>("table.comps thead th")].find((t) => t.textContent?.startsWith("Revenue"))!;
+  await click(head().querySelector("button"));
+  expect(head().getAttribute("aria-sort")).toBe("descending");
+  // Apple $400B, Nvidia $130B; Tesla is metadata only: no value, so last either way
+  expect(names()).toEqual(["Apple", "Nvidia", "Tesla"]);
+  await click(head().querySelector("button"));
+  expect(head().getAttribute("aria-sort")).toBe("ascending");
+  expect(names()).toEqual(["Nvidia", "Apple", "Tesla"]);
+  await click(head().querySelector("button"));
+  expect(head().getAttribute("aria-sort")).toBeNull();
+  expect(names()).toEqual(["Nvidia", "Tesla", "Apple"]);
+});
+
 it("asks the screener for the comps by id and shows each value with its period and source", async () => {
   await render(COMPS);
   const q = calls().find((u) => u.pathname === "/api/query/v1/screener")!;
@@ -125,7 +142,7 @@ it("puts the peer median, without the target, under the table", async () => {
   const median = rows().find((r) => r.textContent?.startsWith("Peer median"))!;
   // only AAPL: TSLA is ungranted and NVDA is the target
   expect([...median.querySelectorAll("td.n")].map((td) => td.textContent)).toEqual(["$400.00B", "30.0%", "-2.0%"]);
-  expect(median.textContent).toContain("1 readable peers");
+  expect(median.textContent).toContain("1 readable");
   expect($(".foot")?.textContent).toContain("1 company shows metadata only");
 });
 
@@ -176,7 +193,7 @@ it("exports the table as CSV and charts the readable companies", async () => {
     select.dispatchEvent(new Event("change", { bubbles: true }));
   });
   await click([...container.querySelectorAll("button")].find((b) => b.textContent === "Chart these"));
-  expect(onChart).toHaveBeenCalledWith([NVDA, AAPL], "operating_margin", "ttm", "Operating margin, TTM");
+  expect(onChart).toHaveBeenCalledWith([NVDA, AAPL], "operating_margin", "ttm");
 });
 
 it("toggles columns and starts empty with a hint", async () => {
@@ -190,8 +207,11 @@ it("toggles columns and starts empty with a hint", async () => {
 
 it("shows a bank's operating margin as n/a and leaves it out of the median, with a note", async () => {
   const JPM = "0000019617";
-  const bank = row(entry({ company_id: JPM, name: "JPMORGAN CHASE & CO", tickers: ["JPM"], industry: "National Commercial Banks",
-    values: { revenue_ttm: "180000000000", operating_margin_ttm: null } }));
+  const bank = {
+    ...row(entry({ company_id: JPM, name: "JPMORGAN CHASE & CO", tickers: ["JPM"], industry: "National Commercial Banks",
+      values: { revenue_ttm: "180000000000", operating_margin_ttm: null } })),
+    readings: { operating_margin_ttm: { status: "not_applicable" as const, reason: "this is a bank: deposits are its debt" } },
+  };
   vi.mocked(fetch).mockImplementation(async (url) => new URL(String(url), "http://x").pathname.endsWith("/peers")
     ? Response.json(PEERS)
     : Response.json({ as_of: "", total: 3, limit: 3, offset: 0, sort: "name", columns: [], rows: [row(entry()), APPLE, bank] }));
@@ -199,7 +219,7 @@ it("shows a bank's operating margin as n/a and leaves it out of the median, with
   const jpm = rows().find((r) => r.textContent?.includes("JPM"))!;
   const cell = [...jpm.querySelectorAll("td.n")][1]!;
   expect(cell.textContent).toBe("n/a (bank)");
-  expect(cell.getAttribute("title")).toContain("doesn't describe a bank");
+  expect(cell.getAttribute("title")).toContain("This is a bank");
   const median = rows().find((r) => r.textContent?.startsWith("Peer median"))!;
   const m = [...median.querySelectorAll("td.n")][1]!;
   expect(m.textContent).toBe("30.0% excl. banks");
@@ -229,6 +249,16 @@ it("side by side: one small chart per column, a line per readable company, on de
     expect([...c.querySelectorAll(".ch-legend g")].map((g) => [g.getAttribute("class"), g.textContent])).toEqual([["c0", "NVDA"], ["c1", "AAPL"]]);
   }
   expect(charts[0]!.querySelector("svg")!.getAttribute("viewBox")).toBe("0 0 460 294"); // narrow and short: the text stays legible
+  // the dollar charts can read on a log scale or indexed; the percents stay as they are
+  const scale = (name: string) => [...container.querySelectorAll<HTMLButtonElement>('[aria-label="Dollar charts\' scale"] button')].find((b) => b.textContent === name)!;
+  expect(scale("Dollars").getAttribute("aria-pressed")).toBe("true");
+  await click(scale("Indexed"));
+  expect(container.querySelectorAll(".multiple")[0]!.querySelector(".ch-title")?.textContent).toBe("Revenue, TTM, indexed");
+  expect(container.querySelectorAll(".multiple")[1]!.querySelector(".ch-title")?.textContent).toBe("Operating margin, TTM");
+  expect(evaluated).toHaveLength(6); // nothing asked again: indexing is the same answers
+  await click(scale("Log scale"));
+  expect([...container.querySelectorAll(".multiple")[0]!.querySelectorAll(".ch-unit")].map((u) => u.textContent)).toEqual(["USD, log scale"]);
+  expect([...container.querySelectorAll(".multiple")[0]!.querySelectorAll(".ch-foot")].map((f) => f.textContent).join(" ")).toContain("Log scale: zero and negative values aren't drawn");
   await click([...container.querySelectorAll("button")].find((b) => b.textContent === "Hide charts"));
   expect(container.querySelector(".multiple")).toBeNull();
 });

@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 
 import { expect, test } from "@playwright/test";
 
-import { KO, mockApi, MSFT, NVDA, PEP, startDemo } from "./mockApi";
+import { KO, mockApi, NVDA, PEP, startDemo } from "./mockApi";
 
 test("try the demo lands on Home with the sandbox and its watchlist", async ({ page }) => {
   await mockApi(page);
@@ -31,7 +31,8 @@ test("screener: filter, sort and watch", async ({ page }) => {
   // a demo sandbox screens only its own companies
   await expect(page.getByText("4 companies in your demo")).toBeVisible();
   await expect(page.getByText("Only companies I can read")).toHaveCount(0);
-  expect(fake.calls.find((c) => c.includes("/v1/screener?"))).toContain("access=financials");
+  // (a company_id list is the name directory asking for identity, not this screen)
+  expect(fake.calls.find((c) => c.includes("/v1/screener?") && !c.includes("company_id="))).toContain("access=financials");
 
   await page.getByRole("columnheader", { name: /Op mgn/ }).click();
   await expect(page).toHaveURL(/sort=-operating_margin_ttm/);
@@ -60,24 +61,30 @@ test("chart builder: two metric layers and a formula, exported as CSV", async ({
   await page.goto("/#/chart");
   await page.getByRole("button", { name: "+ Metric" }).click();
   await page.getByRole("button", { name: "+ Metric" }).click();
-  await page.getByLabel("Company", { exact: true }).nth(1).selectOption(MSFT);
+  // a layer's company is the shared search, not a list loaded into the browser
+  await page.getByRole("button", { name: /^Company: / }).nth(1).click();
+  const pick = page.getByRole("combobox", { name: "Company", exact: true });
+  await pick.fill("MSFT");
+  await expect(page.getByRole("listbox", { name: "Company results" }).getByRole("option").first()).toContainText("MSFT");
+  await pick.press("Enter");
   await page.getByRole("button", { name: "+ Formula" }).click();
   await page.getByLabel("Formula", { exact: true }).fill("net_income / revenue");
   await page.getByLabel("Formula", { exact: true }).press("Enter");
   await page.getByLabel("Chart title").fill("Revenue and margin");
 
-  const legend = page.locator(".ch-legend text");
-  await expect(legend).toHaveText(["KO revenue (TTM)", "MSFT revenue (TTM)", "net_income / revenue (TTM) (right axis)"]);
+  const legend = page.locator(".lchart-svg .ch-legend text");
+  // the first layer starts from the watchlist's first company
+  await expect(legend).toHaveText(["NVDA revenue (TTM)", "MSFT revenue (TTM)", "net_income / revenue (TTM) (right axis)"]);
   await expect(page.locator(".ch-foot").first()).toContainText("Source: SEC filings");
 
   const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Export CSV" }).click()]);
   expect(download.suggestedFilename()).toBe("revenue-and-margin.csv");
   const csv = readFileSync((await download.path())!, "utf8").split("\r\n");
   expect(csv[0]).toBe(
-    "period,KO revenue (TTM) (USD),KO revenue (TTM) sources,MSFT revenue (TTM) (USD),MSFT revenue (TTM) sources," +
+    "period,NVDA revenue (TTM) (USD),NVDA revenue (TTM) sources,MSFT revenue (TTM) (USD),MSFT revenue (TTM) sources," +
       "net_income / revenue (TTM) (ratio),net_income / revenue (TTM) sources",
   );
-  expect(csv[1]).toMatch(/^CY2025 Q3,\d+,0000021344-26-000030,\d+,0000789019-26-000030,0\.\d+,/);
+  expect(csv[1]).toMatch(/^CY2025 Q3,\d+,0001045810-26-000030,\d+,0000789019-26-000030,0\.\d+,/);
 
   // the same values as a table, for screen readers and copying
   await page.getByRole("button", { name: "View as table" }).click();
@@ -98,17 +105,17 @@ test("chart builder: formula autocomplete, annual frequency and deck output", as
   await formula.press("Tab");
   await expect(formula).toHaveValue("net_income");
   await formula.pressSequentially(" ");
-  await suggestions.getByRole("option", { name: /÷/ }).click();
-  await formula.pressSequentially("revenue");
+  await expect(suggestions).toHaveCount(0); // a complete name: nothing more to offer over the controls
+  await formula.pressSequentially("/ revenue");
   await formula.press("Enter");
-  await expect(page.locator(".ch-legend text")).toHaveCount(2);
+  await expect(page.locator(".lchart-svg .ch-legend text")).toHaveCount(2);
 
   await page.getByRole("button", { name: "Annual" }).click();
-  await expect(page.locator(".ch-axis text")).toHaveText(["CY2025"]); // the mock's one full calendar year
+  await expect(page.locator(".lchart-svg .ch-axis text")).toHaveText(["CY2025"]); // the mock's one full calendar year
   await page.getByLabel("Deck output").check();
   await expect(page.locator(".lchart.deck")).toBeVisible();
-  await expect(page.locator(".ch-sub")).toHaveText(/^Calendar years, CY2025 · USD \(left\), % \(right\)$/);
-  await expect(page.locator(".ch-foot").first()).toContainText("Source: SEC filings via Tributary; 10-Q for KO; latest KO 10-Q filed Jul 30, 2026; as of Oct 21, 2026.");
+  await expect(page.locator(".lchart-svg .ch-sub")).toHaveText(/^Calendar years, CY2025 · USD \(left\), % \(right\)$/);
+  await expect(page.locator(".ch-foot").first()).toContainText("Source: SEC filings via Tributary; 10-Q for NVDA; latest NVDA 10-Q filed Jul 30, 2026; as of Oct 21, 2026.");
   const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Export SVG" }).click()]);
   const svg = readFileSync((await download.path())!, "utf8");
   expect(svg).toContain("Source: SEC filings via Tributary");
@@ -120,7 +127,7 @@ test("comps: target and peers with the peer median, exported as CSV", async ({ p
   await startDemo(page);
   await page.goto(`/#/compare?target=${PEP}&peers=${KO},${NVDA}`);
   const rows = page.locator("table.comps tbody tr");
-  await expect(rows).toHaveCount(5); // 3 companies, median, high/low
+  await expect(rows).toHaveCount(6); // 3 companies, median, high, low
   await expect(rows.first()).toContainText("PepsiCo");
   await expect(rows.first()).toContainText("target");
   await expect(rows.nth(3)).toContainText("Peer median");
@@ -137,6 +144,20 @@ test("comps: target and peers with the peer median, exported as CSV", async ({ p
   await expect(multiples).toHaveCount(8);
   await expect(multiples.first().locator(".ch-title")).toHaveText("Revenue, TTM");
   await expect(multiples.first().locator(".ch-legend text")).toHaveText(["PEP", "KO", "NVDA"]);
+  // #199: eight charts in rows of three: the last row is centred, every chart the same width
+  const boxes = await multiples.evaluateAll((els) => els.map((e) => e.getBoundingClientRect()));
+  const lines = [...new Set(boxes.map((b) => Math.round(b.y)))];
+  expect(lines).toHaveLength(3);
+  expect(new Set(boxes.map((b) => Math.round(b.width))).size).toBe(1);
+  const grid = (await page.locator(".multiples").boundingBox())!;
+  const last = boxes.slice(6);
+  const left = last[0]!.x - grid.x;
+  const right = grid.x + grid.width - (last[1]!.x + last[1]!.width);
+  expect(Math.abs(left - right)).toBeLessThan(2);
+  // the instruction is for screen readers only, not printed on eight charts
+  const hints = await multiples.getByText("Click a point to open its filing").evaluateAll((els) => els.map((e) => e.getBoundingClientRect().width));
+  expect(hints).toHaveLength(8);
+  expect(hints.every((w) => w <= 1)).toBe(true);
 });
 
 test("save a chart to a new workspace and reopen it", async ({ page }) => {
@@ -158,9 +179,10 @@ test("save a chart to a new workspace and reopen it", async ({ page }) => {
   // start over, then reopen it from the sidebar
   await page.getByRole("button", { name: "Close", exact: true }).click();
   await page.getByRole("button", { name: "Leverage" }).click();
-  await expect(page.getByLabel("Chart title")).toHaveValue("Debt to equity, quarter end");
+  await expect(page.getByLabel("Chart title")).toHaveValue(""); // written from the layers
+  await expect(page.locator(".lchart-svg .ch-title").first()).toContainText("Debt to equity");
   await page.locator('button[title="Open in Chart builder: Margin check"]').click();
-  await expect(page.getByLabel("Chart title")).toHaveValue("Operating margin, TTM");
+  await expect(page.locator(".lchart-svg .ch-title").first()).toContainText("Operating margin");
   await expect(page.locator(".savebar")).toContainText("Margin check");
 });
 
@@ -304,7 +326,8 @@ test("customizable views: Home arrangement and table columns, saved and reset", 
   // watchlist columns
   const watch = page.locator("section.card", { has: page.getByRole("heading", { name: "Watchlist" }) });
   await watch.getByRole("button", { name: "Columns" }).click();
-  await page.getByLabel("Add a watchlist column").selectOption({ label: "Gross margin (TTM)" });
+  await page.getByLabel("Add a watchlist column").fill("gross");
+  await page.getByRole("button", { name: "+ Gross margin (TTM)" }).click();
   await page.getByRole("button", { name: "Remove Net debt (qtr end)" }).click();
   await expect(page.locator("table.watchlist thead")).toContainText("Gross mgn");
   await expect(page.locator("table.watchlist thead")).not.toContainText("Net debt");
@@ -319,7 +342,8 @@ test("customizable views: Home arrangement and table columns, saved and reset", 
   // screener columns, then reset
   await page.goto("/#/companies");
   await page.getByRole("button", { name: "Columns" }).click();
-  await page.getByLabel("Add a screener column").selectOption({ label: "Net margin (TTM)" });
+  await page.getByLabel("Add a screener column").fill("net margin");
+  await page.getByRole("button", { name: "+ Net margin (TTM)" }).click();
   await expect(page.locator("table.screen thead")).toContainText("Net margin");
   expect(fake.views.screener).toEqual({ columns: [
     "revenue_ttm", "revenue_growth_ttm", "gross_margin_ttm", "operating_margin_ttm", "free_cash_flow_ttm", "net_debt_q", "debt_to_equity_q", "net_margin_ttm",
@@ -327,4 +351,83 @@ test("customizable views: Home arrangement and table columns, saved and reset", 
   await page.getByRole("button", { name: "Reset" }).click();
   await expect(page.locator("table.screen thead")).not.toContainText("Net margin");
   expect(fake.views.screener).toBeUndefined();
+});
+
+test("a first visit starts with the assistant closed, and nothing floats over the page", async ({ page }) => {
+  await mockApi(page);
+  await startDemo(page);
+  await expect(page.locator("aside.ai-drawer")).toHaveCount(0);
+  await expect(page.locator(".fab")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Assistant/ })).toBeVisible();
+});
+
+test("#68: the main screens load with a clean console", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
+  page.on("pageerror", (e) => errors.push(String(e)));
+  page.on("response", (r) => {
+    if (r.status() >= 400) errors.push(`${r.status()} ${new URL(r.url()).pathname}`);
+  });
+  await mockApi(page);
+  await startDemo(page);
+  errors.length = 0; // signed in from here (the mock has no public status page for the front door)
+  for (const hash of ["#/", "#/companies", `#/company/${NVDA}`, `#/company/${NVDA}/statements`, `#/compare?target=${PEP}&peers=${KO}`, "#/chart", "#/analysis"]) {
+    await page.goto(`/${hash}`);
+    await page.waitForLoadState("networkidle");
+  }
+  expect(errors).toEqual([]);
+});
+
+test("no screen scrolls sideways, on a phone, at 1024 or at 1440 with the panel open", async ({ page }) => {
+  await mockApi(page);
+  await startDemo(page);
+  const screens = ["#/", "#/companies", `#/company/${NVDA}`, `#/company/${NVDA}/statements`, `#/company/${NVDA}/peers`, `#/compare?target=${PEP}&peers=${KO}`, "#/chart"];
+  for (const [width, height, panel] of [[390, 844, false], [1024, 768, false], [1440, 900, true]] as const) {
+    await page.setViewportSize({ width, height });
+    await page.evaluate((open) => localStorage.setItem("tributary.assistant", open ? "open" : "closed"), panel);
+    await page.reload();
+    await expect(page.locator("aside.ai-drawer")).toHaveCount(panel ? 1 : 0);
+    for (const hash of screens) {
+      await page.goto(`/${hash}`);
+      await page.waitForLoadState("networkidle");
+      const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      expect(over, `${hash} at ${width}`).toBe(0);
+    }
+  }
+});
+
+test("with the panel open at 1440 the screener still shows its numbers, under a frozen name", async ({ page }) => {
+  await mockApi(page);
+  await startDemo(page);
+  await page.evaluate(() => localStorage.setItem("tributary.assistant", "open"));
+  await page.goto("/#/companies");
+  await page.reload();
+  await expect(page.locator("aside.ai-drawer")).toBeVisible();
+  const row = page.locator("table.screen tbody tr").first();
+  const box = await page.locator(".tw").first().boundingBox();
+  const revenue = await row.locator("td.n").first().boundingBox();
+  expect(revenue!.x + revenue!.width).toBeLessThan(box!.x + box!.width);
+  await expect(row.locator("td.first")).toHaveCSS("position", "sticky");
+});
+
+test("workspace actions: from the page, with a confirmation over the whole screen", async ({ page }) => {
+  await mockApi(page);
+  await startDemo(page);
+  await page.goto("/#/chart");
+  await page.getByRole("button", { name: "Margins", exact: true }).click();
+  await page.getByRole("button", { name: "Save…" }).click();
+  const form = page.locator(".save-form");
+  await form.getByLabel("Name").fill("Margin check");
+  await form.getByLabel("Workspace", { exact: true }).selectOption({ label: "New workspace…" });
+  await form.getByLabel("New workspace").fill("Beverages");
+  await form.getByRole("button", { name: "Save" }).click();
+  await page.locator(".side a.ws-open", { hasText: "Beverages" }).click();
+  await expect(page.getByRole("heading", { name: "Beverages" })).toBeVisible();
+  const main = page.locator("main.content");
+  await main.getByRole("button", { name: "Delete", exact: true }).click();
+  const dialog = page.getByRole("alertdialog");
+  await expect(dialog).toContainText("Delete “Beverages” and its 1 item?");
+  await expect(dialog.getByRole("button", { name: "Keep" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
 });

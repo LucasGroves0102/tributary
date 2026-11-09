@@ -7,6 +7,7 @@ dates, period of report) and what is derived only from them (expected filing dat
 values need `financials` on that company, section text `filings`.
 """
 
+import logging
 import re
 from collections.abc import Callable
 from datetime import UTC, date, datetime
@@ -14,6 +15,7 @@ from decimal import Decimal, InvalidOperation, localcontext
 from typing import Annotated, Literal, get_args
 from zoneinfo import ZoneInfo
 
+import psycopg
 from fastapi import Depends, FastAPI, HTTPException, Path, Query
 from fastapi.responses import Response
 
@@ -30,6 +32,7 @@ from query_api.screener import (
     band_of,
     column_info,
     compile_screen,
+    notes_of,
     parse_filter,
     shape,
 )
@@ -37,6 +40,7 @@ from query_api.shapes import document_url, filing_url, newest_windows, period
 from query_api.store import Store
 from query_api.watchlist import MAX_ENTRIES, UnknownUser, Watchlists
 
+log = logging.getLogger("query_api")
 CompanyId = Annotated[str, Path(pattern=r"^\d{10}$", description="canonical company_id")]
 EXPECTED_METHOD = (
     "Estimate, not a filing. Period end: the last reported fiscal period end plus one quarter. "
@@ -114,6 +118,9 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
         exchange: Annotated[list[str] | None, Query(description="e.g. NYSE, Nasdaq")] = None,
         fiscal_year_end_month: Annotated[list[int] | None, Query()] = None,
         filer_category: Annotated[list[FilerCategory] | None, Query()] = None,
+        issue: Annotated[str | None, Query(
+            pattern=r"^[a-z_]{1,64}$", description="a data-quality check's name "
+            "(the status page's rows): only companies you can read with a finding of it")] = None,
         revenue_band: Annotated[Band | None, Query(description="TTM revenue")] = None,
         assets_band: Annotated[Band | None, Query(description="latest total assets")] = None,
         where: Annotated[list[str] | None, Query(
@@ -129,8 +136,11 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
         offset: Annotated[int, Query(ge=0, le=1_000_000)] = 0,
         fmt: Format = "json",
     ) -> dict | Response:
-        """Companies with financials. Metadata is public; values only for companies the caller
-        can read financials for. Value filters exclude companies without readable values."""
+        """Companies with a figure in at least one of these columns (naming a company or a data
+        check lists it whatever it has). Metadata is public; values only for companies the caller
+        can read financials for. Value filters exclude companies without readable values. A value
+        that reads as not meaningful, not applicable or old (`readings`, migration 035) is still
+        returned, exact, but sorts last and never passes a value filter."""
         if fmt == "json" and limit > MAX_JSON_ROWS:
             raise HTTPException(422, f"limit: at most {MAX_JSON_ROWS} rows as JSON")
         if any(len(s) != 4 or not s.isdigit() for s in sic or []):
@@ -155,17 +165,21 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
             columns=columns if columns is not None else Screen().columns,
             company_ids=sorted(set(company_id)) if company_id is not None else None,
             coverage=company_id is None,
+            hide_blank=company_id is None and q is None and issue is None,
             sic=sic or [], sic_prefix=sic_prefix, industry=industry, q=q,
             exchanges=exchange or [], fye_months=fiscal_year_end_month or [],
-            filer_categories=list(filer_category or []), filters=filters,
+            filer_categories=list(filer_category or []), issue=issue, filters=filters,
             granted_only=access == "financials", sort=sort, limit=limit, offset=offset)
         compiled, rows, total = run_screen(user_id, screen, readable(user_id))
         if fmt == "csv":
-            return csv_response("screener.csv", [*META_CSV, "access", *compiled.columns], (
+            return csv_response("screener.csv", [*META_CSV, "access", *compiled.columns, "notes"], (
                 [*(r[k] for k in META_CSV), r["access"],
-                 *(r["values"][k] for k in compiled.columns)] for r in rows))
+                 *(r["values"][k] for k in compiled.columns), notes_of(r)] for r in rows))
+        # `issue` echoed: an API that ignored it (older than the filter) would list everyone, and
+        # the web app can tell the two apart
         return {"as_of": _now(), "total": total, "limit": limit, "offset": offset, "sort": sort,
-                "columns": column_info(compiled.columns), "rows": rows}
+                "columns": column_info(compiled.columns), "rows": rows,
+                **({"issue": issue} if issue else {})}
 
     @app.get("/v1/companies/{company_id}/expected-filings", response_model=dict)
     def expected_filings(
@@ -276,12 +290,12 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
         if fmt == "csv":
             header = [*META_CSV, "access", "added_at", "last_form", "last_filing_date",
                       "last_period_end", "next_form", "next_period_end", "next_expected_date",
-                      "next_expected_basis", *compiled.columns]
+                      "next_expected_basis", *compiled.columns, "notes"]
             return csv_response("watchlist.csv", header, ([
                 *(r[k] for k in META_CSV), r["access"], r["added_at"],
                 *_pick(r["last_filing"], "form", "filing_date", "period_end"),
                 *_pick(r["next_expected"], "form", "period_end", "expected_date", "basis"),
-                *(r["values"][k] for k in compiled.columns)] for r in rows))
+                *(r["values"][k] for k in compiled.columns), notes_of(r)] for r in rows))
         return {"as_of": _now(), "columns": column_info(compiled.columns),
                 "expected_method": EXPECTED_METHOD, "companies": rows}
 
@@ -365,8 +379,14 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
         rows = store.recap(user_id, company_id, accession_no, filing["period_end"],
                            list(metrics or RECAP_METRICS))
         flags = None
+        flags_note = "one-time-item flags need filings access"
         if allowed(user_id, "filings", company_id):
-            flags = [_flag(f, accession_no) for f in store.filing_flags(user_id, accession_no)]
+            try:
+                flags = [_flag(f, accession_no) for f in store.filing_flags(user_id, accession_no)]
+            except psycopg.Error as e:  # optional: the metrics above still answer
+                log.warning("recap flags unavailable: %s", type(e).__name__,
+                            extra={"accession_no": accession_no})
+                flags_note = "one-time-item flags couldn't be read just now"
         return {"accession_no": accession_no, "company_id": company_id, "form": filing["form"],
                 "filed": filing["filing_date"], "period_end": filing["period_end"],
                 "as_of": _now(),
@@ -375,8 +395,7 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
                         "when the earlier value is 0.",
                 "metrics": _recap_metrics(rows, filing.get("cik")),
                 "flags": flags,
-                **({} if flags is not None else
-                   {"flags_unavailable": "one-time-item flags need filings access"})}
+                **({} if flags is not None else {"flags_unavailable": flags_note})}
 
     @app.get("/v1/companies/{company_id}/peers", response_model=dict)
     def peers(
@@ -397,13 +416,20 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
                                                   coverage=False, sort="name", limit=1), access)
         if not target:
             raise HTTPException(404, "unknown company")
-        revenue = target[0]["values"].get("revenue_ttm") if "revenue_ttm" in cols else None
+        def current(row: dict) -> Decimal | None:
+            # the size band's revenue is read as the screener sorts it (035): an old or not
+            # meaningful TTM has no band, like a peer's (Store.peers)
+            reading = row.get("readings", {}).get("revenue_ttm") or {}
+            return None if reading.get("status") not in (None, "behind") \
+                else row["values"].get("revenue_ttm")
+
+        revenue = current(target[0]) if "revenue_ttm" in cols else None
         granted = access.ids("financials")
-        if revenue is None and "financials" in access.get(company_id, set()):
+        if "revenue_ttm" not in cols and "financials" in access.get(company_id, set()):
             _, own, _ = run_screen(user_id, Screen(columns=["revenue_ttm"],
                                                    company_ids=[company_id], coverage=False,
                                                    sort="name", limit=1), access)
-            revenue = own[0]["values"]["revenue_ttm"] if own else None
+            revenue = current(own[0]) if own else None
         ranked = store.peers(user_id, company_id, granted, revenue, limit,
                              granted_only=access_filter == "financials")
         ids = [p["company_id"] for p in ranked]
@@ -451,7 +477,8 @@ def _recap_metrics(rows: list[dict], cik: str | None) -> list[dict]:
 
 
 def _recap_value(r: dict, cik: str | None) -> dict:
-    return {"value": r["value"], "period_start": r["period_start"],
+    return {"value": r["value"], "not_meaningful": r.get("not_meaningful"),
+            "period_start": r["period_start"],
             "period_end": r["period_end"],
             "fiscal_period": period("FY", r["fiscal_year"], r["fiscal_quarter"]),
             "calendar_period": period("CY", r["calendar_year"], r["calendar_quarter"]),

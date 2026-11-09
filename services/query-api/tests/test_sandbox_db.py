@@ -132,6 +132,57 @@ def test_take_several_questions_all_or_none(db):
     assert s.take_question("demo-a", NOW, 4, 10) == 0
 
 
+def test_give_back_returns_at_most_todays_use(db):
+    """C1: a run that produced nothing gives its questions back, the shared day's too; never
+    below zero, never more than was used today (yesterday's stay spent)."""
+    s, conn = db
+    s.create(sandbox("demo-a"), "ip1", 5, 5)
+    assert s.take_question("demo-a", NOW, 4, 10, 3) == 1
+    assert s.give_back("demo-a", NOW, 3) == 3
+    assert rows(conn, "SELECT questions FROM demo_agent_usage WHERE user_id = 'demo-a'") == [(0,)]
+    assert rows(conn, "SELECT questions FROM demo_agent_daily WHERE day = %s",
+                NOW.date()) == [(0,)]
+    assert s.give_back("demo-a", NOW, 3) == 0
+    assert s.take_question("demo-a", NOW, 4, 10) == 3
+    assert s.give_back("demo-a", NOW + timedelta(days=1), 1) == 0  # another day: nothing used
+    assert s.give_back("demo-unknown", NOW, 1) == 0
+
+
+def test_give_back_after_midnight_moves_usage_but_gains_nothing(db):
+    """A run that took yesterday's questions and is given back after midnight comes off today's
+    count, up to what today used: yesterday stays spent, so the two days together never hold
+    fewer than the run took."""
+    s, conn = db
+    s.create(sandbox("demo-a"), "ip1", 5, 5)
+    before = NOW.replace(hour=23, minute=58)
+    after = before + timedelta(minutes=4)  # the next UTC day
+    s.take_question("demo-a", before, 4, 10, 3)  # the run starts before midnight
+    s.take_question("demo-a", after, 4, 10, 1)  # one question after midnight
+    assert s.give_back("demo-a", after, 3) == 1
+    assert rows(conn, "SELECT day, questions FROM demo_agent_usage WHERE user_id = 'demo-a'"
+                " ORDER BY day") == [(before.date(), 3), (after.date(), 0)]
+
+
+def test_questions_left_reads_the_caps_and_takes_nothing(db):
+    s, conn = db
+    day = NOW.date()
+    conn.execute("DELETE FROM demo_agent_usage WHERE day = %s", (day,))
+    conn.execute("DELETE FROM demo_agent_daily WHERE day = %s", (day,))
+    s.create(sandbox(), "ip1", 3, 10)
+    assert s.questions_left("demo-t1", NOW, 2, 3) == (2, 2)
+    assert s.questions_left("demo-t1", NOW, 2, 3) == (2, 2)  # nothing taken, no day row made
+    assert rows(conn, "SELECT 1 FROM demo_agent_daily WHERE day = %s", day) == []
+    s.take_question("demo-t1", NOW, 2, 3)
+    assert s.questions_left("demo-t1", NOW, 2, 3) == (2, 1)
+    # the shared day is the tighter of the two once it's nearly gone
+    assert s.questions_left("demo-t1", NOW, 5, 1) == (5, 0)
+    # the same refusal as taking one
+    with pytest.raises(SandboxGone):
+        s.questions_left("demo-t1", NOW + timedelta(hours=25), 2, 3)
+    with pytest.raises(SandboxGone):
+        s.questions_left("demo-nobody", NOW, 2, 3)
+
+
 def test_take_question_for_expired_or_unknown_sandbox(db):
     s, _ = db
     s.create(sandbox("demo-a", hours=1), "ip1", 5, 5)

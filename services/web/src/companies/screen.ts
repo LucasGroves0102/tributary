@@ -22,6 +22,30 @@ export const FILER_LABELS: Record<FilerCategory, string> = {
 
 export const EXCHANGES = ["NYSE", "Nasdaq", "CBOE", "OTC"] as const;
 
+/** What each data-quality check flags (migrations 014, 018, 023: ops.check_financials). The status
+ * page's rows, and the screener's "with a finding of this check" filter. */
+export const CHECKS: Record<string, string> = {
+  impossible_value: "Impossible values: negative revenue, assets, debt or share counts, or a part larger than its total",
+  overlapping_quarters: "A quarter starting before the previous one ended",
+  calendar_collision: "Two quarters of a metric in one calendar quarter",
+  annual_sum: "Four quarters differing from the reported year by more than 1%",
+  series_gap: "A quarter missing after four contiguous ones",
+  sign_flip: "An expense or outflow whose sign differs from both neighbouring quarters",
+  outlier: "A one-quarter spike of 10× or more: seasonal, a one-off, or a scale error in the filing",
+  mistagged_fact: "A figure kept out of the data: a period ending after its filing, or debt above total liabilities",
+  net_debt_gap: "Debt and cash on file but no net debt: investments or debt can't be told apart from a gap",
+  segment_sum_business_segment: "Business segments not adding up to the company total (±1%)",
+  segment_sum_geography: "Geographic segments not adding up to the company total (±1%)",
+  segment_sum_product_service: "Product and service lines not adding up to the company total (±1%)",
+  restatement: "A figure a later filing changed by more than 0.5%",
+};
+
+/** A check's description, or undefined when `check` isn't one: own keys only, so an address's
+ * `issue=constructor` or `toString` (Object.prototype's) is no check. */
+export function checkName(check: string | null | undefined): string | undefined {
+  return check && Object.prototype.hasOwnProperty.call(CHECKS, check) ? CHECKS[check] : undefined;
+}
+
 /** Value columns the screener shows, in order. Ratios are fractions in the API. */
 export const SCREEN_COLUMNS: { key: string; label: string; period: string; kind: "usd" | "pct" | "growth" | "x" }[] = [
   { key: "revenue_ttm", label: "Revenue", period: "TTM", kind: "usd" },
@@ -55,6 +79,8 @@ export interface ScreenFilters {
   fye?: number;
   exchange?: string;
   filer?: FilerCategory;
+  /** a data check's name (CHECKS): companies with a finding of it, from the status page */
+  issue?: string;
   /** only companies whose financials the user can read */
   mine?: boolean;
   sort?: string;
@@ -62,7 +88,7 @@ export interface ScreenFilters {
   page?: number;
 }
 
-const KEYS = ["q", "industry", "sic", "band", "growth", "margin", "fye", "exchange", "filer",
+const KEYS = ["q", "industry", "sic", "band", "growth", "margin", "fye", "exchange", "filer", "issue",
   "mine", "sort", "page"] as const;
 
 function text(v: string | null, max = 100): string | undefined {
@@ -95,6 +121,7 @@ export function parseScreen(query: string): ScreenFilters {
     filer: (FILER_CATEGORIES as readonly string[]).includes(p.get("filer") ?? "")
       ? (p.get("filer") as FilerCategory)
       : undefined,
+    issue: checkName(p.get("issue")) ? p.get("issue")! : undefined,
     mine: p.get("mine") === "1" ? true : undefined,
     sort: SORTS.has((p.get("sort") ?? "").replace(/^-/, "")) ? p.get("sort")! : undefined,
     page: int(p.get("page"), 1, 10000),
@@ -130,12 +157,24 @@ export function isEmpty(f: ScreenFilters): boolean {
   return screenQuery({ ...f, sort: undefined, page: undefined }) === "";
 }
 
+/** How many filters are set: the count on the collapsed filter band. */
+export function activeFilters(f: ScreenFilters): number {
+  return [f.q, f.industry, f.sic, f.band, f.growth, f.margin, f.fye, f.exchange, f.filer, f.issue, f.mine]
+    .filter((v) => v !== undefined && v !== "" && v !== false).length;
+}
+
 /** Percent → fraction as a decimal string without float noise: 12.5 → "0.125". */
 export function fraction(percent: number): string {
   return String(Number((percent / 100).toPrecision(12)));
 }
 
 type Params = Record<string, string | number | string[]>;
+
+/** What the count above the table counts. Without a name or a data check, a company with none of
+ * the shown columns isn't listed (the API's rule), so the count doesn't claim a row of blanks. */
+export function countWords(f: ScreenFilters): string {
+  return f.q || f.issue ? "" : " with figures in these columns";
+}
 
 /** Whether the screener sorts on this key (saved screens and URLs take only these). */
 export const sortable = (key: string) => SORTS.has(key);
@@ -159,6 +198,7 @@ export function screenParams(f: ScreenFilters, columns: string[] = SCREEN_COLUMN
   if (f.fye) p.fiscal_year_end_month = f.fye;
   if (f.exchange) p.exchange = [f.exchange];
   if (f.filer) p.filer_category = [f.filer];
+  if (f.issue) p.issue = f.issue;
   if (f.mine) p.access = "financials";
   return p;
 }
@@ -180,6 +220,7 @@ export function describe(f: ScreenFilters): string {
     f.fye && `fiscal year ends in ${MONTHS[f.fye - 1]}`,
     f.exchange && `on ${f.exchange}`,
     f.filer && FILER_LABELS[f.filer].toLowerCase() + " filers",
+    f.issue && `data check: ${checkName(f.issue) ?? f.issue}`,
     f.mine && "only companies you can read",
   ].filter(Boolean);
   return parts.length ? parts.join(", ") : "no filters";
@@ -188,8 +229,13 @@ export function describe(f: ScreenFilters): string {
 export const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August",
   "September", "October", "November", "December"];
 
-/** SEC fiscal year end "0126" (MMDD) → "January". */
+/** SEC fiscal year end "0126" (MMDD) → "January". A 52/53-week year ends up to a week into the next
+ * month, so a day of 1-7 belongs to the month before: J&J's "0103" is December, Target's "0201"
+ * January, and NVIDIA's "0131" stays January. silver.fiscal_year_end_month (migration 042), which the
+ * screener's filter and sort use, is the same rule: change both. */
 export function fyeMonth(fye: string | null): string | null {
   const m = Number(fye?.slice(0, 2));
-  return m >= 1 && m <= 12 ? MONTHS[m - 1]! : null;
+  if (!(m >= 1 && m <= 12)) return null;
+  const first = Number(fye?.slice(2, 4)) <= 7;
+  return MONTHS[first ? (m + 10) % 12 : m - 1]!;
 }

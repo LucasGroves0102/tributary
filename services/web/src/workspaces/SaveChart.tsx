@@ -1,25 +1,27 @@
 import { useId, useState, type FormEvent } from "react";
 
-import { ApiError } from "../api";
+import { failureReason } from "../api";
 import type { ChartState } from "../chart/model";
 import { href } from "../route";
-import { ITEM_NAME_MAX, nameProblem, stateOf, WORKSPACE_NAME_MAX } from "./model";
+import { companyOf, defaultWorkspace, ITEM_NAME_MAX, nameProblem, NEW_WORKSPACE, stateOf, WORKSPACE_NAME_MAX } from "./model";
 import type { Saved, Target } from "./useSaved";
 
-const NEW = "__new__";
+const NEW = NEW_WORKSPACE;
 
 /** "Save to workspace" for a chart shown outside the chart builder (the Revenue view): name
  * and workspace (or a new one), saved as an ordinary chart item through the same Query API
  * route and state cleaner as the chart builder's Save as, so a thesis in that workspace can
  * embed it. It doesn't become the chart builder's open item. */
-export function SaveChart({ saved, chart }: { saved: Saved; chart: ChartState }) {
+export function SaveChart({ saved, chart, label }: { saved: Saved; chart: ChartState; label: (companyId: string) => string }) {
   const id = useId();
   const list = saved.list.state === "ok" ? saved.list.workspaces : [];
   const offline = saved.list.state === "unavailable" || saved.list.state === "error";
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(chart.title.slice(0, ITEM_NAME_MAX));
-  const [workspace, setWorkspace] = useState(list[0]?.workspace_id ?? NEW);
-  const [newName, setNewName] = useState("");
+  // #119: the company's project or folder, else a new workspace named after it
+  const company = companyOf({ kind: "chart", chart });
+  const [workspace, setWorkspace] = useState(() => defaultWorkspace(list, company ? { id: company, names: [label(company)] } : null));
+  const [newName, setNewName] = useState(() => (company ? label(company).slice(0, WORKSPACE_NAME_MAX) : ""));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<{ workspaceId: string; workspace: string } | null>(null);
@@ -36,7 +38,7 @@ export function SaveChart({ saved, chart }: { saved: Saved; chart: ChartState })
       setDone({ workspaceId: item.workspace_id, workspace: item.workspace_name ?? "the workspace" });
       setOpen(false);
     } catch (err) {
-      setError(`Couldn't save it: ${err instanceof ApiError ? err.message : "the Query API didn't answer"}.`);
+      setError(`Couldn't save it: ${failureReason(err)}.`);
     } finally {
       setBusy(false);
     }

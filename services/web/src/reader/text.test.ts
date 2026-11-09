@@ -4,7 +4,9 @@ import type { IndexedFiling } from "../types";
 import {
   comparableForm,
   countMatches,
+  firstMatchFrom,
   highlight,
+  nextComparable,
   outlineGroups,
   paragraphAt,
   paragraphs,
@@ -77,8 +79,30 @@ describe("prior comparable filing", () => {
     expect(priorComparable(index, { accession_no: "0001045810-26-000074", form: "10-Q/A", filed: "2026-08-01" })?.accession_no)
       .toBe("0001045810-26-000050");
     expect(priorComparable(index, { accession_no: "0001045810-26-000021", form: "10-K", filed: "2026-02-26" })).toBeNull();
-    expect(priorComparable(index, { accession_no: "0001045810-26-000080", form: "8-K", filed: "2026-09-01" })).toBeNull();
+    expect(priorComparable(index, { accession_no: "0001045810-26-000080", form: "DEF 14A", filed: "2026-09-01" })).toBeNull();
     expect(comparableForm("10-K/A")).toBe("10-K");
     expect(comparableForm("DEF 14A")).toBeNull();
+  });
+});
+
+describe("stepping through a form's filings and a section's matches", () => {
+  const f = (accession_no: string, form: string, filed: string) => ({ accession_no, form, filed }) as IndexedFiling;
+  const index = [f("a-3", "8-K", "2026-09-01"), f("a-2", "8-K", "2026-08-01"), f("a-1", "8-K", "2026-08-01"), f("a-0", "8-K", "2026-01-01")];
+
+  it("finds the nearest filing either way, same-day ones by accession", () => {
+    expect(nextComparable(index, index[3]!)?.accession_no).toBe("a-1");
+    expect(nextComparable(index, index[2]!)?.accession_no).toBe("a-2");
+    expect(nextComparable(index, index[0]!)).toBeNull();
+    expect(priorComparable(index, index[1]!)?.accession_no).toBe("a-1");
+    expect(priorComparable(index, index[3]!)).toBeNull();
+    expect(nextComparable(index, { accession_no: "x", form: "DEF 14A", filed: "2026-01-01" })).toBeNull();
+  });
+
+  it("opens at the first highlight in or after a cited paragraph", () => {
+    const ps = paragraphs("Export one.\n\nNothing here.\n\nExport two export three.");
+    expect(firstMatchFrom(ps, ["export"], -1)).toBe(0);
+    expect(firstMatchFrom(ps, ["export"], 1)).toBe(1); // the cited paragraph has none: the next one
+    expect(firstMatchFrom(ps, ["export"], 2)).toBe(1);
+    expect(firstMatchFrom(ps, ["zzz"], 2)).toBe(0);
   });
 });

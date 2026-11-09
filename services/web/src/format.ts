@@ -16,6 +16,19 @@ export function money(value: number, unit: string): string {
   return `${sign}$${abs.toFixed(0)}`;
 }
 
+/** A row of USD amounts in one unit, the largest value's, so periods compare at a glance: $0.05M,
+ * $0.96M, $2.43M instead of $54.74K, $963.57K, $2.43M. A value that would round to nothing in that
+ * unit keeps its own: a figure never reads as $0.00. */
+export function moneyRow(values: (number | null)[]): (string | null)[] {
+  const top = Math.max(0, ...values.map((v) => (v === null ? 0 : Math.abs(v))));
+  const scale = SCALES.find(([size]) => top >= size);
+  return values.map((v) => {
+    if (v === null) return null;
+    if (!scale || v === 0 || Math.abs(v) / scale[0] < 0.005) return money(v, "USD");
+    return `${v < 0 ? "-" : ""}$${(Math.abs(v) / scale[0]).toFixed(2)}${scale[1]}`;
+  });
+}
+
 /** Ratios as percentages: 0.2134 → "21.3%". */
 export function pct(ratio: number, digits = 1): string {
   return `${(ratio * 100).toFixed(digits)}%`;
@@ -34,11 +47,33 @@ export function day(isoDate: string, withYear = false): string {
   return `${MONTHS[m! - 1]} ${d}${withYear ? `, ${y}` : ""}`;
 }
 
+/** A moment's date where the viewer is: "2026-11-07T03:00:00Z" is Nov 6 in Phoenix, Nov 7 in
+ * London. A timestamp without a zone is local already; one that doesn't parse reads as written. */
+export function localDay(timestamp: string, withYear = false): string {
+  const at = new Date(timestamp);
+  if (Number.isNaN(at.getTime())) return day(timestamp, withYear);
+  return `${MONTHS[at.getMonth()]} ${at.getDate()}${withYear ? `, ${at.getFullYear()}` : ""}`;
+}
+
+/** A filing's "period of report": the period a 10-K or 10-Q covers, but on an 8-K the date of the
+ * event it reports, which covers no period. */
+export function periodPhrase(form: string | null | undefined, isoDate: string): string {
+  return /^8-K/.test(form ?? "") ? `event on ${day(isoDate, true)}` : `period ending ${day(isoDate, true)}`;
+}
+
 /** Quarter label from its end date: "2026-07-26" → "Jul '26". */
 export function quarter(periodEnd: string): string {
   const d = new Date(`${periodEnd}T00:00:00Z`);
   const month = d.toLocaleString("en-US", { month: "short", timeZone: "UTC" });
   return `${month} '${String(d.getUTCFullYear()).slice(2)}`;
+}
+
+/** 43 → "43 s", 108 → "1.8 min", 7200 → "2.0 h". */
+export function duration(seconds: number | null): string {
+  if (seconds === null) return "—";
+  if (seconds < 90) return `${Math.round(seconds)} s`;
+  if (seconds < 5400) return `${(seconds / 60).toFixed(1)} min`;
+  return `${(seconds / 3600).toFixed(1)} h`;
 }
 
 /** "3 min ago", "5 h ago", "2 d ago". */
@@ -50,54 +85,4 @@ export function ago(iso: string, now = Date.now()): string {
   return `${Math.floor(s / 86400)} d ago`;
 }
 
-// SEC conformed names are upper case with legal suffixes and state tags ("COSTCO WHOLESALE CORP
-// /NEW"). Display names drop those and fix casing; CSV exports keep the SEC name.
-const NAME_CASE: Record<string, string> = {
-  "COCA COLA": "Coca-Cola", JPMORGAN: "JPMorgan", PEPSICO: "PepsiCo", MCDONALDS: "McDonald's",
-  "MCDONALD'S": "McDonald's", NVIDIA: "Nvidia", UNITEDHEALTH: "UnitedHealth", "AMAZON COM": "Amazon",
-  "EXXON MOBIL": "Exxon Mobil", "KEURIG DR PEPPER": "Keurig Dr Pepper",
-};
-const SUFFIX = /[\s,]+(&\s*CO|INC|INCORPORATED|CORP|CORPORATION|CO|COMPANY|LTD|LIMITED|PLC|LLC|L\.?P|N\.?V|S\.?A|AG|SE)\.?$/i;
-
-export function companyName(raw: string): string {
-  let s = raw.replace(/[’`]/g, "'").replace(/\s*\/[A-Z]{2,3}\/?\s*$/i, "").replace(/\s*\/NEW\s*$/i, "").trim();
-  s = s.replace(/^THE\s+/i, "");
-  for (let i = 0; i < 3 && SUFFIX.test(s); i++) s = s.replace(SUFFIX, "").trim();
-  s = s.replace(/[,\s]+$/, "");
-  const key = s.toUpperCase();
-  for (const [k, v] of Object.entries(NAME_CASE)) {
-    if (key === k) return v;
-    if (key.startsWith(k + " ")) return v + titleCase(s.slice(k.length));
-  }
-  return /[a-z]/.test(s) ? s : titleCase(s);
-}
-
-function titleCase(s: string): string {
-  return s.replace(/[A-Za-z][A-Za-z'.]*/g, (w) =>
-    /^[A-Z]{1,3}$/.test(w) && !/[AEIOU]/.test(w) ? w : w[0]!.toUpperCase() + w.slice(1).toLowerCase());
-}
-
-/** Deep-copies API JSON with display names on every object that has a company_id. */
-export function displayNames<T>(data: T): T {
-  if (Array.isArray(data)) return data.map(displayNames) as T;
-  if (data && typeof data === "object") {
-    const o = Object.fromEntries(Object.entries(data).map(([k, v]) => [k, displayNames(v)])) as Record<string, unknown>;
-    if (typeof o.company_id === "string" && typeof o.name === "string") o.name = companyName(o.name);
-    return o as T;
-  }
-  return data;
-}
-
-/** Operating margin, FCF and net debt don't describe a bank (deposits are its debt, lending its
- * operations), so a missing value there is "n/a", not missing data. */
-export function notForBanks(industry: string | null | undefined, metric: string): boolean {
-  return !!industry && /\bbank|savings institution|bancorp/i.test(industry)
-    && /operating_margin|free_cash_flow|fcf|net_debt/.test(metric);
-}
-
-/** What a bank's inapplicable metric shows instead of a dash, and why (its hover). */
-export const BANK_NA = "n/a (bank)";
-export function bankTitle(label: string): string {
-  return `${label} doesn't describe a bank: deposits are its debt and lending is its operations, ` +
-    "so the SEC data has no comparable figure.";
-}
+export { companyName, displayNames, segmentLabel, UNNAMED } from "./displayNames";

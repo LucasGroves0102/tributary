@@ -2,7 +2,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import type { ScreenFilters } from "../companies/screen";
+import { checkName, parseScreen, type ScreenFilters } from "../companies/screen";
 import { download } from "../download";
 import { entry, NVDA, TESLA, TSLA } from "../fixtures";
 import { ScopeContext, type Scope } from "../scope";
@@ -30,11 +30,12 @@ beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   vi.stubGlobal(
     "fetch",
-    vi.fn(async (url: string) =>
-      new URL(url, "http://x").searchParams.get("format") === "csv"
-        ? new Response("company_id,name\n", { headers: { "Content-Type": "text/csv" } })
-        : Response.json(SCREEN),
-    ),
+    vi.fn(async (url: string) => {
+      const p = new URL(url, "http://x").searchParams;
+      if (p.get("format") === "csv") return new Response("company_id,name\n", { headers: { "Content-Type": "text/csv" } });
+      // the Query API echoes the data check it screened for
+      return Response.json({ ...SCREEN, ...(p.get("issue") ? { issue: p.get("issue") } : {}) });
+    }),
   );
   onWatch.mockClear();
   onChart.mockClear();
@@ -107,6 +108,34 @@ it("sorts by a column, flipping direction on a second click", async () => {
   expect(window.location.hash).toBe("#/companies?sort=operating_margin_ttm");
 });
 
+it("the filters start folded on a phone, say how many are set, and stay mounted", async () => {
+  const width = window.innerWidth;
+  Object.defineProperty(window, "innerWidth", { value: 390, configurable: true });
+  await render({ industry: "semi", band: "over100b" as ScreenFilters["band"] });
+  Object.defineProperty(window, "innerWidth", { value: width, configurable: true });
+  const band = $(".filter-band") as HTMLDetailsElement;
+  expect(band.open).toBe(false);
+  expect(band.querySelector("summary")?.textContent).toContain("2 active");
+  // folded, not gone: what's typed survives opening and closing
+  expect($("#f-ind")).not.toBeNull();
+});
+
+it("the filters start open where there's room", async () => {
+  await render();
+  expect(($(".filter-band") as HTMLDetailsElement).open).toBe(true);
+});
+
+it("an empty result keeps the table's headers", async () => {
+  await render({ q: "no such company" });
+  vi.stubGlobal("fetch", vi.fn(async () => Response.json({ as_of: "", total: 0, limit: 50, offset: 0, sort: "-revenue_ttm", columns: [], rows: [] })));
+  act(() => root.unmount());
+  await render({ q: "no such company" });
+  for (let i = 0; i < 3; i++) await act(async () => {});
+  expect(container.querySelectorAll("table.screen thead th").length).toBeGreaterThan(3);
+  expect(container.querySelectorAll("table.screen tbody tr").length).toBe(0);
+  expect($(".empty")?.textContent).toContain("No companies match");
+});
+
 it("applies a filter from the rail to the URL", async () => {
   await render({ industry: "semi" });
   const select = $("#f-fye") as HTMLSelectElement;
@@ -117,6 +146,49 @@ it("applies a filter from the rail to the URL", async () => {
   expect(window.location.hash).toBe("#/companies?industry=semi&fye=1");
 });
 
+it("applies typed filters by themselves a moment after typing stops, keeping the cursor", async () => {
+  vi.useFakeTimers();
+  await render({ industry: "semi" });
+  const q = $("#f-q") as HTMLInputElement;
+  q.focus();
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(q, "TSLA");
+    q.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  expect(window.location.hash).toBe("");
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(450);
+  });
+  vi.useRealTimers();
+  expect(window.location.hash).toBe("#/companies?q=TSLA&industry=semi");
+  // the same field, still focused: the rail isn't remounted while typing
+  expect($("#f-q")).toBe(q);
+  expect(document.activeElement).toBe(q);
+});
+
+it("a data check from the status page is a filter you can see and remove", async () => {
+  await render({ issue: "impossible_value" });
+  expect(calls().find((u) => u.pathname.endsWith("/v1/screener"))?.searchParams.get("issue")).toBe("impossible_value");
+  const chip = [...container.querySelectorAll("button.chip")].find((b) => b.textContent?.includes("Impossible values"))!;
+  await act(async () => (chip as HTMLElement).click());
+  expect(window.location.hash.includes("issue")).toBe(false);
+});
+
+it("a data check an older API ignores lists nobody, and says to try again", async () => {
+  // the minute of a deploy: an API without the filter answers with every company
+  vi.mocked(fetch).mockImplementation(async () => Response.json(SCREEN));
+  await render({ issue: "impossible_value" });
+  expect(container.querySelectorAll("tbody tr").length).toBe(0);
+  expect(container.textContent).toContain("Try again");
+});
+
+it("an address's issue=constructor is no data check", () => {
+  expect(parseScreen("issue=constructor")).toEqual({});
+  expect(parseScreen("issue=toString")).toEqual({});
+  expect(checkName("constructor")).toBeUndefined();
+  expect(checkName("impossible_value")).toContain("Impossible values");
+});
+
 it("watches, unwatches and charts from a row", async () => {
   await render();
   await act(async () => $(`button[aria-label="Add Nvidia to watchlist"]`)!.click());
@@ -124,7 +196,7 @@ it("watches, unwatches and charts from a row", async () => {
   await act(async () => $(`button[aria-label="Remove Tesla from watchlist"]`)!.click());
   expect(onWatch).toHaveBeenCalledWith(TSLA, false);
   await act(async () => $(`button[aria-label="Chart Nvidia"]`)!.click());
-  expect(onChart).toHaveBeenCalledWith(NVDA, "Nvidia");
+  expect(onChart).toHaveBeenCalledWith(NVDA);
 });
 
 it("exports the whole screen as the API's CSV", async () => {
@@ -174,7 +246,9 @@ it("shows a skeleton while the screen runs and a retry when it fails", async () 
   await act(async () => {});
   const panel = container.querySelector(".errpanel")!;
   expect(panel.textContent).toContain("Couldn't load this screen");
-  expect(panel.textContent).toContain("database is restarting");
+  // a 5xx's detail is for developers: the user gets what happened and what might help
+  expect(panel.textContent).not.toContain("database is restarting");
+  expect(panel.textContent).toContain("The server didn't answer in time");
   fail = false;
   await act(async () => panel.querySelector("button")!.click());
   await act(async () => {});
@@ -201,5 +275,5 @@ it("a named user keeps the full index and the 'only mine' box", async () => {
   await render();
   expect(calls()[0]!.searchParams.get("access")).toBeNull();
   expect(container.textContent).toContain("Only companies I can read");
-  expect($(".page > .row .muted")?.textContent).toBe("2 companies with financials");
+  expect($(".page > .row .muted")?.textContent).toBe("2 companies with figures in these columns");
 });

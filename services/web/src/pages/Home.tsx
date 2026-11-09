@@ -1,18 +1,25 @@
-import { Fragment, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
 
+import { FigureText } from "../components/FigureText";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { navRow, onTableKey } from "../components/tableNav";
-import { ago, change, day } from "../format";
-import { status, type ExpectedItem, type FilingItem, type WatchRow } from "../home/data";
+import { ago, change, day, periodPhrase, UNNAMED } from "../format";
+import { sinceLabel, status, type ExpectedItem, type FilingItem, type WatchRow } from "../home/data";
+import { FRESHNESS_EXPLAINED } from "../home/useFeedStatus";
 import { EXPECTED_DAYS, RECENT_DAYS, type Workspace } from "../home/useWorkspace";
+import { edgarOpen } from "../components/Sidebar";
 import { go, href } from "../route";
 import { defaultHome, type HomeCard, type HomeCardId } from "../views/model";
+import { TableScroll } from "../components/TableScroll";
 
 const FEED_ROWS = 10;
 
 interface Props {
   workspace: Workspace;
+  /** the newest filing's text parsed, among those the user can read */
   lastIngested: string | null;
+  /** the newest filing in the index, whoever's (useFeedStatus) */
+  listed?: string | null;
   onAdd: () => void;
   onExport: () => void;
   /** "Continue where you left off" (workspaces/Recent) */
@@ -26,22 +33,28 @@ interface Props {
   editor?: ReactNode;
   /** the watchlist's "Columns" (views/Editors ColumnPicker) */
   columnPicker?: ReactNode;
+  /** how many companies the user can read (access.ts readableTotal): the feed covers them all */
+  readableCompanies?: number;
+  /** "New chart": an empty chart, the current draft kept for one Restore */
+  onNewChart?: () => void;
 }
 
 /** Cards shown side by side when next to each other. */
 const HALF = new Set<HomeCardId>(["filings", "expected"]);
 
-export function Home({ workspace, lastIngested, onAdd, onExport, recent, notes, layout, onCustomize, editor, columnPicker }: Props) {
+export function Home({ workspace, lastIngested, listed = null, onAdd, onExport, recent, notes, layout, onCustomize, editor, columnPicker, readableCompanies = 0, onNewChart }: Props) {
   const { watchlist, rows, filings, expected, since, firstVisit } = workspace;
-  const newLabel = firstVisit
-    ? "new in the last 7 days in bold"
-    : `new since your last visit (${day(since)}) in bold`;
+  // bold tells the new rows from the rest, so it says nothing when they're all new or none are
+  const shownFilings = filings?.slice(0, FEED_ROWS) ?? [];
+  const someNew = shownFilings.some((f) => f.isNew);
+  const allNew = shownFilings.length > 0 && shownFilings.every((f) => f.isNew);
+  const newLabel = allNew ? `all new ${sinceLabel(since, firstVisit)}` : someNew ? `new ${sinceLabel(since, firstVisit)} in bold` : `none new ${sinceLabel(since, firstVisit)}`;
 
   const card = (id: HomeCardId): ReactNode => {
     switch (id) {
       case "status":
         return watchlist.state === "ok" ? (
-          <StatusStrip rows={rows} filings={filings ?? []} since={since} firstVisit={firstVisit} lastIngested={lastIngested} />
+          <StatusStrip rows={rows} fresh={workspace.filings === null ? null : workspace.fresh} scope={workspace.freshScope} since={sinceLabel(since, firstVisit)} lastIngested={lastIngested} listed={listed} />
         ) : null;
       case "recent":
         return recent ? (
@@ -78,15 +91,15 @@ export function Home({ workspace, lastIngested, onAdd, onExport, recent, notes, 
           <section className="card">
             <div className="card-h">
               <h2>
-                New filings for {workspace.readableCount
-                  ? `the ${workspace.readableCount} companies you can read`
+                New filings for {readableCompanies
+                  ? `the ${readableCompanies.toLocaleString("en-US")} ${readableCompanies === 1 ? "company" : "companies"} you can read`
                   : "your watchlist"}
               </h2>
               <span className="sub">
                 last {RECENT_DAYS} days · {newLabel}
               </span>
             </div>
-            <FilingFeed filings={filings} />
+            <FilingFeed filings={filings} bold={someNew && !allNew} />
           </section>
         );
       case "expected":
@@ -98,8 +111,8 @@ export function Home({ workspace, lastIngested, onAdd, onExport, recent, notes, 
             </div>
             <ExpectedTable expected={expected} />
             <div className="foot">
-              Estimates, not filings: each company's median filing lag over its recent reports,
-              capped at the SEC deadline. Watchlist companies in bold.
+              Estimates, not filings (a dashed tag means not filed yet): each company's median filing lag over its
+              recent reports, capped at the SEC deadline. Watchlist companies in bold.
             </div>
           </section>
         );
@@ -130,7 +143,7 @@ export function Home({ workspace, lastIngested, onAdd, onExport, recent, notes, 
 
   return (
     <div className="page">
-      <div className="row">
+      <div className="row page-bar">
         <h1 className="grow">Home</h1>
         {onCustomize && (
           <button className="btn ghost" onClick={onCustomize} aria-label="Customize Home">
@@ -143,7 +156,7 @@ export function Home({ workspace, lastIngested, onAdd, onExport, recent, notes, 
         <button className="btn" onClick={() => go({ view: "compare" })}>
           New comps
         </button>
-        <button className="btn primary" onClick={() => go({ view: "chart" })}>
+        <button className="btn primary" onClick={() => (onNewChart ? onNewChart() : go({ view: "chart" }))}>
           New chart
         </button>
       </div>
@@ -156,18 +169,22 @@ export function Home({ workspace, lastIngested, onAdd, onExport, recent, notes, 
 
 function StatusStrip({
   rows,
-  filings,
+  fresh,
+  scope,
   since,
-  firstVisit,
   lastIngested,
+  listed,
 }: {
   rows: WatchRow[];
-  filings: FilingItem[];
+  /** the new filings to count (Workspace.fresh); null while they load, which isn't "0 filings" (L6) */
+  fresh: FilingItem[] | null;
+  scope: string;
+  /** sinceLabel */
   since: string;
-  firstVisit: boolean;
   lastIngested: string | null;
+  listed: string | null;
 }) {
-  const s = status(rows, filings);
+  const s = status(rows, fresh ?? []);
   return (
     <div className="status-strip" role="list" aria-label="Status">
       <div role="listitem">
@@ -180,13 +197,22 @@ function StatusStrip({
         </div>
       </div>
       <div role="listitem">
-        <div className="k">New since {firstVisit ? "a week ago" : day(since)}</div>
-        <div className="v">
-          {s.newFilings} {s.newFilings === 1 ? "filing" : "filings"}
-        </div>
-        <div className="p">
-          {s.newPeriodic} 10-K/10-Q · {s.new8k} 8-K
-        </div>
+        <div className="k">New {since}</div>
+        {fresh === null ? (
+          <>
+            <div className="v faint" aria-busy="true">…</div>
+            <div className="p">on {scope} · counting</div>
+          </>
+        ) : (
+          <>
+            <div className="v">
+              {s.newFilings} {s.newFilings === 1 ? "filing" : "filings"}
+            </div>
+            <div className="p">
+              on {scope} · {s.newPeriodic} 10-K/10-Q · {s.new8k} 8-K
+            </div>
+          </>
+        )}
       </div>
       <div role="listitem" title={s.next?.expected.basis}>
         <div className="k">Next expected</div>
@@ -225,31 +251,47 @@ function StatusStrip({
           </>
         )}
       </div>
-      <div role="listitem">
-        <div className="k">Data freshness</div>
-        {lastIngested ? (
-          <>
-            <div className="v">
-              <span className="live" />
-              Live
-            </div>
-            <div className="p">last filing ingested {ago(lastIngested)}</div>
-          </>
+      <div role="listitem" title={FRESHNESS_EXPLAINED}>
+        <div className="k">Newest filing listed</div>
+        {listed ? (
+          <div className="v">
+            <span className={edgarOpen() ? "live" : "live quiet"} />
+            {ago(listed)}
+          </div>
         ) : (
-          <>
-            <div className="v faint">—</div>
-            <div className="p">shown for companies with filings access</div>
-          </>
+          <div className="v faint">—</div>
         )}
+        <div className="p">{lastIngested ? `newest filing text parsed ${ago(lastIngested)}` : "filing text appears for companies with filings access"}</div>
       </div>
     </div>
   );
 }
 
+/** How long "Removed X. Undo" stays. */
+const UNDO_MS = 15_000;
+
 function WatchTable({ workspace, onAdd }: { workspace: Workspace; onAdd: () => void }) {
   const { watchlist, rows } = workspace;
   const [removing, setRemoving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [removed, setRemoved] = useState<{ id: string; name: string } | null>(null);
+  useEffect(() => {
+    if (!removed) return;
+    const t = setTimeout(() => setRemoved(null), UNDO_MS);
+    return () => clearTimeout(t);
+  }, [removed]);
+  const undo = () => {
+    if (!removed) return;
+    const { id } = removed;
+    setRemoved(null);
+    workspace.watch(id).catch(() => setError("Couldn't put it back. Add it again with + Add."));
+  };
+  const notice = removed && (
+    <p className="undo-note" role="status">
+      Removed {removed.name} from your watchlist.{" "}
+      <button className="btn sm" onClick={undo}>Undo</button>
+    </p>
+  );
 
   if (watchlist.state === "loading") return <Skeleton lines={4} label="Loading your watchlist" />;
   if (watchlist.state === "unavailable") {
@@ -261,10 +303,12 @@ function WatchTable({ workspace, onAdd }: { workspace: Workspace; onAdd: () => v
     );
   }
   if (watchlist.state === "error") {
-    return <ErrorPanel what="your watchlist" detail={`The Query API said: ${watchlist.message}.`} onRetry={workspace.reload} />;
+    return <ErrorPanel what="your watchlist" detail={watchlist.message} onRetry={workspace.reload} />;
   }
   if (rows.length === 0) {
     return (
+      <>
+      {notice}
       <p className="empty">
         Follow companies here to see their latest filing, key numbers and next expected report.{" "}
         <button className="btn sm" onClick={onAdd}>
@@ -272,14 +316,16 @@ function WatchTable({ workspace, onAdd }: { workspace: Workspace; onAdd: () => v
         </button>{" "}
         or press <span className="kbd">Ctrl K</span> and type <code>watch:</code>.
       </p>
+      </>
     );
   }
 
-  const remove = (id: string) => {
+  const remove = (id: string, name: string) => {
     setRemoving(id);
     setError(null);
     workspace
       .unwatch(id)
+      .then(() => setRemoved({ id, name }))
       .catch(() => setError("Couldn't remove it. Try again."))
       .finally(() => setRemoving(null));
   };
@@ -287,7 +333,8 @@ function WatchTable({ workspace, onAdd }: { workspace: Workspace; onAdd: () => v
   return (
     <>
       {error && <p className="empty error">{error}</p>}
-      <div className="tw">
+      {notice}
+      <TableScroll label="Watchlist">
         <table className="t watchlist">
           <thead>
             <tr>
@@ -295,7 +342,7 @@ function WatchTable({ workspace, onAdd }: { workspace: Workspace; onAdd: () => v
               <th>Last filing</th>
               <th>Period</th>
               {workspace.columns.map((c) => (
-                <th key={c.key} className="n">
+                <th key={c.key} className={c.label.length > 14 ? "n long" : "n"}>
                   {c.label} <span className="unit">{c.period}</span>
                 </th>
               ))}
@@ -323,11 +370,11 @@ function WatchTable({ workspace, onAdd }: { workspace: Workspace; onAdd: () => v
                     <span className="faint">none on file</span>
                   )}
                 </td>
-                <td className="muted">
+                <td className="muted" title={r.last?.periodEnd ? `Period to ${day(r.last.periodEnd, true)}` : undefined}>
                   {r.last?.periodEnd ? (
                     <>
                       {r.last.fiscalPeriod ?? "Quarter"}{" "}
-                      <span className="faint">(to {day(r.last.periodEnd, true)})</span>
+                      <span className="faint wide-only">(to {day(r.last.periodEnd, true)})</span>
                     </>
                   ) : (
                     "—"
@@ -345,7 +392,7 @@ function WatchTable({ workspace, onAdd }: { workspace: Workspace; onAdd: () => v
                         : "";
                   return (
                     <td key={c.key} className={`n ${tone}`} title={cell.title}>
-                      {cell.text}
+                      <FigureText cell={cell} />
                     </td>
                   );
                 })}
@@ -364,7 +411,7 @@ function WatchTable({ workspace, onAdd }: { workspace: Workspace; onAdd: () => v
                   <button
                     className="btn sm ghost"
                     disabled={removing === r.companyId}
-                    onClick={() => remove(r.companyId)}
+                    onClick={() => remove(r.companyId, r.name)}
                     aria-label={`Remove ${r.name} from watchlist`}
                   >
                     Remove
@@ -374,7 +421,7 @@ function WatchTable({ workspace, onAdd }: { workspace: Workspace; onAdd: () => v
             ))}
           </tbody>
         </table>
-      </div>
+      </TableScroll>
     </>
   );
 }
@@ -384,7 +431,7 @@ function FormTag({ form }: { form: string }) {
   return <span className={`tag ${kind}`}>{form}</span>;
 }
 
-function FilingFeed({ filings }: { filings: FilingItem[] | null }) {
+function FilingFeed({ filings, bold }: { filings: FilingItem[] | null; bold: boolean }) {
   if (filings === null) return <Skeleton lines={5} label="Loading recent filings" />;
   if (filings.length === 0) {
     return (
@@ -401,8 +448,8 @@ function FilingFeed({ filings }: { filings: FilingItem[] | null }) {
           <span className="muted num">{day(f.filed)}</span>
           <FormTag form={f.form} />
           <span className="feed-name">
-            {f.isNew ? <b>{f.name}</b> : f.name}
-            {f.periodEnd && <span className="muted"> · period to {day(f.periodEnd, true)}</span>}
+            {f.isNew && bold ? <b>{f.name}</b> : f.name}
+            {f.periodEnd && <span className="muted"> · {periodPhrase(f.form, f.periodEnd)}</span>}
           </span>
           <span className="row">
             {f.readable ? (
@@ -439,7 +486,7 @@ function ExpectedTable({ expected }: { expected: ExpectedItem[] | null }) {
     );
   }
   return (
-    <div className="tw">
+    <TableScroll label="Expected filings">
       <table className="t">
         <thead>
           <tr>
@@ -461,7 +508,7 @@ function ExpectedTable({ expected }: { expected: ExpectedItem[] | null }) {
                 ~{e.expected_date ? day(e.expected_date) : "—"}
                 {e.status === "overdue" && <span className="tag warn">overdue</span>}
               </td>
-              <td>{e.watched ? <b>{e.name ?? e.company_id}</b> : (e.name ?? e.company_id)}</td>
+              <td>{e.watched ? <b>{e.name ?? UNNAMED}</b> : (e.name ?? UNNAMED)}</td>
               <td>
                 <span className="tag e">{e.form}</span>
               </td>
@@ -470,6 +517,6 @@ function ExpectedTable({ expected }: { expected: ExpectedItem[] | null }) {
           ))}
         </tbody>
       </table>
-    </div>
+    </TableScroll>
   );
 }

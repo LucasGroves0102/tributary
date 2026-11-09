@@ -64,6 +64,78 @@ starting DEF or PRE; silver keeps them), and adds Costco's 10-Q pre-tax tag
 `025_filing_sections_company_pushdown.sql` puts `company_id` first in `gold.filing_sections`'
 DISTINCT ON key (same rows), so a company filter reaches the base tables' indexes instead of
 de-duplicating every section first.
+`033_filing_sections_accession_pushdown.sql` (listed here with its sibling) makes the view output
+`s.accession_no`, the key column: a filter on accession now reaches the base tables too. Before
+it, `gold.filing_flags` and so `/v1/filings/{acc}/recap` sorted all 1.8M sections and timed out,
+and `gold.refresh_section_search` sorted them once per batch (locally 3.3 s → 12 ms). Replacing the
+view takes ACCESS EXCLUSIVE on it, so its `lock_timeout` is 3 s: if the hourly section-index job holds
+the view, the deploy hook fails fast (re-run it) instead of queueing every filing page behind it.
+`034_company_search.sql` adds `silver.search_companies(q)`, what a search box does with what
+people type: exact ticker first (`BRK.B` = `BRK-B`), then CIK, exact name, retired ticker or former
+name, then prefix, a later word, and contained (3+ characters), with spaces ignored for `JP Morgan`
+→ JPMorgan Chase. `silver.resolve_company` keeps its exact-match meaning for formulas and the
+sandbox. Reads all 33,000 aliases per call (25-38 ms on hermes); no index was needed.
+`044_company_search_order.sql` breaks ties within a rank by whether the company has figures here
+(`gold.financials_coverage`, public ids) and the normalized name's length, so "bank of" lists Bank
+of America before Bank of Chile (a 20-F filer) and isn't pushed down by an SEC suffix (`/DE/`).
+`035_value_readings.sql` is the one definition of how a figure may be read: `gold.not_meaningful`
+(thresholds from the data, in its header), `gold.not_applicable_metrics` (banks),
+`gold.period_status` ("stale", once: over 300 days behind the company's latest period is old, over
+45 is behind), `gold.latest_period` and `gold.latest_reading` (032's `gold.latest_value` plus the
+reading, inlinable, under RLS). New functions only; no table changes and nothing to rebuild.
+`036_annual_per_share.sql` adds `gold.annual_per_share`: the 10-K's own EPS and weighted shares
+per fiscal year, SECURITY DEFINER because `query_api` has no grant on the facts table's values, with
+`authz.readable_companies` as its only rule.
+`037_check_segments_subtotal.sql` stops `ops.check_segments` adding a reconciliation member that just
+restates the segments' sum (NVIDIA's "109.0% more" is 4.5%). Stored findings keep their old figure
+until the check runs again (`make segments-rebuild`, or `SELECT ops.check_segments(array_agg(DISTINCT
+company_id)) FROM gold.segment_financials`).
+`038_metric_tags_moved.sql` to `041_quality_findings.sql` change which facts gold believes and what it
+computes from them; they need one `facts-fetcher --rebuild` (the `financials-rebuild` job) to reach
+existing rows, and `backout/` undoes them ([backout/README.md](backout/README.md)). Each file's header
+has the measurements behind its thresholds.
+- 038: tags a line moved to (Nike's investments to
+  `DebtSecuritiesAvailableForSaleExcludingAccruedInterestCurrent`, DTE's and Xcel's revenue to
+  `RegulatedAndUnregulatedOperatingRevenue`, Tesla's, Adobe's, Lennar's and Oracle's debt to
+  `LongTermDebt` / `LongTermNotesPayable` / `LongTermNotesAndLoans` / `DebtCurrent` /
+  `NotesPayableCurrent`, small filers' `Cash`, VF's `PaymentsForCapitalImprovements`) and
+  `silver.metric_sums`: a line filed as two tags, both from one filing for one date (a bank's
+  `InterestIncomeExpenseNet + NoninterestIncome`; NVIDIA's `DebtSecuritiesCurrent + EquitySecuritiesFvNi`).
+  A sum's parts are `silver.metric_tags` rows with `gold_line = false`: stored, never a line alone.
+- 039: `gold.usable_facts(ids)` (silver joined to the tags by tag, so a tag two metrics map serves
+  both: `EarningsPerShareBasicAndDiluted` gave no diluted EPS at 173 of the sample's companies; the sums;
+  a loss quarter's basic EPS as diluted; without proxy statements, periods ending over 7 days after
+  their filing, debt over five times both liabilities and assets, or a fallback debt tag at a bank;
+  a fallback debt total less its current portion, where it is one: equal to the current portion, or
+  above it and above all noncurrent liabilities; below the current portion it is the noncurrent line)
+  and `gold.best_facts(ids)` (each tag's latest filing,
+  then for revenue: a zero loses to another tag's later or same-filing value of $1M or more; Revenues
+  under 20% of contract revenue is a part; then tag priority). `gold.refresh_quarterly_financials`
+  reads `best_facts` (031's series rule unchanged), drops a reported quarter rounded for a sentence
+  for the exact year-to-date difference (NVIDIA's dividends 6,000 → 6,047), and adds gross profit as
+  revenue less cost where none is printed, behind the guard in the header (SIC, cost ≥ 15% of
+  revenue, margin ≥ operating margin, no large unexplained cost, within 8 points of the company's
+  median, quarters since 2019). Validated on hermes where gross profit is reported: 98.5% within a
+  point; fills 7,675 quarters at 559 companies.
+- 040: `gold.refresh_derived_financials` adds a TTM from the stated year where four quarters don't
+  exist (not when a must-be-positive year is negative or below its own quarters; ends within 7 days
+  are one year, 031's rule, so ATI's FY2021 tagged ending Dec 31 and Jan 2 is in gold once), and net debt's
+  rules: investments inside cash aren't subtracted twice; a recent, material investments series with
+  no value at the date, where the balance sheet has room for it, makes net debt absent; so does debt
+  that can't carry its interest (Ford). Net debt counts short-term investments only.
+- 041: `ops.check_financials` reads `best_facts` for the annual comparison, flags negative debt as an
+  `impossible_value`, and adds `mistagged_fact`
+  (error: a period after its filing, debt over five times liabilities and assets),
+  `net_debt_gap` (warning) and a repeated `series_gap` (the same quarter missing three or more
+  years); `ops.quality_summary` lists them.
+- `042_fiscal_year_end_month.sql`: `silver.fiscal_year_end_month(mmdd)`, the month a 52/53-week year
+  belongs to (a day of 1-7 is the month before). The screener's filter and sort; labels unchanged.
+- 043: interest expense is a cost, so `gold.usable_facts` reads it as `abs(value)` under every tag
+  (filings flip its sign between filings and in comparatives: Disney's FY2025 10-K -1,812M against
+  +1,396M nine months in its 10-Qs made Q4 -3,208M; it's 416M), and a derived interest expense
+  quarter that is still negative is left out, like 029's other costs. On hermes before: 2,951
+  negative quarters at 986 companies, 1,096 `sign_flip` findings. Silver keeps the filing's figure.
+  Needs `financials-rebuild`; backout `backout/interest_expense_043.sql`.
 `026_feed_status.sql` adds `ops.feed_status()`: when the newest filing was accepted by EDGAR and
 when it reached bronze, two timestamps and nothing else. It is SECURITY DEFINER (query_api still
 can't read `bronze.filings`) and backs the Query API's public `/v1/status`, which the

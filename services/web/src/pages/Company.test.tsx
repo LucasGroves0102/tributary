@@ -3,11 +3,14 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { excerpt } from "../company/Overview";
+import type { StatementView } from "../company/statementView";
 import { download } from "../download";
 import { ACC, entry, fin, NVDA, nvdaRow, TESLA, TSLA } from "../fixtures";
 import type { CompanyTab } from "../route";
 import { ScopeContext, type Scope } from "../scope";
+import { clearNewest } from "../thesis/useRevisit";
 import type { ScreenerRow } from "../types";
+import type { Saved } from "../workspaces/useSaved";
 import { Company } from "./Company";
 
 vi.mock("../download", () => ({ download: vi.fn() }));
@@ -49,6 +52,7 @@ const INDEX = [
   indexRow(K_ACC, "10-K", "2026-02-26", 1, { period_of_report: "2026-01-25" }),
 ];
 let indexReadable = true;
+let newerIndex: ReturnType<typeof indexRow>[] = [];
 const CHANGES = {
   company_id: NVDA, accession_no: ACC, basis: "prior", as_of: "",
   sections: [{
@@ -107,7 +111,7 @@ function respond(url: string): Response {
     // public metadata: every user gets it; sections only where filings are readable
     const forms = u.searchParams.getAll("form");
     const offset = Number(u.searchParams.get("offset") ?? 0);
-    const rows = INDEX.filter((f) => !forms.length || forms.includes(f.form))
+    const rows = [...newerIndex, ...INDEX].filter((f) => !forms.length || forms.includes(f.form))
       .map((f) => (indexReadable ? f : { ...f, sections: null, sections_available: false }));
     return Response.json({ as_of: "", forms, from: null, to: null, limit: 25, offset, has_more: offset === 0 && !forms.length, filings: rows });
   }
@@ -120,7 +124,7 @@ function respond(url: string): Response {
       fin("revenue", "2026-07-26", "46743000000", "FY2027 Q2"),
       fin("operating_margin", "2026-07-26", "0.6", "FY2027 Q2"),
       ...(view === "ttm" ? [fin("revenue", "2026-01-25", "130497000000", "FY2026 Q4")] : []),
-    ].filter((r) => metrics.includes(r.metric)) });
+    ].filter((r) => metrics.includes(r.metric) && !(noMargin && r.metric === "operating_margin")) });
   }
   if (p.endsWith("/segments")) return Response.json({ as_of: "", rows: [] });
   if (p.endsWith("/data-notes")) return Response.json(NOTES);
@@ -133,6 +137,10 @@ function respond(url: string): Response {
         { ...nvdaRow({ ...entry({ company_id: AAPL, name: "Apple", tickers: ["AAPL"] }), filer_categories: null, state_of_incorporation: null }),
           match: { sic_level: 3, same_filer_category: true, revenue_band: ">=$100B", same_revenue_band: true } },
         { ...tesla, match: { sic_level: 2, same_filer_category: false, revenue_band: null, same_revenue_band: false } },
+        ...Array.from({ length: morePeers }, (_, i) => ({
+          ...nvdaRow({ ...entry({ company_id: String(1000000000 + i), name: `Peer ${i}`, tickers: [`P${i}`] }), filer_categories: null, state_of_incorporation: null }),
+          match: { sic_level: 2, same_filer_category: false, revenue_band: null, same_revenue_band: false },
+        })),
       ] });
   }
   return Response.json({ detail: "not found" }, { status: 404 });
@@ -144,12 +152,18 @@ const onWatch = vi.fn(async () => {});
 const onChart = vi.fn();
 const onChartMany = vi.fn();
 const onAsk = vi.fn();
+let noMargin = false;
+let morePeers = 0;
 
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   vi.stubGlobal("fetch", vi.fn(async (url: string) => respond(url)));
   rowFor = () => nvdaRow({ access: ["filings", "financials"] });
   indexReadable = true;
+  newerIndex = [];
+  clearNewest();
+  noMargin = false;
+  morePeers = 0;
   [onWatch, onChart, onChartMany, onAsk].forEach((f) => f.mockClear());
 });
 
@@ -160,14 +174,14 @@ afterEach(() => {
   window.location.hash = "";
 });
 
-async function render(tab: CompanyTab = "overview", companyId = NVDA, scope: Scope | null = null) {
+async function render(tab: CompanyTab = "overview", companyId = NVDA, scope: Scope | null = null, statements?: StatementView) {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
   await act(async () =>
     root.render(
       <ScopeContext.Provider value={scope}>
-        <Company token="t" companyId={companyId} tab={tab} watched={false} onWatch={onWatch}
+        <Company token="t" companyId={companyId} tab={tab} statements={statements} watched={false} onWatch={onWatch}
           onChart={onChart} onChartMany={onChartMany} onAsk={onAsk} />
       </ScopeContext.Provider>,
     ),
@@ -179,6 +193,32 @@ const $ = (sel: string) => container.querySelector<HTMLElement>(sel);
 const paths = () => vi.mocked(fetch).mock.calls.map(([u]) => new URL(String(u), "http://x"));
 const button = (text: string) => [...container.querySelectorAll("button")].find((b) => b.textContent === text)!;
 const click = (el: Element | null | undefined) => act(async () => (el as HTMLElement).click());
+
+it("L5: the header offers the analysis beside New thesis and New model, and the forms say which is which", async () => {
+  const PID = "22222222-2222-4222-8222-222222222222";
+  const savedWith = (workspaces: object[]) => ({ list: { state: "ok", workspaces }, version: 0 }) as unknown as Saved;
+  const show = async (saved: Saved) => {
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    await act(async () => root.render(
+      <Company token="t" companyId={NVDA} tab="overview" watched={false} onWatch={onWatch} onChart={onChart}
+        onChartMany={onChartMany} onAsk={onAsk} saved={saved} />,
+    ));
+    for (let i = 0; i < 3; i++) await act(async () => {});
+  };
+  await show(savedWith([]));
+  const start = [...container.querySelectorAll("a.btn")].find((a) => a.textContent === "Start an analysis")!;
+  expect(start.getAttribute("href")).toBe(`#/analysis?start=${NVDA}`);
+  expect(start.getAttribute("title")).toContain("New thesis and New model make a single item instead");
+  await click(button("New thesis"));
+  expect($("form.save-form")?.textContent).toContain("A thesis on its own, in a workspace");
+  expect($(".new-work-why a")?.getAttribute("href")).toBe(`#/analysis?start=${NVDA}`);
+  act(() => root.unmount());
+  await show(savedWith([{ workspace_id: PID, name: "Nvidia", created_at: "", updated_at: "", items: [],
+    project: { companyId: NVDA, peers: [], notes: "", done: [] } }]));
+  expect([...container.querySelectorAll("a.btn")].find((a) => a.textContent === "Open analysis")?.getAttribute("href")).toBe(`#/analysis/${PID}`);
+});
 
 it("heads the page with public metadata, the next expected filing and the tabs", async () => {
   await render();
@@ -201,7 +241,45 @@ it("heads the page with public metadata, the next expected filing and the tabs",
   await click(button("Compare"));
   expect(window.location.hash).toBe(`#/compare?target=${NVDA}`);
   await click(button("Chart"));
-  expect(onChart).toHaveBeenCalledWith("Nvidia");
+  expect(onChart).toHaveBeenCalledWith();
+});
+
+it("overview: a slow recap says so plainly and can be retried", async () => {
+  let answers = 0;
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    const u = new URL(url, "http://x");
+    if (u.pathname.endsWith("/recap")) {
+      answers += 1;
+      return answers === 1
+        ? Response.json({ detail: "query took longer than 5s; narrow it (fewer companies, columns or periods)" }, { status: 503 })
+        : Response.json(RECAP);
+    }
+    return respond(url);
+  }));
+  await render();
+  for (let i = 0; i < 3; i++) await act(async () => {});
+  const panel = container.querySelector(".errpanel")!;
+  expect(panel.textContent).toContain("The server didn't answer in time.");
+  expect(container.textContent).not.toMatch(/narrow|Query API/);
+  await act(async () => panel.querySelector("button")!.click());
+  for (let i = 0; i < 3; i++) await act(async () => {});
+  expect(container.querySelector(".errpanel")).toBeNull();
+  expect($(".flags")?.textContent).toContain("restructuring");
+});
+
+it("overview: without flags the recap still renders and says why", async () => {
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    const u = new URL(url, "http://x");
+    if (u.pathname.endsWith("/recap")) {
+      return Response.json({ ...RECAP, flags: null, flags_unavailable: "one-time-item flags couldn't be read just now" });
+    }
+    return respond(url);
+  }));
+  await render();
+  for (let i = 0; i < 3; i++) await act(async () => {});
+  const recap = [...container.querySelectorAll("table")].find((t) => t.textContent?.includes("QoQ"))!;
+  expect(recap.querySelector("tbody tr")?.textContent).toContain("$46.74B");
+  expect(container.textContent).toContain("One-time-item flags couldn't be read just now.");
 });
 
 it("overview: key stats with periods, the latest quarter recap with flags, and Item 1", async () => {
@@ -239,6 +317,52 @@ it("an ungranted company shows its metadata and says what its plan doesn't cover
   expect([...container.querySelectorAll("button")].some((b) => b.textContent === "Chart")).toBe(false);
 });
 
+it("statements: what's chosen comes from the address and goes back to it", async () => {
+  await render("statements", NVDA, null, { kind: "cf", period: "ttm", basis: "calendar", range: "5y" });
+  const q = paths().find((u) => u.pathname.endsWith("/financials"))!;
+  expect(q.searchParams.get("view")).toBe("ttm");
+  expect(q.searchParams.get("quarters")).toBe("20");
+  expect(q.searchParams.get("basis")).toBe("calendar");
+  expect(q.searchParams.getAll("metrics")).toContain("capex");
+  expect($('[aria-label="Range"] [aria-pressed="true"]')?.textContent).toBe("5y");
+  await click(button("Max"));
+  expect(window.location.hash).toBe(`#/company/${NVDA}/statements?kind=cf&period=ttm&basis=calendar&range=max`);
+  await click(button("Income statement"));
+  expect(window.location.hash).toBe(`#/company/${NVDA}/statements?period=ttm&basis=calendar&range=5y`);
+});
+
+it("statements: a balance sheet has no TTM, so it shows quarters and says why", async () => {
+  await render("statements", NVDA, null, { kind: "bs", period: "ttm" });
+  const q = paths().find((u) => u.pathname.endsWith("/financials"))!;
+  expect(q.searchParams.get("view")).toBe("quarter");
+  expect(q.searchParams.getAll("metrics")).toContain("total_assets");
+  expect($('[aria-label="Period"] [aria-pressed="true"]')?.textContent).toBe("Quarterly");
+  const ttm = button("TTM") as HTMLButtonElement;
+  expect(ttm.disabled).toBe(true);
+  expect(ttm.title).toContain("point in time");
+});
+
+it("statements say how far behind EDGAR they are, and promise nothing (H9)", async () => {
+  await render("statements");
+  expect(container.textContent).not.toContain("Not in these figures yet");
+  act(() => root.unmount());
+  clearNewest();
+  newerIndex = [indexRow("0001045810-26-000120", "10-Q", "2026-11-20", 0, { period_of_report: "2026-10-25" })];
+  await render("statements");
+  const notice = $(".stale-note")!;
+  expect(notice.textContent).toContain("Not in these figures yet: Nvidia's 10-Q for the quarter ending Oct 25, 2026, filed Nov 20, 2026");
+  expect(notice.textContent).toContain("These figures end with the period ending Jul 26, 2026");
+  expect(notice.textContent).not.toMatch(/usually|day or two|soon/);
+  expect(notice.querySelector("a")?.getAttribute("href")).toBe(`#/filing/${NVDA}/0001045810-26-000120/I-1`);
+});
+
+it("statements: range is for Quarterly and TTM; Annual has its ten years", async () => {
+  await render("statements", NVDA, null, { period: "a" });
+  expect($('[aria-label="Range"]')).toBeNull();
+  const q = paths().find((u) => u.pathname.endsWith("/financials"))!;
+  expect(q.searchParams.get("quarters")).toBe("40");
+});
+
 it("statements: quarterly, annual and TTM, each value cited, CSV export", async () => {
   await render("statements");
   const q = paths().find((u) => u.pathname.endsWith("/financials"))!;
@@ -246,9 +370,14 @@ it("statements: quarterly, annual and TTM, each value cited, CSV export", async 
   expect(q.searchParams.getAll("metrics")).toContain("cost_of_revenue");
   const cell = [...container.querySelectorAll("td.n")].find((td) => td.textContent === "$46.74B")!;
   expect(cell.getAttribute("title")).toContain(`Source: 10-Q filed Aug 26, 2026, ${ACC}`);
-  expect(cell.querySelector("a")?.getAttribute("href")).toBe("https://www.sec.gov/x/");
+  // #113: the value opens the 10-Q's financial statements in the reader; EDGAR is the second link
+  expect(cell.querySelector("a")?.getAttribute("href")).toBe(`#/filing/${NVDA}/${ACC}/I-1`);
+  expect(cell.querySelector("a.cell-edgar")?.getAttribute("href")).toBe("https://www.sec.gov/x/");
+  expect(cell.querySelector("a.cell-edgar")?.getAttribute("target")).toBe("_blank");
   await click(button("Annual"));
-  for (let i = 0; i < 2; i++) await act(async () => {});
+  expect(window.location.hash).toBe(`#/company/${NVDA}/statements?period=a`);
+  act(() => root.unmount());
+  await render("statements", NVDA, null, { period: "a" });
   const a = paths().filter((u) => u.pathname.endsWith("/financials")).at(-1)!;
   expect([a.searchParams.get("view"), a.searchParams.get("quarters")]).toEqual(["ttm", "40"]);
   expect([...container.querySelectorAll("thead th")].map((t) => t.firstChild?.textContent)).toEqual(["Income statement", "FY2026"]);
@@ -257,11 +386,13 @@ it("statements: quarterly, annual and TTM, each value cited, CSV export", async 
   // calendar basis: asked of the API, said in the header, named in the export
   expect(paths().filter((u) => u.pathname.endsWith("/financials")).every((u) => !u.searchParams.has("basis"))).toBe(true);
   await click(button("Calendar"));
-  for (let i = 0; i < 2; i++) await act(async () => {});
+  expect(window.location.hash).toBe(`#/company/${NVDA}/statements?period=a&basis=calendar`);
+  act(() => root.unmount());
+  await render("statements", NVDA, null, { period: "a", basis: "calendar" });
   expect(paths().filter((u) => u.pathname.endsWith("/financials")).at(-1)!.searchParams.get("basis")).toBe("calendar");
   expect(container.textContent).toContain("calendar quarters");
-  await click(button("Quarterly"));
-  for (let i = 0; i < 2; i++) await act(async () => {});
+  act(() => root.unmount());
+  await render("statements", NVDA, null, { basis: "calendar" });
   await click(button("Export CSV"));
   expect(vi.mocked(download).mock.calls.at(-1)![0]).toBe("nvda-is-q-calendar.csv");
 });
@@ -279,13 +410,20 @@ it("ratios read TTM values; segments say honestly when none are loaded", async (
 
 it("filings: form filters, 8-K items, the reader, and what changed", async () => {
   await render("filings");
-  const rows = () => [...container.querySelectorAll(".grid2 tbody tr")];
+  const rows = () => [...container.querySelectorAll("table.t tbody tr:not(.year-h)")];
+  // reports first: the insider forms and the rest are one click away
+  expect(paths().find((u) => u.pathname.endsWith("/filing-index"))!.searchParams.getAll("form")).toContain("10-K");
+  expect(rows()).toHaveLength(3);
+  await click(button("All"));
+  expect(paths().filter((u) => u.pathname.endsWith("/filing-index")).at(-1)!.searchParams.getAll("form")).toEqual([]);
   expect(rows()).toHaveLength(4);
+  // headed by fiscal year, the same years as the statements (FYE Jan: Aug 2026 is FY2027)
+  expect([...container.querySelectorAll(".year-h th")].map((t) => t.textContent)).toEqual(["FY2027", "FY2026"]);
   expect(rows()[0]!.textContent).toContain("2.02 Results of operations");
   expect(rows()[0]!.textContent).not.toContain("9.01");
   expect(rows()[0]!.querySelector("a")?.getAttribute("href")).toBe(`#/filing/${NVDA}/${EIGHT_K}`);
-  // a Form 4 Tributary hasn't parsed links to EDGAR instead
-  expect(rows()[2]!.textContent).toContain("not parsed");
+  // a Form 4 is never parsed: no note saying so on every row, and it links to EDGAR
+  expect(rows()[2]!.textContent).not.toContain("not parsed");
   expect(rows()[2]!.querySelector("a")?.getAttribute("href")).toMatch(/^https:\/\/www\.sec\.gov\//);
   // the form filter and paging run on the server
   await click(button("Older"));
@@ -312,7 +450,8 @@ it("filings: a free plan sees the whole index with EDGAR links, no reader", asyn
   rowFor = () => nvdaRow({ access: ["financials"] });
   indexReadable = false;
   await render("filings");
-  const rows = [...container.querySelectorAll(".grid2 tbody tr")];
+  await click(button("All"));
+  const rows = [...container.querySelectorAll("table.t tbody tr:not(.year-h)")];
   expect(rows).toHaveLength(4);
   expect(rows.map((r) => r.querySelector(".tag")?.textContent)).toEqual(["8-K", "10-Q", "4", "10-K"]);
   expect(container.querySelector('a[href^="#/filing/"]')).toBeNull();
@@ -324,6 +463,27 @@ it("filings: a free plan sees the whole index with EDGAR links, no reader", asyn
   expect(paths().some((u) => u.pathname === `/api/query/v1/companies/${NVDA}/filings`)).toBe(false);
 });
 
+it("what changed says which filing it is, in words, and closes when a filter hides the row", async () => {
+  await render("filings");
+  await click(button("All"));
+  const row = [...container.querySelectorAll("table.t tbody tr:not(.year-h)")].find((r) => r.textContent?.includes("What changed"))!;
+  await click([...row.querySelectorAll("button")].find((b) => b.textContent === "What changed")!);
+  for (let i = 0; i < 2; i++) await act(async () => {});
+  expect(row.className).toBe("sel");
+  const head = () => [...container.querySelectorAll(".card-h")].find((h) => h.textContent?.startsWith("What changed"))!;
+  expect(head().textContent).toMatch(/10-[KQ] filed .*, against the previous 10-[KQ]/);
+  expect(head().querySelector(".sub")?.getAttribute("title")).toContain("Accession ");
+  expect(head().querySelector(".mono")).toBeNull();
+  await click(button("10-K"));
+  expect(head().querySelector(".sub")).toBeNull();
+  expect(button("Close")).toBeUndefined();
+});
+
+it("the header keeps one main ticker, whatever else a company lists", async () => {
+  await render("overview");
+  expect(container.querySelector(".co-head .mono")?.textContent).toBe("NVDA · Nasdaq");
+});
+
 it("peers: suggested by SIC and size, into Compare and the chart builder", async () => {
   await render("peers");
   const body = [...container.querySelectorAll("tbody tr")];
@@ -331,9 +491,45 @@ it("peers: suggested by SIC and size, into Compare and the chart builder", async
   expect(body[1]!.textContent).toContain("same 3-digit SIC group, same size band, same filer category");
   expect(body[2]!.className).toBe("masked");
   await click(button("Chart margins"));
-  expect(onChartMany).toHaveBeenCalledWith([NVDA, AAPL], "operating_margin", "ttm", "Operating margin, TTM");
+  expect(onChartMany).toHaveBeenCalledWith([NVDA, AAPL], "operating_margin", "ttm");
   await click(button("Open in Compare"));
   expect(window.location.hash).toBe(`#/compare?target=${NVDA}&peers=${AAPL},${TSLA}`);
+});
+
+it("peers: sort by a column like Compare, then back to the suggested order", async () => {
+  await render("peers");
+  const names = () => [...container.querySelectorAll("tbody tr")].map((r) => r.querySelector(".co b")?.textContent);
+  const head = (label: string) => [...container.querySelectorAll<HTMLButtonElement>("thead .th-sort")].find((b) => b.textContent?.startsWith(label))!;
+  await click(head("Company"));
+  expect(names()).toEqual(["Apple", "Nvidia", "Tesla"]);
+  expect(head("Company").closest("th")?.getAttribute("aria-sort")).toBe("ascending");
+  await click(head("Company"));
+  expect(names()).toEqual(["Tesla", "Nvidia", "Apple"]);
+  await click(head("Company"));
+  expect(names()).toEqual(["Nvidia", "Apple", "Tesla"]);
+  await click(head("Revenue"));
+  expect(head("Revenue").closest("th")?.getAttribute("aria-sort")).toBe("descending");
+  expect(names().at(-1)).toBe("Tesla"); // no values to read: last whichever way
+});
+
+it("peers: says when a chart can carry only some of them", async () => {
+  morePeers = 9; // with the company and Apple, 11 it could read
+  await render("peers");
+  const chart = [...container.querySelectorAll("button")].find((b) => b.textContent?.startsWith("Chart margins"))!;
+  expect(chart.textContent).toBe("Chart margins (first 8 of 11)");
+  expect(chart.title).toContain("the first 8");
+});
+
+it("overview: the chart's heading says what it draws", async () => {
+  await render();
+  const heading = () => [...container.querySelectorAll("h2")].find((h) => h.textContent?.startsWith("Revenue"))!;
+  expect(heading().textContent).toBe("Revenue and operating margin");
+  act(() => root.unmount());
+  document.body.innerHTML = "";
+  noMargin = true; // a bank reports none
+  await render();
+  expect(heading().textContent).toBe("Revenue");
+  expect(heading().parentElement!.textContent).toContain("no operating margin reported");
 });
 
 it("peers: a named user's ranking covers every company", async () => {
@@ -365,7 +561,7 @@ it("data notes: plain-language notes by group, each with its filings", async () 
   expect(text).toContain("EDGAR has a 10-Q filed Aug 27, 2026 that the SEC's XBRL data (companyfacts) doesn't include yet");
   expect(text).toContain("Revenue for the period ending Apr 27, 2025 was first reported in the 10-Q filed May 28, 2025 and changed by +1.2% in the 10-K filed Feb 26, 2026");
   expect(text).toContain("No quarterly capex is reported or derivable from Jan 28, 2019 to Apr 28, 2019");
-  expect(text).toContain("Checked 3 h ago");
+  expect(text).toContain("last checked 3 h ago");
   const links = [...container.querySelectorAll(".note-f a")].map((a) => [a.textContent, a.getAttribute("href"), a.getAttribute("title")]);
   expect(links).toEqual([
     ["on EDGAR: 10-Q Aug 27, 2026 ↗", "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000099/", "10-Q 0001045810-26-000099, filed Aug 27, 2026"],

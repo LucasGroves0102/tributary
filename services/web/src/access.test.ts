@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { catalogOpen, readableFor, readableTotal } from "./access";
+import { accountName, catalogOpen, readableFor, readableTotal } from "./access";
 import type { Me } from "./types";
 
 const company = (id: string, tiers: ("financials" | "filings")[]) => ({ company_id: id, name: id, industry: null, tiers });
@@ -35,5 +35,15 @@ describe("access", () => {
     const m: Me = { ...closed, catalog: { public: false, tiers: [], companies: 0 } };
     expect(catalogOpen(m, "financials")).toBe(false);
     expect(readableTotal(m)).toBe(2);
+  });
+});
+
+describe("accountName", () => {
+  it("is what a person knows the account by, never the API's id", () => {
+    const me = { user_id: "pw-morgan", companies: [] };
+    expect(accountName({ ...me, account: { username: "morgan", plan: "pro", agent_questions_per_day: 1000 } })).toBe("morgan");
+    expect(accountName({ ...me, user_id: "gh-1", github: { login: "octo", plan: "pro", company_ids: [], agent: true, agent_questions_per_day: 10 } })).toBe("octo");
+    expect(accountName({ ...me, user_id: "sbx-ab12", sandbox: { expires_at: "", plan: "pro", companies: 20, agent: true, agent_questions_per_day: 10 } })).toBe("demo sandbox");
+    expect(accountName({ ...me, user_id: "alice" })).toBe("alice");
   });
 });

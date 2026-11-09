@@ -1,7 +1,8 @@
 /** Query API responses → what Home and the sidebar show. Pure functions, so the mapping (units,
  * periods, sources, what counts as new) is tested without rendering. */
 
-import { BANK_NA, bankTitle, change, day, money, pct, notForBanks } from "../format";
+import { NOT_REPORTED, readFigure, type Figure } from "../blanks";
+import { change, day, money, pct, UNNAMED } from "../format";
 import { columnSpec, formatColumn } from "../views/model";
 import type {
   CalendarEntry,
@@ -15,12 +16,9 @@ import type {
   WatchlistEntry,
 } from "../types";
 
-/** One number as shown: text with its unit, and a hover title with period and source. */
-export interface Cell {
-  value: number | null;
-  text: string;
-  title: string;
-}
+/** One number as shown: text with its unit, and a hover title with period and source. `value` is
+ * what it sorts and averages by: null when it reads n/m, n/a or old (blanks.ts). */
+export type Cell = Pick<Figure, "value" | "text" | "title"> & Partial<Figure>;
 
 export interface WatchColumn {
   key: string;
@@ -105,19 +103,22 @@ function cell(e: WatchlistEntry, col: WatchColumn, readable: boolean): Cell {
   if (!readable) {
     return {
       value: null,
-      text: "—",
+      text: NOT_REPORTED,
       title: "Values need a financials grant for this company. Watching it grants nothing.",
     };
   }
-  const value = num(e.values[col.key]);
   const long = col.long ?? LONG_LABEL[col.key] ?? col.label;
-  if (value === null && notForBanks(e.industry, col.key)) {
-    return { value, text: BANK_NA, title: bankTitle(long) };
-  }
-  if (value === null) {
-    return { value, text: "—", title: `${long}: not reported for the latest quarter` };
-  }
-  return { value, text: col.format(value), title: sourceTitle(col.key, e.sources[col.key] ?? null, long) };
+  const source = e.sources[col.key] ?? null;
+  return readFigure({
+    label: long,
+    columnKey: col.key,
+    raw: e.values[col.key],
+    reading: e.readings?.[col.key],
+    source,
+    latestPeriod: e.latest_period,
+    format: col.format,
+    sourceTitle: sourceTitle(col.key, source, long),
+  });
 }
 
 /** Quarterly revenue rows → values oldest first, and period end → fiscal label. */
@@ -146,7 +147,7 @@ export function watchRows(
     const lf = e.last_filing;
     return {
       companyId: e.company_id,
-      name: e.name ?? e.company_id,
+      name: e.name ?? UNNAMED,
       ticker: e.tickers?.[0] ?? null,
       industry: e.industry,
       readable,
@@ -203,7 +204,7 @@ export function recentFilings(
   for (const f of index) {
     out.set(f.accession_no, {
       companyId: f.company_id,
-      name: f.name ?? f.company_id,
+      name: f.name ?? UNNAMED,
       accessionNo: f.accession_no,
       form: f.form,
       filed: f.filed,
@@ -229,7 +230,7 @@ export function recentFilings(
     if (!lf || out.has(lf.accession_no)) continue;
     out.set(lf.accession_no, {
       companyId: e.company_id,
-      name: e.name ?? e.company_id,
+      name: e.name ?? UNNAMED,
       accessionNo: lf.accession_no,
       form: lf.form,
       filed: lf.filing_date,
@@ -302,6 +303,12 @@ export function status(rows: WatchRow[], filings: FilingItem[]): Status {
     medianGrowth: median(growth.map((g) => g.growth)),
     best: growth.sort((a, b) => b.growth - a.growth)[0] ?? null,
   };
+}
+
+/** "since your last visit (Nov 5)" or, on a first visit in this browser, "in the last 7 days":
+ * the one wording wherever a count of new filings appears. */
+export function sinceLabel(since: string, firstVisit: boolean): string {
+  return firstVisit ? "in the last 7 days" : `since your last visit (${day(since)})`;
 }
 
 /** Newest ingestion time across the feed, for the freshness notes. */

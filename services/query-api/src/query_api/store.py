@@ -19,6 +19,9 @@ from query_api.screener import Compiled as Screen
 # a timeout on query_api would never reach these sessions. Search sets its own, longer one.
 QUERY_TIMEOUT = "5s"
 SEARCH_TIMEOUT = "8s"
+# A recap's one-time-item flags are optional: a slow pass must cost the panel little, and never
+# all of it (ui.py answers without them).
+FLAGS_TIMEOUT = "2s"
 # Data notes: a 10-K/10-Q filed in the last BEHIND_DAYS whose XBRL isn't in companyfacts yet.
 BEHIND_DAYS = 120
 # silver.filings.filed_on (migration 032) is the date from the row's own base table, so a filter
@@ -76,16 +79,18 @@ class Store:
 
     def search(self, user_id: str, q: str, limit: int = 5, only: list[str] | None = None,
                readable_only: bool = False) -> list[dict]:
-        """Best matches for a name, ticker or CIK. only: just these companies (the caller's
+        """Best matches for what someone typed: a ticker, a CIK, or part of a name
+        (silver.search_companies has the ranking). only: just these companies (the caller's
         readable ones, for a demo that lists nothing else); None: every company. readable_only:
-        the same narrowing when the catalog is public (no id list; RLS on the authz tables)."""
+        the same narrowing when the catalog is public (no id list; RLS on the authz tables).
+        Narrowed before LIMIT, so a page of unreadable matches can't hide a readable one."""
         narrow = (" AND r.company_id IN (SELECT x FROM authz.readable_companies('financials') x)"
                   if readable_only else "")
         with self._session(user_id) as cur:
             cur.execute(
                 "SELECT r.company_id, r.name, r.matched_on, r.matched_alias, r.is_current,"
-                "       c.sic, c.sic_description AS industry, c.exchanges"
-                " FROM silver.resolve_company(%(q)s) WITH ORDINALITY r"
+                "       c.sic, c.sic_description AS industry, c.exchanges, c.tickers"
+                " FROM silver.search_companies(%(q)s) WITH ORDINALITY r"
                 " JOIN silver.companies c USING (company_id)"
                 " WHERE (%(only)s::text[] IS NULL OR r.company_id = ANY(%(only)s::text[]))" + narrow
                 + " ORDER BY r.ordinality LIMIT %(limit)s",
@@ -199,20 +204,27 @@ class Store:
         with self._session(user_id) as cur:
             cur.execute(
                 """
-                SELECT * FROM gold.filing_recap(
+                SELECT r.*,
+                       gold.not_meaningful(r.metric, r.value, (
+                           SELECT d.inputs FROM gold.derived_financials d
+                           WHERE d.company_id = %(company)s AND d.span = r.span
+                             AND d.metric = r.metric AND d.period_end = r.period_end))
+                           AS not_meaningful
+                FROM gold.filing_recap(
                     %(company)s,
                     coalesce(%(period_end)s::date,
                              (SELECT max(q.period_end) FROM gold.quarterly_financials q
                               WHERE q.company_id = %(company)s
                                 AND q.accession_no = %(accession)s)),
-                    %(metrics)s)
+                    %(metrics)s) r
                 """, {"company": company_id, "period_end": period_end,
                       "accession": accession_no, "metrics": metrics})
             return cur.fetchall()
 
     def filing_flags(self, user_id: str, accession_no: str) -> list[dict]:
-        """gold.filing_flags rows (RLS: filings tier)."""
+        """gold.filing_flags rows (RLS: filings tier), under its own short timeout."""
         with self._session(user_id) as cur:
+            cur.execute(f"SET LOCAL statement_timeout = '{FLAGS_TIMEOUT}'")
             cur.execute("SELECT * FROM gold.filing_flags(%s)", (accession_no,))
             return cur.fetchall()
 
@@ -220,9 +232,11 @@ class Store:
               revenue: Decimal | None, limit: int, granted_only: bool = False) -> list[dict]:
         """Ranked peer candidates (gold.peer_candidates): SIC level, then the same revenue size
         band as `revenue` (only companies in `granted` have one; RLS applies too), then the
-        same filer category, then revenue closeness, then name. granted_only: only candidates
-        in `granted`. granted None: the catalog is public at this tier, RLS alone bounds the
-        revenue (query_api.authorizer.Readable)."""
+        same filer category, then revenue closeness, then name. A candidate's revenue is read as
+        the screener sorts it (gold.latest_reading, 035): a TTM over 300 days behind the
+        company's own latest period, or not meaningful, gives no band and no closeness.
+        granted_only: only candidates in `granted`. granted None: the catalog is public at this
+        tier, RLS alone bounds the revenue (query_api.authorizer.Readable)."""
         gate = "" if granted is None else "WHERE p.company_id = ANY(%(granted)s)"
         only = ("p.company_id IN (SELECT x FROM authz.readable_companies('financials') x)"
                 if granted is None else "p.company_id = ANY(%(granted)s)")
@@ -234,7 +248,11 @@ class Store:
                 FROM gold.peer_candidates(%(company)s) p
                 JOIN silver.companies c ON c.company_id = p.company_id
                 LEFT JOIN LATERAL (
-                    SELECT x.value FROM gold.latest_value(p.company_id, 'ttm', 'revenue') x
+                    SELECT CASE WHEN x.status IS NULL OR x.status = 'behind'
+                                THEN x.value END AS value
+                    FROM gold.latest_period(p.company_id) lp
+                    CROSS JOIN LATERAL gold.latest_reading(p.company_id, 'ttm', 'revenue',
+                                                           c.sic, lp.latest) x
                     {gate}
                 ) r ON true
                 WHERE NOT %(granted_only)s OR {only}
@@ -260,7 +278,7 @@ class Store:
                 SELECT metric, period_start, period_end, fiscal_year, fiscal_quarter,
                        calendar_year, calendar_quarter, value, unit, value_source,
                        source_tag, inputs, accession_no, form, filed, source_accessions,
-                       ingested_at,
+                       ingested_at, gold.not_meaningful(metric, value, inputs) AS not_meaningful,
                        (SELECT f.cik FROM silver.financial_facts f
                         WHERE f.accession_no = q.accession_no LIMIT 1) AS filer_cik
                 FROM (
@@ -272,6 +290,41 @@ class Store:
                 WHERE row_number <= %s
                 ORDER BY metric, period_end DESC
                 """, (company_id, view, metrics, basis, quarters))
+            return cur.fetchall()
+
+    def equity_readings(self, user_id: str, company_id: str, metrics: list[str], quarters: int,
+                        view: str = "quarter", basis: str = "fiscal") -> list[dict]:
+        """Why a metric reads n/m because of the company's stockholders' equity, at each of its
+        latest `quarters` equity periods (the window financials() reads), whatever metrics the
+        rows hold: by migration 035's gold.not_meaningful (debt/equity and ROE on negative
+        equity, where gold has no row: 014's guard). Under RLS like every read.
+        [{metric, period_end, reason}]."""
+        if not metrics:
+            return []
+        with self._session(user_id) as cur:
+            cur.execute(
+                """
+                SELECT m.metric, e.period_end, r.reason
+                FROM (
+                    SELECT period_end, value FROM gold.financials
+                    WHERE company_id = %s AND span = %s AND metric = 'stockholders_equity'
+                      AND (%s = 'fiscal' OR calendar_primary)
+                    ORDER BY period_end DESC LIMIT %s
+                ) e
+                CROSS JOIN unnest(%s::text[]) AS m(metric)
+                CROSS JOIN LATERAL (
+                    SELECT gold.not_meaningful(m.metric, NULL, NULL, e.value) AS reason) r
+                WHERE r.reason IS NOT NULL
+                ORDER BY m.metric, e.period_end DESC
+                """, (company_id, view, basis, quarters, metrics))
+            return cur.fetchall()
+
+    def annual_per_share(self, user_id: str, company_id: str, years: int) -> list[dict]:
+        """The 10-K's own EPS and weighted shares per fiscal year (gold.annual_per_share,
+        migration 036): gold's quarters have no annual per-share figure, and these don't add."""
+        with self._session(user_id) as cur:
+            cur.execute("SELECT * FROM gold.annual_per_share(%s, %s)"
+                        " ORDER BY metric, period_end DESC", (company_id, years))
             return cur.fetchall()
 
     def feed_status(self) -> dict:
@@ -395,7 +448,11 @@ class Store:
                     LIMIT %(limit)s OFFSET %(offset)s
                 )
                 SELECT p.accession_no, p.company_id, c.name, p.cik, p.form,
-                       p.filing_date AS filed, p.accepted_at, p.report_date AS period_of_report,
+                       p.filing_date AS filed, p.accepted_at,
+                       -- the SEC's index gives some old 10-Ks and 10-Qs their filing date as the
+                       -- period (NVIDIA's 2008 10-K): a report can't cover a period ending that day
+                       CASE WHEN p.form ~ '^10-[KQ]' AND p.report_date = p.filing_date
+                            THEN NULL ELSE p.report_date END AS period_of_report,
                        p.primary_document,
                        CASE WHEN {sections} THEN (
                            SELECT count(DISTINCT s.section_key) FROM silver.filing_sections s
@@ -581,7 +638,8 @@ class Store:
                 FROM ops.quality_findings f
                 LEFT JOIN ops.quality_companies q ON q.company_id = f.company_id
                 WHERE {scope}
-                ORDER BY coalesce((f.detail->>'restated_filed')::date, f.period_end) DESC,
+                ORDER BY coalesce((f.detail->>'restated_filed')::date, (f.detail->>'filed')::date,
+                                  f.period_end) DESC,
                          f.company_id, f.check_name, f.metric
                 LIMIT %(limit)s
                 """, {"c": company_ids, "limit": limit})
@@ -594,7 +652,8 @@ class Store:
                            min(period_end) AS first_period_end,
                            max(period_end) AS latest_period_end,
                            (array_agg(accession_no ORDER BY period_end DESC))[1]
-                               AS latest_accession
+                               AS latest_accession,
+                           bool_and(source_tag LIKE 'derived:%%') AS computed
                     FROM gold.quarterly_financials
                     WHERE company_id = ANY(%s) AND value_source = 'derived'
                     GROUP BY company_id, metric
@@ -665,6 +724,21 @@ class Store:
             checked = (cur.fetchone() or {}).get("checked_at")
             return {"findings": findings, "derived": rows, "behind": behind,
                     "checked_at": checked}
+
+    def metric_series(self, user_id: str, company_ids: list[str],
+                      metrics: list[str]) -> dict[tuple[str, str], list[tuple[date, float]]]:
+        """(company, metric) → its quarters, oldest first (a data note's one-quarter spike, read
+        against the other years). A few companies and metrics at most, under RLS."""
+        with self._session(user_id) as cur:
+            cur.execute("SELECT company_id, metric, period_end, value"
+                        " FROM gold.quarterly_financials"
+                        " WHERE company_id = ANY(%s) AND metric = ANY(%s)"
+                        " ORDER BY company_id, metric, period_end", (company_ids, metrics))
+            out: dict[tuple[str, str], list[tuple[date, float]]] = {}
+            for r in cur.fetchall():
+                out.setdefault((r["company_id"], r["metric"]), []).append(
+                    (r["period_end"], float(r["value"])))
+            return out
 
     def filing_refs(self, user_id: str, accessions: list[str]) -> dict[str, dict]:
         """accession_no → form, filed, cik (the filer, for EDGAR links), from the public filing

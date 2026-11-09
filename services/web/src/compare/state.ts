@@ -3,7 +3,8 @@
  * table built from the answer: cells with units, the period behind each value and its source,
  * the peer median (target excluded), and the CSV. Pure, tested without rendering. */
 
-import { BANK_NA, bankTitle, change, day, money, notForBanks, pct } from "../format";
+import { NOT_REPORTED, readFigure, type Figure } from "../blanks";
+import { change, day, money, pct } from "../format";
 import { num } from "../home/data";
 import type { ScreenerRow, ValueSource } from "../types";
 import { csvCell } from "../chart/series";
@@ -135,8 +136,10 @@ export interface CompareCell {
   text: string;
   title: string;
   source: ValueSource | null;
-  /** a bank's operating margin / FCF / net debt: shown as n/a, never in the peer median */
-  bank?: true;
+  /** `value` is null for all of these, so a median or a sort can't take them: n/a, n/m and old */
+  status?: Figure["status"];
+  asOf?: string | null;
+  old?: boolean;
 }
 
 export interface CompareRow {
@@ -207,18 +210,23 @@ export function compareRows(s: CompareState, rows: ScreenerRow[]): CompareRow[] 
     for (const key of cols) {
       const c = BY_KEY.get(key)!;
       const raw = readable ? r.values[key] : null;
-      const value = num(raw);
       const source = readable ? (r.sources[key] ?? null) : null;
-      const bank = notForBanks(r.industry, key);
-      cells[key] = !readable
-        ? { value: null, raw: null, text: "—", title: MASKED_TITLE, source: null }
-        : bank && value === null
-          ? { value, raw: null, text: BANK_NA, title: `${bankTitle(c.long)} Left out of the peer median.`, source, bank }
-        : bank
-          ? { value, raw: String(raw), text: formatValue(c.kind, value!), title: `${sourceTitle(key, source)}. A bank: left out of the peer median.`, source, bank }
-        : value === null
-          ? { value, raw: null, text: "—", title: `${c.long}: not reported for the latest period`, source }
-          : { value, raw: String(raw), text: formatValue(c.kind, value), title: sourceTitle(key, source), source };
+      if (!readable) {
+        cells[key] = { value: null, raw: null, text: NOT_REPORTED, title: MASKED_TITLE, source: null };
+        continue;
+      }
+      const figure = readFigure({
+        label: c.long,
+        columnKey: key,
+        raw,
+        reading: r.readings?.[key],
+        source,
+        latestPeriod: r.latest_period,
+        format: (v) => formatValue(c.kind, v),
+        sourceTitle: sourceTitle(key, source),
+      });
+      const leftOut = figure.status && figure.status !== "behind" ? " Left out of the peer median." : "";
+      cells[key] = { ...figure, title: figure.title + leftOut, raw: num(raw) === null ? null : String(raw), source };
     }
     return [{
       companyId: id,
@@ -249,17 +257,20 @@ export interface PeerStat {
   low: number | null;
   /** readable bank peers left out of this column (the metric doesn't describe a bank) */
   banks: number;
+  /** readable peers whose figure reads n/m or old, left out too */
+  unusable: number;
 }
 
-/** Per column: the peers' median, its count, and the high and low (the target and, for
- * operating margin / FCF / net debt, banks excluded). */
+/** Per column: the peers' median, its count, and the high and low (the target excluded, and any
+ * figure that reads n/a, n/m or old: its value is null). */
 export function peerStats(rows: CompareRow[], cols: string[]) {
   const out: Record<string, PeerStat> = {};
   for (const key of cols) {
     const peers = rows.filter((r) => !r.isTarget);
-    const v = peers.filter((r) => !r.cells[key]?.bank).map((r) => r.cells[key]?.value).filter((x): x is number => x != null);
-    const banks = peers.filter((r) => r.cells[key]?.bank).length;
-    out[key] = { median: median(v), n: v.length, high: v.length ? Math.max(...v) : null, low: v.length ? Math.min(...v) : null, banks };
+    const v = peers.map((r) => r.cells[key]?.value).filter((x): x is number => x != null);
+    const banks = peers.filter((r) => r.cells[key]?.status === "not_applicable").length;
+    const unusable = peers.filter((r) => r.cells[key]?.status === "not_meaningful" || r.cells[key]?.status === "old").length;
+    out[key] = { median: median(v), n: v.length, high: v.length ? Math.max(...v) : null, low: v.length ? Math.min(...v) : null, banks, unusable };
   }
   return out;
 }
@@ -267,7 +278,8 @@ export function peerStats(rows: CompareRow[], cols: string[]) {
 /** The peer-median cell's hover. */
 export function medianTitle(s: PeerStat): string {
   const banks = s.banks ? `; ${s.banks} ${s.banks === 1 ? "bank" : "banks"} left out (the metric doesn't describe a bank)` : "";
-  return `Median of ${s.n} peers' values; the target is excluded${banks}`;
+  const unusable = s.unusable ? `; ${s.unusable} left out (not meaningful, or years old)` : "";
+  return `Median of ${s.n} peers' values; the target is excluded${banks}${unusable}`;
 }
 
 export function statText(key: string, v: number | null): string {
@@ -283,7 +295,7 @@ export function compareCsv(s: CompareState, rows: CompareRow[]): string {
   const header = [
     "role", "company_id", "ticker", "company", "access", "latest_quarter_calendar",
     "latest_quarter_fiscal", "latest_period_end",
-    ...cols.flatMap((k) => [k, `${k}_period_end`, `${k}_source_accession`]),
+    ...cols.flatMap((k) => [k, `${k}_period_end`, `${k}_source_accession`, `${k}_note`]),
   ];
   const lines = rows.map((r) => [
     r.isTarget ? "target" : "peer",
@@ -296,27 +308,55 @@ export function compareCsv(s: CompareState, rows: CompareRow[]): string {
     r.latest?.periodEnd ?? "",
     ...cols.flatMap((k) => {
       const c = r.cells[k];
-      return [c?.raw ?? "", c?.source?.period_end ?? "", c?.source?.accession_no ?? ""];
+      const note = c?.status && c.status !== "behind" ? c.status.replace("_", " ") : "";
+      return [c?.raw ?? "", c?.source?.period_end ?? "", c?.source?.accession_no ?? "", note];
     }),
   ]);
   const stats = peerStats(rows, cols);
   const med = ["peer median (excludes target)", "", "", "", "", "", "", "",
     ...cols.flatMap((k) => {
       const m = stats[k]!.median;
-      return [m === null ? "" : String(Number(m.toPrecision(12))), "", `${stats[k]!.n} peers`];
+      return [m === null ? "" : String(Number(m.toPrecision(12))), "", `${stats[k]!.n} peers`, ""];
     })];
   return [header, ...lines, med].map((r) => r.map(csvCell).join(",")).join("\r\n") + "\r\n";
 }
 
 /** "Chart these": the column's metric and transform in the chart builder. */
-export function chartMetric(key: string): { metric: string; transform: "ttm" | "q" | "yoy"; title: string } | null {
-  const c = BY_KEY.get(key);
-  if (!c) return null;
-  if (key === "revenue_growth_ttm") return { metric: "revenue", transform: "yoy", title: "Revenue growth, YoY (TTM)" };
-  const quarterEnd = key.endsWith("_q");
-  return {
-    metric: key.replace(/_(ttm|q)$/, ""),
-    transform: quarterEnd ? "q" : "ttm",
-    title: `${c.long}, ${quarterEnd ? "quarter end" : "TTM"}`,
-  };
+export function chartMetric(key: string): { metric: string; transform: "ttm" | "q" | "yoy" } | null {
+  if (!BY_KEY.has(key)) return null;
+  if (key === "revenue_growth_ttm") return { metric: "revenue", transform: "yoy" };
+  return { metric: key.replace(/_(ttm|q)$/, ""), transform: key.endsWith("_q") ? "q" : "ttm" };
+}
+
+/** How a comps table is sorted: a column key, "name" or "latest"; high-first for values. */
+export interface CompareSort {
+  key: string;
+  desc: boolean;
+}
+
+/** The next sort after clicking a header: first click high-first (names A-Z), second click the
+ * other way, third click back to the order the comps were added in (null). */
+export function nextSort(sort: CompareSort | null, key: string): CompareSort | null {
+  const first = key !== "name";
+  if (sort?.key !== key) return { key, desc: first };
+  return sort.desc === first ? { key, desc: !first } : null;
+}
+
+/** Rows sorted by the column, the target among them; empty cells always last, whichever way. */
+export function sortRows(rows: CompareRow[], sort: CompareSort | null): CompareRow[] {
+  if (!sort) return rows;
+  const by = sort.desc ? -1 : 1;
+  const text = (r: CompareRow) => (sort.key === "latest" ? (r.latest?.periodEnd ?? null) : sort.key === "name" ? r.name : null);
+  return [...rows].sort((a, b) => {
+    if (sort.key === "name" || sort.key === "latest") {
+      const x = text(a);
+      const y = text(b);
+      if (x === null || y === null) return x === y ? 0 : x === null ? 1 : -1;
+      return by * x.localeCompare(y);
+    }
+    const x = a.cells[sort.key]?.value ?? null;
+    const y = b.cells[sort.key]?.value ?? null;
+    if (x === null || y === null) return x === y ? 0 : x === null ? 1 : -1;
+    return by * (x - y);
+  });
 }

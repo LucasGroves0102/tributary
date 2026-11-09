@@ -234,6 +234,32 @@ def test_questions_use_the_accounts_own_cap_not_the_demo_day(world):
         sandboxes.take_question(USER, NOW + timedelta(days=1), 1, 1)
 
 
+def test_give_back_is_the_accounts_own_and_leaves_the_shared_day(world):
+    """C1: a password account's refund lowers its own count only (it never counted in the
+    demo's shared day)."""
+    _, conn, _, sandboxes = world
+    day = NOW.date()
+    conn.execute("INSERT INTO demo_agent_daily (day, questions) VALUES (%s, 7)"
+                 " ON CONFLICT (day) DO UPDATE SET questions = 7", (day,))
+    sandboxes.take_question(USER, NOW, 1, 1, questions=3)
+    assert sandboxes.give_back(USER, NOW, 2) == 2
+    assert sandboxes.questions_left(USER, NOW, 1, 1) == (3, 2)
+    assert rows(conn, "SELECT questions FROM demo_agent_daily WHERE day = %s", day) == [(7,)]
+    assert sandboxes.give_back(USER, NOW, 5) == 1  # never below zero
+
+
+def test_questions_left_is_the_accounts_own_cap_and_takes_nothing(world):
+    _, conn, _, sandboxes = world
+    assert sandboxes.questions_left(USER, NOW, 1, 1) == (3, 3)
+    sandboxes.take_question(USER, NOW, 1, 1)
+    assert sandboxes.questions_left(USER, NOW, 1, 1) == (3, 2)
+    assert rows(conn, "SELECT questions FROM demo_agent_usage WHERE user_id = %s", USER) == [
+        (1,)]
+    conn.execute("UPDATE password_accounts SET disabled = true")
+    with pytest.raises(SandboxGone):
+        sandboxes.questions_left(USER, NOW, 1, 1)
+
+
 def test_agent_quota_message_names_the_accounts_cap(world):
     client, *_ = world
     h = {"Authorization": f"Bearer {sign_in(client).json()['token']}"}

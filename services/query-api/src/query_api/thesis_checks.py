@@ -103,6 +103,12 @@ class Claim(_Strict):
         if self.status != "unverifiable" and not _cited(self.citations):
             raise ValueError("a supported or contradicted claim cites a filing the tools "
                              "returned")
+        # supported certifies the claim's numbers (agent thesis_check.assemble downgrades
+        # one that has a figure the data doesn't hold; change both together)
+        if self.status == "supported" and (
+                any(f.status == "unverified" for f in self.figures)
+                or any(c.figure_status == "unverified" for c in self.citations)):
+            raise ValueError("a supported claim has no figures that aren't in the data")
         return self
 
 
