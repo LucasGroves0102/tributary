@@ -1,7 +1,8 @@
 # query-api
 
-FR8, week 2. HTTP API over the gold tables, read-only except for the caller's own watchlist
-(app database); the [agent](../agent) and the [web](../web) app reach data only through it.
+FR8, week 2. HTTP API over the gold tables, read-only except for the caller's own saved work,
+preferences and alert settings (app database); the [agent](../agent) and the [web](../web) app
+reach data only through it.
 Every data route is permission-checked twice:
 
 1. **OpenFGA** (`authorizer.py`): `can_read_financials` / `can_read_filings` on the company,
@@ -73,6 +74,21 @@ request parameters. Dev tokens: `make token USER=alice`.
 | `DELETE /v1/connections/{provider}` | `DATA_CONNECTIONS_KEY`, token | deletes the key and every price fetched with it |
 | `GET /v1/companies/{id}/prices?from=&to=` | `DATA_CONNECTIONS_KEY`, financials, the caller's own connection | the caller's end-of-day closes (exact decimals), refreshed at most once per US Eastern day |
 | `GET /v1/companies/{id}/valuation` | `DATA_CONNECTIONS_KEY`, financials, the caller's own connection | market cap, P/E, P/S, EV/EBIT from the caller's latest close and the latest gold figures, each with its date and citation |
+| `GET /v1/alerts/unread` | token, app DB | the bell: unread filing alerts, the newest one's time, the alerts job's last look for the caller ([Filing alerts](#filing-alerts)) |
+| `GET /v1/alerts/notifications?company_id=&limit=` | token, app DB (figures: financials now) | the caller's alerts, newest filing first: form, dates, an 8-K's items, a 10-K/10-Q's key figures and red-line results (stripped for a company the caller can no longer read), the filer's EDGAR link |
+| `POST /v1/alerts/notifications/read` | token, app DB | `{"ids": [...]}`, `{"company_id": ...}` or `{"all": true}`: marks the caller's own read |
+| `GET /v1/alerts/settings` | token, app DB | followed companies (watchlist, analysis projects) with the forms alerted, webhooks (URL masked, never the secret), whether email is on, the last check |
+| `PUT /v1/alerts/settings/{id}` | token, app DB | `{"forms": ["10-K", "10-Q", "8-K"]}` (any subset; `[]` = none) for one company |
+| `GET /v1/alerts/red-lines?company_id=&evaluate=` | token, app DB (`evaluate`: financials on the company) | the caller's red lines; with `evaluate=true` each on the company's latest figures |
+| `POST /v1/alerts/red-lines` | token, app DB | `{company_id, label, formula, view, op, threshold}`: a formula-language rule (no ticker), checked like a chart formula; at most 10 per company |
+| `DELETE /v1/alerts/red-lines/{rule}` | token, app DB | the caller's own; another's is the same 404 as none |
+| `GET /v1/alerts/webhooks` | token, app DB | the caller's webhooks: masked URL, format, on/off, last delivery |
+| `POST /v1/alerts/webhooks` | token, app DB | `{"url", "format"?}` parsed by hand (a 422 never echoes the URL): https to a public address only (checked after DNS); answers the signing secret once; at most 3 |
+| `PATCH /v1/alerts/webhooks/{id}` | token, app DB | `{"enabled": bool}` |
+| `POST /v1/alerts/webhooks/{id}/rotate` | token, app DB | a new signing secret, shown once |
+| `DELETE /v1/alerts/webhooks/{id}` | token, app DB | the webhook and its delivery log |
+| `POST /v1/alerts/webhooks/{id}/test` | token, app DB | sends a signed test event to the caller's own webhook now (5 an hour), through the same checks; the result goes in the log |
+| `GET /v1/alerts/deliveries?webhook_id=&limit=` | token, app DB | the caller's delivery log: status, attempts, last HTTP status, a short error code, next try |
 
 `{id}` is the canonical 10-digit `company_id`. Prometheus metrics are on `/metrics` (including
 `tributary_permission_checks_total{tier,result}`); the web proxy blocks it and `/docs` from the
@@ -538,7 +554,9 @@ hidden, in order; a card left out shows after the listed ones) and the column se
 screener (`screener`, 1-12) and the watchlist (`watchlist`, 1-8), each a list of screener column
 keys from `GET /v1/screener/columns`. `GET /v1/views` returns each view's saved state (null = the
 default), the defaults and the options; `PUT /v1/views/{view}` with `{"state": ...}` saves;
-`DELETE /v1/views/{view}` resets. Owner-only like workspaces (JWT `sub`, filtered statements,
+`DELETE /v1/views/{view}` resets. With nothing saved, Home is the watchlist, new filings and data
+notes, with the status strip, Continue and Expected filings off (`DEFAULT_HOME`, F6 #127; the web
+app's `views/model.ts` applies the same). Owner-only like workspaces (JWT `sub`, filtered statements,
 FORCEd row-level security; `test_views_db.py`), validated against fixed catalogs, not streamed,
 and grants nothing: the pages still read every value through the permission-checked routes, so a
 column added for an ungranted company stays masked.
@@ -864,7 +882,68 @@ provider call, another user can't see my connection or prices, layer 1 before th
 once-a-day refresh, rate limits, disconnect deletes the prices, valuation formulas; the real
 Tiingo adapter over `httpx.MockTransport` with `tests/fixtures/`, never Tiingo itself) and
 `test_connections_db.py` (the three tables' forced owner RLS for another user and for no user,
-WITH CHECK, cascades, checks; `APP_TEST_DATABASE_URL`).
+WITH CHECK, cascades, checks; `APP_TEST_DATABASE_URL`). Filing alerts: `test_webhooks.py` (every
+URL and address refusal, a rebound name refused at send time with nothing sent, the connection
+going to the checked address, redirects and errors as codes, size caps, the derived secret and the
+signature), `test_alerts.py` (material 8-Ks, key figures, red-line checks and evaluation, figures
+stripped without access, the webhook form refusing `http://169.254.169.254` and private addresses
+before anything is stored, strict bodies), `test_alerts_db.py` (forced RLS on all six tables, binding
+the owner; one user can't read, mark, change, test, rotate, delete or see the deliveries of another's
+alerts and webhooks; the secret never in a later response or a log; the job end to end over a fake
+index: follow dates, forms, routine 8-Ks skipped, pending then ready with red lines, idempotent runs,
+retries after backoff, email only with a verified address), `test_alert_filings_db.py` (the job's
+index query as query_api without a user) and `test_alert_email.py`.
+
+## Filing alerts
+
+F6 (Phase 9 E, #154): when a company a user watches or analyses files a 10-K, a 10-Q or an 8-K
+with a material item, the user gets an alert in the app (the bell, the Alerts page, the Monitor
+step) and, if they add one, at a webhook (Discord, Slack or any https endpoint), with the key
+figures and their red lines evaluated on it. Rules are `alerts.py`'s docstring; storage is app
+migration 016 (owner-only, forced RLS, not streamed).
+
+- **Who follows what.** The watchlist (from the day a company was added) and each analysis
+  project's company (from the day the project was made). Per company the user can turn any of the
+  three forms off. Watching grants nothing: figures and red lines are read as the user, through
+  OpenFGA and RLS, or not at all (`figures_status: no_access`).
+- **What alerts.** Originals only. An 8-K alerts when any item isn't routine (5.07, 5.08 and 9.01
+  alone are; `events.ROUTINE`); its items come from the filing index, else the parsed item headings
+  (filings tier). A 10-Q or 10-K waits until gold has its figures (its recap cites the filing),
+  then shows revenue with its change on a year earlier, gross (else operating) margin, and diluted
+  EPS (net income for a 10-K's year); after 3 days without them it shows without.
+- **Red lines.** A formula in the [formula language](#formulas) (catalog metrics, + - * /, lags,
+  `ttm()`, `abs()`; no ticker: it reads its company), a view, `<`, `<=`, `>` or `>=`, and a constant.
+  Compiled like a chart formula (bound parameters only) and run as the user. Evaluated at the
+  filing's period on each 10-K/10-Q, and on demand on the latest figures (`?evaluate=true`). A red
+  line describes trouble: crossed means the alert says so. Example, measured on the screenshot
+  harness: `(receivables / receivables[-4q] - 1) - (revenue / revenue[-4q] - 1) > 0.10` on NVIDIA-like
+  figures gives 26.2 points, crossed; `gross_margin < 0.70` (TTM 71.2%) clear.
+- **How alerts are made: a database poll, not a Kafka consumer.** `query-api-alerts`
+  (`alert_job.py`) is a CronJob every 10 minutes. A filing reaches `silver.filings` within seconds
+  of the feed, but what an alert says arrives later from elsewhere (an 8-K's items with the nightly
+  submissions load, a 10-Q's figures with companyfacts), so a consumer would wait and come back to
+  the database anyway, and it would need its own SCRAM user, ACL entry and a secret only the owner
+  can create on hermes. Each run re-reads the last 3 days of the index and inserts with ON CONFLICT
+  DO NOTHING (one alert per user, filing and company; one delivery per webhook and alert), so a
+  missed or repeated run loses or doubles nothing. Cost per run: one short app-DB transaction per
+  user who follows something (a handful of statements), one filing-index query per 50 followed
+  companies (13 ms on hermes for 50 companies, index scans only, measured 2026-11-09), then a recap
+  and the red lines only for the filings that just arrived. One pod for a few seconds every 10
+  minutes; no SEC requests; no Kafka.
+- **Webhooks** (`webhooks.py`, its docstring is the spec). https only, port 443, no user info, no
+  internal names; the name is resolved and refused if any answer is private, loopback, link-local
+  (169.254.169.254), shared, reserved, multicast, or an IPv6 form of one (mapped, NAT64, 6to4,
+  Teredo), when saved and again before every send, and the request goes to the address just
+  checked (no rebinding). Redirects are never followed. 3 s to connect, 8 s a send, 16 KiB body,
+  4 KiB of the answer read. Each request is signed: `X-Tributary-Signature: v1=` HMAC-SHA256 of
+  `timestamp.body` with the webhook's secret, which is derived from the JWT secret, the webhook id
+  and a random salt (never stored, shown once on create or rotate, never logged; rotating the JWT
+  secret changes them all). The URL is stored (forced RLS) and returned masked. Delivery log with
+  retries after 5 min, 30 min, 2 h and 6 h, then failed; errors are codes. The Helm network policy
+  (443 to public addresses only) is a second layer under these checks.
+- **Email** (`alert_email.py`): a provider interface, off. `ALERT_SMTP_HOST` + `ALERT_SMTP_FROM`
+  (any SMTP relay, TLS) turn a provider on in the job, but a user also needs an address they
+  proved they own and none is stored yet, so nothing is sent; the settings say email isn't set up.
 
 ## Statement callouts
 

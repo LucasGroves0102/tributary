@@ -43,8 +43,9 @@ size at any width and titles and footnotes wrap instead of being cut; `svgRef` a
 standard-size drawing, so Export SVG / PNG give the same deck-ready image from a phone or a monitor.
 The chart builder puts the chart first when there's no room for it beside the layers.
 
-Views (hash routes): `#/` Home (status strip, watchlist table, new filings since the last
-visit, expected filings); `#/companies?<filters>` the screener (`/v1/screener`: filters kept in
+Views (hash routes): `#/` Home (Start an analysis first, then the watchlist table, new filings since the
+last visit and data notes; the status strip, Continue and expected filings can be turned on in
+Customize); `#/alerts` filing alerts (below); `#/companies?<filters>` the screener (`/v1/screener`: filters kept in
 the URL, sortable, ungranted companies as metadata only, CSV export through the API);
 `#/company/<company_id>` 12-quarter chart and table, every value linked to its filing (a statement or segment value opens the filing in the reader at its financial statements, a 10-K's Item 8 or a 10-Q's Part I Item 1; the EDGAR link sits beside it on hover);
 `#/filing/<company_id>/<accession>[/<section>]` parsed filing reader; `#/chart` the chart
@@ -358,12 +359,23 @@ on the folder changed last. Never just the first workspace.
 
 - **Thesis** (`#/thesis/{id}`, `ThesisPage.tsx`, pure parts in `thesis/model.ts`): a title (the
   item's name), an optional company and a Markdown body (up to 100,000 characters). Write,
-  Preview or Side by side (remembered per browser); Save or Ctrl/Cmd+S, with an "unsaved
-  changes" mark and the browser's leave-page warning. "Embed a saved item…" inserts a
-  `[[embed:<item id>]]` line at the cursor (at the end until the user has placed one, never above
-  the title) for any chart, comps set, screen or model in the same
+  Markdown, Preview or Side by side (remembered per browser); Save or Ctrl/Cmd+S, with an "unsaved
+  changes" mark and the browser's leave-page warning. **Write** (F6, `thesis/BlockEditor.tsx`, rules
+  in `thesis/blocks.ts`'s docstring) shows the text in boxes and every embedded chart, comps set,
+  model or screen and every pinned quote or earnings-release passage as a card, drawn live: never a
+  `[[embed:…]]` line. A card moves up or down past the paragraph or card beside it (↑ ↓, or Alt+↑ /
+  Alt+↓ on the focused card) and goes with ✕ or Delete, with Undo in the notice; moves are announced
+  and focus follows the card. A quote card says what it is and the period it reports on ("Quote ·
+  10-Q · quarter ended 2026-10-26", "Earnings release · 8-K"). The Markdown underneath is still the
+  only thing saved: the cards are read from it and every edit writes it back line for line, so
+  export, import, versions, drafts and pins are unchanged (a test exports and imports a pinned
+  thesis and gets the same bytes). **Markdown** shows the text as saved, embed lines and all.
+  "Embed a saved item…" inserts a `[[embed:<item id>]]` line at the cursor (at the end until the
+  user has placed one, never above the title) for any chart, comps set, screen or model in the same
   workspace; the preview draws each one in place as reports do (`reports/Embeds.tsx`, the data
-  read now as the viewer). A marker for anything else (another workspace's or user's item, a
+  read now as the viewer). A comps set is drawn as its table (`compare/CompsTable.tsx`: the saved
+  columns, each company's latest quarter, the peer median with n of N, metadata only where the
+  viewer can't read the financials), in theses and reports alike, never as charts. A marker for anything else (another workspace's or user's item, a
   report, a malformed line) is dropped and the editor says how many don't resolve. The text is
   rendered only through `markdown.ts` `renderMarkdown` (marked + DOMPurify, no inline styles or
   form controls; images become their alt text, since the CSP loads nothing from elsewhere;
@@ -516,10 +528,13 @@ per company, from its filings to a thesis that's checked after every filing. Rul
   changes come back instead of going to the URL), Save to project / Add to thesis for the comps;
   6 **Model**: the project's models (ModelPage embedded, bear/base/bull side by side), "Create
   the model" from the company's history (this year from its reported quarters); 7 **Thesis**: ThesisPage embedded (no back link, no company
-  picker); 8 **Monitor**: Check my thesis (disabled while the thesis has unsaved changes or only
-  template text; checks run when the user asks), where the filings stand (Revisit's new-filing
-  notice with a re-check, or which 10-K/10-Q the last check read), and the check panel (a quote
-  opens the Thesis step and marks it).
+  picker); 8 **Monitor** (F6, #154): the company's filing alerts (`alerts/Notifications.tsx`, newest
+  filing first, with the alerts job's last check), its red lines (`alerts/RedLines.tsx`: each
+  "Clear" or "Crossed" on the latest figures, a form with rules to start from or a formula of your
+  own; a percent is typed as 55 and saved as 0.55), then Check my thesis (disabled while the
+  thesis has unsaved changes or only template text; checks run when the user asks), where the
+  filings stand (Revisit's new-filing notice with a re-check, or which 10-K/10-Q the last check
+  read), and the check panel (a quote opens the Thesis step and marks it).
 - **Why Earnings is a step and the 8-Ks sit in What changed** (F1, from the analyst tests: the
   release and the acquisition after the quarter end were "the most decision-relevant filing
   content" and came only from a lucky search and the check): the release is management's account
@@ -557,6 +572,28 @@ per company, from its filings to a thesis that's checked after every filing. Rul
 - Grants nothing: every step reads through the permission-checked routes as the viewer. The
   assistant's page context reports a project as `workspace` (its thesis and model steps as
   `thesis` / `model`): agent-api's pages have no `analysis`.
+
+Home's first step (F6, #127, `home/StartCard.tsx`): a "Start an analysis" card leads Home, a
+company picker (companies you can read) that opens New analysis on the one you pick, the analyses
+under way to continue (with their steps done), and the new filing alerts. Screen companies, New
+comps and New chart stay in the page bar as quiet buttons. With nothing saved, the cards under it
+are the watchlist, new filings and data notes, the three the testers said work; the status strip,
+Continue where you left off and Expected filings are off (`views/model.ts` `DEFAULT_HOME`) and come
+back in Customize.
+
+Filing alerts (F6, `src/alerts/`, Query API README "Filing alerts"): a bell in the top bar with
+the unread count (`useAlerts.ts`: one request shared by every hook, again every 5 minutes, on
+focus and after marking read; an older API's 404 hides the bell); `#/alerts` lists them newest
+filing first: form, company, filed date and period, an 8-K's items, a 10-K/10-Q's key figures with
+their change on a year earlier, your red lines on it (Clear / Crossed), and links to What changed
+(the company's Filings tab opened on that filing's comparison: `#/company/<id>/filings?changes=<accession>`),
+Earnings, the reader and EDGAR; opening the list marks what it shows read. Settings → Filing alerts
+(`AlertSettings.tsx`): 10-K / 10-Q / 8-K per followed company, saved at once; webhooks (the URL
+typed once and cleared, shown masked; the API's refusal sentence for anything but https to a
+public address; the signing secret shown once with Copy, kept only in the component's state;
+Send a test, New secret, Remove, on/off) and the delivery log in words ("Retrying: it answered
+500; tried 2 times"); email says it isn't set up. `alerts/alerts.ts` only words what the API
+decided.
 
 Customizable views (`src/views/`, Query API `/v1/views`): Home's "Customize" shows, hides and
 reorders its cards; the watchlist and the screener have "Columns" to choose and order their value
@@ -878,6 +915,7 @@ React.lazy); once signed in and idle the app prefetches them, so switching scree
 | + Price tab, Settings (`#/settings`) (2026-11-02, Connect your data) | Company 37.1 kB (11.7 kB) with the Price tab; Settings 3.1 kB (1.4 kB); shell 358.7 kB (114.3 kB) | |
 | + Analysis (`#/analysis…`) (2026-11-02) | AnalysisPage 35.7 kB (12.0 kB) + ThesisPage 32.3 kB (11.8 kB), ModelPage 9.9 kB (3.8 kB), Compare 10.8 kB (4.0 kB), Company chunks; shell 361.0 kB (114.9 kB) | 48.6 kB (10.3 kB) |
 | + Model depth (2026-11-09, F2) | ModelPage 27.7 kB (9.6 kB), useModelRun 14.1 kB (5.0 kB), ModelView 6.2 kB (2.7 kB), model 3.3 kB (1.7 kB); shell 433.6 kB (142.4 kB) | 65.4 kB (13.6 kB) |
+| + Thesis cards, alerts, Home's first step (2026-11-09, F6) | ThesisPage 40.0 kB (14.3 kB) with the Write view; AlertsPage 1.5 kB + Notifications chunk; Settings 11.4 kB (4.0 kB); shell 471.9 kB (154.4 kB), +9.3 kB (+3.1 kB) over F5's 462.6 kB (151.3 kB) for the bell, the start card and the alerts' wording | 72.8 kB (15.0 kB) |
 
 Before splitting, everything was one 493.6 kB (156.3 kB gzip) script; the first screen now
 loads a third less. Most of what remains is React DOM. Chart data is cached in memory per
@@ -905,6 +943,10 @@ without the bank lines; a save refused for a comps table's bank columns or a scr
 statement refused for 049's metrics (422) is asked again without them (no subtotals or reconciliation,
 as before); an older API ignores `callouts` (no marks); `/components` answering 404 says the figure
 can't be opened yet; a Numbers chart line of a metric it doesn't know says it couldn't be drawn (the rest draw).
+F6: every `/v1/alerts` route answering 404 means no alerts yet: no bell, and the Alerts page, the
+Monitor step's lists and Settings' section say alerts aren't available on this server yet; an older
+API's notification without `filing_url` links EDGAR from the company id. The thesis's Write view and
+the comps table change no request, and Home's new default arrangement asks nothing new.
 
 `Dockerfile` builds the bundle and serves it from `nginx-unprivileged` on port 8080
 (`deploy/nginx.conf`). nginx returns 404 for the APIs' `/docs`, `/redoc`, `/openapi.json` and

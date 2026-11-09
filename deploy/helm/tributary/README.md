@@ -49,6 +49,18 @@ in one transaction (79 s, 406 MB on 2026-11-09's 4,888 documents; limit 1 GiB). 
 the Query API suggests peers by SIC and size; start one by hand after the deploy:
 `kubectl -n tributary create job --from=cronjob/business-peers business-peers-1`.
 
+`alerts` (query-api image, `query-api-alerts`, app migration 016) runs every 10 minutes and is
+not suspended: it makes filing alerts for each user's watched and analysed companies from the last
+3 days of the filing index, reads their figures and red lines as that user (OpenFGA, then RLS) and
+sends them on to users' webhooks with retries (Query API README, "Filing alerts"). It is idempotent
+on the filing, so a missed or overlapping run changes nothing (and `concurrencyPolicy: Forbid`). It
+uses `postgres`, `app-postgres`, `openfga`, `jwt` (webhook signing secrets are derived from it) and
+`webhooks`: HTTPS to public addresses only, under the code's own checks; no Kafka, no SEC. Its
+`PUBLIC_APP_URL` is where alert links point. Email stays off: setting `ALERT_SMTP_HOST`,
+`ALERT_SMTP_FROM` (and `ALERT_SMTP_USER` / `ALERT_SMTP_PASSWORD` from the secret) in its env would
+turn the SMTP provider on, but nothing is sent until users can verify an address. query-api also
+`uses: webhooks`, for the settings page's "Send a test".
+
 `financials-rebuild` ships suspended and never runs on a schedule: it re-derives silver and gold from
 the payloads already in bronze (`facts-fetcher --rebuild`, no SEC requests, only `uses: postgres`),
 after a change to `silver.metric_tags` or to gold's SQL rules. Run it once by hand after such a
@@ -89,13 +101,14 @@ decides its environment variables, which Secret keys it can read, and its networ
 | uses | Env | Network |
 |---|---|---|
 | `postgres` | `DATABASE_URL` | host Postgres |
-| `app-postgres` | `APP_DATABASE_URL` (query-api: watchlists, workspaces, demo sandboxes, password accounts; demo-cleanup) | host Postgres |
+| `app-postgres` | `APP_DATABASE_URL` (query-api: watchlists, workspaces, demo sandboxes, password accounts, filing alerts; demo-cleanup; alerts) | host Postgres |
 | `kafka` | `KAFKA_BOOTSTRAP_SERVERS`; with `kafka.sasl.enabled` also `KAFKA_SECURITY_PROTOCOL`, `KAFKA_SASL_MECHANISM`, `KAFKA_SASL_USERNAME` (`kafkaUser`, default the service/job name) and `KAFKA_SASL_PASSWORD` (`kafka-password-<user>`) | Kafka in `platform` (9092, or the SASL listener 9094) |
 | `openfga` | `FGA_API_URL`, `FGA_API_TOKEN` when `openfga.auth.enabled` | OpenFGA in `platform` |
 | `sec` | `SEC_USER_AGENT`; `SEC_LIMITER_DATABASE_URL` (main database: `database-url`, or `sec-limiter-database-url` with `secLimiter.dedicatedLogin`) and `SEC_CALLER_CLASS` (`secClass`, default `live` for services, `batch` for jobs) for the shared SEC rate limit | HTTPS to public addresses, host Postgres |
 | `anthropic` | `ANTHROPIC_API_KEY` | HTTPS to public addresses |
 | `github` | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` (`github-client-id` / `github-client-secret`, both `optional: true`), `GITHUB_REDIRECT_URI` (`github.redirectUri`) | HTTPS to public addresses |
 | `market-data` | `DATA_CONNECTIONS_KEY` (`data-connections-key`, `optional: true`) | HTTPS to public addresses |
+| `webhooks` | | HTTPS to public addresses (users' alert webhooks: query-api's test send, the `alerts` job; query_api/webhooks.py refuses private addresses first) |
 | `jwt` | `QUERY_API_JWT_SECRET` | |
 | `query-api` | `QUERY_API_URL` | |
 | `demo` | `DEMO_USERS` when `demo.enabled` (off on hermes: the named users are test personas); `DEMO_SANDBOX_*`, `DEMO_AGENT_*` when `demo.sandbox.enabled` | |

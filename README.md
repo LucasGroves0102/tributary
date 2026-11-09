@@ -174,8 +174,9 @@ curl "localhost:8000/v1/companies/0001045810/financials?metrics=revenue" # 401: 
 
 ### Web app
 
-`services/web` (React, TypeScript, Vite): a research workspace with Home (watchlist, new and
-expected filings), guided [Analysis](#analysis) projects from filings to a checked thesis, a screener over every company, company tearsheets (statements, revenue,
+`services/web` (React, TypeScript, Vite): a research workspace with Home (start an analysis, the
+watchlist, new filings, data notes), [filing alerts](#filing-alerts) for the companies you follow,
+guided [Analysis](#analysis) projects from filings to a checked thesis, a screener over every company, company tearsheets (statements, revenue,
 segments, ratios, filings, peers, [earnings releases and the 8-Ks since the last report](#earnings-and-events)), a chart builder with formula layers, comps tables, a filing reader
 with "what changed" diffs, and full-text search. The assistant sits on every screen, sees what
 you're looking at, and can build charts, screens and comps for you, with Undo. Model output is
@@ -210,10 +211,13 @@ also work on their own:
   Every save keeps the version it replaced. Only your inputs are saved; the maths run in one
   place, the Query API (`POST /v1/companies/{id}/model`), for the page, the thesis check and
   later MCP.
-- **Thesis**: your Markdown about a company, with any chart, comps table, screen or model from
-  the same workspace embedded where you put it, drawn live. Write, preview or both side by side;
-  import a `.md` file and export one (embeds become `[Chart: name]` lines). Rendered through the
-  same sanitizer as model output.
+- **Thesis**: your argument about a company, with any chart, comps table, screen or model from
+  the same workspace embedded where you put it, drawn live, and the filing passages you pinned.
+  Write shows them as cards you move (buttons or Alt+↑/↓) and remove (with Undo), never as
+  `[[embed:…]]` lines; a comps set stays its table; a quote says its form and the period it reports
+  on. Underneath it is still Markdown, so export and import round-trip byte for byte (tested on a
+  pinned thesis, and shown in the screenshot harness) and versions and drafts work as before; a
+  Markdown view shows the text as saved. Rendered through the same sanitizer as model output.
 - **Check my thesis**: the agent reads your saved thesis as you, marks each factual claim
   Supported, Contradicted (with what the filing says) or Can't verify, each with citations that
   open the filing; compares each embedded model's growth and margin per year (its base case)
@@ -261,8 +265,9 @@ without losing anything you typed:
 7. **Thesis**: starts from a template: core thesis (3-5 sentences), variant perception
    (what the market misses), pillars with evidence, catalysts (the next expected filings
    prefilled), risks and mitigants, what would prove you wrong, and KPIs to watch.
-8. **Monitor**: Check my thesis and the new-filing notice; KPIs with red lines checked after
-   every filing come next.
+8. **Monitor**: the company's new filings as alerts arrive, your red lines on its figures (each
+   Clear or Crossed now, and checked on every new 10-K and 10-Q), and Check my thesis with the
+   new-filing notice.
 
 **Add to thesis** on any step pins the evidence into a section you pick: a chart or comps
 table is saved in the project and embedded, a filing passage is quoted with its form, the period
@@ -305,6 +310,27 @@ index here (140,884 of 140,884, all filers); for operating companies over the la
 releases sampled across industries, the outlook rules found 32 of the 33 that have an Outlook or
 Guidance section, and nothing in the others. Rules and numbers:
 [query-api](services/query-api/README.md#earnings-and-events), [web](services/web/README.md).
+
+#### Filing alerts
+
+When a company on your watchlist or in one of your analyses files a 10-K, a 10-Q or an 8-K with a
+material item, a bell counts it and the Alerts page lists it: the form, the period, an 8-K's items,
+a 10-K or 10-Q's revenue, margin and EPS against a year earlier once the SEC's XBRL data has them,
+your red lines evaluated on it, and links to What changed, the earnings view, the reader and EDGAR.
+You choose the forms per company, and can send alerts on to a Discord, Slack or any https webhook,
+signed with a secret shown once. The webhook is SSRF-safe by construction: https to public
+addresses only, checked after DNS and again before each send on the address actually connected to,
+no redirects, short timeouts and size caps; `http://169.254.169.254` and every private, loopback,
+link-local or metadata address are refused (tests and the settings page show it). A red line is a
+rule in the chart formula language ("gross margin below 70%", "receivables growth over revenue
+growth by more than 10 points"), compiled with bound parameters only. Alerts are made by a database
+poll every 10 minutes, not a Kafka consumer (what an alert says arrives later than the filing, and
+a consumer needs credentials only the owner can create); each run re-reads three days of the index
+and is idempotent on the filing, at about 13 ms per 50 followed companies on hermes. Everything is
+owner-only with forced row-level security, and a user can't read, mark, test or see the deliveries
+of another's alerts or webhooks (tested on the real tables). Email is behind a provider interface
+and off: no provider is chosen. Rules and numbers: [query-api](services/query-api/README.md#filing-alerts),
+[web](services/web/README.md).
 
 #### Statements: cash flow, KPIs, reported vs standardised
 
