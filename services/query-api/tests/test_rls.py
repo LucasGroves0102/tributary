@@ -605,10 +605,39 @@ def test_search_ranks_denser_matches_first(texts, token):
             search(texts, token, "t-pro", 'q="export controls"')] == [f"{A}-26-000003"]
 
 
+def test_search_quoted_phrase_date_order_and_total(texts, token):
+    """#80: a quoted phrase matches the words together only; #145: newest first and a total."""
+    conn = texts.app_conn
+    for acc, filed, text in (
+            (f"{A}-25-000003", "2025-05-01", "export controls on chips; export controls again"),
+            (f"{A}-26-000004", "2026-05-01", "new export controls"),
+            (f"{A}-26-000005", "2026-06-01", "export rules and, much later, some controls")):
+        conn.execute(
+            "INSERT INTO bronze.filing_documents (accession_no, cik, form, filed,"
+            " document_name, url, content_gzip, content_sha256, size_bytes)"
+            " VALUES (%s, %s, '10-Q', %s, 'd.htm', 'u', '\\x00', 'x', 1)", (acc, A, filed))
+        conn.execute(
+            "INSERT INTO silver.filing_sections (accession_no, section_key, parser,"
+            " parser_version, item, title, text, char_start, char_end)"
+            " VALUES (%s, 'II-1A', 'python', 't', '1A', 'Risk Factors', %s, 100, 150)",
+            (acc, text))
+        conn.execute("SELECT gold.refresh_section_search(ARRAY[%s])", (acc,))
+    accs = lambda q: [h["citation"]["accession_no"]  # noqa: E731
+                      for h in search(texts, token, "t-pro", q)]
+    assert accs("q=export+controls") == [f"{A}-25-000003", f"{A}-26-000004", f"{A}-26-000005"]
+    assert accs("q=%22export+controls%22") == [f"{A}-25-000003", f"{A}-26-000004"]
+    assert accs("q=export+controls&sort=date") == [f"{A}-26-000005", f"{A}-26-000004",
+                                                   f"{A}-25-000003"]
+    body = texts.get("/v1/search?q=export+controls&limit=1&sort=date",
+                     headers=token("t-pro")).json()
+    assert body["total"] == 3 and body["has_more"] is True and body["sort"] == "date"
+    body = texts.get("/v1/search?q=%22export+controls%22&limit=1&offset=1",
+                     headers=token("t-pro")).json()
+    assert body["total"] == 2 and body["has_more"] is False
+
+
 def test_every_session_has_a_statement_timeout(client):
     """SET LOCAL ROLE skips role settings, so Store must set the timeout itself."""
-    import psycopg
-
     store = Store(OneConnection(client.app_conn))
     with store._session("t-free") as cur:
         cur.execute("SHOW statement_timeout")
@@ -713,6 +742,7 @@ def test_store_reads_the_catalog_list_under_rls(client):
 # Open access without an id list (migration 032): RLS alone, as with the catalog public ---------
 
 SEARCH_FN = "gold.search_passages(tsquery, text[], text, text, date, date, int, int)"
+SEARCH_PAGE_FN = "gold.search_page(tsquery, text[], text, text, date, date, text, int, int)"
 
 
 class PublicCatalogSaysOpenFga:
@@ -861,14 +891,38 @@ def test_search_passages_applies_the_read_rule(client):
 
 def test_search_passages_is_locked_down(client):
     conn = client.app_conn
-    fn = (SEARCH_FN,)
-    assert conn.execute("SELECT has_function_privilege('query_api', %s, 'EXECUTE')",
-                        fn).fetchone() == (True,)
-    assert conn.execute("SELECT has_function_privilege('ops_reader', %s, 'EXECUTE')",
-                        fn).fetchone() == (False,)
-    secdef, config = conn.execute(
-        "SELECT prosecdef, proconfig FROM pg_proc WHERE oid = %s::regprocedure", fn).fetchone()
-    assert secdef is True and config == ["search_path=pg_catalog, pg_temp"]
+    for fn in ((SEARCH_FN,), (SEARCH_PAGE_FN,)):
+        assert conn.execute("SELECT has_function_privilege('query_api', %s, 'EXECUTE')",
+                            fn).fetchone() == (True,)
+        assert conn.execute("SELECT has_function_privilege('ops_reader', %s, 'EXECUTE')",
+                            fn).fetchone() == (False,)
+        secdef, config = conn.execute(
+            "SELECT prosecdef, proconfig FROM pg_proc WHERE oid = %s::regprocedure",
+            fn).fetchone()
+        assert secdef is True and config == ["search_path=pg_catalog, pg_temp"]
+
+
+def test_search_page_applies_the_read_rule(client):
+    """052's gold.search_page is 032's read rule with an order and a total: the same cases."""
+    conn = client.app_conn
+    for cid in (A, B):
+        conn.execute("SELECT gold.refresh_section_search(ARRAY[%s])", (f"{cid}-26-000002",))
+
+    def page(user, companies=None, sort="relevance"):
+        return visible(conn, user,
+                       "SELECT company_id, total FROM gold.search_page(websearch_to_tsquery("
+                       "'english', 'secret'), %s::text[], NULL, NULL, NULL, NULL, %s, 10, 0)"
+                       " ORDER BY company_id", (companies, sort))
+    assert page("t-pro") == [(A, 1)]
+    assert page("t-pro", [B]) == []
+    assert page("t-free") == [] and page("t-reader") == []
+    for user in (None, ""):
+        assert page(user) == [] and page(user, [A, B]) == []
+    open_catalog(conn, B)
+    assert page("t-reader") == [(B, 1)]
+    assert page("t-pro", sort="date") == [(A, 2), (B, 2)]
+    with pytest.raises(psycopg.errors.RaiseException):
+        page("t-pro", sort="rank DESC; --")
 
 
 def test_search_with_the_catalog_public_is_bounded_by_rls(client, token):

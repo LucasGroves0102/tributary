@@ -3,13 +3,17 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { searchCompanies, searchFilings } from "../api";
 import { formTag } from "../company/data";
 import { useLoad } from "../company/useLoad";
+import { useDirectory } from "../companies/directory";
 import { CompanyPicker, type PickedCompany } from "../components/CompanySearch";
 import { Skeleton } from "../components/States";
 import { day, UNNAMED } from "../format";
-import { snippetRuns } from "../reader/text";
+import { searchTerms, snippetRuns } from "../reader/text";
 import { go, href } from "../route";
-import { datesInverted, groupHits, SEARCH_FORMS, SEARCH_PAGE, usableDate, type SearchForm, type SearchState } from "../search/state";
-import type { Company } from "../types";
+import {
+  asPhrase, datesInverted, groupHits, isPhrase, SEARCH_FORMS, SEARCH_PAGE, searchScope, searchWindow, usableDate,
+  type SearchForm, type SearchState,
+} from "../search/state";
+import type { Company, SectionSearch } from "../types";
 
 interface Props {
   token: string;
@@ -43,8 +47,12 @@ export function Search({ token, search, companies, open = false, suggestions = N
       company: search!.company,
       limit: SEARCH_PAGE,
       offset: page * SEARCH_PAGE,
+      ...(search!.sort ? { sort: search!.sort } : {}),
+      ...(searchWindow(search!) === "exact" && !search!.company ? { window: "exact" as const } : {}),
     }),
   );
+  const terms = useMemo(() => (search ? searchTerms(search.q) : []), [search]);
+  const directory = useDirectory(token);
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -77,6 +85,19 @@ export function Search({ token, search, companies, open = false, suggestions = N
           <button className="btn primary" type="submit" disabled={!draft.q.trim()}>Search</button>
         </div>
         <div className="row wrap">
+          <label className="chk" title="Match the words together, in this order (the same as typing them in quotes)">
+            <input type="checkbox" checked={isPhrase(draft.q)} disabled={!draft.q.trim()}
+              onChange={(e) => filter({ q: asPhrase(draft.q, e.target.checked) })} />
+            <span>Exact phrase</span>
+          </label>
+          <label className="row">
+            <span className="faint">Order</span>
+            <select className="field narrow" aria-label="Order" value={draft.sort ?? ""}
+              onChange={(e) => filter({ sort: e.target.value === "date" ? "date" : undefined })}>
+              <option value="">Best match</option>
+              <option value="date">Newest first</option>
+            </select>
+          </label>
           <label className="row">
             <span className="faint">Form</span>
             <select className="field narrow" aria-label="Form" value={draft.form ?? ""}
@@ -93,12 +114,12 @@ export function Search({ token, search, companies, open = false, suggestions = N
           <label className="row">
             <span className="faint">Filed from</span>
             <input className="field narrow" type="date" aria-label="Filed from" value={draft.from ?? ""}
-              onChange={(e) => filter({ from: e.target.value || undefined })} />
+              onChange={(e) => filter({ from: e.target.value || undefined, allDates: undefined })} />
           </label>
           <label className="row">
             <span className="faint">to</span>
             <input className="field narrow" type="date" aria-label="Filed to" value={draft.to ?? ""}
-              onChange={(e) => filter({ to: e.target.value || undefined })} />
+              onChange={(e) => filter({ to: e.target.value || undefined, allDates: undefined })} />
           </label>
         </div>
         {inverted && (
@@ -153,14 +174,9 @@ export function Search({ token, search, companies, open = false, suggestions = N
         </p>
       ) : (
         <section className="card results">
-          {load.data.searched_from && (
-            <p className="foot searched-from">
-              Best matches in filings since {day(load.data.searched_from, true)}. Pick a company or
-              dates to search further back.
-            </p>
-          )}
-          {groupHits(load.data.results).map((c) => (
-            <div key={c.companyId} className="result-co">
+          <ScopeLine search={search} data={load.data} name={search.company ? directory.short(search.company) : null} />
+          {groupHits(load.data.results, load.data.sort === "date").map((c, gi) => (
+            <div key={`${gi}-${c.companyId}`} className="result-co">
               <h2>
                 <a href={href({ view: "company", companyId: c.companyId, tab: "filings" })}>{c.name}</a>
               </h2>
@@ -181,7 +197,7 @@ export function Search({ token, search, companies, open = false, suggestions = N
                         </a>
                         {h.passages_matched > 1 && <span className="faint small"> · {h.passages_matched} passages match</span>}
                         <div className="snippet">
-                          {snippetRuns(h.snippet).map((r, i) => (typeof r === "string" ? r : <mark key={i}>{r.mark}</mark>))}
+                          {snippetRuns(h.snippet, terms).map((r, i) => (typeof r === "string" ? r : <mark key={i}>{r.mark}</mark>))}
                         </div>
                       </li>
                     ))}
@@ -194,16 +210,42 @@ export function Search({ token, search, companies, open = false, suggestions = N
             <div className="pager">
               <span className="muted">
                 {page * SEARCH_PAGE + 1}–{page * SEARCH_PAGE + load.data.results.length}
+                {typeof load.data.total === "number" ? ` of ${load.data.total.toLocaleString("en-US")}` : ""}
               </span>
               <button className="btn sm" disabled={page === 0} onClick={() => toPage(page - 1)}>Previous</button>
               <button className="btn sm" disabled={!load.data.has_more} onClick={() => toPage(page + 1)}>Next</button>
             </div>
           )}
           <div className="foot">
-            Ranked by how densely the words occur in each passage; one passage per section. Data
-            as of {day(load.data.as_of, true)}.
+            {load.data.sort === "date"
+              ? "Newest filings first, the best-matching passage of each section."
+              : "Best match first: by how densely the words occur in each passage, the best passage of each section."}{" "}
+            Data as of {day(load.data.as_of, true)}.
           </div>
         </section>
+      )}
+    </div>
+  );
+}
+
+/** #81/#145: what was searched, said up front, from the API's own answer; when the API ranked only
+ * the newest filings itself (every company, no dates), ways to search further back. */
+function ScopeLine({ search, data, name }: { search: SearchState; data: SectionSearch; name: string | null }) {
+  const scope = searchScope(search, data, name);
+  const pastYear = new Date(Date.parse(data.as_of) - 365 * 86_400_000).toISOString().slice(0, 10);
+  return (
+    <div className="search-scope row wrap" role="status">
+      <span className="grow">{scope.text}</span>
+      {scope.widen && (
+        <span className="row wrap">
+          <span className="faint small">Every company's filings are ranked from the newest; for more:</span>
+          <button className="btn sm" onClick={() => go({ view: "search", search: { ...search, from: pastYear, page: undefined } })}>
+            The past year
+          </button>
+          <button className="btn sm" onClick={() => go({ view: "search", search: { ...search, allDates: true, page: undefined } })}>
+            All dates
+          </button>
+        </span>
       )}
     </div>
   );

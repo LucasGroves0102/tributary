@@ -298,6 +298,18 @@ def test_search_with_from_stops_there_and_too_broad_is_still_422(token):
     assert c.get("/v1/search?q=revenue", headers=token("carol")).status_code == 422
 
 
+def test_search_window_exact_ranks_exactly_the_range_asked(token):
+    """#81: the dates a reader picked are the dates searched, across the catalog too: one call
+    over exactly from-to, still no id list (the definer function reads the rule itself)."""
+    c = app()
+    body = c.get("/v1/search?q=x+y&from=2025-11-01&to=2026-11-01&window=exact&sort=date",
+                 headers=token("carol")).json()
+    [(_, args, kwargs)] = [x for x in c.store.calls if x[0] == "search_sections"]
+    assert args[1] is None and args[5] == date(2025, 11, 1) and args[6] == date(2026, 11, 1)
+    assert kwargs == {"sort": "date"}
+    assert "searched_from" not in body and body["window"] == "exact"
+
+
 def test_search_of_one_company_is_exact_all_time(token):
     c = app()
     c.get(f"/v1/search?q=revenue&company={NVDA}", headers=token("carol"))

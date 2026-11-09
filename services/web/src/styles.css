@@ -2888,6 +2888,14 @@ mark {
   border-bottom: 1px solid var(--line);
 }
 
+/* what was searched, at the top of the results (#81, #145): a sentence, not a footnote */
+.search-scope {
+  padding: var(--sp-4) var(--sp-6);
+  border-bottom: 1px solid var(--line);
+  background: var(--panel-2);
+  font-weight: 500;
+}
+
 .results .result-co h2 {
   margin: 0 0 var(--sp-3);
   font-size: var(--fs-lg);

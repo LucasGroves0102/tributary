@@ -52,7 +52,7 @@ request parameters. Dev tokens: `make token USER=alice`.
 | `GET /v1/filings/latest?limit=` | token | newest parsed filings across the companies the caller can read filings for |
 | `GET /v1/companies/{id}/sections/{key}?form=&accession_no=&limit=&max_chars=` | filings | section text + citation; `max_chars` default 8,000, up to 1,000,000 (the reader asks for the whole section) |
 | `GET /v1/companies/{id}/filings/{accession}/changes?section=&basis=&kind=&view=&q=&numbers=` | filings | new / removed / rewritten Risk Factors and MD&A paragraphs vs the comparable earlier filing, word diffs, citations in both filings; with `view` read for materiality (noise hidden and counted, periods, figures, score and why; a 10-Q against a year ago by default; topic and new-figure filters) ([What changed](#what-changed)) |
-| `GET /v1/search?q=&company=&form=&section=&from=&to=&limit=&offset=` | filings (every company searched) | best passage per section, ranked, with snippet and citation ([Search](#search)) |
+| `GET /v1/search?q=&company=&form=&section=&from=&to=&limit=&offset=&sort=&window=` | filings (every company searched) | best passage per section, ranked or newest first, with snippet, citation and a total ([Search](#search)) |
 | `GET /v1/companies/{id}/events` | filings | 8-K filings since the latest 10-Q/10-K period end, newest first: items (SEC title, kind), an excerpt of the 8-K's own words, the press release exhibit, `announced` (a completed deal or new financing read from a 7.01/8.01 announcement), and `stale`: figures at that period end an event after it may have changed ([Earnings and events](#earnings-and-events)) |
 | `GET /v1/companies/{id}/earnings?quarters=` | filings | each quarter's earnings release (8-K Item 2.02), newest first, `quarters` 1-8 (default 4): the release, its headline, outlook passages and management's adjustments (reconciliation tables, dollar notes), each with offsets into the release; no beat or miss ([Earnings and events](#earnings-and-events)) |
 | `GET /v1/companies/{id}/data-notes` | financials | data-quality and freshness notes: gaps, overlapping quarters, restatements, derived quarters, filings companyfacts doesn't carry yet, each with its filings ([Data notes](#data-notes)) |
@@ -1240,10 +1240,18 @@ applies `authz.readable_companies('filings')` itself: `@@` isn't leakproof, so u
 `gold.section_search` the planner can't use the GIN index at all. It returns offsets and ranks,
 no text; the snippet's text is still read through RLS on `silver.filing_sections`.
 
-- `q`: `websearch_to_tsquery('english', q)`: words, `"a phrase"`, `or`, `-excluded`.
+- `q`: `websearch_to_tsquery('english', q)`: words, `"a phrase"`, `or`, `-excluded`. A quoted
+  phrase matches its words adjacent and in order (stemmed: `"export controls"` matches "export
+  control rules"); `gold.section_search` keeps positions, so this runs in the index. `ts_headline`
+  still marks each of the phrase's words wherever it stands in the snippet; the web app re-marks a
+  phrase query's snippet itself (#80).
   Filters: `company`, `form` (`10-K`, `10-Q`, `8-K`, `/A` amendments), `section`, `from` / `to`
   (filing date). `limit` 1-50 (default 10), `offset` up to 1000, `has_more`.
-- One result per section: its best passage by `ts_rank_cd`, then newest filing first;
+- One result per section: its best passage by `ts_rank_cd`; with `sort=relevance` (default) best
+  rank first, then newest filing, with `sort=date` newest filing first, then rank (#145).
+  `total` is how many sections match in the range searched (`null` past the last page; the same
+  ranking pass counts them, migration 052's `gold.search_page`). `sort` and `window` are echoed:
+  the web app reads an answer without them as an older API.
   `passages_matched` counts the section's matching passages. `snippet` is `ts_headline` over that
   passage only (matches between « and »), cut from `silver.filing_sections` at query time.
   `citation` has the passage's character offsets into the document text.
@@ -1253,5 +1261,9 @@ no text; the snippet's text is still read through RLS on `silver.filing_sections
   from `to` (or today), then 180, 730, then all time (a phrase with few recent matches has few
   matches), never before `from`. `searched_from` in the response is that lower bound (`null`:
   all time or `from`). A consequence: a page past the end of one window re-ranks a wider one, so
-  deep paging can repeat a result. Queries still stop after 8 s (`SEARCH_TIMEOUT`) with 422
-  "search too broad".
+  deep paging can repeat a result. `window=exact` (the web app sends it whenever the reader picked
+  dates or "All dates", #81) skips the windows: exactly `from`-`to`, which may be too broad.
+  Measured on hermes (2026-11-09, the inner query as the owner): "export controls" ranks 647
+  sections of 30 days in 0.5 s, 7,017 of a year in 4.3 s. The agent's tool sends neither `sort`
+  nor `window`, so its searches are unchanged. Queries still stop after 8 s (`SEARCH_TIMEOUT`)
+  with 422 "search too broad".

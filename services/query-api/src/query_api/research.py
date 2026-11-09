@@ -269,12 +269,21 @@ def add_research_routes(app: FastAPI, *, store: Store, current_user: Callable[..
         end: Annotated[date | None, Query(alias="to", description="filed on or before")] = None,
         limit: Annotated[int, Query(ge=1, le=50)] = 10,
         offset: Annotated[int, Query(ge=0, le=1000)] = 0,
+        sort: Annotated[Literal["relevance", "date"], Query(
+            description="relevance (rank, then newest) or date (newest filed first)")]
+            = "relevance",
+        window: Annotated[Literal["auto", "exact"], Query(
+            description="auto: with the catalog public and no company, the newest window that"
+                        " fills the page; exact: exactly from-to (may be too broad: 422)")]
+            = "auto",
     ) -> dict:
         """Full-text search over the parsed sections of the companies whose filings the caller
-        can read: the best-matching passage per section, ranked, with a snippet (matches
-        between « and ») and a citation to the passage. With the catalog public and no `company`,
-        `searched_from` says how far back the ranked filings go: the newest window that fills
-        the page, wider only when there are few matches."""
+        can read: the best-matching passage per section, ranked (or newest first with
+        `sort=date`), with a snippet (matches between « and ») and a citation to the passage.
+        `total` is how many sections match in the range searched (None past the last page).
+        With the catalog public, no `company` and `window=auto`, `searched_from` says how far
+        back the ranked filings go: the newest window that fills the page, wider only when
+        there are few matches. `sort` and `window` are echoed (additive)."""
         if company is not None:
             require(user_id, "filings", company)
             granted: list[str] | None = [company]
@@ -286,22 +295,24 @@ def add_research_routes(app: FastAPI, *, store: Store, current_user: Callable[..
         rows: list[dict] = []
         windowed: dict[str, date | None] = {}
         try:
-            if granted is None:
+            if granted is None and window == "auto":
                 today = datetime.now(UTC).date()  # EDGAR dates are US Eastern, never later
                 for lower in newest_windows(SEARCH_WINDOW_DAYS, start, end, today):
                     rows = store.search_sections(user_id, None, q, form, section, lower, end,
-                                                 limit + 1, offset)
+                                                 limit + 1, offset, sort=sort)
                     windowed = {"searched_from": lower}
                     if len(rows) > limit:
                         break
-            elif granted:
+            elif granted is None or granted:
                 rows = store.search_sections(user_id, granted, q, form, section, start, end,
-                                             limit + 1, offset)
+                                             limit + 1, offset, sort=sort)
         except SearchTooBroad:
             raise HTTPException(422, "search too broad: add a company, form, section or"
                                      " date filter, or more specific words") from None
+        total = rows[0].get("total") if rows else (0 if offset == 0 else None)
         return {
             "query": q, "as_of": _now(), "limit": limit, "offset": offset, **windowed,
+            "sort": sort, "window": window, "total": total,
             "has_more": len(rows) > limit,  # layer 1 on every row below, also without an id list
             "results": [{
                 "company_id": r["company_id"], "name": r["name"],

@@ -300,8 +300,22 @@ replaces a chart with work in it (New chart, a template, a Chart button, opening
 that draft: the builder says what happened and can restore it until the next replacement.
 
 Search (`pages/Search.tsx`): words run on Enter or the button (each search ranks every match);
-form, company and dates apply as soon as they change. Inverted dates aren't searched: the page says
+form, company, dates, order and Exact phrase apply as soon as they change. Inverted dates aren't searched: the page says
 so and offers to swap them. No result under filters offers to clear them instead of blaming the words.
+The results open with one sentence saying what was searched (`search/state.ts` `searchScope`, from
+the API's answer, not from what was asked): "647 sections in every company's filings filed since
+Oct 10, 2026 match, best match first." (#81, #145). The dates a reader picks are exactly the dates
+searched (`searchWindow`: `window=exact`), across every company too; only an all-company search with
+no dates lets the API rank the newest window that fills a page, and then the sentence says from when
+and offers "The past year" and "All dates" (`dates=all`). One company is always every date, and the
+sentence says "of any date". Order: Best match or Newest first (`sort=date`; then the list stays in
+date order, a company's run of hits grouped, not all its hits). The pager says "1-20 of 647".
+Exact phrase (`isPhrase`/`asPhrase`) quotes the words; a phrase marks only the words together, in the
+snippets too (`reader/text.ts` `snippetRuns(snippet, terms)` re-marks a phrase query's snippet
+because `ts_headline` marks each word alone; `highlight` matches each word from its stem, `wordStem`,
+so "export controls" marks "export control rules" as the stemmed search matched it). The reader's
+search box has the same box (#80). An older API ignores `sort`/`window` and echoes neither: the
+sentence then shows no count and "best match first".
 
 While the catalog is closed, a sandbox (or a GitHub sign-in) lists only its own 20 companies
 (`src/scope.ts`, a React context set from the session, and only while `/v1/me` says the catalog

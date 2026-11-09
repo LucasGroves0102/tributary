@@ -19,6 +19,11 @@ from query_api.screener import Compiled as Screen
 # a timeout on query_api would never reach these sessions. Search sets its own, longer one.
 QUERY_TIMEOUT = "5s"
 SEARCH_TIMEOUT = "8s"
+# /v1/search's orders (gold.search_page's p_sort): fixed SQL chosen by a validated key, never text
+SEARCH_ORDERS = {
+    "relevance": "h.rank DESC, h.filed DESC, h.accession_no, h.section_key",
+    "date": "h.filed DESC, h.rank DESC, h.accession_no, h.section_key",
+}
 # A recap's one-time-item flags are optional: a slow pass must cost the panel little, and never
 # all of it (ui.py answers without them).
 FLAGS_TIMEOUT = "2s"
@@ -859,12 +864,16 @@ class Store:
 
     def search_sections(self, user_id: str, company_ids: list[str] | None, q: str,
                         form: str | None, section_key: str | None, start: date | None,
-                        end: date | None, limit: int, offset: int) -> list[dict]:
-        """Best passage per section matching websearch_to_tsquery(q), ranked by ts_rank_cd,
-        with a ts_headline snippet cut from that passage only (never the whole section).
-        company_ids None: every company the caller can read (gold.search_passages, migration
-        032, applies the same read rule as RLS; the section text below is still read under RLS).
-        Raises SearchTooBroad when ranking the matches takes over SEARCH_TIMEOUT."""
+                        end: date | None, limit: int, offset: int,
+                        sort: str = "relevance") -> list[dict]:
+        """Best passage per section matching websearch_to_tsquery(q), ranked by ts_rank_cd
+        (sort "relevance") or newest filed first ("date"), with a ts_headline snippet cut from
+        that passage only (never the whole section); every row carries `total`, the sections
+        matching in all. company_ids None: every company the caller can read (gold.search_page,
+        migration 052 over 032's search_passages, applies the same read rule as RLS; the section
+        text below is still read under RLS). Raises SearchTooBroad when ranking the matches
+        takes over SEARCH_TIMEOUT."""
+        order = SEARCH_ORDERS[sort]
         try:
             with self._session(user_id) as cur:
                 cur.execute(f"SET LOCAL statement_timeout = '{SEARCH_TIMEOUT}'")
@@ -873,12 +882,13 @@ class Store:
                     WITH q AS (SELECT websearch_to_tsquery('english', %(q)s) AS q),
                     page AS (
                         SELECT p.*
-                        FROM q CROSS JOIN LATERAL gold.search_passages(
+                        FROM q CROSS JOIN LATERAL gold.search_page(
                             q.q, %(companies)s::text[], %(form)s::text, %(section)s::text,
-                            %(start)s::date, %(end)s::date, %(limit)s::int, %(offset)s::int) p
+                            %(start)s::date, %(end)s::date, %(sort)s::text, %(limit)s::int,
+                            %(offset)s::int) p
                     )
                     SELECT h.company_id, c.name, h.accession_no, h.form, h.filed,
-                           h.section_key, h.rank, h.passages_matched, s.title,
+                           h.section_key, h.rank, h.passages_matched, h.total, s.title,
                            s.char_start + h.start_char AS char_start,
                            s.char_start + h.end_char AS char_end,
                            regexp_replace(
@@ -898,9 +908,9 @@ class Store:
                     LEFT JOIN bronze.filing_exhibits e
                            ON e.accession_no = h.accession_no AND e.exhibit_type = h.section_key
                     JOIN silver.companies c ON c.company_id = h.company_id
-                    ORDER BY h.rank DESC, h.filed DESC, h.accession_no, h.section_key
+                    ORDER BY """ + order + """
                     """, {"q": q, "companies": company_ids, "form": form,
-                          "section": section_key, "start": start, "end": end,
+                          "section": section_key, "start": start, "end": end, "sort": sort,
                           "limit": limit, "offset": offset, "headline": HEADLINE})
                 return cur.fetchall()
         except psycopg.errors.QueryCanceled:

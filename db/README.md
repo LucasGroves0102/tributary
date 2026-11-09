@@ -116,6 +116,10 @@ the same filing's own total are left out (`mistagged_fact`, rule `debt_parts_sca
 to date: forfeitures, remeasured liability awards); its `sign_flip` is severity `info`, rule `benefit`,
 unless another filing reports the quarter positive. Measurements in its header. Needs
 `financials-rebuild`; backout `backout/filers_debt_050.sql`.
+`052_search_sort_total.sql` adds `gold.search_page`: 032's `search_passages` with an order (`relevance`
+or `date`) and a `total` of the matching sections, for the search page's count and "Newest first"
+(#145). Same SECURITY DEFINER read rule; `search_passages` stays for an API pod from before it.
+Catalog only: no table is locked.
 `051_filing_figures.sql` adds `gold.filing_figures(company, accession)`: one filing's facts as gold
 reads them and the net debt, cash and investments and free cash flow computed from that filing alone
 (040's rules), for the thesis check's H2 guard (Query API `/v1/companies/{id}/filings/{accession}/figures`).

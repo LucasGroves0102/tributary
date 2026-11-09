@@ -91,11 +91,25 @@ function escape(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-/** Text split into plain runs and matches of the terms (case-insensitive, word starts, so
- * "export" also marks "exports" as the stemmed search does). */
+/** A typed word as the start of the words the stemmed search matches: one plural or verb ending
+ * off ("controls" → "control", "companies" → "compan"), never leaving under 4 letters. Display
+ * only: Postgres' stemmer decides what matches; this marks about the same words. */
+export function wordStem(word: string): string {
+  const w = word.toLowerCase();
+  for (const end of ["ings", "ing", "ies", "ed", "es", "s"]) {
+    if (w.endsWith(end) && w.length - end.length >= 4 && !w.endsWith("ss")) return w.slice(0, -end.length);
+  }
+  return w;
+}
+
+/** Text split into plain runs and matches of the terms (case-insensitive, from a word's start
+ * and its stem, so "export" also marks "exports" and "controls" marks "control", as the stemmed
+ * search does). A phrase ("export controls", from a quoted query) marks only its words in order,
+ * with nothing but spaces or punctuation between them, never one of them alone (#80). */
 export function highlight(text: string, terms: string[]): Run[] {
   if (!terms.length) return [text];
-  const pattern = new RegExp(`\\b(?:${terms.map((t) => escape(t).replace(/\s+/g, "\\s+")).join("|")})\\w*`, "gi");
+  const one = (t: string) => t.split(/\s+/).map((w) => `${escape(wordStem(w))}\\w*`).join("\\W+");
+  const pattern = new RegExp(`\\b(?:${terms.map(one).join("|")})`, "gi");
   const out: Run[] = [];
   let last = 0;
   for (const m of text.matchAll(pattern)) {
@@ -125,8 +139,11 @@ export function firstMatchFrom(ps: Paragraph[], terms: string[], target: number)
 }
 
 /** A search snippet ("... «export» controls ...") as runs; the marks come from the Query API's
- * ts_headline, the text from the filing. */
-export function snippetRuns(snippet: string): Run[] {
+ * ts_headline, the text from the filing. ts_headline marks every word of a quoted phrase wherever
+ * it stands ("«controls» to restrict" for "export controls"), so with a phrase among `terms` the
+ * snippet is marked here instead, as the reader marks the section (#80). */
+export function snippetRuns(snippet: string, terms: string[] = []): Run[] {
+  if (terms.some((t) => /\s/.test(t))) return highlight(snippet.replace(/[«»]/g, ""), terms);
   const out: Run[] = [];
   for (const part of snippet.split(/(«[^»]*»)/)) {
     if (!part) continue;

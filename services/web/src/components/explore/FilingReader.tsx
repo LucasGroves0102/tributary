@@ -29,6 +29,7 @@ import {
   type Run,
 } from "../../reader/text";
 import { go, href } from "../../route";
+import { asPhrase, isPhrase } from "../../search/state";
 import type { IndexedFiling, SectionChanges, SectionHit } from "../../types";
 import { type Basis, comparisonLabel, defaultBasis, fallBack, periodLabel } from "../../company/changes";
 
@@ -220,9 +221,20 @@ export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q,
       </header>
       <div className="reader-tools row wrap">
         <form className="row grow" role="search" onSubmit={submit}>
-          <input className="field" type="search" aria-label="Search this filing" placeholder="Search this filing…"
+          <input className="field" type="search" aria-label="Search this filing" placeholder={'Search this filing: words or "a phrase"'}
             value={draft} maxLength={200} onChange={(e) => setDraft(e.target.value)} onKeyDown={onSearchKey} />
           <button className="btn sm" type="submit">Search</button>
+          <label className="chk small" title="Match the words together, in this order (the same as typing them in quotes)">
+            <input type="checkbox" checked={isPhrase(draft)} disabled={!draft.trim()}
+              onChange={(e) => {
+                // #80: applies at once, like the search page's filters
+                const next = asPhrase(draft, e.target.checked);
+                setDraft(next);
+                go({ view: "filing", companyId, accessionNo, section: active?.section_key ?? null, ...(next ? { q: next } : {}) });
+                setQuery(next);
+              }} />
+            <span>Exact phrase</span>
+          </label>
         </form>
         {stepped && active && (
           <span className="filing-steps" role="group" aria-label={`Other ${stepped} filings`}>
@@ -408,7 +420,7 @@ function SearchHits({ hits, query, companyId, accessionNo }: { hits: Load<Sectio
             <a href={href({ view: "filing", companyId, accessionNo, section: h.section_key, at: h.citation.char_start, q: query })}>
               <b>{h.section_key}</b> {h.title ?? ""}
             </a>
-            <div className="snippet"><Marked runs={snippetRuns(h.snippet)} /></div>
+            <div className="snippet"><Marked runs={snippetRuns(h.snippet, searchTerms(query))} /></div>
           </li>
         ))}
       </ul>

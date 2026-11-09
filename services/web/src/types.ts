@@ -734,6 +734,12 @@ export interface SectionSearch {
   has_more: boolean;
   /** catalog open, no company: ranked filings go back to here (absent or null: all of them) */
   searched_from?: string | null;
+  /** sections matching in the range searched (migration 052); null past the last page, absent from an older API */
+  total?: number | null;
+  /** the order the API used, echoed; absent: an older API, which ranked by relevance whatever was asked */
+  sort?: "relevance" | "date";
+  /** "exact": the dates asked were the dates searched; absent: an older API (it may have windowed) */
+  window?: "auto" | "exact";
   results: SectionHit[];
 }
 

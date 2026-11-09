@@ -501,6 +501,10 @@ export interface SearchQuery {
   to?: string;
   limit?: number;
   offset?: number;
+  /** #145: best match first (default) or newest first; an older API ignores it and doesn't echo it */
+  sort?: "relevance" | "date";
+  /** #81: "exact" searches exactly from-to (or all dates) across every company; an older API ignores it */
+  window?: "auto" | "exact";
 }
 
 /** Full-text search over the parsed sections of companies whose filings the user can read. */
