@@ -23,10 +23,10 @@
 SET LOCAL lock_timeout = '30s';
 
 -- guard (scripts/backout_guards.py writes it; db/backout/README.md, Order). It refuses, changing
--- nothing, unless every newer backout has run (newest first: annual_currency_060.sql,
--- banks_058.sql, currency_readings_057.sql, ifrs_currencies_056.sql, filing_xbrl_facts_055.sql,
--- filers_debt_050.sql) and this one hasn't, and unless the login owns the functions (the migrate
--- login; header).
+-- nothing, unless every newer backout has run (newest first: rebuild_speed_063.sql,
+-- currency_speed_061.sql, annual_currency_060.sql, banks_058.sql, currency_readings_057.sql,
+-- ifrs_currencies_056.sql, filing_xbrl_facts_055.sql, filers_debt_050.sql) and this one hasn't, and
+-- unless the login owns the functions (the migrate login; header).
 DO $guard$
 DECLARE
     w record;
@@ -34,6 +34,7 @@ DECLARE
 BEGIN
     FOR w IN SELECT v.fn, v.want, to_regprocedure(v.fn) AS id FROM (VALUES
         ('gold.amount_currency(text)', NULL),
+        ('gold.amount_currency_of(text)', NULL),
         ('gold.annual_per_share(text,integer)', '7c5af423f8d31e10da7db51ee87018b3'),
         ('gold.companies_for_ciks(text[])', '71eb935f94130a3bfba07359561a5c8f'),
         ('gold.figure_facts(text,text,date)', '44aa5118a18f693837d60aaa72b243d4'),
@@ -58,7 +59,7 @@ BEGIN
         IF w.want IS DISTINCT FROM (SELECT md5(p.prosrc) FROM pg_proc p WHERE p.oid = w.id) THEN
             RAISE EXCEPTION USING MESSAGE = format('%s is not where this backout starts: run '
                 'the newer backouts first, newest first (%s), and this one only once. Nothing was '
-                'changed.', w.fn, 'annual_currency_060.sql, banks_058.sql, currency_readings_057.sql, ifrs_currencies_056.sql, filing_xbrl_facts_055.sql, filers_debt_050.sql');
+                'changed.', w.fn, 'rebuild_speed_063.sql, currency_speed_061.sql, annual_currency_060.sql, banks_058.sql, currency_readings_057.sql, ifrs_currencies_056.sql, filing_xbrl_facts_055.sql, filers_debt_050.sql');
         END IF;
     END LOOP;
 END

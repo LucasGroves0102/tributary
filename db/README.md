@@ -427,3 +427,44 @@ migrations that define those objects.
   dollars and gave its readings the dollar bases. `gold.latest_reading` takes its base's currency from
   `gold.amount_currency` (057's body otherwise). Locks: two functions replaced, a catalog change only
   (no table locked or read, no rebuild); backout `backout/annual_currency_060.sql`.
+- `061_screener_currency_inline.sql`: the same currency rule, run so the screener can afford it. 060's
+  `gold.amount_currency` is a scalar SQL function of sub-selects, which Postgres never inlines, so
+  `gold.latest_reading` ran it as a separate query per company and column, and as `query_api` each run
+  rebuilt the RLS policy's subplan over the catalog's ids (1.5 ms a call, against 0.02 ms as the
+  owner). Production's margin and growth sorts hit the 5 s timeout; in a generic plan (the pool
+  prepares a statement after five runs) the metric test ran after the call, so every value sort paid
+  it. Now the rule is `gold.amount_currency_of(company)`, a one-row set-returning function the planner
+  inlines; `gold.amount_currency` returns its row and `latest_reading`'s `cu` reads it in FROM behind
+  `LIMIT 1` (the metric test stays a one-time filter). Measured as `query_api` with the catalog open
+  on a catalog-sized copy (production's 8,081 companies, each of the 6,594 with gold given one of 529
+  sampled companies' full gold rows: 6.62M quarterly, 7.24M derived), 126 sorts of 50 rows with the
+  default columns: margin and growth sorts 9.5-18 s -> 0.33-0.37 s, every other sort 0.4-0.9 s ->
+  0.17-0.40 s, the same with generic plans (060: 10.5 s for any value sort); rows, values, sources,
+  readings and order identical for all 126. Locks: one function created, two replaced, catalog only
+  (no rebuild); backout `backout/currency_speed_061.sql`.
+- `062_segment_refresh_speed.sql`: `gold.refresh_segment_financials` (053's body, edits marked "062")
+  in time linear in the companies of a call. Its CTEs have no index, and hermes plans `keyed` at one
+  row, so 018's `matches` self-join and `members` sub-select and 053's first-reported and same-cycle
+  lookups were nested loops over the whole call's rows: one company of 3,865 facts 4.0 s, 25 companies
+  83 s, 50 over 11 minutes (the hourly segments job ran one call for 2.5+ hours on 2026-11-09). Now one
+  company at a time, the canonical member and the first reported value as windows, `matches` from
+  fact counts per value, the merged QNames from one GROUP BY, and the same-cycle row as a LATERAL that
+  only a restated value runs. Measured on production's segment facts of 222 companies (262,473 facts):
+  053 95 s one call per company, 062 5.8 s in one call (6.0 s with nested loops only), gold identical
+  (135,229 rows, every column). Locks: one function replaced, catalog only; no refresh needed; backout
+  `backout/segments_speed_062.sql` (053's body), before 053's.
+- `063_rebuild_speed.sql`: two slow parts of the financials rebuild (2 h 05 min on 2026-11-09 against 36
+  minutes before 038-060). Measured on four of production's rebuild batches (200 CIKs, 73 companies,
+  483,143 silver facts), rebuilt step by step: 037's functions 10.7 s, 060's 32.6 s (silver 14.3,
+  quarters 6.6, derived 7.7, checks 4.0), 063's 24.6 s. `silver.refresh_financial_facts` read
+  `payload->'facts'->...` once per metric tag, detoasting each payload 174 times since 056's IFRS tags;
+  it now reads the facts object once per CIK (silver 14.3 -> 7.1 s). `gold.refresh_derived_financials`:
+  040's "of two stated years within 7 days, one" was a NOT EXISTS over the `years` CTE, a nested loop
+  over the batch's years; now a window over ends within 7 days (derived 7.7 -> 6.8 s). Silver, gold
+  quarters, derived rows and findings identical. Left, measured: `gold.best_facts` (039) runs three
+  times a batch (quarters, derived's stated years, the checks' annual comparison), about 1 s each for
+  JPMorgan's batch, so the checks went 0.24 s -> 1.5 s and derived 1.05 s -> 2.7 s; 031's overlap test
+  pairs every quarter of a metric within a company (1.1 s of that batch's 2.8 s of quarters); and the
+  planner estimates usable_facts' `tagged` at one row, so CTE joins over it are nested loops and a
+  plan can flip after a mass delete and insert (one batch went 0.6 s -> 7 s until ANALYZE). Locks:
+  two functions replaced, catalog only; no rebuild; backout `backout/rebuild_speed_063.sql`.

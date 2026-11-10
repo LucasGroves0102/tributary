@@ -11,6 +11,14 @@ Rebuilds what sits under Flux on a server that already runs k3s and the host Pos
 State stays local (`terraform.tfstate`, git-ignored). Neither module reads a private key: the
 two bootstrap secrets are created on the server, where the keys live.
 
+The rate-limit rule (the free plan allows one, matching on the path alone, 10 s period, block for
+10 s): 3 requests per 10 s per address and Cloudflare location on `/api/agent/*` (model spend),
+`/api/query/v1/demo/sandbox` ("Try the demo" creates a user; the sign-in page's GET of the offer
+counts too) and `/api/query/v1/auth/password` (password guessing). `/v1/demo/token` is off in
+production and isn't covered. The Query API's own per-address limits and lockouts stand behind it.
+A change here reaches Cloudflare only when the owner runs `terraform -chdir=deploy/terraform/cloudflare
+plan` (only the rule's description and expression should change) and `apply`.
+
 ## Fresh server
 
 ```bash

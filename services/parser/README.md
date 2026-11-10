@@ -66,7 +66,7 @@ WHERE d.accession_no = t.accession_no AND t.status = 'done' AND d.form ~ '^10-[K
 -- 3. progress: unpublished goes to 0, then the parser-backfill lag drains
 SELECT unpublished FROM ops.doc_crawl_status;
 SELECT parser_version, count(DISTINCT accession_no) FROM silver.filing_sections
-WHERE parser_version IN ('python-5', 'rust-5') GROUP BY 1;   -- the current PARSER_VERSION
+WHERE parser_version IN ('python-6', 'rust-6') GROUP BY 1;   -- the current PARSER_VERSION
 ```
 
 Re-running step 1 afterwards lists the documents rule 9 could not split (no Item headings and no
@@ -81,6 +81,20 @@ Config (env): `DATABASE_URL` (required), `KAFKA_BOOTSTRAP_SERVERS` (default `loc
 `parser-python`). The chart's `parser-backfill` sets them to `documents.backfill` /
 `parser-backfill` for the [document crawl](../doc-fetcher/README.md#document-crawl), so crawled
 documents are parsed by a separate consumer and never queue ahead of live filings.
+
+## A decimal item run into its title (rule 2, `python-6` / `rust-6`)
+
+An 8-K heading written without a space after its number ("Item 7.01Regulation FD Disclosure") failed
+the word boundary after "7.01", so the heading fell back to item 7 with the title "01Regulation FD
+Disclosure". A decimal item now ends before anything but a digit ("Item 7.012" is still item 7). On
+production (2026-11-10) the rule had keyed 6,233 8-K sections by their first digit instead: 9.01 as 9
+(2,497), 2.02 as 2 (1,340), 7.01 as 7 (899), 8.01 as 8 (623), 5.0x as 5 (451), 1.01 as 1 (275), 3.0x
+as 3 (120), 4.0x as 4 (28), nearly all of documents in the crawl queue. Stored rows change only when
+re-parsed: re-queue just those 8-Ks through the crawl outbox (the runbook has the SQL; about 13 rounds
+of 500, a few hours of trickle, then `section-index` re-indexes them) rather than `make reparse`, which
+reads all ~396,000 documents and ~217,000 exhibits, rewrites ~2.2M section rows and makes `parser-index`
+rebuild every passage and diff (hours on hermes). Both parsers must be deployed first: production
+serves parser-rs rows.
 
 ## Section titles (rule 10)
 

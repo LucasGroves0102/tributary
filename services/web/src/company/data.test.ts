@@ -14,6 +14,7 @@ import {
   parsedNote,
   financialsCsv,
   formMatches,
+  formsOf,
   header,
   keyStats,
   metricTable,
@@ -278,6 +279,15 @@ it("labels 8-K items and filters forms", () => {
   expect(formMatches("10-K/A", "10-K")).toBe(true);
   expect(formMatches("10-Q", "10-K")).toBe(false);
   expect(formMatches("8-K", "all")).toBe(true);
+});
+
+it("counts a foreign filer's 20-F, 40-F and 6-K as reports, within the API's 20 forms", () => {
+  for (const form of ["20-F", "20-F/A", "40-F", "40-F/A", "6-K", "6-K/A", "10-K", "10-Q", "8-K"]) {
+    expect(formMatches(form, "reports")).toBe(true);
+  }
+  expect(formMatches("4", "reports")).toBe(false);
+  expect(formMatches("DEF 14A", "reports")).toBe(false);
+  expect(formsOf("reports").length).toBeLessThanOrEqual(20);
 });
 
 describe("banks on the tearsheet", () => {

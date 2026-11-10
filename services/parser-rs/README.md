@@ -81,6 +81,13 @@ Written without a local build: its unit tests in `tests/sections.rs` copy the Py
 `cargo test`, clippy, fmt and `test_rust_service.py` (both services' rows on the fixtures) checked it.
 The corpus and fuzz comparison above was not rerun for rule 10.
 
+Rule 2's decimal item (2026-11-10, `rust-6` / `python-6`): `item_number`'s decimal branch ends before
+anything but a decimal digit (`(?!\d)`) instead of at a word boundary, so "Item 7.01Regulation FD
+Disclosure" is item 7.01 as in sections.py. Written without a local build (no cargo on the laptop): unit
+cases in `heading_patterns` and `tests/sections.rs`
+`a_decimal_item_run_into_its_title_keeps_its_number` (a copy of the Python test); CI's `cargo test`,
+clippy, fmt and `test_rust_service.py` check it.
+
 Known gap: documents declaring a legacy encoding other than UTF-8/16, ISO-8859-x, windows-1252
 or ASCII are decoded with encoding_rs, whose Shift_JIS, GB2312 and Mac Roman tables differ from
 the libiconv lxml uses. Every stored document is ASCII.

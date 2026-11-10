@@ -11,8 +11,8 @@ use crate::pystr::{
     CharIndex, char_len, fold_letter, is_decimal, is_space, is_word, py_strip, upper,
 };
 
-pub const PARSER_VERSION: &str = "rust-5"; // 5: clean titles (rule 10); 4: title headings
-// (rule 9); 3: MD&A by reference, exhibits, SGML envelope
+pub const PARSER_VERSION: &str = "rust-6"; // 6: "Item 7.01Regulation" is 7.01 (rule 2); 5: clean
+// titles (rule 10); 4: title headings (rule 9); 3: MD&A by reference, exhibits, SGML envelope
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Section {
@@ -305,7 +305,7 @@ struct HeadingMatch<'a> {
     end: usize,
 }
 
-/// `^(?:part\s+(?P<part>iv|i{1,3})\b|item\s+(?P<item>\d{1,2}\.\d{2}|\d{1,2}[a-z]?)\b)
+/// `^(?:part\s+(?P<part>iv|i{1,3})\b|item\s+(?P<item>\d{1,2}\.\d{2}(?!\d)|\d{1,2}[a-z]?\b))
 /// [ .:\-–—]*(?P<rest>.*)$`, IGNORECASE, at the start of `s`.
 fn match_heading(s: &str) -> Option<HeadingMatch<'_>> {
     let (number, after) = if let Some(n) = word_then_spaces(s, "part") {
@@ -399,7 +399,8 @@ fn roman(s: &str) -> Option<usize> {
         .map(|n| a.offset(n))
 }
 
-/// `(?:\d{1,2}\.\d{2}|\d{1,2}[a-z]?)\b`: the item number's length in bytes.
+/// `\d{1,2}\.\d{2}(?!\d)|\d{1,2}[a-z]?\b`: the item number's length in bytes. A decimal item ends
+/// before anything but a digit, so "7.01Regulation" is 7.01 (rule 2).
 fn item_number(s: &str) -> Option<usize> {
     let a = Ahead::new(s);
     let digits = (0..2).take_while(|&n| a.is(n, is_decimal)).count();
@@ -407,7 +408,7 @@ fn item_number(s: &str) -> Option<usize> {
         if a.is(d, |c| c == '.')
             && a.is(d + 1, is_decimal)
             && a.is(d + 2, is_decimal)
-            && a.boundary(d + 3)
+            && !a.is(d + 3, is_decimal)
         {
             return Some(a.offset(d + 3));
         }
@@ -753,6 +754,24 @@ mod tests {
         assert_eq!(m("Item 1A. Risk Factors"), Some((21, "Risk Factors")));
         assert_eq!(m("ITEM\n7 \u{2014} MD&A\nx"), Some((15, "MD&A")));
         assert_eq!(m("Item 2.02 Results"), Some((17, "Results")));
+        // rule 2: a decimal item ends before anything but a digit (589 production rows of
+        // "Item 7.01Regulation FD Disclosure" were keyed 7)
+        assert_eq!(m("Item 7.01Regulation FD"), Some((22, "Regulation FD")));
+        assert!(matches!(
+            match_heading("ITEM 9.01Financial"),
+            Some(HeadingMatch {
+                number: Number::Item("9.01"),
+                ..
+            })
+        ));
+        assert!(matches!(
+            match_heading("Item 7.012 x"),
+            Some(HeadingMatch {
+                number: Number::Item("7"),
+                rest: "012 x",
+                ..
+            })
+        ));
         assert_eq!(m("Item 123"), None);
         assert_eq!(m("Item 7of"), None);
         assert!(matches!(

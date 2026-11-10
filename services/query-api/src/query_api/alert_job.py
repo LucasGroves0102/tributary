@@ -41,7 +41,11 @@ A run:
    Email only with a provider configured AND a verified address for the user
    (query_api/alert_email.py: neither exists yet, so none is sent): one digest of the alerts that
    became ready.
-5. alert_checks (the Monitor step's last check); notifications older than KEEP_DAYS deleted.
+5. alert_checks (the Monitor step's last check) only when it changes (filings_through moved,
+   notifications were made or became ready) or is CHECK_EVERY old, so an idle user's row isn't
+   rewritten every ten minutes; notifications older than KEEP_DAYS deleted. Once every user is
+   done, the run itself (alert_runs, app migration 018), complete when no user failed or was
+   deferred: what "last checked" shows is the newer of the two (AppAlerts.unread).
 
 One user's failure (OpenFGA down: fail closed) is logged and the run goes on; the next run
 retries it. Sends happen outside any database transaction. A send that succeeded but wasn't
@@ -85,6 +89,7 @@ MAX_NEW = 200       # new notifications per user per run (a first run after a lo
 DEFAULT_APP_URL = "https://tributary.lucasgroves.dev"
 SENDS_PER_USER = 10     # deliveries tried per user per run
 MAKE_BUDGET = 240.0     # seconds of making alerts per run
+CHECK_EVERY = timedelta(hours=1)  # an unchanged alert_checks row is rewritten this often
 MAX_DETAIL = 15_000     # bytes of a notification's detail (the table allows 16384)
 SEND_BUDGET = 240.0     # seconds of sending per run (the Job's deadline is 540)
 # skip that webhook for the rest of the run, and count a stall (alerts.STALL_WAITS)
@@ -278,6 +283,17 @@ def email_digest(alerts: AppAlerts, store: Any, email: EmailProvider, to: str, u
     email.send(to, subject, body)
 
 
+def check_due(last: dict | None, at: datetime, through: date | None, changed: bool) -> bool:
+    """Whether a user's alert_checks row needs writing (docstring, step 5): none yet, something
+    changed (`changed`: notifications made or made ready; or the newest filing date moved), or it
+    is CHECK_EVERY old."""
+    if last is None or changed:
+        return True
+    if through is not None and through != last["filings_through"]:
+        return True
+    return at - last["checked_at"] >= CHECK_EVERY
+
+
 def run(*, alerts: AppAlerts, store: Any, can: Callable[[str, str, str], bool], sender: Sender,
         jwt_secret: str, now: datetime, app_url: str = DEFAULT_APP_URL,
         users: list[str] | None = None, email: EmailProvider | None = None,
@@ -313,7 +329,8 @@ def run(*, alerts: AppAlerts, store: Any, can: Callable[[str, str, str], bool], 
             continue
         try:
             rows, newest = new_rows(plan, filings)
-            report.created += alerts.add_notifications(user_id, rows)
+            created = alerts.add_notifications(user_id, rows)
+            report.created += created
             updates = []
             for n in alerts.pending(user_id):
                 u = complete(n, user_id=user_id, store=store, can=can,
@@ -334,12 +351,18 @@ def run(*, alerts: AppAlerts, store: Any, can: Callable[[str, str, str], bool], 
                     log.warning("alerts: email not sent: %s", type(e).__name__,
                                 extra={"user_id": user_id})
             report.skipped += sum(1 for u in updates if u["status"] == "skipped")
-            alerts.checked(user_id, now, newest)
+            if check_due(plan.get("last_check"), now, newest, bool(created or ready)):
+                alerts.checked(user_id, now, newest)
             alerts.prune(user_id, now - timedelta(days=KEEP_DAYS))
         except Exception as e:
             report.errors += 1
             log.warning("alerts: a user's run failed: %s", type(e).__name__,
                         extra={"user_id": user_id})
+    # the run (step 5): every user it planned was checked unless one failed or waited
+    try:
+        alerts.ran(now, complete=report.errors == 0 and report.deferred == 0)
+    except Exception as e:  # "last checked" then reads each user's own row, at most an hour old
+        log.warning("alerts: the run wasn't recorded: %s", type(e).__name__)
     # sending last, in a random order, each user a fair share of the budget (docstring, step 4)
     senders = [u for u, p in plans.items() if p["webhooks"]]
     shuffle(senders)

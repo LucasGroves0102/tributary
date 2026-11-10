@@ -8,6 +8,9 @@ The algorithm is specified precisely so the Rust rewrite (week 4) can match it e
    a newline after every block element, a space after every table cell; collapse runs of
    spaces/tabs/nbsp/zero-width to one space, trim each line, drop empty lines.
 2. Headings are lines starting with "Part <roman>" or "Item <n>[letter]" / "Item <n>.<nn>".
+   "Part <roman>" and "Item <n>[letter]" end at a word boundary; "Item <n>.<nn>" only before
+   anything but a digit, so a title run on without a space still makes the 8-K item
+   ("Item 7.01Regulation FD Disclosure" is 7.01, not 7), and "Item 7.012" is still item 7.
 3. Table of contents: tracking the current Part across all headings, if any section key
    occurs twice the body starts at the second occurrence of the first key to repeat (moved
    back to a Part heading at most 50 characters before it). Headings before it are ignored.
@@ -78,8 +81,9 @@ from dataclasses import dataclass
 
 from lxml import html
 
-# 5: clean titles (rule 10); 4: title headings (rule 9); 3: MD&A by reference, exhibits, SGML
-PARSER_VERSION = "python-5"
+# 6: "Item 7.01Regulation" is 7.01 (rule 2); 5: clean titles (rule 10); 4: title headings
+# (rule 9); 3: MD&A by reference, exhibits, SGML
+PARSER_VERSION = "python-6"
 
 _BLOCK = {"p", "div", "br", "tr", "li", "h1", "h2", "h3", "h4", "h5", "h6", "table", "section"}
 _CELL = {"td", "th"}
@@ -96,7 +100,7 @@ _MDNA_END = re.compile(
 )
 _SPACES = re.compile(r"[ \t\xa0​  ]+")
 _HEADING = re.compile(
-    r"^(?:part\s+(?P<part>iv|i{1,3})\b|item\s+(?P<item>\d{1,2}\.\d{2}|\d{1,2}[a-z]?)\b)"
+    r"^(?:part\s+(?P<part>iv|i{1,3})\b|item\s+(?P<item>\d{1,2}\.\d{2}(?!\d)|\d{1,2}[a-z]?\b))"
     r"[ .:\-–—]*(?P<rest>.*)$",
     re.IGNORECASE | re.MULTILINE,
 )

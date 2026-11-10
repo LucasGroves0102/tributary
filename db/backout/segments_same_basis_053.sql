@@ -13,7 +13,7 @@ BEGIN;
 SET LOCAL lock_timeout = '30s';
 
 -- guard (scripts/backout_guards.py writes it; db/backout/README.md, Order). It refuses, changing
--- nothing, unless every newer backout has run (newest first: none, this is the newest) and this one
+-- nothing, unless every newer backout has run (newest first: segments_speed_062.sql) and this one
 -- hasn't, and unless the login owns the functions (the migrate login; header).
 DO $guard$
 DECLARE
@@ -32,7 +32,7 @@ BEGIN
         IF w.want IS DISTINCT FROM (SELECT md5(p.prosrc) FROM pg_proc p WHERE p.oid = w.id) THEN
             RAISE EXCEPTION USING MESSAGE = format('%s is not where this backout starts: run '
                 'the newer backouts first, newest first (%s), and this one only once. Nothing was '
-                'changed.', w.fn, 'none, this is the newest');
+                'changed.', w.fn, 'segments_speed_062.sql');
         END IF;
     END LOOP;
 END

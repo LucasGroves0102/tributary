@@ -8,8 +8,10 @@
 --   sudo -u postgres psql -d tributary -v ON_ERROR_STOP=1 -1 -c 'SET ROLE tributary' -f bank_metrics_048.sql
 --   kubectl -n tributary create job --from=cronjob/financials-rebuild financials-rebuild-2
 --
--- Independent of the other files here (048 touches no function they restore). Generated from 040 by a
--- script (the function's text exactly).
+-- Not independent: it is in the chain (README.md, Order) and runs after every newer file, kpis_049.sql
+-- last of them. 049's backout puts back 048's gold.refresh_derived_financials; run after this one it
+-- would bring back 048's body, with the efficiency ratio whose rows this file removes. The guard below
+-- refuses it out of order. Generated from 040 by a script (the function's text exactly).
 --
 -- Run it as the migration owner, the migrate login `tributary` (SET ROLE as below): run as postgres,
 -- a function it drops and re-creates would belong to postgres, and the non-superuser migrate login
@@ -19,10 +21,10 @@
 SET LOCAL lock_timeout = '30s';
 
 -- guard (scripts/backout_guards.py writes it; db/backout/README.md, Order). It refuses, changing
--- nothing, unless every newer backout has run (newest first: annual_currency_060.sql,
--- banks_058.sql, currency_readings_057.sql, ifrs_currencies_056.sql, filing_xbrl_facts_055.sql,
--- filers_debt_050.sql, kpis_049.sql) and this one hasn't, and unless the login owns the functions
--- (the migrate login; header).
+-- nothing, unless every newer backout has run (newest first: rebuild_speed_063.sql,
+-- currency_speed_061.sql, annual_currency_060.sql, banks_058.sql, currency_readings_057.sql,
+-- ifrs_currencies_056.sql, filing_xbrl_facts_055.sql, filers_debt_050.sql, kpis_049.sql) and this
+-- one hasn't, and unless the login owns the functions (the migrate login; header).
 DO $guard$
 DECLARE
     w record;
@@ -30,6 +32,7 @@ DECLARE
 BEGIN
     FOR w IN SELECT v.fn, v.want, to_regprocedure(v.fn) AS id FROM (VALUES
         ('gold.amount_currency(text)', NULL),
+        ('gold.amount_currency_of(text)', NULL),
         ('gold.annual_per_share(text,integer)', '7c5af423f8d31e10da7db51ee87018b3'),
         ('gold.companies_for_ciks(text[])', '71eb935f94130a3bfba07359561a5c8f'),
         ('gold.figure_facts(text,text,date)', '44aa5118a18f693837d60aaa72b243d4'),
@@ -54,7 +57,7 @@ BEGIN
         IF w.want IS DISTINCT FROM (SELECT md5(p.prosrc) FROM pg_proc p WHERE p.oid = w.id) THEN
             RAISE EXCEPTION USING MESSAGE = format('%s is not where this backout starts: run '
                 'the newer backouts first, newest first (%s), and this one only once. Nothing was '
-                'changed.', w.fn, 'annual_currency_060.sql, banks_058.sql, currency_readings_057.sql, ifrs_currencies_056.sql, filing_xbrl_facts_055.sql, filers_debt_050.sql, kpis_049.sql');
+                'changed.', w.fn, 'rebuild_speed_063.sql, currency_speed_061.sql, annual_currency_060.sql, banks_058.sql, currency_readings_057.sql, ifrs_currencies_056.sql, filing_xbrl_facts_055.sql, filers_debt_050.sql, kpis_049.sql');
         END IF;
     END LOOP;
 END

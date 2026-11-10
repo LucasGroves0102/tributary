@@ -8,7 +8,7 @@ import type { Allowance } from "../types";
 export const NOT_COVERED: { title: string; text: string }[] = [
   {
     title: "No stock prices or market data",
-    text: "So no market cap, P/E, EV/EBITDA or other valuation multiples, and no share-price returns. Ratios here are from the financial statements alone.",
+    text: "Tributary fetches and keeps no share prices, so screens, tables and charts have no market cap, P/E, EV/EBITDA or share-price returns: their ratios are from the financial statements alone. A model gives market cap, P/E and EV multiples from a price you type into it.",
   },
   {
     title: "No consensus estimates",

@@ -349,6 +349,45 @@ def test_the_job_alerts_followed_filings_once_and_completes_them(conn, alerts):
     assert alerts.unread(A)["last_check"]["checked_at"] == NOW + timedelta(minutes=20)
 
 
+def test_an_idle_users_check_is_rewritten_hourly_yet_reads_as_the_last_run(conn, alerts):
+    """App migration 018: the job rewrote every following user's alert_checks row every ten
+    minutes. Now only when something changed or the row is an hour old; "last checked" (the
+    Monitor step, the alerts page, settings) still says the last run, when that run checked every
+    user it planned, and falls back to the user's own row when it didn't."""
+    store, sender = JobStore(), RecordingSender()
+
+    def row():
+        return conn.execute("SELECT xmin::text, checked_at FROM alert_checks WHERE user_id = %s",
+                            (A,)).fetchone()
+
+    def shown():
+        return alerts.unread(A)["last_check"]["checked_at"]
+
+    run_job(alerts, store, sender)  # first look, new notifications: written
+    first = row()
+    assert first[1] == NOW and shown() == NOW
+    for minutes in (10, 20, 50):  # nothing new: the row stays, the display follows the runs
+        report = run_job(alerts, store, sender, now=NOW + timedelta(minutes=minutes))
+        assert (report.created, report.ready, report.errors, report.deferred) == (0, 0, 0, 0)
+        assert row() == first
+        assert shown() == NOW + timedelta(minutes=minutes)
+    run_job(alerts, store, sender, now=NOW + timedelta(minutes=60))  # an hour old: rewritten
+    assert row()[1] == NOW + timedelta(minutes=60) and row()[0] != first[0]
+    # something changed (the 10-Q's figures arrive): written at once
+    store.recaps[Q3] = recap_rows(Q3)
+    assert run_job(alerts, store, sender, now=NOW + timedelta(minutes=70)).ready == 1
+    assert row()[1] == NOW + timedelta(minutes=70)
+    # a run that didn't reach A (out of making time) isn't a check of A
+    ticks = iter([0.0])
+    late = run_job(alerts, store, sender, now=NOW + timedelta(minutes=80),
+                   monotonic=lambda: next(ticks, 1e9))
+    assert late.deferred == 1
+    assert row()[1] == NOW + timedelta(minutes=70) and shown() == NOW + timedelta(minutes=70)
+    # the next complete run reads as checked again
+    run_job(alerts, store, sender, now=NOW + timedelta(minutes=90))
+    assert shown() == NOW + timedelta(minutes=90)
+
+
 def test_the_job_respects_forms_and_access(conn, alerts):
     alerts.put_setting(A, NVDA, ["10-K", "10-Q"])
     store = JobStore()

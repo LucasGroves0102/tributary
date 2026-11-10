@@ -282,7 +282,8 @@ class Adjustment(_Strict):
     """A one-off the user names (F2): `one_off` is an amount in a fiscal quarter's operating
     income (positive raised it, negative is a charge), excluded from margins and growth;
     `acquired` is revenue from acquisitions in that fiscal year, excluded from organic growth.
-    USD. The user's own figure, never data."""
+    In the company's reporting currency, like the model's figures (a euro filer's in euros; F8b).
+    The user's own figure, never data."""
     name: str = Field(max_length=4 * MAX_ADJUSTMENT_NAME)
     fy: StrictInt = Field(ge=1990, le=2100)
     quarter: StrictInt = Field(ge=1, le=4)

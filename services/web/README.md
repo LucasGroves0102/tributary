@@ -303,8 +303,13 @@ Freshness has two clocks, labelled, explained on hover (`home/useFeedStatus.ts`)
 (`GET /v1/status`, the same time as Data status's "Newest filing listed here") minutes after EDGAR accepts
 it, and its text *parsed* (the newest in `/v1/filings/latest`) later: within minutes for a tracked
 company's filings and, since 2026-11-09, an operating company's 10-K, 10-Q and material 8-K from the
-live feed; within the document crawl's next plan (about 6 hours) for the rest (doc-fetcher README).
-Neither clock stands in for the other.
+live feed (about a minute after EDGAR: the hover says so); within the document crawl's next plan (about
+6 hours) for the rest (doc-fetcher README). Neither clock stands in for the other.
+
+The Filings tab opens on Reports: 10-K, 10-Q and 8-K, and a foreign filer's 20-F, 40-F and 6-K, each with
+its amendments (`company/data.ts` `REPORT_FORMS`); All lists every form. What Tributary covers
+(`pages/About.tsx`) says it keeps no share prices, so screens, tables and charts have no valuation
+multiples, and that a model gives market cap, P/E and EV multiples from a price typed into it.
 
 The assistant panel shows the questions left before one is spent (`assistant/useAllowance.ts`,
 agent-api `/v1/allowance`): per hour and, where the account has a cap, per day. What Tributary covers
@@ -428,7 +433,10 @@ on the folder changed last. Never just the first workspace.
   `[[embed:…]]` line. A card moves up or down past the paragraph or card beside it (↑ ↓, or Alt+↑ /
   Alt+↓ on the focused card) and goes with ✕ or Delete, with Undo in the notice; moves are announced
   and focus follows the card. A quote card says what it is and the period it reports on ("Quote ·
-  10-Q · quarter ended 2026-10-26", "Earnings release · 8-K"). The Markdown underneath is still the
+  10-Q · quarter ended 2026-10-26", "Earnings release · 8-K"). A chart card is a small preview (the
+  comps' small-multiple drawing, at most 360 px wide) with Expand to draw it at full width and Show
+  smaller to fold it back (per card, not remembered); Preview and reports draw charts in full. The
+  Markdown underneath is still the
   only thing saved: the cards are read from it and every edit writes it back line for line, so
   export, import, versions, drafts and pins are unchanged (a test exports and imports a pinned
   thesis and gets the same bytes). **Markdown** shows the text as saved, embed lines and all.

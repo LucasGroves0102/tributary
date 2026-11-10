@@ -1,6 +1,7 @@
 """Reports (kind `report`, app migration 005): the routes agent-api saves them through, their
 validation, and that the generic item routes can't write one. In-memory store
-(test_workspaces.FakeWorkspaces); test_reports_db.py runs the real one."""
+(test_workspaces.FakeWorkspaces) only: no DB test runs the real store's report path
+(test_workspaces_db.py covers the generic items and the thesis's size, which equals a report's)."""
 
 import copy
 

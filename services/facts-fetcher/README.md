@@ -198,7 +198,9 @@ How it runs (module docstrings hold the exact rules):
   80-120 days, so 16-week quarters fit; since 053 a year restated after it was first reported is
   paired with the nine months of its own reporting cycle, so a recast never makes one inflated
   quarter: JPMorgan's FY2022 Q4 CIB), then TTM over four contiguous quarters. `gold.segments`
-  adds fiscal and calendar labels with 014's rules.
+  adds fiscal and calendar labels with 014's rules. Since 062 it works one company at a time, so a
+  call's cost grows with its companies, not with the square of their facts (053's body took 83 s for
+  25 companies and over 11 minutes for 50; 062 takes 5.8 s for 222).
 - **Quality** (`ops.check_segments`): the members of each axis vs `gold.quarterly_financials`
   for the same period end, within 1% (one overlapping subtotal allowed); warnings
   `segment_sum_<axis>`.

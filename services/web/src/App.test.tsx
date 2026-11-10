@@ -388,6 +388,13 @@ describe("navigation", () => {
     expect($(".side .fresh")?.textContent).toContain("Signed in as alice");
   });
 
+  it("says a filing's text is parsed about a minute after EDGAR, not hours (live fetch since 2026-11-09)", async () => {
+    await render();
+    const title = $(".side .fresh")?.getAttribute("title") ?? "";
+    expect(title).toContain("about a minute later for a 10-K, 10-Q or material 8-K");
+    expect(title).not.toContain("6 hours for the rest");
+  });
+
   it("names a company it knows only by id: breadcrumb and assistant, never the CIK", async () => {
     await render(`#/company/${APPLE}`);
     // the watchlist and /v1/me don't hold Apple: the name comes from the shared directory
@@ -639,7 +646,9 @@ it("says what Tributary covers, from the sidebar footer and the assistant's empt
   expect($(".crumb")?.textContent).toBe("What Tributary covers");
   const text = $(".about")!.textContent!;
   for (const limit of ["No stock prices or market data", "No consensus estimates", "No earnings-call transcripts",
-    "Expected filing dates are estimates", "n/a (bank)", "5:30 pm ET"]) expect(text).toContain(limit);
+    "Expected filing dates are estimates", "n/a (bank)", "5:30 pm ET",
+    "A model gives market cap, P/E and EV multiples from a price you type"]) expect(text).toContain(limit);
+  expect(text).not.toContain("So no market cap");
   expect($(".side .cover-link")?.getAttribute("aria-current")).toBe("page");
 });
 

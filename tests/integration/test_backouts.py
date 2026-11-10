@@ -25,6 +25,15 @@ _spec.loader.exec_module(guards)
 # What each file must put back: the function's body as an older migration created it (None: the
 # function is gone). Independent of the guards, which are measured from the files themselves.
 RESTORES = {
+    "rebuild_speed_063.sql": {
+        "silver.refresh_financial_facts(text[])": "056_ifrs_currencies.sql",
+        "gold.refresh_derived_financials(text[])": "056_ifrs_currencies.sql",
+    },
+    "currency_speed_061.sql": {
+        "gold.amount_currency(text)": "060_annual_filer_currency.sql",
+        "gold.latest_reading(text,text,text,text,date)": "060_annual_filer_currency.sql",
+        "gold.amount_currency_of(text)": None,
+    },
     "annual_currency_060.sql": {
         "gold.amount_currency(text)": "057_currency_readings.sql",
         "gold.latest_reading(text,text,text,text,date)": "057_currency_readings.sql",
@@ -67,6 +76,8 @@ RESTORES = {
         "gold.refresh_derived_financials(text[])": "014_gold_calendar.sql",
         "ops.check_financials(text[])": "023_data_notes.sql",
     },
+    "segments_speed_062.sql": {
+        "gold.refresh_segment_financials(text[])": "053_segment_same_basis.sql"},
     "segments_same_basis_053.sql": {
         "gold.refresh_segment_financials(text[])": "018_segments.sql"},
     "insider_queue_059.sql": {
@@ -149,7 +160,8 @@ def test_the_chain_runs_newest_first_and_restores_the_older_bodies(cur):
 def test_each_backout_refuses_out_of_order_and_changes_nothing(cur):
     as_owner(cur)
     head = guards.snapshot(cur)
-    for name in guards.CHAIN[1:]:
+    newer_first = guards.CHAIN[1:] + [n for group in guards.INDEPENDENT_CHAINS for n in group[1:]]
+    for name in newer_first:
         with pytest.raises(psycopg.errors.RaiseException, match="run the newer backouts first"):
             with cur.connection.transaction():
                 run(cur, name)
