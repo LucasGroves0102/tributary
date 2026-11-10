@@ -70,7 +70,7 @@ CronJob schedules are New York time (`timeZone`). Every job has `concurrencyPoli
 | `financials-bulk` | facts-fetcher (`facts-fetcher-bulk`) | daily 05:00 | on | every filer's XBRL facts from `companyfacts.zip`, in batches of 500 changed companies |
 | `submissions` | company-loader (`company-loader-submissions`) | daily 05:30 | on | every filer's filing history and metadata from `submissions.zip` |
 | `insiders-catchup` | doc-fetcher (`doc-fetcher-insiders`) | daily 08:45 | on | Forms 3/4/5 of the last 7 days the live doc-fetcher missed (059) |
-| `filing-facts` | facts-fetcher (`facts-fetcher-filings`) | daily 09:30 | suspended | filings companyfacts lacks, from their own XBRL (055) |
+| `filing-facts` | facts-fetcher (`facts-fetcher-filings`) | daily 09:30 | on (Flux release) | filings companyfacts lacks, from their own XBRL (055) |
 | `demo-cleanup` | query-api (`query-api-demo-cleanup`) | hourly at :15 | on | deletes expired demo sandboxes |
 | `segments` | facts-fetcher (`facts-fetcher-segments`) | hourly at :20 | on (Flux release) | segment and KPI facts from the stored documents' inline XBRL (018) |
 | `section-index` | parser (`parser-index`) | hourly at :40 | on (Flux release) | search passages and section diffs (021) |
@@ -123,7 +123,8 @@ companyfacts lacks from their own XBRL, daily at 09:30 once enabled (`uses: post
 instance fetch is two requests at the batch class). It ships suspended; the first run goes back to
 2019 and is started by hand with its arguments
 ([facts-fetcher](../../../services/facts-fetcher/README.md), "Filings companyfacts lacks"), then
-`suspend: false` in the Flux release.
+`suspend: false` in the Flux release. On hermes that first run was 2026-11-09 (293 filings) and the
+daily run is on.
 
 `financials-rebuild` ships suspended and never runs on a schedule: it re-derives silver and gold from
 the payloads already in bronze (`facts-fetcher --rebuild`, no SEC requests, only `uses: postgres`),

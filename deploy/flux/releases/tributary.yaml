@@ -59,5 +59,8 @@ spec:
         suspend: false
       section-index:
         suspend: false
+      # Backfilled by hand on 2026-11-09 (filing-facts-1: 293 filings since 2019).
+      filing-facts:
+        suspend: false
     image:
       tag: main-239-2acfe98aa0b5cdfb4fc843e6ec04e131ac39ae6c # {"$imagepolicy": "flux-system:tributary:tag"}
