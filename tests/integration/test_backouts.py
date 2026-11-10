@@ -72,6 +72,8 @@ RESTORES = {
         "gold.refresh_derived_financials(text[])": "014_gold_calendar.sql",
         "ops.check_financials(text[])": "023_data_notes.sql",
     },
+    "segments_speed_062.sql": {
+        "gold.refresh_segment_financials(text[])": "053_segment_same_basis.sql"},
     "segments_same_basis_053.sql": {
         "gold.refresh_segment_financials(text[])": "018_segments.sql"},
     "insider_queue_059.sql": {
@@ -154,7 +156,8 @@ def test_the_chain_runs_newest_first_and_restores_the_older_bodies(cur):
 def test_each_backout_refuses_out_of_order_and_changes_nothing(cur):
     as_owner(cur)
     head = guards.snapshot(cur)
-    for name in guards.CHAIN[1:]:
+    newer_first = guards.CHAIN[1:] + [n for group in guards.INDEPENDENT_CHAINS for n in group[1:]]
+    for name in newer_first:
         with pytest.raises(psycopg.errors.RaiseException, match="run the newer backouts first"):
             with cur.connection.transaction():
                 run(cur, name)

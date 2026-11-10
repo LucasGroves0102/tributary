@@ -275,3 +275,42 @@ def test_rebuild_reprojects_without_documents(conn):
     stats = segments.rebuild(conn)
     assert stats.documents == len(DOCS)
     assert conn.execute("SELECT count(*) FROM gold.segment_financials").fetchone()[0] == before
+
+
+def test_one_call_for_many_companies_writes_what_one_call_each_writes(conn):
+    """062: gold.refresh_segment_financials runs its CTEs one company at a time (they read the whole
+    call's rows per join and lookup, so a call grew with the square of its facts: 25 companies 83 s,
+    50 over 11 minutes). Renames, a restated year and every real document, refreshed in one call, in
+    one call per company and in the other order, give the same rows."""
+    tag = "us-gaap:Revenues"
+    q1_24, q1_25 = ("2024-01-01", "2024-03-31"), ("2025-01-01", "2025-03-31")
+    add_document(conn, "9000000003-24-000001", X, "10-Q", date(2024, 5, 1), mini_doc(X, [
+        (tag, "x:OldWidgetsMember", *q1_24, "100"), (tag, "x:GadgetsSegmentMember", *q1_24, "50")]))
+    add_document(conn, "9000000003-25-000001", X, "10-Q", date(2025, 5, 1), mini_doc(X, [
+        (tag, "x:WidgetsAndGizmosMember", *q1_25, "120"),
+        (tag, "x:WidgetsAndGizmosMember", *q1_24, "100"), (tag, "x:GadgetsMember", *q1_25, "60")]))
+    nine, year = ("2022-01-01", "2022-09-30"), ("2022-01-01", "2022-12-31")
+    for accession, form, filed, facts in (
+            ("9000000004-22-000001", "10-Q", date(2022, 11, 1), [(*nine, "37500")]),
+            ("9000000004-23-000001", "10-K", date(2023, 2, 20), [(*year, "48000")]),
+            ("9000000004-23-000002", "10-Q", date(2023, 11, 1), [(*nine, "37500")]),
+            ("9000000004-25-000001", "10-K", date(2025, 2, 14), [(*year, "59600")])):
+        add_document(conn, accession, Y, form, filed,
+                     mini_doc(Y, [(tag, "y:CibMember", s, e, v) for s, e, v in facts]))
+    segments.run(conn)
+    companies = sorted(COMPANIES)
+
+    def rows():
+        return conn.execute(
+            "SELECT company_id, span, axis, member, member_label, member_aliases, metric,"
+            " period_start, period_end, value, value_source, source_tag, accession_no, filed,"
+            " source_accessions FROM gold.segment_financials ORDER BY 1, 2, 3, 4, 7, 9"
+        ).fetchall()
+
+    each = rows()
+    assert {r[0] for r in each} >= {X, Y, NVDA, PEP}
+    assert any(r[5] for r in each) and any(r[10] == "derived" for r in each)
+    conn.execute("SELECT gold.refresh_segment_financials(%s)", (companies,))
+    assert rows() == each
+    conn.execute("SELECT gold.refresh_segment_financials(%s)", (companies[::-1] + companies,))
+    assert rows() == each

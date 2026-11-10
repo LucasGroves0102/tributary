@@ -31,7 +31,7 @@ starting from the latest definition listed here (and regenerate the backout guar
 | `gold.refresh_derived_financials(text[])` | `056_ifrs_currencies.sql` (computed amounts in the company's currency; before: `049_kpis_cash_flow.sql` `cash_and_investments`; `048_bank_metrics.sql` the efficiency ratio; `040_gold_derived_rules.sql` TTM from a stated year, net debt absent when investments or debt can't be read; `014_gold_calendar.sql`) |
 | `gold.companies_for_ciks(text[])` (the companies a changed payload reaches, borrowers included), `gold.filed_by(accession, cik)` | `050_filers_debt_signs.sql` |
 | `gold.refresh_segments(text[])` | `018_segments.sql` |
-| `gold.refresh_segment_financials(text[])` (a restated year-to-date difference from one reporting cycle) | `053_segment_same_basis.sql` (before: `018_segments.sql`) |
+| `gold.refresh_segment_financials(text[])` (a restated year-to-date difference from one reporting cycle; one company at a time) | `062_segment_refresh_speed.sql` (before: `053_segment_same_basis.sql`, `018_segments.sql`) |
 | `gold.refresh_section_search(text[])` (search passages); `ops.section_index_priors(text[])`, `ops.section_index_pending(text, int)` (parser-index work); the diffs themselves are Python (`filing_parser/diff.py`) | `021_section_diffs_search.sql` |
 
 Business profiles and peers (`gold.business_*`, `047_business_peers.sql`) are computed in Python by

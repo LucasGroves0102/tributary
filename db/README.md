@@ -442,3 +442,14 @@ migrations that define those objects.
   0.17-0.40 s, the same with generic plans (060: 10.5 s for any value sort); rows, values, sources,
   readings and order identical for all 126. Locks: one function created, two replaced, catalog only
   (no rebuild); backout `backout/currency_speed_061.sql`.
+- `062_segment_refresh_speed.sql`: `gold.refresh_segment_financials` (053's body, edits marked "062")
+  in time linear in the companies of a call. Its CTEs have no index, and hermes plans `keyed` at one
+  row, so 018's `matches` self-join and `members` sub-select and 053's first-reported and same-cycle
+  lookups were nested loops over the whole call's rows: one company of 3,865 facts 4.0 s, 25 companies
+  83 s, 50 over 11 minutes (the hourly segments job ran one call for 2.5+ hours on 2026-11-09). Now one
+  company at a time, the canonical member and the first reported value as windows, `matches` from
+  fact counts per value, the merged QNames from one GROUP BY, and the same-cycle row as a LATERAL that
+  only a restated value runs. Measured on production's segment facts of 222 companies (262,473 facts):
+  053 95 s one call per company, 062 5.8 s in one call (6.0 s with nested loops only), gold identical
+  (135,229 rows, every column). Locks: one function replaced, catalog only; no refresh needed; backout
+  `backout/segments_speed_062.sql` (053's body), before 053's.

@@ -19,7 +19,8 @@ in the order they run ([Order](#order)), the two independent ones last.
 | [`bank_metrics_048.sql`](bank_metrics_048.sql) | 048: a bank's metrics, tags and rows removed, `gold.refresh_derived_financials` back to 040's body | `financials-rebuild` job |
 | [`interest_expense_043.sql`](interest_expense_043.sql) | 043 alone: interest expense read with the filing's sign again, a negative derived quarter kept (back to 039's two functions) | `financials-rebuild` job |
 | [`gold_rules_038_041.sql`](gold_rules_038_041.sql) | 038's tags and sums, 039's fact selection and computed gross profit, 040's net debt and annual TTM, 041's checks (back to 031, 014 and 023; with 043 applied, it undoes 043 too) | `financials-rebuild` job ([helm chart](../../deploy/helm/tributary/README.md)) |
-| [`segments_same_basis_053.sql`](segments_same_basis_053.sql) | 053: `gold.refresh_segment_financials` back to 018's body (derived quarters from the latest filings again). Independent of the others. Tested on JPM, NVDA, DECK and VRT: gold equal to 018's row for row | the segments refresh (db/README "053") |
+| [`segments_speed_062.sql`](segments_speed_062.sql) | 062: `gold.refresh_segment_financials` back to 053's body (the same rows; refreshes quadratic in the companies of a call again). Before 053's, never after. Tested: 062 then this, the function equal to 053's | none |
+| [`segments_same_basis_053.sql`](segments_same_basis_053.sql) | 053: `gold.refresh_segment_financials` back to 018's body (derived quarters from the latest filings again). After 062's; independent of the chain. Tested on JPM, NVDA, DECK and VRT: gold equal to 018's row for row | the segments refresh (db/README "053") |
 | [`insider_queue_059.sql`](insider_queue_059.sql) | 059: `silver.xml_date` and `silver.refresh_insider_filings` back to 054's bodies, `ops.document_outbox`, `ops.insider_queue` and `ops.insider_findings` dropped. Deploy the previous doc-fetcher image first, once the outbox is empty | none |
 
 ## Order
@@ -39,10 +40,11 @@ the rebuild its row names once, after the last file:
 10. `interest_expense_043.sql`
 11. `gold_rules_038_041.sql`
 
-Two stand apart, each replacing functions no other file touches, so each runs at any point, once:
-`segments_same_basis_053.sql` (`gold.refresh_segment_financials`) and `insider_queue_059.sql`
-(`silver.xml_date`, `silver.refresh_insider_filings`; it also refuses while `ops.document_outbox` still
-owes an event).
+Two groups stand apart, replacing functions the list above never touches, so each runs at any point,
+once, newest first within it: `segments_speed_062.sql` then `segments_same_basis_053.sql` (both
+`gold.refresh_segment_financials`: 062's file puts back 053's body, 053's then 018's), and
+`insider_queue_059.sql` (`silver.xml_date`, `silver.refresh_insider_filings`; it also refuses while
+`ops.document_outbox` still owes an event).
 
 Each file starts with a guard that refuses, changing nothing, unless the database is exactly where that
 file belongs: every function any file above replaces or drops must have the body (md5 of its source)

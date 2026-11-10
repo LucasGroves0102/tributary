@@ -40,8 +40,13 @@ CHAIN = [
     "interest_expense_043.sql",
     "gold_rules_038_041.sql",
 ]
-# Touch only functions no other backout touches: checked against their own migration's bodies.
-INDEPENDENT = ["segments_same_basis_053.sql", "insider_queue_059.sql"]
+# Touch only functions the chain above doesn't: each group runs newest first on its own (062's
+# segments backout before 053's), checked against its own migrations' bodies.
+INDEPENDENT_CHAINS = [
+    ["segments_speed_062.sql", "segments_same_basis_053.sql"],
+    ["insider_queue_059.sql"],
+]
+INDEPENDENT = [name for group in INDEPENDENT_CHAINS for name in group]
 
 START = "-- guard (scripts/backout_guards.py writes it"
 END = "-- end guard"
@@ -88,26 +93,30 @@ def measure(conn) -> dict[str, tuple[dict[str, str | None], list[str]]]:
     Runs everything in a transaction that is rolled back."""
     starts: list[dict[str, str]] = []
     touched: set[str] = set()
-    own: dict[str, set[str]] = {}
+    result = {}
     with conn.transaction(force_rollback=True), conn.cursor() as cur:
         cur.execute(f'SET ROLE "{owner(cur)}"')
-        head = snapshot(cur)
-        for name in INDEPENDENT:
+        for group in INDEPENDENT_CHAINS:
+            group_starts, group_touched = [], set()
             with conn.transaction(force_rollback=True):
-                cur.execute(statements((BACKOUT / name).read_text(), guard=False))
-                after = snapshot(cur)
-            own[name] = {f for f in head.keys() | after.keys() if head.get(f) != after.get(f)}
+                for name in group:
+                    before = snapshot(cur)
+                    cur.execute(statements((BACKOUT / name).read_text(), guard=False))
+                    after = snapshot(cur)
+                    group_touched |= {f for f in before.keys() | after.keys()
+                                      if before.get(f) != after.get(f)}
+                    group_starts.append(before)
+            for i, name in enumerate(group):
+                result[name] = ({f: group_starts[i].get(f) for f in sorted(group_touched)},
+                                group[:i])
         for name in CHAIN:
             before = snapshot(cur)
             cur.execute(statements((BACKOUT / name).read_text(), guard=False))
             after = snapshot(cur)
             touched |= {f for f in before.keys() | after.keys() if before.get(f) != after.get(f)}
             starts.append(before)
-    result = {}
     for i, name in enumerate(CHAIN):
         result[name] = ({f: starts[i].get(f) for f in sorted(touched)}, CHAIN[:i])
-    for name in INDEPENDENT:
-        result[name] = ({f: head.get(f) for f in sorted(own[name])}, [])
     return result
 
 
