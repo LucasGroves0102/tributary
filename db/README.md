@@ -427,3 +427,18 @@ migrations that define those objects.
   dollars and gave its readings the dollar bases. `gold.latest_reading` takes its base's currency from
   `gold.amount_currency` (057's body otherwise). Locks: two functions replaced, a catalog change only
   (no table locked or read, no rebuild); backout `backout/annual_currency_060.sql`.
+- `061_screener_currency_inline.sql`: the same currency rule, run so the screener can afford it. 060's
+  `gold.amount_currency` is a scalar SQL function of sub-selects, which Postgres never inlines, so
+  `gold.latest_reading` ran it as a separate query per company and column, and as `query_api` each run
+  rebuilt the RLS policy's subplan over the catalog's ids (1.5 ms a call, against 0.02 ms as the
+  owner). Production's margin and growth sorts hit the 5 s timeout; in a generic plan (the pool
+  prepares a statement after five runs) the metric test ran after the call, so every value sort paid
+  it. Now the rule is `gold.amount_currency_of(company)`, a one-row set-returning function the planner
+  inlines; `gold.amount_currency` returns its row and `latest_reading`'s `cu` reads it in FROM behind
+  `LIMIT 1` (the metric test stays a one-time filter). Measured as `query_api` with the catalog open
+  on a catalog-sized copy (production's 8,081 companies, each of the 6,594 with gold given one of 529
+  sampled companies' full gold rows: 6.62M quarterly, 7.24M derived), 126 sorts of 50 rows with the
+  default columns: margin and growth sorts 9.5-18 s -> 0.33-0.37 s, every other sort 0.4-0.9 s ->
+  0.17-0.40 s, the same with generic plans (060: 10.5 s for any value sort); rows, values, sources,
+  readings and order identical for all 126. Locks: one function created, two replaced, catalog only
+  (no rebuild); backout `backout/currency_speed_061.sql`.

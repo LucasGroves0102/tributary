@@ -54,8 +54,8 @@ How a stored figure may be read, called by the Query API under RLS or with
 | `gold.not_meaningful` (five arguments: the dollar bases only for dollar amounts; the four-argument form reads as dollars) | `057_currency_readings.sql` (before: `035_value_readings.sql`) |
 | `gold.not_applicable_metrics` (the one list of banks: depository SICs, Goldman Sachs, Morgan Stanley, Schwab, American Express, Synchrony, Ally) | `058_bank_holding_companies.sql` (before: `049_kpis_cash_flow.sql` adds `cash_and_investments`; `035_value_readings.sql`) |
 | `gold.period_status`, `gold.latest_period` | `035_value_readings.sql` |
-| `gold.latest_reading` (`other_currency` and the unit; the base's currency from `gold.amount_currency`) | `060_annual_filer_currency.sql` (before: `057_currency_readings.sql`, `056_ifrs_currencies.sql`, `035_value_readings.sql`) |
-| `gold.amount_currency(company)` (latest quarterly revenue's unit, else net income's, else the TTM rows', else USD) | `060_annual_filer_currency.sql` (before: `057_currency_readings.sql`) |
+| `gold.latest_reading` (`other_currency` and the unit; the base's currency from `gold.amount_currency_of`, inlined) | `061_screener_currency_inline.sql` (before: `060_annual_filer_currency.sql`, `057_currency_readings.sql`, `056_ifrs_currencies.sql`, `035_value_readings.sql`) |
+| `gold.amount_currency_of(company)` (the rule: latest quarterly revenue's unit, else net income's, else the TTM rows', else USD; one row, set-returning so a caller's plan inlines it) and `gold.amount_currency(company)` (that row's unit, for scalar callers) | `061_screener_currency_inline.sql` (before: `060_annual_filer_currency.sql`, `057_currency_readings.sql`) |
 | `gold.latest_value(company, span, metric)` | `032_open_access_speed.sql` |
 | `gold.figure_facts(company, metric, period_end)` (the facts behind one figure, for `/components`) | `056_ifrs_currencies.sql` (taxonomy, company tags, the company's currency; before: `049_kpis_cash_flow.sql`) |
 | `gold.filing_figures(company, accession)` (one filing's figures and what gold would compute from it alone, with their unit) | `057_currency_readings.sql` (before: `051_filing_figures.sql`) |

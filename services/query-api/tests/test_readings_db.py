@@ -5,6 +5,7 @@ unless TEST_DATABASE_URL is set; every test is rolled back."""
 
 import json
 import os
+import re
 from contextlib import contextmanager
 from datetime import date, timedelta
 from decimal import Decimal
@@ -14,11 +15,13 @@ from fastapi.testclient import TestClient
 
 from query_api.app import create_app
 from query_api.authorizer import Access
+from query_api.screener import Screen, compile_screen
 from query_api.store import Store
 
 from .conftest import SECRET
 
 psycopg = pytest.importorskip("psycopg")
+pgsql = psycopg.sql
 DSN = os.environ.get("TEST_DATABASE_URL")
 pytestmark = pytest.mark.skipif(not DSN, reason="TEST_DATABASE_URL not set")
 
@@ -810,17 +813,62 @@ def test_an_annual_only_yen_filers_currency_is_yen(conn, token):
 
 def test_latest_reading_stays_inlinable(conn):
     """The screener's plan depends on it, like 032's gold.latest_value (no SET, not DEFINER, a
-    single SQL statement, not volatile)."""
+    single SQL statement, not volatile). 061: so does the currency rule it reads, a set-returning
+    function (a scalar SQL function with sub-selects is never inlined)."""
     rows = conn.execute(
-        "SELECT p.proname, p.prosecdef, p.provolatile, p.proconfig, l.lanname FROM pg_proc p"
-        " JOIN pg_language l ON l.oid = p.prolang"
+        "SELECT p.proname, p.prosecdef, p.provolatile, p.proconfig, l.lanname, p.proretset"
+        " FROM pg_proc p JOIN pg_language l ON l.oid = p.prolang"
         " WHERE p.pronamespace = 'gold'::regnamespace"
-        " AND p.proname IN ('latest_reading', 'latest_period')"
+        " AND p.proname IN ('latest_reading', 'latest_period', 'amount_currency_of')"
     ).fetchall()
-    assert len(rows) == 2
-    for name, definer, volatility, config, language in rows:
-        assert (definer, config, language) == (False, None, "sql"), name
+    assert len(rows) == 3
+    for name, definer, volatility, config, language, returns_set in rows:
+        assert (definer, config, language, returns_set) == (False, None, "sql", True), name
         assert volatility == "s", name
+
+
+def explain(cur, sql: str, params: dict, generic: bool) -> str:
+    """EXPLAIN VERBOSE of a %(name)s query, as a custom plan or as the generic plan a prepared
+    statement gets (the Query API's pool prepares a statement after its fifth run)."""
+    names: list[str] = []
+
+    def number(m):
+        if m.group(1) not in names:
+            names.append(m.group(1))
+        return f"${names.index(m.group(1)) + 1}"
+
+    if not generic:
+        cur.execute("EXPLAIN (VERBOSE, COSTS OFF) " + sql, params)
+        return "\n".join(r[0] for r in cur.fetchall())
+    cur.execute("SET LOCAL plan_cache_mode = force_generic_plan")
+    cur.execute("PREPARE screen_plan AS " + re.sub(r"%\((\w+)\)s", number, sql))
+    # EXECUTE's arguments as literals: a utility statement's parameters have no type to infer
+    args = pgsql.SQL(", ").join(
+        pgsql.SQL("{}::text[]" if isinstance(params[n], list) else "{}").format(
+            pgsql.Literal(params[n])) for n in names)
+    cur.execute(pgsql.SQL("EXPLAIN (VERBOSE, COSTS OFF) EXECUTE screen_plan({})").format(args))
+    plan = "\n".join(r[0] for r in cur.fetchall())
+    cur.execute("DEALLOCATE screen_plan")
+    cur.execute("RESET plan_cache_mode")
+    return plan
+
+
+@pytest.mark.parametrize("generic", [False, True])
+@pytest.mark.parametrize("sort", ["-gross_margin_ttm", "-revenue_growth_ttm", "-revenue_ttm",
+                                  "name"])
+def test_the_screener_reads_a_bases_currency_in_its_own_plan(conn, sort, generic):
+    """061: 060's gold.amount_currency, called from latest_reading's `cu`, never inlined, so it ran
+    as a query of its own per company and column, building the RLS subplan over the catalog's ids
+    each time: 10 s for a margin sort on a catalog-sized copy (production: 503 at 5 s), and in a
+    generic plan for every value sort, the metric test having become a filter after the call. The
+    rule now inlines: no call to it in the plan, custom or generic."""
+    compiled = compile_screen(Screen(sort=sort, hide_blank=True), None)
+    with conn.cursor() as cur:
+        cur.execute("SET LOCAL ROLE query_api")
+        cur.execute("SELECT set_config('app.user_id', %s, true)", (USER,))
+        plan = explain(cur, compiled.sql, compiled.params, generic)
+        cur.execute("RESET ROLE")
+    assert "gold.latest_reading" not in plan and "amount_currency" not in plan, plan
 
 
 def annual_fact(

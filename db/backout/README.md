@@ -8,6 +8,7 @@ in the order they run ([Order](#order)), the two independent ones last.
 
 | File | Undoes | Then |
 |---|---|---|
+| [`currency_speed_061.sql`](currency_speed_061.sql) | 061: `gold.amount_currency` and `gold.latest_reading` back to 060's bodies, `gold.amount_currency_of` dropped (the same readings; the screener's margin and growth sorts slow again). Same signatures: no other image needed. Tested: 061 then this, both functions equal to a database at 060 | none |
 | [`annual_currency_060.sql`](annual_currency_060.sql) | 060: `gold.amount_currency` and `gold.latest_reading` back to 057's bodies (an annual-only 20-F/40-F filer's currency reads USD again). Same signatures: no other image needed. Tested: 060 then this, both functions equal to a database at 057 | none |
 | [`banks_058.sql`](banks_058.sql) | 058: `gold.not_applicable_metrics` back to 049's body (Schwab, American Express and Synchrony no longer banks; Ally stays one by its SIC) | none for the readings; the `financials-rebuild` job puts their fallback debt tags back into gold |
 | [`currency_readings_057.sql`](currency_readings_057.sql) | 057: `gold.not_meaningful` back to 035's four arguments (the five-argument one dropped), `gold.latest_reading` to 056's, `gold.filing_figures` to 051's (no `unit`), `ops.check_financials` to 050's; `gold.amount_currency` dropped. Deploy the previous query-api image with it. Tested: 057 then this, those functions equal to a database at 056 | none (then `ops.check_financials` over every company for 050's debt findings) |
@@ -26,16 +27,17 @@ in the order they run ([Order](#order)), the two independent ones last.
 Newest first, always. To undo a migration, run every file above it in this list first, then it, and
 the rebuild its row names once, after the last file:
 
-1. `annual_currency_060.sql`
-2. `banks_058.sql`
-3. `currency_readings_057.sql`
-4. `ifrs_currencies_056.sql`
-5. `filing_xbrl_facts_055.sql`
-6. `filers_debt_050.sql`
-7. `kpis_049.sql`
-8. `bank_metrics_048.sql`
-9. `interest_expense_043.sql`
-10. `gold_rules_038_041.sql`
+1. `currency_speed_061.sql`
+2. `annual_currency_060.sql`
+3. `banks_058.sql`
+4. `currency_readings_057.sql`
+5. `ifrs_currencies_056.sql`
+6. `filing_xbrl_facts_055.sql`
+7. `filers_debt_050.sql`
+8. `kpis_049.sql`
+9. `bank_metrics_048.sql`
+10. `interest_expense_043.sql`
+11. `gold_rules_038_041.sql`
 
 Two stand apart, each replacing functions no other file touches, so each runs at any point, once:
 `segments_same_basis_053.sql` (`gold.refresh_segment_financials`) and `insider_queue_059.sql`
@@ -48,6 +50,8 @@ it has once the files above have run and this one hasn't. Run out of order, a fi
 older function over a newer rule: 048's, 049's or 050's alone on a database at 056 or 057 brought back
 pre-056 functions and dropped the currency rule. Run twice, it refuses too. Why each pair is ordered:
 
+- 061 before 060: 061's file puts back 060's `gold.amount_currency` and `gold.latest_reading`;
+  060's then puts back 057's.
 - 060 before 057: 060's file puts back 057's `gold.amount_currency` and `gold.latest_reading`;
   057's then drops the one and puts back 056's other.
 - 058 before 049: both put back `gold.not_applicable_metrics` (049's body, then 035's).

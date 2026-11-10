@@ -198,6 +198,17 @@ Every `Store` session also sets `jit = off`: a LATERAL is charged the policy's h
 rescan, so these queries read few rows but cost millions on paper, and JIT spent 0.7-1.6 s compiling
 them for nothing.
 
+What a per-company LATERAL calls must inline into the query. A scalar SQL function whose body has
+sub-selects never does, so it runs as a query of its own per row, and as `query_api` each run builds
+the policy's subplan over the catalog's ids again: `gold.amount_currency` inside `gold.latest_reading`
+made every margin and growth sort read 6,594 companies that way (10 s on a catalog-sized copy, 503 in
+production) until migration 061 made the rule a set-returning function the planner inlines. The pool
+also prepares a statement after its fifth run, and a screen's SQL is the same text whatever its
+columns, so plans are often generic: a test on a parameter alone (`p_metric IN (...)`) only skips work
+when it sits inside its own subquery (`LIMIT 1`), where it stays a one-time filter. Every screener
+sort now answers in 0.17-0.40 s on that copy, custom or generic plan
+(`test_the_screener_reads_a_bases_currency_in_its_own_plan` checks both plans).
+
 ## Screener
 
 `GET /v1/screener`: every company with a figure in at least one of the requested columns
