@@ -1076,10 +1076,13 @@ export function eightKItems(sectionKeys: string[]): string[] {
 
 export type FormFilter = "reports" | "all" | "10-K" | "10-Q" | "8-K" | "proxy" | "insider";
 
-/** The filing index's form chips: each is a list of exact SEC form types (sent to the API).
- * Reports first: 57 of a company's 1,233 filings can be 10-K/Qs among the insider forms. */
+/** The filing index's form chips: each is a list of exact SEC form types (sent to the API, at most
+ * 20). Reports first: 57 of a company's 1,233 filings can be 10-K/Qs among the insider forms. A
+ * foreign filer's reports are 20-F and 40-F (annual) and 6-K (interim and current). */
+export const REPORT_FORMS = ["10-K", "10-K/A", "10-KT", "10-Q", "10-Q/A", "10-QT", "8-K", "8-K/A",
+  "20-F", "20-F/A", "40-F", "40-F/A", "6-K", "6-K/A"];
 export const FORM_FILTERS: [FormFilter, string, string[]][] = [
-  ["reports", "Reports", ["10-K", "10-K/A", "10-KT", "10-Q", "10-Q/A", "10-QT", "8-K", "8-K/A"]],
+  ["reports", "Reports", REPORT_FORMS],
   ["10-K", "10-K", ["10-K", "10-K/A", "10-KT"]],
   ["10-Q", "10-Q", ["10-Q", "10-Q/A", "10-QT"]],
   ["8-K", "8-K", ["8-K", "8-K/A"]],

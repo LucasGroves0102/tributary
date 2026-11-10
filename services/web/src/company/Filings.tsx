@@ -87,7 +87,7 @@ export function Filings({ token, companyId, name, canRead, initialDiff, fiscalYe
         <div className="card-h wrap">
           <h2>Filings</h2>
           <span className="sub">
-            SEC filing index, newest first{fiscalYearEnd ? " · headed by fiscal year" : ""}{filter === "reports" ? " · 10-K, 10-Q, 8-K (All has insider forms and the rest)" : ""}
+            SEC filing index, newest first{fiscalYearEnd ? " · headed by fiscal year" : ""}{filter === "reports" ? " · 10-K, 10-Q, 8-K, and a foreign filer's 20-F, 40-F, 6-K (All has insider forms and the rest)" : ""}
           </span>
           <span className="grow" />
           <span className="seg" role="group" aria-label="Form">
