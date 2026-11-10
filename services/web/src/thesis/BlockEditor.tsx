@@ -203,7 +203,7 @@ export function BlockEditor({ markdown, onChange, onRemoved, items, token, label
               <QuoteCard markdown={markdown} unit={u} actions={actions} />
             ) : item && item.kind !== "report" && item.kind !== "thesis" ? (
               <Embed token={token} item={{ ...item, kind: item.kind, ref: item.item_id }} label={label} readable={readable}
-                hasTtm={hasTtm} onOpenChart={onOpenChart} actions={actions} />
+                hasTtm={hasTtm} onOpenChart={onOpenChart} actions={actions} preview />
             ) : (
               <figure className="card report-embed missing">
                 <figcaption className="embed-h">

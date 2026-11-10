@@ -3977,6 +3977,12 @@ button.link.num {
   margin: 0;
 }
 
+/* a chart card in the thesis editor: the small-multiple drawing, at thumbnail size, until Expand
+   (reports/Embeds.tsx); the full chart is in Preview */
+.embed-body.preview {
+  max-width: 360px;
+}
+
 /* Customizable views: Home's arrangement, table columns (views/) */
 
 .view-editor {

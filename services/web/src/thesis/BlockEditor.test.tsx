@@ -106,6 +106,29 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
+it("draws a chart card as a small preview that expands to full size and back", async () => {
+  await render();
+  const chart = cards()[0]!;
+  const toggle = [...chart.querySelectorAll("button")].find((b) => b.textContent === "Expand")!;
+  expect(toggle.getAttribute("aria-expanded")).toBe("false");
+  const body = document.getElementById(toggle.getAttribute("aria-controls")!)!;
+  expect(body.classList.contains("preview")).toBe(true);
+  // the small-multiple drawing: a 460-wide viewBox, beside the full chart's wider one
+  const width = () => Number(chart.querySelector("svg.lchart-svg")!.getAttribute("viewBox")!.split(" ")[2]);
+  expect(width()).toBe(460);
+  await act(async () => toggle.click());
+  await settle();
+  expect(toggle.getAttribute("aria-expanded")).toBe("true");
+  expect(toggle.textContent).toBe("Show smaller");
+  expect(body.classList.contains("preview")).toBe(false);
+  expect(width()).toBeGreaterThan(460);
+  await act(async () => toggle.click());
+  expect(body.classList.contains("preview")).toBe(true);
+  // only charts: the comps card has no toggle, and looking changes nothing
+  expect([...cards()[2]!.querySelectorAll("button")].some((b) => b.textContent === "Expand")).toBe(false);
+  expect(current).toBe(DOC);
+});
+
 it("draws embeds and pinned quotes as cards, never as [[embed]] lines; comps stay a table", async () => {
   await render();
   expect(cardLabels()).toEqual([

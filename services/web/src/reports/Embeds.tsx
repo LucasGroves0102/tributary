@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 
 import type { Readable } from "../access";
 import { failureReason } from "../api";
@@ -34,15 +34,27 @@ const TAGS = { chart: "Chart", comps: "Comps", screen: "Screen", model: "Model" 
 /** A saved item drawn in a report or thesis from its saved state: the data is read now,
  * through the Query API as the viewer (an ungranted company shows "no access", as anywhere
  * else). A comps set is its table (F6: "keep pinned comps as a table"), never charts.
- * `actions`: the thesis editor's card buttons (move, remove), before the Open link. */
-export function Embed(props: Common & { readable: Readable; hasTtm: TtmCatalog; onOpenChart: (s: ChartState) => void; actions?: ReactNode }) {
+ * `actions`: the thesis editor's card buttons (move, remove), before the Open link.
+ * `preview`: the thesis editor's cards, where a chart is a small drawing (the small multiples'
+ * size) with Expand to draw it at full width; a report and the thesis's Preview draw it in full. */
+export function Embed(props: Common & { readable: Readable; hasTtm: TtmCatalog; onOpenChart: (s: ChartState) => void; actions?: ReactNode; preview?: boolean }) {
   const { item } = props;
+  const [expanded, setExpanded] = useState(false);
+  const bodyId = useId();
+  const small = props.preview === true && item.kind === "chart";
+  const compact = small && !expanded;
   return (
-    <figure className="card report-embed" aria-label={item.name}>
+    <figure className={compact ? "card report-embed compact" : "card report-embed"} aria-label={item.name}>
       <figcaption className="embed-h">
         <span className={`tag ${item.kind}`}>{TAGS[item.kind]}</span>{" "}
         <b>{item.name}</b>
         <span className="grow" />
+        {small && (
+          <button type="button" className="btn sm ghost no-print" aria-expanded={expanded} aria-controls={bodyId}
+            onClick={() => setExpanded((e) => !e)}>
+            {expanded ? "Show smaller" : "Expand"}
+          </button>
+        )}
         {props.actions}
         <span className="no-print">
           {item.kind === "chart" ? (
@@ -65,7 +77,9 @@ export function Embed(props: Common & { readable: Readable; hasTtm: TtmCatalog; 
         </span>
       </figcaption>
       {item.kind === "chart" ? (
-        <EmbeddedChart {...props} />
+        <div id={bodyId} className={compact ? "embed-body preview" : "embed-body"}>
+          <EmbeddedChart {...props} compact={compact} />
+        </div>
       ) : item.kind === "comps" ? (
         <EmbeddedComps {...props} />
       ) : item.kind === "model" ? (
@@ -77,19 +91,21 @@ export function Embed(props: Common & { readable: Readable; hasTtm: TtmCatalog; 
   );
 }
 
-function EmbeddedChart({ token, item, label, hasTtm }: Common & { hasTtm: TtmCatalog }) {
+function EmbeddedChart({ token, item, label, hasTtm, compact = false }: Common & { hasTtm: TtmCatalog; compact?: boolean }) {
   const chart = useMemo(() => restoreChartState(item.state), [item.state]);
-  return <ChartView token={token} chart={chart} name={item.name} label={label} hasTtm={hasTtm} />;
+  return <ChartView token={token} chart={chart} name={item.name} label={label} hasTtm={hasTtm} compact={compact} />;
 }
 
 /** A chart state drawn read-only (embeds, the company Revenue view): each layer's data read
- * now as the viewer (chart/fetch.ts), drawn by LayerChart with its source footnote. */
-export function ChartView({ token, chart, name, label, hasTtm }: {
+ * now as the viewer (chart/fetch.ts), drawn by LayerChart with its source footnote. `compact`:
+ * LayerChart's small-multiple drawing (a thesis card's preview); the data asked is the same. */
+export function ChartView({ token, chart, name, label, hasTtm, compact = false }: {
   token: string;
   chart: ChartState;
   name: string;
   label: (companyId: string) => string;
   hasTtm: TtmCatalog;
+  compact?: boolean;
 }) {
   const visible = chart.layers.filter((l) => !l.hidden);
   const requests = visible.flatMap((layer) => {
@@ -167,6 +183,7 @@ export function ChartView({ token, chart, name, label, hasTtm }: {
         deck={chart.deck}
         onOpen={open}
         from={rangeDates(chart).from}
+        compact={compact}
       />
       {errors.length > 0 && <p className="faint small">{errors.length} line{errors.length === 1 ? "" : "s"} couldn't be drawn: {[...new Set(errors)].join("; ")}.</p>}
     </>
