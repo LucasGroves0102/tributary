@@ -8,8 +8,10 @@
 --   sudo -u postgres psql -d tributary -v ON_ERROR_STOP=1 -1 -c 'SET ROLE tributary' -f bank_metrics_048.sql
 --   kubectl -n tributary create job --from=cronjob/financials-rebuild financials-rebuild-2
 --
--- Independent of the other files here (048 touches no function they restore). Generated from 040 by a
--- script (the function's text exactly).
+-- Not independent: it is in the chain (README.md, Order) and runs after every newer file, kpis_049.sql
+-- last of them. 049's backout puts back 048's gold.refresh_derived_financials; run after this one it
+-- would bring back 048's body, with the efficiency ratio whose rows this file removes. The guard below
+-- refuses it out of order. Generated from 040 by a script (the function's text exactly).
 --
 -- Run it as the migration owner, the migrate login `tributary` (SET ROLE as below): run as postgres,
 -- a function it drops and re-creates would belong to postgres, and the non-superuser migrate login

@@ -579,9 +579,11 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
     @app.get("/v1/companies/{company_id}/peers/check/{candidate_id}", response_model=dict)
     def peer_check(user_id: Annotated[str, Depends(current_user)], company_id: CompanyId,
                    candidate_id: CompanyId) -> dict:
-        """Can this company join the comps of `company_id`, and if not, why: it has no figures
-        here because it files 20-F/40-F annual reports (a foreign private issuer, IFRS), or its
-        10-K's XBRL isn't in yet, or it files no annual report. require(financials) on the comps'
+        """Can this company join the comps of `company_id`, and if not, why. A company with figures
+        here can, whatever it files: since 056 most 20-F/40-F filers have them, in their own
+        currency (`metadata_only` when the caller can't read them). Without figures: it files
+        20-F/40-F annual reports whose XBRL gold doesn't read (`foreign_filer`), or its 10-K's
+        XBRL isn't in yet, or it files no annual report. require(financials) on the comps'
         company; the answer is public filing-index metadata about the candidate."""
         require(user_id, "financials", company_id)
         info = store.annual_reports(user_id, candidate_id)
