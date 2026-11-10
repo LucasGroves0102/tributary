@@ -30,6 +30,7 @@ METRICS = {
     "InterestIncomeExpenseNet": "revenue",
     "NoninterestIncome": "revenue",
     "RegulatedAndUnregulatedOperatingRevenue": "revenue",
+    "SalesRevenueNet": "revenue",
     "CostOfRevenue": "cost_of_revenue",
     "GrossProfit": "gross_profit",
     "OperatingIncomeLoss": "operating_income",
@@ -323,6 +324,71 @@ def test_net_revenue_alone_stays_however_small(conn):
     # nothing to compare it with: no gross line in the period
     put(conn, [(NET, *Q3, 74328, "q", FILED)])
     assert gold(conn, "revenue", END) == (74328, NET)
+
+
+EXCLUDING = "RevenueFromContractWithCustomerExcludingAssessedTax"
+
+
+def test_a_contract_tag_filed_a_thousand_times_too_large_is_a_slip(conn):
+    # Tigo Energy files contract revenue 1,000x too large in every filing beside the right Revenues
+    # (Q1 2023: $50,058,000,000 and $50,058,000; its other figures at most $31.7M), and $100K under
+    # the net tag. 039 made Revenues a part of the slip and believed the net sliver; a net revenue
+    # part rule alone would believe the slip itself. Its stated year the same ($81.3B and $81.3M).
+    put(
+        conn,
+        [
+            (NET, *Q3, 100000, "q", FILED),
+            ("Revenues", *Q3, 50058000, "q", FILED),
+            (EXCLUDING, *Q3, 50058000000, "q", FILED),
+            ("CostOfRevenue", *Q3, 31689000, "q", FILED),
+            ("Revenues", *FY, 81323000, "k", "2026-02-25", "10-K"),
+            (EXCLUDING, *FY, 81323000000, "k", "2026-02-25", "10-K"),
+            ("CostOfRevenue", *FY, 56552000, "k", "2026-02-25", "10-K"),
+        ],
+    )
+    assert gold(conn, "revenue", END) == (50058000, "Revenues")
+    assert derived(conn, "revenue", "2025-12-31", "ttm") == 81323000
+
+
+def test_a_contract_tag_filed_in_thousands_is_the_slip(conn):
+    # Plexus files contract revenue excluding tax in thousands (982,607) beside the same figure in
+    # dollars including tax ($982,607,000; cost $894M): the smaller one is the slip
+    put(
+        conn,
+        [
+            (EXCLUDING, *Q3, 982607, "q", FILED),
+            (INCLUDING, *Q3, 982607000, "q", FILED),
+            ("CostOfRevenue", *Q3, 894467000, "q", FILED),
+        ],
+    )
+    assert gold(conn, "revenue", END) == (982607000, INCLUDING)
+
+
+def test_a_thousands_slip_beside_the_right_revenues_changes_nothing(conn):
+    # FactSet's contract tag at 329,141 beside Revenues of $329,141,000 (cost $161.5M): the smaller
+    # is the slip, as priority already had it
+    put(
+        conn,
+        [
+            ("Revenues", *Q3, 329141000, "q", FILED),
+            (INCLUDING, *Q3, 329141, "q", FILED),
+            ("CostOfRevenue", *Q3, 161524000, "q", FILED),
+        ],
+    )
+    assert gold(conn, "revenue", END) == (329141000, "Revenues")
+
+
+def test_with_no_other_figure_the_smaller_of_a_pair_is_the_slip(conn):
+    # nothing else in the period says which scale is right: the smaller is the slip, the usual case
+    # (a figure filed in thousands: Southwest's 2010 Revenues of 3,168 beside $3.168B)
+    put(
+        conn,
+        [
+            ("Revenues", *Q3, 3168, "q", FILED),
+            ("SalesRevenueNet", *Q3, 3168000000, "q", FILED),
+        ],
+    )
+    assert gold(conn, "revenue", END) == (3168000000, "SalesRevenueNet")
 
 
 def test_a_banks_revenue_is_net_interest_plus_noninterest_income(conn):

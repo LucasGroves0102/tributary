@@ -42,7 +42,10 @@ over `gold.usable_facts`): the quarters, the annual fallback for TTM (040) and t
 comparison (041) all read it. For revenue, a zero loses to another tag's value, and a figure under
 20% of the period's gross line is a part, not the total: `Revenues` under contract revenue (039),
 `RevenuesNetOfInterestExpense` under the larger of `Revenues` and contract revenue (064: Rectitude
-Holdings' S$74,328 beside S$43.8M; a broker's real net revenue, 20-80% of gross, stays). A line a
+Holdings' S$74,328 beside S$43.8M; a broker's real net revenue, 20-80% of gross, stays). Two revenue
+tags of a period 1,000 or 1,000,000 times apart are one figure in two scales (064): the larger is the
+slip when it is over 100 times every other money figure of the period, else the smaller is, and a slip
+sorts last (Tigo Energy's contract tag 1,000x too large, Plexus' in thousands). A line a
 filing reports as two tags (a bank's net interest plus noninterest income; NVIDIA's debt plus equity
 securities) is a `silver.metric_sums` row whose parts are `silver.metric_tags` rows with
 `gold_line = false` (038).

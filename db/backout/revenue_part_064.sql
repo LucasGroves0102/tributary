@@ -1,8 +1,9 @@
 -- Backout of 064_revenue_net_of_interest_part.sql (never a migration: README.md): gold.best_facts
 -- back to 039's body, copied unchanged, so RevenuesNetOfInterestExpense under 20% of the period's
--- gross revenue is believed again (Rectitude's FY2025 S$74,328, StoneX's net operating revenues).
--- Then run the financials-rebuild job for the same CIKs 064's rebuild took (or for all), which puts
--- the old rows back.
+-- gross revenue is believed again (Rectitude's FY2025 S$74,328, StoneX's net operating revenues),
+-- and so are revenue figures 1,000 times off another tag of their period (Tigo's $50B contract tag,
+-- Plexus' quarters in thousands). Then run the financials-rebuild job for the same CIKs 064's
+-- rebuild took (or for all), which puts the old rows back.
 --
 -- Run it as the migration owner, the migrate login `tributary` (SET ROLE as below): run as
 -- postgres, a function it drops and re-creates would belong to postgres, and the non-superuser
@@ -26,7 +27,7 @@ BEGIN
         ('gold.amount_currency(text)', 'd59a928b3b91fb9a6da98fc15e72a536'),
         ('gold.amount_currency_of(text)', '6d18237414dd02bfe4078cac3f7b429e'),
         ('gold.annual_per_share(text,integer)', '663430e80a6341f8a0e4227e1491e657'),
-        ('gold.best_facts(text[])', '13d4a6b1c236fcf600836a82bbb6cb3b'),
+        ('gold.best_facts(text[])', 'd95fe7b45b1f9db2e37c7e01b500e5c0'),
         ('gold.companies_for_ciks(text[])', '5f02b9f1e395d7f743635d0a399f8f6c'),
         ('gold.figure_facts(text,text,date)', '6789892e97611dd6c0260a25f695d7fc'),
         ('gold.filing_figures(text,text)', '51376508ac8a1a66d7e42cc92852346f'),

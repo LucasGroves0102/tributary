@@ -468,18 +468,25 @@ migrations that define those objects.
   planner estimates usable_facts' `tagged` at one row, so CTE joins over it are nested loops and a
   plan can flip after a mass delete and insert (one batch went 0.6 s -> 7 s until ANALYZE). Locks:
   two functions replaced, catalog only; no rebuild; backout `backout/rebuild_speed_063.sql`.
-- `064_revenue_net_of_interest_part.sql`: `gold.best_facts` (039's body, edits marked "064") reads
-  `RevenuesNetOfInterestExpense` under 20% of the period's largest `Revenues` / contract revenue as a
-  part, sorted after the other tags like 039's Revenues part. Revenue's first tag had no such rule, so a
-  small line filed under it beside the total was believed: Rectitude Holdings' FY2025 S$74,328 beside
-  Revenues of S$43.8M, which put its revenue growth at the top of the screener (+68,870%). 20% as in
-  039: a broker's or lender's net revenue really is a fraction of its gross (Nomura 36-49%, Atlanticus
-  27-48%, Oportun 23-50%, Jefferies 42%). Measured on hermes over the 128 companies with the tag: 149
-  periods at 16 companies change pick (StoneX 109: its net operating revenues, 0.2-4.8% of the total
-  revenues data vendors show, give way to them, TTM to June 2026 $2.86B -> $157.7B), nothing else.
-  Rebuilt from those companies' silver on a throwaway database (gold at 063 equal to hermes'): 85
-  quarterly and 125 TTM revenue rows change, and the margins and growth read from them; Rectitude's
-  latest growth +17.1%. Left, and in the header: Oportun's Q1 2023 (a real $4.8M net revenue) now reads
-  total revenue, and Tigo Energy's 2023 reads a contract tag it files 1,000 times too large, as gold
-  already does for its 2022 and two later quarters. Locks: one function replaced, catalog only; the
-  `financials-rebuild` job for those companies' CIKs; backout `backout/revenue_part_064.sql` (039's body).
+- `064_revenue_net_of_interest_part.sql`: two revenue rules in `gold.best_facts` (039's body, edits
+  marked "064"). A net revenue part: `RevenuesNetOfInterestExpense` under 20% of the period's largest
+  `Revenues` / contract revenue is a part, sorted after the other tags like 039's Revenues part.
+  Revenue's first tag had no such rule, so a small line filed under it beside the total was believed:
+  Rectitude Holdings' FY2025 S$74,328 beside Revenues of S$43.8M put its revenue growth at the top of
+  the screener (+68,870%). 20% as in 039: a broker's or lender's net revenue really is a fraction of its
+  gross (Nomura 36-49%, Atlanticus 27-48%, Oportun 23-50%, Jefferies 42%). A scale slip: two revenue
+  tags of a period 1,000 or 1,000,000 times apart (within 0.5%) are one figure in two scales; the larger
+  is the slip when it is over 100 times every other money figure of that period, else the smaller is.
+  A slip is no evidence for the zero and part rules and sorts after every other tag. Either side can be
+  wrong (Tigo Energy's contract tag 1,000x too large; Plexus', FactSet's, CHS' second tag in thousands),
+  so the rest of the period decides; without it the net revenue rule handed Tigo's 2023 to its $50B
+  tag. Measured on hermes over the 128 companies with the net tag and the 41 with such a pair: 184
+  picks change at 24 companies, nothing else (StoneX 109: its net operating revenues, 0.2-4.8% of the
+  total revenues data vendors show, give way to them, TTM to June 2026 $2.86B -> $157.7B; Plexus 15:
+  quarters read in thousands since late 2023, TTM $4.03B -> $4.60B; Tigo 14: every 2022-2026 quarter its
+  $9-69M Revenues, TTM $103.5B -> $104.7M). Rebuilt from those companies' silver on a throwaway database
+  (gold at 063 equal to hermes'): only revenue rows and the margins and growth read from them change;
+  Rectitude's latest growth +17.1%. Left, in the header: Oportun's Q1 2023 (a real $4.8M net revenue)
+  now reads total revenue. best_facts' cost on hermes unchanged within noise (one more window sort).
+  Locks: one function replaced, catalog only; the `financials-rebuild` job for those companies' CIKs;
+  backout `backout/revenue_part_064.sql` (039's body).
