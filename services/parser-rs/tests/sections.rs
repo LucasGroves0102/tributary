@@ -74,6 +74,42 @@ fn eight_k_decimal_items() {
     assert_eq!(sections[0].title, "Other Events.");
 }
 
+/// Rule 2: "Item 7.01Regulation FD Disclosure" (no space) was keyed 7 in production; a decimal
+/// item ends before anything but a digit. "Item 7.012" stays item 7. (sections.py's
+/// test_a_decimal_item_run_into_its_title_keeps_its_number.)
+#[test]
+fn a_decimal_item_run_into_its_title_keeps_its_number() {
+    let body = "Text. ".repeat(20);
+    let text = [
+        "Item 2.02Results of Operations and Financial Condition",
+        &body,
+        "Item 7.01Regulation FD Disclosure",
+        &body,
+        "ITEM 9.01FINANCIAL STATEMENTS AND EXHIBITS",
+        &body,
+    ]
+    .join("\n");
+    let s = find_sections(&text, "8-K").unwrap();
+    let got: Vec<(&str, &str, &str)> = s
+        .iter()
+        .map(|x| (x.key.as_str(), x.item.as_str(), x.title.as_str()))
+        .collect();
+    assert_eq!(
+        got,
+        [
+            (
+                "2.02",
+                "2.02",
+                "Results of Operations and Financial Condition"
+            ),
+            ("7.01", "7.01", "Regulation FD Disclosure"),
+            ("9.01", "9.01", "FINANCIAL STATEMENTS AND EXHIBITS"),
+        ]
+    );
+    let text = ["Item 7.012 Other", &body].join("\n");
+    assert_eq!(keys(&find_sections(&text, "8-K").unwrap()), ["7"]);
+}
+
 #[test]
 fn hidden_inline_xbrl_header_is_dropped() {
     let raw = b"<html><body><div style='display: none'><ix:header>Item 1. Hidden</ix:header></div>\

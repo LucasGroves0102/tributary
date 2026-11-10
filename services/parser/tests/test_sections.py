@@ -44,6 +44,22 @@ def test_10q_keys_include_part():
     assert keys == ["I-1", "I-2", "I-3", "I-4", "II-1", "II-1A", "II-2", "II-5", "II-6"]
 
 
+def test_a_decimal_item_run_into_its_title_keeps_its_number():
+    """Rule 2: "Item 7.01Regulation FD Disclosure" (no space) was keyed 7 in 589 production rows; a
+    decimal item ends before anything but a digit. "Item 7.012" stays item 7, as before."""
+    body = "Text. " * 20
+    text = "\n".join(["Item 2.02Results of Operations and Financial Condition", body,
+                      "Item 7.01Regulation FD Disclosure", body,
+                      "ITEM 9.01FINANCIAL STATEMENTS AND EXHIBITS", body])
+    sections = find_sections(text, "8-K")
+    assert [(s.key, s.item, s.title) for s in sections] == [
+        ("2.02", "2.02", "Results of Operations and Financial Condition"),
+        ("7.01", "7.01", "Regulation FD Disclosure"),
+        ("9.01", "9.01", "FINANCIAL STATEMENTS AND EXHIBITS"),
+    ]
+    assert [s.key for s in find_sections("\n".join(["Item 7.012 Other", body]), "8-K")] == ["7"]
+
+
 def test_8k_decimal_items():
     sections = parse(fixture("8-K"), "8-K")
     assert [s.key for s in sections] == ["8.01", "9.01"]
