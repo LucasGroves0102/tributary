@@ -25,10 +25,12 @@ Q3, Q2, Q1, FY = (
 METRICS = {
     "Revenues": "revenue",
     "RevenueFromContractWithCustomerExcludingAssessedTax": "revenue",
+    "RevenueFromContractWithCustomerIncludingAssessedTax": "revenue",
     "RevenuesNetOfInterestExpense": "revenue",
     "InterestIncomeExpenseNet": "revenue",
     "NoninterestIncome": "revenue",
     "RegulatedAndUnregulatedOperatingRevenue": "revenue",
+    "SalesRevenueNet": "revenue",
     "CostOfRevenue": "cost_of_revenue",
     "GrossProfit": "gross_profit",
     "OperatingIncomeLoss": "operating_income",
@@ -226,6 +228,167 @@ def test_revenues_below_contract_revenue_after_derivative_losses_stays(conn):
         ],
     )
     assert gold(conn, "revenue", END)[0] == 290000000
+
+
+NET = "RevenuesNetOfInterestExpense"
+INCLUDING = "RevenueFromContractWithCustomerIncludingAssessedTax"
+
+
+def test_net_revenue_under_a_fifth_of_total_revenue_is_a_part(conn):
+    # Rectitude Holdings' 20-Fs (SGD): S$74,328 under the net tag beside S$43.8M of Revenues, and
+    # growth read +68,870% from it (064). The years are stated years only, so TTM reads them.
+    years = [
+        ("2022-04-01", "2023-03-31", 106263, 37643696, "2023-07-31"),
+        ("2023-04-01", "2024-03-31", 83659, 41353555, "2024-07-31"),
+        ("2024-04-01", "2025-03-31", 74328, 43796144, "2025-07-31"),
+    ]
+    put(
+        conn,
+        [
+            row
+            for start, end, net, total, filed in years
+            for row in (
+                (NET, start, end, net, f"f{end}", filed, "20-F"),
+                ("Revenues", start, end, total, f"f{end}", filed, "20-F"),
+                (INCLUDING, start, end, total, f"f{end}", filed, "20-F"),
+            )
+        ],
+    )
+    assert derived(conn, "revenue", "2025-03-31", "ttm") == 43796144
+    assert float(derived(conn, "revenue_growth", "2025-03-31", "ttm")) == pytest.approx(
+        43796144 / 41353555 - 1, abs=1e-6
+    )
+
+
+def test_a_net_revenue_quarter_under_a_fifth_of_total_revenue_is_a_part(conn):
+    put(
+        conn,
+        [
+            (NET, *Q3, 74328, "q", FILED),
+            ("Revenues", *Q3, 43796144, "q", FILED),
+        ],
+    )
+    assert gold(conn, "revenue", END) == (43796144, "Revenues")
+
+
+def test_net_revenue_is_compared_with_contract_revenue_too(conn):
+    # Rectitude also tags its total under the contract tag that includes assessed tax: with no
+    # Revenues fact, that is the gross line
+    put(
+        conn,
+        [
+            (NET, *Q3, 74328, "q", FILED),
+            (INCLUDING, *Q3, 43796144, "q", FILED),
+        ],
+    )
+    assert gold(conn, "revenue", END) == (43796144, INCLUDING)
+
+
+def test_a_zero_and_a_net_revenue_sliver_both_lose_to_contract_revenue(conn):
+    # 039's zero rule takes Revenues' zero out; the sliver under the net tag was then believed
+    put(
+        conn,
+        [
+            ("Revenues", *Q3, 0, "q", FILED),
+            (NET, *Q3, 74328, "q", FILED),
+            ("RevenueFromContractWithCustomerExcludingAssessedTax", *Q3, 43796144, "q", FILED),
+        ],
+    )
+    assert gold(conn, "revenue", END) == (
+        43796144,
+        "RevenueFromContractWithCustomerExcludingAssessedTax",
+    )
+
+
+@pytest.mark.parametrize(
+    ("net", "believed"),
+    [
+        (15200000000, 15200000000),  # Goldman-shaped: net revenues 42% of gross, a real line
+        (7300000000, 7300000000),  # 20.3%: above the line
+        (7100000000, 36000000000),  # 19.7%: a part
+    ],
+)
+def test_a_brokers_net_revenue_stays_above_a_fifth_of_gross(conn, net, believed):
+    put(
+        conn,
+        [
+            (NET, *Q3, net, "q", FILED),
+            ("Revenues", *Q3, 36000000000, "q", FILED),
+        ],
+        sic="6211",
+    )
+    assert gold(conn, "revenue", END)[0] == believed
+
+
+def test_net_revenue_alone_stays_however_small(conn):
+    # nothing to compare it with: no gross line in the period
+    put(conn, [(NET, *Q3, 74328, "q", FILED)])
+    assert gold(conn, "revenue", END) == (74328, NET)
+
+
+EXCLUDING = "RevenueFromContractWithCustomerExcludingAssessedTax"
+
+
+def test_a_contract_tag_filed_a_thousand_times_too_large_is_a_slip(conn):
+    # Tigo Energy files contract revenue 1,000x too large in every filing beside the right Revenues
+    # (Q1 2023: $50,058,000,000 and $50,058,000; its other figures at most $31.7M), and $100K under
+    # the net tag. 039 made Revenues a part of the slip and believed the net sliver; a net revenue
+    # part rule alone would believe the slip itself. Its stated year the same ($81.3B and $81.3M).
+    put(
+        conn,
+        [
+            (NET, *Q3, 100000, "q", FILED),
+            ("Revenues", *Q3, 50058000, "q", FILED),
+            (EXCLUDING, *Q3, 50058000000, "q", FILED),
+            ("CostOfRevenue", *Q3, 31689000, "q", FILED),
+            ("Revenues", *FY, 81323000, "k", "2026-02-25", "10-K"),
+            (EXCLUDING, *FY, 81323000000, "k", "2026-02-25", "10-K"),
+            ("CostOfRevenue", *FY, 56552000, "k", "2026-02-25", "10-K"),
+        ],
+    )
+    assert gold(conn, "revenue", END) == (50058000, "Revenues")
+    assert derived(conn, "revenue", "2025-12-31", "ttm") == 81323000
+
+
+def test_a_contract_tag_filed_in_thousands_is_the_slip(conn):
+    # Plexus files contract revenue excluding tax in thousands (982,607) beside the same figure in
+    # dollars including tax ($982,607,000; cost $894M): the smaller one is the slip
+    put(
+        conn,
+        [
+            (EXCLUDING, *Q3, 982607, "q", FILED),
+            (INCLUDING, *Q3, 982607000, "q", FILED),
+            ("CostOfRevenue", *Q3, 894467000, "q", FILED),
+        ],
+    )
+    assert gold(conn, "revenue", END) == (982607000, INCLUDING)
+
+
+def test_a_thousands_slip_beside_the_right_revenues_changes_nothing(conn):
+    # FactSet's contract tag at 329,141 beside Revenues of $329,141,000 (cost $161.5M): the smaller
+    # is the slip, as priority already had it
+    put(
+        conn,
+        [
+            ("Revenues", *Q3, 329141000, "q", FILED),
+            (INCLUDING, *Q3, 329141, "q", FILED),
+            ("CostOfRevenue", *Q3, 161524000, "q", FILED),
+        ],
+    )
+    assert gold(conn, "revenue", END) == (329141000, "Revenues")
+
+
+def test_with_no_other_figure_the_smaller_of_a_pair_is_the_slip(conn):
+    # nothing else in the period says which scale is right: the smaller is the slip, the usual case
+    # (a figure filed in thousands: Southwest's 2010 Revenues of 3,168 beside $3.168B)
+    put(
+        conn,
+        [
+            ("Revenues", *Q3, 3168, "q", FILED),
+            ("SalesRevenueNet", *Q3, 3168000000, "q", FILED),
+        ],
+    )
+    assert gold(conn, "revenue", END) == (3168000000, "SalesRevenueNet")
 
 
 def test_a_banks_revenue_is_net_interest_plus_noninterest_income(conn):

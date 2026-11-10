@@ -14,9 +14,9 @@ BEGIN;
 SET LOCAL lock_timeout = '10s';
 
 -- guard (scripts/backout_guards.py writes it; db/backout/README.md, Order). It refuses, changing
--- nothing, unless every newer backout has run (newest first: rebuild_speed_063.sql,
--- currency_speed_061.sql) and this one hasn't, and unless the login owns the functions (the migrate
--- login; header).
+-- nothing, unless every newer backout has run (newest first: revenue_part_064.sql,
+-- rebuild_speed_063.sql, currency_speed_061.sql) and this one hasn't, and unless the login owns the
+-- functions (the migrate login; header).
 DO $guard$
 DECLARE
     w record;
@@ -26,6 +26,7 @@ BEGIN
         ('gold.amount_currency(text)', '6d18237414dd02bfe4078cac3f7b429e'),
         ('gold.amount_currency_of(text)', NULL),
         ('gold.annual_per_share(text,integer)', '663430e80a6341f8a0e4227e1491e657'),
+        ('gold.best_facts(text[])', '62873ad55ef4c2f947442d18f9604f27'),
         ('gold.companies_for_ciks(text[])', '5f02b9f1e395d7f743635d0a399f8f6c'),
         ('gold.figure_facts(text,text,date)', '6789892e97611dd6c0260a25f695d7fc'),
         ('gold.filing_figures(text,text)', '51376508ac8a1a66d7e42cc92852346f'),
@@ -49,7 +50,7 @@ BEGIN
         IF w.want IS DISTINCT FROM (SELECT md5(p.prosrc) FROM pg_proc p WHERE p.oid = w.id) THEN
             RAISE EXCEPTION USING MESSAGE = format('%s is not where this backout starts: run '
                 'the newer backouts first, newest first (%s), and this one only once. Nothing was '
-                'changed.', w.fn, 'rebuild_speed_063.sql, currency_speed_061.sql');
+                'changed.', w.fn, 'revenue_part_064.sql, rebuild_speed_063.sql, currency_speed_061.sql');
         END IF;
     END LOOP;
 END
