@@ -17,7 +17,7 @@ as tool errors the model must report.
 | `get_section` | `GET /v1/companies/{id}/sections/{key}` |
 | `get_section_changes` | `GET /v1/companies/{id}/filings/{accession}/changes` (keeps the first `max_changes`, default 20, max 50; says how many it left out) |
 | `get_material_changes` | `GET /v1/companies/{id}/filings/{accession}/changes?view=ranked` (`topic` → `q`, `new_figures` → `numbers=new`; keeps the `max_changes` highest scores across sections, default 15, max 50, says how many it left out, and drops the echoed filters) |
-| `search_filings` | `GET /v1/search` |
+| `search_filings` | `GET /v1/search` (`limit` up to 20, `offset` 0-1,000 as its schema says, clamped in `_route`) |
 | `get_earnings_release` | `GET /v1/companies/{id}/earnings` (`quarters` 1-4, default 1; a quarter's quoted adjustments whole up to 6,000 characters, the rest keep heading and citation and say to read them with `get_section`) |
 | `get_events_since_report` | `GET /v1/companies/{id}/events` |
 

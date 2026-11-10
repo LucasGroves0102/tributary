@@ -427,6 +427,16 @@ def test_financials_quarters_stay_within_the_schema():
                                                 "description": "default 4"}
 
 
+def test_search_offset_is_held_to_the_schema_the_model_sees():
+    """The schema says 0-1000; the code passed up to 10,000 (and a negative offset through)."""
+    schema = next(t for t in TOOLS if t["name"] == "search_filings")["input_schema"]
+    assert schema["properties"]["offset"] == {"type": "integer", "minimum": 0, "maximum": 1000}
+    api, seen = query_api(ok)
+    for asked, sent in ((5000, "1000"), (1000, "1000"), (40, "40"), (-3, "0")):
+        assert api.run("search_filings", {"query": "x", "offset": asked})[1] is False
+        assert seen[-1].url.params["offset"] == sent, asked
+
+
 def test_null_or_wrong_numbers_are_a_validation_message_not_a_crash():
     """F7a: the model sends null for "no preference"; int(None) raised a TypeError out of run()."""
     api, seen = query_api(ok)

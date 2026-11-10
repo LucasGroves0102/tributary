@@ -18,6 +18,7 @@ MATERIAL_CHANGES = 15  # get_material_changes' default: the top of the ranked li
 TOPIC_CHARS = 100  # the Query API's limit for a topic (q)
 MAX_QUARTERS = 40  # get_financials' schema maximum, also enforced in _route
 MAX_RELEASE_QUARTERS = 4  # get_earnings_release's schema maximum, enforced in _route too
+SEARCH_MAX_OFFSET = 1000  # search_filings' schema maximum, enforced in _route too
 # get_earnings_release: quoted adjustments (reconciliation tables) kept whole up to this many
 # characters per quarter; the rest keep their heading and citation (get_section reads them)
 ADJUSTMENT_CHARS = 6000
@@ -225,7 +226,7 @@ TOOLS: list[dict] = [
                 "filed_to": {"type": "string", "description": "YYYY-MM-DD"},
                 "limit": {"type": "integer", "minimum": 1, "maximum": 20,
                           "description": "default 10"},
-                "offset": {"type": "integer", "minimum": 0, "maximum": 1000},
+                "offset": {"type": "integer", "minimum": 0, "maximum": SEARCH_MAX_OFFSET},
             },
             "required": ["query"],
             "additionalProperties": False,
@@ -383,7 +384,8 @@ def _route(name: str, a: dict[str, Any]) -> tuple[str, dict]:
         return f"/v1/companies/{company()}/events", {}
     if name == "search_filings":
         params = {"q": str(a["query"]), "limit": _whole(a, "limit", 10, 20),
-                  "offset": _whole(a, "offset", 0, 10_000)}
+                  # the schema's 0-1000: the model is told 1000, so the call never asks for more
+                  "offset": max(0, _whole(a, "offset", 0, SEARCH_MAX_OFFSET))}
         if a.get("company_id"):
             params["company"] = company()
         if a.get("form"):
