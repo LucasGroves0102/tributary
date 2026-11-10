@@ -25,6 +25,7 @@ Q3, Q2, Q1, FY = (
 METRICS = {
     "Revenues": "revenue",
     "RevenueFromContractWithCustomerExcludingAssessedTax": "revenue",
+    "RevenueFromContractWithCustomerIncludingAssessedTax": "revenue",
     "RevenuesNetOfInterestExpense": "revenue",
     "InterestIncomeExpenseNet": "revenue",
     "NoninterestIncome": "revenue",
@@ -226,6 +227,102 @@ def test_revenues_below_contract_revenue_after_derivative_losses_stays(conn):
         ],
     )
     assert gold(conn, "revenue", END)[0] == 290000000
+
+
+NET = "RevenuesNetOfInterestExpense"
+INCLUDING = "RevenueFromContractWithCustomerIncludingAssessedTax"
+
+
+def test_net_revenue_under_a_fifth_of_total_revenue_is_a_part(conn):
+    # Rectitude Holdings' 20-Fs (SGD): S$74,328 under the net tag beside S$43.8M of Revenues, and
+    # growth read +68,870% from it (064). The years are stated years only, so TTM reads them.
+    years = [
+        ("2022-04-01", "2023-03-31", 106263, 37643696, "2023-07-31"),
+        ("2023-04-01", "2024-03-31", 83659, 41353555, "2024-07-31"),
+        ("2024-04-01", "2025-03-31", 74328, 43796144, "2025-07-31"),
+    ]
+    put(
+        conn,
+        [
+            row
+            for start, end, net, total, filed in years
+            for row in (
+                (NET, start, end, net, f"f{end}", filed, "20-F"),
+                ("Revenues", start, end, total, f"f{end}", filed, "20-F"),
+                (INCLUDING, start, end, total, f"f{end}", filed, "20-F"),
+            )
+        ],
+    )
+    assert derived(conn, "revenue", "2025-03-31", "ttm") == 43796144
+    assert float(derived(conn, "revenue_growth", "2025-03-31", "ttm")) == pytest.approx(
+        43796144 / 41353555 - 1, abs=1e-6
+    )
+
+
+def test_a_net_revenue_quarter_under_a_fifth_of_total_revenue_is_a_part(conn):
+    put(
+        conn,
+        [
+            (NET, *Q3, 74328, "q", FILED),
+            ("Revenues", *Q3, 43796144, "q", FILED),
+        ],
+    )
+    assert gold(conn, "revenue", END) == (43796144, "Revenues")
+
+
+def test_net_revenue_is_compared_with_contract_revenue_too(conn):
+    # Rectitude also tags its total under the contract tag that includes assessed tax: with no
+    # Revenues fact, that is the gross line
+    put(
+        conn,
+        [
+            (NET, *Q3, 74328, "q", FILED),
+            (INCLUDING, *Q3, 43796144, "q", FILED),
+        ],
+    )
+    assert gold(conn, "revenue", END) == (43796144, INCLUDING)
+
+
+def test_a_zero_and_a_net_revenue_sliver_both_lose_to_contract_revenue(conn):
+    # 039's zero rule takes Revenues' zero out; the sliver under the net tag was then believed
+    put(
+        conn,
+        [
+            ("Revenues", *Q3, 0, "q", FILED),
+            (NET, *Q3, 74328, "q", FILED),
+            ("RevenueFromContractWithCustomerExcludingAssessedTax", *Q3, 43796144, "q", FILED),
+        ],
+    )
+    assert gold(conn, "revenue", END) == (
+        43796144,
+        "RevenueFromContractWithCustomerExcludingAssessedTax",
+    )
+
+
+@pytest.mark.parametrize(
+    ("net", "believed"),
+    [
+        (15200000000, 15200000000),  # Goldman-shaped: net revenues 42% of gross, a real line
+        (7300000000, 7300000000),  # 20.3%: above the line
+        (7100000000, 36000000000),  # 19.7%: a part
+    ],
+)
+def test_a_brokers_net_revenue_stays_above_a_fifth_of_gross(conn, net, believed):
+    put(
+        conn,
+        [
+            (NET, *Q3, net, "q", FILED),
+            ("Revenues", *Q3, 36000000000, "q", FILED),
+        ],
+        sic="6211",
+    )
+    assert gold(conn, "revenue", END)[0] == believed
+
+
+def test_net_revenue_alone_stays_however_small(conn):
+    # nothing to compare it with: no gross line in the period
+    put(conn, [(NET, *Q3, 74328, "q", FILED)])
+    assert gold(conn, "revenue", END) == (74328, NET)
 
 
 def test_a_banks_revenue_is_net_interest_plus_noninterest_income(conn):

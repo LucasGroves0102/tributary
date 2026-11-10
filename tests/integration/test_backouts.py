@@ -25,6 +25,7 @@ _spec.loader.exec_module(guards)
 # What each file must put back: the function's body as an older migration created it (None: the
 # function is gone). Independent of the guards, which are measured from the files themselves.
 RESTORES = {
+    "revenue_part_064.sql": {"gold.best_facts(text[])": "039_gold_fact_selection.sql"},
     "rebuild_speed_063.sql": {
         "silver.refresh_financial_facts(text[])": "056_ifrs_currencies.sql",
         "gold.refresh_derived_financials(text[])": "056_ifrs_currencies.sql",
