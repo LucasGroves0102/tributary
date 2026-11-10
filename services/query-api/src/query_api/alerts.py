@@ -429,8 +429,13 @@ class AppAlerts:
                         " FROM notifications WHERE user_id = %s AND status <> 'skipped'",
                         (user_id,))
             row = cur.fetchone() or {"unread": 0, "latest": None}
-            cur.execute("SELECT checked_at, filings_through FROM alert_checks WHERE user_id = %s",
-                        (user_id,))
+            # the user's row is written only when it changes or hourly (app migration 018): the
+            # last run, when it checked every user it planned, is a newer look for them too
+            cur.execute("SELECT CASE WHEN r.complete AND r.checked_at > c.checked_at"
+                        "            THEN r.checked_at ELSE c.checked_at END AS checked_at,"
+                        "       c.filings_through"
+                        " FROM alert_checks c LEFT JOIN alert_runs r ON r.run"
+                        " WHERE c.user_id = %s", (user_id,))
             return {**row, "last_check": cur.fetchone()}
 
     def mark_read(self, user_id: str, ids: list[str] | None, company_id: str | None) -> int:
@@ -605,7 +610,12 @@ class AppAlerts:
             cur.execute("SELECT count(*) AS n FROM webhooks WHERE user_id = %s AND enabled",
                         (user_id,))
             hooks = (cur.fetchone() or {"n": 0})["n"]
-        return {"follows": follows, "settings": settings, "red_lines": rules, "webhooks": hooks}
+            # the stored check, so the job rewrites it only when it changes (app migration 018)
+            cur.execute("SELECT checked_at, filings_through FROM alert_checks WHERE user_id = %s",
+                        (user_id,))
+            last = cur.fetchone()
+        return {"follows": follows, "settings": settings, "red_lines": rules, "webhooks": hooks,
+                "last_check": last}
 
     def add_notifications(self, user_id: str, rows: list[dict]) -> int:
         if not rows:
@@ -709,6 +719,14 @@ class AppAlerts:
                         "     filings_through = coalesce(EXCLUDED.filings_through,"
                         "                                alert_checks.filings_through)",
                         (user_id, at, through))
+
+    def ran(self, at: datetime, complete: bool) -> None:
+        """The job's run (app migration 018, one row): when it started and whether it checked
+        every user it planned."""
+        with self._tx("") as cur:
+            cur.execute("INSERT INTO alert_runs (run, checked_at, complete) VALUES (true, %s, %s)"
+                        " ON CONFLICT (run) DO UPDATE SET checked_at = EXCLUDED.checked_at,"
+                        "     complete = EXCLUDED.complete", (at, complete))
 
     def prune(self, user_id: str, before: datetime) -> int:
         """Notifications (and their deliveries, by cascade) and test sends older than `before`."""

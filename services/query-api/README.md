@@ -1021,7 +1021,12 @@ migrations 016 and 017 (owner-only, forced RLS, not streamed).
   the database anyway, and it would need its own SCRAM user, ACL entry and a secret only the owner
   can create on hermes. Each run re-reads the last 3 days of the index and inserts with ON CONFLICT
   DO NOTHING (one alert per user, filing and company; one delivery per webhook and alert), so a
-  missed or repeated run loses or doubles nothing; alerts older than 180 days are deleted. Cost per run: one short app-DB transaction per
+  missed or repeated run loses or doubles nothing; alerts older than 180 days are deleted. A user's
+  `alert_checks` row (the "last checked" the bell, the alerts page, settings and the Monitor step
+  show) is rewritten only when something changed (the newest filing date, alerts made or made
+  ready) or it is an hour old (`CHECK_EVERY`), and each run is recorded once in `alert_runs` (app
+  migration 018): "last checked" is the newer of the two, the run's only when it checked every user
+  it planned (none failed or deferred). Cost per run: one short app-DB transaction per
   user who follows something (a handful of statements), one filing-index query per 50 followed
   companies (13 ms on hermes for 50 companies, index scans only, measured 2026-11-09), then a recap
   and the red lines only for the filings that just arrived. One pod for a few seconds every 10
