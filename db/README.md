@@ -453,3 +453,18 @@ migrations that define those objects.
   053 95 s one call per company, 062 5.8 s in one call (6.0 s with nested loops only), gold identical
   (135,229 rows, every column). Locks: one function replaced, catalog only; no refresh needed; backout
   `backout/segments_speed_062.sql` (053's body), before 053's.
+- `063_rebuild_speed.sql`: two slow parts of the financials rebuild (2 h 05 min on 2026-11-09 against 36
+  minutes before 038-060). Measured on four of production's rebuild batches (200 CIKs, 73 companies,
+  483,143 silver facts), rebuilt step by step: 037's functions 10.7 s, 060's 32.6 s (silver 14.3,
+  quarters 6.6, derived 7.7, checks 4.0), 063's 24.6 s. `silver.refresh_financial_facts` read
+  `payload->'facts'->...` once per metric tag, detoasting each payload 174 times since 056's IFRS tags;
+  it now reads the facts object once per CIK (silver 14.3 -> 7.1 s). `gold.refresh_derived_financials`:
+  040's "of two stated years within 7 days, one" was a NOT EXISTS over the `years` CTE, a nested loop
+  over the batch's years; now a window over ends within 7 days (derived 7.7 -> 6.8 s). Silver, gold
+  quarters, derived rows and findings identical. Left, measured: `gold.best_facts` (039) runs three
+  times a batch (quarters, derived's stated years, the checks' annual comparison), about 1 s each for
+  JPMorgan's batch, so the checks went 0.24 s -> 1.5 s and derived 1.05 s -> 2.7 s; 031's overlap test
+  pairs every quarter of a metric within a company (1.1 s of that batch's 2.8 s of quarters); and the
+  planner estimates usable_facts' `tagged` at one row, so CTE joins over it are nested loops and a
+  plan can flip after a mass delete and insert (one batch went 0.6 s -> 7 s until ANALYZE). Locks:
+  two functions replaced, catalog only; no rebuild; backout `backout/rebuild_speed_063.sql`.

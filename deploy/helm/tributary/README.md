@@ -147,6 +147,8 @@ It commits every 50 CIKs, so a stopped run is safe to start again from the top; 
 quarters, TTM and checks are replaced in one transaction, so readers see either the old rows or
 the new ones. `timeoutSeconds` is 6 hours; a 645-company sample (125 MB of payloads) took about
 3 minutes on a laptop, and hermes' 24,000 payloads are 11 times that, so expect 35 minutes to 2 hours.
+The run of 2026-11-09 (after 038-060) took 2 h 05 min over 412 batches; migration 063 takes about a
+quarter off that on the same batches (db/README.md "063" says where the rest goes).
 Run `VACUUM ANALYZE` on `gold.quarterly_financials` and `gold.derived_financials` afterwards.
 
 The document crawl (`doc-crawler` + `parser-backfill`, see

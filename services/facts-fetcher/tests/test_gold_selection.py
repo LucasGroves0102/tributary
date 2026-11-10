@@ -1016,6 +1016,22 @@ def test_two_stated_years_a_few_days_apart_are_one(conn):
     assert ttm_ends(conn, "capex") == ["2026-01-02"]
 
 
+def test_stated_years_in_a_chain_are_compared_with_their_own_neighbours(conn):
+    # 063 made 040's NOT EXISTS a window over ends within 7 days. Three ends, each within 7 days of
+    # the next but the outer two 12 days apart: the middle one loses to the later-filed first, the
+    # last loses only to the middle (the first is out of its reach), so the first stays alone
+    capex = "PaymentsToAcquireProductiveAssets"
+    put(
+        conn,
+        [
+            (capex, "2024-12-27", "2025-12-25", 45, "k3", "2028-02-23", "10-K"),
+            (capex, *FY, 45, "k2", "2027-02-23", "10-K"),
+            (capex, "2025-01-07", "2026-01-06", 45, "k1", "2026-02-25", "10-K"),
+        ],
+    )
+    assert ttm_ends(conn, "capex") == ["2025-12-25"]
+
+
 # --- rounded sentences --------------------------------------------------------------------------
 
 
