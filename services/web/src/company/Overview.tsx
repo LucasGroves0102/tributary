@@ -207,7 +207,7 @@ function Recap({ token, companyId, name, accession, canFin, foreign }: {
   const data = load?.state === "ok" ? load.data : null;
   return (
     <Folio name="Latest quarter" line={data ? `${data.form} filed ${day(data.filed, true)}` : foreign ? `Annual reports on Form ${foreign}` : "The latest 10-Q or 10-K"}
-      aside="Against the prior quarter and a year earlier; no consensus estimates">
+      aside={foreign ? undefined : "Against the prior quarter and a year earlier; no consensus estimates"}>
       {!canFin ? (
         <p className="empty locked">The recap needs financials for {name}.</p>
       ) : !accession && foreign ? (

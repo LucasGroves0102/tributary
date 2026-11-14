@@ -73,7 +73,7 @@ it("says plainly when the newest figure is older than the newest filing read (an
   // its 2026 releases and 10-Qs don't state one. The route's `read.latest` is its newest 10-Q.
   const now = { ...vrt, read: { ...vrt.read, latest: { form: "10-Q", filed: "2026-10-22", period_end: "2026-09-30", accession_no: "0001674101-26-000150" } } };
   expect(notStatedSince(now, "backlog", "Vertiv Holdings")).toBe(
-    "Backlog was last stated as $15.00B at Dec 31, 2025, in the 10-K filed Feb 13, 2026. None of Vertiv Holdings's filings since, "
+    "Backlog was last stated as $15.00B at Dec 31, 2025, in the 10-K filed Feb 13, 2026. None of Vertiv Holdings' filings since, "
     + "up to the 10-Q for the period ended Sep 30, 2026, states it in the ways Tributary reads.");
   // an earnings release is named as one
   const release = { ...now, read: { ...now.read, latest: { ...now.read.latest!, form: "8-K" } } };

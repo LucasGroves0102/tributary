@@ -6557,6 +6557,11 @@ details.routine summary {
   font-size: 13px;
 }
 
+/* a note's date beside its title (notes.ts noteWhen): set apart by space, not a middle dot */
+.note-t .note-when {
+  margin-left: var(--sp-2);
+}
+
 /* the newest figure is older than the newest filing read (textKpis.ts notStatedSince) */
 .text-kpi-behind {
   margin: 0 0 var(--sp-3);

@@ -118,7 +118,7 @@ export function NoteItem({ note, companyId, canReadFilings, company }: {
             </>
           )}
           <b>{title}</b>
-          {when && <span className="faint"> · {when}</span>}
+          {when && <span className="faint note-when">{when}</span>}
         </div>
         <p>{text}</p>
         {note.filings.length > 0 && (

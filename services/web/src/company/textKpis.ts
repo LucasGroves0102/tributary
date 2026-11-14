@@ -4,6 +4,7 @@
  * Nothing here reads a number out of text or re-derives one. Pure. */
 
 import type { Series, Source } from "../chart/series";
+import { possessive } from "../compare/peers";
 import { day, money } from "../format";
 import { sectionName } from "../reader/sections";
 import type { TextKpiMetric, TextKpiPoint, TextKpis, TextKpiSeries, TextKpiSource } from "../types";
@@ -127,7 +128,7 @@ export function notStatedSince(data: TextKpis, metric: TextKpiMetric, name: stri
   const label = data.metrics[metric].label;
   const at = newest.span === "instant" ? `at ${day(newest.period_end, true)}` : `for the ${when(newest)}`;
   const where = src ? `, in ${filingWord(src.citation.form)} filed ${day(src.citation.filed, true)}` : "";
-  return `${label} was last stated as ${figure(newest)} ${at}${where}. None of ${name}'s filings since, up to ` +
+  return `${label} was last stated as ${figure(newest)} ${at}${where}. None of ${possessive(name)} filings since, up to ` +
     `${filingWord(latest.form)} for the period ended ${day(latest.period_end, true)}, states it in the ways Tributary reads.`;
 }
 

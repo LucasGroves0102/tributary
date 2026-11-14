@@ -210,7 +210,9 @@
 
 /* --- the company's head ---------------------------------------------------------------------- */
 
-.co-name {
+/* the page heading only: CompanySearch's picked value is a span.co-name too (it read 46px in the
+   chart builder's layer cards and Search's company filter) */
+h1.co-name {
   margin: 0;
   font-size: var(--fs-name);
   font-weight: 650;
@@ -330,7 +332,7 @@
 }
 
 @container main (max-width: 600px) {
-  .co-name {
+  h1.co-name {
     font-size: 36px;
   }
 }
