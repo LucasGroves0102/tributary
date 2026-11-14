@@ -471,13 +471,14 @@ test("a company reporting in euros: labelled everywhere, never ranked or average
   });
   await startDemo(page);
   await page.goto(`/#/company/${KO}`);
-  await expect(page.locator(".meta").first()).toContainText("figures in EUR");
+  // Seal: the header's meta row is separate facts in sentence case
+  await expect(page.locator(".co-meta").first()).toContainText("Figures in EUR");
   await expect(page.getByText("€2.10B").first()).toBeVisible();
   await page.screenshot({ path: test.info().outputPath("euro-company.png") });
 
   await page.goto(`/#/company/${KO}/statements`);
   await expect(page.getByText(/reports once a year/)).toBeVisible();
-  await expect(page.getByText(/Figures in EUR/)).toBeVisible();
+  await expect(page.getByText(/Figures in EUR, as/)).toBeVisible();
   await page.getByRole("button", { name: "Show Annual" }).click();
   await expect(page.locator("table").first()).toContainText("€2.10B");
   await page.screenshot({ path: test.info().outputPath("euro-statements.png"), fullPage: true });

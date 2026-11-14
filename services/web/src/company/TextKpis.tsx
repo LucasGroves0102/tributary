@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from "react";
 
 import { textKpis } from "../api";
 import { LayerChart } from "../chart/LayerChart";
+import { Folio } from "../components/Folio";
 import type { Source } from "../chart/series";
 import { day } from "../format";
 import { go, href } from "../route";
@@ -18,7 +19,7 @@ const SHOWN = 6;
 /** Backlog, orders and order growth as the company's filings state them in words (F8b): a chart
  * and, per figure, each value with the passage that states it (it opens the reader there). The
  * company page's Overview and the Numbers step. Words only: the API decides every value. */
-export function TextKpisCard({ token, companyId, name, canRead, compact = false }: {
+export function TextKpisCard({ token, companyId, name, canRead, compact = false, folio = false }: {
   token: string;
   companyId: string;
   name: string;
@@ -26,21 +27,32 @@ export function TextKpisCard({ token, companyId, name, canRead, compact = false 
   canRead: boolean;
   /** the Numbers step: no chart heading of its own, fewer rows */
   compact?: boolean;
+  /** a section of a Seal page (the Overview), what it reads in the margin, instead of a card */
+  folio?: boolean;
 }) {
   const load = useLoad(canRead ? `${companyId}|text-kpis` : null, () => textKpis(token, companyId));
+  const body = !canRead ? (
+    <p className="empty locked">These figures are read from {name}'s filing text, which your plan doesn't include.</p>
+  ) : (
+    <Gate load={load} name={name} what="Filings">
+      {() => <Body data={load?.state === "ok" ? load.data : null} companyId={companyId} name={name} compact={compact} />}
+    </Gate>
+  );
+  if (folio) {
+    return (
+      <Folio name="Backlog and orders" line="As the 10-K, 10-Q and earnings releases state them in words" aside="Not XBRL; each figure opens its passage"
+        className="text-kpis">
+        {body}
+      </Folio>
+    );
+  }
   return (
     <section className="card text-kpis" aria-label={`Backlog and orders ${FROM_TEXT}`}>
       <div className="card-h">
         <h2>Backlog and orders</h2>
         <span className="sub">{FROM_TEXT}: what the 10-K, 10-Q and earnings releases state in words, not XBRL · each figure links to its passage</span>
       </div>
-      {!canRead ? (
-        <p className="empty locked">These figures are read from {name}'s filing text, which your plan doesn't include.</p>
-      ) : (
-        <Gate load={load} name={name} what="Filings">
-          {() => <Body data={load?.state === "ok" ? load.data : null} companyId={companyId} name={name} compact={compact} />}
-        </Gate>
-      )}
+      {body}
     </section>
   );
 }

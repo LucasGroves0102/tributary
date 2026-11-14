@@ -26,6 +26,7 @@ import {
   listingLine,
   withAnnualPerShare,
   withBridges,
+  yearStory,
 } from "./data";
 
 describe("the header's listing line", () => {
@@ -550,5 +551,52 @@ describe("debt that includes a finance arm (migration 055)", () => {
     const sql = readFileSync(`${process.cwd()}/../../db/migrations/055_filing_xbrl_facts.sql`, "utf8");
     const summed = new Set([...sql.matchAll(/\('(\d{10})', '(?:DebtCurrent|LongTermDebt\w*)\[[^\]]*(?:FordCredit|GmFinancial)Member/g)].map((m) => m[1]));
     expect([...summed].sort()).toEqual(Object.keys(FINANCE_ARMS).sort());
+  });
+});
+
+describe("Seal: the year as a sentence and the ledger's net cash (analyst test 4)", () => {
+  const SRC = { period_end: "2026-07-26", accession_no: ACC, form: "10-Q", filed: "2026-08-26" };
+  const row = (values: Record<string, string | null>, sources = Object.fromEntries(Object.keys(values).map((k) => [k, SRC]))) =>
+    nvdaRow({ values, sources });
+
+  it("reads revenue, growth, net income and net cash for the same twelve months, in words", () => {
+    const story = yearStory(row({ revenue_ttm: "302970000000", revenue_growth_ttm: "0.834", net_income_ttm: "192880000000", net_debt_q: "-66000000000" }))!;
+    expect(story).toMatchObject({
+      end: "2026-07-26", revenueLabel: "revenue", revenue: "$302.97 billion",
+      growth: { text: "up 83.4%", rise: true }, netIncome: { text: "$192.88 billion", loss: false },
+      balance: { text: "$66.00 billion", netCash: true },
+    });
+    expect(story.source.accession_no).toBe(ACC);
+  });
+
+  it("says a fall, a loss and net debt as such, and leaves out a figure from another period", () => {
+    const old = { ...SRC, period_end: "2025-07-27" };
+    const story = yearStory(nvdaRow({
+      values: { revenue_ttm: "1000000000", revenue_growth_ttm: "-0.04", net_income_ttm: "-20000000", net_debt_q: "300000000" },
+      sources: { revenue_ttm: SRC, revenue_growth_ttm: SRC, net_income_ttm: SRC, net_debt_q: old },
+    }))!;
+    expect(story.growth).toEqual({ text: "down 4.0%", rise: false });
+    expect(story.netIncome).toEqual({ text: "$20.00 million", loss: true });
+    expect(story.balance).toBeNull();
+  });
+
+  it("has no sentence without a current revenue figure, and skips a reading that isn't the plain figure", () => {
+    expect(yearStory(row({ net_income_ttm: "1" }))).toBeNull();
+    expect(yearStory(nvdaRow({ values: { revenue_ttm: "5" }, sources: { revenue_ttm: SRC }, readings: { revenue_ttm: { status: "old", reason: null } } }))).toBeNull();
+    const story = yearStory(nvdaRow({
+      values: { revenue_ttm: "1000000000", revenue_growth_ttm: "9.5" }, sources: { revenue_ttm: SRC, revenue_growth_ttm: SRC },
+      readings: { revenue_growth_ttm: { status: "not_meaningful", reason: "the year before had no revenue" } },
+    }))!;
+    expect(story.growth).toBeNull();
+  });
+
+  it("labels a negative net debt as net cash, positive, with the signed figure in the hover", () => {
+    const stats = keyStats(row({ net_debt_q: "-66000000000", cash_q: "22440000000", cash_and_investments_q: "98370000000" }));
+    const net = stats.find((s) => s.key === "net_debt_q")!;
+    expect(net).toMatchObject({ label: "Net cash", text: "$66.00B" });
+    expect(net.title).toContain("Cash and short-term investments exceed debt by $66.00B (net debt -$66.00B)");
+    expect(stats.find((s) => s.key === "cash_and_investments_q")).toMatchObject({ label: "Cash and short-term investments", text: "$98.37B" });
+    // a positive net debt keeps its name
+    expect(keyStats(row({ net_debt_q: "9930000000" })).find((s) => s.key === "net_debt_q")).toMatchObject({ label: "Net debt", text: "$9.93B" });
   });
 });

@@ -129,6 +129,16 @@ export function splitEvents(r: EventsResponse): { material: FilingEvent[]; routi
 }
 
 /** What a window says it covers. */
+/** The same window, short, for a margin rubric: [what it lists, the second line]. */
+export function windowRubric(r: EventsResponse): [string, string] {
+  const rep = r.latest_report;
+  if (r.window === "since_report" && rep) {
+    const word = rep.form.startsWith("10-K") ? "fiscal year" : "quarter";
+    return [`8-Ks after the ${word} ended ${day(rep.period_end, true)}`, `The ${rep.form} for it was filed ${day(rep.filed, true)}`];
+  }
+  return [`8-Ks since ${day(r.since, true)}`, "No 10-Q or 10-K in the last 400 days to count from"];
+}
+
 export function windowLine(r: EventsResponse): string {
   const rep = r.latest_report;
   if (r.window === "since_report" && rep) {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { EarningsResponse, EventsResponse } from "../types";
-import { eventLabels, firstQuarter, keyStatFlag, passageLines, quarterName, splitEvents, staleFlags, windowLine } from "./events";
+import { eventLabels, firstQuarter, keyStatFlag, passageLines, quarterName, splitEvents, staleFlags, windowLine, windowRubric } from "./events";
 import DECK_EARNINGS from "./fixtures/deck-earnings.json";
 import VRT_EARNINGS from "./fixtures/vrt-earnings.json";
 import VRT_EVENTS from "./fixtures/vrt-events.json";
@@ -61,6 +61,8 @@ describe("events since the last report", () => {
     expect(windowLine(events)).toBe("8-Ks filed after the quarter the latest 10-Q covers (ended Sep 30, 2026; filed Oct 28, 2026)");
     expect(windowLine({ ...events, window: "recent", since: "2025-10-04", latest_report: null }))
       .toBe("8-Ks filed since Oct 4, 2025: no 10-Q or 10-K in the last 400 days to count from");
+    // the same window, short, for a margin rubric
+    expect(windowRubric(events)).toEqual(["8-Ks after the quarter ended Sep 30, 2026", "The 10-Q for it was filed Oct 28, 2026"]);
   });
 });
 

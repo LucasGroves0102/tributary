@@ -6,11 +6,11 @@ import { csvCell } from "../chart/series";
 import { calendarLabel } from "../compare/state";
 import { FILER_LABELS, fyeMonth, type FilerCategory } from "../companies/screen";
 import { BANK_NA, NO_DATA, NO_DATA_TITLE, NOT_APPLICABLE, NOT_MEANINGFUL, NOT_REPORTED, readFigure } from "../blanks";
-import { change, currencyOf, day, money, moneyRow, pct } from "../format";
+import { change, currencyOf, day, inWords, money, moneyRow, pct } from "../format";
 import { num } from "../home/data";
 import { EIGHT_K_ITEMS } from "../reader/sections";
 import { separateMembers } from "../chart/segments";
-import type { Callout, FinancialRow, NotMeaningfulPeriod, Recap, RecapValue, ScreenerRow, SegmentRow, ValueSource } from "../types";
+import type { Callout, FinancialRow, NotMeaningfulPeriod, Recap, RecapValue, ScreenerRow, SegmentRow, ValueReading, ValueSource } from "../types";
 
 export type Fmt = "usd" | "pct" | "growth" | "x" | "eps" | "shares";
 
@@ -44,6 +44,8 @@ export const KEY_STATS: { key: string; label: string; kind: Fmt }[] = [
   { key: "fcf_margin_ttm", label: "FCF margin", kind: "pct" },
   { key: "eps_diluted_q", label: "EPS (diluted)", kind: "eps" },
   { key: "cash_q", label: "Cash", kind: "usd" },
+  // what net debt subtracts (049): beside Cash, so a net cash larger than the cash reads (analyst test 4)
+  { key: "cash_and_investments_q", label: "Cash and short-term investments", kind: "usd" },
   { key: "net_debt_q", label: "Net debt", kind: "usd" },
   { key: "debt_to_equity_q", label: "Debt / equity", kind: "x" },
   { key: "roe_ttm", label: "Return on equity", kind: "pct" },
@@ -117,6 +119,14 @@ export function listingLine(tickers: string[], exchanges: string[]): { text: str
 export interface KeyStat {
   /** the screener column (KEY_STATS) */
   key: string;
+  /** how it formats: an amount ("usd", "eps") or a rate */
+  kind: Fmt;
+  /** the figure as the API gives it (null: none, or a reading that isn't a plain figure) */
+  value: number | null;
+  /** the API's reading when it isn't the plain figure (blanks.ts) */
+  status: ValueReading["status"] | null;
+  /** the filing the figure is taken from: its seal opens it */
+  source: ValueSource | null;
   /** the period the figure is as of (its source's period end), when it has one */
   periodEnd: string | null;
   label: string;
@@ -139,8 +149,12 @@ function periodText(key: string, src: ValueSource): string {
 export function keyStats(row: ScreenerRow): KeyStat[] {
   // a bank's own set when the answer has its columns (an older API didn't send them)
   const stats = isBankRow(row) && "net_interest_income_ttm" in row.values ? BANK_KEY_STATS : KEY_STATS;
-  return stats.map(({ key, label, kind }) => {
+  return stats.map(({ key, label: named, kind }) => {
     const src = row.sources[key] ?? null;
+    // a negative net debt is net cash: said as such, the figure positive (the exact one in the hover)
+    const exact = row.values[key] === null || row.values[key] === undefined ? null : Number(row.values[key]);
+    const netCash = key === "net_debt_q" && !row.readings?.[key] && exact !== null && Number.isFinite(exact) && exact < 0;
+    const label = netCash ? "Net cash" : named;
     const f = readFigure({
       label,
       columnKey: key,
@@ -148,10 +162,11 @@ export function keyStats(row: ScreenerRow): KeyStat[] {
       reading: row.readings?.[key],
       source: src,
       latestPeriod: row.latest_period,
-      format: (v) => fmt(kind, v),
+      format: (v) => fmt(kind, netCash ? -v : v),
       sourceTitle: src
-        ? `${label}, ${periodText(key, src)} (${calendarLabel(src.period_end)}). Source: ${src.form} filed ` +
-          `${day(src.filed, true)}, ${src.accession_no}.`
+        ? `${label}, ${periodText(key, src)} (${calendarLabel(src.period_end)}). ` +
+          (netCash ? `Cash and short-term investments exceed debt by ${fmt(kind, -exact!)} (net debt ${fmt(kind, exact!)}). ` : "") +
+          `Source: ${src.form} filed ${day(src.filed, true)}, ${src.accession_no}.`
         : label,
     });
     const period = f.status === "not_applicable"
@@ -161,10 +176,75 @@ export function keyStats(row: ScreenerRow): KeyStat[] {
         : !src || f.text === NOT_REPORTED
           ? "not reported"
           : f.old
-            ? `old · ${periodText(key, src)}`
+            ? `old, ${periodText(key, src)}`
             : periodText(key, src);
-    return { key, periodEnd: src?.period_end ?? null, label, text: f.text, period, title: f.title, old: f.old };
+    return {
+      key, kind, periodEnd: src?.period_end ?? null, label, text: f.text, period, title: f.title, old: f.old,
+      value: f.value, status: f.status, source: src,
+    };
   });
+}
+
+/** An amount, not a rate: the ledger's first column. */
+export const isAmount = (s: Pick<KeyStat, "kind">): boolean => s.kind === "usd" || s.kind === "eps";
+
+const LONG_MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October",
+  "November", "December"];
+
+/** "2026-07-26" → "July 26, 2026", for a sentence. */
+export function longDay(iso: string): string {
+  const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
+  return `${LONG_MONTHS[m! - 1]} ${d}, ${y}`;
+}
+
+/** The Overview's lead: the company's year as a sentence (Seal's "The year"). Only the API's figures,
+ * and only those for the same twelve months as revenue: a growth, net income or balance from another
+ * period is left out rather than mixed in. No sentence without a current revenue figure (none, old,
+ * n/m or n/a). Amounts read in the company's own currency. */
+export interface YearStory {
+  /** the twelve months' end */
+  end: string;
+  revenueLabel: "revenue" | "net revenue";
+  revenue: string;
+  /** "up 83.4%", "down 4.0%", "flat" */
+  growth: { text: string; rise: boolean } | null;
+  netIncome: { text: string; loss: boolean } | null;
+  /** net cash (more cash and short-term investments than debt) or net debt, at the same date */
+  balance: { text: string; netCash: boolean } | null;
+  /** revenue's filing: the seal after the sentence opens it */
+  source: ValueSource;
+}
+
+export function yearStory(row: ScreenerRow): YearStory | null {
+  const src = row.sources.revenue_ttm;
+  const amount = (key: string): number | null => {
+    const r = row.readings?.[key];
+    if (r && r.status !== "other_currency") return null;
+    if (row.sources[key]?.period_end !== src?.period_end) return null;
+    const v = row.values[key];
+    const n = v === null || v === undefined || v === "" ? NaN : Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+  const currency = (key: string) => currencyOf(row.readings?.[key]?.unit ?? "USD");
+  const words = (key: string, v: number) => inWords(money(Math.abs(v), currency(key)));
+  const revenue = src ? amount("revenue_ttm") : null;
+  if (!src || revenue === null) return null;
+  const growth = amount("revenue_growth_ttm");
+  const income = amount("net_income_ttm");
+  const net = amount("net_debt_q");
+  return {
+    end: src.period_end,
+    revenueLabel: isBankRow(row) ? "net revenue" : "revenue",
+    revenue: words("revenue_ttm", revenue),
+    growth: growth === null || row.readings?.revenue_growth_ttm
+      ? null
+      : Math.abs(growth) < 0.0005
+        ? { text: "flat", rise: false }
+        : { text: `${growth > 0 ? "up" : "down"} ${pct(Math.abs(growth))}`, rise: growth > 0 },
+    netIncome: income === null ? null : { text: words("net_income_ttm", income), loss: income < 0 },
+    balance: net === null || net === 0 ? null : { text: words("net_debt_q", net), netCash: net < 0 },
+    source: src,
+  };
 }
 
 export interface Header {
@@ -217,6 +297,8 @@ export const RANGE_QUARTERS: Record<StatementRange, number> = { "8q": 8, "5y": 2
 export interface LineOpts {
   sub?: boolean;
   total?: boolean;
+  /** the statement's bottom line: set heaviest, double-ruled (display only) */
+  grand?: boolean;
   outflow?: boolean;
   define?: string;
 }
@@ -254,7 +336,7 @@ export const STATEMENTS: Record<Statement, { label: string; rows: Line[] }> = {
       ["interest_expense", "Interest expense", "usd"],
       ["pretax_income", "Pretax income", "usd"],
       ["income_tax", "Income tax", "usd"],
-      ["net_income", "Net income", "usd"],
+      ["net_income", "Net income", "usd", { grand: true }],
       ["eps_diluted", "EPS (diluted)", "eps"],
       ["weighted_shares_diluted", "Diluted shares", "shares"],
     ],
@@ -268,7 +350,7 @@ export const STATEMENTS: Record<Statement, { label: string; rows: Line[] }> = {
       ["receivables", "Receivables", "usd"],
       ["inventory", "Inventory", "usd"],
       ["current_assets", "Current assets", "usd"],
-      ["total_assets", "Total assets", "usd"],
+      ["total_assets", "Total assets", "usd", { grand: true }],
       ["current_liabilities", "Current liabilities", "usd", { total: true }],
       ["accounts_payable", "Accounts payable", "usd", { sub: true, define: DEFINITIONS.accounts_payable }],
       ["contract_liabilities_current", "Contract liabilities (customer advances)", "usd", { sub: true, define: DEFINITIONS.contract_liabilities_current }],
@@ -293,7 +375,7 @@ export const STATEMENTS: Record<Statement, { label: string; rows: Line[] }> = {
       ["share_buybacks", "Share buybacks", "usd", { sub: true, outflow: true }],
       ["financing_cash_flow", "Net cash from financing activities", "usd", { total: true, define: DEFINITIONS.financing_cash_flow }],
       ["change_in_cash", "Change in cash", "usd", { total: true, define: DEFINITIONS.change_in_cash }],
-      ["cash_and_restricted_cash", "Cash at end of period", "usd", { define: DEFINITIONS.cash_and_restricted_cash }],
+      ["cash_and_restricted_cash", "Cash at end of period", "usd", { grand: true, define: DEFINITIONS.cash_and_restricted_cash }],
       ["free_cash_flow", "Free cash flow (operating cash flow less capex)", "usd"],
     ],
   },
@@ -319,7 +401,7 @@ export const BANK_STATEMENTS: Record<Statement, { label: string; rows: Line[] }>
       ["provision_for_credit_losses", "Provision for credit losses", "usd"],
       ["pretax_income", "Pretax income", "usd"],
       ["income_tax", "Income tax", "usd"],
-      ["net_income", "Net income", "usd"],
+      ["net_income", "Net income", "usd", { grand: true }],
       ["eps_diluted", "EPS (diluted)", "eps"],
       ["weighted_shares_diluted", "Diluted shares", "shares"],
     ],
@@ -329,7 +411,7 @@ export const BANK_STATEMENTS: Record<Statement, { label: string; rows: Line[] }>
     rows: [
       ["cash", "Cash and due from banks", "usd"],
       ["loans", "Loans, net of the allowance", "usd"],
-      ["total_assets", "Total assets", "usd"],
+      ["total_assets", "Total assets", "usd", { grand: true }],
       ["deposits", "Deposits", "usd"],
       ["total_liabilities", "Total liabilities", "usd"],
       ["stockholders_equity", "Stockholders' equity", "usd"],

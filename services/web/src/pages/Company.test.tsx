@@ -233,9 +233,13 @@ it("heads the page with public metadata, the next expected filing and the tabs",
   expect(screen.searchParams.getAll("company_id")).toEqual([NVDA]);
   expect($("h1")?.textContent).toBe("Nvidia");
   const head = $(".co-head")!.textContent!;
-  expect(head).toContain("NVDA · Nasdaq");
-  expect(head).toContain("Semiconductors & Related Devices (SIC 3674) · fiscal year ends January · large accelerated filer · incorporated in DE");
-  expect(head).toContain("next 10-Q for the period ending Oct 25, 2026 expected ~Nov 19, 2026");
+  // Seal: each fact its own item in the meta row (no dotted string); where it's incorporated in words
+  expect($(".co-head .co-listing")?.textContent).toBe("NVDA on Nasdaq");
+  const facts = [...$(".co-head .co-meta")!.children].map((c) => c.textContent);
+  expect(facts).toEqual(expect.arrayContaining([
+    "Semiconductors & Related Devices, SIC 3674", "Fiscal year ends in January", "Large accelerated filer", "Incorporated in Delaware"]));
+  expect(head).not.toContain("incorporated in DE");
+  expect(head).toContain("Next 10-Q, for the period ending Oct 25, 2026, expected around Nov 19, 2026");
   expect([...container.querySelectorAll(".tabs a")].map((a) => [a.textContent, a.getAttribute("href")])).toEqual([
     ["Overview", `#/company/${NVDA}`], ["Earnings", `#/company/${NVDA}/earnings`], ["Statements", `#/company/${NVDA}/statements`], ["Revenue", `#/company/${NVDA}/revenue`],
     ["Segments", `#/company/${NVDA}/segments`],
@@ -294,8 +298,9 @@ it("overview and balance sheet: Ford's net debt says it includes Ford Credit's b
   rowFor = () => nvdaRow({ ...entry({ company_id: FORD, name: "Ford Motor", tickers: ["F"] }), access: ["filings", "financials"] });
   await render("overview", FORD);
   expect($(".debt-note")?.textContent).toContain("include Ford Credit's borrowings");
-  const stat = [...container.querySelectorAll(".kv > div")].find((d) => d.querySelector(".k")?.textContent === "Net debt")!;
-  expect(stat.getAttribute("title")).toContain("include Ford Credit's borrowings");
+  // the ledger row's seal carries the source and the note (its hover, and its description for a reader)
+  const stat = [...container.querySelectorAll(".ledger dl > div")].find((d) => d.getAttribute("data-key") === "net_debt_q")!;
+  expect(stat.querySelector(".seal-source")?.textContent).toContain("include Ford Credit's borrowings");
   await act(async () => root.unmount());
   container.remove();
   await render("statements", FORD, null, { kind: "bs" });
@@ -309,9 +314,16 @@ it("overview and balance sheet: Ford's net debt says it includes Ford Credit's b
 
 it("overview: key stats with periods, the latest quarter recap with flags, and Item 1", async () => {
   await render();
-  const stat = [...container.querySelectorAll(".kv > div")].find((d) => d.querySelector(".k")?.textContent === "Revenue")!;
-  expect(stat.querySelector(".v")?.textContent).toBe("$165.22B");
-  expect(stat.querySelector(".p")?.textContent).toBe("TTM to Jul 26, 2026");
+  // Seal: the key figures are a ledger; the period they share is in the margin, the seal opens the filing
+  const stat = [...container.querySelectorAll(".ledger dl > div")].find((d) => d.querySelector("dt")?.textContent === "Revenue")!;
+  expect(stat.querySelector("dd .figure")?.textContent).toBe("$165.22B");
+  expect([...container.querySelectorAll(".rubric")].find((r) => r.textContent?.startsWith("The year"))?.textContent).toContain("Twelve months to Jul 26, 2026");
+  expect(stat.querySelector("a.seal-link")?.getAttribute("href")).toBe(`#/filing/${NVDA}/${ACC}/I-1`);
+  expect(stat.querySelector("a.seal-link")?.getAttribute("aria-label")).toBe("Revenue: taken from the 10-Q filed Aug 26, 2026");
+  // the year as a sentence, sealed to its filing
+  expect($(".story")?.textContent).toContain("In the twelve months to July 26, 2026, Nvidia reported revenue of $165.22 billion, up 69.0% on the year before.");
+  expect($(".story .seal-source")?.textContent).toContain("Taken from the 10-Q filed Aug 26, 2026");
+  expect($(".story a.seal-link")?.getAttribute("href")).toBe(`#/filing/${NVDA}/${ACC}/I-1`);
   expect(paths().some((u) => u.pathname === `/api/query/v1/filings/${ACC}/recap`)).toBe(true);
   const recap = [...container.querySelectorAll("table")].find((t) => t.textContent?.includes("QoQ"))!;
   expect([...recap.querySelectorAll("th")].map((t) => t.textContent)).toEqual(["Metric", "FY2027 Q2", "FY2027 Q1", "QoQ", "FY2026 Q2", "YoY"]);
@@ -511,7 +523,7 @@ it("what changed says which filing it is, in words, and closes when a filter hid
 
 it("the header keeps one main ticker, whatever else a company lists", async () => {
   await render("overview");
-  expect(container.querySelector(".co-head .mono")?.textContent).toBe("NVDA · Nasdaq");
+  expect(container.querySelector(".co-head .co-listing")?.textContent).toBe("NVDA on Nasdaq");
 });
 
 it("peers: an older API's SIC and size suggestions still read, into Compare and the chart builder", async () => {
@@ -560,7 +572,7 @@ it("overview: the chart's heading says what it draws", async () => {
   noMargin = true; // a bank reports none
   await render();
   expect(heading().textContent).toBe("Revenue");
-  expect(heading().parentElement!.textContent).toContain("no operating margin reported");
+  expect(heading().parentElement!.textContent).toContain("No operating margin reported");
 });
 
 it("peers: by SIC and size, the Why column says there is no business text and why (Intel's cross-reference)", async () => {
@@ -663,8 +675,10 @@ it("F4 bank: a bank's statements and key stats are its own lines, and say what i
   rowFor = () => ({ ...nvdaRow({ ...entry({ company_id: JPM, name: "JPMorgan", tickers: ["JPM"] }) }), not_applicable: ["gross_margin", "operating_margin"],
     values: { revenue_ttm: "180000000000", net_interest_income_ttm: "102908000000", efficiency_ratio_ttm: "0.519", deposits_q: "2780793000000", cet1_ratio_q: null } });
   await render("overview", JPM);
-  const keys = [...container.querySelectorAll(".kv.stats .k")].map((k) => k.textContent);
-  expect(keys.slice(0, 4)).toEqual(["Net revenue", "Net interest income", "Efficiency ratio", "Provision for credit losses"]);
+  // the ledger: a bank's own amounts first, then its rates
+  const keys = [...container.querySelectorAll(".ledger dt")].map((k) => k.firstChild?.textContent);
+  expect(keys.slice(0, 4)).toEqual(["Net revenue", "Net interest income", "Provision for credit losses", "Net income"]);
+  expect(keys).toContain("Efficiency ratio");
   expect(container.textContent).toContain("51.9%");
   expect($(".bank-note")?.textContent).toContain("Not shown: net interest margin");
   const asked = paths().find((u) => u.pathname.endsWith("/screener"))!.searchParams.getAll("columns");
@@ -699,7 +713,9 @@ it("F4 #135: a company that files one combined 10-K with another says it isn't a
     sector: "Utilities", sector_industry: "Multi-utilities", sic: "4931", industry: "Electric & Other Services Combined",
     co_registrants: [{ company_id: CORP, name: "PG&E Corp", accession_no: "0001004980-26-000009", filed: "2026-02-12", filed_by: CORP }] });
   await render("overview", UTIL);
-  expect($(".co-head .meta")?.textContent).toContain("Utilities · Multi-utilities · Electric & Other Services Combined (SIC 4931)");
+  // the sector is the header's rubric; the SIC industry is in the meta row
+  expect($(".co-head .rubric")?.textContent).toBe("UtilitiesMulti-utilities");
+  expect($(".co-head .co-meta")?.textContent).toContain("Electric & Other Services Combined, SIC 4931");
   expect($(".joint-note")?.textContent).toContain("Not a duplicate: Pacific Gas & Electric and PG&E file one combined 10-K as separate SEC registrants");
   expect($(".joint-note a")?.getAttribute("href")).toBe(`#/company/${CORP}`);
 });
