@@ -493,6 +493,25 @@ def test_search_ranks_a_company_with_figures_and_a_short_name_first(conn):
     assert found(conn, "zqbank of") == ["9100000073", "9100000072", "9100000071"]
 
 
+def test_search_ranks_a_classified_company_before_a_fund_named_after_it(conn):
+    """066 (analyst test 4): "Goldman Sachs" found Goldman Sachs BDC (no SIC code) before The
+    Goldman Sachs Group (6211): same rank, filer, exchange and figures, and a shorter name. A
+    company the SEC classifies goes first; the name's length decides only after that."""
+    for cid, name, sic in (("9100000081", "ZQGOLD SACHSEN BDC, Inc.", None),
+                           ("9100000082", "ZQGOLD SACHSEN GROUP INC", "6211"),
+                           ("9100000083", "ZQGOLD SACHSEN PHYSICAL GOLD ETF", "6221")):
+        conn.execute("INSERT INTO silver.companies (company_id, name, current_cik, sic,"
+                     " filer_categories, exchanges) VALUES (%s, %s, %s, %s,"
+                     " ARRAY['Large accelerated filer'], ARRAY['NYSE'])", (cid, name, cid, sic))
+        conn.execute("INSERT INTO silver.company_ciks (cik, company_id) VALUES (%s, %s)",
+                     (cid, cid))
+        conn.execute("INSERT INTO silver.company_aliases (company_id, cik, alias_type, alias,"
+                     " source) VALUES (%s, %s, 'name', %s, 'sec_submissions')", (cid, cid, name))
+    assert found(conn, "zqgold sachsen") == ["9100000082", "9100000083", "9100000081"]
+    # an exact name still wins whatever its code
+    assert found(conn, "zqgold sachsen bdc")[0] == "9100000081"
+
+
 def test_search_former_names_and_retired_tickers_rank_below_current(search_conn):
     rows = Store(OneConnection(search_conn)).search("t-free", "Zqfruit Computer", 25)
     assert [(r["company_id"], r["is_current"]) for r in rows] == [(S_APPLE, False)]
