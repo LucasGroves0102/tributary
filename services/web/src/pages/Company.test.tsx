@@ -322,6 +322,21 @@ it("overview and balance sheet: Ford's net debt says it includes Ford Credit's b
   expect($(".debt-note")).toBeNull();  // NVIDIA has no finance arm
 });
 
+it("overview: a 20-F filer's sections say it files 20-Fs and 6-Ks, and ask for no 8-Ks (analyst test 4)", async () => {
+  const BIRK = "0001977102";
+  const f20 = { period_end: "2025-12-31", accession_no: "0001977102-26-000004", form: "6-K", filed: "2026-02-12" };
+  rowFor = () => nvdaRow({ ...entry({ company_id: BIRK, name: "Birkenstock Holding", tickers: ["BIRK"] }), access: ["filings", "financials"],
+    sources: { revenue_ttm: { ...f20, form: "20-F" }, revenue_q: f20, cash_q: f20, eps_diluted_q: f20, revenue_growth_ttm: f20 } });
+  await render("overview", BIRK);
+  const folio = (name: string) => [...container.querySelectorAll(".folio")].find((f) => f.querySelector(".rubric")?.textContent?.startsWith(name));
+  expect(folio("Latest quarter")?.textContent).toContain("Birkenstock Holding files as a foreign private issuer: annual reports on Form 20-F and interim reports on Form 6-K");
+  expect(folio("Latest quarter")?.textContent).not.toContain("No 10-Q or 10-K values");
+  expect(folio("Since the last report")?.textContent).toContain("current reports on Form 6-K, not 8-Ks");
+  expect(folio("Business")?.textContent).toContain("describes its business in its 20-F annual report");
+  // no 8-K list, no recap and no 10-K Item 1 asked for a company that files none
+  expect(paths().some((u) => u.pathname.endsWith("/events") || u.pathname.includes("/recap") || u.pathname.includes("/sections"))).toBe(false);
+});
+
 it("overview: key stats with periods, the latest quarter recap with flags, and Item 1", async () => {
   await render();
   // Seal: the key figures are a ledger; the period they share is in the margin, the seal opens the filing

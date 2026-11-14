@@ -276,6 +276,19 @@ export function header(row: ScreenerRow): Header {
   };
 }
 
+/** A foreign private issuer's annual report form ("20-F", "40-F", or "20-F or 40-F" when its figures
+ * come only from 6-Ks), when the company's figures come from those forms and none from a 10-K or 10-Q;
+ * else null. Words the API's sources only (each figure's filing form): such a company files no 10-Q,
+ * 10-K or 8-K, so the Overview's recap, 8-K and Item 1 sections say why they're empty (analyst test 4:
+ * Birkenstock read "no 10-Q or 10-K values" and a list of 8-Ks it never files). */
+export function foreignReport(row: ScreenerRow): string | null {
+  const forms = Object.values(row.sources).flatMap((s) => (s?.form ? [s.form.replace(/\/A$/, "")] : []));
+  if (!forms.length || forms.some((f) => /^10-[KQ]/.test(f))) return null;
+  if (forms.includes("40-F")) return "40-F";
+  if (forms.includes("20-F")) return "20-F";
+  return forms.includes("6-K") ? "20-F or 40-F" : null;
+}
+
 /** The 10-Q/10-K the latest quarter's values come from (recaps cover only those forms). */
 export function recapAccession(row: ScreenerRow): string | null {
   const src = row.sources[RECAP_COLUMN];

@@ -16,6 +16,7 @@ import {
   formMatches,
   formsOf,
   header,
+  foreignReport,
   keyStats,
   metricTable,
   RATIOS,
@@ -75,6 +76,18 @@ describe("header and key stats", () => {
       name: "Nvidia", tickers: ["NVDA"], exchanges: ["Nasdaq"], industry: "Semiconductors & Related Devices",
       sic: "3674", fye: "January", filer: "Large accelerated", state: "DE", currency: null,
     });
+  });
+
+  it("a foreign private issuer is told apart by its figures' forms (analyst test 4: Birkenstock)", () => {
+    const f20 = { ...SRC, form: "20-F" };
+    const k6 = { ...SRC, form: "6-K" };
+    expect(foreignReport(nvdaRow({ sources: { revenue_ttm: f20, revenue_q: k6 } }))).toBe("20-F");
+    expect(foreignReport(nvdaRow({ sources: { revenue_ttm: { ...SRC, form: "40-F/A" } } }))).toBe("40-F");
+    expect(foreignReport(nvdaRow({ sources: { revenue_q: k6 } }))).toBe("20-F or 40-F");
+    // any 10-K or 10-Q figure: a US filer, whatever else it has filed
+    expect(foreignReport(nvdaRow({ sources: { revenue_ttm: f20, revenue_q: SRC } }))).toBeNull();
+    expect(foreignReport(nvdaRow())).toBeNull();
+    expect(foreignReport(nvdaRow({ sources: {} }))).toBeNull();
   });
 
   it("recaps only a 10-Q or 10-K", () => {

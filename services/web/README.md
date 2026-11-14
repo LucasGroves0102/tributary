@@ -69,6 +69,12 @@ the key figures as a ledger (amounts, then rates), each sealed, with Cash and sh
 the seal's source); **Since the last report** (red-letter days, below); **Latest quarter**, the recap
 set as a statement (a change from a zero or negative base reads n/m with the API's
 `pct_not_meaningful` in its hover); **Business**; **Revenue and operating margin**; **Backlog and orders**. A
+foreign private issuer (`company/data.ts` `foreignReport`: its figures come from 20-F, 40-F or 6-K
+filings and none from a 10-K or 10-Q, by the API's sources) files no 10-Q, 10-K or 8-K: Since the last
+report says it files current reports on 6-K (no 8-K list is asked for), Latest quarter that it files
+annual reports on 20-F (or 40-F) and interim ones on 6-K, so there is no quarterly recap, and Business
+that its description is in that report, whose text Tributary doesn't read (analyst test 4: Birkenstock
+read "no 10-Q or 10-K values" and an empty 8-K list). A
 statement is a ledger table: red column rules, subtotals heavier, the bottom line (net income, total
 assets, cash at the end of the period) double-ruled, the newest period washed, derived figures italic,
 and its choices (statement, period, range, basis) are toggle groups. Under a statement and under
