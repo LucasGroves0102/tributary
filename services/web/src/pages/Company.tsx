@@ -1,3 +1,6 @@
+import * as Menu from "@radix-ui/react-dropdown-menu";
+import { useRef, useState } from "react";
+
 import { ApiError, expectedFilingsOf, screener } from "../api";
 import { header, HEADER_COLUMNS, HEADER_COLUMNS_WITH_BANK } from "../company/data";
 import { DataNotes } from "../company/DataNotes";
@@ -17,7 +20,8 @@ import { Folio } from "../components/Folio";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { day } from "../format";
 import { COMPANY_TABS, go, href, type CompanyTab } from "../route";
-import { NewWork } from "../workspaces/NewWork";
+import { NEW_WORK_TITLE, NewWorkForm, newWorkOffline } from "../workspaces/NewWork";
+import type { WrittenKind } from "../types";
 import type { Saved } from "../workspaces/useSaved";
 import { restoreProject } from "../analysis/project";
 import { coRegistrantNote } from "../compare/peers";
@@ -55,6 +59,9 @@ export function Company({ token, companyId, tab, statements, changes, watched, o
     ),
   );
   const expected = useLoad(companyId, () => expectedFilingsOf(token, companyId));
+  // New thesis / New model from the More menu: its form opens under the actions
+  const [newKind, setNewKind] = useState<WrittenKind | null>(null);
+  const opening = useRef(false);
   // the Price tab exists only when the server offers "Connect your data"
   const market = useMarketData(token);
   const tabs = COMPANY_TABS.filter(([t]) => t !== "price" || market?.enabled);
@@ -104,27 +111,19 @@ export function Company({ token, companyId, tab, statements, changes, watched, o
           {h.filer && <span>{h.filer} filer</span>}
           {place && <span title={`EDGAR's code: ${h.state}`}>Incorporated in {place}</span>}
           {h.currency && <span>Figures in {h.currency}</span>}
-          <span>CIK {companyId}</span>
-          <span className="tiers" title="What your access covers for this company">
-            {row.access.length ? (
-              row.access.map((t) => <span key={t} className={`tier ${t}`}>{t}</span>)
-            ) : (
-              <span className="tier none">metadata only</span>
-            )}
-          </span>
+          {/* what this user's access covers is the CIK's hover, not a mark in the masthead */}
+          <span className="co-cik" title={`Your access: ${accessWords(row.access)}`}>CIK {companyId}</span>
         </p>
-        <p className="meta co-meta">
-          {next?.last_filed && <span>Last periodic report filed {day(next.last_filed, true)}</span>}
-          {next ? (
+        {next && (
+          <p className="meta co-meta">
+            {next.last_filed && <span>Last periodic report filed {day(next.last_filed, true)}</span>}
             <span title={expected?.state === "ok" ? expected.data.method : undefined}>
               Next {next.form}, for the period ending {day(next.period_end, true)}, expected
               {next.expected_date ? ` around ${day(next.expected_date, true)}` : ""}
               {" "}(an estimate{next.status !== "upcoming" ? `, ${next.status}` : ""})
             </span>
-          ) : (
-            <span>No expected filing date</span>
-          )}
-        </p>
+          </p>
+        )}
         {joint && (
           <p className="meta co-meta joint-note" role="note">
             <span>
@@ -138,6 +137,9 @@ export function Company({ token, companyId, tab, statements, changes, watched, o
             </span>
           </p>
         )}
+        {/* two actions in the open (the analysis, the watch), the rest behind More: seven equal buttons were
+            the masthead's loudest thing. Radix's menu, not modal: a modal one locks scrolling with an
+            injected <style>, which the CSP refuses. */}
         <div className="co-acts">
           {saved && row.access.includes("financials") && <AnalysisLink saved={saved} companyId={companyId} ticker={ticker} />}
           {watched !== null && (
@@ -146,13 +148,45 @@ export function Company({ token, companyId, tab, statements, changes, watched, o
               {watched ? "✓ Watching" : "+ Watch"}
             </button>
           )}
-          {row.access.includes("financials") && (
-            <button className="btn" onClick={() => onChart()}>Chart</button>
-          )}
-          <button className="btn" onClick={() => go({ view: "compare", compare: { target: companyId } })}>Compare</button>
-          <button className="btn" onClick={() => onAsk(`Summarize ${h.name}'s latest quarter.`)}>Ask</button>
-          {saved && <NewWork token={token} saved={saved} company={{ id: companyId, name: ticker }} />}
+          <Menu.Root modal={false}>
+            <Menu.Trigger asChild>
+              <button className="btn more-btn">More<span className="more-caret" aria-hidden="true" /></button>
+            </Menu.Trigger>
+            <Menu.Portal>
+              <Menu.Content className="menu" align="start" sideOffset={6} collisionPadding={12}
+                onCloseAutoFocus={(e) => {
+                  // a new thesis or model's form takes the focus, not the More button
+                  if (opening.current) e.preventDefault();
+                  opening.current = false;
+                }}>
+                {row.access.includes("financials") && (
+                  <Menu.Item className="menu-item" onSelect={() => onChart()}>Chart</Menu.Item>
+                )}
+                <Menu.Item className="menu-item" onSelect={() => go({ view: "compare", compare: { target: companyId } })}>Compare</Menu.Item>
+                <Menu.Item className="menu-item" onSelect={() => onAsk(`Summarize ${h.name}'s latest quarter.`)}>Ask</Menu.Item>
+                {saved && (
+                  <>
+                    <Menu.Separator className="menu-sep" />
+                    {(["thesis", "model"] as const).map((k) => (
+                      <Menu.Item key={k} className="menu-item" disabled={newWorkOffline(saved)}
+                        title={newWorkOffline(saved) ? "Saving is unavailable right now" : NEW_WORK_TITLE[k]}
+                        onSelect={() => {
+                          opening.current = true;
+                          setNewKind(k);
+                        }}>
+                        New {k}
+                      </Menu.Item>
+                    ))}
+                  </>
+                )}
+              </Menu.Content>
+            </Menu.Portal>
+          </Menu.Root>
         </div>
+        {saved && newKind && (
+          <NewWorkForm key={newKind} kind={newKind} token={token} saved={saved} company={{ id: companyId, name: ticker }}
+            onDone={() => setNewKind(null)} />
+        )}
         <nav className="tabs co-tabs" aria-label="Company sections">
           {tabs.map(([t, label]) => (
             <a key={t} href={href({ view: "company", companyId, tab: t })} aria-current={t === tab ? "page" : undefined}>
@@ -179,6 +213,12 @@ export function Company({ token, companyId, tab, statements, changes, watched, o
       {tab === "price" && <Price token={token} companyId={companyId} name={h.name} />}
     </div>
   );
+}
+
+/** What a user's access covers for a company, in words (the CIK's hover). */
+function accessWords(access: string[]): string {
+  if (!access.length) return "metadata only; your plan doesn't cover its financials or filing text";
+  return access.map((t) => (t === "filings" ? "filing text" : t)).join(" and ");
 }
 
 /** The two ways to start research, side by side where the user chooses (L5): an analysis (the

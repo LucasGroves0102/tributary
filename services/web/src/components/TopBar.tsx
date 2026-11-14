@@ -1,7 +1,7 @@
 import { bellLabel } from "../alerts/alerts";
 import { UNNAMED } from "../companies/directory";
 import { href, NAV, type Route } from "../route";
-import type { Theme } from "../theme";
+import { NEXT_THEME, THEME_WORD, type ThemeChoice } from "../theme";
 import type { AlertUnread } from "../types";
 
 interface Props {
@@ -15,7 +15,8 @@ interface Props {
   users: string[];
   user: string | null;
   busy: boolean;
-  theme: Theme;
+  /** Light, Dark or System (the visitor's): the button says which, and moves to the next */
+  theme: ThemeChoice;
   assistantOpen: boolean;
   onUser: (u: string) => void;
   /** A GitHub sign-in: shown by login, with Sign out (which forgets the token). */
@@ -94,8 +95,9 @@ export function TopBar(props: Props) {
           {props.alerts.unread > 0 && <span className="count" aria-hidden="true">{props.alerts.unread > 99 ? "99+" : props.alerts.unread}</span>}
         </a>
       )}
-      <button className="btn ghost sm" onClick={props.onTheme}>
-        {theme === "dark" ? "Light" : "Dark"}
+      <button className="btn ghost sm theme-btn" onClick={props.onTheme}
+        title={`Theme: ${THEME_WORD[theme].toLowerCase()}${theme === "system" ? " (your device's setting)" : ""}. Click for ${THEME_WORD[NEXT_THEME[theme]].toLowerCase()}.`}>
+        <span className="theme-k">Theme</span> {THEME_WORD[theme]}
       </button>
       {route.view !== "ask" && (
         <button

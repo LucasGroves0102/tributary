@@ -253,6 +253,75 @@
   display: contents;
 }
 
+.co-head .save-form {
+  margin-top: 14px;
+  max-width: 560px;
+}
+
+/* More: a quiet caret drawn by CSS (a glyph rendered as a box on some systems) */
+.more-caret {
+  width: 6px;
+  height: 6px;
+  margin: -3px 0 0 2px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+}
+
+.theme-k {
+  color: var(--ink-3);
+  font-weight: 500;
+}
+
+@media (max-width: 600px) {
+  .theme-k {
+    display: none;
+  }
+}
+
+.more-btn[data-state="open"] {
+  background: var(--red-wash);
+}
+
+/* a Radix menu (DropdownMenu, not modal): a sheet one level up, square, ruled */
+.menu {
+  z-index: 70;
+  min-width: 190px;
+  padding: 4px 0;
+  background: var(--sheet);
+  border: 1px solid var(--rule-2);
+  border-top: 2px solid var(--ink);
+  box-shadow: var(--lift);
+  font-family: var(--sans);
+  font-size: var(--fs-base);
+  transform-origin: var(--radix-dropdown-menu-content-transform-origin);
+  animation: seal-pop 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.menu-item {
+  padding: 7px 14px;
+  color: var(--ink);
+  cursor: pointer;
+  outline: none;
+  user-select: none;
+}
+
+.menu-item[data-highlighted] {
+  background: var(--red-wash);
+  box-shadow: inset 2px 0 0 var(--red);
+}
+
+.menu-item[data-disabled] {
+  color: var(--ink-3);
+  cursor: default;
+}
+
+.menu-sep {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--rule);
+}
+
 .tabs.co-tabs {
   margin-top: 24px;
   padding: 0;
@@ -470,6 +539,24 @@ li.event:first-child {
   color: var(--red);
 }
 
+/* figures as of the report that a later 8-K may have changed: one line, the ledger's "*" beside it */
+.stale-line {
+  margin: 0 0 10px;
+  max-width: 820px;
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: var(--fs-md);
+  color: var(--ink-2);
+  cursor: help;
+}
+
+.stale-line .mark {
+  flex: none;
+  color: var(--red);
+  font-weight: 700;
+}
+
 /* --- statement tables ------------------------------------------------------------------------ */
 
 /* a ledger's column rules, the bottom line double-ruled, the newest period washed */
@@ -596,6 +683,89 @@ li.event:first-child {
 .statements .callouts {
   padding-left: 0;
   padding-right: 0;
+}
+
+/* a statement's cells: a little tighter at the sides, so eight quarters and a one-line label fit beside
+   the margin at 1440 */
+.t.statement th,
+.t.statement td {
+  padding-left: 7px;
+  padding-right: 7px;
+}
+
+.t.statement td.first,
+.t.statement th.first {
+  padding-right: 12px;
+}
+
+/* the screener: column rules between its figures only, not between the name and the industry */
+.t.ruled-n td.n + td.n,
+.t.ruled-n th.n + th.n {
+  border-left: 1px solid var(--red-rule);
+}
+
+/* "How to read these figures": the long notes under a table, folded; one sentence stays in view */
+.foot.read-first {
+  padding-bottom: 4px;
+}
+
+.how-to-read {
+  max-width: 96ch;
+  padding: 0 0 8px;
+}
+
+.how-to-read > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--ink-2);
+  cursor: pointer;
+  list-style: none;
+}
+
+.how-to-read > summary::-webkit-details-marker {
+  display: none;
+}
+
+.how-to-read > summary::before {
+  content: "▸";
+  color: var(--red);
+}
+
+.how-to-read[open] > summary::before {
+  content: "▾";
+}
+
+.how-to-read > summary:hover {
+  color: var(--ink);
+}
+
+.card .how-to-read,
+.card .foot.read-first {
+  padding-left: 12px;
+  padding-right: 12px;
+}
+
+.blanks-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 18px;
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+}
+
+.blank-mark {
+  display: inline-block;
+  min-width: 1.2em;
+  color: var(--ink);
+  font-weight: 600;
+  text-align: center;
 }
 
 /* --- the confirm dialog (workspaces/Actions ConfirmDelete, a Radix alert dialog) -------------- */

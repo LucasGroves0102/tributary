@@ -200,6 +200,15 @@ const $ = (sel: string) => container.querySelector<HTMLElement>(sel);
 const paths = () => vi.mocked(fetch).mock.calls.map(([u]) => new URL(String(u), "http://x"));
 const button = (text: string) => [...container.querySelectorAll("button")].find((b) => b.textContent === text)!;
 const click = (el: Element | null | undefined) => act(async () => (el as HTMLElement).click());
+/** The header's More menu (a Radix DropdownMenu: ArrowDown on its button opens it), then one of its items. */
+const moreItem = async (text: string) => {
+  // a menu closed a moment ago returns focus to its button on a timer: let it, or it closes this one
+  for (let i = 0; i < 3; i++) await act(async () => new Promise((r) => setTimeout(r, 0)));
+  await act(async () => { button("More").dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })); });
+  for (let i = 0; i < 3; i++) await act(async () => new Promise((r) => setTimeout(r, 0)));
+  const items = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')];
+  return items.find((i) => i.textContent === text);
+};
 
 it("L5: the header offers the analysis beside New thesis and New model, and the forms say which is which", async () => {
   const PID = "22222222-2222-4222-8222-222222222222";
@@ -218,7 +227,8 @@ it("L5: the header offers the analysis beside New thesis and New model, and the 
   const start = [...container.querySelectorAll("a.btn")].find((a) => a.textContent === "Start an analysis")!;
   expect(start.getAttribute("href")).toBe(`#/analysis?start=${NVDA}`);
   expect(start.getAttribute("title")).toContain("New thesis and New model make a single item instead");
-  await click(button("New thesis"));
+  // Seal: Chart, Compare, Ask, New thesis and New model sit in the header's More menu
+  await click(await moreItem("New thesis"));
   expect($("form.save-form")?.textContent).toContain("A thesis on its own, in a workspace");
   expect($(".new-work-why a")?.getAttribute("href")).toBe(`#/analysis?start=${NVDA}`);
   act(() => root.unmount());
@@ -249,9 +259,9 @@ it("heads the page with public metadata, the next expected filing and the tabs",
   expect($('.tabs a[aria-current="page"]')?.textContent).toBe("Overview");
   await click(button("+ Watch"));
   expect(onWatch).toHaveBeenCalledWith(true);
-  await click(button("Compare"));
+  await click(await moreItem("Compare"));
   expect(window.location.hash).toBe(`#/compare?target=${NVDA}`);
-  await click(button("Chart"));
+  await click(await moreItem("Chart"));
   expect(onChart).toHaveBeenCalledWith();
 });
 
@@ -345,13 +355,15 @@ it("an ungranted company shows its metadata and says what its plan doesn't cover
   rowFor = () => tesla;
   await render("overview", TSLA);
   expect($("h1")?.textContent).toBe("Tesla");
-  expect($(".tier.none")?.textContent).toBe("metadata only");
+  // no access marks in the masthead: what the plan covers is the CIK's hover
+  expect($(".tier")).toBeNull();
+  expect($(".co-cik")?.getAttribute("title")).toContain("metadata only");
   expect(container.textContent).toContain("Financials for Tesla aren't included in your access");
   expect(container.textContent).toContain("The recap needs financials for Tesla");
   expect(container.textContent).toContain("needs the pro plan and a grant for Tesla");
   // no value or text requests for it at all
   expect(paths().some((u) => /recap|financials|sections/.test(u.pathname))).toBe(false);
-  expect([...container.querySelectorAll("button")].some((b) => b.textContent === "Chart")).toBe(false);
+  expect(await moreItem("Chart")).toBeUndefined();
 });
 
 it("statements: what's chosen comes from the address and goes back to it", async () => {
