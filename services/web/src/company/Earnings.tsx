@@ -177,7 +177,9 @@ function Quarter({ token, companyId, name, q, canReadFinancials }: {
           <p className="empty">No release text, so no adjustments for this quarter.</p>
         ) : !q.adjustments.length ? (
           <p className="empty">
-            This release has no reconciliation table and no note with a dollar amount on its figures: it may report GAAP figures only.
+            No reconciliation table and no note with a dollar amount in the forms Tributary reads: a table headed “Reconciliation”,
+            a footnote such as “(1) … $”, or a lettered note under a non-GAAP heading. The release may report GAAP figures only, or
+            reconcile them elsewhere, such as in a financial supplement filed as another exhibit; the release itself is in the reader.
           </p>
         ) : (
           <div className="card-b release-blocks">

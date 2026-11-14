@@ -160,3 +160,30 @@ def test_a_reconciliation_ends_at_another_tables_title():
     ])
     [table] = read_release(text).adjustments
     assert table.text.split("\n")[-1] == "Adjusted EBITDA $ 12 $ 10"
+
+
+def test_jpmorgan_adjusts_in_a_lettered_note_under_its_non_gaap_heading():
+    """Analyst test 4: JPMorgan's release has no reconciliation table (its financial supplement,
+    EX-99.2, has them) and the card said "no reconciliation table ... may report GAAP figures
+    only", while note d. excludes $658 million of securities losses. Trimmed from its Q3 2026
+    EX-99.1 (production, 2026-11-14)."""
+    r = read_release(release("jpm-2026-10-13-ex99-1.txt"))
+    assert [p.kind for p in r.adjustments] == ["note"]
+    [note] = r.adjustments
+    assert note.text.startswith("d.Third-quarter 2026 net income, earnings per share and ROTCE "
+                                "excluding $658 million of net investment securities losses")
+    assert r.outlook == []
+
+
+def test_lettered_notes_count_only_under_a_non_gaap_heading_and_only_when_they_adjust():
+    note = ("d.Net income excluding $658 million of net investment securities losses is a non-GAAP"
+            " financial measure, as management reviews it.")
+    definition = ("b.Tangible common equity is a non-GAAP financial measure. Book value per share"
+                  " was $132.30 at September 30, 2026.")
+    under = "\n".join(["2. Notes on non-GAAP financial measures:", definition, note])
+    assert [p.text for p in read_release(under).adjustments] == [note]
+    # the same line without the heading is a list item, not a note
+    assert read_release("\n".join(["Highlights", note])).adjustments == []
+    # a heading line that isn't a note ends the notes
+    after = "\n".join(["Notes on non-GAAP financial measures", "Additional information", note])
+    assert read_release(after).adjustments == []

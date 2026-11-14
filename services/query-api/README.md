@@ -1266,7 +1266,13 @@ RLS), the excerpts and passages are section text under RLS on `silver.filing_sec
   filed yet is `estimated` (gold.expected_filings' next period end). Its text is the first EX-99
   exhibit, else the 8-K's `2.02` section. From it, by fixed rules (no model): `headline`,
   `outlook` (the blocks under the release's own Outlook or Guidance headings) and `adjustments`
-  (reconciliation tables, and footnotes before the statements that state a dollar amount). Each
+  (reconciliation tables, and footnotes before the statements that state a dollar amount; since
+  analyst test 4 also lettered or numbered notes under a non-GAAP notes heading that exclude or adjust
+  a dollar amount: JPMorgan's "d.Third-quarter 2026 net income ... excluding $658 million of net
+  investment securities losses", its reconciliation tables being in its financial supplement, EX-99.2,
+  which isn't read. Measured over 612 production releases that mention non-GAAP, July-November 2026
+  (banks, brokers, insurers, REITs and a 1-in-40 sample of the rest): two change, JPMorgan's note and
+  Redwood Trust's recourse-debt exclusion; the five fixtures are unchanged). Each
   passage has `heading`, `text` (lines as the parser wrote them), `truncated` and a `citation`
   with offsets into the release. A release without such a heading or table gets none: the web app
   and the agent say so. No beat or miss: Tributary holds no estimates.

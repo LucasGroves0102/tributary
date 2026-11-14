@@ -242,7 +242,8 @@ docstring; the Query API's `/earnings` and `/events`, rules in its README, "Earn
   its own Outlook or Guidance headings, lines as written, each with Read it in the release at its
   offset); **management's adjustments** (its reconciliation tables, folded, in monospace, and its
   notes that state a dollar amount). Each says when the release has none ("no section headed Outlook
-  or Guidance ... read the release to be sure"). No beat or miss: Tributary has no estimates, and the
+  or Guidance ... read the release to be sure"; for adjustments, "none in the forms Tributary reads"
+  and that a release may reconcile in another exhibit, such as JPMorgan's financial supplement). No beat or miss: Tributary has no estimates, and the
   page says so. Pins: an outlook block or a note as `quoteLines` (its lines kept), a table as
   `quoteTable` (a code block in the quote), each citing "8-K for the quarter ended …".
 - **Since the last report** (company Overview, below its Figures; the What changed step's first card):
