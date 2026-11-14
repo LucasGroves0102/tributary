@@ -512,12 +512,13 @@ The answer: `history` (fiscal years: reported and adjusted operating income and 
 and other, tax rate, net income, the 10-K's diluted EPS and shares, share change, operating cash
 flow, capex, FCF and its margin, buybacks, each figure's filing; a diluted share count that moves
 by more than half in a year is a split or a merger, not buybacks, so that year has no share change
-or EPS growth and the years before it no P/E: Deckers' 6-for-1, NVIDIA's 4- and 10-for-1,
-Vertiv's SPAC merger), `ttm` (the latest TTM when it
+or EPS growth and the years before it are on another share basis: Deckers' 6-for-1, NVIDIA's 4- and
+10-for-1, Vertiv's SPAC merger), `ttm` (the latest TTM when it
 isn't a fiscal year end), `current` (the current fiscal year's reported quarters and the same
 quarters a year earlier), `stats` and `run_rate` (B2 and B7's, unchanged), and per case (`bear`,
 `base`, `bull`; bear and bull `preview`ed from the base case until the user adds them) the
-`defaults` (what Reset sets, per year) and the projected `years` (revenue, growth, organic growth,
+`defaults` (what Reset sets, per year; a bear or bull year's FCF margin follows the case's own
+operating margin, below) and the projected `years` (revenue, growth, organic growth,
 operating income reported and adjusted, margin, pretax and net income, shares, EPS and its
 growth, FCF; which rates were `defaulted`; for a `ytd` year 1 its `actual` and `remainder`). The
 base case also has the B2 `check` and `user_set` the thesis check reads. A model saved before F2
@@ -525,8 +526,11 @@ base case also has the B2 `check` and `user_set` the thesis check reads. A model
 after the reported quarters, which the web app offers to rebuild year 1 from without changing it. With a `price`,
 `valuation`: market cap (price x latest shares outstanding), net debt with its date and reading,
 EV (only when net debt is current or merely behind; `ev_note` says why not: `old`, `absent`, ...)
-and P/E, EV/Revenue, EV/EBIT and FCF yield for every history year, the TTM and each case's years;
-`"n/m"` over losses. Currency (057): the run says the company's (`currency`, the unit of its rows;
+and P/E, EV/Revenue, EV/EBIT and FCF yield for the current twelve months (`ttm`; when the newest
+TTM ends at a fiscal Q4 there is no TTM column and `history` holds that one base year) and each
+case's years; `"n/m"` over losses. No other history year (analyst test 4): today's price over
+FY2021's EPS read as "P/E FY2021 560.6x" at Vertiv, a multiple it never traded at, and Tributary
+has no past prices. Currency (057): the run says the company's (`currency`, the unit of its rows;
 every amount is in it) and the price says its own (`price.currency`, three capitals; a price saved
 without one is in dollars, as before). When they differ, market cap is still price x shares, in the
 price's currency (`market_cap_currency`), but EV and every multiple are left out (`ev_note`
@@ -543,7 +547,18 @@ operating margin. The remainder of the current year starts from the TTM like any
 margin carried one strong half forward, so NVIDIA's H2 FY2027 read 75.0% (H2 FY2026's 64.2% +10.8
 points) and +95.8%; it now reads the TTM's 65.2% and +83.4%, a full year of 65.5%. The remainder's
 FCF margin stays those quarters' a year earlier, since working capital is seasonal (Deckers: H1
-FY2027 -1.9%, H2 FY2026 35.7%, the TTM 18.9%). Deckers' FY2027 is H1 reported plus H2, with diluted shares down 8.4% a
+FY2027 -1.9%, H2 FY2026 35.7%, the TTM 18.9%).
+
+Bear and bull FCF margins (analyst test 4, finding 15): every case used to default to the base
+case's FCF margin, so Vertiv's bull case as typed (operating margins 24%, 25%, 25.5%) had free
+cash flow falling $3.70B, $3.37B, $3.14B while its operating income rose to $6.47B. A bear or bull
+year's default is now the base case's FCF margin that year (typed, else its default) moved by the
+case's operating margin minus the base case's, after tax (x (1 - the case's tax rate, held in [0,
+100%])): a point of margin is a point of revenue more operating income, and after tax that much more
+cash. That bull case reads 34.8%, 23.7%, 21.9% and $3.84B, $4.93B, $5.55B; the previewed cases
+(the spread alone) 28.5/13.7/10.0% (bear) and 34.9/18.7/14.8% (bull) around the base case's
+unchanged 31.7/16.2/12.4%. The base case's defaults don't change, so B2 and B7's cases and
+`user_set` hold. Deckers' FY2027 is H1 reported plus H2, with diluted shares down 8.4% a
 year (FY2027 Q2 against FY2026 Q2) as the default share change, and a $46M one-off in Q2 FY2027
 taking the year-to-date margin from 21.8% to 19.9%; Deckers' latest net debt reading is from
 2014 (`old`), so its EV multiples stay blank with that reason. B2 and B7's shared cases

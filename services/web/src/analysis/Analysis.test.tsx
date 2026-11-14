@@ -425,7 +425,7 @@ it("Reset to defaults sets exactly the default shown beside each field, in every
   // growth and margin: a number beside each; the other rates: blank is the default
   const inputs = () => [...page.querySelectorAll<HTMLInputElement>(".assumptions td:nth-child(2) input, .assumptions td:nth-child(3) input")];
   const hints = () => [...page.querySelectorAll(".assumptions td:nth-child(2) .faint, .assumptions td:nth-child(3) .faint")].map((h) => h.textContent);
-  const rates = () => [...page.querySelectorAll<HTMLInputElement>(".assumptions input[aria-label*='(blank: the default)']")];
+  const rates = () => [...page.querySelectorAll<HTMLInputElement>(`.assumptions input[aria-label*="(empty: Tributary's default)"]`)];
   await act(async () => type(inputs()[0]!, "99"));
   await act(async () => type(rates()[0]!, "3"));
   await afterRun();

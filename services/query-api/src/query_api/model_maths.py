@@ -69,7 +69,18 @@ points) against a TTM of 65.2%. The remainder's FCF margin stays those quarters'
 working capital is seasonal (Deckers' H1 FY2027 -1.9%, H2 FY2026 35.7%, TTM 18.9%), and the owner's
 decision named growth and margin only. Bear and bull start from the base case moved by
 SCENARIO_SPREAD (half the growth, at least 5 points; a fifth of the margin, at least 3), the other
-rates as the base case's.
+rates as the base case's, except the FCF margin (below).
+
+A bear or bull year's default FCF margin follows the case's own operating margin (morgan4,
+finding 15: every case read one FCF default, so a bull case whose margin rose to 25% had less free
+cash flow each year while its operating income grew): the base case's FCF margin that year (as
+typed, else its default) + (the case's operating margin - the base case's, both as typed or
+previewed) x (1 - the case's tax rate, held in [0, 100%]), rounded to 0.1 and held in FCF_RANGE.
+Each point of margin is a point of revenue more (less) operating income, and after tax that much
+more (less) cash; the base case's conversion of revenue into cash otherwise holds (growth's working
+capital and capex aren't modelled apart). It follows the margin as typed, so it moves when the
+margin does; Reset leaves the rate blank, which reads it. The base case's defaults are unchanged
+(they fade to the 5-year average like its margin), so user_set and the thesis check read as before.
 
 Check (B2, the thesis check reads it for the base case): each forecast year's full-year growth
 more than GROWTH_FLAG_POINTS above or below the CAGR, or its full-year margin outside [min, max];
@@ -85,7 +96,11 @@ said so); EV = market cap + net debt, only when net debt's reading is current or
 (035: an old, not meaningful, not applicable or absent net debt leaves EV blank, with the reason);
 per column: P/E = price / adjusted diluted EPS (TTM: market cap / adjusted TTM net income),
 EV/Revenue, EV/EBIT (adjusted operating income), FCF yield = FCF / market cap. A multiple over
-zero or negative earnings, revenue or EBIT is not meaningful.
+zero or negative earnings, revenue or EBIT is not meaningful. Columns: the current twelve months
+(`ttm`; when the newest TTM ends at a fiscal Q4 it is the base year, the one entry in `history`)
+and each case's forecast years. No other history year (morgan4, finding 5): today's price over
+FY2021's EPS read as "P/E FY2021 560.6x", a multiple VRT never traded at; Tributary has no past
+prices, so a past year's multiple can't be had here.
 
 Currency (057): every amount is in the company's reporting currency (056), `currency` on the run
 (the unit of its rows: "EUR" for a euro filer, USD when none says otherwise). The price is in the
@@ -586,6 +601,25 @@ def old_default(st: dict) -> dict:
                 _clamp(st["avg_margin"] * 100, MARGIN_RANGE))}
 
 
+def case_defaults(defs: list[dict], case: str, years: list[dict], base_years: list[dict]
+                  ) -> list[dict]:
+    """A bear or bull case's defaults: the base case's moved by SCENARIO_SPREAD (`shifted`), its
+    FCF margin then following the case's own operating margin (the module docstring, Defaults):
+    the base case's FCF margin that year (typed, else default) + the margin difference after
+    tax."""
+    out = shifted(defs, case)
+    for i, d in enumerate(out):
+        if i >= len(years) or i >= len(base_years):
+            break
+        a, b = years[i], base_years[i]
+        base_fcf = float(b["fcfMargin"]) if b.get("fcfMargin") is not None else defs[i]["fcfMargin"]
+        tax = float(a["taxRate"]) if a.get("taxRate") is not None else d["taxRate"]
+        kept = 1 - _clamp(tax, (0.0, 100.0)) / 100
+        d["fcfMargin"] = _round1(_clamp(
+            base_fcf + (float(a["margin"]) - float(b["margin"])) * kept, FCF_RANGE))
+    return out
+
+
 def shifted(base: list[dict], case: str) -> list[dict]:
     """A new bear (bull) case: each base year's growth and margin moved down (up) by
     SCENARIO_SPREAD, without notes, rounded to 0.1; other rates as the base's."""
@@ -829,7 +863,10 @@ def valuation(price: dict | None, latest: dict, years: list[dict], ttm: dict | N
     else:
         out["enterprise_value"] = cap + debt_value
     ev = out["enterprise_value"]
-    out["history"] = [{"fy": y["fy"], **_multiples(y, p, cap, ev)} for y in years]
+    # the current twelve months and the forecasts only: a past year at today's price isn't that
+    # year's multiple (the module docstring, Valuation); with no TTM column the base year is it
+    now = base_year(years) if ttm is None else None
+    out["history"] = [] if now is None else [{"fy": now["fy"], **_multiples(now, p, cap, ev)}]
     out["ttm"] = None if ttm is None else _multiples(ttm, p, cap, ev, ttm=True)
     out["cases"] = {c: [{"fy": y["fy"], **_multiples(y, p, cap, ev)} for y in ys]
                     for c, ys in cases.items()}
@@ -864,7 +901,7 @@ def run(inputs: dict, state: dict) -> dict:
             if not base_years:
                 continue
             ys, preview = shifted(base_years, case), True
-        case_defs = defs if case == "base" else shifted(defs, case)
+        case_defs = defs if case == "base" else case_defaults(defs, case, ys, base_years)
         proj = project(years, ys, case_defs, adjustments, cur if ytd else None, rr)
         projected[case] = proj
         entry: dict[str, Any] = {"preview": preview, "years": proj, "defaults": case_defs}

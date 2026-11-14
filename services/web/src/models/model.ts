@@ -2,7 +2,7 @@
  * query_api/workspaces.py ModelState). The item stores only what the user typed: the company, how
  * many fiscal years of history to show and, per forecast year and case, revenue growth and
  * operating margin (percent), four optional rates (interest and other, tax rate, share change,
- * FCF margin; blank = the default from history) and a note; since F2 also `ytd` (year 1 is the
+ * FCF margin; blank = Tributary's default) and a note; since F2 also `ytd` (year 1 is the
  * current fiscal year's reported quarters plus the remainder), named `adjustments` and the user's
  * own `price`.
  *
@@ -507,8 +507,11 @@ function toSource(s: RunSource | undefined, companyId: string): Source | null {
 }
 
 /** Chart series on a fiscal-year axis: revenue and (adjusted) operating income, history solid,
- * each case's forecast dashed in the same colour from the base year (bear / bull faint). History
- * points carry their filing (a click opens it); forecast points have none. */
+ * each case's forecast dashed from the base year. The base case's forecast keeps its line's
+ * colour; bear and bull are fainter and each in its own colour (CASE_COLORS: umber and deep teal
+ * from the Seal series, never the accent red), so the two can't be mistaken for each other
+ * (morgan4, finding 28). History points carry their filing (a click opens it); forecast points
+ * have none. */
 export function modelSeries(run: ModelRun, historyYears: number, cases: Scenario[]): Series[] {
   const history = run.history.slice(-historyYears);
   const base = runBase(run);
@@ -532,19 +535,25 @@ export function modelSeries(run: ModelRun, historyYears: number, cases: Scenario
   const several = shown.length > 1;
   const name = (what: string, c: Scenario) => `${what} (${several ? c : "forecast"})`;
   const ids = { bear: 4, base: 1, bull: 5 } as const;
+  const colour = (c: Scenario, line: number) => (c === "base" ? line : CASE_COLORS[c]);
   const out: Series[] = [hist(0, "Revenue", 0, (y) => y.revenue, "revenue")];
-  for (const c of shown) out.push(fore(ids[c], name("Revenue", c), 0, base?.revenue ?? null, (p) => p.revenue, run.cases[c]!.years, c !== "base"));
+  for (const c of shown) out.push(fore(ids[c], name("Revenue", c), colour(c, 0), base?.revenue ?? null, (p) => p.revenue, run.cases[c]!.years, c !== "base"));
   out.push(hist(2, "Operating income", 1, (y) => y.operating_income_adjusted, "operating_income"));
   for (const c of shown) {
-    out.push(fore(ids[c] + 4, name("Operating income", c), 1, base?.operating_income_adjusted ?? null, (p) => p.operating_income_adjusted, run.cases[c]!.years, c !== "base"));
+    out.push(fore(ids[c] + 4, name("Operating income", c), colour(c, 1), base?.operating_income_adjusted ?? null, (p) => p.operating_income_adjusted, run.cases[c]!.years, c !== "base"));
   }
   return out.filter((s) => s.points.some((p) => p.y !== null));
 }
 
+/** The chart colour (series index) of a bear and a bull forecast: umber and deep teal, the Seal
+ * series after the ink and slate that revenue and operating income use. */
+export const CASE_COLORS = { bear: 2, bull: 3 } as const;
+
 // --- the three-case table ---------------------------------------------------------------------
 
 export type Unit = "USD" | "ratio" | "USD/shares" | "shares" | "multiple";
-export type CellValue = number | "n/m" | null;
+/** "n/a": a multiple of a past year, which a price typed today can't give */
+export type CellValue = number | "n/m" | "n/a" | null;
 
 export interface Column {
   key: string;
@@ -567,6 +576,8 @@ export interface Line {
   blank?: string;
   /** what a history year's cell needs said (a split, an earlier share basis) */
   noteOf?: (y: RunYear) => string | undefined;
+  /** why a past year's cell reads n/a (the valuation lines) */
+  pastYear?: string;
   history: (y: RunYear, i: number) => CellValue;
   ttm?: (t: RunTtm) => CellValue;
   ytd?: (c: RunCurrent) => CellValue;
@@ -580,8 +591,14 @@ export function modelLines(run: ModelRun): Line[] {
   const acquired = run.adjustments.some((a) => a.kind === "acquired");
   const v = run.valuation;
   const adj = oneOffs ? ", adjusted" : "";
+  // multiples only for the current twelve months and the forecasts (model_maths.py, Valuation):
+  // the API returns a history entry only for a base year that is the current twelve months
   const multiple = (pick: (m: Multiples) => Multiple) => ({
-    history: (y: RunYear) => pick(v!.history.find((m) => m.fy === y.fy) ?? NONE),
+    pastYear: PAST_YEAR,
+    history: (y: RunYear): CellValue => {
+      const m = v!.history.find((x) => x.fy === y.fy);
+      return m ? pick(m) : "n/a";
+    },
     ttm: () => (v!.ttm ? pick(v!.ttm) : null),
     forecast: (_p: Projected, c: Scenario, i: number) => {
       const m = v!.cases[c]?.[i];
@@ -649,7 +666,7 @@ export function modelLines(run: ModelRun): Line[] {
     { key: "fcf", label: "Free cash flow", unit: "USD", group: "Cash", history: (y) => y.fcf, ttm: (t) => t.fcf, ytd: (c) => c.actual?.fcf ?? null, forecast: (p) => p.fcf },
     { key: "fcf_margin", label: "FCF margin", unit: "ratio", group: "Cash", history: (y) => y.fcf_margin, ttm: (t) => t.fcf_margin, ytd: (c) => c.actual?.fcf_margin ?? null, forecast: (p) => p.fcf_margin },
     { key: "buybacks", label: "Buybacks", unit: "USD", group: "Cash", blank: "no buybacks tagged", history: (y) => y.buybacks, ttm: (t) => t.buybacks, forecast: () => null },
-    !!v && { key: "pe", label: "P/E", unit: "multiple", group: "Valuation at your price", noteOf: earlierBasis, ...multiple((m) => m.pe) },
+    !!v && { key: "pe", label: "P/E", unit: "multiple", group: "Valuation at your price", ...multiple((m) => m.pe) },
     !!v && { key: "ev_revenue", label: "EV / Revenue", unit: "multiple", group: "Valuation at your price", blank: evBlank(v), ...multiple((m) => m.ev_revenue) },
     !!v && { key: "ev_ebit", label: "EV / EBIT", unit: "multiple", group: "Valuation at your price", blank: evBlank(v), ...multiple((m) => m.ev_ebit) },
     !!v && { key: "fcf_yield", label: "FCF yield", unit: "ratio", group: "Valuation at your price", ...multiple((m) => m.fcf_yield) },
@@ -657,7 +674,9 @@ export function modelLines(run: ModelRun): Line[] {
   return lines.filter((l): l is Line => !!l);
 }
 
-const NONE: Multiples = { pe: null, ev_revenue: null, ev_ebit: null, fcf_yield: null };
+/** A past year's multiple cell, in words. */
+export const PAST_YEAR = "n/a: a past year's multiple needs that year's price, and Tributary has no past prices. "
+  + "Your price is today's, so multiples are for the trailing twelve months and your forecast years only.";
 
 /** a split or a merger that year (the API's `share_break`) */
 const splitYear = (y: RunYear) =>
@@ -665,7 +684,7 @@ const splitYear = (y: RunYear) =>
 
 /** a year stated on the share basis before a later split or merger */
 const earlierBasis = (y: RunYear) =>
-  y.earlier_share_basis ? `on the share basis before the split or merger in FY${y.earlier_share_basis}: not comparable with later years, so no P/E` : undefined;
+  y.earlier_share_basis ? `on the share basis before the split or merger in FY${y.earlier_share_basis}: not comparable with later years` : undefined;
 
 /** Why there is no EV, in words, or undefined. */
 export function evBlank(v: Valuation | null): string | undefined {
@@ -705,7 +724,7 @@ export function modelColumns(run: ModelRun, historyYears: number, forecastYears:
 
 /** Formats a cell. */
 export function formatCell(v: CellValue, unit: Unit, currency = "USD"): string {
-  if (v === "n/m") return "n/m";
+  if (v === "n/m" || v === "n/a") return v;
   if (v === null || !Number.isFinite(v)) return "—";
   switch (unit) {
     case "USD":

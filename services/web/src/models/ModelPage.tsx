@@ -80,6 +80,10 @@ type Loaded =
   | { state: "ok"; item: SavedItemFull; model: ModelState }
   | { state: "error"; message: string; notFound: boolean };
 
+/** Under an empty rate field, whose grey italic placeholder is the default in use (morgan4,
+ * finding 28: "default (blank)" under a field that showed a number read as a contradiction). */
+const DEFAULT_IN_USE = "Tributary's default";
+
 /** The typed cases: base always, bear / bull once added. */
 type Cases = { base: Draft[]; bear: Draft[] | null; bull: Draft[] | null };
 
@@ -411,8 +415,8 @@ function ModelEditor({ token, item, initial, saved, label, embedded = false, act
         <p className="muted small">
           Model of <a href={href({ view: "company", companyId: initial.companyId })}>{company}</a>: fiscal-year history and the
           current year's reported quarters from its filings, then your assumptions per forecast year: revenue growth and
-          operating margin, and below operating income the interest, tax, share count and free cash flow rates (blank:
-          Tributary's default from history).
+          operating margin, and below operating income the interest, tax, share count and free cash flow rates (a rate
+          you leave empty is Tributary's default, shown in grey italics).
           {nameError && <span className="err"> {nameError}</span>}
         </p>
       </div>
@@ -540,12 +544,12 @@ function ModelEditor({ token, item, initial, saved, label, embedded = false, act
                                 <span className="pct-in">
                                   <input className="field" inputMode="decimal" value={d[r]} aria-invalid={bad} aria-describedby={`${id}-${r}${i}`}
                                     placeholder={dv === undefined ? "" : dv.toFixed(1)}
-                                    aria-label={`${year}${which} ${RATE_LABELS[r].toLowerCase()}, percent (blank: the default)`}
+                                    aria-label={`${year}${which} ${RATE_LABELS[r].toLowerCase()}, percent (empty: Tributary's default)`}
                                     onChange={(e) => setDraft(i, { [r]: e.target.value } as Partial<Draft>)} />
                                   <span aria-hidden="true">%</span>
                                 </span>
                                 <span id={`${id}-${r}${i}`} className={bad ? "err small" : "faint small"}>
-                                  {bad ? `${RATE_RANGES[r][0]} to ${RATE_RANGES[r][1]}` : d[r].trim() ? hint(i, r) : "default (blank)"}
+                                  {bad ? `${RATE_RANGES[r][0]} to ${RATE_RANGES[r][1]}` : d[r].trim() ? hint(i, r) : DEFAULT_IN_USE}
                                 </span>
                               </td>
                             );
@@ -734,7 +738,9 @@ function PriceCard({ id, price, run, onChange }: { id: string; price: PriceDraft
         <p className="small muted">
           The price you type here is yours: Tributary doesn't fetch or keep market prices. It's saved with this model as typed
           and gives market cap, P/E (price over diluted EPS; the TTM's is market cap over TTM net income), EV / Revenue,
-          EV / EBIT and FCF yield, on history and on each case, in the table below.
+          EV / EBIT and FCF yield for the trailing twelve months and each case's forecast years, in the table below. Past
+          years get none: today's price over an old year's earnings isn't that year's multiple, and Tributary has no past
+          prices.
           {figures !== "USD" && ` ${run?.company_id ? "This company" : "It"} reports in ${figures}: type the price in ${figures} (its home listing) and choose ${figures}, or the multiples stay blank. Tributary converts no currency.`}
         </p>
         {v?.currency_mismatch && (

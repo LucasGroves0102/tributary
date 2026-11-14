@@ -570,7 +570,8 @@ on the folder changed last. Never just the first workspace.
   of the maths", whose `model_maths.py` docstring is the spec); the thesis check and later MCP call
   the same route. Before F2 the web app and agent-api each kept a copy.
   Per forecast year (1-10, default 3) and case: revenue growth %, operating margin %, and four
-  rates, blank meaning Tributary's default from history (shown as the placeholder): interest and
+  rates, empty meaning Tributary's default (shown as a grey italic placeholder, "Tributary's default"
+  under it; a typed rate shows "default x%" instead): interest and
   other (% of revenue: operating income less pretax income), tax rate, share change (buybacks less
   issuance, % a year) and FCF margin (FCF as one rate on revenue rather than cash flow less capex:
   both move with revenue, and the table shows operating cash flow, capex and FCF behind it); a
@@ -595,9 +596,11 @@ on the folder changed last. Never just the first workspace.
   years, the case being edited marked. A split or merger year (the API's `share_break`) shows no
   share change or EPS growth, and per-share figures before it are marked * with why. The chart
   draws revenue and operating income, history solid, each case dashed (bear and bull lighter,
-  `faint`). **Bear / base / bull**: a switch picks the case being edited; "Add bear and bull cases"
+  `faint`, and each in its own colour, `CASE_COLORS`: umber and deep teal, the table's case labels
+  in the same two). **Bear / base / bull**: a switch picks the case being edited; "Add bear and bull cases"
   copies the run's preview of them (the base case moved by half its growth, at least 5 points, and
-  a fifth of its margin, at least 3; the rates the user set), and waits for the run of the latest
+  a fifth of its margin, at least 3; the rates the user set; a case's default FCF margin follows its
+  own operating margin, the API's rule worded in the case's rules line), and waits for the run of the latest
   numbers so a case never starts from stale ones. Before they're added, a bear or bull tab shows
   that case's preview beside base; a case whose numbers don't parse keeps its last valid ones
   (marked ⚠), never another case's. Check my thesis checks the base case. **Adjustments** (yours,
@@ -609,8 +612,11 @@ on the folder changed last. Never just the first workspace.
   release's), quoted with its 8-K citation, never read into a field. **Valuation at your price**:
   a price per share and a day you type, saved with the model, give market cap (× the latest shares
   outstanding), EV (+ net debt, only when its reading is current; Deckers' latest is from 2014, so
-  EV is blank and says why) and P/E, EV/Revenue, EV/EBIT and FCF yield on history, the TTM and each
-  case. The page says it's your price: nothing is fetched or kept. A company reporting in another
+  EV is blank and says why) and P/E, EV/Revenue, EV/EBIT and FCF yield for the trailing twelve
+  months and each case's forecast years only: a past year reads n/a with why (`PAST_YEAR`: its
+  multiple needs that year's price, which Tributary doesn't have; Vertiv's "P/E FY2021 560.6x" at
+  today's price was the analyst test's finding 5), and the group's heading carries the price and
+  its day. The page says it's your price: nothing is fetched or kept. A company reporting in another
   currency (057: the run's `currency`) has its table, chart and notes in it ("€2.10B"), and the price
   gets a currency picker (the company's or USD; a price saved before is dollars): a price in another
   currency than the figures gives market cap in the price's currency but no EV or multiple, and the
