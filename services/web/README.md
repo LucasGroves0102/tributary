@@ -384,6 +384,13 @@ timestamps, dates, `as_of` and XBRL concepts the model copied from a tool in wor
 on hover; a thesis, which is the user's, isn't touched). A timestamp reads as the viewer's own date
 (`format.ts` `localDay`: 03:00 UTC on the 7th is the 6th in Phoenix); a plain date as written.
 
+Times (analyst test 4, #23): a moment is written one way everywhere, the viewer's local date and clock
+with their zone's abbreviation, `format.ts` `localTime` ("Nov 10, 2026, 10:14 PM MST"; `localClock` for
+the clock alone): Data status, thesis and model versions, the check history, alerts, deliveries, the
+watchlist's "as of", and the assistant's daily reset (midnight UTC, the service's day, said as the
+viewer's own time: "resets at 5:00 PM MST"). No UTC clock beside a local one and no numeric
+`toLocaleString` dates; a moment's date alone is `localDay`.
+
 Tags: colour says the form (10-K, 10-Q) or, on saved work, the kind; an expected filing has a dashed outline,
 not a colour, so a colour never means "not filed yet". Bold marks new rows on Home only when some rows aren't,
 and an 8-K's period of report reads as the event date it is (`format.ts` `periodPhrase`).
@@ -397,7 +404,10 @@ the foot of the window (`UndoDeletes`); the DELETE goes out when that runs out, 
 `keepalive` request) when the page closes or another user signs in, so closing the tab never keeps
 something the user confirmed. It's an undo window in the browser, not a soft delete: nothing
 changes in the API or the app DB, and once sent a delete is final. The assistant's own Undo of a
-save still deletes immediately. "New chart" starts empty
+save still deletes immediately. While a delete waits out its window, a page that has the item (or an
+item in the workspace) open stops editing it (#20, `useSaved`'s `open` leaves it out): no "workspace /
+name" header and no Save over something about to go; what's on screen stays as unsaved work, and Undo
+brings the open item back. "New chart" starts empty
 and detached from any saved chart (the nav's Chart builder still reopens the draft). Anything that
 replaces a chart with work in it (New chart, a template, a Chart button, opening a saved chart) keeps
 that draft: the builder says what happened and can restore it until the next replacement.
@@ -642,7 +652,10 @@ per company, from its filings to a thesis that's checked after every filing. Rul
   `#/analysis/{project}/thesis|model/{id}` (App.tsx), so it opens inside the project.
 - **Home** (`#/analysis`, `AnalysisHome.tsx`): your projects, newest edit first: company,
   project name, last edited, the thesis's last check (supported / contradicted / can't verify,
-  one checks-list request per thesis, first 20) and Revisit's "new 10-Q" flag. **New
+  one checks-list request per thesis, first 20) and Revisit's "new 10-Q" flag. A check that no
+  longer covers the saved text reads "Stale" with its counts faded (#16), by the Monitor step's own
+  rule: the check's `text_hash` against `textHash` of the saved Markdown (the listing nulls a
+  thesis's state, so each checked thesis is read once). **New
   analysis**: a company search that lists only companies you can read (`readableFor`;
   `access=financials` on the API too), suggested peers from `/peers` (readable ones, the first
   3 ticked), a name; it creates the workspace with its project and opens step 1.
@@ -650,7 +663,8 @@ per company, from its filings to a thesis that's checked after every filing. Rul
   company (public identity), "n of 8 steps done" and tabs for the 8 steps under the rail's names
   (each tab opens its own step); a rail of the 8 steps with a done marker each. Done means the
   user ticked it (`project.done`), never automatic and never locked: work in a step (notes, a
-  saved chart, peers, a model, the Core thesis written, a check: `hasWork`) shows as a hint under
+  saved chart, peers, a model, the Core thesis written in the user's own words, a check: `hasWork`;
+  a pinned passage or an embed alone isn't writing, #30, `project.ts` `ownLines`) shows as a hint under
   the box ("1 chart saved here"). The rail's Monitor says "re-check" when the last check no longer
   covers the thesis (its text changed) or a newer 10-K/10-Q is filed. Without a step in the URL
   it opens at the first step not ticked. Each step is a pane
@@ -1024,7 +1038,13 @@ own companies, by name: with the catalog open, the ones they watch or
 analyse (`/v1/data-notes?company_id=`, at most 50), since every company is readable; while it's closed,
 the ones they can read. They need financials access, like the values they describe. A
 company is checked when its figures change, so its tab says when *its* figures were last checked while
-Home and Data status say when the checks last ran. A note about filings the SEC's XBRL data doesn't have
+Home and Data status say when the checks last ran, from the same source (#24: Home reads Data
+status's `quality.last_checked_at`, `home/useFeedStatus.ts` `useChecksRan`; it once showed its
+companies' newest check under that name, "18 h ago" beside "3 min ago"). Company counts say what
+they count: the sidebar's Companies count is the companies you can read (financials of any kind or a
+stored filing's text; its hover says so, `Sidebar.tsx` `COMPANIES_COUNTED`), Data status's are the
+companies with quarterly financials and the companies checked, and signed in it names the reader's
+larger count beside the first (`Status.tsx` `companiesNote`). A note about filings the SEC's XBRL data doesn't have
 yet dates them newest to oldest and promises "a day or two" only while that's true (over 3 days, it
 says how long the oldest has waited). The Statements tab says the same where the figures are read
 (H9, `company/data.ts` `figuresBehind`): when the newest 10-K/10-Q in the public filing index reports a
@@ -1125,7 +1145,7 @@ the narrow-screen menu, the shortcut sheet, Ctrl+arrow table jumps and the limit
 Home and the tearsheet, writing a report from a workspace with a mocked SSE stream (embedded charts,
 the flagged figure, Markdown download, print styles), customizing Home and the watchlist and screener
 columns, workspace actions, a clean console on Home, Companies, a company's Overview and Statements,
-Compare, the chart builder, Analysis, Alerts and Settings (#68), no screen scrolling sideways on a
+Compare, the chart builder, Analysis, Alerts, Settings and Data status (#68), no screen scrolling sideways on a
 phone, at 1024 or at 1440 with the panel open, the screener's numbers under a frozen name with the
 panel open, and a company reporting in euros, labelled everywhere and never ranked or averaged with
 dollars) run against `vite preview` with every `/api/*` call answered by `e2e/mockApi.ts` (route

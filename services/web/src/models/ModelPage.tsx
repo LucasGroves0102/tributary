@@ -3,7 +3,7 @@ import { Fragment, useEffect, useId, useMemo, useRef, useState } from "react";
 import { ApiError, earnings as fetchEarnings, failureReason, itemVersion, itemVersions, openItem, refusedByOlderApi } from "../api";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { TableScroll } from "../components/TableScroll";
-import { day, localDay, money } from "../format";
+import { day, localTime, money } from "../format";
 import { href } from "../route";
 import type { EarningsResponse, ItemVersion, SavedItemFull } from "../types";
 import { ITEM_NAME_MAX, nameProblem } from "../workspaces/model";
@@ -328,7 +328,7 @@ function ModelEditor({ token, item, initial, saved, label, embedded = false, act
       setEd(editingOf(got.name, m));
       setSel("base");
       setVersions(null);
-      setNotice({ text: `Restored the version saved ${localDay(v.saved_at, true)} (${m.assumptions.length} forecast years${m.scenarios ? ", bear and bull" : ""}). Save to keep it.`, undo: before });
+      setNotice({ text: `Restored the version saved ${localTime(v.saved_at)} (${m.assumptions.length} forecast years${m.scenarios ? ", bear and bull" : ""}). Save to keep it.`, undo: before });
     } catch (e) {
       setNotice({ text: `Couldn't read that version: ${failureReason(e)}.`, error: true });
     }
@@ -396,7 +396,7 @@ function ModelEditor({ token, item, initial, saved, label, embedded = false, act
                 {versions.list.map((v) => (
                   <li key={v.version_id}>
                     <span className="grow">
-                      Saved {localDay(v.saved_at, true)}
+                      Saved {localTime(v.saved_at)}
                       <span className="faint"> · {v.years ?? "?"} forecast year{v.years === 1 ? "" : "s"}{v.cases ? ", bear and bull" : ""} · {v.name}</span>
                     </span>
                     <button className="btn sm" onClick={() => void restoreVersion(v)} title="Put this version in the editor; nothing is saved until you Save">

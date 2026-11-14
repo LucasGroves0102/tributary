@@ -378,8 +378,8 @@ test("#68: the main screens load with a clean console", async ({ page }) => {
   });
   await mockApi(page);
   await startDemo(page);
-  errors.length = 0; // signed in from here (the mock has no public status page for the front door)
-  for (const hash of ["#/", "#/companies", `#/company/${NVDA}`, `#/company/${NVDA}/statements`, `#/compare?target=${PEP}&peers=${KO}`, "#/chart", "#/analysis", "#/alerts", "#/settings"]) {
+  errors.length = 0; // signed in from here
+  for (const hash of ["#/", "#/companies", `#/company/${NVDA}`, `#/company/${NVDA}/statements`, `#/compare?target=${PEP}&peers=${KO}`, "#/chart", "#/analysis", "#/alerts", "#/settings", "#/status"]) {
     await page.goto(`/${hash}`);
     await page.waitForLoadState("networkidle");
   }

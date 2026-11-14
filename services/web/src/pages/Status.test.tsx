@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "../App";
 import type { DataStatus } from "../types";
-import { duration, share, Status } from "./Status";
+import { companiesNote, duration, share, Status } from "./Status";
 
 const NOW = Date.parse("2026-11-02T15:00:00Z");
 
@@ -189,6 +189,30 @@ describe("Status without signing in", () => {
     expect(container.querySelector("h1")?.textContent).toBe("Tributary");
     const link = [...container.querySelectorAll("a")].find((a) => a.textContent === "Data status");
     expect(link?.getAttribute("href")).toBe("#/status");
+  });
+});
+
+describe("companiesNote (#24: each company count says what it counts)", () => {
+  it("names the sidebar's larger count of companies you can read, and nothing else", () => {
+    expect(companiesNote(6597, 6602)).toBe(
+      "from XBRL; the 6,602 you can read (the sidebar's count) also take in companies with only annual figures or only a filing's text");
+    expect(companiesNote(6597, null)).toBe("from XBRL"); // signed out
+    expect(companiesNote(6597, 20)).toBe("from XBRL"); // a demo sandbox while the catalog is closed
+    expect(companiesNote(null, 6602)).toBe("from XBRL");
+  });
+
+  it("is on the page signed in, and every time on it is the viewer's own with its zone", async () => {
+    const was = process.env.TZ;
+    process.env.TZ = "America/Phoenix";
+    try {
+      await mount(<Status load={async () => status({ coverage: { ...status().coverage, companies_with_financials: 6597 } })} now={() => NOW} readable={6602} />);
+      expect(text()).toContain("the 6,602 you can read (the sidebar's count)");
+      // the format.ts localTime way: no UTC clock, no numeric date
+      expect(container.querySelector(".status-strip .p")?.textContent).toBe("Nov 2, 2026, 7:57 AM MST");
+    } finally {
+      if (was === undefined) delete process.env.TZ;
+      else process.env.TZ = was;
+    }
   });
 });
 

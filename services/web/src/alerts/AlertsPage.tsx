@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import { markAlertsRead } from "../api";
+import { localTime } from "../format";
 import { href } from "../route";
 import type { AlertNotifications } from "../types";
 import { NotificationList } from "./Notifications";
@@ -26,7 +27,7 @@ export function AlertsPage({ token }: { token: string }) {
       </div>
       <p className="muted small">
         New 10-K, 10-Q and material 8-K filings of the companies on your watchlist and in your analyses, checked every 10 minutes
-        {check ? `; last checked ${new Date(check.checked_at).toLocaleString()}` : ""}. A 10-K or 10-Q shows its key figures and your red
+        {check ? `; last checked ${localTime(check.checked_at, true)}` : ""}. A 10-K or 10-Q shows its key figures and your red
         lines once the SEC's XBRL data has them.
       </p>
       <section className="card">

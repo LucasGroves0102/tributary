@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { feedStatus } from "../api";
+import { dataStatus, feedStatus } from "../api";
 
 const REFRESH_MS = 5 * 60_000;
 
@@ -26,6 +26,26 @@ export function useFeedStatus(on: boolean): string | null {
     };
   }, [on]);
   return listed;
+}
+
+/** When the data-quality checks last ran anywhere: *checks last ran*, read from the same place as
+ * Data status (`GET /v1/status/data` quality.last_checked_at, public, cached by the API). Home's
+ * notes card once showed its companies' newest check under that name ("18 h ago" while Data status
+ * said "3 min ago", analyst test 4 #24): a company is checked only when its figures change, so that
+ * is *last checked*, a company's, never the run. Null until known, or when it can't be read. */
+export function useChecksRan(on: boolean): string | null {
+  const [ran, setRan] = useState<string | null>(null);
+  useEffect(() => {
+    if (!on) return;
+    let live = true;
+    dataStatus()
+      .then((s) => live && setRan(s.quality?.last_checked_at ?? null))
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [on]);
+  return ran;
 }
 
 /** Both clocks explained, wherever they're shown. */

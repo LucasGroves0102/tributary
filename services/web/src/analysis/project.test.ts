@@ -144,6 +144,24 @@ describe("the thesis template", () => {
     expect(coreWritten(appendToSection(md, "kpis", "- gross margin above 70%"))).toBe(false);
     expect(hasOwnText("")).toBe(false);
   });
+
+  it("#30: a pinned passage or an embed in Core thesis isn't the user's writing", () => {
+    const pin = quoteBlock({
+      text: "Backlog was $15.0 billion.", companyId: NVDA, accessionNo: "0001045810-26-000075",
+      form: "10-K", filed: "2026-02-25", section: "Item 7. MD&A",
+    });
+    const pinned = appendToSection(md, "core", pin);
+    expect(coreWritten(pinned)).toBe(false);
+    expect(hasOwnText(pinned)).toBe(false);
+    const embedded = appendToSection(md, "core", "[[embed:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa]]");
+    expect(coreWritten(embedded)).toBe(false);
+    expect(hasOwnText(embedded)).toBe(false);
+    const both = appendToSection(pinned, "core", "Orders keep running ahead of shipments.");
+    expect(coreWritten(both)).toBe(true);
+    expect(hasOwnText(both)).toBe(true);
+    // a quote the user typed (no pin's citation line) is their text
+    expect(coreWritten(appendToSection(md, "core", "> As the CEO said, demand is strong."))).toBe(true);
+  });
 });
 
 describe("appendToSection", () => {

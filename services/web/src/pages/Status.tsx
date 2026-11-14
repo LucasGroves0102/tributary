@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { dataStatus } from "../api";
 import { checkName } from "../companies/screen";
-import { ago, day, duration } from "../format";
+import { ago, day, duration, localTime } from "../format";
 import { href } from "../route";
 import type { DataStatus, RecordedRun } from "../types";
 import { Seal } from "../components/Seal";
@@ -17,23 +17,22 @@ interface Props {
   now?: () => number;
   /** shown without the app shell (not signed in): adds a way back to the front door */
   signedOut?: boolean;
+  /** signed in: how many companies the reader can read (the sidebar's count), said beside the
+   * companies with quarterly financials so the two counts explain each other (#24) */
+  readable?: number | null;
 }
 
 const count = (n: number | null | undefined) => (n === null || n === undefined ? "—" : n.toLocaleString("en-US"));
 
 export { duration };
 
-/** "Nov 6, 2026, 3:30 PM PST": a time means little without its zone, beside "10 pm ET". */
-function stamp(iso: string): string {
-  const d = new Date(iso);
-  const zone = d.toLocaleTimeString("en-US", { timeZoneName: "short" }).split(" ").at(-1);
-  return `${d.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })} ${zone}`;
-}
+/** "Nov 6, 2026, 3:30 PM PST": the app's one way to write a moment (format.ts `localTime`). */
+const stamp = (iso: string): string => localTime(iso, true);
 
 /** The public status page: how fresh, complete and checked the data is, live from the
  * production database (counts and timestamps only), and the last recorded run of each test
  * suite. Every figure comes from GET /v1/status/data; nothing here is hard-coded. */
-export function Status({ load = dataStatus, now = Date.now, signedOut = false }: Props) {
+export function Status({ load = dataStatus, now = Date.now, signedOut = false, readable = null }: Props) {
   const [state, setState] = useState<State>({ kind: "loading" });
   const fetchStatus = useCallback(() => {
     let alive = true;
@@ -77,12 +76,12 @@ export function Status({ load = dataStatus, now = Date.now, signedOut = false }:
           </button>
         </p>
       )}
-      {state.kind === "ok" && <Body data={state.data} now={now()} signedIn={!signedOut} />}
+      {state.kind === "ok" && <Body data={state.data} now={now()} signedIn={!signedOut} readable={signedOut ? null : readable} />}
     </div>
   );
 }
 
-function Body({ data, now, signedIn }: { data: DataStatus; now: number; signedIn: boolean }) {
+function Body({ data, now, signedIn, readable }: { data: DataStatus; now: number; signedIn: boolean; readable: number | null }) {
   const { freshness: f, ingest: i, coverage: c } = data;
   const when = (iso: string | null) => (iso ? ago(iso, now) : "—");
   return (
@@ -115,7 +114,7 @@ function Body({ data, now, signedIn }: { data: DataStatus; now: number; signedIn
         <div>
           <div className="k">Companies with quarterly financials</div>
           <div className="v">{count(c.companies_with_financials)}</div>
-          <div className="p">from XBRL</div>
+          <div className="p">{companiesNote(c.companies_with_financials, readable)}</div>
         </div>
       </section>
       <p className="faint small status-note">
@@ -201,6 +200,14 @@ function Completeness({ data, when }: { data: DataStatus; when: (iso: string | n
       )}
     </section>
   );
+}
+
+/** What the companies count is, beside the other company counts the reader meets (#24): the
+ * sidebar's companies you can read (financials of any kind or a stored filing's text) and the
+ * checks' companies checked (every company with XBRL figures, below). */
+export function companiesNote(withSeries: number | null, readable: number | null): string {
+  if (readable === null || withSeries === null || readable <= withSeries) return "from XBRL";
+  return `from XBRL; the ${count(readable)} you can read (the sidebar's count) also take in companies with only annual figures or only a filing's text`;
 }
 
 /** "12.3%" of the companies checked, or "–" before the first run. */

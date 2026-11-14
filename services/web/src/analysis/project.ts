@@ -12,14 +12,15 @@
  * - Done: a step is done only when the user marked it (`done`): a box they can always tick and
  *   untick. Work in a step (`hasWork`: Business = notes written; Numbers = a chart saved in the
  *   project; Peers = at least one peer; Model = a model in the project; Thesis = the saved
- *   thesis's Core thesis section has text of the user's own; Monitor = the thesis was checked)
+ *   thesis's Core thesis section has text of the user's own, not just a pinned passage or an embed;
+ *   Monitor = the thesis was checked)
  *   is a hint beside the box, never a tick: peers suggested at creation, one pinned chart or a
  *   stub save don't make a step done, and nothing locks.
  * - Thesis template (`thesisTemplate`): plain Markdown headings (THESIS_SECTIONS) with the
  *   guidance under each as an HTML comment (invisible in the preview, one line to delete);
  *   Catalysts prefilled with the company's expected 10-Q/10-K dates (estimates, labelled so).
- *   `hasOwnText` tells a thesis with writing from an untouched template (the check is
- *   disabled until then).
+ *   `hasOwnText` tells a thesis with writing from a template holding only pins and embeds (the
+ *   check is disabled until then).
  * - Pins ("📌 Add to thesis"): `appendToSection` puts a block at the end of a section (before
  *   the next heading of the same or a higher level), creating the section if it's gone; a chart
  *   is pinned as its `[[embed:<item id>]]` line (the chart is saved in the project first), a
@@ -28,6 +29,7 @@
  *   API returned); a release's table (a guidance table, a reconciliation) as `quoteTable`, its
  *   lines kept in a code block inside the quote. */
 
+import { linesOf, unitsOf } from "../thesis/blocks";
 import type { ExpectedFiling, ProjectState, ProjectStep } from "../types";
 
 export interface StepInfo {
@@ -191,17 +193,22 @@ const COMMENT = /<!--[\s\S]*?(-->|$)/g;
 const HEADING = /^(#{1,6})\s+(.*?)\s*#*\s*$/;
 const PREFILLED = /^- .*\(estimated date\)\s*$/;
 
-/** Whether the thesis has writing of the user's own: anything but headings, the guidance
- * comments and the prefilled catalyst lines. */
-export function hasOwnText(markdown: string): boolean {
-  return markdown
-    .replace(COMMENT, "")
-    .split("\n")
-    .some((l) => {
-      const t = l.trim();
-      return t !== "" && !HEADING.test(t) && !PREFILLED.test(t);
-    });
+/** The lines of Markdown the user wrote: everything but the guidance comments, headings, the
+ * prefilled catalyst lines, pinned filing passages (a quote ending in its pin's citation line) and
+ * embedded charts, tables and models (thesis/blocks.ts reads both, as the editor's cards). */
+function ownLines(markdown: string): string[] {
+  const text = markdown.replace(COMMENT, "");
+  const lines = linesOf(text);
+  return unitsOf(text)
+    .filter((u) => u.kind === "text")
+    .flatMap((u) => lines.slice(u.start, u.end))
+    .map((l) => l.trim())
+    .filter((t) => t !== "" && !HEADING.test(t) && !PREFILLED.test(t));
 }
+
+/** Whether the thesis has writing of the user's own (ownLines): a template with pins and embeds
+ * only has nothing of theirs to check. */
+export const hasOwnText = (markdown: string): boolean => ownLines(markdown).length > 0;
 
 interface Span {
   /** the heading's line index; the section runs to `end` (exclusive) */
@@ -243,8 +250,9 @@ export function sectionText(markdown: string, key: SectionKey): string {
   return s ? lines.slice(s.start + 1, s.end).join("\n").replace(COMMENT, "").trim() : "";
 }
 
-/** The Core thesis section has text of the user's own (the Thesis step's done marker). */
-export const coreWritten = (markdown: string): boolean => sectionText(markdown, "core").length > 0;
+/** The Core thesis section has text of the user's own (the Thesis step's work hint): a pinned
+ * passage or an embed there alone isn't the user's writing (ownLines). */
+export const coreWritten = (markdown: string): boolean => hasOwnText(sectionText(markdown, "core"));
 
 /** `block` added at the end of a section, on lines of its own with a blank line around it; a
  * missing section is added at the end of the thesis with its heading. */

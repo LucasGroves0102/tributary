@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ago, change, companyName, day, displayNames, duration, inWords, money, moneyRow, paren, pct, quarter } from "./format";
+import { ago, change, companyName, day, displayNames, duration, inWords, localClock, localTime, money, moneyRow, paren, pct, quarter } from "./format";
 
 describe("moneyRow", () => {
   it("reads a row in the largest value's unit", () => {
@@ -115,5 +115,30 @@ describe("Seal: negatives in parentheses, amounts in words", () => {
     expect(inWords("€2.10M")).toBe("€2.10 million");
     expect(inWords("$1.20T")).toBe("$1.20 trillion");
     expect(inWords("$950")).toBe("$950");
+  });
+});
+
+describe("localTime (#23: one way to write a moment)", () => {
+  const at = "2026-11-11T05:14:00Z";
+  it("is the viewer's date and clock with their zone's abbreviation", () => {
+    expect(localTime(at, false, "America/Phoenix")).toBe("Nov 10, 10:14 PM MST");
+    expect(localTime(at, true, "America/Phoenix")).toBe("Nov 10, 2026, 10:14 PM MST");
+    expect(localTime(at, true, "America/New_York")).toBe("Nov 11, 2026, 12:14 AM EST");
+    expect(localTime(at, true, "UTC")).toBe("Nov 11, 2026, 5:14 AM UTC");
+    expect(localClock(at, "America/Los_Angeles")).toBe("9:14 PM PST");
+  });
+  it("follows the viewer's own zone when none is given", () => {
+    const before = process.env.TZ;
+    try {
+      process.env.TZ = "America/Phoenix";
+      expect(localTime(at, true)).toBe("Nov 10, 2026, 10:14 PM MST");
+      expect(localClock(new Date(at))).toBe("10:14 PM MST");
+    } finally {
+      if (before === undefined) delete process.env.TZ;
+      else process.env.TZ = before;
+    }
+  });
+  it("leaves what doesn't parse as written", () => {
+    expect(localTime("earlier")).toBe("earlier");
   });
 });

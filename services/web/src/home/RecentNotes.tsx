@@ -5,6 +5,7 @@ import { useLoad } from "../company/useLoad";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { ago } from "../format";
 import { href } from "../route";
+import { useChecksRan } from "./useFeedStatus";
 
 export const HOME_NOTES = 6;
 
@@ -29,6 +30,8 @@ export function RecentNotes({ token, name, filingsFor, catalogOpen = false, comp
   // with the catalog open, wait for the list; an empty one asks for nothing
   const key = ids === null || ids?.length === 0 ? null : `${token}|${ids?.join() ?? ""}`;
   const load = useLoad(key, () => recentDataNotes(token, HOME_NOTES, ids ?? undefined));
+  // the run's time, from Data status's own source (not these companies' newest check)
+  const ran = useChecksRan(load?.state === "ok");
   if (catalogOpen && ids?.length === 0) {
     return (
       <section className="card">
@@ -42,7 +45,7 @@ export function RecentNotes({ token, name, filingsFor, catalogOpen = false, comp
       <div className="card-h">
         <h2>Recent data notes for your companies</h2>
         <span className="sub">
-          restatements, filings not yet in the figures, gaps{load?.state === "ok" && load.data.checked_at ? ` · checks last ran ${ago(load.data.checked_at)}` : ""}
+          restatements, filings not yet in the figures, gaps{load?.state === "ok" && ran ? `; checks last ran ${ago(ran)}` : ""}
         </span>
       </div>
       {!load || load.state === "loading" ? (

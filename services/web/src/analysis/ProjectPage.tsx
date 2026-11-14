@@ -9,7 +9,7 @@ import type { ChartState } from "../chart/model";
 import { header, HEADER_COLUMNS, listingLine } from "../company/data";
 import { leftText, useAllowanceContext } from "../assistant/useAllowance";
 import { ErrorPanel, Skeleton } from "../components/States";
-import { day } from "../format";
+import { day, localDay, localTime } from "../format";
 import { ModelPage } from "../models/ModelPage";
 import { newModelState } from "../models/useModelRun";
 import { go, href } from "../route";
@@ -535,7 +535,7 @@ function Monitor(props: Parameters<typeof ThesisMonitor>[0] & { name: string }) 
           <h3 id="monitor-alerts-h">New filings</h3>
           <span className="sub">
             10-K, 10-Q and material 8-Ks of {name} since you started following it, checked every 10 minutes
-            {check ? ` · last checked ${new Date(check.checked_at).toLocaleString()}` : ""}
+            {check ? ` · last checked ${localTime(check.checked_at, true)}` : ""}
           </span>
           <span className="grow" />
           <a className="btn sm ghost" href={href({ view: "settings" })}>Alert settings</a>
@@ -586,7 +586,7 @@ function ThesisMonitor({ token, companyId, projectId, thesisId, status, checks, 
   const checking = checks.run.status === "running";
   const written = savedText !== null && hasOwnText(savedText);
   const why = !status ? "Loading the thesis…" : status.dirty ? "Save the thesis first: the check reads the saved text"
-    : !written ? "Write the thesis first: headings and guidance alone have nothing to check"
+    : !written ? "Write the thesis first: headings, guidance and pinned evidence alone have nothing of yours to check"
     : `The assistant checks each factual claim and your models' base cases against the filings (counts as 4 questions${allowance ? `; you have ${leftText(allowance)}` : ""})`;
   if (!thesisId) {
     return (
@@ -604,7 +604,7 @@ function ThesisMonitor({ token, companyId, projectId, thesisId, status, checks, 
           {checking ? "Checking…" : checks.history.length ? "Check again" : "Check my thesis"}
         </button>
         <span className="faint small">
-          {checks.history[0] ? `Last checked ${day((checks.history[0].checked_at ?? checks.history[0].created_at).slice(0, 10), true)}` : "Not checked yet"}
+          {checks.history[0] ? `Last checked ${localDay(checks.history[0].checked_at ?? checks.history[0].created_at, true)}` : "Not checked yet"}
           {status?.dirty && " · the thesis has unsaved changes"}
         </span>
       </div>

@@ -24,7 +24,7 @@ import {
 import { useDirectory } from "../companies/directory";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { TableScroll } from "../components/TableScroll";
-import { day, localDay } from "../format";
+import { day, localClock, localDay, localTime } from "../format";
 import { href } from "../route";
 import type { AlertForm, AlertSettings, Webhook, WebhookDelivery, WebhookFormat } from "../types";
 import { deliveryText, FORM_WORDS, FORMS, SOURCE_WORDS, stallNote } from "./alerts";
@@ -70,7 +70,7 @@ export function AlertSettingsSection({ token }: { token: string }) {
                 (votes and exhibits alone don't).
                 {load.data.other_8k_items ? " An 8-K filed only under 7.01 (Regulation FD: presentations, press releases) or 8.01 (Other events) alerts only for the companies you tick under 7.01 / 8.01." : ""}
                 {" "}See them under <a href={href({ view: "alerts" })}>Alerts</a>.
-                {load.data.last_check ? ` Last checked ${new Date(load.data.last_check.checked_at).toLocaleString()}.` : " Not checked yet."}
+                {load.data.last_check ? ` Last checked ${localTime(load.data.last_check.checked_at, true)}.` : " Not checked yet."}
               </p>
               <Companies token={token} settings={load.data} />
               <Webhooks token={token} settings={load.data} onChanged={reload} />
@@ -283,9 +283,9 @@ function Webhooks({ token, settings, onChanged }: { token: string; settings: Ale
               <tbody>
                 {log.slice(0, 20).map((d) => (
                   <tr key={d.id} className={d.status}>
-                    <td className="first muted">{new Date(d.last_attempt_at ?? d.created_at).toLocaleString()}</td>
+                    <td className="first muted">{localTime(d.last_attempt_at ?? d.created_at, true)}</td>
                     <td>{d.test ? "Test" : "Filing alert"}</td>
-                    <td>{deliveryText(d)}{d.next_attempt_at && <span className="faint small"> · next try {new Date(d.next_attempt_at).toLocaleTimeString()}</span>}</td>
+                    <td>{deliveryText(d)}{d.next_attempt_at && <span className="faint small"> · next try {localClock(d.next_attempt_at)}</span>}</td>
                   </tr>
                 ))}
               </tbody>

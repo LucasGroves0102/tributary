@@ -5168,6 +5168,15 @@ mark.claim-mark {
   align-items: center;
 }
 
+/* a check that no longer covers the saved thesis: the step's Stale, and its counts faded */
+.tag.stale {
+  color: var(--warn);
+}
+
+.check-counts.stale .tag:not(.stale) {
+  color: var(--ink-3);
+}
+
 .new-analysis .card-b {
   display: grid;
   gap: var(--sp-4);

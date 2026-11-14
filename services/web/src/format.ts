@@ -86,6 +86,37 @@ export function localDay(timestamp: string, withYear = false): string {
   return `${MONTHS[at.getMonth()]} ${at.getDate()}${withYear ? `, ${at.getFullYear()}` : ""}`;
 }
 
+function clockParts(at: Date, zone?: string) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true,
+    timeZoneName: "short", ...(zone ? { timeZone: zone } : {}),
+  }).formatToParts(at);
+  const get = (t: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === t)?.value ?? "";
+  return {
+    date: (withYear: boolean) => `${get("month")} ${get("day")}${withYear ? `, ${get("year")}` : ""}`,
+    // plain spaces: newer ICU puts a narrow no-break space before AM/PM
+    clock: `${get("hour")}:${get("minute")} ${get("dayPeriod")} ${get("timeZoneName")}`,
+  };
+}
+
+/** A moment, written one way everywhere (analyst test 4, #23): the viewer's local date and time
+ * with their zone's abbreviation, "Nov 10, 10:11 PM MST" ("Nov 10, 2026, 10:11 PM MST" with the
+ * year). Never a UTC clock beside a local one, never a locale's numeric "11/10/2026". A plain date
+ * (a period end, a filing date) is `day`; only a moment's date is `localDay`. One that doesn't
+ * parse reads as written. `zone` is for tests (an IANA name). */
+export function localTime(timestamp: string, withYear = false, zone?: string): string {
+  const at = new Date(timestamp);
+  if (Number.isNaN(at.getTime())) return timestamp;
+  const p = clockParts(at, zone);
+  return `${p.date(withYear)}, ${p.clock}`;
+}
+
+/** Only the clock of a moment, where the day goes without saying: "10:11 PM MST". */
+export function localClock(timestamp: string | Date, zone?: string): string {
+  const at = new Date(timestamp);
+  return Number.isNaN(at.getTime()) ? String(timestamp) : clockParts(at, zone).clock;
+}
+
 /** A filing's "period of report": the period a 10-K or 10-Q covers, but on an 8-K the date of the
  * event it reports, which covers no period. */
 export function periodPhrase(form: string | null | undefined, isoDate: string): string {

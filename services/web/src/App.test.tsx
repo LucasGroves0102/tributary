@@ -5,6 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "./App";
+import { COMPANIES_COUNTED } from "./components/Sidebar";
 import { ACC, entry, feedFiling, NVDA, revenueRow, TESLA, TSLA } from "./fixtures";
 import { forgetVisits } from "./home/lastVisit";
 
@@ -240,6 +241,10 @@ describe("Home", () => {
     expect(label).toBe("in the last 7 days"); // a first visit in this browser, not "your last visit"
     expect(badge.getAttribute("title")).toContain(`${badge.textContent} new`);
     expect(tile.parentElement!.querySelector(".v")?.textContent).toContain(badge.textContent!);
+    // #24: the Companies count says which count it is, beside Data status's other two
+    const companies = $(".nav .cnt:not(.new)")!;
+    expect(companies.getAttribute("title")).toBe(COMPANIES_COUNTED);
+    expect(COMPANIES_COUNTED).toMatch(/^Companies you can read: .*Data status counts the ones with quarterly financials/);
   });
 
   it("F6 (#127): with nothing saved, Home starts with Start an analysis, then the watchlist, new filings and notes", async () => {
@@ -553,7 +558,8 @@ describe("assistant drawer", () => {
     await render();
     await settle();
     expect($(".ai-meter")?.textContent).toBe("28 of 30 questions left this hour · 998 of 1,000 today");
-    expect($(".ai-meter")?.getAttribute("title")).toMatch(/30 questions an hour.*1,000 a day.*midnight UTC/);
+    // the daily reset in the viewer's own time (#23), like every other moment
+    expect($(".ai-meter")?.getAttribute("title")).toMatch(/30 questions an hour.*1,000 a day \(resets at \d{1,2}:\d{2} [AP]M \S+\)/);
     const asks = () => vi.mocked(fetch).mock.calls.filter(([u]) => String(u).endsWith("/v1/allowance")).length;
     const before = asks();
     await act(async () => container.querySelector<HTMLButtonElement>(".ai-s button")!.click());
