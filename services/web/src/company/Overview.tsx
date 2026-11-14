@@ -163,7 +163,8 @@ function Figures({ companyId, name, row, canFin, flags, lead }: {
 }
 
 function LedgerRow({ s, common, companyId, armNote }: { s: KeyStat & { flag: StaleFlag | null }; common: string | null; companyId: string; armNote: string | null }) {
-  const blank = s.value === null && s.status !== "old" && s.status !== "other_currency";
+  // an old figure reads as not reported since its date (blanks.ts): no seal, the last figure in the hover
+  const blank = s.value === null && s.status !== "other_currency";
   const link = s.source && !blank ? sealHref(companyId, s.source) : null;
   const differs = s.old || (s.periodEnd && common && s.periodEnd !== common) || blank;
   const title = [s.title, s.key === "net_debt_q" ? armNote : null, s.flag?.text].filter(Boolean).join("\n\n");

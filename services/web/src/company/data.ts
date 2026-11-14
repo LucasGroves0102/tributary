@@ -134,7 +134,7 @@ export interface KeyStat {
   /** the period the value covers, e.g. "TTM to Jul 26, 2026" */
   period: string;
   title: string;
-  /** years older than the company's latest period (dimmed) */
+  /** over 300 days older than the company's latest period (035): shown as not reported since then */
   old?: boolean;
 }
 
@@ -169,14 +169,15 @@ export function keyStats(row: ScreenerRow): KeyStat[] {
           `Source: ${src.form} filed ${day(src.filed, true)}, ${src.accession_no}.`
         : label,
     });
+    // an old figure (035) isn't the company's current one: "not reported since" its date, the figure in the hover
     const period = f.status === "not_applicable"
       ? "not applicable"
       : f.status === "not_meaningful"
         ? "not meaningful"
-        : !src || f.text === NOT_REPORTED
-          ? "not reported"
-          : f.old
-            ? `old, ${periodText(key, src)}`
+        : f.old && src
+          ? `not reported since ${day(src.period_end, true)}`
+          : !src || f.text === NOT_REPORTED
+            ? "not reported"
             : periodText(key, src);
     return {
       key, kind, periodEnd: src?.period_end ?? null, label, text: f.text, period, title: f.title, old: f.old,

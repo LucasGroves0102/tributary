@@ -340,7 +340,7 @@ export function medianTitle(s: PeerStat): string {
   const why = [
     s.unreported && `${s.unreported} not reported (—)`,
     s.banks && `${s.banks} not applicable (n/a: the metric doesn't describe ${s.banks === 1 ? "a bank" : "banks"})`,
-    s.unusable && `${s.unusable} not meaningful or years old (n/m, dimmed)`,
+    s.unusable && `${s.unusable} not meaningful (n/m) or not reported since an earlier period (— since a date)`,
     s.currency && `${s.currency} in another currency (not averaged with dollars)`,
     s.masked && `${s.masked} metadata only (your plan doesn't cover ${s.masked === 1 ? "its" : "their"} financials)`,
   ].filter(Boolean);

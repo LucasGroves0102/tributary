@@ -54,6 +54,22 @@ describe("header and key stats", () => {
     expect(by("Return on equity")).toMatchObject({ text: "—", period: "not reported" });
   });
 
+  it("an old figure (035) is not the company's current one: not reported since its date, the figure in the hover", () => {
+    // Deckers: net debt last tagged at Sep 30, 2014, debt-free since (analyst test 4, finding 2)
+    const old = { period_end: "2014-09-30", accession_no: "0000910521-14-000040", form: "10-Q", filed: "2014-11-07" };
+    const stats = keyStats(nvdaRow({
+      latest_period: "2026-09-30",
+      values: { net_debt_q: "-63097000", debt_to_equity_q: "0.0575" },
+      sources: { net_debt_q: old, debt_to_equity_q: old },
+      readings: { net_debt_q: { status: "old" }, debt_to_equity_q: { status: "old" } },
+    }));
+    const net = stats.find((s) => s.key === "net_debt_q")!;
+    expect(net).toMatchObject({ label: "Net debt", text: "—", value: null, old: true, period: "not reported since Sep 30, 2014" });
+    expect(net.title).toContain("The last figure on file, -$63.10M");
+    expect(net.title).toContain("latest period is Sep 30, 2026");
+    expect(stats.find((s) => s.key === "debt_to_equity_q")).toMatchObject({ text: "—", period: "not reported since Sep 30, 2014" });
+  });
+
   it("names the company from public metadata", () => {
     expect(header(nvdaRow())).toEqual({
       name: "Nvidia", tickers: ["NVDA"], exchanges: ["Nasdaq"], industry: "Semiconductors & Related Devices",

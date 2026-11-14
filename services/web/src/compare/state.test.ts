@@ -176,11 +176,12 @@ describe("what can't be compared", () => {
     const apple = rows.find((r) => r.companyId === AAPL)!.cells.operating_margin_ttm!;
     expect(apple).toMatchObject({ text: "n/m", value: null, raw: "10.47" });
     const tesla = rows.find((r) => r.companyId === TSLA)!.cells.operating_margin_ttm!;
-    expect(tesla).toMatchObject({ text: "50.0%", value: null, old: true, asOf: "Dec '18" });
+    expect(tesla).toMatchObject({ text: "—", value: null, old: true, asOf: "Dec '18", raw: "0.5" });
+    expect(tesla.title).toContain("not reported since Dec 31, 2018");
     const stats = peerStats(rows, margin.cols).operating_margin_ttm!;
     expect(stats).toMatchObject({ median: null, n: 0, high: null, unusable: 2 });
     expect(medianTitle(stats)).toContain("Median of 0 of 2 peers");
-    expect(medianTitle(stats)).toContain("2 not meaningful or years old");
+    expect(medianTitle(stats)).toContain("2 not meaningful (n/m) or not reported since an earlier period");
     expect(sortRows(rows, { key: "operating_margin_ttm", desc: true })[0]!.companyId).toBe(NVDA);
     expect(compareCsv(margin, rows)).toMatch(/10\.47,[^,]*,[^,]*,not meaningful/);
   });

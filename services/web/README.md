@@ -831,8 +831,8 @@ as a competitor in Vertiv's 10-K" or "its 10-K names Vertiv as a competitor" (a 
 sentence in the reader), the same industry and a similar size. Above the table, the company's own most
 distinctive terms. The columns are the answer's: a bank is compared on a bank's lines. Each median says
 how many of the peers it uses ("3 of 4"), and its hover why the others are left out, in the blanks
-vocabulary (not reported, not applicable, not meaningful or old, metadata only). Compare's medians do the
-same. Adding a peer on Compare asks `/peers/check` first: a company with no figures to compare isn't
+vocabulary (not reported, not applicable, not meaningful or not reported since an earlier period,
+metadata only). Compare's medians do the same. Adding a peer on Compare asks `/peers/check` first: a company with no figures to compare isn't
 added, and the page says why (Birkenstock files 20-F annual reports as a foreign private issuer, under
 IFRS; a company whose XBRL hasn't arrived yet; a fund with no annual report). A bank target's comps open
 on a bank's columns (net interest income, efficiency ratio, provision, loans, deposits, ROE, net margin)
@@ -1035,9 +1035,13 @@ no debt/equity or ROE row there) read n/m only where `/financials?readings=true`
 `not_meaningful_periods`; the page never works out equity itself. Charts read the same rule (F7a): a
 point `/v1/formulas/evaluate` marks `not_meaningful` is a gap, never the raw ratio (Triton's 1,047%
 operating margin), and the chart says under it which periods read n/m and why (`series.ts`
-`notMeaningfulNote`); the CSV keeps the exact figure. An old figure (about a year or
-more behind the company's latest period) shows dimmed with its date; one merely behind shows its date
-and still counts. Neither n/m, n/a nor old enters a median. A company reporting in another currency (a
+`notMeaningfulNote`); the CSV keeps the exact figure. An old figure (035's `period_status`: over 300
+days behind the company's latest period, so the company stopped tagging it) is never shown as the
+company's current figure: it reads **— since Sep '14** in a table and "not reported since Sep 30, 2014"
+in the Overview's ledger (no seal), with the last figure on file, its period and its filing in the hover
+(analyst test 4: Deckers' 2014 net debt, Eaton's 2019 and Johnson Controls' 2016 operating margins
+read as current). One merely behind shows its date and still counts. Neither n/m, n/a nor old enters a
+median, a sort or a size band. A company reporting in another currency (a
 20-F/40-F filer, migration 056) shows its amounts in it, never converted: `money()` writes the symbol or
 the ISO code (€2.10B, CAD 1.20B, €1.87 a share); a screener, Peers or Compare cell the API reads
 `other_currency` shows the figure in its currency and leaves sorts, filters and medians ("1 in another

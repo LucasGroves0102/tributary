@@ -18,7 +18,7 @@
  *   reference the user reads, never an input. */
 
 import type { Series, Source } from "../chart/series";
-import { money } from "../format";
+import { day, money } from "../format";
 import type { EarningsQuarter, EarningsResponse } from "../types";
 
 export const MAX_YEARS = 10;
@@ -673,7 +673,8 @@ export function evBlank(v: Valuation | null): string | undefined {
   const d = v.net_debt;
   switch (v.ev_note) {
     case "old":
-      return `no EV: the latest net debt in the filings is from ${d?.period_end ?? "long ago"}, over 300 days before the company's latest period`;
+      // 035's old: not the company's current net debt, so no EV on it (blanks.ts words it the same way)
+      return `no EV: net debt not reported since ${d?.period_end ? day(d.period_end, true) : "an earlier period"}, over 300 days before the company's latest period`;
     case "not_applicable":
       return `no EV: ${d?.reason ?? "net debt doesn't apply to this company"}`;
     case "not_meaningful":

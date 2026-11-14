@@ -138,14 +138,16 @@ describe("how a row reads what the API says about each value", () => {
     expect(r.cells.gross_margin_ttm?.title).toContain("209828.3%");
   });
 
-  it("an old value shows, dimmed and dated, and can't rank; one merely behind shows its date and counts", () => {
+  it("an old value reads as not reported since its date and can't rank; one merely behind shows its date and counts", () => {
     const r = screenRow(row({
       latest_period: "2026-09-30",
       values: { net_debt_q: "4680000", debt_to_equity_q: "1.5" },
       sources: { net_debt_q: SRC, debt_to_equity_q: { ...SRC, period_end: "2026-06-30" } },
       readings: { net_debt_q: { status: "old" }, debt_to_equity_q: { status: "behind" } },
     }));
-    expect(r.cells.net_debt_q).toMatchObject({ text: "$4.68M", value: null, old: true, asOf: "Dec '20" });
+    expect(r.cells.net_debt_q).toMatchObject({ text: "—", value: null, old: true, asOf: "Dec '20" });
+    expect(r.cells.net_debt_q?.title).toContain("not reported since Dec 31, 2020");
+    expect(r.cells.net_debt_q?.title).toContain("The last figure on file, $4.68M");
     expect(r.cells.net_debt_q?.title).toContain("latest period is Sep 30, 2026");
     expect(r.cells.debt_to_equity_q).toMatchObject({ text: "1.50x", value: 1.5, old: false, asOf: "Jun '26" });
   });

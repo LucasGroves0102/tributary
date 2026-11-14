@@ -206,7 +206,7 @@ describe("the three-case table", () => {
     expect(pe.forecast(vrt.cases.bull!.years[1]!, "bull", 1)).toBeCloseTo(150 / vrt.cases.bull!.years[1]!.eps_adjusted!, 6);
     const evEbit = modelLines(deck).find((l) => l.key === "ev_ebit")!;
     expect(evEbit.forecast(deck.cases.base!.years[0]!, "base", 0)).toBeNull();
-    expect(evBlank(deck.valuation)).toMatch(/from 2014-09-30, over 300 days/);
+    expect(evBlank(deck.valuation)).toMatch(/net debt not reported since Sep 30, 2014, over 300 days/);
     expect(evBlank(vrt.valuation)).toBeUndefined();
   });
 

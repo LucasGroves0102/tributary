@@ -43,9 +43,12 @@ describe("the marks", () => {
     expect(f.title).not.toContain("on file");
   });
 
-  it("old keeps the figure, dated and dimmed, out of ranking; behind keeps it in", () => {
+  it("old reads as not reported since its date, the figure in the hover, out of ranking; behind keeps it in", () => {
     const old = readFigure({ ...base, raw: "0.5", reading: { status: "old" }, latestPeriod: "2026-09-30" });
-    expect(old).toMatchObject({ value: null, text: "50.0%", old: true, asOf: "Jul '24" });
+    expect(old).toMatchObject({ value: null, text: NOT_REPORTED, old: true, asOf: "Jul '24" });
+    expect(old.title).toMatch(/^Gross margin: not reported since Jul \d+, 2024\. It needs gross profit and revenue/);
+    expect(old.title).toContain("The last figure on file, 50.0%");
+    expect(old.title).toContain("latest period is Sep 30, 2026");
     expect(old.title).toContain("stays out of sorts, filters and medians");
     const behind = readFigure({ ...base, raw: "0.5", reading: { status: "behind" }, latestPeriod: "2026-09-30" });
     expect(behind).toMatchObject({ value: 0.5, old: false, asOf: "Jul '24" });
