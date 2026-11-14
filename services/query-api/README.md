@@ -1449,10 +1449,15 @@ company the read rule allows. The first stage is `gold.search_page` (migration 0
 no text; the snippet's text is still read through RLS on `silver.filing_sections`.
 
 - `q`: `websearch_to_tsquery('english', q)`: words, `"a phrase"`, `or`, `-excluded`. A quoted
-  phrase matches its words adjacent and in order (stemmed: `"export controls"` matches "export
-  control rules"); `gold.section_search` keeps positions, so this runs in the index. `ts_headline`
-  still marks each of the phrase's words wherever it stands in the snippet; the web app re-marks a
-  phrase query's snippet itself (#80).
+  phrase matches its words adjacent and in order; `gold.section_search` keeps positions, so this runs
+  in the index. Since 065 it matches its EXACT words: the stemmed match is tested again on the
+  passage's own text with the 'simple' configuration (`store.exact_phrases` builds that query from
+  the quoted phrases of two or more words not excluded; `gold.search_page`'s `p_exact`), so `"liquid
+  cooling"` no longer matches "liquid-cooled" and `"export controls"` no longer matches "export
+  control rules" (a hyphenated "liquid-cooling" is the same words and still matches). Unquoted words
+  stay stemmed, and a query with `or` outside quotes stays wholly stemmed (an exact AND of its phrases
+  would narrow the either-or). `total` stays exact. `ts_headline` still marks each of the phrase's
+  words wherever it stands in the snippet; the web app re-marks a phrase query's snippet itself (#80).
   Filters: `company`, `form` (`10-K`, `10-Q`, `8-K`, `/A` amendments), `section`, `from` / `to`
   (filing date). `limit` 1-50 (default 10), `offset` up to 1000, `has_more`.
 - One result per section: its best passage by `ts_rank_cd`; with `sort=relevance` (default) best

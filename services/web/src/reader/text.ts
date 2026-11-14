@@ -104,11 +104,15 @@ export function wordStem(word: string): string {
 
 /** Text split into plain runs and matches of the terms (case-insensitive, from a word's start
  * and its stem, so "export" also marks "exports" and "controls" marks "control", as the stemmed
- * search does). A phrase ("export controls", from a quoted query) marks only its words in order,
- * with nothing but spaces or punctuation between them, never one of them alone (#80). */
+ * search does). A phrase ("export controls", from a quoted query) marks only its exact words in
+ * order, with nothing but spaces or punctuation between them ("export-controls" too), never one of
+ * them alone (#80) and never another form of them: the search matches a quoted phrase by its exact
+ * words (migration 065; analyst test 4: "liquid cooling" marked "liquid-cooled"). */
 export function highlight(text: string, terms: string[]): Run[] {
   if (!terms.length) return [text];
-  const one = (t: string) => t.split(/\s+/).map((w) => `${escape(wordStem(w))}\\w*`).join("\\W+");
+  const one = (t: string) => /\s/.test(t)
+    ? t.split(/\s+/).map((w) => `${escape(w)}\\b`).join("\\W+")
+    : `${escape(wordStem(t))}\\w*`;
   const pattern = new RegExp(`\\b(?:${terms.map(one).join("|")})`, "gi");
   const out: Run[] = [];
   let last = 0;

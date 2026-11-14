@@ -414,8 +414,9 @@ sentence says "of any date". Order: Best match or Newest first (`sort=date`; the
 date order, a company's run of hits grouped, not all its hits). The pager says "1-20 of 647".
 Exact phrase (`isPhrase`/`asPhrase`) quotes the words; a phrase marks only the words together, in the
 snippets too (`reader/text.ts` `snippetRuns(snippet, terms)` re-marks a phrase query's snippet
-because `ts_headline` marks each word alone; `highlight` matches each word from its stem, `wordStem`,
-so "export controls" marks "export control rules" as the stemmed search matched it). The reader's
+because `ts_headline` marks each word alone; `highlight` matches a plain word from its stem,
+`wordStem`, and a phrase by its exact words, as the search matches it since migration 065: "liquid
+cooling" marks "liquid-cooling" but never "liquid-cooled"). The reader's
 search box has the same box (#80). An older API ignores `sort`/`window` and echoes neither: the
 sentence then shows no count and "best match first".
 

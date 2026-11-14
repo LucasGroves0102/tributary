@@ -894,6 +894,8 @@ def test_store_reads_the_catalog_list_under_rls(client):
 
 SEARCH_FN = "gold.search_passages(tsquery, text[], text, text, date, date, int, int)"
 SEARCH_PAGE_FN = "gold.search_page(tsquery, text[], text, text, date, date, text, int, int)"
+SEARCH_EXACT_FN = ("gold.search_page(tsquery, text[], text, text, date, date, text, int, int,"
+                   " tsquery)")
 
 
 class PublicCatalogSaysOpenFga:
@@ -1042,7 +1044,7 @@ def test_search_passages_applies_the_read_rule(client):
 
 def test_search_passages_is_locked_down(client):
     conn = client.app_conn
-    for fn in ((SEARCH_FN,), (SEARCH_PAGE_FN,)):
+    for fn in ((SEARCH_FN,), (SEARCH_PAGE_FN,), (SEARCH_EXACT_FN,)):
         assert conn.execute("SELECT has_function_privilege('query_api', %s, 'EXECUTE')",
                             fn).fetchone() == (True,)
         assert conn.execute("SELECT has_function_privilege('ops_reader', %s, 'EXECUTE')",
@@ -1074,6 +1076,42 @@ def test_search_page_applies_the_read_rule(client):
     assert page("t-pro", sort="date") == [(A, 2), (B, 2)]
     with pytest.raises(psycopg.errors.RaiseException):
         page("t-pro", sort="rank DESC; --")
+
+
+def test_a_quoted_phrase_matches_its_exact_words(client, token):
+    """065 (analyst test 4): "liquid cooling" in quotes matched "liquid-cooled", the english
+    stemmer's 'liquid' <-> 'cool'. The phrase is now tested on each passage's own words."""
+    conn = client.app_conn
+    acc = f"{A}-26-000002"
+    for key, text in (("1", "Our liquid-cooled racks ship in volume."),
+                      ("7", "Demand for liquid cooling grew in the year."),
+                      ("1B", "Liquid-cooling units were sold out."),
+                      ("2", "The liquid in the cooling tower was replaced.")):
+        conn.execute(
+            "INSERT INTO silver.filing_sections (accession_no, section_key, parser,"
+            " parser_version, item, title, text, char_start, char_end)"
+            " VALUES (%s, %s, 'python', 't', %s, 'Item', %s, 100, 200)", (acc, key, key, text))
+    conn.execute("SELECT gold.refresh_section_search(ARRAY[%s])", (acc,))
+
+    def found(q):
+        body = client.get("/v1/search", params={"q": q, "company": A},
+                          headers=token("t-pro")).json()
+        return sorted(h["section_key"] for h in body["results"]), body["total"]
+    assert found('"liquid cooling"') == (["1B", "7"], 2)  # exact words; hyphenated is the same
+    assert found("liquid cooling") == (["1", "1B", "2", "7"], 4)  # unquoted: stemmed, as before
+    assert found('"liquid cooling" or racks') == (["1", "1B", "7"], 3)  # an either-or: stemmed
+    assert found('"liquid cooling" -sold') == (["7"], 1)
+
+    # the function itself: NULL is 052's answer; the exact test never widens the read rule
+    def page(user, exact):
+        return visible(conn, user,
+                       "SELECT section_key, total FROM gold.search_page(websearch_to_tsquery("
+                       "'english', '\"liquid cooling\"'), NULL, NULL, NULL, NULL, NULL,"
+                       " 'relevance', 10, 0, websearch_to_tsquery('simple', %s::text))"
+                       " ORDER BY section_key", (exact,))
+    assert page("t-pro", None) == [("1", 3), ("1B", 3), ("7", 3)]
+    assert page("t-pro", '"liquid cooling"') == [("1B", 2), ("7", 2)]
+    assert page("t-reader", '"liquid cooling"') == []  # A isn't readable to t-reader
 
 
 def test_search_with_the_catalog_public_is_bounded_by_rls(client, token):

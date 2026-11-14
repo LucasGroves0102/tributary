@@ -2,6 +2,7 @@
 row-level security (db/migrations/007_query_api_rls.sql) filters rows even if layer 1 were
 skipped."""
 
+import re
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import date, timedelta
@@ -40,6 +41,22 @@ READABLE_CIKS = """ARRAY(SELECT k.cik FROM silver.company_ciks k WHERE k.company
     UNION SELECT r FROM authz.readable_companies('filings') r))"""
 HEADLINE = ("StartSel=«, StopSel=», MaxWords=35, MinWords=15, MaxFragments=2,"
             " FragmentDelimiter=\" … \"")
+_QUOTED = re.compile(r'(-?)"([^"]*)"')
+_OR = re.compile(r"(?:^|\s)or(?:\s|$)", re.IGNORECASE)
+
+
+def exact_phrases(q: str) -> str | None:
+    """The quoted phrases of a web-search query that must match their exact words (migration
+    065: "liquid cooling" never "liquid-cooled"), as web-search text for the 'simple' tsquery
+    gold.search_page tests each passage's own text with; None when there is nothing to test.
+    Each phrase not excluded ("-" before it) of two or more words counts; a quoted single word
+    stays a word, stemmed like the rest. None when the query has an `or` outside quotes: an exact
+    AND of the phrases would narrow an either-or, so such a query stays stemmed."""
+    if _OR.search(_QUOTED.sub(" ", q)):
+        return None
+    phrases = [p.strip() for neg, p in _QUOTED.findall(q)
+               if not neg and len(re.findall(r"\w+", p)) >= 2]
+    return " ".join(f'"{p}"' for p in phrases) or None
 # Store.cadence: the annual and quarterly reports in the filing index, and how recent a quarter in
 # gold must be for a 20-F/40-F filer's figures to count as quarters (some furnish them on 6-Ks).
 PERIODIC_FORMS = ("10-K", "10-K/A", "10-KT", "10-KT/A", "10-Q", "10-Q/A", "10-QT", "10-QT/A",
@@ -1031,7 +1048,8 @@ class Store:
                         form: str | None, section_key: str | None, start: date | None,
                         end: date | None, limit: int, offset: int,
                         sort: str = "relevance") -> list[dict]:
-        """Best passage per section matching websearch_to_tsquery(q), ranked by ts_rank_cd
+        """Best passage per section matching websearch_to_tsquery(q), a quoted phrase by its exact
+        words (exact_phrases, migration 065), ranked by ts_rank_cd
         (sort "relevance") or newest filed first ("date"), with a ts_headline snippet cut from
         that passage only (never the whole section); every row carries `total`, the sections
         matching in all. company_ids None: every company the caller can read (gold.search_page,
@@ -1050,7 +1068,8 @@ class Store:
                         FROM q CROSS JOIN LATERAL gold.search_page(
                             q.q, %(companies)s::text[], %(form)s::text, %(section)s::text,
                             %(start)s::date, %(end)s::date, %(sort)s::text, %(limit)s::int,
-                            %(offset)s::int) p
+                            %(offset)s::int,
+                            websearch_to_tsquery('simple', %(exact)s::text)) p  -- 065
                     )
                     SELECT h.company_id, c.name, h.accession_no, h.form, h.filed,
                            h.section_key, h.rank, h.passages_matched, h.total, s.title,
@@ -1076,7 +1095,8 @@ class Store:
                     ORDER BY """ + order + """
                     """, {"q": q, "companies": company_ids, "form": form,
                           "section": section_key, "start": start, "end": end, "sort": sort,
-                          "limit": limit, "offset": offset, "headline": HEADLINE})
+                          "limit": limit, "offset": offset, "headline": HEADLINE,
+                          "exact": exact_phrases(q)})
                 return cur.fetchall()
         except psycopg.errors.QueryCanceled:
             raise SearchTooBroad from None
