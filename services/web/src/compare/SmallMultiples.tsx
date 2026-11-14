@@ -24,6 +24,20 @@ const SCALES: [Scale, string, string][] = [
 /** The largest company past this many times the smallest: the small ones flatten at zero. */
 const WIDE_SPREAD = 100;
 
+/** The dollar charts' note: which charts, by their own metric, have the largest company's latest
+ * value over WIDE_SPREAD times the smallest's (both positive). Measured per chart, never across
+ * them: revenue 14 times apart and free cash flow 130 times apart says so of free cash flow only
+ * (analyst test 4, finding 17). */
+export function spreadNote(charts: { name: string; latest: number[] }[]): string | null {
+  const wide = charts.filter(({ latest }) => {
+    const v = latest.filter((x) => Number.isFinite(x) && x > 0);
+    return v.length > 1 && Math.max(...v) / Math.min(...v) >= WIDE_SPREAD;
+  }).map((c) => c.name);
+  if (!wide.length) return null;
+  const names = wide.length === 1 ? wide[0]! : `${wide.slice(0, -1).join(", ")} and ${wide.at(-1)!}`;
+  return `In ${names}, the largest company is over ${WIDE_SPREAD} times the smallest, which reads as zero in dollars: Log scale or Indexed shows them all.`;
+}
+
 /** The evaluate requests behind the small multiples: per column, one line per company (at most
  * MAX_COMPANY_LINES, the colours a chart tells apart), calendar quarters, the column's own
  * transform (TTM, quarter end, YoY), the last MULTIPLES_RANGE years. Same layer rules as the
@@ -36,6 +50,7 @@ export function multiplesRequests(companyIds: string[], cols: string[], today?: 
     const c = COMPARE_COLUMNS.find((x) => x.key === col)!;
     return [{
       col,
+      name: c.long,
       title: `${c.long}, ${c.period}`,
       layers: chart.layers.flatMap((l) => {
         // balances (quarter end) have no TTM; everything else here does
@@ -98,14 +113,14 @@ export function SmallMultiples({ token, companyIds, cols, label }: {
     const a = answer(key);
     return a?.state === "ok" && a.data.unit === "USD";
   });
-  const spread = charts.filter(isDollars).some((c) => {
-    const latest = c.layers.flatMap(({ key }) => {
+  // per chart, by its own metric's latest values
+  const spread = spreadNote(charts.filter(isDollars).map((c) => ({
+    name: c.name.toLowerCase(),
+    latest: c.layers.map(({ key }) => {
       const a = answer(key);
-      const v = a?.state === "ok" ? Number(a.data.points.at(-1)?.value) : NaN;
-      return v > 0 ? [v] : [];
-    });
-    return latest.length > 1 && Math.max(...latest) / Math.min(...latest) >= WIDE_SPREAD;
-  });
+      return a?.state === "ok" ? Number(a.data.points.at(-1)?.value) : NaN;
+    }),
+  })));
 
   return (
     <div className="multiples">
@@ -119,9 +134,7 @@ export function SmallMultiples({ token, companyIds, cols, label }: {
             ))}
           </span>
           <span className="faint small">
-            {scale === "dollars" && spread
-              ? `The largest company here is over ${WIDE_SPREAD} times the smallest, which reads as zero in dollars: Log scale or Indexed shows them all.`
-              : "For the dollar charts."}
+            {scale === "dollars" && spread ? spread : "For the dollar charts."}
           </span>
         </div>
       )}

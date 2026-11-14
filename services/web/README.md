@@ -817,7 +817,10 @@ Overview, Revenue, Analysis Numbers, Compare, thesis and report embeds), SVG, PN
   empty axis, ticks have the decimals to tell them apart, and a lone bar doesn't fill the chart.
 
 Compare's dollar charts can also read on a log scale or indexed to the first value in range (not
-saved; it says so when the largest company is over 100 times the smallest). "Chart these" and Peers'
+saved; it says so, naming the chart, when the largest company's latest value in that chart's own
+metric is over 100 times the smallest's: `SmallMultiples.tsx` `spreadNote`, measured per chart, never
+across charts, since revenue 14 times apart and free cash flow 130 times apart is a note on free cash
+flow only). "Chart these" and Peers'
 "Chart margins" draw at most 8 companies, the colours a chart tells apart, and say so. The Peers table
 sorts by any column like Compare (`compare/state.ts` `nextSort`/`sortRows`: high first, again to reverse,
 a third time for the suggested order; empty cells last). Revenue growth is green or red; below 1,040px
