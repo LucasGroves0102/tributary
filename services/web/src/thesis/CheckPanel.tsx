@@ -1,19 +1,22 @@
-import { useId, useMemo, useRef } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 
+import { useAllowanceContext } from "../assistant/useAllowance";
 import { ago, day, localDay, localTime, pct } from "../format";
 import { renderAnswer } from "../markdown";
 import { FigureFlags } from "../components/FigureFlags";
 import { FilingLinks } from "../components/FilingLinks";
 import { href } from "../route";
-import type { CheckCitation, CheckClaim, CheckFigure, CheckModel, ClaimStatus, ThesisCheck, ThesisCheckSummary } from "../types";
-import { asCitations, plainQuote, points, problems, STATUS_LABELS, unverifiedFigures } from "./check";
+import type { CheckCitation, CheckClaim, CheckFigure, CheckModel, ClaimModel, ClaimStatus, ThesisCheck, ThesisCheckSummary } from "../types";
+import { asCitations, checkCost, clock, matchLabel, matchValue, plainQuote, points, problems, STATUS_LABELS, unverifiedFigures, wroteOtherwise } from "./check";
 import { diffChecks, flagWords, isQuiet, type CheckDiff } from "./revisit";
 import type { ThesisChecks } from "./useThesisCheck";
 
-/** The assistant's check of a thesis, beside it: claims with status badges and citations
- * (clicking a quote highlights it in the thesis), the models' assumptions against history,
- * what the thesis doesn't mention, the summary, and a history of checks. All model text goes
- * through markdown.ts renderAnswer. `stale`: the text changed since this check. */
+/** The assistant's check of a thesis, beside it: what a check costs and how long it takes
+ * (before one runs, the server's numbers), claims with status badges and citations (clicking a
+ * quote highlights it in the thesis; a claim of the user's own model links the model), the
+ * models' assumptions against history, what the thesis doesn't mention, the summary, and a
+ * history of checks. All model text goes through markdown.ts renderAnswer. `stale`: the text
+ * changed since this check. */
 export function CheckPanel({ checks, stale, onQuote, label }: {
   checks: ThesisChecks;
   stale: boolean;
@@ -22,6 +25,7 @@ export function CheckPanel({ checks, stale, onQuote, label }: {
 }) {
   const id = useId();
   const { history, shown, run, show, stop } = checks;
+  const { allowance } = useAllowanceContext();
   return (
     <aside className="check-panel card" aria-label="Thesis check">
       <div className="row wrap check-head">
@@ -38,11 +42,14 @@ export function CheckPanel({ checks, stale, onQuote, label }: {
           </>
         )}
       </div>
-      {run.status === "running" && (
+      {run.status === "running" ? (
         <p className="report-status" role="status">
-          Checking the thesis against the filings… {run.tools} lookup{run.tools === 1 ? "" : "s"} so far.{" "}
+          Checking the thesis against the filings… {run.tools} lookup{run.tools === 1 ? "" : "s"} so far
+          <Elapsed started={run.started} usual={allowance?.check_seconds ?? null} />.{" "}
           <button className="btn sm ghost" onClick={stop}>Stop</button>
         </p>
+      ) : (
+        <p className="faint small check-cost">{checkCost(allowance)}</p>
       )}
       {run.status === "error" && (
         <p className="report-status error" role="alert">
@@ -66,9 +73,27 @@ export function CheckPanel({ checks, stale, onQuote, label }: {
   );
 }
 
+/** The time a running check has taken, against how long one usually takes (agent-api's number,
+ * absent from older ones): " · 0:42 of about 2 min". Visible only: the status line it sits in
+ * would otherwise be read out every second. */
+function Elapsed({ started, usual }: { started: number; usual: number | null }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(t);
+  }, []);
+  const minutes = usual ? Math.max(1, Math.round(usual / 60)) : null;
+  return (
+    <span aria-hidden="true">
+      {` · ${clock((now - started) / 1000)}`}{minutes ? ` of about ${minutes} min` : ""}
+    </span>
+  );
+}
+
 function historyLabel(c: ThesisCheckSummary): string {
   const n = c.counts;
-  return `${localTime(c.created_at, true)}: ${n.supported}✓ ${n.contradicted}✗ ${n.unverifiable}?`;
+  return `${localTime(c.created_at, true)}: ${n.supported}✓ ${n.contradicted}✗ ${n.unverifiable}?` +
+    (n.model ? ` ${n.model} your model` : "");
 }
 
 function CheckBody({ check, previous, onQuote, label }: {
@@ -104,7 +129,12 @@ function CheckBody({ check, previous, onQuote, label }: {
           )}
         </p>
       ) : (
-        r.verification.used_data && <p className="badge ok">✓ Every figure and filing traced to data the assistant read</p>
+        r.verification.used_data && (
+          <p className="badge ok">
+            ✓ Every figure and filing traced to data the assistant read
+            {r.verification.figures.some((f) => f.status === "model") ? " or to your model" : ""}
+          </p>
+        )
       )}
       {diff && previous && <Changes diff={diff} since={previous.created_at} onQuote={onQuote} />}
       {r.summary && <Text text={r.summary} figures={r.verification.figures} />}
@@ -210,9 +240,29 @@ function Claim({ claim, onQuote }: { claim: CheckClaim; onQuote: (q: string) => 
       ) : (
         <p className="claim-quote missing" title="Not found word for word in the thesis">“{plainQuote(claim.quote)}”</p>
       )}
+      {claim.model && <ModelMatches model={claim.model} />}
       <Text text={claim.explanation} figures={claim.figures} cites={claim.citations} />
       <Cites cites={claim.citations} />
     </li>
+  );
+}
+
+/** A `model` claim's figures against the user's model (analyst test 4, finding 9): each line
+ * the model shows for it, at the model's own precision, and a link to the model. Labels and
+ * numbers only, as React text: nothing the assistant wrote. */
+function ModelMatches({ model }: { model: ClaimModel }) {
+  return (
+    <div className="check-model-match small">
+      <a href={href({ view: "model", itemId: model.item_id })} title="Open the model">{model.name}</a>
+      <ul>
+        {model.matches.map((m, i) => (
+          <li key={i}>
+            <span className="muted">{matchLabel(m)}</span> <b className="num">{matchValue(m, model.currency)}</b>
+            {wroteOtherwise(m, model.currency) && <span className="faint"> (you wrote {m.figure})</span>}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

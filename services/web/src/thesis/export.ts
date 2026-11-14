@@ -75,6 +75,7 @@ export function checkSection(check: ThesisCheck, stale: boolean, label: (company
       : "The text above is the text this check read.",
     "",
     `${n("supported")} supported, ${n("contradicted")} contradicted, ${n("unverifiable")} can't verify` +
+      (n("model") ? `, ${n("model")} your model` : "") +
       (missing.size ? `; figures not found in the data: ${[...missing].map(blockText).join(", ")}` : "") + ".",
     "",
   ];

@@ -7,7 +7,7 @@ import { ApiError, failureReason, itemVersion, itemVersions, openItem, screenerC
 import { slug } from "../chart/export";
 import { catalog } from "../chart/metrics";
 import type { ChartState } from "../chart/model";
-import { leftText, useAllowanceContext } from "../assistant/useAllowance";
+import { useAllowanceContext } from "../assistant/useAllowance";
 import { useDirectory } from "../companies/directory";
 import { CompanySearch } from "../components/CompanySearch";
 import { ErrorPanel, Skeleton } from "../components/States";
@@ -21,7 +21,7 @@ import type { ItemVersion, SavedItemFull } from "../types";
 import { ITEM_NAME_MAX, KIND_LABELS, nameProblem } from "../workspaces/model";
 import { useEditorKeys } from "../workspaces/useEditor";
 import type { Saved } from "../workspaces/useSaved";
-import { clearHighlights, findQuote, highlightQuote, textHash } from "./check";
+import { checkCost, checkCostShort, clearHighlights, findQuote, highlightQuote, textHash } from "./check";
 import { BlockEditor, type BlockEditorHandle } from "./BlockEditor";
 import { CheckPanel } from "./CheckPanel";
 import { checkSection, embedSummary } from "./export";
@@ -517,9 +517,13 @@ function ThesisEditor({ token, item, initial, items, saved, label, readable, onO
         <button className="btn sm" onClick={showVersions} aria-expanded={!!versions} title="Earlier saved versions of this thesis">
           History
         </button>
+        {/* finding 22: the cost and the time before a check, while no check panel says them */}
+        {!showChecks && written && checkCostShort(allowance) && (
+          <span className="faint small check-cost-inline">{checkCostShort(allowance)}</span>
+        )}
         <button className="btn sm" onClick={checks.start} disabled={dirty || checking || !written}
           title={dirty ? "Save first: the check reads the saved thesis" : !written ? "Write the thesis first: headings, guidance and pinned evidence alone have nothing of yours to check"
-            : `The assistant checks each factual claim and your models' assumptions against the filings (counts as 4 questions${allowance ? `; you have ${leftText(allowance)}` : ""})`}>
+            : `The assistant checks each factual claim and your models' assumptions against the filings. ${checkCost(allowance)}`}>
           {checking ? "Checking…" : "Check my thesis"}
         </button>
         <button className="btn primary" onClick={() => void save()} disabled={!dirty || busy || !!nameError} title="Save (Ctrl+S)">
@@ -590,7 +594,7 @@ function ThesisEditor({ token, item, initial, items, saved, label, readable, onO
         <div className="report-status revisit no-print" role="status">
           New {newer.form} filed {day(newer.filed, true)} since your last check — re-check?{" "}
           <button className="btn sm" onClick={checks.start} disabled={dirty}
-            title={dirty ? "Save first: the check reads the saved thesis" : "Check the thesis again against the new filing (counts as 4 questions)"}>
+            title={dirty ? "Save first: the check reads the saved thesis" : `Check the thesis again against the new filing. ${checkCost(allowance)}`}>
             Re-check
           </button>
         </div>

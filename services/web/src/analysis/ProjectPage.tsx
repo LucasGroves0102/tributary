@@ -7,13 +7,13 @@ import { useAlertsUnread } from "../alerts/useAlerts";
 import { ApiError, expectedFilingsOf, failureReason, getItem, screener, updateProject, workspace as fetchWorkspace } from "../api";
 import type { ChartState } from "../chart/model";
 import { header, HEADER_COLUMNS, listingLine } from "../company/data";
-import { leftText, useAllowanceContext } from "../assistant/useAllowance";
+import { useAllowanceContext } from "../assistant/useAllowance";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { day, localDay, localTime } from "../format";
 import { ModelPage } from "../models/ModelPage";
 import { newModelState } from "../models/useModelRun";
 import { go, href } from "../route";
-import { textHash } from "../thesis/check";
+import { checkCost, textHash } from "../thesis/check";
 import { CheckPanel } from "../thesis/CheckPanel";
 import { thesisState } from "../thesis/model";
 import { ThesisPage } from "../thesis/ThesisPage";
@@ -587,7 +587,7 @@ function ThesisMonitor({ token, companyId, projectId, thesisId, status, checks, 
   const written = savedText !== null && hasOwnText(savedText);
   const why = !status ? "Loading the thesis…" : status.dirty ? "Save the thesis first: the check reads the saved text"
     : !written ? "Write the thesis first: headings, guidance and pinned evidence alone have nothing of yours to check"
-    : `The assistant checks each factual claim and your models' base cases against the filings (counts as 4 questions${allowance ? `; you have ${leftText(allowance)}` : ""})`;
+    : `The assistant checks each factual claim and your models' base cases against the filings. ${checkCost(allowance)}`;
   if (!thesisId) {
     return (
       <p className="empty card">

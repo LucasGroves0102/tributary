@@ -544,13 +544,23 @@ on the folder changed last. Never just the first workspace.
   restore; saving it keeps the one it replaces in turn.
 - **Check my thesis** (`thesis/CheckPanel.tsx`, `useThesisCheck.ts`, pure parts in
   `thesis/check.ts`; agent README, "Thesis checks"): the button checks the saved text (disabled
-  while there are unsaved changes) through agent-api `/v1/thesis-checks` and counts as 4
-  assistant questions. The panel beside the thesis lists each factual claim with a Supported /
-  Contradicted / Can't verify badge, the assistant's explanation and its citations (form, date,
+  while there are unsaved changes) through agent-api `/v1/thesis-checks`. What it costs and how
+  long it takes are said before it starts (analyst test 4, finding 22), in agent-api's numbers
+  from `/v1/allowance` (`check_questions`, `check_seconds`; `check.ts` `checkCost`, never a
+  copy here): beside the button while no panel shows ("Uses 4 of your 28 questions · about 2
+  min", the tighter of the hour's and the day's allowance), at the top of the panel ("A check
+  counts as 4 questions (you have 28 left this hour, 998 today) and usually takes about 2
+  minutes."), in the button's hover, and while it runs as the time so far against the usual
+  ("· 0:42 of about 2 min", not read out). Without the allowance no number is said. The panel
+  beside the thesis lists each factual claim with a Supported / Contradicted / Can't verify /
+  **Your model** badge (a claim made of the user's own model's figures, a forecast: its model
+  linked and each figure as the model shows it, "FY2026E P/E at your price 29.2x (you wrote
+  29x)"; analyst test 4, finding 9), the assistant's explanation and its citations (form, date,
   "Read MD&A" opening the filing reader at the cited section, "EDGAR ↗" the filing on sec.gov
   with its accession on hover, the figure; `components/FilingLinks.tsx`, also on answers and
   reports); a filing no tool returned and a figure not found in the data are marked, never hidden,
-  and the warning names each figure (a button to its mark). A check that couldn't finish says why
+  and the warning names each figure (a button to its mark); a figure the user's model gives (status
+  `model`) isn't one of them. A check that couldn't finish says why
   and, when agent-api gave its questions back (`refunded`), that it didn't count; the last saved
   check stays shown.
   Clicking a claim's quote marks it in the preview (only text nodes are wrapped in
@@ -571,7 +581,7 @@ on the folder changed last. Never just the first workspace.
   with the last check: newer when the check recorded the index's newest 10-K/10-Q (`filings[].
   latest`) and this one differs and was filed on or after it, or, for checks stored before that
   record, when it was filed after the check's day. Then "New 10-Q filed <date> since your last
-  check — re-check?" with a Re-check button (the same check, 4 questions). The workspace page
+  check — re-check?" with a Re-check button (the same check and cost). The workspace page
   shows the same line beside each such thesis (its checks list gives the thesis's company and
   record: one request per thesis, first 20). No background job. After a re-check, the panel
   opens with **Changes since <date>** against the check before the one shown (`diffChecks`):

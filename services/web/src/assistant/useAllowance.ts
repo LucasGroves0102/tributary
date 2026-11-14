@@ -83,9 +83,10 @@ export function tightest(a: Allowance): { left: number; of: number } {
 
 /** The limits in a sentence, for hovers and What Tributary covers. */
 export function limitsText(a: Allowance | null): string {
+  // agent-api's numbers only (finding 22): none of them is copied here
   const each = a
     ? `A report counts as ${a.report_questions} questions and a thesis check as ${a.check_questions}`
-    : "A report counts as 3 questions and a thesis check as 4";
+    : "A report and a thesis check each count as several questions";
   if (!a) return `The assistant is limited per hour and per day; its panel shows what you have left. ${each}.`;
   const day = a.per_day === null ? "" : ` and ${count(a.per_day)} a day (resets at ${resetsAt()})`;
   return `Your account can ask ${count(a.per_hour)} questions an hour (counted over the last 60 minutes)${day}, with ` +
