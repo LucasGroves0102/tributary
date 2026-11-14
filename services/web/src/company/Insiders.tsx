@@ -10,7 +10,7 @@ import { day } from "../format";
 import type { Load } from "./useLoad";
 import { TableScroll } from "../components/TableScroll";
 import type { InsiderFiling, InsiderFilings } from "../types";
-import { ownersText, priceText, sharesText, signedShares, transactions, valueText } from "./insiders";
+import { ownersFiled, ownersText, priceText, sharesText, signedShares, transactions, valueText } from "./insiders";
 
 /** Older pages, asked with the API's `next_cursor` (the last filing's date and accession, so a day split
  * across two pages is never cut). An API older than the cursor gives none: no button, as before. */
@@ -82,7 +82,7 @@ export function InsiderTable({ load, token, companyId }: { load: Load<InsiderFil
             <tbody>
               {rows.map(({ filing: f, line: l }) => (
                 <tr key={`${f.accession_no}-${l.line}`}>
-                  <td className="first">{ownersText(f)}</td>
+                  <td className="first" title={`As filed: ${ownersFiled(f)}`}>{ownersText(f)}</td>
                   <td className="muted">{l.transaction_date ? day(l.transaction_date, true) : "—"}</td>
                   <td title={l.code ? `Code ${l.code}${l.derivative ? ", a derivative security" : ""}` : undefined}>
                     {l.code_label ?? l.code ?? "—"}

@@ -1,34 +1,50 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { load, save } from "./storage";
+import { load, remove, save } from "./storage";
 
 export type Theme = "dark" | "light";
+/** What the top bar's button says: an explicit theme, or the visitor's system's. */
+export type ThemeChoice = Theme | "system";
 
 /** Per user: each demo user keeps their own choice. Before sign-in, the last one used. */
 const key = (user: string | null) => (user ? `tributary.theme.${user}` : "tributary.theme");
 
-export function storedTheme(user: string | null): Theme {
+/** The button cycles through the three: Light, then Dark, then System. */
+export const NEXT_THEME: Record<ThemeChoice, ThemeChoice> = { light: "dark", dark: "system", system: "light" };
+export const THEME_WORD: Record<ThemeChoice, string> = { light: "Light", dark: "Dark", system: "System" };
+
+/** The theme the visitor chose, or null: then the page follows their system (tokens.css reads
+ * prefers-color-scheme itself, so nothing waits for this script). */
+export function storedTheme(user: string | null): Theme | null {
   const t = load(key(user)) ?? load(key(null));
-  return t === "light" ? "light" : "dark";
+  return t === "light" || t === "dark" ? t : null;
 }
 
-export function useTheme(user: string | null): [Theme, () => void] {
-  const [theme, setTheme] = useState<Theme>(() => storedTheme(user));
+/** [the choice in force, move to the next one]. Light and Dark are kept (per user and as the
+ * signed-out default); System forgets the choice and the page follows the system again. */
+export function useTheme(user: string | null): [ThemeChoice, () => void] {
+  const [chosen, setChosen] = useState<Theme | null>(() => storedTheme(user));
 
-  useEffect(() => setTheme(storedTheme(user)), [user]);
+  useEffect(() => setChosen(storedTheme(user)), [user]);
 
   useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-  }, [theme]);
+    if (chosen) document.documentElement.dataset.theme = chosen;
+    else delete document.documentElement.dataset.theme;
+  }, [chosen]);
 
-  const toggle = useCallback(() => {
-    setTheme((t) => {
-      const next = t === "dark" ? "light" : "dark";
+  const choice: ThemeChoice = chosen ?? "system";
+  const cycle = useCallback(() => {
+    const next = NEXT_THEME[choice];
+    if (next === "system") {
+      remove(key(user));
+      remove(key(null));
+      setChosen(null);
+    } else {
       save(key(user), next);
       save(key(null), next);
-      return next;
-    });
-  }, [user]);
+      setChosen(next);
+    }
+  }, [choice, user]);
 
-  return [theme, toggle];
+  return [choice, cycle];
 }

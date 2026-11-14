@@ -15,12 +15,65 @@ A page that fails to render shows "This page didn't load" with Reload and Home, 
 console, never on screen). The "demo" badge shows only on a sandbox; the app names an account the way a
 person knows it (`access.ts` `accountName`: "morgan", not the API's "pw-morgan").
 
-The shell follows prototype v3: a sidebar (screens with `g`-then-letter shortcuts, watchlist
+The shell keeps its sidebar: a sidebar (screens with `g`-then-letter shortcuts, watchlist
 with revenue sparklines, next expected filings, freshness), a top bar (breadcrumb, Ctrl/Cmd-K
 command palette, the filing alerts bell, theme, who is signed in) and the assistant drawer on every page (Ctrl/Cmd-J toggles,
 `/` focuses; the top bar's Assistant is the way in, closed until asked for and then remembered per
-browser). Dark is the default theme; the choice is kept per user in localStorage. Design
-tokens (colours for both themes, type scale, spacing) are in `src/tokens.css`.
+browser). The theme follows the visitor's system (light or dark, `prefers-color-scheme`, read by
+`tokens.css` itself so nothing waits for a script). The top bar's Theme button says which is in force
+and cycles Light, Dark, System: Light and Dark are kept per user in localStorage, System forgets the
+choice (`theme.ts`).
+
+**Look ("Seal").** The design system of record is `.interface-design/system.md` at the repo root: an
+annual report kept as a ledger. A white page (a warm near-black in dark), black serif figures, red
+rubrics in the margin, ledger rules, red-letter days, a double-ruled bottom line, and a red wax seal on
+every figure taken from a filing; gold appears only on the seal. Tokens (both palettes, type scale,
+spacing, square corners, motion) are in `src/tokens.css`, with the older names (`--panel`, `--text`,
+`--accent`...) read from Seal's so screens not yet redrawn keep working; `src/seal.css` holds Seal's
+own components and `src/styles.css` the rest. Red is never "a loss": a fall keeps its minus sign in
+the ink (`.neg`), a rise is green, and red means act here, a rubric, or a figure a later filing may
+change. Fonts are Source Serif 4 (names, sentences, figures; lining, tabular numerals) and Archivo
+(controls, navigation, meta), both OFL and self-hosted: pinned `@fontsource-variable` packages
+imported in `main.tsx`, bundled into `/assets` by the build, because the CSP allows fonts only from
+this origin. No monospace for data, no all-caps labels.
+
+Seal's pieces: `components/Seal.tsx` (the seal drawn once, `SealSprite` in `main.tsx`, and used by
+reference; `SealLink` is a seal on a figure: it opens the filing at its statements, and its source is
+a Radix tooltip on hover or focus and the link's description for a screen reader, replacing the
+hover-only source), `components/Folio.tsx` (a section with its rubric in the margin: a 190px column
+of red labels beside each section, above it when the page has under 1100px), `components/Choices.tsx`
+(one of a few views: a Radix toggle group, arrow keys between options). Controls with behaviour use
+Radix Primitives (pinned exact versions), styled only with the tokens: the company page's More menu
+(DropdownMenu, `modal={false}`: a modal one locks scrolling with an injected style), the toggle groups, the seal's
+tooltip, and the confirm dialog (`workspaces/Actions.tsx` `ConfirmDelete`, a Radix alert dialog). Radix
+places popovers through the CSSOM, which the CSP allows; Radix's dialog Overlay isn't used, because
+its scroll lock injects a `<style>` element the CSP refuses (the dialog draws its own backdrop).
+Money negatives read in parentheses in statements, ledgers, the recap and the screener (`format.ts`
+`paren`: display only; the CSV and the hover keep the sign, and F5's `outflow` stays the one place a
+sign is decided); percentages and multiples keep their minus sign.
+
+Seal pages so far (the first batch): the front door (the seal and name, a headline, the way in under
+it; on the right, ruled off in ink, the live figures from `/v1/status/data` and what's in it), Data
+status, the shell, the company page and Statements, and the screener; the others read through the
+tokens until their own pass. The company page's head has the sector in the margin, the name, then
+the facts as separate items (listing, SIC industry, fiscal year end, filer category, where it's
+incorporated in words: `companies/places.ts` maps EDGAR's state and country codes, "Y9" is Jersey,
+and a code EDGAR doesn't list isn't shown; currency; CIK, whose hover says what the user's access
+covers), the next expected filing only when the API has one, two actions in the open (Start an
+analysis, the one primary, and Watch) with Chart, Compare, Ask, New thesis and New model under More,
+and the tabs. The Overview: **The year**, the twelve months as a sentence
+(revenue, its growth, net income and net cash or net debt, `data.ts` `yearStory`: API values only,
+and a figure from another period is left out rather than mixed in), sealed to its filing; **Figures**,
+the key figures as a ledger (amounts, then rates), each sealed, with Cash and short-term investments
+(what net debt subtracts) beside Cash and a negative net debt read as "Net cash" (the exact figure in
+the seal's source); **Since the last report** (red-letter days, below); **Latest quarter**, the recap
+set as a statement; **Business**; **Revenue and operating margin**; **Backlog and orders**. A
+statement is a ledger table: red column rules, subtotals heavier, the bottom line (net income, total
+assets, cash at the end of the period) double-ruled, the newest period washed, derived figures italic,
+and its choices (statement, period, range, basis) are toggle groups. Under a statement and under
+the screener one sentence stays in view; the rest of the notes (definitions, blanks, signs) are behind
+"How to read these figures", closed by default, the blanks as a legend. The screener's column rules
+run between its figures only.
 
 Layout: pages lay out by the room they have, not the window's width, because the assistant takes
 372px at any window size: `.main` is a CSS container and `@container main` rules reflow it (the
@@ -105,8 +158,8 @@ catalog open the user reads every company at once (`/v1/me` says so). While it i
 sandbox gets grants on 20 companies instead, and the page polls `/v1/me` until all 20 are
 readable, showing how many have arrived (access travels app DB → Debezium → Kafka → authz-sync →
 OpenFGA; the BRD target is under 30 s; after that it offers "Continue anyway"). The session is
-kept in localStorage until the sandbox expires; a banner shows "Demo sandbox: every company ·
-resets in Xh" ("20 companies" while the catalog is closed), and an expired or rejected token
+kept in localStorage until the sandbox expires; a banner shows "Demo sandbox: every company" and
+"Resets in Xh" ("20 companies" while the catalog is closed), and an expired or rejected token
 returns to the front door. A regular account (not a sandbox or GitHub user, e.g. a tester the owner invites) signs in with
 an owner-issued link: the owner mints a token on the server (`query-api-token <user_id> --hours
 N` inside the query-api pod) and sends `https://<site>/#/signed-in?token=<token>&expires_in=<s>`;
@@ -145,7 +198,7 @@ tiers; then `companies` lists only private grants). `src/access.ts` turns that i
 pages show: `readableFor(me, tier)` (every company while the catalog is open with that tier),
 `readableTotal(me)` (the sidebar's count) and `catalogOpen`. With the catalog open nothing below
 is scoped: a sandbox or GitHub session sees every company like anyone else, the banner says
-"Demo sandbox: every company · resets in Xh", the front door says "access to every company"
+"Demo sandbox: every company", the front door says "access to every company"
 (`catalog_public` on `GET /v1/demo/sandbox`), the Welcome page waits for no grant (none is
 written), Search covers every company's filings (ranked within the newest window that fills the
 page, with a line saying how far back, unless a company or dates narrow it), Home's feed heading
@@ -191,18 +244,22 @@ docstring; the Query API's `/earnings` and `/events`, rules in its README, "Earn
   or Guidance ... read the release to be sure"). No beat or miss: Tributary has no estimates, and the
   page says so. Pins: an outlook block or a note as `quoteLines` (its lines kept), a table as
   `quoteTable` (a code block in the quote), each citing "8-K for the quarter ended …".
-- **Since the last report** (company Overview, below Key stats; the What changed step's first card):
-  the 8-Ks filed after the latest 10-Q/10-K period end, newest first: date, form, the items in the
+- **Since the last report** (company Overview, below its Figures; the What changed step's first card):
+  the 8-Ks filed after the latest 10-Q/10-K period end, newest first, as red-letter days (the day
+  filed, large; red when the API says the 8-K may change a balance): form, the items in the
   reader's short labels (`EIGHT_K_ITEMS`; exhibits left out), "may change cash, debt, ..." on an
   event the API says affects a balance, the 8-K's own opening words quoted (pinnable in a project),
   Read the 8-K at that passage, Read the press release, EDGAR; one not stored here says so and links
   EDGAR. Routine filings (votes, nominations, exhibits alone) fold under one line. Above them, the
-  figures as of the period end a later event may have changed, each with its event, and "no pro
-  forma": Tributary doesn't compute a figure after the event. The same flags sit on the Overview's
-  key stats (Cash, Net debt, Debt / equity; every stat for non-reliance or bankruptcy) when the
-  figure is as of that period end or earlier: "⚑ before the Oct 27, 2026 8-K (Acquisition or
-  disposition)" ("... and 1 more 8-K" when several; the hover names each), the figure itself
-  unchanged. The Overview asks `/events` once for both. An event the API flags from its 7.01 / 8.01
+  figures as of the period end a later event may have changed: on the What changed step a list, each
+  with its event, and "no pro forma" (Tributary doesn't compute a figure after the event); on the
+  Overview, whose ledger already marks them, one line ("Debt, net debt, debt / equity and cash are as
+  of Jul 26, 2026; the Aug 17, 2026 8-K (Material agreement) may have changed them.", `events.ts`
+  `staleLine`) with the no-pro-forma explanation in its hover. The same flags sit on the Overview's
+  ledger (Cash, Net debt, Debt / equity; every figure for non-reliance or bankruptcy) when the
+  figure is as of that period end or earlier: the figure in red with "*", and a note under the
+  ledger "* At Sep 30, 2026, before the Oct 27, 2026 8-K (Acquisition or disposition) and 1 more 8-K,
+  which may have changed it" (the seal's source names each event), the figure itself unchanged. The Overview asks `/events` once for both. An event the API flags from its 7.01 / 8.01
   announcement (F1b, `announced`) says so under its head: "⚑ A completed acquisition or
   disposition, read from its Item 7.01 announcement (it has no Item 2.01): the words “Completes
   Acquisition” in Press release", linking the reader at that sentence, then the sentence quoted;
@@ -410,7 +467,7 @@ LayerChart, comps as small multiples (an ungranted peer says "no access"), scree
 filters with a link. Figures the verification couldn't trace are highlighted, and listed in the
 note itself. Download Markdown (`reportMarkdown`: embeds become a line naming the item,
 unverified figures are marked `[unverified]`, sources listed) and Print / PDF (`@media print` in
-`styles.css`: the page alone, in the light deck palette whatever the theme; `tokens.test.ts`
+`styles.css`: the page alone, in the light palette whatever the theme or the system's; `tokens.test.ts`
 keeps it equal to the light tokens). "Write again" regenerates it over the same item. A report
 counts as 3 assistant questions; the API's refusal (hourly or demo cap) is shown as is.
 
@@ -444,7 +501,7 @@ on the folder changed last. Never just the first workspace.
   user has placed one, never above the title) for any chart, comps set, screen or model in the same
   workspace; the preview draws each one in place as reports do (`reports/Embeds.tsx`, the data
   read now as the viewer). A comps set is drawn as its table (`compare/CompsTable.tsx`: the saved
-  columns, each company's latest quarter, the peer median with n of N, metadata only where the
+  columns, each company's latest quarter, the peer median with how many peers each column uses ("3 of 4", beside "of 4 peers"), metadata only where the
   viewer can't read the financials), in theses and reports alike, never as charts. A marker for anything else (another workspace's or user's item, a
   report, a malformed line) is dropped and the editor says how many don't resolve. The text is
   rendered only through `markdown.ts` `renderMarkdown` (marked + DOMPurify, no inline styles or
@@ -707,7 +764,8 @@ balances as the year-end value, ratios full-year; QoQ becomes YoY; the Transform
 controls below (`chart/autocomplete.ts`; Tab completes, arrows then Enter pick). The API checks them as
 you type: the chart takes a formula as soon as it's valid (the check's 350 ms is the debounce), or on
 Enter or blur whatever it is; every bad name shows at once, with "did you mean" when there is a close
-one. Deck output draws the chart in the light palette with a subtitle (periods and units,
+one. Deck output draws the chart in the light palette (Seal's light tokens: the ink first, never the red;
+`chart/export.ts` mirrors them) with a subtitle (periods and units,
 editable), axis unit captions and a source footnote ("Source: SEC filings via Tributary; forms
 for companies; latest filing; as of"), which SVG and PNG exports keep. Evaluate answers are kept
 in memory per (token, request) for the session (`chart/cache.ts`), so coming back to a chart
@@ -796,7 +854,7 @@ Co-registrants (#135): a company that files one combined 10-K with another (PG&E
 & Electric) has a "combined 10-K" tag in the screener and a note on its page saying it isn't a
 duplicate: two SEC registrants, each with its own statements, a parent's including its subsidiaries'.
 
-A bank (#103; the API's `not_applicable` list): Key stats show net revenue, net interest income,
+A bank (#103; the API's `not_applicable` list): the Overview's figures show net revenue, net interest income,
 efficiency ratio, provision for credit losses, net income, EPS, loans, deposits, CET1 (where the bank
 tags it), ROE, revenue growth and net margin; Statements show a bank's income statement (net interest
 income, noninterest income, net revenue, noninterest expense, provision, pretax and net income) and
@@ -807,8 +865,8 @@ per share and ROTCE (migration 048's header). Which companies are banks is the A
 
 Debt with a finance arm (`company/data.ts` `FINANCE_ARMS`, `financeArmNote`): Ford's and GM's debt and
 net debt are their consolidated balance sheets' (migration 055 sums each debt line's segment members),
-so they include Ford Credit's and GM Financial's borrowings. Overview (under Key stats, and in the Net
-debt stat's hover) and the Balance sheet say so. Keyed by company id; `data.test.ts` checks the ids
+so they include Ford Credit's and GM Financial's borrowings. The Overview (under its figures, and in
+the net debt seal's source) and the Balance sheet say so. Keyed by company id; `data.test.ts` checks the ids
 against 055's company tags.
 
 Insider filings (#117; `company/Insiders.tsx`, wording in `company/insiders.ts`'s docstring; the
@@ -817,7 +875,9 @@ filings"): on the Filings tab's Insider filter, an "Insider transactions" table 
 the company's Forms 3, 4 and 5, newest first: the insider and their role, the date, the transaction
 (the SEC's code in words, a derivative's security, an indirect holding's nature, a 10b5-1 plan), the
 shares signed by direction, price, value and shares owned after, each linking its filing on EDGAR.
-In the filing index (Insider and All), an insider filing's row says who and what ("Kress Colette, EVP
+A name the filing writes in capitals reads in name case, in the filing's order ("STEVENS MARK A" is
+"Stevens Mark A": Mc/Mac, O', hyphens, Jr. and II/III handled; `insiders.ts` `nameCase`), the name as
+filed in the hover. In the filing index (Insider and All), an insider filing's row says who and what ("Kress Colette, EVP
 & Chief Financial Officer · sold 34,918 shares ($7.65M) · shares withheld for tax or exercise price:
 40,747 shares"). Needs filings access; an older API (404) says the details aren't available yet and
 the index stays as before. Every figure is the API's; nothing is summed or valued here. The table
@@ -958,7 +1018,10 @@ are a roving tab stop (arrows, Page Up/Down, Home/End, Ctrl/Cmd + Up/Down the fi
 row, Right or Ctrl/Cmd + Left/Right into the cells, then the first and last column; Enter opens:
 `components/tableNav.ts`). `?` opens the keyboard shortcut sheet (`components/ShortcutSheet.tsx`,
 also from the sidebar footer).
-`src/tokens.test.ts` checks every text, state and series token against WCAG AA in both themes.
+`src/tokens.test.ts` checks every text, state and series token against WCAG AA in both themes, and that
+following the system to dark gives the same palette as choosing Dark. Focus is a 2px red ring for
+keyboard users; motion is short (a press sinks to 97% in 120 ms, a tooltip fades in) and is dropped
+under `prefers-reduced-motion`.
 Under 900px the sidebar becomes a drawer behind Menu; on a phone Sign out moves into it, the
 screener's filters start folded, and an analysis's steps show their numbers with the current step
 named.

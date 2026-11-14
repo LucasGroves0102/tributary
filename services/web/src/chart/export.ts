@@ -3,20 +3,20 @@
  * looks the same in any slide whatever theme the app is in. */
 
 /** tokens.css light theme: --series-0..7, --text, --text-3, --line. */
-const SERIES = ["#3b5bdb", "#2f9e44", "#e8590c", "#c92a2a", "#0c8599", "#7048e8", "#d6336c", "#495057"];
+const SERIES = ["#5c5350", "#3d5a80", "#9a5a17", "#2f6b5a", "#6b4a7a", "#4b6b2a", "#a8456a", "#8a817c"];
 const EXPORT_CSS = [
   "svg{background:#fff;font-family:Inter,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif}",
   ".ch-bg{fill:#fff}",
-  ".ch-title{fill:#14171c;font-size:15px;font-weight:650}",
-  ".ch-legend text{fill:#4a525e;font-size:11.5px}",
-  ".ch-grid line{stroke:#e3e6eb}",
-  ".ch-axis text,.ch-grid text{fill:#5f6874;font-size:10.5px}",
-  ".ch-zero{stroke:#d3d8df}",
-  ".ch-foot{fill:#5f6874;font-size:10.5px;font-style:italic}",
-  ".ch-sub{fill:#4a525e;font-size:12px}",
-  ".ch-unit{fill:#5f6874;font-size:10px;font-weight:600}",
+  ".ch-title{fill:#161314;font-size:15px;font-weight:650}",
+  ".ch-legend text{fill:#4c4646;font-size:11.5px}",
+  ".ch-grid line{stroke:#e6e0db}",
+  ".ch-axis text,.ch-grid text{fill:#706965;font-size:10.5px}",
+  ".ch-zero{stroke:#d3cbc4}",
+  ".ch-foot{fill:#706965;font-size:10.5px;font-style:italic}",
+  ".ch-sub{fill:#4c4646;font-size:12px}",
+  ".ch-unit{fill:#706965;font-size:10px;font-weight:600}",
   ".ch-mk text{fill:currentColor;font-size:10.5px;font-weight:700}",
-  ".ch-gap{fill:#5f6874;fill-opacity:.1}",
+  ".ch-gap{fill:#706965;fill-opacity:.1}",
   ...SERIES.map((c, i) => `.c${i}{color:${c}}`),
 ].join("");
 

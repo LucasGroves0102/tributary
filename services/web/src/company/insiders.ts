@@ -2,13 +2,15 @@
  * value, roles, the per-filing summary: query_api/insiders.py); this only words it. Pure.
  *
  * - An owner reads "Kress Colette, EVP & Chief Financial Officer"; several are joined with " and ".
+ *   A name the filing writes in capitals ("STEVENS MARK A") reads in name case ("Stevens Mark A",
+ *   `nameCase`), in the filing's order; the name as filed is the hover (`ownersFiled`).
  * - A filing's line in the filing index: owner, then "sold 34,918 shares ($7.62M)", "bought ...",
  *   and "N other transactions" (awards, withholding, gifts) with their shares; a Form 3 or a filing
  *   with only holdings reads "holdings only". Values are the API's; "value not stated" when a priced
  *   total isn't known.
  * - A transaction's shares carry their direction: "+160,418" acquired, "-4,681" disposed. */
 
-import { money } from "../format";
+import { companyName, money } from "../format";
 import type { InsiderFiling, InsiderLine } from "../types";
 
 const num = (s: string | null | undefined): number | null => (s === null || s === undefined || s === "" ? null : Number(s));
@@ -35,12 +37,59 @@ export function valueText(s: string | null): string {
   return n === null ? "—" : money(n, "USD");
 }
 
+/** A fund, trust or company filing as an insider: cased as a company's name is. */
+const ENTITY = /\b(INC|CORP|CORPORATION|CO|COMPANY|LLC|L\.?L\.?C|LP|L\.?P|LTD|LIMITED|PLC|TRUST|FUND|PARTNERS|HOLDINGS?|CAPITAL|GROUP|FOUNDATION|MANAGEMENT|ADVISORS|ASSOCIATES|BANK|N\.?A)\b\.?/;
+/** Generational suffixes and initials keep their capitals; Jr and Sr read as words. */
+const ROMAN = /^(II|III|IV|VI|VII|VIII|IX|X)$/;
+const SUFFIX: Record<string, string> = { JR: "Jr.", "JR.": "Jr.", SR: "Sr.", "SR.": "Sr.", ESQ: "Esq.", "ESQ.": "Esq.", MD: "MD", PHD: "PhD", CPA: "CPA" };
+/** Names that start with Mac but aren't Mac + a name (Machado is not MacHado). */
+const NOT_MAC = new Set(["MACHADO", "MACIAS", "MACEDO", "MACIEL", "MACHIN", "MACKLIN", "MACKINTOSH", "MACOMBER", "MACAULAY",
+  "MACARIO", "MACEDA", "MACHEN", "MACHIAVELLI", "MACKENZIE", "MACKINNON"]);
+
+function casePart(p: string): string {
+  if (!p) return p;
+  const w = p.charAt(0) + p.slice(1).toLowerCase();
+  // O'Brien, D'Angelo: a one-letter prefix before an apostrophe
+  const apos = /^([A-Z])['’]([a-z])(.*)$/i.exec(w);
+  if (apos) return `${apos[1]!.toUpperCase()}'${apos[2]!.toUpperCase()}${apos[3]}`;
+  const up = p.toUpperCase();
+  if (/^MC[A-Z]{2,}$/.test(up)) return `Mc${up.charAt(2)}${up.slice(3).toLowerCase()}`;
+  // Mac + a name of four letters or more (MacDonald, MacLeod); not Mack, Macy, Machado
+  if (/^MAC[A-Z]{4,}$/.test(up) && !NOT_MAC.has(up)) return `Mac${up.charAt(3)}${up.slice(4).toLowerCase()}`;
+  return w;
+}
+
+function caseWord(word: string): string {
+  const up = word.toUpperCase();
+  if (SUFFIX[up.replace(/,$/, "")]) return SUFFIX[up.replace(/,$/, "")]! + (word.endsWith(",") ? "," : "");
+  if (ROMAN.test(up.replace(/[.,]$/, ""))) return up;
+  // an initial: "A", "A." or "J.R."
+  if (/^[A-Z]\.?,?$/.test(up) || /^([A-Z]\.){2,3},?$/.test(up)) return up;
+  return word.split("-").map(casePart).join("-");
+}
+
+/** A name the filing wrote in capitals, in name case: "STEVENS MARK A" → "Stevens Mark A", "O'BRIEN
+ * PATRICK J III" → "O'Brien Patrick J III", "MCDONALD-SMITH ANNE" → "McDonald-Smith Anne". A name
+ * with any lower case is the filer's own casing and stays as written; a fund or company reads as a
+ * company's name does. Display only: the name as filed stays in the hover. */
+export function nameCase(raw: string): string {
+  const name = raw.trim().replace(/\s+/g, " ");
+  if (!name || /[a-z]/.test(name)) return name;
+  if (ENTITY.test(name)) return companyName(name);
+  return name.split(" ").map(caseWord).join(" ");
+}
+
 export function ownerText(o: InsiderFiling["owners"][number]): string {
-  return [o.name ?? "An insider", ...o.roles].join(", ");
+  return [o.name ? nameCase(o.name) : "An insider", ...o.roles].join(", ");
 }
 
 export function ownersText(f: InsiderFiling): string {
   return f.owners.length ? f.owners.map(ownerText).join(" and ") : "Insider not named";
+}
+
+/** The owners' names as the filing gives them (the hover over a name-cased one). */
+export function ownersFiled(f: InsiderFiling): string {
+  return f.owners.map((o) => o.name ?? "An insider").join(" and ");
 }
 
 /** The filing index's line for an insider filing. */

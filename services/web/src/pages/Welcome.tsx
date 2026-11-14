@@ -11,6 +11,7 @@ import {
   passwordSignIn,
   sandboxOffer,
 } from "../api";
+import { Seal } from "../components/Seal";
 import { duration } from "../format";
 import { href } from "../route";
 import { saveSession, type Session } from "../session";
@@ -227,12 +228,13 @@ export function Welcome({ onReady, notice, github, pollMs = 1000, now = Date.now
       <div className="welcome-layout">
         <header className="welcome-head">
           <h1 id="welcome-title" className="welcome-brand">
-            <img src="/favicon.svg" alt="" width={22} height={22} />
-            Tributary
+            <Seal size="logo" />
+            <span className="wordmark">Tributary</span>
           </h1>
+          <p className="welcome-headline">Every figure sealed to the filing it came from.</p>
           <p className="welcome-lead">
-            SEC filings and XBRL financials as they're filed, with an assistant that cites the filing
-            behind every number.
+            SEC filings and XBRL financials as they're filed, with an assistant that cites the filing behind every
+            number.
           </p>
         </header>
         <section className="card pad welcome-card" aria-labelledby="welcome-title">
@@ -254,13 +256,10 @@ export function Welcome({ onReady, notice, github, pollMs = 1000, now = Date.now
               <p className="small muted">The demo isn't available right now.</p>
             ) : (
               o && (
-                <p className="small faint">
-                  Starts a private sandbox for {o.ttl_hours} hours with access to{" "}
+                <p className="small faint" title="The sandbox and what you save in it are deleted when it expires.">
+                  A private {o.ttl_hours}-hour sandbox, no sign-up: access to{" "}
                   {o.catalog_public ? `every company's ${reads}` : `the ${reads} of ${o.tickers.length} companies (${o.tickers.join(", ")})`}
-                  {o.agent
-                    ? `, and ${o.agent_questions_per_day} assistant questions a day`
-                    : "; the assistant is off for demo sandboxes"}
-                  . No sign-up. It's deleted when it expires.
+                  {o.agent ? `, ${o.agent_questions_per_day} assistant questions a day.` : "; the assistant is off for demo sandboxes."}
                 </p>
               )
             )}
@@ -282,9 +281,8 @@ export function Welcome({ onReady, notice, github, pollMs = 1000, now = Date.now
                 )}
               </div>
               {githubOn && (
-                <p className="small faint">
-                  Signing in with GitHub gives you the same {o?.catalog_public ? "access" : "companies"} in an account that stays, with your
-                  saved work. It reads only your public GitHub profile.
+                <p className="small faint" title={`The same ${o?.catalog_public ? "access" : "companies"} as the demo, in an account that stays.`}>
+                  Keeps your saved work. Reads only your public GitHub profile.
                 </p>
               )}
               {passwordOn && formOpen && (
@@ -296,6 +294,7 @@ export function Welcome({ onReady, notice, github, pollMs = 1000, now = Date.now
         </section>
         <section className="welcome-proof" aria-label="What's in Tributary">
           <Proof />
+          <h2 className="welcome-sect">What's in it</h2>
           <ul className="welcome-list">
             <li>Screen companies on revenue, growth, margins and debt, and save the screen.</li>
             <li>Read 10-K, 10-Q and 8-K filings by section, and see what changed since the last one.</li>
@@ -303,9 +302,8 @@ export function Welcome({ onReady, notice, github, pollMs = 1000, now = Date.now
             <li>Compare a company with its peers, then build a guided analysis with a thesis and a model.</li>
             <li>Ask the assistant: it answers from the filings and cites them. No stock prices, consensus estimates or call transcripts.</li>
           </ul>
-          <p className="small faint">
-            <a href={href({ view: "status" })}>Data status</a>: how fresh, complete and checked the data is,
-            live.
+          <p className="welcome-status">
+            <a href={href({ view: "status" })}>Data status</a>: how fresh, complete and checked the data is, live.
           </p>
         </section>
       </div>
@@ -349,7 +347,7 @@ function Proof() {
   })();
   if (!figures.length) return null;
   return (
-    <dl className="proof">
+    <dl className="proof" aria-label="From the data status page, live">
       {figures.map((f) => (
         <div key={f.what}>
           <dt>{f.value}</dt>

@@ -164,7 +164,8 @@ describe("Try the demo", () => {
     expect(created).toBe(1);
     await settle();
     expect(window.location.hash).toBe("#/");
-    expect($(".sandbox-banner")?.textContent).toMatch(/^Demo sandbox: 20 companies · resets in 2[34]h$/);
+    // two items, not a dotted string (Seal)
+    expect([...$(".sandbox-banner")!.children].map((c) => c.textContent)).toEqual(["Demo sandbox: 20 companies", expect.stringMatching(/^Resets in 2[34]h$/)]);
     expect($(".top .who")?.textContent).toContain("demo sandbox");
     expect(container.querySelector("select[aria-label='Demo user']")).toBeNull();
     // the session survives a reload
@@ -177,7 +178,7 @@ describe("Try the demo", () => {
     saveSession({ kind: "sandbox", token: "stored", userId: "demo-aa", expiresAt: new Date(Date.now() + 5 * HOUR).toISOString(), companies: IDS });
     await mount(<App picker={false} />);
     expect(created).toBe(0);
-    expect($(".sandbox-banner")?.textContent).toContain("resets in 4h");
+    expect($(".sandbox-banner")?.textContent).toContain("Resets in 4h");
     expect(button("Try the demo")).toBeUndefined();
   });
 
@@ -350,7 +351,7 @@ describe("a sandbox lists only its own companies", () => {
     window.location.hash = `#/company/${TSLA}/statements`;
     await mount(<App picker={false} />);
     expect($(".not-in-demo")).toBeNull();
-    expect($(".sandbox-banner")?.textContent).toMatch(/^Demo sandbox: every company · resets in/);
+    expect($(".sandbox-banner")?.textContent).toMatch(/^Demo sandbox: every companyResets in/);
     await typeInPalette("tsla");
     const searches = vi.mocked(fetch).mock.calls.map(([u]) => new URL(String(u), "http://x"))
       .filter((u) => u.pathname.endsWith("/v1/companies/search"));

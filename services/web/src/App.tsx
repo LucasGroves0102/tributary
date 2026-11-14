@@ -645,8 +645,8 @@ export function App(props: Props = {}) {
           />
           {session?.kind === "sandbox" && (
             <div className="sandbox-banner" role="note">
-              Demo sandbox: {open ? "every company" : `${session.companies.length} companies`} · resets in{" "}
-              {resetsIn(session.expiresAt, clock)}
+              <span>Demo sandbox: {open ? "every company" : `${session.companies.length} companies`}</span>
+              <span>Resets in {resetsIn(session.expiresAt, clock)}</span>
             </div>
           )}
           {error && (

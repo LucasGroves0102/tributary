@@ -95,6 +95,27 @@ export function staleFlags(r: EventsResponse | null): StaleFlag[] {
   });
 }
 
+/** No pro forma: what the page says it doesn't do after an event. */
+export const NO_PRO_FORMA =
+  "Tributary doesn't compute a figure after the event (no pro forma): the 8-K says what happened, the next 10-Q or 10-K what the balance sheet became.";
+
+/** The flags as one sentence per event (the Overview, under its ledger's "*"): "Debt, net debt, debt /
+ * equity and cash are as of Jul 26, 2026; the Aug 17, 2026 8-K (Material agreement) may have changed
+ * them." The hover (`title`) says there's no pro forma and words each flag in full. */
+export function staleLine(flags: StaleFlag[]): { text: string; title: string } | null {
+  if (!flags.length) return null;
+  const groups = new Map<string, StaleFlag[]>();
+  for (const f of flags) groups.set(`${f.short}|${f.asOf ?? ""}`, [...(groups.get(`${f.short}|${f.asOf ?? ""}`) ?? []), f]);
+  const text = [...groups.values()].map((g) => {
+    const labels = g.map((f, i) => (i === 0 ? f.label : f.label.toLowerCase()));
+    const list = labels.length > 1 ? `${labels.slice(0, -1).join(", ")} and ${labels.at(-1)}` : labels[0]!;
+    const many = g.length > 1 || g[0]!.metric === "*";
+    const asOf = g[0]!.asOf ? ` as of ${day(g[0]!.asOf, true)}` : " from before it";
+    return `${list} ${many && g[0]!.metric !== "*" ? "are" : "is"}${asOf}; ${g[0]!.short} may have changed ${many && g[0]!.metric !== "*" ? "them" : "it"}.`;
+  }).join(" ");
+  return { text, title: [NO_PRO_FORMA, ...flags.map((f) => f.text)].join("\n\n") };
+}
+
 /** The flag for a key stat whose figure is as of `periodEnd`, if an event after it may have changed it. */
 export function keyStatFlag(key: string, periodEnd: string | null, flags: StaleFlag[]): StaleFlag | null {
   const metric = KEY_STAT_METRIC[key];
@@ -129,6 +150,16 @@ export function splitEvents(r: EventsResponse): { material: FilingEvent[]; routi
 }
 
 /** What a window says it covers. */
+/** The same window, short, for a margin rubric: [what it lists, the second line]. */
+export function windowRubric(r: EventsResponse): [string, string] {
+  const rep = r.latest_report;
+  if (r.window === "since_report" && rep) {
+    const word = rep.form.startsWith("10-K") ? "fiscal year" : "quarter";
+    return [`8-Ks after the ${word} ended ${day(rep.period_end, true)}`, `The ${rep.form} for it was filed ${day(rep.filed, true)}`];
+  }
+  return [`8-Ks since ${day(r.since, true)}`, "No 10-Q or 10-K in the last 400 days to count from"];
+}
+
 export function windowLine(r: EventsResponse): string {
   const rep = r.latest_report;
   if (r.window === "since_report" && rep) {

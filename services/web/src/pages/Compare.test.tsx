@@ -141,11 +141,13 @@ it("puts the peer median, without the target, under the table", async () => {
   await render(COMPS);
   const median = rows().find((r) => r.textContent?.startsWith("Peer median"))!;
   // only AAPL: TSLA is ungranted and NVDA is the target
-  // each median says how many of the peers it uses (n of N): AAPL of AAPL and TSLA
+  // each median says how many of the peers it uses: AAPL of AAPL and TSLA
   expect([...median.querySelectorAll("td.n")].map((td) => td.textContent)).toEqual(["$400.00B1 of 2", "30.0%1 of 2", "-2.0%1 of 2"]);
   expect([...median.querySelectorAll("td.n .count")].map((td) => td.textContent)).toEqual(["1 of 2", "1 of 2", "1 of 2"]);
   expect(median.querySelector("td.n")?.getAttribute("title")).toContain("Left out: 1 metadata only");
-  expect(median.textContent).toContain("n of N peers");
+  // beside "Peer median", how many peers the table has (analyst test 4: it read a literal "n of N")
+  expect(median.textContent).toContain("of 2 peers");
+  expect(median.textContent).not.toContain("n of N");
   expect($(".foot")?.textContent).toContain("1 company shows metadata only");
 });
 

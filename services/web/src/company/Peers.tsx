@@ -6,6 +6,7 @@ import {
   COMPARE_COLUMNS,
   compareRows,
   countText,
+  peerCountText,
   MASKED_TITLE,
   medianTitle,
   nextSort,
@@ -183,7 +184,7 @@ export function Peers({
                       );
                     })}
                     <tr className="agg">
-                      <td className="first" title="Each median says how many of the peers it uses; hover it for why the others are left out">Peer median <span className="unit">n of N</span></td>
+                      <td className="first" title="Each median says how many of the peers it uses; hover it for why the others are left out">Peer median <span className="unit">{peerCountText(rows)}</span></td>
                       {cols.map((k) => (
                         <td key={k} className="n" title={medianTitle(stats[k]!)}>
                           {stats[k]!.n === 0 && stats[k]!.banks > 0 ? NOT_APPLICABLE : statText(k, stats[k]!.median)}
@@ -205,7 +206,7 @@ export function Peers({
           ? "Similar businesses come from each company's latest 10-K Business section (Item 1), compared word by word; a company its 10-K names as a competitor ranks up, and a link opens that sentence. SIC division and revenue size count a little. "
           : "Same SIC code first, then revenue size. "}
         Sizes use TTM revenue, only for companies whose financials you can read. Each median says how
-        many of the peers it uses (n of N); hover it for why the others are left out (— not
+        many of the peers it uses ("3 of 4"); hover it for why the others are left out (— not
         reported, n/a, n/m or old). Hover a value for its period and source filing. Click a column to
         sort (again to reverse, a third time for the suggested order).
       </div>

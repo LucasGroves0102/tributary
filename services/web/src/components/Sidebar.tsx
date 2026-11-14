@@ -7,6 +7,7 @@ import { FRESHNESS_EXPLAINED } from "../home/useFeedStatus";
 import type { Workspace } from "../home/useWorkspace";
 import { href, NAV, type Route } from "../route";
 import type { Me } from "../types";
+import { Seal } from "./Seal";
 import { Spark } from "./Spark";
 import { Skeleton } from "./States";
 
@@ -60,8 +61,8 @@ export function Sidebar({ route, me, workspace, lastIngested, listed = null, onA
     <aside id="side-nav" className={open ? "side open" : "side"} aria-label="Navigation">
       <div className="side-top">
       <div className="brand">
-        <img src="/favicon.svg" alt="" width={18} height={18} />
-        Tributary
+        <Seal size="logo" />
+        <span className="wordmark">Tributary</span>
         {sandboxResetsIn && (
           <span className="env" title={`A temporary demo sandbox: it and what you save in it are deleted in ${sandboxResetsIn}`}>
             demo
@@ -96,7 +97,7 @@ export function Sidebar({ route, me, workspace, lastIngested, listed = null, onA
 
       <div className="side-lists" ref={lists}>
       <div className="sect">
-        <span className="grow">Watchlist{watchlist.state === "ok" ? ` · ${rows.length}` : ""}</span>
+        <span className="grow">Watchlist{watchlist.state === "ok" && <span className="sect-n">{rows.length}</span>}</span>
         <button onClick={onExport} title="Export CSV" aria-label="Export watchlist CSV">
           <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
             <path d="M6 1v7M3 5.5 6 8.5l3-3M1.5 11h9" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
@@ -175,8 +176,9 @@ export function Sidebar({ route, me, workspace, lastIngested, listed = null, onA
         {me && (
           <>
             <br />
-            Signed in as {accountName(me)} · {readableTotal(me).toLocaleString("en-US")} readable{" "}
-            {readableTotal(me) === 1 ? "company" : "companies"}
+            Signed in as {accountName(me)}
+            <br />
+            {readableTotal(me).toLocaleString("en-US")} readable {readableTotal(me) === 1 ? "company" : "companies"}
           </>
         )}
       </details>
@@ -208,11 +210,9 @@ export function Sidebar({ route, me, workspace, lastIngested, listed = null, onA
           <div className="credit">
         Built by{" "}
         <a href="https://github.com/LucasGroves0102" target="_blank" rel="noreferrer">Lucas Groves</a>
-        {" · "}
         <a href="https://github.com/LucasGroves0102/tributary#architecture" target="_blank" rel="noreferrer">
           How it works
         </a>
-        {" · "}
         <a href="https://github.com/LucasGroves0102/tributary" target="_blank" rel="noreferrer">GitHub</a>
       </div>
       </div>

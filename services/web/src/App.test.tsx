@@ -563,7 +563,10 @@ describe("assistant drawer", () => {
 
   it("a question a page wrote for you leaves when you do, unless you edited it", async () => {
     await render(`#/company/${NVDA}`);
-    await act(async () => [...container.querySelectorAll<HTMLButtonElement>(".co-head button")].find((b) => b.textContent === "Ask")!.click());
+    // Ask is in the header's More menu (a Radix DropdownMenu: ArrowDown on its button opens it)
+    await act(async () => { [...container.querySelectorAll<HTMLButtonElement>(".co-head button")].find((b) => b.textContent === "More")!
+      .dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })); });
+    await act(async () => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((i) => i.textContent === "Ask")!.click());
     await settle();
     const box = () => $("textarea") as HTMLTextAreaElement;
     expect(box().value).toContain("latest quarter");
@@ -664,13 +667,23 @@ it("links the data status page from the sidebar footer and shows it in the shell
   expect($(".status-home")).toBeNull();
 });
 
-it("switches theme and remembers it per user", async () => {
+it("follows the system's theme until the user chooses Light or Dark, remembers the choice per user, and System forgets it", async () => {
   await render();
-  expect(document.documentElement.dataset.theme).toBe("dark");
-  const button = [...container.querySelectorAll("button")].find((b) => b.textContent === "Light")!;
-  await act(async () => button.click());
+  // no choice: the page follows the system (tokens.css), and the button says so
+  expect(document.documentElement.dataset.theme).toBeUndefined();
+  const button = () => $(".theme-btn") as HTMLButtonElement;
+  expect(button().textContent).toBe("Theme System");
+  await act(async () => button().click());
   expect(document.documentElement.dataset.theme).toBe("light");
   expect(window.localStorage.getItem("tributary.theme.alice")).toBe("light");
+  expect(button().textContent).toBe("Theme Light");
+  await act(async () => button().click());
+  expect(document.documentElement.dataset.theme).toBe("dark");
+  expect(window.localStorage.getItem("tributary.theme.alice")).toBe("dark");
+  await act(async () => button().click());
+  expect(button().textContent).toBe("Theme System");
+  expect(document.documentElement.dataset.theme).toBeUndefined();
+  expect(window.localStorage.getItem("tributary.theme.alice")).toBeNull();
 });
 
 describe("the sidebar", () => {

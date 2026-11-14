@@ -251,7 +251,8 @@ it("exports a standalone SVG without hover marks, with the light palette embedde
   svg.innerHTML = '<g class="c0"><path d="M0,0"/></g><line class="hover-only ch-hover"/>';
   const text = svgText(svg);
   expect(text).toContain('width="900"');
-  expect(text).toContain(".c0{color:#3b5bdb}");
+  // Seal: the deck's first series is the ink, never the red
+  expect(text).toContain(".c0{color:#5c5350}");
   expect(text).not.toContain("hover-only");
   expect(text).not.toContain("var(--");
 });

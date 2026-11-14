@@ -1,5 +1,8 @@
+import * as Menu from "@radix-ui/react-dropdown-menu";
+import { useRef, useState } from "react";
+
 import { ApiError, expectedFilingsOf, screener } from "../api";
-import { header, HEADER_COLUMNS, HEADER_COLUMNS_WITH_BANK, listingLine } from "../company/data";
+import { header, HEADER_COLUMNS, HEADER_COLUMNS_WITH_BANK } from "../company/data";
 import { DataNotes } from "../company/DataNotes";
 import { EarningsView } from "../company/Earnings";
 import { Filings } from "../company/Filings";
@@ -12,10 +15,13 @@ import type { ChartState } from "../chart/model";
 import type { StatementView } from "../company/statementView";
 import { Ratios, Segments, Statements } from "../company/Tables";
 import { useLoad } from "../company/useLoad";
+import { placeName } from "../companies/places";
+import { Folio } from "../components/Folio";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { day } from "../format";
 import { COMPANY_TABS, go, href, type CompanyTab } from "../route";
-import { NewWork } from "../workspaces/NewWork";
+import { NEW_WORK_TITLE, NewWorkForm, newWorkOffline } from "../workspaces/NewWork";
+import type { WrittenKind } from "../types";
 import type { Saved } from "../workspaces/useSaved";
 import { restoreProject } from "../analysis/project";
 import { coRegistrantNote } from "../compare/peers";
@@ -53,6 +59,9 @@ export function Company({ token, companyId, tab, statements, changes, watched, o
     ),
   );
   const expected = useLoad(companyId, () => expectedFilingsOf(token, companyId));
+  // New thesis / New model from the More menu: its form opens under the actions
+  const [newKind, setNewKind] = useState<WrittenKind | null>(null);
+  const opening = useRef(false);
   // the Price tab exists only when the server offers "Connect your data"
   const market = useMarketData(token);
   const tabs = COMPANY_TABS.filter(([t]) => t !== "price" || market?.enabled);
@@ -80,84 +89,112 @@ export function Company({ token, companyId, tab, statements, changes, watched, o
   // charts and saved work call it this: its ticker, or its name when it has none
   const ticker = h.tickers[0] ?? h.name;
   const next = expected?.state === "ok" ? (expected.data.expected[0] ?? null) : null;
-  const listing = listingLine(h.tickers, h.exchanges);
   const joint = coRegistrantNote(h.name, row.co_registrants ?? [], companyId);
+  // the SEC's code for where it is incorporated, in words ("Y9" is Jersey); a code EDGAR doesn't list isn't shown
+  const place = placeName(h.state);
+  const more = h.tickers.length > 1 ? h.tickers.slice(1) : [];
 
   return (
-    <div className="page">
-      <section className="card">
-        <div className="card-b co-head">
-          <div className="grow">
-            <div className="row wrap">
-              <h1>{h.name}</h1>
-              <span className="mono muted" title={listing.more ?? undefined}>{listing.text}</span>
-              <span className="tiers">
-                {row.access.length ? (
-                  row.access.map((t) => <span key={t} className={`tier ${t}`}>{t}</span>)
-                ) : (
-                  <span className="tier none">metadata only</span>
-                )}
-              </span>
-            </div>
-            <div className="meta">
-              {[
-                row.sector && `${row.sector} · ${row.sector_industry}`,
-                h.industry && `${h.industry}${h.sic ? ` (SIC ${h.sic})` : ""}`,
-                h.fye && `fiscal year ends ${h.fye}`,
-                h.filer && `${h.filer.toLowerCase()} filer`,
-                h.state && `incorporated in ${h.state}`,
-                h.currency && `figures in ${h.currency}`,
-                `CIK ${companyId}`,
-              ].filter(Boolean).join(" · ")}
-            </div>
-            <div className="meta">
-              {next?.last_filed && <>last periodic report filed {day(next.last_filed, true)} · </>}
-              {next ? (
-                <span title={expected?.state === "ok" ? expected.data.method : undefined}>
-                  next {next.form} for the period ending {day(next.period_end, true)} expected
-                  {next.expected_date ? ` ~${day(next.expected_date, true)}` : ""}
-                  <span className="faint"> (estimate{next.status !== "upcoming" ? `, ${next.status}` : ""})</span>
+    <div className="page company-page">
+      <Folio name={row.sector ?? "Company"} line={row.sector ? row.sector_industry : h.industry} lead className="co-head">
+        <h1 className="co-name">{h.name}</h1>
+        <p className="meta co-meta">
+          {h.tickers[0] && (
+            <span className="co-listing" title={more.length ? `Also listed: ${more.join(", ")}` : undefined}>
+              <b>{h.tickers[0]}</b>
+              {more.length > 0 && ` +${more.length} more`}
+              {h.exchanges.length > 0 && ` on ${h.exchanges.join(", ")}`}
+            </span>
+          )}
+          {h.industry && <span>{h.industry}{h.sic ? `, SIC ${h.sic}` : ""}</span>}
+          {h.fye && <span>Fiscal year ends in {h.fye}</span>}
+          {h.filer && <span>{h.filer} filer</span>}
+          {place && <span title={`EDGAR's code: ${h.state}`}>Incorporated in {place}</span>}
+          {h.currency && <span>Figures in {h.currency}</span>}
+          {/* what this user's access covers is the CIK's hover, not a mark in the masthead */}
+          <span className="co-cik" title={`Your access: ${accessWords(row.access)}`}>CIK {companyId}</span>
+        </p>
+        {next && (
+          <p className="meta co-meta">
+            {next.last_filed && <span>Last periodic report filed {day(next.last_filed, true)}</span>}
+            <span title={expected?.state === "ok" ? expected.data.method : undefined}>
+              Next {next.form}, for the period ending {day(next.period_end, true)}, expected
+              {next.expected_date ? ` around ${day(next.expected_date, true)}` : ""}
+              {" "}(an estimate{next.status !== "upcoming" ? `, ${next.status}` : ""})
+            </span>
+          </p>
+        )}
+        {joint && (
+          <p className="meta co-meta joint-note" role="note">
+            <span>
+              {joint}{" "}
+              {(row.co_registrants ?? []).map((c, i) => (
+                <span key={c.company_id}>
+                  {i > 0 && ", "}
+                  <a href={href({ view: "company", companyId: c.company_id })}>Open {c.name}</a>
                 </span>
-              ) : (
-                <span className="faint">no expected filing date</span>
-              )}
-            </div>
-            {joint && (
-              <p className="meta joint-note" role="note">
-                {joint}{" "}
-                {(row.co_registrants ?? []).map((c, i) => (
-                  <span key={c.company_id}>
-                    {i > 0 && " · "}
-                    <a href={href({ view: "company", companyId: c.company_id })}>Open {c.name}</a>
-                  </span>
-                ))}
-              </p>
-            )}
-          </div>
-          <div className="row wrap">
-            {watched !== null && (
-              <button className="btn" onClick={() => void onWatch(!watched)}
-                title={row.access.includes("financials") ? undefined : "Watching follows its filings; it grants no access to values"}>
-                {watched ? "✓ Watching" : "+ Watch"}
-              </button>
-            )}
-            {row.access.includes("financials") && (
-              <button className="btn" onClick={() => onChart()}>Chart</button>
-            )}
-            <button className="btn" onClick={() => go({ view: "compare", compare: { target: companyId } })}>Compare</button>
-            <button className="btn" onClick={() => onAsk(`Summarize ${h.name}'s latest quarter.`)}>Ask</button>
-            {saved && row.access.includes("financials") && <AnalysisLink saved={saved} companyId={companyId} ticker={ticker} />}
-            {saved && <NewWork token={token} saved={saved} company={{ id: companyId, name: ticker }} />}
-          </div>
+              ))}
+            </span>
+          </p>
+        )}
+        {/* two actions in the open (the analysis, the watch), the rest behind More: seven equal buttons were
+            the masthead's loudest thing. Radix's menu, not modal: a modal one locks scrolling with an
+            injected <style>, which the CSP refuses. */}
+        <div className="co-acts">
+          {saved && row.access.includes("financials") && <AnalysisLink saved={saved} companyId={companyId} ticker={ticker} />}
+          {watched !== null && (
+            <button className="btn" onClick={() => void onWatch(!watched)} aria-pressed={watched}
+              title={row.access.includes("financials") ? undefined : "Watching follows its filings; it grants no access to values"}>
+              {watched ? "✓ Watching" : "+ Watch"}
+            </button>
+          )}
+          <Menu.Root modal={false}>
+            <Menu.Trigger asChild>
+              <button className="btn more-btn">More<span className="more-caret" aria-hidden="true" /></button>
+            </Menu.Trigger>
+            <Menu.Portal>
+              <Menu.Content className="menu" align="start" sideOffset={6} collisionPadding={12}
+                onCloseAutoFocus={(e) => {
+                  // a new thesis or model's form takes the focus, not the More button
+                  if (opening.current) e.preventDefault();
+                  opening.current = false;
+                }}>
+                {row.access.includes("financials") && (
+                  <Menu.Item className="menu-item" onSelect={() => onChart()}>Chart</Menu.Item>
+                )}
+                <Menu.Item className="menu-item" onSelect={() => go({ view: "compare", compare: { target: companyId } })}>Compare</Menu.Item>
+                <Menu.Item className="menu-item" onSelect={() => onAsk(`Summarize ${h.name}'s latest quarter.`)}>Ask</Menu.Item>
+                {saved && (
+                  <>
+                    <Menu.Separator className="menu-sep" />
+                    {(["thesis", "model"] as const).map((k) => (
+                      <Menu.Item key={k} className="menu-item" disabled={newWorkOffline(saved)}
+                        title={newWorkOffline(saved) ? "Saving is unavailable right now" : NEW_WORK_TITLE[k]}
+                        onSelect={() => {
+                          opening.current = true;
+                          setNewKind(k);
+                        }}>
+                        New {k}
+                      </Menu.Item>
+                    ))}
+                  </>
+                )}
+              </Menu.Content>
+            </Menu.Portal>
+          </Menu.Root>
         </div>
-        <nav className="tabs" aria-label="Company sections">
+        {saved && newKind && (
+          <NewWorkForm key={newKind} kind={newKind} token={token} saved={saved} company={{ id: companyId, name: ticker }}
+            onDone={() => setNewKind(null)} />
+        )}
+        <nav className="tabs co-tabs" aria-label="Company sections">
           {tabs.map(([t, label]) => (
             <a key={t} href={href({ view: "company", companyId, tab: t })} aria-current={t === tab ? "page" : undefined}>
               {label}
             </a>
           ))}
         </nav>
-      </section>
+      </Folio>
 
       {tab === "overview" && <Overview token={token} companyId={companyId} name={h.name} row={row} access={row.access} />}
       {tab === "earnings" && (
@@ -178,6 +215,12 @@ export function Company({ token, companyId, tab, statements, changes, watched, o
   );
 }
 
+/** What a user's access covers for a company, in words (the CIK's hover). */
+function accessWords(access: string[]): string {
+  if (!access.length) return "metadata only; your plan doesn't cover its financials or filing text";
+  return access.map((t) => (t === "filings" ? "filing text" : t)).join(" and ");
+}
+
 /** The two ways to start research, side by side where the user chooses (L5): an analysis (the
  * guided project, its thesis and model inside it) or, beside it, a single thesis or model in a
  * folder (NewWork). Opens the company's analysis if there is one. */
@@ -185,12 +228,12 @@ function AnalysisLink({ saved, companyId, ticker }: { saved: Saved; companyId: s
   const list = saved.list.state === "ok" ? saved.list.workspaces : [];
   const project = list.find((w) => restoreProject(w.project)?.companyId === companyId);
   return project ? (
-    <a className="btn" href={href({ view: "analysis", projectId: project.workspace_id })}
+    <a className="btn primary" href={href({ view: "analysis", projectId: project.workspace_id })}
       title={`Your guided analysis of ${ticker}: business, numbers, earnings, what changed, peers, model, thesis and monitor`}>
       Open analysis
     </a>
   ) : (
-    <a className="btn" href={href({ view: "analysis", start: companyId })}
+    <a className="btn primary" href={href({ view: "analysis", start: companyId })}
       title={`Eight guided steps for ${ticker} (business, numbers, earnings, what changed, peers, model, thesis, monitor), with its thesis and model inside. New thesis and New model make a single item instead.`}>
       Start an analysis
     </a>

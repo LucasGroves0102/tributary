@@ -11,6 +11,12 @@
     "e2e": "playwright test"
   },
   "dependencies": {
+    "@fontsource-variable/archivo": "5.3.0",
+    "@fontsource-variable/source-serif-4": "5.3.1",
+    "@radix-ui/react-alert-dialog": "1.2.1",
+    "@radix-ui/react-dropdown-menu": "2.2.1",
+    "@radix-ui/react-toggle-group": "1.2.1",
+    "@radix-ui/react-tooltip": "1.4.1",
     "dompurify": "3.2.6",
     "marked": "15.0.12",
     "react": "19.1.0",

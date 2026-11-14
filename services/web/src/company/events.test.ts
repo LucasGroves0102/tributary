@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { EarningsResponse, EventsResponse } from "../types";
-import { eventLabels, firstQuarter, keyStatFlag, passageLines, quarterName, splitEvents, staleFlags, windowLine } from "./events";
+import { eventLabels, firstQuarter, keyStatFlag, NO_PRO_FORMA, passageLines, quarterName, splitEvents, staleFlags, staleLine, windowLine, windowRubric } from "./events";
 import DECK_EARNINGS from "./fixtures/deck-earnings.json";
 import VRT_EARNINGS from "./fixtures/vrt-earnings.json";
 import VRT_EVENTS from "./fixtures/vrt-events.json";
@@ -61,6 +61,8 @@ describe("events since the last report", () => {
     expect(windowLine(events)).toBe("8-Ks filed after the quarter the latest 10-Q covers (ended Sep 30, 2026; filed Oct 28, 2026)");
     expect(windowLine({ ...events, window: "recent", since: "2025-10-04", latest_report: null }))
       .toBe("8-Ks filed since Oct 4, 2025: no 10-Q or 10-K in the last 400 days to count from");
+    // the same window, short, for a margin rubric
+    expect(windowRubric(events)).toEqual(["8-Ks after the quarter ended Sep 30, 2026", "The 10-Q for it was filed Oct 28, 2026"]);
   });
 });
 
@@ -93,5 +95,26 @@ describe("earnings releases", () => {
     const [note] = deck.quarters[0]!.adjustments;
     expect(note!.kind).toBe("note");
     expect(note!.text).toContain("$46.0 million");
+  });
+});
+
+describe("the Overview's one line about figures a later 8-K may have changed", () => {
+  const flag = (metric: string, label: string, short: string, asOf: string | null = "2026-07-26") =>
+    ({ metric, label, asOf, events: [], short, text: `${label} text` });
+  const AUG = "the Aug 17, 2026 8-K (Material agreement)";
+
+  it("names the figures and the event in one sentence, the no-pro-forma explanation in the hover", () => {
+    const line = staleLine([flag("long_term_debt", "Debt", AUG), flag("net_debt", "Net debt", AUG), flag("debt_to_equity", "Debt / equity", AUG), flag("cash", "Cash", AUG)])!;
+    expect(line.text).toBe("Debt, net debt, debt / equity and cash are as of Jul 26, 2026; the Aug 17, 2026 8-K (Material agreement) may have changed them.");
+    expect(line.title).toContain(NO_PRO_FORMA);
+    expect(line.title).toContain("Cash text");
+  });
+
+  it("one figure, every figure, two events", () => {
+    expect(staleLine([flag("cash", "Cash", AUG)])!.text).toBe("Cash is as of Jul 26, 2026; the Aug 17, 2026 8-K (Material agreement) may have changed it.");
+    expect(staleLine([flag("*", "Every figure", AUG)])!.text).toBe("Every figure is as of Jul 26, 2026; the Aug 17, 2026 8-K (Material agreement) may have changed it.");
+    const two = staleLine([flag("cash", "Cash", AUG), flag("total_assets", "Total assets", "the Sep 3, 2026 8-K (Other events)")])!;
+    expect(two.text).toBe("Cash is as of Jul 26, 2026; the Aug 17, 2026 8-K (Material agreement) may have changed it. Total assets is as of Jul 26, 2026; the Sep 3, 2026 8-K (Other events) may have changed it.");
+    expect(staleLine([])).toBeNull();
   });
 });

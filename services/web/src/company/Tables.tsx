@@ -3,7 +3,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { annualPerShare, ApiError, financialsView, segments as fetchSegments } from "../api";
 import { NO_DATA, NO_DATA_TITLE, NOT_APPLICABLE, NOT_MEANINGFUL } from "../blanks";
 import { download } from "../download";
-import { change, day, moneyRow, pct } from "../format";
+import { change, day, moneyRow, paren, pct } from "../format";
 import { newestPeriodic } from "../thesis/useRevisit";
 import type { Callout, FinancialRow, IndexedFiling } from "../types";
 import { calloutLines, calloutText } from "./callouts";
@@ -37,6 +37,8 @@ import {
 } from "./data";
 import { go, href } from "../route";
 import type { StatementView } from "./statementView";
+import { Choices } from "../components/Choices";
+import { Folio } from "../components/Folio";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { TableScroll } from "../components/TableScroll";
 import { useLoad, type Load } from "./useLoad";
@@ -58,26 +60,6 @@ const RANGES: [StatementRange, string][] = [
   ["10y", "10y"],
   ["max", "Max"],
 ];
-
-function Seg<T extends string>({ value, options, set, label, off }: {
-  value: T;
-  options: [T, string][];
-  set: (v: T) => void;
-  label: string;
-  /** an option that doesn't apply here, and why (its hover) */
-  off?: Partial<Record<T, string>>;
-}) {
-  return (
-    <span className="seg" role="group" aria-label={label}>
-      {options.map(([v, l]) => (
-        <button key={v} className={v === value ? "on" : undefined} aria-pressed={v === value} onClick={() => set(v)}
-          disabled={!!off?.[v]} title={off?.[v]}>
-          {l}
-        </button>
-      ))}
-    </span>
-  );
-}
 
 const NO_DATA_CELL: BlankCell = { text: NO_DATA, title: NO_DATA_TITLE };
 
@@ -103,16 +85,18 @@ function Cell({ cell, blank = NO_DATA_CELL, companyId, note }: { cell: TableCell
   const { reader, edgar } = cellLinks(cell, companyId);
   const form = cell.source?.form ?? "filing";
   const classes = ["n", cell.derived && "derived", cell.callout && "called", cell.tone && `tone-${cell.tone}`].filter(Boolean).join(" ");
+  // a negative amount in parentheses, as a filing prints it; the hover and the CSV keep the sign
+  const text = paren(cell.text);
   return (
     <td className={classes} title={note ? `${note}\n\n${cell.title}` : cell.title}>
       {/* a callout's mark: the sentence is in the hover and listed under the table */}
       {cell.callout && <span className="callout-mark" aria-hidden="true" />}
       {reader ? (
-        <a href={reader} aria-label={`${cell.text}: open the ${form} in Tributary's reader`}>{cell.text}</a>
+        <a href={reader} aria-label={`${text}: open the ${form} in Tributary's reader`}>{text}</a>
       ) : edgar ? (
-        <a href={edgar} target="_blank" rel="noopener noreferrer">{cell.text}</a>
+        <a href={edgar} target="_blank" rel="noopener noreferrer">{text}</a>
       ) : (
-        cell.text
+        text
       )}
       {/* the arrow is drawn by CSS, so a copied table and the cell's text stay the figure */}
       {reader && edgar && (
@@ -156,7 +140,7 @@ export function MetricTableView({ table, first, companyId, open = null, onOpen }
   }
   return (
     <TableScroll atEnd resetKey={table.columns.length} label={first}>
-      <table className="t statement">
+      <table className="t statement ruled now">
         <thead>
           <tr>
             <th className="first">{first}</th>
@@ -174,7 +158,7 @@ export function MetricTableView({ table, first, companyId, open = null, onOpen }
             const isOpen = opens && open === r.metric;
             const lines = isOpen ? inputLines(r) : [];
             return [
-              <tr key={r.metric} className={[r.opts?.sub && "sub", r.opts?.total && "total", isOpen && "opened"].filter(Boolean).join(" ") || undefined}>
+              <tr key={r.metric} className={[r.opts?.sub && "sub", r.opts?.total && "total", r.opts?.grand && "grand", isOpen && "opened"].filter(Boolean).join(" ") || undefined}>
                 <td className="first" title={r.opts?.define}>
                   {opens ? (
                     <button className="link open-row" aria-expanded={isOpen} onClick={() => onOpen!(isOpen ? null : r.metric)}
@@ -198,7 +182,7 @@ export function MetricTableView({ table, first, companyId, open = null, onOpen }
                     {texts.map((t, i) => (
                       <td key={table.columns[i]!.periodEnd} className={t === null ? "n faint" : "n"}
                         title={t === null ? `${partName(k)}: not in this period's figure` : `${partName(k)}, ${table.columns[i]!.label}: ${t}, as ${r.label.toLowerCase()} read it`}>
-                        {t ?? "·"}
+                        {t === null ? "·" : paren(t)}
                       </td>
                     ))}
                   </tr>
@@ -274,6 +258,17 @@ function BehindNotice({ behind, companyId, name, url }: { behind: FiguresBehind;
   );
 }
 
+/** What an empty cell reads (blanks.ts): each mark with its meaning, as a list, not a dotted string. */
+export function BlanksLegend() {
+  return (
+    <ul className="blanks-legend" aria-label="What an empty cell reads">
+      <li><span className="blank-mark">{NO_DATA}</span> no data in this period</li>
+      <li><span className="blank-mark">—</span> not reported</li>
+      <li><span className="blank-mark">$0</span> a real zero</li>
+    </ul>
+  );
+}
+
 /** Statement, period, basis and range live in the address (route.ts), so a view can be linked,
  * bookmarked and undone with Back. Range applies to Quarterly and TTM; Annual is ten years. */
 export function Statements({ token, companyId, name, ticker, notApplicable = [], view = {} }: TableProps & { view?: StatementView }) {
@@ -341,16 +336,18 @@ export function Statements({ token, companyId, name, ticker, notApplicable = [],
     load?.state === "ok" && table &&
     download(`${ticker.toLowerCase()}-${kind}-${period}${period !== "a" && range !== "8q" ? `-${range}` : ""}${basis === "calendar" ? "-calendar" : ""}.csv`, new Blob([financialsCsv(load.data.rows, table, req.view)], { type: "text/csv" }));
 
+  const periodWord = period === "a" ? "by year" : period === "ttm" ? "twelve months to each quarter end" : "by quarter";
   return (
-    <section className="card">
-      <div className="card-h wrap">
-        <Seg label="Statement" value={kind} set={(k) => set({ kind: k })}
+    <Folio name="Statement" className="statements"
+      line={`${STATEMENTS[kind].label}, ${periodWord}`}
+      aside={`${basis === "calendar" ? "Calendar quarters" : "Fiscal periods"}; ${table?.currency ?? "US dollars"}; derived figures in italic`}>
+      <div className="statement-bar">
+        <Choices label="Statement" value={kind} set={(k) => set({ kind: k })}
           options={(Object.keys(STATEMENTS) as Statement[]).map((k) => [k, STATEMENTS[k].label])} />
-        <Seg label="Period" value={period} set={(p) => set({ period: p })} options={PERIODS}
+        <Choices label="Period" value={period} set={(p) => set({ period: p })} options={PERIODS}
           off={kind === "bs" ? { ttm: BALANCE_NOT_TTM } : undefined} />
-        {period !== "a" && <Seg label="Range" value={range} set={(r) => set({ range: r })} options={RANGES} />}
-        <Seg label="Basis" value={basis} set={(b) => set({ basis: b })} options={BASES} />
-        <span className="sub">{basis === "calendar" ? "calendar quarters" : "fiscal periods"} · {table?.currency ?? "USD"} · hover a value for its filing</span>
+        {period !== "a" && <Choices label="Range" value={range} set={(r) => set({ range: r })} options={RANGES} />}
+        <Choices label="Basis" value={basis} set={(b) => set({ basis: b })} options={BASES} />
         <span className="grow" />
         <button className="btn sm" onClick={exportCsv} disabled={!table?.rows.length}>Export CSV</button>
       </div>
@@ -394,24 +391,30 @@ export function Statements({ token, companyId, name, ticker, notApplicable = [],
           )
         }
       </Gate>
-      <div className="foot">
-        {period === "a"
-          ? basis === "calendar"
-            ? "Annual = the calendar year: the four quarters ending nearest each calendar Q4, balances at its end. "
-            : "Annual = the fiscal year: four quarters to each fiscal Q4, balances at the year end, EPS and shares as the latest 10-K to state them, so years before a stock split may not be adjusted for it. "
-          : period === "ttm"
-            ? "TTM = trailing twelve months to each quarter end. Per-share figures don't add across quarters: n/a. "
-            : kind === "is"
-              ? "EPS and diluted shares have no fiscal Q4: a 10-K states the year, and the year less nine months isn't the quarter when the share count changes. "
-              : ""}
-        {kind === "cf" && "Outflows (capex, dividends, buybacks) are shown negative, as the cash flow statement prints them; the CSV too. Their XBRL tags carry the amount paid, so the chart builder and screener list them as positive amounts. "}
-        {kind === "cf" && "Cash at the start of a period is the end of the period before; the reconciliation checks start + change = end. "}
-        {period === "q" && "A marked quarter is far from the quarters beside it, or of the other sign (listed under the table). "}
-        {"A line with ▸ opens into what it is made of, with the tags and filings behind it. "}
-        Italic values are derived (e.g. Q4 = the 10-K's year minus nine months year-to-date),
-        the rest are reported. A value opens its filing in the reader; ↗ beside it (on hover) is the filing on EDGAR. {NO_DATA} no data in this period, — not reported, $0 a real zero.
-      </div>
-    </section>
+      <p className="foot read-first">A figure opens its filing; italic ones are derived, and a negative amount is in parentheses.</p>
+      <details className="how-to-read">
+        <summary>How to read these figures</summary>
+        <div className="foot">
+          {period === "a"
+            ? basis === "calendar"
+              ? "Annual = the calendar year: the four quarters ending nearest each calendar Q4, balances at its end. "
+              : "Annual = the fiscal year: four quarters to each fiscal Q4, balances at the year end, EPS and shares as the latest 10-K to state them, so years before a stock split may not be adjusted for it. "
+            : period === "ttm"
+              ? "TTM = trailing twelve months to each quarter end. Per-share figures don't add across quarters: n/a. "
+              : kind === "is"
+                ? "EPS and diluted shares have no fiscal Q4: a 10-K states the year, and the year less nine months isn't the quarter when the share count changes. "
+                : ""}
+          {kind === "cf" && "Outflows (capex, dividends, buybacks) are shown negative, as the cash flow statement prints them; the CSV too. Their XBRL tags carry the amount paid, so the chart builder and screener list them as positive amounts. "}
+          {kind === "cf" && "Cash at the start of a period is the end of the period before; the reconciliation checks start + change = end. "}
+          {period === "q" && "A marked quarter is far from the quarters beside it, or of the other sign (listed under the table). "}
+          {"A line with ▸ opens into what it is made of, with the tags and filings behind it. "}
+          Italic values are derived (e.g. Q4 = the 10-K's year minus nine months year-to-date), the rest are reported. A
+          value opens its filing in the reader; ↗ beside it (on hover) is the filing on EDGAR. A negative amount is in
+          parentheses; the CSV and the hover keep its sign.
+        </div>
+        <BlanksLegend />
+      </details>
+    </Folio>
   );
 }
 

@@ -327,6 +327,13 @@ export function peerStats(rows: CompareRow[], cols: string[]) {
 /** "3 of 4": how many peers a column's median uses. */
 export const countText = (s: PeerStat): string => `${s.n} of ${s.of}`;
 
+/** The median row's label beside "Peer median": how many peers the table has ("of 4 peers"), so each
+ * column's "3 of 4" reads against it (analyst test 4: the label was a literal "n of N"). */
+export const peerCountText = (rows: { isTarget: boolean }[]): string => {
+  const n = rows.filter((r) => !r.isTarget).length;
+  return `of ${n} ${n === 1 ? "peer" : "peers"}`;
+};
+
 /** The peer-median cell's hover: what the median uses and why each other peer is left out, in the
  * blanks vocabulary (blanks.ts). */
 export function medianTitle(s: PeerStat): string {

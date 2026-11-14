@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ago, change, companyName, day, displayNames, duration, money, moneyRow, pct, quarter } from "./format";
+import { ago, change, companyName, day, displayNames, duration, inWords, money, moneyRow, paren, pct, quarter } from "./format";
 
 describe("moneyRow", () => {
   it("reads a row in the largest value's unit", () => {
@@ -93,5 +93,27 @@ describe("companyName", () => {
   it("rewrites names only on objects that carry a company_id", () => {
     expect(displayNames({ rows: [{ company_id: "1", name: "COCA COLA CO" }], name: "KEEP" })).toEqual({
       rows: [{ company_id: "1", name: "Coca-Cola" }], name: "KEEP" });
+  });
+});
+
+describe("Seal: negatives in parentheses, amounts in words", () => {
+  it("puts a negative amount in parentheses and leaves everything else alone", () => {
+    expect(paren("-$6.05B")).toBe("($6.05B)");
+    expect(paren("-€2.10B")).toBe("(€2.10B)");
+    expect(paren("-CAD 1.20B")).toBe("(CAD 1.20B)");
+    expect(paren("-$0.12")).toBe("($0.12)");
+    expect(paren("$6.05B")).toBe("$6.05B");
+    expect(paren("-4.0%")).toBe("-4.0%");
+    expect(paren("-0.40x")).toBe("-0.40x");
+    expect(paren("-1,022,239")).toBe("-1,022,239");
+    expect(paren("—")).toBe("—");
+    expect(paren("n/m")).toBe("n/m");
+  });
+
+  it("writes an amount's scale as a word", () => {
+    expect(inWords("$302.97B")).toBe("$302.97 billion");
+    expect(inWords("€2.10M")).toBe("€2.10 million");
+    expect(inWords("$1.20T")).toBe("$1.20 trillion");
+    expect(inWords("$950")).toBe("$950");
   });
 });

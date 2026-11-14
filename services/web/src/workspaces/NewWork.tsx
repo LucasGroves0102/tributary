@@ -40,7 +40,15 @@ export function NewWork(props: Fixed) {
   );
 }
 
-function NewWorkForm({ kind, token, saved, company: fixed, workspaceId, onDone }: Fixed & { kind: WrittenKind; onDone: () => void }) {
+/** Why New thesis / New model can't be used right now (null: they can), and what each makes. */
+export const newWorkOffline = (saved: Saved): boolean => saved.list.state === "unavailable" || saved.list.state === "error";
+export const NEW_WORK_TITLE: Record<WrittenKind, string> = {
+  thesis: "Write a thesis in Markdown, with your charts and models embedded",
+  model: "Forecast revenue and operating income from history and your assumptions",
+};
+
+/** The form New thesis or New model opens (also from the company page's More menu). */
+export function NewWorkForm({ kind, token, saved, company: fixed, workspaceId, onDone }: Fixed & { kind: WrittenKind; onDone: () => void }) {
   const id = useId();
   const list = saved.list.state === "ok" ? saved.list.workspaces : [];
   const [company, setCompany] = useState<{ id: string; name: string } | null>(fixed ?? null);

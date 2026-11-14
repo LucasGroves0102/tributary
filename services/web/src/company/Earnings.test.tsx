@@ -160,14 +160,24 @@ it("lists the 8-Ks since the last report and flags the balances an acquisition a
 it("flags Vertiv's Sep 30 cash and net debt on the Overview's key stats, with the event, without a new figure", async () => {
   const row = VRT_ROW as unknown as ScreenerRow;
   await render(<Overview token="t" companyId={VRT} name="Vertiv" row={row} access={["financials", "filings"]} />);
-  const stat = (label: string) => $$(".kv.stats > div").find((d) => d.querySelector(".k")?.textContent === label)!;
-  expect(stat("Net debt").querySelector(".stale-flag")?.textContent).toBe("⚑ before the Oct 27, 2026 8-K (Acquisition or disposition) and 1 more 8-K");
-  expect(stat("Net debt").getAttribute("title")).toContain("Net debt at Sep 30, 2026 is from before the Oct 27, 2026 8-K");
-  expect(stat("Net debt").querySelector(".v")?.textContent).toBe("-$783.20M"); // the figure itself is unchanged
-  expect(stat("Cash").querySelector(".stale-flag")).not.toBeNull();
-  expect(stat("Revenue").querySelector(".stale-flag")).toBeNull();
-  expect(stat("Debt / equity").querySelector(".stale-flag")).toBeNull(); // 2.01 doesn't list it
+  // Seal: a flagged balance is red with "*" (CSS: the text stays the figure), the event in the ledger's note
+  const stat = (key: string) => $$(".ledger dl > div").find((d) => d.getAttribute("data-key") === key)!;
+  expect(stat("net_debt_q").querySelector("dd")?.className).toContain("later");
+  expect($$(".fnote p").map((p) => p.textContent)).toContain("*At Sep 30, 2026, before the Oct 27, 2026 8-K (Acquisition or disposition) and 1 more 8-K, which may have changed it.");
+  expect(stat("net_debt_q").querySelector(".seal-source")?.textContent).toContain("Net debt at Sep 30, 2026 is from before the Oct 27, 2026 8-K");
+  // the figure itself is unchanged (a negative net debt reads as net cash, its exact figure in the hover)
+  expect(stat("net_debt_q").querySelector("dt")?.textContent).toBe("Net cash");
+  expect(stat("net_debt_q").querySelector(".figure")?.textContent).toBe("$783.20M");
+  expect(stat("net_debt_q").querySelector(".seal-source")?.textContent).toContain("(net debt -$783.20M)");
+  expect(stat("cash_q").querySelector("dd")?.className).toContain("later");
+  expect(stat("revenue_ttm").querySelector("dd")?.className ?? "").not.toContain("later");
+  expect(stat("debt_to_equity_q").querySelector("dd")?.className ?? "").not.toContain("later"); // 2.01 doesn't list it
   expect($(".events-card h2")?.textContent).toBe("Since the last report");
+  // the ledger already marks the figures: here the flags are one line, the no-pro-forma explanation its hover
+  expect($(".events-card .stale-box")).toBeNull();
+  expect($(".events-card .stale-line")?.textContent).toBe(
+    "*Cash, debt, net debt and total assets are as of Sep 30, 2026; the Oct 27, 2026 8-K (Acquisition or disposition) and 1 more 8-K may have changed them.");
+  expect($(".events-card .stale-line")?.getAttribute("title")).toContain("no pro forma");
   // one request for the card and the flags
   expect(vi.mocked(fetch).mock.calls.filter(([u]) => String(u).includes("/events"))).toHaveLength(1);
 });

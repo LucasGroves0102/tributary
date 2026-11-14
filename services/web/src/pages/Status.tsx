@@ -5,6 +5,7 @@ import { checkName } from "../companies/screen";
 import { ago, day, duration } from "../format";
 import { href } from "../route";
 import type { DataStatus, RecordedRun } from "../types";
+import { Seal } from "../components/Seal";
 import { TableScroll } from "../components/TableScroll";
 
 const REPO = "https://github.com/LucasGroves0102/tributary";
@@ -49,8 +50,9 @@ export function Status({ load = dataStatus, now = Date.now, signedOut = false }:
   return (
     <div className={signedOut ? "page status-page signed-out" : "page status-page"}>
       {signedOut && (
-        <a className="status-home" href={href({ view: "home" })}>
-          ← Tributary
+        <a className="status-home" href={href({ view: "home" })} aria-label="Tributary, the front door">
+          <Seal size="logo" />
+          <span className="wordmark">Tributary</span>
         </a>
       )}
       <div className="page-header">
@@ -100,7 +102,7 @@ function Body({ data, now, signedIn }: { data: DataStatus; now: number; signedIn
           <div className="k">From EDGAR to here, typically</div>
           <div className="v">{duration(i.p50_seconds)}</div>
           <div className="p">
-            95% within {duration(i.p95_seconds)} · {count(i.via_feed)} live-feed filings, last {i.window_days} days
+            95% within {duration(i.p95_seconds)}; {count(i.via_feed)} live-feed filings, last {i.window_days} days
           </div>
         </div>
         <div>
@@ -221,7 +223,7 @@ function Quality({ data, when, signedIn }: { data: DataStatus; when: (iso: strin
         <h2>Data-quality checks</h2>
         <span className="sub">
           {q.last_checked_at
-            ? `${count(q.companies_checked)} companies checked · last run ${when(q.last_checked_at)}`
+            ? `${count(q.companies_checked)} companies checked, last run ${when(q.last_checked_at)}`
             : "no check has run yet"}
         </span>
       </div>
@@ -289,8 +291,8 @@ function source(commit: string, path: string): string {
 
 function RunLine({ run, path }: { run: RecordedRun; path: string }) {
   return (
-    <span className="faint small">
-      Recorded {day(run.recorded_at, true)} ·{" "}
+    <span className="faint small run-line">
+      <span>Recorded {day(run.recorded_at, true)}</span>
       <a href={source(run.commit, path)} target="_blank" rel="noreferrer" title={`The full report on GitHub, as recorded (${run.commit})`}>
         Read the report
       </a>
@@ -339,8 +341,8 @@ function Recorded({ data }: { data: DataStatus }) {
             figures were also checked by hand against the filings. Re-checked on every code change, and a new version
             ships only after it passes.
           </span>
-          <span className="faint small">
-            Figures last changed {day(g.committed, true)} ·{" "}
+          <span className="faint small run-line">
+            <span>Figures last changed {day(g.committed, true)}</span>
             <a href={source(g.commit, g.readme)} target="_blank" rel="noreferrer" title={`How it's done, on GitHub (${g.commit})`}>
               How it's checked
             </a>

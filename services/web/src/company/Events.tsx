@@ -1,5 +1,7 @@
 import { useId } from "react";
 
+import { Folio } from "../components/Folio";
+
 import { companyEvents } from "../api";
 import { PinButton } from "../analysis/Pin";
 import { quoteBlock } from "../analysis/project";
@@ -7,7 +9,7 @@ import { day } from "../format";
 import { sectionName } from "../reader/sections";
 import { href } from "../route";
 import type { EventsResponse, FilingEvent } from "../types";
-import { ANNOUNCED_ITEM, ANNOUNCED_LABEL, eventLabels, itemLabel, METRIC_LABEL, splitEvents, staleFlags, windowLine } from "./events";
+import { ANNOUNCED_ITEM, ANNOUNCED_LABEL, eventLabels, itemLabel, METRIC_LABEL, splitEvents, staleFlags, staleLine, windowLine, windowRubric } from "./events";
 import { Gate } from "./Tables";
 import { type Load, useLoad } from "./useLoad";
 
@@ -17,16 +19,35 @@ import { type Load, useLoad } from "./useLoad";
  * changed (tester 1's acquisition after the quarter end): flagged with the event, never recomputed.
  * On the company's Overview and at the top of the What changed step. `load`: the Overview's own
  * request, so the page asks once for the card and its key-stat flags. */
-export function EventsCard({ token, companyId, name, load: given }: {
+export function EventsCard({ token, companyId, name, load: given, folio = false }: {
   token: string;
   companyId: string;
   name: string;
   load?: Load<EventsResponse | null> | null;
+  /** a section of a Seal page (the Overview), its window in the margin, instead of a card */
+  folio?: boolean;
 }) {
   const id = useId();
   const own = useLoad(given === undefined ? `${companyId}|events` : null, () => companyEvents(token, companyId));
   const load = given === undefined ? own : given;
   const data = load?.state === "ok" ? load.data : null;
+  const body = (
+    <Gate load={load} name={name} what="Filings">
+      {() => data === null ? (
+        <p className="empty">8-Ks since the last report aren't available here yet. The company's Filings tab lists every 8-K.</p>
+      ) : (
+        <EventsBody companyId={companyId} data={data} brief={folio} />
+      )}
+    </Gate>
+  );
+  if (folio) {
+    const [line, aside] = data ? windowRubric(data) : ["8-Ks since the latest 10-Q or 10-K", ""];
+    return (
+      <Folio name="Since the last report" line={line} aside={aside || undefined} className="events-card">
+        {body}
+      </Folio>
+    );
+  }
   return (
     <section className="card events-card" aria-labelledby={id}>
       <div className="card-h wrap">
@@ -44,13 +65,22 @@ export function EventsCard({ token, companyId, name, load: given }: {
   );
 }
 
-function EventsBody({ companyId, data }: { companyId: string; data: EventsResponse }) {
+/** `brief`: the Overview, whose ledger already marks each figure "*": the flags are one line there,
+ * the no-pro-forma explanation in its hover. Elsewhere (What changed) they're listed. */
+function EventsBody({ companyId, data, brief = false }: { companyId: string; data: EventsResponse; brief?: boolean }) {
   const flags = staleFlags(data);
   const { material, routine } = splitEvents(data);
   const asOf = flags[0]?.asOf;
+  const line = brief ? staleLine(flags) : null;
   return (
-    <div className="card-b">
-      {flags.length > 0 && (
+    <div className="card-b events-b">
+      {line && (
+        <p className="stale-line" role="note" title={line.title}>
+          <span className="mark" aria-hidden="true">*</span>
+          {line.text}
+        </p>
+      )}
+      {!brief && flags.length > 0 && (
         <div className="stale-box" role="note">
           <b>⚑ Figures as of {asOf ? day(asOf, true) : "the last report"} that a later 8-K may have changed</b>
           <ul>
@@ -86,15 +116,23 @@ function EventsBody({ companyId, data }: { companyId: string; data: EventsRespon
   );
 }
 
+/** A red-letter day: the date it was filed, large, red when the filing can change the figures (the
+ * API's `affects`); then what it is, its words and where to read it. */
 function EventRow({ companyId, e }: { companyId: string; e: FilingEvent }) {
   const ex = e.excerpt;
   const cite = ex?.citation;
   const edgar = e.document_url ?? e.filing_url;
   const affects = e.affects.map((m) => METRIC_LABEL[m] ?? m);
+  const [y, , d] = e.filed.slice(0, 10).split("-");
   return (
-    <li className="event">
+    <li className={affects.length ? "event red" : "event"}>
+      <div className="day">
+        <b aria-hidden="true">{Number(d)}</b>
+        <span aria-hidden="true">{day(e.filed).split(" ")[0]} {y}</span>
+        <span className="event-date visually-hidden">{day(e.filed, true)}</span>
+      </div>
+      <div className="event-body">
       <div className="row wrap event-head">
-        <span className="event-date">{day(e.filed, true)}</span>
         <span className="tag k">{e.form}</span>
         {eventLabels(e).map((l) => <span key={l} className="tag">{l}</span>)}
         {affects.length > 0 && (
@@ -147,6 +185,7 @@ function EventRow({ companyId, e }: { companyId: string; e: FilingEvent }) {
             items from the 8-K itself
           </span>
         )}
+      </div>
       </div>
     </li>
   );

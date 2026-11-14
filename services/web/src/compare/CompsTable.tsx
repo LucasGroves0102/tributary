@@ -14,6 +14,7 @@ import {
   compareRows,
   companiesOf,
   countText,
+  peerCountText,
   isBank,
   MASKED_TITLE,
   medianTitle,
@@ -27,7 +28,7 @@ type Load = { state: "loading" } | { state: "ok"; data: Screener } | { state: "e
 
 /** A saved comps set as the Compare page's table, read-only (a thesis or report embed: wishlist
  * B.8, "keep pinned comps as a table"): every column the set saved, each company's latest
- * reported quarter, the peer median with n of N. Values are read now through /v1/screener as the
+ * reported quarter, the peer median with how many peers each column uses. Values are read now through /v1/screener as the
  * viewer: a company whose financials they can't read shows metadata only, as on Compare. */
 export function CompsTable({ token, compare, label }: {
   token: string;
@@ -105,7 +106,7 @@ export function CompsTable({ token, compare, label }: {
             ))}
             <tr className="agg">
               <td className="first">Peer median</td>
-              <td className="faint">n of N peers</td>
+              <td className="faint">{peerCountText(rows)}</td>
               {cols.map((k) => (
                 <td key={k} className="n" title={medianTitle(stats[k]!)}>
                   {stats[k]!.n === 0 && stats[k]!.banks > 0 ? NOT_APPLICABLE : stats[k]!.n ? statText(k, stats[k]!.median) : NOT_REPORTED}
