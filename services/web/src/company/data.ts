@@ -856,18 +856,27 @@ export interface RecapRow {
   label: string;
   current: string;
   prior: string;
-  qoq: { text: string; sign: number } | null;
+  qoq: RecapDelta | null;
   yearAgo: string;
-  yoy: { text: string; sign: number } | null;
+  yoy: RecapDelta | null;
   title: string;
 }
 
-function delta(v: RecapValue | null, unit: string): RecapRow["qoq"] {
+/** A change column's cell: its text and sign, or n/m with the API's reason (`why`). */
+export interface RecapDelta {
+  text: string;
+  sign: number;
+  why?: string;
+}
+
+function delta(v: RecapValue | null, unit: string): RecapDelta | null {
   if (!v || v.change === undefined) return null;
   if (unit === "ratio") {
     const bp = num(v.change);
     return bp === null ? null : { text: `${bp >= 0 ? "+" : "-"}${Math.abs(bp * 1e4).toFixed(0)} bp`, sign: Math.sign(bp) };
   }
+  // the API's rule (query_api shapes.percent_change): no percentage from a zero or negative base
+  if (v.pct_not_meaningful) return { text: NOT_MEANINGFUL, sign: 0, why: v.pct_not_meaningful };
   const p = num(v.pct_change ?? null);
   return p === null ? null : { text: change(p), sign: Math.sign(p) };
 }

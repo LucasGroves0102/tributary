@@ -74,7 +74,7 @@ from query_api.connections import Limiter
 from query_api.formula import FormulaError, analyze, compile_formula, parse
 from query_api.formula.check import PERCENT
 from query_api.sandbox import is_sandbox_user
-from query_api.shapes import filing_url
+from query_api.shapes import filing_url, percent_change
 from query_api.webhooks import (
     FORMATS,
     HttpsSender,
@@ -175,11 +175,11 @@ def key_figures(form: str, rows: list[dict], accession_no: str) -> list[dict] | 
             "year_ago": str(ago["value"]) if ago and ago["value"] is not None else None,
             "change": None, "pct_change": None}
         if ago and ago["value"] is not None:
-            change = Decimal(cur["value"]) - Decimal(ago["value"])
-            entry["change"] = str(change)
-            if cur["unit"] != "ratio" and ago["value"] != 0:
-                entry["pct_change"] = str((change / abs(Decimal(ago["value"])))
-                                          .quantize(Decimal("0.0001")))
+            now, then = Decimal(cur["value"]), Decimal(ago["value"])
+            entry["change"] = str(now - then)
+            # shapes.percent_change: none from a zero or negative base, nor into a negative
+            pct, _ = percent_change(now, then, cur["unit"], Decimal("0.0001"))
+            entry["pct_change"] = None if pct is None else str(pct)
         out.append(entry)
     return out
 

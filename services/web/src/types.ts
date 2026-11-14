@@ -1089,9 +1089,11 @@ export interface RecapValue {
     filing_url: string | null;
   };
   freshness: { filed: string; ingested_at: string };
-  /** prior_quarter / year_ago only: current minus this (exact), and that over |this| */
+  /** prior_quarter / year_ago only: current minus this (exact), and that over this */
   change?: Num;
   pct_change?: Num | null;
+  /** why pct_change is null: a zero or negative base, or a turn to negative (absent: an older API) */
+  pct_not_meaningful?: string;
 }
 
 /** /v1/filings/{accession}/recap: a 10-Q/10-K vs the prior quarter and the year-ago quarter. */

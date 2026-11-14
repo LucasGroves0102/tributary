@@ -317,7 +317,10 @@ deadline), `overdue`. Companies with no periodic report in 400 days get none.
 span (`quarter`, `ttm`) the `current` value (period ending within 7 days of the period of
 report), `prior_quarter` (80-120 days earlier) and `year_ago` (350-380 days), each with
 citation and freshness, and `change` / `pct_change` (6 decimals; null for ratios, where
-`change` is in ratio points, and from 0). Values are as currently in gold, so a restated value
+`change` is in ratio points). `shapes.percent_change` is the one rule for a percentage change (the
+recap's and alerts'): none from a zero or negative base, nor into a negative figure, and the recap
+says why in `pct_not_meaningful` (additive; JPMorgan's operating cash flow from -$25.28B to $33.16B
+read "+231%" by |earlier|, analyst test 4). Values are as currently in gold, so a restated value
 cites the restating filing. With `filings` access, `flags` lists one-time-item keyword matches
 (impairment, restructuring, one-time/non-recurring, gain or loss on sale, write-down,
 litigation settlement) in MD&A and EX-99 sections, each citing section and character offset;

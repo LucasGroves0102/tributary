@@ -67,7 +67,8 @@ and a figure from another period is left out rather than mixed in), sealed to it
 the key figures as a ledger (amounts, then rates), each sealed, with Cash and short-term investments
 (what net debt subtracts) beside Cash and a negative net debt read as "Net cash" (the exact figure in
 the seal's source); **Since the last report** (red-letter days, below); **Latest quarter**, the recap
-set as a statement; **Business**; **Revenue and operating margin**; **Backlog and orders**. A
+set as a statement (a change from a zero or negative base reads n/m with the API's
+`pct_not_meaningful` in its hover); **Business**; **Revenue and operating margin**; **Backlog and orders**. A
 statement is a ledger table: red column rules, subtotals heavier, the bottom line (net income, total
 assets, cash at the end of the period) double-ruled, the newest period washed, derived figures italic,
 and its choices (statement, period, range, basis) are toggle groups. Under a statement and under

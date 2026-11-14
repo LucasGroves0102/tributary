@@ -206,6 +206,11 @@ class RecapStore(UIStore):
                 recap_row("year_ago", "gross_margin", "0.75", date(2025, 7, 27), "ratio"),
                 recap_row("current", "net_income", "5", date(2026, 7, 26)),
                 recap_row("prior_quarter", "net_income", "0", date(2026, 4, 26)),
+                # JPMorgan's operating cash flow (analyst test 4): from a negative base
+                recap_row("current", "operating_cash_flow", "33160000000", date(2026, 7, 26)),
+                recap_row("prior_quarter", "operating_cash_flow", "-25280000000",
+                          date(2026, 4, 26)),
+                recap_row("year_ago", "operating_cash_flow", "-45620000000", date(2025, 7, 27)),
                 recap_row("year_ago", "cash", "1", date(2025, 7, 27))]  # no current: dropped
 
     def filing_flags(self, user_id, accession_no):
@@ -241,7 +246,15 @@ def test_recap_changes_and_citations(token):
     gm = m[("gross_margin", "quarter")]
     assert (gm["year_ago"]["change"], gm["year_ago"]["pct_change"]) == ("-0.03", None)
     assert gm["prior_quarter"] is None
-    assert m[("net_income", "quarter")]["prior_quarter"]["pct_change"] is None  # from 0
+    ni = m[("net_income", "quarter")]["prior_quarter"]
+    assert ni["pct_change"] is None and ni["pct_not_meaningful"] == "the earlier figure is zero"
+    ocf = m[("operating_cash_flow", "quarter")]
+    for k in ("prior_quarter", "year_ago"):  # +231% and +173% by |earlier| before
+        assert ocf[k]["pct_change"] is None
+        assert ocf[k]["pct_not_meaningful"].startswith("the earlier figure is negative")
+    assert ocf["prior_quarter"]["change"] == "58440000000"  # the change itself stays
+    assert "pct_not_meaningful" not in rev["prior_quarter"]  # additive: only when it applies
+    assert "pct_not_meaningful" not in gm["year_ago"]  # a ratio changes in points
     assert ("cash", "quarter") not in m
     # free plan: no filings tier, so no flags and no section query
     assert body["flags"] is None and "flags_unavailable" in body

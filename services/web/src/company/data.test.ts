@@ -178,6 +178,20 @@ describe("recap", () => {
     expect(rows[0]!.title).toContain(`FY2027 Q1: 10-Q filed Aug 26, 2026, ${ACC}`);
   });
 
+  it("a change from a negative base reads n/m with the API's reason (JPMorgan's operating cash flow)", () => {
+    const why = "the earlier figure is negative, so a percentage change from it says nothing";
+    const { rows } = recapRows({
+      ...recap,
+      metrics: [{ metric: "operating_cash_flow", span: "quarter", unit: "USD", current: v("33160000000", "FY2026 Q3"),
+        prior_quarter: v("-25280000000", "FY2026 Q2", { change: "58440000000", pct_change: null, pct_not_meaningful: why }),
+        year_ago: v("-12130000000", "FY2025 Q3", { change: "45290000000", pct_change: null, pct_not_meaningful: why }) }],
+    });
+    expect(rows[0]).toMatchObject({ current: "$33.16B", prior: "-$25.28B", qoq: { text: "n/m", why }, yoy: { text: "n/m", why } });
+    // an older API without the reason: no percentage, a blank as before
+    const older = recapRows({ ...recap, metrics: [{ ...recap.metrics[1]!, prior_quarter: v("-1", "x", { change: "2", pct_change: null }) }] });
+    expect(older.rows[0]!.qoq).toBeNull();
+  });
+
   it("a margin that isn't meaningful reads n/m, moves no delta, and keeps its figure in the hover", () => {
     const margin = recap.metrics[0]!;
     const { rows } = recapRows({
