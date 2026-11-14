@@ -46,8 +46,8 @@ class Store:
 
     def filing_refs(self, user_id, accessions):
         self.calls.append(("filing_refs", user_id, tuple(accessions)))
-        return {a: {"form": "10-K", "filed": date(2026, 2, 25), "cik": "0001045810"}
-                for a in accessions}
+        return {a: {"form": "10-K", "filed": date(2026, 2, 25), "cik": "0001045810",
+                    "period_end": date(2026, 1, 25)} for a in accessions}
 
 
 def client(grants=GRANTS, down=False):
@@ -198,7 +198,37 @@ def test_a_stock_split_reads_as_one_note_and_counts_what_it_covers():
     assert split["detail"]["last_period_end"] == "2024-01-28"
     assert {f["role"] for f in split["filings"]} == {"restated"}
     assert len(split["filings"]) == 3
-    assert split["date"] == date(2025, 2, 26)
+    # dated by the first filing on the new basis, never the last restating one (2025-02-26)
+    assert split["detail"]["first_restated_accession"] == "0001045810-24-000264"
+    assert split["detail"]["first_restated_filed"] == "2024-08-28"
+    assert split["date"] == date(2024, 8, 28)
+
+
+def test_a_split_is_dated_between_the_last_old_period_and_the_first_new_one():
+    """Analyst test 4: NVIDIA's 10-for-1 (June 2024) read May 28, 2025, the restating filing's
+    date. The index's period of report for the first restating filing bounds it."""
+    refs = {"0001045810-24-000264": {"form": "10-Q", "filed": date(2024, 8, 28),
+                                     "cik": "0001045810", "period_end": date(2024, 7, 28)},
+            "0001045810-24-000316": {"form": "10-Q", "filed": date(2024, 11, 20),
+                                     "cik": "0001045810", "period_end": date(2024, 10, 27)},
+            "0001045810-25-000023": {"form": "10-K", "filed": date(2025, 2, 26),
+                                     "cik": "0001045810", "period_end": date(2025, 1, 26)}}
+    split = shape(TEN_FOR_ONE, [], [], refs)[0]
+    d = split["detail"]
+    assert d["effective_after"] == "2024-01-28"  # the newest period first reported pre-split
+    assert (d["first_restated_form"], d["first_restated_period_end"]) == ("10-Q", "2024-07-28")
+    assert split["date"] == date(2024, 7, 28)
+    # the restating filings are still named, separately
+    assert [f["filed"] for f in split["filings"]] == [date(2025, 2, 26), date(2024, 11, 20),
+                                                      date(2024, 8, 28)]
+
+
+def test_a_split_without_a_report_date_says_only_its_first_filing():
+    refs = {"0001045810-24-000264": {"form": "10-Q", "filed": date(2024, 8, 28),
+                                     "cik": "0001045810", "period_end": None}}
+    d = shape(TEN_FOR_ONE, [], [], refs)[0]["detail"]
+    assert d["first_restated_period_end"] is None and d["first_restated_form"] == "10-Q"
+    assert d["effective_after"] == "2024-01-28"
 
 
 def test_two_splits_of_one_company_are_two_notes():

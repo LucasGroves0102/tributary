@@ -1200,17 +1200,19 @@ class Store:
             return out
 
     def filing_refs(self, user_id: str, accessions: list[str]) -> dict[str, dict]:
-        """accession_no → form, filed, cik (the filer, for EDGAR links), from the public filing
-        index; the facts' filer CIK when the index doesn't have it."""
+        """accession_no → form, filed, cik (the filer, for EDGAR links), period_end (the period of
+        report, None when the index has none), from the public filing index; the facts' filer CIK
+        when the index doesn't have it."""
         with self._session(user_id) as cur:
             cur.execute(
                 """
                 SELECT a.accession_no, i.form, i.filing_date AS filed,
                        coalesce(i.cik, (SELECT x.cik FROM silver.financial_facts x
-                                        WHERE x.accession_no = a.accession_no LIMIT 1)) AS cik
+                                        WHERE x.accession_no = a.accession_no LIMIT 1)) AS cik,
+                       i.report_date AS period_end
                 FROM unnest(%s::text[]) a(accession_no)
                 LEFT JOIN LATERAL (
-                    SELECT f.form, f.filing_date, f.cik FROM silver.filings f
+                    SELECT f.form, f.filing_date, f.cik, f.report_date FROM silver.filings f
                     WHERE f.accession_no = a.accession_no
                     ORDER BY f.filing_date LIMIT 1
                 ) i ON true

@@ -22,6 +22,13 @@ still reaches a note (ops.check_financials' rule: fix causes, never hide finding
   2023-07-30). Those findings become one `stock_split` note, saying how many it covers. A clean
   factor without the other side stays a restatement, with `may_be_split`: real restatements are
   never folded into a split on a guess.
+  When it took effect, as far as the findings show (analyst test 4: the notes dated NVIDIA's
+  June 2024 split by the restating filing of May 28, 2025): after `effective_after`, the newest
+  period restated (every restated period was first reported on the old basis), and by the period of
+  report of the FIRST restating filing (`first_restated_accession` / `_filed` / `_form` /
+  `_period_end`, from the filing index; the period is None when the index has no report date),
+  the first filing on the new basis. The note's `date` is that period (else that filing's date),
+  never a later restating filing's; the restating filings stay listed as `filings`.
 - A factor of exactly 1,000 or 1,000,000 is the filing's unit changing (NVIDIA's 2011 shares), said
   as `unit_change`.
 - A one-quarter spike is `seasonal` when the same quarter peaks in another year too (Deckers'
@@ -108,10 +115,15 @@ FILING_LIST_KEYS = {"quarter_accessions": "quarter"}
 
 
 def note_date(n: dict) -> date | None:
-    """When the note happened, for "recent" ordering: the restating or missing filing's date, a
-    mistagged fact's filing (its period end can be 2033, and would top every list until then), else
-    the period end."""
+    """When the note happened, for "recent" ordering: a split's first period on the new basis (else
+    its first restating filing's date), the restating or missing filing's date, a mistagged fact's
+    filing (its period end can be 2033, and would top every list until then), else the period
+    end."""
     d = n.get("detail") or {}
+    if n.get("kind") == SPLIT:
+        when = d.get("first_restated_period_end") or d.get("first_restated_filed")
+        if when:
+            return _as_date(when)
     for key in ("restated_filed", "missing_filed", "filed"):
         if d.get(key):
             return _as_date(d[key])
@@ -307,6 +319,12 @@ def shape(findings: list[dict], derived: list[dict], behind: list[dict],
         restated = sorted({r["detail"]["restated_accession"] for r in rows
                            if isinstance(r["detail"].get("restated_accession"), str)})
         ends = sorted(r["period_end"] for r in rows if r["period_end"])
+        # the first filing on the new basis: the earliest restating one (module docstring)
+        first = min(rows, key=lambda r: str(r["detail"].get("restated_filed") or "9999"))
+        first_acc = first["detail"].get("restated_accession")
+        first_ref = filings.get(first_acc, {}) if isinstance(first_acc, str) else {}
+        by = _as_date(first_ref.get("period_end"))
+        after = ends[-1] if ends and (by is None or ends[-1] < by) else None
         notes.append({
             "company_id": e["company_id"], "kind": SPLIT, "severity": "info", "metric": None,
             "period_end": ends[-1] if ends else None,
@@ -316,7 +334,13 @@ def shape(findings: list[dict], derived: list[dict], behind: list[dict],
                        "first_period_end": _iso(ends[0]) if ends else None,
                        "last_period_end": _iso(ends[-1]) if ends else None,
                        "restated_filed": max((str(r["detail"].get("restated_filed") or "")
-                                              for r in rows), default=None)},
+                                              for r in rows), default=None),
+                       "effective_after": _iso(after) if after else None,
+                       "first_restated_accession": first_acc if isinstance(first_acc, str)
+                       else None,
+                       "first_restated_filed": first["detail"].get("restated_filed"),
+                       "first_restated_form": first_ref.get("form"),
+                       "first_restated_period_end": _iso(by) if by else None},
             "checked_at": rows[0].get("checked_at"),
             "filings": sorted((cite("restated", a) for a in restated),
                               key=lambda c: str(c["filed"] or ""), reverse=True),

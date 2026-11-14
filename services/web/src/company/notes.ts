@@ -61,6 +61,28 @@ export function rankOf(n: DataNote): NoteRank {
 
 const RANK_ORDER: Record<NoteRank, number> = { attention: 0, note: 1, minor: 2 };
 
+/** When a stock split took effect, as far as the filings show (the API's `effective_after` and
+ * `first_restated_period_end`): "between Apr 28, 2024 and Jul 28, 2024", or "by Jul 28, 2024";
+ * null for an older API, which sent neither. Never a restating filing's date (analyst test 4). */
+export function splitWhen(n: Pick<DataNote, "kind" | "detail">): string | null {
+  if (n.kind !== "stock_split") return null;
+  const after = str(n.detail.effective_after);
+  const by = str(n.detail.first_restated_period_end);
+  if (after && by) return `between ${date(after)} and ${date(by)}`;
+  return by ? `by ${date(by)}` : null;
+}
+
+/** The date beside a note's title: a split's "took effect between ..." (splitWhen), else the
+ * note's own date. A split from an older API (no effective dates) shows none: its date was the
+ * last restating filing's, which reads as the split's. */
+export function noteWhen(n: Pick<DataNote, "kind" | "detail" | "date">): string | null {
+  if (n.kind === "stock_split") {
+    const when = splitWhen(n);
+    return when ? `took effect ${when}` : null;
+  }
+  return n.date ? day(n.date, true) : null;
+}
+
 /** A note in words, and, for a series the API grouped (`repeats`), where else it was found. */
 export function explain(n: DataNote, now = Date.now()): Explained {
   const e = explainOne(n, now);
@@ -102,11 +124,22 @@ function explainOne(n: DataNote, now: number): Explained {
     case "stock_split": {
       const split = str(d.split) ?? "A split";
       const periods = num(d.periods) ?? 0;
+      const firstForm = str(d.first_restated_form) ?? "filing";
+      const by = str(d.first_restated_period_end);
+      const firstFiled = str(d.first_restated_filed);
+      // when it took effect, as far as the filings show (the API's first filing on the new basis);
+      // the restating filings are listed under the note, never given as the split's date
+      const took = by
+        ? `It took effect ${splitWhen(n)}, as far as the filings show: the ${firstForm} for the period ended ${date(by)}${firstFiled ? `, filed ${date(firstFiled)},` : ""} is the first on the new share basis. `
+        : firstFiled
+          ? `It was first reported in the ${firstForm} filed ${date(firstFiled)}. `
+          : "";
       return {
         title: `${split} ${d.reverse ? "reverse " : ""}stock split`,
         text:
+          took +
           `Later filings restated share counts and per-share figures for ${periods} ${periods === 1 ? "period" : "periods"} from ${date(d.first_period_end)} to ${date(d.last_period_end)} ` +
-          "by the split's ratio, share counts and EPS moving opposite ways in the same filing. That isn't a correction. Periods no filing restated stay on the old share count, so read per-share figures across the split with care.",
+          "by the split's ratio, share counts and EPS moving opposite ways in the same filing (the restating filings are listed below). That isn't a correction. Periods no filing restated stay on the old share count, so read per-share figures across the split with care.",
       };
     }
     case "restatement": {

@@ -1001,7 +1001,9 @@ period more than a week after the figures' newest and was filed after everything
 names it, its period, when it was filed and how many days ago, how many quarters the figures are behind,
 and links its financial statements in the reader and on EDGAR. It promises no date (Citigroup was three
 quarters behind on 2026-11-08). What a note says follows the API's reading of a finding: a stock
-split is one "10-for-1 stock split" note, a restatement by a clean factor without the other side says it
+split is one "10-for-1 stock split" note dated by when it took effect as far as the filings show
+("took effect between Apr 28, 2024 and Jul 28, 2024", `notes.ts` `splitWhen`/`noteWhen`), its restating
+filings listed under it and never given as its date, a restatement by a clean factor without the other side says it
 may be a split, a factor of 1,000 says the unit changed, a spike the same quarter has in other years
 is a seasonal peak.
 

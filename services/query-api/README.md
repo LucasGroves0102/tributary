@@ -1171,13 +1171,18 @@ from `readable()` (financials) and passes them into the SQL (with the catalog pu
   (`store.BEHIND_DAYS`; companyfacts lags by days, not months), that no XBRL fact cites yet.
   The companies' CIKs are looked up first and `silver.filings` is filtered on that array.
 - `stock_split`: what a split's restatements read as, one note per split (`detail`: `split`
-  "10-for-1", `reverse`, `findings`, `periods`, `metrics`, first and last period). Needs a share count
+  "10-for-1", `reverse`, `findings`, `periods`, `metrics`, first and last period, and when it took
+  effect as far as the findings show: `effective_after`, the newest restated period, and the first
+  restating filing, `first_restated_accession` / `_filed` / `_form` / `_period_end` (its period of
+  report from the filing index), the first on the new basis; NVIDIA's June 2024 10-for-1 reads
+  "between Apr 28, 2024 and Jul 28, 2024", not May 28, 2025, its last restating filing). Needs a share count
   restated by a clean ratio and EPS by its reciprocal in the same period and filing. Without the other
   side a finding stays a `restatement`, with `may_be_split`; a factor of 1,000 or 1,000,000 gets
   `unit_change`. An `outlier` the same quarter also has in two other years gets `seasonal` and
   severity info. No check is suppressed: every finding still reaches a note.
-- Every note has `date` (restating or missing filing, a mistagged fact's filing, else the period
-  end: a 2033 period mustn't top the list) and
+- Every note has `date` (a split's first period on the new basis, else its first restating filing;
+  restating or missing filing, a mistagged fact's filing, else the period end: a 2033 period mustn't
+  top the list) and
   `filings` (`role`, accession, form, filed, EDGAR `filing_url` from the public index). The
   plain-language wording is the web app's (`services/web/src/company/notes.ts`).
 - **Ranked, grouped, summarised (F7a, M2).** The checks cried wolf (on hermes the median company had
