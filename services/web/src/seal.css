@@ -1,0 +1,635 @@
+/* Seal's own components (.interface-design/system.md): the seal, margin rubrics, the ledger, the lead
+   sentence, red-letter days, statement tables, and the Radix controls (Choices, tooltips, the
+   confirm dialog). Tokens only; nothing here sets a style from script (the CSP: style-src 'self'). */
+
+/* --- the seal -------------------------------------------------------------------------------- */
+
+.seal-sprite {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+.seal {
+  flex: none;
+  display: inline-block;
+}
+
+.seal-logo {
+  width: 30px;
+  height: 30px;
+}
+
+.seal-lead {
+  width: 20px;
+  height: 20px;
+}
+
+.seal-ledger {
+  width: 14px;
+  height: 14px;
+}
+
+/* a seal on a figure opens its filing: a 24px target round a 14px mark */
+.seal-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+  border-radius: 50%;
+  transition: transform var(--press);
+}
+
+.seal-link-ledger {
+  padding: 5px;
+  margin: -5px;
+}
+
+.seal-link-lead {
+  padding: 3px;
+  margin: -3px 0 -3px 4px;
+  vertical-align: -3px;
+}
+
+.seal-link:hover {
+  transform: scale(1.12);
+}
+
+.seal-link:active {
+  transform: scale(0.94);
+}
+
+/* the source, on hover or focus of a seal (Radix Tooltip; it places itself through the CSSOM) */
+.tip {
+  z-index: 70;
+  max-width: min(380px, calc(100vw - 32px));
+  background: var(--ink);
+  color: var(--page);
+  font-family: var(--sans);
+  font-size: var(--fs-xs);
+  line-height: 1.45;
+  padding: 7px 10px;
+  box-shadow: var(--lift);
+  transform-origin: var(--radix-tooltip-content-transform-origin);
+  animation: seal-pop 140ms cubic-bezier(0.23, 1, 0.32, 1);
+  white-space: pre-line;
+}
+
+@keyframes seal-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
+/* --- Choices: one of a few views (components/Choices, a Radix toggle group) ------------------ */
+
+.choices {
+  display: inline-flex;
+  flex: none;
+  max-width: 100%;
+  border: 1px solid var(--ink);
+  overflow-x: auto;
+  font-family: var(--sans);
+}
+
+.choices > button {
+  flex: none;
+  border: 0;
+  background: transparent;
+  padding: 4px 11px;
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  white-space: nowrap;
+  transition: background-color var(--press), color var(--press);
+}
+
+.choices > button + button {
+  border-left: 1px solid var(--rule-2);
+}
+
+.choices > button:hover:not(:disabled):not([data-state="on"]) {
+  background: var(--red-wash);
+  color: var(--ink);
+}
+
+.choices > button[data-state="on"] {
+  background: var(--ink);
+  color: var(--page);
+  font-weight: 600;
+}
+
+.choices > button:focus-visible {
+  outline-offset: -4px;
+  outline-color: var(--red);
+}
+
+/* --- folio: a section with its rubric in the margin ------------------------------------------ */
+
+/* Margin rubrics: a 190px column of red labels (sans bold name, serif italic line) beside each
+   section, right-aligned; above the section when the page has less than 1100px. Sections are
+   ruled off from each other, 28px of air above each. */
+.folio {
+  display: grid;
+  grid-template-columns: var(--rubric-w) minmax(0, 1fr);
+  column-gap: 36px;
+  row-gap: 8px;
+  padding: var(--sp-9) 0 30px;
+  border-top: 1px solid var(--rule);
+}
+
+.folio.lead {
+  border-top: 0;
+  padding-top: 4px;
+}
+
+.rubric {
+  text-align: right;
+  color: var(--red);
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 14px;
+  line-height: 1.35;
+  padding-top: 5px;
+  min-width: 0;
+}
+
+.rubric h2 {
+  margin: 0;
+  font-family: var(--sans);
+  font-style: normal;
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--red);
+}
+
+.rubric p {
+  margin: 2px 0 0;
+}
+
+.rubric .aside {
+  display: block;
+  color: var(--ink-3);
+}
+
+/* a way on from a section, in its margin */
+.rubric a {
+  font-family: var(--sans);
+  font-style: normal;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.folio-body {
+  min-width: 0;
+}
+
+@container main (max-width: 1100px) {
+  .folio {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .rubric {
+    text-align: left;
+    padding-top: 0;
+  }
+
+  .rubric h2,
+  .rubric p,
+  .rubric .aside {
+    display: inline;
+  }
+
+  .rubric p::before,
+  .rubric .aside::before {
+    content: " ";
+  }
+}
+
+/* --- the company's head ---------------------------------------------------------------------- */
+
+.co-name {
+  margin: 0;
+  font-size: var(--fs-name);
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.02;
+  font-variation-settings: "opsz" 60;
+  overflow-wrap: anywhere;
+}
+
+.co-meta {
+  margin: 10px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 26px;
+  font-family: var(--sans);
+  font-size: var(--fs-meta);
+  color: var(--ink-2);
+  line-height: 1.45;
+}
+
+.co-meta + .co-meta {
+  margin-top: 4px;
+  color: var(--ink-3);
+}
+
+.co-meta b {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.co-acts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.co-acts .new-work {
+  display: contents;
+}
+
+.tabs.co-tabs {
+  margin-top: 24px;
+  padding: 0;
+  border-top: 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+@container main (max-width: 600px) {
+  .co-name {
+    font-size: 36px;
+  }
+}
+
+/* --- the year, as a sentence ----------------------------------------------------------------- */
+
+.story {
+  margin: 0;
+  max-width: 60ch;
+  font-size: var(--fs-xl);
+  line-height: 1.5;
+  font-variation-settings: "opsz" 30;
+}
+
+.story b {
+  font-weight: 650;
+}
+
+.story .rise {
+  color: var(--up);
+  font-weight: 650;
+}
+
+@container main (max-width: 600px) {
+  .story {
+    font-size: 18px;
+  }
+}
+
+/* --- the ledger: key figures ------------------------------------------------------------------ */
+
+/* two columns of label / value rows (amounts, then rates), each value after a red rule */
+.ledger {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 40px;
+  max-width: 900px;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.ledger dl {
+  margin: 0;
+  min-width: 0;
+}
+
+.ledger dl > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  column-gap: 12px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.ledger dt {
+  color: var(--ink-2);
+  min-width: 0;
+}
+
+/* a figure not from the latest period says when it is from */
+.ledger dt .when {
+  display: block;
+  font-family: var(--sans);
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+
+.ledger dd {
+  margin: 0;
+  min-width: 136px;
+  padding-left: 14px;
+  border-left: 1px solid var(--red-rule);
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: var(--ink);
+  text-align: right;
+}
+
+/* where a seal would be when there is none, so the figures stay in line */
+.ledger .seal-slot {
+  flex: none;
+  width: 14px;
+}
+
+.ledger dd.blank {
+  color: var(--ink-3);
+  font-weight: 400;
+}
+
+.ledger dd.old .figure {
+  color: var(--ink-3);
+  font-weight: 400;
+}
+
+/* a balance a later filing may have changed: red, with its mark (CSS, so the text stays the figure) */
+.ledger dd.later .figure {
+  color: var(--red);
+}
+
+.ledger dd.later .figure::after {
+  content: "*";
+  margin-left: 1px;
+}
+
+.fnote {
+  margin-top: 12px;
+  max-width: 76ch;
+  display: grid;
+  gap: 5px;
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+}
+
+.fnote p {
+  margin: 0;
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.fnote .mark {
+  flex: none;
+  width: 14px;
+  color: var(--red);
+  font-weight: 700;
+  text-align: center;
+}
+
+.fnote .seal {
+  align-self: center;
+}
+
+@container main (max-width: 680px) {
+  .ledger {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ledger dd {
+    min-width: 116px;
+  }
+}
+
+/* --- red-letter days: filings since the last report ------------------------------------------ */
+
+ol.events {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-width: 880px;
+}
+
+li.event {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr);
+  gap: 4px 18px;
+  padding: 14px 0;
+  border-top: 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+li.event:first-child {
+  padding-top: 4px;
+}
+
+.event .day {
+  text-align: center;
+  line-height: 1;
+  padding-top: 2px;
+}
+
+.event .day b {
+  display: block;
+  font-size: 34px;
+  font-weight: 650;
+  color: var(--ink);
+  font-variant-numeric: lining-nums;
+}
+
+.event .day span {
+  display: block;
+  margin-top: 3px;
+  font-family: var(--sans);
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+
+/* a red-letter day: a filing that can change the figures (the API's `affects`) */
+.event.red .day b {
+  color: var(--red);
+}
+
+.event-body {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.event .event-head .tag.k {
+  color: var(--ink-2);
+}
+
+.event.red .event-head .tag.k {
+  color: var(--red);
+}
+
+/* --- statement tables ------------------------------------------------------------------------ */
+
+/* a ledger's column rules, the bottom line double-ruled, the newest period washed */
+.t.ruled td + td,
+.t.ruled th + th {
+  border-left: 1px solid var(--red-rule);
+}
+
+.t.ruled td.first {
+  color: var(--ink-2);
+}
+
+.t.ruled tr.total td,
+.t.ruled tr.total td.first {
+  font-weight: 650;
+  color: var(--ink);
+}
+
+.t.ruled tr.grand td,
+.t.ruled tr.grand td.first {
+  font-weight: 700;
+  color: var(--ink);
+  border-bottom: 3px double var(--ink);
+}
+
+.t.ruled tr.grand td.derived {
+  color: var(--ink);
+}
+
+/* opaque: a header moved over the rows, or a frozen name column, must hide what passes under it */
+.t.ruled.now th:last-child,
+.t.ruled.now td:last-child,
+.t.ruled .current {
+  background: color-mix(in srgb, var(--red) 5%, var(--sheet));
+}
+
+/* a table on a Seal page sits on the page's ground, not a sheet */
+.folio .t th,
+.folio .t td.first {
+  background: var(--page);
+}
+
+.folio .t tbody tr:hover td.first {
+  background: color-mix(in srgb, var(--red) 5%, var(--page));
+}
+
+.folio .t.ruled.now th:last-child,
+.folio .t.ruled.now td:last-child,
+.folio .t.ruled .current {
+  background: color-mix(in srgb, var(--red) 5%, var(--page));
+}
+
+@container main (max-width: 600px) {
+  li.event {
+    grid-template-columns: 48px minmax(0, 1fr);
+    gap: 4px 12px;
+  }
+
+  .event .day b {
+    font-size: 26px;
+  }
+}
+
+/* --- the company page and its Overview ------------------------------------------------------ */
+
+.company-page {
+  gap: 0;
+}
+
+/* a tab that isn't a Seal page yet (Earnings, Revenue, ...) sits under the head as it did */
+.company-page > .card,
+.company-page > .grid2,
+.company-page > section:not(.folio) {
+  margin-top: var(--sp-8);
+}
+
+.folios {
+  display: flex;
+  flex-direction: column;
+}
+
+.business .excerpt {
+  margin: 0 0 10px;
+  max-width: 70ch;
+  font-size: var(--fs-md);
+  line-height: 1.6;
+}
+
+.overview-chart {
+  display: grid;
+  gap: var(--sp-4);
+  justify-items: start;
+}
+
+.overview-chart > .lchart {
+  width: 100%;
+}
+
+.recap-flags {
+  margin-top: var(--sp-6);
+  max-width: 880px;
+}
+
+.folio .foot,
+.folio .empty {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.folio .t th.first,
+.folio .t td.first {
+  padding-left: 0;
+}
+
+/* the statement: its choices above the table, ruled off from it */
+.statement-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+  margin-bottom: 14px;
+}
+
+.statements .callouts {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+/* --- the confirm dialog (workspaces/Actions ConfirmDelete, a Radix alert dialog) -------------- */
+
+.ws-confirm {
+  border-top: 2px solid var(--ink);
+  animation: seal-pop 180ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.ws-confirm .ws-confirm-q {
+  font-size: var(--fs-lg);
+  font-weight: 650;
+  margin: 0 0 var(--sp-3);
+}
+
+/* --- motion ---------------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .btn,
+  .seal-link,
+  .choices > button,
+  .nav a,
+  .tabs a {
+    transition: none;
+  }
+
+  .btn:active:not(:disabled),
+  .seal-link:hover,
+  .seal-link:active {
+    transform: none;
+  }
+
+  .tip,
+  .ws-confirm {
+    animation: none;
+  }
+}

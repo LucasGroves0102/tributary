@@ -1,87 +1,151 @@
-/* Design tokens (prototype v3). Dark is the default; [data-theme="light"] on <html> switches.
-   Components use only these custom properties, never raw colours. */
+/* Design tokens: "Seal" (.interface-design/system.md). An annual report kept as a ledger: white page,
+   black serif, red rubrics and ledger rules, a red wax seal on figures taken from a filing; gold only on
+   the seal. Light is the base; the visitor's system picks dark unless they chose (theme.ts sets
+   data-theme on <html> only for an explicit choice). The two dark blocks must stay identical
+   (tokens.test.ts checks). Components use only these custom properties, never raw colours. */
 
 :root,
-:root[data-theme="dark"] {
-  --bg: #0f1115;
-  --panel: #161a20;
-  --panel-2: #1c2129;
-  --line: #262c36;
-  --line-2: #323a46;
-  --text: #e8ebf0;
-  --text-2: #aab2be;
-  --text-3: #87919e;
-  --accent: #7c93ff;
-  --accent-soft: #1f2747;
-  --on-accent: #0f1115;
-  --pos: #4cc47a;
-  --neg: #ff6b5e;
-  --warn: #f0a43a;
-  --pos-soft: #14301f;
-  --neg-soft: #3a1916;
-  --warn-soft: #3a2a12;
-  --shadow: none;
-  --overlay: rgb(0 0 0 / 0.5);
-  --popover-shadow: 0 18px 50px rgb(0 0 0 / 0.45);
-  --edge-shadow: rgb(0 0 0 / 0.55);
-  /* chart series, in layer order */
-  --series-0: #7c93ff;
-  --series-1: #4cc47a;
-  --series-2: #f0a43a;
-  --series-3: #ff6b5e;
-  --series-4: #4dd0e1;
-  --series-5: #c084fc;
-  --series-6: #f472b6;
-  --series-7: #aab2be;
-  color-scheme: dark;
-}
-
 :root[data-theme="light"] {
-  --bg: #f6f7f9;
-  --panel: #ffffff;
-  --panel-2: #f1f3f6;
-  --line: #e3e6eb;
-  --line-2: #d3d8df;
-  --text: #14171c;
-  --text-2: #4a525e;
-  --text-3: #5f6874;
-  --accent: #3b5bdb;
-  --accent-soft: #e8edff;
-  --on-accent: #ffffff;
-  --pos: #147a3d;
-  --neg: #c0352b;
-  --warn: #a15c00;
-  --pos-soft: #e5f5eb;
-  --neg-soft: #fbe9e7;
-  --warn-soft: #fff3df;
-  --shadow: 0 1px 2px rgb(16 24 40 / 0.06);
-  --overlay: rgb(10 12 16 / 0.35);
-  --popover-shadow: 0 18px 50px rgb(0 0 0 / 0.25);
-  --edge-shadow: rgb(16 24 40 / 0.22);
-  /* chart series; chart/export.ts mirrors these for deck exports */
-  --series-0: #3b5bdb;
-  --series-1: #2f9e44;
-  --series-2: #e8590c;
-  --series-3: #c92a2a;
-  --series-4: #0c8599;
-  --series-5: #7048e8;
-  --series-6: #d6336c;
-  --series-7: #495057;
+  --page: #fbfaf8;
+  --sheet: #ffffff;
+  --sheet-2: #f4f1ed;
+  --ink: #161314;
+  --ink-2: #4c4646;
+  --ink-3: #706965;
+  --rule: #e6e0db;
+  --rule-2: #d3cbc4;
+  --red: #b3111e;
+  --red-ink: #ffffff;
+  --red-soft: #f7e9e9;
+  --up: #1d6944;
+  --up-soft: #e6f0ea;
+  --warn: #8f4e14;
+  --warn-soft: #f6ece2;
+  --red-rule: rgb(179 17 30 / 0.36);
+  --red-wash: rgb(179 17 30 / 0.05);
+  --overlay: rgb(22 19 20 / 0.32);
+  --lift: 0 1px 2px rgb(0 0 0 / 0.04), 0 18px 50px rgb(20 8 8 / 0.09);
+  --edge-shadow: rgb(22 19 20 / 0.2);
+  /* chart series, in layer order: the ink first, then the inks a printed report would use beside it;
+     never the accent red (it means "act here" or "may change") */
+  --series-0: #5c5350;
+  --series-1: #3d5a80;
+  --series-2: #9a5a17;
+  --series-3: #2f6b5a;
+  --series-4: #6b4a7a;
+  --series-5: #4b6b2a;
+  --series-6: #a8456a;
+  --series-7: #8a817c;
   color-scheme: light;
 }
 
-:root {
-  /* Type: Inter if installed (the CSP blocks web fonts from other origins), else the system UI. */
-  --font: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  --fs-xs: 10.5px;
-  --fs-sm: 11.5px;
-  --fs-base: 12.5px;
-  --fs-md: 13px;
-  --fs-lg: 14px;
-  --fs-xl: 18px;
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --page: #131011;
+    --sheet: #1a1617;
+    --sheet-2: #231e1f;
+    --ink: #ede6dc;
+    --ink-2: #b9b0a6;
+    --ink-3: #958c83;
+    --rule: #2f2829;
+    --rule-2: #433a3b;
+    --red: #e05a63;
+    --red-ink: #1a0d0f;
+    --red-soft: #2a191c;
+    --up: #6cc495;
+    --up-soft: #18281f;
+    --warn: #dc9a5e;
+    --warn-soft: #2c2117;
+    --red-rule: rgb(224 90 99 / 0.42);
+    --red-wash: rgb(224 90 99 / 0.07);
+    --overlay: rgb(0 0 0 / 0.55);
+    --lift: 0 0 0 1px rgb(255 255 255 / 0.06), 0 18px 50px rgb(0 0 0 / 0.5);
+    --edge-shadow: rgb(0 0 0 / 0.55);
+    --series-0: #cdc3b8;
+    --series-1: #8fa8d6;
+    --series-2: #d99a55;
+    --series-3: #6fbfa6;
+    --series-4: #c09ad0;
+    --series-5: #a4c46e;
+    --series-6: #e88aa8;
+    --series-7: #998f86;
+    color-scheme: dark;
+  }
+}
 
-  /* Spacing (4px grid, plus the prototype's dense 6/10 steps) */
+:root[data-theme="dark"] {
+  --page: #131011;
+  --sheet: #1a1617;
+  --sheet-2: #231e1f;
+  --ink: #ede6dc;
+  --ink-2: #b9b0a6;
+  --ink-3: #958c83;
+  --rule: #2f2829;
+  --rule-2: #433a3b;
+  --red: #e05a63;
+  --red-ink: #1a0d0f;
+  --red-soft: #2a191c;
+  --up: #6cc495;
+  --up-soft: #18281f;
+  --warn: #dc9a5e;
+  --warn-soft: #2c2117;
+  --red-rule: rgb(224 90 99 / 0.42);
+  --red-wash: rgb(224 90 99 / 0.07);
+  --overlay: rgb(0 0 0 / 0.55);
+  --lift: 0 0 0 1px rgb(255 255 255 / 0.06), 0 18px 50px rgb(0 0 0 / 0.5);
+  --edge-shadow: rgb(0 0 0 / 0.55);
+  --series-0: #cdc3b8;
+  --series-1: #8fa8d6;
+  --series-2: #d99a55;
+  --series-3: #6fbfa6;
+  --series-4: #c09ad0;
+  --series-5: #a4c46e;
+  --series-6: #e88aa8;
+  --series-7: #998f86;
+  color-scheme: dark;
+}
+
+:root {
+  /* The names the rest of the stylesheet grew up with, read from Seal's. A screen restyled for Seal
+     uses Seal's names; the others keep working through these until their own pass. */
+  --bg: var(--page);
+  --panel: var(--sheet);
+  --panel-2: var(--sheet-2);
+  --line: var(--rule);
+  --line-2: var(--rule-2);
+  --text: var(--ink);
+  --text-2: var(--ink-2);
+  --text-3: var(--ink-3);
+  --accent: var(--red);
+  --accent-soft: var(--red-soft);
+  --on-accent: var(--red-ink);
+  --pos: var(--up);
+  --pos-soft: var(--up-soft);
+  /* an error or a figure that doesn't tie: red says "look here", never "a loss" (.neg is ink) */
+  --neg: var(--red);
+  --neg-soft: var(--red-soft);
+  --shadow: none;
+  --popover-shadow: var(--lift);
+
+  /* Type: self-hosted (main.tsx imports them; the CSP allows fonts only from this origin). Source
+     Serif 4 reads: names, headings, sentences, figures. Archivo works: controls, navigation, meta. */
+  --serif: "Source Serif 4 Variable", "Source Serif 4", Georgia, serif;
+  --sans: "Archivo Variable", "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font: var(--sans);
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  /* notes 12, meta 13.5, body and tables 15, list titles 16, section headings and the lead
+     sentence 22, a company's name 46, the front door's headline 60 */
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-meta: 13.5px;
+  --fs-base: 14px;
+  --fs-md: 15px;
+  --fs-lg: 16px;
+  --fs-xl: 22px;
+  --fs-name: 46px;
+  --fs-hero: 60px;
+
+  /* Spacing (4px grid, plus the dense 6/10 steps) */
   --sp-1: 2px;
   --sp-2: 4px;
   --sp-3: 6px;
@@ -90,13 +154,17 @@
   --sp-6: 12px;
   --sp-7: 14px;
   --sp-8: 18px;
+  --sp-9: 28px;
 
-  --radius-sm: 4px;
-  --radius: 6px;
-  --radius-md: 7px;
-  --radius-lg: 9px;
+  /* square corners: a ledger has none. Only round things (dots, the seal) are round. */
+  --radius-sm: 0;
+  --radius: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
 
-  --sidebar-w: 188px;
+  --press: 120ms cubic-bezier(0.23, 1, 0.32, 1);
+  --rubric-w: 190px;
+  --sidebar-w: 200px;
   --drawer-w: 372px;
-  --topbar-h: 48px;
+  --topbar-h: 52px;
 }

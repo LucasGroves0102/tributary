@@ -664,13 +664,19 @@ it("links the data status page from the sidebar footer and shows it in the shell
   expect($(".status-home")).toBeNull();
 });
 
-it("switches theme and remembers it per user", async () => {
+it("follows the system's theme until the user chooses, remembers the choice per user, and forgets it when it matches the system again", async () => {
+  // jsdom has no prefers-color-scheme: the system reads light
   await render();
+  expect(document.documentElement.dataset.theme).toBeUndefined();
+  const button = () => [...container.querySelectorAll("button")].find((b) => b.textContent === "Dark" || b.textContent === "Light")!;
+  expect(button().textContent).toBe("Dark");
+  await act(async () => button().click());
   expect(document.documentElement.dataset.theme).toBe("dark");
-  const button = [...container.querySelectorAll("button")].find((b) => b.textContent === "Light")!;
-  await act(async () => button.click());
-  expect(document.documentElement.dataset.theme).toBe("light");
-  expect(window.localStorage.getItem("tributary.theme.alice")).toBe("light");
+  expect(window.localStorage.getItem("tributary.theme.alice")).toBe("dark");
+  expect(button().textContent).toBe("Light");
+  await act(async () => button().click());
+  expect(document.documentElement.dataset.theme).toBeUndefined();
+  expect(window.localStorage.getItem("tributary.theme.alice")).toBeNull();
 });
 
 describe("the sidebar", () => {

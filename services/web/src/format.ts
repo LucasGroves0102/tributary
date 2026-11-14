@@ -44,6 +44,22 @@ export function moneyRow(values: (number | null)[], currency = "USD"): (string |
   });
 }
 
+/** How a statement or ledger shows a negative amount: in parentheses, as filings print them
+ * ("-$6.05B" → "($6.05B)", "-CAD 1.20B" → "(CAD 1.20B)"). Display only: the amount, the CSV and the
+ * hover keep the sign (and F5's `outflow` stays the one place a sign is decided). A percentage or a
+ * multiple ("-4.0%", "-0.40x") isn't money and keeps its minus sign; so does anything that isn't a
+ * formatted amount. */
+export function paren(text: string): string {
+  return /^-\D/.test(text) && !/[%x]$/.test(text) ? `(${text.slice(1)})` : text;
+}
+
+const WORDS: Record<string, string> = { T: "trillion", B: "billion", M: "million", K: "thousand" };
+
+/** An amount in a sentence: "$302.97B" → "$302.97 billion", "€2.10B" → "€2.10 billion". */
+export function inWords(text: string): string {
+  return text.replace(/^(.*\d)([TBMK])$/, (_, n: string, s: string) => `${n} ${WORDS[s]}`);
+}
+
 /** Ratios as percentages: 0.2134 → "21.3%". */
 export function pct(ratio: number, digits = 1): string {
   return `${(ratio * 100).toFixed(digits)}%`;
