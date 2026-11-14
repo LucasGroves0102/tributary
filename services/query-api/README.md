@@ -601,7 +601,8 @@ checks"), one row per check in `thesis_checks`, kept with the thesis they checke
   thesis (anything else, someone else's included, is the same 404); the result must name it.
 - `GET /v1/workspace-items/{item_id}/checks`: the thesis's checks, newest first, without
   results (check id, created, `text_hash`, model, cost, counts of supported / contradicted /
-  unverifiable claims, flagged assumptions, points not mentioned, `ok`), plus what the web
+  unverifiable / model claims (`model` is absent from checks stored before it: read it as 0),
+  flagged assumptions, points not mentioned, `ok`), plus what the web
   app's Revisit notice compares, read out of the stored result: the thesis's `company_id`,
   `checked_at` and `filings` (`[]` for checks stored before Revisit).
   `GET /v1/workspace-items/{item_id}/checks/{check_id}` returns one with its result.
@@ -617,6 +618,14 @@ checks"), one row per check in `thesis_checks`, kept with the thesis they checke
   validate; `version` stays 1): at most 12 companies, once each, `latest` a 10-K or 10-Q,
   `evidence` one of the result's own verified citations of that company. At most 120,000 bytes (the table allows 128 KiB); bodies up to
   160,000 bytes. The newest 20 checks per thesis are kept.
+- **Your model** (analyst test 4, finding 9; additive, `version` stays 1). A claim made of the
+  user's own model's figures has status `model` and `model` {ref, item_id, name, currency,
+  matches[] {figure as written, line, fy, case base/bear/bull, kind money/percent/multiple,
+  value}}: a forecast, neither supported nor contradicted, so it needs no citation; `model` comes
+  with that status only, and must name one of the result's checked `assumptions` (ref and item).
+  A figure (claim, citation, assumption, point, verification) may have status `model`: not in
+  what the tools returned, but one the user's model run gives; it doesn't make `ok` false
+  (`CheckFigure`, the report's statuses plus `model`). Deploy before agent-api.
 - **Why a table and not the thesis's state:** the thesis state is written by the browser through
   the generic item routes, so a verdict stored there could be forged; a history of results
   wouldn't fit a thesis's 128 KiB; and an old check must stay readable after the text changes
