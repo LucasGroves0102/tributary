@@ -1231,7 +1231,9 @@ def assemble(job: Job, submitted: dict, answer: Answer, results: list[str], now:
             # 21.0%" read the other basis: finding 10)
             claim.update(status="model", model=found)
             if status != "model":
-                explanation = _model_sentence(found)
+                # its citations were for the verdict it no longer has ("model FY2026 margin
+                # 21.24%" cited the 10-Q): the model is the source now, linked
+                explanation, cites = _model_sentence(found), []
         elif status == "model":
             claim["status"] = "unverifiable"
             claim["downgraded"] = True

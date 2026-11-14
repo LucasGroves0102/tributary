@@ -308,6 +308,7 @@ def test_claims_of_the_users_own_model_are_your_model():
         ("$18.75B", "revenue", 2027), ("$8.52", "diluted EPS", 2027)]
     assert revenue["explanation"].startswith(
         "Matches your model (VRT model): FY2027E revenue $18.75B; FY2027E diluted EPS $8.52.")
+    assert revenue["citations"] == []  # the release it cited for "supported" isn't its source
     # finding 10: 21.0% is the reported margin (21.24% is the adjusted one): the model's, not
     # contradicted; the LLM's "21.24%, not 21.0%" is replaced
     margins = by["operating margin 21.0%, 22.5% and 22.0%"]

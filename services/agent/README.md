@@ -277,8 +277,8 @@ result) or an `error` event if it couldn't be saved or the model never submitted
   stays supported (supported, with every dollar figure one the tools returned: a model built on a
   reported quarter or the guidance shows the same numbers). A `model` claim needs no citation,
   carries `model` {ref, item_id, name, currency, matches[] {figure, line, fy, case, kind, value}}
-  for the web app's link, and its explanation is replaced unless the model wrote `model` itself
-  ("21.24%, not 21.0%" read the other basis). A claim the model calls `model` whose figures aren't
+  for the web app's link, and its explanation and citations are replaced unless the model wrote
+  `model` itself ("21.24%, not 21.0%" read the other basis, citing the 10-Q for it). A claim the model calls `model` whose figures aren't
   the model's is unverifiable with a note naming them. A dollar figure the tools didn't return but
   the model run did (to at least three significant digits: "$3.0B" is within rounding of too many
   of ~150 amounts) is a `model` figure, not "not in the data". TTM free cash flow is in the
