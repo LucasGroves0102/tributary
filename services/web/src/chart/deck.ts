@@ -8,8 +8,8 @@ import type { Align, Frequency } from "./model";
 import { xAxis, type Series } from "./series";
 
 /** "Fiscal quarters, FY2024 Q1–FY2026 Q2 · USD (left), % (right)". */
-export function autoSubtitle(series: Series[], frequency: Frequency, basis: Align): string {
-  const ticks = xAxis(series);
+export function autoSubtitle(series: Series[], frequency: Frequency, basis: Align, through?: string | null): string {
+  const ticks = xAxis(series, through);
   const what = frequency === "annual"
     ? basis === "fiscal" ? "Fiscal years" : "Calendar years"
     : basis === "fiscal" ? "Fiscal quarters" : "Calendar quarters";

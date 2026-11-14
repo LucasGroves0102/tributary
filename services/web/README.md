@@ -787,6 +787,9 @@ asks the API nothing. Clicking a point
 reader. Filing markers put each company's 10-Ks and 10-Qs (public index) and 8-K results (item
 2.02, from parsed filings) in a band of their own under the plot, their letters only where they fit
 (10-Ks first; the rest stay as stems, their hover names them), and on a chart of years only the 10-Ks.
+The companies marked are the ones the layers read: a formula's are those its answer read, so
+`MSFT.capex / MSFT.revenue` marks Microsoft's filings whatever its default company (analyst test 4: it
+marked nothing).
 "View as table" shows the plotted values with their sources as a data table.
 
 How charts tell the truth, in every chart that draws through `chart/LayerChart.tsx` (the builder,
@@ -797,10 +800,18 @@ Overview, Revenue, Analysis Numbers, Compare, thesis and report embeds), SVG, PN
   until the user types one; then the builder says "Custom title" and offers the automatic one back.
   `ChartState.title` holds only what was typed, so a chart saved before this keeps its stored title as
   a custom one. Templates and the Chart buttons leave it empty.
-- **An axis holds one unit** (`chart/axes.ts`): a layer asks for a side; if that side reads in another
-  unit it moves to the other, and with both taken it isn't drawn (the card and the chart's footnote say
-  so, and its values stay in the tooltip, the table and the CSV). Dollars, dollars per share, an index
-  and a multiple never share one, so the smaller doesn't flatten at zero. Percents of every kind do.
+- **An axis holds one unit, and a unit has one axis** (`chart/axes.ts`): a layer asks for a side; if
+  its unit already has a side it joins it (two percents never get a scale each: an operating margin on
+  0-25% beside an FCF margin on 0-30% crossed where the values didn't, analyst test 4), if the side reads
+  in another unit it moves to the other, and with both taken it isn't drawn (the card and the chart's
+  footnote say so, and its values stay in the tooltip, the table and the CSV). Dollars, dollars per share,
+  an index and a multiple never share one, so the smaller doesn't flatten at zero. Percents of every kind
+  do. Each layer's Axis control shows the side it is drawn on, with that side's unit ("Right axis
+  (USD)"), never only what it asked for; choosing a side moves the layer's whole unit there and the
+  unit drawn there to the other side (`askSides`).
+- **A balance is never "TTM"**: a layer that reads only balances (`chart/metrics.ts` POINT_IN_TIME, the
+  mirror of query-api `formula/check.py`; loans and deposits included) has no "(TTM)" in its legend or
+  the title, and its Transform control shows Quarterly (the quarter-end value the API answers with).
 - **A ratio isn't necessarily a percent**: the API says how a dimensionless result reads from its
   formula's shape (query-api `formula/check.py`), percent, multiple or plain number, and a layer's
   "Reads as" overrides it (`display`, saved with the chart). Debt to equity is 1.91x here as in the tables,
@@ -814,7 +825,12 @@ Overview, Revenue, Analysis Numbers, Compare, thesis and report embeds), SVG, PN
   another layer "stop". A chart with no full year on file draws that point rather than nothing.
 - **Gaps are gaps** (`chart/series.ts` `xAxis`): the axis has every period between the first and the
   last, so a missing year is a shaded hole, lines and areas break there, a point alone gets a dot, the
-  table and the CSV have its row. The legend lists only what is drawn. `chart/notes.ts` says the rest in
+  table and the CSV have its row. In the builder and saved-chart embeds the axis also runs on to the
+  newest period due on file by the chart's end (`chartEnd`: a custom range's last day, else the day the
+  answers were read; a quarter is due 90 days after it ends, a non-accelerated filer's 10-K deadline),
+  so Goldman's loans, tagged to CY2022 Q2, end in a shaded gap to CY2026 Q2 with "stops at CY2022 Q2"
+  under the chart, not an axis that ends with the series (analyst test 4). Compare, the Overview and a
+  model end with what is plotted. The legend lists only what is drawn. `chart/notes.ts` says the rest in
   words, under the chart and in its exports: a period with no value, a series that starts late or
   stops early (one quarter behind others isn't a gap: companies file at different times), a layer with
   no values, a chart with nothing as far back as it asked, a negative index. A layer with nothing to

@@ -325,6 +325,56 @@ it("draws 10-K/10-Q and 8-K results markers when turned on", async () => {
   expect(window.location.hash).toBe(`#/filing/${NVDA}/0001045810-26-000061`);
 });
 
+it("marks the filings of the company a formula names by ticker, whatever its default company", async () => {
+  // analyst test 4, finding 14: MSFT.capex / MSFT.revenue with another default company drew no marker
+  const MSFT = "0000789019";
+  vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+    const res = respond(url, init);
+    const path = new URL(url, "http://x").pathname;
+    if (path.endsWith("/filing-index")) {
+      return Response.json({ filings: [
+        { accession_no: "0000950170-26-000100", company_id: MSFT, name: "Microsoft", form: "10-Q", filed: "2026-05-28", accepted_at: null,
+          period_of_report: "2026-03-31", filing_url: null, document_url: null, sections: null, sections_available: false },
+      ] });
+    }
+    if (!path.endsWith("/evaluate")) return res;
+    const body = await res.json();
+    return Response.json({ ...body, unit: "ratio", display: "percent", inputs: [
+      { input: 0, ref: "MSFT.capex", ticker: "MSFT", company_id: MSFT, metric: "capex", span: "ttm", lag_quarters: 0, unit: "USD" },
+      { input: 1, ref: "MSFT.revenue", ticker: "MSFT", company_id: MSFT, metric: "revenue", span: "ttm", lag_quarters: 0, unit: "USD" },
+    ] });
+  }));
+  await render({ ...emptyChart(), markers: true, layers: [
+    { id: 1, kind: "formula", formula: "MSFT.capex / MSFT.revenue", defaultCompany: NVDA, transform: "ttm", type: "bar", axis: "R" },
+  ], nextId: 2 });
+  for (let i = 0; i < 3; i++) await act(async () => {});
+  const fetched = vi.mocked(fetch).mock.calls.map(([u]) => new URL(String(u), "http://x").pathname);
+  expect(fetched.some((p) => p.includes(`/companies/${MSFT}/filing-index`))).toBe(true);
+  expect(fetched.some((p) => p.includes(`/companies/${NVDA}/filing-index`))).toBe(false);
+  const marks = [...container.querySelectorAll(".ch-mk")];
+  expect(marks.length).toBeGreaterThan(0);
+  expect(marks.map((m) => m.querySelector("title")!.textContent).join(" ")).toContain("10-Q filed May 28, 2026");
+});
+
+it("runs the axis to the answer's day, so a balance that stopped in 2022 shows its gap, never as TTM", async () => {
+  // analyst test 4, finding 13: GS loans over 10 years ended the axis at CY2022 Q2 and read "loans (TTM)"
+  vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+    const res = respond(url, init);
+    if (!new URL(url, "http://x").pathname.endsWith("/evaluate")) return res;
+    const body = await res.json();
+    const at = (key: number, period: string, end: string) => ({ ...point(key, period, "180000000000"), period_end: end });
+    return Response.json({ ...body, as_of: "2026-10-21T12:00:00Z",
+      points: [at(8088, "CY2022 Q1", "2022-03-31"), at(8089, "CY2022 Q2", "2022-06-30")] });
+  }));
+  await render({ ...emptyChart(), range: 10, layers: [
+    { id: 1, kind: "metric", companyId: NVDA, metric: "loans", transform: "ttm", type: "line", axis: "L" },
+  ], nextId: 2 });
+  expect([...container.querySelectorAll(".ch-legend text")].map((t) => t.textContent)).toEqual(["NVDA loans"]);
+  expect(container.querySelector<HTMLSelectElement>('select[aria-label="Transform"]')!.selectedOptions[0]!.textContent).toBe("Quarterly");
+  expect([...container.querySelectorAll(".ch-axis text")].at(-1)!.textContent).toBe("CY2026 Q2");
+  expect([...container.querySelectorAll(".ch-foot")].map((f) => f.textContent).join(" ")).toContain("NVDA loans: stops at CY2022 Q2.");
+});
+
 const type = async (input: HTMLInputElement, text: string) => {
   await act(async () => {
     const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
@@ -547,10 +597,40 @@ it("says where a layer ended up, and when it couldn't be drawn", async () => {
     { id: 3, kind: "formula", formula: "NVDA.revenue / MSFT.revenue", defaultCompany: NVDA, transform: "q", type: "line", axis: "L" },
   ], nextId: 4 });
   const cards = [...container.querySelectorAll(".layer")];
-  expect(cards[1]!.textContent).toContain("Drawn on the right axis");
+  // the Axis control says where the layer is drawn, not what it asked for (analyst test 4, #21)
+  const axis = (i: number) => cards[i]!.querySelector<HTMLSelectElement>('select[aria-label="Axis"]')!;
+  expect(axis(0).selectedOptions[0]!.textContent).toBe("Left axis (USD)");
+  expect(axis(1).selectedOptions[0]!.textContent).toBe("Right axis (USD per share)");
+  expect(cards[1]!.textContent).toContain("On the right axis: the left one reads in USD.");
   expect(cards[2]!.textContent).toContain("Not drawn: both axes already read in other units");
   expect([...container.querySelectorAll(".ch-unit")].map((u) => u.textContent)).toEqual(["USD", "USD per share"]);
   expect([...container.querySelectorAll(".ch-foot")].map((f) => f.textContent).join(" ")).toContain("Not drawn:");
+  // choosing the left for EPS moves its unit there, and dollars to the right
+  await act(async () => {
+    axis(1).value = "L";
+    axis(1).dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  expect(latest.layers.map((l) => l.axis)).toEqual(["R", "L", "L"]);
+  expect([...container.querySelectorAll(".ch-unit")].map((u) => u.textContent)).toEqual(["USD per share", "USD"]);
+  expect(axis(0).selectedOptions[0]!.textContent).toBe("Right axis (USD)");
+  expect(container.querySelector(".layer")!.textContent).not.toContain("On the");
+});
+
+it("draws two layers of one unit on one axis, and says so on the layer that asked for the other", async () => {
+  vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+    const res = respond(url, init);
+    if (!new URL(url, "http://x").pathname.endsWith("/evaluate")) return res;
+    const body = await res.json();
+    return Response.json({ ...body, unit: "ratio", display: "percent" });
+  }));
+  await render({ ...emptyChart(), layers: [
+    { id: 1, kind: "metric", companyId: NVDA, metric: "operating_margin", transform: "ttm", type: "line", axis: "L" },
+    { id: 2, kind: "formula", formula: "free_cash_flow / revenue", defaultCompany: NVDA, transform: "ttm", type: "line", axis: "R" },
+  ], nextId: 3 });
+  const cards = [...container.querySelectorAll(".layer")];
+  expect(cards[1]!.querySelector<HTMLSelectElement>('select[aria-label="Axis"]')!.selectedOptions[0]!.textContent).toBe("Left axis (%)");
+  expect(cards[1]!.textContent).toContain("On the left axis with the other layers in %: one unit, one axis.");
+  expect([...container.querySelectorAll(".ch-unit")].map((u) => u.textContent)).toEqual(["%"]);
 });
 
 it("a template with work to lose keeps it for Restore; on an empty chart it doesn't", async () => {

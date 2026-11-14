@@ -205,6 +205,9 @@ export interface LayoutOptions {
   /** a log scale on the left axis, for lines of positive dollars (Compare); zero and negative
    * values aren't drawn on it */
   log?: boolean;
+  /** the chart's end: the time axis runs on to the newest period due on file by then (series.ts
+   * `xAxis`), a shaded gap after a series that stopped */
+  through?: string | null;
 }
 
 const stacked = (t: Series["type"]) => t === "sbar" || t === "sarea";
@@ -313,7 +316,7 @@ export function layout(input: Series[], title: boolean, markers: Marker[] = [], 
     const axis = plan.axes[i];
     return axis ? { ...s, axis } : { ...s, points: [] };
   });
-  const ticks = xAxis(series);
+  const ticks = xAxis(series, opts.through);
   const sp = spans(series, ticks);
   const on = (axis: "L" | "R") => series.flatMap((s, i) => (s.axis === axis && hasValues(s) ? [i] : []));
   const left = scaleFor(on("L").map((i) => series[i]!), on("L").map((i) => sp[i]!), !!opts.log);

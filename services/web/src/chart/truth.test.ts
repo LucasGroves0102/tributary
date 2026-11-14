@@ -163,6 +163,51 @@ describe("the time axis", () => {
     const csv = chartCsv([series(1, [year(2016), year(2018)])]);
     expect(csv.split("\r\n").slice(1, 4)).toEqual(["FY2016,1,", "FY2017,,", "FY2018,1,"]);
   });
+
+  /** A calendar quarter ending on its real last day. */
+  const cq = (y: number, q: number, v: number | null = 1): Point =>
+    ({ key: y * 4 + q - 1, period: `CY${y} Q${q}`, periodEnd: `${y}-${["03-31", "06-30", "09-30", "12-31"][q - 1]}`, y: v, raw: String(v), sources: [] });
+
+  it("runs to what is due by the chart's end, so a series that stopped shows its gap (analyst test 4, #13)", () => {
+    // GS loans: tagged to CY2022 Q2, charted over ten years to Nov 14, 2026
+    const loans = series(1, [cq(2021, 3), cq(2021, 4), cq(2022, 1), cq(2022, 2)], { name: "GS loans" });
+    const ticks = xAxis([loans], "2026-11-14");
+    expect(ticks.at(-1)!.period).toBe("CY2026 Q2"); // Q3 2026 ended Sep 30: not due until 90 days on
+    expect(ticks.filter((t) => t.gap)).toHaveLength(16);
+    expect(xAxis([loans], "2026-12-29").at(-1)!.period).toBe("CY2026 Q3");
+    expect(chartNotes([loans], { through: "2026-11-14" })[0]).toBe("GS loans: stops at CY2022 Q2.");
+    const lay = layout([loans], false, [], { through: "2026-11-14" });
+    expect(lay.ticks).toHaveLength(20);
+    expect(lay.gaps).toHaveLength(1); // one shaded stretch to now
+    expect(lay.xLabels.at(-1)!.label).toBe("CY2026 Q2");
+    // without an end the axis ends with the series, as before (Compare, a model, the table and CSV)
+    expect(xAxis([loans]).at(-1)!.period).toBe("CY2022 Q2");
+    expect(chartCsv([loans]).split("\r\n").filter(Boolean)).toHaveLength(5);
+  });
+
+  it("adds nothing for a series that is current, or merely not due yet", () => {
+    const current = series(1, [cq(2026, 1), cq(2026, 2), cq(2026, 3)]);
+    expect(xAxis([current], "2026-11-14").map((t) => t.period)).toEqual(["CY2026 Q1", "CY2026 Q2", "CY2026 Q3"]);
+    // one company current, one stopped: the axis is the current one's, and the stopped one says so
+    const stopped = series(2, [cq(2026, 1)], { name: "S2" });
+    expect(xAxis([current, stopped], "2026-11-14")).toHaveLength(3);
+    expect(chartNotes([current, stopped], { through: "2026-11-14" })[0]).toBe("S2: stops at CY2026 Q1.");
+    // a model's fiscal years aren't periods: never extended
+    expect(xAxis([series(1, [point(2025, "FY2025"), point(2028, "FY2028E")])], "2030-01-01")).toHaveLength(2);
+  });
+
+  it("runs an annual axis to the last whole year due, after a year in progress too", () => {
+    const fy = (y: number, v: number | null = 1): Point => ({ ...cq(y, 4, v), period: `CY${y}` });
+    const ticks = xAxis([series(1, [fy(2019), fy(2020), fy(2021)])], "2026-11-14");
+    expect(ticks.map((t) => [t.period, !!t.gap])).toEqual([
+      ["CY2019", false], ["CY2020", false], ["CY2021", false],
+      ["CY2022", true], ["CY2023", true], ["CY2024", true], ["CY2025", true],
+    ]);
+    const partial = { ...cq(2022, 2), partial: "ttm" as const };
+    expect(xAxis([series(1, [fy(2021), partial])], "2026-11-14").map((t) => t.period))
+      .toEqual(["CY2021", "CY2022 Q2", "CY2022", "CY2023", "CY2024", "CY2025"]);
+    expect(autoSubtitle([series(1, [fy(2019), fy(2020), fy(2021)])], "annual", "calendar", "2026-11-14")).toContain("CY2019–CY2025");
+  });
 });
 
 describe("drawing a gap", () => {
@@ -245,9 +290,32 @@ describe("an axis holds one unit", () => {
   });
 
   it("uses the requested side when it's free, and joins its own kind across", () => {
-    expect(planAxes([usd(1), usd(2, "R")]).axes).toEqual(["L", "R"]);
     const ratioRight = series(3, q, { unit: "multiple", axis: "R" });
     expect(planAxes([usd(1), ratioRight, usd(2, "R")]).axes).toEqual(["L", "R", "L"]);
+    expect(planAxes([ratioRight, usd(1, "R")]).axes).toEqual(["R", "L"]);
+  });
+
+  it("gives one unit one axis: two layers in dollars never get a scale each", () => {
+    expect(planAxes([usd(1), usd(2, "R")]).axes).toEqual(["L", "L"]);
+    const lay = layout([usd(1), usd(2, "R")], false);
+    expect(lay.right).toBeNull();
+    expect(lay.legend.map((l) => l.name)).toEqual(["S1", "S2"]);
+  });
+
+  it("puts two percents on one % scale and leaves the other side to dollars (analyst test 4, #12)", () => {
+    // Operating margin asks for the left, revenue the left too, FCF / revenue the right: the old plan drew
+    // two % axes (0-25% and 0-30%), so the lines crossed where the values didn't, and revenue wasn't drawn
+    const margin = series(1, q.map((p, i) => ({ ...p, y: [0.17, 0.2][i]! })), { unit: "ratio" });
+    const revenue = usd(2);
+    const fcfMargin = series(3, q.map((p, i) => ({ ...p, y: [0.24, 0.3][i]! })), { unit: "ratio", axis: "R" });
+    const plan = planAxes([margin, revenue, fcfMargin]);
+    expect(plan.axes).toEqual(["L", "R", "L"]);
+    expect([plan.left, plan.right]).toEqual(["%", "USD"]);
+    const lay = layout([margin, revenue, fcfMargin], false);
+    expect(lay.left!.unit).toBe("ratio");
+    expect(lay.left!.hi).toBeGreaterThanOrEqual(0.3); // one scale holds both
+    expect(lay.right!.unit).toBe("USD");
+    expect(chartNotes([margin, revenue, fcfMargin]).some((n) => n.startsWith("Not drawn"))).toBe(false);
   });
 
   it("doesn't draw a third unit, and says so; its values stay", () => {

@@ -26,6 +26,10 @@ interface Props {
   compact?: boolean;
   /** the earliest period end the chart asked for, so it can say when nothing goes back that far */
   from?: string | null;
+  /** the chart's end (model.ts `chartEnd`: its custom range's last day, else the day its answers were
+   * read): the time axis runs on to the newest period due on file by then, so a series that stopped
+   * shows its gap (series.ts `xAxis`). Unset: the axis ends with the newest period plotted. */
+  through?: string | null;
   /** a log scale on the left axis (Compare's dollar charts) */
   log?: boolean;
   /** false: no notes about gaps (a model's forecast starting where its history stops isn't one) */
@@ -52,7 +56,7 @@ export function newestSource(p: Point | undefined): Source | null {
  * On screen it is drawn for the width it has (layout.ts `chartSize`), so its text is its real size
  * whatever the window. `svgRef` always gets the standard-size drawing (hidden when that isn't the
  * one on screen), so Export SVG / PNG give the same deck-ready image from a phone or a wide monitor. */
-export function LayerChart({ series, title, footnote, svgRef, markers = [], onOpen, subtitle = "", deck = false, compact = false, from = null, log = false, notes = true, emptyOnFile = [] }: Props) {
+export function LayerChart({ series, title, footnote, svgRef, markers = [], onOpen, subtitle = "", deck = false, compact = false, from = null, through = null, log = false, notes = true, emptyOnFile = [] }: Props) {
   const room = useRef<HTMLDivElement>(null);
   const [measured, setMeasured] = useState<number | null>(null);
   useEffect(() => {
@@ -68,18 +72,18 @@ export function LayerChart({ series, title, footnote, svgRef, markers = [], onOp
   const fixed = compact ? { width: COMPACT_WIDTH, plotHeight: COMPACT_PLOT_H } : { width: WIDTH };
   const size = compact || measured === null ? fixed : chartSize(measured);
   const said = useMemo(
-    () => (notes ? [...footnote, ...chartNotes(series, { from, brief: compact, emptyOnFile: new Set(emptyOnFile) })] : footnote),
-    [footnote.join("\n"), series, from, compact, notes, emptyOnFile.join(",")],
+    () => (notes ? [...footnote, ...chartNotes(series, { from, through, brief: compact, emptyOnFile: new Set(emptyOnFile) })] : footnote),
+    [footnote.join("\n"), series, from, through, compact, notes, emptyOnFile.join(",")],
   );
   const drawnFor = (o: { width?: number; plotHeight?: number }) => {
     const w = o.width ?? WIDTH;
     const foot = footnoteLines(said, w);
     const heading = titleLines(title, w);
-    const lay = layout(series, Boolean(title), markers, { ...o, log, subtitle: Boolean(subtitle), footLines: foot.length, titleLines: heading.length });
+    const lay = layout(series, Boolean(title), markers, { ...o, log, through, subtitle: Boolean(subtitle), footLines: foot.length, titleLines: heading.length });
     return { lay, foot, heading };
   };
-  const shown = useMemo(() => drawnFor(size), [series, title, markers, subtitle, said, size.width, size.plotHeight, log]);
-  const standard = useMemo(() => drawnFor(fixed), [series, title, markers, subtitle, said, compact, log]);
+  const shown = useMemo(() => drawnFor(size), [series, title, markers, subtitle, said, size.width, size.plotHeight, log, through]);
+  const standard = useMemo(() => drawnFor(fixed), [series, title, markers, subtitle, said, compact, log, through]);
   const lay = shown.lay;
   const sameDrawing = shown.lay.width === standard.lay.width && shown.lay.height === standard.lay.height;
   const [hover, setHover] = useState<number | null>(null);
