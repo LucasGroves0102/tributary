@@ -91,8 +91,8 @@ them; a fall in prose is worded ("down 12%"). Gold appears only on the seal. No 
 
 Decisions taken while building, so later batches hold to them:
 
-- Theme follows the visitor's system (`prefers-color-scheme`, in `tokens.css` itself); Light / Dark in the top bar is an
-  explicit choice, and choosing what the system asks for forgets it. Both palettes as above; the dark block appears twice
+- Theme follows the visitor's system (`prefers-color-scheme`, in `tokens.css` itself) until they choose: the top bar's
+  Theme button says which is in force and cycles Light, Dark, System; System forgets the stored choice. Both palettes as above; the dark block appears twice
   (system and chosen) and `tokens.test.ts` keeps them identical.
 - Extra tokens: `--sheet-2` (#f4f1ed / #231e1f, a recessed sheet), `--rule-2` (#d3cbc4 / #433a3b, a field's edge),
   `--red-soft` (#f7e9e9 / #2a191c, an error's ground), `--up-soft`, `--warn` (#8f4e14 / #dc9a5e, an umber for "your own
@@ -100,7 +100,7 @@ Decisions taken while building, so later batches hold to them:
   front door's sheet, tooltips). Older names (`--panel`, `--text`, `--accent`, `--neg`...) read from these.
 - `.neg` (a fall) is the ink, `.pos` (a rise) `--up`; `--neg` as a colour is the red and means an error.
 - Chart series: the ink first (#5c5350 / #cdc3b8), then slate, umber, deep teal, plum, olive, rose, warm grey; never the
-  accent red. The deck export keeps its own palette until the charts pass.
+  accent red. The deck export (SVG/PNG) uses the light series and inks too.
 - Type scale as tokens: `--fs-xs` 12, `--fs-sm` 13, `--fs-meta` 13.5, `--fs-base` 14 (controls), `--fs-md` 15 (body,
   tables), `--fs-lg` 16, `--fs-xl` 22, `--fs-name` 46, `--fs-hero` 60. Corners are 0 everywhere (`--radius*`).
 - Motion: `--press` 120ms cubic-bezier(.23,1,.32,1); a press sinks to .97; tooltips and the dialog fade/scale from .96;
@@ -109,9 +109,19 @@ Decisions taken while building, so later batches hold to them:
   tooltip and the link's accessible description), `Folio` (rubric + section), `Choices` (Radix toggle group). The
   confirm dialog is a Radix alert dialog with its own backdrop (Radix's Overlay injects a `<style>` the CSP refuses).
 - Parentheses: `format.ts` `paren`, display only, on money in statements, the ledger, the recap and the screener.
-  Income-statement costs stay positive as filed (the mockup's "(12.89)" costs would need costs marked as deductions:
-  a sign-convention change for the owner, not taken).
+  Costs keep the API's sign and print positive, as most 10-Ks print them; parentheses only for a negative amount (the
+  mockup's "(12.89)" costs are left out, decided 2026-11-14).
 - Ledger: amounts in the first column, rates in the second; a figure from another period than the margin's says when;
   a negative net debt reads "Net cash" with Cash and short-term investments beside Cash.
 - The front door makes no claim the API doesn't give: its figures are `/v1/status/data`'s; the mockup's "within a
   minute" and sample filings were left out.
+- A masthead carries two actions in the open (the one primary, and Watch); the rest go in a "More" menu (Radix
+  DropdownMenu, `modal={false}`). No access pills in a masthead: access is a hover. No line for an absent fact ("No
+  expected filing date" is gone).
+- A section says a thing once: the Overview's flags are the ledger's red "*" plus one line under Since the last report
+  (the no-pro-forma explanation in its hover), not a box.
+- Long notes under a table go behind "How to read these figures" (`details`, closed), one sentence left in view; the
+  blanks are a legend (`·`, `—`, `$0` each with its meaning), never a dotted string.
+- No middle dot as a separator anywhere in new copy: separate items (flex gap) or sentences.
+- Statement row labels stay on one line where the table has 900px or more (`@container tw`), and wrap below it.
+- Screener: column rules between figures only.

@@ -20,8 +20,9 @@ with revenue sparklines, next expected filings, freshness), a top bar (breadcrum
 command palette, the filing alerts bell, theme, who is signed in) and the assistant drawer on every page (Ctrl/Cmd-J toggles,
 `/` focuses; the top bar's Assistant is the way in, closed until asked for and then remembered per
 browser). The theme follows the visitor's system (light or dark, `prefers-color-scheme`, read by
-`tokens.css` itself so nothing waits for a script); the top bar's Light / Dark switches it, kept per
-user in localStorage, and switching back to what the system asks for forgets the choice (`theme.ts`).
+`tokens.css` itself so nothing waits for a script). The top bar's Theme button says which is in force
+and cycles Light, Dark, System: Light and Dark are kept per user in localStorage, System forgets the
+choice (`theme.ts`).
 
 **Look ("Seal").** The design system of record is `.interface-design/system.md` at the repo root: an
 annual report kept as a ledger. A white page (a warm near-black in dark), black serif figures, red
@@ -42,7 +43,8 @@ a Radix tooltip on hover or focus and the link's description for a screen reader
 hover-only source), `components/Folio.tsx` (a section with its rubric in the margin: a 190px column
 of red labels beside each section, above it when the page has under 1100px), `components/Choices.tsx`
 (one of a few views: a Radix toggle group, arrow keys between options). Controls with behaviour use
-Radix Primitives (pinned exact versions), styled only with the tokens: the toggle groups, the seal's
+Radix Primitives (pinned exact versions), styled only with the tokens: the company page's More menu
+(DropdownMenu, `modal={false}`: a modal one locks scrolling with an injected style), the toggle groups, the seal's
 tooltip, and the confirm dialog (`workspaces/Actions.tsx` `ConfirmDelete`, a Radix alert dialog). Radix
 places popovers through the CSSOM, which the CSP allows; Radix's dialog Overlay isn't used, because
 its scroll lock injects a `<style>` element the CSP refuses (the dialog draws its own backdrop).
@@ -56,8 +58,10 @@ status, the shell, the company page and Statements, and the screener; the others
 tokens until their own pass. The company page's head has the sector in the margin, the name, then
 the facts as separate items (listing, SIC industry, fiscal year end, filer category, where it's
 incorporated in words: `companies/places.ts` maps EDGAR's state and country codes, "Y9" is Jersey,
-and a code EDGAR doesn't list isn't shown; currency; CIK; the access marks), the actions (Start an
-analysis is the one primary) and the tabs. The Overview: **The year**, the twelve months as a sentence
+and a code EDGAR doesn't list isn't shown; currency; CIK, whose hover says what the user's access
+covers), the next expected filing only when the API has one, two actions in the open (Start an
+analysis, the one primary, and Watch) with Chart, Compare, Ask, New thesis and New model under More,
+and the tabs. The Overview: **The year**, the twelve months as a sentence
 (revenue, its growth, net income and net cash or net debt, `data.ts` `yearStory`: API values only,
 and a figure from another period is left out rather than mixed in), sealed to its filing; **Figures**,
 the key figures as a ledger (amounts, then rates), each sealed, with Cash and short-term investments
@@ -66,7 +70,10 @@ the seal's source); **Since the last report** (red-letter days, below); **Latest
 set as a statement; **Business**; **Revenue and operating margin**; **Backlog and orders**. A
 statement is a ledger table: red column rules, subtotals heavier, the bottom line (net income, total
 assets, cash at the end of the period) double-ruled, the newest period washed, derived figures italic,
-and its choices (statement, period, range, basis) are toggle groups.
+and its choices (statement, period, range, basis) are toggle groups. Under a statement and under
+the screener one sentence stays in view; the rest of the notes (definitions, blanks, signs) are behind
+"How to read these figures", closed by default, the blanks as a legend. The screener's column rules
+run between its figures only.
 
 Layout: pages lay out by the room they have, not the window's width, because the assistant takes
 372px at any window size: `.main` is a CSS container and `@container main` rules reflow it (the
@@ -151,8 +158,8 @@ catalog open the user reads every company at once (`/v1/me` says so). While it i
 sandbox gets grants on 20 companies instead, and the page polls `/v1/me` until all 20 are
 readable, showing how many have arrived (access travels app DB → Debezium → Kafka → authz-sync →
 OpenFGA; the BRD target is under 30 s; after that it offers "Continue anyway"). The session is
-kept in localStorage until the sandbox expires; a banner shows "Demo sandbox: every company ·
-resets in Xh" ("20 companies" while the catalog is closed), and an expired or rejected token
+kept in localStorage until the sandbox expires; a banner shows "Demo sandbox: every company" and
+"Resets in Xh" ("20 companies" while the catalog is closed), and an expired or rejected token
 returns to the front door. A regular account (not a sandbox or GitHub user, e.g. a tester the owner invites) signs in with
 an owner-issued link: the owner mints a token on the server (`query-api-token <user_id> --hours
 N` inside the query-api pod) and sends `https://<site>/#/signed-in?token=<token>&expires_in=<s>`;
@@ -191,7 +198,7 @@ tiers; then `companies` lists only private grants). `src/access.ts` turns that i
 pages show: `readableFor(me, tier)` (every company while the catalog is open with that tier),
 `readableTotal(me)` (the sidebar's count) and `catalogOpen`. With the catalog open nothing below
 is scoped: a sandbox or GitHub session sees every company like anyone else, the banner says
-"Demo sandbox: every company · resets in Xh", the front door says "access to every company"
+"Demo sandbox: every company", the front door says "access to every company"
 (`catalog_public` on `GET /v1/demo/sandbox`), the Welcome page waits for no grant (none is
 written), Search covers every company's filings (ranked within the newest window that fills the
 page, with a line saying how far back, unless a company or dates narrow it), Home's feed heading
@@ -244,8 +251,11 @@ docstring; the Query API's `/earnings` and `/events`, rules in its README, "Earn
   event the API says affects a balance, the 8-K's own opening words quoted (pinnable in a project),
   Read the 8-K at that passage, Read the press release, EDGAR; one not stored here says so and links
   EDGAR. Routine filings (votes, nominations, exhibits alone) fold under one line. Above them, the
-  figures as of the period end a later event may have changed, each with its event, and "no pro
-  forma": Tributary doesn't compute a figure after the event. The same flags sit on the Overview's
+  figures as of the period end a later event may have changed: on the What changed step a list, each
+  with its event, and "no pro forma" (Tributary doesn't compute a figure after the event); on the
+  Overview, whose ledger already marks them, one line ("Debt, net debt, debt / equity and cash are as
+  of Jul 26, 2026; the Aug 17, 2026 8-K (Material agreement) may have changed them.", `events.ts`
+  `staleLine`) with the no-pro-forma explanation in its hover. The same flags sit on the Overview's
   ledger (Cash, Net debt, Debt / equity; every figure for non-reliance or bankruptcy) when the
   figure is as of that period end or earlier: the figure in red with "*", and a note under the
   ledger "* At Sep 30, 2026, before the Oct 27, 2026 8-K (Acquisition or disposition) and 1 more 8-K,
@@ -754,7 +764,8 @@ balances as the year-end value, ratios full-year; QoQ becomes YoY; the Transform
 controls below (`chart/autocomplete.ts`; Tab completes, arrows then Enter pick). The API checks them as
 you type: the chart takes a formula as soon as it's valid (the check's 350 ms is the debounce), or on
 Enter or blur whatever it is; every bad name shows at once, with "did you mean" when there is a close
-one. Deck output draws the chart in the light palette with a subtitle (periods and units,
+one. Deck output draws the chart in the light palette (Seal's light tokens: the ink first, never the red;
+`chart/export.ts` mirrors them) with a subtitle (periods and units,
 editable), axis unit captions and a source footnote ("Source: SEC filings via Tributary; forms
 for companies; latest filing; as of"), which SVG and PNG exports keep. Evaluate answers are kept
 in memory per (token, request) for the session (`chart/cache.ts`), so coming back to a chart
