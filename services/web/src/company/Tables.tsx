@@ -258,6 +258,17 @@ function BehindNotice({ behind, companyId, name, url }: { behind: FiguresBehind;
   );
 }
 
+/** What an empty cell reads (blanks.ts): each mark with its meaning, as a list, not a dotted string. */
+export function BlanksLegend() {
+  return (
+    <ul className="blanks-legend" aria-label="What an empty cell reads">
+      <li><span className="blank-mark">{NO_DATA}</span> no data in this period</li>
+      <li><span className="blank-mark">—</span> not reported</li>
+      <li><span className="blank-mark">$0</span> a real zero</li>
+    </ul>
+  );
+}
+
 /** Statement, period, basis and range live in the address (route.ts), so a view can be linked,
  * bookmarked and undone with Back. Range applies to Quarterly and TTM; Annual is ten years. */
 export function Statements({ token, companyId, name, ticker, notApplicable = [], view = {} }: TableProps & { view?: StatementView }) {
@@ -380,24 +391,29 @@ export function Statements({ token, companyId, name, ticker, notApplicable = [],
           )
         }
       </Gate>
-      <div className="foot">
-        {period === "a"
-          ? basis === "calendar"
-            ? "Annual = the calendar year: the four quarters ending nearest each calendar Q4, balances at its end. "
-            : "Annual = the fiscal year: four quarters to each fiscal Q4, balances at the year end, EPS and shares as the latest 10-K to state them, so years before a stock split may not be adjusted for it. "
-          : period === "ttm"
-            ? "TTM = trailing twelve months to each quarter end. Per-share figures don't add across quarters: n/a. "
-            : kind === "is"
-              ? "EPS and diluted shares have no fiscal Q4: a 10-K states the year, and the year less nine months isn't the quarter when the share count changes. "
-              : ""}
-        {kind === "cf" && "Outflows (capex, dividends, buybacks) are shown negative, as the cash flow statement prints them; the CSV too. Their XBRL tags carry the amount paid, so the chart builder and screener list them as positive amounts. "}
-        {kind === "cf" && "Cash at the start of a period is the end of the period before; the reconciliation checks start + change = end. "}
-        {period === "q" && "A marked quarter is far from the quarters beside it, or of the other sign (listed under the table). "}
-        {"A line with ▸ opens into what it is made of, with the tags and filings behind it. "}
-        Italic values are derived (e.g. Q4 = the 10-K's year minus nine months year-to-date),
-        the rest are reported. A value opens its filing in the reader; ↗ beside it (on hover) is the filing on EDGAR. A negative amount is in
-        parentheses; the CSV and the hover keep its sign. {NO_DATA} no data in this period, — not reported, $0 a real zero.
-      </div>
+      <p className="foot read-first">A figure opens its filing; italic ones are derived, and a negative amount is in parentheses.</p>
+      <details className="how-to-read">
+        <summary>How to read these figures</summary>
+        <div className="foot">
+          {period === "a"
+            ? basis === "calendar"
+              ? "Annual = the calendar year: the four quarters ending nearest each calendar Q4, balances at its end. "
+              : "Annual = the fiscal year: four quarters to each fiscal Q4, balances at the year end, EPS and shares as the latest 10-K to state them, so years before a stock split may not be adjusted for it. "
+            : period === "ttm"
+              ? "TTM = trailing twelve months to each quarter end. Per-share figures don't add across quarters: n/a. "
+              : kind === "is"
+                ? "EPS and diluted shares have no fiscal Q4: a 10-K states the year, and the year less nine months isn't the quarter when the share count changes. "
+                : ""}
+          {kind === "cf" && "Outflows (capex, dividends, buybacks) are shown negative, as the cash flow statement prints them; the CSV too. Their XBRL tags carry the amount paid, so the chart builder and screener list them as positive amounts. "}
+          {kind === "cf" && "Cash at the start of a period is the end of the period before; the reconciliation checks start + change = end. "}
+          {period === "q" && "A marked quarter is far from the quarters beside it, or of the other sign (listed under the table). "}
+          {"A line with ▸ opens into what it is made of, with the tags and filings behind it. "}
+          Italic values are derived (e.g. Q4 = the 10-K's year minus nine months year-to-date), the rest are reported. A
+          value opens its filing in the reader; ↗ beside it (on hover) is the filing on EDGAR. A negative amount is in
+          parentheses; the CSV and the hover keep its sign.
+        </div>
+        <BlanksLegend />
+      </details>
     </Folio>
   );
 }

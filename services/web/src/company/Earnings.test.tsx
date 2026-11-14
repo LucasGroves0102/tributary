@@ -173,6 +173,11 @@ it("flags Vertiv's Sep 30 cash and net debt on the Overview's key stats, with th
   expect(stat("revenue_ttm").querySelector("dd")?.className ?? "").not.toContain("later");
   expect(stat("debt_to_equity_q").querySelector("dd")?.className ?? "").not.toContain("later"); // 2.01 doesn't list it
   expect($(".events-card h2")?.textContent).toBe("Since the last report");
+  // the ledger already marks the figures: here the flags are one line, the no-pro-forma explanation its hover
+  expect($(".events-card .stale-box")).toBeNull();
+  expect($(".events-card .stale-line")?.textContent).toBe(
+    "*Cash, debt, net debt and total assets are as of Sep 30, 2026; the Oct 27, 2026 8-K (Acquisition or disposition) and 1 more 8-K may have changed them.");
+  expect($(".events-card .stale-line")?.getAttribute("title")).toContain("no pro forma");
   // one request for the card and the flags
   expect(vi.mocked(fetch).mock.calls.filter(([u]) => String(u).includes("/events"))).toHaveLength(1);
 });

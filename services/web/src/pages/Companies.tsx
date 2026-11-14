@@ -209,12 +209,8 @@ export function Companies({ token, screen: asked, watched, onWatch, onChart, sav
               onPage={(page) => go({ view: "companies", screen: { ...screen, page } })}
             />
           )}
-          <div className="foot">
-            US dollars; a negative amount is in parentheses. TTM = trailing twelve months to each company's latest reported quarter; net debt
-            and debt/equity at that quarter's end. Hover a value for its period and source filing.
-            A figure from an earlier period than the company's latest shows its date; about a year or
-            more behind it reads old, dimmed, and leaves sorts and filters. n/m = not meaningful,
-            n/a = doesn't apply, — = not reported; hover for why.
+          <p className="foot read-first">
+            US dollars; a negative amount is in parentheses. Hover a value for its period and source filing.
             {masked > 0 && (
               <>
                 {" "}
@@ -227,7 +223,16 @@ export function Companies({ token, screen: asked, watched, onWatch, onChart, sav
             )}
             {hasValueFilter(screen) && !scope &&
               " Value filters and size bands only match companies whose financials you can read."}
-          </div>
+          </p>
+          <details className="how-to-read">
+            <summary>How to read these figures</summary>
+            <div className="foot">
+              TTM = trailing twelve months to each company's latest reported quarter; net debt and debt/equity at that
+              quarter's end. A figure from an earlier period than the company's latest shows its date; about a year or
+              more behind it reads old, dimmed, and leaves sorts and filters. n/m = not meaningful, n/a = doesn't apply,
+              — = not reported; hover for why.
+            </div>
+          </details>
         </section>
       </div>
     </div>
@@ -309,7 +314,8 @@ function FilterRail({ screen, set, scoped, sectors }: {
     <details className="card filter-band" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
       <summary>
         <b>Filters</b>
-        <span className="faint small">{active ? `${active} active` : "none set"} · apply as you change them</span>
+        <span className="faint small">{active ? `${active} active` : "None set"}</span>
+        <span className="faint small">Applied as you change them</span>
       </summary>
       <form className="filters" onSubmit={submit} aria-label="Screen filters">
       {screen.issue && (
@@ -470,7 +476,7 @@ function Table({
     <>
       {error && <p className="empty error">{error}</p>}
       <TableScroll label="Screener results">
-        <table className="t screen ruled">
+        <table className="t screen ruled-n">
           <thead>
             <tr>
               <th className="first sort" {...th("name", false)}>Company{arrow("name")}</th>
@@ -495,8 +501,8 @@ function Table({
           <tbody onKeyDown={onTableKey}>
             {rows.map((r, i) => {
               const isWatched = watched?.has(r.companyId) ?? false;
-              const group = sortKey === GROUP_SORT ? `${r.sector ?? "No sector (no SIC code)"}${r.sectorIndustry ? ` · ${r.sectorIndustry}` : ""}` : null;
-              const newGroup = group !== null && (i === 0 || group !== `${rows[i - 1]!.sector ?? "No sector (no SIC code)"}${rows[i - 1]!.sectorIndustry ? ` · ${rows[i - 1]!.sectorIndustry}` : ""}`);
+              const group = sortKey === GROUP_SORT ? `${r.sector ?? "No sector (no SIC code)"}${r.sectorIndustry ? `: ${r.sectorIndustry}` : ""}` : null;
+              const newGroup = group !== null && (i === 0 || group !== `${rows[i - 1]!.sector ?? "No sector (no SIC code)"}${rows[i - 1]!.sectorIndustry ? `: ${rows[i - 1]!.sectorIndustry}` : ""}`);
               const joint = coRegistrantNote(r.name, r.coRegistrants, r.companyId);
               return (
                 <Fragment key={r.companyId}>

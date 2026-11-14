@@ -299,7 +299,8 @@ a.btn:hover {
 .sandbox-banner {
   display: flex;
   align-items: center;
-  gap: var(--sp-4);
+  flex-wrap: wrap;
+  gap: 2px var(--sp-8);
   background: var(--page);
   color: var(--ink-2);
   font-family: var(--sans);
@@ -3991,19 +3992,19 @@ button.link.num {
    above it and the table view sit on the card, in the app's own theme. */
 .lchart.deck .lchart-svg {
   --panel: #ffffff;
-  --line: #e3e6eb;
-  --line-2: #d3d8df;
-  --text: #14171c;
-  --text-2: #4a525e;
-  --text-3: #5f6874;
-  --series-0: #3b5bdb;
-  --series-1: #2f9e44;
-  --series-2: #e8590c;
-  --series-3: #c92a2a;
-  --series-4: #0c8599;
-  --series-5: #7048e8;
-  --series-6: #d6336c;
-  --series-7: #495057;
+  --line: #e6e0db;
+  --line-2: #d3cbc4;
+  --text: #161314;
+  --text-2: #4c4646;
+  --text-3: #706965;
+  --series-0: #5c5350;
+  --series-1: #3d5a80;
+  --series-2: #9a5a17;
+  --series-3: #2f6b5a;
+  --series-4: #6b4a7a;
+  --series-5: #4b6b2a;
+  --series-6: #a8456a;
+  --series-7: #8a817c;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
 }
@@ -5662,11 +5663,23 @@ button.chip.on {
   text-overflow: ellipsis;
 }
 
-/* a statement's long row names wrap, and the room goes to the periods */
+/* a statement's long row names wrap where the table is tight, and the room goes to the periods; with
+   room (1440 beside the sidebar) a name stays on one line */
 .t.statement .first {
   white-space: normal;
   min-width: 150px;
   max-width: 190px;
+}
+
+.t.statement td.first {
+  font-size: var(--fs-base);
+}
+
+@container tw (min-width: 900px) {
+  .t.statement .first {
+    white-space: nowrap;
+    max-width: none;
+  }
 }
 
 /* segment tables line their periods up from one table to the next */

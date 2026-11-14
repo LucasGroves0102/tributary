@@ -256,13 +256,10 @@ export function Welcome({ onReady, notice, github, pollMs = 1000, now = Date.now
               <p className="small muted">The demo isn't available right now.</p>
             ) : (
               o && (
-                <p className="small faint">
-                  Starts a private sandbox for {o.ttl_hours} hours with access to{" "}
+                <p className="small faint" title="The sandbox and what you save in it are deleted when it expires.">
+                  A private {o.ttl_hours}-hour sandbox, no sign-up: access to{" "}
                   {o.catalog_public ? `every company's ${reads}` : `the ${reads} of ${o.tickers.length} companies (${o.tickers.join(", ")})`}
-                  {o.agent
-                    ? `, and ${o.agent_questions_per_day} assistant questions a day`
-                    : "; the assistant is off for demo sandboxes"}
-                  . No sign-up. It's deleted when it expires.
+                  {o.agent ? `, ${o.agent_questions_per_day} assistant questions a day.` : "; the assistant is off for demo sandboxes."}
                 </p>
               )
             )}
@@ -284,9 +281,8 @@ export function Welcome({ onReady, notice, github, pollMs = 1000, now = Date.now
                 )}
               </div>
               {githubOn && (
-                <p className="small faint">
-                  Signing in with GitHub gives you the same {o?.catalog_public ? "access" : "companies"} in an account that stays, with your
-                  saved work. It reads only your public GitHub profile.
+                <p className="small faint" title={`The same ${o?.catalog_public ? "access" : "companies"} as the demo, in an account that stays.`}>
+                  Keeps your saved work. Reads only your public GitHub profile.
                 </p>
               )}
               {passwordOn && formOpen && (

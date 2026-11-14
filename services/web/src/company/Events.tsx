@@ -9,7 +9,7 @@ import { day } from "../format";
 import { sectionName } from "../reader/sections";
 import { href } from "../route";
 import type { EventsResponse, FilingEvent } from "../types";
-import { ANNOUNCED_ITEM, ANNOUNCED_LABEL, eventLabels, itemLabel, METRIC_LABEL, splitEvents, staleFlags, windowLine, windowRubric } from "./events";
+import { ANNOUNCED_ITEM, ANNOUNCED_LABEL, eventLabels, itemLabel, METRIC_LABEL, splitEvents, staleFlags, staleLine, windowLine, windowRubric } from "./events";
 import { Gate } from "./Tables";
 import { type Load, useLoad } from "./useLoad";
 
@@ -36,7 +36,7 @@ export function EventsCard({ token, companyId, name, load: given, folio = false 
       {() => data === null ? (
         <p className="empty">8-Ks since the last report aren't available here yet. The company's Filings tab lists every 8-K.</p>
       ) : (
-        <EventsBody companyId={companyId} data={data} />
+        <EventsBody companyId={companyId} data={data} brief={folio} />
       )}
     </Gate>
   );
@@ -65,13 +65,22 @@ export function EventsCard({ token, companyId, name, load: given, folio = false 
   );
 }
 
-function EventsBody({ companyId, data }: { companyId: string; data: EventsResponse }) {
+/** `brief`: the Overview, whose ledger already marks each figure "*": the flags are one line there,
+ * the no-pro-forma explanation in its hover. Elsewhere (What changed) they're listed. */
+function EventsBody({ companyId, data, brief = false }: { companyId: string; data: EventsResponse; brief?: boolean }) {
   const flags = staleFlags(data);
   const { material, routine } = splitEvents(data);
   const asOf = flags[0]?.asOf;
+  const line = brief ? staleLine(flags) : null;
   return (
     <div className="card-b events-b">
-      {flags.length > 0 && (
+      {line && (
+        <p className="stale-line" role="note" title={line.title}>
+          <span className="mark" aria-hidden="true">*</span>
+          {line.text}
+        </p>
+      )}
+      {!brief && flags.length > 0 && (
         <div className="stale-box" role="note">
           <b>⚑ Figures as of {asOf ? day(asOf, true) : "the last report"} that a later 8-K may have changed</b>
           <ul>

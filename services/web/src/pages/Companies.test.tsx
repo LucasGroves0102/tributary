@@ -297,7 +297,8 @@ it("F4: a sector filter from /v1/sectors, and the screen grouped by sector with 
   expect([...container.querySelectorAll('select[aria-label="Industry within the sector"] option')].map((o) => o.textContent))
     .toEqual(["Any industry", "Semiconductors (100)", "Software (262)"]);
   expect([...container.querySelectorAll("tr.group-head th")].map((th) => th.textContent))
-    .toEqual(["Technology · Semiconductors", "Consumer Discretionary · Automobiles"]);
+    // Seal: no middle-dot separators
+    .toEqual(["Technology: Semiconductors", "Consumer Discretionary: Automobiles"]);
   expect((container.querySelector(".card-h .chk input") as HTMLInputElement).checked).toBe(true);
   expect($(".sector-sub")?.textContent).toBe("Semiconductors");
 });
