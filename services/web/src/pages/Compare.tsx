@@ -12,6 +12,7 @@ import {
   compareRows,
   companiesOf,
   countText,
+  peerCountText,
   isBank,
   MASKED_TITLE,
   MAX_PEERS,
@@ -372,7 +373,7 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
                 ))}
                 <tr className="agg">
                   <td className="first">Peer median</td>
-                  <td className="faint" title="Each median says how many of the peers it uses; hover it for why the others are left out">n of N peers</td>
+                  <td className="faint" title="Each median says how many of the peers it uses; hover it for why the others are left out">{peerCountText(rows)}</td>
                   {cols.map((k) => (
                     <td key={k} className="n" title={medianTitle(stats[k]!)}>
                       {stats[k]!.n === 0 && stats[k]!.banks > 0 ? NOT_APPLICABLE : statText(k, stats[k]!.median)}

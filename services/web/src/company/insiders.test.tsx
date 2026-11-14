@@ -5,7 +5,7 @@ import { expect, it, vi } from "vitest";
 import type { InsiderFilings } from "../types";
 import NVDA from "./fixtures/nvda-insiders.json";
 import { InsiderTable } from "./Insiders";
-import { filingLine, signedShares, transactions } from "./insiders";
+import { filingLine, nameCase, signedShares, transactions } from "./insiders";
 
 // the branch's /v1/companies/{NVIDIA}/insiders over five real NVIDIA filings (F7b scratchpad
 // make_insider_fixture.py): regenerate, don't hand-edit
@@ -15,8 +15,8 @@ const byAcc = (acc: string) => DATA.filings.find((f) => f.accession_no === acc)!
 it("#117: a filing's line in the index names the insider, their role and the trade", () => {
   expect(filingLine(byAcc("0001588670-26-000014"))).toBe(
     "Kress Colette, EVP & Chief Financial Officer · sold 34,918 shares ($7.65M) · shares withheld for tax or exercise price: 40,747 shares");
-  expect(filingLine(byAcc("0001199039-26-000014"))).toBe("STEVENS MARK A, Director · sold 1,022,239 shares ($235.64M)");
-  expect(filingLine(byAcc("0001197647-26-000013"))).toBe("COXE TENCH, Director · gift: 500,000 shares");
+  expect(filingLine(byAcc("0001199039-26-000014"))).toBe("Stevens Mark A, Director · sold 1,022,239 shares ($235.64M)");
+  expect(filingLine(byAcc("0001197647-26-000013"))).toBe("Coxe Tench, Director · gift: 500,000 shares");
   expect(filingLine(byAcc("0002152188-26-000003"))).toBe("Parker Nicholas P., EVP, Worldwide Field Ops · no securities listed");
 });
 
@@ -62,7 +62,7 @@ it("pre-ship: older filings page on the API's cursor (never a day), and an older
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   await act(async () => root.render(<InsiderTable load={{ state: "ok", data: firstPage }} token="t" companyId="0001045810" />));
   expect(container.querySelector(".sub")!.textContent).toContain("3 most recent filings");
-  expect(container.textContent).not.toContain("STEVENS MARK A");
+  expect(container.textContent).not.toContain("Stevens Mark A");
   const button = [...container.querySelectorAll("button")].find((b) => b.textContent === "Show older filings")!;
   await act(async () => button.click());
   await act(async () => new Promise((r) => setTimeout(r, 0)));
@@ -71,7 +71,9 @@ it("pre-ship: older filings page on the API's cursor (never a day), and an older
   expect(asked.pathname).toBe("/api/query/v1/companies/0001045810/insiders");
   expect(asked.searchParams.get("cursor")).toBe("2026-09-18_0001588670-26-000014");
   expect(asked.searchParams.get("before")).toBeNull();
-  expect(container.textContent).toContain("STEVENS MARK A");
+  expect(container.textContent).toContain("Stevens Mark A");
+  // the name as the filing gives it stays in the hover
+  expect([...container.querySelectorAll("td.first")].some((td) => td.getAttribute("title") === "As filed: STEVENS MARK A")).toBe(true);
   expect(container.querySelector(".sub")!.textContent).toContain("5 filings");
   expect([...container.querySelectorAll("button")].some((b) => b.textContent === "Show older filings")).toBe(false);
   // an API older than the cursor: has_more without next_cursor, so no button (it can't page)
@@ -82,4 +84,24 @@ it("pre-ship: older filings page on the API's cursor (never a day), and an older
   act(() => root.unmount());
   container.remove();
   vi.unstubAllGlobals();
+});
+
+it("analyst test 4 (finding 34): a name filed in capitals reads in name case, in the filing's order", () => {
+  expect(nameCase("STEVENS MARK A")).toBe("Stevens Mark A");
+  expect(nameCase("HUANG JEN HSUN")).toBe("Huang Jen Hsun");
+  expect(nameCase("O'BRIEN PATRICK J III")).toBe("O'Brien Patrick J III");
+  expect(nameCase("MCDONALD-SMITH ANNE")).toBe("McDonald-Smith Anne");
+  expect(nameCase("MACDONALD ANGUS")).toBe("MacDonald Angus");
+  expect(nameCase("MACK JOHN")).toBe("Mack John");
+  expect(nameCase("MACHADO LUIS")).toBe("Machado Luis");
+  expect(nameCase("D'ANGELO MARIA T.")).toBe("D'Angelo Maria T.");
+  expect(nameCase("SMITH JOHN JR")).toBe("Smith John Jr.");
+  expect(nameCase("SMITH JOHN, JR.")).toBe("Smith John, Jr.");
+  expect(nameCase("GATES WILLIAM H II")).toBe("Gates William H II");
+  expect(nameCase("DE LA CRUZ ROSA")).toBe("De La Cruz Rosa");
+  // the filer's own casing stays; a fund or company reads as a company's name does
+  expect(nameCase("Parker Nicholas P.")).toBe("Parker Nicholas P.");
+  expect(nameCase("Kress Colette")).toBe("Kress Colette");
+  expect(nameCase("BERKSHIRE HATHAWAY INC")).toBe("Berkshire Hathaway");
+  expect(nameCase("  COXE   TENCH ")).toBe("Coxe Tench");
 });
