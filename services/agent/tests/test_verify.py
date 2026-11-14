@@ -131,11 +131,53 @@ def test_a_derived_metrics_inputs_are_in_the_data():
 
 def test_inputs_combine_like_values_and_wrong_figures_still_fail():
     """A sum or difference is of one metric, as for rows: revenue less its year-ago value is
-    derived; long-term debt plus its current part (two metrics) is not."""
-    figs, _ = statuses("Up $49.48B on a year ago; debt of $33.37B; not $32.38B, $46.75B nor "
-                       "$10.92T.", [NVDA_DERIVED])
-    assert figs == {"$49.48B": "derived", "$33.37B": "unverified", "$32.38B": "unverified",
+    derived; debt plus cash (two metrics) is not. Total debt is rule 5's, below."""
+    figs, _ = statuses("Up $49.48B on a year ago; debt and cash of $54.81B; not $32.38B, "
+                       "$46.75B nor $10.92T.", [NVDA_DERIVED])
+    assert figs == {"$49.48B": "derived", "$54.81B": "unverified", "$32.38B": "unverified",
                     "$46.75B": "unverified", "$10.92T": "unverified"}
+
+
+# Vertiv's Sep 30, 2026 balance as /financials returns it (analyst test 4): debt/equity and net
+# debt with their inputs, no total debt row
+VRT, VRT_Q3 = "0001674101", "0001628280-26-067893"
+VRT_BALANCE = json.dumps({"company_id": VRT, "view": "quarter", "rows": [
+    {"metric": "debt_to_equity", "period_end": "2026-09-30", "value": 0.5322,
+     "inputs": {"long_term_debt": 2925100000, "long_term_debt_current": 3400000,
+                "stockholders_equity": 5502000000},
+     "citation": {"accession_no": VRT_Q3}},
+    {"metric": "net_debt", "period_end": "2026-09-30", "value": -783200000,
+     "inputs": {"long_term_debt": 2925100000, "long_term_debt_current": 3400000,
+                "cash": 3512900000, "short_term_investments": 198800000},
+     "citation": {"accession_no": VRT_Q3}}]})
+
+
+def test_total_debt_and_cash_are_one_side_of_a_rows_inputs():
+    """Rule 5 (analyst test 4, finding 9): "0.53x (debt $2,928.5M / equity $5,502.0M)" and
+    "$3,512.9M plus $198.8M ... less $2,928.5M debt" were downgraded because total debt is two
+    balance-sheet lines in the inputs. Each side of a row's inputs now verifies as a total at the
+    row's date; anything else across two metrics still doesn't."""
+    figs, v = statuses("Debt of $2,928.5M over equity of $5,502.0M; cash and investments of "
+                       "$3,711.7M; net cash $783.2M. Not $2,928.6M, nor debt plus cash "
+                       "$6,441.4M, nor debt plus equity $8,430.5M.", [VRT_BALANCE],
+                       {VRT_Q3})
+    assert figs == {"$2,928.5M": "verified", "$5,502.0M": "verified", "$3,711.7M": "verified",
+                    "$783.2M": "verified", "$2,928.6M": "unverified", "$6,441.4M": "unverified",
+                    "$8,430.5M": "unverified"}
+    by = {f.text: f.source for f in v.figures}
+    assert by["$2,928.5M"] == {"company_id": VRT, "metric": "total_debt",
+                               "period_end": "2026-09-30", "accession_no": VRT_Q3}
+    # only for what rules 1-4 left unverified: a total equal to a row stays that row's
+    assert by["$783.2M"]["metric"] == "net_debt"
+
+
+def test_one_part_alone_is_no_total():
+    one = json.dumps({"company_id": VRT, "rows": [
+        {"metric": "net_debt", "period_end": "2026-09-30", "value": 100,
+         "inputs": {"long_term_debt": 2925100000, "cash": 3512900000},
+         "citation": {"accession_no": VRT_Q3}}]})
+    figs, _ = statuses("Debt of $2,925.1M; debt and cash $6,438.0M.", [one], {VRT_Q3})
+    assert figs == {"$2,925.1M": "verified", "$6,438.0M": "unverified"}
 
 
 def test_tables_read_at_the_scale_they_state():

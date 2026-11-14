@@ -14,14 +14,16 @@ are still defaults, and for a year built from reported quarters how many), plus 
 never reach the data.
 
 The history the check cites is still read with `get_financials` (view ttm, the same 40 quarters
-the run reads) as a tool result, so figures from it verify like any other."""
+the run reads) as a tool result, so figures from it verify like any other: revenue, operating
+income and free cash flow, the TTM column the model page shows (analyst test 4: the page's TTM FCF
+of $3.15B was "not in the data" when only quarterly cash flow and capex had been read)."""
 
 from typing import Any
 
 from tributary_agent.ui import Http
 
 MAX_HISTORY = 10
-HISTORY_METRICS = ["revenue", "operating_income"]
+HISTORY_METRICS = ["revenue", "operating_income", "free_cash_flow"]
 HISTORY_QUARTERS = 40
 SCENARIOS = ("bear", "base", "bull")
 MAX_YEARS = 10

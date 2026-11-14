@@ -14,7 +14,12 @@ A figure is, in this order:
 4. verified when it equals one of a derived metric's inputs (`inputs` on a /financials row:
    net debt's cash and debt, a growth rate's year-ago value, a TTM's four quarters), or derived
    from them as in 2;
-5. unverified otherwise.
+5. verified when it equals the total of one side of a derived row's inputs at that row's date
+   (`INPUT_TOTALS`: total debt = long-term debt + its current portion, the debt side of net
+   debt and debt/equity's numerator; cash + short-term investments, net debt's cash side). A
+   filing prints them as separate balance-sheet lines, so "debt of $2,928.5M" over Vertiv's
+   $2,925.1M and $3.4M was "not in the data" (analyst test 4, finding 9);
+6. unverified otherwise.
 
 Table cells, per section of a sections result (scale notes: "(in thousands" / "(in millions" /
 "(in billions", also "($ in millions)", "(Dollars in thousands)"): a section that states no
@@ -29,10 +34,10 @@ always could). A figure written without a unit ("$96,221") is never quoted from 
 states a scale. /v1/search's echo of the query is never evidence (the model's own words); its
 snippets are, without the « » marks.
 
-Rule 4 and the decimal and stated-scale cells came after the recorded suites (tests/adversarial,
-tests/citations): they run only for a figure 1-3 left unverified, so a recorded answer verifies
-exactly as before. Nothing is loosened: every rule still needs the number itself in what the
-tools returned.
+Rules 4 and 5 and the decimal and stated-scale cells came after the recorded suites
+(tests/adversarial, tests/citations): they run only for a figure 1-3 left unverified (5 only after
+4 too), so a recorded answer verifies exactly as before. Nothing is loosened: every rule still
+needs the number itself in what the tools returned (5: both its parts, at one row's date).
 
 Currencies (F8b, after the suites too): since migration 056 a company's figures are in its own
 currency, and /financials says so (each row's `unit`, "EUR"; `currency` on the answer when it isn't
@@ -66,6 +71,10 @@ DECIMAL_CELL = re.compile(r"(?<![\d.,])\d{1,3}(?:,\d{3})+\.\d+(?![\d,]|\.\d)")
 # "(In millions, except per share data)", "($ in thousands)", "(Dollars in millions)"
 SCALE_NOTE = re.compile(r"\([^()]{0,30}?\bin\s+(thousands|millions|billions)\b", re.IGNORECASE)
 SCALES = {"thousands": 1e3, "millions": 1e6, "billions": 1e9}
+# rule 5: one side of a derived row's inputs as a total (query_api components.py ROLES: the debts
+# net debt adds and debt/equity's numerator; the cash net debt takes off)
+INPUT_TOTALS = {"total_debt": ("long_term_debt", "long_term_debt_current"),
+                "cash_and_investments": ("cash", "short_term_investments")}
 # where one section of a sections result begins in its JSON (text is escaped: no bare quote)
 SECTION_START = re.compile(r'"section_key"\s*:')
 FRESHNESS = re.compile(r"fresh|as of|as_of", re.IGNORECASE)
@@ -119,6 +128,7 @@ class _Evidence:
     cells: list[float]  # table cells read in millions (rule 3, see _cells)
     scaled: list[float]  # at their section's one stated scale, decimals too (after the suites)
     inputs: list[dict]  # derived metrics' inputs (rule 4)
+    totals: list[dict] = field(default_factory=list)  # one side of a row's inputs (rule 5)
 
 
 def verify(answer: str, tool_results: list[str], cited: set[str]) -> Verification:
@@ -136,6 +146,7 @@ def verify(answer: str, tool_results: list[str], cited: set[str]) -> Verificatio
         cells=sorted({c.value for c in cells if c.scale == 1e6 and not c.decimal}),
         scaled=sorted({c.value for c in cells if c.stated}),
         inputs=_dedupe([r for content in tool_results for r in _input_rows(content)]),
+        totals=_dedupe([r for content in tool_results for r in _input_totals(content)]),
     )
     v = Verification(
         unverified_accessions=sorted({a for a in ACCESSION.findall(answer) if a not in cited}),
@@ -151,9 +162,10 @@ def _check(written: str, value: float, step: float, ev: _Evidence) -> Figure:
     f = _check_rules(written, value, step, ev)
     # added after the recorded suites (F8b): a dollar figure never verifies on another currency
     if f.status in ("verified", "derived") and written.lstrip().startswith("$") and \
-            any(_foreign(r) for r in (*ev.rows, *ev.inputs)):
+            any(_foreign(r) for r in (*ev.rows, *ev.inputs, *ev.totals)):
         dollars = _Evidence([r for r in ev.rows if not _foreign(r)], ev.texts, ev.plain_texts,
-                            ev.cells, ev.scaled, [r for r in ev.inputs if not _foreign(r)])
+                            ev.cells, ev.scaled, [r for r in ev.inputs if not _foreign(r)],
+                            [r for r in ev.totals if not _foreign(r)])
         f = _check_rules(written, value, step, dollars)
     return f
 
@@ -201,6 +213,10 @@ def _check_rules(written: str, value: float, step: float, ev: _Evidence) -> Figu
         pair = _pair(_by_metric([*ev.rows, *ev.inputs]), close)
         if pair:
             return Figure(written, value, "derived", pair)
+    # rule 5 (analyst test 4): last, so nothing rules 1-4 decide can move
+    for r in ev.totals:
+        if close(r["value"]):
+            return Figure(written, value, "verified", _source(r))
     return Figure(written, value, "unverified")
 
 
@@ -385,6 +401,33 @@ def _input_rows(content: str) -> list[dict]:
             if year_ago and end is not None:  # a year before the row's: for pairing only
                 row["_end"] = (end - timedelta(days=364)).isoformat()
             out.append(row)
+    return out
+
+
+def _input_totals(content: str) -> list[dict]:
+    """Rule 5: per /financials row with inputs, each INPUT_TOTALS side of which it has at least
+    two parts, summed, at the row's date with the row's citation (total debt of a net debt or a
+    debt/equity row). One part alone is an input already (rule 4)."""
+    try:
+        data = json.loads(content)
+    except ValueError:
+        return []
+    if not isinstance(data, dict) or not isinstance(data.get("rows"), list):
+        return []
+    company = data.get("company_id")
+    out = []
+    for r in data["rows"]:
+        inputs = r.get("inputs") if isinstance(r, dict) else None
+        if not isinstance(inputs, dict) or "metric" not in r:
+            continue
+        cite = r.get("citation") if isinstance(r.get("citation"), dict) else {}
+        for total, parts in INPUT_TOTALS.items():
+            values = [v for p in parts if (v := _number(inputs.get(p))) is not None]
+            if len(values) >= 2:
+                out.append({"metric": total, "value": sum(abs(v) for v in values),
+                            "company_id": company, "period_end": r.get("period_end"),
+                            "citation": cite, "_span": _span(data, r),
+                            "_currency": _currency(data, r) if data.get("currency") else None})
     return out
 
 
