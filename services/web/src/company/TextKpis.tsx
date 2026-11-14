@@ -9,7 +9,7 @@ import { go, href } from "../route";
 import type { TextKpiPoint, TextKpis, TextKpiSeries } from "../types";
 import { Gate } from "./Tables";
 import {
-  conflictNote, excerpt, figure, FROM_TEXT, hasFigures, TEXT_KPI_ORDER, textKpiSeries, when, writtenIn,
+  conflictNote, excerpt, figure, FROM_TEXT, hasFigures, notStatedSince, TEXT_KPI_ORDER, textKpiSeries, when, writtenIn,
 } from "./textKpis";
 import { useLoad } from "./useLoad";
 
@@ -89,7 +89,8 @@ function Body({ data, companyId, name, compact }: { data: TextKpis | null; compa
         <LayerChart series={series} title="" footnote={[]} svgRef={svg} onOpen={opened} notes={false} />
       )}
       {TEXT_KPI_ORDER.map((m) => data.metrics[m].points.length > 0 && (
-        <Figures key={m} metric={m} series={data.metrics[m]} companyId={companyId} shown={compact ? 4 : SHOWN} />
+        <Figures key={m} metric={m} series={data.metrics[m]} companyId={companyId} shown={compact ? 4 : SHOWN}
+          behind={notStatedSince(data, m, name)} />
       ))}
       <p className="foot">
         {from ? `Read from the ${data.read.filings} filings since ${from} that mention backlog or orders. ` : ""}
@@ -99,12 +100,17 @@ function Body({ data, companyId, name, compact }: { data: TextKpis | null; compa
   );
 }
 
-function Figures({ metric, series, companyId, shown }: { metric: string; series: TextKpiSeries; companyId: string; shown: number }) {
+function Figures({ metric, series, companyId, shown, behind }: {
+  metric: string; series: TextKpiSeries; companyId: string; shown: number;
+  /** notStatedSince: the newest figure is older than the newest filing read */
+  behind: string | null;
+}) {
   const [all, setAll] = useState(false);
   const rows = all ? series.points : series.points.slice(0, shown);
   return (
     <div className="text-kpi" data-metric={metric}>
       <h3>{series.label} <span className="faint small">({FROM_TEXT})</span></h3>
+      {behind && <p className="text-kpi-behind" role="note">{behind}</p>}
       <table className="text-kpi-table">
         <thead>
           <tr><th scope="col">As of</th><th scope="col" className="num">Figure</th><th scope="col">Stated in</th></tr>

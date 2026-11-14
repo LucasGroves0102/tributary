@@ -1627,8 +1627,17 @@ export interface TextKpis {
   as_of: string;
   since: string;
   metrics: Record<TextKpiMetric, TextKpiSeries>;
-  read: { sections: number; filings: number; from: string | null };
+  /** `latest`: the newest 10-K, 10-Q or earnings release filed in the window, whether or not it
+   * states a figure (absent from an older API) */
+  read: { sections: number; filings: number; from: string | null; latest?: TextKpiLatest | null };
   method: string;
+}
+
+export interface TextKpiLatest {
+  form: string;
+  filed: string;
+  period_end: string;
+  accession_no: string;
 }
 
 // --- filing alerts (F6; Query API /v1/alerts, query_api/alerts.py) ---------------------------

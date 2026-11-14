@@ -276,7 +276,11 @@ growth as a line on the right, one basis: organic when the filings say so more o
 reader at their passage) and per figure a table, newest first (six, then Show all): as of (a date for
 backlog, "quarter to ..." for orders), the figure as the API states it, and where it's written ("10-Q
 filed Oct 22, 2025 · MD&A", linking the reader at the passage's offset; "also in N more filings")
-with the passage quoted around its number. With nothing stated it says what it looked for and where,
+with the passage quoted around its number. When a figure's newest value is older than the newest
+filing read (the API's `read.latest`), a plain line under its heading says so (`notStatedSince`: "Backlog
+was last stated as $15.00B at Dec 31, 2025, in the 10-K filed Feb 13, 2026. None of Vertiv's filings
+since, up to the 10-Q for the period ended Sep 30, 2026, states it in the ways Tributary reads."). With
+nothing stated it says what it looked for and where,
 and that a company can state these otherwise or only by segment. The figures, their dates and which
 one wins a disagreement are the API's; nothing is read from text in the browser. An older API (404)
 reads "not available here yet"; without the filings tier it asks nothing. e2e's mock answers the

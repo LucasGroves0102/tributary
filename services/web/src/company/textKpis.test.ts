@@ -4,7 +4,7 @@ import type { TextKpis } from "../types";
 import NVDA from "./fixtures/nvda-text-kpis.json";
 import VRT from "./fixtures/vrt-text-kpis.json";
 import {
-  conflictNote, excerpt, figure, growthBasis, hasFigures, quarterOf, textKpiSeries, when, writtenIn,
+  conflictNote, excerpt, figure, growthBasis, hasFigures, notStatedSince, quarterOf, textKpiSeries, when, writtenIn,
 } from "./textKpis";
 
 // The branch's Query API over Vertiv's and NVIDIA's production sections (2026-11-09)
@@ -66,4 +66,21 @@ it("says when a company states none of it", () => {
     { period_end: "2025-09-30", values: [2.0e9, 2.9e9], kept: null }];
   expect(conflictNote(settled)).toBe("1 date left out where the filings state different figures; 1 date where a "
     + "segment's or another figure disagreed: the table's total, the company-wide wording or the figure more filings state was kept.");
+});
+
+it("says plainly when the newest figure is older than the newest filing read (analyst test 4)", () => {
+  // production on 2026-11-14: Vertiv's backlog is stated only in its FY2025 10-K ($15.0B at Dec 31, 2025);
+  // its 2026 releases and 10-Qs don't state one. The route's `read.latest` is its newest 10-Q.
+  const now = { ...vrt, read: { ...vrt.read, latest: { form: "10-Q", filed: "2026-10-22", period_end: "2026-09-30", accession_no: "0001674101-26-000150" } } };
+  expect(notStatedSince(now, "backlog", "Vertiv Holdings")).toBe(
+    "Backlog was last stated as $15.00B at Dec 31, 2025, in the 10-K filed Feb 13, 2026. None of Vertiv Holdings's filings since, "
+    + "up to the 10-Q for the period ended Sep 30, 2026, states it in the ways Tributary reads.");
+  // an earnings release is named as one
+  const release = { ...now, read: { ...now.read, latest: { ...now.read.latest!, form: "8-K" } } };
+  expect(notStatedSince(release, "backlog", "Vertiv")).toContain("up to the earnings release for the period ended Sep 30, 2026");
+  // current, or an older API without `latest`: nothing to say
+  const current = { ...now, read: { ...now.read, latest: { ...now.read.latest!, period_end: "2025-12-31" } } };
+  expect(notStatedSince(current, "backlog", "Vertiv")).toBeNull();
+  expect(notStatedSince(vrt, "backlog", "Vertiv")).toBeNull();
+  expect(notStatedSince(now, "orders", "Vertiv")).toBeNull(); // nothing stated, nothing to date
 });

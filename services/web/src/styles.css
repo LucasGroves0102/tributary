@@ -6528,6 +6528,15 @@ details.routine summary {
   font-size: 13px;
 }
 
+/* the newest figure is older than the newest filing read (textKpis.ts notStatedSince) */
+.text-kpi-behind {
+  margin: 0 0 var(--sp-3);
+  max-width: 72ch;
+  font-size: var(--fs-sm, 13px);
+  line-height: 1.5;
+  color: var(--ink-2, var(--text-2));
+}
+
 .text-kpi-table {
   width: 100%;
   border-collapse: collapse;

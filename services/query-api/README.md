@@ -1393,7 +1393,12 @@ orders (at most 160 sections; one company, never a catalog's ids). Fixed rules, 
   figure more filings state, else they are left out; `conflicts` lists each.
 
 The answer has `metrics.{backlog, orders, orders_growth}` with `points` (values as numbers: dollars, or
-percentage points for growth) and never a `rows` or `sections` key (verify.py reads those). Not an
+percentage points for growth) and never a `rows` or `sections` key (verify.py reads those). `read` says
+what was read: sections and filings that mention backlog or orders, the oldest filed, and `latest`
+(additive; `latest_filing`): the newest 10-K, 10-Q or earnings release filed in the window, whether or
+not it states a figure, so a page can say a figure isn't stated since (Vertiv states its backlog only
+in the 10-K, $15.0B at Dec 31, 2025; its 2026 releases and 10-Qs don't, analyst test 4). `method` is
+shown to users as it is: it names no file. Not an
 agent tool: the recorded suites are unchanged. Cost: 70-150 ms of Python per company over five years
 of sections (CAT, 3.4M characters: 68 ms).
 

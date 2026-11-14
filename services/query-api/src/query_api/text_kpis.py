@@ -90,10 +90,11 @@ from query_api.store import Store
 
 CompanyId = Annotated[str, Path(pattern=r"^\d{10}$", description="canonical company_id")]
 
+# Shown to users as it is (analyst test 4: the card printed a source path): no file names here.
 METHOD = ("Backlog and orders as the filings' own words state them, read by fixed rules from MD&A, "
-          "the 10-K's Item 1 and earnings releases (query_api/text_kpis.py): each value cites its "
-          "passage and is kept only when its number is in that passage. A company may state them "
-          "in ways these rules don't read; nothing is estimated or computed.")
+          "the 10-K's Item 1 and earnings releases: each value cites its passage and is kept only "
+          "when its number is in that passage. A company may state them in ways these rules don't "
+          "read; nothing is estimated or computed.")
 
 METRICS = ("backlog", "orders", "orders_growth")
 TABLE_REACH = 14
@@ -676,10 +677,29 @@ def docs_of(sections: list[dict], release_ends: dict[str, date]) -> list[Doc]:
     return out
 
 
+def latest_filing(reports: list[dict], releases: list[dict], ends: dict[str, date],
+                  since: date) -> dict | None:
+    """The newest filing these rules could have read a figure from, whether or not its text
+    mentions one: the 10-K/10-Q or 2.02 release filed since `since` covering the latest period
+    (a release's period is its quarter's), the later filed on a tie, then the 10-K/10-Q over the
+    release. A page compares a figure's
+    date with it to say "not stated since" (Vertiv states its backlog only in the 10-K: $15.0B at
+    Dec 31, 2025, and none of its 2026 releases or 10-Qs states one; analyst test 4)."""
+    rows = [(r["period_end"], r["filing_date"], 1, r["form"], r["accession_no"])
+            for r in reports if r["filing_date"] >= since]
+    rows += [(ends[r["accession_no"]], r["filing_date"], 0, r["form"], r["accession_no"])
+             for r in releases if r["accession_no"] in ends]
+    if not rows:
+        return None
+    end, filed, _, form, acc = max(rows)
+    return {"form": form, "filed": filed, "period_end": end, "accession_no": acc}
+
+
 def shape(company_id: str, found: list[Found], docs: list[Doc], urls: dict[tuple[str, str], str],
-          since: date, now: str) -> dict:
+          since: date, now: str, latest: dict | None = None) -> dict:
     """The route's answer. Keys `metrics` and `points`, never `rows` or `sections`: verify.py
-    reads those as financial rows and filing text."""
+    reads those as financial rows and filing text. `read.latest`: latest_filing's answer
+    (additive; None when there is no such filing)."""
     metrics = {}
     for s in series(found):
         for p in s.points:
@@ -692,7 +712,7 @@ def shape(company_id: str, found: list[Found], docs: list[Doc], urls: dict[tuple
                              "points": s.points, "conflicts": s.conflicts}
     return {"company_id": company_id, "as_of": now, "since": since, "metrics": metrics,
             "read": {"sections": len(docs), "filings": len({d.accession_no for d in docs}),
-                     "from": min((d.filed for d in docs), default=None)},
+                     "from": min((d.filed for d in docs), default=None), "latest": latest},
             "method": METHOD}
 
 
@@ -708,7 +728,9 @@ def add_text_kpi_routes(app: FastAPI, *, store: Store, current_user: Callable[..
     ) -> dict:
         """Backlog, orders and order growth as the company's filings state them in words (MD&A,
         the 10-K's Item 1, earnings releases), each value with the passages that state it.
-        Rules: query_api/text_kpis.py. Not estimated, not computed, not every company."""
+        Rules: query_api/text_kpis.py. Not estimated, not computed, not every company.
+        `read.latest`: the newest 10-K, 10-Q or earnings release filed in the window, so a
+        figure older than it can be said to be "not stated since"."""
         require(user_id, "filings", company_id)
         now = today()
         try:
@@ -732,4 +754,5 @@ def add_text_kpi_routes(app: FastAPI, *, store: Store, current_user: Callable[..
         found = [f for d in docs for f in extract(d, read["name"])]
         urls = {(r["accession_no"], r["section_key"]): r.get("document_url")
                 for r in read["sections"]}
-        return shape(company_id, found, docs, urls, since, datetime.now(UTC).isoformat())
+        return shape(company_id, found, docs, urls, since, datetime.now(UTC).isoformat(),
+                     latest_filing(reports, releases, ends, since))
