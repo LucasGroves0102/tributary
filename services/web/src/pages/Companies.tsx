@@ -25,6 +25,7 @@ import {
   type FilerCategory,
   type ScreenFilters,
 } from "../companies/screen";
+import { paren } from "../format";
 import { FigureText } from "../components/FigureText";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { navRow, onTableKey } from "../components/tableNav";
@@ -209,12 +210,11 @@ export function Companies({ token, screen: asked, watched, onWatch, onChart, sav
             />
           )}
           <div className="foot">
-            USD. TTM = trailing twelve months to each company's latest reported quarter; net debt
+            US dollars; a negative amount is in parentheses. TTM = trailing twelve months to each company's latest reported quarter; net debt
             and debt/equity at that quarter's end. Hover a value for its period and source filing.
             A figure from an earlier period than the company's latest shows its date; about a year or
             more behind it reads old, dimmed, and leaves sorts and filters. n/m = not meaningful,
             n/a = doesn't apply, — = not reported; hover for why.
-            Keyboard: ↑ ↓ move between rows, Home/End jump, Enter opens the company.
             {masked > 0 && (
               <>
                 {" "}
@@ -470,7 +470,7 @@ function Table({
     <>
       {error && <p className="empty error">{error}</p>}
       <TableScroll label="Screener results">
-        <table className="t screen">
+        <table className="t screen ruled">
           <thead>
             <tr>
               <th className="first sort" {...th("name", false)}>Company{arrow("name")}</th>
@@ -511,7 +511,7 @@ function Table({
                     <a className="co" href={href({ view: "company", companyId: r.companyId })}
                       onClick={(e) => e.stopPropagation()}>
                       <b title={r.name}>{r.name}</b>
-                      {r.ticker && <span className="faint mono">{r.ticker}</span>}
+                      {r.ticker && <span className="ticker">{r.ticker}</span>}
                       {!r.readable && (
                         <span className="tag" title={MASKED_TITLE}>metadata only</span>
                       )}
@@ -526,7 +526,7 @@ function Table({
                         {r.sectorIndustry && <span className="faint small sector-sub">{r.sectorIndustry}</span>}
                       </span>
                       {r.sic && (
-                        <button className="link faint mono" title={`Only SIC ${r.sic}`}
+                        <button className="link faint sic-code" title={`Only SIC ${r.sic}`}
                           onClick={(e) => {
                             e.stopPropagation();
                             onSic(r.sic!);
@@ -545,7 +545,8 @@ function Table({
                         : "";
                     return (
                       <td key={c.key} className={`n ${tone}`} title={cell.title}>
-                        <FigureText cell={cell} />
+                        {/* a negative amount in parentheses, as a ledger prints it; the hover and CSV keep the sign */}
+                        <FigureText cell={c.kind === "usd" ? { ...cell, text: paren(cell.text) } : cell} />
                       </td>
                     );
                   })}
