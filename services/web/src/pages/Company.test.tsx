@@ -364,7 +364,8 @@ it("statements: what's chosen comes from the address and goes back to it", async
   expect(q.searchParams.getAll("metrics")).toEqual(expect.arrayContaining(["capex", "investing_cash_flow", "financing_cash_flow", "change_in_cash", "cash_and_restricted_cash"]));
   // callouts are for quarters: a TTM view doesn't ask
   expect(q.searchParams.get("callouts")).toBeNull();
-  expect($('[aria-label="Range"] [aria-pressed="true"]')?.textContent).toBe("5y");
+  // a Radix toggle group: the chosen option is a checked radio
+  expect($('[aria-label="Range"] [aria-checked="true"]')?.textContent).toBe("5y");
   await click(button("Max"));
   expect(window.location.hash).toBe(`#/company/${NVDA}/statements?kind=cf&period=ttm&basis=calendar&range=max`);
   await click(button("Income statement"));
@@ -376,7 +377,7 @@ it("statements: a balance sheet has no TTM, so it shows quarters and says why", 
   const q = paths().find((u) => u.pathname.endsWith("/financials"))!;
   expect(q.searchParams.get("view")).toBe("quarter");
   expect(q.searchParams.getAll("metrics")).toContain("total_assets");
-  expect($('[aria-label="Period"] [aria-pressed="true"]')?.textContent).toBe("Quarterly");
+  expect($('[aria-label="Period"] [aria-checked="true"]')?.textContent).toBe("Quarterly");
   const ttm = button("TTM") as HTMLButtonElement;
   expect(ttm.disabled).toBe(true);
   expect(ttm.title).toContain("point in time");
@@ -430,7 +431,7 @@ it("statements: quarterly, annual and TTM, each value cited, CSV export", async 
   act(() => root.unmount());
   await render("statements", NVDA, null, { period: "a", basis: "calendar" });
   expect(paths().filter((u) => u.pathname.endsWith("/financials")).at(-1)!.searchParams.get("basis")).toBe("calendar");
-  expect(container.textContent).toContain("calendar quarters");
+  expect(container.textContent).toContain("Calendar quarters");
   act(() => root.unmount());
   await render("statements", NVDA, null, { basis: "calendar" });
   await click(button("Export CSV"));
@@ -773,8 +774,9 @@ it("F5: the cash flow statement has its subtotals, starts and ends with cash, an
   expect(rows).toEqual(["Net cash from operating activities", "Dividends paid", "Change in cash", "Cash at beginning of period",
     "Cash at end of period", "Beginning + change = end?", "Free cash flow (operating cash flow less capex)"]);
   const dividends = [...container.querySelectorAll(".t.statement tbody tr")].find((tr) => tr.textContent!.startsWith("Dividends paid"))!;
-  // one unit across a row (moneyRow); the quarter before the first only gives it its starting cash, here shown too
-  expect([...dividends.querySelectorAll("td.n")].map((td) => td.textContent)).toEqual(["·", "-$0.24B", "-$6.05B"]);
+  // one unit across a row (moneyRow); the quarter before the first only gives it its starting cash, here shown too.
+  // Seal: an outflow (negative since F5) reads in parentheses, as the statement prints it; the hover keeps the sign
+  expect([...dividends.querySelectorAll("td.n")].map((td) => td.textContent)).toEqual(["·", "($0.24B)", "($6.05B)"]);
   const called = dividends.querySelector("td.called")!;
   expect(called.getAttribute("title")).toContain("Dividends paid, FY2027 Q2: -$6.05B, 25 times the two quarters before it");
   expect($(".callouts")?.textContent).toContain("Worth a look");
