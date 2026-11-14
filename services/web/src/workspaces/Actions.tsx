@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import * as AlertDialog from "@radix-ui/react-alert-dialog";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 
 import { failureReason } from "../api";
@@ -48,43 +49,41 @@ export function NameInput({
   );
 }
 
-/** "Delete this?" over the whole screen, wherever it was asked from: the safe answer has the focus,
- * Escape or clicking away keeps it, and focus goes back where it was. On document.body so no
- * scroller or layout around the asker can clip it. */
+/** "Delete this?" over the whole screen, wherever it was asked from: a Radix alert dialog, so the safe
+ * answer (Keep) has the focus, Tab stays inside, Escape keeps it, the page behind is hidden from
+ * screen readers, and focus goes back where it was. Clicking the dimmed page keeps it too. On
+ * document.body (its portal) so no scroller or layout around the asker can clip it.
+ *
+ * Radix's own Overlay isn't used: it locks scrolling by injecting a <style> element, which the CSP
+ * (style-src 'self', no inline styles) refuses. The backdrop here is ours, styled by class. */
 export function ConfirmDelete({ text, onYes, onNo }: { text: string; onYes: () => void; onNo: () => void }) {
-  const keep = useRef<HTMLButtonElement>(null);
-  const del = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    const before = document.activeElement as HTMLElement | null;
-    keep.current?.focus();
-    return () => before?.focus?.();
+  // where it was asked from: focus goes back there (there's no Radix Trigger to return to)
+  const before = useRef(document.activeElement as HTMLElement | null);
+  useEffect(() => () => {
+    const back = before.current;
+    if (back && document.contains(back)) back.focus();
   }, []);
-  const onKey = (e: ReactKeyboardEvent) => {
-    e.stopPropagation();
-    if (e.key === "Escape") onNo();
-    else if (e.key === "Tab") {
-      // two buttons: Tab goes between them and nowhere else
-      e.preventDefault();
-      (document.activeElement === keep.current ? del : keep).current?.focus();
-    }
-  };
-  return createPortal(
-    <div className="sheet-overlay" onClick={(e) => e.target === e.currentTarget && onNo()} onKeyDown={onKey}>
-      <div className="card ws-confirm" role="alertdialog" aria-modal="true" aria-label={text}>
-        <p>{text}</p>
-        <p className="faint small">You can undo it for {UNDO_MS / 1000} seconds.</p>
-        <div className="row">
-          <span className="grow" />
-          <button ref={del} className="btn danger" onClick={onYes}>
-            Delete
-          </button>
-          <button ref={keep} className="btn" onClick={onNo}>
-            Keep
-          </button>
+  return (
+    <AlertDialog.Root open onOpenChange={(open) => !open && onNo()}>
+      <AlertDialog.Portal>
+        <div className="sheet-overlay" onClick={(e) => e.target === e.currentTarget && onNo()}>
+          <AlertDialog.Content className="card ws-confirm" onKeyDown={(e) => e.stopPropagation()}
+            onCloseAutoFocus={(e) => e.preventDefault()}>
+            <AlertDialog.Title asChild>
+              <p className="ws-confirm-q">{text}</p>
+            </AlertDialog.Title>
+            <AlertDialog.Description className="faint small">You can undo it for {UNDO_MS / 1000} seconds.</AlertDialog.Description>
+            <div className="row">
+              <span className="grow" />
+              <AlertDialog.Action className="btn danger" onClick={onYes}>
+                Delete
+              </AlertDialog.Action>
+              <AlertDialog.Cancel className="btn">Keep</AlertDialog.Cancel>
+            </div>
+          </AlertDialog.Content>
         </div>
-      </div>
-    </div>,
-    document.body,
+      </AlertDialog.Portal>
+    </AlertDialog.Root>
   );
 }
 

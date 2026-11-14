@@ -99,11 +99,11 @@ export function TopBar(props: Props) {
       </button>
       {route.view !== "ask" && (
         <button
-          className={assistantOpen ? "btn sm" : "btn sm primary"}
+          className="btn sm assistant-btn"
           aria-pressed={assistantOpen}
           onClick={props.onAssistant}
         >
-          ✦ Assistant <span className="kbd">Ctrl J</span>
+          Assistant <span className="kbd">Ctrl J</span>
         </button>
       )}
     </header>

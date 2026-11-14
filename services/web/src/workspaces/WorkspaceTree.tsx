@@ -51,7 +51,7 @@ export function WorkspaceTree({ saved, onOpen, onError }: Props) {
   return (
     <>
       <div className="sect">
-        <span className="grow">Workspaces{list.state === "ok" ? ` · ${list.workspaces.length}` : ""}</span>
+        <span className="grow">Workspaces{list.state === "ok" && <span className="sect-n">{list.workspaces.length}</span>}</span>
         <button
           onClick={() => setEditing({ type: "new" })}
           title="New workspace"
