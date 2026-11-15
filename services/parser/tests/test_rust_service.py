@@ -35,6 +35,7 @@ EXHIBIT = (b"<html><body><p>NVIDIA Announces Financial Results</p><p>Revenue gre
            b"</body></html>")
 ROWS = ("SELECT accession_no, section_key, parser, parser_version, part, item, title, text,"
         " char_start, char_end FROM silver.filing_sections ORDER BY accession_no, section_key")
+NO_HEADINGS = "9999999999-26-000000"
 TABLES = ("SELECT accession_no, section_key, parser, table_no, char_start, char_end, rows"
           " FROM silver.filing_tables ORDER BY accession_no, section_key, table_no")
 
@@ -44,8 +45,15 @@ def conn():
     with psycopg.connect(DSN, autocommit=True) as c:
         if c.execute("SELECT count(*) FROM bronze.filing_documents").fetchone()[0]:
             pytest.skip("bronze.filing_documents is not empty")
-        accessions = [acc for acc, _, _ in DOCS]
+        accessions = [acc for acc, _, _ in DOCS] + [NO_HEADINGS]
         try:
+            # filed first: a document the parser can't split is skipped, not the end of the run
+            empty = b"<html><body><p>Nothing to split here.</p></body></html>"
+            c.execute(
+                "INSERT INTO bronze.filing_documents (accession_no, cik, form, filed,"
+                " document_name, url, content_gzip, content_sha256, size_bytes)"
+                " VALUES (%s, '0001045810', '8-K', '2026-01-02', 'doc.htm', 'https://example/doc',"
+                " %s, 'x', %s)", (NO_HEADINGS, gzip.compress(empty), len(empty)))
             for acc, form, filed in DOCS:
                 html = (FIXTURES / f"nvda-{form}.htm.gz").read_bytes()
                 c.execute(
@@ -66,7 +74,8 @@ def conn():
 
 
 def reparse_all(cmd: list[str]) -> list[dict]:
-    """Run a parser service with --reparse-all; its per-document log lines."""
+    """Run a parser service with --reparse-all; its per-document log lines (the skipped
+    document's line has no accession_no field)."""
     env = {**os.environ, "DATABASE_URL": DSN or "", "LOG_LEVEL": "INFO"}
     out = subprocess.run([*cmd, "--reparse-all"], env=env, capture_output=True, text=True,
                          timeout=300)

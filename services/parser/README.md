@@ -38,7 +38,10 @@ make up-all     # consumer, in docker-compose
 make reparse    # parser --reparse-all: re-parse every stored document without Kafka, then exit
 ```
 
-Use `make reparse` after changing the parsing rules.
+Use `make reparse` after changing the parsing rules. A document the parser can't split (no
+headings) is logged (`skipping <accession>: ...`) and passed, as the consumer does; any other
+error stops the run (since v7: a production run over every document must not end at the first
+one). In production the Helm CronJob `parser-reparse` runs it with parser-rs.
 
 ### Re-parsing only some documents (production)
 

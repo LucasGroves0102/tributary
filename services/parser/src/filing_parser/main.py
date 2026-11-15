@@ -60,8 +60,13 @@ def main() -> None:
     configure_logging()
     with psycopg.connect(os.environ["DATABASE_URL"], autocommit=True) as conn:
         if args.reparse_all:
+            # a document the parser can't split (no headings) is logged and passed, as the
+            # consumer does; anything else stops the run
             for accession_no in all_accessions(conn):
-                parse_one(conn, accession_no)
+                try:
+                    parse_one(conn, accession_no)
+                except (ValueError, KeyError) as e:
+                    log.error("skipping %s: %s", accession_no, e)
             return
         consume(conn)
 

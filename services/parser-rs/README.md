@@ -19,7 +19,7 @@ Two binaries. `parser` (`src/bin/parser`) is the service, a drop-in for
 [services/parser](../parser): it consumes `documents.fetched` as the same consumer group
 (`parser-python`, so a swap resumes from the Python service's offsets), commits after each
 message, skips and fails on the same inputs, replaces a document's `silver.filing_sections` rows
-with its own (`parser = rust`, `parser_version = rust-N`), supports `--reparse-all`, and emits the
+with its own (`parser = rust`, `parser_version = rust-N`), supports `--reparse-all` (a document it can't split is logged and passed there too), and emits the
 same metrics on `METRICS_PORT` and the same JSON log lines. Same env: `DATABASE_URL`,
 `KAFKA_BOOTSTRAP_SERVERS`, `METRICS_PORT`, `LOG_LEVEL`, and `PARSER_TOPIC` / `PARSER_GROUP` to
 consume another topic as another group (`parser-backfill` reads `documents.backfill`). Kafka
