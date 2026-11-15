@@ -31,6 +31,11 @@ export function apiBase(origin = window.location.origin): string {
   return `${origin}/api/query`;
 }
 
+/** The site's MCP server for a user's own AI model (nginx /mcp → services/mcp-server). */
+export function mcpUrl(origin = window.location.origin): string {
+  return `${origin}/mcp`;
+}
+
 export interface KeyRoute {
   method: string;
   path: string;

@@ -250,6 +250,20 @@ services:
     depends_on:
       - query-api
 
+  # MCP server for a user's own AI model, with their API key (services/mcp-server): through the
+  # web container at http://localhost:3000/mcp, or directly on 8002
+  mcp-server:
+    build:
+      context: .
+      dockerfile: services/mcp-server/Dockerfile
+    profiles: ["app"]
+    ports:
+      - "127.0.0.1:8002:8002"
+    environment:
+      QUERY_API_URL: http://query-api:8000
+    depends_on:
+      - query-api
+
   web:
     build:
       context: .
@@ -260,6 +274,7 @@ services:
     depends_on:
       - query-api
       - agent-api
+      - mcp-server
 
   # Batch job: make companies
   company-loader:

@@ -48,7 +48,7 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
         with:
           python-version: "3.12"
-      - run: pip install ruff pytest pytest-cov pyright pyyaml==6.0.3 -e libs/kafka -e libs/telemetry -e libs/sec -e libs/authz -e services/poller -e services/bronze-loader -e services/company-loader -e services/facts-fetcher -e services/doc-fetcher -e services/parser -e services/authz-sync -e 'services/query-api[test]' -e services/agent
+      - run: pip install ruff pytest pytest-cov pyright pyyaml==6.0.3 -e libs/kafka -e libs/telemetry -e libs/sec -e libs/authz -e services/poller -e services/bronze-loader -e services/company-loader -e services/facts-fetcher -e services/doc-fetcher -e services/parser -e services/authz-sync -e 'services/query-api[test]' -e services/agent -e services/mcp-server
       - run: ruff check .
       - run: pyright --pythonpath "$(which python)"
       - run: ./scripts/create-databases.sh
@@ -465,7 +465,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [agent, authz-sync, bronze-loader, company-loader, doc-fetcher, facts-fetcher,
+        service: [agent, authz-sync, bronze-loader, company-loader, doc-fetcher, facts-fetcher, mcp-server,
                   parser, parser-rs, poller, query-api, web]
         context: [.]
         include:
@@ -520,7 +520,7 @@ jobs:
       - name: tag main-<run>-<sha>
         run: |
           prefix="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/tributary"
-          for s in agent authz-sync bronze-loader company-loader doc-fetcher facts-fetcher \
+          for s in agent authz-sync bronze-loader company-loader doc-fetcher facts-fetcher mcp-server \
                    migrate parser parser-rs platform-setup poller query-api web; do
             docker buildx imagetools create \
               -t "$prefix-$s:main-${{ github.run_number }}-${{ github.sha }}" \

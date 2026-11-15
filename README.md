@@ -108,6 +108,14 @@ Each item links to the rules and measurements behind it.
   permission layers, and no key can manage the account. A public "Using the API" page with curl and
   Python, a generated OpenAPI of the key routes and a one-file Python client
   ([query-api](services/query-api/README.md#api-keys), [client](clients/python/README.md)).
+- **Your own AI model, through MCP.** A remote MCP server at `/mcp` (Streamable HTTP) authenticated
+  by the same API key: 25 read-only tools (companies, figures with their readings and currency,
+  segments, filings and sections, What changed, earnings releases, 8-Ks since the last report,
+  insider filings, search, peers, the screener, formulas, your saved work) whose every result lists
+  its citations, and `verify_figures`, the assistant's figure checker, for the model's own draft. It
+  holds no database login: each tool calls the Query API as the key's user. Claude Code connects
+  with a header today; claude.ai and ChatGPT directories need OAuth, later
+  ([mcp-server](services/mcp-server/README.md)).
 - **Connect your data** (off until the deployment has its key): bring your own market-data key for
   daily prices and a valuation, stored encrypted and owner-only, never shared between users
   ([query-api](services/query-api/README.md#connect-your-data)).
@@ -234,7 +242,7 @@ make financials        # XBRL financials for tracked companies → gold.quarterl
 make seed-documents    # load recent 10-K/10-Q/8-K history (fetched and parsed by up-all)
 make exhibits          # 8-K press releases (EX-99.x) for 8-Ks already stored
 make up-all            # + poller, bronze-loader, doc-fetcher, parser, authz-sync, query-api,
-                       #   agent-api, and the web app on http://localhost:3000
+                       #   agent-api, mcp-server (:8002), and the web app on http://localhost:3000
 make backfill DAYS=7   # fill in filings missing vs EDGAR's daily indexes
 make psql              # query it: SELECT * FROM bronze.filings ORDER BY filed_at DESC LIMIT 10;
 make consume           # watch filings arrive (or open the Kafka UI at http://localhost:8080)
@@ -252,7 +260,8 @@ and saved work (workspaces, theses, models, reports, views, alerts and webhooks)
 user's own market-data key and prices stay owner-only, with row-level security forced on their
 tables. A personal API key (`Authorization: Bearer trb_...`) is its owner: the user comes from the
 key's row, every request goes through both layers as that user, and a key reaches only the data and
-saved-work routes its scope allows (never the account itself).
+saved-work routes its scope allows (never the account itself). The MCP server for users' own AI models has no
+database login: it forwards the caller's key to the Query API, so the same holds there.
 
 The switch is one app-database row, streamed like any grant:
 
@@ -343,7 +352,7 @@ compared with what gold serves, and 12 derived metrics recomputed from them
 
 | Path | What |
 |---|---|
-| `services/` | One folder per deployable service or job (poller, bronze-loader, company-loader, facts-fetcher, doc-fetcher, parser, parser-rs, authz-sync, query-api, agent, web) |
+| `services/` | One folder per deployable service or job (poller, bronze-loader, company-loader, facts-fetcher, doc-fetcher, parser, parser-rs, authz-sync, query-api, agent, mcp-server, web) |
 | `clients/` | Clients for Tributary's API (`python/tributary_client.py`: one file, the standard library only) |
 | `libs/` | Shared Python packages (`sec`: SEC client with User-Agent and rate limiting; `authz`: OpenFGA client; `kafka`: Kafka client config from the environment, SASL/SCRAM included; `telemetry`: JSON logs and Prometheus metrics) |
 | `db/` | Analytics migrations (`db/migrations`), the app database (`db/app`), backouts (`db/backout`) and the transforms' index (`db/transforms`) |

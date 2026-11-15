@@ -1,0 +1,27 @@
+[project]
+name = "tributary-mcp-server"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    # the official MCP Python SDK; 2.3.0 (2026-10-02). FastMCP is MCPServer since 2.0.
+    "mcp==2.3.0",
+    "httpx>=0.27",  # the Query API client
+    "starlette>=0.48",
+    "uvicorn>=0.31.1",
+    "prometheus-client>=0.20",
+    "tributary-telemetry",
+    "fastapi>=0.115",  # tributary_telemetry.http imports it (RequestMiddleware); no FastAPI app here
+    # verify_figures imports tributary_agent.verify (the standard library only). The image installs
+    # services/agent with --no-deps so the Anthropic SDK isn't pulled in; locally and in CI (the
+    # python job's pip install) the agent package is installed beside this one.
+]
+
+[project.scripts]
+mcp-server = "tributary_mcp.main:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]

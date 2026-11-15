@@ -8,6 +8,7 @@ CORS:
 |---|---|
 | `/api/query/*` | Query API (`query-api:8000`) |
 | `/api/agent/*` | agent-api (`agent-api:8001`), unbuffered for server-sent events |
+| `/mcp` (exactly) | the MCP server (`mcp-server:8002`) for users' own AI models; the app never calls it |
 
 Every screen sets the browser tab's title (`src/title.ts`: "Nvidia (NVDA) · Statements · Tributary").
 A page that fails to render shows "This page didn't load" with Reload and Home, keeping the shell
@@ -1065,8 +1066,10 @@ API keys (Query API README, "API keys"; `src/apikeys/`):
   each scope reaches, the routes table and the limits, both from the Query API's generated
   `GET /v1/openapi-keys.json` (`keyRoutes`, read without the display-name pass; each route's summary
   and description as the API writes them for its users, its `code` spans as code; 404: "doesn't take
-  API keys yet"), and the error codes. The assistant reads
-  it as `about` (agent-api has no "api" page).
+  API keys yet"), and the error codes. "Connect your AI model" says how to add the site's MCP server
+  (`apiKeys.ts` `mcpUrl`: origin + `/mcp`, [mcp-server](../mcp-server)) to a client that sends a header
+  (the Claude Code command), what its tools read, and that claude.ai's and ChatGPT's directories need
+  OAuth, which comes later. The assistant reads it as `about` (agent-api has no "api" page).
 
 Data notes (`src/company/notes.ts`, Query API `/v1/companies/{id}/data-notes`, `/v1/data-notes`):
 the tearsheet's Data notes tab groups what the automated checks found (freshness, restated
@@ -1265,7 +1268,9 @@ keys yet (the rest of the page is static).
 `/metrics`, and for the Query API routes only agent-api may call (the demo's question quota, writing
 a report, storing a thesis check: browsers read those through the item routes); it forwards a request
 ID, and passes Cloudflare's `CF-Connecting-IP` to both APIs as `X-Client-IP` (agent-api's per-IP
-limit, the Query API's sandbox creation and password attempt limits). `deploy/headers.conf` sets CSP, HSTS, nosniff,
+limit, the Query API's sandbox creation and password attempt limits). `location = /mcp` proxies to
+the MCP server with the Authorization header untouched, no buffering, a 300 s read timeout,
+`Cache-Control: no-store` and the security headers; nothing else of that service is routed. `deploy/headers.conf` sets CSP, HSTS, nosniff,
 Referrer-Policy and Permissions-Policy on every response. On k3s only the `cloudflared`
 namespace can reach it. The page itself goes out with `Cache-Control: no-transform`, so Cloudflare
 serves it as built: its Web Analytics "automatic setup" injected a beacon script from
