@@ -14,7 +14,7 @@ import { Settings } from "../pages/Settings";
 import { href, parse } from "../route";
 import { screenTitle } from "../title";
 import type { ApiKey, ApiKeys, KeyRoutesDoc } from "../types";
-import { apiBase, keyRouteList, scopeWords, usageText } from "./apiKeys";
+import { apiBase, keyRouteList, mcpUrl, scopeWords, usageText } from "./apiKeys";
 
 // obviously fake (low entropy): the page only shows what the API answers
 const NEW_KEY = "trb_" + "test".repeat(10) + "abc";
@@ -246,6 +246,19 @@ describe("Using the API", () => {
       .toBe("https://tributary.example/api/query/v1/openapi-keys.json");
     expect(container.querySelector(".status-home")).toBeNull();
     expect(container.querySelector<HTMLAnchorElement>(`a[href="${href({ view: "settings" })}"]`)).toBeTruthy();
+  });
+
+  it("says how to connect your own AI model to the site's MCP server, and what isn't possible yet", async () => {
+    await mount(<ApiDocs load={async () => DOC} origin="https://tributary.example" />);
+    expect(container.querySelector(".api-mcp")?.textContent).toBe("https://tributary.example/mcp");
+    expect(container.querySelector('pre[aria-label="Claude Code example"]')?.textContent).toBe(
+      "claude mcp add --transport http tributary https://tributary.example/mcp \\\n" +
+      '  --header "Authorization: Bearer trb_..."');
+    const text = container.textContent ?? "";
+    expect(text).toContain("A read-only key is enough; nothing can be written through it yet.");
+    expect(text).toContain("verify_figures");
+    expect(text).toContain("connector directories need sign-in through OAuth, which Tributary doesn't offer yet");
+    expect(mcpUrl("http://localhost:3000")).toBe("http://localhost:3000/mcp");
   });
 
   it("signed out: a way back to the front door and to sign in", async () => {

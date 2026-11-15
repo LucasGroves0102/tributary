@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { keyRoutes } from "../api";
-import { apiBase, keyRouteList, LIMITS_TEXT, type KeyRoute } from "../apikeys/apiKeys";
+import { apiBase, keyRouteList, LIMITS_TEXT, mcpUrl, type KeyRoute } from "../apikeys/apiKeys";
 import { Folio } from "../components/Folio";
 import { Seal } from "../components/Seal";
 import { TableScroll } from "../components/TableScroll";
@@ -38,6 +38,7 @@ export function ApiDocs({ load = keyRoutes, signedOut = false, origin }: {
   }, [load]);
   useEffect(fetchDoc, [fetchDoc]);
   const base = apiBase(origin);
+  const mcp = mcpUrl(origin);
   const limits = state.kind === "ok" ? state.doc.info["x-tributary-limits"] : undefined;
 
   return (
@@ -112,6 +113,30 @@ export function ApiDocs({ load = keyRoutes, signedOut = false, origin }: {
           `curl -X PUT -H "Authorization: Bearer $TRIBUTARY_API_KEY" \\`,
           `  "${base}/v1/watchlist/${NVDA}"`,
         ].join("\n")}</code></pre>
+      </Folio>
+
+      <Folio name="Connect your AI model" line="MCP, with the same key">
+        <p>
+          Your own AI model (Claude, or another agent that speaks the Model Context Protocol) can read Tributary through its MCP
+          server at <code className="api-mcp">{mcp}</code> with an API key: the same figures, filing text and citations, through the same
+          permission checks. A read-only key is enough; nothing can be written through it yet. In a client that can send a header to a
+          remote server, for example Claude Code:
+        </p>
+        <pre className="api-code" tabIndex={0} aria-label="Claude Code example"><code>{[
+          `claude mcp add --transport http tributary ${mcp} \\`,
+          `  --header "Authorization: Bearer trb_..."`,
+        ].join("\n")}</code></pre>
+        <p>
+          Keep the key in your own settings (Claude Code's default scope), not a project's <code>.mcp.json</code> that others can see.
+          The tools find companies and read figures (with their currency, and why one reads n/m, n/a or old), segments, filings and their
+          sections, What changed, earnings releases, 8-Ks since the last report, insider filings, search, peers, the screener, formulas,
+          data notes and your own watchlist and saved work. Every result lists the filings it cites, and <code>verify_figures</code> checks
+          your model's dollar figures against Tributary's before it writes them down. Each tool call counts against the key's limits.
+        </p>
+        <p className="muted">
+          claude.ai's and ChatGPT's connector directories need sign-in through OAuth, which Tributary doesn't offer yet: until then, use a
+          client that can send the key as a header.
+        </p>
       </Folio>
 
       <Folio name="What a key can do" line="Read, or read and write">
