@@ -167,6 +167,11 @@ export function ApiDocs({ load = keyRoutes, signedOut = false, origin }: {
   );
 }
 
+/** The API's words with their `code` spans as code (text only: nothing is parsed as HTML). */
+function withCode(text: string) {
+  return text.split("`").map((part, i) => (i % 2 ? <code key={i}>{part}</code> : part));
+}
+
 function Routes({ routes }: { routes: KeyRoute[] }) {
   return (
     <TableScroll label="Routes an API key can use">
@@ -175,7 +180,7 @@ function Routes({ routes }: { routes: KeyRoute[] }) {
           <tr>
             <th className="first">Route</th>
             <th>Access</th>
-            <th>What it answers</th>
+            <th>What it does</th>
           </tr>
         </thead>
         <tbody>
@@ -186,8 +191,8 @@ function Routes({ routes }: { routes: KeyRoute[] }) {
               </td>
               <td>{SCOPE_WORDS[r.scope]}</td>
               <td>
-                {r.about}
-                {r.params.length > 0 && <span className="faint small api-params">Parameters: {r.params.join(", ")}</span>}
+                <span className="api-summary">{r.summary}</span>
+                {r.description && <span className="api-about">{withCode(r.description)}</span>}
               </td>
             </tr>
           ))}

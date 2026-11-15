@@ -57,6 +57,7 @@ from prometheus_client import Counter
 from psycopg.rows import dict_row
 from pydantic import BaseModel, ConfigDict, Field
 
+from query_api.api_key_docs import ROUTE_DOCS, SCOPE_WORDS
 from query_api.sandbox import is_sandbox_user
 
 PREFIX = "trb_"
@@ -549,11 +550,18 @@ def add_api_key_routes(app: FastAPI, *, keys: ApiKeys | None, current_user: Call
 
 # --- the key routes' OpenAPI ------------------------------------------------------------------
 
+# a response's required description, in words for an API user (never the app's own)
+RESPONSE_WORDS = {"200": "OK", "201": "Created",
+                  "422": "A parameter or body the route doesn't take; `detail` says which"}
+
+
 def key_routes_openapi(full: dict, limits: Limits) -> dict:
-    """`full` (the app's OpenAPI) narrowed to KEY_ROUTES and PUBLIC_ROUTES, each operation marked
-    with the scope it needs (`x-tributary-scope`: read, write or public), and only the schemas
-    those reference. Generated, never written by hand: a route's parameters and docs are the
-    app's own."""
+    """`full` (the app's OpenAPI) narrowed to KEY_ROUTES and PUBLIC_ROUTES, and only the schemas
+    those reference: the parameters, bodies and types are the app's own (generated, never written
+    by hand). The words are not: each operation gets its user-facing summary and description from
+    api_key_docs.ROUTE_DOCS plus its scope (`x-tributary-scope`: read, write or public), and every
+    other description the app carries (developer docstrings, parameter and model notes) is
+    dropped, so the public spec shows nothing written for developers."""
     paths: dict[str, dict] = {}
     for path, ops in full.get("paths", {}).items():
         for method, op in ops.items():
@@ -561,10 +569,16 @@ def key_routes_openapi(full: dict, limits: Limits) -> dict:
             scope = KEY_ROUTES.get(key) or ("public" if key in PUBLIC_ROUTES else None)
             if scope is None:
                 continue
-            out = {**op, "x-tributary-scope": scope}
-            if scope == "public":
-                out.pop("security", None)
-            else:
+            summary, description = ROUTE_DOCS[key]
+            out = {k: _undescribed(v) for k, v in op.items()
+                   if k in ("operationId", "parameters", "requestBody")}
+            out["responses"] = {
+                code: {**_undescribed(r), "description": RESPONSE_WORDS.get(code, "Error")}
+                for code, r in op.get("responses", {}).items()}
+            out.update({"summary": summary,
+                        "description": f"{description}\n\n{SCOPE_WORDS[scope]}",
+                        "x-tributary-scope": scope})
+            if scope != "public":
                 out["security"] = [{"apiKey": []}]
             paths.setdefault(path, {})[method] = out
     schemas = full.get("components", {}).get("schemas", {})
@@ -574,7 +588,7 @@ def key_routes_openapi(full: dict, limits: Limits) -> dict:
         name = todo.pop()
         if name in wanted or name not in schemas:
             continue
-        wanted[name] = schemas[name]
+        wanted[name] = _undescribed(schemas[name])
         todo.extend(_refs(schemas[name]))
     return {
         "openapi": full.get("openapi", "3.1.0"),
@@ -599,6 +613,18 @@ def key_routes_openapi(full: dict, limits: Limits) -> dict:
                 "description": "A personal API key (trb_...), made in Tributary's Settings"}},
         },
     }
+
+
+def _undescribed(node: Any) -> Any:
+    """`node` without any free text: every string `description` (a docstring, a parameter's or
+    a field's note) is dropped, at any depth. A property NAMED description is a schema (a dict),
+    so it stays."""
+    if isinstance(node, dict):
+        return {k: _undescribed(v) for k, v in node.items()
+                if not (k in ("description", "summary") and isinstance(v, str))}
+    if isinstance(node, list):
+        return [_undescribed(v) for v in node]
+    return node
 
 
 def _refs(node: Any) -> Iterator[str]:

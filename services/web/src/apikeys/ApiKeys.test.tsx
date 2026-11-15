@@ -211,33 +211,34 @@ const DOC: KeyRoutesDoc = {
   info: { title: "Tributary API (API keys)", version: "1", description: "…", "x-tributary-limits": { per_minute: 60, per_day: 10000 } },
   paths: {
     "/v1/watchlist/{company_id}": {
-      put: { "x-tributary-scope": "write", summary: "Watch" },
-      delete: { "x-tributary-scope": "write", summary: "Unwatch" },
+      put: { "x-tributary-scope": "write", summary: "Watch a company", description: "Adds a company to your watchlist.\n\nScope: write (a key with read and write)." },
+      delete: { "x-tributary-scope": "write", summary: "Stop watching a company" },
     },
-    "/v1/metrics": { get: { "x-tributary-scope": "public", summary: "Metrics", description: "Metric names financials accepts." } },
+    "/v1/metrics": { get: { "x-tributary-scope": "public", summary: "Metric names", description: "Every metric name the financials route accepts.\n\nPublic: no key needed." } },
     "/v1/companies/{company_id}/financials": {
-      get: { "x-tributary-scope": "read", summary: "Financials", parameters: [
-        { name: "company_id", in: "path", required: true }, { name: "metrics", in: "query" }, { name: "quarters", in: "query" },
-        { name: "authorization", in: "header" }] },
+      get: { "x-tributary-scope": "read", summary: "Financial figures", description: "A company's figures, each cited. `metrics`, `quarters`.\n\nScope: read (any API key).",
+        parameters: [{ name: "company_id", in: "path", required: true }, { name: "metrics", in: "query" }, { name: "quarters", in: "query" }] },
     },
     "/v1/companies/search": {
-      get: { "x-tributary-scope": "read", summary: "Search", description: "Tickers, CIKs and any part of a name,\nbest match first.\n\nCompany identity is public." },
+      get: { "x-tributary-scope": "read", summary: "Find companies", description: "Companies matching a ticker, a CIK or any part of a name,\nbest match first.\n\nScope: read (any API key)." },
     },
   },
 };
 
 describe("Using the API", () => {
-  it("lists the routes from the API's own OpenAPI, by access, with their parameters", async () => {
+  it("lists the routes from the API's own OpenAPI, by access, in the API's words for its users", async () => {
     await mount(<ApiDocs load={async () => DOC} origin="https://tributary.example" />);
     const rows = [...container.querySelectorAll("table.api-routes tbody tr")].map((tr) =>
       [...tr.querySelectorAll("td")].map((td) => td.textContent));
     expect(rows).toEqual([
-      ["GET /v1/companies/search", "Read", "Tickers, CIKs and any part of a name, best match first."],
-      ["GET /v1/companies/{company_id}/financials", "Read", "FinancialsParameters: metrics, quarters"],
-      ["DELETE /v1/watchlist/{company_id}", "Write", "Unwatch"],
-      ["PUT /v1/watchlist/{company_id}", "Write", "Watch"],
-      ["GET /v1/metrics", "No key", "Metric names financials accepts."],
+      ["GET /v1/companies/search", "Read", "Find companiesCompanies matching a ticker, a CIK or any part of a name, best match first."],
+      ["GET /v1/companies/{company_id}/financials", "Read", "Financial figuresA company's figures, each cited. metrics, quarters."],
+      ["DELETE /v1/watchlist/{company_id}", "Write", "Stop watching a company"],
+      ["PUT /v1/watchlist/{company_id}", "Write", "Watch a companyAdds a company to your watchlist."],
+      ["GET /v1/metrics", "No key", "Metric namesEvery metric name the financials route accepts."],
     ]);
+    // the API's `code` spans read as code, never as markup
+    expect([...container.querySelectorAll("table.api-routes .api-about code")].map((c) => c.textContent)).toEqual(["metrics", "quarters"]);
     const text = container.textContent ?? "";
     expect(text).toContain("60 requests a minute and 10,000 a day");
     expect(text).toContain("https://tributary.example/api/query/v1/companies/search?q=NVDA");

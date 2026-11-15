@@ -909,8 +909,15 @@ docstring is the spec), app migration 019.
   days.
 - **Docs.** `GET /v1/openapi-keys.json` (public) is `app.openapi()` filtered to `KEY_ROUTES` and the
   two public routes scripts need (`/v1/metrics`, `/v1/screener/columns`), with only the schemas they
-  reference: generated, never written by hand. The web app's "Using the API" page (`#/api`, public)
-  renders it; a one-file Python client is in [clients/python](../../clients/python/README.md).
+  reference: the parameters, bodies and types are generated from the app, never written by hand. The
+  words are not the developer docstrings: each route's summary and description for API users (what
+  it returns, its parameters) are in `api_key_docs.py` (`ROUTE_DOCS`), the scope is added as the
+  description's last paragraph, and every other description (docstrings, parameter and model notes)
+  is dropped. `test_api_keys` fails if the public spec names a table (`silver.`, `gold.`, `ops.`,
+  `bronze.`), a migration or its number, a file, a finding or ticket number or other developer
+  notes, and if a key route has no words. A new key route needs its entry there. The web app's
+  "Using the API" page (`#/api`, public) renders it; a one-file Python client is in
+  [clients/python](../../clients/python/README.md).
 - **Metrics.** `tributary_api_key_requests_total{result}`: ok, invalid, limited_minute,
   limited_day, refused_route, refused_scope, unavailable.
 

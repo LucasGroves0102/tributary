@@ -9,6 +9,7 @@ query string or another header, a key one character off, a revoked, expired or m
 report or thesis-check route, and a key reaching a route added after this list was written."""
 
 import hashlib
+import json
 import logging
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -18,6 +19,7 @@ import pytest
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
+from query_api.api_key_docs import ROUTE_DOCS
 from query_api.api_keys import (
     EXPIRY_DAYS,
     KEY,
@@ -574,9 +576,19 @@ def test_the_key_routes_openapi_is_generated_from_the_app(world):
     assert listed == {**KEY_ROUTES, **{r: "public" for r in PUBLIC_ROUTES}}
     full = client.app.openapi()
     fin = doc["paths"]["/v1/companies/{company_id}/financials"]["get"]
-    assert fin["parameters"] == full["paths"]["/v1/companies/{company_id}/financials"]["get"][
-        "parameters"]
+    # the app's own parameters and types, without its descriptions
+    assert fin["parameters"] == [
+        {k: v for k, v in x.items() if k != "description"} | {"schema": {
+            k: v for k, v in x["schema"].items() if k != "description"}}
+        for x in full["paths"]["/v1/companies/{company_id}/financials"]["get"]["parameters"]]
+    assert (fin["summary"], fin["description"].split("\n\n")) == (
+        ROUTE_DOCS[("GET", "/v1/companies/{company_id}/financials")][0],
+        [ROUTE_DOCS[("GET", "/v1/companies/{company_id}/financials")][1],
+         "Scope: read (any API key)."])
     assert fin["security"] == [{"apiKey": []}]
+    assert doc["paths"]["/v1/workspaces"]["post"]["description"].endswith(
+        "Scope: write (a key with read and write).")
+    assert doc["paths"]["/v1/metrics"]["get"]["description"].endswith("Public: no key needed.")
     assert "security" not in doc["paths"]["/v1/metrics"]["get"]
     assert doc["components"]["securitySchemes"]["apiKey"]["scheme"] == "bearer"
     text = r.text
@@ -586,3 +598,33 @@ def test_the_key_routes_openapi_is_generated_from_the_app(world):
     assert "60 requests a minute" not in doc["info"]["description"]  # this app's own limits
     assert "5 requests a minute and 12 a day" in doc["info"]["description"]
     assert doc["info"]["x-tributary-limits"] == {"per_minute": 5, "per_day": 12}
+
+
+# the public spec is for API users: nothing written for developers (a table, a migration, a file,
+# a ticket or finding number, an agent note) may reach it
+INTERNAL = [
+    r"\b(silver|gold|ops|bronze|authz)\.", r"migration", r"\.py\b", r"CLAUDE",
+    r"\b0[0-9]{2}_", r"\(0[0-9]{2}\)", r"\b0[0-9]{2}'s\b", r"\bF[0-9]+[ab]?\b",
+    r"#[0-9]{2,}", r"query_api", r"pre-ship", r"analyst test", r"\bRLS\b", r"OpenFGA",
+    r"\bStore\b", r"docstring", r"app DB",
+]
+
+
+def test_the_public_spec_shows_no_internal_detail(world):
+    import re
+
+    client, *_ = world
+    text = client.get("/v1/openapi-keys.json").text
+    for pattern in INTERNAL:
+        found = re.search(pattern, text, re.IGNORECASE if pattern.isalpha() else 0)
+        assert found is None, (pattern, text[max(0, found.start() - 80):found.end() + 80])
+    # the app's own OpenAPI does carry them: the check would catch a leak
+    full = json.dumps(client.app.openapi())
+    assert re.search(r"migration", full) and re.search(r"\b(silver|gold)\.", full)
+
+
+def test_every_key_route_has_words_for_api_users():
+    assert set(ROUTE_DOCS) == set(KEY_ROUTES) | PUBLIC_ROUTES
+    for (method, path), (summary, description) in ROUTE_DOCS.items():
+        assert 3 <= len(summary) <= 40 and not summary.endswith("."), (method, path)
+        assert 30 <= len(description) <= 900 and description.endswith("."), (method, path)

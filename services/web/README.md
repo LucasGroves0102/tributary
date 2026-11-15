@@ -1063,8 +1063,9 @@ API keys (Query API README, "API keys"; `src/apikeys/`):
   like Data status; linked from the front door, About and the Settings section): how to make a key,
   curl and Python examples with the site's own base URL (`window.location.origin` + `/api/query`), what
   each scope reaches, the routes table and the limits, both from the Query API's generated
-  `GET /v1/openapi-keys.json` (`keyRoutes`, read without the display-name pass; first sentence of
-  each route's docstring; 404: "doesn't take API keys yet"), and the error codes. The assistant reads
+  `GET /v1/openapi-keys.json` (`keyRoutes`, read without the display-name pass; each route's summary
+  and description as the API writes them for its users, its `code` spans as code; 404: "doesn't take
+  API keys yet"), and the error codes. The assistant reads
   it as `about` (agent-api has no "api" page).
 
 Data notes (`src/company/notes.ts`, Query API `/v1/companies/{id}/data-notes`, `/v1/data-notes`):

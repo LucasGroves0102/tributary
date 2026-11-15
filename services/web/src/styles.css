@@ -6881,9 +6881,17 @@ table.t.release-grid {
   text-align: center;
 }
 
-.api-params {
+.api-summary {
+  display: block;
+  font-weight: 650;
+}
+
+.api-about {
   display: block;
   margin-top: var(--sp-1);
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
 }
 
 @container main (max-width: 760px) {
