@@ -19,7 +19,7 @@ the host and the public site behind a Cloudflare Tunnel. Local development uses
 ```
 push to main → CI (lint, tests, images to GHCR, tag main-<run>-<sha>)
             → Flux image automation commits the new tag → Flux upgrades the Helm releases
-internet → Cloudflare (TLS, rate limit) → tunnel → cloudflared → web (nginx) → query-api / agent-api
+internet → Cloudflare (TLS, rate limit) → tunnel → cloudflared → web (nginx) → query-api / agent-api / mcp-server
 ```
 
 Tributary, platform and cloudflared pods run as non-root, and those namespaces only allow the

@@ -57,6 +57,7 @@ with the Flux release's overrides:
 | `authz-sync` | authz-sync | 1 | the app database's CDC topics → OpenFGA tuples and the `authz` tables |
 | `query-api` | query-api | 1 | the Query API, port 8000 |
 | `agent-api` | agent (`agent-api`) | 1 | the assistant, port 8001 |
+| `mcp-server` | mcp-server | 1 (chart default 0) | the MCP server for users' own AI models (`/mcp` through `web`), port 8002 ([below](#mcp-server)) |
 | `web` | web | 1 | nginx with the built web app, port 8080; the tunnel's only target |
 
 CronJob schedules are New York time (`timeZone`). Every job has `concurrencyPolicy: Forbid`,
@@ -201,6 +202,26 @@ need no `release` label. CronJobs aren't scraped; kube-state-metrics reports the
 
 Every pod runs as non-root with a read-only root filesystem, no capabilities, the
 `RuntimeDefault` seccomp profile and no service account token.
+
+## MCP server
+
+`mcp-server` ([services/mcp-server](../../../services/mcp-server)) lets a user connect their own AI
+model to Tributary with a personal API key: remote MCP over Streamable HTTP at
+`https://tributary.lucasgroves.dev/mcp`. The web image's nginx routes exactly `/mcp` to it (no
+buffering, 300 s read timeout, the security headers); its health and metrics stay inside the
+cluster. It holds no database login and no secrets (`uses: [query-api]` only): each tool calls the
+Query API with the caller's own `Authorization: Bearer trb_...`, so OpenFGA, row-level security,
+the key's scope and its rate limits apply as for any API-key request. NetworkPolicies: in from `web`
+pods (and the node, for probes) only; out to `query-api` (listed in query-api's `from`) and DNS
+only. `MCP_ALLOWED_HOSTS` / `MCP_ALLOWED_ORIGINS` (values.yaml) are the Host and Origin values the
+SDK accepts: nginx sends the Service's host, and non-browser clients send no Origin.
+
+The chart ships it at `replicas: 0`; the Flux release turns it on (`replicas: 1`). The first
+deploy needs the image to exist: turn it on in the Flux release only once a green `main` build
+that includes `tributary-mcp-server` has been tagged, or the upgrade waits on a pod that can't
+pull its image (the release's own timeout and remediation then roll it back). The Cloudflare tunnel
+already routes the whole hostname to `web`, so nothing changes there; `/mcp` isn't in the
+Cloudflare rate-limit rule (the per-key limits in the Query API apply to every tool call).
 
 ## Demo sandboxes
 

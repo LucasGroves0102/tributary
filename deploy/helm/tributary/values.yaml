@@ -209,7 +209,7 @@ services:
     port: 8000
     # webhooks: the alert settings' "Send a test" (query_api/alerts.py, 5 an hour per user)
     uses: [postgres, app-postgres, openfga, jwt, demo, github, market-data, webhooks]
-    from: [web, agent-api]
+    from: [web, agent-api, mcp-server]
     resources:
       requests:
         cpu: 50m
@@ -232,6 +232,26 @@ services:
         memory: 128Mi
       limits:
         memory: 384Mi
+  # MCP server (services/mcp-server): a user's own AI model reads Tributary through it with their
+  # API key, at https://<site>/mcp (the web image's nginx routes it here). No database login and
+  # no secrets: every tool calls the Query API with the caller's key (OpenFGA + RLS as that user).
+  # In: web only (nginx). Out: query-api and DNS only (`uses: [query-api]` adds no egress label;
+  # query-api's `from` lists it). Shipped stopped like doc-crawler; the Flux release turns it on.
+  mcp-server:
+    port: 8002
+    replicas: 0
+    uses: [query-api]
+    from: [web]
+    env:
+      # Host and Origin the SDK accepts (DNS rebinding protection): nginx sends the Service's host
+      MCP_ALLOWED_HOSTS: "mcp-server:*,localhost:*,127.0.0.1:*"
+      MCP_ALLOWED_ORIGINS: https://tributary.lucasgroves.dev
+    resources:
+      requests:
+        cpu: 25m
+        memory: 96Mi
+      limits:
+        memory: 256Mi
   web:
     port: 8080
     probePath: /
