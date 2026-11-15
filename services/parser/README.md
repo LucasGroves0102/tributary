@@ -397,7 +397,10 @@ re-parses all 634,653 documents and their 346,952 exhibits (517 GB of HTML). Mea
 the Rust service on hermes: its busiest minute 273 documents and 602 MB of HTML (parser-backfill,
 2026-11-09 21:08 UTC), ~11,000 documents an hour sustained while the crawl fed it: 517 GB at ~10
 MB/s is ~15 hours, 634,653 documents at ~11,000 an hour ~58 hours. It does more per document than
-before (it reads back the stored sections to compare). Plan on a weekend.
+before (it reads back the stored sections to compare). Plan on a weekend. A document it can't
+split (no headings; 761 stored documents had no sections on 2026-11-15) is logged as `skipping
+<accession>: ...` and passed; any other error stops the Job (re-run it: it starts again from the
+oldest filing, and unchanged documents cost only the read and compare).
 
 ```bash
 sudo kubectl -n tributary create job --from=cronjob/parser-reparse parser-reparse-1
