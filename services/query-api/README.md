@@ -20,8 +20,10 @@ plan's tiers, through the same two layers: OpenFGA resolves `reader from catalog
 Check, and RLS reads `authz.public_access`. Per-company grants keep working for anything outside
 the catalog. Nothing in the API changes shape except `/v1/me`'s `catalog` (below).
 
-The caller is identified by an HS256 JWT (`sub` = app user_id). The user is never read from
-request parameters. Dev tokens: `make token USER=alice`.
+The caller is identified by an HS256 JWT (`sub` = app user_id) or, from a script, by one of
+their personal API keys (`Authorization: Bearer trb_...`, [API keys](#api-keys)): the user is the
+key's owner, read from the key's row. The user is never read from request parameters. Dev
+tokens: `make token USER=alice`.
 
 | Route | Needs | Returns |
 |---|---|---|
@@ -39,7 +41,11 @@ request parameters. Dev tokens: `make token USER=alice`.
 | `POST /v1/auth/password` | `APP_DATABASE_URL` | `{"username", "password"}` → `{"token", "expires_in"}` (a 7-day JWT) for an owner-created account; 401 with one body for every refusal, 429 per client address, 422 never echoes the input ([Password accounts](#password-accounts)) |
 | `GET /v1/auth/github/start` | `GITHUB_CLIENT_ID` + `GITHUB_CLIENT_SECRET` | 302 to GitHub's authorize page (no scopes) with a signed `state`, and the state's nonce in a short-lived cookie (404 when not configured; [GitHub sign-in](#github-sign-in)) |
 | `GET /v1/auth/github/callback?code=&state=` | `GITHUB_CLIENT_ID` + `GITHUB_CLIENT_SECRET` | GitHub's redirect back: 302 to `/#/signed-in?token=…&expires_in=…` (a 7-day JWT, in the URL fragment), or `/#/signed-in?error=<code>` |
-| `GET /v1/me` | token | `catalog`: `{public, tiers, companies}`, whether every catalog company is readable to the caller and with which tiers (`companies`: how many); `companies`: with the catalog public, only what the caller reads beyond it (private grants), else every company the caller can read, with tiers; `sandbox` (expiry, plan, assistant allowance) for a demo sandbox user; `github` (login, plan, the demo's company ids, assistant allowance) for a GitHub sign-in; `account` (username, plan, `agent_questions_per_day`) for a password account |
+| `GET /v1/api-keys` | token (sign-in only, never a key) | the caller's API keys (name, first 8 characters, scopes, dates, today's requests and refusals; never a key or its hash), active ones and those revoked or expired in the last 30 days, plus `allowed` (false for a demo sandbox), `max_active`, `expiry_days`, `scopes` and `limits` ([API keys](#api-keys)) |
+| `POST /v1/api-keys` | token (sign-in only; not a demo sandbox: 403), app DB | `{"name", "scopes": ["read"] or ["read", "write"], "expires_in_days": 30, 90 or 365}` → 201 `{"key", "api_key"}`: the key itself in this answer only (`Cache-Control: no-store`); 409 with 5 active keys |
+| `DELETE /v1/api-keys/{key_id}` | token (sign-in only), app DB | revokes the caller's key at once (its next request is a 401); another user's, or one revoked already, is the same 404 |
+| `GET /v1/openapi-keys.json` | | the OpenAPI of the routes an API key can use, generated from this app's own (`x-tributary-scope` read, write or public per operation, `x-tributary-limits`), for the web app's "Using the API" page and scripts |
+| `GET /v1/me` | token | `catalog`: `{public, tiers, companies}`, whether every catalog company is readable to the caller and with which tiers (`companies`: how many); `companies`: with the catalog public, only what the caller reads beyond it (private grants), else every company the caller can read, with tiers; `sandbox` (expiry, plan, assistant allowance) for a demo sandbox user; `github` (login, plan, the demo's company ids, assistant allowance) for a GitHub sign-in; `account` (username, plan, `agent_questions_per_day`) for a password account; `api_key` (key id, name, prefix, scopes, expiry) only for a request made with an API key |
 | `GET /v1/companies/search?q=&access=&limit=` | token | tickers, CIKs and any part of a name, best match first (`silver.search_companies`, migration 034; ties ordered by 044 and 066: a company with a SIC code before a fund or BDC without one): public identity + caller's access; `limit` 1-25, default 5; `access=financials`: only companies you can read, narrowed before the limit |
 | `GET /v1/metrics` | | metric names served by `financials`: `silver.metrics` and `gold.derived_metrics`, read once |
 | `GET /v1/companies/{id}/financials?metrics=&quarters=&view=&basis=&format=&readings=&callouts=` | financials | values + citation + freshness; `quarters` 1-120 (every quarter there is, the Statements tab's Max); `format=csv`: one row per value with its source filing; `callouts=true` (view quarter): quarters far outside their series ([Statement callouts](#statement-callouts)); `currency` (only when not USD: the company's reporting currency, every amount is in it, migration 056) and `cadence: "annual"` (only for a filer whose figures are fiscal years, a 20-F/40-F filer: gold never splits a year into quarters; `Store.cadence`, under RLS: gold has years and no quarter in the last 800 days AND the company's latest 10-K/10-Q/20-F/40-F in the filing index is a 20-F or 40-F, or with none indexed gold never had a quarter. Never from staleness: a US filer whose figures stopped, EIDP's at 2019 though it files 10-Qs, has no `cadence` and its figures read as old) |
@@ -701,8 +707,9 @@ unset makes those routes answer 503), `FGA_API_TOKEN` (OpenFGA preshared key, wh
 `DEMO_USERS` (comma-separated accounts allowed to sign in without a password; unset disables
 the demo routes), the demo sandbox settings below, `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` /
 `GITHUB_REDIRECT_URI` ([GitHub sign-in](#github-sign-in)), `DATA_CONNECTIONS_KEY` ([Connect
-your data](#connect-your-data)), `PORT` (default 8000), `LOG_LEVEL`. Password accounts need no
-setting: their route exists whenever `APP_DATABASE_URL` is set. The alerts job reads
+your data](#connect-your-data)), `API_KEY_PER_MINUTE` / `API_KEY_PER_DAY` (each API key's limits,
+default 60 and 10,000; [API keys](#api-keys)), `PORT` (default 8000), `LOG_LEVEL`. Password
+accounts and API keys need no other setting: their routes work whenever `APP_DATABASE_URL` is set. The alerts job reads
 `DATABASE_URL`, `APP_DATABASE_URL`, `FGA_API_URL`, `QUERY_API_JWT_SECRET` (webhook secrets),
 `PUBLIC_APP_URL` (where alert links point; default the public site) and the email settings in
 [Filing alerts](#filing-alerts).
@@ -849,6 +856,80 @@ and the shared cap exists to bound anonymous visitors, so a busy demo day must n
 tester. `DEMO_SANDBOX_ENABLED` and `DEMO_AGENT_ENABLED` don't apply either; agent-api's
 hourly per-user and per-IP limits and its daily model budget (`AGENT_DAILY_BUDGET_USD`) still
 do. Refusals read "Your account has used its N assistant questions for today…".
+
+## API keys
+
+Personal access tokens, so a user can use Tributary from their own scripts (and, next, from their
+own AI models through an MCP server, which will authenticate with them). `api_keys.py` (its
+docstring is the spec), app migration 019.
+
+- **The key.** `trb_` + 32 random bytes in base64url (47 characters), shown once, in the answer
+  that creates it. The app database keeps its SHA-256 and its first 8 characters (`trb_` + 4, so the
+  owner can tell keys apart), a name, the scopes, created / last used / expires / revoked. Nothing
+  logs a key, its hash, or more of it than those 8 characters: logs carry the key id.
+- **Authentication.** `Authorization: Bearer trb_...` is accepted beside the JWT on every route
+  that takes a token. One app-DB transaction per request finds the key by its hash (the
+  `key_holder` policy: a transaction that names a key's hash can read that row and nothing else;
+  then `hmac.compare_digest`), checks it isn't revoked or expired (and, for a password account, that
+  the account isn't disabled and the key was made after its last `set-password` or `disable`, the
+  rule its tokens follow), counts the request as the key's user and refuses it over a limit. From
+  there the request is the web app's: `require()` (OpenFGA) on every data route and Store's
+  row-level security as that user, unchanged. An unknown, malformed, expired or revoked key, and a
+  key without an app database, all get the same `401 {"detail": "invalid token"}` as a bad JWT.
+  **Revocation takes effect on the key's next request** on every replica: nothing is cached (a
+  password account's disable is read in the same transaction too). App DB unreachable: 503.
+- **Scopes** (default deny, `KEY_ROUTES`: a route added later refuses keys until it is listed).
+  `read`: the data routes (every GET on companies, filings, sections, What changed, search,
+  screener, peers, events, earnings, insiders, data notes, the calendar, sectors and `/v1/me`, plus
+  the POST calculations that store nothing: `/v1/formulas/validate`, `/v1/formulas/evaluate`,
+  `/v1/companies/{id}/model`) and the user's own watchlist and saved work (workspaces, items, item
+  versions). `write` (always with read): `PUT`/`DELETE /v1/watchlist/{id}`, creating, renaming,
+  duplicating workspaces, adding, saving over and duplicating items. Deleting a workspace or an item
+  stays sign-in only (not restorable from a script). Everything else answers any key with 403
+  ("API keys can't use this route: sign in to Tributary"): the key routes themselves, alerts
+  (notifications, settings, red lines, webhooks, deliveries), views, recent, market-data
+  connections, the demo and sign-in routes, reports and thesis checks. A route the key's scope
+  doesn't reach: 403 "this API key can't write: it has the read scope". agent-api refuses keys
+  itself (403): the assistant, reports and thesis checks need a sign-in.
+- **Limits.** Per key, `API_KEY_PER_MINUTE` (60) requests in each clock minute and
+  `API_KEY_PER_DAY` (10,000) in each UTC day. One row per key per day in `api_key_usage` holds the
+  day's count and the current minute's; one `INSERT ... ON CONFLICT DO UPDATE ... WHERE` counts the
+  request only while under both, under the row's lock, so the bound holds across every replica
+  (`test_api_keys_db` runs eight threads over two app instances: exactly the limit gets through).
+  Over a limit: 429 with `Retry-After` (seconds to the next minute, or to UTC midnight), the request
+  isn't counted but noted (`limited`). A replica whose clock is behind never restarts the minute.
+  Every answer to a key carries `X-RateLimit-Limit-Minute`, `X-RateLimit-Remaining-Minute`,
+  `X-RateLimit-Limit-Day`, `X-RateLimit-Remaining-Day`. A request a route refuses (403) still
+  counts. Sign-ins are never limited here. `last_used_at` is written at most once a minute.
+- **Who.** Any signed-in account but a demo sandbox (GitHub and password accounts in production;
+  the table CHECKs that no `demo-` user holds a key), 5 active keys each (an advisory lock per
+  user makes the cap hold under concurrent creates). Expiry is required: 30, 90 (default) or 365
+  days. Keys revoked or expired more than 30 days ago, and usage rows older than 90 days, are
+  deleted when their owner makes a new key; the list shows active keys and those of the last 30
+  days.
+- **Docs.** `GET /v1/openapi-keys.json` (public) is `app.openapi()` filtered to `KEY_ROUTES` and the
+  two public routes scripts need (`/v1/metrics`, `/v1/screener/columns`), with only the schemas they
+  reference: generated, never written by hand. The web app's "Using the API" page (`#/api`, public)
+  renders it; a one-file Python client is in [clients/python](../../clients/python/README.md).
+- **Metrics.** `tributary_api_key_requests_total{result}`: ok, invalid, limited_minute,
+  limited_day, refused_route, refused_scope, unavailable.
+
+```bash
+curl -H "Authorization: Bearer $TRIBUTARY_API_KEY" \
+  "https://tributary.lucasgroves.dev/api/query/v1/companies/0001045810/financials?metrics=revenue"
+```
+
+Tests: `test_api_keys.py` (routes with an in-memory store that keeps the real one's rules: shown
+once, the list, the cap, a sandbox refused, one 401 for unknown, malformed, one-character-off,
+revoked, expired and disabled keys, the user only from the key's row whatever a parameter or
+header says, another user's data and saved work unreachable, the key only from the Authorization
+header, a read key can't write, every signed-in route outside `KEY_ROUTES` refuses a write key,
+limits with Retry-After, the key, its hash and parts of either in no log record and no later
+answer, the generated OpenAPI) and `test_api_keys_db.py` (on the app schema as the tables' owner:
+forced RLS and the hash-only lookup, revoked/expired/disabled/older-than-the-password keys refused,
+the limits and Retry-After, a slow clock, limits and the cap across two instances at once, a key
+against the real saved-work store, and with `TEST_DATABASE_URL` a key behind an allow-all
+authorizer reading only what RLS gives its user).
 
 ## Connect your data
 

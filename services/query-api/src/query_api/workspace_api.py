@@ -193,6 +193,7 @@ def add_workspace_routes(app: FastAPI, *, store: Store, workspaces: Workspaces |
     @app.post("/v1/workspaces/{workspace_id}/duplicate", status_code=201, response_model=dict)
     def duplicate_workspace(user_id: User, workspace_id: WorkspaceId,
                             body: CopyWorkspace | None = None) -> dict:
+        """A copy of the workspace and every item in it, named `name` or "<name> (copy)"."""
         name = body.name if body else None
         return found(write(lambda: ws().duplicate(user_id, str(workspace_id), name)))
 
@@ -236,6 +237,7 @@ def add_workspace_routes(app: FastAPI, *, store: Store, workspaces: Workspaces |
 
     @app.get("/v1/workspace-items/{item_id}", response_model=dict)
     def get_item(user_id: User, item_id: ItemId) -> dict:
+        """One of the caller's saved items with its state (another user's is the same 404)."""
         return found(ws().item(user_id, str(item_id)), ITEM_NOT_FOUND)
 
     @app.post("/v1/workspace-items/{item_id}/open", response_model=dict)

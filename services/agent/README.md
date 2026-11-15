@@ -110,6 +110,10 @@ its reader there), verification, token usage and estimated cost. `GET /health`; 
 (`tributary_agent_questions_total`, `_tokens_total`, `_cost_usd_total`, `_tool_calls_total`,
 `_rounds`).
 
+Every route takes a sign-in's token only: a personal API key (`trb_...`, Query API README "API
+keys") is refused with 403 before anything is charged or asked, on `/v1/ask`, reports, thesis
+checks and `/v1/allowance` alike, so a script can't spend a user's questions.
+
 The web app also sends `context` (its page, company and company tab, the reader's filing and
 section, the search page's words, chart layers, screener filters, the comps set;
 `ui.UiContext`: strict fields, at most 4,000 bytes). It reaches the model as a block of data
