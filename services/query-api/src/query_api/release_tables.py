@@ -18,20 +18,24 @@ heading spanning the columns it heads. A grid puts that back into columns:
    "n/a", "nm"; a bare year (1900-2099) is not one. Also a figure: a cell that starts with a
    number ("$2.5 billion") when it is not its row's first cell.
 4. Head rows: from the top, rows the parser marked head (a <thead>, <th> cells) and rows without a
-   figure; the first row with a figure ends them. A table without a figure in any other row has no
+   figure whose first cell is right of the table's leftmost first cell (no label) or that have one
+   cell (a title); the first other row ends them. A table without a figure in its other rows has no
    grid (the caller keeps the text).
 5. Columns. The label area ends where the leftmost figure of the body rows starts. Body cells
-   starting before it are the row's label (joined by a space); the others are values. Value cells'
-   column ranges, over all body rows, merged where they overlap, are the value columns, left to
-   right. A grid has a label column and those value columns; each value cell goes in the one it
-   lies in (two in one: joined by a space).
-6. Head cells: a head row's cell spans the grid columns its range overlaps (the label column when
+   starting before it are the row's label (column 0). The value columns are the figures' column
+   ranges over all body rows, merged where they overlap, then the other value cells' ranges that
+   meet none of those, merged likewise; left to right after the label column. A body value cell
+   spans the value columns it overlaps (a heading inside the table spans several).
+6. Head rows (rule 4): a cell spans the grid columns its range overlaps (the label column too when
    it starts in the label area); one that overlaps none goes to the next value column to its right,
-   else is dropped; cells meeting in one column are joined by a space.
+   else is dropped. In any row, a cell meeting the one before it in a column joins it (texts joined
+   by a space, the span widened).
 
-A grid: {"columns": n, "head": [[{"text", "col", "span"}...]...], "body": [[label, value...]...],
-"char_start", "char_end"} (offsets of the rows used, into the release's text). No "rows" or
-"sections" key: query_api.verify-style readers take those as financial rows.
+A grid: {"columns": n, "head": [[{"text", "col", "span"}...]...], "body": [[{"text", "col",
+"span"}...]...], "char_start", "char_end"}: each row's non-empty cells at their first column and
+width (a body row's label at column 0), offsets of the rows used into the release's text. No "rows"
+or "sections" key: the agent's verify.py reads those as financial rows (and the agent never asks
+for grids: events.py `tables`).
 """
 
 import re
@@ -95,7 +99,7 @@ def grid(rows: list[dict], start: int, end: int) -> dict | None:
     """Rules 1-6 over a stored table's rows (silver.filing_tables.rows), keeping the rows within
     [start, end) of the release's text; None when there is no grid (rule 4)."""
     kept = [r for r in rows if start <= r["start"] and r["end"] <= end]
-    cells = [c for c in (_cells(r) for r in kept)]
+    cells = [_cells(r) for r in kept]
     if not any(cells):
         return None
     left = min(row[0][0] for row in cells if row)

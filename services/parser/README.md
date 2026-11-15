@@ -66,7 +66,7 @@ WHERE d.accession_no = t.accession_no AND t.status = 'done' AND d.form ~ '^10-[K
 -- 3. progress: unpublished goes to 0, then the parser-backfill lag drains
 SELECT unpublished FROM ops.doc_crawl_status;
 SELECT parser_version, count(DISTINCT accession_no) FROM silver.filing_sections
-WHERE parser_version IN ('python-6', 'rust-6') GROUP BY 1;   -- the current PARSER_VERSION
+WHERE parser_version IN ('python-7', 'rust-7') GROUP BY 1;   -- the current PARSER_VERSION
 ```
 
 Re-running step 1 afterwards lists the documents rule 9 could not split (no Item headings and no
