@@ -4,7 +4,7 @@ import { LayerChart } from "../chart/LayerChart";
 import type { Source } from "../chart/series";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { TableScroll } from "../components/TableScroll";
-import { day } from "../format";
+import { day, paren } from "../format";
 import { go } from "../route";
 import {
   amountUnit,
@@ -181,7 +181,7 @@ function Fact({ run, line, col, rows }: { run: ModelRun; line: Line; col: Column
       if (note) {
         return (
           <td className={`n ${col.kind} basis`} rowSpan={rows} title={note}>
-            {formatCell(v, line.unit, amountUnit(run))}{v === null ? "" : "*"}
+            {paren(formatCell(v, line.unit, amountUnit(run)))}{v === null ? "" : "*"}
           </td>
         );
       }
@@ -196,7 +196,7 @@ function Fact({ run, line, col, rows }: { run: ModelRun; line: Line; col: Column
   return (
     <td className={`n ${col.kind}${v === "n/a" ? " past" : ""}`} rowSpan={rows}
       title={v === "n/a" ? line.pastYear : v === null ? line.blank ?? title : title}>
-      {formatCell(v, line.unit, amountUnit(run))}
+      {paren(formatCell(v, line.unit, amountUnit(run)))}
     </td>
   );
 }
@@ -213,7 +213,7 @@ function Forecast({ line, p, c, i, preview, currency }: { line: Line; p: Project
     : preview ? "Not added yet: what this case would start as" : p.note ?? undefined);
   return (
     <td className={`n forecast${isDefault ? " default" : ""}`} title={v === null ? line.blank ?? title : title}>
-      {formatCell(v, line.unit, currency)}
+      {paren(formatCell(v, line.unit, currency))}
     </td>
   );
 }

@@ -342,7 +342,7 @@ it("overview: key stats with periods, the latest quarter recap with flags, and I
   // Seal: the key figures are a ledger; the period they share is in the margin. A seal opens the filing, and
   // only a figure the filing states has one (Riley 32): twelve months from a 10-Q are four quarters added up
   const stat = [...container.querySelectorAll(".ledger dl > div")].find((d) => d.querySelector("dt")?.textContent === "Revenue")!;
-  expect(stat.querySelector("dd .figure")?.textContent).toBe("$165.22B");
+  expect(stat.querySelector("dd .figure")?.textContent).toBe("$165.2B");
   expect([...container.querySelectorAll(".rubric")].find((r) => r.textContent?.startsWith("The year"))?.textContent).toContain("Four quarters to Jul 26, 2026");
   expect(stat.querySelector("a.seal-link")).toBeNull();
   expect(stat.querySelector("dd")?.title).toMatch(/^Revenue, the four quarters to Jul 26, 2026 added up\./);
@@ -351,7 +351,7 @@ it("overview: key stats with periods, the latest quarter recap with flags, and I
   expect(eps.querySelector("a.seal-link")?.getAttribute("aria-label")).toBe("EPS (diluted): taken from the 10-Q filed Aug 26, 2026");
   expect($(".computed-note")?.textContent).toContain("No seal: worked out from the filings");
   // the year as a sentence: four quarters added up, so no seal on it
-  expect($(".story")?.textContent).toContain("In the twelve months to July 26, 2026, Nvidia reported revenue of $165.22 billion, up 69.0% on the year before.");
+  expect($(".story")?.textContent).toContain("In the twelve months to July 26, 2026, Nvidia reported revenue of $165.2 billion, up 69.0% on the year before.");
   expect($(".story a.seal-link")).toBeNull();
   expect(paths().some((u) => u.pathname === `/api/query/v1/filings/${ACC}/recap`)).toBe(true);
   const recap = [...container.querySelectorAll("table")].find((t) => t.textContent?.includes("QoQ"))!;

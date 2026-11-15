@@ -73,7 +73,7 @@ it("runs the screen from the URL's filters and shows values with sources", async
   expect(q.searchParams.get("revenue_band")).toBe("1b-10b");
   const nvda = container.querySelectorAll("table.screen tbody tr")[0]!;
   expect(nvda.textContent).toContain("Nvidia");
-  const revenue = [...nvda.querySelectorAll("td.n")].find((td) => td.textContent === "$130.50B");
+  const revenue = [...nvda.querySelectorAll("td.n")].find((td) => td.textContent === "$130.5B");
   expect(revenue?.getAttribute("title")).toContain("10-Q filed Aug 26, 2026");
   expect($(".card-h .sub")?.textContent).toBe("revenue $1B to $10B, operating margin ≥ 20%");
 });

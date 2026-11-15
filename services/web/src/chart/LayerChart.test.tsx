@@ -67,7 +67,7 @@ describe("axes and bars", () => {
     expect(formatValue(100e6, "USD", true)).toBe("$100M");
     expect(formatValue(-50e9, "USD", true)).toBe("-$50B");
     expect(formatValue(0, "USD", true)).toBe("$0");
-    expect(formatValue(400e9, "USD")).toBe("$400.00B");
+    expect(formatValue(400e9, "USD")).toBe("$400.0B");
   });
 
   it("drops a period label that would run into the last one", () => {

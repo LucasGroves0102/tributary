@@ -136,7 +136,7 @@ describe("series", () => {
     // Alibaba's yuan revenue charted as "$996B" before: the API now says CNY
     const yuan = toSeries(series([[8100, "CY2025 Q1", "996347000000"]], { currency: "CNY" }), metric(), "BABA revenue", 0);
     expect(yuan.unit).toBe("CNY");
-    expect(formatValue(996347000000, yuan.unit)).toBe("CN¥996.35B");
+    expect(formatValue(996347000000, yuan.unit)).toBe("CN¥996.3B");
     expect(formatValue(996e9, yuan.unit, true)).toBe("CN¥996B");
     expect(unitLabel(yuan.unit)).toBe("CNY");
     const eps = toSeries(series([[8100, "CY2025 Q1", "1.22"]], { unit: "USD/shares", currency: "EUR" }), metric(), "EPS", 0);

@@ -48,7 +48,7 @@ describe("header and key stats", () => {
   it("label every value with its period and source", () => {
     const stats = keyStats(nvdaRow());
     const by = (l: string) => stats.find((s) => s.label === l)!;
-    expect(by("Revenue")).toMatchObject({ text: "$165.22B", period: "TTM to Jul 26, 2026" });
+    expect(by("Revenue")).toMatchObject({ text: "$165.2B", period: "TTM to Jul 26, 2026" });
     expect(by("Revenue")!.title).toContain(`Source: 10-Q filed Aug 26, 2026, ${ACC}`);
     expect(by("Revenue growth")).toMatchObject({ text: "+69.0%", period: "TTM vs prior TTM, to Jul 26, 2026" });
     expect(by("EPS (diluted)")).toMatchObject({ text: "$1.08", period: "quarter to Jul 26, 2026" });
@@ -606,8 +606,8 @@ describe("Seal: the year as a sentence and the ledger's net cash (analyst test 4
   it("reads revenue, growth, net income and net cash for the same twelve months, in words", () => {
     const story = yearStory(row({ revenue_ttm: "302970000000", revenue_growth_ttm: "0.834", net_income_ttm: "192880000000", net_debt_q: "-66000000000" }))!;
     expect(story).toMatchObject({
-      end: "2026-07-26", revenueLabel: "revenue", revenue: "$302.97 billion",
-      growth: { text: "up 83.4%", rise: true }, netIncome: { text: "$192.88 billion", loss: false },
+      end: "2026-07-26", revenueLabel: "revenue", revenue: "$303.0 billion",
+      growth: { text: "up 83.4%", rise: true }, netIncome: { text: "$192.9 billion", loss: false },
       balance: { text: "$66.00 billion", netCash: true },
     });
     expect(story.source.accession_no).toBe(ACC);

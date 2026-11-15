@@ -148,7 +148,7 @@ describe("drafts: what the fields hold as typed", () => {
     expect(formatCell(1.22, "USD/shares", "EUR")).toBe("€1.22");
     expect(formatCell(1.22, "USD/shares")).toBe("$1.22");
     expect(formatCell(-0.5, "USD/shares")).toBe("-$0.50");
-    expect(formatCell(996e9, "USD", "CNY")).toBe("CN¥996.00B");
+    expect(formatCell(996e9, "USD", "CNY")).toBe("CN¥996.0B");
     const euro = { ...vrt, currency: "EUR" } as ModelRun;
     expect(modelSeries(euro, 5, ["base"])[0]!.unit).toBe("EUR");
     const v = { ...vrt.valuation!, enterprise_value: null, ev_note: "currency", currency_mismatch: { price: "USD", figures: "EUR" } };
@@ -223,7 +223,7 @@ describe("the three-case table", () => {
 
   it("formats each unit", () => {
     expect(formatCell(13_117_100_000, "USD")).toBe("$13.12B");
-    expect(formatCell(-783_200_000, "USD")).toBe("-$783.20M");
+    expect(formatCell(-783_200_000, "USD")).toBe("-$783.2M");
     expect(formatCell(7.02, "USD/shares")).toBe("$7.02");
     expect(formatCell(145_805_000, "shares")).toBe("145.8M");
     expect(formatCell(24.3, "multiple")).toBe("24.3x");
@@ -278,7 +278,7 @@ describe("each default explained in one line", () => {
 
   it("NVIDIA: H2 starts from the trailing twelve months, not last year's H2 moved by this year's change", () => {
     const lines = defaultRules(nvda, "base");
-    expect(lines[0]!.text).toMatch(/H2 starts from H2 FY2026 \(\$125\.13B\), grown at the trailing twelve months to FY2027 Q2's \+83\.4% and at its 65\.2% operating margin\.$/);
+    expect(lines[0]!.text).toMatch(/H2 starts from H2 FY2026 \(\$125\.1B\), grown at the trailing twelve months to FY2027 Q2's \+83\.4% and at its 65\.2% operating margin\.$/);
     expect(nvda.cases.base!.defaults[0]).toMatchObject({ growth: 83.4, margin: 65.2, fcfMargin: 45.6 });
     expect(lines.find((l) => l.key === "fcfMargin")!.text).toMatch(/; FY2027E's H2 at H2 FY2026's 45\.6%\.$/);
   });

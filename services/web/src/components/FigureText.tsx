@@ -1,11 +1,16 @@
+import { paren } from "../format";
+
 /** A table cell's figure: its text and, when it isn't from the company's latest period, the date it
  * is from. An old one (blanks.ts) is the not-reported mark with "since" its last date, dimmed: the
- * figure then is in the cell's hover, never shown as the current one. */
+ * figure then is in the cell's hover, never shown as the current one. A negative amount reads in
+ * parentheses (`paren`), as in the statements and the screener: one negative-number format on every
+ * table (Riley 95: "-$66.00B" on Home, Peers and Compare beside "($29.03B)" in the screener); a
+ * percentage keeps its minus. */
 export function FigureText({ cell }: { cell: { text: string; asOf?: string | null; old?: boolean } }) {
-  if (!cell.asOf) return <>{cell.text}</>;
+  if (!cell.asOf) return <>{paren(cell.text)}</>;
   return (
     <span className={cell.old ? "fig old" : "fig"}>
-      {cell.text}
+      {paren(cell.text)}
       <span className="asof">{cell.old ? `since ${cell.asOf}` : cell.asOf}</span>
     </span>
   );

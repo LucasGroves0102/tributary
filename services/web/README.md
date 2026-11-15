@@ -54,9 +54,16 @@ Radix Primitives (pinned exact versions), styled only with the tokens: the compa
 tooltip, and the confirm dialog (`workspaces/Actions.tsx` `ConfirmDelete`, a Radix alert dialog). Radix
 places popovers through the CSSOM, which the CSP allows; Radix's dialog Overlay isn't used, because
 its scroll lock injects a `<style>` element the CSP refuses (the dialog draws its own backdrop).
-Money negatives read in parentheses in statements, ledgers, the recap and the screener (`format.ts`
+Money negatives read in parentheses on every table (statements, ledgers, the recap, the screener, and since
+Riley's audit the watchlist, Peers, Compare and the model through `components/FigureText`; `format.ts`
 `paren`: display only; the CSV and the hover keep the sign, and F5's `outflow` stays the one place a
-sign is decided); percentages and multiples keep their minus sign.
+sign is decided); percentages and multiples keep their minus sign. An amount has four significant figures at
+most: two decimals below 100 in its scale, one from 100 ("$46.74B", "$227.0M", never "$227.00M"); a row
+takes its largest value's decimals, and a value that would round to nothing keeps its own scale. Compare's
+comps say the quarter's end date ("Jul 26, 2026": two companies a quarter apart read apart), the calendar
+and fiscal labels in the hover; a target with no peers starts with the five suggested ones; Make target
+and Remove are buttons, a removal a toast with Undo; the side-by-side charts open indexed when the
+companies are over 100 times apart in size.
 
 Seal pages so far (the first batch): the front door (the seal and name, a headline, the way in under
 it; on the right, ruled off in ink, the live figures from `/v1/status/data` and what's in it), Data

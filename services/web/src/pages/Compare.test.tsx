@@ -129,8 +129,10 @@ it("asks the screener for the comps by id and shows each value with its period a
   const [nvda, tsla, aapl] = rows();
   expect(nvda!.className).toBe("sel");
   expect(nvda!.textContent).toContain("target");
-  expect(nvda!.querySelectorAll("td")[1]!.textContent).toBe("CY26 Q2 (FY27 Q2)");
-  const revenue = [...nvda!.querySelectorAll("td.n")].find((td) => td.textContent === "$130.50B")!;
+  // the quarter's end date, so two companies a quarter apart read apart; the labels in the hover (Riley 39)
+  expect(nvda!.querySelectorAll("td")[1]!.textContent).toBe("Jul 26, 2026");
+  expect(nvda!.querySelectorAll("td")[1]!.getAttribute("title")).toContain("CY26 Q2, FY27 Q2 in the company's fiscal year");
+  const revenue = [...nvda!.querySelectorAll("td.n")].find((td) => td.textContent === "$130.5B")!;
   expect(revenue.getAttribute("title")).toContain("Source: 10-Q filed Aug 26, 2026");
   expect(tsla!.className).toBe("masked");
   expect(tsla!.textContent).toContain("metadata only");
@@ -142,13 +144,13 @@ it("puts the peer median, without the target, under the table", async () => {
   const median = rows().find((r) => r.textContent?.startsWith("Peer median"))!;
   // only AAPL: TSLA is ungranted and NVDA is the target
   // each median says how many of the peers it uses: AAPL of AAPL and TSLA
-  expect([...median.querySelectorAll("td.n")].map((td) => td.textContent)).toEqual(["$400.00B1 of 2", "30.0%1 of 2", "-2.0%1 of 2"]);
+  expect([...median.querySelectorAll("td.n")].map((td) => td.textContent)).toEqual(["$400.0B1 of 2", "30.0%1 of 2", "-2.0%1 of 2"]);
   expect([...median.querySelectorAll("td.n .count")].map((td) => td.textContent)).toEqual(["1 of 2", "1 of 2", "1 of 2"]);
   expect(median.querySelector("td.n")?.getAttribute("title")).toContain("Left out: 1 metadata only");
   // beside "Peer median", how many peers the table has (analyst test 4: it read a literal "n of N")
   expect(median.textContent).toContain("of 2 peers");
   expect(median.textContent).not.toContain("n of N");
-  expect($(".foot")?.textContent).toContain("1 company shows metadata only");
+  expect($(".how-to-read .foot")?.textContent).toContain("1 company shows metadata only");
 });
 
 it("suggests peers from the peers endpoint and edits the comps in the URL", async () => {
@@ -286,7 +288,7 @@ it("shows a bank's operating margin as n/a and leaves it out of the median, with
   const m = [...median.querySelectorAll("td.n")][1]!;
   expect(m.textContent).toBe("30.0%1 of 2");
   expect(m.getAttribute("title")).toContain("1 not applicable (n/a: the metric doesn't describe a bank)");
-  expect($(".foot")?.textContent).toContain("Banks show n/a for operating margin");
+  expect($(".how-to-read .foot")?.textContent).toContain("Banks show n/a for operating margin");
   // company rows are a keyboard-navigable list; the median rows aren't
   expect(container.querySelectorAll("table.comps tbody tr[data-nav]")).toHaveLength(3);
 });

@@ -198,8 +198,8 @@ it("flags Vertiv's Sep 30 cash and net debt on the Overview's key stats, with th
   expect(stat("net_debt_q").querySelector("dd")?.title).toContain("Net debt at Sep 30, 2026 is from before the Oct 27, 2026 8-K");
   // the figure itself is unchanged (a negative net debt reads as net cash, its exact figure in the hover)
   expect(stat("net_debt_q").querySelector("dt")?.textContent).toBe("Net cash");
-  expect(stat("net_debt_q").querySelector(".figure")?.textContent).toBe("$783.20M");
-  expect(stat("net_debt_q").querySelector("dd")?.title).toContain("(net debt -$783.20M)");
+  expect(stat("net_debt_q").querySelector(".figure")?.textContent).toBe("$783.2M");
+  expect(stat("net_debt_q").querySelector("dd")?.title).toContain("(net debt -$783.2M)");
   // cash is a balance the 10-Q states: sealed
   expect(stat("cash_q").querySelector(".seal-link")).not.toBeNull();
   expect(stat("cash_q").querySelector("dd")?.className).toContain("later");

@@ -15,7 +15,7 @@ const byAcc = (acc: string) => DATA.filings.find((f) => f.accession_no === acc)!
 it("#117: a filing's line in the index names the insider, their role and the trade", () => {
   expect(filingLine(byAcc("0001588670-26-000014"))).toBe(
     "Kress Colette, EVP & Chief Financial Officer · sold 34,918 shares ($7.65M) · shares withheld for tax or exercise price: 40,747 shares");
-  expect(filingLine(byAcc("0001199039-26-000014"))).toBe("Stevens Mark A, Director · sold 1,022,239 shares ($235.64M)");
+  expect(filingLine(byAcc("0001199039-26-000014"))).toBe("Stevens Mark A, Director · sold 1,022,239 shares ($235.6M)");
   expect(filingLine(byAcc("0001197647-26-000013"))).toBe("Coxe Tench, Director · gift: 500,000 shares");
   expect(filingLine(byAcc("0002152188-26-000003"))).toBe("Parker Nicholas P., EVP, Worldwide Field Ops · no securities listed");
 });

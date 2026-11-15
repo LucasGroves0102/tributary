@@ -14,7 +14,7 @@ describe("watchRows", () => {
   const [nvda, tsla] = watchRows([entry(), TESLA], revenue, new Set([NVDA]));
 
   it("formats each value with its unit and gives period and source on hover", () => {
-    expect(nvda!.cells.revenue_ttm!.text).toBe("$130.50B");
+    expect(nvda!.cells.revenue_ttm!.text).toBe("$130.5B");
     expect(nvda!.cells.revenue_growth_ttm!.text).toBe("+69.0%");
     expect(nvda!.cells.operating_margin_ttm!.text).toBe("62.3%");
     expect(nvda!.cells.net_debt_q!.text).toBe("-$43.21B");

@@ -10,8 +10,8 @@ describe("moneyRow", () => {
   });
 
   it("never rounds a real figure to nothing", () => {
-    expect(moneyRow([302e9, 12e6])).toEqual(["$302.00B", "$0.01B"]);
-    expect(moneyRow([302e9, 4e6])).toEqual(["$302.00B", "$4.00M"]);
+    expect(moneyRow([302e9, 12e6])).toEqual(["$302.0B", "$12.00M"]);
+    expect(moneyRow([302e9, 4e6])).toEqual(["$302.0B", "$4.00M"]);
     expect(moneyRow([0, 2e6])).toEqual(["$0", "$2.00M"]);
     expect(moneyRow([640, 12])).toEqual(["$640", "$12"]);
   });
@@ -26,7 +26,7 @@ describe("duration", () => {
 describe("money", () => {
   it("scales USD", () => {
     expect(money(96221000000, "USD")).toBe("$96.22B");
-    expect(money(812400000, "USD")).toBe("$812.40M");
+    expect(money(812400000, "USD")).toBe("$812.4M");
     expect(money(4.2e12, "USD")).toBe("$4.20T");
     expect(money(-1300000000, "USD")).toBe("-$1.30B");
   });
@@ -111,7 +111,7 @@ describe("Seal: negatives in parentheses, amounts in words", () => {
   });
 
   it("writes an amount's scale as a word", () => {
-    expect(inWords("$302.97B")).toBe("$302.97 billion");
+    expect(inWords("$303.0B")).toBe("$303.0 billion");
     expect(inWords("€2.10M")).toBe("€2.10 million");
     expect(inWords("$1.20T")).toBe("$1.20 trillion");
     expect(inWords("$950")).toBe("$950");
@@ -141,4 +141,11 @@ describe("localTime (#23: one way to write a moment)", () => {
   it("leaves what doesn't parse as written", () => {
     expect(localTime("earlier")).toBe("earlier");
   });
+});
+
+it("never claims more than four significant figures: $227.0M, not $227.00M (Riley 123)", () => {
+  expect(money(227e6, "USD")).toBe("$227.0M");
+  expect(money(46.74e9, "USD")).toBe("$46.74B");
+  // a row takes its largest value's decimals, so its points line up
+  expect(moneyRow([227e6, 46.7e6])).toEqual(["$227.0M", "$46.7M"]);
 });

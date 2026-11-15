@@ -49,8 +49,8 @@ it("reads red lines in their formula's display, and says crossed or clear", () =
   expect(inDisplay("1.2", "multiple")).toBe("1.20x");
   expect(inDisplay(null, "percent")).toBe("—");
   // 057: an amount red line on a yuan filer says yuan; dollars (or an older API) as before
-  expect(inDisplay("996347000000", null, "CNY")).toBe("CN¥996.35B");
-  expect(inDisplay("996347000000", null)).toBe("$996.35B");
+  expect(inDisplay("996347000000", null, "CNY")).toBe("CN¥996.3B");
+  expect(inDisplay("996347000000", null)).toBe("$996.3B");
   expect(ruleText({ formula: "revenue", op: "<", threshold: "1000000000000", display: null, unit: "CNY" }))
     .toBe("Revenue below CN¥1.00T");
 });

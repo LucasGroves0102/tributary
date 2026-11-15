@@ -262,7 +262,7 @@ it("renders a thesis with this workspace's items embedded, sanitized, foreign em
   // the model embed: its saved assumptions run now by the Query API, history then forecast years
   const cols = [...doc.querySelectorAll(".model-table thead th")].map((h) => h.textContent);
   expect(cols).toEqual(["Line", "FY2021", "FY2022", "FY2023", "FY2024", "FY2025", "TTMFY2026 Q3", "FY2026Eforecast", "FY2027Eforecast"]);
-  expect(doc.querySelector(".model-table")?.textContent).toContain("$183.01B");
+  expect(doc.querySelector(".model-table")?.textContent).toContain("$183.0B");
   expect(runs.at(-1)).toEqual(MODEL);
   // the editor says a marker points at nothing in this workspace
   expect(container.textContent).toContain("1 embed points at an item no longer in this workspace");

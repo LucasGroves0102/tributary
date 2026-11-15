@@ -89,7 +89,7 @@ describe("the table", () => {
     expect(rows[0]).toMatchObject({ isTarget: true, readable: true, ticker: "NVDA" });
     expect(rows[0]!.latest).toMatchObject({ calendar: "CY2026 Q2", fiscal: "FY2027 Q2", form: "10-Q" });
     expect(rows[2]!.latest).toMatchObject({ calendar: "CY2026 Q2", fiscal: "FY2026 Q3" });
-    expect(rows[0]!.cells.revenue_ttm).toMatchObject({ text: "$130.50B", raw: "130497000000" });
+    expect(rows[0]!.cells.revenue_ttm).toMatchObject({ text: "$130.5B", raw: "130497000000" });
     expect(rows[0]!.cells.revenue_ttm!.title).toContain("trailing twelve months to Jul 26, 2026 (CY2026 Q2)");
     expect(rows[0]!.cells.revenue_ttm!.title).toContain("10-Q filed Aug 26, 2026");
   });

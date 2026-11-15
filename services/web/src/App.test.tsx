@@ -158,7 +158,7 @@ describe("Home", () => {
     const nvda = rows[0]!;
     expect(nvda.textContent).toContain("Nvidia");
     expect(nvda.textContent).toContain("FY2027 Q2");
-    const revenue = [...nvda.querySelectorAll("td.n")].find((td) => td.textContent === "$130.50B");
+    const revenue = [...nvda.querySelectorAll("td.n")].find((td) => td.textContent === "$130.5B");
     expect(revenue?.getAttribute("title")).toContain(`10-Q filed Aug 26, 2026, ${ACC}`);
     expect(container.querySelector("table.watchlist thead")?.textContent).toContain("Revenue TTM");
     // watching Tesla grants nothing: no values, and the reason on hover
