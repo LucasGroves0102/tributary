@@ -15,7 +15,7 @@ use std::sync::atomic::AtomicBool;
 use consumer::{Kafka, client_config, consume, topic_and_group};
 use db::Store;
 use metrics::Metrics;
-use service::parse_one;
+use service::{Failure, parse_one};
 
 pub type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
@@ -60,8 +60,16 @@ fn run(reparse_all: bool) -> Result<(), BoxError> {
     let mut db = tls::connect(&url)?;
     let metrics = Metrics::new()?;
     if reparse_all {
+        // a document the parser can't split (no headings) is logged and passed, as the consumer
+        // does; anything else stops the run
         for accession_no in db.all_accessions()? {
-            parse_one(&mut db, &metrics, &accession_no)?;
+            match parse_one(&mut db, &metrics, &accession_no) {
+                Ok(()) => {}
+                Err(Failure::Skip(reason)) => {
+                    log::error("parser", &format!("skipping {accession_no}: {reason}"), &[]);
+                }
+                Err(Failure::Fatal(e)) => return Err(e),
+            }
         }
         return Ok(());
     }

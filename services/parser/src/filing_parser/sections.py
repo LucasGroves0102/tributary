@@ -74,16 +74,41 @@ The algorithm is specified precisely so the Rust rewrite (week 4) can match it e
       otherwise, or after 3 lines, stop ("MANAGEMENT’S" + "DISCUSSION AND ANALYSIS OF FINANCIAL
       CONDITION AND RESULTS OF OPERATIONS").
    e. The first 200 characters are the title ("" when nothing is left).
+11. Tables, beside the text: nothing above changes. On rule 1's tree (after its drops) a table is
+   a "table" element, a row a "tr", a cell a "td" or "th" (names read as rule 1 reads them).
+   Walking the tree in document order, an element's text, then for each child the child (an
+   element: walked the same way) and the child's tail, rebuilds text_content()'s string, the
+   content; an element's range in it runs from its text to the end of its last descendant's
+   tail (its own tail, rule 1's "\n" or " ", is outside it).
+   a. A row belongs to its nearest table ancestor. A cell belongs to its nearest tr ancestor when
+      that row's table is also the cell's nearest table ancestor, else to no row. A row is a
+      head row when a "thead" element lies between it and its table, or every non-empty cell of
+      it is a "th". A cell's span is its colspan attribute's ASCII digits that follow any of
+      " \t\n\r\f" at its start, as a number capped to 1-100; 1 without such digits.
+   b. Where content lands in the text: each text character comes from one content character,
+      a space that replaced a run of rule 1's collapsed characters from the run's first, any
+      other character from itself; a "\n" joining two lines comes from none. A cell's
+      characters are those that come from its range. Without spaces (U+0020) at either end
+      they run from a to b; its text is text[a:b] with every "\n" read as " ", and "" when
+      none are left (an empty cell). A row's range runs from the smallest a to the largest b of
+      its non-empty cells; a row without one is dropped.
+   c. A section's tables: for each table, in document order, its rows whose range lies within
+      the section's text (char_start to char_start + len(text)), offsets made relative to that
+      text; a table with at least 2 such rows is kept, from its rows' smallest start to their
+      largest end. Each keeps all its rows' cells (empty ones and spans too) in order. An
+      exhibit's (rule 8) are those of its own text.
 """
 
 import re
-from dataclasses import dataclass
+from bisect import bisect_left, bisect_right
+from dataclasses import dataclass, field, replace
 
 from lxml import html
 
-# 6: "Item 7.01Regulation" is 7.01 (rule 2); 5: clean titles (rule 10); 4: title headings
+# 7: tables beside the text (rule 11; the text is 6's); 6: "Item 7.01Regulation" is 7.01
+# (rule 2); 5: clean titles (rule 10); 4: title headings
 # (rule 9); 3: MD&A by reference, exhibits, SGML
-PARSER_VERSION = "python-6"
+PARSER_VERSION = "python-7"
 
 _BLOCK = {"p", "div", "br", "tr", "li", "h1", "h2", "h3", "h4", "h5", "h6", "table", "section"}
 _CELL = {"td", "th"}
@@ -169,6 +194,30 @@ _FOLD = str.maketrans({**{chr(c): chr(c + 32) for c in range(ord("A"), ord("Z") 
 
 
 @dataclass(frozen=True)
+class Cell:
+    """Rule 11: one <td> or <th>."""
+    text: str      # its characters in the text, "\n" read as " "; "" when it has none
+    span: int = 1  # its colspan, 1-100
+
+
+@dataclass(frozen=True)
+class Row:
+    """Rule 11: one <tr> with at least one non-empty cell."""
+    start: int     # [start, end) in the section's text: its first to last non-empty cell
+    end: int
+    head: bool     # inside a <thead> of its table, or every non-empty cell a <th>
+    cells: list[Cell]
+
+
+@dataclass(frozen=True)
+class Table:
+    """Rule 11: one <table>'s rows that lie in a section."""
+    start: int     # [start, end) in the section's text: its first row's start to last row's end
+    end: int
+    rows: list[Row]
+
+
+@dataclass(frozen=True)
 class Section:
     key: str          # 10-K: "1A"; 10-Q: "II-1A"; 8-K: "2.02"
     part: str | None  # "I", "II", ... when known
@@ -177,9 +226,12 @@ class Section:
     text: str
     char_start: int   # offsets into html_to_text(document)
     char_end: int
+    tables: list[Table] = field(default_factory=list)  # rule 11
 
 
-def html_to_text(raw: bytes) -> str:
+def _tree(raw: bytes):
+    """Rule 1's tree: the document without its envelope and dropped elements, a "\\n" tail on
+    every block and a " " tail on every cell."""
     doc = html.fromstring(_ENVELOPE.sub(b"", raw, count=1))
     for el in doc.xpath(_DROP):
         el.drop_tree()
@@ -191,8 +243,184 @@ def html_to_text(raw: bytes) -> str:
             el.tail = "\n" + (el.tail or "")
         elif tag in _CELL:
             el.tail = " " + (el.tail or "")
-    lines = (_SPACES.sub(" ", line).strip() for line in doc.text_content().split("\n"))
+    return doc
+
+
+def _lines(content: str) -> str:
+    lines = (_SPACES.sub(" ", line).strip() for line in content.split("\n"))
     return "\n".join(line for line in lines if line)
+
+
+def html_to_text(raw: bytes) -> str:
+    return _lines(_tree(raw).text_content())
+
+
+def extract(raw: bytes) -> tuple[str, list[Table]]:
+    """Rule 1's text and rule 11's tables, row and table offsets into that text."""
+    doc = _tree(raw)
+    content = doc.text_content()
+    text = _lines(content)
+    walked, tables = _walk(doc)
+    if walked != content:  # never seen; the text is text_content()'s whatever happens
+        return text, []
+    where = _Where(content, text)
+    out = []
+    for rows in tables:
+        kept = []
+        for head, cells in rows:
+            spans, row_cells = [], []
+            for cs, ce, span, th in cells:
+                a, b = where.first(cs), where.end(ce)
+                while a < b and text[a] == " ":
+                    a += 1
+                while b > a and text[b - 1] == " ":
+                    b -= 1
+                row_cells.append(Cell(text[a:b].replace("\n", " ") if a < b else "", span))
+                if a < b:
+                    spans.append((a, b, th))
+            if spans:
+                kept.append(Row(min(a for a, _, _ in spans), max(b for _, b, _ in spans),
+                                head or all(th for _, _, th in spans), row_cells))
+        if kept:
+            out.append(Table(min(r.start for r in kept), max(r.end for r in kept), kept))
+    return text, out
+
+
+def _colspan(el) -> int:
+    m = _COLSPAN.match(el.get("colspan") or "")
+    return min(max(int(m.group(1)), 1), 100) if m else 1
+
+
+_COLSPAN = re.compile(r"[ \t\n\r\f]*([0-9]+)")
+
+
+def _walk(root) -> tuple[str, list]:
+    """text_content() rebuilt by walking the tree, and rule 11's tables in document order: each
+    its rows, (thead, [(start, end, colspan, is_th)]) with [start, end) ranges in that text."""
+    parts: list[str] = []
+    n = 0
+    tables: list = []
+    open_tables: list[list] = []  # per open <table>: [its rows, the open row, open <thead>s]
+
+    def visit(el) -> None:
+        nonlocal n
+        tag = el.tag.rsplit("}", 1)[-1].lower()
+        mark = top = saved = None
+        if tag == "table":
+            top = [[], None, 0]
+            tables.append(top[0])
+            open_tables.append(top)
+        elif open_tables:
+            top = open_tables[-1]
+            if tag == "thead":
+                top[2] += 1
+            elif tag == "tr":
+                saved = top[1]
+                top[1] = (top[2] > 0, [])
+                top[0].append(top[1])
+            elif tag in _CELL and top[1] is not None:
+                mark = [n, n, _colspan(el), tag == "th"]
+                top[1][1].append(mark)
+        if el.text:
+            parts.append(el.text)
+            n += len(el.text)
+        for child in el:
+            if isinstance(child.tag, str):
+                visit(child)
+            if child.tail:
+                parts.append(child.tail)
+                n += len(child.tail)
+        if mark is not None:
+            mark[1] = n
+        if tag == "table":
+            open_tables.pop()
+        elif top is not None and tag == "thead":
+            top[2] -= 1
+        elif top is not None and tag == "tr":
+            top[1] = saved
+
+    visit(root)
+    return "".join(parts), [[(head, [tuple(c) for c in cells]) for head, cells in rows]
+                            for rows in tables]
+
+
+class _Where:
+    """Rule 11's offsets: where characters of the content (text_content()) land in the text.
+    A text character comes from one content character: a collapsed space from the first of its
+    run, any other character from itself; the "\\n" joining two lines from none."""
+
+    def __init__(self, content: str, text: str):
+        self.content, self.text = content, text
+        self.raw: list[int] = []      # each content line's start
+        self.at: list[int] = []       # its text line's start in the text, -1 when dropped
+        self.lead: list[int] = []     # characters strip() took from the collapsed line's start
+        self.size: list[int] = []     # its text line's length
+        self.runs: dict[int, tuple[list[int], list[int], list[int]]] = {}
+        raw = at = 0
+        first = True
+        for line in content.split("\n"):
+            collapsed = _SPACES.sub(" ", line)
+            kept = collapsed.strip()
+            self.raw.append(raw)
+            if kept:
+                if not first:
+                    at += 1  # the "\n" joining it to the line before
+                first = False
+                self.at.append(at)
+                self.lead.append(len(collapsed) - len(collapsed.lstrip()))
+                self.size.append(len(kept))
+                at += len(kept)
+            else:
+                self.at.append(-1)
+                self.lead.append(0)
+                self.size.append(0)
+            raw += len(line) + 1
+        # the next kept line's start from each line on, the previous kept line's end before it
+        self.next = [len(text)] * (len(self.raw) + 1)
+        for i in range(len(self.raw) - 1, -1, -1):
+            self.next[i] = self.at[i] if self.at[i] >= 0 else self.next[i + 1]
+        self.prev = [0] * len(self.raw)
+        end = 0
+        for i in range(len(self.raw)):
+            self.prev[i] = end
+            if self.at[i] >= 0:
+                end = self.at[i] + self.size[i]
+
+    def _collapsed(self, i: int, r: int) -> int:
+        """Characters of line i's collapsed form that come from its first r characters."""
+        if i not in self.runs:
+            line = self.content[self.raw[i]:self.raw[i + 1] - 1 if i + 1 < len(self.raw)
+                                else len(self.content)]
+            starts, ends, before = [], [], [0]
+            for m in _SPACES.finditer(line):
+                starts.append(m.start())
+                ends.append(m.end())
+                before.append(before[-1] + m.end() - m.start())
+            self.runs[i] = (starts, ends, before)
+        starts, ends, before = self.runs[i]
+        k = bisect_left(starts, r)  # runs starting before r
+        in_runs = before[k] - (max(0, ends[k - 1] - r) if k else 0)
+        return r - in_runs + k
+
+    def first(self, p: int) -> int:
+        """The text index of the first character that comes from content position p or later
+        (len(text) when none)."""
+        i = bisect_right(self.raw, p) - 1
+        if self.at[i] >= 0:
+            c = self._collapsed(i, p - self.raw[i]) - self.lead[i]
+            if c < self.size[i]:
+                return self.at[i] + max(c, 0)
+        return self.next[i + 1]
+
+    def end(self, q: int) -> int:
+        """One past the text index of the last character that comes from before content
+        position q (0 when none)."""
+        i = bisect_right(self.raw, q) - 1
+        if self.at[i] >= 0:
+            c = min(self._collapsed(i, q - self.raw[i]) - self.lead[i], self.size[i])
+            if c > 0:
+                return self.at[i] + c
+        return self.prev[i]
 
 
 @dataclass
@@ -266,11 +494,12 @@ def _mdna_by_reference(text: str, item7: Section) -> Section:
 
 
 def exhibit_section(exhibit_type: str, description: str | None, raw: bytes) -> Section:
-    """Rule 8."""
-    text = html_to_text(raw)
+    """Rule 8 (and rule 11's tables)."""
+    text, tables = extract(raw)
     item = exhibit_type.removeprefix("EX-")
-    return Section(exhibit_type, None, item, description or f"Exhibit {item}", text, 0,
-                   len(text))
+    section = Section(exhibit_type, None, item, description or f"Exhibit {item}", text, 0,
+                      len(text))
+    return _with_tables(section, tables)
 
 
 def _headings(text: str):
@@ -393,7 +622,21 @@ def _body(headings: list[_Heading], form: str) -> list[_Heading]:
 
 
 def parse(raw: bytes, form: str) -> list[Section]:
-    return find_sections(html_to_text(raw), form)
+    text, tables = extract(raw)
+    return [_with_tables(s, tables) for s in find_sections(text, form)]
+
+
+def _with_tables(section: Section, tables: list[Table]) -> Section:
+    """Rule 11: the rows of each table that lie within the section's text, offsets into it."""
+    lo, hi = section.char_start, section.char_start + len(section.text)
+    out = []
+    for t in tables:
+        rows = [replace(r, start=r.start - lo, end=r.end - lo) for r in t.rows
+                if r.start >= lo and r.end <= hi]
+        if len(rows) >= 2:
+            out.append(Table(min(r.start for r in rows),
+                             max(r.end for r in rows), rows))
+    return replace(section, tables=out)
 
 
 def _key(form: str, part: str | None, item: str) -> str:

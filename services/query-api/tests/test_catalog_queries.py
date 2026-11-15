@@ -31,6 +31,7 @@ ROUTES = ["/v1/screener?limit=50", "/v1/screener?limit=50&access=financials",
           "/v1/data-notes", f"/v1/companies/{NVDA}/peers", "/v1/watchlist",
           "/v1/calendar/expected-filings?scope=readable", f"/v1/companies/{NVDA}/events",
           f"/v1/companies/{NVDA}/earnings?quarters=8",
+          f"/v1/companies/{NVDA}/earnings?quarters=8&tables=true",  # parser v7
           f"/v1/companies/{NVDA}/filings/0001045810-26-000021/changes?view=ranked&q=tariffs",
           # F5: one company's statement callouts and one figure's components
           f"/v1/companies/{NVDA}/financials?quarters=120&callouts=true",

@@ -515,3 +515,16 @@ test("a thesis check says what it costs before it runs, and links a claim of the
   await expect(page.locator(".check-panel .check-cost")).toContainText("A check counts as 4 questions");
   await expect(page.locator(".check-cost-inline")).toHaveCount(0);
 });
+
+test("an earnings release's guidance table reads as a table (parser v7, analyst test 4 finding 31)", async ({ page }) => {
+  await mockApi(page);
+  await startDemo(page);
+  await page.goto(`/#/company/${KO}/earnings`);
+  const grid = page.locator("table.release-grid").first();
+  await expect(grid).toBeVisible();
+  await expect(grid.locator("thead th")).toHaveText(["", "Current", "Prior"]);
+  await expect(grid.locator("tbody tr").first().locator("td")).toHaveText(["Organic revenues (non-GAAP)", "At least 5% growth", "Approx. 5% growth"]);
+  // the heading stays a line above it; nothing reads as alternating label and value lines
+  await expect(page.locator(".release-block .rl.heading")).toHaveText("Full Year 2026 Guidance");
+  await page.screenshot({ path: test.info().outputPath("earnings-table.png"), fullPage: true });
+});

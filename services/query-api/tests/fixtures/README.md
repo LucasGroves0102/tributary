@@ -10,7 +10,11 @@
   API's sections route on 2026-11-08: Vertiv 2026-10-28 (0001628280-26-067707), Deckers
   2026-10-22 (0000910521-26-000028), NVIDIA 2026-08-26 (0001045810-26-000073), Funko 2026-11-05
   (0001704711-26-000051), PulteGroup 2026-10-22 (0000822416-26-000041). Public SEC filings;
-  `test_releases.py` and `test_events_api.py` read them.
+  `test_releases.py` and `test_events_api.py` read them. Coca-Cola 2026-10-27
+  (0001628280-26-067403) was added on 2026-11-15 from the EX-99.1 HTML stored on hermes, parsed by
+  python-7. `releases/*.tables.json.gz` (Vertiv, NVIDIA, Coca-Cola): those releases' tables as the
+  parser v7 stores them (`silver.filing_tables` rows: table_no, char_start, char_end, rows), from the
+  same stored HTML; their text equals the `.txt` beside them. `test_release_tables.py` reads them.
 - `announcements/*.json`: thirteen real 8-Ks with Item 7.01 or 8.01 (Vertiv, United Therapeutics,
   Blackstone, Las Vegas Sands, TKO, BWX Technologies, National Fuel Gas), read from production
   through the Query API's filings and sections routes on 2026-11-09: their items and the first

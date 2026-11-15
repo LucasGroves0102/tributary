@@ -6079,6 +6079,49 @@ details.routine summary {
   margin: var(--sp-4) 0;
 }
 
+/* parser v7: a release's own table (an outlook, a reconciliation) as a Seal statement table; its
+   lines around it as before */
+.release-parts {
+  display: grid;
+  gap: var(--sp-4);
+  min-width: 0;
+}
+
+.release-table-box .release-parts {
+  margin: var(--sp-4) 0;
+}
+
+/* as wide as its columns need (a two-column guidance table isn't stretched across the card) */
+table.t.release-grid {
+  width: auto;
+  min-width: min(100%, 520px);
+}
+
+.release-grid th {
+  white-space: normal;
+  min-width: 88px;
+  vertical-align: bottom;
+}
+
+.release-grid th.first {
+  min-width: 0;
+}
+
+.release-grid td.first {
+  white-space: normal;
+  min-width: 180px;
+  max-width: 420px;
+}
+
+/* a heading inside the table ("Three Months Ended September 26, 2025" over its columns) */
+.release-grid td.span {
+  font-family: var(--sans);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--ink-2);
+  white-space: normal;
+}
+
 .earnings-method {
   max-width: 900px;
 }

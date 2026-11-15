@@ -1,5 +1,6 @@
 """The Python and Rust parser services (`parser --reparse-all`) on the same stored documents:
-identical silver rows apart from parser and parser_version, and the same log fields.
+identical silver rows (sections and rule 11's tables) apart from parser and parser_version, and
+the same log fields.
 
 Needs TEST_DATABASE_URL and PARSER_RS_BIN (the Rust `parser` binary, cargo build --bin parser).
 The services commit, so this test inserts its own documents into an empty bronze and deletes
@@ -27,9 +28,16 @@ FIXTURES = Path(__file__).parent / "fixtures"
 DOCS = [("9999999999-26-000001", "10-K", "2026-02-25"),
         ("9999999999-26-000002", "10-Q", "2026-05-28"),
         ("9999999999-26-000003", "8-K", "2026-09-03")]
-EXHIBIT = b"<html><body><p>NVIDIA Announces Financial Results</p><p>Revenue grew.</p></body></html>"
+EXHIBIT = (b"<html><body><p>NVIDIA Announces Financial Results</p><p>Revenue grew.</p>"
+           b"<table><thead><tr><td></td><td colspan=3>Three Months Ended</td></tr></thead>"
+           b"<tr><td>Revenue</td><td>$</td><td>57,006</td><td>&nbsp;</td></tr><tr><td> </td></tr>"
+           b"<tr><th>Outlook</th><th>$65.0 billion, plus or minus 2%</th></tr></table>"
+           b"</body></html>")
 ROWS = ("SELECT accession_no, section_key, parser, parser_version, part, item, title, text,"
         " char_start, char_end FROM silver.filing_sections ORDER BY accession_no, section_key")
+NO_HEADINGS = "9999999999-26-000000"
+TABLES = ("SELECT accession_no, section_key, parser, table_no, char_start, char_end, rows"
+          " FROM silver.filing_tables ORDER BY accession_no, section_key, table_no")
 
 
 @pytest.fixture
@@ -37,8 +45,15 @@ def conn():
     with psycopg.connect(DSN, autocommit=True) as c:
         if c.execute("SELECT count(*) FROM bronze.filing_documents").fetchone()[0]:
             pytest.skip("bronze.filing_documents is not empty")
-        accessions = [acc for acc, _, _ in DOCS]
+        accessions = [acc for acc, _, _ in DOCS] + [NO_HEADINGS]
         try:
+            # filed first: a document the parser can't split is skipped, not the end of the run
+            empty = b"<html><body><p>Nothing to split here.</p></body></html>"
+            c.execute(
+                "INSERT INTO bronze.filing_documents (accession_no, cik, form, filed,"
+                " document_name, url, content_gzip, content_sha256, size_bytes)"
+                " VALUES (%s, '0001045810', '8-K', '2026-01-02', 'doc.htm', 'https://example/doc',"
+                " %s, 'x', %s)", (NO_HEADINGS, gzip.compress(empty), len(empty)))
             for acc, form, filed in DOCS:
                 html = (FIXTURES / f"nvda-{form}.htm.gz").read_bytes()
                 c.execute(
@@ -53,13 +68,14 @@ def conn():
                 " %s, 'x', %s)", (DOCS[2][0], gzip.compress(EXHIBIT), len(EXHIBIT)))
             yield c
         finally:
-            for table in ("silver.filing_sections", "bronze.filing_exhibits",
-                          "bronze.filing_documents"):
+            for table in ("silver.filing_tables", "silver.filing_sections",
+                          "bronze.filing_exhibits", "bronze.filing_documents"):
                 c.execute(f"DELETE FROM {table} WHERE accession_no = ANY(%s)", (accessions,))
 
 
 def reparse_all(cmd: list[str]) -> list[dict]:
-    """Run a parser service with --reparse-all; its per-document log lines."""
+    """Run a parser service with --reparse-all; its per-document log lines (the skipped
+    document's line has no accession_no field)."""
     env = {**os.environ, "DATABASE_URL": DSN or "", "LOG_LEVEL": "INFO"}
     out = subprocess.run([*cmd, "--reparse-all"], env=env, capture_output=True, text=True,
                          timeout=300)
@@ -69,6 +85,10 @@ def reparse_all(cmd: list[str]) -> list[dict]:
 
 def comparable(rows: list[tuple]) -> list[tuple]:
     return [r[:2] + r[4:] for r in rows]
+
+
+def comparable_tables(rows: list[tuple]) -> list[tuple]:
+    return [r[:2] + r[3:] for r in rows]
 
 
 def comparable_log(line: dict) -> dict:
@@ -83,12 +103,28 @@ def test_rust_service_writes_what_the_python_service_writes(conn):
     assert {r[2:4] for r in py_rows} == {("python", PARSER_VERSION)}
     assert len({r[0] for r in py_rows}) == 3
     assert ("9999999999-26-000003", "EX-99.1") in {r[:2] for r in py_rows}
+    py_tables = conn.execute(TABLES).fetchall()
+    assert {r[2] for r in py_tables} == {"python"} and len(py_tables) > 100
+    assert ("9999999999-26-000003", "EX-99.1") in {r[:2] for r in py_tables}
 
     rs_logs = reparse_all([RUST or ""])
     rs_rows = conn.execute(ROWS).fetchall()
     # one parser's rows per document: the Rust parse replaced the Python rows
     assert {r[2:4] for r in rs_rows} == {("rust", PARSER_VERSION.replace("python", "rust"))}
     assert comparable(rs_rows) == comparable(py_rows)
+    rs_tables = conn.execute(TABLES).fetchall()
+    assert {r[2] for r in rs_tables} == {"rust"}
+    assert comparable_tables(rs_tables) == comparable_tables(py_tables)
+
+    # the same text again: the Rust service keeps the rows and their parsed_at, rewrites tables
+    conn.execute("UPDATE silver.filing_sections SET parsed_at = '2020-01-01',"
+                 " parser_version = 'rust-6'")
+    conn.execute("DELETE FROM silver.filing_tables")
+    reparse_all([RUST or ""])
+    assert conn.execute("SELECT DISTINCT parsed_at::date::text, parser_version"
+                        " FROM silver.filing_sections").fetchall() == [
+        ("2020-01-01", PARSER_VERSION.replace("python", "rust"))]
+    assert comparable_tables(conn.execute(TABLES).fetchall()) == comparable_tables(py_tables)
 
     assert [comparable_log(x) for x in rs_logs] == [comparable_log(x) for x in py_logs]
     assert [list(x) for x in rs_logs] == [list(x) for x in py_logs]

@@ -566,3 +566,173 @@ fn rule_10_changes_titles_only() {
         ["Business", "Risk Factors", "Unresolved Staff Comments"]
     );
 }
+
+// --- rule 11: tables beside the text (sections.py's test_tables_*) ---------------------------
+
+/// Each table's rows as "cell|cell" joined by " / ", tables joined by " // ".
+fn grid(s: &Section) -> String {
+    let tables: Vec<String> = s
+        .tables
+        .iter()
+        .map(|t| {
+            let rows: Vec<String> = t
+                .rows
+                .iter()
+                .map(|r| {
+                    let cells: Vec<&str> = r.cells.iter().map(|c| c.text.as_str()).collect();
+                    cells.join("|")
+                })
+                .collect();
+            rows.join(" / ")
+        })
+        .collect();
+    tables.join(" // ")
+}
+
+#[test]
+fn tables_rows_cells_spans_and_offsets() {
+    let raw = b"<html><body><p>Item 2.02 Results</p><p>Intro.</p>\
+                <table><thead><tr><td></td><td colspan='3'>Three Months Ended</td></tr></thead>\
+                <tr><td></td><td>2026</td><td></td><td>2025</td></tr>\
+                <tr><td><p>Net   sales</p></td><td>$</td><td>1,234</td><td>$&nbsp; 1,100 </td></tr>\
+                <tr><td> </td><td></td></tr>\
+                <tr><th>Margin</th><th>45.1</th><td> % </td></tr>\
+                </table><p>After.</p></body></html>";
+    let s = parse(raw, "8-K").unwrap();
+    assert_eq!(s.len(), 1);
+    let text = [
+        "Item 2.02 Results",
+        "Intro.",
+        "Three Months Ended",
+        "2026 2025",
+        "Net sales",
+        "$ 1,234 $ 1,100",
+        "Margin 45.1 %",
+        "After.",
+    ]
+    .join("\n");
+    assert_eq!(s[0].text, text);
+    let want = "|Three Months Ended / |2026||2025 / Net sales|$|1,234|$ 1,100 / Margin|45.1|%";
+    assert_eq!(grid(&s[0]), want);
+    let t = &s[0].tables[0];
+    let spans: Vec<u32> = t.rows[0].cells.iter().map(|c| c.span).collect();
+    assert_eq!(spans, [1, 3]);
+    let heads: Vec<bool> = t.rows.iter().map(|r| r.head).collect();
+    assert_eq!(heads, [true, false, false, false]);
+    let lines: Vec<String> = t
+        .rows
+        .iter()
+        .map(|r| chars(&s[0].text, r.start, r.end))
+        .collect();
+    assert_eq!(
+        lines,
+        [
+            "Three Months Ended",
+            "2026 2025",
+            "Net sales\n$ 1,234 $ 1,100",
+            "Margin 45.1 %",
+        ]
+    );
+    assert_eq!((t.start, t.end), (t.rows[0].start, t.rows[3].end));
+}
+
+#[test]
+fn tables_head_rows_of_th_cells_nested_tables_and_cells_outside_rows() {
+    let raw = b"<div>Item 8.01 Other</div><table>\
+                <tr><th>Metric</th><th></th><th>Low</th></tr>\
+                <tr><td>Revenue<table><tr><td>inner</td><td>x</td></tr><tr><td>y</td></tr></table>\
+                </td><td>2.5</td></tr><td>loose cell</td></table>";
+    let s = parse(raw, "8-K").unwrap();
+    let want = "Metric||Low / Revenueinner x y|2.5 // inner|x / y";
+    assert_eq!(grid(&s[0]), want);
+    let heads: Vec<bool> = s[0].tables[0].rows.iter().map(|r| r.head).collect();
+    assert_eq!(heads, [true, false]);
+}
+
+#[test]
+fn tables_colspan_values() {
+    const A: &str = "<p>Item 8.01 Other</p><table><tr>";
+    const B: &str = "<tr><td>b</td></tr></table>";
+    let span = |v: &str| {
+        let raw = format!("{A}<td colspan{v}>a</td></tr>{B}");
+        let s = parse(raw.as_bytes(), "8-K").unwrap();
+        s[0].tables[0].rows[0].cells[0].span
+    };
+    let values = [
+        "=2",
+        "='\n 3'",
+        "=4px",
+        "=0",
+        "=x",
+        "",
+        "=999999999999",
+        "=&#53;",
+        "='+2'",
+    ];
+    let spans: Vec<u32> = values.iter().map(|&v| span(v)).collect();
+    assert_eq!(spans, [2, 3, 4, 1, 1, 1, 100, 5, 1]);
+}
+
+#[test]
+fn tables_keep_only_rows_inside_the_section() {
+    let raw = b"<p>Item 1.01 Agreement</p><table><tr><td>a</td><td>1</td></tr>\
+                <tr><td>b</td><td>2</td></tr><tr><td>Item 2.03 Obligation</td></tr>\
+                <tr><td>c</td><td>3</td></tr></table><p>Text.</p>";
+    let s = parse(raw, "8-K").unwrap();
+    assert_eq!(grid(&s[0]), "a|1 / b|2");
+    assert_eq!(s[1].key, "2.03");
+    assert_eq!(grid(&s[1]), "Item 2.03 Obligation / c|3");
+    let one_row = b"<p>Item 1.01 A</p><table><tr><td>a</td><td>1</td></tr></table><p>x</p>";
+    assert!(parse(one_row, "8-K").unwrap()[0].tables.is_empty());
+}
+
+#[test]
+fn tables_of_an_exhibit_and_hidden_ones() {
+    let raw = b"<html><body><p>Outlook</p><table><tr><td>Revenue</td><td>$2.5 billion</td></tr>\
+                <tr><td>Margin</td><td>20%</td></tr></table>\
+                <table style='display:none'><tr><td>h</td></tr><tr><td>i</td></tr></table>\
+                </body></html>";
+    let s = exhibit_section("EX-99.1", Some("Release"), raw).unwrap();
+    assert_eq!(grid(&s), "Revenue|$2.5 billion / Margin|20%");
+    assert_eq!(s.tables[0].start, "Outlook\n".len());
+}
+
+#[test]
+fn tables_on_real_filings() {
+    for (name, form, least) in [
+        ("10-K", "10-K", 600),
+        ("10-Q", "10-Q", 300),
+        ("8-K", "8-K", 6),
+    ] {
+        let raw = fixture(name);
+        let sections = parse(&raw, form).unwrap();
+        let text = html_to_text(&raw).unwrap();
+        let plain = find_sections(&text, form).unwrap();
+        assert_eq!(sections.len(), plain.len());
+        let mut rows = 0;
+        for (s, p) in sections.iter().zip(&plain) {
+            assert_eq!(
+                (&s.key, &s.text, s.char_start),
+                (&p.key, &p.text, p.char_start)
+            );
+            let mut last = 0;
+            for t in &s.tables {
+                assert!(last <= t.start && t.start < t.end && t.rows.len() >= 2);
+                assert!(t.end <= s.text.chars().count());
+                for r in &t.rows {
+                    rows += 1;
+                    let cells: Vec<&str> = r
+                        .cells
+                        .iter()
+                        .filter(|c| !c.text.is_empty())
+                        .map(|c| c.text.as_str())
+                        .collect();
+                    let line = chars(&s.text, r.start, r.end).replace('\n', " ");
+                    assert_eq!(line, cells.join(" "));
+                }
+                last = t.start;
+            }
+        }
+        assert!(rows >= least, "{name}: {rows} rows");
+    }
+}

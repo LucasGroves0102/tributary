@@ -228,13 +228,18 @@ read back from the stored text without a reparse: the parser writes one table ro
 cells joined by a space, so a run of lines ending in figures ("Cash and cash equivalents $ 10,605
 $ 8,589") becomes a table with a label column, its date heads ("Jan 25, 2026 Jan 26, 2025") and
 sub-headings, and a label whose figures wrapped onto the next line is joined back to them. Page
-numbers and "Table of Contents" lines are left out, and a sentence a page break cut rejoins. Display
-only: offsets are the stored text's, so citations, cited passages and highlights land as before
-(highlights are counted per table cell, the same pieces next/previous step through). What it can't
-do: a table whose cells hold words (a list of directors) stays text; cells merged across columns in
-the HTML can't be told apart; and the search index still holds the debris, so a phrase across a page
-break isn't found (a parser-side change and reindex would fix that; services/parser README "Tables in
-the text").
+furniture is left out (`reader/furniture.ts`, the rule search shares, migration 068: page numbers by
+a page break, "Table of Contents" links, and running headers and footers repeated by page breaks, such
+as "Notes to Consolidated Financial Statements (Continued)" or a statement's "See accompanying
+notes"), and a sentence a page break cut rejoins. Display only: offsets are the stored text's, so
+citations, cited passages and highlights land as before (highlights are counted per table cell, the
+same pieces next/previous step through). What it can't do: a table whose cells hold words (a list of
+directors) stays text; cells merged across columns in the HTML can't be told apart here (the parser
+records them since v7, `silver.filing_tables`; the Earnings tab reads them). Search finds a phrase
+across a page break once its passages are rebuilt (services/parser README "Search without page
+furniture"). The same furniture rule keeps the Analysis Business step's paragraphs and every pinned
+quote clean (`analysis/project.ts` `quoteBlock`, `quoteLines`, `quoteTable`: analyst test 4,
+finding 19's "6 Table of contents Backlog —").
 
 Earnings and events (F1; `company/Earnings.tsx`, `company/Events.tsx`, wording in `company/events.ts`'s
 docstring; the Query API's `/earnings` and `/events`, rules in its README, "Earnings and events"):
@@ -246,8 +251,12 @@ docstring; the Query API's `/earnings` and `/events`, rules in its README, "Earn
   margins, against the same quarter a year ago, n/m readings from the API; "not filed yet" or "not
   in the figures yet" when that's the case); the **outlook stated in the release** (the blocks under
   its own Outlook or Guidance headings, lines as written, each with Read it in the release at its
-  offset); **management's adjustments** (its reconciliation tables, folded, in monospace, and its
-  notes that state a dollar amount). Each says when the release has none ("no section headed Outlook
+  offset); **management's adjustments** (its reconciliation tables, folded, and its notes that state
+  a dollar amount). A block that quotes one of the release's own tables shows it as a table
+  (`company/ReleaseTable.tsx`: the API's `parts`, asked with `tables=true`, parser v7; a Seal
+  statement table, head rows over the columns, the label first, figures right-aligned as the release
+  prints them, a total or adjusted line in 650; analyst test 4, finding 31); a release parsed before
+  v7 shows its lines as before (the reconciliation in monospace). Each says when the release has none ("no section headed Outlook
   or Guidance ... read the release to be sure"; for adjustments, "none in the forms Tributary reads"
   and that a release may reconcile in another exhibit, such as JPMorgan's financial supplement). No beat or miss: Tributary has no estimates, and the
   page says so. Pins: an outlook block or a note as `quoteLines` (its lines kept), a table as

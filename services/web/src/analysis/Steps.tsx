@@ -19,6 +19,7 @@ import { TextKpisCard } from "../company/TextKpis";
 import { useLoad } from "../company/useLoad";
 import { day } from "../format";
 import { Compare } from "../pages/Compare";
+import { withoutFurniture } from "../reader/furniture";
 import { ChartView } from "../reports/Embeds";
 import { href } from "../route";
 import { embedMarker } from "../thesis/model";
@@ -43,12 +44,13 @@ export interface StepCommon {
   label: (companyId: string) => string;
 }
 
-/** Paragraphs of a section's text: blank-line or line breaks, short fragments (headings,
- * page furniture) joined to what follows. */
+/** Paragraphs of a section's text: page furniture left out (reader/furniture.ts: "6", "Table of
+ * contents" and running headers never reach a paragraph or a pin; analyst test 4, finding 19), then
+ * blank-line or line breaks, short fragments (headings) joined to what follows. */
 export function paragraphs(text: string): string[] {
   const out: string[] = [];
   let carry = "";
-  for (const raw of text.split(/\n+/)) {
+  for (const raw of withoutFurniture(text).split(/\n+/)) {
     const t = raw.replace(/\s+/g, " ").trim();
     if (!t) continue;
     if (t.length < 60 && !/[.!?:;]$/.test(t)) {

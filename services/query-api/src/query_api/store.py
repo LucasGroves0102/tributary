@@ -836,6 +836,28 @@ class Store:
             return {(r["accession_no"], r["section_key"]): r["text"] for r in cur.fetchall()
                     if (r["accession_no"], r["section_key"]) in pairs}
 
+    def release_tables(self, user_id: str, company_id: str,
+                       wanted: list[tuple[str, str]]) -> dict[tuple[str, str], list[dict]]:
+        """(accession_no, section_key) → the section's stored tables (parser v7, migration 067:
+        silver.filing_tables under RLS on the section's company, the filings tier), in text
+        order, for these few sections; a section parsed before v7 has none."""
+        if not wanted:
+            return {}
+        with self._session(user_id) as cur:
+            cur.execute(
+                """
+                SELECT accession_no, section_key, table_no, char_start, char_end, rows
+                FROM silver.filing_tables
+                WHERE accession_no = ANY(%s) AND section_key = ANY(%s)
+                ORDER BY accession_no, section_key, table_no
+                """, (sorted({a for a, _ in wanted}), sorted({k for _, k in wanted})))
+            pairs = set(wanted)
+            out: dict[tuple[str, str], list[dict]] = {}
+            for r in cur.fetchall():
+                if (r["accession_no"], r["section_key"]) in pairs:
+                    out.setdefault((r["accession_no"], r["section_key"]), []).append(r)
+            return out
+
     def kpi_sections(self, user_id: str, company_id: str, since: date, releases: list[str],
                      limit: int) -> dict:
         """What query_api.text_kpis reads (F8b, H11), under RLS on the section text (the
@@ -1051,11 +1073,12 @@ class Store:
         """Best passage per section matching websearch_to_tsquery(q), a quoted phrase by its exact
         words (exact_phrases, migration 065), ranked by ts_rank_cd
         (sort "relevance") or newest filed first ("date"), with a ts_headline snippet cut from
-        that passage only (never the whole section); every row carries `total`, the sections
-        matching in all. company_ids None: every company the caller can read (gold.search_page,
-        migration 052 over 032's search_passages, applies the same read rule as RLS; the section
-        text below is still read under RLS). Raises SearchTooBroad when ranking the matches
-        takes over SEARCH_TIMEOUT."""
+        that passage only (never the whole section), its page furniture blanked (migration 068:
+        the passage's stored spans, else the rule on the passage); every row carries `total`, the
+        sections matching in all. company_ids None: every company the caller can read
+        (gold.search_page, migration 052 over 032's search_passages, applies the same read rule as
+        RLS; the section text below is still read under RLS). Raises SearchTooBroad when ranking
+        the matches takes over SEARCH_TIMEOUT."""
         order = SEARCH_ORDERS[sort]
         try:
             with self._session(user_id) as cur:
@@ -1077,10 +1100,10 @@ class Store:
                            s.char_start + h.end_char AS char_end,
                            regexp_replace(
                                ts_headline('english',
-                                           substr(s.text, h.start_char + 1,
-                                                  h.end_char - h.start_char),
+                                           gold.blank(x.t, coalesce(ss.furniture,
+                                                                    gold.page_furniture(x.t))),
                                            q.q, %(headline)s),
-                               '\\s+', ' ', 'g') AS snippet,
+                               '\\s+', ' ', 'g') AS snippet,  -- 068: no page furniture
                            coalesce(e.url, d.url) AS document_url, d.cik,
                            d.period_of_report, d.fetched_at AS ingested_at
                     FROM page h
@@ -1088,6 +1111,11 @@ class Store:
                     JOIN silver.filing_sections s
                       ON s.accession_no = h.accession_no AND s.section_key = h.section_key
                      AND s.parser = h.parser
+                    JOIN gold.section_search ss
+                      ON ss.accession_no = h.accession_no AND ss.section_key = h.section_key
+                     AND ss.passage = h.passage
+                    CROSS JOIN LATERAL (SELECT substr(s.text, h.start_char + 1,
+                                                      h.end_char - h.start_char) AS t) x
                     JOIN bronze.filing_documents d ON d.accession_no = h.accession_no
                     LEFT JOIN bronze.filing_exhibits e
                            ON e.accession_no = h.accession_no AND e.exhibit_type = h.section_key

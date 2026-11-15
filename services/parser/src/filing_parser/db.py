@@ -3,8 +3,9 @@
 import gzip
 
 import psycopg
+from psycopg.types.json import Jsonb
 
-from filing_parser.sections import PARSER_VERSION, Section
+from filing_parser.sections import PARSER_VERSION, Section, Table
 
 PARSER = "python"
 
@@ -21,22 +22,58 @@ def load_document(conn: psycopg.Connection, accession_no: str) -> tuple[str, byt
 
 
 def write_sections(conn: psycopg.Connection, accession_no: str, sections: list[Section]) -> None:
-    """Replace the document's sections, whichever parser wrote them, atomically: a document
-    has one parser's sections, so gold never mixes parsers or keeps the other parser's rows."""
+    """Replace the document's sections and their tables (rule 11), whichever parser wrote them,
+    atomically: a document has one parser's sections, so gold never mixes parsers or keeps the
+    other parser's rows. When this parser's stored sections are exactly the new ones (keys,
+    parts, items, titles, text and offsets), their rows stay, parsed_at included, and only
+    parser_version and the tables change: the search index and What changed diffs key on
+    parsed_at, so a re-parse that changes no text re-indexes nothing (parser v7's tables)."""
+    new = sorted(((s.key, PARSER, s.part, s.item, s.title, s.text, s.char_start, s.char_end)
+                  for s in sections), key=lambda r: r[0])
     with conn.transaction(), conn.cursor() as cur:
         cur.execute(
-            "DELETE FROM silver.filing_sections WHERE accession_no = %s", (accession_no,),
-        )
+            "SELECT section_key, parser, part, item, title, text, char_start, char_end"
+            " FROM silver.filing_sections WHERE accession_no = %s", (accession_no,))
+        if sorted(cur.fetchall(), key=lambda r: r[0]) == new:
+            cur.execute("UPDATE silver.filing_sections SET parser_version = %s"
+                        " WHERE accession_no = %s AND parser_version <> %s",
+                        (PARSER_VERSION, accession_no, PARSER_VERSION))
+            cur.execute("DELETE FROM silver.filing_tables WHERE accession_no = %s",
+                        (accession_no,))
+        else:  # the tables go with their sections (the foreign key cascades)
+            cur.execute(
+                "DELETE FROM silver.filing_sections WHERE accession_no = %s", (accession_no,),
+            )
+            cur.executemany(
+                """
+                INSERT INTO silver.filing_sections
+                    (accession_no, section_key, parser, parser_version, part, item, title, text,
+                     char_start, char_end)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                [(accession_no, s.key, PARSER, PARSER_VERSION, s.part, s.item, s.title, s.text,
+                  s.char_start, s.char_end) for s in sections],
+            )
         cur.executemany(
-            """
-            INSERT INTO silver.filing_sections
-                (accession_no, section_key, parser, parser_version, part, item, title, text,
-                 char_start, char_end)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """,
-            [(accession_no, s.key, PARSER, PARSER_VERSION, s.part, s.item, s.title, s.text,
-              s.char_start, s.char_end) for s in sections],
+            "INSERT INTO silver.filing_tables (accession_no, section_key, parser, table_no,"
+            " char_start, char_end, rows) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+            [(accession_no, s.key, PARSER, n, t.start, t.end, Jsonb(table_rows(t)))
+             for s in sections for n, t in enumerate(s.tables)],
         )
+
+
+def table_rows(table: Table) -> list[dict]:
+    """silver.filing_tables.rows (migration 067): spans only when a cell spans more than one
+    column, head only on a head row."""
+    out = []
+    for r in table.rows:
+        row: dict = {"start": r.start, "end": r.end, "cells": [c.text for c in r.cells]}
+        if any(c.span != 1 for c in r.cells):
+            row["spans"] = [c.span for c in r.cells]
+        if r.head:
+            row["head"] = True
+        out.append(row)
+    return out
 
 
 def all_accessions(conn: psycopg.Connection) -> list[str]:

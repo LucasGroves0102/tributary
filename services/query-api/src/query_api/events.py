@@ -58,7 +58,8 @@ from typing import Annotated
 from fastapi import Depends, FastAPI, Path, Query
 
 from query_api import announcements
-from query_api.releases import read_release
+from query_api.release_tables import grid
+from query_api.releases import lines_of, read_release
 from query_api.shapes import document_url, filing_url
 from query_api.store import Store
 
@@ -395,7 +396,10 @@ def assign_releases(quarters: list[dict], releases: list[dict]) -> None:
 
 
 def shape_quarter(company_id: str, q: dict, sections: dict[str, list[dict]],
-                  texts: dict[tuple[str, str], str]) -> dict:
+                  texts: dict[tuple[str, str], str],
+                  tables: dict[tuple[str, str], list[dict]] | None = None) -> dict:
+    """One quarter of /earnings. `tables` (asked with `tables=true`): the release's stored tables
+    (parser v7), which give its outlook and reconciliation passages their `parts`."""
     report, row = q["report"], q.get("release_row")
     out = {
         "period_end": q["period_end"], "estimated": q["estimated"],
@@ -425,14 +429,49 @@ def shape_quarter(company_id: str, q: dict, sections: dict[str, list[dict]],
         return out
     reading = read_release(text)
 
+    stored = (tables or {}).get((row["accession_no"], key or ""))
+
     def cite(p) -> dict:
-        return {**p.to_dict(),
-                "citation": _citation(company_id, row.get("cik"), row, section, p.start, p.end)}
+        quoted = {**p.to_dict(), "citation": _citation(company_id, row.get("cik"), row, section,
+                                                       p.start, p.end)}
+        if stored and p.kind in ("outlook", "reconciliation"):
+            parts = passage_parts(text, p.start, p.end, stored)
+            if parts is not None:
+                quoted["parts"] = parts
+        return quoted
 
     out["headline"] = cite(reading.headline) if reading.headline else None
     out["outlook"] = [cite(p) for p in reading.outlook]
     out["adjustments"] = [cite(p) for p in reading.adjustments]
     return out
+
+
+def passage_parts(text: str, start: int, end: int, tables: list[dict]) -> list[dict] | None:
+    """A quoted block as it reads, for display: its lines (query_api.releases rule 1) in runs,
+    `{"lines": [...]}`, and in place of the lines a stored table covers, that table's rows within
+    the block as a grid (query_api.release_tables), `{"table": {...}}`. A table without a grid
+    stays lines. None when no table gives a grid: the caller keeps the block's text alone."""
+    grids: dict[int, dict | None] = {}
+    parts: list[dict] = []
+    shown: int | None = None  # the table the last part is
+    for ln in lines_of(text):
+        if not (start <= ln.start and ln.end <= end):
+            continue
+        n = next((i for i, t in enumerate(tables)
+                  if t["char_start"] <= ln.start < t["char_end"]), None)
+        if n is not None and n not in grids:
+            grids[n] = grid(tables[n]["rows"], start, end)
+        if n is not None and grids[n] is not None:
+            if shown != n:
+                parts.append({"table": grids[n]})
+                shown = n
+            continue
+        shown = None
+        if parts and "lines" in parts[-1]:
+            parts[-1]["lines"].append(ln.text)
+        else:
+            parts.append({"lines": [ln.text]})
+    return parts if any("table" in p for p in parts) else None
 
 
 def _now() -> str:
@@ -468,10 +507,13 @@ def add_event_routes(app: FastAPI, *, store: Store, current_user: Callable[..., 
     def earnings(
         user_id: User, company_id: CompanyId,
         quarters: Annotated[int, Query(ge=1, le=MAX_QUARTERS)] = 4,
+        tables: Annotated[bool, Query(description="outlook and reconciliation passages with "
+                                                   "their tables as grids (`parts`)")] = False,
     ) -> dict:
         """Each quarter's earnings release (8-K Item 2.02), newest first: the release, its
         headline, the outlook it states and management's adjustments, each passage quoted with
-        its offsets in the release. No beat or miss. Rules: query_api/events.py, releases.py."""
+        its offsets in the release. No beat or miss. Rules: query_api/events.py, releases.py;
+        `tables`: release_tables.py (without it the answer is the same as before parser v7)."""
         require(user_id, "filings", company_id)
         reports = store.periodic_reports(user_id, company_id)
         since = today() - timedelta(days=quarters * 92 + RELEASE_WINDOW_DAYS + 31)
@@ -489,6 +531,8 @@ def add_event_routes(app: FastAPI, *, store: Store, current_user: Callable[..., 
             if key:
                 wanted.append((r["accession_no"], key))
         texts = store.section_texts(user_id, company_id, wanted) if wanted else {}
+        grids = store.release_tables(user_id, company_id, wanted) if tables and wanted else {}
         return {"company_id": company_id, "as_of": _now(),
-                "quarters": [shape_quarter(company_id, q, sections, texts) for q in shown],
+                "quarters": [shape_quarter(company_id, q, sections, texts, grids)
+                             for q in shown],
                 "method": METHOD_EARNINGS}

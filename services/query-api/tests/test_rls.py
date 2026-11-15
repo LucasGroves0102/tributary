@@ -2,6 +2,7 @@
 Postgres. Row-level security must still hide what authz.user_access doesn't grant.
 Skipped unless TEST_DATABASE_URL is set; every test is rolled back."""
 
+import json
 import os
 from contextlib import contextmanager
 from datetime import date
@@ -273,6 +274,16 @@ def events(client):
                 " parser_version, item, title, text, char_start, char_end)"
                 " VALUES (%s, %s, 'python', 't', %s, 'Item', %s, 0, %s)",
                 (acc, key, key, text, len(text)))
+        # parser v7: the guidance as the release's table (migration 067)
+        head = RELEASE_TEXT.index("Full Year 2026 Guidance")
+        bullet = RELEASE_TEXT.index("•Revenue")
+        rows = [{"start": head, "end": head + 23, "cells": ["Full Year 2026 Guidance"]},
+                {"start": bullet, "end": len(RELEASE_TEXT),
+                 "cells": ["•Revenue is expected to be", "$40 to $42 million."]}]
+        conn.execute(
+            "INSERT INTO silver.filing_tables (accession_no, section_key, parser, table_no,"
+            " char_start, char_end, rows) VALUES (%s, 'EX-99.1', 'python', 0, %s, %s, %s)",
+            (f"{cid}-26-000021", head, len(RELEASE_TEXT), json.dumps(rows)))
     return TestClient(create_app(AllowAll(), Store(OneConnection(conn)), SECRET,
                                  today=lambda: date(2026, 11, 8)))
 
@@ -320,6 +331,32 @@ def test_earnings_text_respects_rls(events, token):
     assert hidden["release"]["accession_no"] == f"{B}-26-000021"
     assert hidden["release"]["section_key"] is None and hidden["outlook"] == []
     assert quarter("t-free", A)["outlook"] == []
+
+
+def test_earnings_tables_respect_rls(events, client, token):
+    def quarter(user, company):
+        r = events.get(f"/v1/companies/{company}/earnings?quarters=1&tables=true",
+                       headers=token(user))
+        assert r.status_code == 200, r.text
+        [q] = r.json()["quarters"]
+        return q
+
+    [outlook] = quarter("t-pro", A)["outlook"]
+    [table] = [p["table"] for p in outlook["parts"] if "table" in p]
+    assert table["body"] == [[{"text": "•Revenue is expected to be", "col": 0, "span": 1},
+                              {"text": "$40 to $42 million.", "col": 1, "span": 1}]]
+    assert quarter("t-pro", B)["outlook"] == []
+    conn = client.app_conn
+    with conn.cursor() as cur:
+        cur.execute("SET LOCAL ROLE query_api")
+        cur.execute("SELECT set_config('app.user_id', 't-pro', true)")
+        cur.execute("SELECT DISTINCT left(accession_no, 10) FROM silver.filing_tables"
+                    " WHERE left(accession_no, 10) IN (%s, %s)", (A, B))
+        assert cur.fetchall() == [(A,)]
+        cur.execute("SELECT set_config('app.user_id', 't-free', true)")  # no filings tier
+        cur.execute("SELECT count(*) FROM silver.filing_tables")
+        assert cur.fetchone() == (0,)
+        cur.execute("RESET ROLE")
 
 
 def test_model_runs_read_only_what_rls_allows(client, token):

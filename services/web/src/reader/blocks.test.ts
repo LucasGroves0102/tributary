@@ -55,11 +55,14 @@ describe("#178: statements read as tables", () => {
     expect(row(equity!, "Shares repurchased")?.cells).toEqual(["(211)", "—", "(27)", "—", "(9,719)", "(9,746)"]);
   });
 
-  it("keeps sub-headings as label rows and the sentence after a statement as text", () => {
+  it("keeps sub-headings as label rows; a statement's footer on every page is page furniture", () => {
     expect(row(balance!, "Current assets:")?.cells).toEqual([]);
     expect(row(income!, "Net income per share:")?.cells).toEqual([]);
-    const after = blocks[blocks.indexOf(income!) + 1]!;
-    expect(after).toMatchObject({ kind: "p", text: "See accompanying Notes to the Consolidated Financial Statements." });
+    // "See accompanying Notes ..." closes each statement's page, by its page number and contents
+    // link, three times: a running footer (furniture.ts rule 3), so neither text nor a table row
+    const footer = "See accompanying Notes to the Consolidated Financial Statements.";
+    expect(blocks.some((b) => (b.kind === "p" ? b.text : b.rows.map((r) => r.label).join("\n")).includes(footer))).toBe(false);
+    expect(blocks[blocks.indexOf(income!) + 1]!.kind).toBe("table");
   });
 
   it("offsets stay the stored text's", () => {

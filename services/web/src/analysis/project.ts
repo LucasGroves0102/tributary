@@ -29,6 +29,7 @@
  *   API returned); a release's table (a guidance table, a reconciliation) as `quoteTable`, its
  *   lines kept in a code block inside the quote. */
 
+import { withoutFurniture } from "../reader/furniture";
 import { linesOf, unitsOf } from "../thesis/blocks";
 import type { ExpectedFiling, ProjectState, ProjectStep } from "../types";
 
@@ -378,9 +379,11 @@ const ISO = /^\d{4}-\d{2}-\d{2}$/;
 
 /** A filing passage pinned into a thesis: a blockquote, then its citation (form, the period it
  * reports on when known, filed date, section, the accession linked to EDGAR when the link can be
- * built). A 10-Q's MD&A can speak of six or nine months: the period says which filing it is. */
+ * built). A 10-Q's MD&A can speak of six or nine months: the period says which filing it is. Every
+ * pin leaves out the passage's page furniture (page numbers, "Table of Contents" links, running
+ * headers: reader/furniture.ts), as the reader does (analyst test 4, finding 19). */
 export function quoteBlock(p: Passage): string {
-  return `> ${quoteText(p.text)}\n>\n> — ${citationLine(p)}`;
+  return `> ${quoteText(withoutFurniture(p.text))}\n>\n> — ${citationLine(p)}`;
 }
 
 function citationLine(p: Passage): string {
@@ -404,7 +407,7 @@ export const MAX_TABLE_LINES = 40;
 export function quoteLines(p: Passage): string {
   const out: string[] = [];
   let total = 0;
-  for (const raw of p.text.replace(/\r\n?/g, "\n").split("\n")) {
+  for (const raw of withoutFurniture(p.text.replace(/\r\n?/g, "\n")).split("\n")) {
     const line = raw.replace(/\s+/g, " ").trim();
     if (!line) continue;
     if (out.length === MAX_TABLE_LINES || total + line.length > MAX_QUOTE * 2) {
@@ -422,7 +425,7 @@ export function quoteLines(p: Passage): string {
  * citation line as quoteBlock. Backticks become quotes (they could close the block), at most
  * MAX_TABLE_LINES lines of up to 200 characters, and "…" says when it was cut. */
 export function quoteTable(p: Passage): string {
-  const all = p.text.replace(/\r\n?/g, "\n").split("\n").map((l) => l.replace(/`/g, "'").replace(/\s+/g, " ").trim()).filter(Boolean);
+  const all = withoutFurniture(p.text.replace(/\r\n?/g, "\n")).split("\n").map((l) => l.replace(/`/g, "'").replace(/\s+/g, " ").trim()).filter(Boolean);
   const lines = all.slice(0, MAX_TABLE_LINES).map((l) => (l.length > 200 ? `${l.slice(0, 199)}…` : l));
   if (all.length > MAX_TABLE_LINES) lines.push("…");
   return ["> ```text", ...lines.map((l) => `> ${l}`), "> ```", ">", `> — ${citationLine(p)}`].join("\n");

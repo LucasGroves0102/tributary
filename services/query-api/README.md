@@ -56,7 +56,7 @@ request parameters. Dev tokens: `make token USER=alice`.
 | `GET /v1/companies/{id}/filings/{accession}/changes?section=&basis=&kind=&view=&q=&numbers=` | filings | new / removed / rewritten Risk Factors and MD&A paragraphs vs the comparable earlier filing, word diffs, citations in both filings; with `view` read for materiality (noise hidden and counted, periods, figures, score and why; a 10-Q against a year ago by default; topic and new-figure filters) ([What changed](#what-changed)) |
 | `GET /v1/search?q=&company=&form=&section=&from=&to=&limit=&offset=&sort=&window=` | filings (every company searched) | best passage per section, ranked or newest first, with snippet, citation and a total ([Search](#search)) |
 | `GET /v1/companies/{id}/events` | filings | 8-K filings since the latest 10-Q/10-K period end, newest first: items (SEC title, kind), an excerpt of the 8-K's own words, the press release exhibit, `announced` (a completed deal or new financing read from a 7.01/8.01 announcement), and `stale`: figures at that period end an event after it may have changed ([Earnings and events](#earnings-and-events)) |
-| `GET /v1/companies/{id}/earnings?quarters=` | filings | each quarter's earnings release (8-K Item 2.02), newest first, `quarters` 1-8 (default 4): the release, its headline, outlook passages and management's adjustments (reconciliation tables, dollar notes), each with offsets into the release; no beat or miss ([Earnings and events](#earnings-and-events)) |
+| `GET /v1/companies/{id}/earnings?quarters=&tables=` | filings | each quarter's earnings release (8-K Item 2.02), newest first, `quarters` 1-8 (default 4): the release, its headline, outlook passages and management's adjustments (reconciliation tables, dollar notes), each with offsets into the release; `tables=true`: outlook and reconciliation passages carry `parts`, the tables they quote as grids (parser v7); no beat or miss ([Earnings and events](#earnings-and-events)) |
 | `GET /v1/companies/{id}/data-notes` | financials | data-quality and freshness notes: gaps, overlapping quarters, restatements, derived quarters, filings companyfacts doesn't carry yet, each with its filings ([Data notes](#data-notes)) |
 | `GET /v1/companies/{id}/annual-per-share?years=` | financials | EPS and weighted shares per fiscal year, as the 10-K states them (migration 036; `years` 1-30, default 10): per-share figures don't add, so quarters can't give them |
 | `GET /v1/data-notes?limit=&company_id=` | financials (every company covered) | the newest notes across the caller's companies, or the named ones of them (at most 50), without derived-quarters notes ([Data notes](#data-notes)) |
@@ -998,8 +998,9 @@ list into SQL), `test_auth.py` (JWTs: signature, expiry, the secret's length) an
 the app schema), `test_views.py` (views with fakes; `test_views_db.py` on the app schema),
 `test_reports.py` (report routes), `test_research_api.py`, `test_changes.py` and
 `test_changes_api.py` (What changed and search; `test_changes.py` over production texts in
-`tests/fixtures/changes`), `test_events_api.py`, `test_releases.py` and `test_announcements.py`
-(earnings and events over real releases and 8-Ks), `test_notes_api.py` and `test_callouts.py`
+`tests/fixtures/changes`), `test_events_api.py`, `test_releases.py`, `test_release_tables.py`
+(the grids over real releases' stored tables) and `test_announcements.py` (earnings and events over
+real releases and 8-Ks), `test_notes_api.py` and `test_callouts.py`
 (data notes, statement callouts), `test_components.py` (reported vs standardised),
 `test_peers.py` and `test_sectors.py` (peers, the sector mapping against every SIC code),
 `test_insiders.py`, `test_text_kpis.py` (each rule on real text) and `test_readings_db.py` (035's
@@ -1285,6 +1286,27 @@ RLS), the excerpts and passages are section text under RLS on `silver.filing_sec
   passage has `heading`, `text` (lines as the parser wrote them), `truncated` and a `citation`
   with offsets into the release. A release without such a heading or table gets none: the web app
   and the agent say so. No beat or miss: Tributary holds no estimates.
+- **The release's own tables** (parser v7, `tables=true`; `release_tables.py`, rules in its
+  docstring; analyst test 4, finding 31: the outlook read as alternating label and value lines, the
+  reconciliation as a monospace dump). The parser records each HTML table beside the text
+  (`silver.filing_tables`, migration 067: rows with offsets into the release, cells in order with
+  their colspans). `Store.release_tables` reads the chosen releases' tables under RLS (the filings
+  tier, one query for the few releases shown), and an outlook or reconciliation passage that covers a
+  table's lines gets `parts`, in reading order: `{"lines": [...]}` for its own lines and `{"table":
+  {columns, head, body, char_start, char_end}}` for each table, its rows within the passage only.
+  The grid puts the release's layout back into columns: a "$" or "(" cell joins its figure, a ")"
+  or "%" cell the figure before it, spacer cells go, the value columns are where the body rows'
+  figures are (merged where they overlap), head rows (a `<thead>`, `<th>` cells, or leading rows
+  without a figure) span the columns they cover, and a heading inside the table spans its columns
+  too. Every cell is the release's text; nothing is read as a number. A table without a figure, or a
+  release parsed before v7, has no grid: the passage keeps `text` alone and the web app shows it as
+  before. Without `tables` the answer is byte for byte the old one: the agent's
+  `get_earnings_release` never asks (no tool-schema change, the recorded suites replay unchanged),
+  and the grids have no `rows` or `sections` key (verify.py would read those as figures). Checked on
+  Vertiv's, NVIDIA's and Coca-Cola's Q3 2026 releases (`tests/fixtures/releases/*.tables.json.gz`,
+  their tables as python-7 stores them): Vertiv's guidance tables are a label and a value column,
+  its reconciliations five columns under their period heads, its EPS bridges a title row over seven
+  columns; Coca-Cola's reconciliation keeps nine columns past a heading row inside the table.
 - **Measured** (hermes, 2026-11-08, operating companies, filings since 2024-11-01): 32,188 8-Ks
   with Item 2.02 from 3,994 companies, every one stored, 30,578 (95%) with a parsed EX-99.1;
   of 40,588 10-Q/10-K quarters, 30,284 (75%) have a 2.02 8-K between the period end and the
@@ -1481,7 +1503,12 @@ no text; the snippet's text is still read through RLS on `silver.filing_sections
   ranking pass counts them, migration 052's `gold.search_page`). `sort` and `window` are echoed:
   the web app reads an answer without them as an older API.
   `passages_matched` counts the section's matching passages. `snippet` is `ts_headline` over that
-  passage only (matches between « and »), cut from `silver.filing_sections` at query time.
+  passage only (matches between « and »), cut from `silver.filing_sections` at query time, with the
+  passage's page furniture blanked (migration 068, parser README "Search without page furniture":
+  page numbers, contents links and running headers become spaces, offsets unchanged; a passage
+  indexed before 068 is blanked by the same rule run on the passage at query time). The exact-phrase
+  check reads the passage the same way, and passages rebuilt by 068 index it so: a phrase across a
+  page break matches.
   `citation` has the passage's character offsets into the document text.
 - Ranking runs over every match of the companies searched. With a company or a closed catalog
   that is all time. With the catalog public (no `company`) ranking every match of a common phrase

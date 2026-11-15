@@ -6,7 +6,7 @@ mod pystr;
 pub mod sections;
 mod tables;
 
-pub use html::html_to_text;
+pub use html::{Cell, Row, Table, extract, html_to_text};
 pub use sections::{PARSER_VERSION, Section, exhibit_section, find_sections, parse};
 
 #[derive(Debug, Clone, PartialEq, Eq)]

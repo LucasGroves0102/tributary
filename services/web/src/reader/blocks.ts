@@ -4,11 +4,10 @@
  * read back from the text without a reparse; services/parser README "Tables in the text").
  *
  * The rules, in order, over the text's lines (split at "\n", each with its offsets):
- *  1. Debris: a line that is only "Table of Contents" (or "Index", "Return to Table of Contents",
- *     "Back to Contents"), and a page number: a line of 1-3 digits ("12", "- 12 -", "Page 12",
- *     "F-12", or i-xx in lower case) when the next line is such a contents link, the previous line
- *     ends a sentence (. ! ? : ;) or there is no previous line. Both are dropped; text around them
- *     joins up again by rule 7 ("procure sufficient" / "foundry capacity").
+ *  1. Debris: page furniture (`furniture.ts`, the rule search shares: a "Table of Contents" or
+ *     "Index" back-link, a page number by a page break, a running header repeated by page breaks)
+ *     is dropped; text around it joins up again by rule 7 ("procure sufficient" / "foundry
+ *     capacity").
  *  2. Cells: from a line's end, numeric cells: a number (1,234 / 4.93 / (259) / -3 / .5) with an
  *     optional "$" or "($" token before it and ")", "%" or "pts" tokens after it (the HTML often puts
  *     each in its own cell), or a dash (— – -), n/a, nm, or a change in words (Up, Down, Flat). What
@@ -34,6 +33,7 @@
  *     line or a line starting with a capital or a bullet; any other line joins the paragraph before.
  */
 
+import { furnitureLines } from "./furniture";
 import { countMatches } from "./text";
 
 export interface TableRow {
@@ -54,10 +54,6 @@ interface Line {
   text: string;
 }
 
-const CONTENTS = /^(?:return to |back to )?(?:the )?(?:table of contents|contents|index)\.?$/i;
-const PAGE = /^(?:(?:page\s+)?(?:[-–—]\s*)?(?:[A-Z]{1,2}-)?\d{1,3}(?:\s*[-–—])?|[ivx]{1,5})$/i;
-const LOWER_ROMAN = /^[ivx]{1,5}$/;
-const SENTENCE_END = /[.!?:;]["”’)]*$/;
 const NUMBER = /^\(?[-–—]?\$?\(?\d[\d,]*(?:\.\d+)?\)?%?$|^\(?\$?\.\d+\)?%?$/;
 const DASH = /^(?:[-–—]+|n\/?a|nm|up|down|flat)$/i;
 const AFTER = /^(?:\)|%|\)%|%\)|pts?)$/;
@@ -72,12 +68,6 @@ function lines(text: string): Line[] {
     at += raw.length + 1;
   }
   return out;
-}
-
-function isPage(text: string): boolean {
-  if (!PAGE.test(text)) return false;
-  // roman numerals only in lower case ("ii"), never a word like "Mix" or "VI" heading
-  return /\d/.test(text) || LOWER_ROMAN.test(text);
 }
 
 /** Rule 2: a line's trailing numeric cells and the label in front of them. */
@@ -126,15 +116,8 @@ const isShort = (s: string) => s.length <= 120 && !/[.]$/.test(s) && !s.startsWi
 export function readerBlocks(text: string): Block[] {
   const ls = lines(text);
   // rule 1 (neighbours skip blank lines)
-  const keep = ls.map((l, i) => {
-    if (CONTENTS.test(l.text)) return false;
-    if (!isPage(l.text)) return true;
-    let n = i + 1;
-    while (n < ls.length && !ls[n]!.text) n++;
-    let p = i - 1;
-    while (p >= 0 && !ls[p]!.text) p--;
-    return !((n < ls.length && CONTENTS.test(ls[n]!.text)) || p < 0 || SENTENCE_END.test(ls[p]!.text));
-  });
+  const furniture = furnitureLines(ls.map((l) => l.text));
+  const keep = ls.map((_, i) => !furniture[i]);
   const live = ls.filter((_, i) => keep[i]);
   // rules 2-4
   const items: Item[] = [];

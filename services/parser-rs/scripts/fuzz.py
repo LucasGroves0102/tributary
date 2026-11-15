@@ -4,7 +4,8 @@ Usage: python scripts/fuzz.py [--n 20000] [--seed 1] [--tokens 60] [--rust CMD]
 
 Use --tokens 2000 for documents larger than libxml2's 4000-byte read size.
 
-Each document is parsed as an exhibit (the whole html_to_text) and as a 10-K, 10-Q and 8-K.
+Each document is parsed as an exhibit (the whole html_to_text) and as a 10-K, 10-Q and 8-K;
+sections are compared with their rule 11 tables.
 Failing inputs are written to fuzz-failures/ for replay.
 """
 
@@ -23,12 +24,17 @@ TAGS = ["html", "head", "body", "title", "p", "div", "span", "td", "th", "tr", "
         "noscript", "br", "hr", "img", "meta", "header", "ix:header", "section", "center", "form",
         "dd", "dt", "dl", "select", "option", "frameset", "noframes", "link", "base", "caption",
         "col", "thead", "tbody", "pre", "address", "blockquote", "P", "DIV", "TD", "x}p", "i",
-        "plaintext", "noembed", "Body", "HEAD", "Title", "frame", "embed", "ol", "dir"]
+        "plaintext", "noembed", "Body", "HEAD", "Title", "frame", "embed", "ol", "dir",
+        # rule 11: tables, rows, cells and head rows, more often
+        "table", "tr", "td", "td", "th", "thead", "TR", "x}td", "tfoot"]
 ATTRS = ["", " style='display:none'", ' style="display: none"', " style=DISPLAY:NONE",
          " style", " class=x", " style='color:red' style='display:none'",
          ' http-equiv="Content-Type" content="text/html; charset=windows-1252"',
          ' charset="utf-8"', " charset=iso-8859-1", " a=&amp;b", " / ", " x='a>b'", " =y",
-         ' style="display&#58;none"', " STYLE='x;display:none;y'", " style=display:none/"]
+         ' style="display&#58;none"', " STYLE='x;display:none;y'", " style=display:none/",
+         # rule 11: colspans
+         " colspan=2", " colspan='3'", " COLSPAN=0", " colspan=&#52;", " colspan=x",
+         " colspan=' 12px'", " colspan=99999999999999999999", " colspan", " colspan=2 colspan=5"]
 TEXT = ["Item 7.", "Item 1A", "ITEM 2.02 Results", "PART II", "Part I", "Item 8. Financial",
         "Management’s discussion and analysis", "Management's Discussion and Analysis of x",
         "Report of Independent Registered Public Accounting Firm", "Item\n7", "Part\tIV.",
@@ -51,7 +57,13 @@ TEXT = ["Item 7.", "Item 1A", "ITEM 2.02 Results", "PART II", "Part I", "Item 8.
         "\nMANAGEMENT’S DISCUSSION AND ANALYSIS OF FINANCIAL CONDITION AND RESULTS OF"
         " OPERATIONS (“MD&A”)\n", "\nPart I, Item 2\n", "\nPART II—OTHER INFORMATION\n",
         "\nRİSK FACTORS\n", "\nFORM 10-K SUMMARY\n", "\nUnregistered Sales of Equity Securities"
-        " and Use of Proceeds (a list longer than twenty)\n", "\nExhibits (a))\n", "Risk Factors"]
+        " and Use of Proceeds (a list longer than twenty)\n", "\nExhibits (a))\n", "Risk Factors",
+        # rule 11: table fragments (rows, cells, spans, head rows, nesting, spacer cells)
+        "<table><tr><td>Revenue</td><td>$</td><td>1,234</td></tr><tr><td> </td></tr>",
+        "<tr><td>a</td><td colspan=2> b  c </td></tr>", "<tr><th>x</th><th></th></tr>",
+        "<thead><tr><td></td><td colspan='3'>Three Months Ended</td></tr></thead>",
+        "<td>\xa0</td>", "<td>$\xa0 1,100 </td>", "<td><p>Net</p><p>sales</p></td>", "</td><td>",
+        "</tr><tr>", "<table><tr><td>in<table><tr><td>ner</td></tr></table></td></tr></table>"]
 BYTES = [b"\xff", b"\x80", b"\xe2\x80", b"\xc3\xa9"]
 RARE = [b"\x0c", b"\x01", b"&#12;", b"&#xFFFE;", b"\xef\xbf\xbe"]  # lxml rejects them in tails
 PREFIXES = [b"", b"<?xml version='1.0' encoding='ASCII'?>", b"<html>", b"<!DOCTYPE html>",

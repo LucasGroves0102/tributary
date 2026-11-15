@@ -6,13 +6,14 @@ use std::collections::HashMap;
 use serde::Serialize;
 
 use crate::Error;
-use crate::html::html_to_text;
+use crate::html::{Row, Table, extract};
 use crate::pystr::{
     CharIndex, char_len, fold_letter, is_decimal, is_space, is_word, py_strip, upper,
 };
 
-pub const PARSER_VERSION: &str = "rust-6"; // 6: "Item 7.01Regulation" is 7.01 (rule 2); 5: clean
-// titles (rule 10); 4: title headings (rule 9); 3: MD&A by reference, exhibits, SGML envelope
+pub const PARSER_VERSION: &str = "rust-7"; // 7: tables beside the text (rule 11; the text is
+// 6's); 6: "Item 7.01Regulation" is 7.01 (rule 2); 5: clean titles (rule 10); 4: title headings
+// (rule 9); 3: MD&A by reference, exhibits, SGML envelope
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Section {
@@ -23,21 +24,27 @@ pub struct Section {
     pub text: String,
     pub char_start: usize, // offsets into html_to_text(document)
     pub char_end: usize,
+    pub tables: Vec<Table>, // rule 11
 }
 
 pub fn parse(raw: &[u8], form: &str) -> Result<Vec<Section>, Error> {
-    find_sections(&html_to_text(raw)?, form)
+    let (text, tables) = extract(raw)?;
+    let sections = find_sections(&text, form)?;
+    Ok(sections
+        .into_iter()
+        .map(|s| with_tables(s, &tables))
+        .collect())
 }
 
-/// Rule 8.
+/// Rule 8 (and rule 11's tables).
 pub fn exhibit_section(
     exhibit_type: &str,
     description: Option<&str>,
     raw: &[u8],
 ) -> Result<Section, Error> {
-    let text = html_to_text(raw)?;
+    let (text, tables) = extract(raw)?;
     let item = exhibit_type.strip_prefix("EX-").unwrap_or(exhibit_type);
-    Ok(Section {
+    let section = Section {
         key: exhibit_type.to_string(),
         part: None,
         item: item.to_string(),
@@ -48,7 +55,34 @@ pub fn exhibit_section(
         char_end: char_len(&text),
         text,
         char_start: 0,
-    })
+        tables: Vec::new(),
+    };
+    Ok(with_tables(section, &tables))
+}
+
+/// Rule 11c: the rows of each table that lie within the section's text, offsets into it; a
+/// table with at least two.
+fn with_tables(mut section: Section, tables: &[Table]) -> Section {
+    let lo = section.char_start;
+    let hi = lo + char_len(&section.text);
+    for t in tables {
+        let rows: Vec<Row> = t
+            .rows
+            .iter()
+            .filter(|r| r.start >= lo && r.end <= hi)
+            .map(|r| Row {
+                start: r.start - lo,
+                end: r.end - lo,
+                ..r.clone()
+            })
+            .collect();
+        if rows.len() >= 2 {
+            let start = rows.iter().map(|r| r.start).min().unwrap_or(0);
+            let end = rows.iter().map(|r| r.end).max().unwrap_or(0);
+            section.tables.push(Table { start, end, rows });
+        }
+    }
+    section
 }
 
 #[derive(Debug, Clone)]
@@ -133,6 +167,7 @@ fn sections(text: &str, mut body: Vec<Heading>, form: &str) -> Vec<Section> {
             text: py_strip(&text[h.start..end.0]).to_string(),
             char_start: h.cstart,
             char_end: end.1,
+            tables: Vec::new(),
         });
     }
     if form.starts_with("10-K") {
