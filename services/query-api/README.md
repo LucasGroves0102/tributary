@@ -859,8 +859,8 @@ do. Refusals read "Your account has used its N assistant questions for today…"
 
 ## API keys
 
-Personal access tokens, so a user can use Tributary from their own scripts (and, next, from their
-own AI models through an MCP server, which will authenticate with them). `api_keys.py` (its
+Personal access tokens, so a user can use Tributary from their own scripts and from their own AI
+models through the [MCP server](../mcp-server), which calls these routes with the user's key. `api_keys.py` (its
 docstring is the spec), app migration 019.
 
 - **The key.** `trb_` + 32 random bytes in base64url (47 characters), shown once, in the answer
