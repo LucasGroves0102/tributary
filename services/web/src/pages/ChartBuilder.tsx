@@ -20,7 +20,7 @@ import { isConnected, useMarketData } from "../market/useMarketData";
 import { autoSubtitle, methodNote, sourceFootnote } from "../chart/deck";
 import { LayerChart } from "../chart/LayerChart";
 import { askSides, drawnIds, planAxes } from "../chart/axes";
-import { ANNUAL_MARKER_KEY, filingMarkers, MARKER_FORMS, MARKER_KEY, markersFor, type Marker } from "../chart/markers";
+import { filingMarkers, MARKER_FORMS, markerKey as keyToMarkers, markersFor, type Marker } from "../chart/markers";
 import { catalog, metricLabel, type MetricInfo } from "../chart/metrics";
 import {
   addLayer,
@@ -60,7 +60,9 @@ import { UNNAMED, useDirectory } from "../companies/directory";
 import { chartCsv, latestSource, toSeries, type Series, type Source } from "../chart/series";
 import type { Readable } from "../access";
 import { CompanyPicker, CompanySearch, resultTicker } from "../components/CompanySearch";
+import { MenuButton } from "../components/MenuButton";
 import { ErrorPanel, Skeleton } from "../components/States";
+import { dismissTopic, toast, useToastOn } from "../components/Toasts";
 import { download } from "../download";
 import { day } from "../format";
 import { go } from "../route";
@@ -185,7 +187,16 @@ export function ChartBuilder({ token, chart, setChart, saveBar, readable = ANYTH
   const market = useMarketData(token);
   const priced = isConnected(market);
   const [results, setResults] = useState<Record<string, Result>>({});
-  const [note, setNote] = useState<string | null>(null);
+  // a problem with an action (PNG, opening a source) and what the opener says: toasts, never banners that stay
+  const setNote = (text: string | null) => text && toast({ text, error: true, topic: "chart-note" });
+  useToastOn(notice, { topic: "chart-notice" });
+  // a replaced draft: said once as a toast with Restore, and kept in the bar while it can be restored
+  const restoreRef = useRef(onRestore);
+  restoreRef.current = onRestore;
+  useEffect(() => {
+    if (onRestore) toast({ text: restoreNote ?? "Started a new chart.", topic: "chart-draft", action: { label: "Restore the previous draft", onClick: () => restoreRef.current?.() } });
+    else dismissTopic("chart-draft");
+  }, [!!onRestore, restoreNote]);
   const [retry, setRetry] = useState(0);
   const svg = useRef<SVGSVGElement>(null);
 
@@ -198,7 +209,17 @@ export function ChartBuilder({ token, chart, setChart, saveBar, readable = ANYTH
   const hasShares = metrics === null || metrics.some((m) => m.name === SHARES_METRIC);
 
   const frequency = frequencyOf(chart);
-  const visible = chart.layers.filter((l) => !l.hidden);
+  // a formula whose text doesn't check right now: off the chart, its title and legend until it does, so
+  // the chart never shows the previous formula under the new one's error (Riley 16)
+  const [broken, setBroken] = useState<ReadonlySet<number>>(new Set());
+  const markBroken = useCallback((id: number, is: boolean) => setBroken((b) => {
+    if (b.has(id) === is) return b;
+    const next = new Set(b);
+    if (is) next.add(id);
+    else next.delete(id);
+    return next;
+  }), []);
+  const visible = chart.layers.filter((l) => !l.hidden && !broken.has(l.id));
   // each layer's request as its cache key (chart/model.ts layerKey: evaluate or segments)
   const requests = visible.map((l) => ({ layer: l, req: layerKey(l, chart, ttm) }));
   const keyOf = (req: string) => req;
@@ -285,7 +306,8 @@ export function ChartBuilder({ token, chart, setChart, saveBar, readable = ANYTH
         .filter((p) => market.connections.some((c) => c.provider === p.id))
         .map((p) => p.attribution).join(" ") || "your market-data connection."}`
     : "";
-  const markerKey = chart.markers ? (frequency === "annual" ? ANNUAL_MARKER_KEY : MARKER_KEY) : "";
+  // which company's marks are whose, once there are several (the companies the markers below read)
+  const markerKey = chart.markers ? keyToMarkers(frequency, [...new Set(visible.flatMap((l) => (l.kind === "formula" ? [] : l.companyId ? [l.companyId] : [])))].map(short)) : "";
   const footnote = chart.deck
     ? [sourceFootnote(series, short, asOf), method, priceNote, markerKey].filter(Boolean)
     : [
@@ -327,7 +349,7 @@ export function ChartBuilder({ token, chart, setChart, saveBar, readable = ANYTH
   // named for what draws, once that's known: a layer with nothing to show isn't in the title
   const drawn = drawnIds(series);
   const answered = new Set(series.map((x) => x.id));
-  const shows = (l: Layer) => (answered.has(l.id) ? drawn.has(l.id) : status(l)?.state !== "error");
+  const shows = (l: Layer) => !broken.has(l.id) && (answered.has(l.id) ? drawn.has(l.id) : status(l)?.state !== "error");
   const title = chartTitle(chart, short, metricLabel, shows);
   const name = title || "chart";
   const whyCalendar = basisReason(chart);
@@ -398,7 +420,7 @@ export function ChartBuilder({ token, chart, setChart, saveBar, readable = ANYTH
 
   return (
     <div className="page">
-      <div className="row wrap">
+      <div className="row page-bar chart-bar">
         <h1>Chart builder</h1>
         {seed !== null && !seed.none && (
           <div className="chart-co">
@@ -418,26 +440,18 @@ export function ChartBuilder({ token, chart, setChart, saveBar, readable = ANYTH
             New chart
           </button>
         )}
-        <button className="btn" onClick={exportCsv} disabled={!series.length}
-          title="Exact values, with the filing behind each point">
-          Export CSV
-        </button>
-        <button className="btn" onClick={exportSvg} disabled={!series.length}>
-          Export SVG
-        </button>
-        <button className="btn" onClick={exportPng} disabled={!series.length}>
-          Export PNG
-        </button>
+        {onRestore && (
+          <button className="btn ghost" onClick={onRestore} title={restoreNote ?? "Bring back the chart this one replaced"}>
+            Restore the previous draft
+          </button>
+        )}
+        <MenuButton label="Export" disabled={!series.length} items={[
+          { label: "CSV, exact values", onSelect: exportCsv, disabled: !series.length, title: "Exact values, with the filing behind each point" },
+          { label: "SVG, for slides", onSelect: exportSvg, disabled: !series.length },
+          { label: "PNG, for slides", onSelect: exportPng, disabled: !series.length },
+        ]} />
         {saveBar}
       </div>
-      {note && <p className="empty error" role="alert">{note}</p>}
-      {notice && <p className="undo-note" role="status">{notice}</p>}
-      {onRestore && (
-        <p className="undo-note" role="status">
-          {restoreNote ?? "Started a new chart."}{" "}
-          <button className="btn sm" onClick={onRestore}>Restore the previous draft</button>
-        </p>
-      )}
 
       <div className="builder">
         <section className="card layers" aria-label="Layers">
@@ -511,6 +525,7 @@ export function ChartBuilder({ token, chart, setChart, saveBar, readable = ANYTH
                 sideNote={sideNote(l)}
                 putOnSide={(side) => putOnSide(l, side)}
                 nothingNote={nothingNote(l)}
+                onBroken={(is) => markBroken(l.id, is)}
                 set={(patch) => setChart((s) => updateLayer(s, l.id, patch))}
                 move={(by) => setChart((s) => moveLayer(s, l.id, by))}
                 remove={() => setChart((s) => removeLayer(s, l.id))}
@@ -522,20 +537,18 @@ export function ChartBuilder({ token, chart, setChart, saveBar, readable = ANYTH
                 YoY and indexed still are.
               </p>
             )}
-            <div>
-              <div className="faint small">Templates</div>
-              <div className="row wrap">
-                {TEMPLATES.map((t) => (
-                  <button key={t.label} className="btn sm" disabled={!fallback.length && !chart.layers.length}
-                    title={t.hint + (t.per === "one" ? " (the chart's first company)" : "") + (chart.layers.length ? ". Replaces the layers; you can restore them" : "")}
-                    onClick={() => {
-                      if (chart.layers.length || chart.title) onReplace?.(`Replaced your layers with the ${t.label} template.`);
-                      setChart((s) => applyTemplate(s, t, fallback));
-                    }}>
-                    {t.label}
-                  </button>
-                ))}
-              </div>
+            {/* one menu, not seven buttons (Riley 60, 101); replacing layers says so with Restore (a toast) */}
+            <div className="templates">
+              <MenuButton label={chart.layers.length ? "Replace with a template" : "Start from a template"} align="start"
+                disabled={!fallback.length && !chart.layers.length}
+                items={TEMPLATES.map((t) => ({
+                  label: t.label,
+                  title: t.hint + (t.per === "one" ? " (the chart's first company)" : "") + (chart.layers.length ? ". Replaces the layers; you can restore them" : ""),
+                  onSelect: () => {
+                    if (chart.layers.length || chart.title) onReplace?.(`Replaced your layers with the ${t.label} template.`);
+                    setChart((s) => applyTemplate(s, t, fallback));
+                  },
+                }))} />
             </div>
           </div>
         </section>
@@ -603,23 +616,13 @@ export function ChartBuilder({ token, chart, setChart, saveBar, readable = ANYTH
                 </button>
               ))}
             </span>
-            <label className="chk" title="10-K (K), 10-Q (Q) and 8-K results (8, item 2.02, where parsed) on the time axis">
-              <input type="checkbox" checked={!!chart.markers}
-                onChange={(e) => {
-                  const markers = e.target.checked;
-                  setChart((s) => ({ ...s, markers: markers || undefined }));
-                }} />
-              Filing markers
-            </label>
-            <label className="chk" title="For slides: light background, a subtitle with periods and units, and a source footnote naming forms, companies and the as-of date; Export SVG / PNG keep it">
-              <input type="checkbox" checked={!!chart.deck}
-                onChange={(e) => {
-                  const deck = e.target.checked;
-                  setChart((s) => ({ ...s, deck: deck || undefined }));
-                }} />
-              Deck output
-            </label>
-            {loading && <span className="sub">Loading…</span>}
+            <MenuButton label="Show" title="Filing markers on the time axis, and the deck look for slides" items={[
+              { label: "Filing markers", checked: !!chart.markers, title: "10-K (K), 10-Q (Q) and 8-K results (8, item 2.02, where parsed) on the time axis",
+                onCheckedChange: (markers) => setChart((s) => ({ ...s, markers: markers || undefined })) },
+              { label: "Deck output", checked: !!chart.deck, title: "For slides: light background, a subtitle with periods and units, and a source footnote naming forms, companies and the as-of date; Export SVG / PNG keep it",
+                onCheckedChange: (deck) => setChart((s) => ({ ...s, deck: deck || undefined })) },
+            ]} />
+            {loading && <span className="sub" role="status">Loading…</span>}
           </div>
           {chart.deck && (
             <div className="card-h deck-h">
@@ -630,7 +633,7 @@ export function ChartBuilder({ token, chart, setChart, saveBar, readable = ANYTH
                   const subtitle = e.target.value;
                   setChart((s) => ({ ...s, subtitle: subtitle || undefined }));
                 }} />
-              <span className="sub">deck output: light background · source footnote added automatically</span>
+              <span className="sub">Deck output: a light background, and the source footnote is added for you</span>
             </div>
           )}
           {whyCalendar && <p className="chart-why">{whyCalendar}</p>}
@@ -653,7 +656,7 @@ export function ChartBuilder({ token, chart, setChart, saveBar, readable = ANYTH
                   : "Start with + Metric (a company and a metric), + Formula (e.g. net_income / revenue), or one of the templates."}
             </p>
           )}
-          {latest && <div className="foot">Hover for each value's period and filing; click a point to open it in the reader.</div>}
+          {latest && <div className="foot">Point at a value, or tap it, for its period and filing; click it to open the filing in the reader.</div>}
         </section>
       </div>
     </div>
@@ -681,6 +684,7 @@ function LayerEditor({
   sideNote,
   putOnSide,
   nothingNote,
+  onBroken,
   set,
   move,
   remove,
@@ -714,6 +718,8 @@ function LayerEditor({
   putOnSide: (side: "L" | "R") => void;
   /** it has an answer with nothing to draw: what to do about it */
   nothingNote: string | null;
+  /** a formula's text doesn't check: the chart leaves the layer out until it does */
+  onBroken: (broken: boolean) => void;
   set: (patch: Partial<Layer>) => void;
   move: (by: -1 | 1) => void;
   remove: () => void;
@@ -758,7 +764,7 @@ function LayerEditor({
         </svg>
         <b className="grow" title={company?.name}>
           {layer.kind === "formula" ? "Formula" : segment ? "Segments" : price ? "Price" : "Metric"}
-          {who && <span className="faint"> · {who}</span>}
+          {who && <span className="faint"> {who}</span>}
         </b>
         <button className="btn sm ghost icon" onClick={() => move(-1)} disabled={index === 0}
           aria-label={`Move ${label} up`} title="Move up">
@@ -818,19 +824,15 @@ function LayerEditor({
           </select>
         </div>
       ) : (
-        <FormulaInput token={token} layer={layer} basis={basis} vocab={vocab} set={set} />
+        <FormulaInput token={token} layer={layer} basis={basis} vocab={vocab} set={set} onBroken={onBroken} />
       )}
       <div className="row">
         <input className="field grow" value={name} maxLength={MAX_LAYER_NAME} placeholder={auto}
           aria-label="Layer name (legend)" onChange={(e) => setName(e.target.value)} onBlur={commitName}
           onKeyDown={(e) => e.key === "Enter" && commitName()} />
-        <select aria-label="Colour" value={color} onChange={(e) => set({ color: Number(e.target.value) })}>
-          {COLOR_NAMES.map((c, i) => (
-            <option key={c} value={i}>{c}</option>
-          ))}
-        </select>
       </div>
-      <div className="row">
+      <Swatches color={color} label={label} onPick={(i) => set({ color: i })} />
+      <div className="row layer-draw">
         <select aria-label="Transform" value={balanceTtm ? "q" : layer.transform} onChange={(e) => set({ transform: e.target.value as Layer["transform"] })}>
           {options.map(([v, label]) => (
             <option key={v} value={v}
@@ -844,10 +846,18 @@ function LayerEditor({
             <option key={v} value={v}>{label}</option>
           ))}
         </select>
-        <select aria-label="Axis" value={placedOn ?? layer.axis} onChange={(e) => putOnSide(e.target.value as Layer["axis"])}>
-          <option value="L">{sides.L ? `Left axis (${sides.L})` : "Left axis"}</option>
-          <option value="R">{sides.R ? `Right axis (${sides.R})` : "Right axis"}</option>
-        </select>
+        {/* two words, not a select cut to "Left axis (U" (Riley 102): the unit is each side's hover */}
+        <span className="seg axis-seg" role="group" aria-label="Axis">
+          {(["L", "R"] as const).map((side) => {
+            const named = `${side === "L" ? "Left" : "Right"} axis${sides[side] ? ` (${sides[side]})` : ""}`;
+            return (
+              <button key={side} type="button" aria-pressed={(placedOn ?? layer.axis) === side} aria-label={named} title={named}
+                onClick={() => putOnSide(side)}>
+                {side === "L" ? "Left" : "Right"}
+              </button>
+            );
+          })}
+        </span>
       </div>
       {dimensionless && (
         <div className="row">
@@ -871,6 +881,37 @@ function LayerEditor({
   );
 }
 
+/** A layer's colour as the colours themselves (Riley 15: a select of names drew another colour than it
+ * said). Each swatch is the series class the line draws with (`.c0`..`.c7`), so the control can't
+ * disagree with the chart; a radio group, arrow keys between swatches. */
+function Swatches({ color, label, onPick }: { color: number; label: string; onPick: (i: number) => void }) {
+  const refs = useRef<(HTMLButtonElement | null)[]>([]);
+  const step = (by: number) => {
+    const next = (color + by + COLOR_NAMES.length) % COLOR_NAMES.length;
+    onPick(next);
+    refs.current[next]?.focus();
+  };
+  return (
+    <div className="swatches" role="radiogroup" aria-label={`Colour of ${label}`}>
+      {COLOR_NAMES.map((c, i) => (
+        <button key={c} ref={(el) => {
+          refs.current[i] = el;
+        }} type="button" role="radio" aria-checked={color === i} aria-label={c} title={c}
+          tabIndex={color === i ? 0 : -1} className={`swatch c${i}`} onClick={() => onPick(i)}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+              e.preventDefault();
+              step(1);
+            } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+              e.preventDefault();
+              step(-1);
+            }
+          }} />
+      ))}
+    </div>
+  );
+}
+
 const KIND_LABEL: Record<Suggestion["kind"], string> = { metric: "metric", ticker: "company", function: "function" };
 
 /** "Valid · ...": what the chart will read it as, in a person's words. */
@@ -890,12 +931,14 @@ function FormulaInput({
   basis,
   vocab,
   set,
+  onBroken,
 }: {
   token: string;
   layer: Layer;
   basis: "fiscal" | "calendar";
   vocab: Vocabulary;
   set: (patch: Partial<Layer>) => void;
+  onBroken?: (broken: boolean) => void;
 }) {
   const [draft, setDraft] = useState(layer.formula ?? "");
   // the cursor while suggesting (null: list closed), the highlighted row, and whether the user
@@ -981,6 +1024,11 @@ function FormulaInput({
   };
   const [check, setCheck] = useState<{ ok: true; unit: string; display: FormulaSeries["display"] } | { ok: false; problems: FormulaProblem[] } | null>(null);
   const [focused, setFocused] = useState(false);
+  const isBroken = check?.ok === false;
+  useEffect(() => {
+    onBroken?.(isBroken);
+  }, [isBroken]);
+  useEffect(() => () => onBroken?.(false), []);
 
   useEffect(() => {
     const formula = draft.trim();
@@ -1064,11 +1112,12 @@ function FormulaInput({
               <div key={i} className="err">
                 {p.message}
                 {at && !p.message.includes(at) && <span className="mono"> at “{at}”</span>}
-                {p.hint && <span className="faint"> · {p.hint}</span>}
+                {p.hint && <span className="faint">. {p.hint}</span>}
               </div>
             );
           })
-        : check?.ok && <div className="faint small">Valid · reads as {readsAs(check.unit, check.display)}.</div>}
+        : check?.ok && <div className="faint small">Valid: reads as {readsAs(check.unit, check.display)}.</div>}
+      {check?.ok === false && <div className="faint small">Not on the chart until the formula checks.</div>}
       {check?.ok !== false && (focused || !draft.trim()) && (
         <div className="faint small">
           Metrics by name read the company above; TICKER.metric reads another; ttm(), abs(), lags like revenue[-4q];

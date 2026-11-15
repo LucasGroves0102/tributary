@@ -55,17 +55,17 @@ describe("a chart's title", () => {
   it("is written from the layers, and follows them", () => {
     const one = companyChart(emptyChart(), NVDA);
     expect(one.title).toBe("");
-    expect(title(one)).toBe("NVDA: revenue and operating margin (TTM)");
+    expect(title(one)).toBe("NVDA: revenue (quarterly) and operating margin (TTM)");
     const moved = { ...one, layers: one.layers.map((l) => ({ ...l, companyId: MSFT })) };
-    expect(title(moved)).toBe("MSFT: revenue and operating margin (TTM)"); // never the old company's
+    expect(title(moved)).toBe("MSFT: revenue (quarterly) and operating margin (TTM)"); // never the old company's
     expect(title({ ...one, layers: one.layers.slice(0, 1) })).toBe("NVDA: revenue");
   });
 
   it("names several companies of one metric, and a formula as its text", () => {
     expect(title(companiesChart(emptyChart(), [NVDA, MSFT], "operating_margin", "ttm"))).toBe("Operating margin (TTM): NVDA and MSFT");
-    expect(title(chart([formula(1, "NVDA.revenue / MSFT.revenue", { defaultCompany: MSFT })]))).toBe("NVDA.revenue / MSFT.revenue (TTM)");
+    expect(title(chart([formula(1, "NVDA.revenue / MSFT.revenue", { defaultCompany: MSFT })]))).toBe("NVDA revenue ÷ MSFT revenue (TTM)");
     expect(title(chart([metric(1, NVDA, "revenue"), formula(2, "net_income / revenue", { defaultCompany: NVDA })])))
-      .toBe("NVDA: revenue (TTM) and net_income / revenue (TTM)");
+      .toBe("NVDA: revenue (TTM) and net income ÷ revenue (TTM)");
     expect(title(chart([metric(1, NVDA, "revenue"), metric(2, MSFT, "net_income")]))).toBe("NVDA and MSFT: revenue (TTM) and net income (TTM)");
   });
 

@@ -203,6 +203,28 @@ export function href(route: Route): string {
   }
 }
 
+/** Which page a route is, without its filters: a new page starts at the top (Riley 92: the chart builder
+ * opened scrolled to the middle, where the page before had been), a filter or a sort keeps the place.
+ * A company's tabs and an analysis' steps are pages; a filing's section is one too. */
+export function pageOf(route: Route): string {
+  switch (route.view) {
+    case "company":
+      return `company/${route.companyId}/${route.tab ?? "overview"}`;
+    case "filing":
+      return `filing/${route.companyId}/${route.accessionNo}/${route.section ?? ""}`;
+    case "workspace":
+      return `workspace/${route.workspaceId}`;
+    case "report":
+    case "thesis":
+    case "model":
+      return `${route.view}/${route.itemId}`;
+    case "analysis":
+      return `analysis/${route.projectId ?? ""}/${route.step ?? ""}/${route.itemId ?? ""}`;
+    default:
+      return route.view;
+  }
+}
+
 export function go(route: Route): void {
   window.location.hash = href(route);
 }

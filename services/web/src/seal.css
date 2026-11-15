@@ -324,6 +324,39 @@ h1.co-name {
   background: var(--rule);
 }
 
+/* an option in a menu that stays on or off (components/MenuButton MenuCheck): a square box, ticked */
+.menu-check {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.menu-box {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--ink-2);
+  display: grid;
+  place-items: center;
+}
+
+.menu-tick {
+  width: 8px;
+  height: 8px;
+  background: var(--ink);
+}
+
+/* how many of a menu's options are on, beside its name */
+.menu-on {
+  min-width: 18px;
+  padding: 0 4px;
+  background: var(--ink);
+  color: var(--page);
+  font-size: var(--fs-xs);
+  line-height: 18px;
+  text-align: center;
+}
+
 .tabs.co-tabs {
   margin-top: 24px;
   padding: 0;

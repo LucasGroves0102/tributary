@@ -143,3 +143,27 @@ Decisions taken while building, so later batches hold to them:
 - No middle dot as a separator anywhere in new copy: separate items (flex gap) or sentences.
 - Statement row labels stay on one line where the table has 900px or more (`@container tw`), and wrap below it.
 - Screener: column rules between figures only.
+
+## The human pass (Riley's audit, branch riley-fixes, 2026-11-15)
+
+Decisions taken while fixing test 6, so later work holds to them:
+
+- One control: every text field, select and date field is the same box (32px, square, the page's ground, 1px
+  `--rule-2`, sans 14; 30px and 13 in a dense card such as a chart layer). A select is styled, not the system's: its
+  chevron is two CSS gradients (no image: CSP). No Radix Select (it locks scroll). Labels over fields are sans 13,
+  `--ink-2`, weight 500, never bold.
+- One button scale: 32px, or 28px (`.sm`) inside a row, a card's head or a table. A page's bar never mixes them
+  (`.page-bar .btn.sm` is 32px). Styles: primary (ink fill, one per view), secondary (ink outline), ghost (text).
+- A page's bar stays on one row: secondary actions go in a menu (`components/MenuButton`, a non-modal Radix
+  DropdownMenu; options that stay on are checkbox items and the button counts how many are on). The chart builder:
+  New chart, Export (CSV, SVG, PNG), Save; Filing markers and Deck output under Show; templates one menu. A saved
+  item's name has its own line under the title ("Chart in Semis: NVDA revenue", then "Unsaved changes" with a
+  dot), never cut beside the buttons.
+- One toast system (`components/Toasts`): what just happened, at most one action (Undo, Restore), at the foot of
+  the window with the delete undo notes, never over the top bar; gone after 6 s (10 with an action), an error
+  stays until dismissed; a newer toast on the same subject replaces it. Banners that stay on the page are for a
+  state that lasts (a sandbox, an error the page can't work without), not for confirmations.
+- A chart's colour control is the colours (swatches as a radio group), never colour names. The series are
+  ordered so the first six read apart: ink, slate, umber, plum, teal, rose (then olive, warm grey); bull is teal,
+  bear umber. A dashed line means a forecast and nothing else.
+- A new page starts at its top (`route.ts` `pageOf`); a filter or sort keeps the place.

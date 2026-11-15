@@ -1,4 +1,4 @@
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { ApiError, demoUsers, login, me as fetchMe, watchlistCsv } from "./api";
 import { useAlertsUnread } from "./alerts/useAlerts";
@@ -46,7 +46,7 @@ import {
   WorkspacePage,
 } from "./pages/lazy";
 import { readableCount, Welcome } from "./pages/Welcome";
-import { go, href, parse, useRoute } from "./route";
+import { go, href, pageOf, parse, useRoute } from "./route";
 import { resolveTicker } from "./palette/commands";
 import { useShortcuts } from "./shortcuts";
 import { inScope, ScopeContext, scopeOf } from "./scope";
@@ -130,6 +130,17 @@ export function App(props: Props = {}) {
   // every navigation and on Escape
   const [navOpen, setNavOpen] = useState(false);
   useEffect(() => setNavOpen(false), [route]);
+  // a new page starts at its top (route.ts pageOf); a layout effect, so a page's own scroll to a passage
+  // (the reader's ?at=, its passive effect) still wins
+  const page = pageOf(route);
+  const firstPage = useRef(true);
+  useLayoutEffect(() => {
+    if (firstPage.current) {
+      firstPage.current = false;
+      return;
+    }
+    window.scrollTo(0, 0);
+  }, [page]);
   // the other screens' code, once signed in and idle (pages/lazy.ts)
   const signedIn = token !== null;
   useEffect(() => {

@@ -34,15 +34,17 @@
   --overlay: rgb(22 19 20 / 0.32);
   --lift: 0 1px 2px rgb(0 0 0 / 0.04), 0 18px 50px rgb(20 8 8 / 0.09);
   --edge-shadow: rgb(22 19 20 / 0.2);
-  /* chart series, in layer order: the ink first, then the inks a printed report would use beside it;
+  /* chart series, in layer order: the ink first, then the inks a printed report would use beside it,
+     ordered so the first six read apart (ink, slate, umber, plum, teal, rose; Riley 122: teal beside
+     olive and ink beside warm grey looked alike in Compare);
      never the accent red (it means "act here" or "may change") */
   --series-0: #5c5350;
   --series-1: #3d5a80;
   --series-2: #9a5a17;
-  --series-3: #2f6b5a;
-  --series-4: #6b4a7a;
-  --series-5: #4b6b2a;
-  --series-6: #a8456a;
+  --series-3: #6b4a7a;
+  --series-4: #2f6b5a;
+  --series-5: #a8456a;
+  --series-6: #4b6b2a;
   --series-7: #8a817c;
   color-scheme: light;
 }
@@ -76,10 +78,10 @@
     --series-0: #cdc3b8;
     --series-1: #8fa8d6;
     --series-2: #d99a55;
-    --series-3: #6fbfa6;
-    --series-4: #c09ad0;
-    --series-5: #a4c46e;
-    --series-6: #e88aa8;
+    --series-3: #c09ad0;
+    --series-4: #6fbfa6;
+    --series-5: #e88aa8;
+    --series-6: #a4c46e;
     --series-7: #998f86;
     color-scheme: dark;
   }
@@ -113,10 +115,10 @@
   --series-0: #cdc3b8;
   --series-1: #8fa8d6;
   --series-2: #d99a55;
-  --series-3: #6fbfa6;
-  --series-4: #c09ad0;
-  --series-5: #a4c46e;
-  --series-6: #e88aa8;
+  --series-3: #c09ad0;
+  --series-4: #6fbfa6;
+  --series-5: #e88aa8;
+  --series-6: #a4c46e;
   --series-7: #998f86;
   color-scheme: dark;
 }

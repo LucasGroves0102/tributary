@@ -256,12 +256,12 @@ function Drawing({ lay, heading, subtitle, foot, onMarker, children }: {
         </text>
       )}
       {lay.units.left && (
-        <text className="ch-unit" x={lay.leftCaption.x} y={plot.t - 6} textAnchor={lay.leftCaption.anchor}>
+        <text className="ch-unit" x={lay.leftCaption.x} y={plot.t - 12} textAnchor={lay.leftCaption.anchor}>
           {lay.units.left}
         </text>
       )}
       {lay.units.right && (
-        <text className="ch-unit" x={lay.rightCaption.x} y={plot.t - 6} textAnchor={lay.rightCaption.anchor}>
+        <text className="ch-unit" x={lay.rightCaption.x} y={plot.t - 12} textAnchor={lay.rightCaption.anchor}>
           {lay.units.right}
         </text>
       )}

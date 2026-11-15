@@ -16,5 +16,6 @@ export default defineConfig({
     },
   },
   // e2e/ is Playwright (npm run e2e), not vitest
-  test: { environment: "jsdom", include: ["src/**/*.test.{ts,tsx}"] },
+  // test-setup.ts: the toast store (components/Toasts) is a module, emptied between tests
+  test: { environment: "jsdom", include: ["src/**/*.test.{ts,tsx}"], setupFiles: ["src/test-setup.ts"] },
 });

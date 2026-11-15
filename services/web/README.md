@@ -816,8 +816,9 @@ Chart builder (`src/chart/`): a "Chart a company" box next to the title searches
 chart can read (by name or ticker) and adds the picked one's revenue (TTM) as a new line layer.
 Each layer card starts with a labelled Company row (full width) and its header shows the
 ticker. Names and tickers of companies on the chart come from the pick, or are asked once by id.
-Tickers in a formula's suggestions come from the same search. Layers can be renamed (legend), recoloured (colours stay with a
-layer when it moves), moved up or down, hidden; types line, bar, area, stacked bar and stacked
+Tickers in a formula's suggestions come from the same search. Layers can be renamed (legend), recoloured (the colour
+control is the eight series colours themselves, a radio group drawn with the classes the lines use, so it can't say
+"Blue" and draw grey as the old named select did; colours stay with a layer when it moves), moved up or down, hidden; types line, bar, area, stacked bar and stacked
 area (layers of the same stacked type and axis stack, negatives downward); transforms quarterly,
 TTM, YoY, QoQ, indexed and per share (`ttm(f) / weighted_shares_diluted` in the quarter view,
 offered only when the catalog has the share count); ranges 1y/3y/5y/10y/max or a custom first and last period end; quarterly or annual frequency
@@ -828,7 +829,14 @@ balances as the year-end value, ratios full-year; QoQ becomes YoY; the Transform
 controls below (`chart/autocomplete.ts`; Tab completes, arrows then Enter pick). The API checks them as
 you type: the chart takes a formula as soon as it's valid (the check's 350 ms is the debounce), or on
 Enter or blur whatever it is; every bad name shows at once, with "did you mean" when there is a close
-one. Deck output draws the chart in the light palette (Seal's light tokens: the ink first, never the red;
+one, and while its text doesn't check the layer is off the chart, its title and its legend (the old formula's
+line used to stay under the new one's error). A formula reads in words in legends and titles ("inventory ÷
+cost of revenue × 365", "COST revenue ÷ WMT revenue", `formulaWords`); the card and the CSV keep what was
+typed. The page's bar stays on one row: New chart, Export (CSV, SVG, PNG: one menu), Save; Filing markers and
+Deck output are under Show (a count on the button says how many are on), the templates one menu (Start from /
+Replace with a template). What happened (a new chart, a template over your layers, a PNG that failed) is a
+toast at the foot of the window (`components/Toasts`), with Restore where it applies; Restore also stays in the
+bar while a replaced draft can come back. Deck output draws the chart in the light palette (Seal's light tokens: the ink first, never the red;
 `chart/export.ts` mirrors them) with a subtitle (periods and units,
 editable), axis unit captions and a source footnote ("Source: SEC filings via Tributary; forms
 for companies; latest filing; as of"), which SVG and PNG exports keep. Evaluate answers are kept
@@ -837,7 +845,8 @@ asks the API nothing. Clicking a point
 (or Enter on it; arrows move between quarters and layers) opens its newest source filing in the
 reader. Filing markers put each company's 10-Ks and 10-Qs (public index) and 8-K results (item
 2.02, from parsed filings) in a band of their own under the plot, their letters only where they fit
-(10-Ks first; the rest stay as stems, their hover names them), and on a chart of years only the 10-Ks.
+(10-Ks first, at least 13 units apart; the rest stay as stems, their hover names them), each company's in its
+line's colour (the footnote's key says so when there are several), and on a chart of years only the 10-Ks.
 The companies marked are the ones the layers read: a formula's are those its answer read, so
 `MSFT.capex / MSFT.revenue` marks Microsoft's filings whatever its default company (analyst test 4: it
 marked nothing).
@@ -846,8 +855,9 @@ marked nothing).
 How charts tell the truth, in every chart that draws through `chart/LayerChart.tsx` (the builder,
 Overview, Revenue, Analysis Numbers, Compare, thesis and report embeds), SVG, PNG and CSV included:
 
-- **Titles** come from the layers (`chart/model.ts` `autoTitle`: "AMZN: revenue (TTM) and net_income /
-  revenue (TTM)", "Operating margin (TTM): KO and PEP", ", annual" when it is), naming what is drawn,
+- **Titles** come from the layers (`chart/model.ts` `autoTitle`: "AMZN: revenue (TTM) and net income ÷
+  revenue (TTM)", "Operating margin (TTM): KO and PEP", ", annual" when it is; a quarter's figure beside a
+  TTM one is "(quarterly)", or "revenue and operating margin (TTM)" read as both TTM), naming what is drawn,
   until the user types one; then the builder says "Custom title" and offers the automatic one back.
   `ChartState.title` holds only what was typed, so a chart saved before this keeps its stored title as
   a custom one. Templates and the Chart buttons leave it empty.
@@ -857,8 +867,8 @@ Overview, Revenue, Analysis Numbers, Compare, thesis and report embeds), SVG, PN
   in another unit it moves to the other, and with both taken it isn't drawn (the card and the chart's
   footnote say so, and its values stay in the tooltip, the table and the CSV). Dollars, dollars per share,
   an index and a multiple never share one, so the smaller doesn't flatten at zero. Percents of every kind
-  do. Each layer's Axis control shows the side it is drawn on, with that side's unit ("Right axis
-  (USD)"), never only what it asked for; choosing a side moves the layer's whole unit there and the
+  do. Each layer's Axis control (two buttons, Left and Right) shows the side it is drawn on, with that side's
+  unit in its name and hover ("Right axis (USD)"), never only what it asked for; choosing a side moves the layer's whole unit there and the
   unit drawn there to the other side (`askSides`).
 - **A balance is never "TTM"**: a layer that reads only balances (`chart/metrics.ts` POINT_IN_TIME, the
   mirror of query-api `formula/check.py`; loans and deposits included) has no "(TTM)" in its legend or
@@ -891,8 +901,11 @@ Overview, Revenue, Analysis Numbers, Compare, thesis and report embeds), SVG, PN
 - **Basis**: the Calendar / Fiscal control highlights what is applied. Fiscal quarters only line up
   within one company, so with several (counted from what the formulas really read) the chart draws calendar
   ones and says why; the choice is kept for when it's one company again.
-- **Axes**: margins are as wide as the tick labels, a caption too wide for its margin runs from the
-  chart's edge, period labels never touch, a sliver past zero (-$8K beside $30M) doesn't earn a step of
+- **Axes**: margins are as wide as the tick labels (no left gutter when only the right axis is drawn), a
+  caption too wide for its margin runs from the chart's edge and sits clear of the top tick's label, period
+  labels never touch and step by 1, 2, 4, 8... quarters (whole years from 4) or 1, 2, 5, 10 years, counted
+  back from the last (every 7 quarters read FY2010 Q1, FY2011 Q4), a line is dashed only for a forecast (a
+  right-axis line is solid, its legend says "(right axis)"), a sliver past zero (-$8K beside $30M) doesn't earn a step of
   empty axis, ticks have the decimals to tell them apart, and a lone bar doesn't fill the chart.
 
 Compare's dollar charts can also read on a log scale or indexed to the first value in range (not

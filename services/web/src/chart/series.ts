@@ -55,7 +55,7 @@ export interface Series {
   type: LayerType;
   axis: Axis;
   points: Point[];
-  /** drawn dashed whatever its axis (a model's forecast); unset: dashed on the right axis */
+  /** drawn dashed (a model's forecast); unset: solid, whatever its axis (layout.ts dashedOf) */
   dashed?: boolean;
   /** drawn lighter and thinner: a model's bear / bull case beside its base case */
   faint?: boolean;

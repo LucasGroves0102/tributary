@@ -202,9 +202,11 @@ kbd,
   display: inline-flex;
   align-items: center;
   gap: var(--sp-3);
+  justify-content: center;
   border: 1px solid var(--ink);
   background: transparent;
-  padding: 7px 14px;
+  min-height: 32px;
+  padding: 0 14px;
   font-family: var(--sans);
   font-size: var(--fs-base);
   font-weight: 600;
@@ -226,9 +228,18 @@ a.btn:hover {
   transform: scale(0.97);
 }
 
+/* One scale (Riley 105): a button is 32px, or 28px inside a row, a card's head or a table. A page's
+   own bar never mixes the two. */
 .btn.sm {
-  padding: 4px 9px;
+  min-height: 28px;
+  padding: 0 10px;
   font-size: var(--fs-sm);
+}
+
+.page-bar .btn.sm {
+  min-height: 32px;
+  padding: 0 14px;
+  font-size: var(--fs-base);
 }
 
 /* the one action of a view: the ink, filled (--action; the red is the seal's) */
@@ -984,9 +995,9 @@ a.btn:hover {
 }
 
 .who select {
-  border: 1px solid var(--rule-2);
-  background: var(--sheet);
-  padding: 3px 6px;
+  height: 28px;
+  background-color: var(--sheet);
+  font-size: var(--fs-sm);
 }
 
 /* Pages, cards, tables */
@@ -1428,38 +1439,82 @@ table.t {
   grid-column: 1 / -1;
 }
 
-/* selects and inputs are one height, so their labels line up */
-.filters .field {
-  height: 34px;
-}
-
+/* a field's label: sans 13, the second ink, regular weight (bold sans labels read as a form's soup) */
 .filters label:not(.chk) {
   display: block;
   font-size: var(--fs-sm);
   color: var(--ink-2);
   margin-bottom: var(--sp-2);
-  font-weight: 600;
+  font-weight: 500;
 }
 
-/* inset a little: a field receives, so it sits on the page's ground, not the sheet's */
-.field {
-  width: 100%;
+/* One control (Riley pattern 9): every text field, select and date field is the same box, 32px, square,
+   on the page's ground (a field receives, so it sits inset), a 1px rule, sans 14. A select is drawn
+   here, not by the system: its chevron is two gradients (no image, for the CSP). */
+.field,
+select,
+input[type="date"] {
   border: 1px solid var(--rule-2);
-  padding: 6px 9px;
-  background: var(--page);
+  border-radius: 0;
+  background-color: var(--page);
+  color: var(--ink);
   font-family: var(--sans);
   font-size: var(--fs-base);
   transition: border-color var(--press);
 }
 
-.field:hover {
+.field {
+  width: 100%;
+  padding: 6px 9px;
+}
+
+.field:not(textarea),
+select,
+input[type="date"] {
+  height: 32px;
+}
+
+select,
+input[type="date"] {
+  padding: 0 9px;
+}
+
+select {
+  appearance: none;
+  padding-right: 28px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--ink-2) 50%),
+    linear-gradient(135deg, var(--ink-2) 50%, transparent 50%);
+  background-position: calc(100% - 15px) 55%, calc(100% - 10px) 55%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+/* the date's own calendar button, in the field's ink */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  opacity: 0.6;
+  cursor: pointer;
+}
+
+.field:hover,
+select:hover:not(:disabled),
+input[type="date"]:hover {
   border-color: var(--ink-3);
 }
 
-.field:focus {
+.field:focus,
+select:focus-visible,
+input[type="date"]:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: -1px;
   border-color: var(--ink);
+}
+
+select:disabled {
+  cursor: default;
+  opacity: 0.55;
 }
 
 input[type="checkbox"],
@@ -1593,14 +1648,16 @@ button.link:hover {
   font-size: 12px;
 }
 
+/* the layer card is dense: the same control a step smaller */
 .layer select,
-.layer .field {
-  border: 1px solid var(--line-2);
-  border-radius: 5px;
-  padding: 3px 6px;
-  background: var(--panel);
-  font-size: 12px;
+.layer .field:not(textarea) {
+  height: 30px;
+  font-size: var(--fs-sm);
   min-width: 0;
+}
+
+.layer .field {
+  padding: 4px 8px;
 }
 
 .layer .row select {
@@ -1747,6 +1804,31 @@ button.link:hover {
 
 .sw {
   flex: none;
+}
+
+/* a layer's colour: the colours themselves, the chosen one ringed in the ink */
+.swatches {
+  display: flex;
+  gap: 6px;
+  padding: 2px 0;
+}
+
+.swatch {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  background: currentColor;
+  transition: transform var(--press);
+}
+
+.swatch:hover {
+  transform: scale(1.12);
+}
+
+.swatch[aria-checked="true"] {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
 }
 
 .tip {
@@ -3526,15 +3608,54 @@ mark {
 }
 
 .savebar .saved-as {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px 10px;
+  flex-wrap: wrap;
+  font-family: var(--sans);
   font-size: var(--fs-sm);
-  max-width: 320px;
+  max-width: 420px;
+}
+
+.savebar .saved-as b {
+  font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  max-width: 40ch;
 }
 
 .savebar .dirty {
   color: var(--warn);
+  white-space: nowrap;
+}
+
+.savebar .dirty::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 5px;
+  vertical-align: 1px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* In a page's bar the buttons sit with the page's own, and the open item's name has a line of its own
+   under the title instead of squeezing beside them (Riley 21's screenshot: "● unsaved c..." cut off);
+   the save form hangs from the bar. */
+.page-bar {
+  position: relative;
+}
+
+.page-bar .savebar {
+  display: contents;
+}
+
+.page-bar .savebar .saved-as {
+  order: 99;
+  flex-basis: 100%;
+  max-width: none;
 }
 
 .save-form {
@@ -4052,10 +4173,10 @@ button.link.num {
   --series-0: #5c5350;
   --series-1: #3d5a80;
   --series-2: #9a5a17;
-  --series-3: #2f6b5a;
-  --series-4: #6b4a7a;
-  --series-5: #4b6b2a;
-  --series-6: #a8456a;
+  --series-3: #6b4a7a;
+  --series-4: #2f6b5a;
+  --series-5: #a8456a;
+  --series-6: #4b6b2a;
   --series-7: #8a817c;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
@@ -4385,10 +4506,10 @@ button.link.num {
     --series-0: #5c5350;
     --series-1: #3d5a80;
     --series-2: #9a5a17;
-    --series-3: #2f6b5a;
-    --series-4: #6b4a7a;
-    --series-5: #4b6b2a;
-    --series-6: #a8456a;
+    --series-3: #6b4a7a;
+    --series-4: #2f6b5a;
+    --series-5: #a8456a;
+    --series-6: #4b6b2a;
     --series-7: #8a817c;
     color-scheme: light;
   }
@@ -4439,7 +4560,19 @@ button.link.num {
 .layer-company > .small {
   flex: none;
   width: 58px;
-  color: var(--text-3);
+  color: var(--ink-3);
+  font-family: var(--sans);
+}
+
+/* the layer card's head: what it is (sans, like every control), then whose */
+.layer > .row > b.grow {
+  font-family: var(--sans);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.layer > .row > b.grow .faint {
+  font-weight: 500;
 }
 
 .layer-company .co-search,
@@ -4999,7 +5132,7 @@ mark.claim-mark {
 }
 
 .model-table td.case.bull {
-  color: var(--series-3);
+  color: var(--series-4);
 }
 
 /* the price and why past years have no multiple, beside "Valuation at your price" */

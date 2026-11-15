@@ -6,6 +6,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 
 import { App } from "./App";
 import { COMPANIES_COUNTED } from "./components/Sidebar";
+import { clearToasts } from "./components/Toasts";
 import { ACC, entry, feedFiling, NVDA, revenueRow, TESLA, TSLA } from "./fixtures";
 import { forgetVisits } from "./home/lastVisit";
 
@@ -120,6 +121,7 @@ async function key(k: string, opts: KeyboardEventInit = {}, target: EventTarget 
 }
 
 const $ = (sel: string) => container.querySelector<HTMLElement>(sel);
+const button = (text: string) => [...container.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent?.trim() === text);
 const drawer = () => $("aside.ai-drawer");
 const chip = () => $(".ai .chip")?.textContent;
 
@@ -141,6 +143,7 @@ beforeEach(() => {
 
 afterEach(() => {
   act(() => root.unmount());
+  clearToasts();
   vi.unstubAllGlobals();
   document.body.innerHTML = "";
   window.location.hash = "";
@@ -287,11 +290,14 @@ describe("new chart", () => {
     await settle();
     expect($("h1")?.textContent).toBe("Chart builder");
     expect(box().value).toBe("");
-    const restore = [...container.querySelectorAll(".undo-note button")].find((b) => b.textContent === "Restore the previous draft")!;
+    // a toast at the foot (components/Toasts), with the same Restore kept in the bar while it can
+    expect(document.querySelector(".undo-stack .undo-note")?.textContent).toContain("Started a new chart.");
+    const restore = [...document.querySelectorAll(".undo-stack .undo-note button")].find((b) => b.textContent === "Restore the previous draft")!;
     await act(async () => (restore as HTMLElement).click());
     await settle();
     expect(box().value).toBe("My draft");
-    expect($(".undo-note")).toBeNull();
+    expect(document.querySelector(".undo-stack .undo-note")).toBeNull();
+    expect(button("Restore the previous draft")).toBeUndefined();
     // the builder's own New: the same thing, offered there too
     await act(async () => [...container.querySelectorAll("button")].find((b) => b.textContent?.trim() === "New chart")!.click());
     await settle();
@@ -305,14 +311,19 @@ describe("new chart", () => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(box(), "Mine");
       box().dispatchEvent(new Event("input", { bubbles: true }));
     });
-    await act(async () => [...container.querySelectorAll("button")].find((b) => b.textContent === "Margins")!.click());
+    // templates are one menu (Radix, non-modal: opened with ArrowDown in jsdom)
+    for (let i = 0; i < 3; i++) await act(async () => new Promise((r) => setTimeout(r, 0)));
+    await act(async () => { container.querySelector(".templates .more-btn")!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })); });
+    for (let i = 0; i < 3; i++) await act(async () => new Promise((r) => setTimeout(r, 0)));
+    await act(async () => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((b) => b.textContent === "Margins")!.click());
     await settle();
     expect(box().value).toBe("");
-    expect($(".undo-note")?.textContent).toContain("Replaced your layers with the Margins template.");
-    await act(async () => [...container.querySelectorAll<HTMLElement>(".undo-note button")].find((b) => b.textContent === "Restore the previous draft")!.click());
+    expect(document.querySelector(".undo-stack .undo-note")?.textContent).toContain("Replaced your layers with the Margins template.");
+    // the bar keeps Restore after the toast has gone
+    await act(async () => button("Restore the previous draft")!.click());
     await settle();
     expect(box().value).toBe("Mine");
-    expect($(".undo-note")).toBeNull();
+    expect(document.querySelector(".undo-stack .undo-note")).toBeNull();
   });
 
   it("the nav's Chart builder still reopens the draft", async () => {

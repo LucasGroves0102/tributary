@@ -1,6 +1,8 @@
 import { useId, useState, type FormEvent } from "react";
 
 import { failureReason } from "../api";
+import { toast } from "../components/Toasts";
+import { ConfirmDelete } from "./Actions";
 import {
   canSave,
   companyOf,
@@ -37,6 +39,8 @@ export function SaveBar({ current, saved, label }: Props) {
   const [form, setForm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Close with unsaved changes asks first (Riley 61): the page keeps them, the saved item doesn't
+  const [closing, setClosing] = useState(false);
   const ready = canSave(current);
   const offline = saved.list.state === "unavailable" || saved.list.state === "error";
   const why = offline
@@ -52,6 +56,7 @@ export function SaveBar({ current, saved, label }: Props) {
     setError(null);
     try {
       await saved.save(current);
+      if (open) toast({ text: `Saved “${open.name}” in ${open.workspaceName}.`, topic: `saved-${current.kind}` });
     } catch (e) {
       setError(`Couldn't save: ${message(e)}.`);
     } finally {
@@ -63,13 +68,11 @@ export function SaveBar({ current, saved, label }: Props) {
     <div className="savebar">
       {open && (
         <span className="saved-as" title={`Saved in workspace “${open.workspaceName}”`}>
-          <span className="faint">{open.workspaceName} /</span> {open.name}
+          <span className="faint">{KIND_LABELS[current.kind]} in {open.workspaceName}:</span> <b>{open.name}</b>{" "}
           {dirty ? (
-            <span className="dirty" title="Changes since you last saved">
-              {" "}● unsaved changes
-            </span>
+            <span className="dirty" title="Changes since you last saved">Unsaved changes</span>
           ) : (
-            <span className="faint"> · saved</span>
+            <span className="faint">Saved</span>
           )}
         </span>
       )}
@@ -91,9 +94,18 @@ export function SaveBar({ current, saved, label }: Props) {
         {open ? "Save as…" : "Save…"}
       </button>
       {open && (
-        <button className="btn ghost" onClick={() => saved.close(current.kind)} title={`Stop editing “${open.name}”; it stays saved`}>
+        <button className="btn ghost" onClick={() => (dirty ? setClosing(true) : saved.close(current.kind))} title={`Stop editing “${open.name}”; it stays saved as it was`}>
           Close
         </button>
+      )}
+      {closing && open && (
+        <ConfirmDelete text={`Close “${open.name}” without saving?`} yes="Close without saving"
+          detail={`Your changes stay on this page, but “${open.name}” in ${open.workspaceName} keeps its last saved version.`}
+          onYes={() => {
+            setClosing(false);
+            saved.close(current.kind);
+          }}
+          onNo={() => setClosing(false)} />
       )}
       {error && !form && (
         <span className="err small" role="alert">

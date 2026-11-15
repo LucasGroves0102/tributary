@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 
 import { failureReason } from "../api";
+import { ToastNotes, useToasts } from "../components/Toasts";
 import type { SavedItem } from "../types";
 import { ITEM_NAME_MAX, nameProblem, WORKSPACE_NAME_MAX } from "./model";
 import { UNDO_MS, type Saved } from "./useSaved";
@@ -95,26 +96,30 @@ export function ConfirmDelete({ text, onYes, onNo, detail, yes = "Delete" }: {
   );
 }
 
-/** Deletes waiting out their undo window (#158), and one that failed once sent: a strip at the foot
- * of the window, on document.body like ConfirmDelete, so it stays while the page changes (a deleted
- * workspace's own page closes at once). */
-export function UndoDeletes({ saved }: { saved: Pick<Saved, "pendingDeletes" | "undoDelete" | "deleteFailure" | "dismissDeleteFailure"> }) {
-  const { pendingDeletes, deleteFailure } = saved;
-  if (!pendingDeletes.length && !deleteFailure) return null;
+/** Deletes waiting out their undo window (#158), one that failed once sent, and the app's toasts
+ * (components/Toasts): one strip at the foot of the window, on document.body like ConfirmDelete, so it
+ * stays while the page changes (a deleted workspace's own page closes at once) and never covers the
+ * top bar. */
+export function UndoDeletes({ saved }: { saved: Pick<Saved, "pendingDeletes" | "undoDelete" | "deleteFailure" | "dismissDeleteFailure"> | null }) {
+  const toasts = useToasts();
+  const pendingDeletes = saved?.pendingDeletes ?? [];
+  const deleteFailure = saved?.deleteFailure ?? null;
+  if (!pendingDeletes.length && !deleteFailure && !toasts.length) return null;
   return createPortal(
     <div className="undo-stack">
       {pendingDeletes.map((p) => (
         <p key={p.id} className="undo-note" role="status">
           <span>Deleted {p.what}.</span>
-          <button className="btn sm" onClick={() => saved.undoDelete(p.id)} aria-label={`Undo deleting ${p.what}`}>Undo</button>
+          <button className="btn sm" onClick={() => saved?.undoDelete(p.id)} aria-label={`Undo deleting ${p.what}`}>Undo</button>
         </p>
       ))}
       {deleteFailure && (
         <p className="undo-note failed" role="alert">
           <span>{deleteFailure}</span>
-          <button className="btn sm ghost" onClick={saved.dismissDeleteFailure}>Dismiss</button>
+          <button className="btn sm ghost" onClick={() => saved?.dismissDeleteFailure()}>Dismiss</button>
         </p>
       )}
+      <ToastNotes />
     </div>,
     document.body,
   );

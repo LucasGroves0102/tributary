@@ -26,6 +26,15 @@ export const MARKER_FORMS = Object.keys(PERIODIC);
 export const MARKER_KEY = "Markers: K = 10-K, Q = 10-Q, 8 = 8-K results (item 2.02, where the filing is parsed and you can read filings).";
 export const ANNUAL_MARKER_KEY = "Markers: K = 10-K.";
 
+/** The footnote's key to the markers; with several companies, which is whose (Riley 98: "K K 8 8" said
+ * nothing about who filed): each company's marks are in its first layer's colour, named on hover. */
+export function markerKey(frequency: "quarterly" | "annual", companies: string[]): string {
+  const base = frequency === "annual" ? ANNUAL_MARKER_KEY : MARKER_KEY;
+  return companies.length > 1
+    ? `${base.replace(/\.$/, "")}; each in its company's line colour (${companies.join(", ")}), the filing named on hover.`
+    : base;
+}
+
 /** A chart of years marks the filing a year is reported in: quarterly ones say nothing there. */
 export function markersFor(markers: Marker[], frequency: "quarterly" | "annual"): Marker[] {
   return frequency === "annual" ? markers.filter((m) => m.kind === "10-K") : markers;

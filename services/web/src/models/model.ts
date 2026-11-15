@@ -545,9 +545,9 @@ export function modelSeries(run: ModelRun, historyYears: number, cases: Scenario
   return out.filter((s) => s.points.some((p) => p.y !== null));
 }
 
-/** The chart colour (series index) of a bear and a bull forecast: umber and deep teal, the Seal
+/** The chart colour (series index) of a bear and a bull forecast: umber and deep teal (tokens.css order), the Seal
  * series after the ink and slate that revenue and operating income use. */
-export const CASE_COLORS = { bear: 2, bull: 3 } as const;
+export const CASE_COLORS = { bear: 2, bull: 4 } as const;
 
 // --- the three-case table ---------------------------------------------------------------------
 

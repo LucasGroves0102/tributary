@@ -182,7 +182,7 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
 
   return (
     <div className={embedded ? "compare-embedded" : "page"}>
-      <div className={embedded ? "row wrap" : "row"}>
+      <div className={embedded ? "row wrap" : "row page-bar"}>
         {embedded ? <h2 className="grow">Comps</h2> : <h1 className="grow">Compare</h1>}
         {target && !embedded && <span className="muted">Comps: {target.name}</span>}
         <button className="btn" onClick={exportCsv} disabled={!rows.length}

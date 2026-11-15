@@ -87,8 +87,8 @@ describe("layers", () => {
     expect(autoName(metric({ metric: "deposits", transform: "yoy" }), short, metricLabel)).toBe("NVDA deposits YoY");
     const formula = (f: string): Layer => ({ ...metric(), kind: "formula", formula: f, transform: "ttm" });
     expect(readsBalances(formula("GS.loans / GS.deposits"))).toBe(true);
-    expect(autoName(formula("cash / total_assets"), short, metricLabel)).toBe("cash / total_assets");
-    expect(autoName(formula("free_cash_flow / revenue"), short, metricLabel)).toBe("free_cash_flow / revenue (TTM)");
+    expect(autoName(formula("cash / total_assets"), short, metricLabel)).toBe("cash ÷ total assets"); // a formula in words (Riley 63)
+    expect(autoName(formula("free_cash_flow / revenue"), short, metricLabel)).toBe("free cash flow ÷ revenue (TTM)");
     expect(readsBalances(formula("ttm(capex) / total_assets"))).toBe(false);
     expect(readsBalances(formula("total_assets[-4q]"))).toBe(true);
     expect(autoTitle(chart([metric({ metric: "loans", transform: "ttm" })]), short, metricLabel)).toBe("NVDA: loans");
