@@ -643,10 +643,13 @@ on the folder changed last. Never just the first workspace.
   and bear, base and bull side by side: history years, the TTM (when it isn't a fiscal year end)
   and the current year's reported quarters once per line, then a row per case for the forecast
   years, the case being edited marked. A split or merger year (the API's `share_break`) shows no
-  share change or EPS growth, and per-share figures before it are marked * with why. The chart
-  draws revenue and operating income, history solid, each case dashed (bear and bull lighter,
+  share change or EPS growth, and per-share figures before it are marked * with why. Two charts side
+  by side, revenue and operating income, each on its own scale (a 4% margin's operating income read as
+  zero on a revenue axis, Riley 36), history solid as "Reported", each case dashed (bear and bull lighter,
   `faint`, and each in its own colour, `CASE_COLORS`: umber and deep teal, the table's case labels
-  in the same two). **Bear / base / bull**: a switch picks the case being edited; "Add bear and bull cases"
+  in the same two). The table opens scrolled to the forecast, the line's name and its case frozen while the
+  years scroll. The page's longer explanations (how the model works, one-offs, how the multiples are worked
+  out) are one sentence each with the rest behind a closed "How this works". **Bear / base / bull**: a switch picks the case being edited; "Add bear and bull cases"
   copies the run's preview of them (the base case moved by half its growth, at least 5 points, and
   a fifth of its margin, at least 3; the rates the user set; a case's default FCF margin follows its
   own operating margin, the API's rule worded in the case's rules line), and waits for the run of the latest
@@ -697,8 +700,9 @@ per company, from its filings to a thesis that's checked after every filing. Rul
   `access=financials` on the API too), suggested peers from `/peers` (readable ones, the first
   3 ticked), a name; it creates the workspace with its project and opens step 1.
 - **A project** (`#/analysis/{id}[/{step}[/{item}]]`, `ProjectPage.tsx`): a header with the
-  company (public identity), "n of 8 steps done" and tabs for the 8 steps under the rail's names
-  (each tab opens its own step); a rail of the 8 steps with a done marker each. Done means the
+  company (public identity) and "n of 8 steps marked done"; the rail of the 8 steps is the one
+  navigation (the header's tabs repeated it, Riley 51), with a done marker each and the thesis's
+  unsaved dot. A pin's confirmation is a toast ("Open the thesis" its action), cleared when the step changes. Done means the
   user ticked it (`project.done`), never automatic and never locked: work in a step (notes, a
   saved chart, peers, a model, the Core thesis written in the user's own words, a check: `hasWork`;
   a pinned passage or an embed alone isn't writing, #30, `project.ts` `ownLines`) shows as a hint under
@@ -712,15 +716,17 @@ per company, from its filings to a thesis that's checked after every filing. Rul
   company page's Segments tables; 2 **Numbers**: nine chart builder states (`charts.ts`: revenue
   and YoY growth, gross and operating margin, free cash flow = operating cash flow − capex,
   buybacks and dividends against free cash flow, shares outstanding, inventory with days of
-  inventory, remaining performance obligations and customer advances against revenue, ten fiscal
-  years annually then the year in progress; the Revenue tab's receivables vs revenue; long-term debt
-  with debt to equity), each drawn by `ChartView`, with Open in Chart builder, Save to project and Add
-  to thesis. Outflows are drawn below zero (`-capex` formula layers). After the backlog proxy, the
+  inventory, remaining performance obligations and customer advances with the backlog in years of
+  revenue on its own axis, ten fiscal years annually then the year in progress; the Revenue tab's
+  receivables vs revenue; long-term debt with debt to equity), each drawn by `ChartView`, with Open in
+  Chart builder, Save to project and Add to thesis; a contents row first and two charts a row where
+  there's room. Outflows are drawn below zero (`-capex` formula layers). After the backlog proxy, the
   backlog and orders the filings state in words (F8b, below); 3 **Earnings**: the company page's Earnings view (below), every outlook block, note and
   reconciliation pinnable; 4 **What changed**: "Since the last report" (the 8-Ks filed after the
   latest 10-Q/10-K period end, each excerpt pinnable, the balances they may have changed flagged),
   then the filing page's `Changes` for the latest 10-Q and 10-K (a 10-Q against a year earlier,
-  ranked, filters; each pin names the passage's period);
+  ranked, filters; each pin names the passage's period; a change over 520 characters opens at five
+  lines with "Show the whole paragraph");
   5 **Peers**: Compare with the target fixed and the peers saved in the project (`embedded`:
   changes come back instead of going to the URL), Save to project / Add to thesis for the comps;
   6 **Model**: the project's models (ModelPage embedded, bear/base/bull side by side), "Create

@@ -147,8 +147,8 @@ it("the bell counts new filing alerts; the list says what was filed, its figures
   expect(q.querySelector(".alert-figures")?.textContent).toContain("Gross margin73.5% -1.0 pts on a year earlier");
   expect(q.querySelector(".tag.crossed")?.textContent).toBe("1 red line crossed");
   expect([...q.querySelectorAll(".alert-redlines li")].map((li) => li.textContent)).toEqual([
-    "Crossed Gross margin below 75% (gross_margin below 75.0%; 73.5%)",
-    "Clear Gross margin below 70% (gross_margin below 70.0%; 73.5%)",
+    "Crossed Gross margin below 75% (73.5%)",
+    "Clear Gross margin below 70% (73.5%)",
   ]);
   const links = [...q.querySelectorAll<HTMLAnchorElement>(".alert-links a")].map((a) => [a.textContent, a.getAttribute("href")]);
   expect(links).toEqual([
@@ -277,11 +277,14 @@ it("Monitor's red lines: crossed and clear on the latest figures; a typed 55 is 
   await settle();
   const rows = [...container.querySelectorAll(".redline-list li")];
   expect(rows.map((r) => r.querySelector(".redline-state")?.textContent)).toEqual(["Crossed", "Clear"]);
-  expect(rows[0]!.textContent).toContain("gross_margin below 75.0% · trailing twelve months · 73.5% at Oct 26, 2026");
+  // the rule in words, no metric names (Riley 84): the label, then the period and the latest figure
+  expect(rows[0]!.textContent).toContain("Gross margin below 75% Over the trailing twelve months; 73.5% at Oct 26, 2026");
+  expect(rows[0]!.querySelector("b")?.getAttribute("title")).toBe("Gross margin below 75.0%");
   expect(rows[1]!.textContent).toContain("3.1% at Oct 26, 2026");
   await act(async () => type(container.querySelector<HTMLInputElement>('input[inputmode="decimal"]')!, "55"));
   await settle();
   await act(async () => container.querySelector<HTMLFormElement>(".redline-form")!.requestSubmit());
   await settle();
-  expect(posted).toEqual([{ company_id: NVDA, label: "Gross margin below 55%", formula: "gross_margin", view: "ttm", op: "<", threshold: "0.55" }]);
+  // the first preset is operating margin: most companies report it (Riley 84)
+  expect(posted).toEqual([{ company_id: NVDA, label: "Operating margin below 55%", formula: "operating_margin", view: "ttm", op: "<", threshold: "0.55" }]);
 });

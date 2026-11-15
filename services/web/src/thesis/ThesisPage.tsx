@@ -41,6 +41,7 @@ import {
 } from "./model";
 import { useNewerFiling } from "./useRevisit";
 import { useThesisCheck, type ThesisChecks } from "./useThesisCheck";
+import { useLeaveWarning } from "../components/useLeaveWarning";
 
 interface Props {
   token: string;
@@ -203,6 +204,7 @@ function ThesisEditor({ token, item, initial, items, saved, label, readable, onO
 
   const thesis: Thesis = { companyId, markdown };
   const dirty = savedPrint(name.trim(), thesis) !== savedAs;
+  useLeaveWarning(dirty);
   const written = hasOwnText(markdown);
 
   // the draft follows the text: kept while there are unsaved changes, dropped once saved

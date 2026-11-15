@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useId, useRef, useState, type ReactNode } from "react";
 
 import { filingIndex, filings as fetchFilings, insiderFilings, sectionChanges } from "../api";
 import { day } from "../format";
@@ -379,6 +379,29 @@ const KIND: Record<Change["kind"], string> = { new: "New", removed: "Removed", r
 
 /** The materiality view's list: one list across sections (ranked) or section by section, each
  * change with its section, period, what made it rank and where it sits in the filing. */
+/** A change longer than this (characters) opens folded to a few lines (Riley 114: the step ran to 8,236px of
+ * struck-through walls); the whole of it is a click away and in the reader. */
+const FOLD_CHARS = 520;
+
+function changeLength(c: Change): number {
+  return c.words ? c.words.reduce((n, [, t]) => n + t.length + 1, 0) : (c.text ?? c.prior_text ?? "").length;
+}
+
+function Folded({ long, children }: { long: boolean; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const id = useId();
+  return (
+    <>
+      <span id={id} className={long && !open ? "change-body folded" : "change-body"}>{children}</span>
+      {long && (
+        <button type="button" className="btn sm ghost fold-toggle" aria-expanded={open} aria-controls={id} onClick={() => setOpen((o) => !o)}>
+          {open ? "Show less" : "Show the whole paragraph"}
+        </button>
+      )}
+    </>
+  );
+}
+
 function MaterialList({ data, companyId, pin, view, all, onAll }: {
   data: SectionChanges;
   companyId: string;
@@ -415,16 +438,16 @@ function MaterialList({ data, companyId, pin, view, all, onAll }: {
               <span className="tag">{sectionShort(s.section_key)}</span>
               {period && <span className="tag period" title="The period this passage describes">{period}</span>}
             </span>
-            <span className="change-body">
+            <Folded long={changeLength(c) > FOLD_CHARS}>
               {c.kind === "rewritten" && c.words
                 ? c.words.map(([op, t], j) =>
                     op === "+" ? <ins key={j}>{text(t)} </ins> : op === "-" ? <del key={j}>{text(t)} </del> : <span key={j}>{text(t)} </span>,
                   )
                 : text(c.text ?? c.prior_text ?? "")}
-            </span>
+            </Folded>
             {c.why && c.why.length > 0 && (
               <span className="change-why faint small">
-                Why {view === "ranked" ? "it ranks here" : "it matters"}: {c.why.join(" · ")}
+                Why {view === "ranked" ? "it ranks here" : "it matters"}: {c.why.join("; ")}
               </span>
             )}
             <span className="change-links small">

@@ -60,6 +60,7 @@ import {
 import { ModelView, RunView } from "./ModelView";
 import { defaultRules } from "./rules";
 import { useModelRun } from "./useModelRun";
+import { useLeaveWarning } from "../components/useLeaveWarning";
 
 interface Props {
   token: string;
@@ -212,6 +213,7 @@ function ModelEditor({ token, item, initial, saved, label, embedded = false, act
   });
   const state = valid ? build({ base: parsed.base!, bear: parsed.bear, bull: parsed.bull }, adjustments!, price ?? undefined) : null;
   const dirty = (state ? JSON.stringify({ name: name.trim(), state: modelState(state) }) : null) !== savedAs;
+  useLeaveWarning(dirty);
   const nameError = nameProblem(name, ITEM_NAME_MAX);
 
   // a case that doesn't read right now keeps its last valid numbers on the chart and in the
@@ -412,13 +414,21 @@ function ModelEditor({ token, item, initial, saved, label, embedded = false, act
         <label className="visually-hidden" htmlFor={`${id}-name`}>Model name</label>
         <input id={`${id}-name`} className="field title-input" value={name} maxLength={ITEM_NAME_MAX}
           aria-invalid={!!nameError} onChange={(e) => set({ name: e.target.value })} />
+        {/* a sentence in view, the rest behind "How this works" (Riley pattern 10: paragraphs instead of defaults) */}
         <p className="muted small">
-          Model of <a href={href({ view: "company", companyId: initial.companyId })}>{company}</a>: fiscal-year history and the
-          current year's reported quarters from its filings, then your assumptions per forecast year: revenue growth and
-          operating margin, and below operating income the interest, tax, share count and free cash flow rates (a rate
-          you leave empty is Tributary's default, shown in grey italics).
+          A model of <a href={href({ view: "company", companyId: initial.companyId })}>{company}</a>: its filed history, then your
+          growth and margin for each year ahead. An empty rate is Tributary's default, in grey italics.
           {nameError && <span className="err"> {nameError}</span>}
         </p>
+        <details className="how-to-read">
+          <summary>How this works</summary>
+          <p className="foot">
+            Fiscal-year history and the current year's reported quarters come from the filings; then your assumptions per
+            forecast year: revenue growth and operating margin, and below operating income the interest, tax, share count and
+            free cash flow rates. A rate you leave empty is Tributary's default, shown in grey italics, and Reset sets a case
+            back to the defaults beside each field.
+          </p>
+        </details>
       </div>
 
       {oldModel && (
@@ -636,11 +646,14 @@ function AdjustmentsCard({ id, list, onChange, defaultFy, defaultQuarter }: {
           Add an adjustment
         </button>
       </div>
-      <p className="small muted card-b model-adj-note">
-        A one-off is an amount in a quarter's operating income you take out (positive if it raised it, like a refund;
-        negative for a charge): margins, growth, EPS and the defaults read the year without it, and the table shows it
-        reported and adjusted. Acquired revenue comes out of organic growth only. Both are what you enter, nothing more.
-      </p>
+      <details className="how-to-read card-b model-adj-note">
+        <summary>Take out a one-off charge or gain, or acquired revenue</summary>
+        <p className="small muted">
+          A one-off is an amount in a quarter's operating income you take out (positive if it raised it, like a refund;
+          negative for a charge): margins, growth, EPS and the defaults read the year without it, and the table shows it
+          reported and adjusted. Acquired revenue comes out of organic growth only. Both are what you enter, nothing more.
+        </p>
+      </details>
       {list.length > 0 && (
         <TableScroll label="Adjustments">
           <table className="t adjustments">
@@ -736,13 +749,18 @@ function PriceCard({ id, price, run, onChange }: { id: string; price: PriceDraft
           {parsed === null && <span className="err small">a price above $0 and the day it's for</span>}
         </div>
         <p className="small muted">
-          The price you type here is yours: Tributary doesn't fetch or keep market prices. It's saved with this model as typed
-          and gives market cap, P/E (price over diluted EPS; the TTM's is market cap over TTM net income), EV / Revenue,
-          EV / EBIT and FCF yield for the trailing twelve months and each case's forecast years, in the table below. Past
-          years get none: today's price over an old year's earnings isn't that year's multiple, and Tributary has no past
-          prices.
+          Your price, not a market feed: it gives the multiples in the table for the last twelve months and each forecast year.
           {figures !== "USD" && ` ${run?.company_id ? "This company" : "It"} reports in ${figures}: type the price in ${figures} (its home listing) and choose ${figures}, or the multiples stay blank. Tributary converts no currency.`}
         </p>
+        <details className="how-to-read">
+          <summary>How the multiples are worked out</summary>
+          <p className="foot">
+            The price you type here is yours: Tributary doesn't fetch or keep market prices. It's saved with this model as typed
+            and gives market cap, P/E (price over diluted EPS; the TTM's is market cap over TTM net income), EV / Revenue,
+            EV / EBIT and FCF yield for the trailing twelve months and each case's forecast years. Past years get none: today's
+            price over an old year's earnings isn't that year's multiple, and Tributary has no past prices.
+          </p>
+        </details>
         {v?.currency_mismatch && (
           <p className="small editor-warn price-mismatch" role="status">
             The price is in {v.currency_mismatch.price} and the figures are in {v.currency_mismatch.figures}: Tributary doesn't convert

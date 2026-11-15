@@ -9,8 +9,9 @@ import { inDisplay, OP_WORDS, RED_LINE_WORDS, redLineState, ruleText, thresholdF
 /** Rules worth starting from: each a formula in the formula language (no ticker: the company's own
  * figures), its view, and the comparison that describes the trouble. */
 export const PRESETS: { key: string; label: string; formula: string; view: "quarter" | "ttm"; op: RedLineOp; threshold: string }[] = [
-  { key: "gm", label: "Gross margin below", formula: "gross_margin", view: "ttm", op: "<", threshold: "" },
+  // operating margin first: most companies report it, and retailers, telecoms and banks have no gross margin (Riley 84)
   { key: "om", label: "Operating margin below", formula: "operating_margin", view: "ttm", op: "<", threshold: "" },
+  { key: "gm", label: "Gross margin below", formula: "gross_margin", view: "ttm", op: "<", threshold: "" },
   { key: "growth", label: "Revenue growth (TTM, on a year earlier) below", formula: "revenue_growth", view: "ttm", op: "<", threshold: "" },
   { key: "dso", label: "Receivables growth over revenue growth by more than", formula: "(receivables / receivables[-4q] - 1) - (revenue / revenue[-4q] - 1)", view: "quarter", op: ">", threshold: "10" },
   { key: "fcf", label: "Free cash flow margin below", formula: "fcf_margin", view: "ttm", op: "<", threshold: "" },
@@ -134,10 +135,10 @@ export function RedLines({ token, companyId, name }: { token: string; companyId:
               <li key={rule.rule_id} className={`redline ${state ?? "unknown"}`}>
                 <span className={`redline-state ${state ?? "unknown"}`}>{state ? RED_LINE_WORDS[state] : "Not evaluated"}</span>
                 <span className="grow">
-                  <b>{rule.label}</b>{" "}
+                  <b title={ruleText(rule)}>{rule.label || ruleText(rule)}</b>{" "}
                   <span className="faint small">
-                    {ruleText(rule)} · {rule.view === "ttm" ? "trailing twelve months" : "quarterly"}
-                    {r?.status === "ok" && r.period_end ? ` · ${inDisplay(r.value, r.display, r.unit)} at ${day(r.period_end, true)}` : ""}
+                    {rule.view === "ttm" ? "Over the trailing twelve months" : "Each quarter"}
+                    {r?.status === "ok" && r.period_end ? `; ${inDisplay(r.value, r.display, r.unit)} at ${day(r.period_end, true)}` : ""}
                   </span>
                 </span>
                 <button className="btn sm ghost" aria-label={`Remove the red line ${rule.label}`} onClick={() => void remove(rule.rule_id)}>Remove</button>

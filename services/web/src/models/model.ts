@@ -511,8 +511,10 @@ function toSource(s: RunSource | undefined, companyId: string): Source | null {
  * colour; bear and bull are fainter and each in its own colour (CASE_COLORS: umber and deep teal
  * from the Seal series, never the accent red), so the two can't be mistaken for each other
  * (morgan4, finding 28). History points carry their filing (a click opens it); forecast points
- * have none. */
-export function modelSeries(run: ModelRun, historyYears: number, cases: Scenario[]): Series[] {
+ * have none. `only` gives one line's series, named for a chart of its own ("Reported", "Base case"):
+ * the page draws revenue and operating income apart, as a 4% margin's operating income on a revenue axis
+ * read as zero and eight dashed legend entries couldn't be told apart (Riley 36). */
+export function modelSeries(run: ModelRun, historyYears: number, cases: Scenario[], only?: "revenue" | "operating_income"): Series[] {
   const history = run.history.slice(-historyYears);
   const base = runBase(run);
   const hist = (id: number, name: string, color: number, value: (y: RunYear) => number | null, src: string): Series => ({
@@ -533,14 +535,23 @@ export function modelSeries(run: ModelRun, historyYears: number, cases: Scenario
   });
   const shown = cases.filter((c) => run.cases[c]?.years.length);
   const several = shown.length > 1;
-  const name = (what: string, c: Scenario) => `${what} (${several ? c : "forecast"})`;
+  const name = (what: string, c: Scenario) => (only
+    ? several ? `${SCENARIO_LABELS[c]} case` : "Forecast"
+    : `${what} (${several ? c : "forecast"})`);
+  const reported = (what: string) => (only ? "Reported" : what);
+  // revenue's forecasts 1, 4, 5; operating income's 11, 14, 15 (they shared 5 before)
   const ids = { bear: 4, base: 1, bull: 5 } as const;
   const colour = (c: Scenario, line: number) => (c === "base" ? line : CASE_COLORS[c]);
-  const out: Series[] = [hist(0, "Revenue", 0, (y) => y.revenue, "revenue")];
-  for (const c of shown) out.push(fore(ids[c], name("Revenue", c), colour(c, 0), base?.revenue ?? null, (p) => p.revenue, run.cases[c]!.years, c !== "base"));
-  out.push(hist(2, "Operating income", 1, (y) => y.operating_income_adjusted, "operating_income"));
-  for (const c of shown) {
-    out.push(fore(ids[c] + 4, name("Operating income", c), colour(c, 1), base?.operating_income_adjusted ?? null, (p) => p.operating_income_adjusted, run.cases[c]!.years, c !== "base"));
+  const out: Series[] = [];
+  if (only !== "operating_income") {
+    out.push(hist(0, reported("Revenue"), 0, (y) => y.revenue, "revenue"));
+    for (const c of shown) out.push(fore(ids[c], name("Revenue", c), colour(c, 0), base?.revenue ?? null, (p) => p.revenue, run.cases[c]!.years, c !== "base"));
+  }
+  if (only !== "revenue") {
+    out.push(hist(2, reported("Operating income"), only ? 0 : 1, (y) => y.operating_income_adjusted, "operating_income"));
+    for (const c of shown) {
+      out.push(fore(ids[c] + 10, name("Operating income", c), colour(c, only ? 0 : 1), base?.operating_income_adjusted ?? null, (p) => p.operating_income_adjusted, run.cases[c]!.years, c !== "base"));
+    }
   }
   return out.filter((s) => s.points.some((p) => p.y !== null));
 }

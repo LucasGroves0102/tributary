@@ -101,6 +101,8 @@ export function PinButton({ make, what, label = "Add to thesis", compact = false
         aria-haspopup="menu" aria-expanded={open} aria-controls={open ? `${id}-menu` : undefined}
         aria-label={compact ? `${label}: this ${what}` : undefined}
         title={`Pin this ${what} into a section of the project's thesis`} onClick={() => setOpen((o) => !o)}>
+        {/* a compact pin says "Pin" (CSS, so a paragraph's text stays its own) when its paragraph is hovered
+            or it has focus, always on a touch screen (Riley 83: an unlabelled grey glyph) */}
         <PinIcon />{compact ? "" : ` ${busy ? "Pinning…" : label}`}
       </button>
       {open && (
@@ -108,7 +110,7 @@ export function PinButton({ make, what, label = "Add to thesis", compact = false
           <span className="faint small pin-menu-h" aria-hidden="true">Add to the thesis under</span>
           {items.map((m) => (
             <button key={m.key} type="button" role="menuitem" onClick={() => void pick(m.target)}>
-              {m.text}{m.hint && <span className="faint"> · {m.hint}</span>}
+              {m.text}
             </button>
           ))}
         </span>

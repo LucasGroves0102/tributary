@@ -201,7 +201,7 @@ const pinTo = async (pin: HTMLButtonElement, section: string) => {
   await click(pin);
   const menu = container.querySelector<HTMLElement>(".pin-menu")!;
   expect([...menu.querySelectorAll("button")].map((b) => b.textContent)).toEqual([
-    "Pillars › Pillar 1 · default", "Pillars › New pillar", "Core thesis", "Variant perception", "Catalysts", "Risks and mitigants",
+    "Pillars › Pillar 1", "Pillars › New pillar", "Core thesis", "Variant perception", "Catalysts", "Risks and mitigants",
     "What would prove me wrong", "KPIs to watch",
   ]);
   expect(document.activeElement).toBe(menu.querySelector("button")); // the first pillar, the default, has focus
@@ -299,27 +299,27 @@ it("L5: a pin chooses its pillar, or starts a new one", async () => {
   expect(md.indexOf("### Pillar 2")).toBeGreaterThan(md.indexOf("### Pillar 1"));
   expect(md.indexOf("> Export controls")).toBeGreaterThan(md.indexOf("### Pillar 2"));
   expect(md.indexOf("> Export controls")).toBeLessThan(md.indexOf("## Catalysts"));
-  expect(container.querySelector(".pin-toast")?.textContent).toContain("under Pillars, Pillar 2 (new)");
+  expect(document.querySelector(".undo-stack .undo-note")?.textContent).toContain("under Pillars, Pillar 2 (new)");
 });
 
-it("switches steps from the rail and the header's tabs without losing an unsaved thesis", async () => {
+it("switches steps from the rail, the one navigation, without losing an unsaved thesis", async () => {
   window.localStorage.setItem("tributary.thesis.mode", "markdown");
   await render(`#/analysis/${PID}/thesis`, "textarea.thesis-text");
   const head = container.querySelector(".project-head")!;
   expect(head.querySelector("h1")?.textContent).toBe("Nvidia");
-  // #153: the tabs are the rail's steps, under the same names
+  // Riley 51: one navigation for the eight steps, the rail (the header's tabs duplicated it)
   const labels = ["Business", "Numbers", "Earnings", "What changed", "Peers", "Model", "Thesis", "Monitor"];
-  expect([...head.querySelectorAll(".tabs a")].map((a) => a.textContent)).toEqual(labels);
-  expect([...head.querySelectorAll<HTMLAnchorElement>(".tabs a")].map((a) => a.getAttribute("href")!.split("/").pop())).toEqual(
+  expect(head.querySelector(".tabs")).toBeNull();
+  expect([...container.querySelectorAll<HTMLAnchorElement>(".step-rail a")].map((a) => a.getAttribute("href")!.split("/").pop())).toEqual(
     ["business", "numbers", "earnings", "changes", "peers", "model", "thesis", "monitor"]);
   // #71: a peer and a model exist, but nothing is done until the user says so
   expect([...container.querySelectorAll(".step-rail a")].map((a) => a.textContent?.replace(/,.*$/, ""))).toEqual(
     labels.map((l, i) => `${i + 1}${l}`));
   await act(async () => type(thesisText(), `${TEMPLATE}\nMy own words.`));
   await settle();
-  expect(head.querySelector(".tabs .dirty")).not.toBeNull();
+  expect(container.querySelector('.step-rail a[href$="/thesis"] .dirty')).not.toBeNull();
   // Monitor: the check reads the saved text, so it waits for a save
-  await click(head.querySelector<HTMLAnchorElement>('.tabs a[href$="/monitor"]')!);
+  await click(container.querySelector<HTMLAnchorElement>('.step-rail a[href$="/monitor"]')!);
   await goTo(`#/analysis/${PID}/monitor`, ".monitor-bar");
   expect(container.querySelector(".step-pane:not([hidden]) h2")?.textContent).toBe("Monitor");
   expect(button("Check my thesis").disabled).toBe(true);
@@ -347,7 +347,7 @@ it("pins a chart from Numbers into the chosen section of the thesis, saving it",
   expect([...container.querySelectorAll(".numbers-chart")].map((c) => c.getAttribute("aria-label"))).toEqual([
     "NVDA: revenue and growth", "NVDA: gross and operating margin", "NVDA: free cash flow (operating cash flow − capex)",
     "NVDA: buybacks and dividends against free cash flow", "NVDA: shares outstanding", "NVDA: inventory and days of inventory",
-    "NVDA: receivables vs revenue growth (YoY)", "NVDA: backlog proxy and customer advances against revenue",
+    "NVDA: receivables vs revenue growth (YoY)", "NVDA: backlog proxy and customer advances, and backlog in years of revenue",
     "NVDA: debt at year end"]);
   const fcf = container.querySelectorAll<HTMLElement>(".numbers-chart")[2]!;
   await pinTo(fcf.querySelector<HTMLButtonElement>(".pin-btn")!, "Risks and mitigants");
@@ -361,7 +361,7 @@ it("pins a chart from Numbers into the chosen section of the thesis, saving it",
   const risks = md.indexOf("## Risks and mitigants");
   expect(md.indexOf(`[[embed:${chartId}]]`)).toBeGreaterThan(risks);
   expect(md.indexOf(`[[embed:${chartId}]]`)).toBeLessThan(md.indexOf("## What would prove me wrong"));
-  expect(container.querySelector(".pin-toast")?.textContent).toContain("Pinned the chart under Risks and mitigants in your thesis.");
+  expect(document.querySelector(".undo-stack .undo-note")?.textContent).toContain("Pinned the chart under Risks and mitigants in your thesis.");
   // a chart saved in the project is work in the Numbers step, not a tick (#71)
   expect(container.querySelector('.step-rail a[href$="/numbers"]')?.className).toBe("");
   await goTo(`#/analysis/${PID}/numbers`, ".step-pane:not([hidden]) .step-work");
@@ -387,7 +387,7 @@ it("with no thesis yet, a pinned passage starts it from the template, cited with
     `[${ACC}](https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/${ACC}-index.htm)`;
   expect(md.indexOf(quote)).toBeGreaterThan(md.indexOf("### Pillar 1"));
   expect(md.indexOf(quote)).toBeLessThan(md.indexOf("## Catalysts"));
-  expect(container.querySelector(".pin-toast")?.textContent).toContain("Started your thesis from the template");
+  expect(document.querySelector(".undo-stack .undo-note")?.textContent).toContain("Started your thesis from the template");
 });
 
 it("adds bear and bull cases to the project's model, switches between them and saves all three", async () => {
@@ -519,7 +519,7 @@ it("F1: the Earnings step quotes the release, and a pinned outlook states its qu
   expect(md).toContain("> — 8-K for the quarter ended 2026-07-26, filed 2026-08-26, Earnings release (Exhibit 99.1), outlook: Outlook · " +
     "[0001045810-26-000073](https://www.sec.gov/Archives/edgar/data/1045810/000104581026000073/0001045810-26-000073-index.htm)");
   expect(md.indexOf("> Outlook")).toBeGreaterThan(md.indexOf("### Pillar 1"));
-  expect(container.querySelector(".pin-toast")?.textContent).toContain("Pinned the outlook passage under Pillars, Pillar 1");
+  expect(document.querySelector(".undo-stack .undo-note")?.textContent).toContain("Pinned the outlook passage under Pillars, Pillar 1");
   // the step is ticked by the user only (Batch 7)
   expect(pane.querySelector<HTMLInputElement>(".step-done input")!.checked).toBe(false);
 });

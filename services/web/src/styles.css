@@ -1475,13 +1475,20 @@ input[type="date"] {
 }
 
 select,
-input[type="date"] {
+input[type="date"],
+input[type="date"].field {
   padding: 0 9px;
+}
+
+/* the chevron's room, a class's padding included (.field set 9px and the chevron sat on the text) */
+select,
+select.field,
+.layer select {
+  padding: 0 28px 0 9px;
 }
 
 select {
   appearance: none;
-  padding-right: 28px;
   background-image:
     linear-gradient(45deg, transparent 50%, var(--ink-2) 50%),
     linear-gradient(135deg, var(--ink-2) 50%, transparent 50%);
@@ -3087,6 +3094,19 @@ button.chip:disabled {
 .diff p .change-links {
   display: block;
   margin-top: var(--sp-2);
+}
+
+/* a long change opens at five lines, the rest a click away (Riley 114) */
+.diff p .change-body.folded {
+  display: -webkit-box;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.diff p .fold-toggle {
+  margin-top: var(--sp-2);
+  padding-left: 0;
 }
 
 .diff p .change-links {
@@ -4798,9 +4818,10 @@ button.link.num {
   margin-top: var(--sp-2);
 }
 
+/* side by side, the preview runs the thesis's whole length beside the editor: a box of 60% of the window that
+   scrolled on its own read as a preview that stopped after Pillars (Riley 22) */
 .thesis-panes.split .thesis-preview {
-  max-height: calc(60vh + 60px);
-  overflow: auto;
+  min-width: 0;
 }
 
 /* Check my thesis: results beside the thesis */
@@ -4995,6 +5016,19 @@ mark.claim-mark {
   gap: var(--sp-6);
 }
 
+/* revenue and operating income side by side, each on its own scale; one above the other when narrow */
+.model-charts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-6);
+}
+
+@container main (max-width: 900px) {
+  .model-charts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .model-table tr.forecast th,
 .model-table tr.forecast td {
   font-style: italic;
@@ -5113,8 +5147,36 @@ mark.claim-mark {
   font-weight: 500;
   color: var(--text);
   white-space: normal;
-  min-width: 150px;
-  max-width: 220px;
+}
+
+/* the line's name and its case both stay while the years scroll (Riley 86: the Case column scrolled away
+   and left unlabelled triples of values): the name a fixed width, the case frozen beside it */
+.model-table th.first {
+  width: 170px;
+  min-width: 170px;
+  max-width: 170px;
+}
+
+.model-table td.case,
+.model-table th.case-h {
+  position: sticky;
+  left: 170px;
+  z-index: 2;
+  background: var(--sheet);
+  box-shadow: inset -1px 0 0 var(--rule);
+}
+
+@container tw (max-width: 560px) {
+  .model-table th.first {
+    width: 118px;
+    min-width: 118px;
+    max-width: 118px;
+  }
+
+  .model-table td.case,
+  .model-table th.case-h {
+    left: 118px;
+  }
 }
 
 .model-table tr.line-start > * {
@@ -5452,10 +5514,8 @@ button.chip.on {
 .project-progress .bar {
   display: block;
   width: 160px;
-  height: 6px;
-  border-radius: 999px;
-  background: var(--panel-2);
-  border: 1px solid var(--line);
+  height: 4px;
+  background: var(--sheet-2);
   overflow: hidden;
 }
 
@@ -5466,16 +5526,48 @@ button.chip.on {
   background: var(--pos);
 }
 
-.project-progress .fill.f1 { width: 14.3%; }
-.project-progress .fill.f2 { width: 28.6%; }
-.project-progress .fill.f3 { width: 42.9%; }
-.project-progress .fill.f4 { width: 57.1%; }
-.project-progress .fill.f5 { width: 71.4%; }
-.project-progress .fill.f6 { width: 85.7%; }
-.project-progress .fill.f7 { width: 100%; }
+/* eighths: eight steps (it was sevenths, so seven ticks read as all done) */
+.project-progress .fill.f1 { width: 12.5%; }
+.project-progress .fill.f2 { width: 25%; }
+.project-progress .fill.f3 { width: 37.5%; }
+.project-progress .fill.f4 { width: 50%; }
+.project-progress .fill.f5 { width: 62.5%; }
+.project-progress .fill.f6 { width: 75%; }
+.project-progress .fill.f7 { width: 87.5%; }
+.project-progress .fill.f8 { width: 100%; }
 
-.project-head .tabs .dirty {
-  color: var(--warn);
+/* the project's head reads like a company's: no box, ruled off below; the rail is its one navigation
+   (Riley 51: header tabs and the rail were two navigations for the same eight steps) */
+.project-head.card {
+  background: transparent;
+  border-width: 0 0 1px;
+}
+
+.project-head .co-head {
+  padding: 0 0 var(--sp-7);
+}
+
+/* the company's name leads, as on its own page (a page's title size, not a card's) */
+.project-head h1 {
+  font-size: 34px;
+  letter-spacing: -0.02em;
+  font-variation-settings: "opsz" 60;
+}
+
+.project-head .meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px var(--sp-6);
+  font-family: var(--sans);
+  font-size: var(--fs-meta);
+}
+
+.step-rail .dirty {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--warn);
 }
 
 .project-body {
@@ -5503,8 +5595,9 @@ button.chip.on {
   align-items: center;
   gap: var(--sp-4);
   padding: 7px 10px;
-  border-radius: var(--radius);
-  color: var(--text-2);
+  color: var(--ink-2);
+  font-family: var(--sans);
+  font-size: var(--fs-base);
   font-weight: 500;
 }
 
@@ -5519,28 +5612,24 @@ button.chip.on {
   outline-offset: -2px;
 }
 
+/* where you are: the ink, and a red rule at its edge, as in the sidebar */
 .step-rail a[aria-current="step"] {
-  background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--ink);
   font-weight: 650;
+  box-shadow: inset 2px 0 0 var(--red);
 }
 
 .step-rail .n {
-  display: inline-grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 999px;
-  border: 1px solid var(--line-2);
+  width: 18px;
+  color: var(--ink-3);
   font-size: var(--fs-sm);
   font-variant-numeric: tabular-nums;
+  text-align: right;
   flex: none;
 }
 
 .step-rail a.done .n {
-  background: var(--pos-soft);
-  border-color: transparent;
-  color: var(--pos);
+  color: var(--up);
   font-weight: 700;
 }
 
@@ -5599,8 +5688,7 @@ button.chip.on {
   font-size: var(--fs-xs);
   color: var(--warn);
   border: 1px solid currentColor;
-  border-radius: 999px;
-  padding: 0 6px;
+  padding: 0 5px;
   white-space: nowrap;
 }
 
@@ -5640,6 +5728,36 @@ button.chip.on {
   margin: var(--sp-3) 0;
 }
 
+/* the Numbers step: its contents, then the charts two a row where there's room (Riley 115) */
+.numbers-contents {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px var(--sp-2);
+  padding-bottom: var(--sp-4);
+  border-bottom: 1px solid var(--rule);
+}
+
+.numbers-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-6);
+  align-items: start;
+}
+
+.numbers-grid .numbers-chart {
+  scroll-margin-top: calc(var(--topbar-h) + 12px);
+}
+
+.numbers-grid .numbers-wide {
+  grid-column: 1 / -1;
+}
+
+@container main (max-width: 1100px) {
+  .numbers-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .numbers-chart .card-b {
   display: grid;
   gap: var(--sp-2);
@@ -5674,6 +5792,26 @@ button.chip.on {
   .pinnable .pin.compact,
   .diff p .pin.compact {
     opacity: 1;
+  }
+}
+
+/* the compact pin's word (CSS, so the paragraph's text stays its own): shown with its paragraph's hover or
+   its own focus, always on a touch screen */
+.pin.compact .pin-btn::after {
+  content: none;
+  margin-left: 3px;
+  font-size: var(--fs-xs);
+}
+
+.pinnable:hover .pin.compact .pin-btn::after,
+.diff p:hover .pin.compact .pin-btn::after,
+.pin.compact .pin-btn:focus-visible::after {
+  content: "Pin";
+}
+
+@media (hover: none) {
+  .pin.compact .pin-btn::after {
+    content: "Pin";
   }
 }
 
@@ -5805,7 +5943,11 @@ button.chip.on {
   }
 
   .step-rail a {
-    padding: 3px 8px 3px 4px;
+    padding: 5px 8px 5px 4px;
+  }
+
+  .step-rail a[aria-current="step"] {
+    box-shadow: inset 0 -2px 0 var(--red);
   }
 
   .project-progress {
@@ -5861,7 +6003,6 @@ button.chip.on {
 @media print {
   .tw-cue,
   .step-rail,
-  .project-head .tabs,
   .step-head .step-done,
   .step-next,
   .pin,
