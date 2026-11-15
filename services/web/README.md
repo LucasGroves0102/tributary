@@ -1048,6 +1048,25 @@ token shared by every component; a 404 or an error hides everything below):
   footnote names the provider. The assistant's page context leaves price layers out, reports the
   Price tab as `overview` and Settings as `about` (the agent can't read prices).
 
+API keys (Query API README, "API keys"; `src/apikeys/`):
+
+- **Settings → API keys** (`apikeys/ApiKeysSection.tsx`, after Connections): make a key (a name, Read
+  only or Read and write, 30 / 90 / 365 days, default from the API), see it once (`.api-key-once`:
+  the key with Copy and "I've saved it"), list the keys (name, `trb_xxxx…`, access, created, last
+  used, expires or when revoked/expired, today's requests and refusals) and revoke one after the
+  Radix alert dialog (`ConfirmDelete` with `yes="Revoke"` and its own line: a revoke can't be
+  undone). The key lives only in the section's state until dismissed: never storage, a URL, a log or
+  the assistant's context. The 5-key cap and the limits are the API's (`max_active`, `limits`);
+  `apikeys/apiKeys.ts` only words them. Hidden when `/v1/api-keys` answers 404 (an older API) or
+  `allowed: false` (a demo sandbox: the API's rule).
+- **Using the API** (`#/api`, `pages/ApiDocs.tsx`, public: signed out it shows without the shell,
+  like Data status; linked from the front door, About and the Settings section): how to make a key,
+  curl and Python examples with the site's own base URL (`window.location.origin` + `/api/query`), what
+  each scope reaches, the routes table and the limits, both from the Query API's generated
+  `GET /v1/openapi-keys.json` (`keyRoutes`, read without the display-name pass; first sentence of
+  each route's docstring; 404: "doesn't take API keys yet"), and the error codes. The assistant reads
+  it as `about` (agent-api has no "api" page).
+
 Data notes (`src/company/notes.ts`, Query API `/v1/companies/{id}/data-notes`, `/v1/data-notes`):
 the tearsheet's Data notes tab groups what the automated checks found (freshness, restated
 figures, gaps and overlapping periods, values to double-check, derived quarters) in plain
@@ -1162,7 +1181,7 @@ npm run build     # tsc + vite build into dist/
 npm run e2e       # Playwright flows in e2e/ against dist/ (build first)
 ```
 
-The 18 end-to-end flows (`e2e/app.spec.ts`: try the demo → Home, screener filter/sort/watch, a
+The 21 end-to-end flows (`e2e/app.spec.ts`: try the demo → Home, screener filter/sort/watch, a
 two-layer chart with a formula exported as CSV, formula autocomplete with annual frequency and deck
 output, comps with the peer median as CSV and side-by-side charts, saving a chart to a workspace and reopening it, the
 assistant drawer with a streamed answer (closed on a first visit, nothing floating over the page),
@@ -1170,10 +1189,11 @@ the narrow-screen menu, the shortcut sheet, Ctrl+arrow table jumps and the limit
 Home and the tearsheet, writing a report from a workspace with a mocked SSE stream (embedded charts,
 the flagged figure, Markdown download, print styles), customizing Home and the watchlist and screener
 columns, workspace actions, a clean console on Home, Companies, a company's Overview and Statements,
-Compare, the chart builder, Analysis, Alerts, Settings and Data status (#68), no screen scrolling sideways on a
-phone, at 1024 or at 1440 with the panel open, the screener's numbers under a frozen name with the
-panel open, and a company reporting in euros, labelled everywhere and never ranked or averaged with
-dollars) run against `vite preview` with every `/api/*` call answered by `e2e/mockApi.ts` (route
+Compare, the chart builder, Analysis, Alerts, Settings, Data status and Using the API (#68), no screen
+scrolling sideways on a phone, at 1024 or at 1440 with the panel open, the screener's numbers under a
+frozen name with the panel open, a company reporting in euros, labelled everywhere and never ranked
+or averaged with dollars, and API keys: a GitHub account makes one, sees it once and revokes it, a
+sandbox's Settings offers none, and the public Using the API page from the front door) run against `vite preview` with every `/api/*` call answered by `e2e/mockApi.ts` (route
 interception), so no backend runs. One worker and one headless chromium
 (`npx playwright install chromium` once). CI runs them in the `e2e` job.
 
@@ -1235,7 +1255,9 @@ API's notification without `filing_url` links EDGAR from the company id. The the
 the comps table change no request, and Home's new default arrangement asks nothing new. F1, F7b, F8b:
 `/earnings`, `/events`, `/insiders` and `/text-kpis` answering 404 read "not available here yet"
 (`api.ts` `orNullOn404`); a model's price currency is the user's work, so like F2's fields it is never
-stripped from a save an older API refuses.
+stripped from a save an older API refuses. API keys: `/v1/api-keys` answering 404 hides the Settings
+section, and `/v1/openapi-keys.json` answering 404 makes Using the API say the server doesn't take
+keys yet (the rest of the page is static).
 
 `Dockerfile` builds the bundle and serves it from `nginx-unprivileged` on port 8080
 (`deploy/nginx.conf`). nginx returns 404 for the APIs' `/docs`, `/redoc`, `/openapi.json` and

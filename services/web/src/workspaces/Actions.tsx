@@ -56,7 +56,15 @@ export function NameInput({
  *
  * Radix's own Overlay isn't used: it locks scrolling by injecting a <style> element, which the CSP
  * (style-src 'self', no inline styles) refuses. The backdrop here is ours, styled by class. */
-export function ConfirmDelete({ text, onYes, onNo }: { text: string; onYes: () => void; onNo: () => void }) {
+export function ConfirmDelete({ text, onYes, onNo, detail, yes = "Delete" }: {
+  text: string;
+  onYes: () => void;
+  onNo: () => void;
+  /** the line under the question (default: the undo window); for what can't be undone */
+  detail?: string;
+  /** the destructive button's word */
+  yes?: string;
+}) {
   // where it was asked from: focus goes back there (there's no Radix Trigger to return to)
   const before = useRef(document.activeElement as HTMLElement | null);
   useEffect(() => () => {
@@ -72,11 +80,11 @@ export function ConfirmDelete({ text, onYes, onNo }: { text: string; onYes: () =
             <AlertDialog.Title asChild>
               <p className="ws-confirm-q">{text}</p>
             </AlertDialog.Title>
-            <AlertDialog.Description className="faint small">You can undo it for {UNDO_MS / 1000} seconds.</AlertDialog.Description>
+            <AlertDialog.Description className="faint small">{detail ?? `You can undo it for ${UNDO_MS / 1000} seconds.`}</AlertDialog.Description>
             <div className="row">
               <span className="grow" />
               <AlertDialog.Action className="btn danger" onClick={onYes}>
-                Delete
+                {yes}
               </AlertDialog.Action>
               <AlertDialog.Cancel className="btn">Keep</AlertDialog.Cancel>
             </div>

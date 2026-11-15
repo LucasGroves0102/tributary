@@ -7,6 +7,10 @@ import type {
   AlertSettings,
   AlertUnread,
   Allowance,
+  ApiKeyCreated,
+  ApiKeys,
+  ApiKeyScope,
+  KeyRoutesDoc,
   AuthProviders,
   PasswordSignedIn,
   Calendar,
@@ -209,6 +213,28 @@ function sendJson<T>(token: string, method: "POST" | "PUT" | "PATCH" | "DELETE",
 }
 
 const enc = encodeURIComponent;
+
+/** The caller's API keys and what can be chosen; null from a Query API older than keys (404: the
+ * deploy window), and the Settings section hides. */
+export const apiKeys = (token: string) => orNullOn404(get<ApiKeys>(token, "/v1/api-keys"));
+
+/** A new key: the answer holds the key itself, this once. It is shown on the page until the user
+ * dismisses it and never goes to storage, a URL or a log. */
+export const createApiKey = (token: string, body: { name: string; scopes: ApiKeyScope[]; expires_in_days: number }) =>
+  sendJson<ApiKeyCreated>(token, "POST", "/v1/api-keys", body);
+
+/** Revokes a key at once: its next request is refused. */
+export const revokeApiKey = (token: string, keyId: string) =>
+  sendJson<{ key_id: string; revoked: boolean }>(token, "DELETE", `/v1/api-keys/${enc(keyId)}`);
+
+/** The routes an API key can use, from the Query API's own OpenAPI (public, no token); null from
+ * an API older than keys. Read as is: no display-name pass (an OpenAPI `name` is a parameter's). */
+export async function keyRoutes(): Promise<KeyRoutesDoc | null> {
+  const r = await fetch(`${QUERY}/v1/openapi-keys.json`);
+  if (r.status === 404) return null;
+  if (!r.ok) throw new ApiError(noDetail(r.status, r.statusText), r.status);
+  return (await r.json()) as KeyRoutesDoc;
+}
 
 /** "Connect your data": null when the server has it off (404). */
 export async function marketConnections(token: string): Promise<MarketConnections | null> {

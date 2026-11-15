@@ -216,6 +216,8 @@ export function pageContext(
       return { label: "What Tributary covers", suggestions: ["What can you answer from SEC filings, and what can't you?"] };
     case "status":
       return { label: "Data status", suggestions: [] };
+    case "api":
+      return { label: "Using the API", suggestions: [] };
     case "settings":
       return { label: "Settings", suggestions: [] };
     case "alerts":

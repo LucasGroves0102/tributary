@@ -13,6 +13,7 @@ const screens = {
   search: () => import("./Search"),
   about: () => import("./About"),
   status: () => import("./Status"),
+  api: () => import("./ApiDocs"),
   settings: () => import("./Settings"),
   reader: () => import("../components/explore/FilingReader"),
   answers: () => import("../components/AssistantMessage"),
@@ -31,6 +32,7 @@ export const Compare = lazy(() => screens.compare().then((m) => ({ default: m.Co
 export const Search = lazy(() => screens.search().then((m) => ({ default: m.Search })));
 export const About = lazy(() => screens.about().then((m) => ({ default: m.About })));
 export const Status = lazy(() => screens.status().then((m) => ({ default: m.Status })));
+export const ApiDocs = lazy(() => screens.api().then((m) => ({ default: m.ApiDocs })));
 export const Settings = lazy(() => screens.settings().then((m) => ({ default: m.Settings })));
 export const WorkspacePage = lazy(() => screens.workspace().then((m) => ({ default: m.WorkspacePage })));
 export const ReportView = lazy(() => screens.report().then((m) => ({ default: m.ReportView })));
