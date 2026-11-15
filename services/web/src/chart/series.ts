@@ -160,13 +160,36 @@ export interface Tick {
 const LABEL = /^(FY|CY)(\d{4})(?: Q([1-4]))?$/;
 /** far past any real chart: a key that isn't a period doesn't fill an axis with thousands of ticks */
 const MOST_TICKS = 400;
+/** A quarter is due on file once this many days have passed since it ended: the longest regular
+ * deadline, a non-accelerated filer's 10-K (90 days). Until then its absence isn't a gap. */
+export const DUE_DAYS = 90;
+const DAY_MS = 86400000;
+const QUARTER_DAYS = 365.25 / 4;
+
+/** How many quarters after the newest one on the axis should be on file by `through` (an ISO
+ * date: the chart's end, model.ts `chartEnd`): 0 while the next one isn't due yet. */
+function dueAfter(series: Series[], newestKey: number, through: string): number {
+  const end = series.flatMap((s) => s.points.filter((p) => p.key === newestKey).map((p) => p.periodEnd)).sort().at(-1);
+  const t = Date.parse(`${through.slice(0, 10)}T00:00:00Z`);
+  const e = end ? Date.parse(`${end.slice(0, 10)}T00:00:00Z`) : NaN;
+  if (Number.isNaN(t) || Number.isNaN(e)) return 0;
+  return Math.max(0, Math.floor((t - e - DUE_DAYS * DAY_MS) / (QUARTER_DAYS * DAY_MS)));
+}
 
 /** Every period from the first any series has to the last, oldest first, labelled by the first
  * series that has it. A period none of them has is still on the axis (`gap`), named like its
  * neighbours: a missing year or quarter shows as a hole, it doesn't close up. Annual series tick
  * every fourth key (annualPoints keeps the Q4s). Keys that aren't quarters since year 0 (a model's
- * fiscal years, its FY2027E) aren't periods to fill. */
-export function xAxis(series: Series[]): Tick[] {
+ * fiscal years, its FY2027E) aren't periods to fill.
+ *
+ * `through` (model.ts `chartEnd`: a custom range's last day, else the day the answers were read, the
+ * API's `as_of`) runs the axis on to the newest period that should be on file by then (DUE_DAYS after
+ * it ended), counted in quarters from the newest period end plotted: a series that stops in 2022 on
+ * a chart that runs to 2026 ends in a shaded gap to now, and chart/notes.ts says where it stops,
+ * instead of the axis ending with the series as if nothing were missing (analyst test 4, finding 13).
+ * Without `through` (Compare, a model, the table and CSV) the axis ends at the newest period any
+ * series has. */
+export function xAxis(series: Series[], through?: string | null): Tick[] {
   const out = new Map<number, string>();
   const partial = new Set<number>();
   for (const s of series) {
@@ -181,18 +204,26 @@ export function xAxis(series: Series[]): Tick[] {
   // a year in progress keeps its quarter's label on an annual axis
   const annual = parsed.every((m, i) => m && (!m[3] || known[i]!.partial));
   const periods = parsed.every((m, i) => m && Number(m[2]) * 4 + (m[3] ? Number(m[3]) - 1 : 3) === known[i]!.key);
-  if (known.length < 2 || !periods) return known;
+  if (!known.length || !periods) return known;
   const step = annual ? 4 : 1;
-  if ((known.at(-1)!.key - known[0]!.key) / step > MOST_TICKS) return known;
+  // the newest period due on file by the chart's end; an annual axis stops at the last whole year in it
+  const newest = known.at(-1)!.key;
+  const due = through ? newest + dueAfter(series, newest, through) : newest;
+  const last = annual ? Math.max(newest, due - (((due % 4) + 1) % 4)) : due;
+  if ((last - known[0]!.key) / step > MOST_TICKS) return known;
+  const gapTick = (key: number, prefix: string): Tick => {
+    const year = Math.floor(key / 4);
+    return { key, period: annual ? `${prefix}${year}` : `${prefix}${year} Q${(key % 4) + 1}`, gap: true };
+  };
   const ticks: Tick[] = [];
   for (let i = 0; i < known.length; i++) {
     ticks.push(known[i]!);
     const prefix = parsed[i]![1]!;
-    for (let key = known[i]!.key + step; i + 1 < known.length && key < known[i + 1]!.key; key += step) {
-      const year = Math.floor(key / 4);
-      ticks.push({ key, period: annual ? `${prefix}${year}` : `${prefix}${year} Q${(key % 4) + 1}`, gap: true });
-    }
+    for (let key = known[i]!.key + step; i + 1 < known.length && key < known[i + 1]!.key; key += step) ticks.push(gapTick(key, prefix));
   }
+  // after a year in progress (an annual axis), the next tick is that year's end
+  const start = annual && known.at(-1)!.partial ? newest + (3 - (newest % 4)) : newest + step;
+  for (let key = start; key <= last; key += step) ticks.push(gapTick(key, parsed.at(-1)![1]!));
   return ticks;
 }
 

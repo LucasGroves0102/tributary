@@ -6,7 +6,7 @@ import { useLoad } from "../company/useLoad";
 import { useDirectory } from "../companies/directory";
 import { CompanyPicker, type PickedCompany } from "../components/CompanySearch";
 import { Skeleton } from "../components/States";
-import { day, UNNAMED } from "../format";
+import { day, localDay, UNNAMED } from "../format";
 import { searchTerms, snippetRuns } from "../reader/text";
 import { go, href } from "../route";
 import {
@@ -221,7 +221,7 @@ export function Search({ token, search, companies, open = false, suggestions = N
             {load.data.sort === "date"
               ? "Newest filings first, the best-matching passage of each section."
               : "Best match first: by how densely the words occur in each passage, the best passage of each section."}{" "}
-            Data as of {day(load.data.as_of, true)}.
+            Data as of {localDay(load.data.as_of, true)}.
           </div>
         </section>
       )}

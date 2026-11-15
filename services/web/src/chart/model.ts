@@ -22,6 +22,7 @@
  * keeps its stored title as a custom one. */
 
 import type { FormulaRequest } from "../api";
+import { POINT_IN_TIME } from "./metrics";
 import { PRICE_TRANSFORM_SET, type PriceRequest, type PriceTransform } from "./prices";
 import { MAX_MEMBERS, MEMBER, memberName, SEGMENT_AXES, SEGMENT_TRANSFORMS, type SegmentAxisKind, type SegmentRequest } from "./segments";
 
@@ -179,6 +180,13 @@ export function rangeDates(s: Pick<ChartState, "range" | "start" | "end">, today
   return { from: fromDate(s.range, today), to: null };
 }
 
+/** The chart's end, as the time axis reads it (series.ts `xAxis`): a custom range's last day, else
+ * the day its answers were read (the API's newest `as_of`: a 3y or Max chart runs to now). Null
+ * before any answer. */
+export function chartEnd(s: Pick<ChartState, "range" | "start" | "end">, asOf: string | null): string | null {
+  return rangeDates(s).to ?? (asOf ? asOf.slice(0, 10) : null);
+}
+
 export const frequencyOf = (s: Pick<ChartState, "frequency">): Frequency => s.frequency ?? "quarterly";
 
 /** The evaluate request for a layer, or null if it isn't complete yet.
@@ -267,9 +275,22 @@ export function layerName(l: Layer, short: (companyId: string) => string, label:
   return autoName(l, short, label, frequency);
 }
 
+/** Whether a metric or formula layer reads only balances (chart/metrics.ts POINT_IN_TIME, query-api
+ * formula/check.py): one date each, so it has no trailing twelve months whatever its transform says
+ * (the API answers a balance's TTM view with the quarter-end value). A formula's names are its
+ * metrics with or without a TICKER.; a call like ttm( is a function, not a metric. */
+export function readsBalances(l: Pick<Layer, "kind" | "metric" | "formula">): boolean {
+  if (l.kind === "metric") return !!l.metric && POINT_IN_TIME.has(l.metric);
+  if (l.kind !== "formula" || !l.formula?.trim()) return false;
+  const names = [...l.formula.matchAll(/(?<![A-Za-z0-9_.])([A-Za-z_][A-Za-z0-9_]*)(?:\.([A-Za-z0-9_]+))?(\s*\()?/g)]
+    .flatMap((m) => (m[3] ? [] : [m[2] ?? m[1]!]));
+  return names.length > 0 && names.every((n) => POINT_IN_TIME.has(n));
+}
+
+/** A balance is never called "TTM" in a legend or title (analyst test 4, finding 13: "loans (TTM)"). */
 const transformSuffix = (l: Layer, frequency: Frequency) => (frequency === "annual"
   ? { q: "", ttm: "", yoy: " YoY", qoq: " YoY", idx: " (indexed)", ps: " per share", contrib: " contribution" }
-  : { q: "", ttm: " (TTM)", yoy: " YoY", qoq: " QoQ", idx: " (indexed)", ps: " per share", contrib: " contribution" })[l.transform];
+  : { q: "", ttm: readsBalances(l) ? "" : " (TTM)", yoy: " YoY", qoq: " QoQ", idx: " (indexed)", ps: " per share", contrib: " contribution" })[l.transform];
 
 /** A metric's label mid-sentence: "free cash flow", but "ROE", "R&D" and "FCF margin" as they are. */
 const inSentence = (label: string) => (/[A-Z]{2}|&/.test(label) ? label : label.toLowerCase());

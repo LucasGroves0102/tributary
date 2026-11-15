@@ -444,10 +444,10 @@ it("edits a model's assumptions next to their defaults and saves them", async ()
   expect(rules.map((r) => r!.split(":")[0])).toEqual(["Growth and operating margin start at the trailing twelve months to FY2026 Q3 (10.0%, n/a) and close half the gap each year to the long run",
     "Interest and other", "Tax rate", "Share change (buybacks less issuance)", "FCF margin, one rate on revenue (the table shows operating cash flow less capex behind it)"]);
   const hints = () => [...container.querySelectorAll(".assumptions td .faint")].map((h) => h.textContent);
-  expect(hints()).toEqual(["default 10.0%", "default 20.0%", "default (blank)", "default (blank)", "default (blank)", "default (blank)",
-    "default 7.5%", "default 20.0%", "default (blank)", "default (blank)", "default (blank)", "default (blank)"]);
+  expect(hints()).toEqual(["default 10.0%", "default 20.0%", "Tributary's default", "Tributary's default", "Tributary's default", "Tributary's default",
+    "default 7.5%", "default 20.0%", "Tributary's default", "Tributary's default", "Tributary's default", "Tributary's default"]);
   // a blank rate shows its default as a placeholder: the 21% US rate here (no tax in the data)
-  expect(container.querySelector<HTMLInputElement>('input[aria-label="FY2026E tax rate, percent (blank: the default)"]')!.placeholder).toBe("21.0");
+  expect(container.querySelector<HTMLInputElement>(`input[aria-label="FY2026E tax rate, percent (empty: Tributary's default)"]`)!.placeholder).toBe("21.0");
   // the model is run by the Query API with what the user typed
   expect(runs.at(-1)).toEqual(MODEL);
   await act(async () => type(growth, "0"));
@@ -461,7 +461,7 @@ it("edits a model's assumptions next to their defaults and saves them", async ()
   expect(button("Save").disabled).toBe(true);
   expect(runs.length).toBe(before);
   // a rate typed is the user's; another that doesn't read is flagged too
-  const tax = container.querySelector<HTMLInputElement>('input[aria-label="FY2027E tax rate, percent (blank: the default)"]')!;
+  const tax = container.querySelector<HTMLInputElement>(`input[aria-label="FY2027E tax rate, percent (empty: Tributary's default)"]`)!;
   await act(async () => type(tax, "101"));
   expect(tax.getAttribute("aria-invalid")).toBe("true");
   await act(async () => type(tax, ""));

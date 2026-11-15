@@ -134,7 +134,7 @@ export interface KeyStat {
   /** the period the value covers, e.g. "TTM to Jul 26, 2026" */
   period: string;
   title: string;
-  /** years older than the company's latest period (dimmed) */
+  /** over 300 days older than the company's latest period (035): shown as not reported since then */
   old?: boolean;
 }
 
@@ -169,14 +169,15 @@ export function keyStats(row: ScreenerRow): KeyStat[] {
           `Source: ${src.form} filed ${day(src.filed, true)}, ${src.accession_no}.`
         : label,
     });
+    // an old figure (035) isn't the company's current one: "not reported since" its date, the figure in the hover
     const period = f.status === "not_applicable"
       ? "not applicable"
       : f.status === "not_meaningful"
         ? "not meaningful"
-        : !src || f.text === NOT_REPORTED
-          ? "not reported"
-          : f.old
-            ? `old, ${periodText(key, src)}`
+        : f.old && src
+          ? `not reported since ${day(src.period_end, true)}`
+          : !src || f.text === NOT_REPORTED
+            ? "not reported"
             : periodText(key, src);
     return {
       key, kind, periodEnd: src?.period_end ?? null, label, text: f.text, period, title: f.title, old: f.old,
@@ -273,6 +274,19 @@ export function header(row: ScreenerRow): Header {
     state: row.state_of_incorporation,
     currency: other ? currencyOf(other.unit) : null,
   };
+}
+
+/** A foreign private issuer's annual report form ("20-F", "40-F", or "20-F or 40-F" when its figures
+ * come only from 6-Ks), when the company's figures come from those forms and none from a 10-K or 10-Q;
+ * else null. Words the API's sources only (each figure's filing form): such a company files no 10-Q,
+ * 10-K or 8-K, so the Overview's recap, 8-K and Item 1 sections say why they're empty (analyst test 4:
+ * Birkenstock read "no 10-Q or 10-K values" and a list of 8-Ks it never files). */
+export function foreignReport(row: ScreenerRow): string | null {
+  const forms = Object.values(row.sources).flatMap((s) => (s?.form ? [s.form.replace(/\/A$/, "")] : []));
+  if (!forms.length || forms.some((f) => /^10-[KQ]/.test(f))) return null;
+  if (forms.includes("40-F")) return "40-F";
+  if (forms.includes("20-F")) return "20-F";
+  return forms.includes("6-K") ? "20-F or 40-F" : null;
 }
 
 /** The 10-Q/10-K the latest quarter's values come from (recaps cover only those forms). */
@@ -855,18 +869,27 @@ export interface RecapRow {
   label: string;
   current: string;
   prior: string;
-  qoq: { text: string; sign: number } | null;
+  qoq: RecapDelta | null;
   yearAgo: string;
-  yoy: { text: string; sign: number } | null;
+  yoy: RecapDelta | null;
   title: string;
 }
 
-function delta(v: RecapValue | null, unit: string): RecapRow["qoq"] {
+/** A change column's cell: its text and sign, or n/m with the API's reason (`why`). */
+export interface RecapDelta {
+  text: string;
+  sign: number;
+  why?: string;
+}
+
+function delta(v: RecapValue | null, unit: string): RecapDelta | null {
   if (!v || v.change === undefined) return null;
   if (unit === "ratio") {
     const bp = num(v.change);
     return bp === null ? null : { text: `${bp >= 0 ? "+" : "-"}${Math.abs(bp * 1e4).toFixed(0)} bp`, sign: Math.sign(bp) };
   }
+  // the API's rule (query_api shapes.percent_change): no percentage from a zero or negative base
+  if (v.pct_not_meaningful) return { text: NOT_MEANINGFUL, sign: 0, why: v.pct_not_meaningful };
   const p = num(v.pct_change ?? null);
   return p === null ? null : { text: change(p), sign: Math.sign(p) };
 }

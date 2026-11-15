@@ -106,10 +106,10 @@ it("#145: a total, and Newest first asks the API for date order and keeps the li
 
 it("#80: Exact phrase quotes the words, and a phrase's snippet marks the phrase only", async () => {
   reply = () => Response.json({ query: "", as_of: "2026-10-21T10:00:00Z", limit: 20, offset: 0, has_more: false, total: 1,
-    results: [{ ...HITS[0]!, snippet: "the «export» «control» rules … «controls» to restrict … «export» licences" }] });
+    results: [{ ...HITS[0]!, snippet: "the «export» «control» rules … «export» «controls» to restrict … «export» licences" }] });
   await render({ q: "export controls" });
   // unquoted, the API's own marks: every word
-  expect([...container.querySelectorAll(".snippet mark")].map((m) => m.textContent)).toEqual(["export", "control", "controls", "export"]);
+  expect([...container.querySelectorAll(".snippet mark")].map((m) => m.textContent)).toEqual(["export", "control", "export", "controls", "export"]);
   const box = container.querySelector<HTMLInputElement>(".search-form input[type=checkbox]")!;
   expect(box.checked).toBe(false);
   await act(async () => box.click());
@@ -117,7 +117,8 @@ it("#80: Exact phrase quotes the words, and a phrase's snippet marks the phrase 
   act(() => root.unmount());
   await render({ q: '"export controls"' });
   expect(container.querySelector<HTMLInputElement>(".search-form input[type=checkbox]")!.checked).toBe(true);
-  expect([...container.querySelectorAll(".snippet mark")].map((m) => m.textContent)).toEqual(["export control"]);
+  // the phrase's exact words only (065): not "export control"
+  expect([...container.querySelectorAll(".snippet mark")].map((m) => m.textContent)).toEqual(["export controls"]);
 });
 
 it("groups ranked passages by company and filing, each opening the reader at the passage", async () => {

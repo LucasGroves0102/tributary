@@ -67,7 +67,14 @@ and a figure from another period is left out rather than mixed in), sealed to it
 the key figures as a ledger (amounts, then rates), each sealed, with Cash and short-term investments
 (what net debt subtracts) beside Cash and a negative net debt read as "Net cash" (the exact figure in
 the seal's source); **Since the last report** (red-letter days, below); **Latest quarter**, the recap
-set as a statement; **Business**; **Revenue and operating margin**; **Backlog and orders**. A
+set as a statement (a change from a zero or negative base reads n/m with the API's
+`pct_not_meaningful` in its hover); **Business**; **Revenue and operating margin**; **Backlog and orders**. A
+foreign private issuer (`company/data.ts` `foreignReport`: its figures come from 20-F, 40-F or 6-K
+filings and none from a 10-K or 10-Q, by the API's sources) files no 10-Q, 10-K or 8-K: Since the last
+report says it files current reports on 6-K (no 8-K list is asked for), Latest quarter that it files
+annual reports on 20-F (or 40-F) and interim ones on 6-K, so there is no quarterly recap, and Business
+that its description is in that report, whose text Tributary doesn't read (analyst test 4: Birkenstock
+read "no 10-Q or 10-K values" and an empty 8-K list). A
 statement is a ledger table: red column rules, subtotals heavier, the bottom line (net income, total
 assets, cash at the end of the period) double-ruled, the newest period washed, derived figures italic,
 and its choices (statement, period, range, basis) are toggle groups. Under a statement and under
@@ -241,7 +248,8 @@ docstring; the Query API's `/earnings` and `/events`, rules in its README, "Earn
   its own Outlook or Guidance headings, lines as written, each with Read it in the release at its
   offset); **management's adjustments** (its reconciliation tables, folded, in monospace, and its
   notes that state a dollar amount). Each says when the release has none ("no section headed Outlook
-  or Guidance ... read the release to be sure"). No beat or miss: Tributary has no estimates, and the
+  or Guidance ... read the release to be sure"; for adjustments, "none in the forms Tributary reads"
+  and that a release may reconcile in another exhibit, such as JPMorgan's financial supplement). No beat or miss: Tributary has no estimates, and the
   page says so. Pins: an outlook block or a note as `quoteLines` (its lines kept), a table as
   `quoteTable` (a code block in the quote), each citing "8-K for the quarter ended …".
 - **Since the last report** (company Overview, below its Figures; the What changed step's first card):
@@ -275,7 +283,11 @@ growth as a line on the right, one basis: organic when the filings say so more o
 reader at their passage) and per figure a table, newest first (six, then Show all): as of (a date for
 backlog, "quarter to ..." for orders), the figure as the API states it, and where it's written ("10-Q
 filed Oct 22, 2025 · MD&A", linking the reader at the passage's offset; "also in N more filings")
-with the passage quoted around its number. With nothing stated it says what it looked for and where,
+with the passage quoted around its number. When a figure's newest value is older than the newest
+filing read (the API's `read.latest`), a plain line under its heading says so (`notStatedSince`: "Backlog
+was last stated as $15.00B at Dec 31, 2025, in the 10-K filed Feb 13, 2026. None of Vertiv's filings
+since, up to the 10-Q for the period ended Sep 30, 2026, states it in the ways Tributary reads."). With
+nothing stated it says what it looked for and where,
 and that a company can state these otherwise or only by segment. The figures, their dates and which
 one wins a disagreement are the API's; nothing is read from text in the browser. An older API (404)
 reads "not available here yet"; without the filings tier it asks nothing. e2e's mock answers the
@@ -378,6 +390,13 @@ timestamps, dates, `as_of` and XBRL concepts the model copied from a tool in wor
 on hover; a thesis, which is the user's, isn't touched). A timestamp reads as the viewer's own date
 (`format.ts` `localDay`: 03:00 UTC on the 7th is the 6th in Phoenix); a plain date as written.
 
+Times (analyst test 4, #23): a moment is written one way everywhere, the viewer's local date and clock
+with their zone's abbreviation, `format.ts` `localTime` ("Nov 10, 2026, 10:14 PM MST"; `localClock` for
+the clock alone): Data status, thesis and model versions, the check history, alerts, deliveries, the
+watchlist's "as of", and the assistant's daily reset (midnight UTC, the service's day, said as the
+viewer's own time: "resets at 5:00 PM MST"). No UTC clock beside a local one and no numeric
+`toLocaleString` dates; a moment's date alone is `localDay`.
+
 Tags: colour says the form (10-K, 10-Q) or, on saved work, the kind; an expected filing has a dashed outline,
 not a colour, so a colour never means "not filed yet". Bold marks new rows on Home only when some rows aren't,
 and an 8-K's period of report reads as the event date it is (`format.ts` `periodPhrase`).
@@ -391,7 +410,10 @@ the foot of the window (`UndoDeletes`); the DELETE goes out when that runs out, 
 `keepalive` request) when the page closes or another user signs in, so closing the tab never keeps
 something the user confirmed. It's an undo window in the browser, not a soft delete: nothing
 changes in the API or the app DB, and once sent a delete is final. The assistant's own Undo of a
-save still deletes immediately. "New chart" starts empty
+save still deletes immediately. While a delete waits out its window, a page that has the item (or an
+item in the workspace) open stops editing it (#20, `useSaved`'s `open` leaves it out): no "workspace /
+name" header and no Save over something about to go; what's on screen stays as unsaved work, and Undo
+brings the open item back. "New chart" starts empty
 and detached from any saved chart (the nav's Chart builder still reopens the draft). Anything that
 replaces a chart with work in it (New chart, a template, a Chart button, opening a saved chart) keeps
 that draft: the builder says what happened and can restore it until the next replacement.
@@ -409,8 +431,9 @@ sentence says "of any date". Order: Best match or Newest first (`sort=date`; the
 date order, a company's run of hits grouped, not all its hits). The pager says "1-20 of 647".
 Exact phrase (`isPhrase`/`asPhrase`) quotes the words; a phrase marks only the words together, in the
 snippets too (`reader/text.ts` `snippetRuns(snippet, terms)` re-marks a phrase query's snippet
-because `ts_headline` marks each word alone; `highlight` matches each word from its stem, `wordStem`,
-so "export controls" marks "export control rules" as the stemmed search matched it). The reader's
+because `ts_headline` marks each word alone; `highlight` matches a plain word from its stem,
+`wordStem`, and a phrase by its exact words, as the search matches it since migration 065: "liquid
+cooling" marks "liquid-cooling" but never "liquid-cooled"). The reader's
 search box has the same box (#80). An older API ignores `sort`/`window` and echoes neither: the
 sentence then shows no count and "best match first".
 
@@ -565,7 +588,8 @@ on the folder changed last. Never just the first workspace.
   of the maths", whose `model_maths.py` docstring is the spec); the thesis check and later MCP call
   the same route. Before F2 the web app and agent-api each kept a copy.
   Per forecast year (1-10, default 3) and case: revenue growth %, operating margin %, and four
-  rates, blank meaning Tributary's default from history (shown as the placeholder): interest and
+  rates, empty meaning Tributary's default (shown as a grey italic placeholder, "Tributary's default"
+  under it; a typed rate shows "default x%" instead): interest and
   other (% of revenue: operating income less pretax income), tax rate, share change (buybacks less
   issuance, % a year) and FCF margin (FCF as one rate on revenue rather than cash flow less capex:
   both move with revenue, and the table shows operating cash flow, capex and FCF behind it); a
@@ -590,9 +614,11 @@ on the folder changed last. Never just the first workspace.
   years, the case being edited marked. A split or merger year (the API's `share_break`) shows no
   share change or EPS growth, and per-share figures before it are marked * with why. The chart
   draws revenue and operating income, history solid, each case dashed (bear and bull lighter,
-  `faint`). **Bear / base / bull**: a switch picks the case being edited; "Add bear and bull cases"
+  `faint`, and each in its own colour, `CASE_COLORS`: umber and deep teal, the table's case labels
+  in the same two). **Bear / base / bull**: a switch picks the case being edited; "Add bear and bull cases"
   copies the run's preview of them (the base case moved by half its growth, at least 5 points, and
-  a fifth of its margin, at least 3; the rates the user set), and waits for the run of the latest
+  a fifth of its margin, at least 3; the rates the user set; a case's default FCF margin follows its
+  own operating margin, the API's rule worded in the case's rules line), and waits for the run of the latest
   numbers so a case never starts from stale ones. Before they're added, a bear or bull tab shows
   that case's preview beside base; a case whose numbers don't parse keeps its last valid ones
   (marked ⚠), never another case's. Check my thesis checks the base case. **Adjustments** (yours,
@@ -604,8 +630,11 @@ on the folder changed last. Never just the first workspace.
   release's), quoted with its 8-K citation, never read into a field. **Valuation at your price**:
   a price per share and a day you type, saved with the model, give market cap (× the latest shares
   outstanding), EV (+ net debt, only when its reading is current; Deckers' latest is from 2014, so
-  EV is blank and says why) and P/E, EV/Revenue, EV/EBIT and FCF yield on history, the TTM and each
-  case. The page says it's your price: nothing is fetched or kept. A company reporting in another
+  EV is blank and says why) and P/E, EV/Revenue, EV/EBIT and FCF yield for the trailing twelve
+  months and each case's forecast years only: a past year reads n/a with why (`PAST_YEAR`: its
+  multiple needs that year's price, which Tributary doesn't have; Vertiv's "P/E FY2021 560.6x" at
+  today's price was the analyst test's finding 5), and the group's heading carries the price and
+  its day. The page says it's your price: nothing is fetched or kept. A company reporting in another
   currency (057: the run's `currency`) has its table, chart and notes in it ("€2.10B"), and the price
   gets a currency picker (the company's or USD; a price saved before is dollars): a price in another
   currency than the figures gives market cap in the price's currency but no EV or multiple, and the
@@ -629,7 +658,10 @@ per company, from its filings to a thesis that's checked after every filing. Rul
   `#/analysis/{project}/thesis|model/{id}` (App.tsx), so it opens inside the project.
 - **Home** (`#/analysis`, `AnalysisHome.tsx`): your projects, newest edit first: company,
   project name, last edited, the thesis's last check (supported / contradicted / can't verify,
-  one checks-list request per thesis, first 20) and Revisit's "new 10-Q" flag. **New
+  one checks-list request per thesis, first 20) and Revisit's "new 10-Q" flag. A check that no
+  longer covers the saved text reads "Stale" with its counts faded (#16), by the Monitor step's own
+  rule: the check's `text_hash` against `textHash` of the saved Markdown (the listing nulls a
+  thesis's state, so each checked thesis is read once). **New
   analysis**: a company search that lists only companies you can read (`readableFor`;
   `access=financials` on the API too), suggested peers from `/peers` (readable ones, the first
   3 ticked), a name; it creates the workspace with its project and opens step 1.
@@ -637,7 +669,8 @@ per company, from its filings to a thesis that's checked after every filing. Rul
   company (public identity), "n of 8 steps done" and tabs for the 8 steps under the rail's names
   (each tab opens its own step); a rail of the 8 steps with a done marker each. Done means the
   user ticked it (`project.done`), never automatic and never locked: work in a step (notes, a
-  saved chart, peers, a model, the Core thesis written, a check: `hasWork`) shows as a hint under
+  saved chart, peers, a model, the Core thesis written in the user's own words, a check: `hasWork`;
+  a pinned passage or an embed alone isn't writing, #30, `project.ts` `ownLines`) shows as a hint under
   the box ("1 chart saved here"). The rail's Monitor says "re-check" when the last check no longer
   covers the thesis (its text changed) or a newer 10-K/10-Q is filed. Without a step in the URL
   it opens at the first step not ticked. Each step is a pane
@@ -774,6 +807,9 @@ asks the API nothing. Clicking a point
 reader. Filing markers put each company's 10-Ks and 10-Qs (public index) and 8-K results (item
 2.02, from parsed filings) in a band of their own under the plot, their letters only where they fit
 (10-Ks first; the rest stay as stems, their hover names them), and on a chart of years only the 10-Ks.
+The companies marked are the ones the layers read: a formula's are those its answer read, so
+`MSFT.capex / MSFT.revenue` marks Microsoft's filings whatever its default company (analyst test 4: it
+marked nothing).
 "View as table" shows the plotted values with their sources as a data table.
 
 How charts tell the truth, in every chart that draws through `chart/LayerChart.tsx` (the builder,
@@ -784,10 +820,18 @@ Overview, Revenue, Analysis Numbers, Compare, thesis and report embeds), SVG, PN
   until the user types one; then the builder says "Custom title" and offers the automatic one back.
   `ChartState.title` holds only what was typed, so a chart saved before this keeps its stored title as
   a custom one. Templates and the Chart buttons leave it empty.
-- **An axis holds one unit** (`chart/axes.ts`): a layer asks for a side; if that side reads in another
-  unit it moves to the other, and with both taken it isn't drawn (the card and the chart's footnote say
-  so, and its values stay in the tooltip, the table and the CSV). Dollars, dollars per share, an index
-  and a multiple never share one, so the smaller doesn't flatten at zero. Percents of every kind do.
+- **An axis holds one unit, and a unit has one axis** (`chart/axes.ts`): a layer asks for a side; if
+  its unit already has a side it joins it (two percents never get a scale each: an operating margin on
+  0-25% beside an FCF margin on 0-30% crossed where the values didn't, analyst test 4), if the side reads
+  in another unit it moves to the other, and with both taken it isn't drawn (the card and the chart's
+  footnote say so, and its values stay in the tooltip, the table and the CSV). Dollars, dollars per share,
+  an index and a multiple never share one, so the smaller doesn't flatten at zero. Percents of every kind
+  do. Each layer's Axis control shows the side it is drawn on, with that side's unit ("Right axis
+  (USD)"), never only what it asked for; choosing a side moves the layer's whole unit there and the
+  unit drawn there to the other side (`askSides`).
+- **A balance is never "TTM"**: a layer that reads only balances (`chart/metrics.ts` POINT_IN_TIME, the
+  mirror of query-api `formula/check.py`; loans and deposits included) has no "(TTM)" in its legend or
+  the title, and its Transform control shows Quarterly (the quarter-end value the API answers with).
 - **A ratio isn't necessarily a percent**: the API says how a dimensionless result reads from its
   formula's shape (query-api `formula/check.py`), percent, multiple or plain number, and a layer's
   "Reads as" overrides it (`display`, saved with the chart). Debt to equity is 1.91x here as in the tables,
@@ -801,7 +845,12 @@ Overview, Revenue, Analysis Numbers, Compare, thesis and report embeds), SVG, PN
   another layer "stop". A chart with no full year on file draws that point rather than nothing.
 - **Gaps are gaps** (`chart/series.ts` `xAxis`): the axis has every period between the first and the
   last, so a missing year is a shaded hole, lines and areas break there, a point alone gets a dot, the
-  table and the CSV have its row. The legend lists only what is drawn. `chart/notes.ts` says the rest in
+  table and the CSV have its row. In the builder and saved-chart embeds the axis also runs on to the
+  newest period due on file by the chart's end (`chartEnd`: a custom range's last day, else the day the
+  answers were read; a quarter is due 90 days after it ends, a non-accelerated filer's 10-K deadline),
+  so Goldman's loans, tagged to CY2022 Q2, end in a shaded gap to CY2026 Q2 with "stops at CY2022 Q2"
+  under the chart, not an axis that ends with the series (analyst test 4). Compare, the Overview and a
+  model end with what is plotted. The legend lists only what is drawn. `chart/notes.ts` says the rest in
   words, under the chart and in its exports: a period with no value, a series that starts late or
   stops early (one quarter behind others isn't a gap: companies file at different times), a layer with
   no values, a chart with nothing as far back as it asked, a negative index. A layer with nothing to
@@ -816,7 +865,10 @@ Overview, Revenue, Analysis Numbers, Compare, thesis and report embeds), SVG, PN
   empty axis, ticks have the decimals to tell them apart, and a lone bar doesn't fill the chart.
 
 Compare's dollar charts can also read on a log scale or indexed to the first value in range (not
-saved; it says so when the largest company is over 100 times the smallest). "Chart these" and Peers'
+saved; it says so, naming the chart, when the largest company's latest value in that chart's own
+metric is over 100 times the smallest's: `SmallMultiples.tsx` `spreadNote`, measured per chart, never
+across charts, since revenue 14 times apart and free cash flow 130 times apart is a note on free cash
+flow only). "Chart these" and Peers'
 "Chart margins" draw at most 8 companies, the colours a chart tells apart, and say so. The Peers table
 sorts by any column like Compare (`compare/state.ts` `nextSort`/`sortRows`: high first, again to reverse,
 a third time for the suggested order; empty cells last). Revenue growth is green or red; below 1,040px
@@ -831,8 +883,8 @@ as a competitor in Vertiv's 10-K" or "its 10-K names Vertiv as a competitor" (a 
 sentence in the reader), the same industry and a similar size. Above the table, the company's own most
 distinctive terms. The columns are the answer's: a bank is compared on a bank's lines. Each median says
 how many of the peers it uses ("3 of 4"), and its hover why the others are left out, in the blanks
-vocabulary (not reported, not applicable, not meaningful or old, metadata only). Compare's medians do the
-same. Adding a peer on Compare asks `/peers/check` first: a company with no figures to compare isn't
+vocabulary (not reported, not applicable, not meaningful or not reported since an earlier period,
+metadata only). Compare's medians do the same. Adding a peer on Compare asks `/peers/check` first: a company with no figures to compare isn't
 added, and the page says why (Birkenstock files 20-F annual reports as a foreign private issuer, under
 IFRS; a company whose XBRL hasn't arrived yet; a fund with no annual report). A bank target's comps open
 on a bank's columns (net interest income, efficiency ratio, provision, loans, deposits, ROE, net margin)
@@ -992,7 +1044,13 @@ own companies, by name: with the catalog open, the ones they watch or
 analyse (`/v1/data-notes?company_id=`, at most 50), since every company is readable; while it's closed,
 the ones they can read. They need financials access, like the values they describe. A
 company is checked when its figures change, so its tab says when *its* figures were last checked while
-Home and Data status say when the checks last ran. A note about filings the SEC's XBRL data doesn't have
+Home and Data status say when the checks last ran, from the same source (#24: Home reads Data
+status's `quality.last_checked_at`, `home/useFeedStatus.ts` `useChecksRan`; it once showed its
+companies' newest check under that name, "18 h ago" beside "3 min ago"). Company counts say what
+they count: the sidebar's Companies count is the companies you can read (financials of any kind or a
+stored filing's text; its hover says so, `Sidebar.tsx` `COMPANIES_COUNTED`), Data status's are the
+companies with quarterly financials and the companies checked, and signed in it names the reader's
+larger count beside the first (`Status.tsx` `companiesNote`). A note about filings the SEC's XBRL data doesn't have
 yet dates them newest to oldest and promises "a day or two" only while that's true (over 3 days, it
 says how long the oldest has waited). The Statements tab says the same where the figures are read
 (H9, `company/data.ts` `figuresBehind`): when the newest 10-K/10-Q in the public filing index reports a
@@ -1000,7 +1058,9 @@ period more than a week after the figures' newest and was filed after everything
 names it, its period, when it was filed and how many days ago, how many quarters the figures are behind,
 and links its financial statements in the reader and on EDGAR. It promises no date (Citigroup was three
 quarters behind on 2026-11-08). What a note says follows the API's reading of a finding: a stock
-split is one "10-for-1 stock split" note, a restatement by a clean factor without the other side says it
+split is one "10-for-1 stock split" note dated by when it took effect as far as the filings show
+("took effect between Apr 28, 2024 and Jul 28, 2024", `notes.ts` `splitWhen`/`noteWhen`), its restating
+filings listed under it and never given as its date, a restatement by a clean factor without the other side says it
 may be a split, a factor of 1,000 says the unit changed, a spike the same quarter has in other years
 is a seasonal peak.
 
@@ -1035,9 +1095,13 @@ no debt/equity or ROE row there) read n/m only where `/financials?readings=true`
 `not_meaningful_periods`; the page never works out equity itself. Charts read the same rule (F7a): a
 point `/v1/formulas/evaluate` marks `not_meaningful` is a gap, never the raw ratio (Triton's 1,047%
 operating margin), and the chart says under it which periods read n/m and why (`series.ts`
-`notMeaningfulNote`); the CSV keeps the exact figure. An old figure (about a year or
-more behind the company's latest period) shows dimmed with its date; one merely behind shows its date
-and still counts. Neither n/m, n/a nor old enters a median. A company reporting in another currency (a
+`notMeaningfulNote`); the CSV keeps the exact figure. An old figure (035's `period_status`: over 300
+days behind the company's latest period, so the company stopped tagging it) is never shown as the
+company's current figure: it reads **— since Sep '14** in a table and "not reported since Sep 30, 2014"
+in the Overview's ledger (no seal), with the last figure on file, its period and its filing in the hover
+(analyst test 4: Deckers' 2014 net debt, Eaton's 2019 and Johnson Controls' 2016 operating margins
+read as current). One merely behind shows its date and still counts. Neither n/m, n/a nor old enters a
+median, a sort or a size band. A company reporting in another currency (a
 20-F/40-F filer, migration 056) shows its amounts in it, never converted: `money()` writes the symbol or
 the ISO code (€2.10B, CAD 1.20B, €1.87 a share); a screener, Peers or Compare cell the API reads
 `other_currency` shows the figure in its currency and leaves sorts, filters and medians ("1 in another
@@ -1087,7 +1151,7 @@ the narrow-screen menu, the shortcut sheet, Ctrl+arrow table jumps and the limit
 Home and the tearsheet, writing a report from a workspace with a mocked SSE stream (embedded charts,
 the flagged figure, Markdown download, print styles), customizing Home and the watchlist and screener
 columns, workspace actions, a clean console on Home, Companies, a company's Overview and Statements,
-Compare, the chart builder, Analysis, Alerts and Settings (#68), no screen scrolling sideways on a
+Compare, the chart builder, Analysis, Alerts, Settings and Data status (#68), no screen scrolling sideways on a
 phone, at 1024 or at 1440 with the panel open, the screener's numbers under a frozen name with the
 panel open, and a company reporting in euros, labelled everywhere and never ranked or averaged with
 dollars) run against `vite preview` with every `/api/*` call answered by `e2e/mockApi.ts` (route

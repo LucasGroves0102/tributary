@@ -63,6 +63,42 @@ def test_defaults_are_b7s_run_rate_fading_to_the_long_run(case):
     assert edited["cases"]["base"]["user_set"] == want["user_set"]
 
 
+def test_each_cases_fcf_margin_default_follows_its_own_operating_margin():
+    """morgan4 finding 15: bear, base and bull all read 31.7%, 16.2%, 12.4%, so Morgan's bull
+    (margins 24, 25, 25.5%) had free cash flow falling $3.70B, $3.37B, $3.14B while its operating
+    income rose to $6.47B. A case's default is the base case's FCF margin moved by its margin
+    difference after tax (VRT's TTM rate, 19.8%)."""
+    inputs = real("vrt")
+    base_defs = run(inputs, model(VRT, years(3), ytd=True))["cases"]["base"]["defaults"]
+    base = [{"growth": d["growth"], "margin": d["margin"]} for d in base_defs]
+    bull = [{"growth": 60, "margin": 24}, {"growth": 40, "margin": 25},
+            {"growth": 22, "margin": 25.5}]
+    out = run(inputs, model(VRT, base, ytd=True, scenarios={"bear": shifted(base, "bear"),
+                                                            "bull": bull}))
+    c = out["cases"]
+    assert [d["fcfMargin"] for d in c["base"]["defaults"]] == [31.7, 16.2, 12.4]  # unchanged
+    assert [d["fcfMargin"] for d in c["bull"]["defaults"]] == [34.8, 23.7, 21.9]
+    fcf = {k: [y["fcf"] for y in c[k]["years"]] for k in ("bear", "base", "bull")}
+    oi = [y["operating_income"] for y in c["bull"]["years"]]
+    assert oi[0] < oi[1] < oi[2] and fcf["bull"][0] < fcf["bull"][1] < fcf["bull"][2]
+    assert all(b < m < u for b, m, u in zip(fcf["bear"], fcf["base"], fcf["bull"], strict=True))
+    tax = c["bull"]["defaults"][1]["taxRate"]
+    assert c["bull"]["defaults"][1]["fcfMargin"] == pytest.approx(
+        16.2 + (25 - base[1]["margin"]) * (1 - tax / 100), abs=0.05)
+    # the preview cases move by the spread alone; a rate the case typed is the case's
+    preview = run(inputs, model(VRT, base, ytd=True))["cases"]
+    assert [d["fcfMargin"] for d in preview["bear"]["defaults"]] == [28.5, 13.7, 10.0]
+    assert [d["fcfMargin"] for d in preview["bull"]["defaults"]] == [34.9, 18.7, 14.8]
+    typed = run(inputs, model(VRT, base, ytd=True, scenarios={
+        "bull": [{**y, "fcfMargin": 5} for y in bull]}))["cases"]["bull"]["years"]
+    assert [y["inputs"]["fcfMargin"] for y in typed] == [5.0, 5.0, 5.0]
+    # the base case's own typed FCF margin is where the cases start; a 100% tax keeps nothing
+    own = [{**y, "fcfMargin": 10} for y in base]
+    cases = run(inputs, model(VRT, own, ytd=True, scenarios={
+        "bull": [{**y, "taxRate": 100} for y in bull]}))["cases"]
+    assert [d["fcfMargin"] for d in cases["bull"]["defaults"]] == [10.0, 10.0, 10.0]
+
+
 def test_bear_and_bull_start_from_the_base_case_by_b7s_spread():
     base = [{"growth": 83, "margin": 60, "taxRate": 18}, {"growth": 2, "margin": 10}]
     assert shifted(base, "bear") == [{"growth": 41.5, "margin": 48.0, "taxRate": 18},
@@ -267,7 +303,10 @@ def test_organic_growth_excludes_the_users_acquired_revenue():
 
 # --- valuation --------------------------------------------------------------------------------
 
-def test_a_typed_price_gives_multiples_on_history_and_each_case():
+def test_a_typed_price_gives_multiples_for_the_ttm_and_each_case_only():
+    """morgan4 finding 5: today's $185 over FY2021's EPS read "P/E FY2021 560.6x". A past year
+    gets no multiple; the current twelve months (here the TTM column to FY2026 Q3) and the
+    forecasts do."""
     out = run(real("vrt"), model(VRT, years(2), ytd=True,
                                  price={"value": 150, "date": "2026-11-06"},
                                  scenarios={"bear": years(2, 0, 15), "bull": years(2, 40, 25)}))
@@ -276,14 +315,35 @@ def test_a_typed_price_gives_multiples_on_history_and_each_case():
     assert v["market_cap"] == pytest.approx(150 * shares)
     assert v["net_debt"]["value"] == -783200000 and v["net_debt"]["period_end"] == "2026-09-30"
     assert v["enterprise_value"] == pytest.approx(150 * shares - 783.2e6)
-    fy25 = out["history"][-1]
-    assert v["history"][-1]["pe"] == pytest.approx(150 / fy25["eps_adjusted"])
-    assert v["history"][-1]["ev_ebit"] == pytest.approx(
-        v["enterprise_value"] / fy25["operating_income_adjusted"])
+    assert out["ttm"] is not None and v["history"] == []
     assert v["ttm"]["pe"] == pytest.approx(v["market_cap"] / out["ttm"]["net_income_adjusted"])
+    assert v["ttm"]["ev_ebit"] == pytest.approx(
+        v["enterprise_value"] / out["ttm"]["operating_income_adjusted"])
     assert set(v["cases"]) == {"bear", "base", "bull"}
     bull = out["cases"]["bull"]["years"][1]
     assert v["cases"]["bull"][1]["fcf_yield"] == pytest.approx(bull["fcf"] / v["market_cap"])
+
+
+def through_q4(inputs: dict) -> dict:
+    """Vertiv's inputs as they read before its FY2026 Q1: the newest TTM ends at FY2025 Q4, so
+    there is no TTM column and the base year is the current twelve months."""
+    out = json.loads(json.dumps(inputs))
+    for key in ("ttm", "quarters"):
+        out[key] = [r for r in out[key] if r["fiscal_year"] <= 2025]
+    return out
+
+
+def test_with_no_ttm_column_the_base_year_is_the_current_twelve_months():
+    out = run(through_q4(real("vrt")), model(VRT, years(2),
+                                             price={"value": 150, "date": "2026-11-06"}))
+    v = out["valuation"]
+    fy25 = out["history"][-1]
+    assert out["ttm"] is None and v["ttm"] is None and fy25["fy"] == 2025
+    assert [m["fy"] for m in v["history"]] == [2025]
+    assert v["history"][0]["pe"] == pytest.approx(150 / fy25["eps_adjusted"])
+    assert v["history"][0]["ev_ebit"] == pytest.approx(
+        v["enterprise_value"] / fy25["operating_income_adjusted"])
+    assert len(v["cases"]["base"]) == 2
 
 
 def as_euros(inputs: dict, debt_age: str | None = None) -> dict:
@@ -322,11 +382,11 @@ def test_a_price_in_another_currency_than_the_figures_gives_no_multiple():
     v = run(euros, model(VRT, years(2), price={"value": 150, "date": "2026-11-06",
                                                "currency": "EUR"}))["valuation"]
     assert "currency_mismatch" not in v and v["market_cap_currency"] == "EUR"
-    assert v["history"][-1]["pe"] is not None and v["enterprise_value"] is not None
+    assert v["ttm"]["pe"] is not None and v["enterprise_value"] is not None
     # and a dollar company's run is as before, with the same multiples
     usd = run(real("vrt"), model(VRT, years(2), price={"value": 150, "date": "2026-11-06"}))
     assert "currency_mismatch" not in usd["valuation"]
-    assert usd["valuation"]["history"] == v["history"]
+    assert usd["valuation"]["ttm"] == v["ttm"] and usd["valuation"]["cases"] == v["cases"]
 
 
 def test_a_euro_price_gives_a_euro_companys_ev_and_multiples():
@@ -342,9 +402,8 @@ def test_a_euro_price_gives_a_euro_companys_ev_and_multiples():
     assert v["enterprise_value"] == pytest.approx(cap - 783200000) and v["ev_note"] is None
     assert v["net_debt"]["value"] == -783200000 and v["net_debt"]["status"] is None
     assert v["net_debt"]["reason"] is None
-    fy = out["history"][-1]
-    assert v["history"][-1]["ev_ebit"] == pytest.approx(
-        v["enterprise_value"] / fy["operating_income_adjusted"])
+    assert v["ttm"]["ev_ebit"] == pytest.approx(
+        v["enterprise_value"] / out["ttm"]["operating_income_adjusted"])
     assert v["cases"]["base"][0]["ev_revenue"] is not None
     # read by its age, as a dollar company's: an earlier quarter still gives EV, an old one not
     behind = run(as_euros(real("vrt"), "behind"), model(VRT, years(2), price=price))["valuation"]
@@ -378,7 +437,8 @@ def test_ev_needs_a_current_net_debt():
         "valuation"]
     assert v["net_debt"]["status"] == "old" and v["net_debt"]["period_end"] == "2014-09-30"
     assert v["enterprise_value"] is None and v["ev_note"] == "old"
-    assert v["history"][-1]["ev_ebit"] is None and v["history"][-1]["pe"] is not None
+    assert v["ttm"]["ev_ebit"] is None and v["ttm"]["pe"] is not None
+    assert v["cases"]["base"][0]["ev_revenue"] is None
     inputs = real("deck")
     inputs["latest"].pop("net_debt")
     assert run(inputs, model(DECK, years(1), price={"value": 100, "date": "2026-11-06"}))[
@@ -419,8 +479,8 @@ def test_a_split_or_merger_breaks_the_share_history_rather_than_reading_as_buyba
     assert by[2023]["eps_growth"] is None
     assert by[2022]["earlier_share_basis"] == 2023 and by[2024]["earlier_share_basis"] is None
     assert by[2024]["share_change"] == pytest.approx(156.285 / 160.111 - 1, rel=1e-4)
-    pe = {m["fy"]: m["pe"] for m in out["valuation"]["history"]}
-    assert pe[2022] is None and pe[2024] == pytest.approx(100 / 4.86)
+    # no past year's P/E at all now (finding 5), so none on the pre-split basis either
+    assert out["valuation"]["history"] == [] and out["valuation"]["ttm"]["pe"] is not None
     nvda = {y["fy"]: y for y in run(real("nvda"), model(NVDA, years(1)))["history"]}
     assert [fy for fy, y in nvda.items() if y["share_break"]] == [2020, 2023]
     # the run rate's share change was never fooled: the latest quarter against a year earlier

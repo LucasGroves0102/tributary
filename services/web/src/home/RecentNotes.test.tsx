@@ -48,6 +48,17 @@ it("waits for the watchlist rather than showing every company meanwhile", async 
   expect(fetch).not.toHaveBeenCalled();
 });
 
+it("#24: checks last ran reads Data status's run, not these companies' newest check", async () => {
+  const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
+  vi.mocked(fetch).mockImplementation(async (u) => String(u).endsWith("/v1/status/data")
+    ? Response.json({ quality: { companies_checked: 7070, last_checked_at: ago(3 * 60_000), checks: [] } })
+    : Response.json({ as_of: "", checked_at: ago(18 * 3600_000), companies: 1, notes: [] }));
+  await render({ catalogOpen: true, companies: [NVDA] });
+  for (let i = 0; i < 3; i++) await act(async () => new Promise((r) => setTimeout(r, 0)));
+  expect(container.querySelector(".card-h .sub")?.textContent).toContain("checks last ran 3 min ago");
+  expect(container.textContent).not.toContain("18 h ago");
+});
+
 it("with the catalog closed, the companies the user can read are the API's to work out", async () => {
   await render({ catalogOpen: false });
   expect(asked()[0]!.searchParams.getAll("company_id")).toEqual([]);

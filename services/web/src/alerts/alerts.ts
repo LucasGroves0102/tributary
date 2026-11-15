@@ -11,7 +11,7 @@
  *   crossed "Clear", no value "No figure for this period". Its threshold reads in the formula's
  *   display (percent: 0.55 is 55%). */
 
-import { change, day, money, pct } from "../format";
+import { change, day, localClock, money, pct } from "../format";
 import { href } from "../route";
 import type { AlertFigure, AlertForm, AlertNotification, AlertSource, RedLineOp, RedLineResult, Webhook, WebhookDelivery } from "../types";
 
@@ -160,7 +160,7 @@ export function stallNote(w: Pick<Webhook, "stalls" | "stalled_until">, now: Dat
   if (!w.stalls || !w.stalled_until) return null;
   const until = new Date(w.stalled_until);
   if (!(until.getTime() > now.getTime())) return null;
-  const when = until.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const when = localClock(until);
   return `Not reachable on its last ${w.stalls} tries: alerts wait until ${when}, then it's tried again`;
 }
 

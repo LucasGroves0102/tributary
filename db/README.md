@@ -490,3 +490,19 @@ migrations that define those objects.
   now reads total revenue. best_facts' cost on hermes unchanged within noise (one more window sort).
   Locks: one function replaced, catalog only; the `financials-rebuild` job for those companies' CIKs;
   backout `backout/revenue_part_064.sql` (039's body).
+- `065_search_exact_phrase.sql`: a quoted phrase matches its exact words (analyst test 4: "liquid
+  cooling" in quotes matched "liquid-cooled", the english stemmer's 'liquid' <-> 'cool'). A ten-argument
+  `gold.search_page` (052's + `p_exact`, a 'simple' tsquery of the query's quoted phrases the Query API
+  builds, `store.exact_phrases`): a passage matches only when its own text, read with 'simple' (no
+  stemming; a hyphenated "liquid-cooling" still is the same words), matches too. NULL is 052's search;
+  the clause is a fixed string. Tested before DISTINCT ON and the counts, so `total` stays exact.
+  Cost on hermes: "liquid cooling" over every company 1,313 stemmed matches, 765 exact, 23 ms -> 651
+  ms (about 0.4 ms a passage, mostly to_tsvector); a common phrase over 30 days ("supply chain", 8,152
+  matches) adds about 4.4 s to a search already past SEARCH_TIMEOUT. Same SECURITY DEFINER read rule
+  and grants; the nine-argument form stays for an API pod from before it. Catalog only, no rebuild.
+- `066_company_search_classified_first.sql`: `silver.search_companies` = 044's body with one key before
+  the name's length: a company with a SIC code first (analyst test 4: "Goldman Sachs" listed Goldman
+  Sachs BDC, no code, above The Goldman Sachs Group, 6211, on the shorter name). Public identity only,
+  never a value. Measured on hermes over 2,285 queries (the first two words of every large accelerated
+  filer's name and the report's cases): the first result changes for "Goldman Sachs" and "Blue Owl"
+  (Blue Owl Capital Inc., the manager, above its BDC) only. Catalog only.

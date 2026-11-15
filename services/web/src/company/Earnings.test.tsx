@@ -105,7 +105,8 @@ it("switches quarters, and says what a quarter lacks instead of guessing", async
   expect($(".release-card .sub")?.textContent).toBe("Quarter ended Dec 31, 2026 (expected)");
   expect(container.textContent).toContain("isn't filed yet, and the figures come from it");
   expect(container.textContent).toContain("This release has no section headed Outlook or Guidance");
-  expect(container.textContent).toContain("This release has no reconciliation table and no note with a dollar amount");
+  expect(container.textContent).toContain("No reconciliation table and no note with a dollar amount in the forms Tributary reads");
+  expect(container.textContent).toContain("such as in a financial supplement filed as another exhibit");
   await act(async () => $$(".earnings-pick .seg button").find((b) => b.textContent?.startsWith("Mar 31, 2026"))!.click());
   expect($(".release-card")?.textContent).toContain("No earnings release (an 8-K with Item 2.02) for this quarter");
   expect(container.textContent).toContain("No release, so no outlook for this quarter.");

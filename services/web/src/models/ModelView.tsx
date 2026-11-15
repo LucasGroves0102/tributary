@@ -31,9 +31,11 @@ import { useModelRun, type RunState } from "./useModelRun";
 const ORDER: Scenario[] = ["bear", "base", "bull"];
 
 /** A model drawn: history (solid) and every shown case's forecast (dashed; bear and bull
- * lighter) on one chart, then ONE table with every line and the cases side by side: history, the
- * TTM and the current year's reported quarters once per line, then a row per case for the
- * forecast years. History points and figures open their filing. */
+ * lighter, each in its own colour, as their labels in the table) on one chart, then ONE table with
+ * every line and the cases side by side: history, the TTM and the current year's reported quarters
+ * once per line, then a row per case for the forecast years. History points and figures open their
+ * filing. Valuation lines have figures only where a price typed today means something: the
+ * trailing twelve months and the forecasts (past years read n/a, PAST_YEAR says why). */
 export function ModelView({
   run,
   historyYears,
@@ -82,7 +84,7 @@ export function ModelView({
         footnote={[
           `History: SEC filings via Tributary, fiscal years (TTM at each fiscal Q4)${run.history.length ? `, through ${day(run.history.at(-1)!.period_end, true)}` : ""}.`,
           first
-            ? `Forecast (dashed) from FY${first.fy}: your assumptions, not data${fromQuarters ? `, after FY${cur!.fy}'s ${quartersLabel(cur!.quarters)} as reported` : ""}.${shown.length > 1 ? " Bear and bull lighter." : ""}`
+            ? `Forecast (dashed) from FY${first.fy}: your assumptions, not data${fromQuarters ? `, after FY${cur!.fy}'s ${quartersLabel(cur!.quarters)} as reported` : ""}.${shown.length > 1 ? " Bear and bull lighter, each in its own colour." : ""}`
             : "No forecast: fix the assumptions.",
         ]}
         svgRef={svg}
@@ -115,7 +117,15 @@ export function ModelView({
           {groups.map((g) => (
             <tbody key={g}>
               <tr className="group-row">
-                <th className="first" scope="rowgroup" colSpan={columns.length + (shown.length > 1 ? 2 : 1)}>{g}</th>
+                <th className="first" scope="rowgroup" colSpan={columns.length + (shown.length > 1 ? 2 : 1)}>
+                  {g}
+                  {g === "Valuation at your price" && run.valuation && (
+                    <span className="group-sub">
+                      {formatCell(run.valuation.price, "USD/shares", run.valuation.market_cap_currency ?? amountUnit(run))} on {day(run.valuation.date, true)}:
+                      the trailing twelve months and your forecast years only. Past years read n/a: Tributary has no past prices.
+                    </span>
+                  )}
+                </th>
               </tr>
               {lines.filter((l) => l.group === g).map((l) => (
                 <Fragment key={l.key}>
@@ -169,7 +179,8 @@ function Fact({ run, line, col, rows }: { run: ModelRun; line: Line; col: Column
     title = `FY${run.current.fy} ${quartersLabel(run.current.quarters)} as reported${line.key === "growth" ? ", against the same quarters a year earlier" : ""}`;
   }
   return (
-    <td className={`n ${col.kind}`} rowSpan={rows} title={v === null ? line.blank ?? title : title}>
+    <td className={`n ${col.kind}${v === "n/a" ? " past" : ""}`} rowSpan={rows}
+      title={v === "n/a" ? line.pastYear : v === null ? line.blank ?? title : title}>
       {formatCell(v, line.unit, amountUnit(run))}
     </td>
   );
@@ -183,7 +194,7 @@ function Forecast({ line, p, c, i, preview, currency }: { line: Line; p: Project
     : null;
   const defaulted = rateOf(line.key);
   const isDefault = defaulted && p.defaulted.includes(defaulted);
-  const title = split ?? (isDefault ? "Tributary's default from history (blank in your assumptions)"
+  const title = split ?? (isDefault ? "Tributary's default (you left this rate empty in your assumptions)"
     : preview ? "Not added yet: what this case would start as" : p.note ?? undefined);
   return (
     <td className={`n forecast${isDefault ? " default" : ""}`} title={v === null ? line.blank ?? title : title}>

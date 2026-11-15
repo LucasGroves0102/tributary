@@ -104,6 +104,8 @@ export function useSaved(token: string | null, user: string | null): Saved {
   const tok = useRef(token);
   tok.current = token;
   const listRef = useRef<SavedWorkspace[]>([]);
+  /** ids of workspaces and items waiting out a delete's undo window (#158, #20 below) */
+  const goneRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     setList({ state: "loading" });
@@ -214,7 +216,8 @@ export function useSaved(token: string | null, user: string | null): Saved {
   const save = useCallback(
     async (current: Current) => {
       const o = open.user === user ? open.items[current.kind] : undefined;
-      if (!o) throw new Error("nothing open to save over");
+      // an item being deleted (or in a workspace being deleted) isn't open any more
+      if (!o || goneRef.current.has(o.itemId) || goneRef.current.has(o.workspaceId)) throw new Error("nothing open to save over");
       try {
         const item = await updateItem(need(), o.itemId, { state: stateOf(current) });
         setOpenItems((x) => ({ ...x, [current.kind]: { ...o, name: item.name, saved: fingerprint(current.kind, item.state) } }));
@@ -405,6 +408,18 @@ export function useSaved(token: string | null, user: string | null): Saved {
   }, []);
 
   const gone = useMemo(() => new Set(pendingDeletes.map((p) => p.id)), [pendingDeletes]);
+  goneRef.current = gone;
+  // #20 (analyst test 4): a page whose open item, or its workspace, is being deleted stops editing
+  // it at once: no "workspace / name" header and no Save over something about to go. What's on
+  // screen stays, as unsaved work; Undo brings the open item back with the rest.
+  const ownOpen = open.user === user ? open.items : null;
+  const shownOpen = useMemo<OpenItems>(() => {
+    const items = ownOpen ?? storedOpen(user);
+    if (!gone.size) return items;
+    return Object.fromEntries(
+      Object.entries(items).filter(([, v]) => v && !gone.has(v.itemId) && !gone.has(v.workspaceId)),
+    ) as OpenItems;
+  }, [ownOpen, user, gone]);
   const shownList = useMemo<SavedList>(() => {
     if (list.state !== "ok" || !gone.size) return list;
     return {
@@ -429,7 +444,7 @@ export function useSaved(token: string | null, user: string | null): Saved {
     pendingDeletes,
     deleteFailure,
     dismissDeleteFailure: () => setDeleteFailure(null),
-    open: open.user === user ? open.items : storedOpen(user),
+    open: shownOpen,
     createWorkspace: create,
     renameWorkspace: renameWs,
     deleteWorkspace: deleteWs,

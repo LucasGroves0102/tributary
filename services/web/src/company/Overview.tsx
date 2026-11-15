@@ -10,7 +10,8 @@ import { day, paren } from "../format";
 import { go, href } from "../route";
 import type { ScreenerRow, Tier, ValueSource } from "../types";
 import {
-  BANK_NOT_SHOWN, financeArmNote, header, isAmount, isBankRow, keyStats, longDay, recapAccession, statementSection, yearStory,
+  BANK_NOT_SHOWN, financeArmNote, foreignReport, header, isAmount, isBankRow, keyStats, longDay, recapAccession, statementSection,
+  yearStory,
   type KeyStat, type YearStory,
 } from "./data";
 import { EventsCard } from "./Events";
@@ -51,7 +52,9 @@ export function Overview({
 }) {
   const canFin = access.includes("financials");
   const canRead = access.includes("filings");
-  const events = useLoad(canRead ? `${companyId}|events` : null, () => companyEvents(token, companyId));
+  // a 20-F/40-F filer files no 10-Q, 10-K or 8-K: those sections say so instead (foreignReport)
+  const foreign = foreignReport(row);
+  const events = useLoad(canRead && !foreign ? `${companyId}|events` : null, () => companyEvents(token, companyId));
   const flags = staleFlags(events?.state === "ok" ? events.data : null);
   const story = canFin ? yearStory(row) : null;
   return (
@@ -62,9 +65,16 @@ export function Overview({
         </Folio>
       )}
       <Figures companyId={companyId} name={name} row={row} canFin={canFin} flags={flags} lead={!story} />
-      {canRead && <EventsCard token={token} companyId={companyId} name={name} load={events} folio />}
-      <Recap token={token} companyId={companyId} name={name} accession={canFin ? recapAccession(row) : null} canFin={canFin} />
-      <Business token={token} companyId={companyId} name={name} canRead={canRead} />
+      {foreign ? (
+        <Folio name="Since the last report" line="Current reports on Form 6-K" className="events-card">
+          <p className="empty foreign-note">
+            {name} files as a foreign private issuer: current reports on Form 6-K, not 8-Ks, so there are no 8-K items here to say
+            what may have changed since its last report. Its 6-Ks are on the Filings tab.
+          </p>
+        </Folio>
+      ) : canRead && <EventsCard token={token} companyId={companyId} name={name} load={events} folio />}
+      <Recap token={token} companyId={companyId} name={name} accession={canFin ? recapAccession(row) : null} canFin={canFin} foreign={foreign} />
+      <Business token={token} companyId={companyId} name={name} canRead={canRead} foreign={foreign} />
       {canFin && <Revenue token={token} companyId={companyId} />}
       <TextKpisCard token={token} companyId={companyId} name={name} canRead={canRead} folio />
     </div>
@@ -163,7 +173,8 @@ function Figures({ companyId, name, row, canFin, flags, lead }: {
 }
 
 function LedgerRow({ s, common, companyId, armNote }: { s: KeyStat & { flag: StaleFlag | null }; common: string | null; companyId: string; armNote: string | null }) {
-  const blank = s.value === null && s.status !== "old" && s.status !== "other_currency";
+  // an old figure reads as not reported since its date (blanks.ts): no seal, the last figure in the hover
+  const blank = s.value === null && s.status !== "other_currency";
   const link = s.source && !blank ? sealHref(companyId, s.source) : null;
   const differs = s.old || (s.periodEnd && common && s.periodEnd !== common) || blank;
   const title = [s.title, s.key === "net_debt_q" ? armNote : null, s.flag?.text].filter(Boolean).join("\n\n");
@@ -187,14 +198,24 @@ function LedgerRow({ s, common, companyId, armNote }: { s: KeyStat & { flag: Sta
   );
 }
 
-function Recap({ token, companyId, name, accession, canFin }: { token: string; companyId: string; name: string; accession: string | null; canFin: boolean }) {
+function Recap({ token, companyId, name, accession, canFin, foreign }: {
+  token: string; companyId: string; name: string; accession: string | null; canFin: boolean;
+  /** foreignReport: a 20-F/40-F filer, which files no 10-Q or 10-K */
+  foreign: string | null;
+}) {
   const load = useLoad(accession, () => fetchRecap(token, accession!));
   const data = load?.state === "ok" ? load.data : null;
   return (
-    <Folio name="Latest quarter" line={data ? `${data.form} filed ${day(data.filed, true)}` : "The latest 10-Q or 10-K"}
-      aside="Against the prior quarter and a year earlier; no consensus estimates">
+    <Folio name="Latest quarter" line={data ? `${data.form} filed ${day(data.filed, true)}` : foreign ? `Annual reports on Form ${foreign}` : "The latest 10-Q or 10-K"}
+      aside={foreign ? undefined : "Against the prior quarter and a year earlier; no consensus estimates"}>
       {!canFin ? (
         <p className="empty locked">The recap needs financials for {name}.</p>
+      ) : !accession && foreign ? (
+        <p className="empty foreign-note">
+          {name} files as a foreign private issuer: annual reports on Form {foreign} and interim reports on Form 6-K, not 10-Qs or
+          10-Ks, so there is no quarterly recap here. The figures above come from those reports, in their own currency; the Filings
+          tab lists them.
+        </p>
       ) : !accession ? (
         <p className="empty">No 10-Q or 10-K values for {name} yet. Its Filings tab lists what it has filed.</p>
       ) : (
@@ -238,12 +259,18 @@ export function excerpt(text: string, max = 900): string {
   return (end > max / 2 ? cut.slice(0, end + 1) : cut) + " …";
 }
 
-function Business({ token, companyId, name, canRead }: { token: string; companyId: string; name: string; canRead: boolean }) {
-  const load = useLoad(canRead ? companyId : null, () => latestSection(token, companyId, "1", "10-K", EXCERPT_CHARS));
+function Business({ token, companyId, name, canRead, foreign }: { token: string; companyId: string; name: string; canRead: boolean; foreign: string | null }) {
+  const load = useLoad(canRead && !foreign ? companyId : null, () => latestSection(token, companyId, "1", "10-K", EXCERPT_CHARS));
   const section = load?.state === "ok" ? load.data : null;
   return (
-    <Folio name="Business" line={section ? `10-K filed ${day(section.citation.filed, true)}` : "The latest 10-K"} aside="Item 1, the opening">
-      {!canRead ? (
+    <Folio name="Business" line={section ? `10-K filed ${day(section.citation.filed, true)}` : foreign ? `The latest ${foreign}` : "The latest 10-K"}
+      aside={foreign ? "Its business description" : "Item 1, the opening"}>
+      {foreign ? (
+        <p className="empty foreign-note">
+          {name} describes its business in its {foreign} annual report. Tributary reads the text of 10-Ks, 10-Qs and 8-Ks only, so
+          there is no excerpt here; the report is on the Filings tab, with its link to EDGAR.
+        </p>
+      ) : !canRead ? (
         <p className="empty locked">The description comes from the 10-K's text, which needs the pro plan and a grant for {name}.</p>
       ) : (
         <Gate load={load} name={name} what="Filings">

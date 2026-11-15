@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { alertNotifications, failureReason, markAlertsRead } from "../api";
 import { useDirectory } from "../companies/directory";
 import { ErrorPanel, Skeleton } from "../components/States";
-import { localDay } from "../format";
+import { localDay, localTime } from "../format";
 import { href } from "../route";
 import type { AlertNotification, AlertNotifications } from "../types";
 import { alertLinks, figureChange, figuresNote, figureValue, headline, inDisplay, RED_LINE_WORDS, redLineState, ruleText, SOURCE_WORDS } from "./alerts";
@@ -68,7 +68,7 @@ export function NotificationList({ token, companyId, empty, limit = 50, onLoaded
             {!n.read_at && <span className="tag new" title="New since you last looked">new</span>}
             {n.crossed > 0 && <span className="tag crossed">{n.crossed} red line{n.crossed === 1 ? "" : "s"} crossed</span>}
             <span className="grow" />
-            <span className="faint small" title={`Noticed ${new Date(n.created_at).toLocaleString()}`}>
+            <span className="faint small" title={`Noticed ${localTime(n.created_at, true)}`}>
               {n.sources.map((s) => SOURCE_WORDS[s]).join(" · ")}
             </span>
           </div>

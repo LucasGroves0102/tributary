@@ -12,9 +12,13 @@
  *
  * Whether a value is n/m, n/a or old is decided once, in the database (migration 035), so sorts,
  * filters and the agent's data can't disagree with the screen: the API sends `readings` and this
- * module only words them. A value marked old also shows, dimmed, with its date, and leaves sorts,
- * range filters and medians; one merely behind shows its date and still counts. An amount in
- * another currency (056: a 20-F filer's euros) shows in that currency and leaves them too. */
+ * module only words them. A value marked old (035's `period_status`: over 300 days before the
+ * company's latest period, so the tag stopped) is not the company's current figure: it reads
+ * "— since Sep '14" (not reported since then), the last figure on file and its date in the hover,
+ * and leaves sorts, range filters and medians (analyst test 4: Deckers' 2014 net debt and Eaton's
+ * 2019 operating margin read as current). One merely behind shows its date and still counts. An
+ * amount in another currency (056: a 20-F filer's euros) shows in that currency and leaves them
+ * too. */
 
 import { currencyOf, day, money, quarter } from "./format";
 import type { Num, ValueReading, ValueSource } from "./types";
@@ -106,10 +110,11 @@ export function readFigure({ label, columnKey, raw, reading, source, latestPerio
         title: `${label}: not meaningful, because ${reading?.reason ?? "its denominator says nothing"}.${shown}${source_}`,
       };
     case "old":
+      // not the company's current figure: the mark for "not reported", dated by the last one on file
       return {
-        value: null, text: exact === null ? NOT_REPORTED : format(exact), old: true, status,
+        value: null, text: NOT_REPORTED, old: true, status,
         asOf: source ? quarter(source.period_end) : null,
-        title: `${sourceTitle} Old: this company's latest period is ${latestPeriod ? day(latestPeriod, true) : "much later"}, so it isn't a current figure and stays out of sorts, filters and medians.`,
+        title: oldTitle(label, columnKey, exact === null ? null : format(exact), source, sourceTitle, latestPeriod),
       };
     case "behind":
       return {
@@ -132,6 +137,20 @@ export function readFigure({ label, columnKey, raw, reading, source, latestPerio
         ? { value: null, text: NOT_REPORTED, title: notReportedTitle(label, columnKey), asOf: null, old: false, status: null }
         : { value: exact, text: format(exact), title: sourceTitle, asOf: null, old: false, status: null };
   }
+}
+
+/** The hover of an old figure: when it was last reported, the figure then and its source, and why it
+ * isn't shown as the company's current one. */
+function oldTitle(label: string, key: string, shown: string | null, source: ValueSource | null, sourceTitle: string,
+  latestPeriod: string | null | undefined): string {
+  const needs = NEEDS[key.replace(/_(ttm|q)$/, "")];
+  const since = source ? day(source.period_end, true) : "an earlier period";
+  const head = needs
+    ? `${label}: not reported since ${since}. It needs ${needs}, and the filings since don't give all of them.`
+    : `${label}: not reported since ${since}.`;
+  const last = shown === null || !source ? "" : ` The last figure on file, ${shown}: ${sourceTitle}`;
+  const latest = latestPeriod ? day(latestPeriod, true) : "much later";
+  return `${head}${last} This company's latest period is ${latest}, so that figure isn't shown as a current one and stays out of sorts, filters and medians.`;
 }
 
 const sentence = (s: string | null | undefined): string =>

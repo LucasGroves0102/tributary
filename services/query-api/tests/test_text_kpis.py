@@ -11,7 +11,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from query_api.app import create_app
-from query_api.text_kpis import MAX_RELEASES, Doc, extract, sentences, series
+from query_api.text_kpis import MAX_RELEASES, Doc, extract, latest_filing, sentences, series
 
 from .conftest import SECRET
 from .test_api import FakeAuthorizer
@@ -338,7 +338,11 @@ def test_route_reads_the_release_as_its_quarter(token):
     growth = body["metrics"]["orders_growth"]["points"]
     assert [(g["period_end"], g["value"], g["basis"]) for g in growth] == [
         ("2025-09-30", 60.0, "organic")]
-    assert body["read"] == {"sections": 2, "filings": 2, "from": "2025-10-22"}
+    # the newest filing read for (a release's period is its quarter's; on a tie the 10-Q)
+    assert body["read"] == {"sections": 2, "filings": 2, "from": "2025-10-22", "latest": {
+        "form": "10-Q", "filed": "2025-10-22", "period_end": "2025-09-30",
+        "accession_no": VRT_10Q}}
+    assert "text_kpis.py" not in body["method"]  # shown on the page as it is
     since, releases, limit = dict(store.calls)["kpi_sections"]
     assert since == date(2015, 11, 9) and releases == [VRT_RELEASE] and limit == 160
 
@@ -357,4 +361,22 @@ def test_route_with_nothing_stated(token):
     r = client(Store(sections=[])).get(f"/v1/companies/{VRT}/text-kpis", headers=token("bob"))
     body = r.json()
     assert all(m["points"] == [] for m in body["metrics"].values())
-    assert body["read"] == {"sections": 0, "filings": 0, "from": None}
+    assert body["read"]["sections"] == 0 and body["read"]["from"] is None
+    assert body["read"]["latest"]["accession_no"] == VRT_10Q  # still the newest filing read for
+
+
+def test_the_latest_filing_is_the_newest_period_whether_or_not_it_mentions_a_figure():
+    """Vertiv: the backlog is stated only in the FY2025 10-K ($15.0B at Dec 31, 2025); the 2026
+    releases and 10-Qs read for don't state one, and the newest of them is what a page compares."""
+    reports = [{"accession_no": "k", "form": "10-K", "filing_date": date(2026, 2, 24),
+                "period_end": date(2025, 12, 31)},
+               {"accession_no": "q3", "form": "10-Q", "filing_date": date(2026, 10, 22),
+                "period_end": date(2026, 9, 30)},
+               {"accession_no": "old", "form": "10-Q", "filing_date": date(2014, 5, 1),
+                "period_end": date(2014, 3, 31)}]
+    releases = [{"accession_no": "r3", "form": "8-K", "filing_date": date(2026, 10, 22)},
+                {"accession_no": "unread", "form": "8-K", "filing_date": date(2026, 11, 1)}]
+    latest = latest_filing(reports, releases, {"r3": date(2026, 9, 30)}, date(2016, 11, 14))
+    assert latest == {"form": "10-Q", "filed": date(2026, 10, 22),
+                      "period_end": date(2026, 9, 30), "accession_no": "q3"}
+    assert latest_filing(reports[2:], [], {}, date(2016, 11, 14)) is None  # before the window

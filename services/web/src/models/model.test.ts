@@ -20,6 +20,7 @@ import vrtOldFixture from "./fixtures/vrt-old-run.json";
 import vrtFixture from "./fixtures/vrt-run.json";
 import {
   amountUnit,
+  CASE_COLORS,
   evBlank,
   formatCell,
   guidanceYear,
@@ -194,7 +195,7 @@ describe("the three-case table", () => {
     const change = lines.find((l) => l.key === "share_change")!;
     expect(change.history(fy2023, 0)).toBeNull();
     expect(change.noteOf!(fy2023)).toMatch(/a split or a merger, not buybacks/);
-    expect(lines.find((l) => l.key === "pe")!.history(fy2022, 0)).toBeNull();
+    expect(lines.find((l) => l.key === "pe")!.history(fy2022, 0)).toBe("n/a");
     expect(lines.find((l) => l.key === "eps")!.noteOf!(fy2022)).toMatch(/before the split or merger in FY2023/);
     const ni = lines.find((l) => l.key === "ni")!;
     expect(ni.ytd!(deck.current!)).toBeCloseTo(deck.current!.actual!.net_income! - 46e6 * (1 - deck.current!.actual!.income_tax! / deck.current!.actual!.pretax_income!), 0);
@@ -204,9 +205,19 @@ describe("the three-case table", () => {
   it("multiples at the user's price; no EV without a current net debt, and why", () => {
     const pe = modelLines(vrt).find((l) => l.key === "pe")!;
     expect(pe.forecast(vrt.cases.bull!.years[1]!, "bull", 1)).toBeCloseTo(150 / vrt.cases.bull!.years[1]!.eps_adjusted!, 6);
+    // morgan4 finding 5: no past year at today's price ("P/E FY2021 560.6x"); the TTM and forecasts only
+    expect(vrt.valuation!.history).toEqual([]);
+    expect(vrt.history.map((y, i) => pe.history(y, i))).toEqual(vrt.history.map(() => "n/a"));
+    expect(pe.ttm!(vrt.ttm!)).toBeCloseTo(vrt.valuation!.market_cap! / vrt.ttm!.net_income_adjusted!, 6);
+    expect(pe.pastYear).toMatch(/no past prices/);
+    expect(formatCell("n/a", "multiple")).toBe("n/a");
+    // a base year that is the current twelve months (no TTM column) keeps its multiples
+    const atQ4 = { ...vrt, ttm: null, valuation: { ...vrt.valuation!, history: [{ fy: 2025, pe: 40, ev_revenue: 5, ev_ebit: 25, fcf_yield: 0.02 }] } } as ModelRun;
+    const fy2025 = atQ4.history.find((y) => y.fy === 2025)!;
+    expect(modelLines(atQ4).find((l) => l.key === "pe")!.history(fy2025, 0)).toBe(40);
     const evEbit = modelLines(deck).find((l) => l.key === "ev_ebit")!;
     expect(evEbit.forecast(deck.cases.base!.years[0]!, "base", 0)).toBeNull();
-    expect(evBlank(deck.valuation)).toMatch(/from 2014-09-30, over 300 days/);
+    expect(evBlank(deck.valuation)).toMatch(/net debt not reported since Sep 30, 2014, over 300 days/);
     expect(evBlank(vrt.valuation)).toBeUndefined();
   });
 
@@ -221,11 +232,17 @@ describe("the three-case table", () => {
     expect(formatCell(null, "USD")).toBe("—");
   });
 
-  it("the chart draws each case from the base year, bear and bull lighter", () => {
+  it("the chart draws each case from the base year, bear and bull lighter and each in its own colour", () => {
     const s = modelSeries(vrt, 6, ["bear", "base", "bull"]);
     expect(s.map((x) => x.name)).toEqual(["Revenue", "Revenue (bear)", "Revenue (base)", "Revenue (bull)", "Operating income",
       "Operating income (bear)", "Operating income (base)", "Operating income (bull)"]);
     expect(s.filter((x) => x.faint).map((x) => x.name)).toEqual(["Revenue (bear)", "Revenue (bull)", "Operating income (bear)", "Operating income (bull)"]);
+    // morgan4 finding 28: bear and bull were one hue; the base forecast keeps its line's colour
+    const colour = (name: string) => s.find((x) => x.name === name)!.color;
+    expect([colour("Revenue"), colour("Revenue (base)"), colour("Operating income"), colour("Operating income (base)")]).toEqual([0, 0, 1, 1]);
+    expect([colour("Revenue (bear)"), colour("Operating income (bear)")]).toEqual([CASE_COLORS.bear, CASE_COLORS.bear]);
+    expect([colour("Revenue (bull)"), colour("Operating income (bull)")]).toEqual([CASE_COLORS.bull, CASE_COLORS.bull]);
+    expect(new Set([0, 1, CASE_COLORS.bear, CASE_COLORS.bull]).size).toBe(4);
     expect(s[1]!.points[0]!.key).toBe(2025);
     expect(modelSeries(nvda, 8, ["base"]).map((x) => x.name)).toEqual(["Revenue", "Revenue (forecast)", "Operating income", "Operating income (forecast)"]);
   });
@@ -271,6 +288,7 @@ describe("each default explained in one line", () => {
     expect(lines.find((l) => l.key === "shareChange")!.text).toBe(
       "Share change (buybacks less issuance): -8.4% a year, diluted shares in FY2027 Q2 against the same quarter a year earlier.");
     expect(lines.at(-1)!.key).toBe("spread");
+    expect(lines.at(-1)!.text).toMatch(/Its FCF margin follows its own operating margin/);
     expect(defaultRules(vrtOld, "base")[0]!.text).toMatch(/^Growth and operating margin start at the trailing twelve months/);
   });
 

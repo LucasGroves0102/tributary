@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { DataNote } from "../types";
-import { edgarUrl, explain, groupNotes, rankOf, summaryText } from "./notes";
+import { edgarUrl, explain, groupNotes, noteWhen, rankOf, summaryText } from "./notes";
 
 const note = (kind: string, detail: Record<string, unknown> = {}, over: Partial<DataNote> = {}): DataNote => ({
   company_id: "0000320193", kind, severity: "warning", metric: "revenue", period_end: "2025-03-29", date: "2025-03-29",
@@ -108,6 +108,26 @@ describe("what a note can honestly say", () => {
     expect(e.text).toContain("4 periods from Jul 30, 2023 to Apr 28, 2024");
     expect(e.text).toContain("isn't a correction");
     expect(explain(note("stock_split", { split: "1-for-6", reverse: true, periods: 1 }, { metric: null })).title).toBe("1-for-6 reverse stock split");
+  });
+
+  it("a split is dated by when it took effect, never by a restating filing (analyst test 4)", () => {
+    // NVIDIA's 10-for-1 of June 2024, as the API describes it on hermes; the last restating filing was May 28, 2025
+    const ten = note("stock_split", {
+      split: "10-for-1", periods: 4, first_period_end: "2023-07-30", last_period_end: "2024-04-28", restated_filed: "2025-05-28",
+      effective_after: "2024-04-28", first_restated_accession: "0001045810-24-000264", first_restated_filed: "2024-08-28",
+      first_restated_form: "10-Q", first_restated_period_end: "2024-07-28",
+    }, { metric: null, date: "2024-07-28" });
+    expect(noteWhen(ten)).toBe("took effect between Apr 28, 2024 and Jul 28, 2024");
+    const e = explain(ten);
+    expect(e.text).toMatch(/^It took effect between Apr 28, 2024 and Jul 28, 2024, as far as the filings show: the 10-Q for the period ended Jul 28, 2024, filed Aug 28, 2024, is the first on the new share basis\./);
+    expect(`${noteWhen(ten)} ${e.text}`).not.toContain("May 28, 2025");
+    // no report date in the index: the first filing on the new basis only
+    const noPeriod = note("stock_split", { split: "4-for-1", periods: 4, first_restated_filed: "2021-08-20", first_restated_form: "10-Q" }, { metric: null });
+    expect(explain(noPeriod).text).toMatch(/^It was first reported in the 10-Q filed Aug 20, 2021\./);
+    expect(noteWhen(noPeriod)).toBeNull();
+    // an older API's split (no effective dates) shows no date: its date was the last restating filing's
+    expect(noteWhen(note("stock_split", { split: "4-for-1" }, { metric: null, date: "2022-05-27" }))).toBeNull();
+    expect(noteWhen(note("restatement", {}, { date: "2022-05-27" }))).toBe("May 27, 2022");
   });
 
   it("a clean factor without the other side may be a split, and the note stays a restatement", () => {

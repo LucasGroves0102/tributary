@@ -12,7 +12,7 @@ import { useDirectory } from "../companies/directory";
 import { CompanySearch } from "../components/CompanySearch";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { download } from "../download";
-import { day } from "../format";
+import { day, localTime } from "../format";
 import { renderMarkdown } from "../markdown";
 import { Embed } from "../reports/Embeds";
 import { href } from "../route";
@@ -518,7 +518,7 @@ function ThesisEditor({ token, item, initial, items, saved, label, readable, onO
           History
         </button>
         <button className="btn sm" onClick={checks.start} disabled={dirty || checking || !written}
-          title={dirty ? "Save first: the check reads the saved thesis" : !written ? "Write the thesis first: headings and guidance alone have nothing to check"
+          title={dirty ? "Save first: the check reads the saved thesis" : !written ? "Write the thesis first: headings, guidance and pinned evidence alone have nothing of yours to check"
             : `The assistant checks each factual claim and your models' assumptions against the filings (counts as 4 questions${allowance ? `; you have ${leftText(allowance)}` : ""})`}>
           {checking ? "Checking…" : "Check my thesis"}
         </button>
@@ -691,9 +691,9 @@ function Markdown({ markdown }: { markdown: string }) {
 }
 
 /** "3 Nov, 14:05" for a draft's time. */
+/** A version's or draft's moment, the app's one way (format.ts `localTime`): "Nov 10, 10:11 PM MST". */
 function when(iso: string): string {
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "earlier" : d.toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  return Number.isNaN(new Date(iso).getTime()) ? "earlier" : localTime(iso);
 }
 
 /** A picked file's text, read in the browser as UTF-8 (nothing is uploaded). */

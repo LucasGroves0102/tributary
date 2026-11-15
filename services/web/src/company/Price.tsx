@@ -10,7 +10,7 @@ import { useMemo, useState, type MouseEvent } from "react";
 
 import { pricesOf, valuationOf } from "../api";
 import { Empty, ErrorPanel, Skeleton } from "../components/States";
-import { day, money } from "../format";
+import { day, localDay, money } from "../format";
 import { href } from "../route";
 import type { PriceRow, Valuation, ValuationMetric } from "../types";
 import { isConnected, useMarketData } from "../market/useMarketData";
@@ -88,7 +88,7 @@ function Connected({ token, companyId, name }: { token: string; companyId: strin
             <PriceChart rows={inRange(prices.data.rows, range)} label={`${name} (${prices.data.ticker}) daily close`} />
             <p className="foot">
               {prices.data.attribution} {prices.data.ticker}, close as traded (not adjusted).
-              {prices.data.fetched_at && <> Fetched {day(prices.data.fetched_at.slice(0, 10), true)}.</>}
+              {prices.data.fetched_at && <> Fetched {localDay(prices.data.fetched_at, true)}.</>}
               {prices.data.warning && <> {prices.data.warning}.</>}
             </p>
           </>

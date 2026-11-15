@@ -381,6 +381,24 @@ export async function mockApi(page: Page): Promise<Fake> {
     if (path === "/v1/alerts/deliveries") return json({ deliveries: [], retries: [300, 1800, 7200, 21600] });
     if (path === "/v1/alerts/red-lines") return json({ red_lines: [], max_per_company: 10, evaluation: [], evaluated_at: now() });
     if (path === "/v1/status") return json({ last_accepted_at: now(), last_ingested_at: now() });
+    // the public status page's data: Data status, the front door's figures, and Home's "checks
+    // last ran" (#24: the run's time, from the same source as Data status)
+    if (path === "/v1/status/data") {
+      const recorded = { recorded_at: "2026-10-18T20:51:00Z", models: ["claude-haiku-5-5"], commit: "02ca3b2", committed: "2026-10-18" };
+      return json({
+        as_of: now(), max_age_seconds: 60,
+        freshness: { last_accepted_at: now(), last_ingested_at: now() },
+        ingest: { window_days: 7, window_start: "2026-10-14T15:00:00Z", filings: 40000, via_feed: 39000, live_pct: 97.5, p50_seconds: 43, p95_seconds: 108 },
+        completeness: { window_days: 30, window_start: "2026-09-21", days_checked: 21, indexed: 43012, missing: 1, republished: 1, days_with_missing: 1, last_checked_at: now() },
+        coverage: { companies_with_financials: 6597, documents: 632923, indexed_filings: 632164, sections: 3555257, last_indexed_at: now() },
+        quality: { companies_checked: 7070, last_checked_at: now(), checks: [{ check: "impossible_value", severity: "error", findings: 3, companies: 2 }] },
+        recorded: {
+          adversarial: { ...recorded, attacks: 59, categories: 10, leaks: 0, controls: 4, controls_answered: 4, report: "tests/adversarial/report.md" },
+          citations: { ...recorded, questions: 32, verified_answers: 32, data_answers: 30, data_answers_citing: 30, figures: 128, figures_traced: 128, untraced_accessions: 0, report: "tests/citations/report.md" },
+          golden: { figures: 149, companies: 5, filings: 5, checks: { absent: 2, annual: 129, annual_silver: 18 }, hand_checked: 21, readme: "tests/golden/README.md", commit: "9d9f318", committed: "2026-10-26" },
+        },
+      });
+    }
     m = path.match(/^\/v1\/companies\/(\d{10})\/expected-filings$/);
     if (m) return json({ company_id: m[1], as_of: "", method: "", expected: [] });
     if (u.pathname === "/api/agent/v1/allowance") {

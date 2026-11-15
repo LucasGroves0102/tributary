@@ -8,11 +8,13 @@ import { metricLabel } from "./metrics";
 import {
   applyTemplate,
   autoName,
+  autoTitle,
   emptyChart,
   fromDate,
   layerColor,
   layerName,
   moveLayer,
+  readsBalances,
   request,
   restoreChart,
   TEMPLATES,
@@ -77,6 +79,19 @@ describe("layers", () => {
     expect(layerName(metric({ name: " " }), short, metricLabel)).toBe("NVDA revenue");
     expect(autoName(metric({ transform: "ps" }), short, metricLabel)).toBe("NVDA revenue per share");
     expect(autoName(metric({ transform: "qoq" }), short, metricLabel)).toBe("NVDA revenue QoQ");
+  });
+
+  it("never call a balance TTM (analyst test 4: \"GS loans (TTM)\")", () => {
+    expect(autoName(metric({ metric: "loans", transform: "ttm" }), short, metricLabel)).toBe("NVDA loans");
+    expect(autoName(metric({ metric: "revenue", transform: "ttm" }), short, metricLabel)).toBe("NVDA revenue (TTM)");
+    expect(autoName(metric({ metric: "deposits", transform: "yoy" }), short, metricLabel)).toBe("NVDA deposits YoY");
+    const formula = (f: string): Layer => ({ ...metric(), kind: "formula", formula: f, transform: "ttm" });
+    expect(readsBalances(formula("GS.loans / GS.deposits"))).toBe(true);
+    expect(autoName(formula("cash / total_assets"), short, metricLabel)).toBe("cash / total_assets");
+    expect(autoName(formula("free_cash_flow / revenue"), short, metricLabel)).toBe("free_cash_flow / revenue (TTM)");
+    expect(readsBalances(formula("ttm(capex) / total_assets"))).toBe(false);
+    expect(readsBalances(formula("total_assets[-4q]"))).toBe(true);
+    expect(autoTitle(chart([metric({ metric: "loans", transform: "ttm" })]), short, metricLabel)).toBe("NVDA: loans");
   });
 
   it("keep their colours when reordered", () => {

@@ -6,6 +6,7 @@ import { App } from "../App";
 import { clearChartCache } from "../chart/cache";
 import { entry, fin, NVDA, nvdaRow } from "../fixtures";
 import { forgetVisits } from "../home/lastVisit";
+import { textHash } from "../thesis/check";
 import { clearNewest } from "../thesis/useRevisit";
 import NVDA_EARNINGS from "../company/fixtures/nvda-earnings.json";
 import NVDA_EVENTS from "../company/fixtures/nvda-events.json";
@@ -50,6 +51,13 @@ let workspaces: Map<string, Ws>;
 let items: Map<string, Item>;
 let writes: { method: string; path: string; body: Record<string, unknown> }[];
 let n: number;
+/** each thesis's checks list (newest first), as /v1/workspace-items/{id}/checks answers */
+let checksFor: Record<string, Record<string, unknown>[]>;
+const checkSummary = (itemId: string, textHashOf: string) => ({
+  check_id: "c1", item_id: itemId, text_hash: textHashOf, model: "m", cost_usd: null, created_at: "2026-11-10T05:14:00Z",
+  checked_at: "2026-11-10T05:14:00Z", company_id: NVDA, filings: [],
+  counts: { supported: 15, contradicted: 2, unverifiable: 7, flagged_assumptions: 0, not_mentioned: 0, ok: true },
+});
 
 const item = (id: string, kind: string, name: string, state: Record<string, unknown>, ws = PID): Item => ({
   item_id: id, workspace_id: ws, kind, name, state, created_at: "2026-11-01T00:00:00Z", updated_at: "2026-11-01T00:00:00Z", opened_at: null,
@@ -97,7 +105,8 @@ function respond(url: string, init?: RequestInit): Response {
   if (p === `/v1/companies/${NVDA}/earnings`) return Response.json(NVDA_EARNINGS);
   if (p === `/v1/companies/${NVDA}/events`) return Response.json(NVDA_EVENTS);
   if (p.endsWith("/segments")) return Response.json({ as_of: "", rows: [] });
-  if (/^\/v1\/workspace-items\/[^/]+\/checks$/.test(p)) return Response.json({ item_id: "", checks: [] });
+  const checked = p.match(/^\/v1\/workspace-items\/([^/]+)\/checks$/);
+  if (checked) return Response.json({ item_id: checked[1], checks: checksFor[checked[1]!] ?? [] });
   if (p === "/v1/workspaces" && method === "GET") {
     return Response.json({ workspaces: [...workspaces.values()].map((w) => ({ ...w, items: [...items.values()].filter((i) => i.workspace_id === w.workspace_id).map(summary) })) });
   }
@@ -209,6 +218,7 @@ beforeEach(() => {
   forgetVisits();
   writes = [];
   n = 0;
+  checksFor = {};
   workspaces = new Map([
     [PID, { workspace_id: PID, name: "Nvidia", created_at: "", updated_at: "2026-11-01T00:00:00Z", project: { companyId: NVDA, peers: [AAPL], notes: "", done: [] } }],
     ["w2", { workspace_id: "w2", name: "Semis", created_at: "", updated_at: "", project: null }],
@@ -250,6 +260,24 @@ it("lists projects in the Analysis tab, and creates one from a readable company 
   const post = writes.find((w) => w.method === "POST" && w.path === "/v1/workspaces")!;
   expect(post.body).toEqual({ name: "Nvidia", project: { companyId: NVDA, peers: [AMD], notes: "", done: [] } });
   expect(window.location.hash).toMatch(/^#\/analysis\/dddddddd-[^/]+\/business$/);
+});
+
+it("#16: the list marks a check stale when the saved thesis changed since, by the step's own rule", async () => {
+  checksFor[THESIS_ID] = [checkSummary(THESIS_ID, await textHash(NVDA, `${TEMPLATE}\nAn earlier text.`))];
+  await render("#/analysis", ".check-counts");
+  for (let i = 0; i < 10 && !container.querySelector(".check-counts.stale"); i++) await settle();
+  const counts = container.querySelector<HTMLElement>(".check-counts")!;
+  expect(counts.classList.contains("stale")).toBe(true);
+  expect(counts.querySelector(".tag.stale")?.textContent).toBe("Stale");
+  expect(counts.textContent).toContain("15 supported");
+  expect(counts.title).toContain("Stale: the thesis changed since this check");
+  act(() => root.unmount());
+  // the check of the text as saved: counts as they are, no mark
+  checksFor[THESIS_ID] = [checkSummary(THESIS_ID, await textHash(NVDA, TEMPLATE))];
+  await render("#/analysis", ".check-counts");
+  for (let i = 0; i < 4; i++) await settle();
+  expect(container.querySelector(".check-counts")?.classList.contains("stale")).toBe(false);
+  expect(container.querySelector(".tag.stale")).toBeNull();
 });
 
 it("L5: a company page's Start an analysis opens New analysis on that company, saying what an analysis is", async () => {
@@ -425,7 +453,7 @@ it("Reset to defaults sets exactly the default shown beside each field, in every
   // growth and margin: a number beside each; the other rates: blank is the default
   const inputs = () => [...page.querySelectorAll<HTMLInputElement>(".assumptions td:nth-child(2) input, .assumptions td:nth-child(3) input")];
   const hints = () => [...page.querySelectorAll(".assumptions td:nth-child(2) .faint, .assumptions td:nth-child(3) .faint")].map((h) => h.textContent);
-  const rates = () => [...page.querySelectorAll<HTMLInputElement>(".assumptions input[aria-label*='(blank: the default)']")];
+  const rates = () => [...page.querySelectorAll<HTMLInputElement>(`.assumptions input[aria-label*="(empty: Tributary's default)"]`)];
   await act(async () => type(inputs()[0]!, "99"));
   await act(async () => type(rates()[0]!, "3"));
   await afterRun();

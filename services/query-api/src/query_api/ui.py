@@ -11,7 +11,7 @@ import logging
 import re
 from collections.abc import Callable
 from datetime import UTC, date, datetime
-from decimal import Decimal, InvalidOperation, localcontext
+from decimal import Decimal
 from typing import Annotated, Literal, get_args
 from zoneinfo import ZoneInfo
 
@@ -42,7 +42,7 @@ from query_api.screener import (
     parse_filter,
     shape,
 )
-from query_api.shapes import document_url, filing_url, newest_windows, period
+from query_api.shapes import document_url, filing_url, newest_windows, percent_change, period
 from query_api.store import Store
 from query_api.watchlist import MAX_ENTRIES, UnknownUser, Watchlists
 
@@ -432,8 +432,9 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
                 "filed": filing["filing_date"], "period_end": filing["period_end"],
                 "as_of": _now(),
                 "note": "Values as currently reported: a restated value cites the restating "
-                        "filing. pct_change is null for ratios (change is in ratio points) and "
-                        "when the earlier value is 0.",
+                        "filing. pct_change is null for ratios (change is in ratio points), and "
+                        "with pct_not_meaningful's reason when the earlier value is zero or "
+                        "negative or the value turned negative.",
                 "metrics": _recap_metrics(rows, filing.get("cik")),
                 "flags": flags,
                 **({} if flags is not None else {"flags_unavailable": flags_note})}
@@ -673,17 +674,11 @@ def _recap_value(r: dict, cik: str | None) -> dict:
 
 
 def _change(current: Decimal, earlier: Decimal, unit: str) -> dict:
-    """change = current - earlier (exact); pct_change = change / |earlier|, 6 decimals."""
-    change = current - earlier
-    pct = None
-    if unit != "ratio" and earlier != 0:
-        with localcontext() as ctx:
-            ctx.prec = 60
-            try:
-                pct = (change / abs(earlier)).quantize(Decimal("0.000001"))
-            except InvalidOperation:
-                pct = None
-    return {"change": change, "pct_change": pct}
+    """change = current - earlier (exact); pct_change by shapes.percent_change (6 decimals), and
+    `pct_not_meaningful` (additive) saying why it is None when a base makes it mislead."""
+    pct, why = percent_change(current, earlier, unit)
+    return {"change": current - earlier, "pct_change": pct,
+            **({"pct_not_meaningful": why} if why else {})}
 
 
 def _flag(f: dict, accession_no: str) -> dict:

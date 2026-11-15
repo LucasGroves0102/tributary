@@ -61,11 +61,14 @@ describe("search terms and highlighting", () => {
     expect(snippetRuns("new «export» «controls» … end")).toEqual(["new ", { mark: "export" }, " ", { mark: "controls" }, " … end"]);
   });
 
-  it("#80: a phrase marks its words together, as stemmed search matched them, never one alone", () => {
+  it("#80: a phrase marks its exact words together, never one alone or another form (065)", () => {
     const text = "the export control rules, then controls to restrict chips; export-controls; Export Controls.";
     expect(highlight(text, ["export controls"]).filter((r) => typeof r !== "string")).toEqual([
-      { mark: "export control" }, { mark: "export-controls" }, { mark: "Export Controls" },
+      { mark: "export-controls" }, { mark: "Export Controls" },
     ]);
+    // analyst test 4: "liquid cooling" in quotes never marks "liquid-cooled" or "liquid coolings"
+    expect(highlight("liquid-cooled racks; liquid coolings; Liquid Cooling; liquid-cooling", ["liquid cooling"])
+      .filter((r) => typeof r !== "string")).toEqual([{ mark: "Liquid Cooling" }, { mark: "liquid-cooling" }]);
     // plain words still mark each word on its own (all of them must be in the passage, not together)
     expect(countMatches(text, ["export", "controls"])).toBe(7);
     expect(wordStem("controls")).toBe("control");
@@ -75,8 +78,8 @@ describe("search terms and highlighting", () => {
   });
 
   it("#80: with a phrase in the query the snippet is marked like the reader, not by ts_headline's every word", () => {
-    const snippet = "the «export» «control» rules … «controls» to restrict … «export» licences";
-    expect(snippetRuns(snippet, ["export controls"]).filter((r) => typeof r !== "string")).toEqual([{ mark: "export control" }]);
+    const snippet = "the «export» «controls» rules … «controls» to restrict … «export» licences";
+    expect(snippetRuns(snippet, ["export controls"]).filter((r) => typeof r !== "string")).toEqual([{ mark: "export controls" }]);
     expect(snippetRuns(snippet, ["export", "controls"])).toEqual(snippetRuns(snippet));
   });
 });

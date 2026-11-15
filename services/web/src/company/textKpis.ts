@@ -4,6 +4,7 @@
  * Nothing here reads a number out of text or re-derives one. Pure. */
 
 import type { Series, Source } from "../chart/series";
+import { possessive } from "../compare/peers";
 import { day, money } from "../format";
 import { sectionName } from "../reader/sections";
 import type { TextKpiMetric, TextKpiPoint, TextKpis, TextKpiSeries, TextKpiSource } from "../types";
@@ -105,6 +106,30 @@ export function excerpt(s: TextKpiSource, max = 240): string {
   if (start > 0) start = text.indexOf(" ", start) + 1 || start;
   if (end < text.length) end = text.lastIndexOf(" ", end) > start ? text.lastIndexOf(" ", end) : end;
   return `${start > 0 ? "… " : ""}${text.slice(start, end)}${end < text.length ? " …" : ""}`;
+}
+
+/** "the 10-Q", "the 10-K", "the earnings release": a filing as a sentence names it. */
+function filingWord(form: string): string {
+  return form.startsWith("8-K") ? "the earnings release" : `the ${form}`;
+}
+
+/** When a figure's newest value is older than the newest filing read for (the API's
+ * `read.latest`), the plain sentence that says so, else null: "Backlog was last stated as $15.00B
+ * at Dec 31, 2025, in the 10-K filed Feb 24, 2026. None of Vertiv's filings since, up to the 10-Q
+ * for the period ended Sep 30, 2026, states it in the ways Tributary reads." (analyst test 4: the
+ * series stopped at Dec 2025 and nothing said why). An older API without `latest`: null. */
+export function notStatedSince(data: TextKpis, metric: TextKpiMetric, name: string): string | null {
+  const latest = data.read.latest;
+  const points = data.metrics[metric]?.points ?? [];
+  if (!latest || !points.length) return null;
+  const newest = points.reduce((a, p) => (p.period_end > a.period_end ? p : a));
+  if (newest.period_end >= latest.period_end) return null;
+  const src = newest.sources[0];
+  const label = data.metrics[metric].label;
+  const at = newest.span === "instant" ? `at ${day(newest.period_end, true)}` : `for the ${when(newest)}`;
+  const where = src ? `, in ${filingWord(src.citation.form)} filed ${day(src.citation.filed, true)}` : "";
+  return `${label} was last stated as ${figure(newest)} ${at}${where}. None of ${possessive(name)} filings since, up to ` +
+    `${filingWord(latest.form)} for the period ended ${day(latest.period_end, true)}, states it in the ways Tributary reads.`;
 }
 
 /** Dates the filings disagree on, in words, or null: "2 dates left out where the filings state

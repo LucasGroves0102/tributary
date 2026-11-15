@@ -35,6 +35,15 @@ Rules (constants below):
    text), a line of 80 characters or more that starts with a footnote mark ("(1)", "(12)",
    "(A)", "*", "**"), lies outside every block of rules 4 and 6 (a note in an outlook block is
    quoted there) and holds a dollar amount ("$" then a digit). At most MAX_NOTES, in text order.
+   Lettered and numbered notes (analyst test 4: JPMorgan's release reconciles nothing in a table
+   and puts its adjustment in "2. Notes on non-GAAP financial measures:" / "d.Third-quarter 2026
+   net income, earnings per share and ROTCE excluding $658 million of net investment securities
+   losses are non-GAAP financial measures. ..."): under a notes heading (a line of at most 160
+   characters holding "non-GAAP" and "note(s)" or "measure(s)", not prose), up to the next heading
+   line (rule 2) that is not itself a note, a line of 80 characters or more that starts with a
+   letter or a number of one or two digits and a period ("a.", "d. ", "10."), holds a dollar amount
+   and says "exclud" or "adjust", outside every block of rules 4 and 6, is a note too. A definition
+   under that heading ("b.Tangible common equity ... Book value per share was $132.30") is not.
 6. Outlook. An outlook heading is a heading line (rule 2, up to 100 characters; when it starts a
    block, one ending in ":" too) that starts with a capital or a digit, has no ". " inside, holds
    "outlook" or "guidance" as a word and none of "reconcil", "non-gaap", "forward-looking", "safe
@@ -85,6 +94,10 @@ _SKIP_HEADLINE = re.compile(
     r"^(?:exhibit\s*99|ex-?\s*99|for immediate release|press release|news release|media release"
     r"|contact|[a-z ]{2,25}:\s)", re.I)
 _FOOTNOTE = re.compile(r"^(?:\(\d{1,2}\)|\([A-Z]\)|\*{1,3})")
+# rule 5's lettered and numbered notes, under a non-GAAP notes heading only
+_NOTES_HEADING = re.compile(r"non-gaap.*\b(?:notes?|measures?)\b|\bnotes?\b.*non-gaap", re.I)
+_LISTED_NOTE = re.compile(r"^(?:[a-z]|\d{1,2})\.\s?[A-Z(\u201c\"$]")
+_ADJUSTING = re.compile(r"exclud|adjust", re.I)
 _DOLLARS = re.compile(r"\$\s?\d")
 _FIGURE = re.compile(r"[$%]")
 _DIGIT = re.compile(r"\d")
@@ -270,12 +283,21 @@ def _reconciliations(lines: list[Line]) -> list[tuple[Passage, int, int]]:
 
 
 def _notes(lines: list[Line], taken: set[int]) -> list[Passage]:
-    """Rule 5."""
+    """Rule 5, with its lettered and numbered notes under a non-GAAP notes heading."""
     out = []
+    under_notes = False
     for i, ln in enumerate(lines[:_statements_start(lines)]):
-        if (i not in taken and len(ln.text) >= 80 and _FOOTNOTE.match(ln.text)
-                and _DOLLARS.search(ln.text)):
-            out.append(Passage("note", None, ln.text, ln.start, ln.end))
+        s = ln.text
+        listed = bool(_LISTED_NOTE.match(s))
+        if len(s) <= 160 and _NOTES_HEADING.search(s) and not is_prose(s):
+            under_notes = True
+            continue
+        if under_notes and not listed and is_heading(s):
+            under_notes = False
+        if i in taken or len(s) < 80 or not _DOLLARS.search(s):
+            continue
+        if _FOOTNOTE.match(s) or (under_notes and listed and _ADJUSTING.search(s)):
+            out.append(Passage("note", None, s, ln.start, ln.end))
             if len(out) == MAX_NOTES:
                 break
     return out

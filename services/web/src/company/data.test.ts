@@ -16,6 +16,7 @@ import {
   formMatches,
   formsOf,
   header,
+  foreignReport,
   keyStats,
   metricTable,
   RATIOS,
@@ -54,11 +55,39 @@ describe("header and key stats", () => {
     expect(by("Return on equity")).toMatchObject({ text: "—", period: "not reported" });
   });
 
+  it("an old figure (035) is not the company's current one: not reported since its date, the figure in the hover", () => {
+    // Deckers: net debt last tagged at Sep 30, 2014, debt-free since (analyst test 4, finding 2)
+    const old = { period_end: "2014-09-30", accession_no: "0000910521-14-000040", form: "10-Q", filed: "2014-11-07" };
+    const stats = keyStats(nvdaRow({
+      latest_period: "2026-09-30",
+      values: { net_debt_q: "-63097000", debt_to_equity_q: "0.0575" },
+      sources: { net_debt_q: old, debt_to_equity_q: old },
+      readings: { net_debt_q: { status: "old" }, debt_to_equity_q: { status: "old" } },
+    }));
+    const net = stats.find((s) => s.key === "net_debt_q")!;
+    expect(net).toMatchObject({ label: "Net debt", text: "—", value: null, old: true, period: "not reported since Sep 30, 2014" });
+    expect(net.title).toContain("The last figure on file, -$63.10M");
+    expect(net.title).toContain("latest period is Sep 30, 2026");
+    expect(stats.find((s) => s.key === "debt_to_equity_q")).toMatchObject({ text: "—", period: "not reported since Sep 30, 2014" });
+  });
+
   it("names the company from public metadata", () => {
     expect(header(nvdaRow())).toEqual({
       name: "Nvidia", tickers: ["NVDA"], exchanges: ["Nasdaq"], industry: "Semiconductors & Related Devices",
       sic: "3674", fye: "January", filer: "Large accelerated", state: "DE", currency: null,
     });
+  });
+
+  it("a foreign private issuer is told apart by its figures' forms (analyst test 4: Birkenstock)", () => {
+    const f20 = { ...SRC, form: "20-F" };
+    const k6 = { ...SRC, form: "6-K" };
+    expect(foreignReport(nvdaRow({ sources: { revenue_ttm: f20, revenue_q: k6 } }))).toBe("20-F");
+    expect(foreignReport(nvdaRow({ sources: { revenue_ttm: { ...SRC, form: "40-F/A" } } }))).toBe("40-F");
+    expect(foreignReport(nvdaRow({ sources: { revenue_q: k6 } }))).toBe("20-F or 40-F");
+    // any 10-K or 10-Q figure: a US filer, whatever else it has filed
+    expect(foreignReport(nvdaRow({ sources: { revenue_ttm: f20, revenue_q: SRC } }))).toBeNull();
+    expect(foreignReport(nvdaRow())).toBeNull();
+    expect(foreignReport(nvdaRow({ sources: {} }))).toBeNull();
   });
 
   it("recaps only a 10-Q or 10-K", () => {
@@ -160,6 +189,20 @@ describe("recap", () => {
     expect(rows[0]).toMatchObject({ current: "$46.74B", prior: "$44.06B", qoq: { text: "+6.1%", sign: 1 }, yoy: { text: "+55.6%" } });
     expect(rows[1]).toMatchObject({ current: "60.0%", qoq: { text: "-200 bp", sign: -1 }, yoy: { text: "+200 bp" } });
     expect(rows[0]!.title).toContain(`FY2027 Q1: 10-Q filed Aug 26, 2026, ${ACC}`);
+  });
+
+  it("a change from a negative base reads n/m with the API's reason (JPMorgan's operating cash flow)", () => {
+    const why = "the earlier figure is negative, so a percentage change from it says nothing";
+    const { rows } = recapRows({
+      ...recap,
+      metrics: [{ metric: "operating_cash_flow", span: "quarter", unit: "USD", current: v("33160000000", "FY2026 Q3"),
+        prior_quarter: v("-25280000000", "FY2026 Q2", { change: "58440000000", pct_change: null, pct_not_meaningful: why }),
+        year_ago: v("-12130000000", "FY2025 Q3", { change: "45290000000", pct_change: null, pct_not_meaningful: why }) }],
+    });
+    expect(rows[0]).toMatchObject({ current: "$33.16B", prior: "-$25.28B", qoq: { text: "n/m", why }, yoy: { text: "n/m", why } });
+    // an older API without the reason: no percentage, a blank as before
+    const older = recapRows({ ...recap, metrics: [{ ...recap.metrics[1]!, prior_quarter: v("-1", "x", { change: "2", pct_change: null }) }] });
+    expect(older.rows[0]!.qoq).toBeNull();
   });
 
   it("a margin that isn't meaningful reads n/m, moves no delta, and keeps its figure in the hover", () => {

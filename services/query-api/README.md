@@ -40,7 +40,7 @@ request parameters. Dev tokens: `make token USER=alice`.
 | `GET /v1/auth/github/start` | `GITHUB_CLIENT_ID` + `GITHUB_CLIENT_SECRET` | 302 to GitHub's authorize page (no scopes) with a signed `state`, and the state's nonce in a short-lived cookie (404 when not configured; [GitHub sign-in](#github-sign-in)) |
 | `GET /v1/auth/github/callback?code=&state=` | `GITHUB_CLIENT_ID` + `GITHUB_CLIENT_SECRET` | GitHub's redirect back: 302 to `/#/signed-in?token=…&expires_in=…` (a 7-day JWT, in the URL fragment), or `/#/signed-in?error=<code>` |
 | `GET /v1/me` | token | `catalog`: `{public, tiers, companies}`, whether every catalog company is readable to the caller and with which tiers (`companies`: how many); `companies`: with the catalog public, only what the caller reads beyond it (private grants), else every company the caller can read, with tiers; `sandbox` (expiry, plan, assistant allowance) for a demo sandbox user; `github` (login, plan, the demo's company ids, assistant allowance) for a GitHub sign-in; `account` (username, plan, `agent_questions_per_day`) for a password account |
-| `GET /v1/companies/search?q=&access=&limit=` | token | tickers, CIKs and any part of a name, best match first (`silver.search_companies`, migration 034; ties ordered by 044): public identity + caller's access; `limit` 1-25, default 5; `access=financials`: only companies you can read, narrowed before the limit |
+| `GET /v1/companies/search?q=&access=&limit=` | token | tickers, CIKs and any part of a name, best match first (`silver.search_companies`, migration 034; ties ordered by 044 and 066: a company with a SIC code before a fund or BDC without one): public identity + caller's access; `limit` 1-25, default 5; `access=financials`: only companies you can read, narrowed before the limit |
 | `GET /v1/metrics` | | metric names served by `financials`: `silver.metrics` and `gold.derived_metrics`, read once |
 | `GET /v1/companies/{id}/financials?metrics=&quarters=&view=&basis=&format=&readings=&callouts=` | financials | values + citation + freshness; `quarters` 1-120 (every quarter there is, the Statements tab's Max); `format=csv`: one row per value with its source filing; `callouts=true` (view quarter): quarters far outside their series ([Statement callouts](#statement-callouts)); `currency` (only when not USD: the company's reporting currency, every amount is in it, migration 056) and `cadence: "annual"` (only for a filer whose figures are fiscal years, a 20-F/40-F filer: gold never splits a year into quarters; `Store.cadence`, under RLS: gold has years and no quarter in the last 800 days AND the company's latest 10-K/10-Q/20-F/40-F in the filing index is a 20-F or 40-F, or with none indexed gold never had a quarter. Never from staleness: a US filer whose figures stopped, EIDP's at 2019 though it files 10-Qs, has no `cadence` and its figures read as old) |
 | `GET /v1/companies/{id}/components?metric=&period_end=&view=` | financials | what one figure is made of: a derived figure's inputs, a TTM's quarters, a sum's parts, and the tags, values and filings behind each ([Reported vs standardised](#reported-vs-standardised)) |
@@ -317,7 +317,10 @@ deadline), `overdue`. Companies with no periodic report in 400 days get none.
 span (`quarter`, `ttm`) the `current` value (period ending within 7 days of the period of
 report), `prior_quarter` (80-120 days earlier) and `year_ago` (350-380 days), each with
 citation and freshness, and `change` / `pct_change` (6 decimals; null for ratios, where
-`change` is in ratio points, and from 0). Values are as currently in gold, so a restated value
+`change` is in ratio points). `shapes.percent_change` is the one rule for a percentage change (the
+recap's and alerts'): none from a zero or negative base, nor into a negative figure, and the recap
+says why in `pct_not_meaningful` (additive; JPMorgan's operating cash flow from -$25.28B to $33.16B
+read "+231%" by |earlier|, analyst test 4). Values are as currently in gold, so a restated value
 cites the restating filing. With `filings` access, `flags` lists one-time-item keyword matches
 (impairment, restructuring, one-time/non-recurring, gain or loss on sale, write-down,
 litigation settlement) in MD&A and EX-99 sections, each citing section and character offset;
@@ -509,12 +512,13 @@ The answer: `history` (fiscal years: reported and adjusted operating income and 
 and other, tax rate, net income, the 10-K's diluted EPS and shares, share change, operating cash
 flow, capex, FCF and its margin, buybacks, each figure's filing; a diluted share count that moves
 by more than half in a year is a split or a merger, not buybacks, so that year has no share change
-or EPS growth and the years before it no P/E: Deckers' 6-for-1, NVIDIA's 4- and 10-for-1,
-Vertiv's SPAC merger), `ttm` (the latest TTM when it
+or EPS growth and the years before it are on another share basis: Deckers' 6-for-1, NVIDIA's 4- and
+10-for-1, Vertiv's SPAC merger), `ttm` (the latest TTM when it
 isn't a fiscal year end), `current` (the current fiscal year's reported quarters and the same
 quarters a year earlier), `stats` and `run_rate` (B2 and B7's, unchanged), and per case (`bear`,
 `base`, `bull`; bear and bull `preview`ed from the base case until the user adds them) the
-`defaults` (what Reset sets, per year) and the projected `years` (revenue, growth, organic growth,
+`defaults` (what Reset sets, per year; a bear or bull year's FCF margin follows the case's own
+operating margin, below) and the projected `years` (revenue, growth, organic growth,
 operating income reported and adjusted, margin, pretax and net income, shares, EPS and its
 growth, FCF; which rates were `defaulted`; for a `ytd` year 1 its `actual` and `remainder`). The
 base case also has the B2 `check` and `user_set` the thesis check reads. A model saved before F2
@@ -522,8 +526,11 @@ base case also has the B2 `check` and `user_set` the thesis check reads. A model
 after the reported quarters, which the web app offers to rebuild year 1 from without changing it. With a `price`,
 `valuation`: market cap (price x latest shares outstanding), net debt with its date and reading,
 EV (only when net debt is current or merely behind; `ev_note` says why not: `old`, `absent`, ...)
-and P/E, EV/Revenue, EV/EBIT and FCF yield for every history year, the TTM and each case's years;
-`"n/m"` over losses. Currency (057): the run says the company's (`currency`, the unit of its rows;
+and P/E, EV/Revenue, EV/EBIT and FCF yield for the current twelve months (`ttm`; when the newest
+TTM ends at a fiscal Q4 there is no TTM column and `history` holds that one base year) and each
+case's years; `"n/m"` over losses. No other history year (analyst test 4): today's price over
+FY2021's EPS read as "P/E FY2021 560.6x" at Vertiv, a multiple it never traded at, and Tributary
+has no past prices. Currency (057): the run says the company's (`currency`, the unit of its rows;
 every amount is in it) and the price says its own (`price.currency`, three capitals; a price saved
 without one is in dollars, as before). When they differ, market cap is still price x shares, in the
 price's currency (`market_cap_currency`), but EV and every multiple are left out (`ev_note`
@@ -540,7 +547,18 @@ operating margin. The remainder of the current year starts from the TTM like any
 margin carried one strong half forward, so NVIDIA's H2 FY2027 read 75.0% (H2 FY2026's 64.2% +10.8
 points) and +95.8%; it now reads the TTM's 65.2% and +83.4%, a full year of 65.5%. The remainder's
 FCF margin stays those quarters' a year earlier, since working capital is seasonal (Deckers: H1
-FY2027 -1.9%, H2 FY2026 35.7%, the TTM 18.9%). Deckers' FY2027 is H1 reported plus H2, with diluted shares down 8.4% a
+FY2027 -1.9%, H2 FY2026 35.7%, the TTM 18.9%).
+
+Bear and bull FCF margins (analyst test 4, finding 15): every case used to default to the base
+case's FCF margin, so Vertiv's bull case as typed (operating margins 24%, 25%, 25.5%) had free
+cash flow falling $3.70B, $3.37B, $3.14B while its operating income rose to $6.47B. A bear or bull
+year's default is now the base case's FCF margin that year (typed, else its default) moved by the
+case's operating margin minus the base case's, after tax (x (1 - the case's tax rate, held in [0,
+100%])): a point of margin is a point of revenue more operating income, and after tax that much more
+cash. That bull case reads 34.8%, 23.7%, 21.9% and $3.84B, $4.93B, $5.55B; the previewed cases
+(the spread alone) 28.5/13.7/10.0% (bear) and 34.9/18.7/14.8% (bull) around the base case's
+unchanged 31.7/16.2/12.4%. The base case's defaults don't change, so B2 and B7's cases and
+`user_set` hold. Deckers' FY2027 is H1 reported plus H2, with diluted shares down 8.4% a
 year (FY2027 Q2 against FY2026 Q2) as the default share change, and a $46M one-off in Q2 FY2027
 taking the year-to-date margin from 21.8% to 19.9%; Deckers' latest net debt reading is from
 2014 (`old`), so its EV multiples stay blank with that reason. B2 and B7's shared cases
@@ -1168,13 +1186,18 @@ from `readable()` (financials) and passes them into the SQL (with the catalog pu
   (`store.BEHIND_DAYS`; companyfacts lags by days, not months), that no XBRL fact cites yet.
   The companies' CIKs are looked up first and `silver.filings` is filtered on that array.
 - `stock_split`: what a split's restatements read as, one note per split (`detail`: `split`
-  "10-for-1", `reverse`, `findings`, `periods`, `metrics`, first and last period). Needs a share count
+  "10-for-1", `reverse`, `findings`, `periods`, `metrics`, first and last period, and when it took
+  effect as far as the findings show: `effective_after`, the newest restated period, and the first
+  restating filing, `first_restated_accession` / `_filed` / `_form` / `_period_end` (its period of
+  report from the filing index), the first on the new basis; NVIDIA's June 2024 10-for-1 reads
+  "between Apr 28, 2024 and Jul 28, 2024", not May 28, 2025, its last restating filing). Needs a share count
   restated by a clean ratio and EPS by its reciprocal in the same period and filing. Without the other
   side a finding stays a `restatement`, with `may_be_split`; a factor of 1,000 or 1,000,000 gets
   `unit_change`. An `outlier` the same quarter also has in two other years gets `seasonal` and
   severity info. No check is suppressed: every finding still reaches a note.
-- Every note has `date` (restating or missing filing, a mistagged fact's filing, else the period
-  end: a 2033 period mustn't top the list) and
+- Every note has `date` (a split's first period on the new basis, else its first restating filing;
+  restating or missing filing, a mistagged fact's filing, else the period end: a 2033 period mustn't
+  top the list) and
   `filings` (`role`, accession, form, filed, EDGAR `filing_url` from the public index). The
   plain-language wording is the web app's (`services/web/src/company/notes.ts`).
 - **Ranked, grouped, summarised (F7a, M2).** The checks cried wolf (on hermes the median company had
@@ -1243,7 +1266,13 @@ RLS), the excerpts and passages are section text under RLS on `silver.filing_sec
   filed yet is `estimated` (gold.expected_filings' next period end). Its text is the first EX-99
   exhibit, else the 8-K's `2.02` section. From it, by fixed rules (no model): `headline`,
   `outlook` (the blocks under the release's own Outlook or Guidance headings) and `adjustments`
-  (reconciliation tables, and footnotes before the statements that state a dollar amount). Each
+  (reconciliation tables, and footnotes before the statements that state a dollar amount; since
+  analyst test 4 also lettered or numbered notes under a non-GAAP notes heading that exclude or adjust
+  a dollar amount: JPMorgan's "d.Third-quarter 2026 net income ... excluding $658 million of net
+  investment securities losses", its reconciliation tables being in its financial supplement, EX-99.2,
+  which isn't read. Measured over 612 production releases that mention non-GAAP, July-November 2026
+  (banks, brokers, insurers, REITs and a 1-in-40 sample of the rest): two change, JPMorgan's note and
+  Redwood Trust's recourse-debt exclusion; the five fixtures are unchanged). Each
   passage has `heading`, `text` (lines as the parser wrote them), `truncated` and a `citation`
   with offsets into the release. A release without such a heading or table gets none: the web app
   and the agent say so. No beat or miss: Tributary holds no estimates.
@@ -1385,7 +1414,12 @@ orders (at most 160 sections; one company, never a catalog's ids). Fixed rules, 
   figure more filings state, else they are left out; `conflicts` lists each.
 
 The answer has `metrics.{backlog, orders, orders_growth}` with `points` (values as numbers: dollars, or
-percentage points for growth) and never a `rows` or `sections` key (verify.py reads those). Not an
+percentage points for growth) and never a `rows` or `sections` key (verify.py reads those). `read` says
+what was read: sections and filings that mention backlog or orders, the oldest filed, and `latest`
+(additive; `latest_filing`): the newest 10-K, 10-Q or earnings release filed in the window, whether or
+not it states a figure, so a page can say a figure isn't stated since (Vertiv states its backlog only
+in the 10-K, $15.0B at Dec 31, 2025; its 2026 releases and 10-Qs don't, analyst test 4). `method` is
+shown to users as it is: it names no file. Not an
 agent tool: the recorded suites are unchanged. Cost: 70-150 ms of Python per company over five years
 of sections (CAT, 3.4M characters: 68 ms).
 
@@ -1421,10 +1455,15 @@ company the read rule allows. The first stage is `gold.search_page` (migration 0
 no text; the snippet's text is still read through RLS on `silver.filing_sections`.
 
 - `q`: `websearch_to_tsquery('english', q)`: words, `"a phrase"`, `or`, `-excluded`. A quoted
-  phrase matches its words adjacent and in order (stemmed: `"export controls"` matches "export
-  control rules"); `gold.section_search` keeps positions, so this runs in the index. `ts_headline`
-  still marks each of the phrase's words wherever it stands in the snippet; the web app re-marks a
-  phrase query's snippet itself (#80).
+  phrase matches its words adjacent and in order; `gold.section_search` keeps positions, so this runs
+  in the index. Since 065 it matches its EXACT words: the stemmed match is tested again on the
+  passage's own text with the 'simple' configuration (`store.exact_phrases` builds that query from
+  the quoted phrases of two or more words not excluded; `gold.search_page`'s `p_exact`), so `"liquid
+  cooling"` no longer matches "liquid-cooled" and `"export controls"` no longer matches "export
+  control rules" (a hyphenated "liquid-cooling" is the same words and still matches). Unquoted words
+  stay stemmed, and a query with `or` outside quotes stays wholly stemmed (an exact AND of its phrases
+  would narrow the either-or). `total` stays exact. `ts_headline` still marks each of the phrase's
+  words wherever it stands in the snippet; the web app re-marks a phrase query's snippet itself (#80).
   Filters: `company`, `form` (`10-K`, `10-Q`, `8-K`, `/A` amendments), `section`, `from` / `to`
   (filing date). `limit` 1-50 (default 10), `offset` up to 1000, `has_more`.
 - One result per section: its best passage by `ts_rank_cd`; with `sort=relevance` (default) best

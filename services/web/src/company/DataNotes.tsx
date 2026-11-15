@@ -5,7 +5,7 @@ import { Empty } from "../components/States";
 import { ago, day } from "../format";
 import { href } from "../route";
 import type { DataNote, NoteFiling } from "../types";
-import { edgarUrl, explain, groupNotes, rankOf, ROLE_LABEL, severityLabel, summaryText } from "./notes";
+import { edgarUrl, explain, groupNotes, noteWhen, rankOf, ROLE_LABEL, severityLabel, summaryText } from "./notes";
 import { Gate } from "./Tables";
 import { useLoad } from "./useLoad";
 
@@ -102,6 +102,7 @@ export function NoteItem({ note, companyId, canReadFilings, company }: {
   company?: string;
 }) {
   const { title, text } = explain(note);
+  const when = noteWhen(note);
   const rank = rankOf(note);
   return (
     <li className={`note ${note.severity} rank-${rank}`}>
@@ -117,7 +118,7 @@ export function NoteItem({ note, companyId, canReadFilings, company }: {
             </>
           )}
           <b>{title}</b>
-          {note.date && <span className="faint"> · {day(note.date, true)}</span>}
+          {when && <span className="faint note-when">{when}</span>}
         </div>
         <p>{text}</p>
         {note.filings.length > 0 && (

@@ -661,7 +661,7 @@ export function App(props: Props = {}) {
             <ErrorBoundary resetKey={window.location.hash}>
             <Suspense fallback={<div className="page"><Skeleton lines={6} label="Loading the page" /></div>}>
             {route.view === "status" ? (
-              <Status />
+              <Status readable={me ? readableTotal(me) : null} />
             ) : !token ? (
               <p className="page muted">Signing in…</p>
             ) : route.view === "home" ? (

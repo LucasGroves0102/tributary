@@ -367,6 +367,24 @@ it("#158: a deleted workspace comes back with Undo, and nothing is sent", async 
   expect(document.querySelector(".undo-stack")).toBeNull();
 });
 
+it("#20: a page stops editing an item whose workspace is being deleted, and Undo gives it back", async () => {
+  await render("#/");
+  await click(sidebarItem("NVDA comps"));
+  expect($(".savebar .saved-as")?.textContent).toContain("Semis / NVDA comps");
+  expect(buttons("Save")).toHaveLength(1);
+  await click(buttons(/Actions for workspace Semis/)[0]!);
+  await click(buttons(/Delete workspace Semis/)[0]!);
+  await click(document.querySelector<HTMLButtonElement>(".ws-confirm button")!);
+  // the comps stay on screen as unsaved work: no header naming the deleted workspace, no Save over it
+  expect($(".savebar .saved-as")).toBeNull();
+  expect(buttons("Save")).toEqual([]);
+  expect(buttons("Save…")).toHaveLength(1);
+  expect(window.location.hash).toBe(`#/compare?target=${NVDA}&peers=${AAPL}`);
+  await click(document.querySelector<HTMLButtonElement>(".undo-stack .undo-note button")!);
+  expect($(".savebar .saved-as")?.textContent).toContain("Semis / NVDA comps");
+  expect(calls("DELETE")).toEqual([]);
+});
+
 it("a folder's arrow folds it, and its name opens the workspace instead of folding it", async () => {
   await render("#/");
   const name = container.querySelector<HTMLAnchorElement>(".ws-row.fd a.ws-open")!;

@@ -1,8 +1,10 @@
 /** What a chart has to say about what isn't on it, in words, under the chart: drawn into the SVG
  * by LayerChart, so every chart and its PNG and SVG exports carry them. A layer no axis can hold,
- * a layer with nothing to draw, periods a layer has no value for, and a chart that starts later
- * than it was asked to. Gaps are never joined or filled (series.ts `xAxis`, layout.ts); this is
- * the sentence that goes with the hole. Pure. */
+ * a layer with nothing to draw, periods a layer has no value for (inside its run, or after it stops:
+ * a chart with an end, `through`, runs its axis to what is due by then, so a series that stopped years
+ * ago "stops at" its last period even alone), and a chart that starts later than it was asked to.
+ * Gaps are never joined or filled (series.ts `xAxis`, layout.ts); this is the sentence that goes with
+ * the hole. Pure. */
 
 import { hasValues, planAxes } from "./axes";
 import { unitLabel } from "./metrics";
@@ -34,10 +36,12 @@ export function chartNotes(series: Series[], opts: {
   /** series (by id) known to have nothing on file at all, not only in this range: the chart says
    * the same as the layer's own note ("No values on file"), never "in this range" beside it */
   emptyOnFile?: ReadonlySet<number>;
+  /** the chart's end (series.ts `xAxis`): the axis, and so "stops at", run to what is due by then */
+  through?: string | null;
 } = {}): string[] {
   const plan = planAxes(series);
   const plotted = series.filter((_, i) => plan.axes[i] !== null);
-  const ticks = xAxis(plotted);
+  const ticks = xAxis(plotted, opts.through);
   const annual = ticks.length > 0 && !ticks.some((t) => !t.partial && / Q[1-4]$/.test(t.period));
   // a year in progress isn't where a series "stops": not every layer has a quarter after the year end
   const full = annual ? ticks.filter((t) => !t.partial).length : ticks.length;

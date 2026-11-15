@@ -1,13 +1,14 @@
 import { useEffect, useId, useMemo, useState, type FormEvent } from "react";
 
 import type { Readable } from "../access";
-import { createWorkspace, failureReason, peers as fetchPeers, screener, thesisChecks } from "../api";
+import { createWorkspace, failureReason, getItem, peers as fetchPeers, screener, thesisChecks } from "../api";
 import { CompanySearch } from "../components/CompanySearch";
 import { Skeleton } from "../components/States";
 import { UNNAMED } from "../displayNames";
-import { ago, day } from "../format";
+import { ago, day, localDay } from "../format";
 import { go, href } from "../route";
-import { STATUS_LABELS } from "../thesis/check";
+import { STATUS_LABELS, textHash } from "../thesis/check";
+import { restoreThesis } from "../thesis/model";
 import { useNewerFilings } from "../thesis/useRevisit";
 import type { SavedWorkspace, ThesisCheckSummary } from "../types";
 import { nameProblem, WORKSPACE_NAME_MAX } from "../workspaces/model";
@@ -82,6 +83,34 @@ function useLastChecks(token: string, thesisIds: string[]): Record<string, Thesi
   return out;
 }
 
+/** Whether each thesis's newest check still covers its saved text, by the step's own rule (the
+ * Monitor step's Stale and `useRecheckReason`): the check's `text_hash` against `textHash` of the
+ * project's company and the saved Markdown. The listing nulls a thesis's state, so each checked
+ * thesis is read once (again when it's edited); true = stale, absent = not known yet. */
+function useStaleChecks(token: string, rows: ProjectRow[], checks: Record<string, ThesisCheckSummary | null>): Record<string, boolean> {
+  const [out, setOut] = useState<Record<string, boolean>>({});
+  const key = rows
+    .flatMap((r) => {
+      const last = r.thesisId ? checks[r.thesisId] : null;
+      return r.thesisId && last ? [[r.thesisId, r.companyId, last.text_hash, r.edited].join("|")] : [];
+    })
+    .join(",");
+  useEffect(() => {
+    let live = true;
+    for (const part of key ? key.split(",") : []) {
+      const [id, companyId, hash] = part.split("|") as [string, string, string];
+      getItem(token, id)
+        .then((item) => textHash(companyId, restoreThesis(item.state).markdown))
+        .then((h) => live && setOut((o) => ({ ...o, [id]: h !== hash })))
+        .catch(() => undefined);
+    }
+    return () => {
+      live = false;
+    };
+  }, [token, key]);
+  return out;
+}
+
 /** The Analysis tab's home: your projects and "New analysis". */
 export function AnalysisHome({ token, saved, readable, label, start }: Props) {
   const [creating, setCreating] = useState(Boolean(start && readable.has(start)));
@@ -90,6 +119,7 @@ export function AnalysisHome({ token, saved, readable, label, start }: Props) {
   const names = useNames(token, rows.map((r) => r.companyId));
   const theses = rows.flatMap((r) => (r.thesisId ? [r.thesisId] : []));
   const checks = useLastChecks(token, theses);
+  const stale = useStaleChecks(token, rows, checks);
   const newer = useNewerFilings(token, theses);
   const offline = saved.list.state === "unavailable" || saved.list.state === "error";
 
@@ -133,6 +163,7 @@ export function AnalysisHome({ token, saved, readable, label, start }: Props) {
             const who = names.get(r.companyId);
             const last = r.thesisId ? checks[r.thesisId] : undefined;
             const fresh = r.thesisId ? newer[r.thesisId] : undefined;
+            const isStale = r.thesisId ? stale[r.thesisId] === true : false;
             return (
               <li key={r.ws.workspace_id} className="card">
                 <a className="project-row" href={href({ view: "analysis", projectId: r.ws.workspace_id })}>
@@ -150,7 +181,11 @@ export function AnalysisHome({ token, saved, readable, label, start }: Props) {
                     ) : last === null ? (
                       <span className="faint">thesis not checked yet</span>
                     ) : (
-                      <span title={`Checked ${day((last.checked_at ?? last.created_at).slice(0, 10), true)}`}>
+                      <span className={isStale ? "check-counts stale" : "check-counts"}
+                        title={`Checked ${localDay(last.checked_at ?? last.created_at, true)}${isStale
+                          ? ". Stale: the thesis changed since this check, so these counts are for an earlier text. Check it again in the Monitor step."
+                          : ""}`}>
+                        {isStale && <><span className="tag stale">Stale</span>{" "}</>}
                         <span className="tag q">{last.counts.supported} {STATUS_LABELS.supported.toLowerCase()}</span>{" "}
                         <span className={last.counts.contradicted ? "tag warn" : "tag"}>{last.counts.contradicted} {STATUS_LABELS.contradicted.toLowerCase()}</span>{" "}
                         <span className="tag">{last.counts.unverifiable} {STATUS_LABELS.unverifiable.toLowerCase()}</span>

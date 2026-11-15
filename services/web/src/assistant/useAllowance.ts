@@ -1,12 +1,19 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 
 import { allowance as fetchAllowance } from "../api";
+import { localClock } from "../format";
 import type { Allowance } from "../types";
 
 /** The rolling hour moves on by itself: look again now and then. */
 const REFRESH_MS = 5 * 60_000;
 
 const count = (n: number) => n.toLocaleString("en-US");
+
+/** When the daily counts start again: the service's day ends at midnight UTC, said in the viewer's
+ * own time like every other moment (format.ts `localClock`, #23): "5:00 PM MST". */
+export function resetsAt(now: Date = new Date()): string {
+  return localClock(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1)));
+}
 
 /** The questions left, in the tightest terms that apply: per hour always, per day when the account
  * has a daily cap. Reads agent-api `/v1/allowance`, which spends nothing. Null while unknown or on
@@ -62,7 +69,7 @@ export function leftText(a: Allowance): string {
 
 /** "28 of 30 questions left this hour · 998 of 1,000 today". */
 export function meterText(a: Allowance): string {
-  if (a.paused) return "The assistant is paused until midnight UTC: its daily budget is used up";
+  if (a.paused) return `The assistant is paused until ${resetsAt()}: its daily budget is used up`;
   const hour = `${count(a.left_this_hour)} of ${count(a.per_hour)} questions left this hour`;
   return a.left_today === null || a.per_day === null ? hour : `${hour} · ${count(a.left_today)} of ${count(a.per_day)} today`;
 }
@@ -80,8 +87,8 @@ export function limitsText(a: Allowance | null): string {
     ? `A report counts as ${a.report_questions} questions and a thesis check as ${a.check_questions}`
     : "A report counts as 3 questions and a thesis check as 4";
   if (!a) return `The assistant is limited per hour and per day; its panel shows what you have left. ${each}.`;
-  const day = a.per_day === null ? "" : ` and ${count(a.per_day)} a day (resets at midnight UTC)`;
+  const day = a.per_day === null ? "" : ` and ${count(a.per_day)} a day (resets at ${resetsAt()})`;
   return `Your account can ask ${count(a.per_hour)} questions an hour (counted over the last 60 minutes)${day}, with ` +
     `${count(a.network_per_hour)} an hour from one network address. ${each}. The assistant also pauses for everyone if its ` +
-    "daily budget runs out, until midnight UTC.";
+    `daily budget runs out, until ${resetsAt()}.`;
 }

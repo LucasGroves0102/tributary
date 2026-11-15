@@ -19,7 +19,7 @@ import { PRICE_TRANSFORMS } from "../chart/prices";
 import { isConnected, useMarketData } from "../market/useMarketData";
 import { autoSubtitle, methodNote, sourceFootnote } from "../chart/deck";
 import { LayerChart } from "../chart/LayerChart";
-import { drawnIds, planAxes } from "../chart/axes";
+import { askSides, drawnIds, planAxes } from "../chart/axes";
 import { ANNUAL_MARKER_KEY, filingMarkers, MARKER_FORMS, MARKER_KEY, markersFor, type Marker } from "../chart/markers";
 import { catalog, metricLabel, type MetricInfo } from "../chart/metrics";
 import {
@@ -29,6 +29,7 @@ import {
   autoTitle,
   basis,
   basisReason,
+  chartEnd,
   chartTitle,
   COLOR_NAMES,
   DISPLAYS,
@@ -44,6 +45,7 @@ import {
   RANGES,
   rangeDates,
   rangeLabel,
+  readsBalances,
   removeLayer,
   SHARES_METRIC,
   TEMPLATES,
@@ -292,20 +294,26 @@ export function ChartBuilder({ token, chart, setChart, saveBar, readable = ANYTH
         priceNote,
         markerKey,
       ].filter(Boolean);
-  const subtitle = chart.deck ? chart.subtitle?.trim() || autoSubtitle(series, frequency, effective) : "";
+  // the time axis runs to the chart's end, so a layer that stopped shows its gap (chart/series.ts xAxis)
+  const through = chartEnd(chart, asOf);
+  const subtitle = chart.deck ? chart.subtitle?.trim() || autoSubtitle(series, frequency, effective, through) : "";
 
-  // filing markers: each company a visible metric layer (or a formula's metrics without a ticker) reads
-  const markedBy = (l: Layer) => (l.kind !== "formula" ? l.companyId : formulaReads(l.formula ?? "").bare ? l.defaultCompany : undefined);
-  const chartCompanies = [...new Set(visible.flatMap((l) => {
-    const c = markedBy(l);
-    return c ? [c] : [];
-  }))].slice(0, 8);
+  // filing markers: each company a visible layer reads. A formula's are the companies its answer read
+  // (TICKER.metric included: "MSFT.capex / MSFT.revenue" with another default company drew none,
+  // analyst test 4, finding 14), or its default company until it has an answer
+  const markedBy = (l: Layer): string[] => {
+    if (l.kind !== "formula") return l.companyId ? [l.companyId] : [];
+    const r = status(l);
+    if (r?.state === "ok") return [...new Set(r.data.inputs.flatMap((i) => (i.company_id ? [i.company_id] : [])))];
+    return formulaReads(l.formula ?? "").bare && l.defaultCompany ? [l.defaultCompany] : [];
+  };
+  const chartCompanies = [...new Set(visible.flatMap(markedBy))].slice(0, 8);
   const { from } = rangeDates(chart);
   const filingsBy = useFilings(token, chartCompanies, from, !!chart.markers);
   const markers: Marker[] = chart.markers
     ? markersFor(chartCompanies.flatMap((c) => {
         const f = filingsBy[c];
-        const layer = visible.find((l) => markedBy(l) === c);
+        const layer = visible.find((l) => markedBy(l).includes(c));
         return f ? filingMarkers(c, short(c), layer ? colorOf(layer) : 0, f.index, f.parsed, from) : [];
       }), frequency)
     : [];
@@ -328,6 +336,21 @@ export function ChartBuilder({ token, chart, setChart, saveBar, readable = ANYTH
   const placedOn = (l: Layer) => {
     const i = series.findIndex((s) => s.id === l.id);
     return i < 0 || !series[i]!.points.some((p) => p.y !== null) ? undefined : plan.axes[i];
+  };
+  // the Axis control shows the side a layer is drawn on; choosing one moves the layer's unit there
+  const sideCaption = (side: "L" | "R") => (side === "L" ? plan.left : plan.right);
+  const sideNote = (l: Layer): string | null => {
+    const on = placedOn(l);
+    if (!on || on === l.axis || l.hidden) return null;
+    const word = (side: "L" | "R") => (side === "R" ? "right" : "left");
+    const asked = sideCaption(l.axis);
+    return asked
+      ? `On the ${word(on)} axis: the ${word(l.axis)} one reads in ${asked}.`
+      : `On the ${word(on)} axis with the other layers in ${sideCaption(on) || "plain numbers"}: one unit, one axis.`;
+  };
+  const putOnSide = (l: Layer, side: "L" | "R") => {
+    const asks = askSides(series, l.id, side);
+    setChart((s) => ({ ...s, layers: s.layers.map((x) => (asks.has(x.id) ? { ...x, axis: asks.get(x.id)! } : x)) }));
   };
   // a layer with an answer but nothing to draw: what would change that, and only that
   const what = frequency === "annual" ? "No full year" : "No values";
@@ -484,6 +507,9 @@ export function ChartBuilder({ token, chart, setChart, saveBar, readable = ANYTH
                 basis={effective}
                 status={status(l)}
                 placedOn={placedOn(l)}
+                sides={{ L: plan.left, R: plan.right }}
+                sideNote={sideNote(l)}
+                putOnSide={(side) => putOnSide(l, side)}
                 nothingNote={nothingNote(l)}
                 set={(patch) => setChart((s) => updateLayer(s, l.id, patch))}
                 move={(by) => setChart((s) => moveLayer(s, l.id, by))}
@@ -598,7 +624,7 @@ export function ChartBuilder({ token, chart, setChart, saveBar, readable = ANYTH
           {chart.deck && (
             <div className="card-h deck-h">
               <input className="field grow" value={chart.subtitle ?? ""} maxLength={200}
-                placeholder={series.length ? autoSubtitle(series, frequency, effective) : "Subtitle (automatic: periods and units)"}
+                placeholder={series.length ? autoSubtitle(series, frequency, effective, through) : "Subtitle (automatic: periods and units)"}
                 aria-label="Subtitle"
                 onChange={(e) => {
                   const subtitle = e.target.value;
@@ -610,7 +636,7 @@ export function ChartBuilder({ token, chart, setChart, saveBar, readable = ANYTH
           {whyCalendar && <p className="chart-why">{whyCalendar}</p>}
           {series.some((s) => s.points.some((p) => p.y !== null)) ? (
             <LayerChart series={series} title={title} footnote={footnote} svgRef={svg}
-              markers={markers} onOpen={openSource} subtitle={subtitle} deck={!!chart.deck} from={from} emptyOnFile={emptyOnFile} />
+              markers={markers} onOpen={openSource} subtitle={subtitle} deck={!!chart.deck} from={from} through={through} emptyOnFile={emptyOnFile} />
           ) : visible.length && loading ? (
             <Skeleton chart label="Loading the series" />
           ) : visible.length && failed ? (
@@ -651,6 +677,9 @@ function LayerEditor({
   basis,
   status,
   placedOn,
+  sides,
+  sideNote,
+  putOnSide,
   nothingNote,
   set,
   move,
@@ -674,8 +703,15 @@ function LayerEditor({
   hasShares: boolean;
   basis: "fiscal" | "calendar";
   status: Result | undefined;
-  /** where it drew: an axis other than its own, or null when neither could take it (chart/axes.ts) */
+  /** where it drew (chart/axes.ts planAxes), null when neither axis could take it, undefined with
+   * nothing to draw */
   placedOn: "L" | "R" | null | undefined;
+  /** each side's unit caption as drawn, null when nothing draws there */
+  sides: { L: string | null; R: string | null };
+  /** why it isn't on the side it asked for, when it isn't */
+  sideNote: string | null;
+  /** the Axis control: puts this layer's unit on that side (chart/axes.ts askSides) */
+  putOnSide: (side: "L" | "R") => void;
   /** it has an answer with nothing to draw: what to do about it */
   nothingNote: string | null;
   set: (patch: Partial<Layer>) => void;
@@ -708,6 +744,8 @@ function LayerEditor({
     if (v === "qoq") return layer.transform === "qoq" ? "YoY % (QoQ needs quarters)" : `${label} (quarterly only)`;
     return label;
   };
+  // a balance has no TTM: the control shows what is drawn, its quarter-end value (chart/model.ts readsBalances)
+  const balanceTtm = !segment && !price && !annual && layer.transform === "ttm" && readsBalances(layer);
   // only a dimensionless value has a choice: a change, an index or per share reads as that
   const dimensionless = status?.state === "ok" && status.data.unit === "ratio" && (layer.transform === "q" || layer.transform === "ttm");
   const asked = status?.state === "ok" ? status.data.display : null;
@@ -793,7 +831,7 @@ function LayerEditor({
         </select>
       </div>
       <div className="row">
-        <select aria-label="Transform" value={layer.transform} onChange={(e) => set({ transform: e.target.value as Layer["transform"] })}>
+        <select aria-label="Transform" value={balanceTtm ? "q" : layer.transform} onChange={(e) => set({ transform: e.target.value as Layer["transform"] })}>
           {options.map(([v, label]) => (
             <option key={v} value={v}
               disabled={!segment && !price && ((v === "ttm" && metric !== undefined && !metric.ttm && !annual) || (v === "ps" && !perShareOk) || (v === "qoq" && annual && layer.transform !== "qoq"))}>
@@ -806,9 +844,9 @@ function LayerEditor({
             <option key={v} value={v}>{label}</option>
           ))}
         </select>
-        <select aria-label="Axis" value={layer.axis} onChange={(e) => set({ axis: e.target.value as Layer["axis"] })}>
-          <option value="L">Left axis</option>
-          <option value="R">Right axis</option>
+        <select aria-label="Axis" value={placedOn ?? layer.axis} onChange={(e) => putOnSide(e.target.value as Layer["axis"])}>
+          <option value="L">{sides.L ? `Left axis (${sides.L})` : "Left axis"}</option>
+          <option value="R">{sides.R ? `Right axis (${sides.R})` : "Right axis"}</option>
         </select>
       </div>
       {dimensionless && (
@@ -828,9 +866,7 @@ function LayerEditor({
       {placedOn === null && !layer.hidden && (
         <div className="err">Not drawn: both axes already read in other units. Hide a layer, or give this one its own chart.</div>
       )}
-      {placedOn && placedOn !== layer.axis && !layer.hidden && (
-        <div className="faint small">Drawn on the {placedOn === "R" ? "right" : "left"} axis: the other side reads in another unit.</div>
-      )}
+      {sideNote && <div className="faint small">{sideNote}</div>}
     </div>
   );
 }

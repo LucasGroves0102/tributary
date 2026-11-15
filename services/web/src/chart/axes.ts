@@ -1,11 +1,15 @@
-/** Which axis each series draws on. An axis holds one kind of number: dollars and dollars per
- * share, an index and a percent, or a percent and a multiple never share one, because the smaller
- * of them would flatten at zero under the other's ticks. A series asks for an axis (the layer's
- * Axis control); when that one already reads in another unit it moves to the other side, and when
- * both are taken it isn't drawn (a third unit has no honest place: the chart says so, and its
- * values stay in the tooltip, the table and the CSV). The first series on a side claims it, in
- * layer order. A series with no values claims nothing. Pure and idempotent: layout.ts plans the
- * drawing with it, and the chart builder and the deck subtitle read the same answer. */
+/** Which axis each series draws on. An axis holds one kind of number, and one kind of number has
+ * one axis: dollars and dollars per share, an index and a percent, or a percent and a multiple never
+ * share one, because the smaller of them would flatten at zero under the other's ticks; and two
+ * percents (an operating margin and an FCF margin) never get a scale each, because two scales for
+ * one unit make lines cross where the values don't (analyst test 4, finding 12). A series asks for an
+ * axis (the layer's Axis control): it gets it when that side is free and its unit has no side yet;
+ * when its unit already has a side it joins it; when the side it asked for reads in another unit it
+ * moves to the other side; and when both sides are taken by other units it isn't drawn (a third unit
+ * has no honest place: the chart says so, and its values stay in the tooltip, the table and the CSV).
+ * The first series to ask for a side claims it, in layer order. A series with no values claims
+ * nothing. Pure and idempotent: layout.ts plans the drawing with it, and the chart builder (each
+ * layer's Axis control shows the side it is drawn on) and the deck subtitle read the same answer. */
 
 import { unitLabel } from "./metrics";
 import type { Axis, Series } from "./series";
@@ -35,20 +39,21 @@ export function axisUnit(series: Series[]): string {
 
 export function planAxes(series: Series[]): AxisPlan {
   const claimed: Record<Axis, string | null> = { L: null, R: null };
+  const sideOf = (f: string): Axis | null => (claimed.L === f ? "L" : claimed.R === f ? "R" : null);
+  // the sides asked for, in layer order: a unit that already has one doesn't take the other
   for (const s of series) {
-    if (hasValues(s) && claimed[s.axis] === null) claimed[s.axis] = family(s.unit);
+    const f = family(s.unit);
+    if (hasValues(s) && claimed[s.axis] === null && sideOf(f) === null) claimed[s.axis] = f;
   }
   const axes = series.map((s): Axis | null => {
     if (!hasValues(s)) return s.axis;
     const f = family(s.unit);
+    const own = sideOf(f);
+    if (own) return own;
     const other: Axis = s.axis === "L" ? "R" : "L";
-    if (claimed[s.axis] === f) return s.axis;
-    if (claimed[other] === f) return other;
-    if (claimed[other] === null) {
-      claimed[other] = f;
-      return other;
-    }
-    return null;
+    const free = claimed[s.axis] === null ? s.axis : claimed[other] === null ? other : null;
+    if (free) claimed[free] = f;
+    return free;
   });
   const caption = (side: Axis) => {
     const on = series.filter((s, i) => axes[i] === side && hasValues(s));
@@ -61,4 +66,25 @@ export function planAxes(series: Series[]): AxisPlan {
 export function drawnIds(series: Series[]): Set<number> {
   const { axes } = planAxes(series);
   return new Set(series.flatMap((s, i) => (axes[i] && hasValues(s) ? [s.id] : [])));
+}
+
+/** What each series asks for once the user puts series `id` on `side` (the layer's Axis control):
+ * its whole unit goes there (one unit, one axis), a unit drawn on that side moves to the other, and
+ * every other series asks for the side it is drawn on, so the next plan honours the choice. Series
+ * with no values aren't in the answer (they keep their own ask). */
+export function askSides(series: Series[], id: number, side: Axis): Map<number, Axis> {
+  const { axes } = planAxes(series);
+  const out = new Map<number, Axis>();
+  const moved = series.find((s) => s.id === id && hasValues(s));
+  if (!moved) return out.set(id, side);
+  const f = family(moved.unit);
+  const other: Axis = side === "L" ? "R" : "L";
+  series.forEach((s, i) => {
+    if (!hasValues(s)) return;
+    const on = axes[i];
+    if (family(s.unit) === f) out.set(s.id, side);
+    else if (on === side) out.set(s.id, other);
+    else if (on) out.set(s.id, on);
+  });
+  return out;
 }

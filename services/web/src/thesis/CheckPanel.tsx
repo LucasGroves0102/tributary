@@ -1,6 +1,6 @@
 import { useId, useMemo, useRef } from "react";
 
-import { ago, day, pct } from "../format";
+import { ago, day, localDay, localTime, pct } from "../format";
 import { renderAnswer } from "../markdown";
 import { FigureFlags } from "../components/FigureFlags";
 import { FilingLinks } from "../components/FilingLinks";
@@ -68,7 +68,7 @@ export function CheckPanel({ checks, stale, onQuote, label }: {
 
 function historyLabel(c: ThesisCheckSummary): string {
   const n = c.counts;
-  return `${day(c.created_at, true)} ${c.created_at.slice(11, 16)} UTC · ${n.supported}✓ ${n.contradicted}✗ ${n.unverifiable}?`;
+  return `${localTime(c.created_at, true)}: ${n.supported}✓ ${n.contradicted}✗ ${n.unverifiable}?`;
 }
 
 function CheckBody({ check, previous, onQuote, label }: {
@@ -150,7 +150,7 @@ function CheckBody({ check, previous, onQuote, label }: {
 /** What changed since the previous check (revisit.ts diffChecks). Quotes are plain text (React
  * escapes them; they are the thesis's own words), statuses are labels: no model prose here. */
 export function Changes({ diff, since, onQuote }: { diff: CheckDiff; since: string; onQuote: (q: string) => void }) {
-  const when = day(since, true);
+  const when = localDay(since, true);
   const badge = (s: ClaimStatus) => <span className={`status-badge ${s}`}>{STATUS_LABELS[s]}</span>;
   const quote = (q: string) => (
     <button className="claim-quote" onClick={() => onQuote(q)} title="Show this sentence in the thesis">“{plainQuote(q)}”</button>

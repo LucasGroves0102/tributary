@@ -17,7 +17,7 @@ starting from the latest definition listed here (and regenerate the backout guar
 | `silver.refresh_segment_facts(text[])` | `018_segments.sql` |
 | `silver.refresh_insider_filings(text[])` (Forms 3/4/5 XML into insider filings and transactions; repeated elements and bad dates recorded as findings), with `silver.xml_date` | `059_fetch_outbox_insider_queue.sql` (before: `054_insider_transactions.sql`, which also has `silver.xml_flag` / `xml_number`) |
 | `silver.resolve_company`, `silver.normalize_name` (entity resolution) | `002_companies.sql` |
-| `silver.search_companies` (what a search box finds, ranked) | `044_company_search_order.sql` (ties within a rank: figures here, then the normalized name's length; before: `034_company_search.sql`) |
+| `silver.search_companies` (what a search box finds, ranked) | `066_company_search_classified_first.sql` (ties within a rank: figures here, filer, exchange, a SIC code, then the normalized name's length; before: `044_company_search_order.sql`, `034_company_search.sql`) |
 | `silver.fiscal_year_end_month(text)` | `042_fiscal_year_end_month.sql` |
 
 ## Gold

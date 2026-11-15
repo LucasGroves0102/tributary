@@ -10,7 +10,7 @@ import { useState, type FormEvent } from "react";
 import { AlertSettingsSection } from "../alerts/AlertSettings";
 import { connectMarketData, disconnectMarketData, failureReason } from "../api";
 import { Skeleton } from "../components/States";
-import { day } from "../format";
+import { localDay } from "../format";
 import { refreshMarketData, useMarketData } from "../market/useMarketData";
 import type { MarketConnection, MarketProvider } from "../types";
 
@@ -102,7 +102,7 @@ function Provider({ token, provider, connection }: { token: string; provider: Ma
       {connection ? (
         <div className="row wrap">
           <span className="grow">
-            Connected · key <code>{connection.key_hint}</code> · added {day(connection.created_at.slice(0, 10), true)}
+            Connected · key <code>{connection.key_hint}</code> · added {localDay(connection.created_at, true)}
           </span>
           <button className="btn" onClick={() => void disconnect()} disabled={busy}>
             Disconnect

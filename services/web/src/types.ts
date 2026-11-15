@@ -1089,9 +1089,11 @@ export interface RecapValue {
     filing_url: string | null;
   };
   freshness: { filed: string; ingested_at: string };
-  /** prior_quarter / year_ago only: current minus this (exact), and that over |this| */
+  /** prior_quarter / year_ago only: current minus this (exact), and that over this */
   change?: Num;
   pct_change?: Num | null;
+  /** why pct_change is null: a zero or negative base, or a turn to negative (absent: an older API) */
+  pct_not_meaningful?: string;
 }
 
 /** /v1/filings/{accession}/recap: a 10-Q/10-K vs the prior quarter and the year-ago quarter. */
@@ -1625,8 +1627,17 @@ export interface TextKpis {
   as_of: string;
   since: string;
   metrics: Record<TextKpiMetric, TextKpiSeries>;
-  read: { sections: number; filings: number; from: string | null };
+  /** `latest`: the newest 10-K, 10-Q or earnings release filed in the window, whether or not it
+   * states a figure (absent from an older API) */
+  read: { sections: number; filings: number; from: string | null; latest?: TextKpiLatest | null };
   method: string;
+}
+
+export interface TextKpiLatest {
+  form: string;
+  filed: string;
+  period_end: string;
+  accession_no: string;
 }
 
 // --- filing alerts (F6; Query API /v1/alerts, query_api/alerts.py) ---------------------------

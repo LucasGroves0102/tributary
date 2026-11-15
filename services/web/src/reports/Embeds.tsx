@@ -8,7 +8,7 @@ import { autoSubtitle, methodNote, sourceFootnote } from "../chart/deck";
 import { drawnIds } from "../chart/axes";
 import { LayerChart } from "../chart/LayerChart";
 import { metricLabel } from "../chart/metrics";
-import { basis, frequencyOf, layerColor, layerKey, layerName, type ChartState, type TtmCatalog, chartTitle, rangeDates } from "../chart/model";
+import { basis, chartEnd, frequencyOf, layerColor, layerKey, layerName, type ChartState, type TtmCatalog, chartTitle, rangeDates } from "../chart/model";
 import { toSeries, type Series, type Source } from "../chart/series";
 import { BAND_LABELS, FILER_LABELS } from "../companies/screen";
 import { CompsTable } from "../compare/CompsTable";
@@ -177,12 +177,13 @@ export function ChartView({ token, chart, name, label, hasTtm, compact = false }
       <LayerChart
         series={series}
         title={chartTitle(chart, label, metricLabel, (l) => !answered.has(l.id) || drawn.has(l.id))}
-        subtitle={chart.deck ? chart.subtitle?.trim() || autoSubtitle(series, frequency, effective) : ""}
+        subtitle={chart.deck ? chart.subtitle?.trim() || autoSubtitle(series, frequency, effective, chartEnd(chart, asOf)) : ""}
         footnote={[sourceFootnote(series, label, asOf), methodNote(effective, frequency, new Set(visible.map((l) => l.transform)))]}
         svgRef={svg}
         deck={chart.deck}
         onOpen={open}
         from={rangeDates(chart).from}
+        through={chartEnd(chart, asOf)}
         compact={compact}
       />
       {errors.length > 0 && <p className="faint small">{errors.length} line{errors.length === 1 ? "" : "s"} couldn't be drawn: {[...new Set(errors)].join("; ")}.</p>}

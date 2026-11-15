@@ -1,7 +1,7 @@
 import { useEffect, useRef, type ReactNode } from "react";
 
 import { accountName, readableTotal } from "../access";
-import { ago, day } from "../format";
+import { ago, day, localClock } from "../format";
 import { sinceLabel, type WatchRow } from "../home/data";
 import { FRESHNESS_EXPLAINED } from "../home/useFeedStatus";
 import type { Workspace } from "../home/useWorkspace";
@@ -85,7 +85,7 @@ export function Sidebar({ route, me, workspace, lastIngested, listed = null, onA
               </span>
             )}
             {n.view === "companies" && me && (
-              <span className="cnt" title="Companies you can read">
+              <span className="cnt" title={COMPANIES_COUNTED}>
                 {readableTotal(me).toLocaleString("en-US")}
               </span>
             )}
@@ -167,11 +167,7 @@ export function Sidebar({ route, me, workspace, lastIngested, listed = null, onA
         {lastIngested ? `Newest filing text parsed ${ago(lastIngested)}` : !listed && "Filings: nothing you can read yet"}
         <br />
         {watchlist.state === "ok"
-          ? `Watchlist values as of ${new Date(watchlist.data.as_of).toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-              timeZoneName: "short",
-            })}`
+          ? `Watchlist values as of ${localClock(watchlist.data.as_of)}`
           : "Values appear as they're filed"}
         {me && (
           <>
@@ -238,6 +234,12 @@ function WatchLink({ row, current, since }: { row: WatchRow; current: Route; sin
     </a>
   );
 }
+
+/** What the Companies count is (#24): Data status's companies with quarterly financials and its
+ * companies checked are other counts, so the hover says which this one is. */
+export const COMPANIES_COUNTED =
+  "Companies you can read: every company with XBRL financials (quarterly or annual) or a stored filing's text. " +
+  "Data status counts the ones with quarterly financials, and its checks every company with XBRL figures.";
 
 /** EDGAR business hours (6:00 am-5:30 pm ET, weekdays), when filings reach its feed within
  * minutes; after them the feed goes quiet until the next morning. */

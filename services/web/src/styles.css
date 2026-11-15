@@ -4824,8 +4824,10 @@ mark.claim-mark {
   width: 64px;
 }
 
+/* an empty rate shows Tributary's default: grey italics, so it never reads as a typed value */
 .assumptions .field::placeholder {
   color: var(--text-3);
+  font-style: italic;
 }
 
 /* a column or row heading's second line: "Q1–Q3 reported + Q4", "FY2026 Q3" */
@@ -4908,9 +4910,27 @@ mark.claim-mark {
   font-size: var(--fs-sm);
 }
 
-.model-table td.case.bear,
+/* bear and bull in their chart colours (model.ts CASE_COLORS), so the table is the chart's legend */
+.model-table td.case.bear {
+  color: var(--series-2);
+}
+
 .model-table td.case.bull {
+  color: var(--series-3);
+}
+
+/* the price and why past years have no multiple, beside "Valuation at your price" */
+.model-table .group-row .group-sub {
+  margin-left: var(--sp-2);
+  font-weight: 400;
   color: var(--text-3);
+  white-space: normal;
+}
+
+/* a past year's multiple: n/a, said in the title */
+.model-table td.past {
+  color: var(--text-3);
+  cursor: help;
 }
 
 .model-table tr.selected td.case {
@@ -5146,6 +5166,15 @@ mark.claim-mark {
   flex-wrap: wrap;
   gap: var(--sp-2);
   align-items: center;
+}
+
+/* a check that no longer covers the saved thesis: the step's Stale, and its counts faded */
+.tag.stale {
+  color: var(--warn);
+}
+
+.check-counts.stale .tag:not(.stale) {
+  color: var(--ink-3);
 }
 
 .new-analysis .card-b {
@@ -6526,6 +6555,20 @@ details.routine summary {
 .text-kpi h3 {
   margin: 0 0 var(--sp-3);
   font-size: 13px;
+}
+
+/* a note's date beside its title (notes.ts noteWhen): set apart by space, not a middle dot */
+.note-t .note-when {
+  margin-left: var(--sp-2);
+}
+
+/* the newest figure is older than the newest filing read (textKpis.ts notStatedSince) */
+.text-kpi-behind {
+  margin: 0 0 var(--sp-3);
+  max-width: 72ch;
+  font-size: var(--fs-sm, 13px);
+  line-height: 1.5;
+  color: var(--ink-2, var(--text-2));
 }
 
 .text-kpi-table {
