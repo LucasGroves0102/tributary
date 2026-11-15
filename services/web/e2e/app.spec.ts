@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 
 import { expect, test } from "@playwright/test";
 
-import { byId, KO, mockApi, NVDA, PEP, screenerRow, startDemo } from "./mockApi";
+import { byId, GITHUB_SESSION, KO, mockApi, NEW_API_KEY, NVDA, PEP, screenerRow, startDemo } from "./mockApi";
 
 test("try the demo lands on Home with the sandbox and its watchlist", async ({ page }) => {
   await mockApi(page);
@@ -379,7 +379,7 @@ test("#68: the main screens load with a clean console", async ({ page }) => {
   await mockApi(page);
   await startDemo(page);
   errors.length = 0; // signed in from here
-  for (const hash of ["#/", "#/companies", `#/company/${NVDA}`, `#/company/${NVDA}/statements`, `#/compare?target=${PEP}&peers=${KO}`, "#/chart", "#/analysis", "#/alerts", "#/settings", "#/status"]) {
+  for (const hash of ["#/", "#/companies", `#/company/${NVDA}`, `#/company/${NVDA}/statements`, `#/compare?target=${PEP}&peers=${KO}`, "#/chart", "#/analysis", "#/alerts", "#/settings", "#/status", "#/api"]) {
     await page.goto(`/${hash}`);
     await page.waitForLoadState("networkidle");
   }
@@ -527,4 +527,57 @@ test("an earnings release's guidance table reads as a table (parser v7, analyst 
   // the heading stays a line above it; nothing reads as alternating label and value lines
   await expect(page.locator(".release-block .rl.heading")).toHaveText("Full Year 2026 Guidance");
   await page.screenshot({ path: test.info().outputPath("earnings-table.png"), fullPage: true });
+});
+
+test("API keys: a GitHub account makes a key, sees it once, and revokes it after a confirm", async ({ page }) => {
+  const fake = await mockApi(page);
+  await page.addInitScript((session) => localStorage.setItem("tributary.session", JSON.stringify(session)), GITHUB_SESSION);
+  await page.goto("/#/settings");
+  const keys = page.locator("section.api-keys");
+  await expect(keys.getByRole("heading", { name: "API keys" })).toBeVisible();
+  await expect(keys).toContainText("You have no API keys yet.");
+  await keys.getByPlaceholder("What it's for: a notebook, a nightly job").fill("Nightly job");
+  await keys.getByRole("radio", { name: "Read and write" }).click();
+  await keys.getByRole("radio", { name: "365 days" }).click();
+  await keys.getByRole("button", { name: "Create key" }).click();
+  const once = keys.locator(".api-key-once");
+  await expect(once.locator("code.secret")).toHaveText(NEW_API_KEY);
+  await expect(once).toContainText("you won't see it again");
+  const row = keys.locator("table.api-key-list tbody tr").first();
+  await expect(row.locator("td")).toHaveText(["Nightly job", "trb_e2ee…", "Read and write", /2026/, "Never", /2027/, "None", "Revoke"]);
+  await once.getByRole("button", { name: "I've saved it" }).click();
+  await expect(once).toHaveCount(0);
+  expect(await page.content()).not.toContain(NEW_API_KEY);
+  expect(await page.evaluate(() => JSON.stringify({ ...localStorage }) + JSON.stringify({ ...sessionStorage }))).not.toContain(NEW_API_KEY.slice(8));
+  await row.getByRole("button", { name: "Revoke the key Nightly job" }).click();
+  const confirm = page.locator(".ws-confirm");
+  await expect(confirm).toContainText("Revoke the key Nightly job?");
+  await expect(confirm.getByRole("button", { name: "Keep" })).toBeFocused();
+  await confirm.getByRole("button", { name: "Revoke" }).click();
+  await expect(row).toHaveClass("off");
+  await expect(row).toContainText("Revoked");
+  expect(fake.calls.filter((c) => c.startsWith("DELETE /api/query/v1/api-keys/"))).toHaveLength(1);
+});
+
+test("API keys: a demo sandbox's Settings has none to offer", async ({ page }) => {
+  await mockApi(page);
+  await startDemo(page);
+  await page.goto("/#/settings");
+  await expect(page.getByRole("heading", { name: "Filing alerts" })).toBeVisible();
+  await expect(page.locator("section.api-keys")).toHaveCount(0);
+});
+
+test("Using the API is public: the front door links it, and its routes come from the API", async ({ page }) => {
+  await mockApi(page);
+  await page.goto("/");
+  await page.getByRole("link", { name: "Using the API" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Using the API" })).toBeVisible();
+  await expect(page).toHaveTitle("Using the API · Tributary");
+  const rows = page.locator("table.api-routes tbody tr");
+  await expect(rows).toHaveCount(9);
+  await expect(rows.first()).toContainText("GET /v1/companies/search");
+  await expect(page.locator(".api-code").first()).toContainText(`Authorization: Bearer $TRIBUTARY_API_KEY`);
+  await expect(page.getByText("60 requests a minute and 10,000 a day")).toBeVisible();
+  await page.locator(".status-home").click();
+  await expect(page.getByRole("button", { name: "Try the demo" })).toBeVisible();
 });

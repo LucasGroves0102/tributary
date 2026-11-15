@@ -38,6 +38,8 @@ from tributary_telemetry import configure_logging
 from tributary_telemetry.http import forward_request_id, instrument, request_id_headers
 
 log = logging.getLogger("tributary_agent")
+# a personal API key (Query API api_keys.py): refused here, the assistant needs a sign-in
+API_KEY_PREFIX = "trb_"
 
 
 class Turn(BaseModel):
@@ -259,6 +261,10 @@ def create_app(make_agent: Callable[[str], Agent], who_is: Callable[[str], str],
     def token(creds: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)]) -> str:
         if creds is None:
             raise HTTPException(401, "missing bearer token")
+        if creds.credentials.startswith(API_KEY_PREFIX):
+            # a personal API key (Query API api_keys.py) never runs the assistant: it would
+            # spend the user's questions from a script; sign in for that
+            raise HTTPException(403, "API keys can't use the assistant: sign in to Tributary")
         return creds.credentials
 
     def client_ip(request: Request) -> str:

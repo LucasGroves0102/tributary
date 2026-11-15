@@ -7,6 +7,7 @@ import uvicorn
 from psycopg_pool import ConnectionPool
 
 from query_api.alerts import AppAlerts
+from query_api.api_keys import AppApiKeys, Limits
 from query_api.app import create_app
 from query_api.auth import check_secret
 from query_api.authorizer import FgaAuthorizer
@@ -59,6 +60,9 @@ def build_app():
         password_accounts=AppPasswordAccounts(app_pool) if app_pool else None,
         # filing alerts (query-api-alerts makes them; the routes read them and the settings)
         alerts=AppAlerts(app_pool) if app_pool else None,
+        # personal API keys (Settings); limits per key from API_KEY_PER_MINUTE / _PER_DAY
+        api_keys=AppApiKeys(app_pool) if app_pool else None,
+        api_key_limits=Limits.from_env(os.environ),
     )
 
 

@@ -6692,3 +6692,220 @@ table.t.release-grid {
     width: 22%;
   }
 }
+
+/* API keys (Settings) and "Using the API" (#/api) */
+.api-keys-lead {
+  max-width: 100ch;
+}
+
+.api-key-once {
+  display: grid;
+  gap: var(--sp-5);
+  border-left: 2px solid var(--red);
+  background: var(--sheet-2);
+}
+
+.api-key-once p {
+  margin: 0;
+  max-width: 80ch;
+}
+
+.api-key-once .row {
+  gap: var(--sp-4);
+}
+
+.secret-once.api-key-once code.secret {
+  padding: 6px 10px;
+  background: var(--sheet);
+  border: 1px solid var(--rule-2);
+  font-size: var(--fs-md);
+}
+
+.api-key-list td {
+  white-space: nowrap;
+}
+
+.api-key-list td.first {
+  white-space: normal;
+  min-width: 140px;
+}
+
+.api-key-list tr.off td {
+  color: var(--ink-3);
+}
+
+.api-key-list td.revoke {
+  width: 1%;
+  text-align: right;
+}
+
+.api-key-list .key-prefix {
+  color: var(--ink-2);
+}
+
+.api-key-form {
+  display: grid;
+  gap: var(--sp-6);
+  margin-top: var(--sp-8);
+  padding-top: var(--sp-8);
+  border-top: 1px solid var(--rule);
+}
+
+.api-key-form h3 {
+  margin: 0;
+}
+
+.api-key-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--sp-6) var(--sp-9);
+}
+
+.api-key-field {
+  display: grid;
+  gap: var(--sp-3);
+  justify-items: start;
+}
+
+.api-key-field > span:first-child {
+  font-family: var(--sans);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+/* the name takes the room the choices leave, at least 280px */
+.api-key-field.name {
+  flex: 1 1 280px;
+  max-width: 420px;
+  justify-items: stretch;
+}
+
+.api-key-field.name .field {
+  width: 100%;
+}
+
+.api-key-form .row {
+  gap: var(--sp-6);
+  align-items: center;
+}
+
+.api-docs .folio-body > p,
+.api-docs .api-steps,
+.api-docs .api-scopes {
+  max-width: 74ch;
+  font-size: var(--fs-md);
+  line-height: 1.6;
+}
+
+.api-docs .folio-body > p {
+  margin: 0 0 var(--sp-5);
+}
+
+.api-base {
+  overflow-wrap: anywhere;
+}
+
+.api-steps {
+  display: grid;
+  gap: var(--sp-4);
+  margin: 0 0 var(--sp-6);
+  padding-left: 1.3em;
+}
+
+.api-code {
+  max-width: 100%;
+  margin: 0 0 var(--sp-8);
+  padding: var(--sp-6) var(--sp-7);
+  overflow-x: auto;
+  background: var(--sheet-2);
+  border: 1px solid var(--rule);
+  border-left: 2px solid var(--red-rule);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.api-code code {
+  font-size: 1em;
+  white-space: pre;
+}
+
+.api-code:focus-visible {
+  outline: 2px solid var(--red);
+  outline-offset: -2px;
+}
+
+.api-scopes {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--sp-6) var(--sp-9);
+  margin: 0;
+}
+
+.api-scopes dt {
+  font-family: var(--sans);
+  font-size: var(--fs-sm);
+  font-weight: 650;
+  padding-top: 3px;
+}
+
+.api-scopes dd {
+  margin: 0;
+}
+
+.api-routes td,
+.api-errors td {
+  vertical-align: top;
+}
+
+/* the words wrap (a table's cells don't, by default) */
+.api-routes td:last-child,
+.api-errors td:last-child {
+  white-space: normal;
+  min-width: 260px;
+}
+
+.api-routes td.first {
+  white-space: nowrap;
+}
+
+.api-method {
+  display: inline-block;
+  min-width: 52px;
+  padding: 0 4px;
+  border: 1px solid var(--ink-3);
+  font-family: var(--sans);
+  font-size: var(--fs-xs);
+  font-weight: 650;
+  text-align: center;
+}
+
+.api-summary {
+  display: block;
+  font-weight: 650;
+}
+
+.api-about {
+  display: block;
+  margin-top: var(--sp-1);
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+
+@container main (max-width: 760px) {
+  .api-scopes {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: var(--sp-2);
+  }
+
+  .api-scopes dd {
+    margin-bottom: var(--sp-5);
+  }
+
+  .api-routes td.first {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}

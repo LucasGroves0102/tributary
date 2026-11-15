@@ -84,6 +84,17 @@ def test_requires_a_valid_token():
     assert ask(c, token="forged").status_code == 401
 
 
+def test_an_api_key_never_runs_the_assistant():
+    """A personal API key (trb_...) is refused before anything is charged or asked: the
+    assistant, reports and thesis checks need a sign-in."""
+    c, messages = client()
+    key = "trb_" + "A" * 43
+    r = ask(c, token=key)
+    assert r.status_code == 403 and "sign in" in r.json()["detail"]
+    assert allowance(c, token=key).status_code == 403
+    assert messages.requests == []
+
+
 def test_history_is_validated_and_passed_through():
     c, messages = client()
     history = [{"role": "user", "content": "a"}, {"role": "assistant", "content": "b"}]

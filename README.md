@@ -102,6 +102,12 @@ Each item links to the rules and measurements behind it.
 - **The assistant** sits on every screen, sees what you're looking at, answers through ten
   Query API tools with every figure verified, and can build charts, screens and comps for you, with
   Undo ([Agent](#agent)).
+- **API keys.** Personal access tokens for your own scripts: read only or read and write (your saved
+  work and watchlist), 30 to 365 days, shown once and stored as a SHA-256, 60 requests a minute and
+  10,000 a day per key counted across every replica, revoked at once. A key is its user: the same two
+  permission layers, and no key can manage the account. A public "Using the API" page with curl and
+  Python, a generated OpenAPI of the key routes and a one-file Python client
+  ([query-api](services/query-api/README.md#api-keys), [client](clients/python/README.md)).
 - **Connect your data** (off until the deployment has its key): bring your own market-data key for
   daily prices and a valuation, stored encrypted and owner-only, never shared between users
   ([query-api](services/query-api/README.md#connect-your-data)).
@@ -242,8 +248,11 @@ named test users) reads every company's financials and filings, within their pla
 while it is public OpenFGA lets every user read it (`catalog:sec#reader@user:*`) and row-level
 security accepts its companies (`authz.public_access`). A request without a user reads nothing.
 Per-company grants (to a user or an organization) still work for anything outside the catalog,
-and saved work (workspaces, theses, models, reports, views, alerts and webhooks) and a user's own
-market-data key and prices stay owner-only, with row-level security forced on their tables.
+and saved work (workspaces, theses, models, reports, views, alerts and webhooks), API keys and a
+user's own market-data key and prices stay owner-only, with row-level security forced on their
+tables. A personal API key (`Authorization: Bearer trb_...`) is its owner: the user comes from the
+key's row, every request goes through both layers as that user, and a key reaches only the data and
+saved-work routes its scope allows (never the account itself).
 
 The switch is one app-database row, streamed like any grant:
 
@@ -279,6 +288,8 @@ are at `localhost:8000/docs`.
 curl -H "Authorization: Bearer $(make -s token USER=alice)" \
   "localhost:8000/v1/companies/0001045810/financials?metrics=revenue"   # 200, cited
 curl "localhost:8000/v1/companies/0001045810/financials?metrics=revenue" # 401: no user, no data
+curl -H "Authorization: Bearer $TRIBUTARY_API_KEY" \
+  "localhost:8000/v1/companies/0001045810/financials?metrics=revenue"   # a key from Settings
 ```
 
 ### Web app
@@ -333,6 +344,7 @@ compared with what gold serves, and 12 derived metrics recomputed from them
 | Path | What |
 |---|---|
 | `services/` | One folder per deployable service or job (poller, bronze-loader, company-loader, facts-fetcher, doc-fetcher, parser, parser-rs, authz-sync, query-api, agent, web) |
+| `clients/` | Clients for Tributary's API (`python/tributary_client.py`: one file, the standard library only) |
 | `libs/` | Shared Python packages (`sec`: SEC client with User-Agent and rate limiting; `authz`: OpenFGA client; `kafka`: Kafka client config from the environment, SASL/SCRAM included; `telemetry`: JSON logs and Prometheus metrics) |
 | `db/` | Analytics migrations (`db/migrations`), the app database (`db/app`), backouts (`db/backout`) and the transforms' index (`db/transforms`) |
 | `streaming/` | Debezium configs and Kafka topic docs |

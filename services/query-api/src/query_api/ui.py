@@ -357,6 +357,7 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
 
     @app.delete("/v1/watchlist/{company_id}")
     def unwatch(user_id: Annotated[str, Depends(current_user)], company_id: CompanyId) -> dict:
+        """Remove a company from the caller's watchlist (removing one that isn't there is fine)."""
         if watchlists is None:
             raise HTTPException(503, "watchlists unavailable")
         return {"company_id": company_id, "removed": watchlists.remove(user_id, company_id)}
@@ -630,6 +631,8 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
 
     @app.get("/v1/screener/columns")
     def screener_columns() -> dict:
+        """The screener's column keys with their metric, span and unit, filer categories and size
+        bands (public: no token)."""
         return {"columns": column_info(sorted(COLUMNS)),
                 "filer_categories": list(FILER_CATEGORIES),
                 "bands": list(get_args(Band))}

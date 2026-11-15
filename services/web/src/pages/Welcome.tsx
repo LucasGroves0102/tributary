@@ -305,6 +305,9 @@ export function Welcome({ onReady, notice, github, pollMs = 1000, now = Date.now
           <p className="welcome-status">
             <a href={href({ view: "status" })}>Data status</a>: how fresh, complete and checked the data is, live.
           </p>
+          <p className="welcome-status">
+            <a href={href({ view: "api" })}>Using the API</a>: the same data from your own scripts, with a key.
+          </p>
         </section>
       </div>
     </main>

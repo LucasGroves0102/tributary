@@ -59,6 +59,8 @@ export type Route =
   | { view: "about" }
   /** how fresh, complete and checked the data is; public (shown signed out too) */
   | { view: "status" }
+  /** "Using the API": API keys, examples, the routes a key can use; public (shown signed out too) */
+  | { view: "api" }
   /** Settings: alerts (forms per company, webhooks) and the user's own market-data key */
   | { view: "settings" }
   /** filing alerts: new 10-K/10-Q/8-K of watched and analysed companies, newest first */
@@ -95,7 +97,7 @@ const ACCESSION = /^\d{10}-\d{2}-\d{6}$/;
 /** Section keys as the Query API takes them: 10-K "1A", 10-Q "II-1A", 8-K "2.02", "EX-99.1". */
 export const SECTION = /^[A-Z0-9.?-]{1,8}$/;
 const MAX_Q = 200;
-const SIMPLE = new Set(["chart", "ask", "about", "status", "settings", "alerts"]);
+const SIMPLE = new Set(["chart", "ask", "about", "status", "api", "settings", "alerts"]);
 
 /** "#/company/0001045810" → route; anything unrecognized is Home. Companies keeps its
  * screener filters in a query ("#/companies?band=1b-10b"), Compare its comps
@@ -115,7 +117,7 @@ export function parse(hash: string): Route {
     const search = parseSearch(query);
     return search ? { view, search } : { view };
   }
-  if (view && SIMPLE.has(view)) return { view: view as "chart" | "ask" | "about" | "status" | "settings" | "alerts" };
+  if (view && SIMPLE.has(view)) return { view: view as "chart" | "ask" | "about" | "status" | "api" | "settings" | "alerts" };
   if (view === "explore") return { view: "companies" }; // links from before the v3 shell
   if (view === "analysis") {
     if (!a || !ID.test(a)) {

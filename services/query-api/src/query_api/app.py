@@ -9,13 +9,14 @@ from datetime import UTC, date, datetime
 from typing import Annotated, Any, Literal
 
 import psycopg
-from fastapi import Depends, FastAPI, HTTPException, Path, Query
+from fastapi import Depends, FastAPI, HTTPException, Path, Query, Request
 from fastapi.responses import JSONResponse, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from prometheus_client import Counter
 from pydantic import BaseModel, Field
 
 from query_api.alerts import AppAlerts, add_alert_routes
+from query_api.api_keys import ApiKeys, KeyAuth, Limits, add_api_key_routes, is_api_key, key_info
 from query_api.auth import Unauthenticated, mint, verify_claims
 from query_api.authorizer import Access, Authorizer, AuthzUnavailable, Readable
 from query_api.components import add_components_routes
@@ -80,6 +81,7 @@ DEMO_TOKEN_TTL = 8 * 3600
 # adds a company (every ~10 min) or the catalog opens or closes: read once a minute at most.
 CATALOG_TTL_SECONDS = 60.0
 SANDBOX_OFF = SandboxConfig()
+KEY_LIMITS = Limits()  # 60 a minute, 10,000 a day per key
 
 PERMISSION_CHECKS = Counter("tributary_permission_checks_total",
                             "OpenFGA checks by tier (list: readable companies) and result "
@@ -123,7 +125,9 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
                alerts: AppAlerts | None = None,
                webhook_sender: Sender | None = None,
                webhook_resolver: Callable[..., Any] | None = None,
-               monotonic: Callable[[], float] = time.monotonic) -> FastAPI:
+               monotonic: Callable[[], float] = time.monotonic,
+               api_keys: ApiKeys | None = None,
+               api_key_limits: Limits = KEY_LIMITS) -> FastAPI:
     """demo_users: accounts anyone may sign in as without a password (empty disables it).
     today: the current US Eastern date (EDGAR's), injectable for tests.
     watchlists: the app database's watchlists (None: watchlist routes answer 503).
@@ -141,7 +145,9 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
     None (no app database): POST /v1/auth/password answers 404 and "pw-" tokens are refused.
     alerts: filing alerts in the app database (query_api.alerts; None: its routes answer 503);
     webhook_sender, webhook_resolver: how a webhook test send connects and resolves names
-    (query_api.webhooks; injected in tests)."""
+    (query_api.webhooks; injected in tests).
+    api_keys, api_key_limits: personal API keys (query_api.api_keys; None: a "trb_" bearer is
+    refused like a bad token, and the key routes answer 503)."""
     app = FastAPI(title="Tributary Query API", version="1")
     instrument(app)
 
@@ -155,11 +161,18 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
         app, accounts=password_accounts, jwt_secret=jwt_secret,
         clock=clock or (lambda: datetime.now(UTC)), monotonic=monotonic)
 
+    now = clock or (lambda: datetime.now(UTC))
+    key_auth = KeyAuth(api_keys, api_key_limits, now)
+
     def current_user(
+        request: Request,
         creds: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)],
     ) -> str:
         if creds is None:
             raise HTTPException(401, "missing bearer token")
+        if is_api_key(creds.credentials):
+            # the key's own row says whose it is, what it may reach and its limits (api_keys)
+            return key_auth.user(request, creds.credentials)
         try:
             claims = verify_claims(creds.credentials, jwt_secret)
         except Unauthenticated:
@@ -252,11 +265,12 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
     add_connection_routes(app, market=market_data, store=store, current_user=current_user,
                           require=require)
 
-    now = clock or (lambda: datetime.now(UTC))
     add_alert_routes(app, alerts=alerts, store=store, current_user=current_user, require=require,
                      readable=readable, jwt_secret=jwt_secret, sender=webhook_sender,
                      resolver=webhook_resolver, clock=now)
     add_status_routes(app, store=store, clock=now)
+    add_api_key_routes(app, keys=api_keys, current_user=current_user, limits=api_key_limits,
+                       clock=now)
     demo_companies = demo_company_resolver(store)
     sandbox_info = add_sandbox_routes(
         app, store=store, sandboxes=sandboxes, config=sandbox_config, jwt_secret=jwt_secret,
@@ -315,7 +329,7 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
                 "expires_in": DEMO_TOKEN_TTL}
 
     @app.get("/v1/me")
-    def me(user_id: User) -> dict:
+    def me(user_id: User, request: Request) -> dict:
         """Who the caller is and what they can read. `catalog.public`: every company in the
         public catalog is readable with `catalog.tiers`, and `companies` lists only what the
         caller reads beyond it (private grants); otherwise `companies` is everything."""
@@ -325,6 +339,7 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
         sandbox = sandbox_info(user_id)
         github_account = github_info(user_id)
         account = account_info(user_id)
+        key = key_info(request)  # only for a request made with an API key
         return {
             "user_id": user_id,
             "catalog": ({"public": True, "tiers": sorted(access.public),
@@ -335,6 +350,7 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
             **({"sandbox": sandbox} if sandbox else {}),
             **({"github": github_account} if github_account else {}),
             **({"account": account} if account else {}),
+            **({"api_key": key} if key else {}),
         }
 
     @app.get("/v1/companies/search")
@@ -395,6 +411,8 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
                         "of the other sign from the quarters beside them (query_api.notes)")]
             = False,
     ) -> dict | Response:
+        """A company's figures by quarter or TTM, fiscal or calendar, each with its citation
+        (filing, form, XBRL tag) and freshness; `format=csv` for one row per value."""
         names = metric_names()
         every = names["metrics"] + names["derived_metrics"]
         unknown = set(metrics or []) - set(every)
@@ -581,6 +599,9 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
         max_chars: Annotated[int, Query(ge=100, le=1_000_000, description=(
             "the web reader asks for the whole section; the longest are about 400,000"))] = 8_000,
     ) -> dict:
+        """A section's text (10-K "1A", 10-Q "II-1A", 8-K "2.02", "EX-99.1") from the company's
+        newest filings that have it (`limit`, of one `form` if given) or from the filing named,
+        with its citation and character offsets."""
         require(user_id, "filings", company_id)
         rows = store.sections(user_id, company_id, section_key, form, accession_no, limit,
                               max_chars)

@@ -30,6 +30,7 @@ import {
   About,
   AlertsPage,
   AnalysisPage,
+  ApiDocs,
   ChartBuilder,
   Companies,
   Company,
@@ -559,7 +560,7 @@ export function App(props: Props = {}) {
   }, [saved.list]);
   useEffect(() => {
     document.title = !picker && !token
-      ? route.view === "status" ? screenTitle(route, { company: () => null }) : "Tributary"
+      ? route.view === "status" || route.view === "api" ? screenTitle(route, { company: () => null }) : "Tributary"
       : screenTitle(route, { company: companyLabel, filing: filingText, chart: chartTitle(chart, companyShort, metricLabel), saved: savedName });
   }, [picker, token, route, companyLabel, companyShort, filingText, chart, savedName]);
 
@@ -576,12 +577,12 @@ export function App(props: Props = {}) {
     allowance,
   };
 
-  // the status page is public: signed out, it shows without the app shell
-  if (!picker && !token && frontDoor && route.view === "status") {
+  // the status page and "Using the API" are public: signed out, they show without the app shell
+  if (!picker && !token && frontDoor && (route.view === "status" || route.view === "api")) {
     return (
       <main className="welcome status-public">
-        <Suspense fallback={<p className="muted">Loading the status…</p>}>
-          <Status signedOut />
+        <Suspense fallback={<p className="muted">Loading…</p>}>
+          {route.view === "status" ? <Status signedOut /> : <ApiDocs signedOut />}
         </Suspense>
       </main>
     );
@@ -662,6 +663,8 @@ export function App(props: Props = {}) {
             <Suspense fallback={<div className="page"><Skeleton lines={6} label="Loading the page" /></div>}>
             {route.view === "status" ? (
               <Status readable={me ? readableTotal(me) : null} />
+            ) : route.view === "api" ? (
+              <ApiDocs />
             ) : !token ? (
               <p className="page muted">Signing in…</p>
             ) : route.view === "home" ? (

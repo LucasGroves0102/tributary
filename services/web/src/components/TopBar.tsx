@@ -150,6 +150,7 @@ function Breadcrumb({
   }
   const label = route.view === "about" ? "What Tributary covers"
     : route.view === "status" ? "Data status"
+    : route.view === "api" ? "Using the API"
     : route.view === "settings" ? "Settings"
     : route.view === "alerts" ? "Alerts"
     : route.view === "workspace" ? "Workspace"

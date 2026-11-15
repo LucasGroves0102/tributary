@@ -3,11 +3,15 @@
  * (the server validates it with one provider call and stores it encrypted) and then cleared:
  * it is never kept in state after a successful save, in storage, or shown again. What the page
  * shows of a saved key is the provider, "…last4" and dates, as the API returns them.
- * Disconnecting deletes the key and every price fetched with it. */
+ * Disconnecting deletes the key and every price fetched with it.
+ *
+ * Settings also holds filing alerts (first) and, last, the user's own API keys
+ * (apikeys/ApiKeysSection.tsx: hidden for a demo sandbox and an API without keys). */
 
 import { useState, type FormEvent } from "react";
 
 import { AlertSettingsSection } from "../alerts/AlertSettings";
+import { ApiKeysSection } from "../apikeys/ApiKeysSection";
 import { connectMarketData, disconnectMarketData, failureReason } from "../api";
 import { Skeleton } from "../components/States";
 import { localDay } from "../format";
@@ -46,6 +50,7 @@ export function Settings({ token }: { token: string }) {
           )}
         </div>
       </section>
+      <ApiKeysSection token={token} />
     </div>
   );
 }

@@ -99,7 +99,19 @@ export interface Fake {
   /** what the next thesis check returns (agent-api's result shape); stored checks by thesis */
   checkResult: ((itemId: string) => Record<string, unknown>) | null;
   checks: Map<string, Record<string, unknown>[]>;
+  /** the account's API keys (/v1/api-keys), as the Query API lists them */
+  apiKeys: Record<string, unknown>[];
 }
+
+/** A GitHub account's session (stored in localStorage as the app keeps one): API keys need a
+ * permanent account, so Settings offers them only to it, never to the demo sandbox. */
+export const GITHUB_TOKEN = "github-e2e-token";
+export const GITHUB_SESSION = {
+  kind: "github", token: GITHUB_TOKEN, userId: "gh-e2e", login: "e2e-analyst", companies: [],
+  expiresAt: "2099-01-01T00:00:00.000Z",
+};
+/** The key the mocked API makes: an obvious fake. */
+export const NEW_API_KEY = "trb_" + "e2e".repeat(14) + "x";
 
 /** A thesis check as agent-api stores it: one supported claim and one of the user's own model. */
 export function thesisCheckResult(itemId: string, modelId = "m1"): Record<string, unknown> {
@@ -144,7 +156,7 @@ function reportState(workspaceId: string, items: Record<string, unknown>[]) {
 }
 
 export async function mockApi(page: Page): Promise<Fake> {
-  const fake: Fake = { watched: new Set([NVDA, PEP]), calls: [], workspaces: [], items: new Map(), asked: [], views: {}, reports: [], checkResult: null, checks: new Map() };
+  const fake: Fake = { watched: new Set([NVDA, PEP]), calls: [], workspaces: [], items: new Map(), asked: [], views: {}, reports: [], checkResult: null, checks: new Map(), apiKeys: [] };
   let seq = 0;
   const now = () => new Date(Date.UTC(2026, 9, 21, 12, 0, seq++)).toISOString();
 
@@ -270,6 +282,58 @@ export async function mockApi(page: Page): Promise<Fake> {
     }
     if (path === "/v1/demo/sandbox") {
       return json({ ttl_hours: 24, plan: "pro", tickers: COMPANIES.map((c) => c.ticker), agent: true, agent_questions_per_day: 10 });
+    }
+    const github = req.headers()["authorization"] === `Bearer ${GITHUB_TOKEN}`;
+    if (path === "/v1/me" && github) {
+      return json({
+        user_id: GITHUB_SESSION.userId, catalog: { public: true, tiers: ["filings", "financials"], companies: COMPANIES.length }, companies: [],
+        github: { login: GITHUB_SESSION.login, plan: "pro", company_ids: COMPANIES.map((c) => c.id), agent: true, agent_questions_per_day: 10 },
+      });
+    }
+    // API keys (Settings): a GitHub account has them; the sandbox is told it can't (allowed false)
+    if (path === "/v1/api-keys" && method === "GET") {
+      return json({ allowed: github, max_active: 5, expiry_days: [30, 90, 365], default_expiry_days: 90, scopes: ["read", "write"],
+        limits: { per_minute: 60, per_day: 10000 }, keys: github ? fake.apiKeys : [] });
+    }
+    if (path === "/v1/api-keys" && method === "POST") {
+      const made = { key_id: `0b6f8a52-63f4-4d6e-9d0e-2f4d3b8a1c${String(10 + fake.apiKeys.length)}`, name: body.name,
+        prefix: NEW_API_KEY.slice(0, 8), scopes: body.scopes, status: "active", created_at: now(),
+        expires_at: new Date(Date.UTC(2026, 9, 21) + body.expires_in_days * 86_400_000).toISOString(),
+        last_used_at: null, revoked_at: null, today: { requests: 0, limited: 0 } };
+      fake.apiKeys = [made, ...fake.apiKeys];
+      return json({ key: NEW_API_KEY, api_key: made }, 201);
+    }
+    const revoked = path.match(/^\/v1\/api-keys\/([^/]+)$/);
+    if (revoked && method === "DELETE") {
+      fake.apiKeys = fake.apiKeys.map((x) => (x.key_id === revoked[1] ? { ...x, status: "revoked", revoked_at: now() } : x));
+      return json({ key_id: revoked[1], revoked: true });
+    }
+    // "Using the API": the Query API's generated OpenAPI of the key routes (a few of them here)
+    if (path === "/v1/openapi-keys.json") {
+      return json({
+        openapi: "3.1.0", info: { title: "Tributary API (API keys)", version: "1", description: "",
+          "x-tributary-limits": { per_minute: 60, per_day: 10000 } },
+        paths: {
+          "/v1/me": { get: { summary: "Who you are", description: "Your user id and what you can read.\n\nScope: read (any API key).", "x-tributary-scope": "read" } },
+          "/v1/companies/search": { get: { summary: "Find companies", description: "Companies matching a ticker, a CIK or any part of a name, best match first. `q` is required; `limit` 1-25.\n\nScope: read (any API key).",
+            "x-tributary-scope": "read", parameters: [{ name: "q", in: "query", required: true }, { name: "limit", in: "query" }] } },
+          "/v1/companies/{company_id}/financials": { get: { summary: "Financial figures", description: "A company's figures, each with the filing it came from. `metrics`, `quarters`, `view`, `basis`, `format`.\n\nScope: read (any API key).",
+            "x-tributary-scope": "read", parameters: [{ name: "company_id", in: "path" }, { name: "metrics", in: "query" }, { name: "quarters", in: "query" },
+              { name: "view", in: "query" }, { name: "basis", in: "query" }, { name: "format", in: "query" }] } },
+          "/v1/companies/{company_id}/sections/{section_key}": { get: { summary: "A section's text", description: "One section's text with its citation. `form`, `accession_no`, `max_chars`.\n\nScope: read (any API key).",
+            "x-tributary-scope": "read", parameters: [{ name: "form", in: "query" }, { name: "accession_no", in: "query" }, { name: "max_chars", in: "query" }] } },
+          "/v1/workspaces": {
+            get: { summary: "Your workspaces", description: "Your workspaces, oldest first, each with its items.\n\nScope: read (any API key).", "x-tributary-scope": "read" },
+            post: { summary: "Create a workspace", description: "A new workspace named `name`.\n\nScope: write (a key with read and write).", "x-tributary-scope": "write" },
+          },
+          "/v1/watchlist/{company_id}": {
+            put: { summary: "Watch a company", description: "Adds a company to your watchlist.\n\nScope: write (a key with read and write).", "x-tributary-scope": "write" },
+            delete: { summary: "Stop watching a company", description: "Removes a company from your watchlist.\n\nScope: write (a key with read and write).", "x-tributary-scope": "write" },
+          },
+          "/v1/metrics": { get: { summary: "Metric names", description: "Every metric name the financials route accepts.\n\nPublic: no key needed.", "x-tributary-scope": "public" } },
+        },
+        components: { schemas: {}, securitySchemes: { apiKey: { type: "http", scheme: "bearer" } } },
+      });
     }
     if (path === "/v1/me") {
       return json({

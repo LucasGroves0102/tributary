@@ -108,6 +108,13 @@ export function About({ allowance = null, open = false }: { allowance?: Allowanc
               <b>Assistant limits</b>
               <span>{limitsText(allowance)}</span>
             </li>
+            <li>
+              <b>Your own scripts</b>
+              <span>
+                An API key from Settings reads the same data from your scripts, as you, with the same citations.{" "}
+                <a href={href({ view: "api" })}>Using the API</a>
+              </span>
+            </li>
             {GOOD_TO_KNOW.map((x) => (
               <li key={x.title}>
                 <b>{x.title}</b>
