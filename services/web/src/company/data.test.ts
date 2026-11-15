@@ -6,6 +6,7 @@ import { ACC, fin, NVDA, nvdaRow } from "../fixtures";
 import type { Recap, RecapValue, SegmentRow } from "../types";
 import {
   eightKItems,
+  howFiled,
   figuresBehind,
   FINANCE_ARMS,
   financeArmNote,
@@ -641,5 +642,24 @@ describe("Seal: the year as a sentence and the ledger's net cash (analyst test 4
     expect(stats.find((s) => s.key === "cash_and_investments_q")).toMatchObject({ label: "Cash and short-term investments", text: "$98.37B" });
     // a positive net debt keeps its name
     expect(keyStats(row({ net_debt_q: "9930000000" })).find((s) => s.key === "net_debt_q")).toMatchObject({ label: "Net debt", text: "$9.93B" });
+  });
+});
+
+describe("howFiled: which figures a seal may say were taken from the filing (Riley 32)", () => {
+  const q = { form: "10-Q", period_end: "2026-07-26" };
+  const k = { form: "10-K", period_end: "2026-01-25" };
+  it("seals what a filing states: a balance, a quarter's flow from its 10-Q, the year from the 10-K", () => {
+    expect(howFiled("cash_q", q)).toEqual({ filed: true });
+    expect(howFiled("cash_q", k)).toEqual({ filed: true });
+    expect(howFiled("eps_diluted_q", q)).toEqual({ filed: true });
+    expect(howFiled("revenue_ttm", k)).toEqual({ filed: true });
+  });
+  it("doesn't seal a ratio, a difference, four quarters added up or a fourth quarter worked out", () => {
+    expect(howFiled("gross_margin_ttm", k)).toEqual({ filed: false, how: "computed: gross profit ÷ revenue" });
+    expect(howFiled("roe_ttm", q)).toMatchObject({ filed: false, how: expect.stringContaining("average of stockholders' equity") });
+    expect(howFiled("net_debt_q", q)).toMatchObject({ filed: false });
+    expect(howFiled("free_cash_flow_ttm", k)).toMatchObject({ filed: false });
+    expect(howFiled("revenue_ttm", q)).toEqual({ filed: false, how: "the four quarters to Jul 26, 2026 added up" });
+    expect(howFiled("revenue_q", k)).toMatchObject({ filed: false, how: expect.stringContaining("year less the first three quarters") });
   });
 });

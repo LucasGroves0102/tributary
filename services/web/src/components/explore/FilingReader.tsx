@@ -9,7 +9,7 @@ import {
 } from "../../api";
 import { edgarLink } from "../../company/Filings";
 import { addDays } from "../../home/data";
-import { formTag } from "../../company/data";
+import { FormMark } from "../FormMark";
 import { useLoad, type Load } from "../../company/useLoad";
 import { ErrorPanel, Skeleton } from "../States";
 import { day, periodPhrase } from "../../format";
@@ -206,7 +206,7 @@ export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q,
       <header className="page-header">
         <div>
           <h1>
-            <span className={`tag ${formTag(f.form)}`}>{f.form}</span> {name ? `${name}, ` : ""}filed {day(f.filed, true)}
+            <FormMark form={f.form} /> {name ? `${name}, ` : ""}filed {day(f.filed, true)}
           </h1>
           <p className="muted">
             <span className="mono">{accessionNo}</span>

@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useState, type ReactNode } from "react";
 
 import { FigureText } from "../components/FigureText";
+import { FormMark } from "../components/FormMark";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { navRow, onTableKey } from "../components/tableNav";
 import { ago, change, day, periodPhrase, UNNAMED } from "../format";
@@ -368,7 +369,7 @@ function WatchTable({ workspace, onAdd }: { workspace: Workspace; onAdd: () => v
                 <td>
                   {r.last ? (
                     <span title={`${r.last.form} filed ${day(r.last.filed, true)}, ${r.last.accessionNo}`}>
-                      <FormTag form={r.last.form} /> <span className="muted">{day(r.last.filed)}</span>
+                      <FormMark form={r.last.form} /> <span className="muted">{day(r.last.filed)}</span>
                     </span>
                   ) : (
                     <span className="faint">none on file</span>
@@ -430,10 +431,6 @@ function WatchTable({ workspace, onAdd }: { workspace: Workspace; onAdd: () => v
   );
 }
 
-function FormTag({ form }: { form: string }) {
-  const kind = form.startsWith("10-K") ? "k" : form.startsWith("10-Q") ? "q" : "";
-  return <span className={`tag ${kind}`}>{form}</span>;
-}
 
 function FilingFeed({ filings, bold }: { filings: FilingItem[] | null; bold: boolean }) {
   if (filings === null) return <Skeleton lines={5} label="Loading recent filings" />;
@@ -450,7 +447,7 @@ function FilingFeed({ filings, bold }: { filings: FilingItem[] | null; bold: boo
       {filings.slice(0, FEED_ROWS).map((f) => (
         <li key={f.accessionNo} className={f.isNew ? "it new" : "it"}>
           <span className="muted num">{day(f.filed)}</span>
-          <FormTag form={f.form} />
+          <FormMark form={f.form} />
           <span className="feed-name">
             {f.isNew && bold ? <b>{f.name}</b> : f.name}
             {f.periodEnd && <span className="muted"> · {periodPhrase(f.form, f.periodEnd)}</span>}

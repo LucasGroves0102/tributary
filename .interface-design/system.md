@@ -31,15 +31,33 @@ seal on every figure taken from a filing. Professional before decorative: no arc
 | `--ink-2` | #4c4646 | #b9b0a6 | labels, supporting text |
 | `--ink-3` | #706965 | #958c83 | periods, notes, metadata (tuned from #78716d / #8f867d for AA on `--sheet-2`) |
 | `--rule` | #e6e0db | #2f2829 | row and section rules |
-| `--red` | #b3111e | #e05a63 | the one accent: actions, rubrics, red-letter days, links, focus |
+| `--red` | #b3111e | #e05a63 | the seal, margin rubrics, red-letter days, a "may have changed" mark (since 2026-11-15) |
 | `--red-ink` | #ffffff | #1a0d0f | text on red |
 | `--red-rule` | rgba(179,17,30,.36) | rgba(224,90,99,.42) | ledger column rules |
-| `--red-wash` | rgba(179,17,30,.05) | rgba(224,90,99,.07) | current column, hover on quiet buttons |
+| `--red-wash` | rgba(179,17,30,.05) | rgba(224,90,99,.07) | the current column only |
+| `--action` | #161314 | #ede6dc | the one primary button (filled), checkboxes; `--action-ink` #ffffff / #131011 on it |
+| `--link` | = `--ink` | = `--ink` | links, with a rule under them (`--link-rule`, the ink at 38%) |
+| `--error` | #b3111e | #e05a63 | an error or a figure that doesn't tie (`--neg` reads it); `--error-soft` its ground |
+| `--focus` | = `--ink` | = `--ink` | focus rings |
 | `--gold` | #a87b2c | #d2b06a | only on the seal |
 | `--up` | #1d6944 | #6cc495 | a rise, in prose and deltas |
 
 Rules: colour means something or it isn't used. Red is never "loss": negatives are in parentheses, as filings print
 them; a fall in prose is worded ("down 12%"). Gold appears only on the seal. No gradients except inside the seal.
+
+Decided 2026-11-15 (Riley's audit, pattern 4: red was the brand, the seal, primary buttons, links, 10-K marks, "may have
+changed" values, the bull case and errors at once): red goes back to the seal, the margin rubrics and red-letter days.
+Primary buttons are the ink filled, links the ink underlined, errors `--error` (the same red today, a separate token so it
+can move), hovers the recessed sheet (`--sheet-2`) instead of a red wash, a "may have changed" figure stays the ink with
+a red "*". Form marks are one family (`components/FormMark`): 10-K filled ink, 10-Q outlined, others a step quieter,
+expected dashed, each named on hover. To give actions the red back, point `--action` at `--red` in tokens.css's three
+blocks.
+
+Seals, decided 2026-11-15 (Riley 32: seals sat on gross margin and ROE while the legend said "taken from a filing"): a
+seal only on a figure the filing states as shown (a balance; a quarter's flow from its 10-Q; twelve months from the
+10-K's year). A ratio, a difference, four quarters added up or a fourth quarter worked out has no seal; its hover says
+what it is computed from (`company/data.ts` `howFiled`, `COMPUTED_FROM`). The lead sentence is sealed only when its
+twelve months are the annual report's year; otherwise its margin line says "Four quarters to ...".
 
 ## Type
 
@@ -63,12 +81,12 @@ them; a fall in prose is worded ("down 12%"). Gold appears only on the seal. No 
 
 ## Components
 
-- Buttons: square corners. Primary `--red` fill; secondary 1px `--ink` outline, transparent; press scale(.97) 120ms.
+- Buttons: square corners. Primary `--action` fill (the ink; red until 2026-11-15); secondary 1px `--ink` outline, transparent; press scale(.97) 120ms.
   One primary per view.
 - Tabs and nav: sans 14px, active = `--ink` + 2px `--red` inset underline.
 - Toggle group: 1px `--ink` border, active segment inverted (`--ink` bg).
 - Ledger (figures): two columns of label / value rows, each value after a 1px `--red-rule` left rule, right-aligned,
-  min-width 120px, a 14px seal after a filed figure; a figure a later filing may change is `--red` with `*`.
+  min-width 120px, a 14px seal after a filed figure; a figure a later filing may change keeps the ink with a red `*`.
 - Table: serif 15px, tabular; header row 2px `--ink` bottom rule; 1px `--red-rule` between columns; totals 650;
   the bottom line 700 with a 3px double `--ink` rule; derived figures italic `--ink-2`; current column `--red-wash`;
   negatives in parentheses.

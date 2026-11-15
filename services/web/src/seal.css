@@ -111,7 +111,7 @@
 }
 
 .choices > button:hover:not(:disabled):not([data-state="on"]) {
-  background: var(--red-wash);
+  background: var(--sheet-2);
   color: var(--ink);
 }
 
@@ -123,7 +123,7 @@
 
 .choices > button:focus-visible {
   outline-offset: -4px;
-  outline-color: var(--red);
+  outline-color: var(--focus);
 }
 
 /* --- folio: a section with its rubric in the margin ------------------------------------------ */
@@ -282,7 +282,7 @@ h1.co-name {
 }
 
 .more-btn[data-state="open"] {
-  background: var(--red-wash);
+  background: var(--sheet-2);
 }
 
 /* a Radix menu (DropdownMenu, not modal): a sheet one level up, square, ruled */
@@ -309,8 +309,8 @@ h1.co-name {
 }
 
 .menu-item[data-highlighted] {
-  background: var(--red-wash);
-  box-shadow: inset 2px 0 0 var(--red);
+  background: var(--sheet-2);
+  box-shadow: inset 2px 0 0 var(--ink);
 }
 
 .menu-item[data-disabled] {
@@ -430,8 +430,13 @@ h1.co-name {
   font-weight: 400;
 }
 
-/* a balance a later filing may have changed: red, with its mark (CSS, so the text stays the figure) */
+/* a balance a later filing may have changed: the figure stays the ink (red read as a loss or an error,
+   Riley 33); the red is only its mark (CSS, so the text stays the figure) */
 .ledger dd.later .figure {
+  color: var(--ink);
+}
+
+.ledger dd.later .figure::after {
   color: var(--red);
 }
 
@@ -466,6 +471,11 @@ h1.co-name {
 
 .fnote .seal {
   align-self: center;
+}
+
+.fnote .seal-slot {
+  flex: none;
+  width: 14px;
 }
 
 @container main (max-width: 680px) {
@@ -533,11 +543,8 @@ li.event:first-child {
   gap: 6px;
 }
 
-.event .event-head .tag.k {
-  color: var(--ink-2);
-}
-
-.event.red .event-head .tag.k {
+/* a red-letter day's own 8-K mark is the red; the other days' marks keep the form's ink */
+.event.red .event-head .tag:first-child {
   color: var(--red);
 }
 
@@ -602,7 +609,7 @@ li.event:first-child {
 }
 
 .folio .t tbody tr:hover td.first {
-  background: color-mix(in srgb, var(--red) 5%, var(--page));
+  background: var(--sheet-2);
 }
 
 .folio .t.ruled.now th:last-child,

@@ -1,6 +1,7 @@
 import { useEffect, useRef, type ReactNode } from "react";
 
 import { accountName, readableTotal } from "../access";
+import { FormMark } from "./FormMark";
 import { ago, day, localClock } from "../format";
 import { sinceLabel, type WatchRow } from "../home/data";
 import { FRESHNESS_EXPLAINED } from "../home/useFeedStatus";
@@ -108,6 +109,12 @@ export function Sidebar({ route, me, workspace, lastIngested, listed = null, onA
         </button>
       </div>
       <div className="wl">
+        {watchlist.state === "ok" && rows.length > 0 && (
+          <p className="wl-head" aria-hidden="true">
+            <span>Revenue</span>
+            <span title="Revenue over the last twelve months against the twelve months a year earlier: the company's growth, not its share price">Growth</span>
+          </p>
+        )}
         {watchlist.state === "loading" && <Skeleton lines={3} label="Loading watchlist" />}
         {watchlist.state === "unavailable" && (
           <p className="side-note">Watchlists are offline; your companies are under Companies.</p>
@@ -134,7 +141,7 @@ export function Sidebar({ route, me, workspace, lastIngested, listed = null, onA
                 title={`${r.name}: ${r.next!.form} for the period ending ${day(r.next!.period_end, true)}. ${r.next!.basis}`}
               >
                 <b>{r.ticker ?? r.name}</b>
-                <span className="tag e">{r.next!.form}</span>
+                <FormMark form={r.next!.form} expected title={null} />
                 <span className="grow" />
                 <span className="num">~{day(r.next!.expected_date!)}</span>
               </a>
@@ -223,7 +230,7 @@ function WatchLink({ row, current, since }: { row: WatchRow; current: Route; sin
     <a
       href={href({ view: "company", companyId: row.companyId })}
       className={on ? "on" : undefined}
-      title={`${row.name} · revenue by quarter, last ${row.revenue.length || 12} quarters`}
+      title={`${row.name}: revenue by quarter over the last ${row.revenue.length || 12} quarters, and revenue growth over the twelve months (not the share price)`}
     >
       <i className={row.isNew ? "d" : "d off"} title={row.isNew ? `New filing ${since}` : undefined} />
       <b>{row.ticker ?? row.name}</b>

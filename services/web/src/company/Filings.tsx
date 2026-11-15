@@ -12,7 +12,8 @@ import {
 export type { Change, ChangedSection } from "./changes";
 /** "📌 Add to thesis" beside each changed paragraph (the Analysis tab's What changed step) */
 export type PinChange = (change: Change, section: ChangedSection) => ReactNode;
-import { eightKItems, filingHeadings, FORM_FILTERS, formsOf, formTag, parsedNote, type FormFilter } from "./data";
+import { FormMark } from "../components/FormMark";
+import { eightKItems, filingHeadings, FORM_FILTERS, formsOf, parsedNote, type FormFilter } from "./data";
 import { Gate } from "./Tables";
 import { useLoad } from "./useLoad";
 import { TableScroll } from "../components/TableScroll";
@@ -147,7 +148,7 @@ export function Filings({ token, companyId, name, canRead, initialDiff, fiscalYe
                         <tr className={diff === f.accession_no ? "sel" : undefined}>
                           <td className="muted">{day(f.filed, true)}</td>
                           <td>
-                            <span className={`tag ${formTag(f.form)}`}>{f.form}</span>
+                            <FormMark form={f.form} />
                           </td>
                           <td className="muted">
                             {f.period_of_report ? (f.form.startsWith("8-K") ? `event ${day(f.period_of_report, true)}` : day(f.period_of_report, true)) : "—"}

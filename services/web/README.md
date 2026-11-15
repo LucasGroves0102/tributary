@@ -32,8 +32,13 @@ every figure taken from a filing; gold appears only on the seal. Tokens (both pa
 spacing, square corners, motion) are in `src/tokens.css`, with the older names (`--panel`, `--text`,
 `--accent`...) read from Seal's so screens not yet redrawn keep working; `src/seal.css` holds Seal's
 own components and `src/styles.css` the rest. Red is never "a loss": a fall keeps its minus sign in
-the ink (`.neg`), a rise is green, and red means act here, a rubric, or a figure a later filing may
-change. Fonts are Source Serif 4 (names, sentences, figures; lining, tabular numerals) and Archivo
+the ink (`.neg`), a rise is green. Since Riley's audit (2026-11-15) red belongs to the seal, the margin
+rubrics, red-letter days and a "may have changed" mark only: the one primary button is the ink filled
+(`--action`, inverted in dark), a link is the ink with a rule under it (`--link`; links that are
+controls, nav or a table's figures carry no rule), an error has its own `--error`, checkboxes and focus
+are the ink, hovers are the recessed sheet rather than a red wash. Pointing `--action` at the red in
+`tokens.css` gives actions the red back in one place. Forms are marked by `components/FormMark` (10-K
+filled ink, 10-Q outlined, the rest quieter, expected dashed; the hover names the form). Fonts are Source Serif 4 (names, sentences, figures; lining, tabular numerals) and Archivo
 (controls, navigation, meta), both OFL and self-hosted: pinned `@fontsource-variable` packages
 imported in `main.tsx`, bundled into `/assets` by the build, because the CSP allows fonts only from
 this origin. No monospace for data, no all-caps labels.
@@ -64,10 +69,16 @@ covers), the next expected filing only when the API has one, two actions in the 
 analysis, the one primary, and Watch) with Chart, Compare, Ask, New thesis and New model under More,
 and the tabs. The Overview: **The year**, the twelve months as a sentence
 (revenue, its growth, net income and net cash or net debt, `data.ts` `yearStory`: API values only,
-and a figure from another period is left out rather than mixed in), sealed to its filing; **Figures**,
-the key figures as a ledger (amounts, then rates), each sealed, with Cash and short-term investments
-(what net debt subtracts) beside Cash and a negative net debt read as "Net cash" (the exact figure in
-the seal's source); **Since the last report** (red-letter days, below); **Latest quarter**, the recap
+and a figure from another period is left out rather than mixed in), sealed to its filing only when its
+twelve months are the 10-K's year (from a 10-Q they are four quarters added up, and the margin says
+"Four quarters to ..."); **Figures**, the key figures as a ledger (amounts, then rates), with Cash and
+short-term investments (what net debt subtracts) beside Cash and a negative net debt read as "Net cash"
+(the exact figure in its hover). A seal says "taken from the filing", so only a figure the filing
+states carries one (`data.ts` `howFiled`: a balance, a quarter from its 10-Q, the year from the 10-K);
+a ratio, a difference (net debt, free cash flow), four quarters added up or a fourth quarter worked out
+from the year has no seal, and its hover says what it is worked out from (`COMPUTED_FROM`, the API's
+definitions in words; ROE is twelve months' net income over the average of equity now and a year
+earlier). A balance a later 8-K may have changed keeps its figure in the ink with a red "*"; **Since the last report** (red-letter days, below); **Latest quarter**, the recap
 set as a statement (a change from a zero or negative base reads n/m with the API's
 `pct_not_meaningful` in its hover); **Business**; **Revenue and operating margin**; **Backlog and orders**. A
 foreign private issuer (`company/data.ts` `foreignReport`: its figures come from 20-F, 40-F or 6-K
@@ -275,7 +286,7 @@ docstring; the Query API's `/earnings` and `/events`, rules in its README, "Earn
   of Jul 26, 2026; the Aug 17, 2026 8-K (Material agreement) may have changed them.", `events.ts`
   `staleLine`) with the no-pro-forma explanation in its hover. The same flags sit on the Overview's
   ledger (Cash, Net debt, Debt / equity; every figure for non-reliance or bankruptcy) when the
-  figure is as of that period end or earlier: the figure in red with "*", and a note under the
+  figure is as of that period end or earlier: the figure in the ink with a red "*", and a note under the
   ledger "* At Sep 30, 2026, before the Oct 27, 2026 8-K (Acquisition or disposition) and 1 more 8-K,
   which may have changed it" (the seal's source names each event), the figure itself unchanged. The Overview asks `/events` once for both. An event the API flags from its 7.01 / 8.01
   announcement (F1b, `announced`) says so under its head: "⚑ A completed acquisition or

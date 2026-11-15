@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 
 import { alertNotifications, failureReason, markAlertsRead } from "../api";
 import { useDirectory } from "../companies/directory";
+import { FormMark } from "../components/FormMark";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { localDay, localTime } from "../format";
 import { href } from "../route";
@@ -60,7 +61,7 @@ export function NotificationList({ token, companyId, empty, limit = 50, onLoaded
       {list.map((n) => (
         <li key={n.id} className={n.read_at ? "alert-item" : "alert-item unread"}>
           <div className="alert-head">
-            <span className={`tag ${n.form === "8-K" ? "k" : "q"}`}>{n.form}</span>
+            <FormMark form={n.form} />
             {!companyId && (
               <a className="alert-co" href={href({ view: "company", companyId: n.company_id })}>{directory.label(n.company_id)}</a>
             )}

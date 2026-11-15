@@ -25,14 +25,41 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/* A link is the ink with a rule under it: red is the seal's and the rubrics' (decided 2026-11-15). Links
+   that are controls or a table's names and figures carry no rule (below); the hover darkens the rule. */
 a {
-  color: var(--red);
-  text-decoration: none;
+  color: var(--link);
+  text-decoration: underline;
+  text-decoration-color: var(--link-rule);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
 }
 
 a:hover {
-  text-decoration: underline;
-  text-underline-offset: 3px;
+  text-decoration-color: currentColor;
+}
+
+.btn,
+.nav a,
+.tabs a,
+.side a,
+.top a,
+.crumb a,
+.t a,
+.toc a,
+.step-rail a,
+.seal-link,
+.brand,
+.cover-link,
+.project-row,
+.ws-open,
+.menu-item,
+.chart a,
+.rubric a,
+a.co,
+a.cell-edgar,
+.pal a {
+  text-decoration: none;
 }
 
 button,
@@ -192,7 +219,7 @@ a.btn:hover {
 }
 
 .btn:hover:not(:disabled) {
-  background: var(--red-wash);
+  background: var(--sheet-2);
 }
 
 .btn:active:not(:disabled) {
@@ -204,14 +231,23 @@ a.btn:hover {
   font-size: var(--fs-sm);
 }
 
+/* the one action of a view: the ink, filled (--action; the red is the seal's) */
 .btn.primary {
-  background: var(--red);
-  border-color: var(--red);
-  color: var(--red-ink);
+  background: var(--action);
+  border-color: var(--action);
+  color: var(--action-ink);
 }
 
 .btn.primary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--red) 86%, var(--ink));
+  background: color-mix(in srgb, var(--action) 84%, var(--page));
+}
+
+/* a disabled primary keeps its shape and loses its fill: "nothing to save" reads as quiet, not broken */
+.btn.primary:disabled {
+  background: transparent;
+  color: var(--ink-3);
+  border-color: var(--rule-2);
+  opacity: 1;
 }
 
 .btn.ghost {
@@ -229,7 +265,9 @@ a.btn:hover {
   border-color: currentColor;
 }
 
-/* a form mark: 1px outline, sans 12px; the colour says what it marks, never a fill */
+/* a form mark: 1px outline, sans 12px, in the ink. An annual report (10-K) is filled, a quarterly
+   one (10-Q) outlined, anything else a step quieter; expected is dashed. components/FormMark gives each
+   its name on hover. */
 .tag {
   display: inline-block;
   font-family: var(--sans);
@@ -244,7 +282,9 @@ a.btn:hover {
 }
 
 .tag.k {
-  color: var(--red);
+  color: var(--page);
+  background: var(--ink);
+  border-color: var(--ink);
 }
 
 .tag.q {
@@ -261,7 +301,7 @@ a.btn:hover {
 
 .tag.warn {
   margin-left: var(--sp-3);
-  color: var(--red);
+  color: var(--error);
 }
 
 /* App shell: sidebar | page | assistant */
@@ -287,8 +327,8 @@ a.btn:hover {
   display: flex;
   align-items: center;
   gap: var(--sp-5);
-  background: var(--red-soft);
-  color: var(--red);
+  background: var(--error-soft);
+  color: var(--error);
   font-family: var(--sans);
   font-size: var(--fs-sm);
   padding: var(--sp-4) var(--sp-8);
@@ -526,8 +566,8 @@ a.btn:hover {
 }
 
 .welcome-error {
-  border-left: 2px solid var(--red);
-  color: var(--red);
+  border-left: 2px solid var(--error);
+  color: var(--error);
   padding: var(--sp-3) var(--sp-5);
 }
 
@@ -555,7 +595,7 @@ a.btn:hover {
 
 .welcome-progress progress {
   width: 100%;
-  accent-color: var(--red);
+  accent-color: var(--action);
 }
 
 /* Sidebar */
@@ -642,7 +682,7 @@ a.btn:hover {
   margin-left: auto;
   font-size: var(--fs-xs);
   font-weight: 600;
-  color: var(--red);
+  color: var(--ink-2);
   border: 1px solid currentColor;
   padding: 0 5px;
 }
@@ -661,7 +701,7 @@ a.btn:hover {
 .nav a:hover {
   text-decoration: none;
   color: var(--ink);
-  background: var(--red-wash);
+  background: var(--sheet-2);
 }
 
 /* where you are: the ink, and a red rule at its edge (the tabs' underline, turned on its side) */
@@ -723,7 +763,7 @@ a.btn:hover {
 }
 
 .side .sect button:hover {
-  color: var(--red);
+  color: var(--ink);
 }
 
 .side-note {
@@ -732,6 +772,18 @@ a.btn:hover {
   font-family: var(--serif);
   font-size: var(--fs-sm);
   line-height: 1.45;
+}
+
+/* what the spark and the percentage are: revenue and its growth, not a share price (Riley 25) */
+.side .wl .wl-head {
+  display: flex;
+  justify-content: space-between;
+  margin: 0 0 2px;
+  padding: 0 6px 0 62px;
+  font-family: var(--sans);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+  color: var(--ink-3);
 }
 
 .side .wl a {
@@ -758,7 +810,7 @@ a.btn:hover {
 
 .side .wl a:hover,
 .side .up a:hover {
-  background: var(--red-wash);
+  background: var(--sheet-2);
   text-decoration: none;
 }
 
@@ -1154,7 +1206,7 @@ table.t {
 }
 
 .t tbody tr:hover td {
-  background: var(--red-wash);
+  background: var(--sheet-2);
 }
 
 .t td.first,
@@ -1202,7 +1254,7 @@ table.t {
 }
 
 .t tbody tr:hover td.first {
-  background: color-mix(in srgb, var(--red) 5%, var(--sheet));
+  background: var(--sheet-2);
 }
 
 .t .clk {
@@ -1405,15 +1457,15 @@ table.t {
 }
 
 .field:focus {
-  outline: 2px solid var(--red);
+  outline: 2px solid var(--focus);
   outline-offset: -1px;
-  border-color: var(--red);
+  border-color: var(--ink);
 }
 
 input[type="checkbox"],
 input[type="radio"],
 progress {
-  accent-color: var(--red);
+  accent-color: var(--action);
 }
 
 .chk {
@@ -1448,7 +1500,7 @@ button.link:hover {
 }
 
 .t th.sort:hover {
-  color: var(--red);
+  color: var(--ink);
 }
 
 .t th[aria-sort="ascending"],
@@ -2280,7 +2332,7 @@ button.link:hover {
 
 .tier.none {
   border-color: currentColor;
-  color: var(--red);
+  color: var(--error);
 }
 
 .company {
@@ -3848,7 +3900,7 @@ button.link.num {
 
 /* a finding's severity: form marks; only an error takes the red */
 .tag.sev-error {
-  color: var(--red);
+  color: var(--error);
 }
 
 .tag.sev-warning {
@@ -4326,6 +4378,10 @@ button.link.num {
     --warn-soft: #f6ece2;
     --red-rule: rgb(179 17 30 / 0.36);
     --red-wash: rgb(179 17 30 / 0.05);
+    --action: #161314;
+    --action-ink: #ffffff;
+    --error: #b3111e;
+    --error-soft: #f7e9e9;
     --series-0: #5c5350;
     --series-1: #3d5a80;
     --series-2: #9a5a17;
@@ -4960,9 +5016,19 @@ mark.claim-mark {
   cursor: help;
 }
 
+/* the case being edited: heavier, in its own colour (bull stays teal, never the red: Riley 116) */
 .model-table tr.selected td.case {
-  color: var(--accent);
-  font-weight: 600;
+  font-weight: 650;
+}
+
+.model-table tr.selected td.case::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 5px;
+  vertical-align: 1px;
+  background: currentColor;
 }
 
 .model-table td.forecast {
@@ -5942,7 +6008,7 @@ button.chip.on {
 
 /* figures a later 8-K may have changed: the red they carry in the ledger, ruled in the margin */
 .stale-box {
-  border-left: 2px solid var(--red);
+  border-left: 2px solid var(--warn);
   padding: var(--sp-2) var(--sp-6);
   margin-bottom: var(--sp-6);
   line-height: 1.5;
@@ -5950,7 +6016,7 @@ button.chip.on {
 }
 
 .stale-box > b {
-  color: var(--red);
+  color: var(--warn);
 }
 
 .stale-box ul {
@@ -6701,7 +6767,7 @@ table.t.release-grid {
 .api-key-once {
   display: grid;
   gap: var(--sp-5);
-  border-left: 2px solid var(--red);
+  border-left: 2px solid var(--warn);
   background: var(--sheet-2);
 }
 
@@ -6832,7 +6898,7 @@ table.t.release-grid {
 }
 
 .api-code:focus-visible {
-  outline: 2px solid var(--red);
+  outline: 2px solid var(--focus);
   outline-offset: -2px;
 }
 

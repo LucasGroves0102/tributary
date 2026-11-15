@@ -186,6 +186,51 @@ export function keyStats(row: ScreenerRow): KeyStat[] {
   });
 }
 
+/** How a figure no filing states is computed (the API's definitions: migrations 014, 040, 048, 049), for
+ * its hover. A seal means "taken from the filing", so a computed figure carries none (decided 2026-11-15,
+ * Riley 32: seals on gross margin and ROE contradicted the legend). Words only: nothing is computed here. */
+export const COMPUTED_FROM: Record<string, string> = {
+  revenue_growth: "revenue over the twelve months against the twelve months a year earlier",
+  net_income_growth: "net income over the twelve months against the twelve months a year earlier",
+  gross_margin: "gross profit ÷ revenue",
+  operating_margin: "operating income ÷ revenue",
+  net_margin: "net income ÷ revenue",
+  fcf_margin: "free cash flow ÷ revenue",
+  free_cash_flow: "net cash from operating activities less capital expenditure",
+  cash_and_investments: "cash plus short-term investments, each investment counted once",
+  net_debt: "debt (long-term and due within a year) less cash and short-term investments",
+  debt_to_equity: "debt (long-term and due within a year) ÷ stockholders' equity",
+  roe: "net income over the twelve months ÷ the average of stockholders' equity at the period end and a year earlier",
+  current_ratio: "current assets ÷ current liabilities",
+  payout_ratio: "dividends paid ÷ net income",
+  efficiency_ratio: "noninterest expense ÷ (net interest income + noninterest income)",
+};
+
+/** An annual report: its twelve months are the year as filed, not four quarters added up. */
+const ANNUAL_FORM = /^(10-K|20-F|40-F)/;
+
+/** A balance (a figure at a date) as opposed to a flow over a period. */
+const BALANCES = new Set(["cash", "short_term_investments", "receivables", "inventory", "current_assets", "total_assets",
+  "current_liabilities", "accounts_payable", "long_term_debt", "long_term_debt_current", "total_liabilities",
+  "stockholders_equity", "loans", "deposits", "cet1_ratio"]);
+
+/** Whether a screener column's figure is stated in its filing as shown (so it may carry a seal), and if
+ * not, how it is made: a ratio or a difference (COMPUTED_FROM), twelve months added up from four
+ * quarters (a TTM whose filing is a 10-Q), or a fourth quarter worked out as the year less nine months
+ * (a quarter's flow whose filing is the 10-K). */
+export function howFiled(key: string, source: Pick<ValueSource, "form" | "period_end"> | null): { filed: true } | { filed: false; how: string } {
+  const metric = key.replace(/_(ttm|q)$/, "");
+  if (COMPUTED_FROM[metric]) return { filed: false, how: `computed: ${COMPUTED_FROM[metric]}` };
+  if (!source) return { filed: true };
+  if (key.endsWith("_ttm") && !ANNUAL_FORM.test(source.form)) {
+    return { filed: false, how: `the four quarters to ${day(source.period_end, true)} added up` };
+  }
+  if (key.endsWith("_q") && !BALANCES.has(metric) && ANNUAL_FORM.test(source.form)) {
+    return { filed: false, how: "the fourth quarter, worked out as the 10-K's year less the first three quarters" };
+  }
+  return { filed: true };
+}
+
 /** An amount, not a rate: the ledger's first column. */
 export const isAmount = (s: Pick<KeyStat, "kind">): boolean => s.kind === "usd" || s.kind === "eps";
 
@@ -1202,11 +1247,6 @@ export function formsOf(f: FormFilter): string[] {
 
 export function formMatches(form: string, f: FormFilter): boolean {
   return f === "all" || formsOf(f).includes(form);
-}
-
-/** The tag class a form gets in tables: k (annual), q (quarterly) or none. */
-export function formTag(form: string): string {
-  return form.startsWith("10-K") ? "k" : form.startsWith("10-Q") ? "q" : "";
 }
 
 /** gold.fiscal_year_end's rule (migration 014) and gold's label (the year of that date less 7

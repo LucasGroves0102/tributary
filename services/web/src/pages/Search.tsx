@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 import { searchCompanies, searchFilings } from "../api";
-import { formTag } from "../company/data";
+import { FormMark } from "../components/FormMark";
 import { useLoad } from "../company/useLoad";
 import { useDirectory } from "../companies/directory";
 import { CompanyPicker, type PickedCompany } from "../components/CompanySearch";
@@ -184,7 +184,7 @@ export function Search({ token, search, companies, open = false, suggestions = N
               {c.filings.map((f) => (
                 <div key={f.accessionNo} className="result-filing">
                   <div className="row wrap">
-                    <span className={`tag ${formTag(f.form)}`}>{f.form}</span>
+                    <FormMark form={f.form} />
                     <span className="muted">filed {day(f.filed, true)}</span>
                     <a className="mono faint" href={href({ view: "filing", companyId: c.companyId, accessionNo: f.accessionNo, section: null, q: search.q })}>
                       {f.accessionNo}

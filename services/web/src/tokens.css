@@ -17,6 +17,14 @@
   --red: #b3111e;
   --red-ink: #ffffff;
   --red-soft: #f7e9e9;
+  /* the action: primary buttons and links are the ink (decided 2026-11-15, Riley's audit: red was the
+     seal, rubrics, links, buttons, 10-K marks and errors at once). Red stays for the seal, the margin
+     rubrics and red-letter days; an error has its own token. To give actions the red back, point
+     --action at the red here and in both dark blocks. */
+  --action: #161314;
+  --action-ink: #ffffff;
+  --error: #b3111e;
+  --error-soft: #f7e9e9;
   --up: #1d6944;
   --up-soft: #e6f0ea;
   --warn: #8f4e14;
@@ -52,6 +60,10 @@
     --red: #e05a63;
     --red-ink: #1a0d0f;
     --red-soft: #2a191c;
+    --action: #ede6dc;
+    --action-ink: #131011;
+    --error: #e05a63;
+    --error-soft: #2a191c;
     --up: #6cc495;
     --up-soft: #18281f;
     --warn: #dc9a5e;
@@ -85,6 +97,10 @@
   --red: #e05a63;
   --red-ink: #1a0d0f;
   --red-soft: #2a191c;
+  --action: #ede6dc;
+  --action-ink: #131011;
+  --error: #e05a63;
+  --error-soft: #2a191c;
   --up: #6cc495;
   --up-soft: #18281f;
   --warn: #dc9a5e;
@@ -116,14 +132,19 @@
   --text: var(--ink);
   --text-2: var(--ink-2);
   --text-3: var(--ink-3);
-  --accent: var(--red);
-  --accent-soft: var(--red-soft);
-  --on-accent: var(--red-ink);
+  /* the older screens' accent is the action now, not the red */
+  --accent: var(--action);
+  --accent-soft: var(--sheet-2);
+  --on-accent: var(--action-ink);
+  /* a link reads as the ink with a rule under it (underline colour; currentColor on hover) */
+  --link: var(--ink);
+  --link-rule: color-mix(in srgb, var(--ink) 38%, transparent);
+  --focus: var(--ink);
   --pos: var(--up);
   --pos-soft: var(--up-soft);
-  /* an error or a figure that doesn't tie: red says "look here", never "a loss" (.neg is ink) */
-  --neg: var(--red);
-  --neg-soft: var(--red-soft);
+  /* an error or a figure that doesn't tie: says "look here", never "a loss" (.neg is ink) */
+  --neg: var(--error);
+  --neg-soft: var(--error-soft);
   --shadow: none;
   --popover-shadow: var(--lift);
 
