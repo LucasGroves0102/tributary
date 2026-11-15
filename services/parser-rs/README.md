@@ -88,6 +88,21 @@ cases in `heading_patterns` and `tests/sections.rs`
 `a_decimal_item_run_into_its_title_keeps_its_number` (a copy of the Python test); CI's `cargo test`,
 clippy, fmt and `test_rust_service.py` check it.
 
+Rule 11, tables beside the text (2026-11-15, `rust-7` / `python-7`): `text_content` records each
+`table`, `tr`, `thead`, `td`/`th` element's byte range while it walks the tree (`Walk`: the open
+tables, their open row and `thead` count, entered and left exactly where the walk enters and leaves
+an element), the start tag keeps a cell's attributes to read its `colspan` (`Dom::spans`), and
+`land` maps every cell boundary onto the text in one pass per line (a collapsed run's space comes
+from the run's first character; stripped and dropped lines move a boundary to the next or previous
+kept character), in characters and bytes. `sections::with_tables` keeps each section's rows. The
+text is built exactly as before. The service's `db.rs` writes `silver.filing_tables` with the
+sections and keeps unchanged section rows (and their `parsed_at`), as db.py does. Written without a
+local build: `tests/sections.rs` copies the Python table tests; CI runs `cargo test`, clippy, fmt,
+`test_rust_service.py` (both services' section and table rows on the fixtures, and the Rust service
+keeping `parsed_at` on an unchanged re-parse) and `scripts/fuzz.py` (3,000 documents of up to 60
+tokens and 300 of up to 2,000, whose tokens now include table fragments, colspans and head rows;
+sections compared with their tables) against the debug `parser-rs` binary.
+
 Known gap: documents declaring a legacy encoding other than UTF-8/16, ISO-8859-x, windows-1252
 or ASCII are decoded with encoding_rs, whose Shift_JIS, GB2312 and Mac Roman tables differ from
 the libiconv lxml uses. Every stored document is ASCII.

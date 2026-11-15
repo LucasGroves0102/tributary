@@ -24,7 +24,7 @@ full_weekday="${FULL_WEEKDAY:-7}"  # date +%u: 1 = Monday ... 7 = Sunday
 full_keep="${FULL_KEEP:-1}"
 compress="${COMPRESS:-zstd:1}"
 slim_exclude=(bronze.filing_documents bronze.filing_exhibits bronze.filing_xbrl
-              silver.filing_sections silver.segment_facts gold.segment_financials
+              silver.filing_sections silver.filing_tables silver.segment_facts gold.segment_financials
               gold.section_search gold.section_diffs gold.section_changes ops.section_index
               ops.doc_crawl_targets)
 if [[ -n "${SLIM_EXCLUDE_DATA:-}" ]]; then read -ra slim_exclude <<<"$SLIM_EXCLUDE_DATA"; fi

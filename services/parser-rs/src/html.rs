@@ -10,8 +10,10 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::hash::{BuildHasherDefault, Hasher};
 
+use serde::Serialize;
+
 use crate::Error;
-use crate::pystr::{collapse_spaces, py_strip};
+use crate::pystr::{char_len, collapse_spaces, is_space, py_strip};
 use crate::tables;
 
 /// htmlElemDesc.dataMode.
@@ -50,6 +52,15 @@ const FFFD: &[u8] = "\u{FFFD}".as_bytes();
 
 /// Rule 1: the text of an HTML document, one line per block.
 pub fn html_to_text(raw: &[u8]) -> Result<String, Error> {
+    Ok(extract_with(raw, false)?.0)
+}
+
+/// Rule 1's text and rule 11's tables of the whole document, row offsets into that text.
+pub fn extract(raw: &[u8]) -> Result<(String, Vec<Table>), Error> {
+    extract_with(raw, true)
+}
+
+fn extract_with(raw: &[u8], tables: bool) -> Result<(String, Vec<Table>), Error> {
     let raw = strip_envelope(raw);
     let full = looks_like_full_html(raw);
     let mut dom = Parser::new(raw).parse();
@@ -58,19 +69,364 @@ pub fn html_to_text(raw: &[u8]) -> Result<String, Error> {
         return Err(Error::NotAnElement);
     }
     drop_hidden(&mut dom)?;
-    let content = dom.text_content(root, root_tail)?;
+    let mut walk = Walk::default();
+    let (content, exact) = dom.text_content(root, root_tail, tables.then_some(&mut walk))?;
     let mut out = String::with_capacity(content.len());
+    let mut lines = Vec::new();
+    let mut at = 0; // characters in `out`
+    let mut raw_at = 0;
     for line in content.split('\n') {
-        let line = collapse_spaces(line);
-        let line = py_strip(&line);
-        if !line.is_empty() {
+        let collapsed = collapse_spaces(line);
+        let kept = py_strip(&collapsed);
+        let mut info = Line {
+            raw: raw_at,
+            kept: None,
+        };
+        raw_at += line.len() + 1;
+        if !kept.is_empty() {
             if !out.is_empty() {
                 out.push('\n');
+                at += 1;
             }
-            out.push_str(line);
+            let leadb = collapsed.len() - collapsed.trim_start_matches(is_space).len();
+            let size = char_len(kept);
+            info.kept = Some(Kept {
+                at,
+                byte: out.len(),
+                lead: char_len(&collapsed[..leadb]),
+                lead_bytes: leadb,
+                size,
+                size_bytes: kept.len(),
+            });
+            out.push_str(kept);
+            at += size;
+        }
+        if tables {
+            lines.push(info);
         }
     }
-    Ok(out)
+    if !tables || !exact || walk.tables.is_empty() {
+        return Ok((out, Vec::new()));
+    }
+    let found = rows_and_cells(&content, &lines, &out, walk.tables);
+    Ok((out, found))
+}
+
+// ---------------------------------------------------------------------------------------------
+// Rule 11: tables beside the text
+
+/// One `<td>` or `<th>`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Cell {
+    pub text: String, // its characters in the text, '\n' read as ' '; "" when it has none
+    pub span: u32,    // its colspan, 1-100
+}
+
+/// One `<tr>` with at least one non-empty cell.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Row {
+    pub start: usize, // [start, end) in characters: its first to last non-empty cell
+    pub end: usize,
+    pub head: bool, // inside a <thead> of its table, or every non-empty cell a <th>
+    pub cells: Vec<Cell>,
+}
+
+/// One `<table>`'s rows (in a section: those that lie in it).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Table {
+    pub start: usize, // [start, end) in characters: its rows' smallest start to largest end
+    pub end: usize,
+    pub rows: Vec<Row>,
+}
+
+/// What a name is to rule 11.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TablePart {
+    None,
+    Table,
+    Thead,
+    Tr,
+    Td,
+    Th,
+}
+
+/// A cell's [start, end) byte range in the content (text_content()), colspan and kind.
+struct RawCell {
+    start: usize,
+    end: usize,
+    span: u32,
+    th: bool,
+}
+
+struct RawRow {
+    head: bool,
+    cells: Vec<RawCell>,
+}
+
+/// An open `<table>`: its index, its innermost open row, how many `<thead>`s are open in it.
+struct OpenTable {
+    table: usize,
+    row: Option<usize>,
+    theads: u32,
+}
+
+/// What leaving an entered element undoes.
+enum Frame {
+    Other,
+    Table,
+    Thead(usize),
+    Tr(usize, Option<usize>),
+    Cell(usize, usize, usize),
+}
+
+/// Rule 11a while text_content() walks the tree: tables in document order, each its rows.
+#[derive(Default)]
+struct Walk {
+    tables: Vec<Vec<RawRow>>,
+    open: Vec<OpenTable>,
+    frames: Vec<Frame>,
+}
+
+impl Walk {
+    fn enter(&mut self, part: TablePart, span: u32, at: usize) {
+        let frame = match part {
+            TablePart::Table => {
+                self.tables.push(Vec::new());
+                self.open.push(OpenTable {
+                    table: self.tables.len() - 1,
+                    row: None,
+                    theads: 0,
+                });
+                Frame::Table
+            }
+            _ if self.open.is_empty() => Frame::Other,
+            TablePart::Thead => {
+                let o = self.open.len() - 1;
+                self.open[o].theads += 1;
+                Frame::Thead(o)
+            }
+            TablePart::Tr => {
+                let o = self.open.len() - 1;
+                let t = self.open[o].table;
+                self.tables[t].push(RawRow {
+                    head: self.open[o].theads > 0,
+                    cells: Vec::new(),
+                });
+                let saved = self.open[o].row.replace(self.tables[t].len() - 1);
+                Frame::Tr(o, saved)
+            }
+            TablePart::Td | TablePart::Th => match self.open.last() {
+                Some(&OpenTable {
+                    table,
+                    row: Some(row),
+                    ..
+                }) => {
+                    let cells = &mut self.tables[table][row].cells;
+                    cells.push(RawCell {
+                        start: at,
+                        end: at,
+                        span,
+                        th: part == TablePart::Th,
+                    });
+                    Frame::Cell(table, row, cells.len() - 1)
+                }
+                _ => Frame::Other,
+            },
+            TablePart::None => Frame::Other,
+        };
+        self.frames.push(frame);
+    }
+
+    fn exit(&mut self, at: usize) {
+        match self.frames.pop() {
+            Some(Frame::Table) => {
+                self.open.pop();
+            }
+            Some(Frame::Thead(o)) => self.open[o].theads -= 1,
+            Some(Frame::Tr(o, saved)) => self.open[o].row = saved,
+            Some(Frame::Cell(t, r, c)) => self.tables[t][r].cells[c].end = at,
+            Some(Frame::Other) | None => {}
+        }
+    }
+}
+
+/// A content line: its first byte, and where it is in the text when rule 1 keeps it.
+struct Line {
+    raw: usize,
+    kept: Option<Kept>,
+}
+
+/// A kept line: its start in the text (characters, bytes), the characters (bytes) strip() took
+/// from its collapsed form's start, and its length.
+#[derive(Clone, Copy)]
+struct Kept {
+    at: usize,
+    byte: usize,
+    lead: usize,
+    lead_bytes: usize,
+    size: usize,
+    size_bytes: usize,
+}
+
+/// A text position: (characters, bytes).
+type Spot = (usize, usize);
+
+/// `_SPACES`' characters (pystr::collapse_spaces).
+fn collapsible(c: char) -> bool {
+    matches!(
+        c,
+        ' ' | '\t' | '\u{a0}' | '\u{200b}' | '\u{2009}' | '\u{202f}'
+    )
+}
+
+/// Rule 11b for every sorted content byte offset: the first text character that comes from
+/// it or later (the text's end when none), and one past the last that comes from before it
+/// (0 when none). A collapsed space comes from its run's first character.
+fn land(content: &str, lines: &[Line], text: &str, positions: &[usize]) -> Vec<(Spot, Spot)> {
+    let total = (char_len(text), text.len());
+    let mut next = vec![total; lines.len() + 1];
+    for (i, line) in lines.iter().enumerate().rev() {
+        next[i] = line.kept.map_or(next[i + 1], |k| (k.at, k.byte));
+    }
+    let mut prev = Vec::with_capacity(lines.len());
+    let mut end = (0, 0);
+    for line in lines {
+        prev.push(end);
+        if let Some(k) = line.kept {
+            end = (k.at + k.size, k.byte + k.size_bytes);
+        }
+    }
+    let mut out = Vec::with_capacity(positions.len());
+    let mut i = 0;
+    let mut q = 0;
+    while q < positions.len() {
+        while i + 1 < lines.len() && lines[i + 1].raw <= positions[q] {
+            i += 1;
+        }
+        let start = lines[i].raw;
+        let stop = lines.get(i + 1).map_or(content.len(), |l| l.raw - 1);
+        // characters (bytes) of the collapsed line that come from before the scan's position
+        let (mut c, mut cb, mut in_run) = (0, 0, false);
+        let mut chars = content[start..stop].char_indices().peekable();
+        while q < positions.len() && positions[q] <= stop {
+            let p = positions[q] - start;
+            while let Some(&(b, ch)) = chars.peek() {
+                if b >= p {
+                    break;
+                }
+                if collapsible(ch) {
+                    if !in_run {
+                        c += 1;
+                        cb += 1;
+                    }
+                    in_run = true;
+                } else {
+                    c += 1;
+                    cb += ch.len_utf8();
+                    in_run = false;
+                }
+                chars.next();
+            }
+            out.push(match lines[i].kept {
+                Some(k) => {
+                    let first = if c <= k.lead {
+                        (k.at, k.byte)
+                    } else if c - k.lead < k.size {
+                        (k.at + c - k.lead, k.byte + cb - k.lead_bytes)
+                    } else {
+                        next[i + 1]
+                    };
+                    let last = if c <= k.lead {
+                        prev[i]
+                    } else if c - k.lead >= k.size {
+                        (k.at + k.size, k.byte + k.size_bytes)
+                    } else {
+                        (k.at + c - k.lead, k.byte + cb - k.lead_bytes)
+                    };
+                    (first, last)
+                }
+                None => (next[i + 1], prev[i]),
+            });
+            q += 1;
+        }
+    }
+    out
+}
+
+/// Rule 11b: each table's rows with text, their cells and offsets into the whole text.
+fn rows_and_cells(content: &str, lines: &[Line], text: &str, raw: Vec<Vec<RawRow>>) -> Vec<Table> {
+    let mut positions: Vec<usize> = raw
+        .iter()
+        .flatten()
+        .flat_map(|r| r.cells.iter().flat_map(|c| [c.start, c.end]))
+        .collect();
+    positions.sort_unstable();
+    positions.dedup();
+    let landed = land(content, lines, text, &positions);
+    let spot = |p: usize| landed[positions.binary_search(&p).unwrap_or(0)];
+    let bytes = text.as_bytes();
+    let mut tables = Vec::new();
+    for rows in raw {
+        let mut kept = Vec::new();
+        for row in rows {
+            let mut cells = Vec::with_capacity(row.cells.len());
+            let mut range: Option<(usize, usize)> = None;
+            let mut all_th = true;
+            for c in &row.cells {
+                let (mut a, _) = spot(c.start);
+                let (_, mut b) = spot(c.end);
+                while a.0 < b.0 && bytes[a.1] == b' ' {
+                    a = (a.0 + 1, a.1 + 1);
+                }
+                while b.0 > a.0 && bytes[b.1 - 1] == b' ' {
+                    b = (b.0 - 1, b.1 - 1);
+                }
+                let mut cell_text = String::new();
+                if a.0 < b.0 {
+                    cell_text = text[a.1..b.1].replace('\n', " ");
+                    range = Some(range.map_or((a.0, b.0), |(s, e)| (s.min(a.0), e.max(b.0))));
+                    all_th &= c.th;
+                }
+                cells.push(Cell {
+                    text: cell_text,
+                    span: c.span,
+                });
+            }
+            if let Some((start, end)) = range {
+                kept.push(Row {
+                    start,
+                    end,
+                    head: row.head || all_th,
+                    cells,
+                });
+            }
+        }
+        if !kept.is_empty() {
+            let start = kept.iter().map(|r| r.start).min().unwrap_or(0);
+            let end = kept.iter().map(|r| r.end).max().unwrap_or(0);
+            tables.push(Table {
+                start,
+                end,
+                rows: kept,
+            });
+        }
+    }
+    tables
+}
+
+/// Rule 11a: a colspan attribute's ASCII digits after any of " \t\n\r\f" at its start, capped
+/// to 1-100; 1 without such digits.
+fn colspan(value: Option<&[u8]>) -> u32 {
+    let v = value.unwrap_or_default();
+    let lead = v
+        .iter()
+        .take_while(|&&c| matches!(c, b' ' | b'\t' | b'\n' | b'\r' | 0x0c))
+        .count();
+    let mut n: Option<u32> = None;
+    for &d in v[lead..].iter().take_while(|c| c.is_ascii_digit()) {
+        n = Some((n.unwrap_or(0) * 10 + u32::from(d - b'0')).min(1000));
+    }
+    n.map_or(1, |n| n.clamp(1, 100))
 }
 
 /// `re.sub(rb"^\s*<DOCUMENT>.*?<TEXT>", b"", raw, count=1, flags=re.I | re.S)`.
@@ -141,6 +497,8 @@ struct Dom {
     nodes: Vec<Node>,
     text: Vec<u8>,
     names: Names,
+    /// Cells' colspans other than 1 (rule 11a), by node.
+    spans: HashMap<u32, u32, BuildHasherDefault<Fnv>>,
 }
 
 impl Dom {
@@ -157,6 +515,7 @@ impl Dom {
             nodes: vec![doc],
             text: Vec::new(),
             names: Names::new(),
+            spans: HashMap::default(),
         }
     }
 
@@ -330,26 +689,44 @@ impl Dom {
     }
 
     /// `el.text_content()` after `el.tail = "\n" + el.tail` for blocks and `" "` for cells
-    /// (`root_tail` for the root itself).
-    fn text_content(&self, root: u32, root_tail: Tail) -> Result<String, Error> {
+    /// (`root_tail` for the root itself), and whether it is the walk's bytes exactly (valid
+    /// UTF-8). With `walk`, rule 11a's tables, rows and cells as byte ranges in it.
+    fn text_content(
+        &self,
+        root: u32,
+        root_tail: Tail,
+        mut walk: Option<&mut Walk>,
+    ) -> Result<(String, bool), Error> {
         if root_tail != Tail::None && !self.run_valid(self.node(root).next) {
             return Err(Error::NotXmlCompatible);
         }
         let mut out: Vec<u8> = Vec::with_capacity(self.text.len());
+        if let Some(w) = walk.as_deref_mut() {
+            w.enter(self.table_part(root), self.span(root), 0);
+        }
         let mut id = self.node(root).first;
         while id != NIL {
             let n = self.node(id);
             match n.kind {
                 Kind::Text(a, b) => out.extend_from_slice(&self.text[a as usize..b as usize]),
-                Kind::Element(..) if n.first != NIL => {
-                    id = n.first;
-                    continue;
+                Kind::Element(..) => {
+                    if let Some(w) = walk.as_deref_mut() {
+                        w.enter(self.table_part(id), self.span(id), out.len());
+                    }
+                    if n.first != NIL {
+                        id = n.first;
+                        continue;
+                    }
                 }
                 _ => {}
             }
             // leave id, then every ancestor it is the last child of, emitting their tails
             let mut cur = id;
             loop {
+                let element = matches!(self.node(cur).kind, Kind::Element(..));
+                if let Some(w) = walk.as_deref_mut().filter(|_| element) {
+                    w.exit(out.len());
+                }
                 match self.tail(cur) {
                     Tail::None => {}
                     tail => {
@@ -371,10 +748,26 @@ impl Dom {
                 }
             }
         }
+        if let Some(w) = walk.as_deref_mut() {
+            w.exit(out.len());
+        }
         Ok(match String::from_utf8(out) {
-            Ok(s) => s,
-            Err(e) => String::from_utf8_lossy(e.as_bytes()).into_owned(),
+            Ok(s) => (s, true),
+            Err(e) => (String::from_utf8_lossy(e.as_bytes()).into_owned(), false),
         })
+    }
+
+    /// Rule 11: what an element is to a table (by rule 1's reading of its name).
+    fn table_part(&self, id: u32) -> TablePart {
+        match self.node(id).kind {
+            Kind::Element(name, _) => self.names.info(name).table_part,
+            _ => TablePart::None,
+        }
+    }
+
+    /// A cell's colspan (rule 11a): 1 unless recorded.
+    fn span(&self, id: u32) -> u32 {
+        self.spans.get(&id).copied().unwrap_or(1)
     }
 }
 
@@ -559,6 +952,7 @@ struct NameInfo {
     priority: u8,
     tail: Tail,
     drop: bool,
+    table_part: TablePart,
 }
 
 struct Names {
@@ -601,6 +995,14 @@ impl Names {
         } else {
             Tail::None
         };
+        let table_part = match local.as_str() {
+            "table" => TablePart::Table,
+            "thead" => TablePart::Thead,
+            "tr" => TablePart::Tr,
+            "td" => TablePart::Td,
+            "th" => TablePart::Th,
+            _ => TablePart::None,
+        };
         let info = NameInfo {
             empty: tables::EMPTY_ELEMENTS.contains(&&*s),
             mode: tables::DATA_ELEMENTS
@@ -613,6 +1015,7 @@ impl Names {
                 .map_or(100, |(_, p)| *p),
             tail,
             drop: DROP.contains(&&*s),
+            table_part,
             name: s,
         };
         self.infos.push(info);
@@ -669,7 +1072,8 @@ impl Tree {
     }
 
     /// htmlnamePush + xmlSAX2StartHtmlElement.
-    fn push(&mut self, name: u32, hidden: bool) {
+    /// The element's node, when it was added to the tree.
+    fn push(&mut self, name: u32, hidden: bool) -> Option<u32> {
         if name == HEAD && self.insert_mode < INSERT_IN_HEAD {
             self.insert_mode = INSERT_IN_HEAD;
         }
@@ -677,7 +1081,7 @@ impl Tree {
             self.insert_mode = INSERT_IN_BODY;
         }
         if self.stopped {
-            return;
+            return None;
         }
         let drop = hidden || self.dom.names.info(name).drop;
         let node = self.dom.create(Kind::Element(name, drop));
@@ -687,9 +1091,10 @@ impl Tree {
         if self.stack.len() >= MAX_DEPTH {
             self.dom.unlink(node);
             self.stopped = true;
-            return;
+            return None;
         }
         self.stack.push((name, node));
+        Some(node)
     }
 
     /// xmlSAX2EndElement + htmlnamePop.
@@ -1715,7 +2120,11 @@ impl<'a> Parser<'a> {
             }
         }
         let meta = name == META;
-        let atts = self.attributes(meta);
+        let cell = matches!(
+            self.tree.dom.names.info(name).table_part,
+            TablePart::Td | TablePart::Th
+        );
+        let atts = self.attributes(meta || cell);
         if self.at_end() {
             return false;
         }
@@ -1734,7 +2143,17 @@ impl<'a> Parser<'a> {
                     v.windows(12).any(|w| w == b"display:none")
                 })
             });
-        self.tree.push(name, hidden);
+        let node = self.tree.push(name, hidden);
+        if let Some(node) = node.filter(|_| cell) {
+            let value = atts
+                .iter()
+                .find(|(n, _)| n == b"colspan")
+                .and_then(|(_, v)| v.as_deref());
+            let span = colspan(value);
+            if span != 1 {
+                self.tree.dom.spans.insert(node, span);
+            }
+        }
         true
     }
 

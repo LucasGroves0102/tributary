@@ -124,17 +124,37 @@ a space, so a table row is one line ("Total assets $ 206,803 $ 111,601"; a label
 `<p>` puts its figures on the next line). The web reader reads tables back from that
 (`services/web/src/reader/blocks.ts`), and leaves out page numbers and "Table of Contents" lines,
 without a reparse. Changing how cells or rows are written changes every stored offset (citations,
-the search index, diffs, peers' mentions): don't, unless all of them are rebuilt.
+the search index, diffs, peers' mentions, thesis pins' `?at=`): don't, unless all of them are rebuilt.
+Parser v7 keeps the text exactly and records the tables beside it (next section).
 
-What a parser-side change could add, if it's ever wanted (F7b measured, not done): marking cell
-boundaries with a tab instead of a space keeps every offset (one character for one) and would let the
-reader split cells exactly, but needs `make reparse` of all ~340,000 stored documents (both parsers;
-production serves parser-rs rows, so the Rust build must match first), then `parser-index` to rebuild
-the search index and diffs and `parser-peers` for mentions; dropping page debris from the text would
-change offsets and needs the same. Parsing itself is cheap (parser-rs README benchmark: a 10-K 8 ms
-median in Rust, 71 ms in Python, parse only); the cost is reading and gunzipping ~338,000 documents
-(~1.3 GB stored at the crawl's ratios), rewriting ~2M section rows and rebuilding the search index
-(~12M passages) and diffs: hours on hermes, and every cached citation offset moves.
+## Tables beside the text (rule 11, `python-7` / `rust-7`)
+
+Beside each section the parser records the HTML tables whose rows lie in it, in
+`silver.filing_tables` (migration 067): one row per table with its `[char_start, char_end)` in the
+section's text and `rows` as jsonb, each row with its own offsets, its cells' text in order (empty
+spacer cells kept, so columns line up: a row's columns are its cells' colspans summed), `spans` when a
+cell spans columns, `head` on a `<thead>` row or a row of `<th>` cells. A cell's text is the text's
+own characters (rule 11b maps each cell of the HTML tree onto rule 1's text: collapsed spaces,
+stripped lines and dropped empty lines included), so `text[row.start:row.end]` is that row's line(s)
+and a reader can find the table a quoted passage comes from by offsets. A table needs two rows with
+text in the section (single-row tables are bullets and layout: 42% of tables in the sample below);
+a table that straddles an Item heading gives each section its own rows.
+
+The text, keys, titles and offsets are rule 1-10's, unchanged (`test_tables_on_real_filings` checks
+it on the fixtures), so nothing that reads stored text or offsets changes. A document parsed before
+v7 has no table rows until it is parsed again; readers fall back to the text (the Query API's
+earnings releases do). The writer (`db.write_sections`, parser-rs `db.rs`) keeps a document's
+section rows and their `parsed_at` when a re-parse produces exactly the stored sections (it updates
+`parser_version` and replaces the tables only): `parser-index` keys on `parsed_at`, so a re-parse
+for tables re-indexes and re-diffs nothing, and What changed never goes stale during it. A section
+row deleted (a re-parse with other text, the other parser's rows) deletes its tables (the foreign
+key cascades).
+
+Measured on 300 documents and exhibits sampled from hermes (2026-11-15; `make`-free scratch script
+over `bronze.filing_documents` / `filing_exhibits` content): 4,030 tables, 29,575 rows; the tables'
+JSON is 37% of 10-K and 10-Q section text, 28% of 8-K items' and 54% of exhibits'. Python parse time
+went from 46 ms to 100 ms on NVIDIA's 10-K (the Rust parser does the same walk in the pass that
+already builds the text).
 
 ## Section diffs and search index (`parser-index`)
 

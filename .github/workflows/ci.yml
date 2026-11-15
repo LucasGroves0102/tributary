@@ -70,8 +70,13 @@ jobs:
       - name: Rust parser service, for the parser equivalence test
         run: |
           rustup toolchain install 1.99.1 --profile minimal
-          cargo +1.99.1 build --locked --bin parser --manifest-path services/parser-rs/Cargo.toml
+          cargo +1.99.1 build --locked --bin parser --bin parser-rs --manifest-path services/parser-rs/Cargo.toml
           echo "PARSER_RS_BIN=$PWD/services/parser-rs/target/debug/parser" >> "$GITHUB_ENV"
+      - name: Parser equivalence on random documents (sections and their rule 11 tables)
+        run: |
+          rs=services/parser-rs/target/debug/parser-rs
+          python services/parser-rs/scripts/fuzz.py --n 3000 --rust "$rs"
+          python services/parser-rs/scripts/fuzz.py --n 300 --tokens 2000 --seed 2 --rust "$rs"
       - name: TLS-only Postgres, for the Rust parser's sslmode test (test_rust_tls.py)
         run: |
           d="$RUNNER_TEMP/pgtls" && mkdir -p "$d" && cd "$d"

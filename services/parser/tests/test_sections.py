@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from filing_parser.sections import find_sections, html_to_text, parse
+from filing_parser.sections import _tree, _walk, exhibit_section, find_sections, html_to_text, parse
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -330,3 +330,100 @@ def test_no_titles_keeps_previous_result():
     assert find_sections("PART I\nNothing numbered or titled here.", "10-Q") == []
     with pytest.raises(ValueError):
         find_sections("No headings at all.", "10-Q")
+
+
+# --- rule 11: tables beside the text ------------------------------------------------------------
+
+def _rows(section) -> list[list[str]]:
+    return [[c.text for c in r.cells] for t in section.tables for r in t.rows]
+
+
+def test_tables_rows_cells_spans_and_offsets():
+    raw = (b"<html><body><p>Item 2.02 Results</p><p>Intro.</p>"
+           b"<table><thead><tr><td></td><td colspan='3'>Three Months Ended</td></tr></thead>"
+           b"<tr><td></td><td>2026</td><td></td><td>2025</td></tr>"
+           b"<tr><td><p>Net   sales</p></td><td>$</td><td>1,234</td><td>$&nbsp; 1,100 </td></tr>"
+           b"<tr><td> </td><td></td></tr>"  # a spacer row: dropped
+           b"<tr><th>Margin</th><th>45.1</th><td> % </td></tr>"
+           b"</table><p>After.</p></body></html>")
+    (s,) = parse(raw, "8-K")
+    assert s.text == ("Item 2.02 Results\nIntro.\nThree Months Ended\n2026 2025\nNet sales\n$ 1,234"
+                      " $ 1,100\nMargin 45.1 %\nAfter.")
+    (t,) = s.tables
+    assert [[c.text for c in r.cells] for r in t.rows] == [
+        ["", "Three Months Ended"], ["", "2026", "", "2025"],
+        ["Net sales", "$", "1,234", "$ 1,100"], ["Margin", "45.1", "%"]]
+    assert [c.span for c in t.rows[0].cells] == [1, 3]
+    assert [r.head for r in t.rows] == [True, False, False, False]  # thead; th and a td: not all th
+    assert [s.text[r.start:r.end] for r in t.rows] == [
+        "Three Months Ended", "2026 2025", "Net sales\n$ 1,234 $ 1,100", "Margin 45.1 %"]
+    assert (t.start, t.end) == (t.rows[0].start, t.rows[-1].end)
+
+
+def test_tables_head_rows_of_th_cells_nested_tables_and_cells_outside_rows():
+    raw = (b"<div>Item 8.01 Other</div><table>"
+           b"<tr><th>Metric</th><th></th><th>Low</th></tr>"
+           b"<tr><td>Revenue<table><tr><td>inner</td><td>x</td></tr><tr><td>y</td></tr></table></td>"
+           b"<td>2.5</td></tr><td>loose cell</td></table>")
+    (s,) = parse(raw, "8-K")
+    outer, inner = s.tables
+    assert [r.head for r in outer.rows] == [True, False]
+    assert [[c.text for c in r.cells] for r in outer.rows] == [
+        ["Metric", "", "Low"], ["Revenueinner x y", "2.5"]]  # a table starts no line
+    assert [[c.text for c in r.cells] for r in inner.rows] == [["inner", "x"], ["y"]]
+
+
+def test_tables_colspan_values():
+    def spans(value: bytes) -> int:
+        raw = (b"<p>Item 8.01 Other</p><table><tr><td colspan" + value + b">a</td></tr>"
+               b"<tr><td>b</td></tr></table>")
+        return parse(raw, "8-K")[0].tables[0].rows[0].cells[0].span
+    assert [spans(v) for v in (b"=2", b"='\n 3'", b"=4px", b"=0", b"=x", b"", b"=999999999999",
+                                b"=&#53;", b"='+2'")] == [2, 3, 4, 1, 1, 1, 100, 5, 1]
+
+
+def test_tables_keep_only_rows_inside_the_section():
+    """A table straddling an Item heading gives each section the rows within it; a section keeps
+    a table only with two rows or more."""
+    raw = (b"<p>Item 1.01 Agreement</p><table><tr><td>a</td><td>1</td></tr>"
+           b"<tr><td>b</td><td>2</td></tr><tr><td>Item 2.03 Obligation</td></tr>"
+           b"<tr><td>c</td><td>3</td></tr></table><p>Text.</p>")
+    first, second = parse(raw, "8-K")
+    assert _rows(first) == [["a", "1"], ["b", "2"]]
+    assert second.key == "2.03" and _rows(second) == [["Item 2.03 Obligation"], ["c", "3"]]
+    one_row = b"<p>Item 1.01 Agreement</p><table><tr><td>a</td><td>1</td></tr></table><p>x</p>"
+    assert parse(one_row, "8-K")[0].tables == []
+
+
+def test_tables_of_an_exhibit_and_hidden_ones():
+    raw = (b"<html><body><p>Outlook</p><table><tr><td>Revenue</td><td>$2.5 billion</td></tr>"
+           b"<tr><td>Margin</td><td>20%</td></tr></table>"
+           b"<table style='display:none'><tr><td>h</td></tr><tr><td>i</td></tr></table>"
+           b"</body></html>")
+    s = exhibit_section("EX-99.1", "Press release", raw)
+    assert _rows(s) == [["Revenue", "$2.5 billion"], ["Margin", "20%"]]
+    assert s.tables[0].start == len("Outlook\n")
+
+
+@pytest.mark.parametrize("name,form,least", [("nvda-10-K", "10-K", 600), ("nvda-10-Q", "10-Q", 300),
+                                             ("nvda-8-K", "8-K", 6), ("moh-10-Q", "10-Q", 80)])
+def test_tables_on_real_filings(name, form, least):
+    """Each row's text is its non-empty cells joined by a space (a "\\n" read as one), the
+    tables lie in their section in order, and the walk rebuilds text_content() exactly."""
+    raw = gzip.decompress((FIXTURES / f"{name}.htm.gz").read_bytes())
+    doc = _tree(raw)
+    assert _walk(doc)[0] == doc.text_content()
+    sections = parse(raw, form)
+    assert [(s.key, s.text, s.char_start, s.char_end) for s in sections] == [
+        (s.key, s.text, s.char_start, s.char_end) for s in find_sections(html_to_text(raw), form)]
+    rows = 0
+    for s in sections:
+        last = -1
+        for t in s.tables:
+            assert last <= t.start < t.end <= len(s.text) and len(t.rows) >= 2
+            for r in t.rows:
+                rows += 1
+                assert s.text[r.start:r.end].replace("\n", " ") == " ".join(
+                    c.text for c in r.cells if c.text)
+            last = t.start
+    assert rows >= least

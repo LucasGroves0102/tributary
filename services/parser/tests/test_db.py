@@ -8,9 +8,9 @@ from pathlib import Path
 import pytest
 from prometheus_client import REGISTRY
 
-from filing_parser.db import load_document, write_sections
+from filing_parser.db import load_document, table_rows, write_sections
 from filing_parser.main import parse_one
-from filing_parser.sections import parse
+from filing_parser.sections import PARSER_VERSION, parse
 
 psycopg = pytest.importorskip("psycopg")
 DSN = os.environ.get("TEST_DATABASE_URL")
@@ -81,3 +81,49 @@ def test_write_replaces_the_other_parsers_rows(conn):
     assert conn.execute(
         "SELECT section_key FROM gold.filing_sections ORDER BY section_key").fetchall() == [
         ("8.01",), ("9.01",)]
+
+
+def _tables(conn):
+    return conn.execute("SELECT section_key, parser, table_no, char_start, char_end, rows"
+                        " FROM silver.filing_tables ORDER BY section_key, table_no").fetchall()
+
+
+def test_tables_are_written_with_their_sections(conn):
+    sections = parse(HTML, "8-K")
+    write_sections(conn, ACC, sections)
+    rows = _tables(conn)
+    (s,) = [s for s in sections if s.key == "9.01"]
+    assert [r[:5] for r in rows] == [("9.01", "python", n, t.start, t.end)
+                                     for n, t in enumerate(s.tables)]
+    assert len(rows) == 2
+    first = rows[0][5]
+    assert first == table_rows(s.tables[0])
+    assert all(set(r) <= {"start", "end", "cells", "spans", "head"} for r in first)
+    assert s.text[first[1]["start"]:first[1]["end"]].replace("\n", " ") == " ".join(
+        c for c in first[1]["cells"] if c)
+
+
+def test_a_reparse_with_the_same_text_keeps_the_rows_and_their_parsed_at(conn):
+    """Only parser_version and the tables change: the search index and diffs key on parsed_at."""
+    write_sections(conn, ACC, parse(HTML, "8-K"))
+    conn.execute("UPDATE silver.filing_sections SET parsed_at = '2020-01-01',"
+                 " parser_version = 'python-6'")
+    conn.execute("DELETE FROM silver.filing_tables")
+    write_sections(conn, ACC, parse(HTML, "8-K"))
+    assert set(conn.execute("SELECT parsed_at::date::text, parser_version"
+                            " FROM silver.filing_sections").fetchall()) == {
+        ("2020-01-01", PARSER_VERSION)}
+    assert len(_tables(conn)) == 2
+
+
+def test_a_reparse_with_other_text_replaces_the_rows_and_their_tables(conn):
+    write_sections(conn, ACC, parse(HTML, "8-K"))
+    conn.execute("UPDATE silver.filing_sections SET parsed_at = '2020-01-01',"
+                 " text = text || ' changed' WHERE section_key = '8.01'")
+    write_sections(conn, ACC, parse(HTML, "8-K"))
+    assert conn.execute("SELECT count(*) FROM silver.filing_sections"
+                        " WHERE parsed_at = '2020-01-01'").fetchone() == (0,)
+    assert len(_tables(conn)) == 2
+    # deleting a section deletes its tables
+    conn.execute("DELETE FROM silver.filing_sections WHERE section_key = '9.01'")
+    assert _tables(conn) == []
