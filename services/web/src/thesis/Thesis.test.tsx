@@ -85,6 +85,8 @@ let indexRows: Record<string, unknown>[];
 const NEW_10Q = "0001045810-26-000030";
 const INDEX_ROW = { accession_no: NEW_10Q, company_id: NVDA, name: "Nvidia", form: "10-Q", filed: "2026-11-20", accepted_at: null, period_of_report: "2026-10-25", filing_url: null, document_url: null, sections: null, sections_available: false };
 let asked: Record<string, unknown>[];
+/** agent-api /v1/allowance: what a check costs and takes come from here (finding 22) */
+const ALLOWANCE = { per_hour: 30, network_per_hour: 60, left_this_hour: 28, paused: false, per_day: 1000, left_today: 998, report_questions: 3, check_questions: 4, check_seconds: 120 };
 const sse = (events: object[]) =>
   new Response(events.map((e) => `data: ${JSON.stringify(e)}\n\n`).join(""), { headers: { "Content-Type": "text/event-stream" } });
 
@@ -119,6 +121,7 @@ function respond(url: string, init?: RequestInit): Response {
     return Response.json(body.ytd ? SYNTHETIC["thesis-new"] : n >= 3 ? SYNTHETIC["thesis-3"] : SYNTHETIC["thesis-2"]);
   }
   if (p === "/v1/companies/search") return Response.json({ results: [{ company_id: TSLA, name: "Tesla", matched_on: "ticker", matched_alias: "TSLA", access: ["financials"] }] });
+  if (p === "/api/agent/v1/allowance") return Response.json(ALLOWANCE);
   if (p === "/api/agent/v1/thesis-checks" && method === "POST") {
     asked.push(body);
     if (failCheck) {
@@ -559,6 +562,43 @@ it("checks the saved thesis and shows claims, assumptions, what's not mentioned 
   const history = container.querySelector<HTMLSelectElement>(".check-panel select")!;
   expect([...history.options].map((o) => o.value)).toEqual(["77777777-7777-4777-8777-777777777777", CHECK_ID]);
   expect(container.querySelector(".check-panel")?.textContent).not.toContain("Stale");
+});
+
+it("says what a check costs and takes before it runs, and links claims of the user's own model", async () => {
+  // analyst test 4: the cost and the time were said only afterwards (finding 22); the model's
+  // own $18.75B read "not in the data" (finding 9)
+  recheck = (h) => {
+    const r = checkResult(h);
+    return {
+      ...r,
+      claims: [...r.claims, {
+        quote: "My base case puts FY2027 revenue at $18.75B", quote_found: false, status: "model",
+        explanation: "Matches your model (NVDA model): FY2027E revenue $18.75B. A forecast of yours, so the filings can't support or contradict it.",
+        citations: [], figures: [{ text: "$18.75B", status: "model" }],
+        model: { ref: "model-1", item_id: MODEL_ID, name: "NVDA model", currency: "USD", matches: [
+          { figure: "$18.75B", line: "revenue", fy: 2027, case: "base", kind: "money", value: 18750412800 },
+          { figure: "29x", line: "P/E at your price", fy: 2026, case: "base", kind: "multiple", value: 29.18 }] },
+      }],
+    } as ReturnType<typeof checkResult>;
+  };
+  markdownMode();
+  await render(`#/thesis/${THESIS_ID}`, ".check-cost-inline");
+  // no check yet (no panel): beside the button, in agent-api's numbers
+  expect(container.querySelector(".check-cost-inline")?.textContent).toBe("Uses 4 of your 28 questions · about 2 min");
+  expect(button("Check my thesis").title).toContain(
+    "A check counts as 4 questions (you have 28 left this hour, 998 today) and usually takes about 2 minutes.");
+  await click(button("Check my thesis"));
+  await waitFor(".check-panel .claims");
+  const panel = container.querySelector<HTMLElement>(".check-panel")!;
+  expect(container.querySelector(".check-cost-inline")).toBeNull();
+  expect(panel.querySelector(".check-cost")?.textContent).toContain("A check counts as 4 questions");
+  const mine = [...panel.querySelectorAll<HTMLElement>(".claim")].find((c) => c.querySelector(".status-badge")?.textContent === "Your model")!;
+  expect(mine.classList.contains("model")).toBe(true);
+  expect(mine.querySelector<HTMLAnchorElement>(".check-model-match a")?.getAttribute("href")).toBe(`#/model/${MODEL_ID}`);
+  expect([...mine.querySelectorAll(".check-model-match li")].map((li) => li.textContent)).toEqual([
+    "FY2027E revenue $18.75B", "FY2026E P/E at your price 29.2x (you wrote 29x)"]);
+  // the model's figures aren't "not found in the data"
+  expect(mine.querySelector(".figure.unverified")).toBeNull();
 });
 
 it("offers a re-check after a newer 10-Q, then shows what flipped", async () => {

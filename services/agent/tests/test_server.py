@@ -199,6 +199,8 @@ def test_allowance_says_what_is_left_and_spends_nothing():
     assert body["paused"] is False
     # what a report and a check take, so the page can say; no daily count without the Query API's
     assert (body["report_questions"], body["check_questions"]) == (3, 4)
+    # and how long a check usually takes (analyst test 4, finding 22: said before it starts)
+    assert body["check_seconds"] == 120
     assert (body["per_day"], body["left_today"]) == (None, None)
     assert ask(c).status_code == 200
     assert allowance(c).json()["left_this_hour"] == 2

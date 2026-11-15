@@ -131,8 +131,8 @@ def test_store_list_and_read_checks(world, token):
     assert r.status_code == 201, r.text
     check = r.json()
     assert check["text_hash"] == HASH and check["counts"] == {
-        "supported": 1, "contradicted": 0, "unverifiable": 1, "flagged_assumptions": 1,
-        "not_mentioned": 1, "ok": True}
+        "supported": 1, "contradicted": 0, "unverifiable": 1, "model": 0,
+        "flagged_assumptions": 1, "not_mentioned": 1, "ok": True}
     listed = client.get(f"/v1/workspace-items/{tid}/checks", headers=token("alice")).json()
     assert [c["check_id"] for c in listed["checks"]] == [check["check_id"]]
     assert "result" not in listed["checks"][0]
@@ -234,6 +234,58 @@ def test_results_without_filings_still_validate():
 def test_invalid_filings_are_refused(filings):
     with pytest.raises(StateError):
         validate_check(result(str(uuid.uuid4()), filings=filings))
+
+
+# --- your model (analyst test 4, finding 9) ------------------------------------------------
+
+def model_claim(res: dict, **over) -> dict:
+    """A claim the user's own model gives, as agent thesis_check.assemble writes it."""
+    m = res["assumptions"][0]
+    return {"quote": "My base case puts FY2026 revenue at $18.75B, operating margin 21.0%.",
+            "quote_found": True, "status": "model",
+            "explanation": "Your model gives FY2026E revenue $18.75B.", "citations": [],
+            "figures": [{"text": "$18.75B", "status": "model"}],
+            "model": {"ref": m["ref"], "item_id": m["item_id"], "name": m["name"],
+                      "currency": "USD", "matches": [
+                          {"figure": "$18.75B", "line": "revenue", "fy": 2026, "case": "base",
+                           "kind": "money", "value": 18750412800.0},
+                          {"figure": "21.0%", "line": "operating margin, reported", "fy": 2026,
+                           "case": "base", "kind": "percent", "value": 21.0024}]},
+            **over}
+
+
+def test_a_model_claim_is_stored_and_counted(world, token):
+    """Neither supported nor contradicted, no citation needed; its `model` figures don't make
+    the check's verification fail."""
+    client, checks, tid, _ = world
+    res = result(tid)
+    res["claims"].append(model_claim(res))
+    res["verification"]["figures"].append({"text": "$18.75B", "status": "model"})
+    r = post(client, token, tid, {"result": res})
+    assert r.status_code == 201, r.text
+    assert r.json()["counts"]["model"] == 1 and r.json()["counts"]["ok"] is True
+    stored = checks.rows[0]["result"]["claims"][-1]
+    assert stored["status"] == "model" and stored["model"]["matches"][1]["kind"] == "percent"
+
+
+@pytest.mark.parametrize("change", [
+    lambda c: c.update(model=None),  # a model claim names its model
+    lambda c: c.update(status="supported"),  # and only a model claim does
+    lambda c: c["model"].update(ref="model-2"),  # one the check read
+    lambda c: c["model"].update(item_id=str(uuid.uuid4())),
+    lambda c: c["model"].update(matches=[]),
+    lambda c: c["model"]["matches"][0].update(kind="dollars"),
+    lambda c: c["model"]["matches"][0].update(value=float("inf")),
+    lambda c: c["model"].update(currency="usd"),
+    lambda c: c.update(figures=[{"text": "$18.75B", "status": "mine"}]),
+])
+def test_invalid_model_claims_are_refused(change):
+    res = result(str(uuid.uuid4()))
+    claim = model_claim(res)
+    change(claim)
+    res["claims"].append(claim)
+    with pytest.raises(StateError):
+        validate_check(res)
 
 
 def test_numbers_are_finite():

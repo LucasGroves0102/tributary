@@ -76,6 +76,13 @@ income of July 2025 less April 2018's "verified" a made-up $99.9B). `/v1/search`
 query is never evidence (a searched figure would quote itself); its snippets are filing text,
 read without the « » marks. Every verdict in the recordings is unchanged, so they replay as
 recorded.
+Total debt (analyst test 4): one side of a derived row's inputs, summed at that row's date, also
+verifies, after every other rule (`INPUT_TOTALS`): long-term debt plus its current portion (net
+debt's debts, debt/equity's numerator) and cash plus short-term investments (net debt's cash). A
+filing prints them as separate lines, so Vertiv's "debt $2,928.5M" ($2,925.1M + $3.4M) was "not in
+the data"; any other sum across two metrics (debt plus cash, debt plus equity) still isn't. It runs
+only for a figure rules 1-4 left unverified: every recording replays with a byte-identical
+verification.
 Currencies (F8b): since migration 056 a foreign filer's figures are in its own currency, and
 `get_financials` says so per row (`unit` "EUR", "EUR/shares") and on the answer (`currency`, only
 when not USD). The system prompt still says to write dollars (changing it needs a re-record), so
@@ -123,7 +130,9 @@ requests are unchanged.
 `GET /v1/allowance` says what's left before anything is spent, for the assistant panel's meter:
 `per_hour`, `network_per_hour`, `left_this_hour` (the tighter of the two), `per_day` and
 `left_today` (from the Query API, null where it doesn't count them), `paused` (the day's budget is
-gone) and what a report and a thesis check take. No model call, takes nothing.
+gone), what a report and a thesis check take (`report_questions`, `check_questions`) and how long a
+check usually runs (`check_seconds`, 120: about two minutes in production). The web app says both
+before a check starts from these numbers, never its own copy. No model call, takes nothing.
 
 Limits: questions per hour per user and per client IP (`X-Client-IP`, set by the web proxy from
 Cloudflare's `CF-Connecting-IP`), and a daily model budget across all users. Over a limit → 429.
@@ -196,7 +205,9 @@ result) or an `error` event if it couldn't be saved or the model never submitted
 - **The user's own thesis, read as the user.** `GET /v1/workspace-items/{id}` with the user's
   token: someone else's thesis, a missing one and an item that isn't a thesis are the same 404,
   and nothing is spent; an empty thesis is a 422. The models it embeds (`[[embed:<id>]]` lines
-  naming `model` items of its workspace, first 4) come from `GET /v1/workspaces/{id}`.
+  naming `model` items of its workspace, first 4) come from `GET /v1/workspaces/{id}`; in an
+  analysis project (the workspace's `project`) the project's other models of its company count
+  too, after the embedded ones (`embedded: false` in the data).
 - **Assumptions computed, not written by the model.** For each model, its company's history is
   read as the user (`get_financials`, TTM, 40 quarters: the evidence its figures verify against)
   and the model is **run by the Query API** (`model_stats.run_model`: `POST
@@ -212,7 +223,15 @@ result) or an `error` event if it couldn't be saved or the model never submitted
   it as such; the rates a year leaves at their defaults are listed (`defaulted`: tax rate,
   interest and other, share change, FCF margin) under the same rule. The data also carries the
   TTM run rate (`ttm_growth_pct`, `ttm_margin_pct`), each year's net income, diluted EPS and its
-  growth, share change and FCF margin, and `reported_quarters`: a model built from the current
+  growth, share change and FCF margin, and `reported_quarters`. Since analyst test 4 it also
+  carries what the model page shows, on both bases where the user has one-offs (finding 10:
+  "21.0%" is the reported FY2026 margin, 21.24% the adjusted one, and the check read one against
+  the other): each year's revenue, operating income and margin reported and adjusted, adjusted
+  EPS and net income, FCF and the P/E at the user's price; the TTM column (revenue, reported
+  margin beside the run rate's adjusted one, FCF and its margin); the adjustments and a `basis`
+  note naming which fields are which; the price. `CHECK_RULES` says compare like with like and that
+  a figure matching either basis within the thesis's rounding isn't contradicted (say which). A
+  model built from the current
   year's reported quarters (F2 `ytd`) is checked on its full year, and `CHECK_RULES` says the
   reported part isn't an assumption. If the run fails (no access, or an older Query API during a
   deploy: "the Query API can't run models yet"), that model carries the error and the claims are
@@ -234,11 +253,36 @@ result) or an `error` event if it couldn't be saved or the model never submitted
   say so and cite the event, never compute a figure after it (tester 1's acquisition after the
   quarter end came only from the check; C11).
 - **Only the thesis's companies.** The tools are the chat tools as the user, limited
-  (`report.ScopedTools`) to the thesis's company, its models' companies and companies it names
-  by ticker (`$NVDA`, `(NASDAQ: NVDA)`, bare upper-case tickers outside a stop list; at most 8
-  lookups) that `/v1/me` says the user can read; 12 at most. A CIK, a workspace id or another
+  (`report.ScopedTools`) to the thesis's company, its models' companies, in an analysis project
+  its company and its peers (as the user picked them in the Peers step: a thesis compares with
+  "Eaton 11.9%, nVent 12.1%" by name, and the check called them "not among the companies in scope";
+  analyst test 4, finding 9), and companies it names by ticker (`$NVDA`, `(NASDAQ: NVDA)`, bare
+  upper-case tickers outside a stop list; at most 8 lookups) that `/v1/me` says the user can read;
+  12 at most. Each company reaches the data with its role (thesis, model, project, peer, named),
+  the user's access and its name and tickers (from `/v1/companies/search` by CIK when `/v1/me`
+  doesn't name it, as with the open catalog), so the model finds "Eaton" there. Scope only lets a
+  tool ask: every read is still the user's own Query API call (require() and RLS), so a peer the
+  user can't read is listed with no access and answers 403. A CIK, a workspace id or another
   user's name in the text widens nothing; the tools take no workspace or user. Plus
   `submit_check`, which takes the structured result once.
+- **Your model** (analyst test 4, finding 9). Claims made of the user's own model ("My base case
+  puts FY2027 revenue at $18.75B and diluted EPS at $8.52", "operating margin 21.0%, 22.5% and
+  22.0%", "29x my FY2026E EPS") were "can't verify: not in the data" or "contradicted". A claim
+  is now status `model` when every figure in its quote ($ amounts, percents, multiples) is one the
+  model run shows (`model_claim` over `model_figures`: each saved case's forecast years, reported
+  and adjusted, the current year's reported quarters and remainder, the multiples at the user's
+  price, the price, their adjustments; at the precision written, in the years the quote names)
+  and the claim is about the model (the model said `model`, two or more figures match, it names a
+  forecast year, or it says "my", "model", "base case" and the like). A claim the data supports
+  stays supported (supported, with every dollar figure one the tools returned: a model built on a
+  reported quarter or the guidance shows the same numbers). A `model` claim needs no citation,
+  carries `model` {ref, item_id, name, currency, matches[] {figure, line, fy, case, kind, value}}
+  for the web app's link, and its explanation and citations are replaced unless the model wrote
+  `model` itself ("21.24%, not 21.0%" read the other basis, citing the 10-Q for it). A claim the model calls `model` whose figures aren't
+  the model's is unverifiable with a note naming them. A dollar figure the tools didn't return but
+  the model run did (to at least three significant digits: "$3.0B" is within rounding of too many
+  of ~150 amounts) is a `model` figure, not "not in the data". TTM free cash flow is in the
+  prefetch now (`model_stats.HISTORY_METRICS`), so the model page's $3.15B verifies.
 - **Every claim cited, every figure verified.** Each citation is checked against the filings the
   tools returned (form, date, EDGAR URL, section, the newest `as_of` of the results that held
   it); one the tools never returned is kept but flagged and listed. Every explanation,
@@ -272,7 +316,9 @@ result) or an `error` event if it couldn't be saved or the model never submitted
   index answer is never a tool result: it reaches neither the model nor the evidence, so it
   can't verify a citation. The web app offers a re-check when the index later has a newer
   10-K/10-Q than `latest`.
-- **Counts as 4 questions** (`CHECK_QUESTIONS`) against every limit, like a report's 3: a check
+- **Counts as 4 questions** (`CHECK_QUESTIONS`) against every limit, like a report's 3, and
+  usually takes about two minutes (`CHECK_SECONDS`); `/v1/allowance` says both so the web app
+  shows them before a check starts (analyst test 4, finding 22). A check
   runs up to 16 tool rounds (`CHECK_ROUNDS`), about 4 rounds per question as reports (12 rounds,
   3 questions); refused with a message saying so when it doesn't fit. A check that saved
   nothing counts, unless it failed in one of the two ways that are given back (see the limits
@@ -288,14 +334,17 @@ result) or an `error` event if it couldn't be saved or the model never submitted
 
 Result shape (`query_api.thesis_checks.CheckResult`): `thesis` (item, title, company,
 `text_hash`, characters checked, truncated), `summary`, `claims[]` (`quote`, `quote_found`,
-`status`, `explanation`, `citations[]` {accession, form, filed, company, url, section_key,
-figure, figure_status, as_of, verified}, `figures[]`, `downgraded`), `assumptions[]` (per model:
+`status` (supported, contradicted, unverifiable, model), `explanation`, `citations[]`
+{accession, form, filed, company, url, section_key, figure, figure_status, as_of, verified},
+`figures[]` (status verified, derived, quoted, unverified or model), `downgraded`, `model` (a
+`model` claim's), `filing_figures`), `assumptions[]` (per model:
 `stats`, `margin_min`/`max`, `years[]` {fy, growth, margin, growth_vs_cagr, growth_flag,
 margin_flag, commentary, citations, figures}, or `error`), `not_mentioned[]`, `notes[]`,
 `citations[]`, `verification`, `as_of`, `checked_at`, `model`, `questions`, `stop`, `rounds`,
 `usage`, `cost_usd`, `filings[]` {company_id, latest, evidence: {accession, form, filed} or
 null} (added for Revisit; optional, `version` stays 1, so checks stored before it still read).
-The Query API validates `filings` first, so deploy it before (or with) agent-api.
+The Query API validates `filings` and the `model` status first, so deploy it before (or with)
+agent-api.
 
 ## Run
 

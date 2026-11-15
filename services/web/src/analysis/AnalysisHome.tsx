@@ -189,6 +189,7 @@ export function AnalysisHome({ token, saved, readable, label, start }: Props) {
                         <span className="tag q">{last.counts.supported} {STATUS_LABELS.supported.toLowerCase()}</span>{" "}
                         <span className={last.counts.contradicted ? "tag warn" : "tag"}>{last.counts.contradicted} {STATUS_LABELS.contradicted.toLowerCase()}</span>{" "}
                         <span className="tag">{last.counts.unverifiable} {STATUS_LABELS.unverifiable.toLowerCase()}</span>
+                        {!!last.counts.model && <>{" "}<span className="tag">{last.counts.model} {STATUS_LABELS.model.toLowerCase()}</span></>}
                       </span>
                     )}
                     {fresh && <span className="tag e" title="Re-check the thesis against it">new {fresh.form} {day(fresh.filed)}</span>}

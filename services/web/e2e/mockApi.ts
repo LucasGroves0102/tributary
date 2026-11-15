@@ -96,6 +96,32 @@ export interface Fake {
   views: Record<string, unknown>;
   /** bodies of POST /api/agent/v1/reports */
   reports: Record<string, unknown>[];
+  /** what the next thesis check returns (agent-api's result shape); stored checks by thesis */
+  checkResult: ((itemId: string) => Record<string, unknown>) | null;
+  checks: Map<string, Record<string, unknown>[]>;
+}
+
+/** A thesis check as agent-api stores it: one supported claim and one of the user's own model. */
+export function thesisCheckResult(itemId: string, modelId = "m1"): Record<string, unknown> {
+  const acc = `${PEP}-26-000040`;
+  const cite = { accession_no: acc, form: "10-Q", filed: "2026-07-30", company_id: PEP, url: "https://www.sec.gov/Archives/edgar/data/77476/x.htm", section_key: "I-2", figure: "$91.9B", figure_status: "verified", as_of: "2026-10-21T08:00:00+00:00", verified: true };
+  return {
+    version: 1,
+    thesis: { item_id: itemId, title: "PepsiCo thesis", company_id: PEP, text_hash: "0".repeat(64), characters: 100, characters_checked: 100, truncated: false },
+    summary: "Revenue checks out; the FY2027 figures are your model's.",
+    claims: [
+      { quote: "Revenue was $91.9B over the last twelve months.", quote_found: true, status: "supported", explanation: "The 10-Q's quarters sum to $91.9B.", citations: [cite], figures: [{ text: "$91.9B", status: "verified" }] },
+      { quote: "My base case puts FY2027 revenue at $99.9B.", quote_found: true, status: "model",
+        explanation: "Matches your model (PEP model): FY2027E revenue $99.9B. A forecast of yours, so the filings can't support or contradict it.",
+        citations: [], figures: [{ text: "$99.9B", status: "model" }],
+        model: { ref: "model-1", item_id: modelId, name: "PEP model", currency: "USD", matches: [{ figure: "$99.9B", line: "revenue", fy: 2027, case: "base", kind: "money", value: 99.9e9 }] } },
+    ],
+    assumptions: [], not_mentioned: [], notes: [],
+    citations: [{ accession_no: acc, form: "10-Q", filed: "2026-07-30", company_id: PEP, url: null, sections: ["I-2"] }],
+    verification: { ok: true, figures: [{ text: "$91.9B", status: "verified" }, { text: "$99.9B", status: "model" }], unverified_accessions: [], used_data: true, freshness: true },
+    as_of: "2026-10-21T08:00:00+00:00", checked_at: "2026-10-21T12:00:00+00:00", model: "mock", questions: 4, stop: "end_turn", rounds: 3, cost_usd: null,
+    filings: [],
+  };
 }
 
 /** The report the mocked agent writes: every saved item embedded, one figure it can't verify. */
@@ -118,7 +144,7 @@ function reportState(workspaceId: string, items: Record<string, unknown>[]) {
 }
 
 export async function mockApi(page: Page): Promise<Fake> {
-  const fake: Fake = { watched: new Set([NVDA, PEP]), calls: [], workspaces: [], items: new Map(), asked: [], views: {}, reports: [] };
+  const fake: Fake = { watched: new Set([NVDA, PEP]), calls: [], workspaces: [], items: new Map(), asked: [], views: {}, reports: [], checkResult: null, checks: new Map() };
   let seq = 0;
   const now = () => new Date(Date.UTC(2026, 9, 21, 12, 0, seq++)).toISOString();
 
@@ -172,8 +198,39 @@ export async function mockApi(page: Page): Promise<Fake> {
       });
     }
 
+    if (u.pathname === "/api/agent/v1/thesis-checks" && method === "POST") {
+      // agent-api's check: a lookup, the saved check, done (thesis_check.py)
+      const result = (fake.checkResult ?? thesisCheckResult)(body.item_id);
+      const claims = result.claims as { status: string }[];
+      const count = (s: string) => claims.filter((c) => c.status === s).length;
+      const check = {
+        check_id: `c${++seq}`, item_id: body.item_id, text_hash: (result.thesis as { text_hash: string }).text_hash, model: "mock", cost_usd: null, created_at: now(),
+        counts: { supported: count("supported"), contradicted: count("contradicted"), unverifiable: count("unverifiable"), model: count("model"), flagged_assumptions: 0, not_mentioned: 0, ok: true },
+        company_id: PEP, checked_at: result.checked_at, filings: [],
+      };
+      fake.checks.set(body.item_id, [{ ...check, result }, ...(fake.checks.get(body.item_id) ?? [])]);
+      const events = [
+        { type: "tool", round: 0, name: "get_financials", input: { company_id: PEP }, is_error: false },
+        { type: "check", check, result },
+        { type: "done", answer: {} },
+      ];
+      return route.fulfill({
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+        body: events.map((e) => `data: ${JSON.stringify(e)}\n\n`).join(""),
+      });
+    }
+
     const path = u.pathname.replace(/^\/api\/query/, "");
     const q = u.searchParams;
+
+    let c = path.match(/^\/v1\/workspace-items\/([^/]+)\/checks$/);
+    if (c) return json({ item_id: c[1], checks: (fake.checks.get(c[1]!) ?? []).map(({ result: _r, ...s }) => s) });
+    c = path.match(/^\/v1\/workspace-items\/([^/]+)\/checks\/([^/]+)$/);
+    if (c) {
+      const one = (fake.checks.get(c[1]!) ?? []).find((x) => x.check_id === c![2]);
+      return one ? json(one) : json({ detail: "check not found" }, 404);
+    }
 
     if (path === "/v1/views" && method === "GET") {
       return json({
@@ -402,7 +459,7 @@ export async function mockApi(page: Page): Promise<Fake> {
     m = path.match(/^\/v1\/companies\/(\d{10})\/expected-filings$/);
     if (m) return json({ company_id: m[1], as_of: "", method: "", expected: [] });
     if (u.pathname === "/api/agent/v1/allowance") {
-      return json({ per_hour: 30, left_this_hour: 30, per_day: 100, left_today: 100, network_per_hour: 60, report_questions: 3, check_questions: 4, paused: false });
+      return json({ per_hour: 30, left_this_hour: 30, per_day: 100, left_today: 100, network_per_hour: 60, report_questions: 3, check_questions: 4, check_seconds: 120, paused: false });
     }
 
     return json({ detail: "not found in the e2e mock" }, 404);

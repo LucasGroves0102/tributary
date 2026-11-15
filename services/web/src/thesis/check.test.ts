@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { asCitations, clearHighlights, findQuote, highlightQuote, normalize, plainQuote, points, textHash } from "./check";
+import { asCitations, checkCost, clearHighlights, clock, findQuote, highlightQuote, matchLabel, matchValue, normalize, plainQuote, points, STATUS_LABELS, textHash, wroteOtherwise } from "./check";
 
 describe("plainQuote", () => {
   it.each([
@@ -60,6 +60,34 @@ describe("highlightQuote", () => {
     highlightQuote(root, "<b>tag</b>");
     expect(root.querySelector("b")).toBeNull();
     expect(root.querySelector("mark")?.textContent).toBe("<b>tag</b>");
+  });
+});
+
+describe("cost, time and the user's model", () => {
+  const a = { per_hour: 30, network_per_hour: 60, left_this_hour: 28, paused: false, per_day: null, left_today: null, report_questions: 3, check_questions: 4 };
+  it("says the server's numbers, and none without them", () => {
+    expect(checkCost({ ...a, check_seconds: 130 })).toBe("A check counts as 4 questions (you have 28 left this hour) and usually takes about 2 minutes.");
+    expect(checkCost({ ...a, check_questions: 5, check_seconds: 50 })).toBe("A check counts as 5 questions (you have 28 left this hour) and usually takes about 1 minute.");
+    expect(checkCost(a)).toBe("A check counts as 4 questions (you have 28 left this hour)."); // an older agent-api
+    expect(checkCost(null)).not.toMatch(/\d/);
+    expect(clock(0)).toBe("0:00");
+    expect(clock(130.6)).toBe("2:10");
+  });
+  it("writes a model's figure as the model page does", () => {
+    const m = { figure: "x", line: "revenue", fy: 2027, case: "base" as const, kind: "money" as const, value: 18750412800 };
+    expect([matchLabel(m), matchValue(m)]).toEqual(["FY2027E revenue", "$18.75B"]);
+    expect(matchValue({ ...m, value: 8.5159 })).toBe("$8.52"); // per share, to the cent
+    expect(matchValue({ ...m, value: 2.1e9 }, "EUR")).toBe("€2.10B");
+    expect(matchValue({ ...m, kind: "percent", value: 21.0024 })).toBe("21.0%");
+    expect(matchValue({ ...m, kind: "multiple", value: 29.18 })).toBe("29.2x");
+    expect(matchLabel({ ...m, fy: null, line: "your price" })).toBe("your price");
+    expect(STATUS_LABELS.model).toBe("Your model");
+    // said only when the thesis's rounding reads differently from the model's figure
+    expect(wroteOtherwise({ ...m, figure: "$18.75B" })).toBeNull();
+    expect(wroteOtherwise({ ...m, figure: "$18.8B" })).toBe("$18.8B");
+    expect(wroteOtherwise({ ...m, figure: "$185", value: 185 })).toBeNull();
+    expect(wroteOtherwise({ ...m, kind: "multiple", figure: "29x", value: 29.18 })).toBe("29x");
+    expect(wroteOtherwise({ ...m, kind: "percent", figure: "21.0%", value: 21.0024 })).toBeNull();
   });
 });
 

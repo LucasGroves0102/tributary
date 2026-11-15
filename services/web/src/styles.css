@@ -4733,6 +4733,33 @@ button.link.num {
   background: var(--panel-2);
 }
 
+/* the user's own model: a forecast, neither a verdict nor a gap (analyst test 4) */
+.status-badge.model {
+  color: var(--text);
+  background: var(--panel);
+  border-style: dashed;
+}
+
+.check-model-match {
+  display: grid;
+  gap: var(--sp-1);
+  padding-left: var(--sp-5);
+  border-left: 2px solid var(--line-2);
+}
+
+.check-model-match ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-6);
+}
+
+.check-cost {
+  margin: 0 0 var(--sp-4);
+}
+
 .claim-quote {
   font: inherit;
   font-style: italic;

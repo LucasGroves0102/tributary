@@ -489,3 +489,29 @@ test("a company reporting in euros: labelled everywhere, never ranked or average
   await expect(page.locator("td[title*='in another currency']").first()).toBeAttached();
   await page.screenshot({ path: test.info().outputPath("euro-compare.png"), fullPage: true });
 });
+
+test("a thesis check says what it costs before it runs, and links a claim of the user's own model", async ({ page }) => {
+  // analyst test 4: the cost and time were said only afterwards (finding 22); the user's own
+  // model's figures read "not in the data" (finding 9)
+  const fake = await mockApi(page);
+  fake.workspaces.push({ workspace_id: "w1", name: "Beverages", created_at: "2026-10-21T00:00:00Z", updated_at: "2026-10-21T00:00:00Z" });
+  fake.items.set("t1", {
+    item_id: "t1", workspace_id: "w1", kind: "thesis", name: "PepsiCo thesis", created_at: "2026-10-21T00:00:00Z",
+    updated_at: "2026-10-21T00:00:00Z", opened_at: null,
+    state: { companyId: PEP, markdown: "# PepsiCo\n\nRevenue was $91.9B over the last twelve months.\n\nMy base case puts FY2027 revenue at $99.9B.\n" },
+  });
+  await startDemo(page);
+  await page.goto("/#/thesis/t1");
+  // agent-api's numbers (/v1/allowance), beside the button before anything runs
+  await expect(page.locator(".check-cost-inline")).toHaveText("Uses 4 of your 30 questions · about 2 min");
+  const check = page.getByRole("button", { name: "Check my thesis" });
+  await expect(check).toHaveAttribute("title", /A check counts as 4 questions \(you have 30 left this hour, 100 today\) and usually takes about 2 minutes\./);
+  await check.click();
+  const mine = page.locator(".claim.model");
+  await expect(mine.locator(".status-badge")).toHaveText("Your model");
+  await expect(mine.locator(".check-model-match a")).toHaveAttribute("href", "#/model/m1");
+  await expect(mine.locator(".check-model-match li")).toHaveText("FY2027E revenue $99.90B");
+  await expect(page.locator(".check-panel .badge.ok")).toHaveText("✓ Every figure and filing traced to data the assistant read or to your model");
+  await expect(page.locator(".check-panel .check-cost")).toContainText("A check counts as 4 questions");
+  await expect(page.locator(".check-cost-inline")).toHaveCount(0);
+});

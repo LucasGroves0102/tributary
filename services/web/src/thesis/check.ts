@@ -3,13 +3,62 @@
  * through markdown.ts `renderAnswer` (DOMPurify; accession numbers link only when a tool
  * returned them, unverified figures are marked) and quotes are matched as plain text. */
 
-import type { CheckCitation, CheckFigure, Citation, ClaimStatus, ThesisCheckResult } from "../types";
+import { leftText, tightest } from "../assistant/useAllowance";
+import { money } from "../format";
+import type { Allowance, CheckCitation, CheckFigure, Citation, ClaimStatus, ModelMatch, ThesisCheckResult } from "../types";
 
 export const STATUS_LABELS: Record<ClaimStatus, string> = {
   supported: "Supported",
   contradicted: "Contradicted",
   unverifiable: "Can't verify",
+  model: "Your model",
 };
+
+/** What a check costs and how long it usually takes, said before it starts (analyst test 4,
+ * finding 22), in agent-api's numbers (`/v1/allowance` check_questions, check_seconds): never a
+ * second copy here. Without the allowance it says no number. */
+export function checkCost(a: Allowance | null): string {
+  if (!a) return "A check uses several of your assistant questions and takes a few minutes.";
+  const minutes = a.check_seconds ? Math.max(1, Math.round(a.check_seconds / 60)) : null;
+  const time = minutes ? ` and usually takes about ${minutes} minute${minutes === 1 ? "" : "s"}` : "";
+  return `A check counts as ${a.check_questions} questions (you have ${leftText(a)})${time}.`;
+}
+
+/** The same, short, beside the button while no check panel shows: "Uses 4 of your 28 questions ·
+ * about 2 min" (the tighter of the hour's and the day's allowance). Null without the allowance. */
+export function checkCostShort(a: Allowance | null): string | null {
+  if (!a) return null;
+  const minutes = a.check_seconds ? Math.max(1, Math.round(a.check_seconds / 60)) : null;
+  return `Uses ${a.check_questions} of your ${tightest(a).left} questions${minutes ? ` · about ${minutes} min` : ""}`;
+}
+
+/** "0:42" */
+export function clock(seconds: number): string {
+  const s = Math.max(0, Math.floor(seconds));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
+/** A `model` claim's figure as the model shows it: "FY2027E revenue", "$18.75B" (money in the
+ * model's currency, per-share amounts to the cent), "21.0%", "29.2x". */
+export function matchLabel(m: ModelMatch): string {
+  return `${m.fy ? `FY${m.fy}E ` : ""}${m.line}`;
+}
+
+export function matchValue(m: ModelMatch, currency = "USD"): string {
+  if (m.kind === "percent") return `${m.value.toFixed(1)}%`;
+  if (m.kind === "multiple") return `${m.value.toFixed(1)}x`;
+  return money(m.value, Math.abs(m.value) < 1000 ? `${currency}/shares` : currency);
+}
+
+/** The figure as the thesis wrote it, when that reads differently from the model's ("29x" for
+ * 29.2x); null when it is the same number written another way ("$99.9B" for $99.90B). */
+export function wroteOtherwise(m: ModelMatch, currency = "USD"): string | null {
+  const parts = (s: string) => {
+    const x = s.match(/([\d,]+(?:\.\d+)?)\s*([A-Za-z%]*)/);
+    return x ? `${Number(x[1]!.replace(/,/g, ""))}${x[2]!.toLowerCase()}` : s;
+  };
+  return parts(m.figure) === parts(matchValue(m, currency)) ? null : m.figure;
+}
 
 /** What the stale notice compares (agent-api thesis_check.text_hash): SHA-256 of the company
  * id (or nothing), a newline and the Markdown, as UTF-8, in hex. */

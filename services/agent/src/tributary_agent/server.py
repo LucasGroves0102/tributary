@@ -31,7 +31,7 @@ from tributary_agent.report import (
     ReportError,
 )
 from tributary_agent.telemetry import record_answer, record_error
-from tributary_agent.thesis_check import CHECK_QUESTIONS, Checker, check_agent
+from tributary_agent.thesis_check import CHECK_QUESTIONS, CHECK_SECONDS, Checker, check_agent
 from tributary_agent.tools import MetricTools, QueryApi
 from tributary_agent.ui import UiActions, UiContext
 from tributary_telemetry import configure_logging
@@ -365,9 +365,11 @@ def create_app(make_agent: Callable[[str], Agent], who_is: Callable[[str], str],
                   ip: Annotated[str, Depends(client_ip)]) -> dict:
         """The caller's questions left, before spending any: per hour here, per day from the
         Query API (null where it doesn't count them), and what a report and a thesis check
-        take. Takes nothing and costs no model call."""
+        take, and how long a check usually runs (the web app says both before one starts).
+        Takes nothing and costs no model call."""
         return {**limits.left(who_is(tok), ip), **daily_count(tok),
-                "report_questions": REPORT_QUESTIONS, "check_questions": CHECK_QUESTIONS}
+                "report_questions": REPORT_QUESTIONS, "check_questions": CHECK_QUESTIONS,
+                "check_seconds": CHECK_SECONDS}
 
     @app.post("/v1/ask")
     def ask(body: AskRequest, tok: Annotated[str, Depends(token)],

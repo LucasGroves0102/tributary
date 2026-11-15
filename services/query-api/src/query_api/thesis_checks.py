@@ -23,6 +23,13 @@ records per company in the check's scope the newest 10-K/10-Q in the SEC index w
 ran (`latest`) and the newest filing the result's verified citations rely on (`evidence`,
 which must be one of those citations). `version` stays 1: the field is additive.
 
+Your model (analyst test 4, finding 9): a claim whose figures are all the user's own model's
+(agent `thesis_check.model_claim`) has status `model` and `model` (which model, each figure
+matched with its line, year, case and value); it needs no citation, never counts as supported,
+and must name one of the result's checked models. A figure the tools didn't return but the user's
+model run did has status `model` (`CheckFigure`), which doesn't make `ok` false. Additive like
+Revisit: results stored before it validate and read as they were.
+
 Owner-only in both layers like every saved item: statements filter on the JWT `sub` and the
 table's row-level security is FORCEd on `app.user_id`. A check grants nothing: it holds what
 the agent wrote from data the user could read, and filing citations."""
@@ -44,7 +51,6 @@ from query_api.reports import (
     SECTION_KEY,
     TIMESTAMP,
     ReportCitation,
-    ReportFigure,
 )
 from query_api.workspaces import CIK, ISO_DATE, ITEM_NAME, StateError, clean_name
 
@@ -69,6 +75,16 @@ def _text(limit: int, min_length: int = 0) -> Any:
     return Field(min_length=min_length, max_length=limit)
 
 
+FigureStatus = Literal["verified", "derived", "quoted", "unverified", "model"]
+
+
+class CheckFigure(_Strict):
+    """A figure the check wrote, through the agent's verify.py: a report's statuses, plus
+    `model` (not in what the tools returned, but one of the user's own model's)."""
+    text: str = Field(max_length=60)
+    status: FigureStatus
+
+
 class CheckCitation(_Strict):
     """A filing cited for a claim, assumption or point: what the agent's tools returned for
     it (form, filed, company, EDGAR URL), the section and figure the model pointed at, and the
@@ -80,7 +96,7 @@ class CheckCitation(_Strict):
     url: str | None = Field(default=None, max_length=300, pattern=r"^https://www\.sec\.gov/")
     section_key: str | None = Field(default=None, pattern=SECTION_KEY)
     figure: str | None = Field(default=None, max_length=60)
-    figure_status: Literal["verified", "derived", "quoted", "unverified"] | None = None
+    figure_status: FigureStatus | None = None
     as_of: str | None = Field(default=None, pattern=TIMESTAMP)
     verified: bool
 
@@ -102,19 +118,47 @@ class FilingFigure(_Strict):
     agrees: bool
 
 
+class ModelMatch(_Strict):
+    """One figure of a `model` claim: as the thesis writes it, and the model's own figure it
+    matches (money in the model's currency, a percent as a percent, a multiple as times)."""
+    figure: str = Field(min_length=1, max_length=60)
+    line: str = Field(min_length=1, max_length=80)
+    fy: int | None = Field(default=None, ge=1, le=9999)
+    case: Literal["base", "bear", "bull"] = "base"
+    kind: Literal["money", "percent", "multiple"]
+    value: Num
+
+
+class ClaimModel(_Strict):
+    """Which of the result's checked models a `model` claim matches (the web app links it)."""
+    ref: str = Field(pattern=r"^model-[1-9]$")
+    item_id: str = Field(pattern=UUID_RE)
+    name: str = Field(max_length=4 * ITEM_NAME)
+    currency: str = Field(default="USD", pattern=r"^[A-Z]{3}$")
+    matches: list[ModelMatch] = Field(min_length=1, max_length=12)
+
+    @field_validator("name")
+    @classmethod
+    def _name(cls, v: str) -> str:
+        return clean_name(v, ITEM_NAME)
+
+
 class Claim(_Strict):
     quote: str = _text(600, 1)
     quote_found: bool  # the quote appears in the thesis text (the web app highlights it)
-    status: Literal["supported", "contradicted", "unverifiable"]
+    status: Literal["supported", "contradicted", "unverifiable", "model"]
     explanation: str = _text(2000)
     citations: list[CheckCitation] = Field(default=[], max_length=8)
-    figures: list[ReportFigure] = Field(default=[], max_length=40)
+    figures: list[CheckFigure] = Field(default=[], max_length=40)
     downgraded: bool = False  # the model said supported/contradicted without a usable citation
     filing_figures: list[FilingFigure] = Field(default=[], max_length=8)
+    model: ClaimModel | None = None  # status model: the user's own model gives its figures
 
     @model_validator(mode="after")
     def _evidence(self) -> "Claim":
-        if self.status != "unverifiable" and not _cited(self.citations):
+        if (self.status == "model") != (self.model is not None):
+            raise ValueError("a model claim, and only one, names the model it matches")
+        if self.status not in ("unverifiable", "model") and not _cited(self.citations):
             raise ValueError("a supported or contradicted claim cites a filing the tools "
                              "returned")
         # supported certifies the claim's numbers (agent thesis_check.assemble downgrades
@@ -148,7 +192,7 @@ class AssumptionYear(_Strict):
     margin_flag: Flag = None
     commentary: str = _text(1500)
     citations: list[CheckCitation] = Field(default=[], max_length=6)
-    figures: list[ReportFigure] = Field(default=[], max_length=20)
+    figures: list[CheckFigure] = Field(default=[], max_length=20)
 
 
 class ModelCheck(_Strict):
@@ -172,7 +216,7 @@ class ModelCheck(_Strict):
 class NotMentioned(_Strict):
     point: str = _text(1500, 1)
     citations: list[CheckCitation] = Field(min_length=1, max_length=6)
-    figures: list[ReportFigure] = Field(default=[], max_length=20)
+    figures: list[CheckFigure] = Field(default=[], max_length=20)
 
     @model_validator(mode="after")
     def _evidence(self) -> "NotMentioned":
@@ -183,7 +227,7 @@ class NotMentioned(_Strict):
 
 class CheckVerification(_Strict):
     ok: bool = False
-    figures: list[ReportFigure] = Field(default=[], max_length=400)
+    figures: list[CheckFigure] = Field(default=[], max_length=400)
     unverified_accessions: list[Annotated[str, Field(pattern=ACCESSION)]] = Field(
         default=[], max_length=50)
     used_data: bool = False
@@ -268,13 +312,18 @@ class CheckResult(_Strict):
         for f in self.filings:
             if f.evidence and (f.company_id, f.evidence.accession_no) not in cited:
                 raise ValueError("filings evidence is not a verified citation of the check")
+        checked = {(m.ref, m.item_id) for m in self.assumptions}
+        if any(c.model is not None and (c.model.ref, c.model.item_id) not in checked
+               for c in self.claims):
+            raise ValueError("a model claim names a model the check didn't read")
         return self
 
 
 def counts(result: dict) -> dict:
-    """What the history list shows of a check, without its result."""
+    """What the history list shows of a check, without its result (`model` since analyst test
+    4; counts stored before it have none: read as 0)."""
     by = {s: sum(c["status"] == s for c in result["claims"])
-          for s in ("supported", "contradicted", "unverifiable")}
+          for s in ("supported", "contradicted", "unverifiable", "model")}
     flagged = sum(1 for m in result["assumptions"] for y in m.get("years", [])
                   if y.get("growth_flag") or y.get("margin_flag"))
     return {**by, "flagged_assumptions": flagged, "not_mentioned": len(result["not_mentioned"]),

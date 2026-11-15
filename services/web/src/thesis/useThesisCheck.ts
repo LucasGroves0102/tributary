@@ -12,7 +12,7 @@ export interface ThesisChecks {
   /** the check just older than `shown` in the history, once read; null if none */
   previous: ThesisCheck | null;
   /** refunded: the questions given back because the check saved nothing */
-  run: { status: "idle" } | { status: "running"; tools: number } | { status: "error"; message: string; refunded?: number };
+  run: { status: "idle" } | { status: "running"; tools: number; /** Date.now() when it started (the panel counts the time) */ started: number } | { status: "error"; message: string; refunded?: number };
   loading: boolean;
   start: () => void;
   stop: () => void;
@@ -70,7 +70,7 @@ export function useThesisCheck(token: string, itemId: string | null): ThesisChec
     if (!itemId || run.status === "running") return;
     const ctl = new AbortController();
     abort.current = ctl;
-    setRun({ status: "running", tools: 0 });
+    setRun({ status: "running", tools: 0, started: Date.now() });
     let finished = false;
     const onEvent = (e: AgentEvent) => {
       if (!live.current) return;

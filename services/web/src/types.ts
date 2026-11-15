@@ -68,6 +68,8 @@ export interface Allowance {
   left_today: number | null;
   report_questions: number;
   check_questions: number;
+  /** how long a thesis check usually runs, in seconds (absent from older agent-apis) */
+  check_seconds?: number;
 }
 
 /** GET /v1/auth/providers: which sign-in buttons to show. */
@@ -230,9 +232,31 @@ export type WrittenKind = "thesis" | "model";
 export type ItemKind = SavedKind | WrittenKind | "report";
 
 /** "Check my thesis" (agent-api thesis_check.py; stored by the Query API, thesis_checks.py,
- * app DB 010). Numbers in `stats` are ratios; a year's growth and margin are percent as typed. */
-export type ClaimStatus = "supported" | "contradicted" | "unverifiable";
-export type FigureStatus = "verified" | "derived" | "quoted" | "unverified";
+ * app DB 010). Numbers in `stats` are ratios; a year's growth and margin are percent as typed.
+ * `model` (analyst test 4): a claim made of the user's own model's figures, a forecast neither
+ * supported nor contradicted; a figure the tools didn't return but the user's model run did. */
+export type ClaimStatus = "supported" | "contradicted" | "unverifiable" | "model";
+export type FigureStatus = "verified" | "derived" | "quoted" | "unverified" | "model";
+
+/** One figure of a `model` claim: as the thesis writes it, and the model's own (money in the
+ * model's currency, a percent as a percent, a multiple as times). */
+export interface ModelMatch {
+  figure: string;
+  line: string;
+  fy: number | null;
+  case: "base" | "bear" | "bull";
+  kind: "money" | "percent" | "multiple";
+  value: number;
+}
+
+/** The checked model a `model` claim matches (one of the result's `assumptions`). */
+export interface ClaimModel {
+  ref: string;
+  item_id: string;
+  name: string;
+  currency: string;
+  matches: ModelMatch[];
+}
 
 export interface CheckFigure {
   text: string;
@@ -263,6 +287,8 @@ export interface CheckClaim {
   figures: CheckFigure[];
   /** the model said supported/contradicted without a citation of data it read */
   downgraded?: boolean;
+  /** status model: which of the user's models gives its figures */
+  model?: ClaimModel | null;
 }
 
 export type CheckFlag = "above" | "below" | null;
@@ -360,6 +386,8 @@ export interface ThesisCheckSummary {
     supported: number;
     contradicted: number;
     unverifiable: number;
+    /** claims of the user's own model; absent from checks stored before it (read as 0) */
+    model?: number;
     flagged_assumptions: number;
     not_mentioned: number;
     ok: boolean;
