@@ -699,7 +699,11 @@ fn tables_of_an_exhibit_and_hidden_ones() {
 
 #[test]
 fn tables_on_real_filings() {
-    for (name, form, least) in [("10-K", "10-K", 600), ("10-Q", "10-Q", 300), ("8-K", "8-K", 6)] {
+    for (name, form, least) in [
+        ("10-K", "10-K", 600),
+        ("10-Q", "10-Q", 300),
+        ("8-K", "8-K", 6),
+    ] {
         let raw = fixture(name);
         let sections = parse(&raw, form).unwrap();
         let text = html_to_text(&raw).unwrap();
@@ -707,7 +711,10 @@ fn tables_on_real_filings() {
         assert_eq!(sections.len(), plain.len());
         let mut rows = 0;
         for (s, p) in sections.iter().zip(&plain) {
-            assert_eq!((&s.key, &s.text, s.char_start), (&p.key, &p.text, p.char_start));
+            assert_eq!(
+                (&s.key, &s.text, s.char_start),
+                (&p.key, &p.text, p.char_start)
+            );
             let mut last = 0;
             for t in &s.tables {
                 assert!(last <= t.start && t.start < t.end && t.rows.len() >= 2);
