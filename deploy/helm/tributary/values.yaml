@@ -460,6 +460,46 @@ jobs:
     env:
       SECTION_INDEX_LIMIT: "20000"
       SECTION_INDEX_BATCH: "25"
+  # Search passages without page furniture (migration 068): rebuilds only the passages of filings
+  # indexed before it (parser-index --passages: no diffs, no checkpoint change, the same lock as
+  # section-index, so one waits for the other). By hand, repeated until it logs "complete"
+  # (services/parser README "Search without page furniture"; runbook-parser-v7.md):
+  # kubectl -n tributary create job --from=cronjob/section-passages section-passages-1
+  section-passages:
+    image: parser
+    command: [parser-index, --passages]
+    schedule: "0 7 1 1 *"
+    suspend: true
+    timeoutSeconds: 14400
+    uses: [postgres]
+    resources:
+      requests:
+        cpu: 250m
+        memory: 256Mi
+      limits:
+        memory: 768Mi
+    env:
+      SECTION_INDEX_LIMIT: "100000"
+      SECTION_INDEX_BATCH: "50"
+  # Re-parse every stored document with the deployed parser (parser --reparse-all, parser-rs: oldest
+  # filing first, no Kafka). Parser v7 (rule 11, tables): a document whose sections come out the
+  # same keeps its rows and parsed_at (search and diffs untouched) and gains its tables; one whose
+  # sections change (rules 2, 9, 10 since its last parse) is replaced and re-indexed by
+  # section-index. By hand, once per parser version that needs it (runbook-parser-v7.md):
+  # kubectl -n tributary create job --from=cronjob/parser-reparse parser-reparse-1
+  parser-reparse:
+    image: parser-rs
+    command: [parser, --reparse-all]
+    schedule: "0 8 1 1 *"
+    suspend: true
+    timeoutSeconds: 172800
+    uses: [postgres]
+    resources:
+      requests:
+        cpu: 500m
+        memory: 192Mi
+      limits:
+        memory: 768Mi
   # Peers by business (parser-peers, migration 047): reads each company's latest 10-K Item 1
   # twice (~250 MB of text, ~6 s each on hermes), compares them as term vectors and replaces
   # gold.business_profiles / business_peers / business_mentions in one transaction (60 MB). No

@@ -21,10 +21,10 @@
 -- foreign key cascades). A document parsed before v7 has no rows here until it is parsed again; a
 -- reader falls back to the text (releases: the lines as before).
 --
--- Size, measured on 300 stored documents and exhibits sampled from hermes (2026-11-15): the tables'
--- JSON is about 37% of the 10-K and 10-Q section text, 28% of 8-K items' and 54% of exhibits'; 44%
--- of tables have one row (bullets and layout) and aren't kept. All stored filings: about 15 GB of
--- JSON before TOAST compression (parser README "Parser v7").
+-- Size, measured on 205 stored documents and 130 exhibits sampled from hermes (2026-11-15): the
+-- tables' JSON is about 37% of the 10-K and 10-Q section text, 28% of 8-K items' and 54% of
+-- exhibits'; 42% of tables have one row (bullets and layout) and aren't kept. All stored filings:
+-- about 15 GB of JSON before TOAST compression (parser README "Tables beside the text").
 --
 -- Access: filing content, so the filings tier, with silver.filing_sections' policy (030's form).
 -- Backups: dumped schema-only nightly with the rest of the document subtree (deploy/host/pg-backup.sh

@@ -79,6 +79,8 @@ CronJob schedules are New York time (`timeZone`). Every job has `concurrencyPoli
 | `financials-rebuild` | facts-fetcher (`facts-fetcher --rebuild`) | suspended | by hand | re-derives silver and gold from bronze |
 | `insiders-backfill` | doc-fetcher (`doc-fetcher-insiders`, 90 days) | suspended | by hand | Forms 3/4/5 history |
 | `seed-documents` | doc-fetcher (`doc-fetcher-seed`) | suspended | by hand | tracked companies' recent 10-K/10-Q/8-K → `filings.raw` |
+| `section-passages` | parser (`parser-index --passages`) | suspended | by hand | rebuilds the search passages indexed before migration 068 without page furniture; no diffs (parser README) |
+| `parser-reparse` | parser-rs (`parser --reparse-all`) | suspended | by hand | re-parses every stored document; unchanged sections keep their rows, all get rule 11's tables (parser v7, `runbook-parser-v7.md`) |
 
 A suspended job keeps a placeholder schedule (January 1) and runs only when started with
 `kubectl -n tributary create job --from=cronjob/<name> <name>-1`.

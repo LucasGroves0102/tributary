@@ -10,6 +10,7 @@ import type { EarningsQuarter, EarningsRelease, ReleasePassage } from "../types"
 import { recapRows } from "./data";
 import { firstQuarter, itemLabel, passageLines, quarterName } from "./events";
 import { RecapTable } from "./RecapTable";
+import { ReleaseParts } from "./ReleaseTable";
 import { Gate } from "./Tables";
 import { useLoad } from "./useLoad";
 
@@ -21,9 +22,11 @@ export const RELEASE_FIGURES = ["revenue", "gross_margin", "operating_margin", "
  * from the 10-Q/10-K (the recap route: gold's values with their n/m readings), the outlook the
  * release states under its own Outlook or Guidance headings, and management's adjustments (its
  * reconciliation tables, its notes with dollar amounts). Every passage is quoted as written, with a
- * link to it in the reader, and pins into an analysis's thesis with its quarter. Where the release
- * has none of something, this says so. No beat or miss: Tributary has no estimates. The company
- * page's Earnings tab and the Analysis flow's Earnings step. */
+ * link to it in the reader, and pins into an analysis's thesis with its quarter. A passage that
+ * quotes one of the release's own tables shows it as a table (`parts`, parser v7: the Query API's
+ * grid, columns as the release has them); one parsed before v7 keeps its lines (analyst test 4,
+ * finding 31). Where the release has none of something, this says so. No beat or miss: Tributary has
+ * no estimates. The company page's Earnings tab and the Analysis flow's Earnings step. */
 export function EarningsView({ token, companyId, name, canReadFilings, canReadFinancials }: {
   token: string;
   companyId: string;
@@ -190,7 +193,9 @@ function Quarter({ token, companyId, name, q, canReadFinancials }: {
             {tables.map((p) => (
               <details key={p.char_start} className="release-table-box">
                 <summary>{p.heading ?? "Reconciliation"}</summary>
-                <pre className="release-table" tabIndex={0}>{p.text.split("\n").slice(1).join("\n")}</pre>
+                {p.parts
+                  ? <ReleaseParts parts={p.parts} heading={p.heading} label={p.heading ?? "Reconciliation"} skipHeading />
+                  : <pre className="release-table" tabIndex={0}>{p.text.split("\n").slice(1).join("\n")}</pre>}
                 <div className="row wrap">
                   {readerAt(p) && <a className="reader-link" href={readerAt(p)!}>Read it in the release</a>}
                   {p.truncated && <span className="faint small">cut here; the reader has all of it</span>}
@@ -205,16 +210,19 @@ function Quarter({ token, companyId, name, q, canReadFinancials }: {
   );
 }
 
-/** One quoted block: its lines as the release wrote them (bullets as a list), where to read it, a pin. */
+/** One quoted block: its lines as the release wrote them (bullets as a list) and, when it quotes one
+ * of the release's tables, that table; where to read it, a pin. */
 function Block({ p, at, make, what }: { p: ReleasePassage; at: string | null; make: () => Promise<string>; what: string }) {
   const lines = passageLines(p);
   return (
     <div className="release-block pinnable">
-      <div className="release-lines">
-        {lines.map((l, i) => (
-          <p key={i} className={`rl ${l.kind}`}>{l.kind === "bullet" || l.kind === "sub" ? <span aria-hidden="true">• </span> : null}{l.text}</p>
-        ))}
-      </div>
+      {p.parts ? <ReleaseParts parts={p.parts} heading={p.heading} label={p.heading ?? "Outlook"} /> : (
+        <div className="release-lines">
+          {lines.map((l, i) => (
+            <p key={i} className={`rl ${l.kind}`}>{l.kind === "bullet" || l.kind === "sub" ? <span aria-hidden="true">• </span> : null}{l.text}</p>
+          ))}
+        </div>
+      )}
       <div className="row wrap">
         {at && <a className="reader-link" href={at}>Read it in the release</a>}
         {p.truncated && <span className="faint small">cut here; the reader has the rest</span>}

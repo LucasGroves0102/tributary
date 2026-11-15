@@ -2,6 +2,7 @@
 quarter and event rules of query_api/events.py, shapes. Store rows mirror Store's (real 8-K
 items and release texts of Vertiv and Deckers, fixtures/releases)."""
 
+import gzip
 import json
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -72,7 +73,7 @@ UIG_TEXT = ("On October 27, 2026, Vertiv Holdings Co completed its previously an
 
 
 class Store:
-    def __init__(self, reports=VRT_REPORTS, rows=VRT_8KS, heads=None, texts=None):
+    def __init__(self, reports=VRT_REPORTS, rows=VRT_8KS, heads=None, texts=None, tables=None):
         self.reports, self.rows = reports, rows
         self.heads = heads if heads is not None else {
             UIG: [section("2.01", UIG_TEXT, "Completion of Acquisition", start=1200),
@@ -82,6 +83,7 @@ class Store:
                                      section("EX-99.1", "", "Exhibit 99.1", chars=39984)],
         }
         self.texts = texts or {}
+        self.tables = tables or {}
         self.calls = []
 
     def periodic_reports(self, user_id, company_id):
@@ -100,6 +102,10 @@ class Store:
     def section_texts(self, user_id, company_id, wanted):
         self.calls.append(("section_texts", company_id, tuple(wanted)))
         return {w: self.texts[w] for w in wanted if w in self.texts}
+
+    def release_tables(self, user_id, company_id, wanted):
+        self.calls.append(("release_tables", company_id, tuple(wanted)))
+        return {w: self.tables[w] for w in wanted if w in self.tables}
 
 
 def client(store, today=date(2026, 11, 8)):
@@ -372,6 +378,48 @@ def test_earnings_quotes_the_release_with_offsets_into_it(token):
     assert prior["outlook"] == [] and prior["headline"] is None
     assert ("section_texts", DECK, ((acc, "EX-99.1"),)) in store.calls
     assert "No beat or miss" in body["method"]
+
+
+def test_earnings_tables_are_asked_for_and_give_the_quoted_tables_as_grids(token):
+    """Parser v7: with tables=true, outlook and reconciliation passages that quote a stored table
+    carry `parts` (lines, and the table as a grid); without it the answer is as before (the
+    agent's get_earnings_release never asks)."""
+    acc = "0001628280-26-067707"
+    text = (RELEASES / "vrt-2026-10-28-ex99-1.txt").read_text(encoding="utf-8")
+    tables = json.loads(gzip.decompress(
+        (RELEASES / "vrt-2026-10-28-ex99-1.tables.json.gz").read_bytes()))
+    store = Store(texts={(acc, "EX-99.1"): text}, tables={(acc, "EX-99.1"): tables})
+    url = f"/v1/companies/{VRT}/earnings?quarters=1"
+    plain = client(store).get(url, headers=token("bob")).json()
+    [quarter] = plain["quarters"]
+    assert quarter["release"]["accession_no"] == acc
+    assert not any("parts" in p for p in quarter["outlook"] + quarter["adjustments"])
+    assert not any(c[0] == "release_tables" for c in store.calls)
+
+    body = client(store).get(f"{url}&tables=true", headers=token("bob")).json()
+    [q] = body["quarters"]
+    assert ("release_tables", VRT, ((acc, "EX-99.1"),)) in store.calls
+    with_parts = [p["heading"] for p in q["outlook"] if "parts" in p]
+    assert with_parts == ["Fourth Quarter 2026 Guidance", "Full Year 2026 Guidance"]
+    guidance = next(p for p in q["outlook"] if "parts" in p)
+    [part] = [x for x in guidance["parts"] if "table" in x]
+    assert part["table"]["columns"] == 2
+    assert part["table"]["body"][0] == [{"text": "Net sales", "col": 0, "span": 1},
+                                        {"text": "$4,313M - $4,513M", "col": 1, "span": 1}]
+    # the same passage otherwise: text, offsets and citation unchanged
+    assert {k: v for k, v in guidance.items() if k != "parts"} in quarter["outlook"]
+    assert all("parts" in a for a in q["adjustments"] if a["kind"] == "reconciliation"
+               and a["heading"] != "Reconciliation of GAAP and non-GAAP Financial Measures")
+    assert not any("parts" in a for a in q["adjustments"] if a["kind"] == "note")
+    assert not {"rows", "sections"} & keys(q)  # what the agent's verify.py reads as figures
+
+
+def keys(value) -> set[str]:
+    if isinstance(value, dict):
+        return set(value) | {k for v in value.values() for k in keys(v)}
+    if isinstance(value, list):
+        return {k for v in value for k in keys(v)}
+    return set()
 
 
 def test_a_quarter_without_a_release_says_so(token):

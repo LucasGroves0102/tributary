@@ -605,9 +605,10 @@ export const companyEvents = (token: string, companyId: string) =>
 export const textKpis = (token: string, companyId: string) =>
   orNullOn404(get<TextKpis>(token, `/v1/companies/${companyId}/text-kpis`));
 
-/** Each quarter's earnings release (8-K Item 2.02), its outlook and adjustments, newest first. */
+/** Each quarter's earnings release (8-K Item 2.02), its outlook and adjustments, newest first, with
+ * the tables those quote as grids (`parts`, parser v7; an older Query API ignores `tables`). */
 export const earnings = (token: string, companyId: string, quarters = 4) =>
-  orNullOn404(get<EarningsResponse>(token, `/v1/companies/${companyId}/earnings`, { quarters }));
+  orNullOn404(get<EarningsResponse>(token, `/v1/companies/${companyId}/earnings`, { quarters, tables: "true" }));
 
 export const segments = (token: string, companyId: string, quarters = 8) =>
   get<{ as_of: string; rows: SegmentRow[] }>(token, `/v1/companies/${companyId}/segments`, { quarters });

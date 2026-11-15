@@ -301,6 +301,7 @@ export async function mockApi(page: Page): Promise<Fake> {
         latest_report: { accession_no: `${m[1]}-26-000040`, form: "10-Q", filed: "2026-07-30", period_end: "2026-06-30" } });
     }
     m = path.match(/^\/v1\/companies\/(\d{10})\/earnings$/);
+    if (m && m[1] === KO) return json(koEarnings(q.get("tables") === "true"));
     if (m) return json({ company_id: m[1], as_of: "", quarters: [], method: "" });
     // F8b: the Overview's and Numbers' backlog and orders from the filings' text
     m = path.match(/^\/v1\/companies\/(\d{10})\/text-kpis$/);
@@ -468,6 +469,31 @@ export async function mockApi(page: Page): Promise<Fake> {
 }
 
 /** "Try the demo" from the front door, up to Home with the sandbox banner. */
+/** Coca-Cola's Q3 2026 release as /earnings answers it: its guidance block, with the table it quotes
+ * as a grid when asked with tables=true (parser v7; Query API release_tables.py, the shape of its
+ * test on the same release). */
+function koEarnings(tables: boolean) {
+  const acc = "0001628280-26-067403";
+  const text = "Full Year 2026 Guidance\nCurrent Prior\nOrganic revenues (non-GAAP) At least 5% growth Approx. 5% growth\nUnderlying effective tax rate 19.7% 19.9%";
+  const cite = { accession_no: acc, form: "8-K", filed: "2026-10-27", filing_url: null, section_key: "EX-99.1", char_start: 1200, char_end: 1200 + text.length };
+  const cell = (t: string, col: number) => ({ text: t, col, span: 1 });
+  const outlook = {
+    kind: "outlook", heading: "Full Year 2026 Guidance", text, char_start: 1200, char_end: 1200 + text.length, truncated: false, citation: cite,
+    ...(tables ? { parts: [
+      { lines: ["Full Year 2026 Guidance"] },
+      { table: { columns: 3, char_start: 1224, char_end: 1200 + text.length,
+        head: [[cell("Current", 1), cell("Prior", 2)]],
+        body: [[cell("Organic revenues (non-GAAP)", 0), cell("At least 5% growth", 1), cell("Approx. 5% growth", 2)],
+          [cell("Underlying effective tax rate", 0), cell("19.7%", 1), cell("19.9%", 2)]] } },
+    ] } : {}),
+  };
+  return { company_id: KO, as_of: "", method: "", quarters: [{
+    period_end: "2026-09-26", estimated: false, report: { accession_no: `${KO}-26-000050`, form: "10-Q", filed: "2026-10-28" },
+    release: { accession_no: acc, form: "8-K", filed: "2026-10-27", accepted_at: null, items: [{ item: "2.02", title: "Results of Operations and Financial Condition", kind: "earnings" }],
+      section_key: "EX-99.1", title: "Press release", total_chars: 72509, document_url: null, filing_url: null },
+    headline: null, outlook: [outlook], adjustments: [], other_releases: [] }] };
+}
+
 export async function startDemo(page: Page) {
   await page.goto("/");
   await page.getByRole("button", { name: "Try the demo" }).click();

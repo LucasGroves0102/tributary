@@ -506,3 +506,22 @@ migrations that define those objects.
   never a value. Measured on hermes over 2,285 queries (the first two words of every large accelerated
   filer's name and the report's cases): the first result changes for "Goldman Sachs" and "Blue Owl"
   (Blue Owl Capital Inc., the manager, above its BDC) only. Catalog only.
+- `067_filing_tables.sql` (parser v7, rule 11): `silver.filing_tables`, one row per HTML table of a
+  parsed section (`rows` jsonb: each row's [start, end) in the section's text, its cells in order,
+  `spans` when a cell spans columns, `head` on a `<thead>`/`<th>` row), written by both parsers with
+  the sections; FK to `silver.filing_sections` ON DELETE CASCADE (a re-parse that changes a section
+  drops its tables with it); RLS as `silver.filing_sections` (030's form), GRANT to query_api; in
+  pg-backup.sh's slim excludes. The text is unchanged: no offset moves. About 15 GB of JSON for every
+  stored filing before TOAST (a sample of 335 files: 37% of 10-K/10-Q section text). Locks: the FK takes
+  SHARE ROW EXCLUSIVE on `silver.filing_sections` for an instant (lock_timeout 5 s).
+- `068_search_page_furniture.sql`: search without page furniture (analyst test 4; parser README "Page
+  furniture" and "Search without page furniture"). `gold.page_furniture_lines(text)` (the rule, the
+  web's `reader/furniture.ts` copy checked on the same cases), `gold.page_furniture(text)` (spans),
+  `gold.blank(text, spans)` (spaces one for one: offsets stay); `gold.refresh_section_search` blanks a
+  section's furniture before `to_tsvector` and stores each passage's spans
+  (`gold.section_search.furniture`; NULL before 068), so a phrase across a page break matches; the
+  ten-argument `gold.search_page` checks exact phrases on the blanked passage; the Query API blanks
+  snippets. `ops.section_index.passages_rule` marks passages built so; `parser-index --passages`
+  rebuilds the others without touching diffs. Locks: two ADD COLUMNs without default (catalog only)
+  take ACCESS EXCLUSIVE on `gold.section_search` and `ops.section_index` for an instant (lock_timeout
+  3 s: deploy when no `section-index` Job runs). Nothing stored changes.

@@ -292,6 +292,20 @@ describe("quoting a filing", () => {
         "We sell GPUs, systems and software to data centers.",
       ]);
   });
+
+  it("leaves page furniture out of paragraphs and pins (analyst test 4, finding 19)", () => {
+    // Vertiv's Item 1 as stored: a page break between two subsections
+    const item1 = "We serve customers in over 130 countries.\n6\nTable of contents\nBacklog\nOur backlog was $15.0 billion at December 31, 2025.";
+    expect(paragraphs(item1)).toEqual([
+      "We serve customers in over 130 countries.",
+      "Backlog — Our backlog was $15.0 billion at December 31, 2025.",
+    ]);
+    const passage = { text: item1, companyId: "0001674101", accessionNo: "0001674101-26-000010", form: "10-K", filed: "2026-02-20", section: "Item 1. Business" };
+    expect(quoteBlock(passage)).toContain("> We serve customers in over 130 countries. Backlog Our backlog was");
+    expect(quoteBlock(passage)).not.toContain("Table of contents");
+    expect(quoteLines(passage)).not.toContain("Table of contents");
+    expect(quoteTable({ ...passage, text: "Net sales $1\n12\nTable of Contents\nMargin 5%" })).not.toContain("Table of Contents");
+  });
 });
 
 describe("the Numbers step's charts", () => {

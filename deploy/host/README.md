@@ -29,8 +29,9 @@ slim dump gives every financial, filer and access table, with the document table
 the crawl (`ops.doc_crawl_plan`, then `doc-crawler` + `parser-backfill`), then the `segments` and
 `section-index` jobs, or restore the latest full dump instead.
 
-Full dumps hold every table's data except what the `section-index` job derives from the parsed
-sections: `gold.section_search`, `gold.section_diffs`, `gold.section_changes` and its checkpoint
+Full dumps hold every table's data (since parser v7 that includes `silver.filing_tables`, the parsed
+documents' tables: a few GB once every filing is parsed with v7) except what the `section-index` job
+derives from the parsed sections: `gold.section_search`, `gold.section_diffs`, `gold.section_changes` and its checkpoint
 `ops.section_index` (~35 GB, listed in `tributary.schema-only-tables`). After restoring one, run
 the `section-index` job until `ops.section_index_status` has caught up (about 1 h of indexing and
 ~4 h of diffs for ~265k filings; see the job's comment in the chart's `values.yaml`), then

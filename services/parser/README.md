@@ -9,7 +9,7 @@ citations from the `gold.filing_sections` view.
 | | |
 |---|---|
 | Input | `documents.fetched` (consumer group `parser-python`), `bronze.filing_documents`, `bronze.filing_exhibits` |
-| Output | `silver.filing_sections`: key, part, item, title, text, character offsets into the document text |
+| Output | `silver.filing_sections`: key, part, item, title, text, character offsets into the document text; `silver.filing_tables`: each section's HTML tables, rows and cells with offsets into its text (rule 11, migration 067) |
 | Metrics | `tributary_documents_parsed_total{form}`, `tributary_parse_failures_total{form}`, `tributary_parse_duration_seconds{form}` |
 
 Section keys: 10-K `1A`, 10-Q `II-1A`, 8-K `2.02`, 8-K exhibits `EX-99.1`. Re-parsing an
@@ -150,11 +150,52 @@ for tables re-indexes and re-diffs nothing, and What changed never goes stale du
 row deleted (a re-parse with other text, the other parser's rows) deletes its tables (the foreign
 key cascades).
 
-Measured on 300 documents and exhibits sampled from hermes (2026-11-15; `make`-free scratch script
-over `bronze.filing_documents` / `filing_exhibits` content): 4,030 tables, 29,575 rows; the tables'
-JSON is 37% of 10-K and 10-Q section text, 28% of 8-K items' and 54% of exhibits'. Python parse time
-went from 46 ms to 100 ms on NVIDIA's 10-K (the Rust parser does the same walk in the pass that
-already builds the text).
+Measured on 205 documents and 130 exhibits sampled from hermes' `bronze.filing_documents` and
+`filing_exhibits` (2026-11-15): 4,030 tables (42% of them single-row), 29,575 rows; the tables' JSON
+is 37% of 10-K and 10-Q section text, 28% of 8-K items' and 54% of exhibits', about 15 GB for every
+stored filing before TOAST compression. The walk rebuilt `text_content()` exactly on every sampled
+document and on 20,000 fuzzed ones. Python parse time went from 46 ms to 100 ms on NVIDIA's 10-K
+(parser-rs does the same walk in the pass that already builds the text).
+
+## Page furniture: left out where the text is read, not stripped (parser v7 decision)
+
+The printed filing's page furniture stays in the stored text: page numbers, "Table of Contents"
+back-links and running headers ("Alphabet Inc.", "Notes to Consolidated Financial Statements
+(Continued)", "NVIDIA Corporation | 2026 Form 10-K | 29") sit between two halves of a sentence
+wherever the page turned. Analyst test 4 found it in a pinned quote ("6 Table of contents Backlog
+—", finding 19) and in search (debris in snippets; a phrase across a page break not found).
+
+Measured on hermes (2026-11-15, read-only): a 0.2% sample of stored sections (6,406 sections,
+74M characters): page-number lines in 56% of 10-K and 53% of 10-Q sections, "Table of Contents"
+lines in 25% and 22% (0.4% of their characters); running headers (rule 3 below) in 6.5% of all
+sections. A full reparse means 634,653 documents (433 GB of HTML, 27.7 GB stored gzip) and
+346,952 exhibits (84 GB, 4.3 GB) into 3.57M section rows (20 GB with TOAST).
+
+Two ways to fix it: (a) strip the furniture at parse time (rule 1): every section with a page break
+after its first one moves its offsets, so every citation, thesis pin `?at=`, search passage
+(~12M), What changed diff (14.6M rows) and peers' mention would have to be rebuilt, and pins
+already saved in theses would point a few hundred characters off; (b) leave the text and its
+offsets alone and leave furniture out where text is read. Chosen: (b). It fixes what the tester saw
+with no reparse, no offset moves and no stale diffs: the reader already dropped page numbers and
+contents links (web `reader/blocks.ts`), and now one rule, in two copies checked against the same
+cases (`services/web/src/reader/furniture.cases.json`), runs where text is read:
+
+- web `reader/furniture.ts`: the reader (`blocks.ts` rule 1), the Business step's paragraphs and
+  every pinned quote (`quoteBlock`, `quoteLines`, `quoteTable`);
+- SQL `gold.page_furniture_lines` (migration 068): search passages and snippets (next section).
+
+What Changed already skips furniture its own way (`diff.py` rule 1, the Query API's `changes.py`),
+and so do the earnings release rules (`releases.py` rule 1, page numbers).
+
+The rule, over a text's non-blank lines: 1. a contents link ("Table of Contents", "Contents",
+"Index", optionally "Return to"/"Back to" and "the", optionally a final "."; any case); 2. a page
+number ("12", "- 12 -", "Page 12", "F-12", or i-xxxxx in lower case) when the next line is a contents
+link, it is the first line, or the line before ends a sentence; 3. a running header: a line of
+3-100 characters with a letter whose digits-as-"#" form occurs at least 3 times, at least twice and at
+least half the time within two lines of a kind 1-2 line. Without the page-break condition a repeat rule
+would take table labels ("Total", "Three Months Ended", "December 31,") six times as often as headers
+(same sample). A statement's footer on every page ("See accompanying notes ...") counts as a
+running footer.
 
 ## Section diffs and search index (`parser-index`)
 
@@ -185,7 +226,28 @@ resumes and a re-run is a no-op. One run at a time (advisory lock).
 
 ```bash
 make section-index LIMIT=5000   # parser-index --limit 5000 [--batch 25]
+parser-index --passages         # only the passages built before migration 068 (below)
 ```
+
+### Search without page furniture (migration 068)
+
+`gold.refresh_section_search` blanks each section's page furniture (the rule above, over the whole
+section, so a running header counts all its pages) before `to_tsvector`: the lines become spaces,
+one for one, so offsets stay and "procure sufficient" / "14" / "Table of Contents" / "foundry
+capacity" is the phrase "sufficient foundry capacity" again. Each passage stores its blanked lines
+(`gold.section_search.furniture`, [start, end) pairs relative to the passage); the snippet and 065's
+exact-phrase check read the passage through `gold.blank` with them, or, for a passage built before
+068 (`furniture` NULL), with the rule run on the passage alone, so snippets are clean at once.
+`ops.section_index.passages_rule` = `furniture-1` marks filings whose passages were built this way.
+Cost, NVIDIA's five fixture filings (1.07M characters, 568 passages, 647 furniture lines): 0.19 s
+against 021's 0.22-0.27 s (fewer tokens to index).
+
+Old passages keep their debris tokens (and miss phrases across page breaks) until rebuilt:
+`parser-index --passages` (Helm CronJob `section-passages`, by hand) rebuilds the passages of filings
+whose `passages_rule` isn't the current one, `--limit` filings per run in `--batch` transactions,
+under the same advisory lock as `section-index`. It leaves `indexed_at`, `diffed_at` and the diffs
+alone, so nothing is diffed again and What changed never goes stale. Then `REINDEX INDEX
+CONCURRENTLY gold.section_search_tsv` (the bulk rewrite bloats the GIN index).
 
 Config: `DATABASE_URL`, `SECTION_INDEX_LIMIT` (default 5000; 20,000 in the Helm values),
 `SECTION_INDEX_BATCH` (25). Helm: CronJob `section-index` (hourly at :40; ships suspended, the Flux
@@ -236,6 +298,178 @@ Helm: CronJob `business-peers` (Sundays 05:30 ET, not suspended, 1 GiB limit); r
 after the deploy that adds migration 047. Until a run has stored peers, the Query API ranks them by
 SIC and size.
 
+## Parser v7 rollout (runbook)
+
+For the owner (`sudo kubectl` on hermes, SQL as the DB owner); measured on hermes 2026-11-15, read-only.
+
+### What ships
+
+| Piece | Change | Needs |
+|---|---|---|
+| migration 067 | `silver.filing_tables` (+ RLS, GRANT, FK to `silver.filing_sections` ON DELETE CASCADE) | nothing; additive |
+| migration 068 | `gold.section_search.furniture`, `ops.section_index.passages_rule`, `gold.page_furniture_lines` / `page_furniture` / `blank`, `gold.refresh_section_search` and the 10-argument `gold.search_page` redefined | a moment's ACCESS EXCLUSIVE on `gold.section_search` and `ops.section_index` (lock_timeout 3 s) |
+| parser-rs `rust-7` (`parser`, `parser-backfill`, new `parser-reparse`) | records tables; keeps unchanged section rows and their `parsed_at` on a re-parse | both Deployments roll with the image |
+| parser image `python-7` (`section-index`, `business-peers`, new `section-passages`) | passages built without furniture; `--passages` | nothing else |
+| query-api | `/earnings?tables=true` → `parts` (grids); search snippets blanked | after the migrations (the deploy hook runs them first) |
+| web | Earnings tab tables; pins and Business paragraphs without furniture | the new query-api (an older one ignores `tables`) |
+
+The stored text, keys, titles and offsets do not change: no pin, citation, passage offset or diff
+moves, and a re-parse that changes nothing keeps `parsed_at`, so `section-index` re-indexes
+nothing for it.
+
+### 0. Before (read-only)
+
+```sql
+SELECT parser_version, count(DISTINCT accession_no) FROM silver.filing_sections GROUP BY 1 ORDER BY 1;
+-- 2026-11-15: rust-3 267,972 documents, rust-4 87,983, rust-5 58,691, rust-6 219,246
+SELECT pg_size_pretty(pg_database_size('tributary'));   -- 155 GB; / had 168 GB free
+SELECT * FROM ops.section_index_status;                 -- section-index caught up?
+```
+
+### 1. Deploy (merge, Flux) - minutes
+
+Merge when no `section-index` Job is running (it runs hourly at :40; its long transactions hold
+`gold.section_search`): `sudo kubectl -n tributary get jobs | grep section-index`. If 068's hook
+fails on `lock_timeout`, re-run the release (`flux reconcile helmrelease tributary -n flux-system`
+or the usual way); nothing is half-applied (each migration is one transaction).
+
+Check:
+
+```sql
+SELECT version FROM public.schema_migrations ORDER BY 1 DESC LIMIT 2;  -- 068, 067
+SELECT parser_version, count(*) FROM silver.filing_sections
+WHERE parsed_at > now() - interval '1 hour' GROUP BY 1;            -- rust-7 appears as filings arrive
+SELECT count(*) AS tables, count(DISTINCT accession_no) AS documents FROM silver.filing_tables;
+```
+
+From here every new filing has its tables; the Earnings tab shows a release's outlook and
+reconciliation tables as tables once its release is parsed with v7, and the text as before until
+then. Pinned quotes and the Business step lose page furniture at once (web only). Search snippets
+lose it at once (068 blanks old passages at query time); phrases across page breaks need step 4.
+
+### 2. Earnings releases since July 2024 (recommended) - ~20 h of background trickle
+
+Re-queues the 2.02 8-Ks through the crawl outbox (`doc-crawler` publishes `documents.backfill` 500
+per round, about every 15 minutes once the crawl is idle; `parser-backfill` parses them). 38,851 such
+8-Ks were stored on 2026-11-15, 38,154 of them in the crawl queue (1.4 GB documents + 18.7 GB
+exhibits): ~78 rounds, ~20 hours. Unchanged sections keep their rows (no re-index); every one gains
+its tables.
+
+```sql
+-- 1. how many (expect ~38,000)
+SELECT count(*) FROM ops.doc_crawl_targets
+WHERE status = 'done' AND form = '8-K' AND filing_date >= '2024-07-01'
+  AND '2.02' = ANY(string_to_array(items, ','));
+-- 2. queue them
+UPDATE ops.doc_crawl_targets SET published_at = NULL
+WHERE status = 'done' AND form = '8-K' AND filing_date >= '2024-07-01'
+  AND '2.02' = ANY(string_to_array(items, ','));
+-- 3. progress: unpublished goes to 0, then parser-backfill's lag drains
+SELECT unpublished FROM ops.doc_crawl_status;
+SELECT count(DISTINCT t.accession_no) FROM silver.filing_tables t
+JOIN ops.doc_crawl_targets c USING (accession_no)
+WHERE c.form = '8-K' AND '2.02' = ANY(string_to_array(c.items, ','));
+```
+
+Same route, same SQL shape, for the 8-Ks still keyed by their item's first digit ("Item
+7.01Regulation": fixed in python-6/rust-6, stored rows still old): 6,064 sections in 3,465 documents
+on 2026-11-15 (rust-3 3,779, rust-4 1,257, rust-5 1,028), ~7 rounds, ~2 hours. These do change, so
+`section-index` re-indexes them by itself.
+
+```sql
+UPDATE ops.doc_crawl_targets t SET published_at = NULL
+WHERE t.status = 'done' AND t.accession_no IN (
+    SELECT s.accession_no FROM silver.filing_sections s
+    JOIN bronze.filing_documents d USING (accession_no)
+    WHERE d.form LIKE '8-K%' AND s.section_key ~ '^[1-9]$'
+      AND s.text ~* '^item [0-9]\.[0-9]{2}[a-z]');          -- the SELECT takes ~1-2 min
+```
+
+Skip step 2 if step 3 is run soon: it covers both.
+
+### 3. Everything (optional) - roughly 15 hours to 2.5 days
+
+`parser-reparse` (`parser --reparse-all`, parser-rs, one process, oldest filing first, no Kafka)
+re-parses all 634,653 documents and their 346,952 exhibits (517 GB of HTML). Measured throughput of
+the Rust service on hermes: its busiest minute 273 documents and 602 MB of HTML (parser-backfill,
+2026-11-09 21:08 UTC), ~11,000 documents an hour sustained while the crawl fed it: 517 GB at ~10
+MB/s is ~15 hours, 634,653 documents at ~11,000 an hour ~58 hours. It does more per document than
+before (it reads back the stored sections to compare). Plan on a weekend.
+
+```bash
+sudo kubectl -n tributary create job --from=cronjob/parser-reparse parser-reparse-1
+sudo kubectl -n tributary logs job/parser-reparse-1 -f | head   # one JSON line per document
+```
+
+```sql
+SELECT parser_version, count(DISTINCT accession_no) FROM silver.filing_sections GROUP BY 1 ORDER BY 1;
+-- rust-7 grows towards ~634,000; documents whose sections change (rules 2, 9, 10 since their last
+-- parse: most rust-3/4/5 rows' titles) get a new parsed_at and section-index re-indexes them
+SELECT count(*) FILTER (WHERE parsed_at < '<deploy time>') AS kept,
+       count(*) FILTER (WHERE parsed_at >= '<deploy time>') AS rewritten
+FROM silver.filing_sections WHERE parser_version = 'rust-7';
+```
+
+Effects while it runs: the DB is busy (reads 32 GB of gzip, writes ~15 GB of table JSON before TOAST
+compression, ~4-6 GB stored; WAL); readers are unaffected. Rewritten documents are re-indexed by the
+hourly `section-index` (their What changed diffs show `stale` until then: only those). The weekly full
+backup grows by the tables (the nightly slim one dumps `silver.filing_tables` schema-only). Stop it
+any time (`sudo kubectl -n tributary delete job parser-reparse-1`): a document is written in one
+transaction, and a re-run redoes everything from the oldest (it has no resume point).
+
+### 4. Search passages without page furniture - ~3-5 hours
+
+```bash
+sudo kubectl -n tributary create job --from=cronjob/section-passages section-passages-1
+# repeat (section-passages-2, ...) until its last line says "complete"; 100,000 filings per run
+```
+
+```sql
+SELECT passages_rule, count(*) FROM ops.section_index GROUP BY 1;   -- NULL goes to 0
+-- then, as the owner, outside the :40 run
+REINDEX INDEX CONCURRENTLY gold.section_search_tsv;
+```
+
+Estimate: 021's first load indexed ~265,000 filings in about an hour; 068's refresh costs the same
+per passage (measured locally: 0.19 s vs 0.22-0.27 s for NVIDIA's five filings), for ~634,000
+filings: ~3 hours, plus the REINDEX (~1 hour). It never touches diffs or the checkpoint's
+`indexed_at`/`diffed_at`. It shares `section-index`'s advisory lock: one waits for the other.
+
+### 5. Verify
+
+```sql
+-- tables for an earnings release (Vertiv Q3 2026: 20 tables)
+SELECT table_no, char_start, char_end, jsonb_array_length(rows) AS rows
+FROM silver.filing_tables WHERE accession_no = '0001628280-26-067707' AND section_key = 'EX-99.1'
+ORDER BY 1 LIMIT 5;
+-- What changed not stale beyond what is waiting for section-index
+SELECT count(*) FROM gold.section_diffs d
+JOIN silver.filing_sections s ON s.accession_no = d.accession_no
+ AND s.section_key = d.section_key AND s.parser = d.parser
+WHERE s.parsed_at <> d.parsed_at;
+-- a phrase across a page break (NVIDIA FY2026 10-K Item 1A), once step 4 has rebuilt it: 1
+SELECT count(*) FROM gold.section_search
+WHERE accession_no = '0001045810-26-000021' AND section_key = '1A'
+  AND tsv @@ phraseto_tsquery('english', 'procure sufficient foundry capacity');
+-- the decimal items: 0 once step 2's second part (or step 3) is through
+SELECT count(*) FROM silver.filing_sections s JOIN bronze.filing_documents d USING (accession_no)
+WHERE d.form LIKE '8-K%' AND s.section_key ~ '^[1-9]$' AND s.text ~* '^item [0-9]\.[0-9]{2}[a-z]';
+```
+
+In the app: Vertiv's Earnings tab (Q3 2026): the Q4 and full-year guidance and the reconciliations
+are tables; search `"sufficient foundry capacity"` (NVIDIA) finds Item 1A; pin a paragraph from
+Vertiv's Business step: no "6 Table of contents".
+
+### Rollback
+
+Images: set the parser images back (`parser-rs` at the previous tag, or `parser`) in the Flux release.
+An older parser deletes and rewrites a document's sections when it parses it (its tables go with them
+by the cascade); stored rows are otherwise untouched. An older query-api ignores the new columns and
+tables; an older web never sends `tables`. Migrations 067/068 are additive and can stay; to drop them
+by hand: `DROP TABLE silver.filing_tables`; re-create 021's `gold.refresh_section_search` and 065's
+`gold.search_page` from those files, then drop `gold.blank`, `gold.page_furniture`,
+`gold.page_furniture_lines` and the two columns.
+
 ## Tests
 
 `pytest services/parser`: `test_business.py` runs the peers rules on the openings of ten real 10-K
@@ -250,6 +484,11 @@ the quirks above; `test_db.py` needs
 2025 10-K; Q2 FY2027 10-Q vs Q1 and vs Q2 FY2026); `test_index_db.py` runs `parser-index` on
 them in Postgres (incremental runs, late priors, re-parses, algorithm bumps).
 `test_rust_service.py` runs both parser services on the same stored documents and expects
-identical rows (`PARSER_RS_BIN`, `TEST_DATABASE_URL`); `test_rust_tls.py` checks that the Rust
+identical section and table rows, and the Rust service keeping `parsed_at` on an unchanged re-parse
+(`PARSER_RS_BIN`, `TEST_DATABASE_URL`); `test_sections.py`'s `test_tables_*` are rule 11 (synthetic
+cases, and on the fixtures each row's text equals its cells and the walk equals `text_content()`;
+`services/parser-rs/tests/sections.rs` copies them); `test_db.py` the table rows and the kept
+`parsed_at`; `test_index_db.py` migration 068 (the furniture rule against the web's cases, a phrase
+across NVIDIA's page break, `--passages` leaving diffs alone); `test_rust_tls.py` checks that the Rust
 parser connects or fails for every `sslmode` exactly where libpq does, against a TLS-only server
 (CI).

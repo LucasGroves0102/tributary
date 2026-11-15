@@ -6,6 +6,11 @@ ops.section_index, passages via gold.refresh_section_search), then, for 10-K and
 Risk Factors and MD&A with the comparable filings (ops.section_index_priors) and replace its
 gold.section_diffs / gold.section_changes rows. Everything for a filing commits together, so a
 stopped run resumes where it left off and a re-run changes nothing.
+
+Passages are built with page furniture blanked (migration 068), and ops.section_index.passages_rule
+records it. `--passages` rebuilds only the passages of filings indexed before that (oldest
+accession first, the same batches and lock): their checkpoint, diffs and parsed_at stay as they
+are, so What changed never goes stale and nothing is diffed again.
 """
 
 import argparse
@@ -28,6 +33,7 @@ DIFF_SECTIONS = {"10-K": ("1A", "7"), "10-Q": ("I-2", "II-1A")}
 LIMIT = 5000
 BATCH = 25
 LOCK = 2_021_001  # pg_advisory_lock key: one indexer at a time
+SEARCH_RULE = "furniture-1"  # ops.section_index.passages_rule: passages built by migration 068
 
 
 @dataclass
@@ -96,9 +102,7 @@ def process(conn: psycopg.Connection, accessions: list[str], reindex: set[str],
             stats.indexed += index(conn, fresh)
             stats.passages += conn.execute("SELECT gold.refresh_section_search(%s)",
                                            (fresh,)).fetchone()[0]  # type: ignore[index]
-            conn.execute("UPDATE ops.section_index i SET passages = (SELECT count(*)"
-                         " FROM gold.section_search s WHERE s.accession_no = i.accession_no)"
-                         " WHERE accession_no = ANY(%s)", (fresh,))
+            count_passages(conn, fresh)
         priors = conn.execute(
             "SELECT p.accession_no, i.company_id, i.form, p.prior_accession_no,"
             "       p.year_ago_accession_no"
@@ -133,6 +137,50 @@ def process(conn: psycopg.Connection, accessions: list[str], reindex: set[str],
                 " year_ago_accession_no = %s, diffed_at = clock_timestamp(), diff_error = %s"
                 " WHERE accession_no = %s", (ALGORITHM, prior, year_ago, error, accession_no))
             stats.diffed += 1
+
+
+def count_passages(conn: psycopg.Connection, accessions: list[str]) -> None:
+    conn.execute("UPDATE ops.section_index i SET passages = (SELECT count(*)"
+                 " FROM gold.section_search s WHERE s.accession_no = i.accession_no),"
+                 " passages_rule = %s WHERE accession_no = ANY(%s)", (SEARCH_RULE, accessions))
+
+
+def refresh_passages(conn: psycopg.Connection, limit: int = LIMIT,
+                     batch: int = BATCH) -> Stats:
+    """--passages: rebuild the search passages of up to `limit` indexed filings whose passages
+    predate SEARCH_RULE, `batch` filings per transaction; nothing else changes."""
+    stats = Stats()
+    with conn.transaction():
+        locked = conn.execute("SELECT pg_try_advisory_lock(%s)", (LOCK,)).fetchone()
+    if not (locked and locked[0]):
+        log.warning("another parser-index run holds the lock; exiting")
+        stats.completed = True
+        return stats
+    try:
+        while stats.filings < limit:
+            with conn.transaction():
+                rows = conn.execute(
+                    "SELECT accession_no FROM ops.section_index"
+                    " WHERE passages_rule IS DISTINCT FROM %s ORDER BY accession_no LIMIT %s",
+                    (SEARCH_RULE, min(limit - stats.filings, 1000))).fetchall()
+            if not rows:
+                stats.completed = True
+                break
+            order = [r[0] for r in rows]
+            for i in range(0, len(order), batch):
+                chunk = order[i:i + batch]
+                with conn.transaction():
+                    stats.passages += conn.execute("SELECT gold.refresh_section_search(%s)",
+                                                   (chunk,)).fetchone()[0]  # type: ignore[index]
+                    count_passages(conn, chunk)
+                stats.filings += len(chunk)
+                stats.indexed += len(chunk)
+            log.info("rebuilt the passages of %d filings (%d passages)", stats.filings,
+                     stats.passages)
+    finally:
+        with conn.transaction():
+            conn.execute("SELECT pg_advisory_unlock(%s)", (LOCK,))
+    return stats
 
 
 def index(conn: psycopg.Connection, accessions: list[str]) -> int:
@@ -206,10 +254,19 @@ def main(argv: Iterable[str] | None = None) -> None:
     parser.add_argument("--batch", type=int,
                         default=int(os.environ.get("SECTION_INDEX_BATCH", BATCH)),
                         help=f"filings per transaction (default: $SECTION_INDEX_BATCH or {BATCH})")
+    parser.add_argument("--passages", action="store_true",
+                        help="rebuild only the search passages of filings indexed before the page"
+                             " furniture rule (migration 068); no diffs, no checkpoint change")
     args = parser.parse_args(None if argv is None else list(argv))
     configure_logging()
     started = time.monotonic()
     with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
+        if args.passages:
+            stats = refresh_passages(conn, args.limit, args.batch)
+            log.info("%s: passages of %d filings rebuilt (%d passages) in %.0fs",
+                     "complete" if stats.completed else "limit reached, run again to continue",
+                     stats.filings, stats.passages, time.monotonic() - started)
+            return
         stats = run(conn, args.limit, args.batch)
     log.info("%s: %d filings, %d indexed (%d passages), %d diffed (%d section diffs, %d changes,"
              " %d errors) in %.0fs",

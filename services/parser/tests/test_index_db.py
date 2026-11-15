@@ -2,6 +2,7 @@
 TEST_DATABASE_URL is set. Every test runs inside a transaction that is rolled back."""
 
 import gzip
+import json
 import os
 from functools import cache
 from pathlib import Path
@@ -151,6 +152,70 @@ def test_algorithm_change_recomputes_diffs(conn, monkeypatch):
     stats = index.run(conn)
     assert stats.indexed == 0 and stats.diffed == 2
     assert state(conn, K26[0])[2] == "diff-test"
+
+
+FURNITURE_CASES = (Path(__file__).parents[3] / "services" / "web" / "src" / "reader"
+                   / "furniture.cases.json")
+
+
+def test_page_furniture_rule_is_the_web_readers(conn):
+    """Migration 068's gold.page_furniture_lines on the cases the web's reader/furniture.ts is
+    checked against: one rule in two languages."""
+    cases = json.loads(FURNITURE_CASES.read_text(encoding="utf-8"))["cases"]
+    for case in cases:
+        got = conn.execute("SELECT coalesce(array_agg(n ORDER BY n), '{}')"
+                           " FROM gold.page_furniture_lines(%s) n", (case["text"],)).fetchone()
+        assert got == ([i + 1 for i in case["furniture"]],), case["name"]
+    text = "We may not be able to procure sufficient\n29\nTable of Contents\nfoundry capacity."
+    spans = conn.execute("SELECT gold.page_furniture(%s)", (text,)).fetchone()[0]
+    assert spans == [41, 43, 44, 61]
+    blanked = conn.execute("SELECT gold.blank(%s, %s)", (text, spans)).fetchone()[0]
+    assert len(blanked) == len(text) and "Table" not in blanked and blanked.endswith("capacity.")
+
+
+def test_passages_blank_page_furniture_so_a_phrase_across_a_page_break_is_found(conn):
+    store(conn, K26)
+    index.run(conn)
+    # NVIDIA's Item 1A: "... procure sufficient" / "14" / "Table of Contents" / "foundry capacity"
+    phrase = ("SELECT count(*) FROM gold.section_search WHERE accession_no = %s"
+              " AND section_key = '1A'"
+              " AND tsv @@ phraseto_tsquery('english', 'procure sufficient foundry capacity')")
+    assert conn.execute(phrase, (K26[0],)).fetchone() == (1,)
+    text = next(s.text for s in sections("nvda-10-K", "10-K") if s.key == "1A")
+    start, furniture = conn.execute(
+        "SELECT start_char, furniture FROM gold.section_search WHERE accession_no = %s"
+        " AND section_key = '1A' AND tsv @@ phraseto_tsquery('english', 'sufficient foundry')",
+        (K26[0],)).fetchone()
+    blanked = {text[start + a:start + b] for a, b in zip(furniture[::2], furniture[1::2],
+                                                         strict=True)}
+    assert {"14", "Table of Contents"} <= blanked
+    assert conn.execute("SELECT DISTINCT passages_rule FROM ops.section_index").fetchall() == [
+        (index.SEARCH_RULE,)]
+
+
+def test_passages_only_rebuild_leaves_the_checkpoint_and_diffs(conn):
+    for f in (K25, K26):
+        store(conn, f)
+    index.run(conn)
+    # as if indexed before migration 068
+    conn.execute("UPDATE gold.section_search SET furniture = NULL,"
+                 " tsv = to_tsvector('english', 'old')")
+    conn.execute("UPDATE ops.section_index SET passages_rule = NULL")
+    before = conn.execute("SELECT accession_no, indexed_at, diffed_at FROM ops.section_index"
+                          " ORDER BY 1").fetchall()
+    diffs = conn.execute("SELECT count(*), max(computed_at) FROM gold.section_diffs").fetchone()
+    stats = index.refresh_passages(conn)
+    assert stats.completed and stats.filings == 2 and stats.passages > 100
+    assert conn.execute("SELECT count(*) FROM gold.section_search"
+                        " WHERE furniture IS NULL").fetchone() == (0,)
+    assert conn.execute("SELECT DISTINCT passages_rule FROM ops.section_index").fetchall() == [
+        (index.SEARCH_RULE,)]
+    assert conn.execute("SELECT accession_no, indexed_at, diffed_at FROM ops.section_index"
+                        " ORDER BY 1").fetchall() == before
+    assert conn.execute("SELECT count(*), max(computed_at)"
+                        " FROM gold.section_diffs").fetchone() == diffs
+    assert index.run(conn).filings == 0  # nothing pending: no re-index, no re-diff
+    assert index.refresh_passages(conn).filings == 0
 
 
 def test_status_views_count_without_text(conn):

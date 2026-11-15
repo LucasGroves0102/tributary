@@ -6,6 +6,7 @@ import type { EarningsResponse, EventsResponse, ScreenerRow } from "../types";
 import { EarningsView } from "./Earnings";
 import { EventsCard } from "./Events";
 import VRT_EARNINGS from "./fixtures/vrt-earnings.json";
+import VRT_EARNINGS_TABLES from "./fixtures/vrt-earnings-tables.json";
 import VRT_EVENTS from "./fixtures/vrt-events.json";
 import VRT_RECAP from "./fixtures/vrt-recap.json";
 import VRT_ROW from "./fixtures/vrt-row.json";
@@ -93,6 +94,32 @@ it("shows the release beside its 10-Q figures, its outlook and its adjustments, 
   // no beat or miss: the only mentions are the two that say there is none
   const said = container.textContent!.replace("no consensus or beat/miss in Tributary", "").replace("No beat or miss: Tributary holds no estimates.", "");
   expect(said).not.toMatch(/\bbeat|\bmiss|consensus/i);
+});
+
+it("shows the release's own tables as tables once the parser has them (parser v7, analyst test 4, finding 31)", async () => {
+  earnings = structuredClone(VRT_EARNINGS_TABLES) as EarningsResponse;
+  await render(view());
+  const blocks = $$(".release-block").filter((b) => b.closest("section")?.querySelector("h3")?.textContent === "Outlook stated in the release");
+  // the bullets stay lines; the guidance tables are tables: no more alternating label and value lines
+  expect(blocks[0]!.querySelector("table")).toBeNull();
+  const q4 = blocks[3]!.querySelector<HTMLTableElement>("table.release-grid")!;
+  expect(blocks[3]!.querySelector(".rl")).toBeNull(); // its heading is the table's own head row
+  expect([...q4.querySelectorAll("thead th")].map((t) => t.textContent)).toEqual(["", "Fourth Quarter 2026 Guidance"]);
+  const rows = [...q4.querySelectorAll("tbody tr")].map((r) => [...r.querySelectorAll("td")].map((c) => c.textContent));
+  expect(rows[0]).toEqual(["Net sales", "$4,313M - $4,513M"]);
+  expect(rows.at(-1)).toEqual(["Adjusted diluted EPS growth(2)", "63% - 67%"]);
+  // a reconciliation: columns as the release has them, its "$" with the figure, no monospace dump
+  const box = $$(".release-table-box").find((t) => t.querySelector("summary")?.textContent === "Reconciliation from operating profit (loss) to adjusted operating profit (loss)")!;
+  expect(box.querySelector("pre")).toBeNull();
+  const recon = box.querySelector<HTMLTableElement>("table.release-grid")!;
+  expect([...recon.querySelectorAll("thead th")].map((t) => t.textContent)).toEqual([
+    "", "Three months ended September 30, 2026", "Three months ended September 30, 2025",
+    "Nine months ended September 30, 2026", "Nine months ended September 30, 2025"]);
+  const last = [...recon.querySelectorAll("tbody tr")].at(-1)!;
+  expect([...last.querySelectorAll("td")].map((c) => c.textContent)).toEqual(["Adjusted operating profit (loss)", "$1,086.9", "$595.6", "$2,377.5", "$1,421.6"]);
+  expect(last.className).toBe("total");
+  // its heading is the summary's, not repeated over the table
+  expect(box.querySelector(".rl.heading")).toBeNull();
 });
 
 it("switches quarters, and says what a quarter lacks instead of guessing", async () => {

@@ -1573,7 +1573,28 @@ export interface ReleasePassage {
   char_end: number;
   truncated: boolean;
   citation: EventCitation;
+  /** parser v7, asked with `tables=true`: the block's lines and the tables it quotes as grids, in
+   * order; absent for a release parsed before v7 (or without a table): show `text` */
+  parts?: ReleasePart[];
 }
+
+/** A cell of a release table's grid (query_api/release_tables.py): its text, first column, width. */
+export interface ReleaseGridCell {
+  text: string;
+  col: number;
+  span: number;
+}
+
+/** A release's own table as columns: head rows, then rows whose column 0 is the label. */
+export interface ReleaseGrid {
+  columns: number;
+  head: ReleaseGridCell[][];
+  body: ReleaseGridCell[][];
+  char_start: number;
+  char_end: number;
+}
+
+export type ReleasePart = { lines: string[] } | { table: ReleaseGrid };
 
 export interface EarningsRelease {
   accession_no: string;
