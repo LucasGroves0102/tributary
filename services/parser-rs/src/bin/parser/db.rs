@@ -26,8 +26,8 @@ pub trait Store {
     fn all_accessions(&mut self) -> Result<Vec<String>, BoxError>;
 }
 
-/// A silver.filing_sections row as compared before a re-parse rewrites it.
-#[derive(PartialEq)]
+/// A silver.filing_sections row as compared before a re-parse rewrites it (ordered by key first).
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
 struct Stored {
     key: String,
     parser: String,
@@ -113,7 +113,7 @@ impl Store for postgres::Client {
                 end: i32::try_from(s.char_end)?,
             });
         }
-        new.sort_by(|a, b| a.key.cmp(&b.key));
+        new.sort();
         let mut tx = self.transaction()?;
         let mut old: Vec<Stored> = tx
             .query(
@@ -133,7 +133,7 @@ impl Store for postgres::Client {
                 end: r.get(7),
             })
             .collect();
-        old.sort_by(|a, b| a.key.cmp(&b.key));
+        old.sort();
         if old == new {
             tx.execute(
                 "UPDATE silver.filing_sections SET parser_version = $1 \

@@ -748,7 +748,7 @@ impl Dom {
                 }
             }
         }
-        if let Some(w) = walk.as_deref_mut() {
+        if let Some(w) = walk {
             w.exit(out.len());
         }
         Ok(match String::from_utf8(out) {
