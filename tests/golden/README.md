@@ -1,7 +1,9 @@
 # Golden 10-K figures
 
 Checks the financial pipeline (XBRL companyfacts → bronze → silver → gold) against the numbers
-five companies printed in their 10-Ks, read independently of the XBRL the pipeline loads.
+companies printed in their 10-Ks, read independently of the XBRL the pipeline loads: five companies
+in full below (`10k_figures.csv`), and about 100 more on their headline lines in the
+[reference set](#reference-set) (`reference_set.csv`).
 
 | Company | Fiscal year (end) | 10-K |
 |---|---|---|
@@ -115,6 +117,58 @@ A third gap, closed by migration 038. Its row was `absent` until then, written t
    payload in bronze on hermes (fetched from the SEC 2026-10-19), with `trim_facts.py`'s own window:
    Nvidia's `DebtSecuritiesCurrent` and `EquitySecuritiesFvNi`, two facts each. No other fixture
    changed; a test that needs another new tag's facts adds them the same way.
+
+## Reference set
+
+[`reference_set.csv`](reference_set.csv): 808 figures of 91 companies' latest 10-Ks (filed
+2025-11 to 2026-11), chosen for spread ([`reference_companies.csv`](reference_companies.csv)):
+mega and small caps, every sector, banks and brokers (JPMorgan in `10k_figures.csv`, Goldman,
+Schwab, Bank of America, Zions, StoneX), insurers, REITs, utilities, Walmart and Costco, AT&T and
+Verizon, Imperial Oil, Enbridge and Canadian Pacific in Canadian dollars, splits after the 10-K
+(Booking 25-for-1, CrowdStrike 4-for-1, Monster 2-for-1), DTE (a co-registrant), Ford and GM (finance
+arms), Tigo, Plexus, Kennametal, Goldman's provision, a SPAC, a commodity pool, a BDC. Per company,
+what its statements print of: revenue, net income, diluted EPS as filed and split-adjusted, total
+assets, total liabilities, equity, cash, long-term debt and its current portion, operating cash flow,
+capex. Each row cites the accession, the printed line and its table (`notes`); `fiscal_year` is the
+calendar year the fiscal year ends in.
+
+[`test_reference_set.py`](test_reference_set.py) loads the companies' companyfacts payloads
+([`fixtures/`](fixtures), trimmed by `trim_facts.py`'s rule, gzip) with their real SICs, once per
+module (10 s), and checks each row: `annual` (gold's TTM for a flow, within two printed units: four
+quarters each rounded as filed; the year-end balance within one), `annual_per_share` (the 10-K's
+EPS as the API reads it, `gold.annual_per_share`), `adjusted` (EPS split-adjusted as `/per-share`
+computes it, `query_api.per_share`), `differs` (an exception below, asserted so a fix shows). Every
+gold rule change must keep it passing.
+
+How it was read: [`extract_reference.py`](extract_reference.py) parses each stored 10-K with the
+parser's own v7 rules and reads its tables with `filing_parser.statements` (cells, periods, the
+current column, the scale) under one label pattern per metric; `review` sets every candidate against
+the 10-K's own XBRL facts for gold's tags. Kept: the candidate that equals the 10-K's fact of the
+best-priority gold tag the 10-K carries (734), or, with no scale words by the table, at the page
+heading's millions (2); 3 read by hand (StoneX's revenue, Booking's net income and EPS); the 70
+split-adjusted EPS rows are the printed EPS over the splits since. A metric with no such candidate was left out
+(statements printing no total liabilities, debt inside another line, an EPS line worded its own
+way): not every company has every metric. Nobody has hand-checked these rows yet.
+
+### Exceptions (owner-visible)
+
+Companies with no figures (`reference_companies.csv` `exception`):
+
+| Companies | Why |
+|---|---|
+| GE, IBM, Wells Fargo, Citigroup, U.S. Bancorp, Progressive | the 10-K's statements are in its annual report exhibit (EX-13) or another document; only the primary document is stored |
+| TSMC, Birkenstock, Rectitude (20-F); Canadian Natural, TELUS (40-F) | no 20-F or 40-F is stored (the crawl stores 10-K, 10-Q and 8-K) and tests never call the SEC |
+
+Rows where gold holds another figure (`differs`):
+
+| Company | Line | Printed | Gold | Why |
+|---|---|---|---|---|
+| Booking | net income | 5,404 | none after 2015 | its 10-Ks and 10-Qs tag net income as NetIncomeLossAvailableToCommonStockholdersBasic, not a net_income tag; its only NetIncomeLoss facts are the proxies' (024 ignores them). **Gold gap: map that tag as a last fallback (a rule change)** |
+| PNC | net income | 6,997 | 7,015 | Q1 2025 (a later 10-Q's comparative) and the derived Q4 read ProfitLoss, Q2-Q3 NetIncomeLoss: **a tag mix gold shouldn't make** |
+| CrowdStrike | net income | -162.5M | -149.0M | Q1-Q2 FY2026 restated in the FY2027 10-Qs, Q3 and Q4 not: TTM of restated and original quarters (072 `annual_sum` 'quarter') |
+| Zions | total assets, liabilities | 88,990; 81,810 | 88,690; 81,510 | the Q3 2026 10-Q restated Dec 31, 2025; the latest filing wins, by design |
+| FedEx | cash, current debt | 13,311; 1,676 | 13,060; 1,633 | the Q2 FY2027 10-Q restated May 31, 2026 (FedEx Freight's separation), by design |
+| Bank of America, American Express | long-term debt | 317,816; 56,387 | none | a bank: no noncurrent debt tag by design (012, 039), as JPMorgan |
 
 ## Hand check
 

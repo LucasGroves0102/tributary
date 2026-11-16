@@ -30,17 +30,20 @@
     "committed": "2026-10-18"
   },
   "golden": {
-    "figures": 149,
-    "companies": 5,
-    "filings": 5,
+    "figures": 957,
+    "companies": 96,
+    "filings": 96,
     "checks": {
       "absent": 1,
-      "annual": 130,
-      "annual_silver": 18
+      "adjusted": 70,
+      "annual": 789,
+      "annual_per_share": 70,
+      "annual_silver": 18,
+      "differs": 9
     },
     "hand_checked": 21,
     "readme": "tests/golden/README.md",
-    "commit": "4943765",
-    "committed": "2026-11-08"
+    "commit": "b964849",
+    "committed": "2026-11-16"
   }
 }

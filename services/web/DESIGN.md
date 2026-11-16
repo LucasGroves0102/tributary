@@ -1424,4 +1424,6 @@ the comps table change no request, and Home's new default arrangement asks nothi
 (`api.ts` `orNullOn404`); a model's price currency is the user's work, so like F2's fields it is never
 stripped from a save an older API refuses. API keys: `/v1/api-keys` answering 404 hides the Settings
 section, and `/v1/openapi-keys.json` answering 404 makes Using the API say the server doesn't take
-keys yet (the rest of the page is static).
+keys yet (the rest of the page is static). Data trust, part 2: an older API sends no `confidence`
+(no mark in the header or the screener) and no tag disagreement `figures` (the note keeps its
+tags-only wording); nothing new is requested.

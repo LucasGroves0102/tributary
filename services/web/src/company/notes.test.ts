@@ -276,6 +276,31 @@ describe("072: checks that say what they mean", () => {
     expect(groupNotes([note("tag_disagreement")])[0]!.key).toBe("values");
   });
 
+  it("075: shows the two figures the API read for this reader, each as the filing states it", () => {
+    const d = { rule: "scale", tag: "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents",
+      other_tag: "CashAndCashEquivalentsAtCarryingValue", factor: 1000, form: "10-Q", filed: "2026-05-12",
+      accession_no: "x", figures: [
+        { tag: "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents", value: "205134", unit: "USD" },
+        { tag: "CashAndCashEquivalentsAtCarryingValue", value: "205134000", unit: "USD" }] };
+    const e = explain(note("tag_disagreement", d, { metric: "cash" }));
+    expect(e.title).toBe("Cash: one figure in two scales");
+    expect(e.text).toContain("The 10-Q filed May 12, 2026 gives cash for the period ending Mar 29, 2025 as " +
+      "$205,134 in one place and $205,134,000 in another (1,000 times apart): the same figure in two scales");
+    expect(e.figures).toEqual([
+      { text: "$205,134", tag: "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents" },
+      { text: "$205,134,000", tag: "CashAndCashEquivalentsAtCarryingValue" }]);
+    // in another currency, in its own
+    const eur = explain(note("tag_disagreement", { ...d, figures: d.figures.map((f) => ({ ...f, unit: "EUR" })) }));
+    expect(eur.text).toContain("€205,134 in one place and €205,134,000 in another");
+    // corrected since the check ran: no figures, and says so
+    const gone = explain(note("tag_disagreement", { ...d, figures: undefined, corrected: true }));
+    expect(gone.title).toBe("Revenue: two tags disagreed, since corrected");
+    expect(gone.text).toContain("Its figures have been corrected or reloaded since");
+    expect(gone.figures).toBeUndefined();
+    // an older API sends no figures: the tags-only wording
+    expect(explain(note("tag_disagreement", { ...d, figures: undefined })).text).toContain("1,000 times the first");
+  });
+
   it("says a swing on a lumpy line is usually real, and a year's restatement explains its quarters", () => {
     const lumpy = explain(note("outlier", { vs_neighbours: 42, rule: "lumpy" }, { severity: "info" }));
     expect(lumpy.title).toBe("Revenue: a large swing");

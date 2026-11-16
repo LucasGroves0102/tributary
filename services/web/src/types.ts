@@ -968,6 +968,14 @@ export interface ScreenerRow {
   sector_industry?: string | null;
   /** companies filing one combined 10-K with this one (#135): separate registrants */
   co_registrants?: CoRegistrant[];
+  /** how far to trust the figures, from public signals, with the reasons in words (migration 074,
+   * gold.company_confidence); null without the financials tier or a check, absent from an older API */
+  confidence?: Confidence | null;
+}
+
+export interface Confidence {
+  level: "high" | "medium" | "low";
+  reasons: string[];
 }
 
 export interface CoRegistrant {

@@ -139,13 +139,16 @@ facts. A run:
    `libs/sec`'s shared limit (`SEC_CALLER_CLASS`, batch); the instance is stored gzip-compressed in
    `bronze.filing_instances` and never fetched again.
 3. **Extras**: the stored documents of companies with their own tags (`silver.metric_tags.company_id`:
-   NVIDIA's capex extension tag) or member sums (`silver.member_sums`: Ford's and GM's debt filed only
-   by segment), not read yet.
+   NVIDIA's capex extension tag), member sums (`silver.member_sums`: Ford's and GM's debt filed only
+   by segment) or member picks (`silver.member_picks`, migration 073: JPMorgan's, Bank of America's
+   and Wells Fargo's CET1 ratio, filed only per approach and entity), not read yet, or projected
+   before the company's newest pick (`added_at`): a new pick reads the history on the next daily run.
 4. `--accessions A,B`: these filings whatever they are, fetching the instance when no document is
    stored (history before the document crawl: NVIDIA's FY2018 and FY2020 10-Ks).
 
 Each filing becomes one `bronze.filing_facts` row: its undimensioned facts of mapped tags (only the
-company's own tags when companyfacts has the filing) and the member facts a sum needs, with `source`
+company's own tags when companyfacts has the filing), the member facts a sum needs and the facts a
+pick names, with `source`
 (`ixbrl` or `instance`) and `document` (where they were read). `silver.refresh_filing_facts` maps them
 into `silver.financial_facts` with `source = 'filing'` (a filing companyfacts lacks) or `'filing_extra'`
 (what companyfacts never carries), and `gold.refresh_financials` rebuilds the companies; one
@@ -159,6 +162,10 @@ gaps touch, 2019-2026), 59,054 of 59,097 shared values are identical; the 43 oth
 stated twice, rounded in the text and exact in a table, where `ixbrl.py` keeps the first and
 companyfacts the more precise (`instance.py` keeps the more precise). companyfacts has 146 facts the
 extracts lack (0.25%, mostly EPS), the extracts 15 it lacks.
+
+A member pick (073) reads one fact whose dimensions are exactly the pick's (every axis listed, no
+other: the parent company's standardized CET1 ratio, never the advanced approach or the bank
+subsidiary's), as silver tag `Concept[member+member]`, `filing_extra`.
 
 A member sum is made only when every listed member is in the filing for the date, no other member of
 the axis is, and the filing has no undimensioned fact of the concept for that date (that would be the

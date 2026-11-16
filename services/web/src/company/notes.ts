@@ -1,9 +1,10 @@
 /** Data notes in plain language: what each quality finding (ops checks), derived-quarters note
  * and "companyfacts behind EDGAR" note means for someone reading the numbers. The Query API
- * sends kinds, dates, filings and relative sizes (never values); the words live here. */
+ * sends kinds, dates, filings and relative sizes; values only where a note needs them, read for
+ * this reader (a tag disagreement's two figures, migration 075). The words live here. */
 
 import { metricLabel } from "../chart/metrics";
-import { day } from "../format";
+import { asFiled, day } from "../format";
 import type { DataNote, NoteFiling, NoteRank } from "../types";
 
 export interface Explained {
@@ -11,6 +12,21 @@ export interface Explained {
   title: string;
   /** one or two sentences: what happened and what it means for the figures shown */
   text: string;
+  /** figures the filing states, each shown with a seal to it (a tag disagreement's two, 075) */
+  figures?: { text: string; tag: string }[];
+}
+
+/** A tag disagreement's figures as the API read them for this reader (075), gold's tag first. */
+function stated(d: Record<string, unknown>): { tag: string; text: string }[] | null {
+  if (!Array.isArray(d.figures) || d.figures.length !== 2) return null;
+  const out = d.figures.map((f) => {
+    const x = f as Record<string, unknown>;
+    const value = Number(x.value);
+    return typeof x.tag === "string" && typeof x.unit === "string" && Number.isFinite(value)
+      ? { tag: x.tag, text: asFiled(value, x.unit) }
+      : null;
+  });
+  return out.every((x) => x !== null) ? (out as { tag: string; text: string }[]) : null;
 }
 
 /** Groups on the Data notes tab, in order, with the kinds each holds. */
@@ -19,7 +35,7 @@ export const NOTE_GROUPS: { key: string; label: string; kinds: (k: string) => bo
   { key: "splits", label: "Stock splits", kinds: (k) => k === "stock_split" },
   { key: "restated", label: "Restated figures", kinds: (k) => k === "restatement" || k === "annual_sum" },
   { key: "periods", label: "Gaps and overlapping periods", kinds: (k) => ["series_gap", "overlapping_quarters", "calendar_collision", "net_debt_gap"].includes(k) },
-  { key: "values", label: "Values to double-check", kinds: (k) => ["impossible_value", "tag_disagreement", "sign_flip", "outlier", "mistagged_fact"].includes(k) || k.startsWith("segment_sum_") },
+  { key: "values", label: "Values to double-check", kinds: (k) => ["impossible_value", "tag_disagreement", "statement_mismatch", "sign_flip", "outlier", "mistagged_fact"].includes(k) || k.startsWith("segment_sum_") },
   { key: "derived", label: "Derived quarters", kinds: (k) => k === "derived_quarters" },
 ];
 
@@ -225,6 +241,27 @@ function explainOne(n: DataNote, now: number): Explained {
       const ratio = factor === null ? "many times" : factor >= 1 ? `${times(factor)} times` : `1/${times(1 / factor)} of`;
       const filing = `The ${str(d.form) ?? "filing"}${d.filed ? ` filed ${date(d.filed)}` : ""}`;
       const rule = str(d.rule);
+      // 075: the two figures, read now for this reader; or the filing has been corrected since
+      const figs = stated(d);
+      if (d.corrected === true) {
+        return {
+          title: `${m}: two tags disagreed, since corrected`,
+          text: `${filing} tagged ${m.toLowerCase()} for ${pe} as ${tag} and as ${other}, ${ratio} the first, when this check ran. Its figures have been corrected or reloaded since, so the two no longer stand side by side; the check clears at its next run.`,
+        };
+      }
+      if (figs) {
+        const [a, b] = figs as [{ tag: string; text: string }, { tag: string; text: string }];
+        const apart = factor === null ? "" : ` (${factor >= 1 ? times(factor) : times(1 / factor)} times apart)`;
+        const what =
+          rule === "scale" ? "the same figure in two scales, thousands entered as units or the reverse"
+            : rule === "same_line" ? "two names of one line that can't both be right"
+              : `a total under its own part (${b.tag}), so one of the tags is likely on the wrong line`;
+        return {
+          title: rule === "scale" ? `${m}: one figure in two scales` : rule === "same_line" ? `${m}: two tags of one line disagree` : `${m}: a total smaller than its own part`,
+          text: `${filing} gives ${m.toLowerCase()} for ${pe} as ${a.text} in one place and ${b.text} in another${apart}: ${what}. The figure shown here is the first; check the filing for which is right.`,
+          figures: [{ text: a.text, tag: a.tag }, { text: b.text, tag: b.tag }],
+        };
+      }
       if (rule === "scale") {
         return {
           title: `${m}: one figure in two scales`,
@@ -321,6 +358,19 @@ function explainOne(n: DataNote, now: number): Explained {
         text:
           `For ${q} quarter${q === 1 ? "" : "s"} between ${date(d.first_period_end)} and ${date(d.latest_period_end)} the filing reports only the year or year-to-date, ` +
           "so the quarter is the difference (fiscal Q4 = the 10-K's year minus the first nine months). Statements mark these values as derived.",
+      };
+    }
+    case "statement_mismatch": {
+      // 074: the filing's own statement table against the figure shown (which its XBRL states)
+      const factor = num(d.factor);
+      const line = str(d.line) === "liabilities_and_equity" ? "total liabilities and equity" : m.toLowerCase();
+      const filing = `The ${str(d.form) ?? "filing"}${d.filed ? ` filed ${date(d.filed)}` : ""}`;
+      const ratio = factor === null ? "" : factor >= 1 ? ` ${times(factor)} times the printed one` : ` 1/${times(1 / factor)} of the printed one`;
+      return {
+        title: str(d.rule) === "scale" ? `${m}: the statement prints another scale` : `${m}: the statement prints another figure`,
+        text: `${filing} prints ${line} for ${pe} in its own statement as a different figure from the one shown here, which its XBRL states${ratio ? `; the figure shown is${ratio}` : ""}` +
+          (str(d.rule) === "scale" ? ": the same figure in two scales. " : str(d.rule) === "sign" ? ": the same figure with the other sign. " : ". ") +
+          "Either the XBRL is on the wrong line or Tributary misread the table; check the statement.",
       };
     }
     default: {

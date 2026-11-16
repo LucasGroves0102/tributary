@@ -768,3 +768,45 @@ do, and check results that say what they mean. Its header has the rules and the 
 Both company checks' versions go to 72, so the hourly catch-up re-checks every company; nothing runs by
 hand. No backout file: 057's `ops.check_financials`, 070's `ops.check_segments` and versions 57/70 undo
 the checks (the chain's guards pin 072's bodies).
+
+### 073_member_picks_cet1.sql
+
+Member picks: a company files a line only with dimensions where others file it undimensioned.
+`silver.member_picks` names, per company, a concept and the exact set of dimensions to read (every axis
+listed, no other); the filing-facts job projects those facts and `silver.refresh_filing_facts` maps them
+(`filing_extra`, silver tag spelling out the members, 055's convention). First use: CET1 for JPMorgan
+(its own concept; standardized, parent; the 2018-19 transitional and fully phased-in names after it),
+Bank of America (10-K only) and Wells Fargo (10-Qs). A pick reaches hermes by itself: the job's extras
+pass reads every stored document of a company with a pick, and again any projected before its newest
+pick (`added_at`); no rules_version bump (055's precedent: only these companies' facts change).
+
+### 074_statement_reconciliation_confidence.sql
+
+Data trust, part 2. An independent source and a mark per company.
+
+- Statement lines: parser-index reads each 10-K's and 10-Q's v7 tables with `filing_parser/statements.py`
+  (its docstring is the spec: columns by spans and head rows, the current period, the scale words,
+  four headline lines by label) into `silver.statement_reads` / `statement_lines`. Every candidate is
+  kept (a line prints in the statement and in MD&A); agreement with any counts.
+- `statement_mismatch` (warning, "to double-check"): gold's figure, one the filing itself states, isn't
+  what its own statement prints, and the print is unambiguous (titled, in the statements' home, alone
+  in its row). A later filing's restated figure is never compared with the original. On hermes'
+  300 parsed 10-K/10-Qs: 4 findings in 367 comparisons, two gold's side (a ProfitLoss TTM, an XBRL net
+  income unlike the print) and two the reader's; the rest agree or were restated since.
+- `gold.company_confidence`: high / medium / low and its reasons in words, read time (staleness moves
+  with today), from inputs the check stores in `ops.quality_companies` (statement counts, core figures,
+  entity kind) and 072's errors, warnings and figures. Low for shells, commodity pools, royalty trusts,
+  BDCs, errors at 2+ per 1,000 figures, warnings at 25+, no report for 500 days, at most two core
+  figures; medium for any error, warnings at 10+, a statement mismatch (not low: half are the
+  reader's), another currency, figures over 270 days old, three or four core figures. On hermes:
+  59% high, 25% medium, 16% low.
+- Catch-up: `ops.check_financials_version()` 74; a filing read after a company's last check makes the
+  check due (`ops.company_backlog`); parser-index's catch-up kind `statements` reads every stored
+  10-K/10-Q with tables once per `statements.READER`.
+
+### 075_disagreeing_figures.sql
+
+`gold.disagreeing_figures`: the two figures behind a `tag_disagreement` note, read from silver when the
+note is read, as the user (DEFINER, `authz.readable_companies('financials')` its only rule:
+`figure_facts`' pattern). Findings, ops views and the status page stay figure-free (014); a figure silver
+no longer holds reads as "corrected since".

@@ -82,7 +82,12 @@ Hash routes (`src/route.ts`; an unknown route goes Home, `#/explore` to Companie
 - **Times** are the viewer's local date and clock with the zone (`format.ts` `localTime`).
 - **Freshness words**: *listed* (in the filing index), *parsed* (text in the reader), *checks last
   ran*, *last checked* (one company) ([Freshness and times](DESIGN.md#freshness-and-times)).
-- **A seal** marks only a figure the filing states; a computed figure says how it is worked out.
+- **A seal** marks only a figure the filing states; a computed figure says how it is worked out. A
+  tag disagreement's data note shows its two figures exactly as filed (`format.ts` `asFiled`), each
+  with a seal to the filing (migration 075), or says they were corrected since.
+- **Confidence** (migration 074) is the API's level and reasons, worded by `companies/rows.ts`
+  `confidenceWords`: quiet text with a dotted underline and the reasons on hover, in the company
+  header always and in the screener only when medium or low; never a colour or a traffic light.
 - **Model output** renders only through `src/markdown.ts` (marked + DOMPurify); an accession number
   becomes an EDGAR link only if a tool returned it. A user's thesis renders the same way, without the
   citation check.

@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent, type Re
 
 import { failureReason, screener, SCREENER_CSV_ROWS, screenerCsv, sectors as fetchSectors } from "../api";
 import { coRegistrantNote } from "../compare/peers";
-import { currencyFoot, DEFAULT_SPECS, MASKED_TITLE, screenRow } from "../companies/rows";
+import { confidenceWords, currencyFoot, DEFAULT_SPECS, MASKED_TITLE, screenRow } from "../companies/rows";
 import {
   activeFilters,
   BAND_LABELS,
@@ -535,6 +535,12 @@ function Table({
                       )}
                       {joint && <span className="tag joint" title={joint}>combined 10-K</span>}
                     </a>
+                    {/* 074: only a mark worth a second look shows in the list; high says nothing */}
+                    {r.confidence && r.confidence.level !== "high" && (
+                      <span className="defined faint small co-confidence" title={confidenceWords(r.confidence).hover}>
+                        {confidenceWords(r.confidence).label}
+                      </span>
+                    )}
                     {r.industry && <div className="co-sub faint small" title={r.industry}>{r.industry}</div>}
                   </td>
                   <td className="muted ind" title={`${r.sector ? `${r.sector} · ${r.sectorIndustry} (Tributary's grouping). ` : ""}SIC: ${r.industry ?? "none"}`}>

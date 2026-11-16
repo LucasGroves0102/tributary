@@ -194,8 +194,12 @@ Companies you can't read are listed with metadata only and never match a value f
 `readings` say how each value reads (migration 035, the only definition: `not_meaningful`,
 `not_applicable` for banks, `old`, `behind`, `stale` and `not_computed` (069), `other_currency`
 (056)); every reading but `behind` sorts after real values and never passes a filter or a band.
-`/financials?readings=true` adds the same per row. Filters, the JSON shape, sectors and
-co-registrants: [DESIGN.md](DESIGN.md#screener).
+`/financials?readings=true` adds the same per row. Each row also carries `confidence` (migration
+074, `gold.company_confidence`): `{level: high | medium | low, reasons: [...]}` in words, from public
+signals (the checks' findings per 1,000 figures, the filings' own statements against gold, how old
+the latest figures are, the core figures on file, the currency, shells, pools, trusts and BDCs);
+`null` without the financials tier or a check. The web's company header reads it from its screener
+row. Filters, the JSON shape, sectors and co-registrants: [DESIGN.md](DESIGN.md#screener).
 
 ## Per-share figures on one share basis
 
@@ -461,6 +465,11 @@ per segment member, from `gold.segments` (migration 018; built by facts-fetcher'
 splits. Findings are about values, so the routes need `financials`. Nothing is dropped: repeats are
 grouped into one note and every note has a `rank` (attention, note, minor) and a `summary`. The
 wording is the web app's. Kinds, dates and ranking: [DESIGN.md](DESIGN.md#data-notes).
+A `tag_disagreement` note (072) also carries `detail.figures` (migration 075): the two figures as the
+filing states them, `[{tag, value, unit}]`, gold's tag first, read when the note is read, as the user
+(`gold.disagreeing_figures`); `detail.corrected: true` when silver no longer holds both. The stored
+finding stays figure-free (014). `statement_mismatch` (074) notes name the line, the factor and the
+filing.
 
 ## Earnings and events
 

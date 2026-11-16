@@ -34,6 +34,17 @@ export function money(value: number, unit: string): string {
   return `${sign}${p}${abs.toFixed(0)}`;
 }
 
+/** A figure exactly as a filing states it, every digit grouped: $205,134 and $205,134,000, so two
+ * tags of one line read side by side (a data note, migration 075). Per share as $1.0523, shares as
+ * "1,234 shares", a ratio as a plain number. Not for tables, which keep four significant figures. */
+export function asFiled(value: number, unit: string): string {
+  const sign = value < 0 ? "-" : "";
+  const digits = Math.abs(value).toLocaleString("en-US", { maximumFractionDigits: 4 });
+  if (unit === "shares") return `${sign}${digits} shares`;
+  if (/^[A-Z]{3}(\/shares)?$/.test(unit)) return `${sign}${prefix(currencyOf(unit))}${digits}`;
+  return `${sign}${digits}`;
+}
+
 /** A row of amounts in one unit, the largest value's, so periods compare at a glance: $0.05M,
  * $0.96M, $2.43M instead of $54.74K, $963.57K, $2.43M. A value that would round to nothing in that
  * unit keeps its own: a figure never reads as $0.00. `currency`: the row's (USD unless a company

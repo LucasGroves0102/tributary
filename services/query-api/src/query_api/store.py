@@ -1302,6 +1302,22 @@ class Store:
                     (r["period_end"], float(r["value"])))
             return out
 
+    def disagreeing_figures(self, user_id: str, company_ids: list[str]) -> dict[tuple, dict]:
+        """The figures behind these companies' tag_disagreement findings (migration 075,
+        gold.disagreeing_figures: the finding's filing, tags and period, as silver still holds
+        them), as the user: (company, metric, period end, accession) -> tag -> (value, unit). A
+        company the caller can't read has none (the function's own access rule)."""
+        if not company_ids:
+            return {}
+        out: dict[tuple, dict] = {}
+        with self._session(user_id) as cur:
+            cur.execute("SELECT company_id, metric, period_end, accession_no, tag, value, unit"
+                        " FROM gold.disagreeing_figures(%s)", (company_ids,))
+            for r in cur.fetchall():
+                key = (r["company_id"], r["metric"], r["period_end"], r["accession_no"])
+                out.setdefault(key, {})[r["tag"]] = (r["value"], r["unit"])
+        return out
+
     def filing_refs(self, user_id: str, accessions: list[str]) -> dict[str, dict]:
         """accession_no → form, filed, cik (the filer, for EDGAR links), period_end (the period of
         report, None when the index has none), from the public filing index; the facts' filer CIK
