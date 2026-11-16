@@ -84,8 +84,12 @@ def test_a_company_whose_ciks_changed_is_rebuilt_first(loaded):
     assert loaded.execute("SELECT ops.rebuild_soon(ARRAY[%s])", (XOM,)).fetchone() == (1,)
     assert stamps(loaded, "gold")[XOM][:1] == (0,)
     built = []
-    catchup.catch_up(loaded, "gold", FOREVER, batch=1,
-                     build=lambda conn, kind, ids: built.extend(ids) or catchup.build(conn, kind, ids))
+
+    def build(conn, kind, ids):
+        built.extend(ids)
+        catchup.build(conn, kind, ids)
+
+    catchup.catch_up(loaded, "gold", FOREVER, batch=1, build=build)
     assert built[0] == XOM and sorted(built) == ALL
     assert stamps(loaded, "gold")[XOM][0] == 77
 

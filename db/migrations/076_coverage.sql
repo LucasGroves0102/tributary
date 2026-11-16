@@ -221,7 +221,11 @@ LANGUAGE sql STABLE AS $$
                     ELSE 'fixable' END AS reason,
                jsonb_build_object('accession_no', l.accession_no, 'form', l.form,
                                   'filed', l.filing_date, 'period_end', l.report_date,
-                                  'figures_to', fg.last_any) AS detail
+                                  'figures_to', fg.last_any,
+                                  -- the SEC's companyfacts carries the filing (silver has its facts)
+                                  'in_companyfacts', EXISTS (
+                                      SELECT 1 FROM silver.financial_facts s
+                                      WHERE s.accession_no = l.accession_no)) AS detail
         FROM latest l
         JOIN figs fg ON fg.company_id = l.company_id AND fg.any_figures AND fg.last_any IS NOT NULL
         CROSS JOIN LATERAL (SELECT CASE
