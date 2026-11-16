@@ -55,6 +55,20 @@ def test_a_finding_on_the_metric_or_its_inputs_explains_an_extreme(loaded):
     assert "outlier" in row[5] and row[6] is False
 
 
+def test_a_figure_in_line_with_its_previous_one_is_explained(loaded):
+    """Amazon's revenue is large, not wrong: same sign and within 3x of the company's own figure a
+    period earlier (a year for TTM) reads in_line; a jump past that is left to explain."""
+    extremes.refresh(loaded, n=2)
+    rows = loaded.execute("SELECT value, prev_value, findings FROM ops.extremes"
+                          " WHERE prev_value IS NOT NULL").fetchall()
+    assert rows
+    for value, prev, findings in rows:
+        close = (value > 0) == (prev > 0) and (value < 0) == (prev < 0) and (
+            value == 0 or max(abs(value), abs(prev)) <= 3 * min(abs(value), abs(prev)))
+        assert ("in_line" in findings) == close
+    assert any("in_line" in f for _, _, f in rows)
+
+
 def test_ops_reads_the_report_and_the_cli_prints_it(loaded, capsys, monkeypatch):
     extremes.refresh(loaded, n=1)
     loaded.execute("SET LOCAL ROLE ops_reader")
