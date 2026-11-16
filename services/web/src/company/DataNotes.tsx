@@ -1,11 +1,13 @@
 import { useState } from "react";
 
 import { dataNotes } from "../api";
+import { useDirectory } from "../companies/directory";
 import { SealLink } from "../components/Seal";
 import { Empty } from "../components/States";
 import { ago, day } from "../format";
 import { href } from "../route";
-import type { DataNote, NoteFiling } from "../types";
+import type { CoverageGap, DataNote, NoteFiling } from "../types";
+import { coverageWords, REASON_WORDS, shownGaps } from "./coverage";
 import { edgarUrl, explain, groupNotes, noteWhen, rankOf, ROLE_LABEL, severityLabel, summaryText } from "./notes";
 import { Gate } from "./Tables";
 import { useLoad } from "./useLoad";
@@ -33,18 +35,23 @@ export function DataNotes({ token, companyId, name, canReadFilings }: {
         {() => {
           if (load?.state !== "ok") return null;
           const { notes, checked_at } = load.data;
+          const gaps = shownGaps(load.data.coverage ?? []);
           if (!notes.length) {
             return (
-              <Empty>
-                Nothing to flag for {name}: {checked_at ? `the last check of its figures (${ago(checked_at)})` : "the checks"} found no gaps,
-                overlapping quarters or restatements, and the figures include every 10-K and 10-Q on EDGAR.
-              </Empty>
+              <>
+                {gaps.length > 0 && <Coverage gaps={gaps} name={name} token={token} />}
+                <Empty>
+                  Nothing to flag for {name}: {checked_at ? `the last check of its figures (${ago(checked_at)})` : "the checks"} found no gaps,
+                  overlapping quarters or restatements{gaps.length ? "" : ", and the figures include every 10-K and 10-Q on EDGAR"}.
+                </Empty>
+              </>
             );
           }
           const summary = summaryText(load.data.summary);
           return (
             <>
               {summary && <p className="notes-summary">{summary}</p>}
+              {gaps.length > 0 && <Coverage gaps={gaps} name={name} token={token} />}
               {groupNotes(notes).map((g) => (
                 <NoteGroup key={g.key} label={g.label} notes={g.notes} companyId={companyId} canReadFilings={canReadFilings} />
               ))}
@@ -57,6 +64,31 @@ export function DataNotes({ token, companyId, name, canReadFilings }: {
         }}
       </Gate>
     </section>
+  );
+}
+
+/** What the nightly coverage sweep found missing from this company's figures or documents, and
+ * whose gap it is (company/coverage.ts words them). Quiet: a reason in words, no colour. */
+export function Coverage({ gaps, name, token }: { gaps: CoverageGap[]; name: string; token: string }) {
+  const directory = useDirectory(token);
+  return (
+    <div className="notes-group coverage-notes">
+      <h3>Coverage</h3>
+      <ul className="coverage-list">
+        {gaps.map((g) => {
+          const { title, text } = coverageWords(g, name, (id) => directory.name(id) ?? "its parent");
+          return (
+            <li key={g.kind} className="coverage-gap">
+              <div>
+                <b>{title}</b>
+                <span className="faint coverage-reason">{REASON_WORDS[g.reason] ?? g.reason}</span>
+              </div>
+              <p>{text}</p>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 

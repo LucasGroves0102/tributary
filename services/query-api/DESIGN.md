@@ -702,6 +702,7 @@ route. The result is cached per process for 60 s (`max_age_seconds`).
 | `coverage` | `ops.public_coverage()`: companies with `gold.quarterly_financials` rows, `bronze.filing_documents` rows, search-indexed filings and their sections (`ops.section_index`) |
 | `quality` | `ops.public_quality()`: `ops.quality_tiers`, one row per check and severity (072: a check can have two) with its `tier` (`error` a figure shown that can't be right, `warning` one to double-check, `kept_out` one the data leaves out, `coverage` one missing, `info`; an older database: the severity), findings, companies, `per_1000` (findings per 1,000 gold figures of the companies checked), companies checked, `figures`, last run |
 | `parser` | `ops.public_parser_quality()` (072): per parser-output check, documents with a finding and `per_1000` of the documents checked, documents checked, last check |
+| `gaps` | `ops.public_coverage_gaps()` (076): the coverage sweep's open gaps, `kinds` = companies per kind and reason (`fixable`, `not_in_sec_data`, `out_of_scope`), `listed` companies measured, `refreshed_at`; empty `kinds` before the first run or on an older database |
 | `recorded` | `query_api/data/recorded_results.json`: the last recorded adversarial and citation runs and the golden 10-K figures, with the commit that last changed each; written by `make status-results` ([tests/status](../../tests/status)) |
 
 ```json

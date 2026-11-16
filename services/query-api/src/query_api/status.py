@@ -10,6 +10,9 @@ be right), `warning` (one to double-check), `kept_out` (a figure gold already le
 `coverage` (a figure missing, not wrong), `info` (restatements, swings on lumpy lines, sums against
 restated years). An older database without them reads every check by its severity.
 
+`gaps` (076): the coverage sweep's open gaps per kind and reason over the listed companies it
+measured (`ops.public_coverage_gaps`): counts only, never a company.
+
 `shape` copies named fields only, so a function that started returning more columns still
 couldn't put them on a public route. Results are cached for CACHE_SECONDS per process."""
 
@@ -77,6 +80,16 @@ def _parser(rows: list[dict]) -> dict:
     }
 
 
+def _gaps(rows: list[dict]) -> dict:
+    first = rows[0] if rows else {}
+    return {
+        "listed": first.get("listed"),
+        "refreshed_at": first.get("refreshed_at"),
+        "kinds": [{"kind": r["kind"], "reason": r["reason"], "companies": r["companies"]}
+                  for r in rows],
+    }
+
+
 def shape(raw: dict, recorded: dict) -> dict:
     ingest, completeness = raw.get("ingest") or {}, raw.get("completeness") or {}
     filings, via_feed = ingest.get("filings") or 0, ingest.get("via_feed") or 0
@@ -102,6 +115,7 @@ def shape(raw: dict, recorded: dict) -> dict:
                           "indexed_filings", "sections", "last_indexed_at"),
         "quality": _quality(raw.get("quality") or []),
         "parser": _parser(raw.get("parser") or []),
+        "gaps": _gaps(raw.get("gaps") or []),
         "recorded": recorded,
     }
 
@@ -132,7 +146,7 @@ def add_status_routes(app: FastAPI, *, store: Any, clock: Callable[[], datetime]
     def data_status() -> dict:
         """Public (no token): freshness, ingest latency, completeness against EDGAR, coverage
         counts, data-quality check totals by tier (with findings per 1,000 figures), the
-        parser-output checks and the last recorded suite runs. Counts and timestamps only; never
-        a company, filing, value or text."""
+        parser-output checks, the coverage sweep's gaps per kind and reason, and the last recorded
+        suite runs. Counts and timestamps only; never a company, filing, value or text."""
         body, at = cache.get()
         return {"as_of": at.isoformat(), "max_age_seconds": CACHE_SECONDS, **body}

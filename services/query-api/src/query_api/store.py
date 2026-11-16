@@ -705,7 +705,8 @@ class Store:
     def data_status(self) -> dict:
         """The public status page's aggregates (migration 028's SECURITY DEFINER functions):
         counts and timestamps only, no user. {freshness, ingest, completeness, coverage,
-        quality: [one row per check and severity], parser: [one row per parser check] (072)}."""
+        quality: [one row per check and severity], parser: [one row per parser check] (072),
+        gaps: [one row per coverage kind and reason] (076)}."""
         with self._session("") as cur:
             out = {}
             cur.execute("SELECT * FROM ops.feed_status()")
@@ -720,6 +721,13 @@ class Store:
             out["quality"] = cur.fetchall()
             cur.execute("SELECT * FROM ops.public_parser_quality()")
             out["parser"] = cur.fetchall()
+            # 076: gaps per kind and reason (an older database without the sweep: none)
+            cur.execute("SELECT to_regprocedure('ops.public_coverage_gaps()') IS NOT NULL AS ok")
+            row = cur.fetchone()
+            out["gaps"] = []
+            if row and row["ok"]:
+                cur.execute("SELECT * FROM ops.public_coverage_gaps()")
+                out["gaps"] = cur.fetchall()
             return out
 
     def segment_metric_names(self) -> list[str]:
@@ -1317,6 +1325,19 @@ class Store:
                 key = (r["company_id"], r["metric"], r["period_end"], r["accession_no"])
                 out.setdefault(key, {})[r["tag"]] = (r["value"], r["unit"])
         return out
+
+    def coverage(self, user_id: str, company_id: str) -> list[dict]:
+        """The company's open coverage gaps (migration 076, ops.coverage under RLS, financials
+        tier): kind, cause, reason, detail (dates, forms, accessions, metrics, counts) and since
+        when. A table the nightly sweep writes; an older database without it answers none."""
+        with self._session(user_id) as cur:
+            cur.execute("SELECT to_regclass('ops.coverage') IS NOT NULL AS ok")
+            row = cur.fetchone()
+            if not row or not row["ok"]:
+                return []
+            cur.execute("SELECT kind, cause, reason, detail, first_seen FROM ops.coverage"
+                        " WHERE company_id = %s ORDER BY kind", (company_id,))
+            return cur.fetchall()
 
     def filing_refs(self, user_id: str, accessions: list[str]) -> dict[str, dict]:
         """accession_no → form, filed, cik (the filer, for EDGAR links), period_end (the period of

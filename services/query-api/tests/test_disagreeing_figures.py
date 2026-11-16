@@ -67,6 +67,9 @@ class Store:
         self.calls.append(("disagreeing_figures", user_id, tuple(company_ids)))
         return HELD
 
+    def coverage(self, user_id, company_id):
+        return []
+
 
 def test_the_route_reads_the_figures_after_the_access_check(token):
     store = Store()

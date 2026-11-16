@@ -49,6 +49,16 @@ class Store:
         return {a: {"form": "10-K", "filed": date(2026, 2, 25), "cik": "0001045810",
                     "period_end": date(2026, 1, 25)} for a in accessions}
 
+    def coverage(self, user_id, company_id):
+        self.calls.append(("coverage", user_id, company_id))
+        return [{"kind": "documents_missing", "cause": "partial", "reason": "fixable",
+                 "detail": {"expected": 40, "stored": 12, "last_filed": "2026-08-27"},
+                 "first_seen": CHECKED},
+                {"kind": "history_short", "cause": "revenue_tag", "reason": "not_in_sec_data",
+                 "detail": {"figures_from": "2009-06-30", "revenue_from": "2017-03-31",
+                            "first_xbrl_report": "2009-11-02"},
+                 "first_seen": CHECKED}]
+
 
 def client(grants=GRANTS, down=False):
     store = Store()
@@ -96,6 +106,23 @@ def test_company_notes_shapes(token):
     assert derived["filings"][0]["accession_no"] == Q4
     assert gap["filings"] == []
     assert ("data_notes", "bob", (NVDA,), True, 1000) in c.store.calls  # type: ignore[attr-defined]
+
+
+def test_company_notes_say_what_is_missing_and_why(token):
+    """076: the coverage sweep's gaps, most telling first, each with cause, reason and since."""
+    c = client()
+    body = c.get(f"/v1/companies/{NVDA}/data-notes", headers=token("bob")).json()
+    assert body["coverage"] == [
+        {"kind": "history_short", "cause": "revenue_tag", "reason": "not_in_sec_data",
+         "since": "2026-10-20", "detail": {"figures_from": "2009-06-30",
+                                          "revenue_from": "2017-03-31",
+                                          "first_xbrl_report": "2009-11-02"}},
+        {"kind": "documents_missing", "cause": "partial", "reason": "fixable",
+         "since": "2026-10-20", "detail": {"expected": 40, "stored": 12,
+                                          "last_filed": "2026-08-27"}}]
+    assert ("coverage", "bob", NVDA) in c.store.calls  # type: ignore[attr-defined]
+    # only on the company's own page, never across companies
+    assert "coverage" not in c.get("/v1/data-notes", headers=token("bob")).json()
 
 
 def test_recent_notes_cover_readable_financials_only(token):

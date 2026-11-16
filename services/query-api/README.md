@@ -70,7 +70,7 @@ tokens: `make token USER=alice`.
 | `GET /v1/search?q=&company=&form=&section=&from=&to=&limit=&offset=&sort=&window=` | filings (every company searched) | best passage per section, with snippet, citation and a total ([Search](#search)) |
 | `GET /v1/companies/{id}/events` | filings | 8-Ks since the latest 10-Q/10-K period end: items, an excerpt, the press release, `announced`, `stale` figures ([Earnings and events](#earnings-and-events)) |
 | `GET /v1/companies/{id}/earnings?quarters=&tables=` | filings | each quarter's earnings release (Item 2.02), `quarters` 1-8 (default 4): headline, outlook, adjustments; `tables=true` adds the release's tables as grids |
-| `GET /v1/companies/{id}/data-notes` | financials | data-quality and freshness notes, ranked, each with its filings ([Data notes](#data-notes)) |
+| `GET /v1/companies/{id}/data-notes` | financials | data-quality and freshness notes, ranked, each with its filings, and the company's coverage gaps ([Data notes](#data-notes)) |
 | `GET /v1/companies/{id}/annual-per-share?years=` | financials | EPS and weighted shares per fiscal year as the 10-K states them (036; `years` 1-30, default 10) |
 | `GET /v1/companies/{id}/per-share?view=&basis=&shares=&quarters=` | financials | EPS and weighted shares on one share basis: `view` quarter, ttm or annual; `shares` adjusted (default) or as_filed; `quarters` 1-120 (default 40) ([Per-share figures](#per-share-figures-on-one-share-basis)) |
 | `GET /v1/data-notes?limit=&company_id=` | financials (every company covered) | the newest notes across the caller's companies, or up to 50 named ones |
@@ -306,8 +306,8 @@ Details: [DESIGN.md](DESIGN.md#customizable-views).
 
 `GET /v1/status/data` (`status.py`) backs the web app's public `#/status` page. No token, so it
 returns only aggregate counts and timestamps (freshness, ingest latency, completeness, coverage,
-data quality by tier with findings per 1,000 figures, the parser-output checks, the last recorded
-suite runs), never a company, ticker, accession number, value or text. Each part comes from a SECURITY DEFINER function of migration 028, and `status.shape` copies
+data quality by tier with findings per 1,000 figures, the parser-output checks, the coverage
+sweep's gaps per kind and reason (`gaps`, 076), the last recorded suite runs), never a company, ticker, accession number, value or text. Each part comes from a SECURITY DEFINER function of migration 028, and `status.shape` copies
 named fields only. Cached 60 s per process. Fields and an example: [DESIGN.md](DESIGN.md#status-page).
 
 ## Demo sandboxes
@@ -465,6 +465,10 @@ per segment member, from `gold.segments` (migration 018; built by facts-fetcher'
 splits. Findings are about values, so the routes need `financials`. Nothing is dropped: repeats are
 grouped into one note and every note has a `rank` (attention, note, minor) and a `summary`. The
 wording is the web app's. Kinds, dates and ranking: [DESIGN.md](DESIGN.md#data-notes).
+The company route also returns `coverage` (migration 076, `coverage_notes`): the nightly coverage
+sweep's gaps for the company (`ops.coverage` under RLS), most telling first, each `{kind, cause, reason,
+since, detail}` (detail: dates, forms, accessions, metric names, counts; never values); `[]` on a
+database before 076. Not on the cross-company route.
 A `tag_disagreement` note (072) also carries `detail.figures` (migration 075): the two figures as the
 filing states them, `[{tag, value, unit}]`, gold's tag first, read when the note is read, as the user
 (`gold.disagreeing_figures`); `detail.corrected: true` when silver no longer holds both. The stored

@@ -227,6 +227,18 @@ def test_data_notes_respect_rls(client, token):
                                   ("restatement", f"{A}-26-000000")]
     assert notes("t-free", B) == []
     assert notes("t-nobody", A) == []
+
+    # 076: coverage gaps (ops.coverage) follow the financials tier the same way
+    for cid in (A, B):
+        conn.execute("INSERT INTO ops.coverage (company_id, kind, cause, reason, detail) VALUES"
+                     " (%s, 'documents_missing', 'none', 'fixable', '{\"expected\": 3}')", (cid,))
+
+    def gaps(user, company):
+        r = client.get(f"/v1/companies/{company}/data-notes", headers=token(user))
+        return [(g["kind"], g["detail"]) for g in r.json()["coverage"]]
+
+    assert gaps("t-free", A) == [("documents_missing", {"expected": 3})]
+    assert gaps("t-free", B) == [] and gaps("t-nobody", A) == []
     r = client.get("/v1/data-notes", headers=token("t-free"))
     assert {n["company_id"] for n in r.json()["notes"]} == {A}
     assert "derived_quarters" not in {n["kind"] for n in r.json()["notes"]}

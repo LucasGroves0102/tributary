@@ -674,7 +674,12 @@ the Revenue view). The assistant's page context leaves them out and reports the 
 Data notes (`src/company/notes.ts`, Query API `/v1/companies/{id}/data-notes`, `/v1/data-notes`):
 the tearsheet's Data notes tab groups what the automated checks found (freshness, restated
 figures, gaps and overlapping periods, values to double-check, derived quarters) in plain
-language, each with links to its filings (the reader for 10-K/10-Q text the user can read,
+language, after a Coverage group (076, `company/coverage.ts` words it): what the nightly coverage sweep
+found missing from the company's figures or documents (no figures, figures starting at a re-registration
+or late, a core figure missing lately, figures behind its latest report, statements in an Exhibit 13,
+documents not stored) and whose gap it is in words (Tributary's to fix, not in the SEC's structured
+data, outside what Tributary reads), never a colour; a history cut short by a re-registration is said
+once. The status page counts the gaps per kind and reason, never a company, each with links to its filings (the reader for 10-K/10-Q text the user can read,
 else EDGAR); groups run by their most important note, then their newest, with derived quarters last.
 The API ranks and groups the findings (M2: `rank` attention / note / minor, a series' repeats as one
 note with `repeats` and its period range, a `summary`): the tab opens on a line like "1 needs attention
@@ -1407,7 +1412,8 @@ refuses for them says to try again in a minute instead of dropping them); a mode
 /v1/companies/{id}/model`) answering 404 shows "being updated, draws again in a minute" with Try
 again, and a new model then starts at zeros in the older shape; versions answer an empty list on
 404; data notes asked for some
-companies keep only those; a data-check screen the API didn't echo (`issue`) is a failure with Try
+companies keep only those; data notes without `coverage` (076) show no Coverage group, and a status
+answer without `gaps` no gaps table; a data-check screen the API didn't echo (`issue`) is a failure with Try
 again, never every company; `/annual-per-share`, `readings` and agent-api's `/v1/allowance` were
 already optional. F4: `/peers/check` and `/v1/sectors` answering 404 mean no check (the peer is added
 as before) and no sector filter; a bank's statement or header columns refused (422) are asked again

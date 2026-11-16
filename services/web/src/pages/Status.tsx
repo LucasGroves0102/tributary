@@ -2,9 +2,10 @@ import { useCallback, useEffect, useState } from "react";
 
 import { dataStatus } from "../api";
 import { checkName } from "../companies/screen";
+import { GAP_KINDS, REASON_WORDS } from "../company/coverage";
 import { ago, day, duration, localTime } from "../format";
 import { href } from "../route";
-import type { DataStatus, QualityTier, RecordedRun } from "../types";
+import type { CoverageReason, DataStatus, QualityTier, RecordedRun } from "../types";
 import { Seal } from "../components/Seal";
 import { TableScroll } from "../components/TableScroll";
 
@@ -144,6 +145,7 @@ function Body({ data, now, signedIn, readable }: { data: DataStatus; now: number
           </div>
         </section>
       </div>
+      {data.gaps && data.gaps.kinds.length > 0 && <Gaps gaps={data.gaps} when={when} />}
       <Quality data={data} when={when} signedIn={signedIn} />
       <Recorded data={data} />
     </>
@@ -357,6 +359,50 @@ function Quality({ data, when, signedIn }: { data: DataStatus; when: (iso: strin
         </p>
       </details>
       {data.parser && <Parser parser={data.parser} when={when} />}
+    </section>
+  );
+}
+
+/** The coverage sweep (076): every listed company measured each night for each kind of gap, counted
+ * by whose gap it is. Counts only, never a company. */
+function Gaps({ gaps, when }: { gaps: NonNullable<DataStatus["gaps"]>; when: (iso: string | null) => string }) {
+  const by = (kind: string, reason: CoverageReason) =>
+    gaps.kinds.find((k) => k.kind === kind && k.reason === reason)?.companies ?? 0;
+  const kinds = GAP_KINDS.filter(([k]) => gaps.kinds.some((x) => x.kind === k));
+  return (
+    <section className="card">
+      <div className="card-h">
+        <h2>Gaps in coverage</h2>
+        <span className="sub">
+          {gaps.listed === null ? "" : `${count(gaps.listed)} exchange-listed companies measured`}
+          {gaps.refreshed_at ? `, last run ${when(gaps.refreshed_at)}` : ""}
+        </span>
+      </div>
+      <TableScroll label="Gaps in coverage">
+        <table className="t">
+          <thead>
+            <tr>
+              <th>Gap</th>
+              <th className="n">{REASON_WORDS.fixable}</th>
+              <th className="n">{REASON_WORDS.not_in_sec_data}</th>
+              <th className="n">{REASON_WORDS.out_of_scope}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {kinds.map(([k, label]) => (
+              <tr key={k}>
+                <td>{label}</td>
+                <td className="n">{count(by(k, "fixable"))}</td>
+                <td className="n">{count(by(k, "not_in_sec_data"))}</td>
+                <td className="n">{count(by(k, "out_of_scope"))}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </TableScroll>
+      <p className="foot">
+        Companies, counted once per kind of gap. A company's own page says what is missing from its figures and why.
+      </p>
     </section>
   );
 }
