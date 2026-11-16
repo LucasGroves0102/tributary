@@ -165,9 +165,17 @@ diffs (`diff.ALGORITHM`) needs nothing run by hand (migration 071, `filing_parse
 3. measures diffs of an older `ALGORITHM` (the run itself recomputes them).
 
 Re-parsed documents whose sections change are re-indexed by the next runs (after new filings).
-Progress: `SELECT * FROM ops.catchup_status` (`behind`, `in_flight`, `done_last_day`, `eta`); pause:
-`UPDATE ops.catchup SET paused = true WHERE kind = 'parser'`. On 2026-11-16, 595,775 documents
-predated rust-7 (about 8 days at 3,000 an hour) and 433,157 filings' passages predated
+Progress: `SELECT * FROM ops.catchup_status` (`paused`, `behind`, `in_flight`, `done_last_day`,
+`eta`). The parser kind ships paused (migration 071): it is measured every hour and re-queues
+nothing until the owner runs
+
+```sql
+UPDATE ops.catchup SET paused = false WHERE kind = 'parser';   -- `true` pauses it again
+```
+
+From the next `section-index` run (hourly at :40) it re-queues 3,000 documents an hour, which
+`doc-crawler` publishes within about 30 minutes and `parser-backfill` parses: on 2026-11-16, 595,775
+documents predated rust-7, about 8 days. Passages are not paused: 433,157 filings predated
 `furniture-1` (hours).
 Cost and index size: [DESIGN.md](DESIGN.md#section-diffs-and-search-index-cost).
 
@@ -196,7 +204,8 @@ SIC and size.
 
 Deploying v7 on hermes (what ships, re-queueing earnings releases, the full `parser-reparse`,
 `section-passages`, verification and rollback): [DESIGN.md](DESIGN.md#parser-v7-rollout-runbook).
-Since migration 071 its steps 2-4 happen by themselves ([catch-up](#catch-up)).
+Since migration 071 its step 4 happens by itself and steps 2-3 once the parser kind is unpaused
+([catch-up](#catch-up)).
 
 ## Tests
 

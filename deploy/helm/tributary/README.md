@@ -74,7 +74,7 @@ CronJob schedules are New York time (`timeZone`). Every job has `concurrencyPoli
 | `filing-facts` | facts-fetcher (`facts-fetcher-filings`) | daily 09:30 | on (Flux release) | filings companyfacts lacks, from their own XBRL (055) |
 | `demo-cleanup` | query-api (`query-api-demo-cleanup`) | hourly at :15 | on | deletes expired demo sandboxes |
 | `segments` | facts-fetcher (`facts-fetcher-segments`) | hourly at :20 | on (Flux release) | segment and KPI facts from the stored documents' inline XBRL (018); then up to 20 min of catch-up: gold and checks an older rule built (071) |
-| `section-index` | parser (`parser-index`) | hourly at :40 | on (Flux release) | search passages and section diffs (021); then catch-up: re-queues 3,000 documents of an older parser for `parser-backfill`, up to 20 min of older passages (071) |
+| `section-index` | parser (`parser-index`) | hourly at :40 | on (Flux release) | search passages and section diffs (021); then catch-up: re-queues 3,000 documents of an older parser for `parser-backfill` (paused until the owner starts it), up to 20 min of older passages (071) |
 | `alerts` | query-api (`query-api-alerts`) | every 10 minutes | on | filing alerts and webhooks (app migration 016) |
 | `business-peers` | parser (`parser-peers`) | Sundays 05:30 | on | peers by business (047) |
 | `financials-rebuild` | facts-fetcher (`facts-fetcher --rebuild`) | suspended | emergency only | re-derives silver and gold from bronze, all at once (the `segments` catch-up does it by itself) |
@@ -103,7 +103,8 @@ Notes per job (what each reads and uses, its limits, measurements and hermes his
   run by hand: `segments` and `section-index` catch stored history up hourly (migration 071; db
   README "Versions and catch-up"). Watch `SELECT * FROM ops.catchup_status` (or the
   `CatchupStalled` alert); pause one kind with `UPDATE ops.catchup SET paused = true WHERE kind =
-  '...'`.
+  '...'`. The parser kind ships paused (about 8 days of re-parsing): `UPDATE ops.catchup SET paused =
+  false WHERE kind = 'parser';` starts it.
 - `financials-rebuild` never runs on a schedule; it is the emergency tool for all of gold at once
   (after a backout, say), then `VACUUM ANALYZE gold.quarterly_financials` and
   `gold.derived_financials`. It commits every 50 CIKs, so a stopped run is safe to start again.

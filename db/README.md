@@ -76,7 +76,9 @@ financials-rebuild) replaces `gold.rules_version()` with its own number; one tha
 companies it built (`gold.refresh_financials`, `gold.refresh_segments`); a company without a stamp was
 built with `ops.catchup.baseline`. Gold writers of one company take turns (`gold.lock_companies`).
 Progress for ops_reader: `ops.catchup_status` (behind, in flight, failed, the last day's pace, ETA);
-pause a kind with `UPDATE ops.catchup SET paused = true WHERE kind = '...'`. A backout leaves the
+pause a kind with `UPDATE ops.catchup SET paused = true WHERE kind = '...'` (a paused kind is still
+measured, and the alert ignores it). The parser kind ships paused: `UPDATE ops.catchup SET paused =
+false WHERE kind = 'parser';` starts it. A backout leaves the
 versions as they are: run `financials-rebuild` after one.
 
 ### What each migration adds

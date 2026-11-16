@@ -126,12 +126,33 @@ def test_the_live_path_is_never_used(conn):
     assert conn.execute("SELECT count(*) FROM ops.document_outbox").fetchone() == before
 
 
-def test_paused_measures_and_queues_nothing(conn):
+def test_paused_measures_and_queues_nothing_until_unpaused(conn):
     doc(conn, "a", "2020-05-01")
-    conn.execute("UPDATE ops.catchup SET paused = true WHERE kind = 'parser'")
+    doc(conn, "b", "2021-05-01")
+    conn.execute("UPDATE ops.catchup SET paused = true WHERE kind = 'parser'")  # as 071 ships it
+    for _ in range(2):
+        r = catchup.parser(conn, per_run=5, version=7)
+        assert (r.paused, r.done, r.behind, r.in_flight) == (True, 0, 2, 0)
+    assert {t[1] for t in targets(conn).values()} == {False}  # nothing re-queued
+    state = conn.execute("SELECT state, paused, behind, eta FROM ops.catchup_status"
+                         " WHERE kind = 'parser'").fetchone()
+    assert state == ("paused", True, 2, None)
+    conn.execute("UPDATE ops.catchup SET paused = false WHERE kind = 'parser'")  # the owner
     r = catchup.parser(conn, per_run=5, version=7)
-    assert (r.paused, r.done, r.behind) == (True, 0, 1)
-    assert targets(conn)["a"][1] is False
+    assert (r.paused, r.done, r.behind, r.in_flight) == (False, 2, 0, 2)
+    assert conn.execute("SELECT state FROM ops.catchup_status WHERE kind = 'parser'"
+                        ).fetchone() == ("catching_up",)
+
+
+def test_a_paused_parser_leaves_the_other_kinds_running(conn):
+    doc(conn, "a", "2020-05-01", version="rust-7")
+    doc(conn, "b", "2021-05-01")
+    index.run(conn)
+    conn.execute("UPDATE ops.section_index SET passages_rule = NULL")
+    conn.execute("UPDATE ops.catchup SET paused = true WHERE kind = 'parser'")
+    results = {r.kind: r for r in catchup.run(conn, seconds=60, per_run=5)}
+    assert results["parser"].paused and results["parser"].done == 0
+    assert not results["passages"].paused and results["passages"].done == 2
 
 
 def test_passages_catch_up_stops_at_its_deadline_and_resumes(conn):
@@ -187,4 +208,4 @@ def test_status_view_counts_each_kind(conn):
     types = {c.name: c.type_code for c in conn.execute(
         "SELECT * FROM ops.catchup_status LIMIT 0").description}
     text_oid = 25
-    assert {n for n, t in types.items() if t == text_oid} == {"kind", "version"}
+    assert {n for n, t in types.items() if t == text_oid} == {"kind", "state", "version"}

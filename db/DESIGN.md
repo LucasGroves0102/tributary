@@ -717,7 +717,9 @@ already pin the bodies. A company without a stamp counts as built with `ops.catc
 migration's versions), so the first deploy needs no backfill and finds nothing behind: the last full
 rebuild ran 2026-11-09, 064's canary covered its companies, and 070's segment re-check had run (27,168
 segment_sum findings on 2026-11-16, 070's expected ~27,000). The parser and passages kinds are behind
-from the start: 595,775 documents and 433,157 filings on 2026-11-16.
+from the start: 595,775 documents and 433,157 filings on 2026-11-16. The parser kind ships paused
+(`ops.catchup.paused`): eight days of re-parsing is the owner's call; it is measured hourly meanwhile,
+shows `paused` in the status view, and the alert ignores it.
 
 `gold.lock_companies`: the catch-up rebuilds companies while the nightly `financials`, `financials-bulk`
 and `filing-facts` refresh theirs, and 014's refresh is a DELETE then INSERT per company: two

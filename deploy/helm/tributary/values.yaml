@@ -475,7 +475,9 @@ jobs:
   # A run that finishes its work then catches up older history (migration 071, filing_parser/catchup.py):
   # up to PARSER_CATCHUP_PER_RUN documents an older parser split are re-queued through the crawl's outbox
   # for parser-backfill (never documents.fetched; only while the crawl and parser-backfill keep up), and
-  # passages an older rule built are rebuilt for up to CATCHUP_SECONDS. Watch: ops.catchup_status.
+  # passages an older rule built are rebuilt for up to CATCHUP_SECONDS. Watch: ops.catchup_status. The
+  # parser kind ships paused (~8 days of re-parsing); the owner starts it with
+  # UPDATE ops.catchup SET paused = false WHERE kind = 'parser';
   section-index:
     image: parser  # Python: the indexing job (filing_parser/index.py), not the document parser
     command: [parser-index]

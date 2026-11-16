@@ -40,6 +40,8 @@ def test_versions_live_with_their_rules():
         assert c.execute("SELECT kind, baseline FROM ops.catchup WHERE baseline IS NOT NULL"
                          " ORDER BY 1").fetchall() == [
             ("check_financials", 57), ("check_segments", 70), ("gold", 64)]
+        # 071 ships the parser kind paused (the owner's call), every other kind running
+        assert c.execute("SELECT kind FROM ops.catchup WHERE paused").fetchall() == [("parser",)]
         assert c.execute("SELECT ops.parser_version_number('rust-7'),"
                          " ops.parser_version_number('python-12'),"
                          " ops.parser_version_number('odd')").fetchone() == (7, 12, 0)
@@ -81,6 +83,23 @@ def test_nothing_behind_reads_done(conn):
     assert status(conn, "diffs")[3] == timedelta(0)
 
 
+def test_state_tells_paused_from_stalled(conn):
+    for kind in ("parser", "gold"):
+        conn.execute("SELECT * FROM ops.catchup_begin(%s, '9')", (kind,))
+    conn.execute("UPDATE ops.catchup SET started_at = now() - interval '3 days'"
+                 " WHERE kind IN ('parser', 'gold')")
+    run(conn, "parser", 1, behind=500, done=0)  # no progress for days...
+    run(conn, "gold", 1, behind=500, done=0)
+    conn.execute("UPDATE ops.catchup SET paused = (kind = 'parser')")
+    states = dict(conn.execute("SELECT kind, state FROM ops.catchup_status"))
+    assert states["parser"] == "paused"  # ... but paused by hand: not stalled
+    assert states["gold"] == "stalled"
+    assert states["diffs"] == "current"
+    run(conn, "gold", 0, behind=499, done=1)
+    assert dict(conn.execute("SELECT kind, state FROM ops.catchup_status"))["gold"] == \
+        "catching_up"
+
+
 def test_ops_reader_sees_the_status_only(conn):
     run(conn, "gold", 1, behind=3, done=1)
     conn.execute("SET LOCAL ROLE ops_reader")
@@ -101,4 +120,5 @@ def test_the_exporter_query_runs_as_ops_reader(conn):
     assert set(rows) == {"parser", "passages", "diffs", "gold", "check_financials",
                          "check_segments"}
     assert rows["gold"][:5] == (3, 0, 0, 1, 0)
+    assert rows["parser"][4] == 0  # the fixture unpaused it; paused = 1 keeps the alert quiet
     assert all(v is not None for r in rows.values() for v in r)

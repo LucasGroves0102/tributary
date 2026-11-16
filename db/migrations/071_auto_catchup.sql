@@ -34,7 +34,8 @@
 --    it. Every refresh path calls these, so a hand-run rebuild stamps too.
 -- 5. ops.catchup (one row per kind: a pause switch, the version being caught up to and when the
 --    catch-up first saw it), ops.catchup_runs (each run's measurement, 30 days), ops.catchup_status
---    (ops_reader: counts, dates and rates only).
+--    (ops_reader: counts, dates and rates only). The parser kind ships paused (the owner unpauses
+--    it); the others run from the first deploy.
 -- 6. ops.parser_catchup: re-queues documents with an older parser version, oldest filing first,
 --    through the crawl's outbox (ops.doc_crawl_targets.published_at -> documents.backfill ->
 --    parser-backfill), never documents.fetched; a budget per call, only while the crawl's own queue,
@@ -101,9 +102,12 @@ CREATE TABLE ops.catchup (
     started_at timestamptz,            -- when the catch-up first saw it
     baseline   integer
 );
-INSERT INTO ops.catchup (kind, baseline) VALUES
-    ('parser', NULL), ('passages', NULL), ('diffs', NULL),
-    ('gold', 64), ('check_financials', 57), ('check_segments', 70);
+-- The parser kind ships paused: re-parsing every document before rust-7 (595,775, about 8 days at
+-- 3,000 an hour) is the owner's call. Paused, it is measured hourly and does nothing; unpause with
+--   UPDATE ops.catchup SET paused = false WHERE kind = 'parser';
+INSERT INTO ops.catchup (kind, paused, baseline) VALUES
+    ('parser', true, NULL), ('passages', false, NULL), ('diffs', false, NULL),
+    ('gold', false, 64), ('check_financials', false, 57), ('check_segments', false, 70);
 
 CREATE FUNCTION ops.company_rule_version(p_kind text) RETURNS integer
 LANGUAGE sql STABLE AS $$
@@ -268,11 +272,17 @@ LANGUAGE sql AS $$
     DELETE FROM ops.catchup_runs WHERE kind = p_kind AND run_at < now() - interval '30 days';
 $$;
 
--- One row per kind: the latest measurement, the last day's pace and the ETA at it, and when it last
--- moved (progress_at: the last run that did something, else when this version's catch-up began).
--- Counts, dates and version labels only.
+-- One row per kind: the latest measurement, the last day's pace and the ETA at it, when it last
+-- moved (progress_at: the last run that did something, else when this version's catch-up began), and
+-- its state: paused (set by hand; measured, never stalled), current (nothing left), stalled (work
+-- left and no progress for a day: the CatchupStalled alert's rule) or catching_up. Counts, dates and
+-- labels only.
 CREATE VIEW ops.catchup_status AS
 SELECT c.kind,
+       CASE WHEN c.paused THEN 'paused'
+            WHEN coalesce(r.behind, 0) + coalesce(r.in_flight, 0) = 0 THEN 'current'
+            WHEN greatest(c.started_at, d.last_done_at) < now() - interval '1 day' THEN 'stalled'
+            ELSE 'catching_up' END AS state,
        c.paused,
        c.version,
        c.started_at,
@@ -284,7 +294,7 @@ SELECT c.kind,
        coalesce(d.done_last_day, 0) AS done_last_day,
        greatest(c.started_at, d.last_done_at) AS progress_at,
        CASE WHEN coalesce(r.behind, 0) + coalesce(r.in_flight, 0) = 0 THEN interval '0'
-            WHEN d.done_last_day > 0
+            WHEN NOT c.paused AND d.done_last_day > 0
             THEN (r.behind + r.in_flight)::float8 / d.done_last_day * interval '1 day' END AS eta
 FROM ops.catchup c
 LEFT JOIN LATERAL (

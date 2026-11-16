@@ -199,6 +199,10 @@ Why it is built this way (rules in the README, "Catch-up"):
   come only after a `section-index` run that finished its own work, and that run re-indexes new
   filings before re-parsed history (071's `ops.section_index_pending` order), so a re-parse wave
   never delays a new filing's passages or diffs.
+- **Paused at first.** 071 ships the parser kind paused: re-parsing every older document (eight
+  days of database load, ~380,000 documents re-indexed as their titles change) is the owner's call.
+  Paused, it is still measured each hour (the status view shows `paused`, the alert ignores it);
+  `UPDATE ops.catchup SET paused = false WHERE kind = 'parser'` starts it.
 - **Pace.** 3,000 an hour: `doc-crawler` publishes 500 per round and an idle round is 5 minutes
   (`CRAWL_IDLE_SECONDS`, 15 before), parser-backfill sustained ~11,000 an hour on hermes, and the
   documents whose sections change (rust-3/4/5's titles) are re-indexed by the next hourly runs. On
@@ -245,8 +249,9 @@ sees re-parsed filings). Nothing here calls the SEC.
 ## Parser v7 rollout (runbook)
 
 For the owner (`sudo kubectl` on hermes, SQL as the DB owner); measured on hermes 2026-11-15, read-only.
-Since migration 071, steps 2-4 happen by themselves after the deploy ([Catch-up](#catch-up-migration-071));
-the steps stay as the record and the emergency path.
+Since migration 071, step 4 happens by itself after the deploy and steps 2-3 once the owner unpauses
+the parser kind ([Catch-up](#catch-up-migration-071)); the steps stay as the record and the emergency
+path.
 
 ### What ships
 

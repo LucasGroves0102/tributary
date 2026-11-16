@@ -26,7 +26,8 @@ rules are off.
   `ReplicationSlotRetainingWal` (a slot holding over 10 GB of WAL), `PostgresConnectionsHigh`,
   `DiskUsageHigh`, `DiskSpaceLow` (under 50 GB free), and for the document crawl
   `DocCrawlPausedForDisk` and `DocCrawlStalled` (its `tributary_doc_crawl_*` metrics), and
-  `CatchupStalled` (a kind of stored data an older rule built hasn't moved in a day, migration 071;
+  `CatchupStalled` (a kind of stored data an older rule built hasn't moved in a day, a paused kind
+  never; migration 071;
   `tributary_catchup_*{kind}`, which doc-crawler reports from `ops.catchup_status`). Alertmanager
   sends every alert to Discord except `info` severity, `Watchdog` and `InfoInhibitor`.
 - `dashboards/*.json`: loaded by the Grafana sidecar (`tributary-freshness.json`, FR11).
