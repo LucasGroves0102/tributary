@@ -19,7 +19,7 @@ export const NOTE_GROUPS: { key: string; label: string; kinds: (k: string) => bo
   { key: "splits", label: "Stock splits", kinds: (k) => k === "stock_split" },
   { key: "restated", label: "Restated figures", kinds: (k) => k === "restatement" || k === "annual_sum" },
   { key: "periods", label: "Gaps and overlapping periods", kinds: (k) => ["series_gap", "overlapping_quarters", "calendar_collision", "net_debt_gap"].includes(k) },
-  { key: "values", label: "Values to double-check", kinds: (k) => ["impossible_value", "sign_flip", "outlier", "mistagged_fact"].includes(k) || k.startsWith("segment_sum_") },
+  { key: "values", label: "Values to double-check", kinds: (k) => ["impossible_value", "tag_disagreement", "sign_flip", "outlier", "mistagged_fact"].includes(k) || k.startsWith("segment_sum_") },
   { key: "derived", label: "Derived quarters", kinds: (k) => k === "derived_quarters" },
 ];
 
@@ -30,6 +30,8 @@ export function severityLabel(s: DataNote["severity"]): string {
 }
 
 const str = (v: unknown): string | null => (typeof v === "string" && v ? v : null);
+/** A ratio in words: "1,000", "5.6", "1,076". */
+const times = (r: number): string => r.toLocaleString("en-US", { maximumFractionDigits: r < 10 ? 1 : 0 });
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 const date = (v: unknown): string => (str(v) ? day(str(v)!, true) : "an unknown date");
 const signedPct = (r: number): string => `${r >= 0 ? "+" : "−"}${Math.abs(r * 100).toLocaleString("en-US", { maximumFractionDigits: Math.abs(r) < 0.1 ? 1 : 0, minimumFractionDigits: Math.abs(r) < 0.1 ? 1 : 0 })}%`;
@@ -163,12 +165,18 @@ function explainOne(n: DataNote, now: number): Explained {
     }
     case "annual_sum": {
       const dev = num(d.deviation);
+      // 072: the check says when a restatement explains it (the year's figure, or one of its quarters)
+      const restated = str(d.restated);
       return {
-        title: `${m}: quarters don't add up to the year`,
+        title: restated ? `${m}: quarters differ from a restated year` : `${m}: quarters don't add up to the year`,
         text:
           `The four quarters of ${m.toLowerCase()} in the fiscal year ending ${n.period_end ? day(n.period_end, true) : "?"} sum to ` +
-          `${dev !== null ? `${Math.abs(dev * 100).toFixed(1)}% ${dev > 0 ? "more" : "less"} than` : "something other than"} the annual figure in the 10-K, ` +
-          "usually because a quarter was later restated or reclassified. TTM uses the quarters.",
+          `${dev !== null ? `${Math.abs(dev * 100).toFixed(1)}% ${dev > 0 ? "more" : "less"} than` : "something other than"} the annual figure in the 10-K` +
+          (restated === "year"
+            ? ". A later filing changed that year's figure and not every quarter with it, so the restatement is the difference, not an error. TTM uses the quarters."
+            : restated === "quarter"
+              ? ". One of the year's quarters was restated after it was first reported, which accounts for the difference. TTM uses the quarters."
+              : ", usually because a quarter was later restated or reclassified. TTM uses the quarters."),
       };
     }
     case "series_gap": {
@@ -207,6 +215,32 @@ function explainOne(n: DataNote, now: number): Explained {
             title: `${m}: left out, a period after its filing`,
             text: `The ${str(d.form) ?? "filing"}${filed} tags ${m.toLowerCase()} for ${pe}, a period that hadn't ended when it was filed, almost always a typing slip in its XBRL. The figure isn't used.`,
           };
+    }
+    case "tag_disagreement": {
+      // 072: two tags of one line in one filing that can't both be right; the API sends the tags and
+      // their ratio, never the figures
+      const factor = num(d.factor);
+      const tag = str(d.tag) ?? "one tag";
+      const other = str(d.other_tag) ?? "another";
+      const ratio = factor === null ? "many times" : factor >= 1 ? `${times(factor)} times` : `1/${times(1 / factor)} of`;
+      const filing = `The ${str(d.form) ?? "filing"}${d.filed ? ` filed ${date(d.filed)}` : ""}`;
+      const rule = str(d.rule);
+      if (rule === "scale") {
+        return {
+          title: `${m}: one figure in two scales`,
+          text: `${filing} tags ${m.toLowerCase()} for ${pe} as ${tag} and as ${other}, ${ratio} the first: the same figure in two scales (thousands entered as units, or the reverse). The figure shown is ${tag}'s; check the filing for which scale is right.`,
+        };
+      }
+      if (rule === "same_line") {
+        return {
+          title: `${m}: two tags of one line disagree`,
+          text: `${filing} tags ${m.toLowerCase()} for ${pe} under two names for the same line, ${tag} and ${other}, one ${ratio} the other. They can't both be right; the figure shown is ${tag}'s. Check the filing.`,
+        };
+      }
+      return {
+        title: `${m}: a total smaller than its own part`,
+        text: `${filing} tags ${m.toLowerCase()} for ${pe} as ${tag}, and a part of that line (${other}) at ${ratio} it. A total can't be smaller than its part, so one of the tags is likely on the wrong line; the figure shown is the total as tagged. Check the filing.`,
+      };
     }
     case "overlapping_quarters": {
       const days = num(d.overlap_days);
@@ -255,6 +289,13 @@ function explainOne(n: DataNote, now: number): Explained {
     case "outlier": {
       const x = num(d.vs_neighbours);
       const size = `${x !== null ? `${Math.abs(x).toFixed(1)}×` : "many times"} the size of the quarters around it`;
+      // 072: a line that swings by nature (a debt raise, an acquisition, a special dividend, a tax charge)
+      if (str(d.rule) === "lumpy" && d.seasonal !== true) {
+        return {
+          title: `${m}: a large swing`,
+          text: `${m} for ${pe} is ${size}. This line swings with one-off events (a debt raise or repayment, an acquisition, a special dividend, a tax charge or benefit), so a quarter like this is usually real; check the filing if it matters.`,
+        };
+      }
       return d.seasonal === true
         ? {
             title: `${m}: seasonal peak`,

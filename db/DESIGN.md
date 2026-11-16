@@ -733,3 +733,38 @@ The catch-up runs in the hourly `section-index` and `segments` jobs (deploy/helm
 records a row per kind and run in `ops.catchup_runs` (30 days), and `ops.catchup_status` reads the
 latest row, the last day's pace and an ETA; the `CatchupStalled` alert fires when a kind with work left
 hasn't moved in a day. Locks: new tables and functions; three functions replaced (catalog only).
+
+### 072_data_trust_checks.sql
+
+`072_data_trust_checks.sql` (data trust, part 1): nightly checks that find wrong numbers before readers
+do, and check results that say what they mean. Its header has the rules and the production counts.
+
+- `tag_disagreement` (`ops.check_financials`, warning): the filing gold reads a figure from tags the same
+  line another way and the two can't both be right: gold's tag a total under a fifth of a part of it
+  (`ops.tag_relations` 'part'), two names of one line 5x apart ('same'), or any two tags 1,000 or
+  1,000,000 times apart (revenue's are 064's). A bare "two tags 5x apart" found 84,000 pairs, almost all
+  normal sub-totals; the relations keep only lines that can't exceed gold's. Detail names both tags and
+  the factor, never the values (014's rule).
+- Tiers (`ops.quality_tier`): error, warning, kept_out (`mistagged_fact`, now info), coverage
+  (`series_gap`, `net_debt_gap`, now info), info (restatements; outliers on lumpy lines, rule `lumpy`;
+  annual sums whose year or quarter was restated, `restated`). `ops.quality_companies.figures` counts
+  each company's gold rows at its check, for findings per 1,000 figures in the new view
+  `ops.quality_tiers` (`ops.public_quality` reads it; `ops.quality_summary` keeps its six columns, which
+  the 038-041 backout replaces, one row per check and severity now).
+- `ops.check_segments`: two cuts beside a zero or a negative member (NVIDIA's 2019 quarters) overlap
+  too: zeros drop out and the negative members count once in every set (070's search over the
+  positive members for the figure less the negative ones). 3,125 of 27,170 stored findings go; NVIDIA
+  keeps 13 of 19, real (two bases mixed in derived Q4s, missing geography members, unallocated costs).
+- Parser-output checks (`ops.check_sections`, `ops.section_findings`, `ops.section_checks`): keys the
+  form has, core items, empty and repeated sections, stored documents with none; twins of
+  services/parser `invariants.py`. Run by section-index for what it indexes and by the catch-up (kind
+  `check_sections`) for every stored document once per `ops.check_sections_version()`. First counts:
+  6,973 of 634,653 documents with an invalid key, 17,591 missing a core item (mostly 10-Q Part I Item 1).
+- Extremes (`ops.refresh_extremes`, `ops.extremes`, `ops.extremes_report` for ops_reader): the screener's
+  top and bottom 20 per column with what explains each (a finding, a derived quarter, or `in_line`: the
+  company's own previous figure within 3x); 1,036 of 4,720 rows to review on hermes. The nightly
+  financials-bulk job refreshes it.
+
+Both company checks' versions go to 72, so the hourly catch-up re-checks every company; nothing runs by
+hand. No backout file: 057's `ops.check_financials`, 070's `ops.check_segments` and versions 57/70 undo
+the checks (the chain's guards pin 072's bodies).

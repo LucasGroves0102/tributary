@@ -1037,6 +1037,30 @@ def test_overlapping_members_are_not_a_deviation_but_a_missing_one_is(conn):
     assert [c for c, _ in _segment_findings(conn, STALE)] == ["segment_sum_product_service"]
 
 
+def test_two_cuts_beside_a_zero_or_a_negative_member_overlap_too(conn):
+    """072: NVIDIA's quarter to Jul 28, 2019 as gold holds it: GPU and Tegra (the old cut) beside
+    Compute and Networking and Graphics (the 10-K's re-cut comparatives), revenue $2,579M with a
+    $0 corporate member, operating income $571M with -$300M of corporate costs. 070 gave up on a
+    zero or a negative member (037's rule: 100% and 152% more). The negative members count once in
+    every set, so each cut makes the figure: no finding. Without one of the old cut's members,
+    operating income has no set within 0.5%: still flagged."""
+    end = date(2019, 7, 28)
+    reported(conn, STALE, "revenue", end, 2_579)
+    reported(conn, STALE, "operating_income", end, 571)
+    for member, revenue, income in (("Gpu", 2_104, 746), ("Tegra", 475, 122),
+                                    ("ComputeAndNetworking", 776, 164), ("Graphics", 1_803, 707)):
+        segment(conn, STALE, "business_segment", member, revenue, end, metric="revenue")
+        segment(conn, STALE, "business_segment", member, income, end)
+    segment(conn, STALE, "reconciliation", "Corporate", 0, end, metric="revenue")
+    segment(conn, STALE, "reconciliation", "Corporate", -300, end)
+    conn.execute("SELECT ops.check_segments(%s)", ([STALE],))
+    assert _segment_findings(conn, STALE) == []
+    conn.execute("DELETE FROM gold.segment_financials WHERE company_id = %s AND member IN"
+                 " ('Graphics', 'Tegra') AND metric = 'operating_income'", (STALE,))
+    conn.execute("SELECT ops.check_segments(%s)", ([STALE],))
+    assert [c for c, _ in _segment_findings(conn, STALE)] == ["segment_sum_business_segment"]
+
+
 def test_segment_cover_searches_positive_parts_only(conn):
     cover = "SELECT ops.segment_cover(%s::numeric[], %s::numeric, %s::numeric)"
     assert conn.execute(cover, ([89.02, 48.71, 40.31, 7.2], 96.22, 0.48)).fetchone()[0] is True

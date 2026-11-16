@@ -44,9 +44,13 @@ the parser image's `parser-peers` job, not in SQL.
 
 | Function | Latest definition |
 |---|---|
-| `ops.check_financials(text[])` (debt compared with liabilities and assets in its own currency) | `057_currency_readings.sql` (before: `050_filers_debt_signs.sql` SBC benefits as info, `debt_parts_scale`; `041_quality_findings.sql` `mistagged_fact`, `net_debt_gap`, a repeated `series_gap`, the annual comparison through `gold.best_facts`; `023_data_notes.sql` restatement; `018_segments.sql`; `014_gold_calendar.sql`) |
-| `ops.check_segments(text[])` (a reconciliation member restating the segments' sum isn't added; members that overlap, some set of them making the figure, aren't a deviation: `ops.segment_cover`) | `070_check_segments_overlap.sql` (before: `037_check_segments_subtotal.sql`, `018_segments.sql`) |
-| `ops.check_financials_version()`, `ops.check_segments_version()` (bump with a check's replace), `ops.recheck(kind, text[])` | `071_auto_catchup.sql` |
+| `ops.check_financials(text[])` (tag_disagreement over `ops.tag_relations`; mistagged facts, series gaps and lumpy outliers info; annual sums against a restated year info; each company's figures counted) | `072_data_trust_checks.sql` (before: `057_currency_readings.sql` debt compared with liabilities and assets in its own currency; `050_filers_debt_signs.sql` SBC benefits as info, `debt_parts_scale`; `041_quality_findings.sql` `mistagged_fact`, `net_debt_gap`, a repeated `series_gap`, the annual comparison through `gold.best_facts`; `023_data_notes.sql` restatement; `018_segments.sql`; `014_gold_calendar.sql`) |
+| `ops.check_segments(text[])` (a reconciliation member restating the segments' sum isn't added; members that overlap, some set of them making the figure, aren't a deviation: `ops.segment_cover`, zeros out and negative members in every set) | `072_data_trust_checks.sql` (before: `070_check_segments_overlap.sql`, `037_check_segments_subtotal.sql`, `018_segments.sql`) |
+| `ops.check_financials_version()`, `ops.check_segments_version()` (bump with a check's replace) | `072_data_trust_checks.sql` (first: `071_auto_catchup.sql`) |
+| `ops.recheck(kind, text[])` | `071_auto_catchup.sql` |
+| `ops.quality_tier(check, severity)` (the status page's groups), views `ops.quality_tiers` and `ops.quality_summary`, `ops.public_quality()` | `072_data_trust_checks.sql` |
+| `ops.check_sections(text[])` (parser-output checks per document), `ops.check_sections_version()`, `ops.section_key_valid(form, key)`, `ops.core_section_keys(form)`, `ops.section_check_backlog(int)`, `ops.public_parser_quality()` | `072_data_trust_checks.sql` |
+| `ops.refresh_extremes(int)`, `ops.extreme_columns()` (the screener's columns), view `ops.extremes_report` | `072_data_trust_checks.sql` |
 
 ## Catch-up
 

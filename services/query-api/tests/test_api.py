@@ -80,7 +80,15 @@ class FakeStore:
                          "last_indexed_at": "2026-11-02T10:00:00Z", "ticker": "NVDA"},
             "quality": [{"check_name": "impossible_value", "severity": "error", "findings": 3,
                          "companies": 2, "companies_checked": 6024,
-                         "last_checked_at": "2026-11-02T08:00:00Z", "company_id": NVDA}],
+                         "last_checked_at": "2026-11-02T08:00:00Z", "company_id": NVDA,
+                         "tier": "error", "figures": 13790000, "per_1000": Decimal("0.0002")},
+                        {"check_name": "mistagged_fact", "severity": "info", "findings": 634,
+                         "companies": 262, "companies_checked": 6024,
+                         "last_checked_at": "2026-11-02T08:00:00Z", "tier": "kept_out",
+                         "figures": 13790000, "per_1000": Decimal("0.046")}],
+            "parser": [{"check_name": "invalid_key", "severity": "error", "documents": 6,
+                        "documents_checked": 4000, "last_checked_at": "2026-11-02T09:00:00Z",
+                        "accession_no": "0001045810-26-000075"}],
         }
 
     def segments(self, user_id, company_id, axis, metric, periods, view, basis):
@@ -460,15 +468,22 @@ def test_status_data_is_public_and_aggregate_only(client):
     assert r.status_code == 200
     body = r.json()
     assert set(body) == {"as_of", "max_age_seconds", "freshness", "ingest", "completeness",
-                         "coverage", "quality", "recorded"}
+                         "coverage", "quality", "parser", "recorded"}
     assert body["ingest"] == {"window_days": 7, "window_start": "2026-10-26T15:00:00Z",
                               "filings": 40000, "via_feed": 39000, "live_pct": 97.5,
                               "p50_seconds": 41.2, "p95_seconds": 170.0}
     assert body["coverage"]["companies_with_financials"] == 6025
-    assert body["quality"] == {"companies_checked": 6024,
-                               "last_checked_at": "2026-11-02T08:00:00Z",
-                               "checks": [{"check": "impossible_value", "severity": "error",
-                                           "findings": 3, "companies": 2}]}
+    assert body["quality"] == {
+        "companies_checked": 6024, "last_checked_at": "2026-11-02T08:00:00Z",
+        "figures": 13790000,
+        "checks": [{"check": "impossible_value", "severity": "error", "tier": "error",
+                    "findings": 3, "companies": 2, "per_1000": 0.0},
+                   {"check": "mistagged_fact", "severity": "info", "tier": "kept_out",
+                    "findings": 634, "companies": 262, "per_1000": 0.046}]}
+    assert body["parser"] == {
+        "documents_checked": 4000, "last_checked_at": "2026-11-02T09:00:00Z",
+        "checks": [{"check": "invalid_key", "severity": "error", "documents": 6,
+                    "per_1000": 1.5}]}
     # nothing the store returned beyond the named fields reaches the public route
     text = r.text
     assert NVDA not in text and "0001045810-26-000075" not in text and "NVDA" not in text

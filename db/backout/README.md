@@ -46,6 +46,10 @@ the rebuild its row names once, after the last file:
 13. `interest_expense_043.sql`
 14. `gold_rules_038_041.sql`
 
+072's checks (`ops.check_financials`, `ops.check_segments`) have no file: the guards expect 072's
+bodies, `currency_readings_057.sql` puts back 050's `ops.check_financials` as before, and 057's and
+070's bodies with versions 57/70 undo 072 by hand.
+
 Two groups stand apart, replacing functions the list above never touches, so each runs at any point,
 once, newest first within it: `segments_speed_062.sql` then `segments_same_basis_053.sql` (both
 `gold.refresh_segment_financials`: 062's file puts back 053's body, 053's then 018's), and

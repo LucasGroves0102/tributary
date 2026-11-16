@@ -517,7 +517,20 @@ export async function mockApi(page: Page): Promise<Fake> {
         ingest: { window_days: 7, window_start: "2026-10-14T15:00:00Z", filings: 40000, via_feed: 39000, live_pct: 97.5, p50_seconds: 43, p95_seconds: 108 },
         completeness: { window_days: 30, window_start: "2026-09-21", days_checked: 21, indexed: 43012, missing: 1, republished: 1, days_with_missing: 1, last_checked_at: now() },
         coverage: { companies_with_financials: 6597, documents: 632923, indexed_filings: 632164, sections: 3555257, last_indexed_at: now() },
-        quality: { companies_checked: 7070, last_checked_at: now(), checks: [{ check: "impossible_value", severity: "error", findings: 3, companies: 2 }] },
+        quality: {
+          companies_checked: 7070, last_checked_at: now(), figures: 13_790_000,
+          checks: [
+            { check: "impossible_value", severity: "error", tier: "error", findings: 1410, companies: 517, per_1000: 0.102 },
+            { check: "tag_disagreement", severity: "warning", tier: "warning", findings: 2900, companies: 1000, per_1000: 0.21 },
+            { check: "mistagged_fact", severity: "info", tier: "kept_out", findings: 634, companies: 262, per_1000: 0.046 },
+            { check: "series_gap", severity: "info", tier: "coverage", findings: 19534, companies: 3865, per_1000: 1.417 },
+            { check: "restatement", severity: "info", tier: "info", findings: 191772, companies: 5288, per_1000: 13.91 },
+          ],
+        },
+        parser: {
+          documents_checked: 580000, last_checked_at: now(),
+          checks: [{ check: "invalid_key", severity: "error", documents: 6300, per_1000: 10.862 }],
+        },
         recorded: {
           adversarial: { ...recorded, attacks: 59, categories: 10, leaks: 0, controls: 4, controls_answered: 4, report: "tests/adversarial/report.md" },
           citations: { ...recorded, questions: 32, verified_answers: 32, data_answers: 30, data_answers_citing: 30, figures: 128, figures_traced: 128, untraced_accessions: 0, report: "tests/citations/report.md" },

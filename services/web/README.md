@@ -60,7 +60,7 @@ Hash routes (`src/route.ts`; an unknown route goes Home, `#/explore` to Companie
 | `#/alerts` | filing alerts | [Filing alerts](DESIGN.md#filing-alerts) |
 | `#/settings` | filing alerts, Connect your data (when on), API keys | [Price](DESIGN.md#price-connect-your-data), [API keys](DESIGN.md#api-keys-and-using-the-api) |
 | `#/about` | what Tributary covers and doesn't | [Screens](DESIGN.md#screens-hash-routes) |
-| `#/status` | Data status: freshness, completeness, quality checks, recorded suites; public | [Screens](DESIGN.md#screens-hash-routes) |
+| `#/status` | Data status: freshness, completeness, quality checks by what they mean for a reader, filing-section checks, recorded suites; public | [Screens](DESIGN.md#screens-hash-routes) |
 | `#/api` | Using the API: keys, examples, the routes a key can use, connecting an AI model; public | [API keys](DESIGN.md#api-keys-and-using-the-api) |
 | `#/signed-in?token=…` | where GitHub sign-in and an owner-issued link land | [Sign-in](DESIGN.md#sign-in-and-access) |
 

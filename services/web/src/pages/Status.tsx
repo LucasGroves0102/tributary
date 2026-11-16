@@ -4,7 +4,7 @@ import { dataStatus } from "../api";
 import { checkName } from "../companies/screen";
 import { ago, day, duration, localTime } from "../format";
 import { href } from "../route";
-import type { DataStatus, RecordedRun } from "../types";
+import type { DataStatus, QualityTier, RecordedRun } from "../types";
 import { Seal } from "../components/Seal";
 import { TableScroll } from "../components/TableScroll";
 
@@ -217,6 +217,58 @@ export function share(part: number, total: number): string {
   return `${pct < 0.1 && part > 0 ? "<0.1" : pct.toFixed(1)}%`;
 }
 
+/** Findings per 1,000 figures (or documents): "0.10", "13.9", "<0.01" for a real finding, "—" before
+ * the checks have counted. */
+export function perThousand(n: number | null | undefined, findings = 1): string {
+  if (n === null || n === undefined) return "—";
+  if (n > 0 && n < 0.01) return "<0.01";
+  if (n === 0 && findings > 0) return "<0.01";
+  return n >= 10 ? n.toFixed(1) : n.toFixed(2);
+}
+
+/** The status page's groups (migration 072's tiers), in order, each with what it means for a reader. */
+export const TIERS: { tier: QualityTier; label: string; meaning: string }[] = [
+  { tier: "error", label: "Errors readers could see", meaning: "a figure shown that can't be right as it stands" },
+  { tier: "warning", label: "To double-check", meaning: "a figure shown that looks wrong and may be" },
+  { tier: "kept_out", label: "Kept out", meaning: "source figures the data already leaves out: nothing shown is affected" },
+  { tier: "coverage", label: "Coverage", meaning: "a figure missing, not a wrong one: left blank rather than guessed" },
+  { tier: "info", label: "Information", meaning: "normal behaviour worth knowing, not an error" },
+];
+
+/** What a check's findings mean for someone reading the figures, by check and severity (a check can
+ * have findings of two: an outlier on a lumpy line is information). Falls back to the screener's
+ * description (companies/screen.ts CHECKS). */
+const MEANING: Record<string, string> = {
+  impossible_value: "Negative revenue, assets or share counts, or a part larger than its total (gross profit above revenue): one of the figures is tagged wrongly in the filing",
+  overlapping_quarters: "A quarter that starts before the previous one ends, usually a change of fiscal calendar: comparisons across it may be off",
+  "tag_disagreement:warning": "The filing tags one line two ways that can't both be right (one figure in two scales, a total under a fifth of its own part, two names of a line 5× apart); the figure shown is one of them",
+  "outlier:warning": "A quarter 10× or more the quarters around it: a one-off, or a scale slip in the filing",
+  "outlier:info": "A 10× swing on a line that swings by nature (cash flow subtotals, the change in cash, buybacks, dividends, income tax)",
+  "sign_flip:warning": "A cost or outflow with the opposite sign to the quarters around it, usually a sign slip in the filing",
+  "sign_flip:info": "Negative stock-based compensation that the filing's own year to date confirms: a benefit, not a slip",
+  "annual_sum:warning": "Four quarters more than 1% off the year's reported figure, with no restatement to explain it",
+  "annual_sum:info": "Four quarters off a year that a later filing restated (the year or one of its quarters): the restatement explains it",
+  calendar_collision: "Two fiscal quarters in one calendar quarter: the calendar view shows one of them",
+  segment_sum_business_segment: "Business segments that add up to the company total in no combination (±0.5%)",
+  segment_sum_geography: "Geographic areas that add up to the company total in no combination (±0.5%)",
+  segment_sum_product_service: "Products and services that add up to the company total in no combination (±0.5%)",
+  mistagged_fact: "A source figure the data leaves out: a period ending after its filing, or debt above total liabilities and assets",
+  series_gap: "A quarter missing from a series (often capex, buybacks or stock compensation the 10-Qs don't tag): TTM and growth that need it are left blank",
+  net_debt_gap: "Debt and cash on file but net debt left out, where investments or debt can't be told apart",
+  restatement: "A figure a later filing changed by more than 0.5%: the latest is shown",
+};
+
+export function meaning(check: string, severity: string): string {
+  return MEANING[`${check}:${severity}`] ?? MEANING[check] ?? checkName(check) ?? check.replace(/_/g, " ");
+}
+
+type Check = DataStatus["quality"]["checks"][number];
+
+/** The tier a row belongs to: the API's, else (an older API) its severity. */
+export function tierOf(c: Pick<Check, "tier" | "severity">): QualityTier {
+  return c.tier ?? c.severity;
+}
+
 /** This page is public and aggregate: never a company here. A signed-in reader follows a row to the
  * screener, which lists the companies they can read with such a finding, under their own access. */
 function Quality({ data, when, signedIn }: { data: DataStatus; when: (iso: string | null) => string; signedIn: boolean }) {
@@ -224,13 +276,14 @@ function Quality({ data, when, signedIn }: { data: DataStatus; when: (iso: strin
   const withSeries = data.coverage.companies_with_financials;
   // every company with XBRL figures is checked; not all of them have a quarterly series to show
   const noSeries = withSeries !== null && q.companies_checked > withSeries ? q.companies_checked - withSeries : 0;
+  const groups = TIERS.map((t) => ({ ...t, checks: q.checks.filter((c) => tierOf(c) === t.tier) })).filter((g) => g.checks.length);
   return (
     <section className="card">
       <div className="card-h">
         <h2>Data-quality checks</h2>
         <span className="sub">
           {q.last_checked_at
-            ? `${count(q.companies_checked)} companies checked, last run ${when(q.last_checked_at)}`
+            ? `${count(q.companies_checked)} companies checked${q.figures ? `, ${count(q.figures)} figures` : ""}, last run ${when(q.last_checked_at)}`
             : "no check has run yet"}
         </span>
       </div>
@@ -247,37 +300,42 @@ function Quality({ data, when, signedIn }: { data: DataStatus; when: (iso: strin
         )}
       </p>
       <TableScroll label="Data-quality checks">
-        <table className="t">
+        <table className="t quality-table">
           <thead>
             <tr>
               <th>Check</th>
-              <th>Severity</th>
               <th className="n">Companies affected</th>
               <th className="n">Share</th>
+              <th className="n">Per 1,000 figures</th>
               <th className="n">Findings</th>
             </tr>
           </thead>
-          <tbody>
-            {q.checks.map((c) => (
-              <tr key={c.check}>
-                <td>{checkName(c.check) ?? c.check}</td>
-                <td>
-                  <span className={`tag sev-${c.severity}`}>{c.severity}</span>
-                </td>
-                <td className="n">
-                  {signedIn && checkName(c.check) && c.companies ? (
-                    <a className="count-link" href={href({ view: "companies", screen: { issue: c.check } })} title="List these companies in the screener">
-                      {count(c.companies)}
-                    </a>
-                  ) : (
-                    count(c.companies)
-                  )}
-                </td>
-                <td className="n">{share(c.companies, q.companies_checked)}</td>
-                <td className="n">{count(c.findings)}</td>
+          {groups.map((g) => (
+            <tbody key={g.tier} className={`tier tier-${g.tier}`}>
+              <tr className="tier-h">
+                <th colSpan={5} scope="rowgroup">
+                  {g.label}: <span className="faint">{g.meaning}</span>
+                </th>
               </tr>
-            ))}
-          </tbody>
+              {g.checks.map((c) => (
+                <tr key={`${c.check}:${c.severity}`}>
+                  <td>{meaning(c.check, c.severity)}</td>
+                  <td className="n">
+                    {signedIn && checkName(c.check) && c.companies ? (
+                      <a className="count-link" href={href({ view: "companies", screen: { issue: c.check } })} title="List these companies in the screener">
+                        {count(c.companies)}
+                      </a>
+                    ) : (
+                      count(c.companies)
+                    )}
+                  </td>
+                  <td className="n">{share(c.companies, q.companies_checked)}</td>
+                  <td className="n">{perThousand(c.per_1000, c.findings)}</td>
+                  <td className="n">{count(c.findings)}</td>
+                </tr>
+              ))}
+            </tbody>
+          ))}
         </table>
       </TableScroll>
       {/* what a finding means for what you see first (Riley 48), the rest behind a disclosure */}
@@ -291,12 +349,65 @@ function Quality({ data, when, signedIn }: { data: DataStatus; when: (iso: strin
           A company is checked whenever its figures change, so its own last check can be days old while the latest run
           is minutes old. {noSeries > 0 && `${count(q.companies_checked)} companies have XBRL figures to check; ${count(noSeries)} of them have no quarterly series, which is why ${count(withSeries)} show as having quarterly financials. `}
           A finding is one company, metric and quarter;
-          one bad source figure can raise several. SEC data is messy: companies mis-tag figures and restate
-          them, and these checks are how we find it. Errors and warnings flag figures to double-check; restatements are
-          informational.
+          one bad source figure can raise several. Per 1,000 figures counts findings against every quarter, trailing
+          twelve months and computed figure of the companies checked. SEC data is messy: companies mis-tag figures and
+          restate them, and these checks are how we find it. Only the first two groups are about figures you see that
+          may be wrong; the rest say what the data leaves out, what it lacks, and what is normal.
         </p>
       </details>
+      {data.parser && <Parser parser={data.parser} when={when} />}
     </section>
+  );
+}
+
+/** What each parser-output check means for someone reading a filing's sections. */
+const PARSER_MEANING: Record<string, string> = {
+  invalid_key: "A section labelled with an item its form doesn't have (an 8-K's \"Item 7\", a 10-Q's Part I Item 6)",
+  no_sections: "A stored filing that couldn't be split into sections: no item headings were found in its text",
+  missing_core_item: "A 10-K without Item 1, 1A, 7 or 8, or a 10-Q without Part I Items 1 and 2",
+  duplicate_section: "The same text under two items",
+  empty_section: "An item with nothing past its heading",
+};
+
+/** The parser-output checks: documents, never a company or filing. */
+function Parser({ parser: p, when }: { parser: NonNullable<DataStatus["parser"]>; when: (iso: string | null) => string }) {
+  return (
+    <>
+      <div className="card-h parser-h">
+        <h3>Filing sections</h3>
+        <span className="sub">
+          {p.last_checked_at ? `${count(p.documents_checked)} filings checked, last run ${when(p.last_checked_at)}` : "no check has run yet"}
+        </span>
+      </div>
+      <TableScroll label="Filing section checks">
+        <table className="t">
+          <thead>
+            <tr>
+              <th>Check</th>
+              <th>Severity</th>
+              <th className="n">Filings affected</th>
+              <th className="n">Per 1,000 filings</th>
+            </tr>
+          </thead>
+          <tbody>
+            {p.checks.map((c) => (
+              <tr key={c.check}>
+                <td>{PARSER_MEANING[c.check] ?? c.check.replace(/_/g, " ")}</td>
+                <td>
+                  <span className={`tag sev-${c.severity}`}>{c.severity}</span>
+                </td>
+                <td className="n">{count(c.documents)}</td>
+                <td className="n">{perThousand(c.per_1000, c.documents)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </TableScroll>
+      <p className="foot">
+        Every stored 10-K, 10-Q and 8-K is checked after it is split into items, so a parser rule that files sections
+        under the wrong item shows here before readers meet it.
+      </p>
+    </>
   );
 }
 

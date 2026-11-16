@@ -129,6 +129,22 @@ make section-index LIMIT=5000   # parser-index --limit 5000 [--batch 25]
 parser-index --passages         # only the passages built before migration 068 (below)
 ```
 
+### Parser-output checks (migration 072)
+
+The parity tests prove Python and Rust agree; these prove what they agree on is right ("Item
+7.01Regulation" keyed 3,465 8-K sections "7" in both). Each filing section-index indexes goes through
+`ops.check_sections`: `invalid_key` (a key the form doesn't have: 8-K items 1.01-9.01, 10-K items with
+4A, 10-Q items of their Part, exhibit keys), `missing_core_item` (an original 10-K without 1, 1A, 7 or
+8 unless it has a cross-reference index; a 10-Q without Part I items 1 and 2), `duplicate_section`,
+`empty_section` (nothing past the heading; a 10-K's reserved Item 6 isn't one) and `no_sections` (a
+stored document a day old the parser couldn't split). Findings in `ops.section_findings` (keys and
+counts, never text), stamps in `ops.section_checks`; counts for ops_reader in
+`ops.parser_quality_summary` and on the public status page. `filing_parser/invariants.py` holds the
+same rules for the tests (`test_invariants.py` checks they are the migration's), run over every real
+filing in `tests/fixtures`, including Chicago Rivet's "Item 7.01Regulation" 8-K (`cvr-8-K`).
+Known gap, both parsers: a 10-Q whose Part I Item 1 heading isn't an Item line (Molina, TriNet; 14,882
+10-Qs on hermes) has no `I-1`; the fixtures' tests mark it a strict xfail.
+
 ### Search without page furniture (migration 068)
 
 `gold.refresh_section_search` blanks a section's page furniture (as spaces, so offsets stay)
@@ -158,11 +174,14 @@ diffs (`diff.ALGORITHM`) needs nothing run by hand (migration 071, `filing_parse
    3,000 events and under 6,000 of the last day's requests wait for parser-backfill. A document the
    live doc-fetcher stored has no crawl target; it gets the row the crawl writes for a filing it
    finds already stored. Each document is re-queued once per version;
-2. rebuilds older passages for up to `CATCHUP_SECONDS` (never past 50 minutes into the job, so the
-   next hour's run is never skipped), oldest filing first, under the same lock as
+2. runs the parser-output checks (072) on every stored document no check of
+   `ops.check_sections_version()` has seen, oldest filing first, 2,000 a transaction, for up to 5 of
+   those minutes (kind `check_sections`; 634,653 documents on hermes, a batch in under a second);
+3. rebuilds older passages for the rest of `CATCHUP_SECONDS` (never past 50 minutes into the job, so
+   the next hour's run is never skipped), oldest filing first, under the same lock as
    `section-passages` (one waits for the other; both take the same filings, so they can overlap in
    time without harm);
-3. measures diffs of an older `ALGORITHM` (the run itself recomputes them).
+4. measures diffs of an older `ALGORITHM` (the run itself recomputes them).
 
 Re-parsed documents whose sections change are re-indexed by the next runs (after new filings).
 Progress: `SELECT * FROM ops.catchup_status` (`paused`, `behind`, `in_flight`, `done_last_day`,
@@ -228,4 +247,5 @@ cases, and on the fixtures each row's text equals its cells and the walk equals 
 `parsed_at`; `test_index_db.py` migration 068 (the furniture rule against the web's cases, a phrase
 across NVIDIA's page break, `--passages` leaving diffs alone); `test_rust_tls.py` checks that the Rust
 parser connects or fails for every `sslmode` exactly where libpq does, against a TLS-only server
-(CI).
+(CI). `test_invariants.py` checks every fixture's keys and core items (072's rules);
+`test_section_checks_db.py` runs `ops.check_sections`, section-index's call and the catch-up.

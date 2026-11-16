@@ -22,8 +22,9 @@ export const FILER_LABELS: Record<FilerCategory, string> = {
 
 export const EXCHANGES = ["NYSE", "Nasdaq", "CBOE", "OTC"] as const;
 
-/** What each data-quality check flags (migrations 014, 018, 023: ops.check_financials). The status
- * page's rows, and the screener's "with a finding of this check" filter. */
+/** What each data-quality check flags (migrations 014, 018, 023, 041, 072: ops.check_financials). The
+ * screener's "with a finding of this check" filter, and which status-page rows link to it (the page
+ * words its rows itself, by check and severity). */
 export const CHECKS: Record<string, string> = {
   impossible_value: "Impossible values: negative revenue, assets, debt or share counts, or a part larger than its total",
   overlapping_quarters: "A quarter starting before the previous one ended",
@@ -32,6 +33,7 @@ export const CHECKS: Record<string, string> = {
   series_gap: "A quarter missing after four contiguous ones",
   sign_flip: "An expense or outflow whose sign differs from both neighbouring quarters",
   outlier: "A one-quarter spike of 10× or more: seasonal, a one-off, or a scale error in the filing",
+  tag_disagreement: "Two tags of one line in one filing that can't both be right: one figure in two scales, or a total under a fifth of its own part",
   mistagged_fact: "A figure kept out of the data: a period ending after its filing, or debt above total liabilities",
   net_debt_gap: "Debt and cash on file but no net debt: investments or debt can't be told apart from a gap",
   segment_sum_business_segment: "Business segments not adding up to the company total (±1%)",

@@ -69,6 +69,7 @@ to date by themselves, oldest first, a budget per run, after their own work (mig
 | diffs | `diff.ALGORITHM` | `ops.section_index.algorithm` | `section-index` (its own run) |
 | gold | `gold.rules_version()` | `ops.company_builds` ('gold') | `segments`: the rebuild path, per company |
 | checks | `ops.check_financials_version()`, `ops.check_segments_version()` | `ops.company_builds` | `segments`: the check re-run |
+| parser checks | `ops.check_sections_version()` | `ops.section_checks.version` | `section-index` (072) |
 
 **A migration that changes gold's rules or `silver.metric_tags` (anything that needed
 financials-rebuild) replaces `gold.rules_version()` with its own number; one that replaces
@@ -156,3 +157,4 @@ One line each; the full notes (what it changes, why, the measurements) are in [D
 - [`069_readings_not_computed_stale.sql`](DESIGN.md#069_readings_not_computed_stalesql): readings `not_computed` and `stale`.
 - [`070_check_segments_overlap.sql`](DESIGN.md#070_check_segments_overlapsql): `ops.check_segments`: overlapping members aren't a deviation when a set adds up.
 - [`071_auto_catchup.sql`](DESIGN.md#071_auto_catchupsql): rule versions, per-company build stamps and the catch-up's state, status and parser re-queue.
+- [`072_data_trust_checks.sql`](DESIGN.md#072_data_trust_checkssql): the tag-disagreement check, check tiers and findings per 1,000 figures, parser-output checks, the extremes report.

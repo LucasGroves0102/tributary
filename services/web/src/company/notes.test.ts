@@ -256,3 +256,34 @@ describe("ranked and grouped notes (M2)", () => {
     expect(parts.text).toContain("add up to 1,000 times the total debt");
   });
 });
+
+describe("072: checks that say what they mean", () => {
+  it("words a tag disagreement by its rule, with both tags and their ratio, never a figure", () => {
+    const filed = { form: "10-Q", filed: "2026-08-14", accession_no: "x" };
+    const scale = explain(note("tag_disagreement", { rule: "scale", tag: "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents",
+      other_tag: "CashAndCashEquivalentsAtCarryingValue", factor: 1000, ...filed }));
+    expect(scale.title).toBe("Revenue: one figure in two scales");
+    expect(scale.text).toContain("The 10-Q filed Aug 14, 2026 tags revenue for the period ending Mar 29, 2025");
+    expect(scale.text).toContain("1,000 times the first");
+    const part = explain(note("tag_disagreement", { rule: "total_below_part", tag: "ReceivablesNetCurrent",
+      other_tag: "AccountsReceivableNetCurrent", factor: 9.2356 }));
+    expect(part.title).toBe("Revenue: a total smaller than its own part");
+    expect(part.text).toContain("a part of that line (AccountsReceivableNetCurrent) at 9.2 times it");
+    const same = explain(note("tag_disagreement", { rule: "same_line", tag: "EarningsPerShareBasic",
+      other_tag: "EarningsPerShareBasicAndDiluted", factor: 0.001 }));
+    expect(same.title).toBe("Revenue: two tags of one line disagree");
+    expect(same.text).toContain("one 1/1,000 of the other");
+    expect(groupNotes([note("tag_disagreement")])[0]!.key).toBe("values");
+  });
+
+  it("says a swing on a lumpy line is usually real, and a year's restatement explains its quarters", () => {
+    const lumpy = explain(note("outlier", { vs_neighbours: 42, rule: "lumpy" }, { severity: "info" }));
+    expect(lumpy.title).toBe("Revenue: a large swing");
+    expect(lumpy.text).toContain("is usually real");
+    const year = explain(note("annual_sum", { deviation: 0.08, restated: "year" }, { severity: "info" }));
+    expect(year.title).toBe("Revenue: quarters differ from a restated year");
+    expect(year.text).toContain("the restatement is the difference, not an error");
+    const quarter = explain(note("annual_sum", { deviation: 0.08, restated: "quarter" }, { severity: "info" }));
+    expect(quarter.text).toContain("One of the year's quarters was restated");
+  });
+});
