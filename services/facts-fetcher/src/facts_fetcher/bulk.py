@@ -6,8 +6,8 @@ together with the run's progress in bronze.bulk_loads. A run stops after `limit`
 entries, so the first load of every filer is a series of short runs, each resuming after the
 last committed entry; once caught up, a night only touches the companies that changed. One
 download can serve several runs (--rounds), with a pause between them (--pause-seconds).
-Last, changed zip or not, it refreshes the extremes report (extremes.py, migration 072): gold is
-current for the night by then.
+Last, changed zip or not, it refreshes the extremes report (extremes.py, migration 072) and the
+coverage report (coverage.py, migration 076): gold is current for the night by then.
 """
 
 import argparse
@@ -25,6 +25,7 @@ from pathlib import Path
 import httpx
 import psycopg
 
+from facts_fetcher import coverage, extremes
 from facts_fetcher.db import (
     company_ids,
     latest_hashes,
@@ -35,7 +36,6 @@ from facts_fetcher.db import (
     store_payloads,
     touch,
 )
-from facts_fetcher.extremes import refresh_quietly
 from facts_fetcher.payload import Payload, Tag, digest, prepare
 from tributary_sec import sec_client
 from tributary_telemetry import configure_logging
@@ -271,7 +271,9 @@ def main(argv: Iterable[str] | None = None) -> None:
                 got = download(client, args.dir / "companyfacts.zip", since)
             if got is None:
                 log.info("companyfacts.zip unchanged since %s", since)
-                refresh_quietly(conn)  # the other nightly jobs and the catch-up changed gold
+                # the other nightly jobs and the catch-up changed gold
+                extremes.refresh_quietly(conn)
+                coverage.refresh_quietly(conn)
                 return
             log.info("downloaded %d bytes (Last-Modified %s) in %.0fs", got.size_bytes,
                      got.last_modified, time.monotonic() - started)
@@ -282,7 +284,8 @@ def main(argv: Iterable[str] | None = None) -> None:
         finally:
             if got is not None:
                 got.path.unlink()
-        refresh_quietly(conn)
+        extremes.refresh_quietly(conn)
+        coverage.refresh_quietly(conn)
     log.info("%s: %d entries, %d changed, %d new facts, %d gold rows refreshed in %.0fs",
              "complete" if stats.completed else "limit reached, run again to continue",
              stats.entries, stats.changed, stats.facts, stats.gold_rows,

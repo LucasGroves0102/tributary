@@ -25,7 +25,7 @@ no gold rows (a CIK mapped after its facts were loaded). `--zip PATH` loads a lo
 `--dir` sets the download directory. `--rounds N --pause-seconds S` (`$BULK_ROUNDS`,
 `$BULK_PAUSE_SECONDS`) runs up to N batches from one download with a pause between them,
 stopping once the file is fully loaded. Last (an unchanged zip too) it refreshes the
-[extremes report](#extremes-report).
+[extremes report](#extremes-report) and the [coverage report](#coverage-report).
 
 Bronze keeps, per distinct payload, only the facts of tags in `silver.metric_tags`
 (`payload`, what SQL reads) plus the full payload gzip-compressed (`raw_gzip`) for the latest
@@ -44,7 +44,7 @@ A migration that changes the tags or gold's rules replaces `gold.rules_version()
 number; one that changes `ops.check_financials` or `ops.check_segments` bumps that check's version
 (migration 071, [db](../../db/README.md#versions-and-catch-up)). Every refresh stamps the companies
 it built in `ops.company_builds`, and the hourly `segments` job, once its own work is done, spends up
-to `CATCHUP_SECONDS` (1,200; never past 50 minutes into the job) on `catchup.py`: companies an older version built, oldest build first,
+to `CATCHUP_SECONDS` (1,200; never past 50 minutes into the job) on `catchup.py`: companies an older version built, those whose CIKs changed first (`ops.rebuild_soon`, 076: a re-registration linked), then oldest build first,
 the checks re-run 100 at a time (nothing re-derived; a check waits while the company's gold is due),
 then gold rebuilt 25 at a time by the `--rebuild` path (no SEC requests; `gold.companies_for_ciks`
 borrowers included). Each batch commits alone and takes the companies' gold locks, so a stopped run
@@ -54,7 +54,7 @@ that raises is retried a company at a time; one that still raises is recorded
 `ops.catchup_status`. A full gold catch-up of hermes' ~8,100 companies is about 1-2 hours of
 rebuilding, so it is done within a few hours of the deploy; the checks within the first run.
 
-Which fact gold believes is one SQL function, `gold.best_facts` (migration 039, latest body 064,
+Which fact gold believes is one SQL function, `gold.best_facts` (migration 039, latest body 077,
 over `gold.usable_facts`): the quarters, the annual fallback for TTM (040) and the checks' annual
 comparison (041) all read it. For revenue, a zero loses to another tag's value, and a figure under
 20% of the period's gross line is a part, not the total: `Revenues` under contract revenue (039),
@@ -65,7 +65,9 @@ slip when it is over 100 times every other money figure of the period, else the 
 sorts last (Tigo Energy's contract tag 1,000x too large, Plexus' in thousands). A line a
 filing reports as two tags (a bank's net interest plus noninterest income; NVIDIA's debt plus equity
 securities) is a `silver.metric_sums` row whose parts are `silver.metric_tags` rows with
-`gold_line = false` (038).
+`gold_line = false` (038). Net income is one line a year (077): inside a year whose annual figure is
+tagged `ProfitLoss` and never `NetIncomeLoss`, `ProfitLoss` reads first (PNC); its last fallback is
+`NetIncomeLossAvailableToCommonStockholdersBasic` (Booking since 2016).
 
 A filing's facts are the company's whose CIK the filing's own XBRL names (migration 050): since July
 2026 the SEC files some multi-registrant 10-K/10-Qs only under a co-registrant's CIK (DTE Energy's under
@@ -95,6 +97,29 @@ make extremes REFRESH=1  # recompute first
 ```
 
 On hermes, read-only: `SELECT * FROM ops.extremes_report WHERE review ORDER BY column_key, side, rank;`
+
+### Coverage report
+
+`coverage.py` (migration 076): every exchange-listed company measured for each kind of gap (no
+figures, figures behind its latest report, history cut short, a core metric missing lately, an
+unlinked re-registration, documents missing, statements in an unstored Exhibit 13), each with its cause
+and a reason: `fixable`, `not_in_sec_data` or `out_of_scope` (the kinds and causes: migration 076's
+header). `ops.refresh_coverage` rebuilds `ops.coverage` after the extremes report (36 s on hermes; a
+failure is logged, never the job's); a gap keeps its `first_seen` while it lasts. Readers: the company's
+data notes (`coverage`), the status page (counts per kind and reason), `ops.coverage_report` for
+ops_reader (names companies: never public).
+
+```bash
+make coverage                      # counts per kind, cause and reason
+make coverage KIND=history_short   # that kind's companies (REASON=fixable narrows)
+make coverage REFRESH=1            # recompute first
+make coverage-sample               # the monthly audit: 25 random listed companies (seeded by month)
+```
+
+`make coverage-sample` writes a Markdown checklist (`OUT=file`, `MONTH=2026-12`): per company, what
+Tributary shows (TTM revenue, net income and operating cash flow, the latest assets and equity, each with
+its period and filing), its latest filings' EDGAR links and its coverage notes, each a box to tick against
+the filings, for a person or a tester agent. No model or SEC call.
 
 ## Foreign filers and currencies
 
@@ -278,7 +303,7 @@ CronJobs on k3s (New York time; [helm chart](../../deploy/helm/tributary/README.
 | Job | Command | When |
 |---|---|---|
 | `financials` | `facts-fetcher` | nightly 04:00 |
-| `financials-bulk` | `facts-fetcher-bulk` | nightly 05:00, up to 60 rounds of 500 changed companies, no pause; then the extremes report |
+| `financials-bulk` | `facts-fetcher-bulk` | nightly 05:00, up to 60 rounds of 500 changed companies, no pause; then the extremes and coverage reports |
 | `filing-facts` | `facts-fetcher-filings` | daily 09:30; ships suspended until its first run by hand |
 | `segments` | `facts-fetcher-segments` | hourly at :20, then the catch-up (above); ships suspended, unsuspended in the Flux release; no SEC access |
 | `financials-rebuild` | `facts-fetcher --rebuild` | suspended: an emergency rebuild of everything at once; no SEC access |
@@ -307,6 +332,8 @@ fixtures in `conftest.py`), and the bulk loader on small zips. `test_filings.py`
 ones in `tests/fixtures/instance/`, made with `tests/trim_instance.py`), projection, and with a database the
 gap, catch-up, instance, extension-tag and member-sum paths; `test_ifrs.py`: IFRS filers, currencies, half years and
 borrowings (056). `test_extremes_db.py`: the extremes report's ranks, explanations and CLI (072).
+`test_coverage_db.py`: each kind of coverage gap, its cause and reason, first_seen, the readers and the
+monthly sample (076).
 `test_golden_10k.py` checks gold
 against 149 figures printed in five companies' 10-Ks, loading their companyfacts from
 `tests/fixtures/golden/` ([tests/golden](../../tests/golden/README.md)). Database tests

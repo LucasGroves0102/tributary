@@ -43,13 +43,14 @@ def refreshed(conn) -> list[tuple]:
 
 
 def test_every_refresh_stamps_its_companies(loaded):
-    assert {c: v[0] for c, v in stamps(loaded, "gold").items()} == dict.fromkeys(ALL, 64)
+    assert {c: v[0] for c, v in stamps(loaded, "gold").items()} == dict.fromkeys(ALL, 77)
     assert {c: v[0] for c, v in stamps(loaded, "check_financials").items()} == \
         dict.fromkeys(ALL, 74)
 
 
 def test_first_deploy_counts_every_company_current(loaded):
     loaded.execute("DELETE FROM ops.company_builds")  # as on the day 071 lands
+    bump(loaded, "gold.rules_version", 64)  # 071's rules (077 bumped them since)
     results = catchup.run(loaded, 60)
     # current at 071's baseline, except the checks 072 changed: every company re-checked
     assert [(r.kind, r.done, r.behind, r.failed) for r in results] == [
@@ -74,6 +75,19 @@ def test_a_rules_bump_rebuilds_every_company_in_budgeted_batches(loaded):
     row = loaded.execute("SELECT version, behind, done_last_day FROM ops.catchup_status"
                          " WHERE kind = 'gold'").fetchone()
     assert row == ("999", 0, 5)
+
+
+def test_a_company_whose_ciks_changed_is_rebuilt_first(loaded):
+    """076: the company-loader linked a CIK to XOM (ops.rebuild_soon): under a rules bump, with
+    every other company never stamped, XOM's batch comes first."""
+    loaded.execute("DELETE FROM ops.company_builds WHERE kind = 'gold'")  # hermes since 071
+    assert loaded.execute("SELECT ops.rebuild_soon(ARRAY[%s])", (XOM,)).fetchone() == (1,)
+    assert stamps(loaded, "gold")[XOM][:1] == (0,)
+    built = []
+    catchup.catch_up(loaded, "gold", FOREVER, batch=1,
+                     build=lambda conn, kind, ids: built.extend(ids) or catchup.build(conn, kind, ids))
+    assert built[0] == XOM and sorted(built) == ALL
+    assert stamps(loaded, "gold")[XOM][0] == 77
 
 
 def test_a_check_bump_reruns_the_check_without_rebuilding(loaded):
@@ -107,7 +121,7 @@ def test_a_company_that_raises_is_recorded_and_left_until_the_next_version(loade
     bump(loaded, "gold.rules_version", 999)
     r = catchup.catch_up(loaded, "gold", FOREVER, build=build)
     assert (r.done, r.behind, r.failed) == (4, 0, 1)
-    assert stamps(loaded, "gold")[NVDA][::2] == (64, 999)  # (version, failed_version)
+    assert stamps(loaded, "gold")[NVDA][::2] == (77, 999)  # (version, failed_version)
     assert catchup.catch_up(loaded, "gold", FOREVER, build=build).done == 0
     bump(loaded, "gold.rules_version", 1000)
     assert catchup.catch_up(loaded, "gold", FOREVER).done == 5
