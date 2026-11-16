@@ -26,9 +26,13 @@ Sources:
 
 `company_id` is the first CIK in a company's lineage, so it never changes when a successor
 appears; a re-registration link keeps the successor's id instead (its users, grants and saved work
-hold it). A load that links a CIK to a company drops the company's gold build stamp
+hold it). A load that links a CIK to a company marks the company's gold as built at the epoch
 (`ops.rebuild_soon`, migration 076): the hourly catch-up rebuilds it first, with the linked CIK's
-companyfacts. Tickers from `company_tickers.json` are tracked over time: when one disappears its
+companyfacts. The rows came from a read-only search of the stored submissions and facts
+([db/research/re_registration_search.sql](../../db/research/re_registration_search.sql): every
+8-K12B and 8-K12G3, candidates by name, address or phone, their filings and figures; its header has
+the rules); the uncertain file's `for_the_owner` column marks the 25 worth a look. The nightly
+coverage sweep lists a new unlinked re-registration (`make coverage KIND=re_registration`). Tickers from `company_tickers.json` are tracked over time: when one disappears its
 row gets a `valid_to` instead of being deleted.
 
 Look up a company: `SELECT * FROM silver.resolve_company('FB');`
