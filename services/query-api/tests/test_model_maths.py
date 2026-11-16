@@ -316,7 +316,10 @@ def test_a_typed_price_gives_multiples_for_the_ttm_and_each_case_only():
     assert v["net_debt"]["value"] == -783200000 and v["net_debt"]["period_end"] == "2026-09-30"
     assert v["enterprise_value"] == pytest.approx(150 * shares - 783.2e6)
     assert out["ttm"] is not None and v["history"] == []
-    assert v["ttm"]["pe"] == pytest.approx(v["market_cap"] / out["ttm"]["net_income_adjusted"])
+    # Riley 11: one P/E method in every column, price over diluted EPS; the TTM column's EPS is its
+    # net income over the latest quarter's diluted shares (it read market cap / net income)
+    assert v["ttm"]["pe"] == pytest.approx(
+        150 / (out["ttm"]["net_income_adjusted"] / out["ttm"]["shares"]))
     assert v["ttm"]["ev_ebit"] == pytest.approx(
         v["enterprise_value"] / out["ttm"]["operating_income_adjusted"])
     assert set(v["cases"]) == {"bear", "base", "bull"}
@@ -340,12 +343,7 @@ def test_with_no_ttm_column_the_base_year_is_the_current_twelve_months():
     fy25 = out["history"][-1]
     assert out["ttm"] is None and v["ttm"] is None and fy25["fy"] == 2025
     assert [m["fy"] for m in v["history"]] == [2025]
-    # Riley 11: one P/E method in every column, market cap over adjusted net income (not price over
-    # diluted EPS in the base year beside it in the TTM column)
-    assert v["history"][0]["pe"] == pytest.approx(v["market_cap"] / fy25["net_income_adjusted"])
-    assert all(c["pe"] == pytest.approx(v["market_cap"] / y["net_income_adjusted"])
-               for c, y in zip(v["cases"]["base"], out["cases"]["base"]["years"], strict=True)
-               if y["net_income_adjusted"])
+    assert v["history"][0]["pe"] == pytest.approx(150 / fy25["eps_adjusted"])
     assert v["history"][0]["ev_ebit"] == pytest.approx(
         v["enterprise_value"] / fy25["operating_income_adjusted"])
     assert len(v["cases"]["base"]) == 2

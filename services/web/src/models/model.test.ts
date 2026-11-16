@@ -204,12 +204,12 @@ describe("the three-case table", () => {
 
   it("multiples at the user's price; no EV without a current net debt, and why", () => {
     const pe = modelLines(vrt).find((l) => l.key === "pe")!;
-    // one method in every column (Riley 11): market cap over adjusted net income
-    expect(pe.forecast(vrt.cases.bull!.years[1]!, "bull", 1)).toBeCloseTo(vrt.valuation!.market_cap! / vrt.cases.bull!.years[1]!.net_income_adjusted!, 6);
+    expect(pe.forecast(vrt.cases.bull!.years[1]!, "bull", 1)).toBeCloseTo(150 / vrt.cases.bull!.years[1]!.eps_adjusted!, 6);
     // morgan4 finding 5: no past year at today's price ("P/E FY2021 560.6x"); the TTM and forecasts only
     expect(vrt.valuation!.history).toEqual([]);
     expect(vrt.history.map((y, i) => pe.history(y, i))).toEqual(vrt.history.map(() => "n/a"));
-    expect(pe.ttm!(vrt.ttm!)).toBeCloseTo(vrt.valuation!.market_cap! / vrt.ttm!.net_income_adjusted!, 6);
+    // one method in every column (Riley 11): the TTM's EPS is its net income over the latest diluted shares
+    expect(pe.ttm!(vrt.ttm!)).toBeCloseTo(150 / (vrt.ttm!.net_income_adjusted! / vrt.ttm!.shares!), 6);
     expect(pe.pastYear).toMatch(/no past prices/);
     expect(formatCell("n/a", "multiple")).toBe("n/a");
     // a base year that is the current twelve months (no TTM column) keeps its multiples

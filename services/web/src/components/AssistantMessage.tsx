@@ -173,6 +173,13 @@ function Sources({ citations }: { citations: Citation[] }) {
   );
 }
 
+/** What the badge's check is, said where it shows (the agent's verify.py: a figure equal to a value a tool
+ * returned, a sum of two of them, or quoted in returned text; a cited filing one a tool returned). */
+export const CHECKED_MEANS =
+  "Each figure was found in what Tributary's tools returned for this answer: a reported value, a sum or " +
+  "difference of two, or words quoted from a filing's text. Each cited filing is one a tool returned. That " +
+  "doesn't mean the assistant read the passage a citation points to: open the filing to read it.";
+
 function VerifiedBadge({ v, body }: { v: Verification; body: RefObject<HTMLDivElement | null> }) {
   const figures = v.figures.length;
   if (!v.used_data && !figures) return null;
@@ -184,9 +191,12 @@ function VerifiedBadge({ v, body }: { v: Verification; body: RefObject<HTMLDivEl
   ].filter(Boolean);
   const title = v.figures.map((f) => `${f.text}: ${f.status}`).join("\n");
   if (v.ok) {
+    // what the check is (Riley 4: "verified" on an 8-K the assistant hadn't read): each figure was found in
+    // what the tools returned, and each cited filing is one a tool returned. It doesn't say the assistant
+    // read the passage a citation points to.
     return (
-      <span className="badge ok" title={title}>
-        ✓ {figures} figure{figures === 1 ? "" : "s"} verified against the data
+      <span className="badge ok" title={`${CHECKED_MEANS}\n\n${title}`}>
+        ✓ {figures} figure{figures === 1 ? "" : "s"} found in the data it was given
       </span>
     );
   }

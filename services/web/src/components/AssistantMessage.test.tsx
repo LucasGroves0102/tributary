@@ -82,5 +82,7 @@ it("a refused question says what the user can change; only a 5xx or no answer sa
 it("says every figure verified when they all are, naming none", () => {
   act(() => root.render(<AssistantMessage turn={turn(answer(`Revenue was $96.22B (${ACC}). As of 2026-11-06.`, [["$96.22B", "verified"]]))} />));
   expect(container.querySelector(".figure-flags")).toBeNull();
-  expect(container.querySelector(".badge.ok")?.textContent).toBe("✓ 1 figure verified against the data");
+  // Riley 4: the badge says what it checked, not that a cited filing was read
+  expect(container.querySelector(".badge.ok")?.textContent).toBe("✓ 1 figure found in the data it was given");
+  expect(container.querySelector(".badge.ok")?.getAttribute("title")).toContain("doesn't mean the assistant read the passage");
 });

@@ -567,8 +567,9 @@ base case also has the B2 `check` and `user_set` the thesis check reads. A model
 after the reported quarters, which the web app offers to rebuild year 1 from without changing it. With a `price`,
 `valuation`: market cap (price x latest shares outstanding), net debt with its date and reading,
 EV (only when net debt is current or merely behind; `ev_note` says why not: `old`, `absent`, ...)
-and P/E (market cap over adjusted net income, the same in every column: Riley 11 found the base year
-read price over diluted EPS beside it), EV/Revenue, EV/EBIT and FCF yield for the current twelve months (`ttm`; when the newest
+and P/E (price over adjusted diluted EPS in every column, the TTM column's EPS its net income over the
+latest quarter's diluted shares: Riley 11 found it read market cap over net income beside a base year at
+price over EPS), EV/Revenue, EV/EBIT and FCF yield for the current twelve months (`ttm`; when the newest
 TTM ends at a fiscal Q4 there is no TTM column and `history` holds that one base year) and each
 case's years; `"n/m"` over losses. No other history year (analyst test 4): today's price over
 FY2021's EPS read as "P/E FY2021 560.6x" at Vertiv, a multiple it never traded at, and Tributary
@@ -1056,9 +1057,9 @@ RLS is per company, not per user). The valuation joins them in Python: gold thro
 | EV | market cap + `net_debt` (long-term debt incl. current − cash − short-term investments) |
 | EV/EBIT | EV / TTM `operating_income` (≤ 0 or no net debt: not shown) |
 
-P/E is market cap over TTM net income, not price over TTM diluted EPS (the model reads it the same
-way): the two differ by the diluted vs outstanding share count and preferred dividends, and a market
-cap needs no share basis (a split moves EPS, not market cap). The close used is the newest within 14 days.
+P/E here is market cap over TTM net income (the Price tab, off on hermes); the model's is price over
+diluted EPS. The two differ by the diluted vs outstanding share count and preferred dividends, and
+each page says which it uses. The close used is the newest within 14 days.
 A company with several share classes (several current tickers) prices one class against the
 total share count; the response lists them in `share_classes`.
 

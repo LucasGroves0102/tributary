@@ -756,7 +756,8 @@ function PriceCard({ id, price, run, onChange }: { id: string; price: PriceDraft
           <summary>How the multiples are worked out</summary>
           <p className="foot">
             The price you type here is yours: Tributary doesn't fetch or keep market prices. It's saved with this model as typed
-            and gives market cap, P/E (market cap over adjusted net income, the same way in every column), EV / Revenue,
+            and gives market cap, P/E (price over diluted EPS in every column; the twelve months' EPS is their net income
+            over the latest quarter's diluted shares), EV / Revenue,
             EV / EBIT and FCF yield for the trailing twelve months and each case's forecast years. Past years get none: today's
             price over an old year's earnings isn't that year's multiple, and Tributary has no past prices.
           </p>

@@ -184,7 +184,8 @@ export function problems(r: ThesisCheckResult): string[] {
   const bad = new Set(unverifiedFigures(r.verification.figures)).size;
   const unknown = r.verification.unverified_accessions.length;
   return [
-    bad ? `${bad} figure${bad === 1 ? "" : "s"} not found in the data` : "",
+    // the check's own explanations, not the thesis (Riley 12: "$1,332M not found" in a thesis that never wrote it)
+    bad ? `${bad} figure${bad === 1 ? "" : "s"} in the check's explanations not found in the data` : "",
     unknown ? `${unknown} cited filing${unknown === 1 ? "" : "s"} the assistant never read` : "",
   ].filter(Boolean);
 }

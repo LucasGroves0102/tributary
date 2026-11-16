@@ -526,7 +526,7 @@ it("checks the saved thesis and shows claims, assumptions, what's not mentioned 
   expect(panel.querySelector(".claims .figure.unverified")?.textContent).toBe("$99.9B");
   // #57: the warning names the figure, and the name finds its mark
   const flag = panel.querySelector<HTMLButtonElement>(".figure-flags button")!;
-  expect(panel.querySelector(".figure-flags")?.textContent).toBe("⚠ 1 figure not found in the data: $99.9B");
+  expect(panel.querySelector(".figure-flags")?.textContent).toBe("⚠ 1 figure in the check's explanations not found in the data: $99.9B");
   Element.prototype.scrollIntoView = function (this: Element) {
     this.classList.add("seen");
   };

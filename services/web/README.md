@@ -174,7 +174,9 @@ the EDGAR link sits beside it on hover);
 `#/thesis/<id>`, `#/model/<id>` saved work (below); `#/chart` the chart
 builder (each layer a `/v1/formulas/evaluate` request; plain SVG; CSV, SVG and PNG export);
 `#/ask` the assistant full width, with streamed answers, the lookups it made and verified citation links
-(an answer's figures not found in the data are named under it, each a button that scrolls to and
+(the badge says "N figures found in the data it was given": each figure was found in what the tools
+returned and each cited filing is one a tool returned, its hover says it doesn't mean the passage a
+citation points to was read: Riley 4; an answer's figures not found in the data are named under it, each a button that scrolls to and
 flashes its mark in the answer: `components/FigureFlags.tsx`, the same in the check panel; a
 question that got no answer says it didn't count, after agent-api's `refunded` event);
 `#/compare` the comps table; `#/analysis` the Analysis tab (guided research projects, below; `#/analysis?start=<company_id>` opens New analysis on that company, from the company page's "Start an analysis", which reads "Open analysis" when there is one: beside New thesis and New model, whose forms say a thesis or model there is a single item, without the steps); `#/about` says what Tributary covers and doesn't (no prices, consensus or
