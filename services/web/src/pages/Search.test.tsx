@@ -61,7 +61,7 @@ it("#81: says up front how far back the ranking goes when the API searched a rec
     searched_from: "2026-09-21", total: 4, sort: "relevance", window: "auto" });
   await render({ q: "supply chain", page: 0 });
   const scope = container.querySelector(".search-scope")!;
-  expect(scope.textContent).toContain("4 sections in every company's filings filed since Sep 21, 2026 match, best match first.");
+  expect(scope.textContent).toContain("Only filings since Sep 21, 2026 were searched: 4 sections match, best match first.");
   await act(async () => [...scope.querySelectorAll("button")].find((b) => b.textContent === "All dates")!.click());
   expect(parseSearch(window.location.hash.split("?")[1]!)).toEqual({ q: "supply chain", allDates: true });
   await act(async () => [...scope.querySelectorAll("button")].find((b) => b.textContent === "The past year")!.click());
@@ -131,7 +131,7 @@ it("groups ranked passages by company and filing, each opening the reader at the
   const nvda = container.querySelector(".result-co")!;
   const filings = [...nvda.querySelectorAll(".result-filing")];
   expect(filings).toHaveLength(2);
-  expect([...filings[0]!.querySelectorAll("li b")].map((b) => b.textContent)).toEqual(["II-1A", "I-2"]);
+  expect([...filings[0]!.querySelectorAll("li b")].map((b) => b.textContent)).toEqual(["Risk Factors", "MD&A"]);
   expect(filings[0]!.querySelector("li a")?.getAttribute("href")).toBe(`#/filing/${NVDA}/${ACC}/II-1A?at=4100&q=export+controls`);
   expect([...filings[0]!.querySelectorAll("li mark")].slice(0, 2).map((m) => m.textContent)).toEqual(["export", "controls"]);
   expect(container.textContent).toContain("2 companies on your plan");

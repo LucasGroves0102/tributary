@@ -26,7 +26,7 @@ function what(route: Route, k: Known): string {
     case "filing":
       return `${company(route.companyId)} · ${k.filing ?? "Filing"}`;
     case "search":
-      return route.search?.q ? `Search: “${route.search.q}”` : "Search filings";
+      return route.search?.q ? `Search: “${route.search.q.replace(/^"(.*)"$/, "$1")}”` : "Search filings";
     case "chart":
       return k.chart?.trim() || "Chart builder";
     case "compare":

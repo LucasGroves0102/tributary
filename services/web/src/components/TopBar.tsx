@@ -155,7 +155,7 @@ function Breadcrumb({
   if (route.view === "search") {
     return (
       <nav className="crumb" aria-label="Breadcrumb">
-        <span aria-current="page">Search filings{route.search ? `: “${route.search.q}”` : ""}</span>
+        <span aria-current="page">Search filings{route.search ? `: “${route.search.q.replace(/^"(.*)"$/, "$1")}”` : ""}</span>
       </nav>
     );
   }

@@ -188,8 +188,11 @@ it("jumps to the first match when a section opens, and steps through them both w
 
 it("says what the outline's numbers are, and shows only one kind at a time", async () => {
   await render("II-1A");
-  expect($(".toc-legend")?.textContent).toBe("Number: section length in characters");
-  expect($('.toc a[aria-current="page"] .size')?.textContent).toBe("12k");
+  // no counts without a search (Riley 81: "38k" beside each section); the size is the link's hover
+  expect($(".toc-legend")).toBeNull();
+  expect($(".toc .size")).toBeNull();
+  expect($('.toc a[aria-current="page"]')?.getAttribute("title")).toMatch(/characters$/);
+  expect($('.toc a[aria-current="page"] .key')?.textContent).toBe("1A");
   act(() => root.unmount());
   await render("II-1A", { q: "export controls" });
   expect($(".toc-legend")?.textContent).toContain("passages that match");

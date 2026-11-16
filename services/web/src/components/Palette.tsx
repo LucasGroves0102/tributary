@@ -150,7 +150,7 @@ export function Palette({ token, initial, companies, watched, actions, onClose, 
         : [];
     const searchItem: Item[] =
       text.length >= 2
-        ? [{ key: "search", label: `Search filings for “${text}”`, sub: catalogOpen ? "full text · every company" : "full text · your companies", run: () => actions.searchFilings(text) }]
+        ? [{ key: "search", label: `Search filings for “${text.replace(/^"(.*)"$/, "$1")}”`, sub: catalogOpen ? "full text · every company" : "full text · your companies", run: () => actions.searchFilings(text) }]
         : [];
     const command = parseCommand(text);
     const commandItem: Item[] = !command

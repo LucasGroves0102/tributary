@@ -253,9 +253,7 @@ export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q,
       <div className="reader-body">
         <nav className="toc" aria-label="Sections">
           {query && <SearchHits hits={hits} query={query} companyId={companyId} accessionNo={accessionNo} />}
-          <p className="toc-legend faint small">
-            {query ? "Number: passages that match, about 2,000 characters each" : "Number: section length in characters"}
-          </p>
+          {query && <p className="toc-legend faint small">Number: passages that match, about 2,000 characters each</p>}
           {outlineGroups(f.sections).map((g) => (
             <div key={g.label} className="grp">
               <div className="grp-h">{g.label}</div>
@@ -266,15 +264,16 @@ export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q,
                     key={s.section_key}
                     href={href({ view: "filing", companyId, accessionNo, section: s.section_key, ...(query ? { q: query } : {}) })}
                     aria-current={s.section_key === active?.section_key ? "page" : undefined}
+                    title={`${s.chars.toLocaleString("en-US")} characters`}
                   >
-                    <span className="key">{s.section_key}</span>
+                    {/* the item's number under its Part's heading, not the stored key ("II-1A"), and no "38k"
+                        counts in the outline: the size is the hover (Riley 81) */}
+                    <span className="key">{s.section_key.replace(/^(I|II|III|IV)-/, "")}</span>
                     <span className="grow">{sectionTitle(s.section_key, s.title)}</span>
-                    {hit ? (
+                    {hit && (
                       <span className="cnt" title={`${hit.passages_matched} matching passage${hit.passages_matched === 1 ? "" : "s"}`}>
                         {hit.passages_matched}
                       </span>
-                    ) : query ? null : (
-                      <span className="size faint" title={`${s.chars.toLocaleString("en-US")} characters`}>{size(s.chars)}</span>
                     )}
                   </a>
                 );
@@ -321,10 +320,6 @@ export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q,
       </div>
     </div>
   );
-}
-
-function size(chars: number): string {
-  return chars >= 1000 ? `${Math.round(chars / 1000)}k` : String(chars);
 }
 
 function Marked({ runs }: { runs: Run[] }) {

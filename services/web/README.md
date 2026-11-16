@@ -91,7 +91,12 @@ lists of the same Form 4s), dates have Clear, and insiders read given name first
 an odd last figure across the row, and figures in a reader's words; Data status says what a finding means
 for what you see before how the checks work, and its cards keep their own height; What Tributary covers
 stacks its three lists with their items side by side; the Ask page is wider with prose at a readable
-measure, a cited filing a quiet mark rather than red monospace, and no pill repeating the title.
+measure, a cited filing a quiet mark rather than red monospace, and no pill repeating the title. The reader's
+outline shows the item's number under its Part ("1A", not "II-1A") and no character counts (the size is
+the hover), and its sticky section heading has a rule under it; Search says first when only recent filings
+were searched, names sections ("Risk Factors") instead of their keys, offers Open the filing instead of the
+accession number, and never doubles a phrase's quotes; Peers' shared terms appear once each, three at most;
+Business paragraphs rejoin a sentence a line break cut.
 
 Seal pages so far (the first batch): the front door (the seal and name, a headline, the way in under
 it; on the right, ruled off in ink, the live figures from `/v1/status/data` and what's in it), Data

@@ -285,6 +285,11 @@ describe("quoting a filing", () => {
     expect(quoteLines({ ...release, text: many }).split("  \n")).toHaveLength(41);
   });
 
+  it("runs a sentence a line break cut on into the next line (Riley 94)", () => {
+    expect(paragraphs("Our depots receive large shipments from suppliers and quickly\n\nship these goods to warehouses. This process creates freight volume.\n\nOur warehouses are large."))
+      .toEqual(["Our depots receive large shipments from suppliers and quickly ship these goods to warehouses. This process creates freight volume.", "Our warehouses are large."]);
+  });
+
   it("splits section text into paragraphs, joining short headings to what follows", () => {
     expect(paragraphs("Item 1. Business\nOur Company\nNVIDIA pioneered accelerated computing to help solve hard problems.\n\n\nWe sell GPUs, systems and software to data centers.\n"))
       .toEqual([

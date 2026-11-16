@@ -101,7 +101,11 @@ export function searchScope(
   else when = "of any date";
   const order = r.sort === "date" ? "newest first" : "best match first";
   const verb = n === 1 ? "matches" : "match";
-  const text = `${count} in ${whose} ${when} ${verb}, ${order}.`;
+  // the API's own window leads, so a search of recent filings never passes for a search of all of them
+  // (Riley 41: "since Oct 16" read as part of a count)
+  const text = r.searched_from && !s.company && !s.from && !s.to
+    ? `Only filings since ${day(r.searched_from, true)} were searched: ${count.toLowerCase()} ${verb}, ${order}.`
+    : `${count} in ${whose} ${when} ${verb}, ${order}.`;
   return { text, widen: !!r.searched_from && !s.company };
 }
 

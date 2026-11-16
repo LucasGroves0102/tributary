@@ -3298,8 +3298,16 @@ mark {
   position: sticky;
   top: var(--topbar-h);
   z-index: 2;
-  padding: 6px 0;
+  padding: 8px 0;
   background: var(--panel);
+  /* a rule and a soft edge under it, so the text passes beneath rather than looking cut (Riley 117) */
+  border-bottom: 1px solid var(--rule);
+  box-shadow: 0 8px 10px -8px var(--edge-shadow);
+}
+
+/* the reader's Exact phrase box: one line beside the search */
+.reader-tools .chk {
+  white-space: nowrap;
 }
 
 .section-nav {
