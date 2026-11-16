@@ -363,7 +363,7 @@ export interface LineOpts {
 }
 export type Line = [string, string, Fmt, LineOpts?];
 
-/** What the lines migration 049 added are (their hovers; README "Statements"). */
+/** What the lines migration 049 added are (their hovers; services/web DESIGN.md "Statements"). */
 export const DEFINITIONS: Record<string, string> = {
   cash_and_investments:
     "Cash and short-term investments, read as net debt reads them: investments already inside cash aren't added twice, and there's no figure when they're missing at this date but were reported lately. Open it to see the tags behind it.",
@@ -441,7 +441,7 @@ export const STATEMENTS: Record<Statement, { label: string; rows: Line[] }> = {
 };
 
 /** The metrics migration 049 added: an older API refuses them (422), so a statement asks again without
- * them (the Production fallback, services/web README). */
+ * them (the deploy-window fallback, services/web DESIGN.md "Deploy window"). */
 export const F5_METRICS = new Set(["cash_and_investments", "accounts_payable", "contract_liabilities_current",
   "contract_liabilities", "remaining_performance_obligations", "investing_cash_flow", "financing_cash_flow",
   "change_in_cash", "cash_and_restricted_cash"]);

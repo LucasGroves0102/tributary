@@ -1,7 +1,7 @@
 /** Screens loaded on first use (code splitting): everything but Home and the shell. Each import
  * is its own chunk, so the first screen downloads and parses less; `prefetchScreens` then loads
  * them in the background once the browser is idle, so moving to one is still instant. Sizes per
- * chunk are in services/web/README.md ("Performance"). */
+ * chunk are in services/web/DESIGN.md ("Performance"). */
 
 import { lazy } from "react";
 
