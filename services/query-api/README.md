@@ -359,7 +359,8 @@ span (`quarter`, `ttm`) the `current` value (period ending within 7 days of the 
 report), `prior_quarter` (80-120 days earlier) and `year_ago` (350-380 days), each with
 citation and freshness, and `change` / `pct_change` (6 decimals; null for ratios, where
 `change` is in ratio points). `shapes.percent_change` is the one rule for a percentage change (the
-recap's and alerts'): none from a zero or negative base, nor into a negative figure, and the recap
+recap's and alerts'): none from a zero or negative base, nor into a negative figure, nor over 1,000% from
+a dollar base under $10M (035's revenue growth bound: Pro-Dex's cash +35,533.3%, Riley 45), and the recap
 says why in `pct_not_meaningful` (additive; JPMorgan's operating cash flow from -$25.28B to $33.16B
 read "+231%" by |earlier|, analyst test 4). Values are as currently in gold, so a restated value
 cites the restating filing. With `filings` access, `flags` lists one-time-item keyword matches

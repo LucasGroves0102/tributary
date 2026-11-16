@@ -27,6 +27,9 @@ def document_url(cik: str | None, accession_no: str, document: str | None) -> st
 PCT_FROM_ZERO = "the earlier figure is zero"
 PCT_FROM_NEGATIVE = "the earlier figure is negative, so a percentage change from it says nothing"
 PCT_TO_NEGATIVE = "the figure went from positive to negative"
+PCT_SMALL_BASE = "growth of over 1,000% from under $10M earlier"
+# 035's revenue growth bound, the same numbers: over 1,000% from a dollar base under $10M
+SMALL_BASE, SMALL_BASE_GROWTH = Decimal("10000000"), Decimal("10")
 
 
 def percent_change(current: Decimal, earlier: Decimal, unit: str,
@@ -41,6 +44,9 @@ def percent_change(current: Decimal, earlier: Decimal, unit: str,
                               $33.16B is "+231%" by |earlier|, which says nothing (analyst test 4)
       earlier > 0 > current   PCT_TO_NEGATIVE: -150% for a profit turned loss, as 035 reads net
                               income growth below -100% ("went from a profit to a loss")
+      over 1,000% from under $10M (dollar amounts only, 057)  PCT_SMALL_BASE: 035's revenue growth
+                              bound for any amount (Riley 45: Pro-Dex's cash +35,533.3%, $33K to
+                              $11.76M)
 
     A zero now from a positive base stays -100%: a real fall to nothing."""
     if unit in ("ratio", "pure"):
@@ -51,6 +57,8 @@ def percent_change(current: Decimal, earlier: Decimal, unit: str,
         return None, PCT_FROM_NEGATIVE
     if current < 0:
         return None, PCT_TO_NEGATIVE
+    if unit == "USD" and earlier < SMALL_BASE and current - earlier > SMALL_BASE_GROWTH * earlier:
+        return None, PCT_SMALL_BASE
     with localcontext() as ctx:
         ctx.prec = 60
         try:
