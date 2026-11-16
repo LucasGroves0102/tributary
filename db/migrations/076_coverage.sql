@@ -25,7 +25,7 @@
 --                          (revenue under a tag gold doesn't read as revenue: Church & Dwight's
 --                          SalesRevenueGoodsNet to 2018, net income from 2009, revenue from 2017;
 --                          not mapped: in a sample where it sits beside a total, goods alone equal
---                          it in 25 of 149 periods), companyfacts (companyfacts starts later than
+--                          it in 41 of 178 periods), companyfacts (companyfacts starts later than
 --                          the filings' XBRL), companyfacts_gold (silver has earlier facts). All
 --                          fixable: the figures are in the filings' XBRL.
 --      metric_missing      a core metric (revenue, net income, total assets, equity, operating cash
