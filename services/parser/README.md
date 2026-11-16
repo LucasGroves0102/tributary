@@ -43,10 +43,12 @@ make up-all     # consumer, in docker-compose
 make reparse    # parser --reparse-all: re-parse every stored document without Kafka, then exit
 ```
 
-Use `make reparse` after changing the parsing rules. A document the parser can't split (no
+Use `make reparse` after changing the parsing rules locally. A document the parser can't split (no
 headings) is logged (`skipping <accession>: ...`) and passed, as the consumer does, so a run over
 every document doesn't end at the first one (since v7); any other error stops the run. In
-production the Helm CronJob `parser-reparse` runs it with parser-rs.
+production nothing is run by hand: [catch-up](#catch-up) re-queues every document an older
+`PARSER_VERSION` split. The Helm CronJob `parser-reparse` (parser-rs, everything at once) is the
+emergency tool.
 
 To re-parse only some documents (those without sections, or one form and item) without
 `--reparse-all`, re-queue them through the document crawl's outbox:
@@ -118,7 +120,9 @@ parsed, which filings its diffs used). `ops.section_index_pending` returns filin
 are new or re-parsed, and filings whose comparable filing changed (it arrived later, since the
 crawl goes newest first, or was re-indexed) or whose diffs come from another algorithm version.
 Each batch of filings commits with its passages, diffs and checkpoint rows, so a stopped run
-resumes and a re-run is a no-op. One run at a time (advisory lock).
+resumes and a re-run is a no-op. Filings never indexed or diffed come first, then the rest oldest
+first (migration 071), so re-indexing history never delays a new filing. One run at a time
+(advisory lock; a run that finds it taken does nothing and logs so, never "complete").
 
 ```bash
 make section-index LIMIT=5000   # parser-index --limit 5000 [--batch 25]
@@ -131,14 +135,40 @@ parser-index --passages         # only the passages built before migration 068 (
 before `to_tsvector`, and stores the blanked lines per passage (`gold.section_search.furniture`);
 snippets and exact phrases read through `gold.blank`, so they are clean at once even for older
 passages. `ops.section_index.passages_rule` = `furniture-1` marks filings rebuilt this way.
-`parser-index --passages` (Helm CronJob `section-passages`, by hand) rebuilds older filings'
-passages without touching diffs; then `REINDEX INDEX CONCURRENTLY gold.section_search_tsv`.
+The hourly [catch-up](#catch-up) rebuilds older filings' passages without touching diffs;
+`parser-index --passages` (Helm CronJob `section-passages`, emergency only) does all of them at
+once. After a full rebuild, `REINDEX INDEX CONCURRENTLY gold.section_search_tsv`.
 Details: [DESIGN.md](DESIGN.md#search-without-page-furniture-migration-068).
 
 Config: `DATABASE_URL`, `SECTION_INDEX_LIMIT` (default 5000; 20,000 in the Helm values),
-`SECTION_INDEX_BATCH` (25). Helm: CronJob `section-index` (hourly at :40; ships suspended, the Flux
-release turns it on). Progress: `ops.section_index_status`; counts per compared section:
-`ops.section_change_summary`.
+`SECTION_INDEX_BATCH` (25), `CATCHUP_SECONDS` (1200), `PARSER_CATCHUP_PER_RUN` (3000). Helm: CronJob
+`section-index` (hourly at :40; ships suspended, the Flux release turns it on). Progress:
+`ops.section_index_status`; counts per compared section: `ops.section_change_summary`.
+
+### Catch-up
+
+A deploy that changes the parser (`PARSER_VERSION`, both parsers), the passages (`SEARCH_RULE`) or the
+diffs (`diff.ALGORITHM`) needs nothing run by hand (migration 071, `filing_parser/catchup.py`). Once a
+`section-index` run has done its own work, it:
+
+1. re-queues up to `PARSER_CATCHUP_PER_RUN` documents whose sections an older parser wrote, oldest
+   filing first, through the document crawl's outbox (`ops.doc_crawl_targets.published_at`):
+   `doc-crawler` publishes them to `documents.backfill` and `parser-backfill` parses them, never the
+   live parser. Only while the crawl has under 1,000 targets of its own pending, its outbox under
+   3,000 events and under 6,000 of the last day's requests wait for parser-backfill. A document the
+   live doc-fetcher stored has no crawl target; it gets the row the crawl writes for a filing it
+   finds already stored. Each document is re-queued once per version;
+2. rebuilds older passages for up to `CATCHUP_SECONDS` (never past 50 minutes into the job, so the
+   next hour's run is never skipped), oldest filing first, under the same lock as
+   `section-passages` (one waits for the other; both take the same filings, so they can overlap in
+   time without harm);
+3. measures diffs of an older `ALGORITHM` (the run itself recomputes them).
+
+Re-parsed documents whose sections change are re-indexed by the next runs (after new filings).
+Progress: `SELECT * FROM ops.catchup_status` (`behind`, `in_flight`, `done_last_day`, `eta`); pause:
+`UPDATE ops.catchup SET paused = true WHERE kind = 'parser'`. On 2026-11-16, 595,775 documents
+predated rust-7 (about 8 days at 3,000 an hour) and 433,157 filings' passages predated
+`furniture-1` (hours).
 Cost and index size: [DESIGN.md](DESIGN.md#section-diffs-and-search-index-cost).
 
 ## Peers by business
@@ -166,6 +196,7 @@ SIC and size.
 
 Deploying v7 on hermes (what ships, re-queueing earnings releases, the full `parser-reparse`,
 `section-passages`, verification and rollback): [DESIGN.md](DESIGN.md#parser-v7-rollout-runbook).
+Since migration 071 its steps 2-4 happen by themselves ([catch-up](#catch-up)).
 
 ## Tests
 
