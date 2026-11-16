@@ -4,7 +4,7 @@
 import { NOT_REPORTED, readFigure } from "../blanks";
 import { day, UNNAMED } from "../format";
 import type { Cell } from "../home/data";
-import type { ScreenerRow, ValueSource } from "../types";
+import type { Confidence, ScreenerRow, ValueSource } from "../types";
 import { columnSpec, formatColumn, type ColumnSpec } from "../views/model";
 import { fyeMonth, SCREEN_COLUMNS } from "./screen";
 
@@ -40,6 +40,19 @@ export interface ScreenRow {
   fye: string | null;
   readable: boolean;
   cells: Record<string, Cell>;
+  /** the API's confidence mark (074), null without one */
+  confidence: Confidence | null;
+}
+
+/** The confidence mark in words, quiet: "Medium confidence" with the API's reasons on hover. The
+ * level and the reasons are the API's (gold.company_confidence); nothing is judged here. */
+export function confidenceWords(c: Confidence): { label: string; hover: string } {
+  const level = c.level[0]!.toUpperCase() + c.level.slice(1);
+  const why = c.reasons.length ? `: ${c.reasons.join("; ")}` : "";
+  return {
+    label: `${level} confidence`,
+    hover: `${level} confidence in its figures, from public signals${why}.`,
+  };
 }
 
 function title(key: string, src: ValueSource | null, long?: string): string {
@@ -98,5 +111,6 @@ export function screenRow(r: ScreenerRow, columns: ColumnSpec[] = DEFAULT_SPECS)
     fye: fyeMonth(r.fiscal_year_end),
     readable,
     cells,
+    confidence: r.confidence ?? null,
   };
 }

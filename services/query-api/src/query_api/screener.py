@@ -13,7 +13,9 @@ The rules are in 035, once; this module only asks. Sorts and range filters take 
 value, `k<i>`, which is NULL for all of them but "behind": the exact figure stays in `v<i>`, so a
 209,828% gross margin is still returned, with its reason, and doesn't win a sort or pass a filter.
 An amount in a currency other than the dollar reads `other_currency` (migration 056) and says its
-unit: shown in that currency, never sorted, filtered or averaged with dollar figures.
+unit: shown in that currency, never sorted, filtered or averaged with dollar figures. Each page row
+also carries the company's confidence mark (migration 074, gold.company_confidence: high, medium or
+low and its reasons in words), read after the LIMIT and, like the values, only for a reader.
 
 The query has two stages, so its cost follows what the screen asks for and not how many
 companies the caller can read: the values filters and the sort need are read for every company
@@ -338,10 +340,12 @@ ranked AS (
     ORDER BY {order} {direction} NULLS LAST, b.company_id
     LIMIT %(limit)s OFFSET %(offset)s
 )
-SELECT r.*{'' if early else ', a.latest AS latest_period'}{page_outputs}{page_sector}
+SELECT r.*{'' if early else ', a.latest AS latest_period'}{page_outputs}{page_sector},
+       cf.level AS confidence, cf.reasons AS confidence_reasons
 FROM ranked r
 {'' if early else _latest('r.company_id', granted)}
 LEFT JOIN LATERAL {_values(page, 'r.company_id', 'r.sic', page_latest, granted)} w ON true
+LEFT JOIN LATERAL gold.company_confidence(r.company_id, r.sic, {page_latest}) cf ON true
 {page_join}
 ORDER BY {final} {direction} NULLS LAST, r.company_id
 """
@@ -369,6 +373,11 @@ def shape(row: dict, compiled: Compiled, financials: bool) -> dict:
                if row[f"st{compiled.slots[k]}"] == "other_currency" else {})}
         for k in compiled.columns if row.get(f"st{compiled.slots[k]}")}
     out["latest_period"] = row.get("latest_period") if financials else None
+    # additive (074): how far to trust the company's figures, from public signals, with the
+    # reasons in words (gold.company_confidence); like the values, only for a reader of them
+    out["confidence"] = ({"level": row["confidence"],
+                          "reasons": row.get("confidence_reasons") or []}
+                         if financials and row.get("confidence") else None)
     # from the public SIC, so also for a company the caller can't read
     out["not_applicable"] = row.get("not_applicable") or []
     return out

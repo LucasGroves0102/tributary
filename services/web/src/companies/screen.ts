@@ -34,6 +34,7 @@ export const CHECKS: Record<string, string> = {
   sign_flip: "An expense or outflow whose sign differs from both neighbouring quarters",
   outlier: "A one-quarter spike of 10× or more: seasonal, a one-off, or a scale error in the filing",
   tag_disagreement: "Two tags of one line in one filing that can't both be right: one figure in two scales, or a total under a fifth of its own part",
+  statement_mismatch: "A filing's own statement table printing another revenue, net income or total assets than the figure shown",
   mistagged_fact: "A figure kept out of the data: a period ending after its filing, or debt above total liabilities",
   net_debt_gap: "Debt and cash on file but no net debt: investments or debt can't be told apart from a gap",
   segment_sum_business_segment: "Business segments not adding up to the company total (±1%)",

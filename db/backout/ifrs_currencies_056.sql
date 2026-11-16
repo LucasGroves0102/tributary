@@ -47,7 +47,7 @@ BEGIN
         ('gold.refresh_quarterly_financials(text[])', '84ce53d8fc3987c84012b4360b69fed4'),
         ('gold.usable_facts(text[])', '0b0c7a112a9761106084a4fd15dd2a56'),
         ('ops.check_financials(text[])', '59a01d3f17aeb26a7e0289a90d444223'),
-        ('silver.refresh_filing_facts(text[])', '566a561f85a949551ee2cdef2cf576f3'),
+        ('silver.refresh_filing_facts(text[])', '3b400f0ebef7ea4ae47aeac60b50cca6'),
         ('silver.refresh_financial_facts(text[])', '3b47cf049eeb9714470d25212df6ec05')
     ) v(fn, want) LOOP
         SELECT pg_get_userbyid(p.proowner) INTO fn_owner FROM pg_proc p WHERE p.oid = w.id;

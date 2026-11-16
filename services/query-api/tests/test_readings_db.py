@@ -817,14 +817,16 @@ def test_an_annual_only_yen_filers_currency_is_yen(conn, token):
 def test_latest_reading_stays_inlinable(conn):
     """The screener's plan depends on it, like 032's gold.latest_value (no SET, not DEFINER, a
     single SQL statement, not volatile). 061: so does the currency rule it reads, a set-returning
-    function (a scalar SQL function with sub-selects is never inlined)."""
+    function (a scalar SQL function with sub-selects is never inlined). 074: and the confidence
+    mark the screener reads per page row."""
     rows = conn.execute(
         "SELECT p.proname, p.prosecdef, p.provolatile, p.proconfig, l.lanname, p.proretset"
         " FROM pg_proc p JOIN pg_language l ON l.oid = p.prolang"
         " WHERE p.pronamespace = 'gold'::regnamespace"
-        " AND p.proname IN ('latest_reading', 'latest_period', 'amount_currency_of')"
+        " AND p.proname IN ('latest_reading', 'latest_period', 'amount_currency_of',"
+        "                   'company_confidence')"
     ).fetchall()
-    assert len(rows) == 3
+    assert len(rows) == 4
     for name, definer, volatility, config, language, returns_set in rows:
         assert (definer, config, language, returns_set) == (False, None, "sql", True), name
         assert volatility == "s", name

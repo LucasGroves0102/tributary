@@ -10,7 +10,7 @@ starting from the latest definition listed here (and regenerate the backout guar
 | Function | Latest definition |
 |---|---|
 | `silver.refresh_financial_facts(text[])` (companyfacts payloads into typed facts: the taxonomy recorded, any currency; each payload's facts read once) | `063_rebuild_speed.sql` (before: `056_ifrs_currencies.sql`, `011_bulk_financials.sql`, first in `003_financials.sql`); metric tags in `003_financials.sql` and `012_more_metrics.sql`, more in `024`, `038`, `048`, `049`, company tags in `055`, IFRS tags in `056` |
-| `silver.refresh_filing_facts(text[])` (a filing's own XBRL into silver: a filing companyfacts lacks, a company's own tags, member sums; any currency) | `056_ifrs_currencies.sql` (before: `055_filing_xbrl_facts.sql`) |
+| `silver.refresh_filing_facts(text[])` (a filing's own XBRL into silver: a filing companyfacts lacks, a company's own tags, member sums, member picks; any currency) | `073_member_picks_cet1.sql` (before: `056_ifrs_currencies.sql`, `055_filing_xbrl_facts.sql`) |
 | `silver.filing_facts_caught_up()`, `silver.supersede_filing_facts(text[])` (hand a filing back to companyfacts once it has it) | `055_filing_xbrl_facts.sql` |
 | `silver.unit_fits(metric unit, fact unit)` (an amount in any ISO currency, or per share in one) | `056_ifrs_currencies.sql` |
 | `silver.refresh_company_metadata` | `013_submissions.sql` |
@@ -44,11 +44,12 @@ the parser image's `parser-peers` job, not in SQL.
 
 | Function | Latest definition |
 |---|---|
-| `ops.check_financials(text[])` (tag_disagreement over `ops.tag_relations`; mistagged facts, series gaps and lumpy outliers info; annual sums against a restated year info; each company's figures counted) | `072_data_trust_checks.sql` (before: `057_currency_readings.sql` debt compared with liabilities and assets in its own currency; `050_filers_debt_signs.sql` SBC benefits as info, `debt_parts_scale`; `041_quality_findings.sql` `mistagged_fact`, `net_debt_gap`, a repeated `series_gap`, the annual comparison through `gold.best_facts`; `023_data_notes.sql` restatement; `018_segments.sql`; `014_gold_calendar.sql`) |
+| `ops.check_financials(text[])` (statement_mismatch over `ops.statement_comparisons`; the confidence mark's inputs stored; tag_disagreement over `ops.tag_relations`; mistagged facts, series gaps and lumpy outliers info; annual sums against a restated year info; each company's figures counted) | `074_statement_reconciliation_confidence.sql` (before: `072_data_trust_checks.sql`; `057_currency_readings.sql` debt compared with liabilities and assets in its own currency; `050_filers_debt_signs.sql` SBC benefits as info, `debt_parts_scale`; `041_quality_findings.sql` `mistagged_fact`, `net_debt_gap`, a repeated `series_gap`, the annual comparison through `gold.best_facts`; `023_data_notes.sql` restatement; `018_segments.sql`; `014_gold_calendar.sql`) |
 | `ops.check_segments(text[])` (a reconciliation member restating the segments' sum isn't added; members that overlap, some set of them making the figure, aren't a deviation: `ops.segment_cover`, zeros out and negative members in every set) | `072_data_trust_checks.sql` (before: `070_check_segments_overlap.sql`, `037_check_segments_subtotal.sql`, `018_segments.sql`) |
-| `ops.check_financials_version()`, `ops.check_segments_version()` (bump with a check's replace) | `072_data_trust_checks.sql` (first: `071_auto_catchup.sql`) |
+| `ops.check_financials_version()`, `ops.check_segments_version()` (bump with a check's replace) | `074_statement_reconciliation_confidence.sql`, `072_data_trust_checks.sql` (first: `071_auto_catchup.sql`) |
+| `ops.statement_comparisons(text[])` (each filing's statement lines against gold: own, agree, clear), `ops.core_figures(company)`, `ops.entity_kind(company, sic)` | `074_statement_reconciliation_confidence.sql` |
 | `ops.recheck(kind, text[])` | `071_auto_catchup.sql` |
-| `ops.quality_tier(check, severity)` (the status page's groups), views `ops.quality_tiers` and `ops.quality_summary`, `ops.public_quality()` | `072_data_trust_checks.sql` |
+| `ops.quality_tier(check, severity)` (the status page's groups), views `ops.quality_tiers` and `ops.quality_summary`, `ops.public_quality()` | `072_data_trust_checks.sql` (`ops.quality_tiers` with `statement_mismatch`: `074_statement_reconciliation_confidence.sql`) |
 | `ops.check_sections(text[])` (parser-output checks per document), `ops.check_sections_version()`, `ops.section_key_valid(form, key)`, `ops.core_section_keys(form)`, `ops.section_check_backlog(int)`, `ops.public_parser_quality()` | `072_data_trust_checks.sql` |
 | `ops.refresh_extremes(int)`, `ops.extreme_columns()` (the screener's columns), view `ops.extremes_report` | `072_data_trust_checks.sql` |
 
@@ -56,7 +57,9 @@ the parser image's `parser-peers` job, not in SQL.
 
 | Function | Latest definition |
 |---|---|
-| `ops.company_backlog(kind)`, `ops.stamp_builds`, `ops.build_failed`, `ops.catchup_begin`, `ops.catchup_record`, `ops.parser_catchup` (documents of an older parser back through the crawl's outbox), view `ops.catchup_status` | `071_auto_catchup.sql` |
+| `ops.company_backlog(kind)` (a statement read after a company's check makes the check due) | `074_statement_reconciliation_confidence.sql` (before: `071_auto_catchup.sql`) |
+| `ops.statement_backlog(reader)` (10-K/10-Qs with tables this statements.READER hasn't read) | `074_statement_reconciliation_confidence.sql` |
+| `ops.stamp_builds`, `ops.build_failed`, `ops.catchup_begin`, `ops.catchup_record`, `ops.parser_catchup` (documents of an older parser back through the crawl's outbox), view `ops.catchup_status` | `071_auto_catchup.sql` |
 
 ## Readings (read, not refreshed)
 
@@ -75,5 +78,7 @@ How a stored figure may be read, called by the Query API under RLS or with
 | `gold.figure_facts(company, metric, period_end)` (the facts behind one figure, for `/components`) | `056_ifrs_currencies.sql` (taxonomy, company tags, the company's currency; before: `049_kpis_cash_flow.sql`) |
 | `gold.filing_figures(company, accession)` (one filing's figures and what gold would compute from it alone, with their unit) | `057_currency_readings.sql` (before: `051_filing_figures.sql`) |
 | `gold.annual_per_share(company, years)` (the 10-K's own EPS and weighted shares) | `056_ifrs_currencies.sql` (before: `036_annual_per_share.sql`) |
+| `gold.company_confidence(company, sic, latest)` (high / medium / low and its reasons, from public signals; plain SQL, inlinable, the screener reads it per page row) | `074_statement_reconciliation_confidence.sql` |
+| `gold.disagreeing_figures(companies)` (a tag disagreement's two figures, for the data notes; DEFINER, the access rule its only rule) | `075_disagreeing_figures.sql` |
 
 See [`../migrations/`](../migrations).

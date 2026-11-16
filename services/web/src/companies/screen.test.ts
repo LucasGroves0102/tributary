@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { entry, TESLA } from "../fixtures";
 import type { ScreenerRow } from "../types";
-import { currencyFoot, MASKED_TITLE, screenRow } from "./rows";
+import { confidenceWords, currencyFoot, MASKED_TITLE, screenRow } from "./rows";
 import { activeFilters, describe as describeScreen, fraction, fyeMonth, parseScreen, screenParams, screenQuery } from "./screen";
 
 describe("screen filters", () => {
@@ -214,5 +214,24 @@ describe("F4: sectors in a screen", () => {
     // an older API: no sector, no co-registrants
     const old = screenRow({ ...entry(), filer_categories: null, state_of_incorporation: null } as ScreenerRow);
     expect([old.sector, old.coRegistrants]).toEqual([null, []]);
+  });
+});
+
+describe("074: the confidence mark", () => {
+  const row = (over: Partial<ScreenerRow> = {}): ScreenerRow => ({
+    ...TESLA, filer_categories: null, state_of_incorporation: null, values: { ...TESLA.values }, ...over,
+  });
+
+  it("words the API's level and reasons, judging nothing itself", () => {
+    expect(confidenceWords({ level: "medium", reasons: ["1 error a reader could see", "reported in CAD"] })).toEqual({
+      label: "Medium confidence",
+      hover: "Medium confidence in its figures, from public signals: 1 error a reader could see; reported in CAD.",
+    });
+    expect(confidenceWords({ level: "high", reasons: [] }).hover).toBe("High confidence in its figures, from public signals.");
+  });
+
+  it("carries the row's mark, null from an older API", () => {
+    expect(screenRow(row()).confidence).toBeNull();
+    expect(screenRow(row({ confidence: { level: "low", reasons: ["x"] } })).confidence?.level).toBe("low");
   });
 });

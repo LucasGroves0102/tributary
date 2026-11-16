@@ -3,7 +3,8 @@
 Each run asks ops.section_index_pending for work and processes it in transactions of --batch
 filings. Per filing: (re)index when its sections are new or re-parsed (checkpoint row in
 ops.section_index, passages via gold.refresh_section_search, the parser-output checks via
-ops.check_sections, migration 072), then, for 10-K and 10-Q, compare
+ops.check_sections, migration 072, and a 10-K's or 10-Q's statement lines via statements.py,
+migration 074), then, for 10-K and 10-Q, compare
 Risk Factors and MD&A with the comparable filings (ops.section_index_priors) and replace its
 gold.section_diffs / gold.section_changes rows. Everything for a filing commits together, so a
 stopped run resumes where it left off and a re-run changes nothing.
@@ -31,6 +32,7 @@ from dataclasses import dataclass
 import psycopg
 from psycopg.types.json import Jsonb
 
+from filing_parser import statements
 from filing_parser.diff import ALGORITHM, Diff, diff
 from tributary_telemetry.logs import configure_logging
 
@@ -54,6 +56,7 @@ class Stats:
     changes: int = 0
     errors: int = 0
     section_findings: int = 0  # the parser-output checks' findings on the filings indexed
+    statement_lines: int = 0   # 074: statement lines read from the 10-K/10-Qs indexed
     completed: bool = False
     locked_out: bool = False  # another run holds the lock: nothing was done
 
@@ -120,6 +123,7 @@ def process(conn: psycopg.Connection, accessions: list[str], reindex: set[str],
                                            (fresh,)).fetchone()[0]  # type: ignore[index]
             count_passages(conn, fresh)
             stats.section_findings += check_sections(conn, fresh)
+            stats.statement_lines += read_statements(conn, fresh)
         priors = conn.execute(
             "SELECT p.accession_no, i.company_id, i.form, p.prior_accession_no,"
             "       p.year_ago_accession_no"
@@ -169,6 +173,64 @@ def check_sections(conn: psycopg.Connection, accessions: list[str]) -> int:
             raise
         log.exception("parser checks failed for %d filings; the catch-up retries", len(accessions))
         return 0
+
+
+def read_statements(conn: psycopg.Connection, accessions: list[str]) -> int:
+    """The statement reader (statements.py, migration 074) on the filings just indexed: a 10-K's or
+    10-Q's headline lines into silver.statement_lines. Inside the filing's transaction; a read that
+    raises leaves the filing indexed, unread (the catch-up reads it later)."""
+    try:
+        with conn.transaction():
+            return write_statements(conn, accessions)
+    except psycopg.Error:
+        if conn.broken:
+            raise
+        log.exception("statement lines failed for %d filings; the catch-up retries",
+                      len(accessions))
+        return 0
+
+
+def write_statements(conn: psycopg.Connection, accessions: list[str]) -> int:
+    """Read and store these filings' statement lines (the 10-K and 10-Q originals with a period of
+    report among them): the served parser's tables (rust's when it has any) and the 600 characters
+    of section text before each, every filing a silver.statement_reads row, lines or none."""
+    docs = conn.execute(
+        "SELECT accession_no, cik, form, period_of_report, filed FROM bronze.filing_documents"
+        " WHERE accession_no = ANY(%s) AND form IN ('10-K', '10-Q')"
+        " AND period_of_report IS NOT NULL", (accessions,)).fetchall()
+    if not docs:
+        return 0
+    ids = [d[0] for d in docs]
+    tables: dict[tuple[str, str], list] = {}
+    for acc, parser, key, n, rows, before in conn.execute(
+            "SELECT t.accession_no, t.parser, t.section_key, t.table_no, t.rows,"
+            " substr(s.text, greatest(t.char_start - 600, 0) + 1, least(t.char_start, 600))"
+            " FROM silver.filing_tables t"
+            " JOIN silver.filing_sections s USING (accession_no, section_key, parser)"
+            " WHERE t.accession_no = ANY(%s)"
+            " ORDER BY t.accession_no, t.parser, s.char_start, t.table_no", (ids,)):
+        tables.setdefault((acc, parser), []).append((key, n, rows, before))
+    conn.execute("DELETE FROM silver.statement_reads WHERE accession_no = ANY(%s)", (ids,))
+    total = 0
+    for acc, cik, form, period, filed in docs:
+        served = tables.get((acc, "rust")) or tables.get((acc, "python")) or []
+        lines = statements.read(served, form, period)
+        conn.execute(
+            "INSERT INTO silver.statement_reads (accession_no, cik, form, period, filed, reader,"
+            " lines) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+            (acc, cik, form, period, filed, statements.READER, len(lines)))
+        if lines:
+            with conn.cursor() as cur:
+                cur.executemany(
+                    "INSERT INTO silver.statement_lines (accession_no, line, n, label, value,"
+                    " scale, period_end, months, section_key, table_no, row_no, titled,"
+                    " loss_label)"
+                    " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                    [(acc, x.line, i, x.label[:500], x.value, x.scale, x.period_end, x.months,
+                      x.section_key, x.table_no, x.row_no, x.titled, x.loss_label)
+                     for i, x in enumerate(lines)])
+        total += len(lines)
+    return total
 
 
 def count_passages(conn: psycopg.Connection, accessions: list[str]) -> None:
@@ -313,9 +375,10 @@ def main(argv: Iterable[str] | None = None) -> None:
             return
         stats = run(conn, args.limit, args.batch)
         log.info("%s: %d filings, %d indexed (%d passages), %d diffed (%d section diffs,"
-                 " %d changes, %d errors; %d parser findings) in %.0fs", outcome(stats),
-                 stats.filings, stats.indexed, stats.passages, stats.diffed, stats.section_diffs,
-                 stats.changes, stats.errors, stats.section_findings, time.monotonic() - started)
+                 " %d changes, %d errors; %d parser findings, %d statement lines) in %.0fs",
+                 outcome(stats), stats.filings, stats.indexed, stats.passages, stats.diffed,
+                 stats.section_diffs, stats.changes, stats.errors, stats.section_findings,
+                 stats.statement_lines, time.monotonic() - started)
         if stats.completed:
             from filing_parser import catchup  # imports this module
 

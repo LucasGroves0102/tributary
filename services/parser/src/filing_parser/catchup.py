@@ -15,9 +15,15 @@ a new filing:
    document no check of ops.check_sections_version() has seen, oldest filing first, SECTIONS_BATCH
    documents a transaction, for up to SECTIONS_SECONDS of the budget. section-index itself checks
    the filings it indexes; this covers the rest once per version (and documents with no sections).
-3. passages: index.refresh_passages for the rest of `seconds` (filings whose passages an older
+3. statements: statements.py (migration 074) on every stored 10-K/10-Q with tables that the current
+   statements.READER hasn't read (ops.statement_backlog), oldest filing first, STATEMENTS_BATCH a
+   transaction, for up to STATEMENTS_SECONDS of the budget. section-index reads what it indexes;
+   this covers the rest once per READER. Each read makes its company's financial check due
+   (ops.company_backlog), so the facts-fetcher catch-up compares the lines with gold within the
+   hour.
+4. passages: index.refresh_passages for the rest of `seconds` (filings whose passages an older
    SEARCH_RULE built, oldest first), under the lock section-index and section-passages share.
-4. diffs: measured only; the run itself recomputes diffs of an older diff.ALGORITHM.
+5. diffs: measured only; the run itself recomputes diffs of an older diff.ALGORITHM.
 
 Each kind records a row in ops.catchup_runs (read ops.catchup_status). `UPDATE ops.catchup SET
 paused = true WHERE kind = ...` stops a kind's work and keeps measuring it. Everything is keyed on
@@ -32,7 +38,7 @@ from datetime import date
 
 import psycopg
 
-from filing_parser import index
+from filing_parser import index, statements
 from filing_parser.diff import ALGORITHM
 from filing_parser.sections import PARSER_VERSION
 
@@ -45,6 +51,8 @@ CRAWL_BUSY = 1000   # ... and the crawl has fewer targets of its own pending
 SECONDS = 1200      # passages rebuilt per run, in seconds (after the parser checks' share)
 SECTIONS_SECONDS = 300  # documents checked per run, in seconds, out of SECONDS
 SECTIONS_BATCH = 2000   # ... a transaction (0.8 s on hermes)
+STATEMENTS_SECONDS = 300  # filings' statement lines read per run, in seconds, out of SECONDS
+STATEMENTS_BATCH = 100    # ... a transaction
 JOB_SECONDS = 3000  # ... within 50 minutes of the job's start: the next hourly run is never skipped
 
 
@@ -146,6 +154,32 @@ def sections(conn: psycopg.Connection, seconds: float, *, batch: int = SECTIONS_
     return r
 
 
+def statement_lines(conn: psycopg.Connection, seconds: float, *, batch: int = STATEMENTS_BATCH,
+                    clock: Callable[[], float] = time.monotonic) -> Result:
+    """10-K/10-Q filings the current statements.READER hasn't read, read oldest filing first until
+    `seconds` (clock time) run out; each batch commits alone."""
+    started = clock()
+    with conn.transaction():
+        paused, _ = begin(conn, "statements", statements.READER)
+    r = Result("statements", statements.READER, paused=paused)
+    while not paused and clock() < started + seconds:
+        with conn.transaction():
+            ids = [x[0] for x in conn.execute(
+                "SELECT accession_no FROM ops.statement_backlog(%s)"
+                " ORDER BY filed, accession_no LIMIT %s", (statements.READER, batch))]
+            if ids:
+                index.write_statements(conn, ids)
+        if not ids:
+            break
+        r.done += len(ids)
+    with conn.transaction():
+        r.behind, r.oldest = conn.execute(  # type: ignore[misc]
+            "SELECT count(*), min(filed) FROM ops.statement_backlog(%s)",
+            (statements.READER,)).fetchone()
+        record(conn, r, clock() - started)
+    return r
+
+
 def diffs(conn: psycopg.Connection, diffed: int) -> Result:
     """The run recomputes diffs of an older ALGORITHM itself: this only measures what is left."""
     with conn.transaction():
@@ -162,14 +196,18 @@ def diffs(conn: psycopg.Connection, diffed: int) -> Result:
 
 def run(conn: psycopg.Connection, seconds: float = SECONDS, per_run: int = PER_RUN,
         diffed: int = 0, clock: Callable[[], float] = time.monotonic,
-        sections_seconds: float = SECTIONS_SECONDS) -> list[Result]:
+        sections_seconds: float = SECTIONS_SECONDS,
+        statements_seconds: float = STATEMENTS_SECONDS) -> list[Result]:
     """Every kind, after a parser-index run that finished its own work: the parser checks get up to
-    `sections_seconds` of `seconds`, the passages what is left. A kind that raises is logged and
+    `sections_seconds` of `seconds`, the statement lines up to `statements_seconds`, the passages
+    what is left. A kind that raises is logged and
     left for the next run; a lost connection stops the job."""
     deadline = clock() + seconds
     steps: list[Callable[[], Result]] = [
         lambda: parser(conn, per_run),
         lambda: sections(conn, min(sections_seconds, max(0.0, deadline - clock())), clock=clock),
+        lambda: statement_lines(conn, min(statements_seconds, max(0.0, deadline - clock())),
+                                clock=clock),
         lambda: passages(conn, max(0.0, deadline - clock()), clock=clock),
         lambda: diffs(conn, diffed),
     ]

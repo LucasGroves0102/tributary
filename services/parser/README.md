@@ -145,6 +145,19 @@ filing in `tests/fixtures`, including Chicago Rivet's "Item 7.01Regulation" 8-K 
 Known gap, both parsers: a 10-Q whose Part I Item 1 heading isn't an Item line (Molina, TriNet; 14,882
 10-Qs on hermes) has no `I-1`; the fixtures' tests mark it a strict xfail.
 
+### Statement lines (migration 074)
+
+For each 10-K and 10-Q it indexes, section-index reads the filing's own statement tables with
+`filing_parser/statements.py` (its docstring is the spec; `READER`): revenue, net income, total
+assets and total liabilities and equity as printed in the current period's column, times the table's
+scale words, every candidate kept (`silver.statement_lines`, one `silver.statement_reads` row per
+filing, lines or none). `ops.check_financials` compares them with gold (`statement_mismatch`, a
+warning) and the company's confidence mark counts them; a read makes the company's check due, so
+the facts-fetcher catch-up compares within the hour. Measured: the reader agrees with the filing's
+own XBRL on 97-100% of the lines it finds in 97 recent 10-Ks; on hermes' first 300 parsed
+10-K/10-Qs, 4 findings in 367 comparisons (two gold's side, two the reader's: migration 074's
+header). A rule change bumps `READER`: the catch-up re-reads every filing.
+
 ### Search without page furniture (migration 068)
 
 `gold.refresh_section_search` blanks a section's page furniture (as spaces, so offsets stay)
@@ -177,11 +190,14 @@ diffs (`diff.ALGORITHM`) needs nothing run by hand (migration 071, `filing_parse
 2. runs the parser-output checks (072) on every stored document no check of
    `ops.check_sections_version()` has seen, oldest filing first, 2,000 a transaction, for up to 5 of
    those minutes (kind `check_sections`; 634,653 documents on hermes, a batch in under a second);
-3. rebuilds older passages for the rest of `CATCHUP_SECONDS` (never past 50 minutes into the job, so
+3. reads the statement lines (074) of every stored 10-K/10-Q with tables that the current
+   `statements.READER` hasn't read, oldest filing first, 100 a transaction, for up to 5 minutes
+   (kind `statements`, `ops.statement_backlog`);
+4. rebuilds older passages for the rest of `CATCHUP_SECONDS` (never past 50 minutes into the job, so
    the next hour's run is never skipped), oldest filing first, under the same lock as
    `section-passages` (one waits for the other; both take the same filings, so they can overlap in
    time without harm);
-4. measures diffs of an older `ALGORITHM` (the run itself recomputes them).
+5. measures diffs of an older `ALGORITHM` (the run itself recomputes them).
 
 Re-parsed documents whose sections change are re-indexed by the next runs (after new filings).
 Progress: `SELECT * FROM ops.catchup_status` (`paused`, `behind`, `in_flight`, `done_last_day`,

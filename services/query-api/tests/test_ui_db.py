@@ -410,6 +410,32 @@ def test_screener_lists_a_data_check_only_for_companies_the_caller_can_read(reca
     assert "issue" not in api.get("/v1/screener", headers=token("t-free")).json()
 
 
+def test_screener_rows_carry_the_confidence_mark_for_a_reader_only(recap_conn, token):
+    """074: gold.company_confidence per page row, under RLS: a reader of the company's figures
+    gets the level and its reasons, anyone else nothing."""
+    run = recap_conn.execute("INSERT INTO ops.quality_runs (companies, findings) VALUES (1, 1)"
+                             " RETURNING run_id").fetchone()[0]
+    recap_conn.execute("INSERT INTO ops.quality_companies (company_id, run_id, checked_at, errors,"
+                       " warnings, figures, core_figures) VALUES (%s, %s, now(), 1, 0, 40, 6)",
+                       (R, run))
+
+    class ReadsR(AllowAll):  # layer 1 lets everyone read R; RLS (layer 2) decides
+        def readable(self, _):
+            return {R: {"financials"}}
+
+    api = TestClient(create_app(ReadsR(), Store(OneConnection(recap_conn)), SECRET,
+                                today=lambda: date(2026, 8, 15)))
+
+    def row(user):
+        r = api.get(f"/v1/screener?company_id={R}&columns=revenue_q", headers=token(user))
+        assert r.status_code == 200, r.text
+        return next(x for x in r.json()["rows"] if x["company_id"] == R)
+
+    assert row("t-free")["confidence"] == {
+        "level": "low", "reasons": ["1 error a reader could see in its 40 figures"]}
+    assert row("t-nobody")["confidence"] is None
+
+
 S_APPLE, S_APPLEBY, S_ACME, S_GS, S_SPROUT, S_SPROUTS = (
     "9100000021", "9100000022", "9100000023", "9100000024", "9100000025", "9100000026")
 
@@ -600,10 +626,12 @@ def test_status_data_runs_as_query_api_without_bronze_or_ops_access(conn):
                               " FROM ops.public_completeness()") == [(2, 150, 1, 2, 1)]
     coverage = as_query_api(conn, "SELECT * FROM ops.public_coverage()")[0]
     assert coverage[:4] == (before[0] + 1, before[1] + 1, before[2] + 1, before[3] + 7)
-    # 023's eleven checks, 041's mistagged_fact and net_debt_gap, 072's tag_disagreement, and the
-    # checks with findings of two severities (outlier, sign_flip, annual_sum): one row each, by tier
+    # 023's eleven checks, 041's mistagged_fact and net_debt_gap, 072's tag_disagreement, 074's
+    # statement_mismatch, and the checks with findings of two severities (outlier, sign_flip,
+    # annual_sum): one row each, by tier
     quality = as_query_api(conn, "SELECT check_name, severity, tier FROM ops.public_quality()")
-    assert len(quality) == 17
+    assert len(quality) == 18
+    assert ("statement_mismatch", "warning", "warning") in quality
     assert [t for _, _, t in quality] == sorted(
         (t for _, _, t in quality),
         key=["error", "warning", "kept_out", "coverage", "info"].index)

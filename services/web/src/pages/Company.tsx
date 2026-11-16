@@ -16,6 +16,7 @@ import type { StatementView } from "../company/statementView";
 import { Ratios, Segments, Statements } from "../company/Tables";
 import { useLoad } from "../company/useLoad";
 import { placeName } from "../companies/places";
+import { confidenceWords } from "../companies/rows";
 import { Folio } from "../components/Folio";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { day } from "../format";
@@ -112,6 +113,11 @@ export function Company({ token, companyId, tab, statements, changes, watched, o
           {h.filer && <span>{h.filer} filer</span>}
           {place && <span title={`EDGAR's code: ${h.state}`}>Incorporated in {place}</span>}
           {h.currency && <span>Figures in {h.currency}</span>}
+          {/* 074: how far to trust the figures, quiet, its reasons in the hover */}
+          {row.confidence && (() => {
+            const c = confidenceWords(row.confidence);
+            return <span className="defined co-confidence" title={c.hover}>{c.label}</span>;
+          })()}
           {/* what this user's access covers is the CIK's hover, not a mark in the masthead */}
           <span className="co-cik" title={`Your access: ${accessWords(row.access)}`}>CIK {companyId}</span>
         </p>
