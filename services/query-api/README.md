@@ -1505,7 +1505,9 @@ no stored row changes and nothing is rebuilt.
   much; + new and removed figures; + how far figures moved; + new risk wording), halved under
   12 words. `ranking` is the one line that says so. In a rewritten passage's `words`, a
   calendar-only swap ("second" → "third" quarter, "June 30, 2025" → "September 30, 2026") is shown
-  as the new words, unmarked; every other word change is marked.
+  as the new words, unmarked, with the earlier filing's own words third in that "=" run (`["=", new, old]`) so the
+  side-by-side reader quotes each filing as it was (Riley 5: an Aug 2025 10-Q read "fiscal year 2027");
+  every other word change is marked.
 - Filters, after the pass: `q` (2-100 characters; every word must appear in the passage or its
   compared one, as a word prefix with a plural dropped, so "tariffs" finds "tariff"; "quoted
   phrases" as written), `numbers=new` (passages with a new figure), `kind`, `section`. The answer

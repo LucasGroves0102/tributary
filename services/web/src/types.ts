@@ -1292,7 +1292,9 @@ export interface SectionChanges {
       text: string | null;
       prior_text: string | null;
       /** word runs: "=" in both, "-" prior only, "+" this filing only */
-      words: [string, string][] | null;
+      /** "=", "-", "+" runs; an "=" run may carry the earlier filing's own words third (a calendar
+       * swap shown unmarked: "fiscal year 2026" a year later reads 2027), for that filing's side */
+      words: ([string, string] | [string, string, string])[] | null;
       citation: ChangeCitation | null;
       prior_citation: ChangeCitation | null;
       /** F3 */

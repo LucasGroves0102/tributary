@@ -228,8 +228,14 @@ def test_calendar_swaps_inside_a_rewritten_passage_are_not_marked():
             ["+", "Weak."]]
     assert quiet_calendar(runs) == [
         ["=", "Net sales were"], ["-", "$3,274.3"], ["+", "$4,312.8"],
-        ["=", "in the third quarter of 2026, compared with September 30, 2026."],
+        # the earlier filing's own words stay third, for its side (Riley 5)
+        ["=", "in the third quarter of 2026, compared with September 30, 2026.",
+         "in the second quarter of 2026, compared with June 30, 2025."],
         ["-", "Strong."], ["+", "Weak."]]
+    # NVIDIA's "fiscal year 2026" a year later: the Aug 2025 side never reads 2027
+    assert quiet_calendar([["=", "in fiscal year"], ["-", "2026,"], ["+", "2027,"],
+                           ["=", "we expect"]]) == [
+        ["=", "in fiscal year 2027, we expect", "in fiscal year 2026, we expect"]]
     # figures are never calendar words; a run that mixes them stays marked
     assert quiet_calendar([["-", "second $5.0"], ["+", "third $6.0"]]) == [
         ["-", "second $5.0"], ["+", "third $6.0"]]
