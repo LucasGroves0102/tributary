@@ -830,8 +830,9 @@ stamp when the company-loader links a CIK to it, so the catch-up rebuilds it fir
 
 Net income from one line. `NetIncomeLossAvailableToCommonStockholdersBasic` is the last fallback
 (Booking's 10-Ks and 10-Qs since 2016; the same figure without preferred stock), and inside a year whose
-annual net income is tagged ProfitLoss and never NetIncomeLoss, ProfitLoss reads first, so the year's
-quarters, year-to-date figures and derived Q4 never mix the two (PNC's 2025: 7,015 against the printed
-6,997, now 6,997). A coverage-majority rule was tried first and dropped: Kroger, Prologis and Duke tag
+own filings tag net income ProfitLoss only (NetIncomeLoss only in later filings' comparatives), ProfitLoss
+reads first, so the year's quarters, year-to-date figures and derived Q4 never mix the two (PNC's 2025:
+7,015 against the printed 6,997, now 6,997; on hermes 417 periods at 129 companies hold both tags in such
+years, 69 more than 10% apart). A coverage-majority rule was tried first and dropped: Kroger, Prologis and Duke tag
 ProfitLoss in more periods than NetIncomeLoss and print the attributable figure. `gold.rules_version()`
 77: the catch-up rebuilds every company.

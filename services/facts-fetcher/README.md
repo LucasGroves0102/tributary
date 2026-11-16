@@ -65,8 +65,8 @@ slip when it is over 100 times every other money figure of the period, else the 
 sorts last (Tigo Energy's contract tag 1,000x too large, Plexus' in thousands). A line a
 filing reports as two tags (a bank's net interest plus noninterest income; NVIDIA's debt plus equity
 securities) is a `silver.metric_sums` row whose parts are `silver.metric_tags` rows with
-`gold_line = false` (038). Net income is one line a year (077): inside a year whose annual figure is
-tagged `ProfitLoss` and never `NetIncomeLoss`, `ProfitLoss` reads first (PNC); its last fallback is
+`gold_line = false` (038). Net income is one line a year (077): inside a year whose own filings tag it
+`ProfitLoss` only (`NetIncomeLoss` only in later comparatives), `ProfitLoss` reads first (PNC); its last fallback is
 `NetIncomeLossAvailableToCommonStockholdersBasic` (Booking since 2016).
 
 A filing's facts are the company's whose CIK the filing's own XBRL names (migration 050): since July

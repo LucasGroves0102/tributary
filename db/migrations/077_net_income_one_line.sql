@@ -6,14 +6,26 @@
 --    fact. Booking tags its income statement's "Net income" that way in every 10-K and 10-Q since
 --    2016 (no preferred stock: the same figure); its only NetIncomeLoss facts since are the
 --    proxies' (024 drops them), so gold had no net income after 2015 (reference set: 5,404 printed
---    for 2025, none in gold). MEASURE_NILATCSB
+--    for 2025, none in gold). Of the listed companies whose net income stops while their figures
+--    go on (076's sweep, 3), Booking and Trupanion carry this tag every period since; Energy
+--    Services of America also reports preferred dividends, so its figure reads net income less
+--    them. Elsewhere it fills only a period with neither tag.
 --
--- 2. gold.best_facts (064's body, edits marked "077"): a company whose us-gaap ProfitLoss covers
---    more of its periods than NetIncomeLoss reads ProfitLoss first. PNC tags its bottom line
---    ProfitLoss in every filing; two 2026 10-Qs added NetIncomeLoss for their 2025 comparatives, so
---    gold's 2025 read Q1 ProfitLoss, Q2-Q3 NetIncomeLoss and a fiscal Q4 of the year's ProfitLoss
---    less nine months of NetIncomeLoss: TTM 7,015 against the printed 6,997. Now 6,997.
---    MEASURE_PL
+-- 2. gold.best_facts (064's body, edits marked "077"): inside a year whose annual net income is
+--    tagged ProfitLoss and never NetIncomeLoss (a year: 350-380 days), NetIncomeLoss for its
+--    periods only in later filings' comparatives (first filed 100+ days after the year ended),
+--    ProfitLoss reads first, so the year's quarters, year-to-date figures and the fiscal Q4
+--    derived from them are one line. PNC tags its bottom line ProfitLoss in every filing; two 2026
+--    10-Qs added NetIncomeLoss for their 2025 comparatives, so gold's 2025 read Q1 ProfitLoss,
+--    Q2-Q3 NetIncomeLoss and a fiscal Q4 of the year's ProfitLoss less nine months of
+--    NetIncomeLoss: TTM 7,015 against the printed 6,997. Now 6,997. Tried first and dropped:
+--    ProfitLoss first wherever it covers more of the company's periods (Kroger, Prologis and Duke
+--    Energy would read the figure with noncontrolling interests where they print the attributable
+--    one; the reference set caught it). On hermes' silver: 2,765 such years at 626 companies (most
+--    with no NetIncomeLoss in them: nothing changes); 417 periods at 129 companies hold both tags,
+--    192 with two values, 69 by more than 10% (large noncontrolling interests: the year's quarters
+--    now all include them, where its derived Q4 alone used to). Without the comparatives
+--    condition: 2,163 periods at 328 companies.
 --
 -- gold.rules_version() 64 -> 77: the hourly catch-up (071) re-projects every company's stored
 -- companyfacts with the new tag and rebuilds its gold, oldest build first; nothing by hand. The
@@ -21,8 +33,9 @@
 --
 -- Locks on hermes (lock_timeout 3 s): one row into silver.metric_tags (read by the hourly jobs:
 -- ROW EXCLUSIVE), CREATE OR REPLACE of gold.best_facts and gold.rules_version (catalog only; a
--- running caller keeps the body it started with). Nothing is rebuilt here. Undo: 064's best_facts,
--- rules_version 64, delete the tag row; then the catch-up rebuilds again.
+-- running caller keeps the body it started with). Nothing is rebuilt here. Undo:
+-- db/backout/net_income_077.sql (064's best_facts, the tag and its silver facts gone), then the
+-- financials-rebuild job.
 
 SET LOCAL lock_timeout = '3s';
 
@@ -35,25 +48,37 @@ RETURNS TABLE (company_id text, metric text, tag text, taxonomy text, unit text,
                filed date, ingested_at timestamptz, cik text, priority numeric, additive boolean)
 LANGUAGE sql STABLE AS $$
     WITH tag_latest AS (
-        SELECT DISTINCT ON (u.company_id, u.metric, u.tag, u.period_start, u.period_end) u.*
+        SELECT DISTINCT ON (u.company_id, u.metric, u.tag, u.period_start, u.period_end) u.*,
+               -- 077: when the tag first gave this period (a later filing's comparative or not)
+               min(u.filed) OVER (PARTITION BY u.company_id, u.metric, u.tag, u.period_start,
+                                               u.period_end) AS first_filed
         FROM gold.usable_facts(p_company_ids) u
         ORDER BY u.company_id, u.metric, u.tag, u.period_start, u.period_end, u.filed DESC,
                  u.accession_no DESC, u.cik
     ),
-    -- 077: a year whose net income is tagged ProfitLoss and never NetIncomeLoss (a year: 350-380
-    -- days); inside it ProfitLoss reads first, so the year's quarters, its year-to-date figures
-    -- and the fiscal Q4 derived from them are one line. PNC's 2025: ProfitLoss in every filing of
-    -- the year, NetIncomeLoss only in two 2026 10-Qs' comparatives (Q2, Q3, six and nine months):
-    -- gold read Q1 ProfitLoss, Q2-Q3 NetIncomeLoss and a Q4 of the year's ProfitLoss less nine
-    -- months of NetIncomeLoss.
+    -- 077: a year whose net income the company's own filings of the year tag ProfitLoss only (the
+    -- annual figure ProfitLoss, never NetIncomeLoss; a year: 350-380 days), NetIncomeLoss for its
+    -- periods coming only from later filings' comparatives (first filed 100+ days after the year
+    -- ended). Inside it ProfitLoss reads first, so the year's quarters, its year-to-date figures and
+    -- the fiscal Q4 derived from them are one line. PNC's 2025: ProfitLoss in every filing of the
+    -- year, NetIncomeLoss only in two 2026 10-Qs' comparatives (Q2, Q3, six and nine months): gold
+    -- read Q1 ProfitLoss, Q2-Q3 NetIncomeLoss and a Q4 of the year's ProfitLoss less nine months of
+    -- NetIncomeLoss.
     profit_loss_years AS MATERIALIZED (
-        SELECT t.company_id, t.period_start, t.period_end
-        FROM tag_latest t
-        WHERE t.metric = 'net_income' AND t.taxonomy = 'us-gaap'
-          AND t.tag IN ('NetIncomeLoss', 'ProfitLoss')
-          AND t.period_end - t.period_start BETWEEN 350 AND 380
-        GROUP BY t.company_id, t.period_start, t.period_end
-        HAVING NOT bool_or(t.tag = 'NetIncomeLoss')
+        SELECT y.company_id, y.period_start, y.period_end
+        FROM (SELECT t.company_id, t.period_start, t.period_end
+              FROM tag_latest t
+              WHERE t.metric = 'net_income' AND t.taxonomy = 'us-gaap'
+                AND t.tag IN ('NetIncomeLoss', 'ProfitLoss')
+                AND t.period_end - t.period_start BETWEEN 350 AND 380
+              GROUP BY t.company_id, t.period_start, t.period_end
+              HAVING NOT bool_or(t.tag = 'NetIncomeLoss')) y
+        WHERE NOT EXISTS (SELECT 1 FROM tag_latest n
+                          WHERE n.company_id = y.company_id AND n.metric = 'net_income'
+                            AND n.taxonomy = 'us-gaap' AND n.tag = 'NetIncomeLoss'
+                            AND n.period_start >= y.period_start
+                            AND n.period_end <= y.period_end
+                            AND n.first_filed <= y.period_end + 100)
     ),
     ranked AS (  -- 077: the order tags are believed in; priority, but for that rule
         SELECT t.*,

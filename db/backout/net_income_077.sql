@@ -27,7 +27,7 @@ BEGIN
         ('gold.amount_currency(text)', 'd59a928b3b91fb9a6da98fc15e72a536'),
         ('gold.amount_currency_of(text)', '6d18237414dd02bfe4078cac3f7b429e'),
         ('gold.annual_per_share(text,integer)', '663430e80a6341f8a0e4227e1491e657'),
-        ('gold.best_facts(text[])', 'f1b0a930c4c8c3a8639ce69b5c09a6a1'),
+        ('gold.best_facts(text[])', '21ac196fb91af417d9f27ff079a35882'),
         ('gold.companies_for_ciks(text[])', '5f02b9f1e395d7f743635d0a399f8f6c'),
         ('gold.figure_facts(text,text,date)', '6789892e97611dd6c0260a25f695d7fc'),
         ('gold.filing_figures(text,text)', '51376508ac8a1a66d7e42cc92852346f'),
