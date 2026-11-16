@@ -181,6 +181,9 @@ services:
       CRAWL_MIN_FREE_GB: "50"
       CRAWL_WORKERS: "4"
       CRAWL_BATCH: "32"
+      # An idle crawl's round, which also publishes up to 500 outbox events: every 5 minutes, so the
+      # parser catch-up's re-queued documents (section-index, migration 071) go out within the hour
+      CRAWL_IDLE_SECONDS: "300"
     resources:
       requests:
         cpu: 100m
@@ -285,7 +288,8 @@ jobs:
     schedule: "0 4 * * *"
     uses: [postgres, sec]
   # Re-derive silver and gold from stored bronze, after a change to silver.metric_tags or gold's rules.
-  # No SEC requests. Ships suspended and never runs on its own. Run now:
+  # No SEC requests. Ships suspended and never runs on its own. An emergency tool since migration 071:
+  # a deploy that bumps gold.rules_version() is caught up by the hourly segments job by itself. Run now:
   # kubectl -n tributary create job --from=cronjob/financials-rebuild financials-rebuild-1
   financials-rebuild:
     image: facts-fetcher
@@ -412,6 +416,9 @@ jobs:
   # stopped run resumes where it left off. Documents are decompressed and parsed in 1 MB chunks.
   # Hourly once enabled, to pick up new filings. Ships suspended; first load (~90k documents
   # once the crawl is done): kubectl -n tributary create job --from=cronjob/segments segments-1
+  # A run that leaves nothing pending then spends up to CATCHUP_SECONDS on the catch-up (migration
+  # 071, facts_fetcher/catchup.py): companies whose gold or quality checks an older rule built are
+  # re-checked or rebuilt (the financials-rebuild path, no SEC), 25 at a time, oldest build first.
   segments:
     image: facts-fetcher
     command: [facts-fetcher-segments]
@@ -431,6 +438,7 @@ jobs:
       SEGMENTS_BATCH: "25"
       SEGMENTS_ROUNDS: "40"
       SEGMENTS_PAUSE_SECONDS: "0"
+      CATCHUP_SECONDS: "1200"
   # Filing alerts (query_api/alert_job.py, app migration 016): every 10 minutes, the 10-K, 10-Q
   # and material 8-K filings of each user's watched and analysed companies in the last 3 days
   # (public filing index), as in-app notifications with their key figures and the user's red
@@ -464,6 +472,12 @@ jobs:
   # to_tsvector plus ~4 h of diffs): kubectl -n tributary create job
   # --from=cronjob/section-index section-index-1, repeated until ops.section_index_status
   # catches up; then REINDEX the GIN index (gold.section_search_tsv), bloated by the bulk load.
+  # A run that finishes its work then catches up older history (migration 071, filing_parser/catchup.py):
+  # up to PARSER_CATCHUP_PER_RUN documents an older parser split are re-queued through the crawl's outbox
+  # for parser-backfill (never documents.fetched; only while the crawl and parser-backfill keep up), and
+  # passages an older rule built are rebuilt for up to CATCHUP_SECONDS. Watch: ops.catchup_status. The
+  # parser kind ships paused (~8 days of re-parsing); the owner starts it with
+  # UPDATE ops.catchup SET paused = false WHERE kind = 'parser';
   section-index:
     image: parser  # Python: the indexing job (filing_parser/index.py), not the document parser
     command: [parser-index]
@@ -480,9 +494,12 @@ jobs:
     env:
       SECTION_INDEX_LIMIT: "20000"
       SECTION_INDEX_BATCH: "25"
+      CATCHUP_SECONDS: "1200"
+      PARSER_CATCHUP_PER_RUN: "3000"
   # Search passages without page furniture (migration 068): rebuilds only the passages of filings
   # indexed before it (parser-index --passages: no diffs, no checkpoint change, the same lock as
-  # section-index, so one waits for the other). By hand, repeated until it logs "complete"
+  # section-index, so one waits for the other). An emergency tool since migration 071: the hourly
+  # section-index rebuilds older passages by itself. By hand, repeated until it logs "complete"
   # (services/parser README "Search without page furniture"; runbook-parser-v7.md):
   # kubectl -n tributary create job --from=cronjob/section-passages section-passages-1
   section-passages:
@@ -505,7 +522,8 @@ jobs:
   # filing first, no Kafka). Parser v7 (rule 11, tables): a document whose sections come out the
   # same keeps its rows and parsed_at (search and diffs untouched) and gains its tables; one whose
   # sections change (rules 2, 9, 10 since its last parse) is replaced and re-indexed by
-  # section-index. By hand, once per parser version that needs it (runbook-parser-v7.md):
+  # section-index. An emergency tool since migration 071 (section-index re-queues older documents for
+  # parser-backfill by itself, a few thousand an hour); all at once, by hand (runbook-parser-v7.md):
   # kubectl -n tributary create job --from=cronjob/parser-reparse parser-reparse-1
   parser-reparse:
     image: parser-rs

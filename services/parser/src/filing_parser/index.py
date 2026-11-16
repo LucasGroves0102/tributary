@@ -9,15 +9,21 @@ stopped run resumes where it left off and a re-run changes nothing.
 
 Passages are built with page furniture blanked (migration 068), and ops.section_index.passages_rule
 records it. `--passages` rebuilds only the passages of filings indexed before that (oldest
-accession first, the same batches and lock): their checkpoint, diffs and parsed_at stay as they
+filing first, the same batches and lock): their checkpoint, diffs and parsed_at stay as they
 are, so What changed never goes stale and nothing is diffed again.
+
+Work order: filings never indexed (never diffed) first, then re-indexing and re-diffing oldest first
+(migration 071), so history being upgraded never delays a new filing. Once a run has done all its
+work, catchup.py upgrades a budget of older history: documents an older parser split (re-queued
+for parser-backfill) and passages an older SEARCH_RULE built (CATCHUP_SECONDS). A run that finds the
+lock taken (another run, or the hand-run section-passages) does nothing and says so.
 """
 
 import argparse
 import logging
 import os
 import time
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 
 import psycopg
@@ -46,6 +52,7 @@ class Stats:
     changes: int = 0
     errors: int = 0
     completed: bool = False
+    locked_out: bool = False  # another run holds the lock: nothing was done
 
 
 @dataclass(frozen=True)
@@ -58,13 +65,19 @@ class Section:
     text: str
 
 
+def locked(conn: psycopg.Connection) -> bool:
+    with conn.transaction():
+        row = conn.execute("SELECT pg_try_advisory_lock(%s)", (LOCK,)).fetchone()
+    if row and row[0]:
+        return True
+    log.warning("another parser-index run holds the lock; nothing done")
+    return False
+
+
 def run(conn: psycopg.Connection, limit: int = LIMIT, batch: int = BATCH) -> Stats:
     stats = Stats()
-    with conn.transaction():
-        locked = conn.execute("SELECT pg_try_advisory_lock(%s)", (LOCK,)).fetchone()
-    if not (locked and locked[0]):
-        log.warning("another parser-index run holds the lock; exiting")
-        stats.completed = True
+    if not locked(conn):
+        stats.locked_out = True
         return stats
     last: list = []
     try:
@@ -145,29 +158,34 @@ def count_passages(conn: psycopg.Connection, accessions: list[str]) -> None:
                  " passages_rule = %s WHERE accession_no = ANY(%s)", (SEARCH_RULE, accessions))
 
 
-def refresh_passages(conn: psycopg.Connection, limit: int = LIMIT,
-                     batch: int = BATCH) -> Stats:
-    """--passages: rebuild the search passages of up to `limit` indexed filings whose passages
-    predate SEARCH_RULE, `batch` filings per transaction; nothing else changes."""
+def refresh_passages(conn: psycopg.Connection, limit: int = 10**9, batch: int = BATCH, *,
+                     deadline: float | None = None,
+                     clock: Callable[[], float] = time.monotonic) -> Stats:
+    """--passages and the catch-up: rebuild the search passages of up to `limit` indexed filings
+    whose passages predate SEARCH_RULE, oldest filing first, `batch` filings per transaction, until
+    `deadline` (clock time); nothing else changes."""
     stats = Stats()
-    with conn.transaction():
-        locked = conn.execute("SELECT pg_try_advisory_lock(%s)", (LOCK,)).fetchone()
-    if not (locked and locked[0]):
-        log.warning("another parser-index run holds the lock; exiting")
-        stats.completed = True
+    if not locked(conn):
+        stats.locked_out = True
         return stats
+
+    def more() -> bool:
+        return stats.filings < limit and (deadline is None or clock() < deadline)
+
     try:
-        while stats.filings < limit:
+        while more():
             with conn.transaction():
                 rows = conn.execute(
                     "SELECT accession_no FROM ops.section_index"
-                    " WHERE passages_rule IS DISTINCT FROM %s ORDER BY accession_no LIMIT %s",
-                    (SEARCH_RULE, min(limit - stats.filings, 1000))).fetchall()
+                    " WHERE passages_rule IS DISTINCT FROM %s ORDER BY filed, accession_no"
+                    " LIMIT %s", (SEARCH_RULE, min(limit - stats.filings, 1000))).fetchall()
             if not rows:
                 stats.completed = True
                 break
             order = [r[0] for r in rows]
             for i in range(0, len(order), batch):
+                if not more():
+                    break
                 chunk = order[i:i + batch]
                 with conn.transaction():
                     stats.passages += conn.execute("SELECT gold.refresh_section_search(%s)",
@@ -257,22 +275,39 @@ def main(argv: Iterable[str] | None = None) -> None:
     parser.add_argument("--passages", action="store_true",
                         help="rebuild only the search passages of filings indexed before the page"
                              " furniture rule (migration 068); no diffs, no checkpoint change")
+    parser.add_argument("--catchup-seconds", type=float,
+                        default=float(os.environ.get("CATCHUP_SECONDS", 1200)),
+                        help="after a run that finished its work: seconds of older passages"
+                             " rebuilt (default: $CATCHUP_SECONDS or 1200)")
+    parser.add_argument("--parser-catchup", type=int,
+                        default=int(os.environ.get("PARSER_CATCHUP_PER_RUN", 3000)),
+                        help="... and documents of an older parser re-queued for parser-backfill"
+                             " (default: $PARSER_CATCHUP_PER_RUN or 3000)")
     args = parser.parse_args(None if argv is None else list(argv))
     configure_logging()
     started = time.monotonic()
     with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
         if args.passages:
             stats = refresh_passages(conn, args.limit, args.batch)
-            log.info("%s: passages of %d filings rebuilt (%d passages) in %.0fs",
-                     "complete" if stats.completed else "limit reached, run again to continue",
+            log.info("%s: passages of %d filings rebuilt (%d passages) in %.0fs", outcome(stats),
                      stats.filings, stats.passages, time.monotonic() - started)
             return
         stats = run(conn, args.limit, args.batch)
-    log.info("%s: %d filings, %d indexed (%d passages), %d diffed (%d section diffs, %d changes,"
-             " %d errors) in %.0fs",
-             "complete" if stats.completed else "limit reached, run again to continue",
-             stats.filings, stats.indexed, stats.passages, stats.diffed, stats.section_diffs,
-             stats.changes, stats.errors, time.monotonic() - started)
+        log.info("%s: %d filings, %d indexed (%d passages), %d diffed (%d section diffs,"
+                 " %d changes, %d errors) in %.0fs", outcome(stats), stats.filings,
+                 stats.indexed, stats.passages, stats.diffed, stats.section_diffs, stats.changes,
+                 stats.errors, time.monotonic() - started)
+        if stats.completed:
+            from filing_parser import catchup  # imports this module
+
+            catchup.run(conn, catchup.budget(args.catchup_seconds, time.monotonic() - started),
+                        args.parser_catchup, stats.diffed)
+
+
+def outcome(stats: Stats) -> str:
+    if stats.locked_out:
+        return "another run holds the lock, nothing done"
+    return "complete" if stats.completed else "limit reached, run again to continue"
 
 
 if __name__ == "__main__":

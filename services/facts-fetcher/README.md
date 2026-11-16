@@ -32,10 +32,26 @@ payload of each CIK. Measured on a 400-company sample of the bulk file, extrapol
 ~20k entries: full payloads as jsonb ≈ 4 GB, gzip ≈ 1.4 GB, mapped facts ≈ 0.26 GB.
 
 `facts-fetcher --rebuild` skips the SEC: it re-projects each CIK's stored raw payload with the
-current `silver.metric_tags`, then re-derives silver and gold. Use it after changing the tags
-or the gold rules. `--ciks 0001045810,0000320187` limits it to those CIKs, to look at a few
-companies first. On k3s it's the suspended `financials-rebuild` CronJob
-([helm chart](../../deploy/helm/tributary/README.md)).
+current `silver.metric_tags`, then re-derives silver and gold, all at once. `--ciks
+0001045810,0000320187` limits it to those CIKs, to look at a few companies first. On k3s it's the
+suspended `financials-rebuild` CronJob ([helm chart](../../deploy/helm/tributary/README.md)), an
+emergency tool since the catch-up below.
+
+### Catch-up
+
+A migration that changes the tags or gold's rules replaces `gold.rules_version()` with its own
+number; one that changes `ops.check_financials` or `ops.check_segments` bumps that check's version
+(migration 071, [db](../../db/README.md#versions-and-catch-up)). Every refresh stamps the companies
+it built in `ops.company_builds`, and the hourly `segments` job, once its own work is done, spends up
+to `CATCHUP_SECONDS` (1,200; never past 50 minutes into the job) on `catchup.py`: companies an older version built, oldest build first,
+the checks re-run 100 at a time (nothing re-derived; a check waits while the company's gold is due),
+then gold rebuilt 25 at a time by the `--rebuild` path (no SEC requests; `gold.companies_for_ciks`
+borrowers included). Each batch commits alone and takes the companies' gold locks, so a stopped run
+leaves whole companies and the nightly jobs wait for a batch rather than interleave with it. A batch
+that raises is retried a company at a time; one that still raises is recorded
+(`ops.company_builds.failed_version`, `error`) and left until the next version. Progress:
+`ops.catchup_status`. A full gold catch-up of hermes' ~8,100 companies is about 1-2 hours of
+rebuilding, so it is done within a few hours of the deploy; the checks within the first run.
 
 Which fact gold believes is one SQL function, `gold.best_facts` (migration 039, latest body 064,
 over `gold.usable_facts`): the quarters, the annual fallback for TTM (040) and the checks' annual
@@ -64,7 +80,7 @@ Migration 056 maps the core IFRS tags (`ifrs-full:Revenue`, `ProfitLossFromOpera
 `ProfitLoss`, `Assets`, `Equity`, `CashAndCashEquivalents`, `LongtermBorrowings`,
 `CashFlowsFromUsedInOperatingActivities`, `PurchaseOfPropertyPlantAndEquipment...`, EPS and the rest)
 and lets silver keep amounts in any currency, so a 20-F or 40-F filer's companyfacts reach gold: the
-`financials-rebuild` job re-projects every stored payload with the new tags (`payload.project` keeps
+`financials-rebuild` job re-projected every stored payload with the new tags (`payload.project` keeps
 the (taxonomy, tag) pairs of `silver.metric_tags`; no SEC request). Each company is read in its
 reporting currency only (`gold.usable_facts`), and gold never splits a year or a half into quarters,
 so a filer of annual reports has fiscal years and year-end balances, and one whose 6-Ks tag quarters
@@ -235,14 +251,15 @@ CronJobs on k3s (New York time; [helm chart](../../deploy/helm/tributary/README.
 | `financials` | `facts-fetcher` | nightly 04:00 |
 | `financials-bulk` | `facts-fetcher-bulk` | nightly 05:00, up to 60 rounds of 500 changed companies, no pause |
 | `filing-facts` | `facts-fetcher-filings` | daily 09:30; ships suspended until its first run by hand |
-| `segments` | `facts-fetcher-segments` | hourly at :20; ships suspended, unsuspended in the Flux release; no SEC access |
-| `financials-rebuild` | `facts-fetcher --rebuild` | suspended, run by hand after a change to tags or gold rules; no SEC access |
+| `segments` | `facts-fetcher-segments` | hourly at :20, then the catch-up (above); ships suspended, unsuspended in the Flux release; no SEC access |
+| `financials-rebuild` | `facts-fetcher --rebuild` | suspended: an emergency rebuild of everything at once; no SEC access |
 
 Config (env): `DATABASE_URL`, `SEC_USER_AGENT` (both required; the bulk job needs no
 `SEC_USER_AGENT` with `--zip`, the segments job and `--rebuild` none at all), `BULK_DIR` (default
 the system temp dir), `BULK_LIMIT` (default 500), `BULK_ROUNDS` (default 1), `BULK_PAUSE_SECONDS`
 (default 0), `SEGMENTS_LIMIT` (2000), `SEGMENTS_BATCH` (25), `SEGMENTS_ROUNDS` (1),
-`SEGMENTS_PAUSE_SECONDS` (0), the `FILING_FACTS_*` settings above, `LOG_LEVEL`.
+`SEGMENTS_PAUSE_SECONDS` (0), `CATCHUP_SECONDS` (1200; 0: no catch-up), the `FILING_FACTS_*`
+settings above, `LOG_LEVEL`.
 SEC requests share one rate limit with every other service (`libs/sec`): `SEC_CALLER_CLASS`
 (`batch` for every job here) and `SEC_LIMITER_DATABASE_URL` (default `DATABASE_URL`).
 

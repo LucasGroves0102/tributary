@@ -10,9 +10,21 @@ from datetime import date, timedelta
 from pathlib import Path
 
 import httpx
+import psycopg
 import pytest
 
-from doc_fetcher.crawl import Config, Crawler, classify, window_start, years_before
+from doc_fetcher.crawl import (
+    CATCHUP_BEHIND,
+    CATCHUP_FAILED,
+    CATCHUP_IN_FLIGHT,
+    CATCHUP_PAUSED,
+    CATCHUP_PROGRESS,
+    Config,
+    Crawler,
+    classify,
+    window_start,
+    years_before,
+)
 from doc_fetcher.crawl_db import Control
 from doc_fetcher.crawl_fetch import Fetched, Target, Unusable, download, fetch_target, needs_index
 from doc_fetcher.db import Blob
@@ -169,6 +181,7 @@ class FakeQueue:
         self.plans: list[tuple[date, list[str] | None]] = []
         self.paused = False
         self.states: list[tuple[str, int | None]] = []
+        self.catchup: list[tuple] = []
 
     def plan(self, since, eight_k_items):
         self.plans.append((since, eight_k_items))
@@ -226,6 +239,9 @@ class FakeQueue:
 
     def report(self, state, disk_free, min_free):
         self.states.append((state, disk_free))
+
+    def catchup_status(self):
+        return self.catchup
 
 
 class FakeMessage:
@@ -373,6 +389,25 @@ def test_operator_pause():
     assert c.round() == 60
     assert queue.status == {"a1": "pending"}
     assert queue.states == [("paused", None)]
+
+
+def test_reports_the_catch_up_every_round_even_paused():
+    queue = FakeQueue([target("a1")])
+    queue.paused = True
+    queue.catchup = [("parser", 5, 2, 1, False, 1_700_000_000.0), ("gold", 0, 0, 0, True, 1.0)]
+    crawler(queue).round()
+    assert CATCHUP_BEHIND.labels("parser")._value.get() == 5
+    assert CATCHUP_IN_FLIGHT.labels("parser")._value.get() == 2
+    assert CATCHUP_FAILED.labels("parser")._value.get() == 1
+    assert CATCHUP_PROGRESS.labels("parser")._value.get() == 1_700_000_000
+    assert CATCHUP_PAUSED.labels("gold")._value.get() == 1
+
+    def broken():
+        raise psycopg.errors.UndefinedTable("ops.catchup_status")
+    queue.catchup_status = broken  # before migration 071, say: the crawl goes on
+    queue.paused = False
+    crawler(queue).round()
+    assert queue.status == {"a1": "done"}
 
 
 def test_backs_off_when_every_fetch_fails():

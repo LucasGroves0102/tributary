@@ -100,6 +100,18 @@ spec:
           labels: {severity: warning}
           annotations:
             summary: "Document crawl paused by its disk guard: {{`{{ $value | humanize1024 }}`}}B free"
+        - alert: CatchupStalled
+          # ops-exporter: stored data an older rule built (parser, passages, gold, checks; migration
+          # 071) that the hourly section-index and segments jobs haven't moved in a day: the jobs
+          # failing or suspended, the crawl busy, parser-backfill stopped, or errors (their logs).
+          expr: |
+            max by (kind) (tributary_catchup_behind) > 0
+            and on (kind) max by (kind) (tributary_catchup_paused) == 0
+            and on (kind) time() - max by (kind) (tributary_catchup_progress_timestamp_seconds) > 86400
+          for: 1h
+          labels: {severity: warning}
+          annotations:
+            summary: "Catch-up of {{`{{ $labels.kind }}`}} has made no progress in a day (ops.catchup_status)"
         - alert: DocCrawlStalled
           # Work left, not paused (by hand or for disk), and nothing finished for 30 minutes:
           # SEC errors, everything left in retry backoff, Postgres or a hung fetch.

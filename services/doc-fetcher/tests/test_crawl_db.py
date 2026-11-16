@@ -170,3 +170,10 @@ def test_store_publish_and_ops_views(conn):
         " projected_stored_bytes >= stored_bytes FROM ops.doc_crawl_status").fetchone()
     assert status == ("running", 300 * 10**9, 3, 2, 0, 1, 0, raw, 3, True, True)
     conn.execute("RESET ROLE")
+
+
+def test_catchup_status_reads_every_kind(conn):
+    rows = {r[0]: r[1:] for r in crawl_db.catchup_status(conn)}
+    assert set(rows) == {"parser", "passages", "diffs", "gold", "check_financials",
+                         "check_segments"}
+    assert all(isinstance(r[4], float) for r in rows.values())

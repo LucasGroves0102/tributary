@@ -68,3 +68,35 @@ tributary_doc_crawl:
     - stored_bytes:
         usage: GAUGE
         description: Gzip bytes stored
+tributary_catchup:
+  query: |
+    SELECT kind, behind, in_flight, failed, done_last_day, paused::int AS paused,
+           extract(epoch FROM coalesce(progress_at, now())) AS progress_timestamp_seconds,
+           extract(epoch FROM coalesce(measured_at, now())) AS measured_timestamp_seconds
+    FROM ops.catchup_status
+  cache_seconds: 300
+  metrics:
+    - kind:
+        usage: LABEL
+        description: parser, passages, diffs, gold, check_financials or check_segments (migration 071)
+    - behind:
+        usage: GAUGE
+        description: Items an older rule built that the catch-up has not tried yet
+    - in_flight:
+        usage: GAUGE
+        description: Documents re-queued for parser-backfill and not parsed yet (parser only)
+    - failed:
+        usage: GAUGE
+        description: Items tried with the current rule that are still behind
+    - done_last_day:
+        usage: GAUGE
+        description: Items the catch-up rebuilt (parser - re-queued) in the last 24 hours
+    - paused:
+        usage: GAUGE
+        description: 1 when ops.catchup.paused is set for the kind
+    - progress_timestamp_seconds:
+        usage: GAUGE
+        description: Unix time the kind last moved (or its current version's catch-up began)
+    - measured_timestamp_seconds:
+        usage: GAUGE
+        description: Unix time of the kind's latest measurement (the hourly jobs)

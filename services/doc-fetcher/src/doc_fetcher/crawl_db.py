@@ -173,6 +173,15 @@ def control(conn: psycopg.Connection) -> Control:
     return Control(paused=bool(row and row[0]))
 
 
+def catchup_status(conn: psycopg.Connection) -> list[tuple[str, int, int, int, bool, float]]:
+    """(kind, behind, in flight, failed, paused, last progress as Unix time) of each kind of the
+    automatic catch-up (migration 071's ops.catchup_status), for the alert's gauges."""
+    return conn.execute(
+        "SELECT kind, behind, in_flight, failed, paused,"
+        " extract(epoch FROM coalesce(progress_at, now()))::float8 FROM ops.catchup_status"
+    ).fetchall()
+
+
 def report(conn: psycopg.Connection, state: str, disk_free: int | None,
            min_free: int) -> None:
     conn.execute(

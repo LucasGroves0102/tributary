@@ -25,14 +25,18 @@ rules are off.
   `PostgresRestoreTestMissing` (no passing weekly restore test in 8 days), `PostgresDown`,
   `ReplicationSlotRetainingWal` (a slot holding over 10 GB of WAL), `PostgresConnectionsHigh`,
   `DiskUsageHigh`, `DiskSpaceLow` (under 50 GB free), and for the document crawl
-  `DocCrawlPausedForDisk` and `DocCrawlStalled` (its `tributary_doc_crawl_*` metrics). Alertmanager
+  `DocCrawlPausedForDisk` and `DocCrawlStalled` (its `tributary_doc_crawl_*` metrics), and
+  `CatchupStalled` (a kind of stored data an older rule built hasn't moved in a day, a paused kind
+  never; migration 071;
+  `tributary_catchup_*{kind}`, which doc-crawler reports from `ops.catchup_status`). Alertmanager
   sends every alert to Discord except `info` severity, `Watchdog` and `InfoInhibitor`.
 - `dashboards/*.json`: loaded by the Grafana sidecar (`tributary-freshness.json`, FR11).
 - `templates/ops-database.yaml`: with `opsDatabase.enabled`, a Grafana Postgres datasource
   (uid `tributary`) on the `ops` views, used by the freshness dashboard, and the ops-exporter
   queries (`files/ops-exporter-queries.yaml`): `tributary_companyfacts_*{company}` from
   `ops.companyfacts_lag`, `tributary_financials_quality_*{check_name,severity}` from
-  `ops.quality_summary`, and `tributary_doc_crawl_*{form}` from `ops.doc_crawl_progress`.
+  `ops.quality_summary`, `tributary_doc_crawl_*{form}` from `ops.doc_crawl_progress`, and
+  `tributary_catchup_*{kind}` from `ops.catchup_status`.
   `opsDatabase.enabled` is off in the chart and in hermes' release (it needs the `grafana_reader`
   login and the `grafana-postgres` secret, below), so on hermes those panels are empty and
   `CompanyFactsBehindEdgar` has no data. The public Data status page (Query API

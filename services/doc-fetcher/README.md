@@ -179,7 +179,11 @@ How it runs:
 - **Parsing**: events go to `documents.backfill` (outbox: a stored filing without a confirmed
   event is republished next round), consumed by `parser-backfill`, the same image as the live
   parser with `PARSER_TOPIC` / `PARSER_GROUP`. The live parser only reads `documents.fetched`,
-  so a backlog of crawled documents never delays a new filing (`streaming/topics.md`).
+  so a backlog of crawled documents never delays a new filing (`streaming/topics.md`). The same
+  outbox carries the parser catch-up (migration 071, parser README "Catch-up"): the hourly
+  `section-index` sets `published_at` back to NULL on documents an older parser split (adding the
+  crawl's 'already stored' row for live-fetched ones the plan never saw), and this publishes them.
+  An idle round runs every `CRAWL_IDLE_SECONDS` (900; 300 on hermes since 071), 500 events each.
 - **Disk guard**: before each round, free space on `CRAWL_DISK_PATH` (`/tmp`, an emptyDir on the
   node disk, which on hermes is the filesystem holding host Postgres) must be at least
   `CRAWL_MIN_FREE_GB` (50), else the crawler pauses (`disk_low`) and rechecks every 5 minutes.

@@ -56,6 +56,18 @@ MIN_FREE = Gauge("tributary_doc_crawl_min_free_bytes", "The disk guard's thresho
 STATE = Gauge("tributary_doc_crawl_state", "1 for the crawler's current state", ["state"])
 LAST_PROGRESS = Gauge("tributary_doc_crawl_last_progress_timestamp_seconds",
                       "Unix time a target was last finished")
+# The automatic catch-up (migration 071) runs in CronJobs, which aren't scraped; this long-running
+# pod, which publishes the parser catch-up, reports ops.catchup_status for the CatchupStalled alert.
+CATCHUP_BEHIND = Gauge("tributary_catchup_behind",
+                       "Items an older rule built that the catch-up hasn't tried yet", ["kind"])
+CATCHUP_IN_FLIGHT = Gauge("tributary_catchup_in_flight",
+                          "Documents re-queued for parser-backfill, not parsed yet", ["kind"])
+CATCHUP_FAILED = Gauge("tributary_catchup_failed",
+                       "Items tried with the current rule that are still behind", ["kind"])
+CATCHUP_PAUSED = Gauge("tributary_catchup_paused", "1 when ops.catchup.paused is set", ["kind"])
+CATCHUP_PROGRESS = Gauge("tributary_catchup_progress_timestamp_seconds",
+                         "Unix time the kind last moved (or its version's catch-up began)",
+                         ["kind"])
 
 
 @dataclass(frozen=True)
@@ -113,6 +125,7 @@ class Queue(Protocol):
     def mark_published(self, accessions: list[str]) -> None: ...
     def remaining(self) -> int: ...
     def control(self) -> crawl_db.Control: ...
+    def catchup_status(self) -> list[tuple[str, int, int, int, bool, float]]: ...
     def report(self, state: str, disk_free: int | None, min_free: int) -> None: ...
 
 
@@ -157,6 +170,9 @@ class PgQueue:
 
     def control(self) -> crawl_db.Control:
         return crawl_db.control(self.conn)
+
+    def catchup_status(self) -> list[tuple[str, int, int, int, bool, float]]:
+        return crawl_db.catchup_status(self.conn)
 
     def report(self, state: str, disk_free: int | None, min_free: int) -> None:
         crawl_db.report(self.conn, state, disk_free, min_free)
@@ -213,6 +229,7 @@ class Crawler:
     def round(self) -> float:
         """One round; returns the seconds to wait before the next."""
         c = self.config
+        self._catchup()
         if self.queue.control().paused:
             self._state("paused", None)
             return c.pause_seconds
@@ -319,6 +336,19 @@ class Crawler:
             self.queue.mark_published(delivered)
             PUBLISHED.inc(len(delivered))
         return len(delivered)
+
+    def _catchup(self) -> None:
+        try:
+            rows = self.queue.catchup_status()
+        except psycopg.Error as e:  # reporting must never stop the crawl
+            log.warning("could not read ops.catchup_status: %s", e)
+            return
+        for kind, behind, in_flight, failed, paused, progress in rows:
+            CATCHUP_BEHIND.labels(kind).set(behind)
+            CATCHUP_IN_FLIGHT.labels(kind).set(in_flight)
+            CATCHUP_FAILED.labels(kind).set(failed)
+            CATCHUP_PAUSED.labels(kind).set(1 if paused else 0)
+            CATCHUP_PROGRESS.labels(kind).set(progress)
 
     def _state(self, state: str, free: int | None) -> None:
         for s in STATES:

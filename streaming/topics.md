@@ -33,7 +33,9 @@ accession, so an event published twice (the crawl republishes unconfirmed ones) 
 doc-fetcher works the same way since migration 059: a document, its exhibits and its owed event
 (`ops.document_outbox`) commit together, and an event Kafka didn't confirm is sent again within a
 minute. A document the live side stored (its event sent, or still owed) gets no
-`documents.backfill` event from the crawl, so it is parsed once.
+`documents.backfill` event from the crawl, so it is parsed once. Since migration 071 the crawl's
+outbox also re-sends documents an older parser split (the parser catch-up, a few thousand an hour),
+same shape and `source`; the live side never re-sends one.
 
 Each producer and consumer above is a Kafka principal with ACLs for exactly these topics and its
 group (Kafka SASL is on in production; `deploy/helm/platform/files/kafka-acls.yaml`: `poller`,

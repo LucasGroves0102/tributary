@@ -132,8 +132,9 @@ Cost, NVIDIA's five fixture filings (1.07M characters, 568 passages, 647 furnitu
 against 021's 0.22-0.27 s (fewer tokens to index).
 
 Old passages keep their debris tokens (and miss phrases across page breaks) until rebuilt:
-`parser-index --passages` (Helm CronJob `section-passages`, by hand) rebuilds the passages of filings
-whose `passages_rule` isn't the current one, `--limit` filings per run in `--batch` transactions,
+The hourly `section-index` catch-up (071) and `parser-index --passages` (Helm CronJob
+`section-passages`, emergency only) rebuild the passages of filings whose `passages_rule` isn't the
+current one, `--limit` filings per run in `--batch` transactions,
 under the same advisory lock as `section-index`. It leaves `indexed_at`, `diffed_at` and the diffs
 alone, so nothing is diffed again and What changed never goes stale. Then `REINDEX INDEX
 CONCURRENTLY gold.section_search_tsv` (the bulk rewrite bloats the GIN index).
@@ -176,12 +177,45 @@ A minimum document frequency of 20 scored 47 of 90, 10 scored 45, 5 scored 44; 2
 40,000 vs 80,000 characters moved it by at most one. XOM scores 1: Exxon's Item 1 is 6,600
 characters, mostly pointers to the rest of its 10-K.
 
+## Catch-up (migration 071)
+
+Why it is built this way (rules in the README, "Catch-up"):
+
+- **The version lives with the rule.** The catch-up reads `PARSER_VERSION`'s number in the parser
+  image that runs `section-index`; parser-rs ships from the same commit with the same number, and a
+  document is behind when any of its section rows has a lower one (`ops.parser_version_number`). A
+  rolled-back image has a lower number, so it re-queues nothing a newer parser wrote.
+- **The backfill route only.** Re-queued documents go through the crawl's outbox: `doc-crawler` is
+  already the only producer of `documents.backfill` (no new Kafka client, user or ACL), and
+  `parser-backfill` is its own consumer group, so the live parser (`documents.fetched`) never sees
+  them. A live-fetched document had no crawl target (020's plan skips stored filings: 2,715 of the
+  documents behind on 2026-11-16); it gets the row the crawl itself writes for a filing it finds
+  already stored ('done', files 0, 'already stored'), so every stored document has a way back.
+- **Once per version, with backpressure.** A target published since the catch-up first saw the
+  version (`ops.catchup.started_at`) counts as requested, so a document isn't sent twice while it
+  waits in Kafka. Nothing is added while the crawl has its own work (1,000 pending), its outbox is
+  full (3,000) or 6,000 of the last day's requests are unparsed (parser-backfill down or slow); a
+  requested document still old after a day is counted `failed` (the parser skipped it). Requests
+  come only after a `section-index` run that finished its own work, and that run re-indexes new
+  filings before re-parsed history (071's `ops.section_index_pending` order), so a re-parse wave
+  never delays a new filing's passages or diffs.
+- **Paused at first.** 071 ships the parser kind paused: re-parsing every older document (eight
+  days of database load, ~380,000 documents re-indexed as their titles change) is the owner's call.
+  Paused, it is still measured each hour (the status view shows `paused`, the alert ignores it);
+  `UPDATE ops.catchup SET paused = false WHERE kind = 'parser'` starts it.
+- **Pace.** 3,000 an hour: `doc-crawler` publishes 500 per round and an idle round is 5 minutes
+  (`CRAWL_IDLE_SECONDS`, 15 before), parser-backfill sustained ~11,000 an hour on hermes, and the
+  documents whose sections change (rust-3/4/5's titles) are re-indexed by the next hourly runs. On
+  2026-11-16: 595,775 documents behind, about 8 days. The selection (every document's version,
+  grouped) took 5.4 s on hermes.
+
 ## Re-parsing only some documents (production)
 
-`--reparse-all` reads every stored document. When a rule change only affects documents that
+Since migration 071 a `PARSER_VERSION` bump re-queues every older document by itself (above). This
+is for re-parsing a subset without a bump. `--reparse-all` reads every stored document. When a rule change only affects documents that
 currently have no sections (rule 9), re-queue just those through the document crawl's outbox
 instead: `doc-crawler` publishes `documents.backfill` for every `done` target whose
-`published_at` is NULL, 500 per round (every 15 minutes even when idle), and `parser-backfill`
+`published_at` is NULL, 500 per round (every 5 minutes on hermes even when idle), and `parser-backfill`
 re-parses them. After the new parser image is deployed (both `parser` and `parser-backfill`):
 
 ```sql
@@ -207,13 +241,17 @@ WHERE parser_version IN ('python-7', 'rust-7') GROUP BY 1;   -- the current PARS
 
 Re-running step 1 afterwards lists the documents rule 9 could not split (no Item headings and no
 standard titles). Documents outside the crawl queue (`in_crawl_queue` lower than `count`:
-stored by the live doc-fetcher outside the crawl's plan) are only reached by `--reparse-all`.
+stored by the live doc-fetcher outside the crawl's plan) need a target row first: insert the one
+`ops.parser_catchup` writes (071), or use `--reparse-all`.
 The hourly `section-index` job picks the new sections up by itself (`ops.section_index_pending`
 sees re-parsed filings). Nothing here calls the SEC.
 
 ## Parser v7 rollout (runbook)
 
 For the owner (`sudo kubectl` on hermes, SQL as the DB owner); measured on hermes 2026-11-15, read-only.
+Since migration 071, step 4 happens by itself after the deploy and steps 2-3 once the owner unpauses
+the parser kind ([Catch-up](#catch-up-migration-071)); the steps stay as the record and the emergency
+path.
 
 ### What ships
 

@@ -702,3 +702,34 @@ not a deviation; the web's `memberTree` (chart/segments.ts) shows it as children
 hermes' 38,461 stored findings (2026-11-15): 11,430 go, 15,764 stay, 11,267 have a negative member and
 keep 037's rule. Stored findings change when the check runs again (`SELECT ops.check_segments(array_agg(
 DISTINCT company_id)) FROM gold.segment_financials;`). No backout file (037's body undoes it).
+
+### 071_auto_catchup.sql
+
+`071_auto_catchup.sql`: stored data upgrades itself after a rule change, so a deploy needs no reparse,
+rebuild, passages or check Job by hand. Each kind's current version lives with its rule
+(`PARSER_VERSION`, `SEARCH_RULE`, `diff.ALGORITHM` in the parser image; `gold.rules_version()` 64,
+`ops.check_financials_version()` 57, `ops.check_segments_version()` 70 here) and each item records the
+version that built it (`silver.filing_sections.parser_version`, `ops.section_index.passages_rule` /
+`algorithm`, and the new `ops.company_builds`, stamped by `gold.refresh_financials`,
+`gold.refresh_segments` and `ops.recheck`). Gold's version is a number a migration bumps, not a hash of
+the function bodies: a speed-only replace (063) must not rebuild everything, and a backout's guards
+already pin the bodies. A company without a stamp counts as built with `ops.catchup.baseline` (this
+migration's versions), so the first deploy needs no backfill and finds nothing behind: the last full
+rebuild ran 2026-11-09, 064's canary covered its companies, and 070's segment re-check had run (27,168
+segment_sum findings on 2026-11-16, 070's expected ~27,000). The parser and passages kinds are behind
+from the start: 595,775 documents and 433,157 filings on 2026-11-16. The parser kind ships paused
+(`ops.catchup.paused`): eight days of re-parsing is the owner's call; it is measured hourly meanwhile,
+shows `paused` in the status view, and the alert ignores it.
+
+`gold.lock_companies`: the catch-up rebuilds companies while the nightly `financials`, `financials-bulk`
+and `filing-facts` refresh theirs, and 014's refresh is a DELETE then INSERT per company: two
+transactions refreshing one company would collide on the primary key, or leave findings computed from
+the old rows. Each refresh takes an exclusive transaction lock per company (sorted, so no deadlock),
+under a shared lock that a call of over 1,000 companies takes exclusively instead (the lock table holds
+64 x 100 entries on hermes). ops.recheck('check_financials') takes the same locks.
+
+`ops.parser_catchup` and `ops.section_index_pending`'s new order: services/parser DESIGN.md, "Catch-up".
+The catch-up runs in the hourly `section-index` and `segments` jobs (deploy/helm/tributary DESIGN.md),
+records a row per kind and run in `ops.catchup_runs` (30 days), and `ops.catchup_status` reads the
+latest row, the last day's pace and an ETA; the `CatchupStalled` alert fires when a kind with work left
+hasn't moved in a day. Locks: new tables and functions; three functions replaced (catalog only).
