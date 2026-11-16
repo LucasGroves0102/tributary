@@ -229,7 +229,7 @@ def handle(conn: psycopg.Connection, client: httpx.Client, producer: Producer, e
     index = parse_index(index_resp.content, form)
     doc_resp = client.get(index.url)
     doc_resp.raise_for_status()
-    exhibits = exhibit_bodies(client, index_resp.content) if form == "8-K" else []
+    exhibits = exhibit_bodies(client, index_resp.content, form)  # 8-K EX-99.x, 10-K EX-13
     blob = Blob.of(doc_resp.content)
     with conn.transaction():
         insert_document(conn, accession, cik, form, index, blob)
@@ -286,10 +286,12 @@ def drain_insiders(conn: psycopg.Connection, client: httpx.Client, budget: float
                            on_stored=lambda form: INSIDERS.labels(form).inc())
 
 
-def exhibit_bodies(client: httpx.Client, index_html: bytes) -> list[tuple[Exhibit, bytes]]:
-    """Every EX-99.x exhibit of an index, fetched; an HTTP error raises (nothing is stored)."""
+def exhibit_bodies(client: httpx.Client, index_html: bytes,
+                   form: str = "8-K") -> list[tuple[Exhibit, bytes]]:
+    """Every exhibit of an index the form stores (index.EXHIBITS: an 8-K's EX-99.x, a 10-K's
+    EX-13), fetched; an HTTP error raises (nothing is stored)."""
     bodies = []
-    for exhibit in parse_exhibits(index_html):
+    for exhibit in parse_exhibits(index_html, form):
         resp = client.get(exhibit.url)
         resp.raise_for_status()
         bodies.append((exhibit, resp.content))

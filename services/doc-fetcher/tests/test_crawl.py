@@ -53,11 +53,11 @@ def mock_client(pages: dict[str, bytes], calls: list[str]) -> httpx.Client:
 
 # fetching ------------------------------------------------------------------------------------
 
-def test_10k_fetches_the_primary_document_directly():
+def test_10q_fetches_the_primary_document_directly():
     calls: list[str] = []
     url = "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/nvda-20260125.htm"
     client = mock_client({url: DOC_8K}, calls)
-    t = Target("0001045810-26-000021", NVDA, "10-K", date(2026, 2, 25), date(2026, 1, 25),
+    t = Target("0001045810-26-000021", NVDA, "10-Q", date(2026, 2, 25), date(2026, 1, 25),
                "nvda-20260125.htm")
     fetched = fetch_target(client, t, 10**8)
     assert calls == [url]
@@ -69,6 +69,25 @@ def test_10k_fetches_the_primary_document_directly():
     assert fetched.document.sha256 == hashlib.sha256(DOC_8K).hexdigest()
     assert fetched.document.size == len(DOC_8K)
     assert fetched.exhibits == []
+
+
+def test_10k_reads_its_index_for_an_annual_report_exhibit():
+    """A 10-K's EX-13 (076): the index first, then the document and the exhibit; a 10-K without
+    one costs the index request and stores the document alone."""
+    base = "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
+    acc = "0001045810-26-000021"
+    t = Target(acc, NVDA, "10-K", date(2026, 2, 25), date(2026, 1, 25), "nvda-20260125.htm")
+    annual = [("EX-13", b"<html>annual report</html>")]
+    for index, exhibits in (("nvda-10-K-index-ex13.htm", annual), ("nvda-10-K-index.htm", [])):
+        calls: list[str] = []
+        pages = {f"{base}{acc}-index.htm": (FIXTURES / index).read_bytes(),
+                 f"{base}nvda-20260125.htm": DOC_8K,
+                 f"{base}nvda-2026xex13.htm": b"<html>annual report</html>"}
+        fetched = fetch_target(mock_client(pages, calls), t, 10**8)
+        assert calls == list(pages)[:2 + len(exhibits)]
+        assert fetched.requests == 2 + len(exhibits)
+        assert [(e.exhibit_type, gzip.decompress(b.content_gzip))
+                for e, b in fetched.exhibits] == exhibits
 
 
 def test_8k_reads_the_index_then_document_and_exhibits():
@@ -116,7 +135,8 @@ def test_download_refuses_large_and_empty_files():
 
 
 @pytest.mark.parametrize(("form", "primary", "expected"), [
-    ("10-K", "a.htm", False), ("10-Q/A", "a.HTML", False), ("8-K", "a.htm", True),
+    ("10-K", "a.htm", True), ("10-Q", "a.htm", False), ("10-Q/A", "a.HTML", False),
+    ("8-K", "a.htm", True),
     ("10-K", None, True), ("10-K", "a.txt", True), ("10-K", "xsl/a.htm", True),
 ])
 def test_needs_index(form, primary, expected):

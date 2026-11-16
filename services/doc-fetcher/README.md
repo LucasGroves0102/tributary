@@ -3,7 +3,9 @@
 FR2b, week 1. Consumes `filings.raw`; for 10-K, 10-Q and 8-K filings, fetches the filing index
 page, then the primary document, stores it gzip-compressed in `bronze.filing_documents` and
 publishes `documents.fetched` for the [parser](../parser). For 8-Ks it also stores the EX-99.x
-exhibits (press releases) in `bronze.filing_exhibits`. Each accession is fetched once. Forms 3, 4
+exhibits (press releases), for 10-Ks the EX-13 (the annual report to shareholders, where IBM, Wells
+Fargo and others print their statements, Item 8 only pointing to it; 076), in `bronze.filing_exhibits`
+(`index.EXHIBITS`). Each accession is fetched once. Forms 3, 4
 and 5 in the same feed are queued and stored as [insider filings](#insider-filings-forms-3-4-5).
 
 A filing is stored whole or not at all (migration 059): the index, the document and every exhibit
@@ -126,7 +128,8 @@ idle, longer while the document crawl runs), ~75 MB and ~30 MB.
 ## Document crawl
 
 `doc-crawler` (`crawl.py`, `crawl_fetch.py`, `crawl_db.py`; migration `020_doc_crawl.sql`)
-fetches the 10-K, 10-K/A, 10-Q, 10-Q/A and 8-K primary documents and 8-K EX-99.x exhibits of
+fetches the 10-K, 10-K/A, 10-Q, 10-Q/A and 8-K primary documents, 8-K EX-99.x and 10-K EX-13 exhibits (a 10-K
+reads its index first since 076: one more request) of
 every company with gold financials (the operating companies, ~6,000) for the last `CRAWL_YEARS`
 years (or since `CRAWL_SINCE`, a date, when that is earlier: a backfill's fixed start), into the same
 bronze tables, in the same gzip format the live doc-fetcher writes and
