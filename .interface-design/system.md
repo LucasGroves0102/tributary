@@ -167,3 +167,13 @@ Decisions taken while fixing test 6, so later work holds to them:
   ordered so the first six read apart: ink, slate, umber, plum, teal, rose (then olive, warm grey); bull is teal,
   bear umber. A dashed line means a forecast and nothing else.
 - A new page starts at its top (`route.ts` `pageOf`); a filter or sort keeps the place.
+- Explanations: one sentence in view, the rest behind a closed `details.how-to-read` ("How this works", "What alerts,
+  and what doesn't"); never a paragraph above a control. A sentence, not a dotted string ("A; B" or two sentences).
+- No codes where a name exists: metric labels written out (`chart/metrics.ts`), formulas in words in legends and titles, red
+  lines as sentences, section names instead of keys, the SIC code and accession numbers in hovers.
+- Wide tables give the numbers priority: a wordy column moves under the first one before a number is cut; a phone
+  watchlist is cards with labelled figures (CSS `attr(data-label)`, the cells' text unchanged); the model opens at the
+  forecast with its line and case frozen.
+- Long steps lead with contents and fold: the Numbers step lists its charts and shows two a row, a long What changed
+  paragraph opens at five lines.
+- Amounts: four significant figures at most, negatives in parentheses on every table.
