@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import { dataNotes } from "../api";
+import { SealLink } from "../components/Seal";
 import { Empty } from "../components/States";
 import { ago, day } from "../format";
 import { href } from "../route";
@@ -101,8 +102,15 @@ export function NoteItem({ note, companyId, canReadFilings, company }: {
   /** the company's name, on lists that span companies (Home) */
   company?: string;
 }) {
-  const { title, text } = explain(note);
+  const { title, text, figures } = explain(note);
   const when = noteWhen(note);
+  // 075: each figure a tag disagreement names, with a seal to the filing that states it
+  const source = note.filings.find((f) => f.role === "source") ?? note.filings[0];
+  const sealHref = source
+    ? canReadFilings && /^10-[KQ]/.test(source.form ?? "")
+      ? href({ view: "filing", companyId, accessionNo: source.accession_no, section: null })
+      : edgarUrl(source)
+    : null;
   const rank = rankOf(note);
   return (
     <li className={`note ${note.severity} rank-${rank}`}>
@@ -121,6 +129,20 @@ export function NoteItem({ note, companyId, canReadFilings, company }: {
           {when && <span className="faint note-when">{when}</span>}
         </div>
         <p>{text}</p>
+        {figures && (
+          <ul className="note-figs">
+            {figures.map((f) => (
+              <li key={f.tag}>
+                <span className="note-fig">{f.text}</span>
+                {sealHref && source && (
+                  <SealLink href={sealHref} label={`${f.text}: as the ${source.form ?? "filing"} states it`}
+                    source={`${f.text} as ${f.tag}, in the ${source.form ?? "filing"} ${source.accession_no}${source.filed ? `, filed ${day(source.filed, true)}` : ""}`} />
+                )}
+                <span className="faint note-fig-tag">{f.tag}</span>
+              </li>
+            ))}
+          </ul>
+        )}
         {note.filings.length > 0 && (
           <div className="note-f">
             {note.filings.slice(0, 4).map((f) => (

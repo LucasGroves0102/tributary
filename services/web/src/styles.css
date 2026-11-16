@@ -4104,6 +4104,32 @@ button.link.num {
   align-items: center;
 }
 
+/* 075: the two figures a tag disagreement names, each with its seal and its tag (quiet) */
+.note-figs {
+  list-style: none;
+  margin: 0 0 var(--sp-3);
+  padding: 0;
+  display: grid;
+  gap: var(--sp-1);
+}
+
+.note-figs li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+.note-fig {
+  font-variant-numeric: tabular-nums;
+}
+
+.note-fig-tag {
+  overflow-wrap: anywhere;
+  font-size: 0.85em;
+}
+
 /* a finding's severity: form marks; only an error takes the red */
 .tag.sev-error {
   color: var(--error);

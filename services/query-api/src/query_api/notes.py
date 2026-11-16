@@ -279,6 +279,18 @@ def _clusters(rows: list[dict]) -> Iterable[list[dict]]:
         yield cluster
 
 
+def _disagreeing(r: dict, figures: dict[tuple, dict]) -> dict:
+    """A tag disagreement's two figures as the filing gives them (migration 075), gold's tag first:
+    `figures` [{tag, value, unit}, ...]; `corrected` when silver no longer holds both (the filing
+    was restated or reloaded since the check ran). Read now, for this reader; never stored."""
+    d = r["detail"] or {}
+    held = figures.get((r["company_id"], r["metric"], r["period_end"], d.get("accession_no")), {})
+    tags = [t for t in (d.get("tag"), d.get("other_tag")) if isinstance(t, str)]
+    if len(tags) < 2 or any(t not in held for t in tags):
+        return {"corrected": True}
+    return {"figures": [{"tag": t, "value": held[t][0], "unit": held[t][1]} for t in tags]}
+
+
 def _plain_restatement(r: dict) -> dict:
     """What a restatement that isn't part of an established split can honestly add."""
     change = _change(r)
@@ -300,11 +312,12 @@ def _plain_restatement(r: dict) -> dict:
 def shape(findings: list[dict], derived: list[dict], behind: list[dict],
           filings: dict[str, dict],
           series: dict[tuple[str, str], list[tuple[date, float]]] | None = None,
-          now: datetime | None = None) -> list[dict]:
+          now: datetime | None = None, figures: dict[tuple, dict] | None = None) -> list[dict]:
     """One list of notes, most important first (module docstring, M2): findings as checked (a
     stock split's as one note, a series' repeats as one), a derived-quarters note per metric, and
     a companyfacts-behind note per company (listing every missing filing), each with its `rank`.
-    `series`: (company, metric) → its quarters, oldest first, for the outliers."""
+    `series`: (company, metric) → its quarters, oldest first, for the outliers. `figures`: the
+    tag_disagreement findings' two figures (Store.disagreeing_figures), read for this reader."""
 
     def cite(role: str, acc: str) -> dict:
         f = filings.get(acc, {})
@@ -354,6 +367,8 @@ def shape(findings: list[dict], derived: list[dict], behind: list[dict],
              "checked_at": r.get("checked_at")}
         if n["kind"] == "restatement":
             n["detail"].update(_plain_restatement(r))
+        elif n["kind"] == "tag_disagreement" and figures is not None:
+            n["detail"].update(_disagreeing(r, figures))
         elif n["kind"] == "outlier" and series and _is_outlier_seasonal(
                 series.get((r["company_id"], r["metric"]), []), r["period_end"]):
             n["detail"]["seasonal"] = True
@@ -527,7 +542,12 @@ def add_notes_routes(app: FastAPI, *, store: Store, current_user: Callable[..., 
         spikes = [r for r in raw["findings"] if r["check_name"] == "outlier"]
         series = store.metric_series(user_id, sorted({r["company_id"] for r in spikes}),
                                      sorted({r["metric"] for r in spikes})) if spikes else {}
-        return (shape(raw["findings"], raw["derived"], raw["behind"], filings, series),
+        # 075: a tag disagreement's two figures, read now as this user (never stored)
+        disagree = sorted({r["company_id"] for r in raw["findings"]
+                           if r["check_name"] == "tag_disagreement"})
+        figures = store.disagreeing_figures(user_id, disagree) if disagree else {}
+        return (shape(raw["findings"], raw["derived"], raw["behind"], filings, series,
+                      figures=figures),
                 raw["checked_at"], len(raw["findings"]))
 
     @app.get("/v1/companies/{company_id}/data-notes", response_model=dict)
