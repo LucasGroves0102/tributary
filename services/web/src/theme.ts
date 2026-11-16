@@ -20,9 +20,10 @@ export function storedTheme(user: string | null): Theme | null {
   return t === "light" || t === "dark" ? t : null;
 }
 
-/** [the choice in force, move to the next one]. Light and Dark are kept (per user and as the
- * signed-out default); System forgets the choice and the page follows the system again. */
-export function useTheme(user: string | null): [ThemeChoice, () => void] {
+/** [the choice in force, move to the next one, choose one]. Light and Dark are kept (per user and as the
+ * signed-out default); System forgets the choice and the page follows the system again. The top bar offers
+ * the three by name (Riley 72: a blind cycle); `cycle` stays for the keyboard. */
+export function useTheme(user: string | null): [ThemeChoice, () => void, (choice: ThemeChoice) => void] {
   const [chosen, setChosen] = useState<Theme | null>(() => storedTheme(user));
 
   useEffect(() => setChosen(storedTheme(user)), [user]);
@@ -33,8 +34,7 @@ export function useTheme(user: string | null): [ThemeChoice, () => void] {
   }, [chosen]);
 
   const choice: ThemeChoice = chosen ?? "system";
-  const cycle = useCallback(() => {
-    const next = NEXT_THEME[choice];
+  const set = useCallback((next: ThemeChoice) => {
     if (next === "system") {
       remove(key(user));
       remove(key(null));
@@ -44,7 +44,8 @@ export function useTheme(user: string | null): [ThemeChoice, () => void] {
       save(key(null), next);
       setChosen(next);
     }
-  }, [choice, user]);
+  }, [user]);
+  const cycle = useCallback(() => set(NEXT_THEME[choice]), [choice, set]);
 
-  return [choice, cycle];
+  return [choice, cycle, set];
 }

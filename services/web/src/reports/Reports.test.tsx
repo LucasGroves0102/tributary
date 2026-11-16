@@ -147,6 +147,10 @@ it("writes a report from the workspace page and opens it", async () => {
   expect(container.querySelector("h1")?.textContent).toBe("Semis");
   expect(container.textContent).toContain("counts as 3 assistant questions");
   await click(button("Write a report"));
+  // it spends questions, so it asks first (Riley 89)
+  expect(reportBodies).toEqual([]);
+  expect(document.querySelector(".ws-confirm")?.textContent).toContain("It counts as 3 assistant questions");
+  await click([...document.querySelectorAll<HTMLButtonElement>(".ws-confirm button")].find((b) => b.textContent === "Write it")!);
   expect(reportBodies).toEqual([{ workspace_id: "w1" }]); // the workspace only: never a user
   expect(window.location.hash).toBe("#/report/r1");
   await waitFor(".report-doc h1");
@@ -205,6 +209,7 @@ it("says clearly when the report is over the limit, and spends nothing visible",
   reportReply = () => Response.json({ detail: "A report counts as 3 questions. You have 2 of 30 left this hour." }, { status: 429 });
   await render("#/workspace/w1");
   await click(button("Write a report"));
+  await click([...document.querySelectorAll<HTMLButtonElement>(".ws-confirm button")].find((b) => b.textContent === "Write it")!);
   expect(container.querySelector('[role="alert"]')?.textContent).toContain("A report counts as 3 questions");
   expect(window.location.hash).toBe("#/workspace/w1");
 });

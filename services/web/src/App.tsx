@@ -153,7 +153,7 @@ export function App(props: Props = {}) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [navOpen]);
-  const [theme, toggleTheme] = useTheme(user);
+  const [theme, toggleTheme, setTheme] = useTheme(user);
   const views = useViews(token, user);
   const [customizing, setCustomizing] = useState(false);
   const watchCols = useMemo(() => watchColumns(views.watchlistColumns, views.options), [views.watchlistColumns, views.options]);
@@ -241,6 +241,8 @@ export function App(props: Props = {}) {
   }, []);
 
   const signOut = useCallback((notice: string | null) => {
+    // the front door at the site's own address, not the page that was open (Riley 93: #/search?q=tariffs)
+    window.history.replaceState(null, "", window.location.pathname + window.location.search);
     clearSession();
     setSession(null);
     setUser(null);
@@ -645,7 +647,8 @@ export function App(props: Props = {}) {
           connections={market?.enabled ?? false}
           sandboxResetsIn={session?.kind === "sandbox" ? resetsIn(session.expiresAt, clock) : null}
           workspaces={token ? <WorkspaceTree saved={saved} onOpen={openSaved} onError={setError} /> : null}
-          onSignOut={(session?.kind === "github" || session?.kind === "account") ? () => signOut(null) : undefined}
+          onSignOut={(session?.kind === "github" || session?.kind === "account" || session?.kind === "sandbox") ? () => signOut(null) : undefined}
+          signOutLabel={session?.kind === "sandbox" ? "End demo" : "Sign out"}
         />
         {navOpen && <div className="scrim" aria-hidden="true" onClick={() => setNavOpen(false)} />}
         <div className="main">
@@ -666,7 +669,8 @@ export function App(props: Props = {}) {
             assistantOpen={showDrawer}
             onUser={setUser}
             onSearch={() => setPalette("")}
-            onTheme={toggleTheme}
+            onTheme={setTheme}
+            onEndDemo={session?.kind === "sandbox" ? () => signOut(null) : undefined}
             onAssistant={() => (drawerOpen ? setDrawer(false) : focusAssistant())}
             alerts={alertCount}
           />

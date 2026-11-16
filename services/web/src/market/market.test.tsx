@@ -122,14 +122,15 @@ describe("Settings → Connections", () => {
   it("says the server has none when the feature is off", async () => {
     connections = null; // an older API: 404
     await mount(<Settings token="t" />);
-    expect(text()).toContain("No data connections are available");
+    // no section for what the server hasn't got (Riley 90)
+    expect(container.querySelector('[aria-label="Connections"]')).toBeNull();
     expect(container.querySelector("input")).toBeNull();
   });
 
   it("reads no providers offered as off (the API's answer without a master key: no 404 in the console)", async () => {
     connections = { providers: [], connections: [] };
     await mount(<Settings token="t" />);
-    expect(text()).toContain("No data connections are available");
+    expect(container.querySelector('[aria-label="Connections"]')).toBeNull();
     expect(container.querySelector("input")).toBeNull();
   });
 

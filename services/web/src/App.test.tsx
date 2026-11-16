@@ -694,14 +694,24 @@ it("follows the system's theme until the user chooses Light or Dark, remembers t
   expect(document.documentElement.dataset.theme).toBeUndefined();
   const button = () => $(".theme-btn") as HTMLButtonElement;
   expect(button().textContent).toBe("Theme System");
-  await act(async () => button().click());
+  // the three by name in a menu (Riley 72: a blind cycle), opened with ArrowDown in jsdom
+  const pick = async (name: string) => {
+    for (let i = 0; i < 3; i++) await act(async () => new Promise((r) => setTimeout(r, 0)));
+    await act(async () => { button().dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })); });
+    for (let i = 0; i < 3; i++) await act(async () => new Promise((r) => setTimeout(r, 0)));
+    const items = [...document.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]')];
+    expect(items.map((i) => i.textContent)).toEqual(["Light", "Dark", "System (your device's setting)"]);
+    await act(async () => items.find((i) => i.textContent?.startsWith(name))!.click());
+    await act(async () => { document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
+  };
+  await pick("Light");
   expect(document.documentElement.dataset.theme).toBe("light");
   expect(window.localStorage.getItem("tributary.theme.alice")).toBe("light");
   expect(button().textContent).toBe("Theme Light");
-  await act(async () => button().click());
+  await pick("Dark");
   expect(document.documentElement.dataset.theme).toBe("dark");
   expect(window.localStorage.getItem("tributary.theme.alice")).toBe("dark");
-  await act(async () => button().click());
+  await pick("System");
   expect(button().textContent).toBe("Theme System");
   expect(document.documentElement.dataset.theme).toBeUndefined();
   expect(window.localStorage.getItem("tributary.theme.alice")).toBeNull();

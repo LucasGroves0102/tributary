@@ -36,6 +36,8 @@ interface Props {
   sandboxResetsIn?: string | null;
   /** a phone's top bar has no room for it */
   onSignOut?: () => void;
+  /** "End demo" for a sandbox */
+  signOutLabel?: string;
 }
 
 /** Which nav entry a route belongs to: a company or filing is under Companies. */
@@ -43,7 +45,7 @@ function section(route: Route): Route["view"] {
   return route.view === "company" || route.view === "filing" ? "companies" : route.view;
 }
 
-export function Sidebar({ route, me, workspace, lastIngested, listed = null, onAdd, onExport, onShortcuts, workspaces, open = false, connections = false, sandboxResetsIn = null, onSignOut }: Props) {
+export function Sidebar({ route, me, workspace, lastIngested, listed = null, onAdd, onExport, onShortcuts, workspaces, open = false, connections = false, sandboxResetsIn = null, onSignOut, signOutLabel = "Sign out" }: Props) {
   // the phone menu always opens at the top of its lists
   const lists = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -187,7 +189,7 @@ export function Sidebar({ route, me, workspace, lastIngested, listed = null, onA
       </details>
       {onSignOut && (
         <button className="btn sm side-signout" onClick={onSignOut}>
-          Sign out
+          {signOutLabel}
         </button>
       )}
       <div className="side-links">

@@ -74,7 +74,12 @@ a sector's industries their own filter cell, and saves a screen under a short na
 (else a new "Screens"); arriving from another page with a different screen than the one open closes the open
 one. Home's feed starts with the watchlist's filings (All in your plan a toggle), its watchlist has one Last
 filing column with the period under the date, sortable headers, cards with labelled figures on a phone, and a
-toast to undo a removal; the status strip's figures never wrap.
+toast to undo a removal; the status strip's figures never wrap. The top bar's Theme is a menu of the three
+(Light, Dark, System), a demo sandbox has End demo (top bar and the phone's menu), and signing out lands on
+the site's own address; with the assistant open the bar drops who is signed in before the breadcrumb's
+words. Settings shows only what the server has (no Connections or Email section to say they're off), its
+alerts' rules behind a disclosure. A workspace's Duplicate opens the copy, Write a report asks first and says
+what it costs, renaming hides the heading it replaces, and an analysis project is tagged "Analysis".
 
 Seal pages so far (the first batch): the front door (the seal and name, a headline, the way in under
 it; on the right, ruled off in ink, the live figures from `/v1/status/data` and what's in it), Data

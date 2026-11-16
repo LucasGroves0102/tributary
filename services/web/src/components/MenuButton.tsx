@@ -1,4 +1,5 @@
 import * as Menu from "@radix-ui/react-dropdown-menu";
+import type { ReactNode } from "react";
 
 export interface MenuChoice {
   label: string;
@@ -23,8 +24,12 @@ const isCheck = (it: MenuChoice | MenuCheck): it is MenuCheck => "checked" in it
  * chart builder's toolbar onto three rows). A Radix DropdownMenu, never modal (a modal one locks
  * scrolling with an injected style the CSP refuses), styled like the company page's More. The button
  * says how many options are on, so a ticked one isn't hidden. */
-export function MenuButton({ label, items, disabled = false, title, align = "end" }: {
-  label: string;
+export function MenuButton({ label, items, disabled = false, title, align = "end", className = "btn more-btn", count = true }: {
+  label: ReactNode;
+  /** the button's classes (a top bar's is small and quiet) */
+  className?: string;
+  /** say how many options are on (not for a choice of one, like a theme) */
+  count?: boolean;
   items: (MenuChoice | MenuCheck)[];
   disabled?: boolean;
   title?: string;
@@ -34,9 +39,9 @@ export function MenuButton({ label, items, disabled = false, title, align = "end
   return (
     <Menu.Root modal={false}>
       <Menu.Trigger asChild>
-        <button className="btn more-btn" disabled={disabled} title={title}>
+        <button className={className} disabled={disabled} title={title}>
           {label}
-          {on > 0 && <span className="menu-on" aria-label={`${on} on`}>{on}</span>}
+          {count && on > 0 && <span className="menu-on" aria-label={`${on} on`}>{on}</span>}
           <span className="more-caret" aria-hidden="true" />
         </button>
       </Menu.Trigger>

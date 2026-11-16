@@ -918,12 +918,15 @@ a.btn:hover {
   z-index: 20;
 }
 
+/* where you are keeps its words: the search box gives way first (Riley 108, 125: "Nvidia (…") */
 .crumb {
   font-weight: 600;
   white-space: nowrap;
   display: flex;
   gap: var(--sp-3);
   min-width: 0;
+  flex-shrink: 0;
+  max-width: 46%;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -5867,10 +5870,13 @@ button.chip.on {
 }
 
 .tag.analysis {
-  background: var(--pos-soft);
-  color: var(--pos);
-  border-color: transparent;
+  color: var(--ink-2);
   padding: 0 4px;
+}
+
+/* renaming a workspace: the field takes the heading's place (Riley 119: the name showed twice) */
+.page-bar:has(.ws-actions form) > h1 {
+  display: none;
 }
 
 .compare-embedded {
@@ -6211,7 +6217,11 @@ button.chip.on {
     display: inline;
   }
 
-  .who .faint {
+  /* with the assistant open the bar loses who is signed in before anything else; the account's button
+     (Sign out, End demo) stays (Riley 108) */
+  .who .faint,
+  .who .who-name,
+  .theme-k {
     display: none;
   }
 

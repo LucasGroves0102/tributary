@@ -63,21 +63,30 @@ export function AlertSettingsSection({ token }: { token: string }) {
           : load.state === "error" ? <ErrorPanel what="your alert settings" detail={load.message} onRetry={reload} />
           : (
             <>
+              {/* one sentence in view, what alerts and what doesn't behind a disclosure (Riley pattern 10) */}
               <p className="small muted">
-                Tributary checks {load.data.schedule} for new filings of the companies on your watchlist and the companies you're
-                analysing. A 10-K or 10-Q alerts with its key figures and your red lines once the SEC's XBRL data has them; an 8-K when
-                it reports a material event: results (2.02), a deal, debt, a leadership change, an impairment, a restatement and the like
-                (votes and exhibits alone don't).
-                {load.data.other_8k_items ? " An 8-K filed only under 7.01 (Regulation FD: presentations, press releases) or 8.01 (Other events) alerts only for the companies you tick under 7.01 / 8.01." : ""}
-                {" "}See them under <a href={href({ view: "alerts" })}>Alerts</a>.
+                Checked {load.data.schedule} for the companies on your watchlist and in your analyses; they show under{" "}
+                <a href={href({ view: "alerts" })}>Alerts</a>.
                 {load.data.last_check ? ` Last checked ${localTime(load.data.last_check.checked_at, true)}.` : " Not checked yet."}
               </p>
+              <details className="how-to-read">
+                <summary>What alerts, and what doesn't</summary>
+                <p className="foot">
+                  A 10-K or 10-Q alerts with its key figures and your red lines once the SEC's XBRL data has them; an 8-K when
+                  it reports a material event: results (2.02), a deal, debt, a leadership change, an impairment, a restatement and the like
+                  (votes and exhibits alone don't).
+                  {load.data.other_8k_items ? " An 8-K filed only under 7.01 (Regulation FD: presentations, press releases) or 8.01 (Other events) alerts only for the companies you tick under 7.01 / 8.01." : ""}
+                </p>
+              </details>
               <Companies token={token} settings={load.data} />
               <Webhooks token={token} settings={load.data} onChanged={reload} />
-              <h3>Email</h3>
-              <p className="small muted">
-                {load.data.email.available ? "Email alerts are available." : "Email alerts aren't set up on this server, so alerts arrive here and at your webhook."}
-              </p>
+              {/* only what the server has: no section to say email isn't set up (Riley 90) */}
+              {load.data.email.available && (
+                <>
+                  <h3>Email</h3>
+                  <p className="small muted">Email alerts are available.</p>
+                </>
+              )}
             </>
           )}
       </div>

@@ -285,6 +285,7 @@ test("reports: write one from a workspace, read it with its charts, download and
   await expect(page.getByRole("heading", { name: "Beverages" })).toBeVisible();
   await expect(page.locator(".page")).toContainText("counts as 3 assistant questions");
   await page.getByRole("button", { name: "Write a report" }).click();
+  await page.getByRole("button", { name: "Write it" }).click();
 
   await expect(page).toHaveURL(/#\/report\/r\d+$/);
   expect(fake.reports).toEqual([{ workspace_id: "w-bev" }]);

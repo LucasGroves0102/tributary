@@ -177,7 +177,7 @@ it("Settings: forms per company, and a webhook refused for plain http, then adde
   await act(async () => box.click());
   await settle();
   expect(writes).toContainEqual({ method: "PUT", path: `/v1/alerts/settings/${NVDA}`, body: { forms: ["10-K", "10-Q"] } });
-  expect(container.textContent).toContain("Email alerts aren't set up on this server");
+  expect(container.textContent).not.toContain("Email"); // no section for what the server hasn't got (Riley 90)
 
   const url = container.querySelector<HTMLInputElement>("#webhook-url")!;
   await act(async () => type(url, "http://169.254.169.254"));

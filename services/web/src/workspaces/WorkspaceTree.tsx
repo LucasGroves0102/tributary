@@ -172,7 +172,8 @@ function Folder({
           </button>
           <a className="ws-open" href={target} title={w.project ? `Open the analysis: ${w.name}` : `Open ${w.name}: items and reports`}>
             <span className="ws-name">{w.name}</span>{" "}
-            {w.project && <span className="tag analysis" title="An analysis project">A</span>}{" "}
+            {/* a word, not a green "A" nobody could read (Riley 88) */}
+            {w.project && <span className="tag analysis" title="An analysis project: its steps, thesis and model">Analysis</span>}{" "}
             <span className="faint">{w.items.length}</span>
           </a>
           <Dots open={menu === key} label={`Actions for workspace ${w.name}`} onClick={() => setMenu(menu === key ? null : key)} />

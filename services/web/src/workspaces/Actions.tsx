@@ -3,7 +3,8 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 
 import { failureReason } from "../api";
-import { ToastNotes, useToasts } from "../components/Toasts";
+import { toast, ToastNotes, useToasts } from "../components/Toasts";
+import { go } from "../route";
 import type { SavedItem } from "../types";
 import { ITEM_NAME_MAX, nameProblem, WORKSPACE_NAME_MAX } from "./model";
 import { UNDO_MS, type Saved } from "./useSaved";
@@ -57,7 +58,7 @@ export function NameInput({
  *
  * Radix's own Overlay isn't used: it locks scrolling by injecting a <style> element, which the CSP
  * (style-src 'self', no inline styles) refuses. The backdrop here is ours, styled by class. */
-export function ConfirmDelete({ text, onYes, onNo, detail, yes = "Delete" }: {
+export function ConfirmDelete({ text, onYes, onNo, detail, yes = "Delete", tone = "danger" }: {
   text: string;
   onYes: () => void;
   onNo: () => void;
@@ -65,6 +66,8 @@ export function ConfirmDelete({ text, onYes, onNo, detail, yes = "Delete" }: {
   detail?: string;
   /** the destructive button's word */
   yes?: string;
+  /** "primary" for a question that isn't a loss (Write a report: it costs questions) */
+  tone?: "danger" | "primary";
 }) {
   // where it was asked from: focus goes back there (there's no Radix Trigger to return to)
   const before = useRef(document.activeElement as HTMLElement | null);
@@ -84,7 +87,7 @@ export function ConfirmDelete({ text, onYes, onNo, detail, yes = "Delete" }: {
             <AlertDialog.Description className="faint small">{detail ?? `You can undo it for ${UNDO_MS / 1000} seconds.`}</AlertDialog.Description>
             <div className="row">
               <span className="grow" />
-              <AlertDialog.Action className="btn danger" onClick={onYes}>
+              <AlertDialog.Action className={`btn ${tone}`} onClick={onYes}>
                 {yes}
               </AlertDialog.Action>
               <AlertDialog.Cancel className="btn">Keep</AlertDialog.Cancel>
@@ -168,8 +171,12 @@ export function WorkspaceActions({
       ) : (
         <button className="btn sm ghost" onClick={() => setMode("rename")}>Rename</button>
       )}
+      {/* the copy opens, and says so (Riley 88: it stayed out of sight below the sidebar's fold) */}
       <button className="btn sm ghost"
-        onClick={() => run(`duplicate the ${what}`, saved.duplicateWorkspace(id), () => setNote(`Copied: “${workspace.name} (copy)” is in the sidebar.`))}>
+        onClick={() => run(`duplicate the ${what}`, saved.duplicateWorkspace(id).then((copy) => {
+          if (copy) go(what === "analysis" ? { view: "analysis", projectId: copy } : { view: "workspace", workspaceId: copy });
+          toast({ text: `This is the copy, “${workspace.name} (copy)”; the original is unchanged.`, topic: "duplicate" });
+        }))}>
         Duplicate
       </button>
       <button className="btn sm ghost" onClick={() => setMode("delete")}>Delete</button>
