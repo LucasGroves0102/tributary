@@ -175,5 +175,5 @@ def test_store_publish_and_ops_views(conn):
 def test_catchup_status_reads_every_kind(conn):
     rows = {r[0]: r[1:] for r in crawl_db.catchup_status(conn)}
     assert set(rows) == {"parser", "passages", "diffs", "gold", "check_financials",
-                         "check_segments", "check_sections"}
+                         "check_segments", "check_sections", "statements"}
     assert all(isinstance(r[4], float) for r in rows.values())
