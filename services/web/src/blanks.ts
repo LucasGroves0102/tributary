@@ -170,7 +170,7 @@ export function readFigure({ label, columnKey, raw, reading, source, latestPerio
       const unit = reading?.unit ?? "";
       const inIt = exact === null ? null : money(exact, unit);
       return {
-        value: null, text: inIt ?? NOT_REPORTED, asOf: null, old: false, status, currency: currencyOf(unit),
+        value: null, text: inIt ?? NOT_REPORTED, asOf: dated(source, false), old: false, status, currency: currencyOf(unit),
         title: `${label}: ${inIt ? `${inIt}, ` : ""}reported in ${currencyOf(unit)}, so it isn't sorted, filtered or averaged with US-dollar figures.${source_}`,
       };
     }
