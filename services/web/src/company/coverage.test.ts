@@ -9,8 +9,8 @@ const gap = (kind: string, cause: string, reason: CoverageGap["reason"], detail:
 
 describe("coverage notes", () => {
   it.each([
-    [gap("history_short", "revenue_tag", "not_in_sec_data", { revenue_from: "2017-03-31", figures_from: "2009-06-30" }),
-      "Revenue starts in 2017", "Revenue before 2017 isn't in the SEC's structured data for Church & Dwight; the filings are. Its other figures go back to 2009."],
+    [gap("history_short", "revenue_tag", "fixable", { revenue_from: "2017-03-31", figures_from: "2009-06-30" }),
+      "Revenue starts in 2017", "Revenue before 2017 is filed under a tag Tributary doesn't read as revenue yet (a sales line for goods or services alone, or Church & Dwight's own tag); the filings have it. Its other figures go back to 2009."],
     [gap("no_figures", "bank_regulator", "not_in_sec_data"),
       "Reports to its bank regulator", "files its annual and quarterly reports with its banking regulator, not the SEC"],
     [gap("re_registration", "unlinked", "fixable", { moved_on: "2021-04-20", form: "8-K12B", figures_from: "2020-05-02" }),

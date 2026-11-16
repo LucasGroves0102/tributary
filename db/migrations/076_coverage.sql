@@ -19,10 +19,13 @@
 --                          (companyfacts has the filing; gold left it out), companyfacts_lacks
 --                          (055's job should read it), no_xbrl, foreign
 --      history_short       figures start a year or more after the company's first XBRL 10-K/10-Q
---                          (or revenue a year after its other figures): re_registration,
---                          revenue_tag (revenue tagged outside the standard taxonomy before then:
---                          Church & Dwight, gross profit from 2009, revenue from 2017),
---                          companyfacts (the SEC's companyfacts starts later than the filings)
+--                          (or revenue a year after its net income): re_registration, revenue_tag
+--                          (revenue under a tag gold doesn't read as revenue: Church & Dwight's
+--                          SalesRevenueGoodsNet to 2018, net income from 2009, revenue from 2017;
+--                          not mapped: in a sample where it sits beside a total, goods alone equal
+--                          it in 25 of 149 periods), companyfacts (companyfacts starts later than
+--                          the filings' XBRL), companyfacts_gold (silver has earlier facts). All
+--                          fixable: the figures are in the filings' XBRL.
 --      metric_missing      a core metric (revenue, net income, total assets, equity, operating cash
 --                          flow) with 4+ quarters, none in the 400 days before the company's latest
 --                          figure: gold_dropped (silver has later facts) or not_read (no mapped tag
@@ -274,8 +277,8 @@ LANGUAGE sql STABLE AS $$
     -- history_short ----------------------------------------------------------------------------
     short_found AS (
         SELECT fg.company_id, 'history_short'::text AS kind, x.cause,
-               CASE WHEN x.cause IN ('re_registration', 'companyfacts_gold') THEN 'fixable'
-                    ELSE 'not_in_sec_data' END AS reason,
+               -- each is in the SEC's data (a filing's XBRL): Tributary's to read
+               'fixable'::text AS reason,
                jsonb_strip_nulls(jsonb_build_object(
                    'first_xbrl_report', r.first_10x_xbrl, 'figures_from', fg.first_any,
                    'revenue_from', fg.first_revenue,

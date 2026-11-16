@@ -54,7 +54,7 @@ class Store:
         return [{"kind": "documents_missing", "cause": "partial", "reason": "fixable",
                  "detail": {"expected": 40, "stored": 12, "last_filed": "2026-08-27"},
                  "first_seen": CHECKED},
-                {"kind": "history_short", "cause": "revenue_tag", "reason": "not_in_sec_data",
+                {"kind": "history_short", "cause": "revenue_tag", "reason": "fixable",
                  "detail": {"figures_from": "2009-06-30", "revenue_from": "2017-03-31",
                             "first_xbrl_report": "2009-11-02"},
                  "first_seen": CHECKED}]
@@ -113,7 +113,7 @@ def test_company_notes_say_what_is_missing_and_why(token):
     c = client()
     body = c.get(f"/v1/companies/{NVDA}/data-notes", headers=token("bob")).json()
     assert body["coverage"] == [
-        {"kind": "history_short", "cause": "revenue_tag", "reason": "not_in_sec_data",
+        {"kind": "history_short", "cause": "revenue_tag", "reason": "fixable",
          "since": "2026-10-20", "detail": {"figures_from": "2009-06-30",
                                           "revenue_from": "2017-03-31",
                                           "first_xbrl_report": "2009-11-02"}},

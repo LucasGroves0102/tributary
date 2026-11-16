@@ -82,12 +82,12 @@ export function coverageWords(g: CoverageGap, name: string, nameOf: (id: string)
       if (g.cause === "revenue_tag") {
         return {
           title: `Revenue starts in ${year(d.revenue_from)}`,
-          text: `Revenue before ${year(d.revenue_from)} isn't in the SEC's structured data for ${name}; the filings are. Its other figures go back to ${year(d.figures_from)}.`,
+          text: `Revenue before ${year(d.revenue_from)} is filed under a tag Tributary doesn't read as revenue yet (a sales line for goods or services alone, or ${name}'s own tag); the filings have it. Its other figures go back to ${year(d.figures_from)}.`,
         };
       }
       return {
         title: `Figures start in ${year(d.figures_from)}`,
-        text: `${name} has filed reports with structured data since ${year(d.first_xbrl_report)}, but figures before ${year(d.figures_from)} ${g.reason === "fixable" ? "haven't reached Tributary yet" : "aren't in the SEC's structured data for it; the filings are on EDGAR"}.`,
+        text: `${name} has filed reports with structured data since ${year(d.first_xbrl_report)}, but its figures before ${year(d.figures_from)} haven't reached Tributary yet; the filings are on EDGAR.`,
       };
     case "metric_missing": {
       const ms = (d.metrics ?? []).map((m) => `${metricLabel(m.metric).toLowerCase()} after ${on(m.last)}`);
