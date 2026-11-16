@@ -109,9 +109,9 @@ export const HEADER_COLUMNS_WITH_BANK = [...new Set([...HEADER_COLUMNS, ...BANK_
  * tickers in the hover). A bank can have a dozen preferreds. */
 export function listingLine(tickers: string[], exchanges: string[]): { text: string; more: string | null } {
   const rest = tickers.slice(1);
-  const main = [tickers[0], rest.length ? `+${rest.length} more` : null].filter(Boolean).join(" ");
+  const main = [tickers[0], exchanges.length ? `on ${exchanges.join(", ")}` : null].filter(Boolean).join(" ");
   return {
-    text: [main, exchanges.join(", ")].filter(Boolean).join(" · "),
+    text: `${main}${rest.length ? `, and ${rest.length} other share ${rest.length === 1 ? "class or note" : "classes or notes"}` : ""}`,
     more: rest.length ? `Also listed: ${rest.join(", ")}` : null,
   };
 }
@@ -480,17 +480,20 @@ export const BANK_STATEMENTS: Record<Statement, { label: string; rows: Line[] }>
   cf: STATEMENTS.cf,
 };
 
+/** Each ratio's label says how it is worked out (COMPUTED_FROM; Riley 79: ROE's method wasn't stated). */
+const ratio = (metric: string, label: string, fmt: Fmt): Line => [metric, label, fmt, { define: `${label}: ${COMPUTED_FROM[metric] ?? "computed from the filings"}.` }];
+
 export const RATIOS: Line[] = [
-  ["gross_margin", "Gross margin", "pct"],
-  ["operating_margin", "Operating margin", "pct"],
-  ["net_margin", "Net margin", "pct"],
-  ["fcf_margin", "FCF margin", "pct"],
-  ["revenue_growth", "Revenue growth YoY", "growth"],
-  ["net_income_growth", "Net income growth YoY", "growth"],
-  ["roe", "Return on equity", "pct"],
-  ["debt_to_equity", "Debt / equity", "x"],
-  ["current_ratio", "Current ratio", "x"],
-  ["payout_ratio", "Payout ratio", "pct"],
+  ratio("gross_margin", "Gross margin", "pct"),
+  ratio("operating_margin", "Operating margin", "pct"),
+  ratio("net_margin", "Net margin", "pct"),
+  ratio("fcf_margin", "FCF margin", "pct"),
+  ratio("revenue_growth", "Revenue growth YoY", "growth"),
+  ratio("net_income_growth", "Net income growth YoY", "growth"),
+  ratio("roe", "Return on equity", "pct"),
+  ratio("debt_to_equity", "Debt / equity", "x"),
+  ratio("current_ratio", "Current ratio", "x"),
+  ratio("payout_ratio", "Payout ratio", "pct"),
 ];
 
 /** What to request for a period choice: quarterly values, TTM ending each quarter, or annual

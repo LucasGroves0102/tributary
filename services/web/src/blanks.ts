@@ -55,9 +55,17 @@ const TAGGING: Record<string, string> = {
   provision_for_credit_losses: "",
 };
 
+/** Gross margin's blank, as migration 039 decides it: a computed gross profit only where cost of revenue is the
+ * cost of what revenue sells (Riley 3: Walmart, Costco, AT&T and Verizon read a bare "—"). Words only; the rule
+ * and its industries stay in the database. */
+const GROSS_MARGIN_BLANK = "can't be computed here. Either the filings don't give gross profit or cost of revenue, or the company " +
+  "is one Tributary doesn't work it out for: a warehouse club or variety store, whose revenue includes membership fees, " +
+  "or a telecom, whose network costs sit outside cost of revenue.";
+
 /** The hover of a — under a label like "Free cash flow". */
 export function notReportedTitle(label: string, key: string): string {
   const metric = key.replace(/_(ttm|q)$/, "");
+  if (metric === "gross_margin") return `${label}: ${GROSS_MARGIN_BLANK}`;
   const needs = NEEDS[metric];
   return needs
     ? `${label}: can't be computed. It needs ${needs}, and this company's filings don't give all of them.`

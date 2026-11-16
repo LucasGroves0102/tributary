@@ -424,7 +424,12 @@ a.btn:hover {
   min-width: 0;
   padding: 44px 40px 40px;
   background: var(--page);
-  border-left: 2px solid var(--ink);
+  border-left: 1px solid var(--ink);
+}
+
+/* an odd last figure takes the row, not half of it beside nothing (Riley 120) */
+.proof > div:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
 }
 
 .proof {
@@ -479,7 +484,8 @@ a.btn:hover {
   color: var(--ink-3);
 }
 
-.welcome-layout > .welcome-card {
+/* .card.pad set 18px and the way in sat 38px left of the headline (Riley 120): one left edge */
+.welcome-layout > .card.welcome-card {
   grid-area: card;
   align-self: start;
   width: 100%;
@@ -537,7 +543,7 @@ a.btn:hover {
 
   .welcome-proof {
     border-left: 0;
-    border-top: 2px solid var(--ink);
+    border-top: 1px solid var(--ink);
   }
 }
 
@@ -546,7 +552,7 @@ a.btn:hover {
     padding: 36px 22px 0;
   }
 
-  .welcome-layout > .welcome-card {
+  .welcome-layout > .card.welcome-card {
     padding: 24px 22px 36px;
   }
 
@@ -2053,10 +2059,21 @@ button.link:hover {
   background: var(--panel-2);
 }
 
+/* a filing cited in an answer: a quiet mark in the sans, not red monospace mid-sentence (Riley 118); the
+   accession stays its text (the citation check), the filing is its hover */
 .accession {
-  font-family: var(--mono);
-  font-size: 0.9em;
+  font-family: var(--sans);
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
   white-space: nowrap;
+  padding: 0 4px;
+  border: 1px solid var(--rule-2);
+  text-decoration: none;
+}
+
+a.accession:hover {
+  color: var(--ink);
+  border-color: var(--ink-3);
 }
 
 .accession.unverified {
@@ -2301,10 +2318,16 @@ button.link:hover {
   color: var(--ink-3);
 }
 
-/* one readable column, centred: answers, prompts and the box line up */
+/* the page's width for tables, prose kept to a readable measure inside it (Riley 118: a 870px column with
+   wide empty gutters) */
 .ask-page {
-  max-width: 920px;
+  max-width: 1120px;
   margin-inline: auto;
+}
+
+.ask-page .answer p,
+.ask-page .answer li {
+  max-width: 78ch;
 }
 
 /* A page that failed to render (components/ErrorBoundary) */
@@ -4074,17 +4097,22 @@ button.link.num {
   color: var(--accent);
 }
 
+/* What Tributary covers: the three lists one above the other, each list's items side by side, so no column
+   ends 800px before its neighbour (Riley 126: three cards of very different heights) */
 .cover-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--sp-6);
-  align-items: start;
 }
 
-@container main (max-width: 1000px) {
-  .cover-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
+.cover-grid .cover-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+}
+
+.cover-grid .cover-list li {
+  border-bottom: 0;
+  border-top: 1px solid var(--line);
 }
 
 .cover-list {
@@ -4659,14 +4687,15 @@ button.link.num {
   gap: var(--sp-7);
 }
 
-/* neighbours are one height, and their tiles fill it */
+/* neighbours keep their own height: a short card stretched to its neighbour's showed ~200px of empty boxes
+   (Riley 121) */
+.status-grid {
+  align-items: start;
+}
+
 .status-grid > .card {
   display: flex;
   flex-direction: column;
-}
-
-.status-grid > .card > .kv {
-  flex: 1;
 }
 
 .status-grid > .card > .kv > div {

@@ -50,9 +50,12 @@ export function AssistantPanel({
     >
       <div className="ai-h">
         <b>Assistant</b>
-        <span className="chip" title="Suggestions follow the page you're on">
-          {context.label}
-        </span>
+        {/* the page you're on, beside the drawer; on the Ask page it only repeated the title (Riley 65) */}
+        {variant === "drawer" && (
+          <span className="chip" title="Suggestions follow the page you're on">
+            {context.label}
+          </span>
+        )}
         <span className="grow" />
         {turns.length > 0 && (
           <button className="btn sm ghost" onClick={clear}>

@@ -240,7 +240,8 @@ function Quality({ data, when, signedIn }: { data: DataStatus; when: (iso: strin
           "Select a count to list those companies in the screener."
         ) : (
           <>
-            <a href={href({ view: "home" })}>Sign in</a> to list the companies behind each count; this public page
+            {/* the front door's sign-in, not the address it already has (Riley 75: it went to #/) */}
+            <a href={href({ view: "home" })} onClick={() => window.scrollTo(0, 0)}>Sign in or try the demo</a> to list the companies behind each count; this public page
             shows counts only.
           </>
         )}
@@ -279,15 +280,22 @@ function Quality({ data, when, signedIn }: { data: DataStatus; when: (iso: strin
           </tbody>
         </table>
       </TableScroll>
-      <p className="foot">
-        A company is checked whenever its figures change, so its own last check can be days old while the latest run
-        is minutes old. {noSeries > 0 && `${count(q.companies_checked)} companies have XBRL figures to check; ${count(noSeries)} of them have no quarterly series, which is why ${count(withSeries)} show as having quarterly financials. `}
-        A finding is one company, metric and quarter;
-        one bad source figure can raise several. SEC data is messy: companies mis-tag figures and restate
-        them, and these checks are how we find it. Findings are shown to readers as Data notes on the
-        company. Errors and warnings flag figures to double-check (a derived quarter that comes out impossible
-        is left out, not shown); restatements are informational.
+      {/* what a finding means for what you see first (Riley 48), the rest behind a disclosure */}
+      <p className="foot read-first">
+        What this means for you: a figure with a finding is marked on its company's Data notes tab, and one that can't be
+        right (a derived quarter that comes out impossible) is left out of the tables rather than shown.
       </p>
+      <details className="how-to-read">
+        <summary>How the checks work</summary>
+        <p className="foot">
+          A company is checked whenever its figures change, so its own last check can be days old while the latest run
+          is minutes old. {noSeries > 0 && `${count(q.companies_checked)} companies have XBRL figures to check; ${count(noSeries)} of them have no quarterly series, which is why ${count(withSeries)} show as having quarterly financials. `}
+          A finding is one company, metric and quarter;
+          one bad source figure can raise several. SEC data is messy: companies mis-tag figures and restate
+          them, and these checks are how we find it. Errors and warnings flag figures to double-check; restatements are
+          informational.
+        </p>
+      </details>
     </section>
   );
 }
@@ -301,7 +309,7 @@ function RunLine({ run, path }: { run: RecordedRun; path: string }) {
     <span className="faint small run-line">
       <span>Recorded {day(run.recorded_at, true)}</span>
       <a href={source(run.commit, path)} target="_blank" rel="noreferrer" title={`The full report on GitHub, as recorded (${run.commit})`}>
-        Read the report
+        The report, on GitHub ↗
       </a>
     </span>
   );

@@ -83,12 +83,11 @@ export function Filings({ token, companyId, name, canRead, initialDiff, fiscalYe
 
   return (
     <>
-      {filter === "insider" && canRead && <InsiderTable load={insiders} token={token} companyId={companyId} />}
       <section className="card">
         <div className="card-h wrap">
           <h2>Filings</h2>
           <span className="sub">
-            SEC filing index, newest first{fiscalYearEnd ? " · headed by fiscal year" : ""}{filter === "reports" ? " · 10-K, 10-Q, 8-K, and a foreign filer's 20-F, 40-F, 6-K (All has insider forms and the rest)" : ""}
+            The SEC's filing index, newest first{fiscalYearEnd ? ", headed by fiscal year" : ""}.{filter === "reports" ? " Reports are the 10-K, 10-Q, 8-K, and a foreign filer's 20-F, 40-F and 6-K; All has insider forms and the rest." : ""}
           </span>
           <span className="grow" />
           <span className="seg" role="group" aria-label="Form">
@@ -109,7 +108,19 @@ export function Filings({ token, companyId, name, canRead, initialDiff, fiscalYe
             <input type="date" className="field narrow" aria-label="Filed to" value={to}
               onChange={(e) => refilter(() => setTo(e.target.value))} />
           </label>
+          {/* dates apply as they change; one click puts them back (Riley 76: no Clear) */}
+          {(from || to) && (
+            <button className="btn sm ghost" onClick={() => refilter(() => {
+              setFrom("");
+              setTo("");
+            })}>Clear dates</button>
+          )}
         </div>
+        {/* the insider filter shows the transactions table here, not above a second list of the same Form 4s
+            (Riley 19); without it (an older API, no filings access) the index lists them */}
+        {filter === "insider" && canRead && insiders?.state === "ok" && insiders.data ? (
+          <InsiderTable load={insiders} token={token} companyId={companyId} />
+        ) : (
         <Gate load={load} name={name} what="Filings">
           {() =>
             rows.length === 0 ? (
@@ -191,7 +202,8 @@ export function Filings({ token, companyId, name, canRead, initialDiff, fiscalYe
             )
           }
         </Gate>
-        {load?.state === "ok" && (offset > 0 || load.data.has_more) && (
+        )}
+        {load?.state === "ok" && (offset > 0 || load.data.has_more) && !(filter === "insider" && insiders?.state === "ok" && insiders.data) && (
           <div className="pager">
             <span className="muted">
               {offset + 1}–{offset + rows.length}

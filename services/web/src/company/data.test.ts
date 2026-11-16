@@ -34,10 +34,10 @@ import {
 describe("the header's listing line", () => {
   it("names the main ticker and counts the rest, whose tickers go in the hover", () => {
     expect(listingLine(["JPM", "JPM-PC", "JPM-PD", "VYLD"], ["NYSE"])).toEqual({
-      text: "JPM +3 more · NYSE",
+      text: "JPM on NYSE, and 3 other share classes or notes",
       more: "Also listed: JPM-PC, JPM-PD, VYLD",
     });
-    expect(listingLine(["NVDA"], ["Nasdaq"])).toEqual({ text: "NVDA · Nasdaq", more: null });
+    expect(listingLine(["NVDA"], ["Nasdaq"])).toEqual({ text: "NVDA on Nasdaq", more: null });
     expect(listingLine([], [])).toEqual({ text: "", more: null });
   });
 });

@@ -247,7 +247,7 @@ it("heads the page with public metadata, the next expected filing and the tabs",
   expect($(".co-head .co-listing")?.textContent).toBe("NVDA on Nasdaq");
   const facts = [...$(".co-head .co-meta")!.children].map((c) => c.textContent);
   expect(facts).toEqual(expect.arrayContaining([
-    "Semiconductors & Related Devices, SIC 3674", "Fiscal year ends in January", "Large accelerated filer", "Incorporated in Delaware"]));
+    "Semiconductors & Related Devices", "Fiscal year ends in January", "Large accelerated filer", "Incorporated in Delaware"]));
   expect(head).not.toContain("incorporated in DE");
   expect(head).toContain("Next 10-Q, for the period ending Oct 25, 2026, expected around Nov 19, 2026");
   expect([...container.querySelectorAll(".tabs a")].map((a) => [a.textContent, a.getAttribute("href")])).toEqual([
@@ -747,7 +747,7 @@ it("F4 #135: a company that files one combined 10-K with another says it isn't a
   await render("overview", UTIL);
   // the sector is the header's rubric; the SIC industry is in the meta row
   expect($(".co-head .rubric")?.textContent).toBe("UtilitiesMulti-utilities");
-  expect($(".co-head .co-meta")?.textContent).toContain("Electric & Other Services Combined, SIC 4931");
+  expect($(".co-head .co-meta")?.textContent).toContain("Electric & Other Services Combined");
   expect($(".joint-note")?.textContent).toContain("Not a duplicate: Pacific Gas & Electric and PG&E file one combined 10-K as separate SEC registrants");
   expect($(".joint-note a")?.getAttribute("href")).toBe(`#/company/${CORP}`);
 });

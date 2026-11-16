@@ -127,6 +127,9 @@ const SCREENS: Shot[] = [
   { name: "analysis-thesis", hash: "#/analysis/p1/thesis" },
   { name: "analysis-monitor", hash: "#/analysis/p1/monitor" },
   { name: "workspace", hash: "#/workspace/w1" },
+  { name: "out-front", hash: "#/" },
+  { name: "out-signin", hash: "#/", then: async (p) => { await p.getByRole("button", { name: "Sign in" }).click().catch(() => undefined); } },
+  { name: "out-status", hash: "#/status" },
   { name: "home", hash: "#/" },
   { name: "companies", hash: "#/companies" },
   { name: "nvda-overview", hash: `#/company/${NVDA}` },
@@ -153,7 +156,7 @@ for (const s of SCREENS) {
     const fake = await mockApi(page);
     await seed(fake);
     await richer(page);
-    await startDemo(page);
+    if (!s.name.startsWith("out-")) await startDemo(page);
     for (const w of WIDTHS) {
       const [width, theme] = w.split("-") as [string, "light" | "dark"];
       await page.setViewportSize({ width: Number(width), height: Number(width) < 600 ? 844 : 900 });

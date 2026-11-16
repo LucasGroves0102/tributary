@@ -722,6 +722,24 @@ li.event:first-child {
   margin-bottom: 14px;
 }
 
+/* a phone: the four switches in one row that scrolls sideways, not four rows above the table (Riley 123) */
+@container main (max-width: 560px) {
+  .statement-bar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    scrollbar-width: thin;
+  }
+
+  .statement-bar > * {
+    flex: none;
+  }
+
+  .statement-bar .grow {
+    display: none;
+  }
+}
+
 .statements .callouts {
   padding-left: 0;
   padding-right: 0;

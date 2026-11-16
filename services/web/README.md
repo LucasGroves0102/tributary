@@ -80,6 +80,18 @@ the site's own address; with the assistant open the bar drops who is signed in b
 words. Settings shows only what the server has (no Connections or Email section to say they're off), its
 alerts' rules behind a disclosure. A workspace's Duplicate opens the copy, Write a report asks first and says
 what it costs, renaming hides the heading it replaces, and an analysis project is tagged "Analysis".
+The company page names the extra listings ("and 8 other share classes or notes", tickers on hover) and keeps
+the SIC code in the industry's hover; each ratio's label says how it is worked out (ROE: twelve months' net
+income over the average of equity now and a year earlier); a gross margin blank says why (no gross profit or
+cost of revenue, or a warehouse club, variety store or telecom, 039's rule in words); the Fiscal / Calendar
+switch says it only renames the columns for one company; on a phone the statement's switches are one
+scrolling row. The Filings tab's Insider filter shows the transactions table in place of the index (not two
+lists of the same Form 4s), dates have Clear, and insiders read given name first ("Jen Hsun Huang",
+`insiders.ts` `personName`; the filing's form in the hover). The front door has one left edge, a 1px rule,
+an odd last figure across the row, and figures in a reader's words; Data status says what a finding means
+for what you see before how the checks work, and its cards keep their own height; What Tributary covers
+stacks its three lists with their items side by side; the Ask page is wider with prose at a readable
+measure, a cited filing a quiet mark rather than red monospace, and no pill repeating the title.
 
 Seal pages so far (the first batch): the front door (the seal and name, a headline, the way in under
 it; on the right, ruled off in ink, the live figures from `/v1/status/data` and what's in it), Data
