@@ -593,8 +593,12 @@ const TTM_PER_SHARE = "not applicable. Per-share figures don't add across quarte
   "Annual shows the 10-K's figure for each fiscal year.";
 const BANK_TITLE = "not applicable. This is a bank: deposits are its debt and lending its operations, so the figure has no comparable meaning.";
 
-function blankCell(metric: string, name: string, period: Period, column: string, notApplicable: string[]): BlankCell {
+function blankCell(metric: string, name: string, period: Period, column: string, notApplicable: string[],
+  notComputed: Record<string, string> = {}): BlankCell {
   if (notApplicable.includes(metric)) return { text: BANK_NA, title: `${name}: ${BANK_TITLE}` };
+  // Tributary computes none for this kind of company: the API's reason (migration 069, Riley 3)
+  const why = notComputed[metric];
+  if (why) return { text: NOT_APPLICABLE, title: `${name}: not computed for this company: ${why}.` };
   if (PER_SHARE.has(metric) && period === "ttm") return { text: NOT_APPLICABLE, title: `${name}: ${TTM_PER_SHARE}` };
   if (PER_SHARE.has(metric) && period === "q" && column.endsWith("Q4")) return { text: NOT_REPORTED, title: `${name}: ${Q4_PER_SHARE}` };
   return { text: NO_DATA, title: `${name}: ${NO_DATA_TITLE.toLowerCase()}` };
@@ -659,6 +663,8 @@ export function metricTable(
   meaningless: NotMeaningfulPeriod[] = [],
   /** the API's callouts (F5): a cell they name carries one; quarterly tables only */
   callouts: Callout[] = [],
+  /** the API's `not_computed` (069): metric → why Tributary computes none for this company */
+  notComputed: Record<string, string> = {},
 ): MetricTable {
   const periodOf = (r: FinancialRow) => (basis === "calendar" ? r.calendar_period : r.fiscal_period) ?? null;
   const kept = period === "a" ? rows.filter((r) => periodOf(r)?.endsWith("Q4")) : rows;
@@ -693,7 +699,7 @@ export function metricTable(
           metric,
           label: name,
           ...(opts ? { opts } : {}),
-          blanks: ends.map((_, i) => blankCell(metric, name, period, columns[i]!.label, notApplicable)),
+          blanks: ends.map((_, i) => blankCell(metric, name, period, columns[i]!.label, notApplicable, notComputed)),
           cells: ends.map((end, i): TableCell | null => {
             const r = by.get(`${metric}|${end}`);
             const v = r ? num(r.value) : null;

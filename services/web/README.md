@@ -1212,7 +1212,15 @@ days behind the company's latest period, so the company stopped tagging it) is n
 company's current figure: it reads **— since Sep '14** in a table and "not reported since Sep 30, 2014"
 in the Overview's ledger (no seal), with the last figure on file, its period and its filing in the hover
 (analyst test 4: Deckers' 2014 net debt, Eaton's 2019 and Johnson Controls' 2016 operating margins
-read as current). One merely behind shows its date and still counts. Neither n/m, n/a nor old enters a
+read as current). One merely behind shows its date and still counts. Migration 069 adds two readings:
+**n/a** for a figure Tributary computes none of for the company's industry, the API's reason in the hover
+(Walmart's and Costco's gross margin: revenue includes membership fees; AT&T's and Verizon's: network
+costs outside cost of revenue; also the Ratios table's blank row, from `/financials`' `not_computed`), and
+*stale*, a company whose latest period is long past (a quarterly filer's 270 days, an annual filer's 500):
+its figure shows with its date but leaves sorts, filters and medians (Aphoenity's Sep 2024 margin topped
+a Nov 2026 sort). A figure from a 20-F or 40-F says **annual, period ended Dec '25** under it, the fiscal
+year's full date in the hover (owner decision 4: an annual filer is current until its next annual report
+is due). The screener's foot says when the page holds an amount in another currency. Neither n/m, n/a nor old enters a
 median, a sort or a size band. A company reporting in another currency (a
 20-F/40-F filer, migration 056) shows its amounts in it, never converted: `money()` writes the symbol or
 the ISO code (€2.10B, CAD 1.20B, €1.87 a share); a screener, Peers or Compare cell the API reads

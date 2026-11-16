@@ -832,8 +832,11 @@ export interface ColumnInfo {
 /** How to read a screener value (migration 035): not_applicable and not_meaningful give a reason,
  * old and behind are about its date (blanks.ts has what each shows). */
 export interface ValueReading {
-  /** other_currency (migration 056): an amount in a currency other than the dollar, with `unit` */
-  status: "not_applicable" | "not_meaningful" | "old" | "behind" | "other_currency";
+  /** other_currency (migration 056): an amount in a currency other than the dollar, with `unit`;
+   * not_computed (069): no figure because Tributary computes none for this kind of company (Walmart's
+   * gross margin), the reason says why; stale (069): the company's latest period is long past (a
+   * quarterly filer's 270 days, an annual filer's 500), the figure kept but out of sorts and medians */
+  status: "not_applicable" | "not_meaningful" | "old" | "behind" | "other_currency" | "not_computed" | "stale";
   reason?: string | null;
   unit?: string | null;
 }

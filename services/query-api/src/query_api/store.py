@@ -559,6 +559,21 @@ class Store:
                 (company_id, accession_no))
             return cur.fetchall()
 
+    def not_computed(self, user_id: str, company_id: str, metrics: list[str]) -> dict[str, str]:
+        """Why Tributary computes none of these metrics for this kind of company (migration 069's
+        gold.not_computed over the company's public SIC code): {metric: reason}, only where a rule
+        says so. Gross margin for Walmart, Costco (5331) and the telecoms (48xx) today."""
+        if not metrics:
+            return {}
+        with self._session(user_id) as cur:
+            cur.execute(
+                """
+                SELECT m.metric, gold.not_computed(m.metric, c.sic) AS reason
+                FROM silver.companies c CROSS JOIN unnest(%s::text[]) AS m(metric)
+                WHERE c.company_id = %s AND gold.not_computed(m.metric, c.sic) IS NOT NULL
+                """, (metrics, company_id))
+            return {r["metric"]: r["reason"] for r in cur.fetchall()}
+
     def equity_readings(self, user_id: str, company_id: str, metrics: list[str], quarters: int,
                         view: str = "quarter", basis: str = "fiscal") -> list[dict]:
         """Why a metric reads n/m because of the company's stockholders' equity, at each of its

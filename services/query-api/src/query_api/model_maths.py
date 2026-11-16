@@ -775,7 +775,10 @@ def user_set(st: dict, assumptions: list[dict], defaults_: list[dict]) -> list[b
 
 # --- valuation ------------------------------------------------------------------------------
 
-USABLE = (None, "behind")
+# a reading that can value the company. 069's `stale` (the company's latest period long past) is the
+# company's own latest balance: the whole model is on that period, so its net debt and shares
+# still value it (the screener leaves them out of comparisons with other companies instead)
+USABLE = (None, "behind", "stale")
 
 
 def _reading(r: dict | None) -> dict | None:

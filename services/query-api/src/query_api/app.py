@@ -403,8 +403,9 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
             = "json",
         readings: Annotated[bool, Query(
             description="add `not_meaningful` (why a ratio reads n/m, migration 035) to each row, "
-                        "and `not_meaningful_periods` for periods a ratio has no row because of "
-                        "the company's equity")]
+                        "`not_meaningful_periods` for periods a ratio has no row because of "
+                        "the company's equity, and `not_computed` (metric: why Tributary computes "
+                        "none for this kind of company, migration 069)")]
             = False,
         callouts: Annotated[bool, Query(
             description="view=quarter: add `callouts`, quarters far outside their series or "
@@ -445,6 +446,8 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
                 {"metric": m, "period_end": end, "reason": reason}
                 for (m, end), reason in sorted(by_equity.items(),
                                                key=lambda x: (x[0][0], -x[0][1].toordinal()))]
+            # why a figure is blank for this kind of company (069: Walmart's gross margin)
+            meta["not_computed"] = store.not_computed(user_id, company_id, metrics or every)
         if callouts and view == "quarter" and fmt == "json":
             # every quarter of the series, not just the window: a quarter's neighbours can be
             # outside it (F5; only for the web's statements, so the agent's JSON is unchanged)

@@ -525,3 +525,15 @@ migrations that define those objects.
   rebuilds the others without touching diffs. Locks: two ADD COLUMNs without default (catalog only)
   take ACCESS EXCLUSIVE on `gold.section_search` and `ops.section_index` for an instant (lock_timeout
   3 s: deploy when no `section-index` Job runs). Nothing stored changes.
+- `069_readings_not_computed_stale.sql` (Riley, test 6): two readings beside 035's. `gold.not_computed(metric,
+  sic)` says why a blank is blank where Tributary computes none for the company's industry (039's
+  computed gross profit leaves out 5331, 48xx, 58xx, 5912, 13xx/2911, 4911/493x, 60-67 and no SIC;
+  test_readings_db keeps the two lists equal); `gold.latest_reading` reads `not_computed` (no value, or an
+  old one) and `stale`: the company's latest period more than 270 days before today for a quarterly
+  filer, 500 for an annual one (a 20-F, 40-F or 6-K reading, or no quarterly revenue or net income within
+  200 days of its latest period; owner decision 4). On hermes (2026-11-15) 501 of 6,617 companies read
+  stale (209 quarterly, 292 annual: most are 20-F filers whose 2025 annual report hasn't reached
+  companyfacts' payload, TSMC among them). The test runs only past 270 days (a one-time filter): the
+  same 198 ms as without it for every company's latest period on hermes. "Today" is `current_date`
+  unless the session sets `tributary.today` (the DB tests pin it). Function-only, no rebuild; backout
+  `backout/readings_069.sql`.

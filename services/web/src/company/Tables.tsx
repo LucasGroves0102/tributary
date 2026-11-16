@@ -428,7 +428,8 @@ export function Ratios({ token, companyId, name, ticker, notApplicable = [] }: T
   // equity comes along so its dates are columns
   const load = useLoad(companyId, () => financialsView(token, companyId, 8, [...RATIOS.map(([m]) => m), "stockholders_equity"], "ttm", "fiscal", true));
   const table = load?.state === "ok"
-    ? metricTable(load.data.rows, RATIOS, "ttm", "fiscal", notApplicable, undefined, load.data.not_meaningful_periods)
+    ? metricTable(load.data.rows, RATIOS, "ttm", "fiscal", notApplicable, undefined, load.data.not_meaningful_periods,
+        [], load.data.not_computed ?? {})
     : null;
   return (
     <section className="card">

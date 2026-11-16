@@ -54,3 +54,33 @@ describe("the marks", () => {
     expect(behind).toMatchObject({ value: 0.5, old: false, asOf: "Jul '24" });
   });
 });
+
+describe("069: why a blank is blank, a company long past its latest period, an annual figure", () => {
+  it("not computed reads n/a with the API's reason (Riley 3: Walmart, Costco, AT&T, Verizon)", () => {
+    const f = readFigure({ ...base, raw: null, source: null,
+      reading: { status: "not_computed", reason: "a warehouse club's or variety store's revenue includes membership fees" } });
+    expect(f).toMatchObject({ value: null, text: NOT_APPLICABLE, status: "not_computed" });
+    expect(f.title).toBe("Gross margin: not computed for this company. A warehouse club's or variety store's revenue includes membership fees.");
+  });
+
+  it("stale keeps the figure and its date but never ranks (Riley 23: Aphoenity's Sep 2024 margin)", () => {
+    const f = readFigure({ ...base, raw: "0.847", reading: { status: "stale",
+      reason: "this company's latest figures here are for the period ended Sep 30, 2024, and no report since has reached Tributary" } });
+    expect(f).toMatchObject({ value: null, text: "84.7%", asOf: "Jul '24", old: false, status: "stale" });
+    expect(f.title).toContain("Gross margin: This company's latest figures here are for the period ended Sep 30, 2024");
+    expect(f.title).toContain("stays out of sorts, filters and medians");
+  });
+
+  it("an annual report's figure says it is a year, beside quarterly ones (owner decision 4)", () => {
+    const source = { period_end: "2025-12-31", accession_no: "a", form: "20-F", filed: "2026-04-16" };
+    const f = readFigure({ ...base, raw: "0.457", source });
+    expect(f).toMatchObject({ value: 0.457, asOf: "annual, period ended Dec '25" });
+    expect(f.title).toContain("An annual figure: the 20-F's fiscal year, period ended Dec 31, 2025");
+    expect(readFigure({ ...base, raw: "0.457" }).asOf).toBeNull();
+  });
+
+  it("an amount in another currency carries its code for the table's foot", () => {
+    const f = readFigure({ ...base, columnKey: "revenue_ttm", raw: "2894307700000", reading: { status: "other_currency", unit: "TWD" } });
+    expect(f).toMatchObject({ value: null, currency: "TWD" });
+  });
+});

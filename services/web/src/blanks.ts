@@ -18,7 +18,11 @@
  * and leaves sorts, range filters and medians (analyst test 4: Deckers' 2014 net debt and Eaton's
  * 2019 operating margin read as current). One merely behind shows its date and still counts. An
  * amount in another currency (056: a 20-F filer's euros) shows in that currency and leaves them
- * too. */
+ * too. Migration 069 adds two: `not_computed`, n/a with the API's reason (Tributary computes no gross
+ * margin for a warehouse club or a telecom: Riley 3), and `stale`, the figure with its date, out of
+ * sorts and medians, when the company's latest period is long past (Aphoenity's Sep 2024 margin
+ * topped a Nov 2026 sort: Riley 23). A figure from an annual report (20-F, 40-F) says so beside
+ * quarterly ones: "annual, period ended Dec '25" (owner decision 4), the full date in the hover. */
 
 import { currencyOf, day, money, quarter } from "./format";
 import type { Num, ValueReading, ValueSource } from "./types";
@@ -82,6 +86,8 @@ export interface Figure {
   old: boolean;
   /** a reading other than the plain figure, to leave out of a median and say why */
   status: ValueReading["status"] | null;
+  /** other_currency: the ISO code the figure is in */
+  currency?: string;
 }
 
 function num(v: Num | null | undefined): number | null {
@@ -89,6 +95,21 @@ function num(v: Num | null | undefined): number | null {
   const n = typeof v === "number" ? v : Number(v);
   return Number.isFinite(n) ? n : null;
 }
+
+/** A 20-F's or 40-F's figure is a fiscal year, not twelve months to a recent quarter (owner decision 4). */
+export const ANNUAL_FORMS = /^(20-F|40-F)/;
+
+/** "annual, period ended Dec '25" under a figure from an annual report, else the period's month. */
+function dated(source: ValueSource | null, always: boolean): string | null {
+  if (!source) return null;
+  if (ANNUAL_FORMS.test(source.form ?? "")) return `annual, period ended ${quarter(source.period_end)}`;
+  return always ? quarter(source.period_end) : null;
+}
+
+const annualNote = (source: ValueSource | null): string =>
+  source && ANNUAL_FORMS.test(source.form ?? "")
+    ? ` An annual figure: the ${source.form}'s fiscal year, period ended ${day(source.period_end, true)}; the company reports once a year.`
+    : "";
 
 /** How a figure reads: the plain value and its source, or one of the marks above. */
 export function readFigure({ label, columnKey, raw, reading, source, latestPeriod, format, sourceTitle }: {
@@ -127,8 +148,21 @@ export function readFigure({ label, columnKey, raw, reading, source, latestPerio
     case "behind":
       return {
         value: exact, text: exact === null ? NOT_REPORTED : format(exact), old: false, status,
-        asOf: source ? quarter(source.period_end) : null,
-        title: `${sourceTitle} This company's latest period is ${latestPeriod ? day(latestPeriod, true) : "later"}.`,
+        asOf: dated(source, true),
+        title: `${sourceTitle} This company's latest period is ${latestPeriod ? day(latestPeriod, true) : "later"}.${annualNote(source)}`,
+      };
+    case "not_computed":
+      // no figure because Tributary computes none for this kind of company (069): the API says why
+      return {
+        value: null, text: NOT_APPLICABLE, asOf: null, old: false, status,
+        title: `${label}: not computed for this company. ${sentence(reading?.reason)}${shown}${source_}`,
+      };
+    case "stale":
+      // the company's figure, dated, never ranked with current ones (069)
+      return {
+        value: null, text: exact === null ? NOT_REPORTED : format(exact), old: false, status,
+        asOf: dated(source, true),
+        title: `${label}: ${sentence(reading?.reason)}${annualNote(source)} ${sourceTitle} It stays out of sorts, filters and medians.`,
       };
     case "other_currency": {
       // an amount in the company's own currency (migration 056): shown in it, labelled, and never
@@ -136,14 +170,14 @@ export function readFigure({ label, columnKey, raw, reading, source, latestPerio
       const unit = reading?.unit ?? "";
       const inIt = exact === null ? null : money(exact, unit);
       return {
-        value: null, text: inIt ?? NOT_REPORTED, asOf: null, old: false, status,
+        value: null, text: inIt ?? NOT_REPORTED, asOf: null, old: false, status, currency: currencyOf(unit),
         title: `${label}: ${inIt ? `${inIt}, ` : ""}reported in ${currencyOf(unit)}, so it isn't sorted, filtered or averaged with US-dollar figures.${source_}`,
       };
     }
     default:
       return exact === null
         ? { value: null, text: NOT_REPORTED, title: notReportedTitle(label, columnKey), asOf: null, old: false, status: null }
-        : { value: exact, text: format(exact), title: sourceTitle, asOf: null, old: false, status: null };
+        : { value: exact, text: format(exact), title: `${sourceTitle}${annualNote(source)}`, asOf: dated(source, false), old: false, status: null };
   }
 }
 

@@ -270,7 +270,14 @@ $100K, debt over 100 times equity, debt or equity below zero, ROE or payout over
 ratio over 100x. `not_applicable` (with `reason`): a bank's gross and operating margin, FCF, FCF margin,
 net debt, cash and investments, debt to equity and current ratio, whether or not a value exists. `old`: more than 300 days
 before the company's `latest_period` (the newest of its revenue, net income and total assets, never a
-future date). `behind`: more than 45. `other_currency` (migration 056, with `reason` and `unit`): an
+future date). `behind`: more than 45. `stale` (migration 069, with `reason`): the company's latest
+period itself is long past today, more than 270 days for a quarterly filer and 500 for an annual one (a
+20-F, 40-F or 6-K reading, or no quarterly revenue or net income within 200 days of its latest period:
+its next annual report isn't due yet before that); the figure is kept, dated, out of sorts and
+medians. `not_computed` (069, with `reason`): no figure, or only an old one, because Tributary
+computes none for this kind of company (`gold.not_computed`: 039's industries without a gross profit
+line, Walmart's and Costco's membership fees, a telecom's network costs), only where the caller reads
+the company's figures. `other_currency` (migration 056, with `reason` and `unit`): an
 amount or per-share figure in a currency other than the dollar (a 20-F filer's euros: `unit` "EUR" or
 "EUR/shares"); ratios have no currency and read as anyone's. `values` keeps the exact figure in every
 case, but all except `behind` sort after real values and never pass a `where` or a size band: sorting
@@ -280,7 +287,8 @@ ROE on that period's negative equity first) and `not_meaningful_periods: [{metri
 reason}]`, the periods a requested metric has no row because of the company's equity there (gold has
 no debt/equity or ROE on negative equity), taken from the company's own latest `quarters` equity
 periods whatever metrics were asked (`debt_to_equity` alone still gets them), both by
-`gold.not_meaningful` (`Store.equity_readings`, under RLS, after `require()`); off
+`gold.not_meaningful` (`Store.equity_readings`, under RLS, after `require()`), and
+`not_computed: {metric: reason}` (069, `Store.not_computed`, from the company's SIC); off
 by default, so the agent's tool sees what it always did. The web app reads these instead of working
 out equity itself.
 

@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent, type Re
 
 import { failureReason, screener, SCREENER_CSV_ROWS, screenerCsv, sectors as fetchSectors } from "../api";
 import { coRegistrantNote } from "../compare/peers";
-import { DEFAULT_SPECS, MASKED_TITLE, screenRow } from "../companies/rows";
+import { currencyFoot, DEFAULT_SPECS, MASKED_TITLE, screenRow } from "../companies/rows";
 import {
   activeFilters,
   BAND_LABELS,
@@ -214,7 +214,7 @@ export function Companies({ token, screen: asked, watched, onWatch, onChart, sav
             />
           )}
           <p className="foot read-first">
-            US dollars; a negative amount is in parentheses. Hover a value for its period and source filing.
+            {currencyFoot(rows)} A negative amount is in parentheses. Hover a value for its period and source filing.
             {masked > 0 && (
               <>
                 {" "}
