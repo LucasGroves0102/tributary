@@ -54,7 +54,7 @@ const NEEDS: Record<string, string> = {
 
 /** Why a bank line is often blank (migration 048 measured every bank's tags). */
 const TAGGING: Record<string, string> = {
-  cet1_ratio: " Most banks tag their CET1 ratio only in the 10-K, and the largest (JPMorgan, Bank of America, Wells Fargo) only under their own XBRL tags, which Tributary doesn't read.",
+  cet1_ratio: " Most banks tag their CET1 ratio only in the 10-K; some tag it only for one regulatory approach or subsidiary, which Tributary reads for JPMorgan, Bank of America (10-K only) and Wells Fargo.",
   loans: " Some banks (Wells Fargo) tag their loans only under their own XBRL tags.",
   provision_for_credit_losses: "",
 };

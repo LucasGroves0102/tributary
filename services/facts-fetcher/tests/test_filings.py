@@ -1,4 +1,5 @@
-"""A filing's own XBRL where companyfacts doesn't carry it (filings.py, instance.py, migration 055).
+"""A filing's own XBRL where companyfacts doesn't carry it (filings.py, instance.py, migrations 055
+and 073's member picks).
 
 Instances: trimmed from the SEC's copies with trim_instance.py (Clorox's FY2026 10-K, whose primary
 document carries only the cover page, and NVIDIA's FY2020 10-K with its capex extension tag). The
@@ -111,6 +112,29 @@ def test_projection_keeps_what_silver_reads():
     # companyfacts has the filing: only what it never carries
     assert [f["v"] for f in project(facts, "F", M, gap=False)] == ["2", "5", "6"]
     assert [f["v"] for f in project(facts, "other", M, gap=True)] == ["10"]
+
+
+RWA = "us-gaap:RiskWeightedAssetsCalculationMethodologyAxis"
+PARENT = {"srt:ConsolidatedEntitiesAxis": "srt:ParentCompanyMember"}
+STANDARDIZED = {**PARENT, RWA: "jpm:BaselIIIStandardizedMember"}
+
+
+def test_a_pick_keeps_only_facts_with_exactly_its_dimensions():
+    # JPMorgan's CET1 ratio (073): the parent's standardized ratio, not the advanced approach, not
+    # the bank subsidiary, not a fact with one axis more or less
+    m = Mapping(standard=frozenset(), own={}, sums={},
+                picks={"J": {"jpm:Cet1": [STANDARDIZED]}})
+    facts = [fact("jpm:Cet1", "0.14", i="2026-09-30", u="pure", m=STANDARDIZED),
+             fact("jpm:Cet1", "0.153", i="2026-09-30", u="pure",
+                  m={**PARENT, RWA: "jpm:BaselIIIAdvancedMember"}),
+             fact("jpm:Cet1", "0.142", i="2026-09-30", u="pure",
+                  m={"dei:LegalEntityAxis": "jpm:JpmorganChaseBankNAMember",
+                     RWA: "jpm:BaselIIIStandardizedMember"}),
+             fact("jpm:Cet1", "0.1", i="2026-09-30", u="pure",
+                  m={**STANDARDIZED, "srt:ProductOrServiceAxis": "x"}),
+             fact("jpm:Cet1", "0.2", i="2026-09-30", u="pure", m={RWA: STANDARDIZED[RWA]})]
+    assert [f["v"] for f in project(facts, "J", m, gap=False)] == ["0.14"]
+    assert project(facts, "other", m, gap=True) == []
 
 
 # database ----------------------------------------------------------------------------------------
@@ -332,6 +356,86 @@ def test_no_sum_when_another_member_is_on_the_axis(conn):
 @db
 def test_no_sum_when_the_filing_has_the_consolidated_figure(conn):
     assert ford(conn, {"f:A": 5550, "f:B": 51752}, total=57302) is None
+
+
+JPM = "0000019617"
+
+
+def jpm_q3(conn, cet1):
+    """JPMorgan's Q3 2026 10-Q as stored: statements companyfacts has, and the CET1 ratios it
+    files only with dimensions (values from its extract on hermes)."""
+    facts = statements(start="2026-07-01", end="2026-09-30") + [
+        fact("jpm:CommonEquityTier1CapitaltoRiskWeightedAssets", v, i="2026-09-30", u="pure",
+             m={**PARENT, RWA: member})
+        for member, v in cet1.items()]
+    stored(conn, "jpm-q3", JPM, facts, filed=date(2026, 11, 3))
+    conn.execute(  # companyfacts has the filing (other tags): not a gap
+        "INSERT INTO silver.financial_facts (cik, metric, tag, unit, period_start, period_end,"
+        " value, accession_no, form, filed) VALUES (%s, 'total_assets', 'Assets', 'USD', NULL,"
+        " '2026-09-30', 4561000000000, 'jpm-q3', '10-Q', '2026-11-03')", (JPM,))
+
+
+@db
+def test_jpmorgans_standardized_cet1_reaches_gold_from_its_pick(conn):
+    # 073's own rows: the parent company's standardized ratio, never the advanced one
+    jpm_q3(conn, {"jpm:BaselIIIStandardizedMember": "0.14", "jpm:BaselIIIAdvancedMember": "0.153"})
+    stats = run(conn)
+    assert stats.filings == 1 and stats.sec_requests == 0
+    got = gold(conn, "cet1_ratio", "2026-09-30", JPM)
+    assert got == (Decimal("0.14"), "jpm:CommonEquityTier1CapitaltoRiskWeightedAssets"
+                   "[srt:ParentCompanyMember+jpm:BaselIIIStandardizedMember]", "jpm-q3")
+    assert silver(conn, "jpm-q3") == [("companyfacts", 1), ("filing_extra", 1)]
+    assert run(conn).filings == 0  # read once
+
+
+@db
+def test_the_older_standardized_names_fill_in_and_the_current_one_wins(conn):
+    jpm_q3(conn, {"jpm:BaselIIIStandardizedTransitionalMember": "0.12",
+                  "jpm:BaselIIIStandardizedMember": "0.14"})
+    run(conn)
+    assert gold(conn, "cet1_ratio", "2026-09-30", JPM)[0] == Decimal("0.14")
+
+
+@db
+def test_a_pick_added_later_rereads_the_documents_already_read(conn):
+    conn.execute("DELETE FROM silver.member_picks WHERE company_id = %s", (JPM,))
+    jpm_q3(conn, {"jpm:BaselIIIStandardizedMember": "0.14"})
+    conn.execute(  # read before the pick existed
+        "INSERT INTO bronze.filing_facts (accession_no, cik, form, filed, source, document, gap,"
+        " facts, fact_count, extractor_version, projected_at)"
+        " VALUES ('jpm-q3', %s, '10-Q', '2026-11-03', 'ixbrl', 'q.htm', false, '[]', 15, %s,"
+        " now() - interval '1 day')", (JPM, filings.EXTRACTOR_VERSION))
+    assert run(conn).filings == 0
+    conn.execute(
+        "INSERT INTO silver.member_picks (company_id, tag, concept, members) VALUES (%s,"
+        " 'CommonEquityTier1CapitaltoRiskWeightedAssets[srt:ParentCompanyMember"
+        "+jpm:BaselIIIStandardizedMember]', 'jpm:CommonEquityTier1CapitaltoRiskWeightedAssets',"
+        " %s)", (JPM, json.dumps(STANDARDIZED)))
+    assert run(conn).filings == 1
+    assert gold(conn, "cet1_ratio", "2026-09-30", JPM)[0] == Decimal("0.14")
+    assert run(conn).filings == 0
+
+
+@db
+def test_the_shared_us_gaap_pick_reads_only_for_companies_that_have_it(conn):
+    # Wells Fargo's and Bank of America's pick: one us-gaap tag (073), read for its companies only
+    std = {**PARENT, RWA: "us-gaap:StandardizedApproachMember"}
+    facts = statements(start="2026-07-01", end="2026-09-30") + [
+        fact("us-gaap:CommonEquityTierOneCapitalRatio", "0.1003", i="2026-09-30", u="pure", m=std)]
+    stored(conn, "co-q3", CO, facts, filed=date(2026, 10, 28))
+    conn.execute(
+        "INSERT INTO silver.financial_facts (cik, metric, tag, unit, period_start, period_end,"
+        " value, accession_no, form, filed) VALUES (%s, 'total_assets', 'Assets', 'USD', NULL,"
+        " '2026-09-30', 1, 'co-q3', '10-Q', '2026-10-28')", (CO,))
+    run(conn)
+    assert gold(conn, "cet1_ratio", "2026-09-30") is None  # Home Depot has no pick
+    conn.execute(
+        "INSERT INTO silver.member_picks (company_id, tag, concept, members) VALUES (%s,"
+        " 'CommonEquityTierOneCapitalRatio[srt:ParentCompanyMember"
+        "+us-gaap:StandardizedApproachMember]', 'us-gaap:CommonEquityTierOneCapitalRatio', %s)",
+        (CO, json.dumps(std)))
+    run(conn)
+    assert gold(conn, "cet1_ratio", "2026-09-30")[0] == Decimal("0.1003")
 
 
 class _Spy:

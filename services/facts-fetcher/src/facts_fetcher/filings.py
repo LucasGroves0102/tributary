@@ -16,14 +16,16 @@ document, fetched from EDGAR once and stored (bronze.filing_instances). A run:
    named with --accessions). The stored extract when it has at least MIN_STATEMENT_FACTS
    undimensioned facts of mapped tags, else the instance: two SEC requests (the folder's index.json
    and the instance), through libs/sec's shared rate limit.
-3. Extras: the stored documents of companies with their own tags or member sums (silver.metric_tags
-   with a company_id, silver.member_sums) not read yet.
+3. Extras: the stored documents of companies with their own tags, member sums or member picks
+   (silver.metric_tags with a company_id, silver.member_sums, silver.member_picks) not read yet, or
+   read before the company's latest pick was added (073: a new pick reads the history by itself).
 4. --accessions: these filings whatever they are (history before the document crawl: NVIDIA's FY2018
    and FY2020 10-Ks), fetching the instance when no document is stored.
 
 Each filing becomes one bronze.filing_facts row (the projection: undimensioned facts of mapped tags,
-and the member facts a sum needs), then silver.refresh_filing_facts maps them into silver and
-gold.refresh_financials rebuilds the companies, per batch in one transaction. --rebuild re-projects
+the member facts a sum needs and the dimensioned facts a pick names), then
+silver.refresh_filing_facts maps them into silver and gold.refresh_financials rebuilds the
+companies, per batch in one transaction. --rebuild re-projects
 every stored row from its source (after a change to metric_tags or member_sums) without the SEC.
 """
 
@@ -65,11 +67,13 @@ _NOT_INSTANCE = re.compile(r"(_cal|_def|_lab|_pre)\.xml$|^FilingSummary\.xml$", 
 
 @dataclass(frozen=True)
 class Mapping:
-    """What silver can read from a filing: tags every company shares, each company's own tags, and
-    the member sums each company has (concept -> axis)."""
+    """What silver can read from a filing: tags every company shares, each company's own tags, the
+    member sums each company has (concept -> axis) and its member picks (concept -> the dimension
+    sets read, each exactly: axis -> member; 073)."""
     standard: frozenset[tuple[str, str]]
     own: dict[str, frozenset[tuple[str, str]]]
     sums: dict[str, dict[str, str]]
+    picks: dict[str, dict[str, list[dict[str, str]]]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -115,11 +119,13 @@ def split_concept(concept: str) -> tuple[str, str]:
 def project(facts: Iterable[dict], company_id: str | None, mapping: Mapping,
             gap: bool) -> list[dict]:
     """The facts silver reads from one filing: undimensioned facts of mapped tags (the shared ones
-    only for a gap filing), and the member facts of the company's sums (one axis, optionally with
+    only for a gap filing), the member facts of the company's sums (one axis, optionally with
     the operating-segments consolidation member) with the concept's undimensioned facts, which
-    stop a sum where the filing states the consolidated figure itself."""
+    stop a sum where the filing states the consolidated figure itself, and the facts whose
+    dimensions are exactly one of the company's picks (073)."""
     own = mapping.own.get(company_id or "", frozenset())
     sums = mapping.sums.get(company_id or "", {})
+    picks = mapping.picks.get(company_id or "", {})
     out = []
     for f in facts:
         members = f.get("m")
@@ -131,6 +137,8 @@ def project(facts: Iterable[dict], company_id: str | None, mapping: Mapping,
             rest = {k: v for k, v in members.items() if (k, v) != CONSOLIDATION}
             if list(rest) == [sums[f["c"]]]:
                 out.append(f)
+        elif members in picks.get(f["c"], []):
+            out.append(f)
     return out
 
 
@@ -184,7 +192,13 @@ def mapping(conn: psycopg.Connection) -> Mapping:
     for company_id, concept, axis in conn.execute(
             "SELECT company_id, concept, axis FROM silver.member_sums"):
         sums[company_id][concept] = axis
-    return Mapping(frozenset(standard), {k: frozenset(v) for k, v in own.items()}, dict(sums))
+    picks: dict[str, dict[str, list[dict[str, str]]]] = defaultdict(lambda: defaultdict(list))
+    for company_id, concept, members in conn.execute(
+            "SELECT company_id, concept, members FROM silver.member_picks"
+            " ORDER BY company_id, tag"):
+        picks[company_id][concept].append(members)
+    return Mapping(frozenset(standard), {k: frozenset(v) for k, v in own.items()}, dict(sums),
+                   {k: dict(v) for k, v in picks.items()})
 
 
 def gaps(conn: psycopg.Connection, since: date, after_days: int, limit: int) -> list[Filing]:
@@ -216,23 +230,28 @@ def gaps(conn: psycopg.Connection, since: date, after_days: int, limit: int) -> 
 
 
 def extras(conn: psycopg.Connection, limit: int) -> list[Filing]:
-    """Stored documents of companies with their own tags or member sums, not read for the current
-    extractor version (module docstring, 3)."""
+    """Stored documents of companies with their own tags, member sums or picks, not read for the
+    current extractor version or since the company's latest pick (module docstring, 3)."""
     rows = conn.execute(
         """
         WITH curated AS (
-            SELECT company_id FROM silver.metric_tags WHERE company_id IS NOT NULL
-            UNION SELECT company_id FROM silver.member_sums
+            SELECT company_id, NULL::timestamptz AS picked FROM silver.metric_tags
+            WHERE company_id IS NOT NULL
+            UNION SELECT company_id, NULL FROM silver.member_sums
+            UNION SELECT company_id, max(added_at) FROM silver.member_picks GROUP BY company_id
+        ),
+        companies AS (
+            SELECT company_id, max(picked) AS picked FROM curated GROUP BY company_id
         )
         SELECT d.accession_no, d.cik, d.form, d.filed,
                NOT EXISTS (SELECT 1 FROM silver.financial_facts f
                            WHERE f.accession_no = d.accession_no AND f.source = 'companyfacts')
-        FROM curated c
+        FROM companies c
         JOIN silver.company_ciks k ON k.company_id = c.company_id
         JOIN bronze.filing_xbrl x ON x.cik = k.cik AND x.status = 'ok'
         JOIN bronze.filing_documents d ON d.accession_no = x.accession_no
         LEFT JOIN bronze.filing_facts b ON b.accession_no = d.accession_no
-        WHERE b.accession_no IS NULL OR b.extractor_version <> %s
+        WHERE b.accession_no IS NULL OR b.extractor_version <> %s OR b.projected_at < c.picked
         ORDER BY d.filed, d.accession_no
         LIMIT %s
         """, (EXTRACTOR_VERSION, limit)).fetchall()
