@@ -33,4 +33,4 @@ spec:
         enabled: true
     images:
       setup:
-        tag: main-291-db2fb88422f919dde976fd3384f3d2dd5e017b07 # {"$imagepolicy": "flux-system:tributary:tag"}
+        tag: main-295-d883c442748b824a393e0cc393ae7a31d71ce393 # {"$imagepolicy": "flux-system:tributary:tag"}
