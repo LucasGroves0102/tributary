@@ -171,7 +171,7 @@ describe("Home", () => {
     await render();
     const strip = $(".status-strip")!.textContent!;
     expect(strip).toContain("2 companies");
-    expect(strip).toContain("NVDA 10-Q ~Nov 19");
+    expect(strip).toContain("~Nov 19NVDA 10-Q, an estimate");
     expect(strip).toContain("+69.0%");
     expect(strip).toContain("Newest filing listed");
     expect(strip).toContain("just now");
@@ -218,13 +218,14 @@ describe("Home", () => {
     await render();
     await act(async () => container.querySelector<HTMLButtonElement>(`button[aria-label="Remove Tesla from watchlist"]`)!.click());
     await settle();
-    const note = $(".undo-note")!;
+    // a toast at the foot of the window (components/Toasts)
+    const note = document.querySelector<HTMLElement>(".undo-stack .undo-note")!;
     expect(note.textContent).toContain("Removed Tesla from your watchlist");
-    await act(async () => note.querySelector("button")!.click());
+    await act(async () => [...note.querySelectorAll("button")].find((b) => b.textContent === "Undo")!.click());
     await settle();
     const puts = vi.mocked(fetch).mock.calls.filter(([, init]) => init?.method === "PUT").map(([u]) => String(u));
     expect(puts).toContain(`/api/query/v1/watchlist/${TSLA}`);
-    expect($(".undo-note")).toBeNull();
+    expect(document.querySelector(".undo-stack .undo-note")).toBeNull();
   });
 
   it("doesn't say 0 new filings while they're still loading (L6)", async () => {
@@ -272,7 +273,8 @@ describe("Home", () => {
         ? Response.json({ ...ME, companies: [], catalog: { public: true, tiers: ["financials", "filings"], companies: 6039 } })
         : respond(String(url), init));
     await render();
-    expect(container.textContent).toContain("New filings for the 6,039 companies you can read");
+    // the feed starts with the watchlist's filings, the whole plan one click away (Riley 49)
+    expect(container.textContent).toContain("All 6,039 in your plan");
   });
 });
 

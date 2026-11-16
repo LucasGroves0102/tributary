@@ -167,8 +167,9 @@ describe("defaultWorkspace (#119: it started on the first one, PepsiCo vs Coca-C
     expect(defaultWorkspace(list, { id: AAPL, names: ["AAPL"] })).toBe(NEW_WORKSPACE);
   });
 
-  it("without a company (a screen): the folder changed last, projects left out", () => {
-    expect(defaultWorkspace(list, null)).toBe("semis");
+  it("without a company (a screen): a folder of screens, else a new one, never an unrelated folder (Riley 66)", () => {
+    expect(defaultWorkspace(list, null)).toBe(NEW_WORKSPACE);
+    expect(defaultWorkspace([...list, ws("sc", "My screens", "2026-01-01T00:00:00Z")], null)).toBe("sc");
     expect(defaultWorkspace([], null)).toBe(NEW_WORKSPACE);
   });
 

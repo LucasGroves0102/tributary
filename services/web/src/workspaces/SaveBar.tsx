@@ -12,6 +12,7 @@ import {
   KIND_LABELS,
   nameProblem,
   NEW_WORKSPACE,
+  SCREENS_WORKSPACE,
   suggestName,
   WORKSPACE_NAME_MAX,
   type Current,
@@ -145,10 +146,10 @@ function SaveForm({
   const list = saved.list.state === "ok" ? saved.list.workspaces : [];
   const [name, setName] = useState(initial);
   // #119: the open item's workspace, else the company's project or folder, else a new workspace
-  // named after it; a screen goes to the folder changed last
+  // named after it; a screen goes to a folder of screens, else a new "Screens"
   const company = companyOf(current);
   const [workspace, setWorkspace] = useState(() => openIn ?? defaultWorkspace(list, company ? { id: company, names: [label(company)] } : null));
-  const [newName, setNewName] = useState(() => (company ? label(company).slice(0, WORKSPACE_NAME_MAX) : ""));
+  const [newName, setNewName] = useState(() => (company ? label(company).slice(0, WORKSPACE_NAME_MAX) : current.kind === "screen" ? SCREENS_WORKSPACE : ""));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

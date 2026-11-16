@@ -97,13 +97,14 @@ export function ColumnPicker({
             {columns.map((k, i) => (
               <li key={k}>
                 <span className="grow">{name(k)}</span>
-                <button className="btn sm ghost" aria-label={`Move ${name(k)} left`} disabled={i === 0}
+                {/* columns move left and right, so the arrows say so (Riley 70: ↑ ↓ for left and right) */}
+                <button className="btn sm ghost" aria-label={`Move ${name(k)} left`} title="Move left" disabled={i === 0}
                   onClick={() => onChange(move(columns, i, -1))}>
-                  ↑
+                  ←
                 </button>
-                <button className="btn sm ghost" aria-label={`Move ${name(k)} right`} disabled={i === columns.length - 1}
+                <button className="btn sm ghost" aria-label={`Move ${name(k)} right`} title="Move right" disabled={i === columns.length - 1}
                   onClick={() => onChange(move(columns, i, 1))}>
-                  ↓
+                  →
                 </button>
                 <button className="btn sm ghost" aria-label={`Remove ${name(k)}`} disabled={columns.length === 1}
                   onClick={() => onChange(columns.filter((x) => x !== k))}>

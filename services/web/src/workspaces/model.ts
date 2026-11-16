@@ -250,9 +250,14 @@ export function defaultWorkspace(list: SavedWorkspace[], company: { id: string; 
     const named = folders.find((w) => names.some((n) => words(w.name).includes(n)));
     return named?.workspace_id ?? NEW_WORKSPACE;
   }
-  const recent = [...folders].sort((a, b) => b.updated_at.localeCompare(a.updated_at))[0];
-  return recent?.workspace_id ?? NEW_WORKSPACE;
+  // a screen: a folder of screens, else a new one (Riley 66: the folder changed last was an unrelated
+  // "PepsiCo vs Coca-Cola")
+  const screens = [...folders].filter((w) => /\bscreens?\b/i.test(w.name)).sort((a, b) => b.updated_at.localeCompare(a.updated_at))[0];
+  return screens?.workspace_id ?? NEW_WORKSPACE;
 }
+
+/** A new workspace's name when there's no company to name it after (a screen). */
+export const SCREENS_WORKSPACE = "Screens";
 
 export function suggestName(c: Current, label: (companyId: string) => string): string {
   if (c.kind === "chart") return chartTitle(c.chart, label, metricLabel).slice(0, ITEM_NAME_MAX) || "Chart";
@@ -260,6 +265,11 @@ export function suggestName(c: Current, label: (companyId: string) => string): s
     const s = cleanCompare(c.compare);
     return s.target ? `${label(s.target)} comps`.slice(0, ITEM_NAME_MAX) : "Comps";
   }
+  // a name, not the whole filter sentence (Riley 66): the first few words of it, cut at a word
   const what = isEmpty(c.screen) ? "All companies" : describe(c.screen);
-  return (what.charAt(0).toUpperCase() + what.slice(1)).slice(0, ITEM_NAME_MAX);
+  const short = what.length <= SCREEN_NAME ? what : `${what.slice(0, what.lastIndexOf(" ", SCREEN_NAME)).replace(/[,;:]$/, "")}…`;
+  return (short.charAt(0).toUpperCase() + short.slice(1)).slice(0, ITEM_NAME_MAX);
 }
+
+/** How long a screen's suggested name may be. */
+const SCREEN_NAME = 40;

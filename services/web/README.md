@@ -65,6 +65,17 @@ and fiscal labels in the hover; a target with no peers starts with the five sugg
 and Remove are buttons, a removal a toast with Undo; the side-by-side charts open indexed when the
 companies are over 100 times apart in size.
 
+The human pass (Riley's audit, test 6, branch `riley-fixes`): every select and date field is one styled
+control, buttons one scale, a page's bar one row (secondary actions in a `components/MenuButton` menu),
+confirmations toasts (`components/Toasts`, at the foot of the window with the delete undo notes), a new page
+opens at its top. The screener fades the last screen's rows with a line saying a new one is running, moves
+the industry under the company's name below 1240px of table (the SIC code is a hover-only filter link), gives
+a sector's industries their own filter cell, and saves a screen under a short name into a folder of screens
+(else a new "Screens"); arriving from another page with a different screen than the one open closes the open
+one. Home's feed starts with the watchlist's filings (All in your plan a toggle), its watchlist has one Last
+filing column with the period under the date, sortable headers, cards with labelled figures on a phone, and a
+toast to undo a removal; the status strip's figures never wrap.
+
 Seal pages so far (the first batch): the front door (the seal and name, a headline, the way in under
 it; on the right, ruled off in ink, the live figures from `/v1/status/data` and what's in it), Data
 status, the shell, the company page and Statements, and the screener; the others read through the

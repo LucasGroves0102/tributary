@@ -260,7 +260,7 @@ it("a demo sandbox screens only its companies, with no 'only mine' box and a dem
   vi.mocked(fetch).mockImplementation(async () => Response.json({ ...SCREEN, total: 1, rows: [row(entry())] }));
   await render({}, scope);
   expect(calls()[0]!.searchParams.get("access")).toBe("financials");
-  expect(container.textContent).not.toContain("Only companies I can read");
+  expect(container.textContent).not.toContain("Only companies in my plan");
   expect($(".page > .row .muted")?.textContent).toBe("1 company in your demo");
   expect($(".card-h .sub")?.textContent).toBe("no filters");
   expect(container.textContent).not.toContain("metadata only");
@@ -274,7 +274,7 @@ it("a demo sandbox screens only its companies, with no 'only mine' box and a dem
 it("a named user keeps the full index and the 'only mine' box", async () => {
   await render();
   expect(calls()[0]!.searchParams.get("access")).toBeNull();
-  expect(container.textContent).toContain("Only companies I can read");
+  expect(container.textContent).toContain("Only companies in my plan");
   expect($(".page > .row .muted")?.textContent).toBe("2 companies with figures in these columns");
 });
 
@@ -295,7 +295,7 @@ it("F4: a sector filter from /v1/sectors, and the screen grouped by sector with 
   const sector = $("#f-sector") as HTMLSelectElement;
   expect([...sector.options].map((o) => o.textContent)).toEqual(["Any", "Technology (900)"]);
   expect([...container.querySelectorAll('select[aria-label="Industry within the sector"] option')].map((o) => o.textContent))
-    .toEqual(["Any industry", "Semiconductors (100)", "Software (262)"]);
+    .toEqual(["Any", "Semiconductors (100)", "Software (262)"]);
   expect([...container.querySelectorAll("tr.group-head th")].map((th) => th.textContent))
     // Seal: no middle-dot separators
     .toEqual(["Technology: Semiconductors", "Consumer Discretionary: Automobiles"]);

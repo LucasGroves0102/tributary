@@ -20,7 +20,8 @@ export function AlertsPage({ token }: { token: string }) {
       <div className="row page-bar">
         <h1 className="grow">Alerts</h1>
         <a className="btn ghost" href={`${href({ view: "settings" })}`}>Alert settings</a>
-        <button className="btn" disabled={!loaded?.notifications.some((n) => !n.read_at) && !unread?.unread}
+        {/* once the list is here, it decides: nothing unread in it, nothing to mark (Riley 54) */}
+        <button className="btn" disabled={loaded ? !loaded.notifications.some((n) => !n.read_at) : !unread?.unread}
           onClick={() => void markAlertsRead(token, { all: true }).then(() => refreshAlerts(token)).then(() => setEpoch((n) => n + 1)).catch(() => undefined)}>
           Mark all read
         </button>
