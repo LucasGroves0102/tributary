@@ -41,7 +41,8 @@ export function DataNotes({ token, companyId, name, canReadFilings }: {
               <>
                 {gaps.length > 0 && <Coverage gaps={gaps} name={name} token={token} />}
                 <Empty>
-                  Nothing to flag for {name}: {checked_at ? `the last check of its figures (${ago(checked_at)})` : "the checks"} found no gaps,
+                  {gaps.length ? `Within ${name}'s figures, ` : `Nothing to flag for ${name}: `}
+                  {checked_at ? `the last check of its figures (${ago(checked_at)})` : "the checks"} found no gaps,
                   overlapping quarters or restatements{gaps.length ? "" : ", and the figures include every 10-K and 10-Q on EDGAR"}.
                 </Empty>
               </>
