@@ -48,10 +48,20 @@ instance fetch is two requests at the batch class). It ships suspended; the firs
 `suspend: false` in the Flux release. On hermes that first run was 2026-11-09 (293 filings) and the
 daily run is on.
 
+Catch-up (migration 071) lives in two jobs that already run hourly, so it needs no new CronJob, no
+new `uses` and no Kafka client, and a deploy that ships it changes no command (a new CronJob's command
+would run from the previous image until Flux's tag bump). `section-index` (parser image: it knows
+`PARSER_VERSION` and `SEARCH_RULE`) re-queues older documents into the crawl's outbox, which
+`doc-crawler` already publishes to `documents.backfill` (its idle round is 5 minutes, `CRAWL_IDLE_SECONDS`,
+so 3,000 an hour go out), and rebuilds older passages under its own lock. `segments` (facts-fetcher
+image: it has the rebuild code) rebuilds gold and re-runs checks. Both start only after their own work
+is done, so a backlog of theirs postpones the catch-up, never the reverse.
+
 `financials-rebuild` ships suspended and never runs on a schedule: it re-derives silver and gold from
 the payloads already in bronze (`facts-fetcher --rebuild`, no SEC requests, only `uses: postgres`),
-after a change to `silver.metric_tags` or to gold's SQL rules. Run it once by hand after such a
-migration deploys:
+all at once. Since 071 the `segments` catch-up does the same per company after a deploy that bumps
+`gold.rules_version()`; this is the emergency tool (after a backout, which leaves the version as it
+is). By hand:
 
 ```bash
 kubectl -n tributary create job --from=cronjob/financials-rebuild financials-rebuild-1

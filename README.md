@@ -163,6 +163,9 @@ in front (Terraform). GitHub Actions runs every test and builds the images
   user's token, and every figure is verified before the answer is shown.
 - **Medallion in SQL, provenance on every row.** Transforms are SQL functions rebuildable from
   bronze; how a figure may be read is defined once, in SQL.
+- **Stored data upgrades itself.** Every parsed document, search passage, gold company and quality
+  check records the rule version that built it; after a deploy, hourly jobs bring history up to the
+  new rule in the background, oldest first, never ahead of new filings.
 - **Rules, not a model, where the answer must be exact**, each measured on real filings.
 - **One SEC rate limit across every pod**: a token bucket in one Postgres row.
 - **Rust where it pays.** The parser was rewritten in Rust against a written spec and swapped in

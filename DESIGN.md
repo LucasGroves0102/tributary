@@ -147,6 +147,14 @@ schedule in [deploy/helm/tributary](deploy/helm/tributary/README.md).
   it has parsed every filing since ([benchmarks](benchmarks)).
 - **Batch, don't flood.** Bulk loads are capped batches with checkpoints and content hashes, so a
   re-run only touches what changed and a crash resumes where it stopped.
+- **Stored data upgrades itself** (migration 071). Each kind of derived data has a version that lives
+  with its rule (the parser's `PARSER_VERSION`, the passages' and diffs' rules, `gold.rules_version()`,
+  each check's version) and a stamp per document, filing or company of the version that built it. The
+  hourly `section-index` and `segments` jobs, after their own work, upgrade a budget of older items,
+  oldest first: documents go back to the parser through the crawl's backfill topic, never the live
+  one; gold is rebuilt per company under a lock the nightly loads share. `ops.catchup_status` shows
+  each kind's backlog and pace, and an alert fires when one stops moving for a day. A deploy needs no
+  rebuild, reparse or re-check Job.
 
 ## Access control and the agent
 
