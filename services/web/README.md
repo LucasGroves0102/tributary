@@ -1234,9 +1234,14 @@ currencies is refused by the API (code `currency`) and its layer shows why; an o
 dollars. Alert red lines on an amount show its `unit` (CN¥1.00T). A bank reads "n/a (bank)" for gross and
 operating margin, FCF, FCF margin, net debt, debt to equity and the current ratio whether or not it
 tags them, by the API's `not_applicable` list. Statements: a balance sheet has no TTM (the button is off,
-and a saved one reads as quarters); EPS and diluted shares read n/a in TTM, — in a fiscal Q4 (the 10-K
-states the year, and they aren't derived by subtraction) and come from the 10-K itself in Annual
-(`/v1/companies/{id}/annual-per-share`). Column pickers don't offer a balance's `_ttm` column.
+and a saved one reads as quarters). EPS and weighted shares come from the Query API's one per-share
+pipeline (`/v1/companies/{id}/per-share`, owner decisions 1 and 2): split-adjusted to today's share basis
+by default, with **Per share: Split-adjusted / As filed** beside Basis (`shares=filed` in the address)
+and the figure as filed, its filing and the splits applied in every adjusted cell's hover; a fiscal Q4
+derived from its net income over the year's shares less the first three quarters', TTM EPS the four
+quarters' EPS added, both italic and their inputs in the hover (`perShareTitle`). A cell the pipeline
+leaves blank says why. An older API (404) leaves the statement's own figures, the 10-K's in Annual.
+Column pickers don't offer a balance's `_ttm` column.
 What a statement's lines can't say is a computed row (`withBridges`, data.ts), italic and never in the
 CSV: "Other items, net" between operating and net income where the filing tags no pretax income
 (Guerrilla RF's warrant revaluation), "Not itemised" where assets aren't liabilities plus equity

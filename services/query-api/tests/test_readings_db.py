@@ -936,6 +936,25 @@ def test_annual_per_share_reads_the_latest_10k_never_a_proxy_and_respects_the_re
         cur.execute("RESET ROLE")
 
 
+def test_per_share_reads_one_companys_figures_under_rls(conn, token):
+    """Riley (test 6): /per-share over Store.per_share_inputs, as query_api with RLS."""
+    end = date(2025, 12, 31)
+    annual_fact(conn, NORMAL, "eps_diluted", end, Decimal("4.90"), "0000000000-26-000010",
+                date(2026, 2, 1))
+    reported(conn, NORMAL, "eps_diluted", LATEST, Decimal("1.25"))
+    r = api(conn).get(f"/v1/companies/{NORMAL}/per-share", headers=token(USER),
+                      params={"view": "annual"})
+    assert r.status_code == 200, r.text
+    assert [(x["metric"], x["value"]) for x in r.json()["rows"]] == [("eps_diluted", "4.90")]
+    q = api(conn).get(f"/v1/companies/{NORMAL}/per-share", headers=token(USER)).json()
+    assert [(x["metric"], x["value"], x["as_filed"]) for x in q["rows"]] == [
+        ("eps_diluted", "1.25", "1.25")]
+    for view in ("annual", "quarter"):  # RLS alone: nothing for a user who reads nothing
+        nobody = api(conn).get(f"/v1/companies/{NORMAL}/per-share", headers=token("t-nobody"),
+                               params={"view": view}).json()
+        assert nobody["rows"] == [] and nobody["splits"] == []
+
+
 def test_annual_per_share_needs_the_tier_first(conn, token):
     r = api(conn, Closed()).get(f"/v1/companies/{STALE}/annual-per-share", headers=token(USER))
     assert r.status_code == 403

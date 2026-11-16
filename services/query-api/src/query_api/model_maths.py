@@ -20,7 +20,8 @@ more than half in a year is a split or a merger, not buybacks (the 10-Ks state t
 different share bases): that year has no share change or EPS growth (`share_break`), and the
 years before it no P/E (`earlier_share_basis`). `ttm` is the newest TTM when its quarter
 isn't a fiscal Q4 (else the newest year is the TTM): the same lines, the latest quarter's diluted
-weighted shares, no EPS (per-share figures don't add across quarters).
+weighted shares, no EPS (its P/E reads market cap over net income, like every column; the
+Statements tab's TTM EPS, the four quarters added, is query_api.per_share's).
 
 One-off adjustments (the user's, `adjustments`): `one_off` is an amount booked in a fiscal
 quarter's operating income (positive: it raised it, like a refund; negative: a charge). Adjusted
@@ -94,7 +95,9 @@ Valuation (only with the user's own `price`; nothing is fetched or stored beyond
 market cap = price x the latest shares outstanding (else the latest diluted weighted shares,
 said so); EV = market cap + net debt, only when net debt's reading is current or merely behind
 (035: an old, not meaningful, not applicable or absent net debt leaves EV blank, with the reason);
-per column: P/E = price / adjusted diluted EPS (TTM: market cap / adjusted TTM net income),
+per column: P/E = market cap / adjusted net income, one method in every column (Riley 11: the
+base year read price / diluted EPS, 45.8x for Costco, beside a TTM column and a page that said
+market cap / net income, 45.6x; a forecast year's share change moves its EPS, not this P/E),
 EV/Revenue, EV/EBIT (adjusted operating income), FCF yield = FCF / market cap. A multiple over
 zero or negative earnings, revenue or EBIT is not meaningful. Columns: the current twelve months
 (`ttm`; when the newest TTM ends at a fiscal Q4 it is the base year, the one entry in `history`)
@@ -791,18 +794,15 @@ def _reading(r: dict | None) -> dict | None:
                 "filed": _iso(r.get("filed")), "filing_url": r.get("filing_url")}}
 
 
-def _multiples(col: dict, price: float, cap: float, ev: float | None, ttm: bool = False) -> dict:
+def _multiples(col: dict, cap: float, ev: float | None) -> dict:
     def nm(num: float | None, den: float | None) -> float | str | None:
         if num is None or den is None:
             return None
         return "n/m" if den <= 0 else num / den
 
-    if ttm:
-        pe = nm(cap, col.get("net_income_adjusted"))
-    elif col.get("earlier_share_basis"):
-        pe = None  # EPS on the share basis before a split: today's price doesn't divide by it
-    else:
-        pe = nm(price, col.get("eps_adjusted"))
+    # one method in every column (module docstring): market cap over adjusted net income, which no
+    # share basis (a split) can move
+    pe = nm(cap, col.get("net_income_adjusted"))
     return {"pe": pe, "ev_revenue": nm(ev, col.get("revenue")) if ev is not None else None,
             "ev_ebit": nm(ev, col.get("operating_income_adjusted")) if ev is not None else None,
             "fcf_yield": None if col.get("fcf") is None or cap <= 0 else col["fcf"] / cap}
@@ -869,9 +869,9 @@ def valuation(price: dict | None, latest: dict, years: list[dict], ttm: dict | N
     # the current twelve months and the forecasts only: a past year at today's price isn't that
     # year's multiple (the module docstring, Valuation); with no TTM column the base year is it
     now = base_year(years) if ttm is None else None
-    out["history"] = [] if now is None else [{"fy": now["fy"], **_multiples(now, p, cap, ev)}]
-    out["ttm"] = None if ttm is None else _multiples(ttm, p, cap, ev, ttm=True)
-    out["cases"] = {c: [{"fy": y["fy"], **_multiples(y, p, cap, ev)} for y in ys]
+    out["history"] = [] if now is None else [{"fy": now["fy"], **_multiples(now, cap, ev)}]
+    out["ttm"] = None if ttm is None else _multiples(ttm, cap, ev)
+    out["cases"] = {c: [{"fy": y["fy"], **_multiples(y, cap, ev)} for y in ys]
                     for c, ys in cases.items()}
     return out
 

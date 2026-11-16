@@ -116,6 +116,7 @@ it("round-trips the Statements tab's choices, dropping defaults and anything unk
     { view: "company", companyId: id, tab: "statements", statements: { kind: "bs" } },
     { view: "company", companyId: id, tab: "statements", statements: { kind: "cf", period: "ttm", basis: "calendar", range: "max" } },
     { view: "company", companyId: id, tab: "statements", statements: { period: "a" } },
+    { view: "company", companyId: id, tab: "statements", statements: { period: "a", shares: "filed" } },
   ];
   for (const r of views) expect(parse(href(r))).toEqual(r);
   expect(href(views[2]!)).toBe(`#/company/${id}/statements?kind=cf&period=ttm&basis=calendar&range=max`);

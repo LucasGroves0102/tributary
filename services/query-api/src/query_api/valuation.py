@@ -12,8 +12,8 @@ date and citation; nothing is aligned or restated.
                                                        - cash - short-term investments)
   EV/EBIT    = EV / TTM operating_income              (operating income > 0, net_debt known)
 
-P/E is market cap over TTM net income rather than price over TTM diluted EPS: gold has no TTM
-EPS (fiscal Q4 EPS is never reported or derived, migration 014). The two differ by the
+P/E is market cap over TTM net income rather than price over TTM diluted EPS, as in the model
+(model_maths): a market cap needs no share basis, so a split never moves it. The two differ by the
 diluted-versus-outstanding share count and by preferred dividends. EBIT is operating income.
 Companies with several share classes (several current tickers) price one class against the
 total share count: the result says so (`share_classes`).

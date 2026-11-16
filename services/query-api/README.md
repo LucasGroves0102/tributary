@@ -64,7 +64,8 @@ tokens: `make token USER=alice`.
 | `GET /v1/companies/{id}/events` | filings | 8-K filings since the latest 10-Q/10-K period end, newest first: items (SEC title, kind), an excerpt of the 8-K's own words, the press release exhibit, `announced` (a completed deal or new financing read from a 7.01/8.01 announcement), and `stale`: figures at that period end an event after it may have changed ([Earnings and events](#earnings-and-events)) |
 | `GET /v1/companies/{id}/earnings?quarters=&tables=` | filings | each quarter's earnings release (8-K Item 2.02), newest first, `quarters` 1-8 (default 4): the release, its headline, outlook passages and management's adjustments (reconciliation tables, dollar notes), each with offsets into the release; `tables=true`: outlook and reconciliation passages carry `parts`, the tables they quote as grids (parser v7); no beat or miss ([Earnings and events](#earnings-and-events)) |
 | `GET /v1/companies/{id}/data-notes` | financials | data-quality and freshness notes: gaps, overlapping quarters, restatements, derived quarters, filings companyfacts doesn't carry yet, each with its filings ([Data notes](#data-notes)) |
-| `GET /v1/companies/{id}/annual-per-share?years=` | financials | EPS and weighted shares per fiscal year, as the 10-K states them (migration 036; `years` 1-30, default 10): per-share figures don't add, so quarters can't give them |
+| `GET /v1/companies/{id}/annual-per-share?years=` | financials | EPS and weighted shares per fiscal year, as the 10-K states them (migration 036; `years` 1-30, default 10) |
+| `GET /v1/companies/{id}/per-share?view=&basis=&shares=&quarters=` | financials | EPS and weighted shares on one share basis by quarter, TTM or fiscal year: split-adjusted by default (`shares=as_filed` for each filing's figure), fiscal Q4 and TTM derived and labelled ([Per-share figures](#per-share-figures-on-one-share-basis)) |
 | `GET /v1/data-notes?limit=&company_id=` | financials (every company covered) | the newest notes across the caller's companies, or the named ones of them (at most 50), without derived-quarters notes ([Data notes](#data-notes)) |
 | `POST /v1/formulas/validate` | token | AST, unit and inputs, or errors with positions |
 | `POST /v1/formulas/evaluate` | financials, every company in the formula | series; each point cites every input's filing |
@@ -299,6 +300,32 @@ the value, and evaluating it would be an oracle), and a value sort puts them las
 (`screener.py`) holds no user input: column and sort keys come from fixed catalogs, every
 value is a bind parameter.
 
+
+## Per-share figures on one share basis
+
+`GET /v1/companies/{id}/per-share` (query_api/per_share.py, its docstring is the spec; Riley, test 6;
+owner decisions 1 and 2, 2026-11-15) is the one per-share pipeline the Statements tab reads for
+quarters, TTM and years. Gold and `/financials` keep every per-share figure as filed (the agent's tool
+is unchanged); this route reads one company's gold quarters of EPS, weighted shares and net income,
+the 10-K's per-share facts (036) and its restatement findings, under RLS after `require(financials)`.
+
+- **Split-adjusted by default.** A stock split is what the data notes call one (restated shares at a
+  clean ratio, EPS at its reciprocal, in one filing); it applies to every figure filed before its first
+  restating filing. Where the company restated a period itself, gold already holds that figure and only
+  later splits apply. NVIDIA's FY2019 EPS $6.63 (filed before the 2021 4-for-1 and the 2024 10-for-1)
+  reads $0.17; each row keeps `as_filed` and the `splits` applied. `shares=as_filed` gives the filings'
+  own figures.
+- **Fiscal Q4, derived** (`derivation.method` `q4_eps`, `q4_shares`): Q4 shares = the year's weighted
+  shares x its days less Q1-Q3's x theirs, over Q4's days; Q4 EPS = Q4 net income / Q4 shares, scaled
+  by the year's EPS x shares / net income when preferred dividends make that more than 1% (beyond the
+  filed EPS's rounding) from 1 (JPMorgan's Q4 2024: $4.79 against the reported $4.81). Kept only when
+  the shares are within 25% of the year's and EPS within max($0.03, 15%) of the year less nine months.
+- **TTM, derived** (`ttm_eps`, `ttm_shares`): EPS = the four quarters' EPS added (the market
+  convention), shares = their day-weighted average; four quarters in a row, 350-380 days.
+- On hermes (2026-11-15) the split notes establish 1,603 splits at 1,061 companies (1,298 reverse; 1,234
+  since 2019), so those companies' per-share history now reads on one basis.
+
+`/annual-per-share` stays (the 10-K's own figures; MCP's tools read it).
 ## Watchlist and calendar
 
 `GET /v1/watchlist` reads the caller's rows in the app database's `watchlists`
@@ -540,7 +567,8 @@ base case also has the B2 `check` and `user_set` the thesis check reads. A model
 after the reported quarters, which the web app offers to rebuild year 1 from without changing it. With a `price`,
 `valuation`: market cap (price x latest shares outstanding), net debt with its date and reading,
 EV (only when net debt is current or merely behind; `ev_note` says why not: `old`, `absent`, ...)
-and P/E, EV/Revenue, EV/EBIT and FCF yield for the current twelve months (`ttm`; when the newest
+and P/E (market cap over adjusted net income, the same in every column: Riley 11 found the base year
+read price over diluted EPS beside it), EV/Revenue, EV/EBIT and FCF yield for the current twelve months (`ttm`; when the newest
 TTM ends at a fiscal Q4 there is no TTM column and `history` holds that one base year) and each
 case's years; `"n/m"` over losses. No other history year (analyst test 4): today's price over
 FY2021's EPS read as "P/E FY2021 560.6x" at Vertiv, a multiple it never traded at, and Tributary
@@ -1028,9 +1056,9 @@ RLS is per company, not per user). The valuation joins them in Python: gold thro
 | EV | market cap + `net_debt` (long-term debt incl. current − cash − short-term investments) |
 | EV/EBIT | EV / TTM `operating_income` (≤ 0 or no net debt: not shown) |
 
-P/E is market cap over TTM net income, not price over TTM diluted EPS: gold has no TTM EPS
-(fiscal Q4 EPS is never reported or derived, migration 014); the two differ by the diluted vs
-outstanding share count and preferred dividends. The close used is the newest within 14 days.
+P/E is market cap over TTM net income, not price over TTM diluted EPS (the model reads it the same
+way): the two differ by the diluted vs outstanding share count and preferred dividends, and a market
+cap needs no share basis (a split moves EPS, not market cap). The close used is the newest within 14 days.
 A company with several share classes (several current tickers) prices one class against the
 total share count; the response lists them in `share_classes`.
 

@@ -56,8 +56,18 @@ ROUTE_DOCS: dict[tuple[str, str], tuple[str, str]] = {
     ("GET", "/v1/companies/{company_id}/annual-per-share"): (
         "Annual per-share figures",
         "EPS and weighted average shares for each fiscal year as the annual report states them, "
-        "each cited. `years` 1-30 (default 10). Per-share figures don't add up across quarters, so "
-        "they come only by year."),
+        "each cited. `years` 1-30 (default 10). For the history on one share basis, with stock "
+        "splits applied and the fourth quarter and trailing twelve months worked out, use the "
+        "per-share figures."),
+    ("GET", "/v1/companies/{company_id}/per-share"): (
+        "Per-share figures on one share basis",
+        "EPS and weighted average shares by quarter (`view=quarter`), trailing twelve months "
+        "(`ttm`) or fiscal year (`annual`), with every period restated to today's share basis "
+        "after stock splits (`shares=adjusted`, the default; `as_filed` for each filing's own "
+        "figure). Each figure keeps what the filing stated (`as_filed`) and the splits applied. "
+        "The fourth quarter is worked out from the year and its first three quarters, and the "
+        "trailing twelve months' EPS is the four quarters' EPS added; both say how in "
+        "`derivation`. `basis` fiscal or calendar, `quarters` 1-120 (default 40)."),
     ("GET", "/v1/companies/{company_id}/segments"): (
         "Segment figures",
         "Revenue, operating income and other figures per business segment, geography or product "

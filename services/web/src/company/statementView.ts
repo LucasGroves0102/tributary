@@ -8,6 +8,8 @@ export interface StatementView {
   period?: Period;
   basis?: Basis;
   range?: StatementRange;
+  /** per-share figures as each filing states them; split-adjusted when absent (owner decision 1) */
+  shares?: "filed";
 }
 
 const KINDS: readonly string[] = ["is", "bs", "cf"];
@@ -26,6 +28,7 @@ export function parseStatementView(query: string): StatementView {
   if (basis && basis !== "fiscal" && BASES.includes(basis)) out.basis = basis as Basis;
   const range = p.get("range");
   if (range && range !== "8q" && RANGES.includes(range)) out.range = range as StatementRange;
+  if (p.get("shares") === "filed") out.shares = "filed";
   return out;
 }
 
@@ -35,5 +38,6 @@ export function statementQuery(v: StatementView): string {
   if (v.period && v.period !== "q") p.set("period", v.period);
   if (v.basis && v.basis !== "fiscal") p.set("basis", v.basis);
   if (v.range && v.range !== "8q") p.set("range", v.range);
+  if (v.shares === "filed") p.set("shares", "filed");
   return p.toString();
 }

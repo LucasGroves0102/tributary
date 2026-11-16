@@ -609,6 +609,44 @@ class Store:
                         " ORDER BY metric, period_end DESC", (company_id, years))
             return cur.fetchall()
 
+    def per_share_inputs(self, user_id: str, company_id: str) -> dict:
+        """What query_api.per_share reads, in one session under RLS: gold's fiscal quarters of the
+        per-share metrics and net income (newest 120 each), the 10-K's per-share facts by year
+        (gold.annual_per_share, 036: its own read rule) and the company's restatement findings on
+        share counts and EPS (ops.quality_findings, the split notes' source). One company."""
+        from query_api.per_share import FINDING_METRICS, INPUT_METRICS
+
+        with self._session(user_id) as cur:
+            cur.execute(
+                """
+                SELECT metric, period_start, period_end, fiscal_year, fiscal_quarter,
+                       calendar_year, calendar_quarter, calendar_primary, value, unit,
+                       value_source, source_tag, accession_no, form, filed, source_accessions,
+                       ingested_at,
+                       (SELECT f.cik FROM silver.financial_facts f
+                        WHERE f.accession_no = q.accession_no LIMIT 1) AS filer_cik
+                FROM (
+                    SELECT *, row_number() OVER (PARTITION BY metric ORDER BY period_end DESC)
+                    FROM gold.financials
+                    WHERE company_id = %s AND span = 'quarter' AND metric = ANY(%s)
+                ) q
+                WHERE row_number <= 120
+                ORDER BY metric, period_end DESC
+                """, (company_id, list(INPUT_METRICS)))
+            quarters = cur.fetchall()
+            cur.execute("SELECT * FROM gold.annual_per_share(%s, 30)"
+                        " ORDER BY metric, period_end DESC", (company_id,))
+            annual = cur.fetchall()
+            cur.execute(
+                """
+                SELECT company_id, check_name, metric, period_end, severity, detail
+                FROM ops.quality_findings
+                WHERE company_id = %s AND check_name = 'restatement' AND metric = ANY(%s)
+                ORDER BY metric, period_end
+                """, (company_id, list(FINDING_METRICS)))
+            findings = cur.fetchall()
+        return {"quarters": quarters, "annual": annual, "findings": findings}
+
     def model_inputs(self, user_id: str, company_id: str, metrics: list[str], quarters: int,
                      recent: int, years: int, latest: list[str]) -> dict:
         """What a model run reads (query_api.model_maths), in one session under RLS: TTM rows

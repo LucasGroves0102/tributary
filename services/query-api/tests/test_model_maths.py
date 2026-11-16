@@ -340,7 +340,12 @@ def test_with_no_ttm_column_the_base_year_is_the_current_twelve_months():
     fy25 = out["history"][-1]
     assert out["ttm"] is None and v["ttm"] is None and fy25["fy"] == 2025
     assert [m["fy"] for m in v["history"]] == [2025]
-    assert v["history"][0]["pe"] == pytest.approx(150 / fy25["eps_adjusted"])
+    # Riley 11: one P/E method in every column, market cap over adjusted net income (not price over
+    # diluted EPS in the base year beside it in the TTM column)
+    assert v["history"][0]["pe"] == pytest.approx(v["market_cap"] / fy25["net_income_adjusted"])
+    assert all(c["pe"] == pytest.approx(v["market_cap"] / y["net_income_adjusted"])
+               for c, y in zip(v["cases"]["base"], out["cases"]["base"]["years"], strict=True)
+               if y["net_income_adjusted"])
     assert v["history"][0]["ev_ebit"] == pytest.approx(
         v["enterprise_value"] / fy25["operating_income_adjusted"])
     assert len(v["cases"]["base"]) == 2

@@ -204,7 +204,8 @@ describe("the three-case table", () => {
 
   it("multiples at the user's price; no EV without a current net debt, and why", () => {
     const pe = modelLines(vrt).find((l) => l.key === "pe")!;
-    expect(pe.forecast(vrt.cases.bull!.years[1]!, "bull", 1)).toBeCloseTo(150 / vrt.cases.bull!.years[1]!.eps_adjusted!, 6);
+    // one method in every column (Riley 11): market cap over adjusted net income
+    expect(pe.forecast(vrt.cases.bull!.years[1]!, "bull", 1)).toBeCloseTo(vrt.valuation!.market_cap! / vrt.cases.bull!.years[1]!.net_income_adjusted!, 6);
     // morgan4 finding 5: no past year at today's price ("P/E FY2021 560.6x"); the TTM and forecasts only
     expect(vrt.valuation!.history).toEqual([]);
     expect(vrt.history.map((y, i) => pe.history(y, i))).toEqual(vrt.history.map(() => "n/a"));

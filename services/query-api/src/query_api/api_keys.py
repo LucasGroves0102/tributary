@@ -89,6 +89,7 @@ READ_ROUTES: frozenset[tuple[str, str]] = frozenset({
     ("GET", "/v1/companies/search"),
     ("GET", "/v1/companies/{company_id}/financials"),
     ("GET", "/v1/companies/{company_id}/annual-per-share"),
+    ("GET", "/v1/companies/{company_id}/per-share"),
     ("GET", "/v1/companies/{company_id}/segments"),
     ("GET", "/v1/companies/{company_id}/components"),
     ("GET", "/v1/companies/{company_id}/filings"),

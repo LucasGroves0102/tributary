@@ -572,6 +572,36 @@ export interface FinancialRow {
     filing_url: string | null;
   };
   freshness: { filed: string; ingested_at: string };
+  /** /per-share only (query_api/per_share.py): the filing's own figure, the splits applied to it
+   * (split-adjusted figures), and how a derived fiscal Q4 or TTM was worked out */
+  as_filed?: string | null;
+  splits?: PerShareSplit[];
+  derivation?: PerShareDerivation;
+}
+
+/** A stock split as the split notes establish it: before its first restating filing, figures are on
+ * the old share basis. */
+export interface PerShareSplit {
+  label: string;
+  reverse: boolean;
+  first_filed: string;
+  first_accession: string | null;
+  ratio?: number;
+}
+
+export interface PerShareDerivation {
+  method: "q4_eps" | "q4_shares" | "ttm_eps" | "ttm_shares";
+  inputs: { role: string; metric: string; period_end: string; value: string; accession_no: string | null; form: string | null; derived?: boolean }[];
+  note?: string;
+}
+
+/** GET /v1/companies/{id}/per-share: EPS and weighted shares on one share basis (owner decisions 1-2). */
+export interface PerShare {
+  company_id: string;
+  view: "quarter" | "ttm" | "annual";
+  shares: "adjusted" | "as_filed";
+  splits: PerShareSplit[];
+  rows: FinancialRow[];
 }
 
 /** /financials with `callouts` (F5, query_api.notes): a quarter far outside its series (041's outlier

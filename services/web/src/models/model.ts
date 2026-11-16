@@ -664,11 +664,11 @@ export function modelLines(run: ModelRun): Line[] {
       forecast: (p) => p.net_income_adjusted,
     },
     {
-      key: "eps", label: `Diluted EPS${adj}`, unit: "USD/shares", group: "Per share", blank: "per-share figures don't add across quarters: the 10-K states the year's",
+      key: "eps", label: `Diluted EPS${adj}`, unit: "USD/shares", group: "Per share", blank: "the model's twelve months carry net income, not EPS (P/E is market cap over net income); the Statements tab has the TTM EPS, the four quarters added",
       noteOf: earlierBasis, history: (y) => y.eps_adjusted, ttm: () => null, forecast: (p) => p.eps_adjusted,
     },
     oneOffs && {
-      key: "eps_reported", label: "Diluted EPS, reported", unit: "USD/shares", group: "Per share", blank: "per-share figures don't add across quarters",
+      key: "eps_reported", label: "Diluted EPS, reported", unit: "USD/shares", group: "Per share", blank: "the model's twelve months carry net income, not EPS",
       noteOf: earlierBasis, history: (y) => y.eps, ttm: () => null, forecast: (p) => p.eps,
     },
     { key: "eps_growth", label: "EPS growth", unit: "ratio", group: "Per share", blank: "no positive EPS the year before", noteOf: splitYear, history: (y) => y.eps_growth, forecast: (p) => p.eps_growth },
