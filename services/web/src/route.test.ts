@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 
-import { href, parse, type Route } from "./route";
+import { href, pageOf, parse, type Route } from "./route";
 
 it("round-trips every route", () => {
   const routes: Route[] = [
@@ -130,4 +130,11 @@ it("keeps a known data check in the screener's address and drops anything else",
   expect(parse("#/companies?issue=impossible_value")).toEqual({ view: "companies", screen: { issue: "impossible_value" } });
   expect(href({ view: "companies", screen: { issue: "impossible_value" } })).toBe("#/companies?issue=impossible_value");
   expect(parse("#/companies?issue=drop_table")).toEqual({ view: "companies" });
+});
+
+it("a page is its view and ids, not its filters: a new page starts at the top, a filter keeps the place (Riley 92)", () => {
+  expect(pageOf(parse("#/companies?sector=Technology"))).toBe(pageOf(parse("#/companies")));
+  expect(pageOf(parse("#/company/0001045810/statements?period=a"))).toBe(pageOf(parse("#/company/0001045810/statements")));
+  expect(pageOf(parse("#/company/0001045810/statements"))).not.toBe(pageOf(parse("#/company/0001045810/ratios")));
+  expect(pageOf(parse("#/chart"))).not.toBe(pageOf(parse("#/companies")));
 });

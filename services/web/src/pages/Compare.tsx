@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { failureReason, peerCheck, peers as fetchPeers, screener } from "../api";
 import { NOT_APPLICABLE, NOT_REPORTED } from "../blanks";
@@ -30,6 +30,7 @@ import { SmallMultiples } from "../compare/SmallMultiples";
 import { CompanySearch } from "../components/CompanySearch";
 import { FigureText } from "../components/FigureText";
 import { ErrorPanel, Skeleton } from "../components/States";
+import { toast } from "../components/Toasts";
 import { navRow, onTableKey } from "../components/tableNav";
 import { download } from "../download";
 import { day } from "../format";
@@ -54,6 +55,8 @@ interface Props {
 type Load<T> = { state: "loading" } | { state: "ok"; data: T } | { state: "error"; message: string };
 
 const SUGGESTIONS = 10;
+/** How many of the suggestions a target with no peers starts with. */
+const PREFILL_PEERS = 5;
 
 /** Compare: a comps table of a target and its peers over /v1/screener (`company_id`), each
  * value with its period and source, the peer median, suggestions from /v1/companies/{id}/peers.
@@ -128,6 +131,16 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
   const set = (patch: Partial<CompareState>) =>
     embedded ? embedded.onChange({ ...compare, ...patch }) : go({ view: "compare", compare: { ...compare, ...patch } });
   const peerIds = compare.peers ?? [];
+  // a target with no peers yet (the company page's More, Compare) starts with the suggested ones, the Peers
+  // tab's first five, once per visit: Riley 20 opened on "Peer median of 0 peers" with every cell blank. The
+  // address is replaced, so Back goes where it was; removing them later doesn't bring them back.
+  const filled = useRef<string | null>(null);
+  useEffect(() => {
+    if (embedded || !compare.target || peerIds.length || filled.current === compare.target || suggested?.state !== "ok") return;
+    filled.current = compare.target;
+    const first = suggested.data.peers.filter((p) => p.company_id !== compare.target).slice(0, PREFILL_PEERS).map((p) => p.company_id);
+    if (first.length) window.location.replace(href({ view: "compare", compare: { ...compare, peers: first } }));
+  }, [suggested, compare.target, peerIds.length]);
   const addPeer = (id: string) => peerIds.length < MAX_PEERS && set({ peers: [...peerIds, id] });
   /** A picked company joins only if it has figures to compare; otherwise say why (F4: a foreign
    * filer like Birkenstock, no XBRL yet, no annual report). An older API has no check: add it. */
@@ -138,7 +151,16 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
       .then((check) => (check && check.ok === false ? setRefused(peerRefusal(name, check)) : addPeer(id)))
       .catch(() => addPeer(id));
   };
-  const removePeer = (id: string) => set({ peers: peerIds.filter((p) => p !== id) });
+  // a removal says so with Undo (Riley 87: a plain × with nothing to take it back)
+  const removePeer = (id: string) => {
+    const before = peerIds;
+    set({ peers: peerIds.filter((p) => p !== id) });
+    if (!embedded) {
+      const was = { ...compare, peers: before };
+      toast({ text: `Removed ${names.get(id) ?? "a peer"} from the comps.`, topic: "comps-remove",
+        action: { label: "Undo", onClick: () => go({ view: "compare", compare: was }) } });
+    }
+  };
   const toggleColumn = (k: string) =>
     set({ cols: cols.includes(k) ? cols.filter((c) => c !== k) : COMPARE_COLUMNS.map((c) => c.key).filter((c) => c === k || cols.includes(c)) });
   const offered = COMPARE_COLUMNS.filter((c) => !c.bank || bank || cols.includes(c.key));
@@ -182,7 +204,7 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
 
   return (
     <div className={embedded ? "compare-embedded" : "page"}>
-      <div className={embedded ? "row wrap" : "row"}>
+      <div className={embedded ? "row wrap" : "row page-bar"}>
         {embedded ? <h2 className="grow">Comps</h2> : <h1 className="grow">Compare</h1>}
         {target && !embedded && <span className="muted">Comps: {target.name}</span>}
         <button className="btn" onClick={exportCsv} disabled={!rows.length}
@@ -274,8 +296,7 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
         <div className="card-h wrap">
           <h2>Comparable companies</h2>
           <span className="sub">
-            each company's latest reported quarter · TTM to that quarter, balances at its end · median
-            excludes the target
+            Each company's latest quarter: twelve months to it, balances at its end. The median leaves out the target.
           </span>
           <span className="grow" />
           {rows.length > 0 && (
@@ -312,7 +333,7 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
               <thead>
                 <tr>
                   <th className="first" aria-sort={ariaSort("name")}>{sortHead("name", "Company")}</th>
-                  <th aria-sort={ariaSort("latest")}>{sortHead("latest", "Latest quarter")}</th>
+                  <th aria-sort={ariaSort("latest")}>{sortHead("latest", "Quarter ended")}</th>
                   {cols.map((k) => {
                     const c = COMPARE_COLUMNS.find((x) => x.key === k)!;
                     return (
@@ -336,15 +357,10 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
                         {!r.readable && <span className="tag" title={MASKED_TITLE}>metadata only</span>}
                       </a>
                     </td>
-                    <td className="muted" title={r.latest ? `${r.latest.fiscal ? `${short(r.latest.fiscal)}. ` : ""}Period ended ${day(r.latest.periodEnd, true)}; ${r.latest.form} filed ${day(r.latest.filed, true)}` : undefined}>
-                      {r.latest ? (
-                        <>
-                          {short(r.latest.calendar)}
-                          {r.latest.fiscal && <span className="faint wide-only"> ({short(r.latest.fiscal)})</span>}
-                        </>
-                      ) : (
-                        "—"
-                      )}
+                    {/* the date itself: two companies a quarter apart read apart (Riley 39: "CY26 Q2 (FY27 Q2)" hid it);
+                        the calendar and fiscal labels are the hover */}
+                    <td className="muted" title={r.latest ? `${short(r.latest.calendar)}${r.latest.fiscal ? `, ${short(r.latest.fiscal)} in the company's fiscal year` : ""}. ${r.latest.form} filed ${day(r.latest.filed, true)}` : undefined}>
+                      {r.latest ? day(r.latest.periodEnd, true) : "—"}
                     </td>
                     {cols.map((k) => {
                       const cell = r.cells[k]!;
@@ -360,11 +376,11 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
                       {!r.isTarget && (
                         <>
                           <button className="btn sm ghost" onClick={() => set({ target: r.companyId, peers: [...(compare.target ? [compare.target] : []), ...peerIds.filter((p) => p !== r.companyId)] })}
-                            aria-label={`Make ${r.name} the target`}>
-                            Target
+                            aria-label={`Make ${r.name} the target`} title={`Compare the others with ${r.name}`}>
+                            Make target
                           </button>
-                          <button className="btn sm ghost" onClick={() => removePeer(r.companyId)} aria-label={`Remove ${r.name}`}>
-                            ✕
+                          <button className="btn sm ghost" onClick={() => removePeer(r.companyId)} aria-label={`Remove ${r.name}`} title={`Take ${r.name} out of the comps`}>
+                            Remove
                           </button>
                         </>
                       )}
@@ -402,17 +418,22 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
             </table>
           </TableScroll>
         )}
-        <div className="foot">
-          USD. No valuation multiples: Tributary has no market prices. Each company's own latest
-          quarter, labelled by calendar quarter (fiscal in brackets); hover a value for its
-          period and source filing. Click a column to sort, again to reverse, a third time for
+        {/* one sentence in view, the how-to behind a disclosure (Riley pattern 10) */}
+        <p className="foot read-first">
+          US dollars, each company to its own latest quarter; a negative amount is in parentheses. Hover a value for its period and filing.
+        </p>
+        <details className="how-to-read">
+          <summary>How to read this table</summary>
+          <div className="foot">
+          No valuation multiples: Tributary has no market prices. Click a column to sort, again to reverse, a third time for
           the order you added them. Keyboard: ↑ ↓ move between rows, Enter opens the company.
           {bankCols.length > 0 &&
             ` Banks show n/a for ${bankCols.join(", ")} (deposits are a bank's debt and lending its operations) and are left out of ${bankCols.length === 1 ? "that column's" : "those columns'"} median.`}
           {fyes.length > 1 &&` Fiscal years end in different months (${fyes.join(", ")}); TTM figures compare regardless.`}
           {masked.length > 0 &&
             ` ${masked.length} ${masked.length === 1 ? "company shows" : "companies show"} metadata only: your plan doesn't cover ${masked.length === 1 ? "its" : "their"} financials, so ${masked.length === 1 ? "it is" : "they are"} left out of the median and charts.`}
-        </div>
+          </div>
+        </details>
       </section>
 
       {rows.length > 0 && (
@@ -420,8 +441,8 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
           <div className="card-h wrap">
             <h2>Side by side</h2>
             <span className="sub">
-              one chart per column · every company you can read a line, in the same colour on each · calendar quarters, last 3 years
-              {readableIds.length > MAX_COMPANY_LINES ? ` · the first ${MAX_COMPANY_LINES} of ${readableIds.length} companies` : ""}
+              One chart per column, a line per company in the same colour on each; calendar quarters, the last 3 years
+              {readableIds.length > MAX_COMPANY_LINES ? `; the first ${MAX_COMPANY_LINES} of ${readableIds.length} companies` : ""}
             </span>
             <span className="grow" />
             <button className="btn sm" aria-expanded={multiples} onClick={() => setMultiples((m) => !m)}

@@ -111,7 +111,9 @@ export const RANGES: Range[] = [1, 3, 5, 10, "max"];
 const VALID_RANGES: Range[] = [1, 2, 3, 5, 10, "max", "custom"];
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 export const MAX_LAYERS = 12;
-export const COLOR_NAMES = ["Blue", "Green", "Orange", "Red", "Teal", "Violet", "Pink", "Grey"];
+/** The series colours' names, in tokens.css order (--series-0..7): the swatch a layer card offers is the
+ * colour its line draws in (Riley 15: "Blue" drew grey after the Seal palette replaced the old one). */
+export const COLOR_NAMES = ["Ink", "Slate", "Umber", "Plum", "Teal", "Rose", "Olive", "Warm grey"];
 /** The diluted share count per-share layers divide by. */
 export const SHARES_METRIC = "weighted_shares_diluted";
 
@@ -295,6 +297,21 @@ const transformSuffix = (l: Layer, frequency: Frequency) => (frequency === "annu
 /** A metric's label mid-sentence: "free cash flow", but "ROE", "R&D" and "FCF margin" as they are. */
 const inSentence = (label: string) => (/[A-Z]{2}|&/.test(label) ? label : label.toLowerCase());
 
+/** A formula as a person reads it in a legend or title (Riley 63: "inventory / cost_of_revenue * 365",
+ * "COST.revenue / WMT.revenue"): each metric name its label ("cost of revenue"), TICKER.metric as
+ * "COST revenue", * and / as × and ÷. A function call (ttm(...)) and numbers stay as typed; the formula
+ * itself is kept in the layer card and the CSV. Display only. */
+export function formulaWords(formula: string, label: (metric: string) => string): string {
+  return formula
+    .trim()
+    .replace(/(?<![A-Za-z0-9_.])([A-Z][A-Z0-9-]*)\.([a-z_][a-z0-9_]*)|(?<![A-Za-z0-9_.])([a-z_][a-z0-9_]*)(?!\s*\()(?![A-Za-z0-9_.])/g,
+      (_, ticker: string | undefined, tMetric: string | undefined, metric: string | undefined) =>
+        ticker ? `${ticker} ${inSentence(label(tMetric!))}` : inSentence(label(metric!)))
+    .replace(/\s*\*\s*/g, " × ")
+    .replace(/\s*\/\s*/g, " ÷ ")
+    .replace(/\s+/g, " ");
+}
+
 /** What a layer shows, without its company. */
 function layerWhat(l: Layer, label: (metric: string) => string, frequency: Frequency): string {
   if (l.kind === "price") return l.transform === "yoy" ? "share price YoY" : l.transform === "idx" ? "share price (indexed)" : "share price";
@@ -303,7 +320,7 @@ function layerWhat(l: Layer, label: (metric: string) => string, frequency: Frequ
       ? l.metric ? inSentence(label(l.metric)) : "?"
       : l.kind === "segment"
         ? l.members?.length === 1 ? memberName(l.members[0]!) : `${l.members?.length ?? 0} segments`
-        : (l.formula ?? "").trim() || "formula";
+        : formulaWords(l.formula ?? "", label) || "formula";
   return base + transformSuffix(l, frequency);
 }
 
@@ -320,7 +337,7 @@ const TITLE_METRICS = 3;
 const TITLE_COMPANIES = 4;
 const MAX_TITLE = 200;
 
-/** The title a chart's visible layers give it: "AMZN: revenue (TTM) and net_income / revenue
+/** The title a chart's visible layers give it: "AMZN: revenue (TTM) and net income ÷ revenue
  * (TTM)", "Operating margin (TTM): KO, PEP and KDP", with ", annual" when it is. Empty without a
  * visible layer. A formula naming its tickers has no company to put in front of it. `shows` leaves
  * out layers known to draw nothing, so it names what is there (unless nothing would be left). */
@@ -329,9 +346,13 @@ export function autoTitle(s: ChartState, short: (companyId: string) => string, l
   // a formula layer nothing has been typed into isn't anything yet
   const visible = s.layers.filter((l) => !l.hidden && (l.kind !== "formula" || l.formula?.trim()));
   const named = shows && visible.some(shows) ? visible.filter(shows) : visible;
+  // a quarter's figure beside a twelve months' says so, or "revenue and operating margin (TTM)" reads as
+  // both TTM (Riley 34)
+  const mixed = frequency === "quarterly" && named.some((l) => l.transform === "ttm" && !readsBalances(l))
+    && named.some((l) => l.transform === "q" && !readsBalances(l) && l.kind !== "price");
   const parts = named.map((l) => {
     const name = l.name?.trim();
-    const what = name || layerWhat(l, label, frequency);
+    const what = name || layerWhat(l, label, frequency) + (mixed && l.transform === "q" && !readsBalances(l) && l.kind !== "price" ? " (quarterly)" : "");
     const company = l.kind === "formula"
       ? (formulaReads(l.formula ?? "").tickers.length ? undefined : l.defaultCompany)
       : l.companyId;

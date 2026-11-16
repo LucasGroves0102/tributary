@@ -46,13 +46,20 @@ export interface StepCommon {
 
 /** Paragraphs of a section's text: page furniture left out (reader/furniture.ts: "6", "Table of
  * contents" and running headers never reach a paragraph or a pin; analyst test 4, finding 19), then
- * blank-line or line breaks, short fragments (headings) joined to what follows. */
+ * blank-line or line breaks, short fragments (headings) joined to what follows. A line a break cut
+ * mid-sentence (no closing punctuation, the next line starting in lower case) runs on into the next:
+ * Riley 94, Costco's "…and quickly" / "ship these goods" and Pro-Dex's hard line breaks. */
 export function paragraphs(text: string): string[] {
   const out: string[] = [];
   let carry = "";
   for (const raw of withoutFurniture(text).split(/\n+/)) {
     const t = raw.replace(/\s+/g, " ").trim();
     if (!t) continue;
+    const last = out.at(-1);
+    if (!carry && last && !/[.!?:;)\u201d"]$/.test(last) && /^[a-z]/.test(t)) {
+      out[out.length - 1] = `${last} ${t}`;
+      continue;
+    }
     if (t.length < 60 && !/[.!?:;]$/.test(t)) {
       carry = carry ? `${carry} ${t}` : t;
       continue;
@@ -186,8 +193,17 @@ export function Numbers({ token, companyId, name, ticker, label, saved, projectI
       setDone((d) => ({ ...d, [key]: "Couldn't save it. Try again." }));
     }
   };
+  // what's on the step, first; the charts two a row where there's room (Riley 115: 5,963px of stacked
+  // charts with no contents). Buttons, not #anchors: the address is the app's route.
+  const jump = (key: string) => document.getElementById(`numbers-${key}`)?.scrollIntoView({ block: "start" });
   return (
     <>
+      <nav className="numbers-contents" aria-label="Charts on this step">
+        {sets.map((s) => (
+          <button key={s.key} type="button" className="btn sm ghost" onClick={() => jump(s.key)}>{s.short}</button>
+        ))}
+      </nav>
+      <div className="numbers-grid">
       {sets.map((s) => {
         const state = done[s.key];
         const already = state === "saved" || savedNames.has(s.chart.title);
@@ -197,7 +213,7 @@ export function Numbers({ token, companyId, name, ticker, label, saved, projectI
         ) : null;
         return (
           <Fragment key={s.key}>
-          <section className="card numbers-chart" aria-label={s.chart.title}>
+          <section className="card numbers-chart" id={`numbers-${s.key}`} aria-label={s.chart.title}>
             <div className="card-b">
               <ChartView token={token} chart={s.chart} name={s.chart.title} label={label} hasTtm={everyMetric} />
               <p className="small muted read-hint">{s.read}</p>
@@ -216,10 +232,11 @@ export function Numbers({ token, companyId, name, ticker, label, saved, projectI
               </div>
             </div>
           </section>
-          {text}
+          {text && <div className="numbers-wide">{text}</div>}
           </Fragment>
         );
       })}
+      </div>
       <p className="faint small">
         Up to ten fiscal years of {name}, one point per year (flows are the year's total, balances the year end), then the
         latest quarter when the year isn't over, marked * and drawn lighter (the trailing twelve months for flows, the quarter

@@ -6,6 +6,7 @@ import { ACC, fin, NVDA, nvdaRow } from "../fixtures";
 import type { Recap, RecapValue, SegmentRow } from "../types";
 import {
   eightKItems,
+  howFiled,
   figuresBehind,
   FINANCE_ARMS,
   financeArmNote,
@@ -33,10 +34,10 @@ import {
 describe("the header's listing line", () => {
   it("names the main ticker and counts the rest, whose tickers go in the hover", () => {
     expect(listingLine(["JPM", "JPM-PC", "JPM-PD", "VYLD"], ["NYSE"])).toEqual({
-      text: "JPM +3 more · NYSE",
+      text: "JPM on NYSE, and 3 other share classes or notes",
       more: "Also listed: JPM-PC, JPM-PD, VYLD",
     });
-    expect(listingLine(["NVDA"], ["Nasdaq"])).toEqual({ text: "NVDA · Nasdaq", more: null });
+    expect(listingLine(["NVDA"], ["Nasdaq"])).toEqual({ text: "NVDA on Nasdaq", more: null });
     expect(listingLine([], [])).toEqual({ text: "", more: null });
   });
 });
@@ -47,7 +48,7 @@ describe("header and key stats", () => {
   it("label every value with its period and source", () => {
     const stats = keyStats(nvdaRow());
     const by = (l: string) => stats.find((s) => s.label === l)!;
-    expect(by("Revenue")).toMatchObject({ text: "$165.22B", period: "TTM to Jul 26, 2026" });
+    expect(by("Revenue")).toMatchObject({ text: "$165.2B", period: "TTM to Jul 26, 2026" });
     expect(by("Revenue")!.title).toContain(`Source: 10-Q filed Aug 26, 2026, ${ACC}`);
     expect(by("Revenue growth")).toMatchObject({ text: "+69.0%", period: "TTM vs prior TTM, to Jul 26, 2026" });
     expect(by("EPS (diluted)")).toMatchObject({ text: "$1.08", period: "quarter to Jul 26, 2026" });
@@ -605,8 +606,8 @@ describe("Seal: the year as a sentence and the ledger's net cash (analyst test 4
   it("reads revenue, growth, net income and net cash for the same twelve months, in words", () => {
     const story = yearStory(row({ revenue_ttm: "302970000000", revenue_growth_ttm: "0.834", net_income_ttm: "192880000000", net_debt_q: "-66000000000" }))!;
     expect(story).toMatchObject({
-      end: "2026-07-26", revenueLabel: "revenue", revenue: "$302.97 billion",
-      growth: { text: "up 83.4%", rise: true }, netIncome: { text: "$192.88 billion", loss: false },
+      end: "2026-07-26", revenueLabel: "revenue", revenue: "$303.0 billion",
+      growth: { text: "up 83.4%", rise: true }, netIncome: { text: "$192.9 billion", loss: false },
       balance: { text: "$66.00 billion", netCash: true },
     });
     expect(story.source.accession_no).toBe(ACC);
@@ -641,5 +642,24 @@ describe("Seal: the year as a sentence and the ledger's net cash (analyst test 4
     expect(stats.find((s) => s.key === "cash_and_investments_q")).toMatchObject({ label: "Cash and short-term investments", text: "$98.37B" });
     // a positive net debt keeps its name
     expect(keyStats(row({ net_debt_q: "9930000000" })).find((s) => s.key === "net_debt_q")).toMatchObject({ label: "Net debt", text: "$9.93B" });
+  });
+});
+
+describe("howFiled: which figures a seal may say were taken from the filing (Riley 32)", () => {
+  const q = { form: "10-Q", period_end: "2026-07-26" };
+  const k = { form: "10-K", period_end: "2026-01-25" };
+  it("seals what a filing states: a balance, a quarter's flow from its 10-Q, the year from the 10-K", () => {
+    expect(howFiled("cash_q", q)).toEqual({ filed: true });
+    expect(howFiled("cash_q", k)).toEqual({ filed: true });
+    expect(howFiled("eps_diluted_q", q)).toEqual({ filed: true });
+    expect(howFiled("revenue_ttm", k)).toEqual({ filed: true });
+  });
+  it("doesn't seal a ratio, a difference, four quarters added up or a fourth quarter worked out", () => {
+    expect(howFiled("gross_margin_ttm", k)).toEqual({ filed: false, how: "computed: gross profit ÷ revenue" });
+    expect(howFiled("roe_ttm", q)).toMatchObject({ filed: false, how: expect.stringContaining("average of stockholders' equity") });
+    expect(howFiled("net_debt_q", q)).toMatchObject({ filed: false });
+    expect(howFiled("free_cash_flow_ttm", k)).toMatchObject({ filed: false });
+    expect(howFiled("revenue_ttm", q)).toEqual({ filed: false, how: "the four quarters to Jul 26, 2026 added up" });
+    expect(howFiled("revenue_q", k)).toMatchObject({ filed: false, how: expect.stringContaining("year less the first three quarters") });
   });
 });

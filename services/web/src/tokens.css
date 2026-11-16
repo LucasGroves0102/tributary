@@ -17,6 +17,14 @@
   --red: #b3111e;
   --red-ink: #ffffff;
   --red-soft: #f7e9e9;
+  /* the action: primary buttons and links are the ink (decided 2026-11-15, Riley's audit: red was the
+     seal, rubrics, links, buttons, 10-K marks and errors at once). Red stays for the seal, the margin
+     rubrics and red-letter days; an error has its own token. To give actions the red back, point
+     --action at the red here and in both dark blocks. */
+  --action: #161314;
+  --action-ink: #ffffff;
+  --error: #b3111e;
+  --error-soft: #f7e9e9;
   --up: #1d6944;
   --up-soft: #e6f0ea;
   --warn: #8f4e14;
@@ -26,15 +34,17 @@
   --overlay: rgb(22 19 20 / 0.32);
   --lift: 0 1px 2px rgb(0 0 0 / 0.04), 0 18px 50px rgb(20 8 8 / 0.09);
   --edge-shadow: rgb(22 19 20 / 0.2);
-  /* chart series, in layer order: the ink first, then the inks a printed report would use beside it;
+  /* chart series, in layer order: the ink first, then the inks a printed report would use beside it,
+     ordered so the first six read apart (ink, slate, umber, plum, teal, rose; Riley 122: teal beside
+     olive and ink beside warm grey looked alike in Compare);
      never the accent red (it means "act here" or "may change") */
   --series-0: #5c5350;
   --series-1: #3d5a80;
   --series-2: #9a5a17;
-  --series-3: #2f6b5a;
-  --series-4: #6b4a7a;
-  --series-5: #4b6b2a;
-  --series-6: #a8456a;
+  --series-3: #6b4a7a;
+  --series-4: #2f6b5a;
+  --series-5: #a8456a;
+  --series-6: #4b6b2a;
   --series-7: #8a817c;
   color-scheme: light;
 }
@@ -52,6 +62,10 @@
     --red: #e05a63;
     --red-ink: #1a0d0f;
     --red-soft: #2a191c;
+    --action: #ede6dc;
+    --action-ink: #131011;
+    --error: #e05a63;
+    --error-soft: #2a191c;
     --up: #6cc495;
     --up-soft: #18281f;
     --warn: #dc9a5e;
@@ -64,10 +78,10 @@
     --series-0: #cdc3b8;
     --series-1: #8fa8d6;
     --series-2: #d99a55;
-    --series-3: #6fbfa6;
-    --series-4: #c09ad0;
-    --series-5: #a4c46e;
-    --series-6: #e88aa8;
+    --series-3: #c09ad0;
+    --series-4: #6fbfa6;
+    --series-5: #e88aa8;
+    --series-6: #a4c46e;
     --series-7: #998f86;
     color-scheme: dark;
   }
@@ -85,6 +99,10 @@
   --red: #e05a63;
   --red-ink: #1a0d0f;
   --red-soft: #2a191c;
+  --action: #ede6dc;
+  --action-ink: #131011;
+  --error: #e05a63;
+  --error-soft: #2a191c;
   --up: #6cc495;
   --up-soft: #18281f;
   --warn: #dc9a5e;
@@ -97,10 +115,10 @@
   --series-0: #cdc3b8;
   --series-1: #8fa8d6;
   --series-2: #d99a55;
-  --series-3: #6fbfa6;
-  --series-4: #c09ad0;
-  --series-5: #a4c46e;
-  --series-6: #e88aa8;
+  --series-3: #c09ad0;
+  --series-4: #6fbfa6;
+  --series-5: #e88aa8;
+  --series-6: #a4c46e;
   --series-7: #998f86;
   color-scheme: dark;
 }
@@ -116,14 +134,19 @@
   --text: var(--ink);
   --text-2: var(--ink-2);
   --text-3: var(--ink-3);
-  --accent: var(--red);
-  --accent-soft: var(--red-soft);
-  --on-accent: var(--red-ink);
+  /* the older screens' accent is the action now, not the red */
+  --accent: var(--action);
+  --accent-soft: var(--sheet-2);
+  --on-accent: var(--action-ink);
+  /* a link reads as the ink with a rule under it (underline colour; currentColor on hover) */
+  --link: var(--ink);
+  --link-rule: color-mix(in srgb, var(--ink) 38%, transparent);
+  --focus: var(--ink);
   --pos: var(--up);
   --pos-soft: var(--up-soft);
-  /* an error or a figure that doesn't tie: red says "look here", never "a loss" (.neg is ink) */
-  --neg: var(--red);
-  --neg-soft: var(--red-soft);
+  /* an error or a figure that doesn't tie: says "look here", never "a loss" (.neg is ink) */
+  --neg: var(--error);
+  --neg-soft: var(--error-soft);
   --shadow: none;
   --popover-shadow: var(--lift);
 

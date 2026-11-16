@@ -18,13 +18,18 @@ const prefix = (code: string) => SYMBOLS[code] ?? `${code} `;
 
 /** Amounts as $96.22B / -$1.30B (€2.10B, CAD 1.20B in another currency, migration 056); per-share
  * values (EPS: a unit like "USD/shares") as $1.05. */
+/** Decimals for an amount in its scale: two below 100, one from 100 (Riley 123: "$227.00M" claimed a
+ * precision the scale doesn't have; four significant figures at most). The exact figure is in the hover
+ * and the CSV. */
+const places = (scaled: number) => (Math.abs(scaled) >= 99.995 ? 1 : 2);
+
 export function money(value: number, unit: string): string {
   const sign = value < 0 ? "-" : "";
   const abs = Math.abs(value);
   const p = prefix(currencyOf(unit));
   if (!/^[A-Z]{3}$/.test(unit)) return `${sign}${p}${abs.toFixed(2)}`;
   for (const [size, suffix] of SCALES) {
-    if (abs >= size) return `${sign}${p}${(abs / size).toFixed(2)}${suffix}`;
+    if (abs >= size) return `${sign}${p}${(abs / size).toFixed(places(abs / size))}${suffix}`;
   }
   return `${sign}${p}${abs.toFixed(0)}`;
 }
@@ -37,10 +42,12 @@ export function moneyRow(values: (number | null)[], currency = "USD"): (string |
   const top = Math.max(0, ...values.map((v) => (v === null ? 0 : Math.abs(v))));
   const scale = SCALES.find(([size]) => top >= size);
   const p = prefix(currency);
+  // one count of decimals for the row, the largest value's, so the row's points line up
+  const dp = scale ? places(top / scale[0]) : 2;
   return values.map((v) => {
     if (v === null) return null;
-    if (!scale || v === 0 || Math.abs(v) / scale[0] < 0.005) return money(v, currency);
-    return `${v < 0 ? "-" : ""}${p}${(Math.abs(v) / scale[0]).toFixed(2)}${scale[1]}`;
+    if (!scale || v === 0 || Math.abs(v) / scale[0] < 0.5 * 10 ** -dp) return money(v, currency);
+    return `${v < 0 ? "-" : ""}${p}${(Math.abs(v) / scale[0]).toFixed(dp)}${scale[1]}`;
   });
 }
 

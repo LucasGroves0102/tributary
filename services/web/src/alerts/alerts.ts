@@ -11,6 +11,8 @@
  *   crossed "Clear", no value "No figure for this period". Its threshold reads in the formula's
  *   display (percent: 0.55 is 55%). */
 
+import { formulaWords } from "../chart/model";
+import { metricLabel } from "../chart/metrics";
 import { change, day, localClock, money, pct } from "../format";
 import { href } from "../route";
 import type { AlertFigure, AlertForm, AlertNotification, AlertSource, RedLineOp, RedLineResult, Webhook, WebhookDelivery } from "../types";
@@ -55,8 +57,11 @@ export function inDisplay(value: string | null, display: string | null, unit?: s
 }
 
 /** "gross_margin below 55.0%" */
+/** A red line as a sentence: "Operating margin below 3.0%", the formula in words (Riley 84: it read
+ * "operating_margin below 3.0%"); what was typed stays the rule's own. */
 export function ruleText(r: Pick<RedLineResult, "formula" | "op" | "threshold" | "display"> & { unit?: string }): string {
-  return `${r.formula} ${OP_WORDS[r.op]} ${inDisplay(r.threshold, r.display, r.unit)}`;
+  const words = formulaWords(r.formula, metricLabel);
+  return `${words.charAt(0).toUpperCase()}${words.slice(1)} ${OP_WORDS[r.op]} ${inDisplay(r.threshold, r.display, r.unit)}`;
 }
 
 export type RedLineState = "crossed" | "clear" | "no_value";

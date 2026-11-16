@@ -3,7 +3,7 @@
  * looks the same in any slide whatever theme the app is in. */
 
 /** tokens.css light theme: --series-0..7, --text, --text-3, --line. */
-const SERIES = ["#5c5350", "#3d5a80", "#9a5a17", "#2f6b5a", "#6b4a7a", "#4b6b2a", "#a8456a", "#8a817c"];
+const SERIES = ["#5c5350", "#3d5a80", "#9a5a17", "#6b4a7a", "#2f6b5a", "#a8456a", "#4b6b2a", "#8a817c"];
 const EXPORT_CSS = [
   "svg{background:#fff;font-family:Inter,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif}",
   ".ch-bg{fill:#fff}",

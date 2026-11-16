@@ -102,11 +102,12 @@ export function Company({ token, companyId, tab, statements, changes, watched, o
           {h.tickers[0] && (
             <span className="co-listing" title={more.length ? `Also listed: ${more.join(", ")}` : undefined}>
               <b>{h.tickers[0]}</b>
-              {more.length > 0 && ` +${more.length} more`}
               {h.exchanges.length > 0 && ` on ${h.exchanges.join(", ")}`}
+              {/* what "+8 more" was (Riley 59): the other classes and notes, named in the hover */}
+              {more.length > 0 && `, and ${more.length} other share ${more.length === 1 ? "class or note" : "classes or notes"}`}
             </span>
           )}
-          {h.industry && <span>{h.industry}{h.sic ? `, SIC ${h.sic}` : ""}</span>}
+          {h.industry && <span title={h.sic ? `SIC ${h.sic}, the SEC's industry code` : undefined}>{h.industry}</span>}
           {h.fye && <span>Fiscal year ends in {h.fye}</span>}
           {h.filer && <span>{h.filer} filer</span>}
           {place && <span title={`EDGAR's code: ${h.state}`}>Incorporated in {place}</span>}

@@ -74,15 +74,17 @@ test("chart builder: two metric layers and a formula, exported as CSV", async ({
 
   const legend = page.locator(".lchart-svg .ch-legend text");
   // the first layer starts from the watchlist's first company
-  await expect(legend).toHaveText(["NVDA revenue (TTM)", "MSFT revenue (TTM)", "net_income / revenue (TTM) (right axis)"]);
+  await expect(legend).toHaveText(["NVDA revenue (TTM)", "MSFT revenue (TTM)", "net income ÷ revenue (TTM) (right axis)"]);
   await expect(page.locator(".ch-foot").first()).toContainText("Source: SEC filings");
 
-  const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Export CSV" }).click()]);
+  // the bar's exports are one menu (Riley 101: three buttons wrapped the toolbar)
+  await page.getByRole("button", { name: "Export", exact: true }).click();
+  const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("menuitem", { name: "CSV, exact values" }).click()]);
   expect(download.suggestedFilename()).toBe("revenue-and-margin.csv");
   const csv = readFileSync((await download.path())!, "utf8").split("\r\n");
   expect(csv[0]).toBe(
     "period,NVDA revenue (TTM) (USD),NVDA revenue (TTM) sources,MSFT revenue (TTM) (USD),MSFT revenue (TTM) sources," +
-      "net_income / revenue (TTM) (ratio),net_income / revenue (TTM) sources",
+      "net income ÷ revenue (TTM) (ratio),net income ÷ revenue (TTM) sources",
   );
   expect(csv[1]).toMatch(/^CY2025 Q3,\d+,0001045810-26-000030,\d+,0000789019-26-000030,0\.\d+,/);
 
@@ -113,11 +115,14 @@ test("chart builder: formula autocomplete, annual frequency and deck output", as
   await page.getByRole("button", { name: "Annual" }).click();
   // the mock's one full calendar year, then the year in progress, marked (F5)
   await expect(page.locator(".lchart-svg .ch-axis text")).toHaveText(["CY2025", "CY2026 Q2*"]);
-  await page.getByLabel("Deck output").check();
+  await page.getByRole("button", { name: "Show" }).click();
+  await page.getByRole("menuitemcheckbox", { name: "Deck output" }).click();
+  await page.keyboard.press("Escape");
   await expect(page.locator(".lchart.deck")).toBeVisible();
   await expect(page.locator(".lchart-svg .ch-sub")).toHaveText(/^Calendar years, CY2025–CY2026 Q2\* · USD \(left\), % \(right\)$/);
   await expect(page.locator(".ch-foot").first()).toContainText("Source: SEC filings via Tributary; 10-Q for NVDA; latest NVDA 10-Q filed Jul 30, 2026; as of Oct 21, 2026.");
-  const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Export SVG" }).click()]);
+  await page.getByRole("button", { name: "Export", exact: true }).click();
+  const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("menuitem", { name: "SVG, for slides" }).click()]);
   const svg = readFileSync((await download.path())!, "utf8");
   expect(svg).toContain("Source: SEC filings via Tributary");
   expect(svg).toContain("Calendar years, CY2025–CY2026 Q2*");
@@ -166,7 +171,8 @@ test("save a chart to a new workspace and reopen it", async ({ page }) => {
   const fake = await mockApi(page);
   await startDemo(page);
   await page.goto("/#/chart");
-  await page.getByRole("button", { name: "Margins" }).click();
+  await page.getByRole("button", { name: /from a template/ }).click();
+  await page.getByRole("menuitem", { name: "Margins" }).click();
   await expect(page.locator(".ch-legend text")).not.toHaveCount(0);
 
   await page.getByRole("button", { name: "Save…" }).click();
@@ -175,14 +181,15 @@ test("save a chart to a new workspace and reopen it", async ({ page }) => {
   await form.getByLabel("Workspace", { exact: true }).selectOption({ label: "New workspace…" });
   await form.getByLabel("New workspace").fill("Beverages");
   await form.getByRole("button", { name: "Save" }).click();
-  await expect(page.locator(".savebar")).toContainText("Beverages / Margin check");
+  await expect(page.locator(".savebar")).toContainText("Chart in Beverages: Margin check");
   expect([...fake.items.values()].map((i) => i.name)).toEqual(["Margin check"]);
 
   // start over, then reopen it from the sidebar
   await page.getByRole("button", { name: "Close", exact: true }).click();
-  await page.getByRole("button", { name: "Leverage" }).click();
+  await page.getByRole("button", { name: /with a template/ }).click();
+  await page.getByRole("menuitem", { name: "Leverage" }).click();
   await expect(page.getByLabel("Chart title")).toHaveValue(""); // written from the layers
-  await expect(page.locator(".lchart-svg .ch-title").first()).toContainText("Debt to equity");
+  await expect(page.locator(".lchart-svg .ch-title").first()).toContainText("Debt / equity");
   await page.locator('button[title="Open in Chart builder: Margin check"]').click();
   await expect(page.locator(".lchart-svg .ch-title").first()).toContainText("Operating margin");
   await expect(page.locator(".savebar")).toContainText("Margin check");
@@ -278,6 +285,7 @@ test("reports: write one from a workspace, read it with its charts, download and
   await expect(page.getByRole("heading", { name: "Beverages" })).toBeVisible();
   await expect(page.locator(".page")).toContainText("counts as 3 assistant questions");
   await page.getByRole("button", { name: "Write a report" }).click();
+  await page.getByRole("button", { name: "Write it" }).click();
 
   await expect(page).toHaveURL(/#\/report\/r\d+$/);
   expect(fake.reports).toEqual([{ workspace_id: "w-bev" }]);
@@ -422,7 +430,8 @@ test("workspace actions: from the page, with a confirmation over the whole scree
   await mockApi(page);
   await startDemo(page);
   await page.goto("/#/chart");
-  await page.getByRole("button", { name: "Margins", exact: true }).click();
+  await page.getByRole("button", { name: /from a template/ }).click();
+  await page.getByRole("menuitem", { name: "Margins", exact: true }).click();
   await page.getByRole("button", { name: "Save…" }).click();
   const form = page.locator(".save-form");
   await form.getByLabel("Name").fill("Margin check");

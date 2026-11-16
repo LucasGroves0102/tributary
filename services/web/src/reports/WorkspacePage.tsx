@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { ApiError, failureReason, workspace as fetchWorkspace } from "../api";
 import { leftText, useAllowanceContext } from "../assistant/useAllowance";
 import { ErrorPanel, Skeleton } from "../components/States";
-import { ItemActions, WorkspaceActions } from "../workspaces/Actions";
+import { ConfirmDelete, ItemActions, WorkspaceActions } from "../workspaces/Actions";
 import { ago, day } from "../format";
 import { go, href } from "../route";
 import { useNewerFilings } from "../thesis/useRevisit";
@@ -39,6 +39,7 @@ export function WorkspacePage({ token, workspaceId, writer, onOpen, version, sav
   const { allowance } = useAllowanceContext();
   const [loaded, setLoaded] = useState<Loaded>({ state: "loading" });
   const [retry, setRetry] = useState(0);
+  const [asking, setAsking] = useState(false);
 
   useEffect(() => {
     let live = true;
@@ -89,18 +90,32 @@ export function WorkspacePage({ token, workspaceId, writer, onOpen, version, sav
           className="btn primary"
           disabled={busy || items.length === 0}
           title={items.length ? undefined : "Save a chart, comps table or screen here first"}
-          onClick={() => writer.start(workspaceId, null)}
+          onClick={() => setAsking(true)}
         >
-          ✦ Write a report
+          Write a report
         </button>
       </div>
+      {/* it spends questions, so it asks first and says how many (Riley 89: it started on the click) */}
+      {asking && (
+        <ConfirmDelete tone="primary" yes="Write it" text="Write a report from this workspace?"
+          detail={`It counts as ${REPORT_QUESTIONS} assistant questions${allowance ? ` (you have ${leftText(allowance)})` : ""} and takes a minute or two.`}
+          onNo={() => setAsking(false)}
+          onYes={() => {
+            setAsking(false);
+            writer.start(workspaceId, null);
+          }} />
+      )}
       <p className="muted small">
-        The assistant writes a research note from the saved items below: a summary, a section per
-        item with the chart or table drawn in place, and what changed in the latest filings where
-        your plan includes them. Every number is checked against the data and cited; anything it
-        can't verify is flagged. A report counts as {REPORT_QUESTIONS} assistant questions{allowance ? ` (you have ${leftText(allowance)})` : ""}
+        A report is a research note the assistant writes from the items below; it counts as {REPORT_QUESTIONS} assistant questions{allowance ? ` (you have ${leftText(allowance)})` : ""}
         {items.length > MAX_REPORT_ITEMS ? ` and covers the first ${MAX_REPORT_ITEMS} items` : ""}.
       </p>
+      <details className="how-to-read">
+        <summary>What a report holds</summary>
+        <p className="foot">
+          A summary, a section per item with the chart or table drawn in place, and what changed in the latest filings where
+          your plan includes them. Every number is checked against the data and cited; anything it can't verify is flagged.
+        </p>
+      </details>
       {ws.project && (
         <p className="report-status" role="note">
           This workspace is an analysis project: its guided steps, thesis and model open in the project.{" "}

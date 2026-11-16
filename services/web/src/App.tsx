@@ -1,4 +1,4 @@
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { ApiError, demoUsers, login, me as fetchMe, watchlistCsv } from "./api";
 import { useAlertsUnread } from "./alerts/useAlerts";
@@ -46,7 +46,7 @@ import {
   WorkspacePage,
 } from "./pages/lazy";
 import { readableCount, Welcome } from "./pages/Welcome";
-import { go, href, parse, useRoute } from "./route";
+import { go, href, pageOf, parse, useRoute } from "./route";
 import { resolveTicker } from "./palette/commands";
 import { useShortcuts } from "./shortcuts";
 import { inScope, ScopeContext, scopeOf } from "./scope";
@@ -70,12 +70,13 @@ import { columnSpecs, DEFAULT_SCREENER_COLUMNS, DEFAULT_WATCHLIST_COLUMNS } from
 import { useViews } from "./views/useViews";
 import { useMarketData } from "./market/useMarketData";
 import type { Me } from "./types";
-import { itemRoute, restoreChartState, type Current } from "./workspaces/model";
+import { currentFingerprint, itemRoute, restoreChartState, type Current } from "./workspaces/model";
 import { Recent } from "./workspaces/Recent";
 import { SaveBar } from "./workspaces/SaveBar";
 import { useSaved } from "./workspaces/useSaved";
 import { WorkspaceTree } from "./workspaces/WorkspaceTree";
 import { UndoDeletes } from "./workspaces/Actions";
+import { toast } from "./components/Toasts";
 
 const DRAWER_KEY = "tributary.assistant";
 
@@ -130,6 +131,17 @@ export function App(props: Props = {}) {
   // every navigation and on Escape
   const [navOpen, setNavOpen] = useState(false);
   useEffect(() => setNavOpen(false), [route]);
+  // a new page starts at its top (route.ts pageOf); a layout effect, so a page's own scroll to a passage
+  // (the reader's ?at=, its passive effect) still wins
+  const page = pageOf(route);
+  const firstPage = useRef(true);
+  useLayoutEffect(() => {
+    if (firstPage.current) {
+      firstPage.current = false;
+      return;
+    }
+    window.scrollTo(0, 0);
+  }, [page]);
   // the other screens' code, once signed in and idle (pages/lazy.ts)
   const signedIn = token !== null;
   useEffect(() => {
@@ -141,13 +153,23 @@ export function App(props: Props = {}) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [navOpen]);
-  const [theme, toggleTheme] = useTheme(user);
+  const [theme, toggleTheme, setTheme] = useTheme(user);
   const views = useViews(token, user);
   const [customizing, setCustomizing] = useState(false);
   const watchCols = useMemo(() => watchColumns(views.watchlistColumns, views.options), [views.watchlistColumns, views.options]);
   const screenCols = useMemo(() => columnSpecs(views.screenerColumns, views.options), [views.screenerColumns, views.options]);
   const workspace = useWorkspace(token, user, me?.companies.map((c) => c.company_id), watchCols, !!me && !me.catalog?.public);
   const saved = useSaved(token, user);
+  // Riley 21: a saved screen stayed bound to whatever screen came next, so Save would overwrite it with
+  // another. Arriving at the screener from another page with a different screen than the one open is a new
+  // screen, not an edit of it; changing filters on the page still is.
+  const lastView = useRef(route.view);
+  useEffect(() => {
+    const arrived = route.view === "companies" && lastView.current !== "companies";
+    lastView.current = route.view;
+    const open = saved.open.screen;
+    if (arrived && open && currentFingerprint({ kind: "screen", screen: route.screen ?? {} }) !== open.saved) saved.close("screen");
+  }, [route]);
   // "Connect your data": offered only when the server has it on (useMarketData's docstring)
   const market = useMarketData(token);
   // F6: the bell's count (null: no alerts on this server, so no bell)
@@ -219,6 +241,8 @@ export function App(props: Props = {}) {
   }, []);
 
   const signOut = useCallback((notice: string | null) => {
+    // the front door at the site's own address, not the page that was open (Riley 93: #/search?q=tariffs)
+    window.history.replaceState(null, "", window.location.pathname + window.location.search);
     clearSession();
     setSession(null);
     setUser(null);
@@ -494,8 +518,12 @@ export function App(props: Props = {}) {
     (): PaletteActions => ({
       go: (view) => go({ view }),
       company: (companyId) => go({ view: "company", companyId }),
+      // an add says so (Riley 69: "+ Add" gave no confirmation)
       watch: (companyId) => {
-        workspace.watch(companyId).catch(() => setError("Couldn't add that company. Try again."));
+        workspace.watch(companyId)
+          .then(() => toast({ text: `Added ${companyName(companyId) ?? "it"} to your watchlist.`, topic: `watch-${companyId}`,
+            action: { label: "Open it", onClick: () => go({ view: "company", companyId }) } }))
+          .catch(() => setError("Couldn't add that company. Try again."));
       },
       ask: (q) => {
         focusAssistant();
@@ -619,7 +647,8 @@ export function App(props: Props = {}) {
           connections={market?.enabled ?? false}
           sandboxResetsIn={session?.kind === "sandbox" ? resetsIn(session.expiresAt, clock) : null}
           workspaces={token ? <WorkspaceTree saved={saved} onOpen={openSaved} onError={setError} /> : null}
-          onSignOut={(session?.kind === "github" || session?.kind === "account") ? () => signOut(null) : undefined}
+          onSignOut={(session?.kind === "github" || session?.kind === "account" || session?.kind === "sandbox") ? () => signOut(null) : undefined}
+          signOutLabel={session?.kind === "sandbox" ? "End demo" : "Sign out"}
         />
         {navOpen && <div className="scrim" aria-hidden="true" onClick={() => setNavOpen(false)} />}
         <div className="main">
@@ -640,7 +669,8 @@ export function App(props: Props = {}) {
             assistantOpen={showDrawer}
             onUser={setUser}
             onSearch={() => setPalette("")}
-            onTheme={toggleTheme}
+            onTheme={setTheme}
+            onEndDemo={session?.kind === "sandbox" ? () => signOut(null) : undefined}
             onAssistant={() => (drawerOpen ? setDrawer(false) : focusAssistant())}
             alerts={alertCount}
           />

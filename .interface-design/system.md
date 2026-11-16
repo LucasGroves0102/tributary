@@ -31,15 +31,33 @@ seal on every figure taken from a filing. Professional before decorative: no arc
 | `--ink-2` | #4c4646 | #b9b0a6 | labels, supporting text |
 | `--ink-3` | #706965 | #958c83 | periods, notes, metadata (tuned from #78716d / #8f867d for AA on `--sheet-2`) |
 | `--rule` | #e6e0db | #2f2829 | row and section rules |
-| `--red` | #b3111e | #e05a63 | the one accent: actions, rubrics, red-letter days, links, focus |
+| `--red` | #b3111e | #e05a63 | the seal, margin rubrics, red-letter days, a "may have changed" mark (since 2026-11-15) |
 | `--red-ink` | #ffffff | #1a0d0f | text on red |
 | `--red-rule` | rgba(179,17,30,.36) | rgba(224,90,99,.42) | ledger column rules |
-| `--red-wash` | rgba(179,17,30,.05) | rgba(224,90,99,.07) | current column, hover on quiet buttons |
+| `--red-wash` | rgba(179,17,30,.05) | rgba(224,90,99,.07) | the current column only |
+| `--action` | #161314 | #ede6dc | the one primary button (filled), checkboxes; `--action-ink` #ffffff / #131011 on it |
+| `--link` | = `--ink` | = `--ink` | links, with a rule under them (`--link-rule`, the ink at 38%) |
+| `--error` | #b3111e | #e05a63 | an error or a figure that doesn't tie (`--neg` reads it); `--error-soft` its ground |
+| `--focus` | = `--ink` | = `--ink` | focus rings |
 | `--gold` | #a87b2c | #d2b06a | only on the seal |
 | `--up` | #1d6944 | #6cc495 | a rise, in prose and deltas |
 
 Rules: colour means something or it isn't used. Red is never "loss": negatives are in parentheses, as filings print
 them; a fall in prose is worded ("down 12%"). Gold appears only on the seal. No gradients except inside the seal.
+
+Decided 2026-11-15 (Riley's audit, pattern 4: red was the brand, the seal, primary buttons, links, 10-K marks, "may have
+changed" values, the bull case and errors at once): red goes back to the seal, the margin rubrics and red-letter days.
+Primary buttons are the ink filled, links the ink underlined, errors `--error` (the same red today, a separate token so it
+can move), hovers the recessed sheet (`--sheet-2`) instead of a red wash, a "may have changed" figure stays the ink with
+a red "*". Form marks are one family (`components/FormMark`): 10-K filled ink, 10-Q outlined, others a step quieter,
+expected dashed, each named on hover. To give actions the red back, point `--action` at `--red` in tokens.css's three
+blocks.
+
+Seals, decided 2026-11-15 (Riley 32: seals sat on gross margin and ROE while the legend said "taken from a filing"): a
+seal only on a figure the filing states as shown (a balance; a quarter's flow from its 10-Q; twelve months from the
+10-K's year). A ratio, a difference, four quarters added up or a fourth quarter worked out has no seal; its hover says
+what it is computed from (`company/data.ts` `howFiled`, `COMPUTED_FROM`). The lead sentence is sealed only when its
+twelve months are the annual report's year; otherwise its margin line says "Four quarters to ...".
 
 ## Type
 
@@ -63,12 +81,12 @@ them; a fall in prose is worded ("down 12%"). Gold appears only on the seal. No 
 
 ## Components
 
-- Buttons: square corners. Primary `--red` fill; secondary 1px `--ink` outline, transparent; press scale(.97) 120ms.
+- Buttons: square corners. Primary `--action` fill (the ink; red until 2026-11-15); secondary 1px `--ink` outline, transparent; press scale(.97) 120ms.
   One primary per view.
 - Tabs and nav: sans 14px, active = `--ink` + 2px `--red` inset underline.
 - Toggle group: 1px `--ink` border, active segment inverted (`--ink` bg).
 - Ledger (figures): two columns of label / value rows, each value after a 1px `--red-rule` left rule, right-aligned,
-  min-width 120px, a 14px seal after a filed figure; a figure a later filing may change is `--red` with `*`.
+  min-width 120px, a 14px seal after a filed figure; a figure a later filing may change keeps the ink with a red `*`.
 - Table: serif 15px, tabular; header row 2px `--ink` bottom rule; 1px `--red-rule` between columns; totals 650;
   the bottom line 700 with a 3px double `--ink` rule; derived figures italic `--ink-2`; current column `--red-wash`;
   negatives in parentheses.
@@ -125,3 +143,37 @@ Decisions taken while building, so later batches hold to them:
 - No middle dot as a separator anywhere in new copy: separate items (flex gap) or sentences.
 - Statement row labels stay on one line where the table has 900px or more (`@container tw`), and wrap below it.
 - Screener: column rules between figures only.
+
+## The human pass (Riley's audit, branch riley-fixes, 2026-11-15)
+
+Decisions taken while fixing test 6, so later work holds to them:
+
+- One control: every text field, select and date field is the same box (32px, square, the page's ground, 1px
+  `--rule-2`, sans 14; 30px and 13 in a dense card such as a chart layer). A select is styled, not the system's: its
+  chevron is two CSS gradients (no image: CSP). No Radix Select (it locks scroll). Labels over fields are sans 13,
+  `--ink-2`, weight 500, never bold.
+- One button scale: 32px, or 28px (`.sm`) inside a row, a card's head or a table. A page's bar never mixes them
+  (`.page-bar .btn.sm` is 32px). Styles: primary (ink fill, one per view), secondary (ink outline), ghost (text).
+- A page's bar stays on one row: secondary actions go in a menu (`components/MenuButton`, a non-modal Radix
+  DropdownMenu; options that stay on are checkbox items and the button counts how many are on). The chart builder:
+  New chart, Export (CSV, SVG, PNG), Save; Filing markers and Deck output under Show; templates one menu. A saved
+  item's name has its own line under the title ("Chart in Semis: NVDA revenue", then "Unsaved changes" with a
+  dot), never cut beside the buttons.
+- One toast system (`components/Toasts`): what just happened, at most one action (Undo, Restore), at the foot of
+  the window with the delete undo notes, never over the top bar; gone after 6 s (10 with an action), an error
+  stays until dismissed; a newer toast on the same subject replaces it. Banners that stay on the page are for a
+  state that lasts (a sandbox, an error the page can't work without), not for confirmations.
+- A chart's colour control is the colours (swatches as a radio group), never colour names. The series are
+  ordered so the first six read apart: ink, slate, umber, plum, teal, rose (then olive, warm grey); bull is teal,
+  bear umber. A dashed line means a forecast and nothing else.
+- A new page starts at its top (`route.ts` `pageOf`); a filter or sort keeps the place.
+- Explanations: one sentence in view, the rest behind a closed `details.how-to-read` ("How this works", "What alerts,
+  and what doesn't"); never a paragraph above a control. A sentence, not a dotted string ("A; B" or two sentences).
+- No codes where a name exists: metric labels written out (`chart/metrics.ts`), formulas in words in legends and titles, red
+  lines as sentences, section names instead of keys, the SIC code and accession numbers in hovers.
+- Wide tables give the numbers priority: a wordy column moves under the first one before a number is cut; a phone
+  watchlist is cards with labelled figures (CSS `attr(data-label)`, the cells' text unchanged); the model opens at the
+  forecast with its line and case frozen.
+- Long steps lead with contents and fold: the Numbers step lists its charts and shows two a row, a long What changed
+  paragraph opens at five lines.
+- Amounts: four significant figures at most, negatives in parentheses on every table.

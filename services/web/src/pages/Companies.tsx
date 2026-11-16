@@ -53,7 +53,9 @@ interface Props {
 
 type State =
   | { state: "loading" }
-  | { state: "ok"; data: Screener }
+  /** `updating`: these are the last screen's rows while the new one runs (Riley 44: they stayed under
+   * the new filter for seconds, unmarked) */
+  | { state: "ok"; data: Screener; updating?: boolean }
   | { state: "error"; message: string };
 
 /** Companies: the screener over /v1/screener. Filters live in the URL, so a screen can be
@@ -78,7 +80,7 @@ export function Companies({ token, screen: asked, watched, onWatch, onChart, sav
 
   useEffect(() => {
     let live = true;
-    setResult((r) => (r.state === "ok" ? r : { state: "loading" }));
+    setResult((r) => (r.state === "ok" ? { ...r, updating: true } : { state: "loading" }));
     screener(token, params)
       .then((data) => live && setResult({ state: "ok", data }))
       .catch(
@@ -181,7 +183,9 @@ export function Companies({ token, screen: asked, watched, onWatch, onChart, sav
             <Skeleton lines={8} label="Running the screen" />
           ) : (
             <>
+              {result.updating && <p className="screen-updating" role="status">Running the new screen; these are the last one's rows.</p>}
               <Table
+                updating={!!result.updating}
                 rows={rows}
                 columns={columns}
                 sort={screen.sort ?? DEFAULT_SORT}
@@ -358,15 +362,20 @@ function FilterRail({ screen, set, scoped, sectors }: {
               <option key={s.name} value={s.name}>{s.name} ({s.companies.toLocaleString()})</option>
             ))}
           </select>
-          {sectorOf && (
-            <select className="field" aria-label="Industry within the sector" value={screen.sector_industry ?? ""}
-              onChange={(e) => apply({ sector_industry: e.target.value || undefined })}>
-              <option value="">Any industry</option>
-              {sectorOf.industries.map((i) => (
-                <option key={i.name} value={i.name} title={`SIC ${i.sic.join(", ")}`}>{i.name} ({i.companies.toLocaleString()})</option>
-              ))}
-            </select>
-          )}
+        </div>
+      )}
+      {/* the sector's industries are a filter of their own, in the grid, not a second box under Sector that
+          pushed its row out of line (Riley 104) */}
+      {sectors && sectorOf && (
+        <div>
+          <label htmlFor="f-sector-ind">Industry in {sectorOf.name}</label>
+          <select id="f-sector-ind" className="field" aria-label="Industry within the sector" value={screen.sector_industry ?? ""}
+            onChange={(e) => apply({ sector_industry: e.target.value || undefined })}>
+            <option value="">Any</option>
+            {sectorOf.industries.map((i) => (
+              <option key={i.name} value={i.name} title={`SIC ${i.sic.join(", ")}`}>{i.name} ({i.companies.toLocaleString()})</option>
+            ))}
+          </select>
         </div>
       )}
       <div>
@@ -423,7 +432,7 @@ function FilterRail({ screen, set, scoped, sectors }: {
         <label className="chk">
           <input type="checkbox" checked={screen.mine ?? false}
             onChange={(e) => apply({ mine: e.target.checked || undefined })} />
-          Only companies I can read
+          Only companies in my plan
         </label>
       )}
       <button type="submit" className="visually-hidden">Apply</button>
@@ -433,6 +442,7 @@ function FilterRail({ screen, set, scoped, sectors }: {
 }
 
 function Table({
+  updating = false,
   rows,
   columns,
   sort,
@@ -442,6 +452,8 @@ function Table({
   onWatch,
   onChart,
 }: {
+  /** the last screen's rows while a new one runs: dimmed, marked busy */
+  updating?: boolean;
   rows: ReturnType<typeof screenRow>[];
   columns: ColumnSpec[];
   sort: string;
@@ -476,7 +488,7 @@ function Table({
     <>
       {error && <p className="empty error">{error}</p>}
       <TableScroll label="Screener results">
-        <table className="t screen ruled-n">
+        <table className={updating ? "t screen ruled-n updating" : "t screen ruled-n"} aria-busy={updating || undefined}>
           <thead>
             <tr>
               <th className="first sort" {...th("name", false)}>Company{arrow("name")}</th>

@@ -285,6 +285,11 @@ describe("quoting a filing", () => {
     expect(quoteLines({ ...release, text: many }).split("  \n")).toHaveLength(41);
   });
 
+  it("runs a sentence a line break cut on into the next line (Riley 94)", () => {
+    expect(paragraphs("Our depots receive large shipments from suppliers and quickly\n\nship these goods to warehouses. This process creates freight volume.\n\nOur warehouses are large."))
+      .toEqual(["Our depots receive large shipments from suppliers and quickly ship these goods to warehouses. This process creates freight volume.", "Our warehouses are large."]);
+  });
+
   it("splits section text into paragraphs, joining short headings to what follows", () => {
     expect(paragraphs("Item 1. Business\nOur Company\nNVIDIA pioneered accelerated computing to help solve hard problems.\n\n\nWe sell GPUs, systems and software to data centers.\n"))
       .toEqual([
@@ -316,7 +321,10 @@ describe("the Numbers step's charts", () => {
     // outflows below zero, as the cash flow statement prints them (F5)
     expect(sets.find((s) => s.key === "fcf")!.chart.layers.map((l) => l.metric ?? l.formula)).toEqual(["operating_cash_flow", "-capex", "free_cash_flow"]);
     expect(sets.find((s) => s.key === "returns")!.chart.layers.map((l) => l.metric ?? l.formula)).toEqual(["-share_buybacks", "-dividends_paid", "free_cash_flow"]);
-    expect(sets.find((s) => s.key === "backlog")!.chart.layers.map((l) => l.metric)).toEqual(["remaining_performance_obligations", "contract_liabilities_current", "revenue"]);
+    // the backlog against revenue is a ratio on its own axis (Riley 37), not revenue in dollars beside it
+    const backlog = sets.find((s) => s.key === "backlog")!.chart.layers;
+    expect(backlog.map((l) => l.metric ?? l.formula)).toEqual(["remaining_performance_obligations", "contract_liabilities_current", "remaining_performance_obligations / revenue"]);
+    expect(backlog[2]).toMatchObject({ axis: "R", display: "multiple" });
   });
 
   it("are chart builder states: they restore unchanged and ask the formula API for annual fiscal values", () => {

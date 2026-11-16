@@ -17,7 +17,15 @@ export interface NumbersChart {
   /** what to look for, under the chart */
   read: string;
   chart: ChartState;
+  /** its name in the step's contents */
+  short: string;
 }
+
+/** The contents' names, by key. */
+const SHORT: Record<NumbersChart["key"], string> = {
+  growth: "Growth", margins: "Margins", fcf: "Free cash flow", returns: "Buybacks and dividends", shares: "Shares",
+  inventory: "Inventory", receivables: "Receivables", backlog: "Backlog", debt: "Debt",
+};
 
 const annual = (title: string, layers: ChartState["layers"]): ChartState => ({
   title,
@@ -33,7 +41,7 @@ const outflow = (companyId: string, metric: string, layer: Omit<Layer, "kind" | 
   ({ ...layer, kind: "formula", formula: `-${metric}`, defaultCompany: companyId, transform: "ttm" });
 
 export function numbersCharts(companyId: string, ticker: string): NumbersChart[] {
-  return [
+  const sets: Omit<NumbersChart, "short">[] = [
     {
       key: "growth",
       read: "Is growth steady, accelerating or fading? One-off jumps usually mean an acquisition: check the 10-K.",
@@ -90,11 +98,13 @@ export function numbersCharts(companyId: string, ticker: string): NumbersChart[]
     },
     {
       key: "backlog",
-      read: "Remaining performance obligations are revenue under contract not yet recognised, the nearest tagged figure to a backlog; contract liabilities are customer advances. Rising faster than revenue means demand ahead of output. Not every company tags them; the backlog and orders the filings state in words are in the next card, from the filing's text.",
-      chart: annual(`${ticker}: backlog proxy and customer advances against revenue`, [
+      read: "Remaining performance obligations are revenue under contract not yet recognised, the nearest tagged figure to a backlog; contract liabilities are customer advances. The line is the backlog in years of revenue: rising means demand ahead of output. Not every company tags them; the backlog and orders the filings state in words are in the next card, from the filing's text.",
+      // revenue as a ratio on its own axis, not a line in dollars: beside a year's revenue the backlog bars read as zero
+      // (Riley 37: contract liabilities on a $400B axis)
+      chart: annual(`${ticker}: backlog proxy and customer advances, and backlog in years of revenue`, [
         { id: 1, kind: "metric", companyId, metric: "remaining_performance_obligations", transform: "q", type: "bar", axis: "L", name: "Remaining performance obligations", color: 0 },
         { id: 2, kind: "metric", companyId, metric: "contract_liabilities_current", transform: "q", type: "bar", axis: "L", name: "Contract liabilities (customer advances)", color: 4 },
-        { id: 3, kind: "metric", companyId, metric: "revenue", transform: "ttm", type: "line", axis: "L", name: "Revenue", color: 2 },
+        { id: 3, kind: "formula", formula: "remaining_performance_obligations / revenue", defaultCompany: companyId, transform: "ttm", type: "line", axis: "R", display: "multiple", name: "Backlog in years of revenue", color: 2 },
       ]),
     },
     {
@@ -107,4 +117,5 @@ export function numbersCharts(companyId: string, ticker: string): NumbersChart[]
       ]),
     },
   ];
+  return sets.map((s) => ({ ...s, short: SHORT[s.key] }));
 }

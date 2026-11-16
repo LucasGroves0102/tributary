@@ -24,6 +24,8 @@ export function Settings({ token }: { token: string }) {
     <div className="page settings-page">
       <h1>Settings</h1>
       <AlertSettingsSection token={token} />
+      {/* a server without data connections shows no section for them (Riley 90: "none available") */}
+      {market?.enabled !== false && (
       <section className="card" aria-label="Connections">
         <div className="card-h">
           <h2 className="grow">Connections</h2>
@@ -32,8 +34,6 @@ export function Settings({ token }: { token: string }) {
         <div className="card-b">
           {market === null ? (
             <Skeleton lines={3} label="Loading connections" />
-          ) : !market.enabled ? (
-            <p className="empty">No data connections are available on this server.</p>
           ) : (
             <>
               <p className="small muted">
@@ -50,6 +50,7 @@ export function Settings({ token }: { token: string }) {
           )}
         </div>
       </section>
+      )}
       <ApiKeysSection token={token} />
     </div>
   );

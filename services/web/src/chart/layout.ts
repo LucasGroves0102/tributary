@@ -14,7 +14,8 @@ import { pointAt, xAxis, type Series, type Tick } from "./series";
 
 export const WIDTH = 900;
 export const PLOT_H = 300;
-const PAD = { l: 64, r: 16, rAxis: 64, t: 10, b: 26 };
+// t: room above the top gridline for the axes' unit captions, clear of the top tick's label (Riley 99)
+const PAD = { l: 64, r: 16, rAxis: 64, t: 16, b: 26 };
 const LEGEND_LINE = 18;
 const CHAR_W = 6.6; // approximate width of a legend character at 11.5px
 const FOOT_CHAR_W = 5.3; // of a footnote character at 10.5px italic
@@ -28,7 +29,7 @@ const MARKER_BAND = 14;
 const TICK_CHAR_W = 6; // of an axis label at 10.5px
 const CAPTION_CHAR_W = 6.2; // of an axis caption at 10px semibold
 const LABEL_GAP = 10; // between period labels
-const MARKER_LETTER_W = 9;
+const MARKER_LETTER_W = 13; // letters this far apart, or the later one is only a stem (Riley 98: "K K 8 8" crowded)
 const MOST_BAR_W = 56;
 
 /** The viewBox for the width a chart really has, so its text is drawn at its real size and never
@@ -212,8 +213,9 @@ export interface LayoutOptions {
 
 const stacked = (t: Series["type"]) => t === "sbar" || t === "sarea";
 const barLike = (t: Series["type"]) => t === "bar" || t === "sbar";
-/** Right-axis lines are dashed; a series may ask for it itself (a forecast). */
-const dashedOf = (s: Series) => !barLike(s.type) && (s.dashed ?? s.axis === "R");
+/** A line is dashed only when its series asks (a model's forecast): dashes mean "not filed yet", so a
+ * right-axis line or a formula is solid and its legend says "(right axis)" (Riley 40). */
+const dashedOf = (s: Series) => !barLike(s.type) && !!s.dashed;
 
 /** Per series per tick, the span it covers: [0, v] alone, or its segment of the stack it
  * belongs to (same stacked type and axis; positives stack up, negatives down). */
@@ -325,7 +327,8 @@ export function layout(input: Series[], title: boolean, markers: Marker[] = [], 
 
   const W = opts.width ?? WIDTH;
   const narrow = W < NARROW;
-  const l = Math.max(narrow ? 48 : PAD.l, widestLabel(left) * TICK_CHAR_W + 10);
+  // no left axis (only right-axis layers): no empty left gutter, the plot starts near the edge (Riley 99)
+  const l = !left && hasRight ? (narrow ? 8 : PAD.r) : Math.max(narrow ? 48 : PAD.l, widestLabel(left) * TICK_CHAR_W + 10);
   const r = W - (hasRight ? Math.max(narrow ? 48 : PAD.rAxis, widestLabel(right) * TICK_CHAR_W + 10) : PAD.r);
   const lead = textLeft(W);
 
@@ -361,12 +364,17 @@ export function layout(input: Series[], title: boolean, markers: Marker[] = [], 
 
   const lines = (sc: Scale | null) => tickValues(sc).map((v) => ({ y: yOf(sc!, v), label: tickLabel(sc!, v) }));
 
-  // as many period labels as fit; the last always has its own, one running into it gives way
+  // as many period labels as fit, at a step a reader can count: quarters every 1, 2, 4, 8... (whole years
+  // once it's 4 or more), years every 1, 2, 5, 10 (Riley 100: every 7 quarters read FY2010 Q1, FY2011 Q4).
+  // Counted back from the last, which always has its own, so the labels share its quarter.
   const room = Math.max(0, ...ticks.map((tk) => tk.period.length)) * TICK_CHAR_W + LABEL_GAP;
   const spacing = n > 1 ? (xs[n - 1]! - xs[0]!) / (n - 1) : room;
-  const every = Math.max(1, Math.ceil(room / spacing));
+  const quarterly = ticks.some((tk) => / Q\d/.test(tk.period));
+  const want = Math.max(1, Math.ceil(room / spacing));
+  const steps = quarterly ? [1, 2, 4, 8, 12, 20, 40, 80] : [1, 2, 5, 10, 20, 50];
+  const every = steps.find((s) => s >= want) ?? want;
   const xLabels = ticks.flatMap((tk, i) =>
-    (i % every === 0 && xs[n - 1]! - xs[i]! >= room) || i === n - 1 ? [{ x: xs[i]!, label: tk.partial ? `${tk.period}*` : tk.period }] : [],
+    ((n - 1 - i) % every === 0) ? [{ x: xs[i]!, label: tk.partial ? `${tk.period}*` : tk.period }] : [],
   );
 
   // bar slots: one per plain bar layer, one per stacked-bar group (axis)

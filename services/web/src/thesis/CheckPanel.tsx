@@ -92,8 +92,9 @@ function Elapsed({ started, usual }: { started: number; usual: number | null }) 
 
 function historyLabel(c: ThesisCheckSummary): string {
   const n = c.counts;
-  return `${localTime(c.created_at, true)}: ${n.supported}✓ ${n.contradicted}✗ ${n.unverifiable}?` +
-    (n.model ? ` ${n.model} your model` : "");
+  // words, not "4✓ 0✗ 1?" (Riley 53)
+  return `${localTime(c.created_at, true)}: ${n.supported} supported, ${n.contradicted} contradicted, ${n.unverifiable} not found` +
+    (n.model ? `, ${n.model} your model` : "");
 }
 
 function CheckBody({ check, previous, onQuote, label }: {

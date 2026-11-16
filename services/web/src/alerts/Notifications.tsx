@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 
 import { alertNotifications, failureReason, markAlertsRead } from "../api";
 import { useDirectory } from "../companies/directory";
+import { FormMark } from "../components/FormMark";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { localDay, localTime } from "../format";
 import { href } from "../route";
@@ -60,7 +61,7 @@ export function NotificationList({ token, companyId, empty, limit = 50, onLoaded
       {list.map((n) => (
         <li key={n.id} className={n.read_at ? "alert-item" : "alert-item unread"}>
           <div className="alert-head">
-            <span className={`tag ${n.form === "8-K" ? "k" : "q"}`}>{n.form}</span>
+            <FormMark form={n.form} />
             {!companyId && (
               <a className="alert-co" href={href({ view: "company", companyId: n.company_id })}>{directory.label(n.company_id)}</a>
             )}
@@ -69,7 +70,7 @@ export function NotificationList({ token, companyId, empty, limit = 50, onLoaded
             {n.crossed > 0 && <span className="tag crossed">{n.crossed} red line{n.crossed === 1 ? "" : "s"} crossed</span>}
             <span className="grow" />
             <span className="faint small" title={`Noticed ${localTime(n.created_at, true)}`}>
-              {n.sources.map((s) => SOURCE_WORDS[s]).join(" · ")}
+              {n.sources.map((s) => SOURCE_WORDS[s]).join(" and ")}
             </span>
           </div>
           {n.form === "8-K" && n.items.length > 0 && (
@@ -96,7 +97,7 @@ export function NotificationList({ token, companyId, empty, limit = 50, onLoaded
                 const state = redLineState(r);
                 return (
                   <li key={r.rule_id} className={`redline ${state}`}>
-                    <b>{RED_LINE_WORDS[state]}</b> {r.label} <span className="faint">({ruleText(r)}; {inDisplay(r.value, r.display, r.unit)})</span>
+                    <b>{RED_LINE_WORDS[state]}</b> <span title={ruleText(r)}>{r.label || ruleText(r)}</span> <span className="faint">({inDisplay(r.value, r.display, r.unit)})</span>
                   </li>
                 );
               })}

@@ -3,6 +3,8 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 
 import { failureReason } from "../api";
+import { toast, ToastNotes, useToasts } from "../components/Toasts";
+import { go } from "../route";
 import type { SavedItem } from "../types";
 import { ITEM_NAME_MAX, nameProblem, WORKSPACE_NAME_MAX } from "./model";
 import { UNDO_MS, type Saved } from "./useSaved";
@@ -56,7 +58,7 @@ export function NameInput({
  *
  * Radix's own Overlay isn't used: it locks scrolling by injecting a <style> element, which the CSP
  * (style-src 'self', no inline styles) refuses. The backdrop here is ours, styled by class. */
-export function ConfirmDelete({ text, onYes, onNo, detail, yes = "Delete" }: {
+export function ConfirmDelete({ text, onYes, onNo, detail, yes = "Delete", tone = "danger" }: {
   text: string;
   onYes: () => void;
   onNo: () => void;
@@ -64,6 +66,8 @@ export function ConfirmDelete({ text, onYes, onNo, detail, yes = "Delete" }: {
   detail?: string;
   /** the destructive button's word */
   yes?: string;
+  /** "primary" for a question that isn't a loss (Write a report: it costs questions) */
+  tone?: "danger" | "primary";
 }) {
   // where it was asked from: focus goes back there (there's no Radix Trigger to return to)
   const before = useRef(document.activeElement as HTMLElement | null);
@@ -83,7 +87,7 @@ export function ConfirmDelete({ text, onYes, onNo, detail, yes = "Delete" }: {
             <AlertDialog.Description className="faint small">{detail ?? `You can undo it for ${UNDO_MS / 1000} seconds.`}</AlertDialog.Description>
             <div className="row">
               <span className="grow" />
-              <AlertDialog.Action className="btn danger" onClick={onYes}>
+              <AlertDialog.Action className={`btn ${tone}`} onClick={onYes}>
                 {yes}
               </AlertDialog.Action>
               <AlertDialog.Cancel className="btn">Keep</AlertDialog.Cancel>
@@ -95,26 +99,30 @@ export function ConfirmDelete({ text, onYes, onNo, detail, yes = "Delete" }: {
   );
 }
 
-/** Deletes waiting out their undo window (#158), and one that failed once sent: a strip at the foot
- * of the window, on document.body like ConfirmDelete, so it stays while the page changes (a deleted
- * workspace's own page closes at once). */
-export function UndoDeletes({ saved }: { saved: Pick<Saved, "pendingDeletes" | "undoDelete" | "deleteFailure" | "dismissDeleteFailure"> }) {
-  const { pendingDeletes, deleteFailure } = saved;
-  if (!pendingDeletes.length && !deleteFailure) return null;
+/** Deletes waiting out their undo window (#158), one that failed once sent, and the app's toasts
+ * (components/Toasts): one strip at the foot of the window, on document.body like ConfirmDelete, so it
+ * stays while the page changes (a deleted workspace's own page closes at once) and never covers the
+ * top bar. */
+export function UndoDeletes({ saved }: { saved: Pick<Saved, "pendingDeletes" | "undoDelete" | "deleteFailure" | "dismissDeleteFailure"> | null }) {
+  const toasts = useToasts();
+  const pendingDeletes = saved?.pendingDeletes ?? [];
+  const deleteFailure = saved?.deleteFailure ?? null;
+  if (!pendingDeletes.length && !deleteFailure && !toasts.length) return null;
   return createPortal(
     <div className="undo-stack">
       {pendingDeletes.map((p) => (
         <p key={p.id} className="undo-note" role="status">
           <span>Deleted {p.what}.</span>
-          <button className="btn sm" onClick={() => saved.undoDelete(p.id)} aria-label={`Undo deleting ${p.what}`}>Undo</button>
+          <button className="btn sm" onClick={() => saved?.undoDelete(p.id)} aria-label={`Undo deleting ${p.what}`}>Undo</button>
         </p>
       ))}
       {deleteFailure && (
         <p className="undo-note failed" role="alert">
           <span>{deleteFailure}</span>
-          <button className="btn sm ghost" onClick={saved.dismissDeleteFailure}>Dismiss</button>
+          <button className="btn sm ghost" onClick={() => saved?.dismissDeleteFailure()}>Dismiss</button>
         </p>
       )}
+      <ToastNotes />
     </div>,
     document.body,
   );
@@ -163,8 +171,12 @@ export function WorkspaceActions({
       ) : (
         <button className="btn sm ghost" onClick={() => setMode("rename")}>Rename</button>
       )}
+      {/* the copy opens, and says so (Riley 88: it stayed out of sight below the sidebar's fold) */}
       <button className="btn sm ghost"
-        onClick={() => run(`duplicate the ${what}`, saved.duplicateWorkspace(id), () => setNote(`Copied: “${workspace.name} (copy)” is in the sidebar.`))}>
+        onClick={() => run(`duplicate the ${what}`, saved.duplicateWorkspace(id).then((copy) => {
+          if (copy) go(what === "analysis" ? { view: "analysis", projectId: copy } : { view: "workspace", workspaceId: copy });
+          toast({ text: `This is the copy, “${workspace.name} (copy)”; the original is unchanged.`, topic: "duplicate" });
+        }))}>
         Duplicate
       </button>
       <button className="btn sm ghost" onClick={() => setMode("delete")}>Delete</button>

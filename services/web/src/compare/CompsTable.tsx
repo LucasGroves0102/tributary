@@ -5,6 +5,7 @@ import { NOT_APPLICABLE, NOT_REPORTED } from "../blanks";
 import { FigureText } from "../components/FigureText";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { TableScroll } from "../components/TableScroll";
+import { day } from "../format";
 import { href } from "../route";
 import type { Screener } from "../types";
 import {
@@ -71,7 +72,7 @@ export function CompsTable({ token, compare, label }: {
           <thead>
             <tr>
               <th className="first">Company</th>
-              <th>Latest quarter</th>
+              <th>Quarter ended</th>
               {cols.map((k) => {
                 const c = COMPARE_COLUMNS.find((x) => x.key === k)!;
                 return (
@@ -93,7 +94,7 @@ export function CompsTable({ token, compare, label }: {
                     {!r.readable && <span className="tag" title={MASKED_TITLE}>metadata only</span>}
                   </a>
                 </td>
-                <td className="muted">{r.latest ? short(r.latest.calendar) : "—"}</td>
+                <td className="muted" title={r.latest ? short(r.latest.calendar) : undefined}>{r.latest ? day(r.latest.periodEnd, true) : "—"}</td>
                 {cols.map((k) => {
                   const cell = r.cells[k]!;
                   return (

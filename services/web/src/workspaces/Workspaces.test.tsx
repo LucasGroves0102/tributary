@@ -220,7 +220,7 @@ it("lists workspaces as sidebar folders and opens an item with its state", async
   expect(calls("POST").map(([u]) => u)).toContain("/api/query/v1/workspace-items/i1/open");
   expect(window.location.hash).toBe("#/chart");
   expect($("h1")?.textContent).toBe("Chart builder");
-  expect($(".savebar .saved-as")?.textContent).toBe("Semis / NVDA revenue · saved");
+  expect($(".savebar .saved-as")?.textContent).toBe("Chart in Semis: NVDA revenue Saved");
   // the comps open on Compare with their target and peers in the URL
   await click(sidebarItem("NVDA comps"));
   expect(window.location.hash).toBe(`#/compare?target=${NVDA}&peers=${AAPL}`);
@@ -235,7 +235,7 @@ it("marks unsaved changes and saves over the open item", async () => {
     select.dispatchEvent(new Event("change", { bubbles: true }));
   });
   await settle();
-  expect($(".savebar .dirty")?.textContent).toContain("unsaved changes");
+  expect($(".savebar .dirty")?.textContent).toContain("Unsaved changes");
   await click(buttons("Save")[0]!);
   const [url, body] = calls("PUT").at(-1)!;
   expect(url).toBe("/api/query/v1/workspace-items/i1");
@@ -263,7 +263,7 @@ it("saves comps into a new workspace with Save as", async () => {
   expect(posts).toContainEqual(["/api/query/v1/workspaces", { name: "Chips" }]);
   const item = posts.find(([u]) => String(u).endsWith("/items"))!;
   expect(item[1]).toEqual({ kind: "comps", name: "Chips comps", state: { target: NVDA, peers: [AAPL] } });
-  expect($(".savebar .saved-as")?.textContent).toBe("Chips / Chips comps · saved");
+  expect($(".savebar .saved-as")?.textContent).toBe("Comps in Chips: Chips comps Saved");
   expect($(".side")?.textContent).toContain("Chips comps");
 });
 
@@ -370,7 +370,7 @@ it("#158: a deleted workspace comes back with Undo, and nothing is sent", async 
 it("#20: a page stops editing an item whose workspace is being deleted, and Undo gives it back", async () => {
   await render("#/");
   await click(sidebarItem("NVDA comps"));
-  expect($(".savebar .saved-as")?.textContent).toContain("Semis / NVDA comps");
+  expect($(".savebar .saved-as")?.textContent).toContain("Semis: NVDA comps");
   expect(buttons("Save")).toHaveLength(1);
   await click(buttons(/Actions for workspace Semis/)[0]!);
   await click(buttons(/Delete workspace Semis/)[0]!);
@@ -381,7 +381,7 @@ it("#20: a page stops editing an item whose workspace is being deleted, and Undo
   expect(buttons("Save…")).toHaveLength(1);
   expect(window.location.hash).toBe(`#/compare?target=${NVDA}&peers=${AAPL}`);
   await click(document.querySelector<HTMLButtonElement>(".undo-stack .undo-note button")!);
-  expect($(".savebar .saved-as")?.textContent).toContain("Semis / NVDA comps");
+  expect($(".savebar .saved-as")?.textContent).toContain("Semis: NVDA comps");
   expect(calls("DELETE")).toEqual([]);
 });
 

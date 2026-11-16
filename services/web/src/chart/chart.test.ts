@@ -91,7 +91,7 @@ describe("chart state", () => {
     expect(layerName(metric({ transform: "ttm", metric: "operating_margin" }), short, metricLabel)).toBe(
       "NVDA operating margin (TTM)",
     );
-    expect(layerName({ ...metric(), kind: "formula", formula: "a / b", transform: "yoy" }, short, metricLabel)).toBe("a / b YoY");
+    expect(layerName({ ...metric(), kind: "formula", formula: "a / b", transform: "yoy" }, short, metricLabel)).toBe("a ÷ b YoY");
   });
 
   it("builds a company's revenue and margin chart, and templates across its companies", () => {
@@ -136,7 +136,7 @@ describe("series", () => {
     // Alibaba's yuan revenue charted as "$996B" before: the API now says CNY
     const yuan = toSeries(series([[8100, "CY2025 Q1", "996347000000"]], { currency: "CNY" }), metric(), "BABA revenue", 0);
     expect(yuan.unit).toBe("CNY");
-    expect(formatValue(996347000000, yuan.unit)).toBe("CN¥996.35B");
+    expect(formatValue(996347000000, yuan.unit)).toBe("CN¥996.3B");
     expect(formatValue(996e9, yuan.unit, true)).toBe("CN¥996B");
     expect(unitLabel(yuan.unit)).toBe("CNY");
     const eps = toSeries(series([[8100, "CY2025 Q1", "1.22"]], { unit: "USD/shares", currency: "EUR" }), metric(), "EPS", 0);
@@ -211,7 +211,8 @@ describe("layout", () => {
     expect(lay.right?.unit).toBe("ratio");
     expect(lay.drawn[0]!.bars).toHaveLength(3);
     expect(lay.drawn[1]!.path).toMatch(/^M[\d.]+,[\d.]+L[\d.]+,[\d.]+$/);
-    expect(lay.drawn[1]!.dashed).toBe(true);
+    // solid: dashes mean a forecast (Riley 40); the legend names the side
+    expect(lay.drawn[1]!.dashed).toBe(false);
     expect(lay.legend.map((l) => l.name)).toEqual(["rev", "om (right axis)"]);
     expect(lay.rightLabels.at(-1)?.label).toBe("20%");
     expect(nearest(lay, lay.x[2]! + 3)).toBe(2);

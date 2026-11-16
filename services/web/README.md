@@ -32,8 +32,13 @@ every figure taken from a filing; gold appears only on the seal. Tokens (both pa
 spacing, square corners, motion) are in `src/tokens.css`, with the older names (`--panel`, `--text`,
 `--accent`...) read from Seal's so screens not yet redrawn keep working; `src/seal.css` holds Seal's
 own components and `src/styles.css` the rest. Red is never "a loss": a fall keeps its minus sign in
-the ink (`.neg`), a rise is green, and red means act here, a rubric, or a figure a later filing may
-change. Fonts are Source Serif 4 (names, sentences, figures; lining, tabular numerals) and Archivo
+the ink (`.neg`), a rise is green. Since Riley's audit (2026-11-15) red belongs to the seal, the margin
+rubrics, red-letter days and a "may have changed" mark only: the one primary button is the ink filled
+(`--action`, inverted in dark), a link is the ink with a rule under it (`--link`; links that are
+controls, nav or a table's figures carry no rule), an error has its own `--error`, checkboxes and focus
+are the ink, hovers are the recessed sheet rather than a red wash. Pointing `--action` at the red in
+`tokens.css` gives actions the red back in one place. Forms are marked by `components/FormMark` (10-K
+filled ink, 10-Q outlined, the rest quieter, expected dashed; the hover names the form). Fonts are Source Serif 4 (names, sentences, figures; lining, tabular numerals) and Archivo
 (controls, navigation, meta), both OFL and self-hosted: pinned `@fontsource-variable` packages
 imported in `main.tsx`, bundled into `/assets` by the build, because the CSP allows fonts only from
 this origin. No monospace for data, no all-caps labels.
@@ -49,9 +54,49 @@ Radix Primitives (pinned exact versions), styled only with the tokens: the compa
 tooltip, and the confirm dialog (`workspaces/Actions.tsx` `ConfirmDelete`, a Radix alert dialog). Radix
 places popovers through the CSSOM, which the CSP allows; Radix's dialog Overlay isn't used, because
 its scroll lock injects a `<style>` element the CSP refuses (the dialog draws its own backdrop).
-Money negatives read in parentheses in statements, ledgers, the recap and the screener (`format.ts`
+Money negatives read in parentheses on every table (statements, ledgers, the recap, the screener, and since
+Riley's audit the watchlist, Peers, Compare and the model through `components/FigureText`; `format.ts`
 `paren`: display only; the CSV and the hover keep the sign, and F5's `outflow` stays the one place a
-sign is decided); percentages and multiples keep their minus sign.
+sign is decided); percentages and multiples keep their minus sign. An amount has four significant figures at
+most: two decimals below 100 in its scale, one from 100 ("$46.74B", "$227.0M", never "$227.00M"); a row
+takes its largest value's decimals, and a value that would round to nothing keeps its own scale. Compare's
+comps say the quarter's end date ("Jul 26, 2026": two companies a quarter apart read apart), the calendar
+and fiscal labels in the hover; a target with no peers starts with the five suggested ones; Make target
+and Remove are buttons, a removal a toast with Undo; the side-by-side charts open indexed when the
+companies are over 100 times apart in size.
+
+The human pass (Riley's audit, test 6, branch `riley-fixes`): every select and date field is one styled
+control, buttons one scale, a page's bar one row (secondary actions in a `components/MenuButton` menu),
+confirmations toasts (`components/Toasts`, at the foot of the window with the delete undo notes), a new page
+opens at its top. The screener fades the last screen's rows with a line saying a new one is running, moves
+the industry under the company's name below 1240px of table (the SIC code is a hover-only filter link), gives
+a sector's industries their own filter cell, and saves a screen under a short name into a folder of screens
+(else a new "Screens"); arriving from another page with a different screen than the one open closes the open
+one. Home's feed starts with the watchlist's filings (All in your plan a toggle), its watchlist has one Last
+filing column with the period under the date, sortable headers, cards with labelled figures on a phone, and a
+toast to undo a removal; the status strip's figures never wrap. The top bar's Theme is a menu of the three
+(Light, Dark, System), a demo sandbox has End demo (top bar and the phone's menu), and signing out lands on
+the site's own address; with the assistant open the bar drops who is signed in before the breadcrumb's
+words. Settings shows only what the server has (no Connections or Email section to say they're off), its
+alerts' rules behind a disclosure. A workspace's Duplicate opens the copy, Write a report asks first and says
+what it costs, renaming hides the heading it replaces, and an analysis project is tagged "Analysis".
+The company page names the extra listings ("and 8 other share classes or notes", tickers on hover) and keeps
+the SIC code in the industry's hover; each ratio's label says how it is worked out (ROE: twelve months' net
+income over the average of equity now and a year earlier); a gross margin blank says why (no gross profit or
+cost of revenue, or a warehouse club, variety store or telecom, 039's rule in words); the Fiscal / Calendar
+switch says it only renames the columns for one company; on a phone the statement's switches are one
+scrolling row. The Filings tab's Insider filter shows the transactions table in place of the index (not two
+lists of the same Form 4s), dates have Clear, and insiders read given name first ("Jen Hsun Huang",
+`insiders.ts` `personName`; the filing's form in the hover). The front door has one left edge, a 1px rule,
+an odd last figure across the row, and figures in a reader's words; Data status says what a finding means
+for what you see before how the checks work, and its cards keep their own height; What Tributary covers
+stacks its three lists with their items side by side; the Ask page is wider with prose at a readable
+measure, a cited filing a quiet mark rather than red monospace, and no pill repeating the title. The reader's
+outline shows the item's number under its Part ("1A", not "II-1A") and no character counts (the size is
+the hover), and its sticky section heading has a rule under it; Search says first when only recent filings
+were searched, names sections ("Risk Factors") instead of their keys, offers Open the filing instead of the
+accession number, and never doubles a phrase's quotes; Peers' shared terms appear once each, three at most;
+Business paragraphs rejoin a sentence a line break cut.
 
 Seal pages so far (the first batch): the front door (the seal and name, a headline, the way in under
 it; on the right, ruled off in ink, the live figures from `/v1/status/data` and what's in it), Data
@@ -64,10 +109,16 @@ covers), the next expected filing only when the API has one, two actions in the 
 analysis, the one primary, and Watch) with Chart, Compare, Ask, New thesis and New model under More,
 and the tabs. The Overview: **The year**, the twelve months as a sentence
 (revenue, its growth, net income and net cash or net debt, `data.ts` `yearStory`: API values only,
-and a figure from another period is left out rather than mixed in), sealed to its filing; **Figures**,
-the key figures as a ledger (amounts, then rates), each sealed, with Cash and short-term investments
-(what net debt subtracts) beside Cash and a negative net debt read as "Net cash" (the exact figure in
-the seal's source); **Since the last report** (red-letter days, below); **Latest quarter**, the recap
+and a figure from another period is left out rather than mixed in), sealed to its filing only when its
+twelve months are the 10-K's year (from a 10-Q they are four quarters added up, and the margin says
+"Four quarters to ..."); **Figures**, the key figures as a ledger (amounts, then rates), with Cash and
+short-term investments (what net debt subtracts) beside Cash and a negative net debt read as "Net cash"
+(the exact figure in its hover). A seal says "taken from the filing", so only a figure the filing
+states carries one (`data.ts` `howFiled`: a balance, a quarter from its 10-Q, the year from the 10-K);
+a ratio, a difference (net debt, free cash flow), four quarters added up or a fourth quarter worked out
+from the year has no seal, and its hover says what it is worked out from (`COMPUTED_FROM`, the API's
+definitions in words; ROE is twelve months' net income over the average of equity now and a year
+earlier). A balance a later 8-K may have changed keeps its figure in the ink with a red "*"; **Since the last report** (red-letter days, below); **Latest quarter**, the recap
 set as a statement (a change from a zero or negative base reads n/m with the API's
 `pct_not_meaningful` in its hover); **Business**; **Revenue and operating margin**; **Backlog and orders**. A
 foreign private issuer (`company/data.ts` `foreignReport`: its figures come from 20-F, 40-F or 6-K
@@ -275,7 +326,7 @@ docstring; the Query API's `/earnings` and `/events`, rules in its README, "Earn
   of Jul 26, 2026; the Aug 17, 2026 8-K (Material agreement) may have changed them.", `events.ts`
   `staleLine`) with the no-pro-forma explanation in its hover. The same flags sit on the Overview's
   ledger (Cash, Net debt, Debt / equity; every figure for non-reliance or bankruptcy) when the
-  figure is as of that period end or earlier: the figure in red with "*", and a note under the
+  figure is as of that period end or earlier: the figure in the ink with a red "*", and a note under the
   ledger "* At Sep 30, 2026, before the Oct 27, 2026 8-K (Acquisition or disposition) and 1 more 8-K,
   which may have changed it" (the seal's source names each event), the figure itself unchanged. The Overview asks `/events` once for both. An event the API flags from its 7.01 / 8.01
   announcement (F1b, `announced`) says so under its head: "⚑ A completed acquisition or
@@ -632,10 +683,13 @@ on the folder changed last. Never just the first workspace.
   and bear, base and bull side by side: history years, the TTM (when it isn't a fiscal year end)
   and the current year's reported quarters once per line, then a row per case for the forecast
   years, the case being edited marked. A split or merger year (the API's `share_break`) shows no
-  share change or EPS growth, and per-share figures before it are marked * with why. The chart
-  draws revenue and operating income, history solid, each case dashed (bear and bull lighter,
+  share change or EPS growth, and per-share figures before it are marked * with why. Two charts side
+  by side, revenue and operating income, each on its own scale (a 4% margin's operating income read as
+  zero on a revenue axis, Riley 36), history solid as "Reported", each case dashed (bear and bull lighter,
   `faint`, and each in its own colour, `CASE_COLORS`: umber and deep teal, the table's case labels
-  in the same two). **Bear / base / bull**: a switch picks the case being edited; "Add bear and bull cases"
+  in the same two). The table opens scrolled to the forecast, the line's name and its case frozen while the
+  years scroll. The page's longer explanations (how the model works, one-offs, how the multiples are worked
+  out) are one sentence each with the rest behind a closed "How this works". **Bear / base / bull**: a switch picks the case being edited; "Add bear and bull cases"
   copies the run's preview of them (the base case moved by half its growth, at least 5 points, and
   a fifth of its margin, at least 3; the rates the user set; a case's default FCF margin follows its
   own operating margin, the API's rule worded in the case's rules line), and waits for the run of the latest
@@ -686,8 +740,9 @@ per company, from its filings to a thesis that's checked after every filing. Rul
   `access=financials` on the API too), suggested peers from `/peers` (readable ones, the first
   3 ticked), a name; it creates the workspace with its project and opens step 1.
 - **A project** (`#/analysis/{id}[/{step}[/{item}]]`, `ProjectPage.tsx`): a header with the
-  company (public identity), "n of 8 steps done" and tabs for the 8 steps under the rail's names
-  (each tab opens its own step); a rail of the 8 steps with a done marker each. Done means the
+  company (public identity) and "n of 8 steps marked done"; the rail of the 8 steps is the one
+  navigation (the header's tabs repeated it, Riley 51), with a done marker each and the thesis's
+  unsaved dot. A pin's confirmation is a toast ("Open the thesis" its action), cleared when the step changes. Done means the
   user ticked it (`project.done`), never automatic and never locked: work in a step (notes, a
   saved chart, peers, a model, the Core thesis written in the user's own words, a check: `hasWork`;
   a pinned passage or an embed alone isn't writing, #30, `project.ts` `ownLines`) shows as a hint under
@@ -701,15 +756,17 @@ per company, from its filings to a thesis that's checked after every filing. Rul
   company page's Segments tables; 2 **Numbers**: nine chart builder states (`charts.ts`: revenue
   and YoY growth, gross and operating margin, free cash flow = operating cash flow − capex,
   buybacks and dividends against free cash flow, shares outstanding, inventory with days of
-  inventory, remaining performance obligations and customer advances against revenue, ten fiscal
-  years annually then the year in progress; the Revenue tab's receivables vs revenue; long-term debt
-  with debt to equity), each drawn by `ChartView`, with Open in Chart builder, Save to project and Add
-  to thesis. Outflows are drawn below zero (`-capex` formula layers). After the backlog proxy, the
+  inventory, remaining performance obligations and customer advances with the backlog in years of
+  revenue on its own axis, ten fiscal years annually then the year in progress; the Revenue tab's
+  receivables vs revenue; long-term debt with debt to equity), each drawn by `ChartView`, with Open in
+  Chart builder, Save to project and Add to thesis; a contents row first and two charts a row where
+  there's room. Outflows are drawn below zero (`-capex` formula layers). After the backlog proxy, the
   backlog and orders the filings state in words (F8b, below); 3 **Earnings**: the company page's Earnings view (below), every outlook block, note and
   reconciliation pinnable; 4 **What changed**: "Since the last report" (the 8-Ks filed after the
   latest 10-Q/10-K period end, each excerpt pinnable, the balances they may have changed flagged),
   then the filing page's `Changes` for the latest 10-Q and 10-K (a 10-Q against a year earlier,
-  ranked, filters; each pin names the passage's period);
+  ranked, filters; each pin names the passage's period; a change over 520 characters opens at five
+  lines with "Show the whole paragraph");
   5 **Peers**: Compare with the target fixed and the peers saved in the project (`embedded`:
   changes come back instead of going to the URL), Save to project / Add to thesis for the comps;
   6 **Model**: the project's models (ModelPage embedded, bear/base/bull side by side), "Create
@@ -805,8 +862,9 @@ Chart builder (`src/chart/`): a "Chart a company" box next to the title searches
 chart can read (by name or ticker) and adds the picked one's revenue (TTM) as a new line layer.
 Each layer card starts with a labelled Company row (full width) and its header shows the
 ticker. Names and tickers of companies on the chart come from the pick, or are asked once by id.
-Tickers in a formula's suggestions come from the same search. Layers can be renamed (legend), recoloured (colours stay with a
-layer when it moves), moved up or down, hidden; types line, bar, area, stacked bar and stacked
+Tickers in a formula's suggestions come from the same search. Layers can be renamed (legend), recoloured (the colour
+control is the eight series colours themselves, a radio group drawn with the classes the lines use, so it can't say
+"Blue" and draw grey as the old named select did; colours stay with a layer when it moves), moved up or down, hidden; types line, bar, area, stacked bar and stacked
 area (layers of the same stacked type and axis stack, negatives downward); transforms quarterly,
 TTM, YoY, QoQ, indexed and per share (`ttm(f) / weighted_shares_diluted` in the quarter view,
 offered only when the catalog has the share count); ranges 1y/3y/5y/10y/max or a custom first and last period end; quarterly or annual frequency
@@ -817,7 +875,14 @@ balances as the year-end value, ratios full-year; QoQ becomes YoY; the Transform
 controls below (`chart/autocomplete.ts`; Tab completes, arrows then Enter pick). The API checks them as
 you type: the chart takes a formula as soon as it's valid (the check's 350 ms is the debounce), or on
 Enter or blur whatever it is; every bad name shows at once, with "did you mean" when there is a close
-one. Deck output draws the chart in the light palette (Seal's light tokens: the ink first, never the red;
+one, and while its text doesn't check the layer is off the chart, its title and its legend (the old formula's
+line used to stay under the new one's error). A formula reads in words in legends and titles ("inventory ÷
+cost of revenue × 365", "COST revenue ÷ WMT revenue", `formulaWords`); the card and the CSV keep what was
+typed. The page's bar stays on one row: New chart, Export (CSV, SVG, PNG: one menu), Save; Filing markers and
+Deck output are under Show (a count on the button says how many are on), the templates one menu (Start from /
+Replace with a template). What happened (a new chart, a template over your layers, a PNG that failed) is a
+toast at the foot of the window (`components/Toasts`), with Restore where it applies; Restore also stays in the
+bar while a replaced draft can come back. Deck output draws the chart in the light palette (Seal's light tokens: the ink first, never the red;
 `chart/export.ts` mirrors them) with a subtitle (periods and units,
 editable), axis unit captions and a source footnote ("Source: SEC filings via Tributary; forms
 for companies; latest filing; as of"), which SVG and PNG exports keep. Evaluate answers are kept
@@ -826,7 +891,8 @@ asks the API nothing. Clicking a point
 (or Enter on it; arrows move between quarters and layers) opens its newest source filing in the
 reader. Filing markers put each company's 10-Ks and 10-Qs (public index) and 8-K results (item
 2.02, from parsed filings) in a band of their own under the plot, their letters only where they fit
-(10-Ks first; the rest stay as stems, their hover names them), and on a chart of years only the 10-Ks.
+(10-Ks first, at least 13 units apart; the rest stay as stems, their hover names them), each company's in its
+line's colour (the footnote's key says so when there are several), and on a chart of years only the 10-Ks.
 The companies marked are the ones the layers read: a formula's are those its answer read, so
 `MSFT.capex / MSFT.revenue` marks Microsoft's filings whatever its default company (analyst test 4: it
 marked nothing).
@@ -835,8 +901,9 @@ marked nothing).
 How charts tell the truth, in every chart that draws through `chart/LayerChart.tsx` (the builder,
 Overview, Revenue, Analysis Numbers, Compare, thesis and report embeds), SVG, PNG and CSV included:
 
-- **Titles** come from the layers (`chart/model.ts` `autoTitle`: "AMZN: revenue (TTM) and net_income /
-  revenue (TTM)", "Operating margin (TTM): KO and PEP", ", annual" when it is), naming what is drawn,
+- **Titles** come from the layers (`chart/model.ts` `autoTitle`: "AMZN: revenue (TTM) and net income ÷
+  revenue (TTM)", "Operating margin (TTM): KO and PEP", ", annual" when it is; a quarter's figure beside a
+  TTM one is "(quarterly)", or "revenue and operating margin (TTM)" read as both TTM), naming what is drawn,
   until the user types one; then the builder says "Custom title" and offers the automatic one back.
   `ChartState.title` holds only what was typed, so a chart saved before this keeps its stored title as
   a custom one. Templates and the Chart buttons leave it empty.
@@ -846,8 +913,8 @@ Overview, Revenue, Analysis Numbers, Compare, thesis and report embeds), SVG, PN
   in another unit it moves to the other, and with both taken it isn't drawn (the card and the chart's
   footnote say so, and its values stay in the tooltip, the table and the CSV). Dollars, dollars per share,
   an index and a multiple never share one, so the smaller doesn't flatten at zero. Percents of every kind
-  do. Each layer's Axis control shows the side it is drawn on, with that side's unit ("Right axis
-  (USD)"), never only what it asked for; choosing a side moves the layer's whole unit there and the
+  do. Each layer's Axis control (two buttons, Left and Right) shows the side it is drawn on, with that side's
+  unit in its name and hover ("Right axis (USD)"), never only what it asked for; choosing a side moves the layer's whole unit there and the
   unit drawn there to the other side (`askSides`).
 - **A balance is never "TTM"**: a layer that reads only balances (`chart/metrics.ts` POINT_IN_TIME, the
   mirror of query-api `formula/check.py`; loans and deposits included) has no "(TTM)" in its legend or
@@ -880,8 +947,11 @@ Overview, Revenue, Analysis Numbers, Compare, thesis and report embeds), SVG, PN
 - **Basis**: the Calendar / Fiscal control highlights what is applied. Fiscal quarters only line up
   within one company, so with several (counted from what the formulas really read) the chart draws calendar
   ones and says why; the choice is kept for when it's one company again.
-- **Axes**: margins are as wide as the tick labels, a caption too wide for its margin runs from the
-  chart's edge, period labels never touch, a sliver past zero (-$8K beside $30M) doesn't earn a step of
+- **Axes**: margins are as wide as the tick labels (no left gutter when only the right axis is drawn), a
+  caption too wide for its margin runs from the chart's edge and sits clear of the top tick's label, period
+  labels never touch and step by 1, 2, 4, 8... quarters (whole years from 4) or 1, 2, 5, 10 years, counted
+  back from the last (every 7 quarters read FY2010 Q1, FY2011 Q4), a line is dashed only for a forecast (a
+  right-axis line is solid, its legend says "(right axis)"), a sliver past zero (-$8K beside $30M) doesn't earn a step of
   empty axis, ticks have the decimals to tell them apart, and a lone bar doesn't fill the chart.
 
 Compare's dollar charts can also read on a log scale or indexed to the first value in range (not

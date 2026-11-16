@@ -347,7 +347,10 @@ export function Statements({ token, companyId, name, ticker, notApplicable = [],
         <Choices label="Period" value={period} set={(p) => set({ period: p })} options={PERIODS}
           off={kind === "bs" ? { ttm: BALANCE_NOT_TTM } : undefined} />
         {period !== "a" && <Choices label="Range" value={range} set={(r) => set({ range: r })} options={RANGES} />}
-        <Choices label="Basis" value={basis} set={(b) => set({ basis: b })} options={BASES} />
+        {/* what the switch does, said where it is (Riley 80: the figures didn't change, only the labels) */}
+        <span className="basis-choice" title="Fiscal names each quarter by the company's own fiscal year; Calendar by the calendar quarter it ends in, so companies with different years line up. For one company the figures are the same, only the column names change.">
+          <Choices label="Basis" value={basis} set={(b) => set({ basis: b })} options={BASES} />
+        </span>
         <span className="grow" />
         <button className="btn sm" onClick={exportCsv} disabled={!table?.rows.length}>Export CSV</button>
       </div>

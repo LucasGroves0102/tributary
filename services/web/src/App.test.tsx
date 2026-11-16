@@ -6,6 +6,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 
 import { App } from "./App";
 import { COMPANIES_COUNTED } from "./components/Sidebar";
+import { clearToasts } from "./components/Toasts";
 import { ACC, entry, feedFiling, NVDA, revenueRow, TESLA, TSLA } from "./fixtures";
 import { forgetVisits } from "./home/lastVisit";
 
@@ -120,6 +121,7 @@ async function key(k: string, opts: KeyboardEventInit = {}, target: EventTarget 
 }
 
 const $ = (sel: string) => container.querySelector<HTMLElement>(sel);
+const button = (text: string) => [...container.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent?.trim() === text);
 const drawer = () => $("aside.ai-drawer");
 const chip = () => $(".ai .chip")?.textContent;
 
@@ -141,6 +143,7 @@ beforeEach(() => {
 
 afterEach(() => {
   act(() => root.unmount());
+  clearToasts();
   vi.unstubAllGlobals();
   document.body.innerHTML = "";
   window.location.hash = "";
@@ -155,7 +158,7 @@ describe("Home", () => {
     const nvda = rows[0]!;
     expect(nvda.textContent).toContain("Nvidia");
     expect(nvda.textContent).toContain("FY2027 Q2");
-    const revenue = [...nvda.querySelectorAll("td.n")].find((td) => td.textContent === "$130.50B");
+    const revenue = [...nvda.querySelectorAll("td.n")].find((td) => td.textContent === "$130.5B");
     expect(revenue?.getAttribute("title")).toContain(`10-Q filed Aug 26, 2026, ${ACC}`);
     expect(container.querySelector("table.watchlist thead")?.textContent).toContain("Revenue TTM");
     // watching Tesla grants nothing: no values, and the reason on hover
@@ -168,7 +171,7 @@ describe("Home", () => {
     await render();
     const strip = $(".status-strip")!.textContent!;
     expect(strip).toContain("2 companies");
-    expect(strip).toContain("NVDA 10-Q ~Nov 19");
+    expect(strip).toContain("~Nov 19NVDA 10-Q, an estimate");
     expect(strip).toContain("+69.0%");
     expect(strip).toContain("Newest filing listed");
     expect(strip).toContain("just now");
@@ -215,13 +218,14 @@ describe("Home", () => {
     await render();
     await act(async () => container.querySelector<HTMLButtonElement>(`button[aria-label="Remove Tesla from watchlist"]`)!.click());
     await settle();
-    const note = $(".undo-note")!;
+    // a toast at the foot of the window (components/Toasts)
+    const note = document.querySelector<HTMLElement>(".undo-stack .undo-note")!;
     expect(note.textContent).toContain("Removed Tesla from your watchlist");
-    await act(async () => note.querySelector("button")!.click());
+    await act(async () => [...note.querySelectorAll("button")].find((b) => b.textContent === "Undo")!.click());
     await settle();
     const puts = vi.mocked(fetch).mock.calls.filter(([, init]) => init?.method === "PUT").map(([u]) => String(u));
     expect(puts).toContain(`/api/query/v1/watchlist/${TSLA}`);
-    expect($(".undo-note")).toBeNull();
+    expect(document.querySelector(".undo-stack .undo-note")).toBeNull();
   });
 
   it("doesn't say 0 new filings while they're still loading (L6)", async () => {
@@ -269,7 +273,8 @@ describe("Home", () => {
         ? Response.json({ ...ME, companies: [], catalog: { public: true, tiers: ["financials", "filings"], companies: 6039 } })
         : respond(String(url), init));
     await render();
-    expect(container.textContent).toContain("New filings for the 6,039 companies you can read");
+    // the feed starts with the watchlist's filings, the whole plan one click away (Riley 49)
+    expect(container.textContent).toContain("All 6,039 in your plan");
   });
 });
 
@@ -287,11 +292,14 @@ describe("new chart", () => {
     await settle();
     expect($("h1")?.textContent).toBe("Chart builder");
     expect(box().value).toBe("");
-    const restore = [...container.querySelectorAll(".undo-note button")].find((b) => b.textContent === "Restore the previous draft")!;
+    // a toast at the foot (components/Toasts), with the same Restore kept in the bar while it can
+    expect(document.querySelector(".undo-stack .undo-note")?.textContent).toContain("Started a new chart.");
+    const restore = [...document.querySelectorAll(".undo-stack .undo-note button")].find((b) => b.textContent === "Restore the previous draft")!;
     await act(async () => (restore as HTMLElement).click());
     await settle();
     expect(box().value).toBe("My draft");
-    expect($(".undo-note")).toBeNull();
+    expect(document.querySelector(".undo-stack .undo-note")).toBeNull();
+    expect(button("Restore the previous draft")).toBeUndefined();
     // the builder's own New: the same thing, offered there too
     await act(async () => [...container.querySelectorAll("button")].find((b) => b.textContent?.trim() === "New chart")!.click());
     await settle();
@@ -305,14 +313,19 @@ describe("new chart", () => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(box(), "Mine");
       box().dispatchEvent(new Event("input", { bubbles: true }));
     });
-    await act(async () => [...container.querySelectorAll("button")].find((b) => b.textContent === "Margins")!.click());
+    // templates are one menu (Radix, non-modal: opened with ArrowDown in jsdom)
+    for (let i = 0; i < 3; i++) await act(async () => new Promise((r) => setTimeout(r, 0)));
+    await act(async () => { container.querySelector(".templates .more-btn")!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })); });
+    for (let i = 0; i < 3; i++) await act(async () => new Promise((r) => setTimeout(r, 0)));
+    await act(async () => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((b) => b.textContent === "Margins")!.click());
     await settle();
     expect(box().value).toBe("");
-    expect($(".undo-note")?.textContent).toContain("Replaced your layers with the Margins template.");
-    await act(async () => [...container.querySelectorAll<HTMLElement>(".undo-note button")].find((b) => b.textContent === "Restore the previous draft")!.click());
+    expect(document.querySelector(".undo-stack .undo-note")?.textContent).toContain("Replaced your layers with the Margins template.");
+    // the bar keeps Restore after the toast has gone
+    await act(async () => button("Restore the previous draft")!.click());
     await settle();
     expect(box().value).toBe("Mine");
-    expect($(".undo-note")).toBeNull();
+    expect(document.querySelector(".undo-stack .undo-note")).toBeNull();
   });
 
   it("the nav's Chart builder still reopens the draft", async () => {
@@ -681,14 +694,24 @@ it("follows the system's theme until the user chooses Light or Dark, remembers t
   expect(document.documentElement.dataset.theme).toBeUndefined();
   const button = () => $(".theme-btn") as HTMLButtonElement;
   expect(button().textContent).toBe("Theme System");
-  await act(async () => button().click());
+  // the three by name in a menu (Riley 72: a blind cycle), opened with ArrowDown in jsdom
+  const pick = async (name: string) => {
+    for (let i = 0; i < 3; i++) await act(async () => new Promise((r) => setTimeout(r, 0)));
+    await act(async () => { button().dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })); });
+    for (let i = 0; i < 3; i++) await act(async () => new Promise((r) => setTimeout(r, 0)));
+    const items = [...document.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]')];
+    expect(items.map((i) => i.textContent)).toEqual(["Light", "Dark", "System (your device's setting)"]);
+    await act(async () => items.find((i) => i.textContent?.startsWith(name))!.click());
+    await act(async () => { document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
+  };
+  await pick("Light");
   expect(document.documentElement.dataset.theme).toBe("light");
   expect(window.localStorage.getItem("tributary.theme.alice")).toBe("light");
   expect(button().textContent).toBe("Theme Light");
-  await act(async () => button().click());
+  await pick("Dark");
   expect(document.documentElement.dataset.theme).toBe("dark");
   expect(window.localStorage.getItem("tributary.theme.alice")).toBe("dark");
-  await act(async () => button().click());
+  await pick("System");
   expect(button().textContent).toBe("Theme System");
   expect(document.documentElement.dataset.theme).toBeUndefined();
   expect(window.localStorage.getItem("tributary.theme.alice")).toBeNull();

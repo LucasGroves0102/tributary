@@ -36,7 +36,7 @@ const BRANDS: Record<string, string> = {
   "CURTISS WRIGHT": "Curtiss-Wright", LOWES: "Lowe's", KOHLS: "Kohl's", CASEYS: "Casey's",
   "PILGRIMS PRIDE": "Pilgrim's Pride", "O REILLY": "O'Reilly",
   "SCHWAB CHARLES": "Charles Schwab", "PRICE T ROWE": "T. Rowe Price", "US BANCORP": "U.S. Bancorp",
-  "R F": "RF", "G III": "G-III",
+  "R F": "RF", "G III": "G-III", MOODYS: "Moody's", "PRO DEX": "Pro-Dex",
 };
 
 /** " /DE/", "/NEW", "/ADR/", " / MA", "\DE\", " (DE)": a state or listing tag, not part of the name. */

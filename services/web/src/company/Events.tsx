@@ -1,6 +1,7 @@
 import { useId } from "react";
 
 import { Folio } from "../components/Folio";
+import { FormMark } from "../components/FormMark";
 
 import { companyEvents } from "../api";
 import { PinButton } from "../analysis/Pin";
@@ -133,7 +134,7 @@ function EventRow({ companyId, e }: { companyId: string; e: FilingEvent }) {
       </div>
       <div className="event-body">
       <div className="row wrap event-head">
-        <span className="tag k">{e.form}</span>
+        <FormMark form={e.form} />
         {eventLabels(e).map((l) => <span key={l} className="tag">{l}</span>)}
         {affects.length > 0 && (
           <span className="tag warn" title={`An event after the period end: ${affects.join(", ")} as of that date may have changed${e.announced?.length ? " (read from the 8-K's announcement)" : ""}`}>

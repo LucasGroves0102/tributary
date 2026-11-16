@@ -9,6 +9,7 @@ import type { ChartState } from "../chart/model";
 import { header, HEADER_COLUMNS, listingLine } from "../company/data";
 import { useAllowanceContext } from "../assistant/useAllowance";
 import { ErrorPanel, Skeleton } from "../components/States";
+import { dismissTopic, toast } from "../components/Toasts";
 import { day, localDay, localTime } from "../format";
 import { ModelPage } from "../models/ModelPage";
 import { newModelState } from "../models/useModelRun";
@@ -130,7 +131,6 @@ function useCompany(token: string, companyId: string): ScreenerRow | null {
   return row;
 }
 
-type Toast = { text: string; error?: boolean; thesis?: boolean } | null;
 
 function Project({ token, user, projectId, step: asked, itemId, saved, readable, label, onOpenChart, onChartMany, ws, initial, reload }: Props & {
   ws: SavedWorkspaceFull;
@@ -157,7 +157,6 @@ function Project({ token, user, projectId, step: asked, itemId, saved, readable,
   const bridge = useRef<ThesisHandle | null>(null);
   const [itemsVersion, setItemsVersion] = useState(0);
   const [thesisEpoch, setThesisEpoch] = useState(0);
-  const [toast, setToast] = useState<Toast>(null);
 
   const facts: Facts = {
     charts: charts.length,
@@ -174,11 +173,13 @@ function Project({ token, user, projectId, step: asked, itemId, saved, readable,
   }, [step]);
   // M3: the rail says when the last check no longer covers the thesis or the filings
   const recheck = useRecheckReason(token, companyId, checks, thesisStatus);
-  useEffect(() => {
-    if (!toast) return;
-    const t = window.setTimeout(() => setToast(null), 8000);
-    return () => window.clearTimeout(t);
-  }, [toast]);
+  // a pin's confirmation is a toast (components/Toasts), gone when the step changes (Riley 113: they
+  // stayed and carried over to the next step); "Open the thesis" is its action
+  const setToast = useCallback((t: { text: string; error?: boolean; thesis?: boolean }) => {
+    toast({ text: t.text, error: t.error, topic: "pin",
+      action: t.thesis ? { label: "Open the thesis", onClick: () => go({ view: "analysis", projectId, step: "thesis" }) } : undefined });
+  }, [projectId]);
+  useEffect(() => dismissTopic("pin"), [step]);
 
   /** Saves the project's state over (optimistic; a failure says so and keeps what's on screen). */
   const saveProject = useCallback(async (next: ProjectState, what: "notes" | "other" = "other") => {
@@ -304,43 +305,30 @@ function Project({ token, user, projectId, step: asked, itemId, saved, readable,
         <section className="card project-head">
           <div className="card-b co-head">
             <div className="grow">
-              <div className="eyebrow"><a href={href({ view: "analysis" })}>Analysis</a> · {ws.name}</div>
+              <div className="eyebrow"><a href={href({ view: "analysis" })}>Analysis</a> <span aria-hidden="true">/</span> {ws.name}</div>
               <div className="row wrap">
                 <h1>{name}</h1>
                 {h && <span className="mono muted" title={listingLine(h.tickers, h.exchanges).more ?? undefined}>{listingLine(h.tickers, h.exchanges).text}</span>}
               </div>
               {h && (
                 <div className="meta">
-                  {[h.industry, h.fye && `fiscal year ends ${h.fye}`, project.peers.length ? `${project.peers.length} peer${project.peers.length === 1 ? "" : "s"}` : null]
-                    .filter(Boolean).join(" · ")}
+                  {[h.industry, h.fye && `Fiscal year ends ${h.fye}`, project.peers.length ? `${project.peers.length} peer${project.peers.length === 1 ? "" : "s"}` : null]
+                    .filter((x): x is string => !!x).map((x) => <span key={x}>{x}</span>)}
                 </div>
               )}
             </div>
             <div className="project-progress" aria-label={`${doneCount} of ${STEPS.length} steps done`}>
-              <span className="small muted">{doneCount} of {STEPS.length} steps done</span>
+              {/* the count is the user's ticks only (#71); the rail says what each step holds (Riley 52) */}
+              <span className="small muted" title="Steps you've marked done with Mark done. A step's work (notes written, a check run) shows in the step, and doesn't tick it for you.">
+                {doneCount} of {STEPS.length} steps marked done
+              </span>
               <span className="bar" aria-hidden="true"><span className={`fill f${doneCount}`} /></span>
               <a className="btn sm ghost" href={href({ view: "company", companyId })}>Company page</a>
               <WorkspaceActions workspace={ws} saved={saved} what="analysis" onDeleted={() => go({ view: "analysis" })} />
             </div>
           </div>
-          {/* #153: the same steps under the same names as the rail; each tab opens its own step */}
-          <nav className="tabs" aria-label="Project">
-            {STEPS.map((s) => (
-              <a key={s.key} href={href({ view: "analysis", projectId, step: s.key })} aria-current={step === s.key ? "page" : undefined}>
-                {s.label}
-                {s.key === "thesis" && thesisStatus?.dirty && <span className="dirty" title="Unsaved changes"> ●</span>}
-              </a>
-            ))}
-          </nav>
         </section>
         {projectError && <div className="banner" role="alert">{projectError} <button className="btn sm ghost" onClick={() => setProjectError(null)}>Dismiss</button></div>}
-        {toast && (
-          <div className={toast.error ? "report-status error pin-toast" : "report-status pin-toast"} role={toast.error ? "alert" : "status"}>
-            {toast.text}{" "}
-            {toast.thesis && step !== "thesis" && <a href={href({ view: "analysis", projectId, step: "thesis" })}>Open the thesis</a>}{" "}
-            <button className="btn sm ghost" onClick={() => setToast(null)}>Dismiss</button>
-          </div>
-        )}
         <div className="project-body">
           <nav className="step-rail" aria-label="Guided steps">
             <ol>
@@ -353,6 +341,7 @@ function Project({ token, user, projectId, step: asked, itemId, saved, readable,
                       className={done ? "done" : undefined}>
                       <span className="n" aria-hidden="true">{done ? "✓" : i + 1}</span>
                       <span className="grow">{s.label}</span>
+                      {s.key === "thesis" && thesisStatus?.dirty && <span className="dirty" title="Unsaved changes" aria-label="unsaved changes" />}
                       {alert && <span className="step-alert" title={alert}>re-check</span>}
                       <span className="visually-hidden">{done ? ", done" : ", not done"}{alert ? `, ${alert}` : ""}</span>
                     </a>

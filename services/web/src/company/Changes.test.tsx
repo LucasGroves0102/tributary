@@ -62,7 +62,7 @@ it("opens a 10-Q against the same quarter a year earlier, most material first, a
   expect([...refund.querySelectorAll(".change-head .tag")].map((t) => t.textContent)).toEqual(["MD&A", "3 and 6 months"]);
   expect(refund.querySelector(".change-head b")?.textContent).toBe("New");
   expect(refund.querySelector(".change-why")?.textContent)
-    .toBe("Why it ranks here: new passage · 5 new figures · new risk wording: tariff, refund · Results of operations");
+    .toBe("Why it ranks here: new passage; 5 new figures; new risk wording: tariff, refund; Results of operations");
   expect([...refund.querySelectorAll("mark")].map((m) => m.textContent)).toEqual(["tariffs", "tariff", "tariff", "tariff"]);
   expect(refund.querySelector(".change-links a")?.getAttribute("href")).toMatch(new RegExp(`^#/filing/${DECK}/${ACC}/I-2\\?at=\\d+$`));
 });

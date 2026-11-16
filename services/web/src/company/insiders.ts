@@ -79,8 +79,29 @@ export function nameCase(raw: string): string {
   return name.split(" ").map(caseWord).join(" ");
 }
 
+const PARTICLE = /^(de|del|della|der|la|le|van|von|da|di|du|dos|st\.?)$/i;
+const AFTER_NAME = /^(jr\.?|sr\.?|esq\.?|md|phd|cpa|ii|iii|iv|v)$/i;
+
+/** A person's name the SEC lists surname first ("HUANG JEN HSUN"), as a reader writes it: "Jen Hsun Huang",
+ * "SMITH JOHN JR" → "John Smith Jr." (Riley 111). Only a name filed in capitals (the SEC's order), never a
+ * fund or company, nor a name the filer cased itself. */
+export function personName(raw: string): string {
+  const name = raw.trim().replace(/\s+/g, " ");
+  const cased = nameCase(name);
+  if (!name || /[a-z]/.test(name) || ENTITY.test(name)) return cased;
+  const words = cased.replace(/,/g, " ").split(" ").filter(Boolean);
+  if (words.length < 2) return cased;
+  const suffix = words.length > 2 && AFTER_NAME.test(words.at(-1)!) ? words.pop()! : null;
+  // a surname's particles go with it: "DE LA CRUZ ROSA" is Rosa De La Cruz
+  let at = 0;
+  while (at < words.length - 2 && PARTICLE.test(words[at]!)) at++;
+  const surname = words.slice(0, at + 1);
+  const given = words.slice(at + 1);
+  return [...given, ...surname, ...(suffix ? [suffix] : [])].join(" ");
+}
+
 export function ownerText(o: InsiderFiling["owners"][number]): string {
-  return [o.name ? nameCase(o.name) : "An insider", ...o.roles].join(", ");
+  return [o.name ? personName(o.name) : "An insider", ...o.roles].join(", ");
 }
 
 export function ownersText(f: InsiderFiling): string {

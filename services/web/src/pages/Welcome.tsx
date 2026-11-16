@@ -326,8 +326,9 @@ export function proofFigures(d: DataStatus): { value: string; what: string }[] {
       value: duration(i.p50_seconds),
       what: `typically from EDGAR to here${i.p95_seconds !== null ? `; 95% within ${duration(i.p95_seconds)}` : ""}`,
     },
-    r.citations.figures > 0 && { value: `${n(r.citations.figures_traced)} of ${n(r.citations.figures)}`, what: "figures in the assistant's test answers traced to the data" },
-    r.adversarial.attacks > 0 && { value: `${n(r.adversarial.leaks)} of ${n(r.adversarial.attacks)}`, what: "attempts to reach data a user can't read succeeded in testing" },
+    // what the tests mean for a reader, not how they're scored (Riley 74: "0 of 59 attempts ... succeeded")
+    r.citations.figures > 0 && { value: `${n(r.citations.figures_traced)} of ${n(r.citations.figures)}`, what: "figures the assistant gave in testing traced back to their filings" },
+    r.adversarial.attacks > 0 && { value: `${n(r.adversarial.leaks)} of ${n(r.adversarial.attacks)}`, what: `tries to read another user's data got through, in ${n(r.adversarial.attacks)} attempts` },
   ].filter((f): f is { value: string; what: string } => !!f);
 }
 

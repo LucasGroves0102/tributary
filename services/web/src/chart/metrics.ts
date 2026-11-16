@@ -40,12 +40,34 @@ const SPECIAL: Record<string, string> = {
   cash_and_restricted_cash: "Cash with restricted cash",
   cash_and_investments: "Cash and short-term investments",
   change_in_cash: "Change in cash",
+  // written as a person writes them, never the metric's name re-cased (Riley 62: "Cet1 ratio")
+  cet1_ratio: "CET1 ratio",
+  stockholders_equity: "Stockholders' equity",
+  short_term_investments: "Short-term investments",
+  sga_expense: "SG&A",
+  ebit: "EBIT",
+  ebitda: "EBITDA",
+  gross_profit: "Gross profit",
+  pretax_income: "Pretax income",
+  debt_to_equity: "Debt / equity",
+  net_debt: "Net debt",
+  weighted_shares_diluted: "Diluted shares",
+  weighted_shares_basic: "Basic shares",
+  net_interest_income: "Net interest income",
+  noninterest_income: "Noninterest income",
+  noninterest_expense: "Noninterest expense",
+  provision_for_credit_losses: "Provision for credit losses",
+  revenue_growth: "Revenue growth",
+  net_income_growth: "Net income growth",
+  payout_ratio: "Payout ratio",
+  current_ratio: "Current ratio",
+  efficiency_ratio: "Efficiency ratio",
 };
 
 /** "operating_margin" → "Operating margin". */
 export function metricLabel(name: string): string {
   if (SPECIAL[name]) return SPECIAL[name];
-  const words = name.replace(/_/g, " ");
+  const words = name.replace(/_/g, " ").replace(/\b(short|long) term\b/g, "$1-term");
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 

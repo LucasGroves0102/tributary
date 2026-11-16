@@ -109,9 +109,9 @@ export const HEADER_COLUMNS_WITH_BANK = [...new Set([...HEADER_COLUMNS, ...BANK_
  * tickers in the hover). A bank can have a dozen preferreds. */
 export function listingLine(tickers: string[], exchanges: string[]): { text: string; more: string | null } {
   const rest = tickers.slice(1);
-  const main = [tickers[0], rest.length ? `+${rest.length} more` : null].filter(Boolean).join(" ");
+  const main = [tickers[0], exchanges.length ? `on ${exchanges.join(", ")}` : null].filter(Boolean).join(" ");
   return {
-    text: [main, exchanges.join(", ")].filter(Boolean).join(" · "),
+    text: `${main}${rest.length ? `, and ${rest.length} other share ${rest.length === 1 ? "class or note" : "classes or notes"}` : ""}`,
     more: rest.length ? `Also listed: ${rest.join(", ")}` : null,
   };
 }
@@ -184,6 +184,51 @@ export function keyStats(row: ScreenerRow): KeyStat[] {
       value: f.value, status: f.status, source: src,
     };
   });
+}
+
+/** How a figure no filing states is computed (the API's definitions: migrations 014, 040, 048, 049), for
+ * its hover. A seal means "taken from the filing", so a computed figure carries none (decided 2026-11-15,
+ * Riley 32: seals on gross margin and ROE contradicted the legend). Words only: nothing is computed here. */
+export const COMPUTED_FROM: Record<string, string> = {
+  revenue_growth: "revenue over the twelve months against the twelve months a year earlier",
+  net_income_growth: "net income over the twelve months against the twelve months a year earlier",
+  gross_margin: "gross profit ÷ revenue",
+  operating_margin: "operating income ÷ revenue",
+  net_margin: "net income ÷ revenue",
+  fcf_margin: "free cash flow ÷ revenue",
+  free_cash_flow: "net cash from operating activities less capital expenditure",
+  cash_and_investments: "cash plus short-term investments, each investment counted once",
+  net_debt: "debt (long-term and due within a year) less cash and short-term investments",
+  debt_to_equity: "debt (long-term and due within a year) ÷ stockholders' equity",
+  roe: "net income over the twelve months ÷ the average of stockholders' equity at the period end and a year earlier",
+  current_ratio: "current assets ÷ current liabilities",
+  payout_ratio: "dividends paid ÷ net income",
+  efficiency_ratio: "noninterest expense ÷ (net interest income + noninterest income)",
+};
+
+/** An annual report: its twelve months are the year as filed, not four quarters added up. */
+const ANNUAL_FORM = /^(10-K|20-F|40-F)/;
+
+/** A balance (a figure at a date) as opposed to a flow over a period. */
+const BALANCES = new Set(["cash", "short_term_investments", "receivables", "inventory", "current_assets", "total_assets",
+  "current_liabilities", "accounts_payable", "long_term_debt", "long_term_debt_current", "total_liabilities",
+  "stockholders_equity", "loans", "deposits", "cet1_ratio"]);
+
+/** Whether a screener column's figure is stated in its filing as shown (so it may carry a seal), and if
+ * not, how it is made: a ratio or a difference (COMPUTED_FROM), twelve months added up from four
+ * quarters (a TTM whose filing is a 10-Q), or a fourth quarter worked out as the year less nine months
+ * (a quarter's flow whose filing is the 10-K). */
+export function howFiled(key: string, source: Pick<ValueSource, "form" | "period_end"> | null): { filed: true } | { filed: false; how: string } {
+  const metric = key.replace(/_(ttm|q)$/, "");
+  if (COMPUTED_FROM[metric]) return { filed: false, how: `computed: ${COMPUTED_FROM[metric]}` };
+  if (!source) return { filed: true };
+  if (key.endsWith("_ttm") && !ANNUAL_FORM.test(source.form)) {
+    return { filed: false, how: `the four quarters to ${day(source.period_end, true)} added up` };
+  }
+  if (key.endsWith("_q") && !BALANCES.has(metric) && ANNUAL_FORM.test(source.form)) {
+    return { filed: false, how: "the fourth quarter, worked out as the 10-K's year less the first three quarters" };
+  }
+  return { filed: true };
 }
 
 /** An amount, not a rate: the ledger's first column. */
@@ -435,17 +480,20 @@ export const BANK_STATEMENTS: Record<Statement, { label: string; rows: Line[] }>
   cf: STATEMENTS.cf,
 };
 
+/** Each ratio's label says how it is worked out (COMPUTED_FROM; Riley 79: ROE's method wasn't stated). */
+const ratio = (metric: string, label: string, fmt: Fmt): Line => [metric, label, fmt, { define: `${label}: ${COMPUTED_FROM[metric] ?? "computed from the filings"}.` }];
+
 export const RATIOS: Line[] = [
-  ["gross_margin", "Gross margin", "pct"],
-  ["operating_margin", "Operating margin", "pct"],
-  ["net_margin", "Net margin", "pct"],
-  ["fcf_margin", "FCF margin", "pct"],
-  ["revenue_growth", "Revenue growth YoY", "growth"],
-  ["net_income_growth", "Net income growth YoY", "growth"],
-  ["roe", "Return on equity", "pct"],
-  ["debt_to_equity", "Debt / equity", "x"],
-  ["current_ratio", "Current ratio", "x"],
-  ["payout_ratio", "Payout ratio", "pct"],
+  ratio("gross_margin", "Gross margin", "pct"),
+  ratio("operating_margin", "Operating margin", "pct"),
+  ratio("net_margin", "Net margin", "pct"),
+  ratio("fcf_margin", "FCF margin", "pct"),
+  ratio("revenue_growth", "Revenue growth YoY", "growth"),
+  ratio("net_income_growth", "Net income growth YoY", "growth"),
+  ratio("roe", "Return on equity", "pct"),
+  ratio("debt_to_equity", "Debt / equity", "x"),
+  ratio("current_ratio", "Current ratio", "x"),
+  ratio("payout_ratio", "Payout ratio", "pct"),
 ];
 
 /** What to request for a period choice: quarterly values, TTM ending each quarter, or annual
@@ -1202,11 +1250,6 @@ export function formsOf(f: FormFilter): string[] {
 
 export function formMatches(form: string, f: FormFilter): boolean {
   return f === "all" || formsOf(f).includes(form);
-}
-
-/** The tag class a form gets in tables: k (annual), q (quarterly) or none. */
-export function formTag(form: string): string {
-  return form.startsWith("10-K") ? "k" : form.startsWith("10-Q") ? "q" : "";
 }
 
 /** gold.fiscal_year_end's rule (migration 014) and gold's label (the year of that date less 7

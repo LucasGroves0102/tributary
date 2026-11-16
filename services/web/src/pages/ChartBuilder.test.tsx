@@ -122,6 +122,15 @@ async function render(initial: ChartState) {
 
 const $ = (sel: string) => container.querySelector<HTMLElement>(sel);
 const button = (text: string) => [...container.querySelectorAll("button")].find((b) => b.textContent === text)!;
+/** An item of one of the bar's menus (Export, Show: components/MenuButton, a non-modal Radix menu): opened
+ * with ArrowDown on its button, as jsdom can't do Radix's pointerdown. */
+const menuItem = async (menu: string, item: string): Promise<HTMLElement> => {
+  for (let i = 0; i < 3; i++) await act(async () => new Promise((r) => setTimeout(r, 0)));
+  const opener = [...container.querySelectorAll("button.more-btn")].find((b) => b.textContent?.startsWith(menu))!;
+  await act(async () => { opener.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })); });
+  for (let i = 0; i < 3; i++) await act(async () => new Promise((r) => setTimeout(r, 0)));
+  return [...document.querySelectorAll<HTMLElement>('[role="menuitem"], [role="menuitemcheckbox"]')].find((i) => i.textContent === item)!;
+};
 
 it("evaluates each layer through the formula API and draws them", async () => {
   await render(companyChart(emptyChart(), NVDA));
@@ -129,7 +138,7 @@ it("evaluates each layer through the formula API and draws them", async () => {
   expect(evals).toHaveLength(2);
   expect(evals[0]).toMatchObject({ formula: "revenue", default_company: NVDA, basis: "fiscal", view: "quarter" });
   expect(evals[1]).toMatchObject({ formula: "operating_margin", view: "ttm" });
-  expect($(".ch-title")?.textContent).toBe("NVDA: revenue and operating margin (TTM)");
+  expect($(".ch-title")?.textContent).toBe("NVDA: revenue (quarterly) and operating margin (TTM)");
   expect([...container.querySelectorAll(".ch-legend text")].map((t) => t.textContent)).toEqual([
     "NVDA revenue",
     "NVDA operating margin (TTM) (right axis)",
@@ -226,9 +235,10 @@ it("checks formulas inline and reports a company the user can't read", async () 
 
 it("exports the plotted data as CSV with exact values and sources", async () => {
   await render(companyChart(emptyChart(), NVDA));
-  await act(async () => button("Export CSV").click());
+  const csv = await menuItem("Export", "CSV, exact values");
+  await act(async () => csv.click());
   const [name, blob] = vi.mocked(download).mock.calls[0]!;
-  expect(name).toBe("nvda-revenue-and-operating-margin-ttm.csv");
+  expect(name).toBe("nvda-revenue-quarterly-and-operating-margin-ttm.csv");
   const text = await new Promise<string>((resolve) => {
     const r = new FileReader();
     r.onload = () => resolve(String(r.result));
@@ -258,8 +268,12 @@ it("renames, recolours and reorders layers from the keyboard-reachable controls"
   expect(latest.layers[0]!.name).toBe("Quarterly sales");
   expect([...container.querySelectorAll(".ch-legend text")][0]!.textContent).toBe("Quarterly sales");
 
-  await select("Colour", "5");
+  // the colour is the swatch itself, drawn in the class the line draws with (Riley 15)
+  const rose = container.querySelector<HTMLButtonElement>('[role="radiogroup"][aria-label="Colour of Quarterly sales"] button[aria-label="Rose"]')!;
+  expect(rose.className).toBe("swatch c5");
+  await act(async () => rose.click());
   expect(latest.layers[0]!.color).toBe(5);
+  expect(rose.getAttribute("aria-checked")).toBe("true");
   expect(container.querySelector(".ch-legend g")!.getAttribute("class")).toBe("c5");
 
   const down = container.querySelector<HTMLButtonElement>('button[aria-label="Move Quarterly sales down"]')!;
@@ -313,7 +327,7 @@ it("opens the clicked point's filing in the reader, and shows the values as a ta
 it("draws 10-K/10-Q and 8-K results markers when turned on", async () => {
   await render(companyChart(emptyChart(), NVDA));
   expect(container.querySelector(".ch-mk")).toBeNull();
-  const box = [...container.querySelectorAll<HTMLInputElement>("input[type=checkbox]")].find((c) => c.parentElement?.textContent?.includes("Filing markers"))!;
+  const box = await menuItem("Show", "Filing markers");
   await act(async () => box.click());
   for (let i = 0; i < 3; i++) await act(async () => {});
   expect(latest.markers).toBe(true);
@@ -450,7 +464,7 @@ it("deck output: light chart with subtitle, units and the source footnote", asyn
   await render(companyChart(emptyChart(), NVDA));
   expect(container.querySelector(".lchart.deck")).toBeNull();
   expect([...container.querySelectorAll(".ch-unit")].map((t) => t.textContent)).toEqual(["USD", "%"]);
-  const box = [...container.querySelectorAll<HTMLInputElement>("input[type=checkbox]")].find((c) => c.parentElement?.textContent?.includes("Deck output"))!;
+  const box = await menuItem("Show", "Deck output");
   await act(async () => box.click());
   expect(latest.deck).toBe(true);
   expect(container.querySelector(".lchart.deck")).not.toBeNull();
@@ -460,7 +474,8 @@ it("deck output: light chart with subtitle, units and the source footnote", asyn
   expect(foot[1]).toContain("Fiscal quarters; TTM = trailing four quarters");
   await type(container.querySelector<HTMLInputElement>('input[aria-label="Subtitle"]')!, "USD billions, fiscal quarters");
   expect($(".ch-sub")?.textContent).toBe("USD billions, fiscal quarters");
-  await act(async () => button("Export SVG").click());
+  const svgItem = await menuItem("Export", "SVG, for slides");
+  await act(async () => svgItem.click());
   const svg = await new Promise<string>((resolve) => {
     const r = new FileReader();
     r.onload = () => resolve(String(r.result));
@@ -485,7 +500,7 @@ it("writes the title from the layers until the user types one, and says when it'
   await render(companyChart(emptyChart(), NVDA));
   const field = container.querySelector<HTMLInputElement>('input[aria-label="Chart title"]')!;
   expect(field.value).toBe("");
-  expect(field.placeholder).toBe("NVDA: revenue and operating margin (TTM)");
+  expect(field.placeholder).toBe("NVDA: revenue (quarterly) and operating margin (TTM)");
   expect($(".title-mode")).toBeNull();
   // hide the margin: the title follows, in the drawing too
   await act(async () => container.querySelectorAll<HTMLButtonElement>('button[aria-label^="Hide"]')[1]!.click());
@@ -494,7 +509,8 @@ it("writes the title from the layers until the user types one, and says when it'
   await type(field, "My chart");
   expect($(".ch-title")?.textContent).toBe("My chart");
   expect($(".title-mode")?.textContent).toContain("Custom title");
-  await act(async () => button("Export CSV").click());
+  const csvItem = await menuItem("Export", "CSV, exact values");
+  await act(async () => csvItem.click());
   expect(vi.mocked(download).mock.calls[0]![0]).toBe("my-chart.csv");
   await act(async () => button("Use automatic").click());
   expect(latest.title).toBe("");
@@ -550,15 +566,42 @@ it("shows every bad name with what it meant, once", async () => {
   for (let i = 0; i < 3; i++) await act(async () => {});
   const errors = [...container.querySelectorAll(".layer .err")].map((e) => e.textContent);
   expect(errors).toEqual([
-    "Unknown metric 'ebitda' · Start typing to see the metric names",
-    "Unknown metric 'revnue' · Did you mean revenue?",
+    "Unknown metric 'ebitda'. Start typing to see the metric names",
+    "Unknown metric 'revnue'. Did you mean revenue?",
   ]);
   expect(container.textContent).not.toContain("/v1/");
 });
 
+it("takes a formula off the chart while its new text doesn't check, title and legend too (Riley 16)", async () => {
+  vi.useFakeTimers();
+  const problems = [{ code: "unknown_metric", message: "Unknown metric 'revnue'", pos: 0, length: 6, hint: "Did you mean revenue?" }];
+  vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+    const path = new URL(url, "http://x").pathname;
+    if (path.endsWith("/validate")) {
+      const body = JSON.parse(String(init?.body ?? "{}")) as { formula: string };
+      return Response.json(body.formula.includes("revnue") ? { valid: false, errors: problems } : { valid: true, unit: "USD", display: null, errors: [] });
+    }
+    return respond(url, init);
+  }));
+  await render({ ...emptyChart(), layers: [{ id: 1, kind: "formula", formula: "revenue", defaultCompany: NVDA, transform: "ttm", type: "line", axis: "L" }], nextId: 2 });
+  await act(async () => vi.advanceTimersByTime(400));
+  for (let i = 0; i < 3; i++) await act(async () => {});
+  expect(container.querySelector(".lchart-svg")).not.toBeNull();
+  const input = container.querySelector<HTMLInputElement>('input[aria-label="Formula"]')!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "revnue / 2");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => vi.advanceTimersByTime(400));
+  for (let i = 0; i < 3; i++) await act(async () => {});
+  // the old formula's line is gone, not left under the new one's error
+  expect(container.querySelector(".lchart-svg")).toBeNull();
+  expect(container.textContent).toContain("Not on the chart until the formula checks.");
+});
+
 it("names the company a formula reads, not the one in the box", async () => {
   await render({ ...emptyChart(), layers: [{ id: 1, kind: "formula", formula: "TSLA.net_income / TSLA.revenue", defaultCompany: NVDA, transform: "ttm", type: "line", axis: "L" }], nextId: 2 });
-  expect($(".layer b.grow")?.textContent).toBe("Formula · TSLA");
+  expect($(".layer b.grow")?.textContent).toBe("Formula TSLA");
 });
 
 it("reads a dimensionless layer as the API says, and lets the user choose", async () => {
@@ -598,21 +641,19 @@ it("says where a layer ended up, and when it couldn't be drawn", async () => {
   ], nextId: 4 });
   const cards = [...container.querySelectorAll(".layer")];
   // the Axis control says where the layer is drawn, not what it asked for (analyst test 4, #21)
-  const axis = (i: number) => cards[i]!.querySelector<HTMLSelectElement>('select[aria-label="Axis"]')!;
-  expect(axis(0).selectedOptions[0]!.textContent).toBe("Left axis (USD)");
-  expect(axis(1).selectedOptions[0]!.textContent).toBe("Right axis (USD per share)");
+  // two buttons, Left and Right, the pressed one the side drawn on, its unit in its name (Riley 102)
+  const axis = (i: number) => cards[i]!.querySelector<HTMLButtonElement>('[aria-label="Axis"] [aria-pressed="true"]')!.getAttribute("aria-label");
+  expect(axis(0)).toBe("Left axis (USD)");
+  expect(axis(1)).toBe("Right axis (USD per share)");
   expect(cards[1]!.textContent).toContain("On the right axis: the left one reads in USD.");
   expect(cards[2]!.textContent).toContain("Not drawn: both axes already read in other units");
   expect([...container.querySelectorAll(".ch-unit")].map((u) => u.textContent)).toEqual(["USD", "USD per share"]);
   expect([...container.querySelectorAll(".ch-foot")].map((f) => f.textContent).join(" ")).toContain("Not drawn:");
   // choosing the left for EPS moves its unit there, and dollars to the right
-  await act(async () => {
-    axis(1).value = "L";
-    axis(1).dispatchEvent(new Event("change", { bubbles: true }));
-  });
+  await act(async () => cards[1]!.querySelector<HTMLButtonElement>('[aria-label="Axis"] button[aria-label^="Left"]')!.click());
   expect(latest.layers.map((l) => l.axis)).toEqual(["R", "L", "L"]);
   expect([...container.querySelectorAll(".ch-unit")].map((u) => u.textContent)).toEqual(["USD per share", "USD"]);
-  expect(axis(0).selectedOptions[0]!.textContent).toBe("Right axis (USD)");
+  expect(axis(0)).toBe("Right axis (USD)");
   expect(container.querySelector(".layer")!.textContent).not.toContain("On the");
 });
 
@@ -628,7 +669,7 @@ it("draws two layers of one unit on one axis, and says so on the layer that aske
     { id: 2, kind: "formula", formula: "free_cash_flow / revenue", defaultCompany: NVDA, transform: "ttm", type: "line", axis: "R" },
   ], nextId: 3 });
   const cards = [...container.querySelectorAll(".layer")];
-  expect(cards[1]!.querySelector<HTMLSelectElement>('select[aria-label="Axis"]')!.selectedOptions[0]!.textContent).toBe("Left axis (%)");
+  expect(cards[1]!.querySelector('[aria-label="Axis"] [aria-pressed="true"]')!.getAttribute("aria-label")).toBe("Left axis (%)");
   expect(cards[1]!.textContent).toContain("On the left axis with the other layers in %: one unit, one axis.");
   expect([...container.querySelectorAll(".ch-unit")].map((u) => u.textContent)).toEqual(["%"]);
 });
@@ -645,7 +686,8 @@ it("a template with work to lose keeps it for Restore; on an empty chart it does
   }
   await act(async () => root.render(<WithReplace initial={companyChart(emptyChart(), NVDA)} />));
   for (let i = 0; i < 3; i++) await act(async () => {});
-  await act(async () => button("Margins").click());
+  const margins = await menuItem("Replace with a template", "Margins");
+  await act(async () => margins.click());
   expect(onReplace).toHaveBeenCalledWith("Replaced your layers with the Margins template.");
   expect(latest.title).toBe("");
   expect(latest.layers.map((l) => l.metric)).toEqual(["operating_margin"]);

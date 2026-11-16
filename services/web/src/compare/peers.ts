@@ -61,6 +61,18 @@ export const possessive = (name: string | null | undefined): string => {
 };
 
 /** Why a peer was suggested, strongest first. `target`: the company the peers are of. */
+/** The API's shared terms once each: "gpus, gpu" are one word (Riley 110: "gpus, gpus, gpu, cpu" read as
+ * salad). Words only; the API decides which terms. */
+export function distinctTerms(terms: string[]): string[] {
+  const seen = new Set<string>();
+  return terms.filter((t) => {
+    const stem = t.toLowerCase().replace(/(es|s)$/, "");
+    if (seen.has(stem)) return false;
+    seen.add(stem);
+    return true;
+  });
+}
+
 export function whyParts(match: PeerMatch | undefined, peer: ScreenerRow, target: { companyId: string; name: string | null }): Reason[] {
   if (!match) return [];
   const out: Reason[] = [];
@@ -71,7 +83,7 @@ export function whyParts(match: PeerMatch | undefined, peer: ScreenerRow, target
     out.push({ text: `its 10-K names ${short(target.name)} as a competitor`, cite: { companyId: peer.company_id, mention: match.names_target } });
   }
   if (match.similarity !== undefined) {
-    if (match.terms?.length) out.push({ text: `business: ${match.terms.slice(0, 4).join(", ")}` });
+    if (match.terms?.length) out.push({ text: `business: ${distinctTerms(match.terms).slice(0, 3).join(", ")}` });
     if (match.same_industry && peer.sector_industry) out.push({ text: `same industry (${peer.sector_industry})` });
     else if (match.sic_level === 4) out.push({ text: "same SIC" });
   } else {

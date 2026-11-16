@@ -20,10 +20,10 @@ const DARK = ':root[data-theme="dark"] {';
 const SYSTEM_DARK = ':root:not([data-theme="light"])';
 
 // WCAG 2.1 AA: 4.5:1 for text, 3:1 for graphics (chart series against the sheet)
-const TEXT = ["ink", "ink-2", "ink-3", "red", "up", "warn"];
+const TEXT = ["ink", "ink-2", "ink-3", "red", "up", "warn", "action", "error"];
 const SURFACES = ["page", "sheet", "sheet-2"];
 const PAIRS: [string, string][] = [
-  ["red-ink", "red"], ["red", "red-soft"], ["up", "up-soft"], ["warn", "warn-soft"],
+  ["red-ink", "red"], ["red", "red-soft"], ["up", "up-soft"], ["warn", "warn-soft"], ["action-ink", "action"], ["error", "error-soft"],
 ];
 
 describe.each([

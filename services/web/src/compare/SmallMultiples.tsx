@@ -76,7 +76,8 @@ export function SmallMultiples({ token, companyIds, cols, label }: {
   const charts = multiplesRequests(companyIds, cols);
   const keys = [...new Set(charts.flatMap((c) => c.layers.map((l) => l.key)))];
   const [answers, setAnswers] = useState<Record<string, Answer>>({});
-  const [scale, setScale] = useState<Scale>("dollars");
+  // null until the reader chooses: then indexed when the companies are far apart in size, else dollars
+  const [chosen, setScale] = useState<Scale | null>(null);
 
   // answers are keyed by request, so one arriving after the columns changed is still kept
   const mounted = useRef(true);
@@ -121,6 +122,9 @@ export function SmallMultiples({ token, companyIds, cols, label }: {
       return a?.state === "ok" ? Number(a.data.points.at(-1)?.value) : NaN;
     }),
   })));
+  // a spread of over 100x flattens all but the largest in dollars (Riley 38): such a page opens indexed, and
+  // says why; dollars is a click away
+  const scale: Scale = chosen ?? (spread ? "indexed" : "dollars");
 
   return (
     <div className="multiples">
@@ -134,7 +138,7 @@ export function SmallMultiples({ token, companyIds, cols, label }: {
             ))}
           </span>
           <span className="faint small">
-            {scale === "dollars" && spread ? spread : "For the dollar charts."}
+            {spread && scale === "dollars" ? spread : spread && !chosen ? "Indexed: the companies are too far apart in size to read in dollars. Dollars shows their sizes." : "For the dollar charts."}
           </span>
         </div>
       )}

@@ -10,7 +10,7 @@ import { day, paren } from "../format";
 import { go, href } from "../route";
 import type { ScreenerRow, Tier, ValueSource } from "../types";
 import {
-  BANK_NOT_SHOWN, financeArmNote, foreignReport, header, isAmount, isBankRow, keyStats, longDay, recapAccession, statementSection,
+  BANK_NOT_SHOWN, financeArmNote, foreignReport, header, howFiled, isAmount, isBankRow, keyStats, longDay, recapAccession, statementSection,
   yearStory,
   type KeyStat, type YearStory,
 } from "./data";
@@ -60,7 +60,8 @@ export function Overview({
   return (
     <div className="folios">
       {story && (
-        <Folio name="The year" line={`Twelve months to ${day(story.end, true)}`} lead>
+        <Folio name="The year" lead
+          line={howFiled("revenue_ttm", story.source).filed ? `The year to ${day(story.end, true)}, as filed` : `Four quarters to ${day(story.end, true)}`}>
           <YearSentence story={story} name={name} companyId={companyId} />
         </Folio>
       )}
@@ -86,7 +87,10 @@ export function Overview({
  * cash and short-term investments than debt." Then the seal: the filing it is taken from. */
 function YearSentence({ story, name, companyId }: { story: YearStory; name: string; companyId: string }) {
   const src = story.source;
-  const link = sealHref(companyId, src);
+  // sealed only when the twelve months are the annual report's own year; four quarters added up are not
+  // a figure the filing states (Riley 32), so then the sentence carries no seal
+  const filed = howFiled("revenue_ttm", src).filed;
+  const link = filed ? sealHref(companyId, src) : null;
   const taken = `Taken from the ${src.form} filed ${day(src.filed, true)}`;
   return (
     <p className="story">
@@ -107,9 +111,9 @@ function YearSentence({ story, name, companyId }: { story: YearStory; name: stri
       )}
       {link ? (
         <SealLink size="lead" href={link} label={`${taken}: open it`} source={`${taken}, ${src.accession_no}. Revenue for the twelve months to ${day(story.end, true)}.`} />
-      ) : (
+      ) : filed ? (
         <Seal size="lead" label={taken} />
-      )}
+      ) : null}
     </p>
   );
 }
@@ -139,7 +143,9 @@ function Figures({ companyId, name, row, canFin, flags, lead }: {
   // the period most of them share goes in the margin; the others say their own
   const ends = stats.map((s) => s.periodEnd).filter((e): e is string => !!e);
   const common = ends.sort((a, b) => ends.filter((x) => x === b).length - ends.filter((x) => x === a).length)[0] ?? null;
-  const sources = new Set(stats.filter((s) => s.source && !s.status).map((s) => `${s.source!.form} filed ${day(s.source!.filed, true)}`));
+  const sealed = stats.filter((s) => s.source && !s.status && howFiled(s.key, s.source).filed);
+  const sources = new Set(sealed.map((s) => `${s.source!.form} filed ${day(s.source!.filed, true)}`));
+  const computed = stats.some((s) => s.value !== null && !howFiled(s.key, s.source).filed);
   const flagged = [...new Map(stats.filter((s) => s.flag).map((s) => [s.flag!.short, s.flag!])).values()];
   return (
     <Folio name="Figures" lead={lead}
@@ -159,6 +165,12 @@ function Figures({ companyId, name, row, canFin, flags, lead }: {
             </span>
           </p>
         )}
+        {computed && (
+          <p className="computed-note">
+            <span className="seal-slot" aria-hidden="true" />
+            <span>No seal: worked out from the filings (a ratio, a difference, or four quarters added up). Hover a figure for how.</span>
+          </p>
+        )}
         {flagged.map((f) => (
           <p key={f.short} role="note">
             <span className="mark" aria-hidden="true">*</span>
@@ -175,9 +187,13 @@ function Figures({ companyId, name, row, canFin, flags, lead }: {
 function LedgerRow({ s, common, companyId, armNote }: { s: KeyStat & { flag: StaleFlag | null }; common: string | null; companyId: string; armNote: string | null }) {
   // an old figure reads as not reported since its date (blanks.ts): no seal, the last figure in the hover
   const blank = s.value === null && s.status !== "other_currency";
-  const link = s.source && !blank ? sealHref(companyId, s.source) : null;
+  // a seal says "taken from the filing": only a figure the filing states has one (Riley 32); a computed
+  // one says in its hover what it is worked out from
+  const filing = howFiled(s.key, s.source);
+  const link = s.source && !blank && filing.filed ? sealHref(companyId, s.source) : null;
   const differs = s.old || (s.periodEnd && common && s.periodEnd !== common) || blank;
-  const title = [s.title, s.key === "net_debt_q" ? armNote : null, s.flag?.text].filter(Boolean).join("\n\n");
+  const how = !blank && !filing.filed ? `${s.label}, ${filing.how}.` : null;
+  const title = [how, s.title, s.key === "net_debt_q" ? armNote : null, s.flag?.text].filter(Boolean).join("\n\n");
   const classes = [blank && "blank", s.old && "old", s.flag && "later"].filter(Boolean).join(" ") || undefined;
   const taken = s.source ? `the ${s.source.form} filed ${day(s.source.filed, true)}` : "";
   return (

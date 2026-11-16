@@ -42,17 +42,17 @@ it("words figures as the statements do", () => {
 it("reads red lines in their formula's display, and says crossed or clear", () => {
   const r: RedLineResult = { rule_id: "r", label: "GM", formula: "gross_margin", view: "ttm", op: "<", threshold: "0.55", display: "percent",
     value: "0.735", period_end: "2026-10-26", crossed: false, status: "ok" };
-  expect(ruleText(r)).toBe("gross_margin below 55.0%");
+  expect(ruleText(r)).toBe("Gross margin below 55.0%");
   expect(redLineState(r)).toBe("clear");
   expect(redLineState({ ...r, crossed: true })).toBe("crossed");
   expect(redLineState({ ...r, status: "no_value", crossed: null })).toBe("no_value");
   expect(inDisplay("1.2", "multiple")).toBe("1.20x");
   expect(inDisplay(null, "percent")).toBe("—");
   // 057: an amount red line on a yuan filer says yuan; dollars (or an older API) as before
-  expect(inDisplay("996347000000", null, "CNY")).toBe("CN¥996.35B");
-  expect(inDisplay("996347000000", null)).toBe("$996.35B");
+  expect(inDisplay("996347000000", null, "CNY")).toBe("CN¥996.3B");
+  expect(inDisplay("996347000000", null)).toBe("$996.3B");
   expect(ruleText({ formula: "revenue", op: "<", threshold: "1000000000000", display: null, unit: "CNY" }))
-    .toBe("revenue below CN¥1.00T");
+    .toBe("Revenue below CN¥1.00T");
 });
 
 it("turns a typed threshold into what the API stores", () => {

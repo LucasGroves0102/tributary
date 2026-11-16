@@ -4,7 +4,7 @@
  * the peer median (target excluded), and the CSV. Pure, tested without rendering. */
 
 import { NOT_REPORTED, readFigure, type Figure } from "../blanks";
-import { change, day, money, pct } from "../format";
+import { change, day, money, paren, pct } from "../format";
 import { num } from "../home/data";
 import type { ScreenerRow, ValueSource } from "../types";
 import { csvCell } from "../chart/series";
@@ -348,9 +348,10 @@ export function medianTitle(s: PeerStat): string {
     (why.length ? `. Left out: ${why.join("; ")}.` : ".");
 }
 
+/** A median, high or low as the table shows it: a negative amount in parentheses, like every cell. */
 export function statText(key: string, v: number | null): string {
   const c = BY_KEY.get(key);
-  return v === null || !c ? "—" : formatValue(c.kind, v);
+  return v === null || !c ? "—" : paren(formatValue(c.kind, v));
 }
 
 /** The table as CSV: exact values from the API, each with its period end and source

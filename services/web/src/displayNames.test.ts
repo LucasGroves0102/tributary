@@ -17,6 +17,9 @@ describe("companyName", () => {
     ["KEYCORP /NEW/", "KeyCorp"],
     ["V F CORP", "VF"],
     ["AAR CORP", "AAR"],
+    // Riley's audit (test 6, finding 112)
+    ["MOODYS CORP /DE/", "Moody's"],
+    ["PRO DEX INC", "Pro-Dex"],
     // state and listing tags
     ["COSTCO WHOLESALE CORP /NEW", "Costco Wholesale"],
     ["BANK OF AMERICA CORP /DE/", "Bank of America"],

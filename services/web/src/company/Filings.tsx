@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useId, useRef, useState, type ReactNode } from "react";
 
 import { filingIndex, filings as fetchFilings, insiderFilings, sectionChanges } from "../api";
 import { day } from "../format";
@@ -12,7 +12,8 @@ import {
 export type { Change, ChangedSection } from "./changes";
 /** "📌 Add to thesis" beside each changed paragraph (the Analysis tab's What changed step) */
 export type PinChange = (change: Change, section: ChangedSection) => ReactNode;
-import { eightKItems, filingHeadings, FORM_FILTERS, formsOf, formTag, parsedNote, type FormFilter } from "./data";
+import { FormMark } from "../components/FormMark";
+import { eightKItems, filingHeadings, FORM_FILTERS, formsOf, parsedNote, type FormFilter } from "./data";
 import { Gate } from "./Tables";
 import { useLoad } from "./useLoad";
 import { TableScroll } from "../components/TableScroll";
@@ -82,12 +83,11 @@ export function Filings({ token, companyId, name, canRead, initialDiff, fiscalYe
 
   return (
     <>
-      {filter === "insider" && canRead && <InsiderTable load={insiders} token={token} companyId={companyId} />}
       <section className="card">
         <div className="card-h wrap">
           <h2>Filings</h2>
           <span className="sub">
-            SEC filing index, newest first{fiscalYearEnd ? " · headed by fiscal year" : ""}{filter === "reports" ? " · 10-K, 10-Q, 8-K, and a foreign filer's 20-F, 40-F, 6-K (All has insider forms and the rest)" : ""}
+            The SEC's filing index, newest first{fiscalYearEnd ? ", headed by fiscal year" : ""}.{filter === "reports" ? " Reports are the 10-K, 10-Q, 8-K, and a foreign filer's 20-F, 40-F and 6-K; All has insider forms and the rest." : ""}
           </span>
           <span className="grow" />
           <span className="seg" role="group" aria-label="Form">
@@ -108,7 +108,19 @@ export function Filings({ token, companyId, name, canRead, initialDiff, fiscalYe
             <input type="date" className="field narrow" aria-label="Filed to" value={to}
               onChange={(e) => refilter(() => setTo(e.target.value))} />
           </label>
+          {/* dates apply as they change; one click puts them back (Riley 76: no Clear) */}
+          {(from || to) && (
+            <button className="btn sm ghost" onClick={() => refilter(() => {
+              setFrom("");
+              setTo("");
+            })}>Clear dates</button>
+          )}
         </div>
+        {/* the insider filter shows the transactions table here, not above a second list of the same Form 4s
+            (Riley 19); without it (an older API, no filings access) the index lists them */}
+        {filter === "insider" && canRead && insiders?.state === "ok" && insiders.data ? (
+          <InsiderTable load={insiders} token={token} companyId={companyId} />
+        ) : (
         <Gate load={load} name={name} what="Filings">
           {() =>
             rows.length === 0 ? (
@@ -147,7 +159,7 @@ export function Filings({ token, companyId, name, canRead, initialDiff, fiscalYe
                         <tr className={diff === f.accession_no ? "sel" : undefined}>
                           <td className="muted">{day(f.filed, true)}</td>
                           <td>
-                            <span className={`tag ${formTag(f.form)}`}>{f.form}</span>
+                            <FormMark form={f.form} />
                           </td>
                           <td className="muted">
                             {f.period_of_report ? (f.form.startsWith("8-K") ? `event ${day(f.period_of_report, true)}` : day(f.period_of_report, true)) : "—"}
@@ -190,7 +202,8 @@ export function Filings({ token, companyId, name, canRead, initialDiff, fiscalYe
             )
           }
         </Gate>
-        {load?.state === "ok" && (offset > 0 || load.data.has_more) && (
+        )}
+        {load?.state === "ok" && (offset > 0 || load.data.has_more) && !(filter === "insider" && insiders?.state === "ok" && insiders.data) && (
           <div className="pager">
             <span className="muted">
               {offset + 1}–{offset + rows.length}
@@ -378,6 +391,29 @@ const KIND: Record<Change["kind"], string> = { new: "New", removed: "Removed", r
 
 /** The materiality view's list: one list across sections (ranked) or section by section, each
  * change with its section, period, what made it rank and where it sits in the filing. */
+/** A change longer than this (characters) opens folded to a few lines (Riley 114: the step ran to 8,236px of
+ * struck-through walls); the whole of it is a click away and in the reader. */
+const FOLD_CHARS = 520;
+
+function changeLength(c: Change): number {
+  return c.words ? c.words.reduce((n, [, t]) => n + t.length + 1, 0) : (c.text ?? c.prior_text ?? "").length;
+}
+
+function Folded({ long, children }: { long: boolean; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const id = useId();
+  return (
+    <>
+      <span id={id} className={long && !open ? "change-body folded" : "change-body"}>{children}</span>
+      {long && (
+        <button type="button" className="btn sm ghost fold-toggle" aria-expanded={open} aria-controls={id} onClick={() => setOpen((o) => !o)}>
+          {open ? "Show less" : "Show the whole paragraph"}
+        </button>
+      )}
+    </>
+  );
+}
+
 function MaterialList({ data, companyId, pin, view, all, onAll }: {
   data: SectionChanges;
   companyId: string;
@@ -414,16 +450,16 @@ function MaterialList({ data, companyId, pin, view, all, onAll }: {
               <span className="tag">{sectionShort(s.section_key)}</span>
               {period && <span className="tag period" title="The period this passage describes">{period}</span>}
             </span>
-            <span className="change-body">
+            <Folded long={changeLength(c) > FOLD_CHARS}>
               {c.kind === "rewritten" && c.words
                 ? c.words.map(([op, t], j) =>
                     op === "+" ? <ins key={j}>{text(t)} </ins> : op === "-" ? <del key={j}>{text(t)} </del> : <span key={j}>{text(t)} </span>,
                   )
                 : text(c.text ?? c.prior_text ?? "")}
-            </span>
+            </Folded>
             {c.why && c.why.length > 0 && (
               <span className="change-why faint small">
-                Why {view === "ranked" ? "it ranks here" : "it matters"}: {c.why.join(" · ")}
+                Why {view === "ranked" ? "it ranks here" : "it matters"}: {c.why.join("; ")}
               </span>
             )}
             <span className="change-links small">

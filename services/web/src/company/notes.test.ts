@@ -141,7 +141,7 @@ describe("what a note can honestly say", () => {
     const unit = explain(note("restatement", { change: 999, unit_change: true }, { metric: "weighted_shares_basic" }));
     expect(unit.title).toContain("unit changed");
     const shell = explain(note("restatement", { change: -141.96 }, { metric: "stockholders_equity" }));
-    expect(shell.title).toBe("Stockholders equity restated");
+    expect(shell.title).toBe("Stockholders' equity restated");
     expect(shell.text).toContain("−14,196%");
     expect(shell.text).toContain("describe different things");
   });

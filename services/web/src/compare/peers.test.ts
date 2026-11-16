@@ -18,7 +18,7 @@ describe("why a peer was suggested", () => {
     const reasons = whyParts(match, ETN, VRT);
     expect(reasons.map((r) => r.text)).toEqual([
       "named as a competitor in Vertiv's 10-K",
-      "business: hyperscale, power management, colocation, global service",
+      "business: hyperscale, power management, colocation", // three, each once (Riley 110)
       "similar size ($10B-$100B)",
     ]);
     expect(reasons[0]!.cite).toEqual({ companyId: VRT.companyId, mention: cite });

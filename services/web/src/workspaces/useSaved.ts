@@ -44,7 +44,8 @@ export interface Saved {
   createWorkspace: (name: string) => Promise<SavedWorkspace>;
   renameWorkspace: (id: string, name: string) => Promise<void>;
   deleteWorkspace: (id: string) => Promise<void>;
-  duplicateWorkspace: (id: string) => Promise<void>;
+  /** resolves with the copy's id */
+  duplicateWorkspace: (id: string) => Promise<string>;
   renameItem: (id: string, name: string) => Promise<void>;
   duplicateItem: (id: string) => Promise<void>;
   deleteItem: (id: string) => Promise<void>;
@@ -298,8 +299,9 @@ export function useSaved(token: string | null, user: string | null): Saved {
   }, [forget, refresh]);
 
   const duplicateWs = useCallback(async (id: string) => {
-    await duplicateWorkspace(need(), id);
+    const copy = await duplicateWorkspace(need(), id);
     refresh();
+    return copy.workspace_id;
   }, [refresh]);
 
   const renameItem = useCallback(async (id: string, name: string) => {

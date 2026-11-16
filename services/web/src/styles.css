@@ -25,14 +25,41 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/* A link is the ink with a rule under it: red is the seal's and the rubrics' (decided 2026-11-15). Links
+   that are controls or a table's names and figures carry no rule (below); the hover darkens the rule. */
 a {
-  color: var(--red);
-  text-decoration: none;
+  color: var(--link);
+  text-decoration: underline;
+  text-decoration-color: var(--link-rule);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
 }
 
 a:hover {
-  text-decoration: underline;
-  text-underline-offset: 3px;
+  text-decoration-color: currentColor;
+}
+
+.btn,
+.nav a,
+.tabs a,
+.side a,
+.top a,
+.crumb a,
+.t a,
+.toc a,
+.step-rail a,
+.seal-link,
+.brand,
+.cover-link,
+.project-row,
+.ws-open,
+.menu-item,
+.chart a,
+.rubric a,
+a.co,
+a.cell-edgar,
+.pal a {
+  text-decoration: none;
 }
 
 button,
@@ -175,9 +202,11 @@ kbd,
   display: inline-flex;
   align-items: center;
   gap: var(--sp-3);
+  justify-content: center;
   border: 1px solid var(--ink);
   background: transparent;
-  padding: 7px 14px;
+  min-height: 32px;
+  padding: 0 14px;
   font-family: var(--sans);
   font-size: var(--fs-base);
   font-weight: 600;
@@ -192,26 +221,44 @@ a.btn:hover {
 }
 
 .btn:hover:not(:disabled) {
-  background: var(--red-wash);
+  background: var(--sheet-2);
 }
 
 .btn:active:not(:disabled) {
   transform: scale(0.97);
 }
 
+/* One scale (Riley 105): a button is 32px, or 28px inside a row, a card's head or a table. A page's
+   own bar never mixes the two. */
 .btn.sm {
-  padding: 4px 9px;
+  min-height: 28px;
+  padding: 0 10px;
   font-size: var(--fs-sm);
 }
 
+.page-bar .btn.sm {
+  min-height: 32px;
+  padding: 0 14px;
+  font-size: var(--fs-base);
+}
+
+/* the one action of a view: the ink, filled (--action; the red is the seal's) */
 .btn.primary {
-  background: var(--red);
-  border-color: var(--red);
-  color: var(--red-ink);
+  background: var(--action);
+  border-color: var(--action);
+  color: var(--action-ink);
 }
 
 .btn.primary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--red) 86%, var(--ink));
+  background: color-mix(in srgb, var(--action) 84%, var(--page));
+}
+
+/* a disabled primary keeps its shape and loses its fill: "nothing to save" reads as quiet, not broken */
+.btn.primary:disabled {
+  background: transparent;
+  color: var(--ink-3);
+  border-color: var(--rule-2);
+  opacity: 1;
 }
 
 .btn.ghost {
@@ -229,7 +276,9 @@ a.btn:hover {
   border-color: currentColor;
 }
 
-/* a form mark: 1px outline, sans 12px; the colour says what it marks, never a fill */
+/* a form mark: 1px outline, sans 12px, in the ink. An annual report (10-K) is filled, a quarterly
+   one (10-Q) outlined, anything else a step quieter; expected is dashed. components/FormMark gives each
+   its name on hover. */
 .tag {
   display: inline-block;
   font-family: var(--sans);
@@ -244,7 +293,9 @@ a.btn:hover {
 }
 
 .tag.k {
-  color: var(--red);
+  color: var(--page);
+  background: var(--ink);
+  border-color: var(--ink);
 }
 
 .tag.q {
@@ -261,7 +312,7 @@ a.btn:hover {
 
 .tag.warn {
   margin-left: var(--sp-3);
-  color: var(--red);
+  color: var(--error);
 }
 
 /* App shell: sidebar | page | assistant */
@@ -287,8 +338,8 @@ a.btn:hover {
   display: flex;
   align-items: center;
   gap: var(--sp-5);
-  background: var(--red-soft);
-  color: var(--red);
+  background: var(--error-soft);
+  color: var(--error);
   font-family: var(--sans);
   font-size: var(--fs-sm);
   padding: var(--sp-4) var(--sp-8);
@@ -373,7 +424,12 @@ a.btn:hover {
   min-width: 0;
   padding: 44px 40px 40px;
   background: var(--page);
-  border-left: 2px solid var(--ink);
+  border-left: 1px solid var(--ink);
+}
+
+/* an odd last figure takes the row, not half of it beside nothing (Riley 120) */
+.proof > div:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
 }
 
 .proof {
@@ -428,7 +484,8 @@ a.btn:hover {
   color: var(--ink-3);
 }
 
-.welcome-layout > .welcome-card {
+/* .card.pad set 18px and the way in sat 38px left of the headline (Riley 120): one left edge */
+.welcome-layout > .card.welcome-card {
   grid-area: card;
   align-self: start;
   width: 100%;
@@ -486,7 +543,7 @@ a.btn:hover {
 
   .welcome-proof {
     border-left: 0;
-    border-top: 2px solid var(--ink);
+    border-top: 1px solid var(--ink);
   }
 }
 
@@ -495,7 +552,7 @@ a.btn:hover {
     padding: 36px 22px 0;
   }
 
-  .welcome-layout > .welcome-card {
+  .welcome-layout > .card.welcome-card {
     padding: 24px 22px 36px;
   }
 
@@ -526,8 +583,8 @@ a.btn:hover {
 }
 
 .welcome-error {
-  border-left: 2px solid var(--red);
-  color: var(--red);
+  border-left: 2px solid var(--error);
+  color: var(--error);
   padding: var(--sp-3) var(--sp-5);
 }
 
@@ -555,7 +612,7 @@ a.btn:hover {
 
 .welcome-progress progress {
   width: 100%;
-  accent-color: var(--red);
+  accent-color: var(--action);
 }
 
 /* Sidebar */
@@ -642,7 +699,7 @@ a.btn:hover {
   margin-left: auto;
   font-size: var(--fs-xs);
   font-weight: 600;
-  color: var(--red);
+  color: var(--ink-2);
   border: 1px solid currentColor;
   padding: 0 5px;
 }
@@ -661,7 +718,7 @@ a.btn:hover {
 .nav a:hover {
   text-decoration: none;
   color: var(--ink);
-  background: var(--red-wash);
+  background: var(--sheet-2);
 }
 
 /* where you are: the ink, and a red rule at its edge (the tabs' underline, turned on its side) */
@@ -723,7 +780,7 @@ a.btn:hover {
 }
 
 .side .sect button:hover {
-  color: var(--red);
+  color: var(--ink);
 }
 
 .side-note {
@@ -732,6 +789,18 @@ a.btn:hover {
   font-family: var(--serif);
   font-size: var(--fs-sm);
   line-height: 1.45;
+}
+
+/* what the spark and the percentage are: revenue and its growth, not a share price (Riley 25) */
+.side .wl .wl-head {
+  display: flex;
+  justify-content: space-between;
+  margin: 0 0 2px;
+  padding: 0 6px 0 62px;
+  font-family: var(--sans);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+  color: var(--ink-3);
 }
 
 .side .wl a {
@@ -758,7 +827,7 @@ a.btn:hover {
 
 .side .wl a:hover,
 .side .up a:hover {
-  background: var(--red-wash);
+  background: var(--sheet-2);
   text-decoration: none;
 }
 
@@ -855,12 +924,15 @@ a.btn:hover {
   z-index: 20;
 }
 
+/* where you are keeps its words: the search box gives way first (Riley 108, 125: "Nvidia (…") */
 .crumb {
   font-weight: 600;
   white-space: nowrap;
   display: flex;
   gap: var(--sp-3);
   min-width: 0;
+  flex-shrink: 0;
+  max-width: 46%;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -932,9 +1004,9 @@ a.btn:hover {
 }
 
 .who select {
-  border: 1px solid var(--rule-2);
-  background: var(--sheet);
-  padding: 3px 6px;
+  height: 28px;
+  background-color: var(--sheet);
+  font-size: var(--fs-sm);
 }
 
 /* Pages, cards, tables */
@@ -1154,7 +1226,7 @@ table.t {
 }
 
 .t tbody tr:hover td {
-  background: var(--red-wash);
+  background: var(--sheet-2);
 }
 
 .t td.first,
@@ -1202,7 +1274,7 @@ table.t {
 }
 
 .t tbody tr:hover td.first {
-  background: color-mix(in srgb, var(--red) 5%, var(--sheet));
+  background: var(--sheet-2);
 }
 
 .t .clk {
@@ -1295,6 +1367,12 @@ table.t {
   margin: 4px 0 2px;
   font-variant-numeric: lining-nums tabular-nums;
   letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+/* the live point sits at the figure's middle, not its baseline (Riley 128) */
+.status-strip .v .live {
+  vertical-align: 0.3em;
 }
 
 .feed {
@@ -1376,44 +1454,95 @@ table.t {
   grid-column: 1 / -1;
 }
 
-/* selects and inputs are one height, so their labels line up */
-.filters .field {
-  height: 34px;
-}
-
+/* a field's label: sans 13, the second ink, regular weight (bold sans labels read as a form's soup) */
 .filters label:not(.chk) {
   display: block;
   font-size: var(--fs-sm);
   color: var(--ink-2);
   margin-bottom: var(--sp-2);
-  font-weight: 600;
+  font-weight: 500;
 }
 
-/* inset a little: a field receives, so it sits on the page's ground, not the sheet's */
-.field {
-  width: 100%;
+/* One control (Riley pattern 9): every text field, select and date field is the same box, 32px, square,
+   on the page's ground (a field receives, so it sits inset), a 1px rule, sans 14. A select is drawn
+   here, not by the system: its chevron is two gradients (no image, for the CSP). */
+.field,
+select,
+input[type="date"] {
   border: 1px solid var(--rule-2);
-  padding: 6px 9px;
-  background: var(--page);
+  border-radius: 0;
+  background-color: var(--page);
+  color: var(--ink);
   font-family: var(--sans);
   font-size: var(--fs-base);
   transition: border-color var(--press);
 }
 
-.field:hover {
+.field {
+  width: 100%;
+  padding: 6px 9px;
+}
+
+.field:not(textarea),
+select,
+input[type="date"] {
+  height: 32px;
+}
+
+select,
+input[type="date"],
+input[type="date"].field {
+  padding: 0 9px;
+}
+
+/* the chevron's room, a class's padding included (.field set 9px and the chevron sat on the text) */
+select,
+select.field,
+.layer select {
+  padding: 0 28px 0 9px;
+}
+
+select {
+  appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--ink-2) 50%),
+    linear-gradient(135deg, var(--ink-2) 50%, transparent 50%);
+  background-position: calc(100% - 15px) 55%, calc(100% - 10px) 55%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+/* the date's own calendar button, in the field's ink */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  opacity: 0.6;
+  cursor: pointer;
+}
+
+.field:hover,
+select:hover:not(:disabled),
+input[type="date"]:hover {
   border-color: var(--ink-3);
 }
 
-.field:focus {
-  outline: 2px solid var(--red);
+.field:focus,
+select:focus-visible,
+input[type="date"]:focus-visible {
+  outline: 2px solid var(--focus);
   outline-offset: -1px;
-  border-color: var(--red);
+  border-color: var(--ink);
+}
+
+select:disabled {
+  cursor: default;
+  opacity: 0.55;
 }
 
 input[type="checkbox"],
 input[type="radio"],
 progress {
-  accent-color: var(--red);
+  accent-color: var(--action);
 }
 
 .chk {
@@ -1448,7 +1577,7 @@ button.link:hover {
 }
 
 .t th.sort:hover {
-  color: var(--red);
+  color: var(--ink);
 }
 
 .t th[aria-sort="ascending"],
@@ -1541,14 +1670,16 @@ button.link:hover {
   font-size: 12px;
 }
 
+/* the layer card is dense: the same control a step smaller */
 .layer select,
-.layer .field {
-  border: 1px solid var(--line-2);
-  border-radius: 5px;
-  padding: 3px 6px;
-  background: var(--panel);
-  font-size: 12px;
+.layer .field:not(textarea) {
+  height: 30px;
+  font-size: var(--fs-sm);
   min-width: 0;
+}
+
+.layer .field {
+  padding: 4px 8px;
 }
 
 .layer .row select {
@@ -1695,6 +1826,31 @@ button.link:hover {
 
 .sw {
   flex: none;
+}
+
+/* a layer's colour: the colours themselves, the chosen one ringed in the ink */
+.swatches {
+  display: flex;
+  gap: 6px;
+  padding: 2px 0;
+}
+
+.swatch {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  background: currentColor;
+  transition: transform var(--press);
+}
+
+.swatch:hover {
+  transform: scale(1.12);
+}
+
+.swatch[aria-checked="true"] {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
 }
 
 .tip {
@@ -1903,10 +2059,21 @@ button.link:hover {
   background: var(--panel-2);
 }
 
+/* a filing cited in an answer: a quiet mark in the sans, not red monospace mid-sentence (Riley 118); the
+   accession stays its text (the citation check), the filing is its hover */
 .accession {
-  font-family: var(--mono);
-  font-size: 0.9em;
+  font-family: var(--sans);
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
   white-space: nowrap;
+  padding: 0 4px;
+  border: 1px solid var(--rule-2);
+  text-decoration: none;
+}
+
+a.accession:hover {
+  color: var(--ink);
+  border-color: var(--ink-3);
 }
 
 .accession.unverified {
@@ -2151,10 +2318,16 @@ button.link:hover {
   color: var(--ink-3);
 }
 
-/* one readable column, centred: answers, prompts and the box line up */
+/* the page's width for tables, prose kept to a readable measure inside it (Riley 118: a 870px column with
+   wide empty gutters) */
 .ask-page {
-  max-width: 920px;
+  max-width: 1120px;
   margin-inline: auto;
+}
+
+.ask-page .answer p,
+.ask-page .answer li {
+  max-width: 78ch;
 }
 
 /* A page that failed to render (components/ErrorBoundary) */
@@ -2280,7 +2453,7 @@ button.link:hover {
 
 .tier.none {
   border-color: currentColor;
-  color: var(--red);
+  color: var(--error);
 }
 
 .company {
@@ -2955,6 +3128,19 @@ button.chip:disabled {
   margin-top: var(--sp-2);
 }
 
+/* a long change opens at five lines, the rest a click away (Riley 114) */
+.diff p .change-body.folded {
+  display: -webkit-box;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.diff p .fold-toggle {
+  margin-top: var(--sp-2);
+  padding-left: 0;
+}
+
 .diff p .change-links {
   display: flex;
   flex-wrap: wrap;
@@ -3112,8 +3298,16 @@ mark {
   position: sticky;
   top: var(--topbar-h);
   z-index: 2;
-  padding: 6px 0;
+  padding: 8px 0;
   background: var(--panel);
+  /* a rule and a soft edge under it, so the text passes beneath rather than looking cut (Riley 117) */
+  border-bottom: 1px solid var(--rule);
+  box-shadow: 0 8px 10px -8px var(--edge-shadow);
+}
+
+/* the reader's Exact phrase box: one line beside the search */
+.reader-tools .chk {
+  white-space: nowrap;
 }
 
 .section-nav {
@@ -3474,15 +3668,54 @@ mark {
 }
 
 .savebar .saved-as {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px 10px;
+  flex-wrap: wrap;
+  font-family: var(--sans);
   font-size: var(--fs-sm);
-  max-width: 320px;
+  max-width: 420px;
+}
+
+.savebar .saved-as b {
+  font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  max-width: 40ch;
 }
 
 .savebar .dirty {
   color: var(--warn);
+  white-space: nowrap;
+}
+
+.savebar .dirty::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 5px;
+  vertical-align: 1px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* In a page's bar the buttons sit with the page's own, and the open item's name has a line of its own
+   under the title instead of squeezing beside them (Riley 21's screenshot: "● unsaved c..." cut off);
+   the save form hangs from the bar. */
+.page-bar {
+  position: relative;
+}
+
+.page-bar .savebar {
+  display: contents;
+}
+
+.page-bar .savebar .saved-as {
+  order: 99;
+  flex-basis: 100%;
+  max-width: none;
 }
 
 .save-form {
@@ -3848,7 +4081,7 @@ button.link.num {
 
 /* a finding's severity: form marks; only an error takes the red */
 .tag.sev-error {
-  color: var(--red);
+  color: var(--error);
 }
 
 .tag.sev-warning {
@@ -3872,17 +4105,22 @@ button.link.num {
   color: var(--accent);
 }
 
+/* What Tributary covers: the three lists one above the other, each list's items side by side, so no column
+   ends 800px before its neighbour (Riley 126: three cards of very different heights) */
 .cover-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--sp-6);
-  align-items: start;
 }
 
-@container main (max-width: 1000px) {
-  .cover-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
+.cover-grid .cover-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+}
+
+.cover-grid .cover-list li {
+  border-bottom: 0;
+  border-top: 1px solid var(--line);
 }
 
 .cover-list {
@@ -4000,10 +4238,10 @@ button.link.num {
   --series-0: #5c5350;
   --series-1: #3d5a80;
   --series-2: #9a5a17;
-  --series-3: #2f6b5a;
-  --series-4: #6b4a7a;
-  --series-5: #4b6b2a;
-  --series-6: #a8456a;
+  --series-3: #6b4a7a;
+  --series-4: #2f6b5a;
+  --series-5: #a8456a;
+  --series-6: #4b6b2a;
   --series-7: #8a817c;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
@@ -4326,13 +4564,17 @@ button.link.num {
     --warn-soft: #f6ece2;
     --red-rule: rgb(179 17 30 / 0.36);
     --red-wash: rgb(179 17 30 / 0.05);
+    --action: #161314;
+    --action-ink: #ffffff;
+    --error: #b3111e;
+    --error-soft: #f7e9e9;
     --series-0: #5c5350;
     --series-1: #3d5a80;
     --series-2: #9a5a17;
-    --series-3: #2f6b5a;
-    --series-4: #6b4a7a;
-    --series-5: #4b6b2a;
-    --series-6: #a8456a;
+    --series-3: #6b4a7a;
+    --series-4: #2f6b5a;
+    --series-5: #a8456a;
+    --series-6: #4b6b2a;
     --series-7: #8a817c;
     color-scheme: light;
   }
@@ -4383,7 +4625,19 @@ button.link.num {
 .layer-company > .small {
   flex: none;
   width: 58px;
-  color: var(--text-3);
+  color: var(--ink-3);
+  font-family: var(--sans);
+}
+
+/* the layer card's head: what it is (sans, like every control), then whose */
+.layer > .row > b.grow {
+  font-family: var(--sans);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.layer > .row > b.grow .faint {
+  font-weight: 500;
 }
 
 .layer-company .co-search,
@@ -4441,14 +4695,15 @@ button.link.num {
   gap: var(--sp-7);
 }
 
-/* neighbours are one height, and their tiles fill it */
+/* neighbours keep their own height: a short card stretched to its neighbour's showed ~200px of empty boxes
+   (Riley 121) */
+.status-grid {
+  align-items: start;
+}
+
 .status-grid > .card {
   display: flex;
   flex-direction: column;
-}
-
-.status-grid > .card > .kv {
-  flex: 1;
 }
 
 .status-grid > .card > .kv > div {
@@ -4497,6 +4752,9 @@ button.link.num {
 
 .thesis-page .seg {
   margin-bottom: var(--sp-4);
+  /* as wide as its four choices, not the page (a column stretched its frame to the edge) */
+  align-self: flex-start;
+  justify-self: start;
 }
 
 .thesis-panes {
@@ -4609,9 +4867,10 @@ button.link.num {
   margin-top: var(--sp-2);
 }
 
+/* side by side, the preview runs the thesis's whole length beside the editor: a box of 60% of the window that
+   scrolled on its own read as a preview that stopped after Pillars (Riley 22) */
 .thesis-panes.split .thesis-preview {
-  max-height: calc(60vh + 60px);
-  overflow: auto;
+  min-width: 0;
 }
 
 /* Check my thesis: results beside the thesis */
@@ -4629,10 +4888,13 @@ button.link.num {
   padding: var(--sp-5) var(--sp-6);
   display: grid;
   gap: var(--sp-4);
-  max-height: calc(100vh - 120px);
+  /* under the top bar, as tall as the window leaves it, scrolling inside (Riley 53: it clipped its own text
+     under the bar) */
+  max-height: calc(100vh - var(--topbar-h) - 24px);
   overflow: auto;
+  overscroll-behavior: contain;
   position: sticky;
-  top: var(--sp-6);
+  top: calc(var(--topbar-h) + 12px);
 }
 
 .check-panel h2,
@@ -4806,6 +5068,19 @@ mark.claim-mark {
   gap: var(--sp-6);
 }
 
+/* revenue and operating income side by side, each on its own scale; one above the other when narrow */
+.model-charts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-6);
+}
+
+@container main (max-width: 900px) {
+  .model-charts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .model-table tr.forecast th,
 .model-table tr.forecast td {
   font-style: italic;
@@ -4924,8 +5199,36 @@ mark.claim-mark {
   font-weight: 500;
   color: var(--text);
   white-space: normal;
-  min-width: 150px;
-  max-width: 220px;
+}
+
+/* the line's name and its case both stay while the years scroll (Riley 86: the Case column scrolled away
+   and left unlabelled triples of values): the name a fixed width, the case frozen beside it */
+.model-table th.first {
+  width: 170px;
+  min-width: 170px;
+  max-width: 170px;
+}
+
+.model-table td.case,
+.model-table th.case-h {
+  position: sticky;
+  left: 170px;
+  z-index: 2;
+  background: var(--sheet);
+  box-shadow: inset -1px 0 0 var(--rule);
+}
+
+@container tw (max-width: 560px) {
+  .model-table th.first {
+    width: 118px;
+    min-width: 118px;
+    max-width: 118px;
+  }
+
+  .model-table td.case,
+  .model-table th.case-h {
+    left: 118px;
+  }
 }
 
 .model-table tr.line-start > * {
@@ -4943,7 +5246,7 @@ mark.claim-mark {
 }
 
 .model-table td.case.bull {
-  color: var(--series-3);
+  color: var(--series-4);
 }
 
 /* the price and why past years have no multiple, beside "Valuation at your price" */
@@ -4960,9 +5263,19 @@ mark.claim-mark {
   cursor: help;
 }
 
+/* the case being edited: heavier, in its own colour (bull stays teal, never the red: Riley 116) */
 .model-table tr.selected td.case {
-  color: var(--accent);
-  font-weight: 600;
+  font-weight: 650;
+}
+
+.model-table tr.selected td.case::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 5px;
+  vertical-align: 1px;
+  background: currentColor;
 }
 
 .model-table td.forecast {
@@ -5253,10 +5566,8 @@ button.chip.on {
 .project-progress .bar {
   display: block;
   width: 160px;
-  height: 6px;
-  border-radius: 999px;
-  background: var(--panel-2);
-  border: 1px solid var(--line);
+  height: 4px;
+  background: var(--sheet-2);
   overflow: hidden;
 }
 
@@ -5267,16 +5578,48 @@ button.chip.on {
   background: var(--pos);
 }
 
-.project-progress .fill.f1 { width: 14.3%; }
-.project-progress .fill.f2 { width: 28.6%; }
-.project-progress .fill.f3 { width: 42.9%; }
-.project-progress .fill.f4 { width: 57.1%; }
-.project-progress .fill.f5 { width: 71.4%; }
-.project-progress .fill.f6 { width: 85.7%; }
-.project-progress .fill.f7 { width: 100%; }
+/* eighths: eight steps (it was sevenths, so seven ticks read as all done) */
+.project-progress .fill.f1 { width: 12.5%; }
+.project-progress .fill.f2 { width: 25%; }
+.project-progress .fill.f3 { width: 37.5%; }
+.project-progress .fill.f4 { width: 50%; }
+.project-progress .fill.f5 { width: 62.5%; }
+.project-progress .fill.f6 { width: 75%; }
+.project-progress .fill.f7 { width: 87.5%; }
+.project-progress .fill.f8 { width: 100%; }
 
-.project-head .tabs .dirty {
-  color: var(--warn);
+/* the project's head reads like a company's: no box, ruled off below; the rail is its one navigation
+   (Riley 51: header tabs and the rail were two navigations for the same eight steps) */
+.project-head.card {
+  background: transparent;
+  border-width: 0 0 1px;
+}
+
+.project-head .co-head {
+  padding: 0 0 var(--sp-7);
+}
+
+/* the company's name leads, as on its own page (a page's title size, not a card's) */
+.project-head h1 {
+  font-size: 34px;
+  letter-spacing: -0.02em;
+  font-variation-settings: "opsz" 60;
+}
+
+.project-head .meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px var(--sp-6);
+  font-family: var(--sans);
+  font-size: var(--fs-meta);
+}
+
+.step-rail .dirty {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--warn);
 }
 
 .project-body {
@@ -5304,8 +5647,9 @@ button.chip.on {
   align-items: center;
   gap: var(--sp-4);
   padding: 7px 10px;
-  border-radius: var(--radius);
-  color: var(--text-2);
+  color: var(--ink-2);
+  font-family: var(--sans);
+  font-size: var(--fs-base);
   font-weight: 500;
 }
 
@@ -5320,28 +5664,24 @@ button.chip.on {
   outline-offset: -2px;
 }
 
+/* where you are: the ink, and a red rule at its edge, as in the sidebar */
 .step-rail a[aria-current="step"] {
-  background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--ink);
   font-weight: 650;
+  box-shadow: inset 2px 0 0 var(--red);
 }
 
 .step-rail .n {
-  display: inline-grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 999px;
-  border: 1px solid var(--line-2);
+  width: 18px;
+  color: var(--ink-3);
   font-size: var(--fs-sm);
   font-variant-numeric: tabular-nums;
+  text-align: right;
   flex: none;
 }
 
 .step-rail a.done .n {
-  background: var(--pos-soft);
-  border-color: transparent;
-  color: var(--pos);
+  color: var(--up);
   font-weight: 700;
 }
 
@@ -5400,8 +5740,7 @@ button.chip.on {
   font-size: var(--fs-xs);
   color: var(--warn);
   border: 1px solid currentColor;
-  border-radius: 999px;
-  padding: 0 6px;
+  padding: 0 5px;
   white-space: nowrap;
 }
 
@@ -5441,6 +5780,36 @@ button.chip.on {
   margin: var(--sp-3) 0;
 }
 
+/* the Numbers step: its contents, then the charts two a row where there's room (Riley 115) */
+.numbers-contents {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px var(--sp-2);
+  padding-bottom: var(--sp-4);
+  border-bottom: 1px solid var(--rule);
+}
+
+.numbers-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-6);
+  align-items: start;
+}
+
+.numbers-grid .numbers-chart {
+  scroll-margin-top: calc(var(--topbar-h) + 12px);
+}
+
+.numbers-grid .numbers-wide {
+  grid-column: 1 / -1;
+}
+
+@container main (max-width: 1100px) {
+  .numbers-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .numbers-chart .card-b {
   display: grid;
   gap: var(--sp-2);
@@ -5475,6 +5844,26 @@ button.chip.on {
   .pinnable .pin.compact,
   .diff p .pin.compact {
     opacity: 1;
+  }
+}
+
+/* the compact pin's word (CSS, so the paragraph's text stays its own): shown with its paragraph's hover or
+   its own focus, always on a touch screen */
+.pin.compact .pin-btn::after {
+  content: none;
+  margin-left: 3px;
+  font-size: var(--fs-xs);
+}
+
+.pinnable:hover .pin.compact .pin-btn::after,
+.diff p:hover .pin.compact .pin-btn::after,
+.pin.compact .pin-btn:focus-visible::after {
+  content: "Pin";
+}
+
+@media (hover: none) {
+  .pin.compact .pin-btn::after {
+    content: "Pin";
   }
 }
 
@@ -5524,10 +5913,13 @@ button.chip.on {
 }
 
 .tag.analysis {
-  background: var(--pos-soft);
-  color: var(--pos);
-  border-color: transparent;
+  color: var(--ink-2);
   padding: 0 4px;
+}
+
+/* renaming a workspace: the field takes the heading's place (Riley 119: the name showed twice) */
+.page-bar:has(.ws-actions form) > h1 {
+  display: none;
 }
 
 .compare-embedded {
@@ -5606,7 +5998,11 @@ button.chip.on {
   }
 
   .step-rail a {
-    padding: 3px 8px 3px 4px;
+    padding: 5px 8px 5px 4px;
+  }
+
+  .step-rail a[aria-current="step"] {
+    box-shadow: inset 0 -2px 0 var(--red);
   }
 
   .project-progress {
@@ -5662,7 +6058,6 @@ button.chip.on {
 @media print {
   .tw-cue,
   .step-rail,
-  .project-head .tabs,
   .step-head .step-done,
   .step-next,
   .pin,
@@ -5693,7 +6088,45 @@ button.chip.on {
 }
 
 .t.screen td.ind {
-  max-width: 190px;
+  max-width: 170px;
+}
+
+/* the last screen's rows while the new one runs: faded, with a line saying so (Riley 44) */
+.t.updating tbody {
+  opacity: 0.4;
+  transition: opacity 160ms ease;
+}
+
+.screen-updating {
+  margin: 0;
+  padding: var(--sp-3) var(--sp-6);
+  font-family: var(--sans);
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+  border-bottom: 1px solid var(--rule);
+}
+
+/* the SIC code is a filter shortcut, not something to read: it shows on the row's hover or focus (Riley
+   pattern 6: codes beside the industry's name) */
+.t.screen td.ind .sic-code {
+  visibility: hidden;
+}
+
+.t.screen tr:hover td.ind .sic-code,
+.t.screen td.ind .sic-code:focus-visible {
+  visibility: visible;
+}
+
+/* the numbers have priority (Riley 103: at 1440 the industry took 190px and pushed FYE and the row's
+   actions out of view): below 1240px of table the industry moves under the company's name */
+@container tw (max-width: 1240px) {
+  .t.screen .ind {
+    display: none;
+  }
+
+  .t.screen .co-sub {
+    display: block;
+  }
 }
 
 .ind-in {
@@ -5827,7 +6260,11 @@ button.chip.on {
     display: inline;
   }
 
-  .who .faint {
+  /* with the assistant open the bar loses who is signed in before anything else; the account's button
+     (Sign out, End demo) stays (Riley 108) */
+  .who .faint,
+  .who .who-name,
+  .theme-k {
     display: none;
   }
 
@@ -5874,6 +6311,11 @@ button.chip.on {
 
   .search-box {
     padding: 5px 8px;
+  }
+
+  /* the theme menu's caret goes before anything is pushed off the bar */
+  .theme-btn .more-caret {
+    display: none;
   }
 }
 
@@ -5942,7 +6384,7 @@ button.chip.on {
 
 /* figures a later 8-K may have changed: the red they carry in the ledger, ruled in the margin */
 .stale-box {
-  border-left: 2px solid var(--red);
+  border-left: 2px solid var(--warn);
   padding: var(--sp-2) var(--sp-6);
   margin-bottom: var(--sp-6);
   line-height: 1.5;
@@ -5950,7 +6392,7 @@ button.chip.on {
 }
 
 .stale-box > b {
-  color: var(--red);
+  color: var(--warn);
 }
 
 .stale-box ul {
@@ -6701,7 +7143,7 @@ table.t.release-grid {
 .api-key-once {
   display: grid;
   gap: var(--sp-5);
-  border-left: 2px solid var(--red);
+  border-left: 2px solid var(--warn);
   background: var(--sheet-2);
 }
 
@@ -6832,7 +7274,7 @@ table.t.release-grid {
 }
 
 .api-code:focus-visible {
-  outline: 2px solid var(--red);
+  outline: 2px solid var(--focus);
   outline-offset: -2px;
 }
 
@@ -6907,5 +7349,58 @@ table.t.release-grid {
   .api-routes td.first {
     white-space: normal;
     overflow-wrap: anywhere;
+  }
+}
+
+/* the watchlist: a filing and its period in one column, the period a line under it (Riley 106) */
+.t.watchlist .period-sub {
+  display: block;
+  line-height: 1.3;
+}
+
+/* a phone: each company a card with its figures labelled, not a table whose numbers sat behind
+   "7 columns" (Riley 124). The cells keep their text; the labels are CSS (attr), so copying a figure
+   copies only the figure. */
+@container tw (max-width: 560px) {
+  .t.watchlist,
+  .t.watchlist tbody {
+    display: block;
+  }
+
+  .t.watchlist thead {
+    display: none;
+  }
+
+  .t.watchlist tbody tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px 16px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .t.watchlist tbody td,
+  .t.watchlist tbody td.first {
+    display: block;
+    position: static;
+    padding: 0;
+    border: 0;
+    text-align: left;
+    white-space: normal;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .t.watchlist tbody td.first,
+  .t.watchlist tbody td:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .t.watchlist tbody td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    font-family: var(--sans);
+    font-size: var(--fs-xs);
+    color: var(--ink-3);
   }
 }

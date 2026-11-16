@@ -247,7 +247,7 @@ it("heads the page with public metadata, the next expected filing and the tabs",
   expect($(".co-head .co-listing")?.textContent).toBe("NVDA on Nasdaq");
   const facts = [...$(".co-head .co-meta")!.children].map((c) => c.textContent);
   expect(facts).toEqual(expect.arrayContaining([
-    "Semiconductors & Related Devices, SIC 3674", "Fiscal year ends in January", "Large accelerated filer", "Incorporated in Delaware"]));
+    "Semiconductors & Related Devices", "Fiscal year ends in January", "Large accelerated filer", "Incorporated in Delaware"]));
   expect(head).not.toContain("incorporated in DE");
   expect(head).toContain("Next 10-Q, for the period ending Oct 25, 2026, expected around Nov 19, 2026");
   expect([...container.querySelectorAll(".tabs a")].map((a) => [a.textContent, a.getAttribute("href")])).toEqual([
@@ -308,9 +308,9 @@ it("overview and balance sheet: Ford's net debt says it includes Ford Credit's b
   rowFor = () => nvdaRow({ ...entry({ company_id: FORD, name: "Ford Motor", tickers: ["F"] }), access: ["filings", "financials"] });
   await render("overview", FORD);
   expect($(".debt-note")?.textContent).toContain("include Ford Credit's borrowings");
-  // the ledger row's seal carries the source and the note (its hover, and its description for a reader)
+  // net debt is computed, so no seal (Riley 32): the row's hover carries how, the source and the note
   const stat = [...container.querySelectorAll(".ledger dl > div")].find((d) => d.getAttribute("data-key") === "net_debt_q")!;
-  expect(stat.querySelector(".seal-source")?.textContent).toContain("include Ford Credit's borrowings");
+  expect(stat.querySelector("dd")?.title).toContain("include Ford Credit's borrowings");
   await act(async () => root.unmount());
   container.remove();
   await render("statements", FORD, null, { kind: "bs" });
@@ -339,16 +339,20 @@ it("overview: a 20-F filer's sections say it files 20-Fs and 6-Ks, and ask for n
 
 it("overview: key stats with periods, the latest quarter recap with flags, and Item 1", async () => {
   await render();
-  // Seal: the key figures are a ledger; the period they share is in the margin, the seal opens the filing
+  // Seal: the key figures are a ledger; the period they share is in the margin. A seal opens the filing, and
+  // only a figure the filing states has one (Riley 32): twelve months from a 10-Q are four quarters added up
   const stat = [...container.querySelectorAll(".ledger dl > div")].find((d) => d.querySelector("dt")?.textContent === "Revenue")!;
-  expect(stat.querySelector("dd .figure")?.textContent).toBe("$165.22B");
-  expect([...container.querySelectorAll(".rubric")].find((r) => r.textContent?.startsWith("The year"))?.textContent).toContain("Twelve months to Jul 26, 2026");
-  expect(stat.querySelector("a.seal-link")?.getAttribute("href")).toBe(`#/filing/${NVDA}/${ACC}/I-1`);
-  expect(stat.querySelector("a.seal-link")?.getAttribute("aria-label")).toBe("Revenue: taken from the 10-Q filed Aug 26, 2026");
-  // the year as a sentence, sealed to its filing
-  expect($(".story")?.textContent).toContain("In the twelve months to July 26, 2026, Nvidia reported revenue of $165.22 billion, up 69.0% on the year before.");
-  expect($(".story .seal-source")?.textContent).toContain("Taken from the 10-Q filed Aug 26, 2026");
-  expect($(".story a.seal-link")?.getAttribute("href")).toBe(`#/filing/${NVDA}/${ACC}/I-1`);
+  expect(stat.querySelector("dd .figure")?.textContent).toBe("$165.2B");
+  expect([...container.querySelectorAll(".rubric")].find((r) => r.textContent?.startsWith("The year"))?.textContent).toContain("Four quarters to Jul 26, 2026");
+  expect(stat.querySelector("a.seal-link")).toBeNull();
+  expect(stat.querySelector("dd")?.title).toMatch(/^Revenue, the four quarters to Jul 26, 2026 added up\./);
+  const eps = [...container.querySelectorAll(".ledger dl > div")].find((d) => d.getAttribute("data-key") === "eps_diluted_q")!;
+  expect(eps.querySelector("a.seal-link")?.getAttribute("href")).toBe(`#/filing/${NVDA}/${ACC}/I-1`);
+  expect(eps.querySelector("a.seal-link")?.getAttribute("aria-label")).toBe("EPS (diluted): taken from the 10-Q filed Aug 26, 2026");
+  expect($(".computed-note")?.textContent).toContain("No seal: worked out from the filings");
+  // the year as a sentence: four quarters added up, so no seal on it
+  expect($(".story")?.textContent).toContain("In the twelve months to July 26, 2026, Nvidia reported revenue of $165.2 billion, up 69.0% on the year before.");
+  expect($(".story a.seal-link")).toBeNull();
   expect(paths().some((u) => u.pathname === `/api/query/v1/filings/${ACC}/recap`)).toBe(true);
   const recap = [...container.querySelectorAll("table")].find((t) => t.textContent?.includes("QoQ"))!;
   expect([...recap.querySelectorAll("th")].map((t) => t.textContent)).toEqual(["Metric", "FY2027 Q2", "FY2027 Q1", "QoQ", "FY2026 Q2", "YoY"]);
@@ -743,7 +747,7 @@ it("F4 #135: a company that files one combined 10-K with another says it isn't a
   await render("overview", UTIL);
   // the sector is the header's rubric; the SIC industry is in the meta row
   expect($(".co-head .rubric")?.textContent).toBe("UtilitiesMulti-utilities");
-  expect($(".co-head .co-meta")?.textContent).toContain("Electric & Other Services Combined, SIC 4931");
+  expect($(".co-head .co-meta")?.textContent).toContain("Electric & Other Services Combined");
   expect($(".joint-note")?.textContent).toContain("Not a duplicate: Pacific Gas & Electric and PG&E file one combined 10-K as separate SEC registrants");
   expect($(".joint-note a")?.getAttribute("href")).toBe(`#/company/${CORP}`);
 });

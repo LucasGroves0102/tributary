@@ -4,7 +4,7 @@ import { LayerChart } from "../chart/LayerChart";
 import type { Source } from "../chart/series";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { TableScroll } from "../components/TableScroll";
-import { day } from "../format";
+import { day, paren } from "../format";
 import { go } from "../route";
 import {
   amountUnit,
@@ -61,10 +61,14 @@ export function ModelView({
   selected?: Scenario;
 }) {
   const shown = ORDER.filter((c) => cases.includes(c) && run.cases[c]);
-  const series = modelSeries(run, historyYears, shown);
+  // revenue and operating income each on their own scale (Riley 36: a 4% margin's operating income
+  // read as zero on a revenue axis)
+  const revenue = modelSeries(run, historyYears, shown, "revenue");
+  const income = modelSeries(run, historyYears, shown, "operating_income");
   const columns = useMemo(() => modelColumns(run, historyYears, forecastYears), [run, historyYears, forecastYears]);
   const lines = useMemo(() => modelLines(run), [run]);
   const svg = useRef<SVGSVGElement>(null);
+  const svgIncome = useRef<SVGSVGElement>(null);
   const open = (src: Source) => {
     if (src.companyId) go({ view: "filing", companyId: src.companyId, accessionNo: src.accessionNo, section: null });
   };
@@ -78,25 +82,36 @@ export function ModelView({
   const caseLabel = (c: Scenario) => `${SCENARIO_LABELS[c]}${preview.includes(c) ? " (preview)" : ""}${stale.includes(c) ? " ⚠" : ""}`;
   return (
     <div className="model-view">
-      <LayerChart
-        series={series}
-        title={`${company}: revenue and operating income`}
-        footnote={[
-          `History: SEC filings via Tributary, fiscal years (TTM at each fiscal Q4)${run.history.length ? `, through ${day(run.history.at(-1)!.period_end, true)}` : ""}.`,
-          first
-            ? `Forecast (dashed) from FY${first.fy}: your assumptions, not data${fromQuarters ? `, after FY${cur!.fy}'s ${quartersLabel(cur!.quarters)} as reported` : ""}.${shown.length > 1 ? " Bear and bull lighter, each in its own colour." : ""}`
-            : "No forecast: fix the assumptions.",
-        ]}
-        svgRef={svg}
-        onOpen={open}
-        notes={false}
-      />
+      <div className="model-charts">
+        <LayerChart
+          series={revenue}
+          title={`${company}: revenue`}
+          footnote={[
+            `Reported: SEC filings via Tributary, fiscal years (TTM at each fiscal Q4)${run.history.length ? `, through ${day(run.history.at(-1)!.period_end, true)}` : ""}.`,
+            first
+              ? `Dashed from FY${first.fy}: your assumptions, not data${fromQuarters ? `, after FY${cur!.fy}'s ${quartersLabel(cur!.quarters)} as reported` : ""}.${shown.length > 1 ? " Bear and bull lighter, each in its own colour." : ""}`
+              : "No forecast: fix the assumptions.",
+          ]}
+          svgRef={svg}
+          onOpen={open}
+          notes={false}
+        />
+        <LayerChart
+          series={income}
+          title={`${company}: operating income`}
+          footnote={["Adjusted for your one-off items, if any; dashed is the forecast, as beside it."]}
+          svgRef={svgIncome}
+          onOpen={open}
+          notes={false}
+        />
+      </div>
       {stale.length > 0 && (
         <p className="small editor-warn" role="status">
           Some {stale.join(" and ")} numbers don't read as percentages yet: the chart and table show the last ones that did.
         </p>
       )}
-      <TableScroll label="The model">
+      {/* the forecast in view first (Riley 86, 116: FY2019-21 showed and the forecast hid behind "8 columns") */}
+      <TableScroll label="The model" atEnd resetKey={`${columns.length}`}>
         <table className="t model-table">
           <caption className="visually-hidden">
             {company}: every line by fiscal year; reported history, the trailing twelve months
@@ -105,7 +120,7 @@ export function ModelView({
           <thead>
             <tr>
               <th className="first" scope="col">Line</th>
-              {shown.length > 1 && <th scope="col">Case</th>}
+              {shown.length > 1 && <th scope="col" className="case-h">Case</th>}
               {columns.map((c) => (
                 <th key={c.key} scope="col" className={`n ${c.kind}`}>
                   {c.label}
@@ -166,7 +181,7 @@ function Fact({ run, line, col, rows }: { run: ModelRun; line: Line; col: Column
       if (note) {
         return (
           <td className={`n ${col.kind} basis`} rowSpan={rows} title={note}>
-            {formatCell(v, line.unit, amountUnit(run))}{v === null ? "" : "*"}
+            {paren(formatCell(v, line.unit, amountUnit(run)))}{v === null ? "" : "*"}
           </td>
         );
       }
@@ -181,7 +196,7 @@ function Fact({ run, line, col, rows }: { run: ModelRun; line: Line; col: Column
   return (
     <td className={`n ${col.kind}${v === "n/a" ? " past" : ""}`} rowSpan={rows}
       title={v === "n/a" ? line.pastYear : v === null ? line.blank ?? title : title}>
-      {formatCell(v, line.unit, amountUnit(run))}
+      {paren(formatCell(v, line.unit, amountUnit(run)))}
     </td>
   );
 }
@@ -198,7 +213,7 @@ function Forecast({ line, p, c, i, preview, currency }: { line: Line; p: Project
     : preview ? "Not added yet: what this case would start as" : p.note ?? undefined);
   return (
     <td className={`n forecast${isDefault ? " default" : ""}`} title={v === null ? line.blank ?? title : title}>
-      {formatCell(v, line.unit, currency)}
+      {paren(formatCell(v, line.unit, currency))}
     </td>
   );
 }

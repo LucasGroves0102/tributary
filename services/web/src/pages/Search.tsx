@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 import { searchCompanies, searchFilings } from "../api";
-import { formTag } from "../company/data";
+import { FormMark } from "../components/FormMark";
 import { useLoad } from "../company/useLoad";
 import { useDirectory } from "../companies/directory";
 import { CompanyPicker, type PickedCompany } from "../components/CompanySearch";
 import { Skeleton } from "../components/States";
 import { day, localDay, UNNAMED } from "../format";
+import { sectionName } from "../reader/sections";
 import { searchTerms, snippetRuns } from "../reader/text";
 import { go, href } from "../route";
 import {
@@ -184,19 +185,22 @@ export function Search({ token, search, companies, open = false, suggestions = N
               {c.filings.map((f) => (
                 <div key={f.accessionNo} className="result-filing">
                   <div className="row wrap">
-                    <span className={`tag ${formTag(f.form)}`}>{f.form}</span>
+                    <FormMark form={f.form} />
                     <span className="muted">filed {day(f.filed, true)}</span>
-                    <a className="mono faint" href={href({ view: "filing", companyId: c.companyId, accessionNo: f.accessionNo, section: null, q: search.q })}>
-                      {f.accessionNo}
+                    {/* a way into the filing, its accession number the hover (Riley 82: raw numbers in the results) */}
+                    <a className="faint small" title={f.accessionNo} href={href({ view: "filing", companyId: c.companyId, accessionNo: f.accessionNo, section: null, q: search.q })}>
+                      Open the filing
                     </a>
                   </div>
                   <ul>
                     {f.hits.map((h) => (
                       <li key={h.section_key}>
                         <a href={href({ view: "filing", companyId: c.companyId, accessionNo: f.accessionNo, section: h.section_key, at: h.citation.char_start, q: search.q })}>
-                          <b>{h.section_key}</b> {h.title ?? ""}
+                          {/* the section by its name, in the reader's words ("Risk Factors"), not its key and the
+                              filing's own capitals */}
+                          <b>{sectionName(h.section_key)}</b>
                         </a>
-                        {h.passages_matched > 1 && <span className="faint small"> · {h.passages_matched} passages match</span>}
+                        {h.passages_matched > 1 && <span className="faint small">; {h.passages_matched} passages match</span>}
                         <div className="snippet">
                           {snippetRuns(h.snippet, terms).map((r, i) => (typeof r === "string" ? r : <mark key={i}>{r.mark}</mark>))}
                         </div>

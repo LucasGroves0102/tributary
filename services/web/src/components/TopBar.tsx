@@ -1,7 +1,8 @@
 import { bellLabel } from "../alerts/alerts";
 import { UNNAMED } from "../companies/directory";
 import { href, NAV, type Route } from "../route";
-import { NEXT_THEME, THEME_WORD, type ThemeChoice } from "../theme";
+import { THEME_WORD, type ThemeChoice } from "../theme";
+import { MenuButton } from "./MenuButton";
 import type { AlertUnread } from "../types";
 
 interface Props {
@@ -22,7 +23,10 @@ interface Props {
   /** A GitHub sign-in: shown by login, with Sign out (which forgets the token). */
   account?: { login: string; onSignOut: () => void };
   onSearch: () => void;
-  onTheme: () => void;
+  /** the three themes by name (Riley 72: the button was a blind cycle) */
+  onTheme: (choice: ThemeChoice) => void;
+  /** a demo sandbox's way out: forget it and go back to the front door (Riley 14: there was none) */
+  onEndDemo?: () => void;
   onAssistant: () => void;
   /** narrow screens: open or close the sidebar drawer */
   onMenu?: () => void;
@@ -55,7 +59,7 @@ export function TopBar(props: Props) {
       <span className="grow" />
       {props.account ? (
         <span className="who">
-          <span className="faint">Signed in as</span> {props.account.login}
+          <span className="faint">Signed in as</span> <span className="who-name">{props.account.login}</span>
           <button className="btn ghost sm" onClick={props.account.onSignOut}>
             Sign out
           </button>
@@ -79,7 +83,12 @@ export function TopBar(props: Props) {
       ) : (
         user && (
           <span className="who">
-            <span className="faint">Signed in to</span> {user}
+            <span className="faint">Signed in to</span> <span className="who-name">{user}</span>
+            {props.onEndDemo && (
+              <button className="btn ghost sm end-demo" onClick={props.onEndDemo} title="Leave the demo and go back to the front door; the sandbox is deleted when it resets">
+                End demo
+              </button>
+            )}
           </span>
         )
       )}
@@ -95,10 +104,12 @@ export function TopBar(props: Props) {
           {props.alerts.unread > 0 && <span className="count" aria-hidden="true">{props.alerts.unread > 99 ? "99+" : props.alerts.unread}</span>}
         </a>
       )}
-      <button className="btn ghost sm theme-btn" onClick={props.onTheme}
-        title={`Theme: ${THEME_WORD[theme].toLowerCase()}${theme === "system" ? " (your device's setting)" : ""}. Click for ${THEME_WORD[NEXT_THEME[theme]].toLowerCase()}.`}>
-        <span className="theme-k">Theme</span> {THEME_WORD[theme]}
-      </button>
+      <MenuButton className="btn ghost sm theme-btn more-btn" count={false}
+        title={`Theme: ${THEME_WORD[theme].toLowerCase()}${theme === "system" ? " (your device's setting)" : ""}`}
+        label={<><span className="theme-k">Theme</span> {THEME_WORD[theme]}</>}
+        items={(["light", "dark", "system"] as const).map((c) => ({
+          label: c === "system" ? "System (your device's setting)" : THEME_WORD[c], checked: theme === c, onCheckedChange: () => props.onTheme(c),
+        }))} />
       {route.view !== "ask" && (
         <button
           className="btn sm assistant-btn"
@@ -144,7 +155,7 @@ function Breadcrumb({
   if (route.view === "search") {
     return (
       <nav className="crumb" aria-label="Breadcrumb">
-        <span aria-current="page">Search filings{route.search ? `: “${route.search.q}”` : ""}</span>
+        <span aria-current="page">Search filings{route.search ? `: “${route.search.q.replace(/^"(.*)"$/, "$1")}”` : ""}</span>
       </nav>
     );
   }
