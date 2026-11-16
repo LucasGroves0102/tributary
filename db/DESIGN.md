@@ -753,13 +753,17 @@ do, and check results that say what they mean. Its header has the rules and the 
   the 038-041 backout replaces, one row per check and severity now).
 - `ops.check_segments`: two cuts beside a zero or a negative member (NVIDIA's 2019 quarters) overlap
   too: zeros drop out and the negative members count once in every set (070's search over the
-  positive members for the figure less the negative ones).
+  positive members for the figure less the negative ones). 3,125 of 27,170 stored findings go; NVIDIA
+  keeps 13 of 19, real (two bases mixed in derived Q4s, missing geography members, unallocated costs).
 - Parser-output checks (`ops.check_sections`, `ops.section_findings`, `ops.section_checks`): keys the
   form has, core items, empty and repeated sections, stored documents with none; twins of
   services/parser `invariants.py`. Run by section-index for what it indexes and by the catch-up (kind
-  `check_sections`) for every stored document once per `ops.check_sections_version()`.
+  `check_sections`) for every stored document once per `ops.check_sections_version()`. First counts:
+  6,973 of 634,653 documents with an invalid key, 17,591 missing a core item (mostly 10-Q Part I Item 1).
 - Extremes (`ops.refresh_extremes`, `ops.extremes`, `ops.extremes_report` for ops_reader): the screener's
-  top and bottom 20 per column with what explains each; the nightly financials-bulk job refreshes it.
+  top and bottom 20 per column with what explains each (a finding, a derived quarter, or `in_line`: the
+  company's own previous figure within 3x); 1,036 of 4,720 rows to review on hermes. The nightly
+  financials-bulk job refreshes it.
 
 Both company checks' versions go to 72, so the hourly catch-up re-checks every company; nothing runs by
 hand. No backout file: 057's `ops.check_financials`, 070's `ops.check_segments` and versions 57/70 undo

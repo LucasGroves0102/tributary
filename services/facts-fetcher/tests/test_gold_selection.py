@@ -1674,7 +1674,8 @@ def test_kept_out_and_coverage_findings_are_info(conn):
         " AND check_name = 'mistagged_fact'", (CO,))} == {"info"}
     assert conn.execute("SELECT ops.quality_tier('mistagged_fact', 'error'),"
                         " ops.quality_tier('series_gap', 'warning'),"
-                        " ops.quality_tier('outlier', 'warning'), ops.quality_tier('outlier', 'info')"
+                        " ops.quality_tier('outlier', 'warning'),"
+                        " ops.quality_tier('outlier', 'info')"
                         ).fetchone() == ("kept_out", "coverage", "warning", "info")
     figures = conn.execute("SELECT figures FROM ops.quality_companies WHERE company_id = %s",
                            (CO,)).fetchone()[0]

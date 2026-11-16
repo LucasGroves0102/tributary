@@ -1,58 +1,54 @@
--- Data trust, part 1: nightly checks that find wrong numbers before people do, and checks that say what
--- they mean (db/DESIGN.md "072").
+-- Data trust, part 1: nightly checks that find wrong numbers before people do, and checks that say
+-- what they mean (db/DESIGN.md "072"). Measured on hermes 2026-11-16, read-only.
 --
 -- 1. tag_disagreement (ops.check_financials, warning): the filing gold reads a figure from tags the
 --    same line another way, and the two can't both be right. For each fact gold.best_facts believes
 --    (positive), the metric's other gold tags in the same filing, unit and period:
---      total_below_part  gold's tag is a total and is under a fifth of a part of it filed beside it
---                        (ops.tag_relations 'part': D&A under its depreciation, cost of revenue under
---                        its cost of goods sold, receivables under accounts receivable...)
---      same_line         two names of one line 5x apart (EPS basic beside EPS basic-and-diluted, the
---                        contract revenue tags with and without assessed tax, us-gaap beside IFRS)
+--      total_below_part  gold's tag is a total under a fifth of a part of it filed beside it
+--                        (ops.tag_relations 'part', listed only where gold reads the total first:
+--                        D&A under its depreciation, receivables under accounts receivable...)
+--      same_line         two names of one line 5x apart (EPS basic and basic-and-diluted, contract
+--                        revenue with and without assessed tax, a us-gaap tag beside its IFRS twin)
 --      scale             any two tags of the metric 1,000 or 1,000,000 times apart (within 0.5%):
---                        one figure in two scales. Revenue's pairs are 064's, resolved in best_facts.
---    One finding per company, metric and period end (its shortest period, then the widest gap);
---    detail: both tags, factor (the other tag's figure over gold's), the filing. Never the values
---    (014's rule for detail). A sub-total beside its total (contract revenue under Revenues, cash
---    under cash and restricted cash, current debt under total debt) is no finding: the relations
---    list only lines that can't be larger than gold's, and only where gold's is the total.
---    Measured on hermes (2026-11-16, read-only, per filing and the tag gold reads first there):
---    a bare "two tags 5x apart" finds 84,000 pairs at 2,900 companies, almost all normal sub-totals
---    (Depreciation beside D&A 15,000, contract revenue beside Revenues 7,600, cash beside cash and
---    due from banks 5,500...). The three rules: 6,304 pairs, 3,780 company-metric-period findings
---    at 876 companies (scale 946 at 238, same_line 476 at 109, total_below_part 2,362 at 623); 1,674
---    of them on a quarter gold shows from that very filing. Sample: Zura Bio's cash and restricted
---    cash read 205,134 beside cash of 205,134,000 (gold showed the thousands); First Northern
---    Community Bancorp's 2024 D&A $1.057B beside $1.057M; Lee Enterprises' current debt $994,550
---    beside $994.55M; Sempra's receivables $141M under its accounts receivable $891M; Virco's cost
---    of revenue $480K under cost of goods and services $34.9M; Kamada's current liabilities 222,000
---    beside 24,967,000; Amplify Energy's weighted shares 22,837,000 beside 22,837 (gold right).
---    Rectitude, Tigo and Plexus (064) are revenue's, resolved: none of them is a finding now.
---    Dropped after the sample: cash and due from banks as a part of cash (a bank's balance sheet line
---    can exceed the cash flow statement's cash: Shinhan), depreciation, amortization and accretion
---    "net" as a total (accretion nets it down: Park National).
+--                        one figure in two scales; a revenue pair is 064's, resolved in best_facts,
+--                        so no finding (Rectitude, Tigo and Plexus are none now)
+--    One finding per company, metric and period end (shortest period, then widest gap); detail: both
+--    tags, factor (the other tag's figure over gold's), the filing, never the values (014's rule).
+--    A bare "two tags 5x apart" finds 84,000 pairs at 2,900 companies, almost all normal sub-totals
+--    (Depreciation beside D&A 15,000, contract revenue beside Revenues 7,600, cash and due from banks
+--    5,500): those relations aren't listed. Per filing, over all of silver, the rules find 3,780
+--    company-metric-period findings at 876 companies (scale 946, same_line 476, total_below_part
+--    2,362); as the check runs (best_facts' facts), 41 at 14 of 100 random companies, so about 2,900
+--    at 1,000. Sample: Zura Bio's cash and restricted cash read 205,134 beside cash of 205,134,000;
+--    First Northern Community Bancorp's 2024 D&A $1.057B beside $1.057M; Sempra's receivables $141M
+--    under its accounts receivable $891M; Virco's cost of revenue $480K under cost of goods and
+--    services $34.9M; Ultrapar's trade and other receivables 12-170x under its trade receivables
+--    (2016-2024); Freshpet's DD&A 1,007x under its D&A; Kamada's current liabilities 222,000 beside
+--    24,967,000; Amplify Energy's weighted shares 22,837,000 beside 22,837 (gold right). Dropped after
+--    the sample: cash and due from banks as a part of cash (a bank's line can exceed its cash flow
+--    statement's cash: Shinhan), and D&A "and accretion, net" as a total (accretion nets it down).
 --
 -- 2. Tiers that say what they mean (ops.quality_tier, the status page's groups), never hiding a
 --    finding: error (errors readers could see), warning (to double-check), kept_out, coverage, info.
 --      mistagged_fact            error -> info, tier kept_out: gold already leaves the figure out
---                                (634 at 262 companies on hermes)
+--                                (634 at 262 companies)
 --      series_gap, net_debt_gap  warning -> info, tier coverage: a figure missing, not a wrong one
 --                                (19,534 at 3,865; 134)
 --      outlier                   info (rule 'lumpy') on lines that swing by nature: financing and
 --                                investing cash flow, change in cash, buybacks, dividends, income tax
---                                (5,855 of 13,244 on hermes: 2,217 / 1,897 / 580 / 337 / 242 / 582).
---                                No stronger bar separates them: 465 financing spikes are 100x or
---                                more and 195 300x or more, and only 11 sit near 1,000x. Kept as
---                                warnings: share counts (most of their spikes are 1,000x scale slips:
---                                weighted shares 230 of 328 at 100x+), earnings, cash, current debt.
---      annual_sum                info, detail restated 'year' | 'quarter', when the year's own figure
---                                was changed by a later filing or one of its quarters was restated
---                                (10,248 of 20,776 have a restated quarter on hermes; the year test
---                                adds those whose 10-K comparatives moved)
---    ops.quality_companies gains `figures` (gold quarters, TTM and computed rows at the check), so
---    the summary says findings per 1,000 figures (13.79M on hermes) beside companies affected.
---    ops.check_financials_version() 57 -> 72: the hourly catch-up re-checks every company, oldest
---    first (071), nothing by hand. Until it has, a company's older findings keep their old severity
+--                                (5,855 of 13,244: 2,217 / 1,897 / 580 / 337 / 242 / 582). No stronger
+--                                bar separates them: 465 financing spikes are 100x or more, 195 300x
+--                                or more, and only 11 sit near 1,000x. Warnings still: share counts
+--                                (weighted shares 230 of 328 at 100x+, mostly scale slips), earnings,
+--                                cash, current debt.
+--      annual_sum                info with detail restated 'year' (the year's own figure changed by a
+--                                later filing) or 'quarter' (one of its quarters restated); else a
+--                                warning. Of 100 random companies' 320: 144 year, 104 quarter, 72 stay.
+--    ops.quality_companies gains `figures` (the company's gold quarters, TTM and computed rows at its
+--    check: 13.79M in all) for findings per 1,000 figures. ops.check_financials_version() 57 -> 72:
+--    the hourly catch-up re-checks every company (071), nothing by hand. The new body checks 100
+--    random companies in 61.7 s against best_facts' own 59-66 s, finding exactly the stored findings
+--    of every unchanged rule. Until a company is re-checked its findings keep their old severity
 --    (their tier follows the check's name for kept_out and coverage).
 --
 -- 3. ops.quality_tiers (new view): one row per check and severity (a check can now have two), with
@@ -60,38 +56,59 @@
 --    the 038-041 backout replaces it) and reads the new view. ops.public_quality returns the new
 --    columns (DROP and CREATE, 028's grants; an older Query API pod's shape copies named fields).
 --
--- 4. Parser-output checks, per document (ops.check_sections, ops.section_findings, stamps in
---    ops.section_checks): invalid_key (error: a key the form doesn't have; 8-K items x.yy, 10-K and
---    10-Q item keys, exhibit keys), missing_core_item (warning: a 10-K without 1, 1A, 7 or 8 unless
---    it has a cross-reference index; a 10-Q without Part I items 1 and 2), duplicate_section
+-- 4. Parser-output checks, per document (ops.check_sections; findings in ops.section_findings, keys
+--    and counts only; stamps in ops.section_checks): invalid_key (error: a key the form doesn't have;
+--    8-K items 1.01-9.01, 10-K items with 4A, 10-Q items of their Part, exhibit keys),
+--    missing_core_item (warning: an original 10-K without 1, 1A, 7 or 8 unless it has a
+--    cross-reference index; an original 10-Q without Part I items 1 and 2), duplicate_section
 --    (warning: two keys, the same text), empty_section (info: nothing past the heading; a 10-K's
---    reserved Item 6 isn't one), no_sections (error: a stored document a day old with none).
---    section-index runs it for the filings it indexes; the catch-up (kind check_sections,
---    ops.check_sections_version() 72) for every stored document once, oldest first. Public:
---    ops.public_parser_quality() (counts only). Measured on hermes (2026-11-16): invalid keys at
---    8-Ks 1,069 docs ("Item 7 - Regulation FD", "Item 7.0", exhibit index lines "Item 99"), 10-Qs
---    4,754 (Part II items read as Part I: I-5, I-6, I-1A; 8-K items in Item 5: II-5.02), 10-Ks 454
---    besides 332 Item 4A (valid); a 10-Q without Part I Item 1 14,882 of 129,692 (its heading runs
---    into "PART I" on one line), without Item 2 3,555; a 10-K without 1, 1A, 7 or 8 1,946 of 42,078;
---    the same text under two keys 23 documents; one-line 8-K items ("Item 2.02.") 1,520 and exhibits
---    with no text 1,376; stored documents with no sections 762 (8-K 468, 10-K/A 172, 10-Q/A 99).
+--    reserved Item 6 isn't one), no_sections (error: a stored document a day old with none). Twins of
+--    services/parser filing_parser/invariants.py. section-index runs it for the filings it indexes; the
+--    catch-up (kind check_sections, ops.check_sections_version() 72) every stored document once, oldest
+--    first, 2,000 a batch (0.8 s; the whole corpus 24 s as one query). First counts, of 634,653 stored
+--    documents: invalid_key 6,973 (10-Q 4,749: Part II items read as Part I, 8-K items quoted in Item
+--    5; 8-K 1,084: "Item 7 - Regulation FD", "Item 7.0", exhibit index lines read as "Item 99"; 10-Q/A
+--    644; 10-K 455; 10-K/A 41), missing_core_item 17,591 (10-Q 15,645, mostly Part I Item 1 whose
+--    heading runs into "PART I" or is only a title; 10-K 1,946), empty_section 1,659 (8-K 1,639:
+--    "Item 2.02." heading another item's text), no_sections 761 (8-K 468, 10-K/A 172, 10-Q/A 99),
+--    duplicate_section 3.
 --
 -- 5. Extremes (ops.refresh_extremes, ops.extremes, ops.extremes_report for ops_reader): for each
 --    screener value column (ops.extreme_columns: silver.metrics and gold.derived_metrics, the formula
---    CATALOG's columns), the top and bottom 20 companies as the screener sorts them (gold.latest_reading,
---    readings applied: k = the value unless a reading says otherwise), each with the checks that have
---    a finding on the metric or its inputs in the year to its period, and `review` when nothing
---    explains it. Refreshed by the nightly financials-bulk job; never public (it names companies).
+--    CATALOG's), the top and bottom 20 companies as the screener sorts them (gold.latest_reading,
+--    readings applied), each with what explains it: the checks with a finding on the metric or its
+--    inputs in the year to its period, a quarter derived from year-to-date figures, or the company's
+--    own figure a period earlier (a year for TTM) of the same sign within 3x (in_line). `review` when
+--    nothing does. On hermes: 118 columns, 4,720 rows in 38 s; with checks alone 3,942 rows flagged
+--    (Amazon's revenue, JPMorgan's assets), with in_line 1,036 at 633 companies: Evernorth's quarterly
+--    EPS $155M and Virtuix's $32.8M (after -$0.09), VIP Play's gross margin -562% (after +21%),
+--    GIVBUX's net margin +692% (after -1,205%), Amazon's TTM free cash flow -$46.9B (after +$10.6B,
+--    real). A figure wrong the same way every period reads in_line (Boost Run's EPS -$51,000): the
+--    report finds jumps, the checks persistent slips. Refreshed after the nightly financials-bulk run;
+--    never public (it names companies).
+--
+-- 6. ops.check_segments (070's body, one edit): members that overlap beside a zero or a negative
+--    member. NVIDIA's 19 segment findings: 6 are its two cuts (GPU and Tegra beside Compute and
+--    Networking and Graphics, Jul 2019-Jan 2020) beside a $0 corporate revenue member or -$300M of
+--    corporate operating costs, which made 070's search give up (037's rule: 100% and 152% more).
+--    Zeros now drop out and the negative members count once in every set (the search runs over the
+--    positive members for the figure less the negative ones). The other 13 are real: derived Q4
+--    members of two bases (the FY2026 10-K's re-cut comparatives against earlier 10-Qs), geography
+--    members missing in a year's Q4, and segment operating income without the unallocated "All
+--    Other" costs. Over all 27,170 stored segment findings (the old rule reproduces every one): 3,125
+--    at 611 companies go (a zero member 1,334, a negative one 1,791), 24,045 stay, none is added; 5 s
+--    for every company with a finding. ops.check_segments_version() 70 -> 72: the catch-up re-checks
+--    every company.
 --
 -- Locks on hermes (lock_timeout 3 s; re-run the hook if it times out): ALTER TABLE ADD COLUMN on
 -- ops.quality_companies (no default: catalog only, ACCESS EXCLUSIVE for an instant; the Query API's
 -- data notes read it), a CHECK replaced on ops.catchup (6 rows, read by the hourly jobs), CREATE OR
 -- REPLACE VIEW ops.quality_summary (the ops exporter, every 5 minutes), DROP and CREATE of
--- ops.public_quality (the status route, cached a minute), CREATE OR REPLACE of
--- ops.check_financials and ops.check_financials_version (catalog). New tables, functions and views
--- otherwise. Nothing is rebuilt: findings change as the catch-up re-checks each company. Undo: 057's
--- ops.check_financials body and version 57 (the backouts' guards pin this body); drop what this file
--- creates.
+-- ops.public_quality (the status route, cached a minute), CREATE OR REPLACE of ops.check_financials,
+-- ops.check_segments and their versions (catalog). New tables, functions and views otherwise.
+-- Nothing is rebuilt: findings change as the catch-up re-checks each company and document. Undo:
+-- 057's ops.check_financials and 070's ops.check_segments with versions 57 and 70 (the backouts'
+-- guards pin 072's bodies); drop what this file creates.
 
 SET LOCAL lock_timeout = '3s';
 
@@ -745,6 +762,9 @@ BEGIN
         JOIN docs d ON d.accession_no = x.accession_no
         ORDER BY x.accession_no, x.section_key, x.parser = 'rust' DESC, x.parsed_at DESC
     ),
+    keys AS MATERIALIZED (  -- set-based per document: no lookup into s per document and key
+        SELECT accession_no, array_agg(section_key) AS keys FROM s GROUP BY accession_no
+    ),
     findings AS (
         SELECT accession_no, 'invalid_key' AS check_name, 'error' AS severity,
                jsonb_build_object('keys', (array_agg(section_key ORDER BY section_key))[1:20],
@@ -756,14 +776,13 @@ BEGIN
         SELECT d.accession_no, 'missing_core_item', 'warning',
                jsonb_build_object('missing', m.missing)
         FROM docs d
+        JOIN keys k ON k.accession_no = d.accession_no  -- none at all: no_sections says it
         CROSS JOIN LATERAL (
             SELECT array_agg(c.k ORDER BY c.o) AS missing
             FROM unnest(ops.core_section_keys(d.form)) WITH ORDINALITY c(k, o)
-            WHERE NOT EXISTS (SELECT 1 FROM s WHERE s.accession_no = d.accession_no
-                                                AND s.section_key = c.k)
+            WHERE c.k <> ALL(k.keys)
         ) m
         WHERE m.missing IS NOT NULL
-          AND EXISTS (SELECT 1 FROM s WHERE s.accession_no = d.accession_no)
           -- a 10-K laid out by a cross-reference index (GE, Intel) numbers no items
           AND NOT (d.form = '10-K' AND EXISTS (
                        SELECT 1 FROM silver.filing_sections x
@@ -779,23 +798,24 @@ BEGIN
           AND NOT (form ~ '^10-K' AND section_key = '6')  -- removed in 2021: "Item 6. [Reserved]"
         GROUP BY accession_no
         UNION ALL
-        SELECT a.accession_no, 'duplicate_section', 'warning',
-               jsonb_build_object('keys', array_agg(DISTINCT k ORDER BY k))
-        FROM s a
-        JOIN s b ON b.accession_no = a.accession_no AND b.section_key > a.section_key
-                AND b.bytes = a.bytes AND a.bytes > 200
-        CROSS JOIN LATERAL (VALUES (a.section_key), (b.section_key)) ks(k)
-        WHERE (SELECT md5(x.text) FROM silver.filing_sections x
-               WHERE x.accession_no = a.accession_no AND x.section_key = a.section_key
-                 AND x.parser = a.parser)
-            = (SELECT md5(x.text) FROM silver.filing_sections x
-               WHERE x.accession_no = b.accession_no AND x.section_key = b.section_key
-                 AND x.parser = b.parser)
-        GROUP BY a.accession_no
+        SELECT accession_no, 'duplicate_section', 'warning',
+               jsonb_build_object('keys', (array_agg(k ORDER BY k))[1:20])
+        FROM (  -- the same text under two keys: hashed only where two sections' sizes are equal
+            SELECT DISTINCT x.accession_no, unnest(array_agg(x.section_key)) AS k
+            FROM (SELECT accession_no, bytes FROM s WHERE bytes > 200
+                  GROUP BY accession_no, bytes HAVING count(*) > 1) g
+            JOIN s a ON a.accession_no = g.accession_no AND a.bytes = g.bytes
+            JOIN silver.filing_sections x ON x.accession_no = a.accession_no
+                                         AND x.section_key = a.section_key AND x.parser = a.parser
+            GROUP BY x.accession_no, md5(x.text)
+            HAVING count(*) > 1
+        ) d
+        GROUP BY accession_no
         UNION ALL
         SELECT d.accession_no, 'no_sections', 'error', '{}'::jsonb
         FROM docs d
-        WHERE NOT EXISTS (SELECT 1 FROM s WHERE s.accession_no = d.accession_no)
+        LEFT JOIN keys k ON k.accession_no = d.accession_no
+        WHERE k.accession_no IS NULL
     )
     INSERT INTO ops.section_findings (accession_no, check_name, severity, detail)
     SELECT accession_no, check_name, severity, detail FROM findings
@@ -884,8 +904,11 @@ LANGUAGE sql STABLE AS $$
 $$;
 
 -- The latest refresh: per column, side and rank, the company and its figure as the screener reads it,
--- the checks with a finding on the metric or its inputs in the year to the figure's period (and
--- derived_quarter for a quarter derived from year-to-date figures), and review when none explains it.
+-- what explains it (the checks with a finding on the metric or its inputs in the year to the figure's
+-- period; derived_quarter for a quarter derived from year-to-date figures; in_line when the company's
+-- figure a period earlier, a year for TTM, has its sign and is within 3x: Amazon's revenue is large,
+-- not wrong), and review when nothing does. A figure wrong the same way every period reads in_line:
+-- the report finds jumps, the checks persistent slips.
 CREATE TABLE ops.extremes (
     column_key   text        NOT NULL,
     metric       text        NOT NULL,
@@ -898,6 +921,7 @@ CREATE TABLE ops.extremes (
     period_end   date,
     accession_no text,
     status       text,                   -- the screener's reading: NULL or 'behind'
+    prev_value   numeric,                -- the column's figure a period earlier (TTM: a year)
     findings     text[]      NOT NULL DEFAULT '{}',
     review       boolean     NOT NULL,
     refreshed_at timestamptz NOT NULL,
@@ -944,6 +968,27 @@ BEGIN
         CROSS JOIN LATERAL (VALUES ('top', r.top_rank), ('bottom', r.bottom_rank)) s(side, rank)
         WHERE s.rank <= p_n
     ),
+    prev AS (  -- 072: the same column's figure a period earlier (a year for TTM), as gold holds it
+        SELECT p.*, pv.value AS prev_value
+        FROM picked p
+        LEFT JOIN LATERAL (
+            SELECT y.value FROM (
+                (SELECT q.period_end, q.value FROM gold.quarterly_financials q
+                 WHERE q.company_id = p.company_id AND q.metric = p.metric
+                   AND q.period_end < p.period_end
+                   AND (p.span = 'quarter' OR EXISTS (SELECT 1 FROM silver.metrics m
+                                                      WHERE m.metric = p.metric
+                                                        AND m.kind = 'instant'))
+                 ORDER BY q.period_end DESC LIMIT 1)
+                UNION ALL
+                (SELECT d.period_end, d.value FROM gold.derived_financials d
+                 WHERE d.company_id = p.company_id AND d.span = p.span AND d.metric = p.metric
+                   AND d.period_end <= p.period_end - CASE p.span WHEN 'ttm' THEN 350 ELSE 1 END
+                 ORDER BY d.period_end DESC LIMIT 1)
+            ) y
+            ORDER BY y.period_end DESC LIMIT 1
+        ) pv ON true
+    ),
     explained AS (
         SELECT p.*,
                ARRAY(
@@ -960,13 +1005,18 @@ BEGIN
                            SELECT 1 FROM gold.quarterly_financials q
                            WHERE q.company_id = p.company_id AND q.metric = p.metric
                              AND q.period_end = p.period_end AND q.value_source = 'derived')
-                       THEN ARRAY['derived_quarter'] ELSE '{}'::text[] END AS findings
-        FROM picked p
+                       THEN ARRAY['derived_quarter'] ELSE '{}'::text[] END
+           || CASE WHEN p.prev_value IS NOT NULL AND sign(p.prev_value) = sign(p.value)
+                        AND (p.value = 0 OR greatest(abs(p.value), abs(p.prev_value))
+                                            <= 3 * least(abs(p.value), abs(p.prev_value)))
+                   THEN ARRAY['in_line'] ELSE '{}'::text[] END AS findings
+        FROM prev p
     )
     INSERT INTO ops.extremes (column_key, metric, span, side, rank, company_id, value, unit,
-                              period_end, accession_no, status, findings, review, refreshed_at)
+                              period_end, accession_no, status, prev_value, findings, review,
+                              refreshed_at)
     SELECT column_key, metric, span, side, rank, company_id, value, unit, period_end,
-           accession_no, status, findings, cardinality(findings) = 0, now()
+           accession_no, status, prev_value, findings, cardinality(findings) = 0, now()
     FROM explained;
     SELECT count(*) INTO n FROM ops.extremes WHERE review;
     RETURN n;
@@ -977,7 +1027,7 @@ $$;
 -- companies, so ops_reader only, never the Query API.
 CREATE VIEW ops.extremes_report AS
 SELECT e.column_key, e.side, e.rank, e.company_id, c.name AS company, e.value, e.unit,
-       e.period_end, e.accession_no, e.status, e.findings, e.review, e.refreshed_at
+       e.period_end, e.accession_no, e.status, e.prev_value, e.findings, e.review, e.refreshed_at
 FROM ops.extremes e
 JOIN silver.companies c ON c.company_id = e.company_id;
 

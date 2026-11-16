@@ -1,10 +1,12 @@
 """The extremes report (migration 072): for every screener value column, the top and bottom 20
-companies as the screener sorts them (gold.latest_reading, readings applied), each with the checks
-that have a finding on the metric or its inputs in the year to its period. One nobody explains is
-flagged `review`: an extreme no reading, check or data note accounts for is the likeliest wrong
-number a reader meets first. ops.refresh_extremes rebuilds ops.extremes; the nightly financials-bulk
-job runs it after its rounds (refresh). ops.extremes_report adds the names, for ops_reader and this
-CLI only: it names companies, so it is never public.
+companies as the screener sorts them (gold.latest_reading, readings applied), each with what
+explains it: the checks that have a finding on the metric or its inputs in the year to its period,
+a quarter derived from year-to-date figures, or the company's own figure a period earlier (a year
+for TTM) of the same sign within 3x (`in_line`: Amazon's revenue is large, not wrong). One nothing
+explains is flagged `review`: an extreme no reading, check or data note accounts for is the
+likeliest wrong number a reader meets first. ops.refresh_extremes rebuilds ops.extremes; the
+nightly financials-bulk job runs it after its rounds (refresh). ops.extremes_report adds the names,
+for ops_reader and this CLI only: it names companies, so it is never public.
 
     make extremes                # the rows flagged for review
     make extremes ALL=1          # every row
@@ -53,7 +55,8 @@ def rows(conn: psycopg.Connection, everything: bool = False,
     with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(
             "SELECT column_key, side, rank, company, company_id, value, unit, period_end,"
-            " accession_no, status, findings, review, refreshed_at FROM ops.extremes_report"
+            " accession_no, status, prev_value, findings, review, refreshed_at"
+            " FROM ops.extremes_report"
             " WHERE (%(all)s OR review) AND (%(column)s::text IS NULL OR column_key = %(column)s)"
             " ORDER BY column_key, side DESC, rank",
             {"all": everything, "column": column})
@@ -76,8 +79,10 @@ def render(found: Iterable[dict]) -> str:
     lines = []
     for r in found:
         why = ", ".join(r["findings"]) or ("REVIEW" if r["review"] else "")
+        before = "" if r["prev_value"] is None else figure(r["prev_value"], r["unit"])
         lines.append(f"{r['column_key']:<34} {r['side']:<6} {r['rank']:>2}  "
                      f"{(r['company'] or '')[:36]:<36} {figure(r['value'], r['unit']):>16}  "
+                     f"{before:>16}  "
                      f"{r['period_end']}  {r['accession_no'] or '':<20}  "
                      f"{r['status'] or '':<6} {why}")
     return "\n".join(lines)

@@ -44,7 +44,7 @@ IN_FLIGHT = 6000    # ... and fewer of the last day's requests wait for parser-b
 CRAWL_BUSY = 1000   # ... and the crawl has fewer targets of its own pending
 SECONDS = 1200      # passages rebuilt per run, in seconds (after the parser checks' share)
 SECTIONS_SECONDS = 300  # documents checked per run, in seconds, out of SECONDS
-SECTIONS_BATCH = 500    # ... a transaction
+SECTIONS_BATCH = 2000   # ... a transaction (0.8 s on hermes)
 JOB_SECONDS = 3000  # ... within 50 minutes of the job's start: the next hourly run is never skipped
 
 

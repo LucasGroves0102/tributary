@@ -175,8 +175,8 @@ diffs (`diff.ALGORITHM`) needs nothing run by hand (migration 071, `filing_parse
    live doc-fetcher stored has no crawl target; it gets the row the crawl writes for a filing it
    finds already stored. Each document is re-queued once per version;
 2. runs the parser-output checks (072) on every stored document no check of
-   `ops.check_sections_version()` has seen, oldest filing first, 500 a transaction, for up to 5 of
-   those minutes (kind `check_sections`; about 586,000 documents once per version);
+   `ops.check_sections_version()` has seen, oldest filing first, 2,000 a transaction, for up to 5 of
+   those minutes (kind `check_sections`; 634,653 documents on hermes, a batch in under a second);
 3. rebuilds older passages for the rest of `CATCHUP_SECONDS` (never past 50 minutes into the job, so
    the next hour's run is never skipped), oldest filing first, under the same lock as
    `section-passages` (one waits for the other; both take the same filings, so they can overlap in

@@ -79,10 +79,12 @@ document crawl and doc-fetcher store.
 
 `extremes.py` (migration 072): for every screener value column (`ops.extreme_columns`, the formula
 CATALOG's), the top and bottom 20 companies as the screener sorts them (`gold.latest_reading`, readings
-applied), each with the checks that have a finding on its metric or inputs in the year to its period
-(`derived_quarter` for a quarter derived from year-to-date figures). A row nothing explains is flagged
-`review`: an extreme no reading, check or data note accounts for is the likeliest wrong figure a reader
-meets first. `ops.refresh_extremes` rebuilds `ops.extremes` at the end of the nightly `financials-bulk`
+applied), each with what explains it: the checks that have a finding on its metric or inputs in the
+year to its period, `derived_quarter` (a quarter derived from year-to-date figures), or `in_line` (the
+company's figure a period earlier, a year for TTM, has its sign and is within 3x: Amazon's revenue is
+large, not wrong). A row nothing explains is flagged `review`: an extreme nothing accounts for is the
+likeliest wrong figure a reader meets first (on hermes 1,036 of 4,720 rows, e.g. a quarterly EPS of
+$155M). A figure wrong the same way every period reads `in_line`: the checks catch those. `ops.refresh_extremes` rebuilds `ops.extremes` at the end of the nightly `financials-bulk`
 run (a failure is logged, never the job's); `ops.extremes_report` adds names for ops_reader. Never
 public: it names companies.
 
