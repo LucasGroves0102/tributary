@@ -83,7 +83,7 @@ export function Home({ workspace, lastIngested, listed = null, onAdd, onExport, 
             <div className="card-h">
               <h2>Watchlist</h2>
               <span className="sub">
-                USD · TTM to each company's latest reported quarter unless noted · ~ = expected
+                US dollars, the twelve months to each company's latest quarter unless a figure says otherwise; ~ is an estimate
               </span>
               <span className="grow" />
               {columnPicker}
@@ -464,7 +464,7 @@ function FilingFeed({ filings, bold }: { filings: FilingItem[] | null; bold: boo
           <FormMark form={f.form} />
           <span className="feed-name">
             {f.isNew && bold ? <b>{f.name}</b> : f.name}
-            {f.periodEnd && <span className="muted"> · {periodPhrase(f.form, f.periodEnd)}</span>}
+            {f.periodEnd && <span className="muted feed-period">, {periodPhrase(f.form, f.periodEnd)}</span>}
           </span>
           <span className="row">
             {f.readable ? (

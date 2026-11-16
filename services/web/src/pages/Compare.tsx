@@ -296,8 +296,7 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
         <div className="card-h wrap">
           <h2>Comparable companies</h2>
           <span className="sub">
-            each company's latest reported quarter · TTM to that quarter, balances at its end · median
-            excludes the target
+            Each company's latest quarter: twelve months to it, balances at its end. The median leaves out the target.
           </span>
           <span className="grow" />
           {rows.length > 0 && (
@@ -376,7 +375,7 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
                     <td className="n actions">
                       {!r.isTarget && (
                         <>
-                          <button className="btn sm" onClick={() => set({ target: r.companyId, peers: [...(compare.target ? [compare.target] : []), ...peerIds.filter((p) => p !== r.companyId)] })}
+                          <button className="btn sm ghost" onClick={() => set({ target: r.companyId, peers: [...(compare.target ? [compare.target] : []), ...peerIds.filter((p) => p !== r.companyId)] })}
                             aria-label={`Make ${r.name} the target`} title={`Compare the others with ${r.name}`}>
                             Make target
                           </button>
@@ -442,8 +441,8 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
           <div className="card-h wrap">
             <h2>Side by side</h2>
             <span className="sub">
-              one chart per column · every company you can read a line, in the same colour on each · calendar quarters, last 3 years
-              {readableIds.length > MAX_COMPANY_LINES ? ` · the first ${MAX_COMPANY_LINES} of ${readableIds.length} companies` : ""}
+              One chart per column, a line per company in the same colour on each; calendar quarters, the last 3 years
+              {readableIds.length > MAX_COMPANY_LINES ? `; the first ${MAX_COMPANY_LINES} of ${readableIds.length} companies` : ""}
             </span>
             <span className="grow" />
             <button className="btn sm" aria-expanded={multiples} onClick={() => setMultiples((m) => !m)}
