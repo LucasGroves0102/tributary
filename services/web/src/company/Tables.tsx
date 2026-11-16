@@ -18,6 +18,7 @@ import {
   type Line,
   metricTable,
   RANGE_QUARTERS,
+  BANK_RATIOS,
   RATIOS,
   segmentTables,
   statementRequest,
@@ -448,9 +449,22 @@ export function Ratios({ token, companyId, name, ticker, notApplicable = [] }: T
   // with readings, the API says where debt/equity and ROE read n/m on negative equity
   // (`not_meaningful_periods`, from the company's own equity periods), so those aren't gaps;
   // equity comes along so its dates are columns
-  const load = useLoad(companyId, () => financialsView(token, companyId, 8, [...RATIOS.map(([m]) => m), "stockholders_equity"], "ttm", "fiscal", true));
+  // a bank (the API's not_applicable list, 035/058) reads its own ratios; an older API refuses a bank
+  // line's name (422): the usual ratios then, as before
+  const bank = notApplicable.length > 0;
+  const load = useLoad(`${companyId}|${bank}`, async () => {
+    const ask = (lines: Line[]) => financialsView(token, companyId, 8, [...lines.map(([m]) => m), "stockholders_equity"], "ttm", "fiscal", true)
+      .then((f) => ({ ...f, lines }));
+    return bank
+      ? ask(BANK_RATIOS).catch((e) => {
+        if (e instanceof ApiError && e.status === 422) return ask(RATIOS);
+        throw e;
+      })
+      : ask(RATIOS);
+  });
+  const lines = load?.state === "ok" ? load.data.lines : bank ? BANK_RATIOS : RATIOS;
   const table = load?.state === "ok"
-    ? metricTable(load.data.rows, RATIOS, "ttm", "fiscal", notApplicable, undefined, load.data.not_meaningful_periods,
+    ? metricTable(load.data.rows, lines, "ttm", "fiscal", notApplicable, undefined, load.data.not_meaningful_periods,
         [], load.data.not_computed ?? {})
     : null;
   return (
@@ -480,6 +494,13 @@ export function Ratios({ token, companyId, name, ticker, notApplicable = [] }: T
           return (
             <>
               <MetricTableView table={table!} first="Ratio" companyId={companyId} open={opened?.metric ?? null} onOpen={openRow} />
+              {lines === BANK_RATIOS && (
+                <p className="foot bank-note">
+                  {name} is a bank, so it reads a bank's ratios: the efficiency ratio (noninterest expense over net interest
+                  and noninterest income) and CET1 where it tags one. Net interest margin, tangible book value and return on
+                  tangible equity aren't here: no standard tag carries their inputs each quarter.
+                </p>
+              )}
               {opened && row && (
                 <ComponentsPanel token={token} companyId={companyId} metric={opened.metric} label={row.label} view="ttm"
                   columns={table!.columns.filter((_, i) => row.cells[i]?.opens)} periodEnd={opened.periodEnd}

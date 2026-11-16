@@ -496,6 +496,20 @@ export const RATIOS: Line[] = [
   ratio("payout_ratio", "Payout ratio", "pct"),
 ];
 
+/** A bank's Ratios (Riley 58: six of ten rows read "n/a (bank)"): its own lines, migration 048's efficiency
+ * ratio and CET1 ratio (where the bank tags it), then the ratios that do describe a bank. No net interest
+ * margin, tangible book value or ROTCE: no standard tag carries their inputs quarterly (048's header); no
+ * net charge-offs: no metric holds them yet. The bank list is the API's (`not_applicable`), never here. */
+export const BANK_RATIOS: Line[] = [
+  ratio("efficiency_ratio", "Efficiency ratio", "pct"),
+  ratio("cet1_ratio", "CET1 ratio", "pct"),
+  ratio("net_margin", "Net margin", "pct"),
+  ratio("roe", "Return on equity", "pct"),
+  ratio("revenue_growth", "Revenue growth YoY", "growth"),
+  ratio("net_income_growth", "Net income growth YoY", "growth"),
+  ratio("payout_ratio", "Payout ratio", "pct"),
+];
+
 /** What to request for a period choice: quarterly values, TTM ending each quarter, or annual
  * (TTM at each fiscal Q4: the fiscal year; balances at its end). */
 export function statementRequest(period: Period, range: StatementRange = "8q", kind: Statement = "is"): { view: "quarter" | "ttm"; quarters: number } {

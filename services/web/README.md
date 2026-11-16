@@ -1001,7 +1001,11 @@ efficiency ratio, provision for credit losses, net income, EPS, loans, deposits,
 tags it), ROE, revenue growth and net margin; Statements show a bank's income statement (net interest
 income, noninterest income, net revenue, noninterest expense, provision, pretax and net income) and
 balance sheet (cash and due from banks, loans net of the allowance, total assets, deposits, total
-liabilities, equity, CET1). Both say what isn't shown and why: net interest margin, tangible book value
+liabilities, equity, CET1); Ratios show `BANK_RATIOS` (efficiency ratio, CET1, net margin, ROE, revenue
+and net income growth, payout ratio; Riley 58: six of ten rows read n/a (bank)), the standard ratios
+again from an older API that refuses the bank lines (422). JPMorgan, Bank of America and Wells Fargo tag
+CET1 only under their own XBRL tags, with dimensions (the firm and the Basel III method), so their CET1
+row stays blank until a dimensional pick reads it. All say what isn't shown and why: net interest margin, tangible book value
 per share and ROTCE (migration 048's header). Which companies are banks is the API's alone (migration
 058 added Schwab, American Express, Synchrony and Ally); nothing here lists one.
 

@@ -720,6 +720,13 @@ it("F4 bank: a bank's statements and key stats are its own lines, and say what i
   const metrics = paths().filter((u) => u.pathname.endsWith("/financials")).at(-1)!.searchParams.getAll("metrics");
   expect(metrics.slice(0, 5)).toEqual(["net_interest_income", "noninterest_income", "revenue", "noninterest_expense", "provision_for_credit_losses"]);
   expect($(".bank-note")?.textContent).toContain("is a bank, so it is shown with a bank's own lines");
+  act(() => root.unmount());
+  // Riley 58: a bank's Ratios are its own (efficiency, CET1), not six rows of n/a (bank)
+  await render("ratios", JPM);
+  const ratios = paths().filter((u) => u.pathname.endsWith("/financials")).at(-1)!.searchParams.getAll("metrics");
+  expect(ratios.slice(0, 2)).toEqual(["efficiency_ratio", "cet1_ratio"]);
+  expect(ratios).not.toContain("gross_margin");
+  expect(ratios).not.toContain("current_ratio");
 });
 
 it("F4 bank: an older API that refuses the bank metrics still shows the standard statement", async () => {
