@@ -7,7 +7,7 @@ live.
 
 | File | Role |
 |---|---|
-| `recorded_results.py` | writes `services/query-api/src/query_api/data/recorded_results.json` from the committed [adversarial](../adversarial) and [citation](../citations) recordings (counts per run, their report's run date, the models in the recordings) and the [golden 10-K figures](../golden) CSV, each with the commit that last changed its inputs |
+| `recorded_results.py` | writes `services/query-api/src/query_api/data/recorded_results.json` from the committed [adversarial](../adversarial) and [citation](../citations) recordings (counts per run, their report's run date, the models in the recordings) and the [golden 10-K figures](../golden) CSVs (the five companies and the reference set), each with the commit that last changed its inputs |
 | `test_recorded_results.py` | CI: the committed JSON matches what the recordings say now (commits aside), and holds no company ids or accession numbers |
 
 ```bash

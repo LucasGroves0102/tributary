@@ -1,0 +1,809 @@
+company,ticker,company_id,fiscal_year,period_end,metric,value,unit,printed_unit,statement,line_label,check,accession_no,notes
+Apple Inc.,AAPL,0000320193,2026,2026-09-26,revenue,478834000000,USD,1000000,income,Total net sales,annual,0000320193-26-000026,table 8#1 row 5
+Apple Inc.,AAPL,0000320193,2026,2026-09-26,net_income,132175000000,USD,1000000,income,Net income,annual,0000320193-26-000026,table 8#1 row 19
+Apple Inc.,AAPL,0000320193,2026,2026-09-26,eps_diluted,8.98,USD/shares,0.01,income,Diluted,annual_per_share,0000320193-26-000026,table 8#1 row 22
+Apple Inc.,AAPL,0000320193,2026,2026-09-26,eps_diluted_adjusted,8.98,USD/shares,0.01,income,Diluted,adjusted,0000320193-26-000026,no split since the 10-K: as filed
+Apple Inc.,AAPL,0000320193,2026,2026-09-26,total_assets,404548000000,USD,1000000,balance,Total assets,annual,0000320193-26-000026,table 8#3 row 16
+Apple Inc.,AAPL,0000320193,2026,2026-09-26,total_liabilities,292455000000,USD,1000000,balance,Total liabilities,annual,0000320193-26-000026,table 8#3 row 29
+Apple Inc.,AAPL,0000320193,2026,2026-09-26,stockholders_equity,112093000000,USD,1000000,balance,Total shareholders’ equity,annual,0000320193-26-000026,table 8#3 row 35
+Apple Inc.,AAPL,0000320193,2026,2026-09-26,cash,36305000000,USD,1000000,balance,Cash and cash equivalents,annual,0000320193-26-000026,table 8#3 row 3
+MICROSOFT CORP,MSFT,0000789019,2026,2026-06-30,revenue,331839000000,USD,1000000,income,Total revenue,annual,0001193125-26-323660,table 8#0 row 5
+MICROSOFT CORP,MSFT,0000789019,2026,2026-06-30,net_income,133749000000,USD,1000000,income,Net income,annual,0001193125-26-323660,table 8#0 row 18
+MICROSOFT CORP,MSFT,0000789019,2026,2026-06-30,eps_diluted,17.95,USD/shares,0.01,income,Diluted,annual_per_share,0001193125-26-323660,table 8#0 row 21
+MICROSOFT CORP,MSFT,0000789019,2026,2026-06-30,eps_diluted_adjusted,17.95,USD/shares,0.01,income,Diluted,adjusted,0001193125-26-323660,no split since the 10-K: as filed
+MICROSOFT CORP,MSFT,0000789019,2026,2026-06-30,total_assets,758376000000,USD,1000000,balance,Total assets,annual,0001193125-26-323660,table 8#2 row 17
+MICROSOFT CORP,MSFT,0000789019,2026,2026-06-30,total_liabilities,315989000000,USD,1000000,balance,Total liabilities,annual,0001193125-26-323660,table 8#2 row 33
+MICROSOFT CORP,MSFT,0000789019,2026,2026-06-30,stockholders_equity,442387000000,USD,1000000,balance,Total stockholders’ equity,annual,0001193125-26-323660,table 8#2 row 39
+MICROSOFT CORP,MSFT,0000789019,2026,2026-06-30,cash,20935000000,USD,1000000,balance,Cash and cash equivalents,annual,0001193125-26-323660,table 8#2 row 4
+MICROSOFT CORP,MSFT,0000789019,2026,2026-06-30,long_term_debt,31067000000,USD,1000000,balance,Long-term debt,annual,0001193125-26-323660,table 8#2 row 27
+MICROSOFT CORP,MSFT,0000789019,2026,2026-06-30,long_term_debt_current,9227000000,USD,1000000,balance,Current portion of long-term debt,annual,0001193125-26-323660,table 8#2 row 21
+MICROSOFT CORP,MSFT,0000789019,2026,2026-06-30,capex,115948000000,USD,1000000,cash_flow,Additions to property and equipment,annual,0001193125-26-323660,table 8#3 row 30
+AMAZON COM INC,AMZN,0001018724,2025,2025-12-31,revenue,716924000000,USD,1000000,income,Total net sales,annual,0001018724-26-000004,table 8#3 row 4
+AMAZON COM INC,AMZN,0001018724,2025,2025-12-31,net_income,77670000000,USD,1000000,income,Net income,annual,0001018724-26-000004,table 8#2 row 4
+AMAZON COM INC,AMZN,0001018724,2025,2025-12-31,eps_diluted,7.17,USD/shares,0.01,income,Diluted earnings per share,annual_per_share,0001018724-26-000004,table 8#3 row 23
+AMAZON COM INC,AMZN,0001018724,2025,2025-12-31,eps_diluted_adjusted,7.17,USD/shares,0.01,income,Diluted earnings per share,adjusted,0001018724-26-000004,no split since the 10-K: as filed
+AMAZON COM INC,AMZN,0001018724,2025,2025-12-31,total_assets,818042000000,USD,1000000,balance,Total assets,annual,0001018724-26-000004,table 8#5 row 13
+AMAZON COM INC,AMZN,0001018724,2025,2025-12-31,stockholders_equity,411065000000,USD,1000000,balance,Total stockholders’ equity,annual,0001018724-26-000004,table 8#5 row 31
+AMAZON COM INC,AMZN,0001018724,2025,2025-12-31,cash,86810000000,USD,1000000,balance,Cash and cash equivalents,annual,0001018724-26-000004,table 8#5 row 4
+AMAZON COM INC,AMZN,0001018724,2025,2025-12-31,long_term_debt,65648000000,USD,1000000,balance,Long-term debt,annual,0001018724-26-000004,table 8#5 row 21
+AMAZON COM INC,AMZN,0001018724,2025,2025-12-31,operating_cash_flow,139514000000,USD,1000000,cash_flow,Net cash provided by (used in) operating activities,annual,0001018724-26-000004,table 8#2 row 17
+AMAZON COM INC,AMZN,0001018724,2025,2025-12-31,capex,131819000000,USD,1000000,cash_flow,Purchases of property and equipment,annual,0001018724-26-000004,table 8#2 row 19
+Alphabet Inc.,GOOGL,0001288776,2025,2025-12-31,revenue,402836000000,USD,1000000,income,Revenues,annual,0001652044-26-000018,table 8#5 row 2
+Alphabet Inc.,GOOGL,0001288776,2025,2025-12-31,net_income,132170000000,USD,1000000,income,Net income,annual,0001652044-26-000018,table 8#5 row 13
+Alphabet Inc.,GOOGL,0001288776,2025,2025-12-31,eps_diluted,10.81,USD/shares,0.01,income,Diluted net income per share (Note 12),annual_per_share,0001652044-26-000018,table 8#5 row 15
+Alphabet Inc.,GOOGL,0001288776,2025,2025-12-31,eps_diluted_adjusted,10.81,USD/shares,0.01,income,Diluted net income per share (Note 12),adjusted,0001652044-26-000018,no split since the 10-K: as filed
+Alphabet Inc.,GOOGL,0001288776,2025,2025-12-31,total_assets,595281000000,USD,1000000,balance,Total assets,annual,0001652044-26-000018,table 8#4 row 16
+Alphabet Inc.,GOOGL,0001288776,2025,2025-12-31,total_liabilities,180016000000,USD,1000000,balance,Total liabilities,annual,0001652044-26-000018,table 8#4 row 29
+Alphabet Inc.,GOOGL,0001288776,2025,2025-12-31,stockholders_equity,415265000000,USD,1000000,balance,Total stockholders’ equity,annual,0001652044-26-000018,table 8#4 row 36
+Alphabet Inc.,GOOGL,0001288776,2025,2025-12-31,cash,30708000000,USD,1000000,balance,Cash and cash equivalents,annual,0001652044-26-000018,table 8#4 row 4
+Alphabet Inc.,GOOGL,0001288776,2025,2025-12-31,long_term_debt,46547000000,USD,1000000,balance,Long-term debt,annual,0001652044-26-000018,table 8#4 row 25
+Alphabet Inc.,GOOGL,0001288776,2025,2025-12-31,operating_cash_flow,164713000000,USD,1000000,cash_flow,Net cash provided by operating activities,annual,0001652044-26-000018,table 8#8 row 18
+Alphabet Inc.,GOOGL,0001288776,2025,2025-12-31,capex,91447000000,USD,1000000,cash_flow,Purchases of property and equipment,annual,0001652044-26-000018,table 8#8 row 20
+"Meta Platforms, Inc.",META,0001326801,2025,2025-12-31,revenue,200966000000,USD,1000000,income,Revenue,annual,0001628280-26-003942,table 8#5 row 2
+"Meta Platforms, Inc.",META,0001326801,2025,2025-12-31,net_income,60458000000,USD,1000000,income,Net income,annual,0001628280-26-003942,table 8#5 row 13
+"Meta Platforms, Inc.",META,0001326801,2025,2025-12-31,eps_diluted,23.49,USD/shares,0.01,income,Diluted,annual_per_share,0001628280-26-003942,table 8#5 row 16
+"Meta Platforms, Inc.",META,0001326801,2025,2025-12-31,eps_diluted_adjusted,23.49,USD/shares,0.01,income,Diluted,adjusted,0001628280-26-003942,no split since the 10-K: as filed
+"Meta Platforms, Inc.",META,0001326801,2025,2025-12-31,total_assets,366021000000,USD,1000000,balance,Total assets,annual,0001628280-26-003942,table 8#4 row 14
+"Meta Platforms, Inc.",META,0001326801,2025,2025-12-31,total_liabilities,148778000000,USD,1000000,balance,Total liabilities,annual,0001628280-26-003942,table 8#4 row 25
+"Meta Platforms, Inc.",META,0001326801,2025,2025-12-31,stockholders_equity,217243000000,USD,1000000,balance,Total stockholders' equity,annual,0001628280-26-003942,table 8#4 row 32
+"Meta Platforms, Inc.",META,0001326801,2025,2025-12-31,cash,35873000000,USD,1000000,balance,Cash and cash equivalents,annual,0001628280-26-003942,table 8#4 row 4
+"Meta Platforms, Inc.",META,0001326801,2025,2025-12-31,long_term_debt,58744000000,USD,1000000,balance,Long-term debt,annual,0001628280-26-003942,table 8#4 row 22
+"Meta Platforms, Inc.",META,0001326801,2025,2025-12-31,operating_cash_flow,115800000000,USD,1000000,cash_flow,Net cash provided by operating activities,annual,0001628280-26-003942,table 8#8 row 18
+"Meta Platforms, Inc.",META,0001326801,2025,2025-12-31,capex,69691000000,USD,1000000,cash_flow,Purchases of property and equipment,annual,0001628280-26-003942,table 8#8 row 20
+"Tesla, Inc.",TSLA,0001318605,2025,2025-12-31,revenue,94827000000,USD,1000000,income,Total revenues,annual,0001628280-26-003952,table 8#2 row 9
+"Tesla, Inc.",TSLA,0001318605,2025,2025-12-31,net_income,3794000000,USD,1000000,income,Net income attributable to common stockholders,annual,0001628280-26-003952,table 8#2 row 31
+"Tesla, Inc.",TSLA,0001318605,2025,2025-12-31,eps_diluted,1.08,USD/shares,0.01,income,Diluted,annual_per_share,0001628280-26-003952,table 8#2 row 34
+"Tesla, Inc.",TSLA,0001318605,2025,2025-12-31,eps_diluted_adjusted,1.08,USD/shares,0.01,income,Diluted,adjusted,0001628280-26-003952,no split since the 10-K: as filed
+"Tesla, Inc.",TSLA,0001318605,2025,2025-12-31,total_assets,137806000000,USD,1000000,balance,Total assets,annual,0001628280-26-003952,table 8#1 row 16
+"Tesla, Inc.",TSLA,0001318605,2025,2025-12-31,total_liabilities,54941000000,USD,1000000,balance,Total liabilities,annual,0001628280-26-003952,table 8#1 row 27
+"Tesla, Inc.",TSLA,0001318605,2025,2025-12-31,stockholders_equity,82137000000,USD,1000000,balance,Total stockholders’ equity,annual,0001628280-26-003952,table 8#1 row 37
+"Tesla, Inc.",TSLA,0001318605,2025,2025-12-31,cash,16513000000,USD,1000000,balance,Cash and cash equivalents,annual,0001628280-26-003952,table 8#1 row 3
+"Tesla, Inc.",TSLA,0001318605,2025,2025-12-31,operating_cash_flow,14747000000,USD,1000000,cash_flow,Net cash provided by operating activities,annual,0001628280-26-003952,table 8#5 row 19
+"Tesla, Inc.",TSLA,0001318605,2025,2025-12-31,capex,8527000000,USD,1000000,cash_flow,"Purchases of property and equipment excluding finance leases, net of sales",annual,0001628280-26-003952,table 8#5 row 21
+ELI LILLY & Co,LLY,0000059478,2025,2025-12-31,revenue,65179000000,USD,1000000,income,Revenue,annual,0000059478-26-000013,table 8#0 row 2
+ELI LILLY & Co,LLY,0000059478,2025,2025-12-31,net_income,20640000000,USD,1000000,income,Net income,annual,0000059478-26-000013,table 8#0 row 13
+ELI LILLY & Co,LLY,0000059478,2025,2025-12-31,eps_diluted,22.95,USD/shares,0.01,income,Diluted,annual_per_share,0000059478-26-000013,table 8#0 row 16
+ELI LILLY & Co,LLY,0000059478,2025,2025-12-31,eps_diluted_adjusted,22.95,USD/shares,0.01,income,Diluted,adjusted,0000059478-26-000013,no split since the 10-K: as filed
+ELI LILLY & Co,LLY,0000059478,2025,2025-12-31,total_assets,112476000000,USD,1000000,balance,Total assets,annual,0000059478-26-000013,table 8#2 row 18
+ELI LILLY & Co,LLY,0000059478,2025,2025-12-31,stockholders_equity,26535000000,USD,1000000,balance,Total equity,annual,0000059478-26-000013,table 8#2 row 40
+ELI LILLY & Co,LLY,0000059478,2025,2025-12-31,cash,7268000000,USD,1000000,balance,Cash and cash equivalents,annual,0000059478-26-000013,table 8#2 row 4
+ELI LILLY & Co,LLY,0000059478,2025,2025-12-31,long_term_debt,40868000000,USD,1000000,balance,Long-term debt,annual,0000059478-26-000013,table 8#2 row 28
+ELI LILLY & Co,LLY,0000059478,2025,2025-12-31,long_term_debt_current,1635000000,USD,1000000,balance,Short-term borrowings and current maturities of long-term debt,annual,0000059478-26-000013,table 8#2 row 21
+ELI LILLY & Co,LLY,0000059478,2025,2025-12-31,operating_cash_flow,16813000000,USD,1000000,cash_flow,Net Cash Provided by Operating Activities,annual,0000059478-26-000013,table 8#4 row 16
+ELI LILLY & Co,LLY,0000059478,2025,2025-12-31,capex,7841000000,USD,1000000,cash_flow,Purchases of property and equipment,annual,0000059478-26-000013,table 8#4 row 18
+UNITEDHEALTH GROUP INC,UNH,0000731766,2025,2025-12-31,revenue,447567000000,USD,1000000,income,Total revenues,annual,0000731766-26-000062,table 8#3 row 7
+UNITEDHEALTH GROUP INC,UNH,0000731766,2025,2025-12-31,net_income,12056000000,USD,1000000,income,Net earnings attributable to UnitedHealth Group common shareholders,annual,0000731766-26-000062,table 8#3 row 21
+UNITEDHEALTH GROUP INC,UNH,0000731766,2025,2025-12-31,eps_diluted,13.23,USD/shares,0.01,income,Diluted,annual_per_share,0000731766-26-000062,table 8#3 row 24
+UNITEDHEALTH GROUP INC,UNH,0000731766,2025,2025-12-31,eps_diluted_adjusted,13.23,USD/shares,0.01,income,Diluted,adjusted,0000731766-26-000062,no split since the 10-K: as filed
+UNITEDHEALTH GROUP INC,UNH,0000731766,2025,2025-12-31,total_assets,309581000000,USD,1000000,balance,Total assets,annual,0000731766-26-000062,table 8#2 row 14
+UNITEDHEALTH GROUP INC,UNH,0000731766,2025,2025-12-31,total_liabilities,207883000000,USD,1000000,balance,Total liabilities,annual,0000731766-26-000062,table 8#2 row 26
+UNITEDHEALTH GROUP INC,UNH,0000731766,2025,2025-12-31,stockholders_equity,100090000000,USD,1000000,balance,Total equity,annual,0000731766-26-000062,table 8#2 row 36
+UNITEDHEALTH GROUP INC,UNH,0000731766,2025,2025-12-31,cash,24365000000,USD,1000000,balance,Cash and cash equivalents,annual,0000731766-26-000062,table 8#2 row 3
+UNITEDHEALTH GROUP INC,UNH,0000731766,2025,2025-12-31,long_term_debt,72320000000,USD,1000000,balance,"Long-term debt, less current maturities",annual,0000731766-26-000062,table 8#2 row 23
+UNITEDHEALTH GROUP INC,UNH,0000731766,2025,2025-12-31,long_term_debt_current,6069000000,USD,1000000,balance,Short-term borrowings and current maturities of long-term debt,annual,0000731766-26-000062,table 8#2 row 19
+UNITEDHEALTH GROUP INC,UNH,0000731766,2025,2025-12-31,operating_cash_flow,19697000000,USD,1000000,cash_flow,Cash provided by operating activities,annual,0000731766-26-000062,table 7#4 row 3 (untitled)
+UNITEDHEALTH GROUP INC,UNH,0000731766,2025,2025-12-31,capex,3622000000,USD,1000000,cash_flow,"Purchases of property, equipment and capitalized software",annual,0000731766-26-000062,table 8#6 row 23
+VISA INC.,V,0001403161,2026,2026-09-30,revenue,45903000000,USD,1000000,income,Net revenue,annual,0001403161-26-000134,table 8#2 row 3
+VISA INC.,V,0001403161,2026,2026-09-30,net_income,23504000000,USD,1000000,income,Net income,annual,0001403161-26-000134,table 8#2 row 20
+VISA INC.,V,0001403161,2026,2026-09-30,total_assets,94360000000,USD,1000000,balance,Total assets,annual,0001403161-26-000134,table 8#1 row 19
+VISA INC.,V,0001403161,2026,2026-09-30,total_liabilities,58249000000,USD,1000000,balance,Total liabilities,annual,0001403161-26-000134,table 8#1 row 33
+VISA INC.,V,0001403161,2026,2026-09-30,stockholders_equity,36111000000,USD,1000000,balance,Total equity,annual,0001403161-26-000134,table 8#1 row 50
+VISA INC.,V,0001403161,2026,2026-09-30,cash,12938000000,USD,1000000,balance,Cash and cash equivalents,annual,0001403161-26-000134,table 8#1 row 4
+VISA INC.,V,0001403161,2026,2026-09-30,long_term_debt,19355000000,USD,1000000,balance,Long-term debt,annual,0001403161-26-000134,table 8#1 row 30
+VISA INC.,V,0001403161,2026,2026-09-30,operating_cash_flow,23728000000,USD,1000000,cash_flow,Net cash provided by (used in) operating activities,annual,0001403161-26-000134,table 8#7 row 22
+VISA INC.,V,0001403161,2026,2026-09-30,capex,1671000000,USD,1000000,cash_flow,"Purchases of property, equipment and technology",annual,0001403161-26-000134,table 8#7 row 24
+Mastercard Inc,MA,0001141391,2025,2025-12-31,revenue,32791000000,USD,1000000,income,Net Revenue,annual,0001141391-26-000013,table 7A#1 row 4
+Mastercard Inc,MA,0001141391,2025,2025-12-31,net_income,14968000000,USD,1000000,income,Net Income,annual,0001141391-26-000013,table 7A#1 row 20
+Mastercard Inc,MA,0001141391,2025,2025-12-31,eps_diluted,16.52,USD/shares,0.01,income,Diluted Earnings per Share,annual_per_share,0001141391-26-000013,table 7A#1 row 23
+Mastercard Inc,MA,0001141391,2025,2025-12-31,eps_diluted_adjusted,16.52,USD/shares,0.01,income,Diluted Earnings per Share,adjusted,0001141391-26-000013,no split since the 10-K: as filed
+Mastercard Inc,MA,0001141391,2025,2025-12-31,total_assets,54157000000,USD,1000000,balance,Total Assets,annual,0001141391-26-000013,table 7A#3 row 19
+Mastercard Inc,MA,0001141391,2025,2025-12-31,total_liabilities,46411000000,USD,1000000,balance,Total Liabilities,annual,0001141391-26-000013,table 7A#3 row 33
+Mastercard Inc,MA,0001141391,2025,2025-12-31,cash,10566000000,USD,1000000,balance,Cash and cash equivalents,annual,0001141391-26-000013,table 7A#3 row 6
+Mastercard Inc,MA,0001141391,2025,2025-12-31,long_term_debt,18251000000,USD,1000000,balance,Long-term debt,annual,0001141391-26-000013,table 7A#3 row 30
+Mastercard Inc,MA,0001141391,2025,2025-12-31,long_term_debt_current,749000000,USD,1000000,balance,Short-term debt,annual,0001141391-26-000013,table 7A#3 row 27
+Mastercard Inc,MA,0001141391,2025,2025-12-31,operating_cash_flow,17648000000,USD,1000000,cash_flow,Net cash provided by operating activities,annual,0001141391-26-000013,table 7A#6 row 25
+Mastercard Inc,MA,0001141391,2025,2025-12-31,capex,489000000,USD,1000000,cash_flow,Purchases of property and equipment,annual,0001141391-26-000013,table 7A#6 row 32
+Broadcom Inc.,AVGO,0001730168,2025,2025-11-02,revenue,63887000000,USD,1000000,income,Total net revenue,annual,0001730168-25-000121,table 8#2 row 6
+Broadcom Inc.,AVGO,0001730168,2025,2025-11-02,net_income,23126000000,USD,1000000,income,Net income,annual,0001730168-25-000121,table 8#2 row 26
+Broadcom Inc.,AVGO,0001730168,2025,2025-11-02,total_assets,171092000000,USD,1000000,balance,Total assets,annual,0001730168-25-000121,table 8#1 row 14
+Broadcom Inc.,AVGO,0001730168,2025,2025-11-02,total_liabilities,89800000000,USD,1000000,balance,Total liabilities,annual,0001730168-25-000121,table 8#1 row 25
+Broadcom Inc.,AVGO,0001730168,2025,2025-11-02,stockholders_equity,81292000000,USD,1000000,balance,Total stockholders’ equity,annual,0001730168-25-000121,table 8#1 row 33
+Broadcom Inc.,AVGO,0001730168,2025,2025-11-02,cash,16178000000,USD,1000000,balance,Cash and cash equivalents,annual,0001730168-25-000121,table 8#1 row 4
+Broadcom Inc.,AVGO,0001730168,2025,2025-11-02,long_term_debt,61984000000,USD,1000000,balance,Long-term debt,annual,0001730168-25-000121,table 8#1 row 23
+Broadcom Inc.,AVGO,0001730168,2025,2025-11-02,long_term_debt_current,3152000000,USD,1000000,balance,Short-term debt,annual,0001730168-25-000121,table 8#1 row 19
+Broadcom Inc.,AVGO,0001730168,2025,2025-11-02,operating_cash_flow,27537000000,USD,1000000,cash_flow,Net cash provided by operating activities,annual,0001730168-25-000121,table 8#4 row 20
+Broadcom Inc.,AVGO,0001730168,2025,2025-11-02,capex,623000000,USD,1000000,cash_flow,"Purchases of property, plant and equipment",annual,0001730168-25-000121,table 8#4 row 24
+ORACLE CORP,ORCL,0001341439,2026,2026-05-31,revenue,67357000000,USD,1000000,income,Total revenues,annual,0001193125-26-277521,table 15#3 row 7
+ORACLE CORP,ORCL,0001341439,2026,2026-05-31,net_income,17087000000,USD,1000000,income,Net income,annual,0001193125-26-277521,table 15#3 row 23
+ORACLE CORP,ORCL,0001341439,2026,2026-05-31,eps_diluted,5.83,USD/shares,0.01,income,Diluted,annual_per_share,0001193125-26-277521,table 15#3 row 28
+ORACLE CORP,ORCL,0001341439,2026,2026-05-31,eps_diluted_adjusted,5.83,USD/shares,0.01,income,Diluted,adjusted,0001193125-26-277521,no split since the 10-K: as filed
+ORACLE CORP,ORCL,0001341439,2026,2026-05-31,total_assets,261759000000,USD,1000000,balance,Total assets,annual,0001193125-26-277521,table 15#2 row 16
+ORACLE CORP,ORCL,0001341439,2026,2026-05-31,stockholders_equity,42508000000,USD,1000000,balance,Total Oracle Corporation stockholders’ equity,annual,0001193125-26-277521,table 15#2 row 37
+ORACLE CORP,ORCL,0001341439,2026,2026-05-31,cash,31289000000,USD,1000000,balance,Cash and cash equivalents,annual,0001193125-26-277521,table 15#2 row 4
+ORACLE CORP,ORCL,0001341439,2026,2026-05-31,operating_cash_flow,31977000000,USD,1000000,cash_flow,Net cash provided by operating activities,annual,0001193125-26-277521,table 15#6 row 17
+ORACLE CORP,ORCL,0001341439,2026,2026-05-31,capex,55663000000,USD,1000000,cash_flow,Capital expenditures,annual,0001193125-26-277521,table 15#6 row 21
+BERKSHIRE HATHAWAY INC,BRK-B,0001067983,2025,2025-12-31,revenue,371444000000,USD,1000000,income,Total revenues,annual,0001193125-26-083899,table 8#2 row 14
+BERKSHIRE HATHAWAY INC,BRK-B,0001067983,2025,2025-12-31,net_income,66968000000,USD,1000000,income,Net earnings attributable to Berkshire shareholders,annual,0001193125-26-083899,table 8#2 row 39
+BERKSHIRE HATHAWAY INC,BRK-B,0001067983,2025,2025-12-31,total_assets,1222176000000,USD,1000000,balance,Total assets,annual,0001193125-26-083899,table 8#0 row 27
+BERKSHIRE HATHAWAY INC,BRK-B,0001067983,2025,2025-12-31,total_liabilities,502473000000,USD,1000000,balance,Total liabilities,annual,0001193125-26-083899,table 8#1 row 20
+BERKSHIRE HATHAWAY INC,BRK-B,0001067983,2025,2025-12-31,operating_cash_flow,45969000000,USD,1000000,cash_flow,Net cash flows from operating activities,annual,0001193125-26-083899,table 8#5 row 18
+BERKSHIRE HATHAWAY INC,BRK-B,0001067983,2025,2025-12-31,capex,20927000000,USD,1000000,cash_flow,"Purchases of property, plant and equipment and equipment held for lease",annual,0001193125-26-083899,table 8#5 row 26
+Walmart Inc.,WMT,0000104169,2026,2026-01-31,revenue,713163000000,USD,1000000,income,Total revenues,annual,0000104169-26-000055,table 8#2 row 5
+Walmart Inc.,WMT,0000104169,2026,2026-01-31,eps_diluted,2.73,USD/shares,0.01,income,Diluted net income per common share attributable to Walmart,annual_per_share,0000104169-26-000055,table 8#2 row 23
+Walmart Inc.,WMT,0000104169,2026,2026-01-31,eps_diluted_adjusted,2.73,USD/shares,0.01,income,Diluted net income per common share attributable to Walmart,adjusted,0000104169-26-000055,no split since the 10-K: as filed
+Walmart Inc.,WMT,0000104169,2026,2026-01-31,total_assets,284668000000,USD,1000000,balance,Total assets,annual,0000104169-26-000055,table 8#4 row 14
+Walmart Inc.,WMT,0000104169,2026,2026-01-31,stockholders_equity,99617000000,USD,1000000,balance,Total Walmart shareholders' equity,annual,0000104169-26-000055,table 8#4 row 36
+Walmart Inc.,WMT,0000104169,2026,2026-01-31,cash,10727000000,USD,1000000,balance,Cash and cash equivalents,annual,0000104169-26-000055,table 8#4 row 4
+Walmart Inc.,WMT,0000104169,2026,2026-01-31,long_term_debt,34624000000,USD,1000000,balance,Long-term debt,annual,0000104169-26-000055,table 8#4 row 25
+Walmart Inc.,WMT,0000104169,2026,2026-01-31,operating_cash_flow,41565000000,USD,1000000,cash_flow,Net cash provided by operating activities,annual,0000104169-26-000055,table 8#6 row 15
+Walmart Inc.,WMT,0000104169,2026,2026-01-31,capex,26642000000,USD,1000000,cash_flow,Payments for property and equipment,annual,0000104169-26-000055,table 8#6 row 17
+PROCTER & GAMBLE Co,PG,0000080424,2026,2026-06-30,revenue,87032000000,USD,1000000,income,NET SALES,annual,0000080424-26-000103,table 8#3 row 1
+PROCTER & GAMBLE Co,PG,0000080424,2026,2026-06-30,net_income,16046000000,USD,1000000,income,NET EARNINGS ATTRIBUTABLE TO PROCTER & GAMBLE,annual,0000080424-26-000103,table 8#3 row 13
+PROCTER & GAMBLE Co,PG,0000080424,2026,2026-06-30,eps_diluted,6.62,USD/shares,0.01,income,Diluted,annual_per_share,0000080424-26-000103,table 8#3 row 16
+PROCTER & GAMBLE Co,PG,0000080424,2026,2026-06-30,eps_diluted_adjusted,6.62,USD/shares,0.01,income,Diluted,adjusted,0000080424-26-000103,no split since the 10-K: as filed
+PROCTER & GAMBLE Co,PG,0000080424,2026,2026-06-30,total_assets,126521000000,USD,1000000,balance,TOTAL ASSETS,annual,0000080424-26-000103,table 8#5 row 16
+PROCTER & GAMBLE Co,PG,0000080424,2026,2026-06-30,total_liabilities,72210000000,USD,1000000,balance,TOTAL LIABILITIES,annual,0000080424-26-000103,table 8#5 row 26
+PROCTER & GAMBLE Co,PG,0000080424,2026,2026-06-30,stockholders_equity,54311000000,USD,1000000,balance,TOTAL SHAREHOLDERS' EQUITY,annual,0000080424-26-000103,table 8#5 row 37
+PROCTER & GAMBLE Co,PG,0000080424,2026,2026-06-30,cash,9942000000,USD,1000000,balance,Cash and cash equivalents,annual,0000080424-26-000103,table 8#5 row 3
+PROCTER & GAMBLE Co,PG,0000080424,2026,2026-06-30,long_term_debt,22842000000,USD,1000000,balance,LONG-TERM DEBT,annual,0000080424-26-000103,table 8#5 row 23
+PROCTER & GAMBLE Co,PG,0000080424,2026,2026-06-30,long_term_debt_current,6457000000,USD,1000000,balance,Current portion of long-term debt,annual,0000080424-26-000103,table 8#47 row 2 (untitled)
+PROCTER & GAMBLE Co,PG,0000080424,2026,2026-06-30,operating_cash_flow,19556000000,USD,1000000,cash_flow,Net cash provided by operating activities,annual,0000080424-26-000103,table 7#10 row 1 (untitled)
+PROCTER & GAMBLE Co,PG,0000080424,2026,2026-06-30,capex,4409000000,USD,1000000,cash_flow,Capital expenditures,annual,0000080424-26-000103,table 8#7 row 15
+COCA COLA CO,KO,0000021344,2025,2025-12-31,revenue,47941000000,USD,1000000,income,Net Operating Revenues,annual,0001628280-26-010047,table 8#1 row 1
+COCA COLA CO,KO,0000021344,2025,2025-12-31,net_income,13107000000,USD,1000000,income,Net Income Attributable to Shareowners of The Coca-Cola Company,annual,0001628280-26-010047,table 8#1 row 15
+COCA COLA CO,KO,0000021344,2025,2025-12-31,eps_diluted,3.04,USD/shares,0.01,income,Diluted Net Income Per Share1,annual_per_share,0001628280-26-010047,table 8#1 row 17
+COCA COLA CO,KO,0000021344,2025,2025-12-31,eps_diluted_adjusted,3.04,USD/shares,0.01,income,Diluted Net Income Per Share1,adjusted,0001628280-26-010047,no split since the 10-K: as filed
+COCA COLA CO,KO,0000021344,2025,2025-12-31,total_assets,104816000000,USD,1000000,balance,Total Assets,annual,0001628280-26-010047,table 8#3 row 18
+COCA COLA CO,KO,0000021344,2025,2025-12-31,cash,10270000000,USD,1000000,balance,Cash and cash equivalents,annual,0001628280-26-010047,table 8#3 row 3
+COCA COLA CO,KO,0000021344,2025,2025-12-31,long_term_debt,42119000000,USD,1000000,balance,Long-term debt,annual,0001628280-26-010047,table 8#3 row 27
+COCA COLA CO,KO,0000021344,2025,2025-12-31,long_term_debt_current,1822000000,USD,1000000,balance,Current maturities of long-term debt,annual,0001628280-26-010047,table 8#3 row 23
+COCA COLA CO,KO,0000021344,2025,2025-12-31,operating_cash_flow,7408000000,USD,1000000,cash_flow,Net Cash Provided by Operating Activities,annual,0001628280-26-010047,table 8#4 row 13
+COCA COLA CO,KO,0000021344,2025,2025-12-31,capex,2112000000,USD,1000000,cash_flow,"Purchases of property, plant and equipment",annual,0001628280-26-010047,table 8#4 row 19
+PEPSICO INC,PEP,0000077476,2025,2025-12-27,revenue,93925000000,USD,1000000,income,Net Revenue,annual,0000077476-26-000007,table 7#16 row 1
+PEPSICO INC,PEP,0000077476,2025,2025-12-27,net_income,8240000000,USD,1000000,income,Net Income Attributable to PepsiCo,annual,0000077476-26-000007,table 7#16 row 13
+PEPSICO INC,PEP,0000077476,2025,2025-12-27,total_assets,107399000000,USD,1000000,balance,Total Assets,annual,0000077476-26-000007,table 7#20 row 20
+PEPSICO INC,PEP,0000077476,2025,2025-12-27,total_liabilities,86852000000,USD,1000000,balance,Total Liabilities,annual,0000077476-26-000007,table 7#20 row 29
+PEPSICO INC,PEP,0000077476,2025,2025-12-27,stockholders_equity,20406000000,USD,1000000,balance,Total PepsiCo Common Shareholders’ Equity,annual,0000077476-26-000007,table 7#20 row 37
+PEPSICO INC,PEP,0000077476,2025,2025-12-27,cash,9159000000,USD,1000000,balance,Cash and cash equivalents,annual,0000077476-26-000007,table 7#20 row 3
+PEPSICO INC,PEP,0000077476,2025,2025-12-27,operating_cash_flow,12087000000,USD,1000000,cash_flow,Net Cash Provided by Operating Activities,annual,0000077476-26-000007,table 7#18 row 24
+JOHNSON & JOHNSON,JNJ,0000200406,2025,2025-12-28,net_income,26804000000,USD,1000000,income,Net earnings,annual,0000200406-26-000016,table 8#2 row 15
+JOHNSON & JOHNSON,JNJ,0000200406,2025,2025-12-28,eps_diluted,11.03,USD/shares,0.01,income,Total net earnings per share - diluted,annual_per_share,0000200406-26-000016,table 8#2 row 22
+JOHNSON & JOHNSON,JNJ,0000200406,2025,2025-12-28,eps_diluted_adjusted,11.03,USD/shares,0.01,income,Total net earnings per share - diluted,adjusted,0000200406-26-000016,no split since the 10-K: as filed
+JOHNSON & JOHNSON,JNJ,0000200406,2025,2025-12-28,total_assets,199210000000,USD,1000000,balance,Total assets,annual,0000200406-26-000016,table 8#1 row 14
+JOHNSON & JOHNSON,JNJ,0000200406,2025,2025-12-28,total_liabilities,117666000000,USD,1000000,balance,Total liabilities,annual,0000200406-26-000016,table 8#1 row 29
+JOHNSON & JOHNSON,JNJ,0000200406,2025,2025-12-28,stockholders_equity,81544000000,USD,1000000,balance,Total shareholders’ equity,annual,0000200406-26-000016,table 8#1 row 37
+JOHNSON & JOHNSON,JNJ,0000200406,2025,2025-12-28,cash,19709000000,USD,1000000,balance,Cash and cash equivalents (Notes 1 and 2),annual,0000200406-26-000016,table 8#1 row 3
+JOHNSON & JOHNSON,JNJ,0000200406,2025,2025-12-28,long_term_debt,39438000000,USD,1000000,balance,Long-term debt (Note 7),annual,0000200406-26-000016,table 8#1 row 24
+JOHNSON & JOHNSON,JNJ,0000200406,2025,2025-12-28,operating_cash_flow,24530000000,USD,1000000,cash_flow,Net cash flows from operating activities,annual,0000200406-26-000016,table 8#5 row 18
+JOHNSON & JOHNSON,JNJ,0000200406,2025,2025-12-28,capex,4832000000,USD,1000000,cash_flow,"Additions to property, plant and equipment",annual,0000200406-26-000016,table 8#5 row 20
+"Merck & Co., Inc.",MRK,0000310158,2025,2025-12-31,revenue,65011000000,USD,1000000,income,Sales,annual,0000310158-26-000063,table 8#0 row 1
+"Merck & Co., Inc.",MRK,0000310158,2025,2025-12-31,net_income,18254000000,USD,1000000,income,"Net Income Attributable to Merck & Co., Inc.",annual,0000310158-26-000063,table 8#0 row 13
+"Merck & Co., Inc.",MRK,0000310158,2025,2025-12-31,eps_diluted,7.28,USD/shares,0.01,income,"Earnings per Common Share Assuming Dilution Attributable to Merck & Co., Inc. Common Shareholders",annual_per_share,0000310158-26-000063,table 8#0 row 15
+"Merck & Co., Inc.",MRK,0000310158,2025,2025-12-31,eps_diluted_adjusted,7.28,USD/shares,0.01,income,"Earnings per Common Share Assuming Dilution Attributable to Merck & Co., Inc. Common Shareholders",adjusted,0000310158-26-000063,no split since the 10-K: as filed
+"Merck & Co., Inc.",MRK,0000310158,2025,2025-12-31,stockholders_equity,52606000000,USD,1000000,balance,"Total Merck & Co., Inc. stockholders’ equity",annual,0000310158-26-000063,table 8#2 row 40
+"Merck & Co., Inc.",MRK,0000310158,2025,2025-12-31,cash,14565000000,USD,1000000,balance,Cash and cash equivalents,annual,0000310158-26-000063,table 8#2 row 3
+"Merck & Co., Inc.",MRK,0000310158,2025,2025-12-31,long_term_debt,46750000000,USD,1000000,balance,Long-Term Debt,annual,0000310158-26-000063,table 8#2 row 30
+"Merck & Co., Inc.",MRK,0000310158,2025,2025-12-31,operating_cash_flow,16472000000,USD,1000000,cash_flow,Net Cash Provided by Operating Activities,annual,0000310158-26-000063,table 8#4 row 20
+"Merck & Co., Inc.",MRK,0000310158,2025,2025-12-31,capex,4112000000,USD,1000000,cash_flow,Capital expenditures,annual,0000310158-26-000063,table 8#4 row 22
+AbbVie Inc.,ABBV,0001551152,2025,2025-12-31,revenue,61160000000,USD,1000000,income,Net revenues,annual,0001551152-26-000008,table 8#2 row 1
+AbbVie Inc.,ABBV,0001551152,2025,2025-12-31,net_income,4226000000,USD,1000000,income,Net earnings attributable to AbbVie Inc.,annual,0001551152-26-000008,table 8#2 row 16
+AbbVie Inc.,ABBV,0001551152,2025,2025-12-31,eps_diluted,2.36,USD/shares,0.01,income,Diluted earnings per share attributable to AbbVie Inc.,annual_per_share,0001551152-26-000008,table 8#2 row 19
+AbbVie Inc.,ABBV,0001551152,2025,2025-12-31,eps_diluted_adjusted,2.36,USD/shares,0.01,income,Diluted earnings per share attributable to AbbVie Inc.,adjusted,0001551152-26-000008,no split since the 10-K: as filed
+AbbVie Inc.,ABBV,0001551152,2025,2025-12-31,total_assets,133960000000,USD,1000000,balance,Total assets,annual,0001551152-26-000008,table 8#4 row 14
+AbbVie Inc.,ABBV,0001551152,2025,2025-12-31,stockholders_equity,-3270000000,USD,1000000,balance,Total stockholders' equity (deficit),annual,0001551152-26-000008,table 8#4 row 31
+AbbVie Inc.,ABBV,0001551152,2025,2025-12-31,cash,5229000000,USD,1000000,balance,Cash and equivalents,annual,0001551152-26-000008,table 8#4 row 3
+AbbVie Inc.,ABBV,0001551152,2025,2025-12-31,long_term_debt_current,6056000000,USD,1000000,balance,Current portion of long-term debt and finance lease obligations,annual,0001551152-26-000008,table 8#4 row 18
+AbbVie Inc.,ABBV,0001551152,2025,2025-12-31,capex,1214000000,USD,1000000,cash_flow,Acquisitions of property and equipment,annual,0001551152-26-000008,table 8#6 row 24
+CHEVRON CORP,CVX,0000093410,2025,2025-12-31,net_income,12299000000,USD,1000000,income,Net Income (Loss) Attributable to Chevron Corporation,annual,0000093410-26-000078,table 14#56 row 21
+CHEVRON CORP,CVX,0000093410,2025,2025-12-31,eps_diluted,6.63,USD/shares,0.01,income,Earnings per share of common stock - Diluted,annual_per_share,0000093410-26-000078,table 14#95 row 14 (untitled)
+CHEVRON CORP,CVX,0000093410,2025,2025-12-31,eps_diluted_adjusted,6.63,USD/shares,0.01,income,Earnings per share of common stock - Diluted,adjusted,0000093410-26-000078,no split since the 10-K: as filed
+CHEVRON CORP,CVX,0000093410,2025,2025-12-31,total_assets,324012000000,USD,1000000,balance,Total Assets,annual,0000093410-26-000078,table 14#60 row 22
+CHEVRON CORP,CVX,0000093410,2025,2025-12-31,stockholders_equity,186450000000,USD,1000000,balance,Total Chevron Corporation Stockholders’ Equity,annual,0000093410-26-000078,table 14#60 row 42
+CHEVRON CORP,CVX,0000093410,2025,2025-12-31,long_term_debt,39781000000,USD,1000000,balance,Long-term debt,annual,0000093410-26-000078,table 7#40 row 3 (untitled)
+CHEVRON CORP,CVX,0000093410,2025,2025-12-31,operating_cash_flow,33939000000,USD,1000000,cash_flow,Net Cash Provided by Operating Activities,annual,0000093410-26-000078,table 14#62 row 16
+CHEVRON CORP,CVX,0000093410,2025,2025-12-31,capex,17347000000,USD,1000000,cash_flow,Capital expenditures,annual,0000093410-26-000078,table 14#62 row 20
+CONOCOPHILLIPS,COP,0001163165,2025,2025-12-31,revenue,58944000000,USD,1000000,income,Sales and other operating revenues,annual,0001163165-26-000009,table 8#3 row 3
+CONOCOPHILLIPS,COP,0001163165,2025,2025-12-31,net_income,7988000000,USD,1000000,income,Net income (loss),annual,0001163165-26-000009,table 8#3 row 23
+CONOCOPHILLIPS,COP,0001163165,2025,2025-12-31,eps_diluted,6.35,USD/shares,0.01,income,Diluted,annual_per_share,0001163165-26-000009,table 8#3 row 26
+CONOCOPHILLIPS,COP,0001163165,2025,2025-12-31,eps_diluted_adjusted,6.35,USD/shares,0.01,income,Diluted,adjusted,0001163165-26-000009,no split since the 10-K: as filed
+CONOCOPHILLIPS,COP,0001163165,2025,2025-12-31,total_assets,121939000000,USD,1000000,balance,Total assets,annual,0001163165-26-000009,table 8#5 row 12
+CONOCOPHILLIPS,COP,0001163165,2025,2025-12-31,total_liabilities,57452000000,USD,1000000,balance,Total liabilities,annual,0001163165-26-000009,table 8#5 row 25
+CONOCOPHILLIPS,COP,0001163165,2025,2025-12-31,stockholders_equity,64487000000,USD,1000000,balance,Total equity,annual,0001163165-26-000009,table 8#5 row 33
+CONOCOPHILLIPS,COP,0001163165,2025,2025-12-31,cash,6497000000,USD,1000000,balance,Cash and cash equivalents,annual,0001163165-26-000009,table 8#5 row 3
+CONOCOPHILLIPS,COP,0001163165,2025,2025-12-31,long_term_debt,22424000000,USD,1000000,balance,Long-term debt,annual,0001163165-26-000009,table 8#5 row 20
+CONOCOPHILLIPS,COP,0001163165,2025,2025-12-31,long_term_debt_current,1020000000,USD,1000000,balance,Short-term debt,annual,0001163165-26-000009,table 8#5 row 15
+CONOCOPHILLIPS,COP,0001163165,2025,2025-12-31,operating_cash_flow,19796000000,USD,1000000,cash_flow,Net cash provided by operating activities,annual,0001163165-26-000009,table 8#6 row 19
+OCCIDENTAL PETROLEUM CORP /DE/,OXY,0000797468,2025,2025-12-31,revenue,21593000000,USD,1000000,income,Net sales,annual,0001628280-26-009059,table 8#3 row 3
+OCCIDENTAL PETROLEUM CORP /DE/,OXY,0000797468,2025,2025-12-31,net_income,2369000000,USD,1000000,income,NET INCOME,annual,0001628280-26-009059,table 8#3 row 28
+OCCIDENTAL PETROLEUM CORP /DE/,OXY,0000797468,2025,2025-12-31,eps_diluted,1.61,USD/shares,0.01,income,Diluted earnings per common share,annual_per_share,0001628280-26-009059,table 8#52 row 19 (untitled)
+OCCIDENTAL PETROLEUM CORP /DE/,OXY,0000797468,2025,2025-12-31,eps_diluted_adjusted,1.61,USD/shares,0.01,income,Diluted earnings per common share,adjusted,0001628280-26-009059,no split since the 10-K: as filed
+OCCIDENTAL PETROLEUM CORP /DE/,OXY,0000797468,2025,2025-12-31,total_assets,84186000000,USD,1000000,balance,TOTAL ASSETS,annual,0001628280-26-009059,table 8#1 row 24
+OCCIDENTAL PETROLEUM CORP /DE/,OXY,0000797468,2025,2025-12-31,stockholders_equity,36034000000,USD,1000000,balance,Total stockholders’ equity,annual,0001628280-26-009059,table 8#2 row 23
+OCCIDENTAL PETROLEUM CORP /DE/,OXY,0000797468,2025,2025-12-31,cash,1968000000,USD,1000000,balance,Cash and cash equivalents,annual,0001628280-26-009059,table 8#1 row 4
+OCCIDENTAL PETROLEUM CORP /DE/,OXY,0000797468,2025,2025-12-31,long_term_debt,20623000000,USD,1000000,balance,"LONG-TERM DEBT, NET",annual,0001628280-26-009059,table 8#2 row 9
+OCCIDENTAL PETROLEUM CORP /DE/,OXY,0000797468,2025,2025-12-31,long_term_debt_current,1773000000,USD,1000000,balance,Current maturities of long-term debt,annual,0001628280-26-009059,table 8#2 row 4
+OCCIDENTAL PETROLEUM CORP /DE/,OXY,0000797468,2025,2025-12-31,operating_cash_flow,10532000000,USD,1000000,cash_flow,Net cash provided by operating activities,annual,0001628280-26-009059,table 8#6 row 21
+OCCIDENTAL PETROLEUM CORP /DE/,OXY,0000797468,2025,2025-12-31,capex,6427000000,USD,1000000,cash_flow,Capital expenditures,annual,0001628280-26-009059,table 8#6 row 23
+SLB LIMITED/NV,SLB,0000087347,2025,2025-12-31,revenue,35708000000,USD,1000000,income,Total Revenue,annual,0001193125-26-021017,table 8#0 row 5
+SLB LIMITED/NV,SLB,0000087347,2025,2025-12-31,net_income,3374000000,USD,1000000,income,Net income attributable to SLB,annual,0001193125-26-021017,table 8#0 row 20
+SLB LIMITED/NV,SLB,0000087347,2025,2025-12-31,eps_diluted,2.35,USD/shares,0.01,income,Diluted earnings per share of SLB,annual_per_share,0001193125-26-021017,table 8#0 row 22
+SLB LIMITED/NV,SLB,0000087347,2025,2025-12-31,eps_diluted_adjusted,2.35,USD/shares,0.01,income,Diluted earnings per share of SLB,adjusted,0001193125-26-021017,no split since the 10-K: as filed
+SLB LIMITED/NV,SLB,0000087347,2025,2025-12-31,long_term_debt,9742000000,USD,1000000,balance,Long-term Debt,annual,0001193125-26-021017,table 8#2 row 23
+SLB LIMITED/NV,SLB,0000087347,2025,2025-12-31,operating_cash_flow,6489000000,USD,1000000,cash_flow,NET CASH PROVIDED BY OPERATING ACTIVITIES,annual,0001193125-26-021017,table 8#3 row 22
+SLB LIMITED/NV,SLB,0000087347,2025,2025-12-31,capex,1694000000,USD,1000000,cash_flow,Capital expenditures,annual,0001193125-26-021017,table 8#3 row 24
+CATERPILLAR INC,CAT,0000018230,2025,2025-12-31,revenue,67589000000,USD,1000000,income,Total sales and revenues,annual,0000018230-26-000008,table 8#1 row 7 (untitled)
+CATERPILLAR INC,CAT,0000018230,2025,2025-12-31,total_assets,98585000000,USD,1000000,balance,Total assets,annual,0000018230-26-000008,table 8#3 row 19 (untitled)
+CATERPILLAR INC,CAT,0000018230,2025,2025-12-31,total_liabilities,77267000000,USD,1000000,balance,Total liabilities,annual,0000018230-26-000008,table 8#3 row 39 (untitled)
+CATERPILLAR INC,CAT,0000018230,2025,2025-12-31,stockholders_equity,21318000000,USD,1000000,balance,Total shareholders’ equity,annual,0000018230-26-000008,table 8#3 row 48 (untitled)
+CATERPILLAR INC,CAT,0000018230,2025,2025-12-31,cash,9980000000,USD,1000000,balance,Cash and cash equivalents,annual,0000018230-26-000008,table 8#3 row 6 (untitled)
+CATERPILLAR INC,CAT,0000018230,2025,2025-12-31,long_term_debt,30696000000,USD,1000000,balance,Long-term debt due after one year,annual,0000018230-26-000008,table 7#14 row 31 (untitled)
+CATERPILLAR INC,CAT,0000018230,2025,2025-12-31,operating_cash_flow,11739000000,USD,1000000,cash_flow,Net cash provided by (used for) operating activities,annual,0000018230-26-000008,table 8#6 row 21
+DEERE & CO,DE,0000315189,2025,2025-11-02,total_assets,105996000000,USD,1000000,balance,Total Assets,annual,0001104659-25-122321,table 16#18 row 17
+DEERE & CO,DE,0000315189,2025,2025-11-02,total_liabilities,79989000000,USD,1000000,balance,Total liabilities,annual,0001104659-25-122321,table 16#18 row 27
+DEERE & CO,DE,0000315189,2025,2025-11-02,stockholders_equity,25950000000,USD,1000000,balance,Total Deere & Company stockholders’ equity,annual,0001104659-25-122321,table 16#18 row 35
+DEERE & CO,DE,0000315189,2025,2025-11-02,cash,8276000000,USD,1000000,balance,Cash and cash equivalents,annual,0001104659-25-122321,table 16#18 row 2
+DEERE & CO,DE,0000315189,2025,2025-11-02,long_term_debt_current,13796000000,USD,1000000,balance,Short-term borrowings,annual,0001104659-25-122321,table 16#18 row 20
+DEERE & CO,DE,0000315189,2025,2025-11-02,capex,1360000000,USD,1000000,cash_flow,Purchases of property and equipment,annual,0001104659-25-122321,table 16#13 row 30; scale from the statement's page heading
+BOEING CO,BA,0000012927,2025,2025-12-31,revenue,89463000000,USD,1000000,income,Total revenues,annual,0001628280-26-004357,table 8#1 row 4
+BOEING CO,BA,0000012927,2025,2025-12-31,eps_diluted,2.48,USD/shares,0.01,income,Diluted,annual_per_share,0001628280-26-004357,table 8#14 row 24 (untitled)
+BOEING CO,BA,0000012927,2025,2025-12-31,eps_diluted_adjusted,2.48,USD/shares,0.01,income,Diluted,adjusted,0001628280-26-004357,no split since the 10-K: as filed
+BOEING CO,BA,0000012927,2025,2025-12-31,total_assets,168235000000,USD,1000000,balance,Total assets,annual,0001628280-26-004357,table 8#3 row 18
+BOEING CO,BA,0000012927,2025,2025-12-31,total_liabilities,162778000000,USD,1000000,balance,Total liabilities,annual,0001628280-26-004357,table 8#3 row 30
+BOEING CO,BA,0000012927,2025,2025-12-31,cash,10921000000,USD,1000000,balance,Cash and cash equivalents,annual,0001628280-26-004357,table 8#3 row 3
+BOEING CO,BA,0000012927,2025,2025-12-31,long_term_debt,45637000000,USD,1000000,balance,Long-term debt,annual,0001628280-26-004357,table 8#3 row 29
+BOEING CO,BA,0000012927,2025,2025-12-31,long_term_debt_current,8461000000,USD,1000000,balance,Short-term debt and current portion of long-term debt,annual,0001628280-26-004357,table 8#3 row 23
+UNITED PARCEL SERVICE INC,UPS,0001090727,2025,2025-12-31,revenue,88661000000,USD,1000000,income,Revenue,annual,0001628280-26-008432,table 8#2 row 1
+UNITED PARCEL SERVICE INC,UPS,0001090727,2025,2025-12-31,net_income,5572000000,USD,1000000,income,Net Income,annual,0001628280-26-008432,table 8#2 row 18
+UNITED PARCEL SERVICE INC,UPS,0001090727,2025,2025-12-31,eps_diluted,6.56,USD/shares,0.01,income,Diluted Earnings Per Share,annual_per_share,0001628280-26-008432,table 8#2 row 20
+UNITED PARCEL SERVICE INC,UPS,0001090727,2025,2025-12-31,eps_diluted_adjusted,6.56,USD/shares,0.01,income,Diluted Earnings Per Share,adjusted,0001628280-26-008432,no split since the 10-K: as filed
+UNITED PARCEL SERVICE INC,UPS,0001090727,2025,2025-12-31,total_assets,73090000000,USD,1000000,balance,Total Assets,annual,0001628280-26-008432,table 8#1 row 14
+UNITED PARCEL SERVICE INC,UPS,0001090727,2025,2025-12-31,cash,5887000000,USD,1000000,balance,Cash and cash equivalents,annual,0001628280-26-008432,table 8#1 row 4
+UNITED PARCEL SERVICE INC,UPS,0001090727,2025,2025-12-31,long_term_debt_current,608000000,USD,1000000,balance,Current maturities of long-term debt and finance leases,annual,0001628280-26-008432,table 8#1 row 17
+UNITED PARCEL SERVICE INC,UPS,0001090727,2025,2025-12-31,operating_cash_flow,8450000000,USD,1000000,cash_flow,Net cash from operating activities,annual,0001628280-26-008432,table 8#4 row 18
+UNITED PARCEL SERVICE INC,UPS,0001090727,2025,2025-12-31,capex,3685000000,USD,1000000,cash_flow,Capital expenditures,annual,0001628280-26-008432,table 8#4 row 20
+LOCKHEED MARTIN CORP,LMT,0000936468,2025,2025-12-31,revenue,75048000000,USD,1000000,income,Total sales,annual,0001628280-26-004195,table 8#1 row 5
+LOCKHEED MARTIN CORP,LMT,0000936468,2025,2025-12-31,net_income,5017000000,USD,1000000,income,Net earnings,annual,0001628280-26-004195,table 8#1 row 20
+LOCKHEED MARTIN CORP,LMT,0000936468,2025,2025-12-31,eps_diluted,21.49,USD/shares,0.01,income,Diluted,annual_per_share,0001628280-26-004195,table 8#1 row 23
+LOCKHEED MARTIN CORP,LMT,0000936468,2025,2025-12-31,eps_diluted_adjusted,21.49,USD/shares,0.01,income,Diluted,adjusted,0001628280-26-004195,no split since the 10-K: as filed
+LOCKHEED MARTIN CORP,LMT,0000936468,2025,2025-12-31,total_assets,59840000000,USD,1000000,balance,Total assets,annual,0001628280-26-004195,table 8#3 row 16
+LOCKHEED MARTIN CORP,LMT,0000936468,2025,2025-12-31,total_liabilities,53119000000,USD,1000000,balance,Total liabilities,annual,0001628280-26-004195,table 8#3 row 28
+LOCKHEED MARTIN CORP,LMT,0000936468,2025,2025-12-31,stockholders_equity,6721000000,USD,1000000,balance,Total stockholders’ equity,annual,0001628280-26-004195,table 8#3 row 34
+LOCKHEED MARTIN CORP,LMT,0000936468,2025,2025-12-31,cash,4121000000,USD,1000000,balance,Cash and cash equivalents,annual,0001628280-26-004195,table 8#3 row 4
+LOCKHEED MARTIN CORP,LMT,0000936468,2025,2025-12-31,long_term_debt,20532000000,USD,1000000,balance,"Long-term debt, net",annual,0001628280-26-004195,table 8#3 row 25
+LOCKHEED MARTIN CORP,LMT,0000936468,2025,2025-12-31,long_term_debt_current,1168000000,USD,1000000,balance,Current maturities of long-term debt,annual,0001628280-26-004195,table 8#3 row 22
+LOCKHEED MARTIN CORP,LMT,0000936468,2025,2025-12-31,operating_cash_flow,8557000000,USD,1000000,cash_flow,Net cash provided by operating activities,annual,0001628280-26-004195,table 8#4 row 20
+LOCKHEED MARTIN CORP,LMT,0000936468,2025,2025-12-31,capex,1649000000,USD,1000000,cash_flow,Capital expenditures,annual,0001628280-26-004195,table 8#4 row 22
+"CISCO SYSTEMS, INC.",CSCO,0000858877,2026,2026-07-25,revenue,63325000000,USD,1000000,income,Total revenue,annual,0000858877-26-000132,table 8#3 row 4
+"CISCO SYSTEMS, INC.",CSCO,0000858877,2026,2026-07-25,net_income,13267000000,USD,1000000,income,NET INCOME,annual,0000858877-26-000132,table 8#3 row 24
+"CISCO SYSTEMS, INC.",CSCO,0000858877,2026,2026-07-25,eps_diluted,3.33,USD/shares,0.01,income,Diluted,annual_per_share,0000858877-26-000132,table 8#3 row 27
+"CISCO SYSTEMS, INC.",CSCO,0000858877,2026,2026-07-25,eps_diluted_adjusted,3.33,USD/shares,0.01,income,Diluted,adjusted,0000858877-26-000132,no split since the 10-K: as filed
+"CISCO SYSTEMS, INC.",CSCO,0000858877,2026,2026-07-25,total_assets,129637000000,USD,1000000,balance,TOTAL ASSETS,annual,0000858877-26-000132,table 8#2 row 16
+"CISCO SYSTEMS, INC.",CSCO,0000858877,2026,2026-07-25,total_liabilities,79352000000,USD,1000000,balance,Total liabilities,annual,0000858877-26-000132,table 8#2 row 30
+"CISCO SYSTEMS, INC.",CSCO,0000858877,2026,2026-07-25,stockholders_equity,50285000000,USD,1000000,balance,Total equity,annual,0000858877-26-000132,table 8#2 row 38
+"CISCO SYSTEMS, INC.",CSCO,0000858877,2026,2026-07-25,cash,7218000000,USD,1000000,balance,Cash and cash equivalents,annual,0000858877-26-000132,table 8#2 row 3
+"CISCO SYSTEMS, INC.",CSCO,0000858877,2026,2026-07-25,long_term_debt,19372000000,USD,1000000,balance,Long-term debt,annual,0000858877-26-000132,table 8#2 row 26
+"CISCO SYSTEMS, INC.",CSCO,0000858877,2026,2026-07-25,long_term_debt_current,3500000000,USD,1000000,balance,Current portion of long-term debt,annual,0000858877-26-000132,table 8#54 row 24 (untitled)
+"CISCO SYSTEMS, INC.",CSCO,0000858877,2026,2026-07-25,operating_cash_flow,14177000000,USD,1000000,cash_flow,Net cash provided by operating activities,annual,0000858877-26-000132,table 8#5 row 19
+"CISCO SYSTEMS, INC.",CSCO,0000858877,2026,2026-07-25,capex,1410000000,USD,1000000,cash_flow,Acquisition of property and equipment,annual,0000858877-26-000132,table 8#5 row 27
+INTEL CORP,INTC,0000050863,2025,2025-12-27,net_income,-267000000,USD,1000000,income,Net income (loss) attributable to Intel,annual,0000050863-26-000011,table 7#10 row 15 (untitled)
+INTEL CORP,INTC,0000050863,2025,2025-12-27,cash,14265000000,USD,1000000,balance,Cash and cash equivalents,annual,0000050863-26-000011,table 7#18 row 1 (untitled)
+INTEL CORP,INTC,0000050863,2025,2025-12-27,operating_cash_flow,9697000000,USD,1000000,cash_flow,Net cash provided by (used for) operating activities,annual,0000050863-26-000011,table 7#17 row 1 (untitled)
+QUALCOMM INC/DE,QCOM,0000804328,2026,2026-09-27,revenue,43120000000,USD,1000000,income,Total revenues,annual,0000804328-26-000128,table 16#3 row 5
+QUALCOMM INC/DE,QCOM,0000804328,2026,2026-09-27,net_income,13628000000,USD,1000000,income,Net income,annual,0000804328-26-000128,table 16#3 row 19
+QUALCOMM INC/DE,QCOM,0000804328,2026,2026-09-27,total_assets,60829000000,USD,1000000,balance,Total assets,annual,0000804328-26-000128,table 16#2 row 15
+QUALCOMM INC/DE,QCOM,0000804328,2026,2026-09-27,total_liabilities,30428000000,USD,1000000,balance,Total liabilities,annual,0000804328-26-000128,table 16#2 row 25
+QUALCOMM INC/DE,QCOM,0000804328,2026,2026-09-27,stockholders_equity,30401000000,USD,1000000,balance,Total stockholders’ equity,annual,0000804328-26-000128,table 16#2 row 32
+QUALCOMM INC/DE,QCOM,0000804328,2026,2026-09-27,cash,4636000000,USD,1000000,balance,Cash and cash equivalents,annual,0000804328-26-000128,table 16#2 row 3
+QUALCOMM INC/DE,QCOM,0000804328,2026,2026-09-27,long_term_debt,12620000000,USD,1000000,balance,Long-term debt,annual,0000804328-26-000128,table 16#2 row 23
+QUALCOMM INC/DE,QCOM,0000804328,2026,2026-09-27,long_term_debt_current,1993000000,USD,1000000,balance,Short-term debt,annual,0000804328-26-000128,table 16#32 row 8 (untitled)
+QUALCOMM INC/DE,QCOM,0000804328,2026,2026-09-27,operating_cash_flow,11145000000,USD,1000000,cash_flow,Net cash provided by operating activities,annual,0000804328-26-000128,table 16#5 row 19
+QUALCOMM INC/DE,QCOM,0000804328,2026,2026-09-27,capex,2494000000,USD,1000000,cash_flow,Capital expenditures,annual,0000804328-26-000128,table 16#5 row 21
+"Salesforce, Inc.",CRM,0001108524,2026,2026-01-31,revenue,41525000000,USD,1000000,income,Total revenues,annual,0001108524-26-000060,table 8#3 row 5
+"Salesforce, Inc.",CRM,0001108524,2026,2026-01-31,net_income,7457000000,USD,1000000,income,Net income,annual,0001108524-26-000060,table 8#3 row 22
+"Salesforce, Inc.",CRM,0001108524,2026,2026-01-31,eps_diluted,7.80,USD/shares,0.01,income,Diluted net income per share,annual_per_share,0001108524-26-000060,table 8#3 row 24
+"Salesforce, Inc.",CRM,0001108524,2026,2026-01-31,eps_diluted_adjusted,7.8,USD/shares,0.01,income,Diluted net income per share,adjusted,0001108524-26-000060,no split since the 10-K: as filed
+"Salesforce, Inc.",CRM,0001108524,2026,2026-01-31,total_assets,112305000000,USD,1000000,balance,Total assets,annual,0001108524-26-000060,table 8#2 row 16
+"Salesforce, Inc.",CRM,0001108524,2026,2026-01-31,total_liabilities,53163000000,USD,1000000,balance,Total liabilities,annual,0001108524-26-000060,table 8#2 row 27
+"Salesforce, Inc.",CRM,0001108524,2026,2026-01-31,stockholders_equity,59142000000,USD,1000000,balance,Total stockholders’ equity,annual,0001108524-26-000060,table 8#2 row 36
+"Salesforce, Inc.",CRM,0001108524,2026,2026-01-31,cash,7327000000,USD,1000000,balance,Cash and cash equivalents,annual,0001108524-26-000060,table 8#2 row 3
+"Salesforce, Inc.",CRM,0001108524,2026,2026-01-31,operating_cash_flow,14996000000,USD,1000000,cash_flow,Net cash provided by operating activities,annual,0001108524-26-000060,table 8#8 row 16
+"Salesforce, Inc.",CRM,0001108524,2026,2026-01-31,capex,594000000,USD,1000000,cash_flow,Capital expenditures,annual,0001108524-26-000060,table 8#8 row 24
+NETFLIX INC,NFLX,0001065280,2025,2025-12-31,revenue,45183036000,USD,1000,income,Revenues,annual,0001065280-26-000034,table 16#3 row 2
+NETFLIX INC,NFLX,0001065280,2025,2025-12-31,net_income,10981201000,USD,1000,income,Net income,annual,0001065280-26-000034,table 16#3 row 13
+NETFLIX INC,NFLX,0001065280,2025,2025-12-31,eps_diluted,2.53,USD/shares,0.01,income,Diluted,annual_per_share,0001065280-26-000034,table 16#3 row 16
+NETFLIX INC,NFLX,0001065280,2025,2025-12-31,eps_diluted_adjusted,2.53,USD/shares,0.01,income,Diluted,adjusted,0001065280-26-000034,no split since the 10-K: as filed
+NETFLIX INC,NFLX,0001065280,2025,2025-12-31,total_assets,55596993000,USD,1000,balance,Total assets,annual,0001065280-26-000034,table 16#6 row 11
+NETFLIX INC,NFLX,0001065280,2025,2025-12-31,total_liabilities,28981505000,USD,1000,balance,Total liabilities,annual,0001065280-26-000034,table 16#6 row 23
+NETFLIX INC,NFLX,0001065280,2025,2025-12-31,stockholders_equity,26615488000,USD,1000,balance,Total stockholders’ equity,annual,0001065280-26-000034,table 16#6 row 31
+NETFLIX INC,NFLX,0001065280,2025,2025-12-31,cash,9033681000,USD,1000,balance,Cash and cash equivalents,annual,0001065280-26-000034,table 16#6 row 4
+NETFLIX INC,NFLX,0001065280,2025,2025-12-31,long_term_debt,13463971000,USD,1000,balance,Long-term debt,annual,0001065280-26-000034,table 16#6 row 21
+NETFLIX INC,NFLX,0001065280,2025,2025-12-31,operating_cash_flow,10149273000,USD,1000,cash_flow,Net cash provided by operating activities,annual,0001065280-26-000034,table 16#5 row 19
+NETFLIX INC,NFLX,0001065280,2025,2025-12-31,capex,688220000,USD,1000,cash_flow,Purchases of property and equipment,annual,0001065280-26-000034,table 16#5 row 21
+Walt Disney Co,DIS,0001744489,2025,2025-09-27,revenue,94425000000,USD,1000000,income,Total revenues,annual,0001744489-25-000155,table 16#3 row 4
+Walt Disney Co,DIS,0001744489,2025,2025-09-27,net_income,12404000000,USD,1000000,income,Net income attributable to The Walt Disney Company (Disney),annual,0001744489-25-000155,table 16#3 row 19
+Walt Disney Co,DIS,0001744489,2025,2025-09-27,eps_diluted,6.85,USD/shares,0.01,income,Diluted,annual_per_share,0001744489-25-000155,table 16#3 row 21
+Walt Disney Co,DIS,0001744489,2025,2025-09-27,eps_diluted_adjusted,6.85,USD/shares,0.01,income,Diluted,adjusted,0001744489-25-000155,no split since the 10-K: as filed
+Walt Disney Co,DIS,0001744489,2025,2025-09-27,total_assets,197514000000,USD,1000000,balance,Total assets,annual,0001744489-25-000155,table 16#5 row 21
+Walt Disney Co,DIS,0001744489,2025,2025-09-27,stockholders_equity,109869000000,USD,1000000,balance,Total Disney Shareholders’ equity,annual,0001744489-25-000155,table 16#5 row 38
+Walt Disney Co,DIS,0001744489,2025,2025-09-27,cash,5695000000,USD,1000000,balance,Cash and cash equivalents,annual,0001744489-25-000155,table 16#5 row 3
+Walt Disney Co,DIS,0001744489,2025,2025-09-27,operating_cash_flow,18101000000,USD,1000000,cash_flow,Cash provided by operations,annual,0001744489-25-000155,table 16#6 row 17
+COMCAST CORP,CMCSA,0001166691,2025,2025-12-31,revenue,123707000000,USD,1000000,income,Revenue,annual,0001628280-26-004994,table 8#1 row 1
+COMCAST CORP,CMCSA,0001166691,2025,2025-12-31,net_income,19998000000,USD,1000000,income,Net income attributable to Comcast Corporation,annual,0001628280-26-004994,table 8#1 row 16
+COMCAST CORP,CMCSA,0001166691,2025,2025-12-31,eps_diluted,5.39,USD/shares,0.01,income,Diluted earnings per common share attributable to Comcast Corporation shareholders,annual_per_share,0001628280-26-004994,table 8#1 row 18
+COMCAST CORP,CMCSA,0001166691,2025,2025-12-31,eps_diluted_adjusted,5.39,USD/shares,0.01,income,Diluted earnings per common share attributable to Comcast Corporation shareholders,adjusted,0001628280-26-004994,no split since the 10-K: as filed
+COMCAST CORP,CMCSA,0001166691,2025,2025-12-31,total_assets,272631000000,USD,1000000,balance,Total assets,annual,0001628280-26-004994,table 8#4 row 14
+COMCAST CORP,CMCSA,0001166691,2025,2025-12-31,stockholders_equity,96903000000,USD,1000000,balance,Total Comcast Corporation shareholders’ equity,annual,0001628280-26-004994,table 8#4 row 36
+COMCAST CORP,CMCSA,0001166691,2025,2025-12-31,cash,9481000000,USD,1000000,balance,Cash and cash equivalents,annual,0001628280-26-004994,table 8#4 row 3
+COMCAST CORP,CMCSA,0001166691,2025,2025-12-31,long_term_debt_current,5958000000,USD,1000000,balance,Current portion of debt,annual,0001628280-26-004994,table 8#4 row 20
+COMCAST CORP,CMCSA,0001166691,2025,2025-12-31,operating_cash_flow,33643000000,USD,1000000,cash_flow,Net cash provided by operating activities,annual,0001628280-26-004994,table 8#3 row 14
+COMCAST CORP,CMCSA,0001166691,2025,2025-12-31,capex,11750000000,USD,1000000,cash_flow,Capital expenditures,annual,0001628280-26-004994,table 8#3 row 16
+AT&T INC.,T,0000732717,2025,2025-12-31,revenue,125648000000,USD,1000000,income,Total Operating Revenues,annual,0000732717-26-000120,table 7#2 row 5 (untitled)
+AT&T INC.,T,0000732717,2025,2025-12-31,net_income,21953000000,USD,1000000,income,Net Income Attributable to AT&T,annual,0000732717-26-000120,table 8#0 row 24; scale from the statement's page heading
+AT&T INC.,T,0000732717,2025,2025-12-31,eps_diluted,3.04,USD/shares,0.01,income,Diluted Earnings Per Share Attributable to Common Stock,annual_per_share,0000732717-26-000120,table 8#0 row 28
+AT&T INC.,T,0000732717,2025,2025-12-31,eps_diluted_adjusted,3.04,USD/shares,0.01,income,Diluted Earnings Per Share Attributable to Common Stock,adjusted,0000732717-26-000120,no split since the 10-K: as filed
+AT&T INC.,T,0000732717,2025,2025-12-31,total_assets,420198000000,USD,1000000,balance,Total Assets,annual,0000732717-26-000120,table 8#4 row 17
+AT&T INC.,T,0000732717,2025,2025-12-31,stockholders_equity,126491000000,USD,1000000,balance,Total stockholders’ equity,annual,0000732717-26-000120,table 8#4 row 44
+AT&T INC.,T,0000732717,2025,2025-12-31,cash,18234000000,USD,1000000,balance,Cash and cash equivalents,annual,0000732717-26-000120,table 8#4 row 5
+AT&T INC.,T,0000732717,2025,2025-12-31,long_term_debt,127089000000,USD,1000000,balance,Long-Term Debt,annual,0000732717-26-000120,table 8#4 row 25
+AT&T INC.,T,0000732717,2025,2025-12-31,operating_cash_flow,40284000000,USD,1000000,cash_flow,Net Cash Provided by Operating Activities,annual,0000732717-26-000120,table 8#6 row 21
+AT&T INC.,T,0000732717,2025,2025-12-31,capex,20842000000,USD,1000000,cash_flow,Capital expenditures,annual,0000732717-26-000120,table 8#6 row 23
+VERIZON COMMUNICATIONS INC,VZ,0000732712,2025,2025-12-31,revenue,138191000000,USD,1000000,income,Total Operating Revenues,annual,0000732712-26-000007,table 8#4 row 5
+VERIZON COMMUNICATIONS INC,VZ,0000732712,2025,2025-12-31,net_income,17174000000,USD,1000000,income,Net income attributable to Verizon,annual,0000732712-26-000007,table 8#4 row 21
+VERIZON COMMUNICATIONS INC,VZ,0000732712,2025,2025-12-31,total_assets,404258000000,USD,1000000,balance,Total assets,annual,0000732712-26-000007,table 8#8 row 20
+VERIZON COMMUNICATIONS INC,VZ,0000732712,2025,2025-12-31,stockholders_equity,105741000000,USD,1000000,balance,Total equity,annual,0000732712-26-000007,table 8#8 row 44
+VERIZON COMMUNICATIONS INC,VZ,0000732712,2025,2025-12-31,cash,19048000000,USD,1000000,balance,Cash and cash equivalents,annual,0000732712-26-000007,table 8#8 row 4
+VERIZON COMMUNICATIONS INC,VZ,0000732712,2025,2025-12-31,long_term_debt,139532000000,USD,1000000,balance,Long-term debt,annual,0000732712-26-000007,table 8#8 row 28
+VERIZON COMMUNICATIONS INC,VZ,0000732712,2025,2025-12-31,operating_cash_flow,37137000000,USD,1000000,cash_flow,Net cash provided by operating activities,annual,0000732712-26-000007,table 8#10 row 17
+"T-Mobile US, Inc.",TMUS,0001283699,2025,2025-12-31,revenue,88309000000,USD,1000000,income,Total revenues,annual,0001283699-26-000010,table 8#1 row 9
+"T-Mobile US, Inc.",TMUS,0001283699,2025,2025-12-31,net_income,10992000000,USD,1000000,income,Net income,annual,0001283699-26-000010,table 8#1 row 25
+"T-Mobile US, Inc.",TMUS,0001283699,2025,2025-12-31,eps_diluted,9.72,USD/shares,0.01,income,Diluted,annual_per_share,0001283699-26-000010,table 8#1 row 36
+"T-Mobile US, Inc.",TMUS,0001283699,2025,2025-12-31,eps_diluted_adjusted,9.72,USD/shares,0.01,income,Diluted,adjusted,0001283699-26-000010,no split since the 10-K: as filed
+"T-Mobile US, Inc.",TMUS,0001283699,2025,2025-12-31,total_assets,219237000000,USD,1000000,balance,Total assets,annual,0001283699-26-000010,table 8#0 row 18
+"T-Mobile US, Inc.",TMUS,0001283699,2025,2025-12-31,stockholders_equity,59203000000,USD,1000000,balance,Total stockholders' equity,annual,0001283699-26-000010,table 8#0 row 43
+"T-Mobile US, Inc.",TMUS,0001283699,2025,2025-12-31,cash,5598000000,USD,1000000,balance,Cash and cash equivalents,annual,0001283699-26-000010,table 8#0 row 3
+"T-Mobile US, Inc.",TMUS,0001283699,2025,2025-12-31,operating_cash_flow,27950000000,USD,1000000,cash_flow,Net cash provided by operating activities,annual,0001283699-26-000010,table 8#2 row 22
+"T-Mobile US, Inc.",TMUS,0001283699,2025,2025-12-31,capex,9955000000,USD,1000000,cash_flow,"Purchases of property and equipment, including capitalized interest of $(43), $(34) and $(104)",annual,0001283699-26-000010,table 8#2 row 24
+UNION PACIFIC CORP,UNP,0000100885,2025,2025-12-31,revenue,24510000000,USD,1000000,income,Total operating revenues,annual,0000100885-26-000037,table 8#1 row 4
+UNION PACIFIC CORP,UNP,0000100885,2025,2025-12-31,net_income,7138000000,USD,1000000,income,Net income,annual,0000100885-26-000037,table 8#1 row 18
+UNION PACIFIC CORP,UNP,0000100885,2025,2025-12-31,eps_diluted,11.98,USD/shares,0.01,income,Earnings per share - diluted,annual_per_share,0000100885-26-000037,table 8#1 row 21
+UNION PACIFIC CORP,UNP,0000100885,2025,2025-12-31,eps_diluted_adjusted,11.98,USD/shares,0.01,income,Earnings per share - diluted,adjusted,0000100885-26-000037,no split since the 10-K: as filed
+UNION PACIFIC CORP,UNP,0000100885,2025,2025-12-31,total_assets,69698000000,USD,1000000,balance,Total assets,annual,0000100885-26-000037,table 8#3 row 13
+UNION PACIFIC CORP,UNP,0000100885,2025,2025-12-31,total_liabilities,51231000000,USD,1000000,balance,Total liabilities,annual,0000100885-26-000037,table 8#3 row 24
+UNION PACIFIC CORP,UNP,0000100885,2025,2025-12-31,stockholders_equity,18467000000,USD,1000000,balance,Total common shareholders' equity,annual,0000100885-26-000037,table 8#3 row 31
+UNION PACIFIC CORP,UNP,0000100885,2025,2025-12-31,cash,1266000000,USD,1000000,balance,Cash and cash equivalents,annual,0000100885-26-000037,table 8#3 row 3
+UNION PACIFIC CORP,UNP,0000100885,2025,2025-12-31,long_term_debt_current,1520000000,USD,1000000,balance,Debt due within one year (Note 14),annual,0000100885-26-000037,table 8#3 row 17
+UNION PACIFIC CORP,UNP,0000100885,2025,2025-12-31,operating_cash_flow,9290000000,USD,1000000,cash_flow,Cash provided by operating activities,annual,0000100885-26-000037,table 8#4 row 13
+"DELTA AIR LINES, INC.",DAL,0000027904,2025,2025-12-31,revenue,63364000000,USD,1000000,income,Total operating revenue,annual,0000027904-26-000013,table 8#5 row 6
+"DELTA AIR LINES, INC.",DAL,0000027904,2025,2025-12-31,net_income,5005000000,USD,1000000,income,Net Income,annual,0000027904-26-000013,table 8#5 row 32
+"DELTA AIR LINES, INC.",DAL,0000027904,2025,2025-12-31,eps_diluted,7.66,USD/shares,0.01,income,Diluted Earnings Per Share,annual_per_share,0000027904-26-000013,table 8#5 row 34
+"DELTA AIR LINES, INC.",DAL,0000027904,2025,2025-12-31,eps_diluted_adjusted,7.66,USD/shares,0.01,income,Diluted Earnings Per Share,adjusted,0000027904-26-000013,no split since the 10-K: as filed
+"DELTA AIR LINES, INC.",DAL,0000027904,2025,2025-12-31,total_assets,81317000000,USD,1000000,balance,Total assets,annual,0000027904-26-000013,table 8#4 row 17
+"DELTA AIR LINES, INC.",DAL,0000027904,2025,2025-12-31,stockholders_equity,20853000000,USD,1000000,balance,Total stockholders' equity,annual,0000027904-26-000013,table 8#4 row 44
+"DELTA AIR LINES, INC.",DAL,0000027904,2025,2025-12-31,cash,4310000000,USD,1000000,balance,Cash and cash equivalents,annual,0000027904-26-000013,table 8#4 row 4
+"DELTA AIR LINES, INC.",DAL,0000027904,2025,2025-12-31,operating_cash_flow,8342000000,USD,1000000,cash_flow,Net cash provided by operating activities,annual,0000027904-26-000013,table 8#7 row 17
+FEDEX CORP,FDX,0001048911,2026,2026-05-31,revenue,94720000000,USD,1000000,income,REVENUE,annual,0001048911-26-000105,table 8#4 row 2
+FEDEX CORP,FDX,0001048911,2026,2026-05-31,net_income,4433000000,USD,1000000,income,NET INCOME,annual,0001048911-26-000105,table 8#4 row 24
+FEDEX CORP,FDX,0001048911,2026,2026-05-31,eps_diluted,18.55,USD/shares,0.01,income,Diluted,annual_per_share,0001048911-26-000105,table 8#4 row 27
+FEDEX CORP,FDX,0001048911,2026,2026-05-31,eps_diluted_adjusted,18.55,USD/shares,0.01,income,Diluted,adjusted,0001048911-26-000105,no split since the 10-K: as filed
+FEDEX CORP,FDX,0001048911,2026,2026-05-31,total_assets,98937000000,USD,1000000,balance,TOTAL ASSETS,annual,0001048911-26-000105,table 8#2 row 23
+FEDEX CORP,FDX,0001048911,2026,2026-05-31,stockholders_equity,31647000000,USD,1000000,balance,Total common stockholders’ investment,annual,0001048911-26-000105,table 8#3 row 27
+FEDEX CORP,FDX,0001048911,2026,2026-05-31,cash,13311000000,USD,1000000,balance,Cash and cash equivalents,differs,0001048911-26-000105,"table 8#2 row 4; gold holds the restated May 31, 2026 figure of the Q2 FY2027 10-Q (0001048911-26-000131: 13,060; FedEx Freight's separation), by design"
+FEDEX CORP,FDX,0001048911,2026,2026-05-31,long_term_debt,23293000000,USD,1000000,balance,"LONG-TERM DEBT, LESS CURRENT PORTION",annual,0001048911-26-000105,table 8#3 row 11
+FEDEX CORP,FDX,0001048911,2026,2026-05-31,long_term_debt_current,1676000000,USD,1000000,balance,Current portion of long-term debt,differs,0001048911-26-000105,"table 8#3 row 8; gold holds the Q2 FY2027 10-Q's restated figure (0001048911-26-000131: 1,633), by design"
+FEDEX CORP,FDX,0001048911,2026,2026-05-31,operating_cash_flow,8925000000,USD,1000000,cash_flow,Cash provided by operating activities,annual,0001048911-26-000105,table 8#6 row 19
+FEDEX CORP,FDX,0001048911,2026,2026-05-31,capex,3809000000,USD,1000000,cash_flow,Capital expenditures,annual,0001048911-26-000105,table 8#6 row 21
+MCDONALDS CORP,MCD,0000063908,2025,2025-12-31,revenue,26885000000,USD,1000000,income,Revenues,annual,0000063908-26-000035,table 7#2 row 2 (untitled)
+MCDONALDS CORP,MCD,0000063908,2025,2025-12-31,net_income,8563000000,USD,1000000,income,Net income,annual,0000063908-26-000035,table 7#2 row 7 (untitled)
+MCDONALDS CORP,MCD,0000063908,2025,2025-12-31,eps_diluted,11.95,USD/shares,0.01,income,Earnings per common share—diluted,annual_per_share,0000063908-26-000035,table 7#2 row 8 (untitled)
+MCDONALDS CORP,MCD,0000063908,2025,2025-12-31,eps_diluted_adjusted,11.95,USD/shares,0.01,income,Earnings per common share—diluted,adjusted,0000063908-26-000035,no split since the 10-K: as filed
+STARBUCKS CORP,SBUX,0000829224,2026,2026-09-27,revenue,37910600000.0,USD,1000000,income,Total net revenues,annual,0000829224-26-000162,table 8#0 row 5
+STARBUCKS CORP,SBUX,0000829224,2026,2026-09-27,net_income,2526700000.0,USD,1000000,income,Net earnings attributable to Starbucks,annual,0000829224-26-000162,table 8#0 row 22
+STARBUCKS CORP,SBUX,0000829224,2026,2026-09-27,eps_diluted,2.21,USD/shares,0.01,income,Earnings per share — diluted,annual_per_share,0000829224-26-000162,table 8#0 row 24
+STARBUCKS CORP,SBUX,0000829224,2026,2026-09-27,eps_diluted_adjusted,2.21,USD/shares,0.01,income,Earnings per share — diluted,adjusted,0000829224-26-000162,no split since the 10-K: as filed
+STARBUCKS CORP,SBUX,0000829224,2026,2026-09-27,total_assets,28389900000.0,USD,1000000,balance,TOTAL ASSETS,annual,0000829224-26-000162,table 8#2 row 17
+STARBUCKS CORP,SBUX,0000829224,2026,2026-09-27,total_liabilities,36051700000.0,USD,1000000,balance,Total liabilities,annual,0000829224-26-000162,table 8#2 row 31
+STARBUCKS CORP,SBUX,0000829224,2026,2026-09-27,stockholders_equity,-7669100000.0,USD,1000000,balance,Total shareholders’ deficit,annual,0000829224-26-000162,table 8#2 row 37
+STARBUCKS CORP,SBUX,0000829224,2026,2026-09-27,cash,3679900000.0,USD,1000000,balance,Cash and cash equivalents,annual,0000829224-26-000162,table 8#2 row 3
+STARBUCKS CORP,SBUX,0000829224,2026,2026-09-27,long_term_debt,11777900000.0,USD,1000000,balance,Long-term debt,annual,0000829224-26-000162,table 8#2 row 27
+STARBUCKS CORP,SBUX,0000829224,2026,2026-09-27,long_term_debt_current,1499000000.0,USD,1000000,balance,Current portion of long-term debt,annual,0000829224-26-000162,table 8#2 row 25
+STARBUCKS CORP,SBUX,0000829224,2026,2026-09-27,capex,1263600000.0,USD,1000000,cash_flow,"Additions to property, plant and equipment",annual,0000829224-26-000162,table 8#3 row 26
+"NIKE, Inc.",NKE,0000320187,2026,2026-05-31,revenue,46398000000,USD,1000000,income,Revenues,annual,0000320187-26-000088,table 8#1 row 2
+"NIKE, Inc.",NKE,0000320187,2026,2026-05-31,net_income,3108000000,USD,1000000,income,NET INCOME,annual,0000320187-26-000088,table 8#1 row 12
+"NIKE, Inc.",NKE,0000320187,2026,2026-05-31,eps_diluted,2.10,USD/shares,0.01,income,Diluted,annual_per_share,0000320187-26-000088,table 8#1 row 15
+"NIKE, Inc.",NKE,0000320187,2026,2026-05-31,eps_diluted_adjusted,2.1,USD/shares,0.01,income,Diluted,adjusted,0000320187-26-000088,no split since the 10-K: as filed
+"NIKE, Inc.",NKE,0000320187,2026,2026-05-31,total_assets,38410000000,USD,1000000,balance,TOTAL ASSETS,annual,0000320187-26-000088,table 8#3 row 15
+"NIKE, Inc.",NKE,0000320187,2026,2026-05-31,stockholders_equity,14865000000,USD,1000000,balance,Total shareholders' equity,annual,0000320187-26-000088,table 8#3 row 36
+"NIKE, Inc.",NKE,0000320187,2026,2026-05-31,cash,7563000000,USD,1000000,balance,Cash and equivalents,annual,0000320187-26-000088,table 8#3 row 4
+"NIKE, Inc.",NKE,0000320187,2026,2026-05-31,long_term_debt,5942000000,USD,1000000,balance,Long-term debt,annual,0000320187-26-000088,table 8#3 row 24
+"NIKE, Inc.",NKE,0000320187,2026,2026-05-31,long_term_debt_current,2000000000,USD,1000000,balance,Current portion of long-term debt,annual,0000320187-26-000088,table 8#3 row 18
+"NIKE, Inc.",NKE,0000320187,2026,2026-05-31,capex,684000000,USD,1000000,cash_flow,"Additions to property, plant and equipment",annual,0000320187-26-000088,table 8#4 row 20
+TARGET CORP,TGT,0000027419,2026,2026-01-31,revenue,104780000000,USD,1000000,income,Net sales,annual,0000027419-26-000016,table 8#8 row 1
+TARGET CORP,TGT,0000027419,2026,2026-01-31,net_income,3705000000,USD,1000000,income,Net earnings,annual,0000027419-26-000016,table 8#8 row 10
+TARGET CORP,TGT,0000027419,2026,2026-01-31,eps_diluted,8.13,USD/shares,0.01,income,Diluted earnings per share,annual_per_share,0000027419-26-000016,table 8#8 row 12
+TARGET CORP,TGT,0000027419,2026,2026-01-31,eps_diluted_adjusted,8.13,USD/shares,0.01,income,Diluted earnings per share,adjusted,0000027419-26-000016,no split since the 10-K: as filed
+TARGET CORP,TGT,0000027419,2026,2026-01-31,total_assets,59490000000,USD,1000000,balance,Total assets,annual,0000027419-26-000016,table 8#12 row 9
+TARGET CORP,TGT,0000027419,2026,2026-01-31,stockholders_equity,16165000000,USD,1000000,balance,Total shareholders' investment,annual,0000027419-26-000016,table 8#12 row 25
+TARGET CORP,TGT,0000027419,2026,2026-01-31,cash,5488000000,USD,1000000,balance,Cash and cash equivalents,annual,0000027419-26-000016,table 8#12 row 2
+TARGET CORP,TGT,0000027419,2026,2026-01-31,long_term_debt_current,2130000000,USD,1000000,balance,Current portion of long-term debt and other borrowings,annual,0000027419-26-000016,table 8#12 row 13
+TARGET CORP,TGT,0000027419,2026,2026-01-31,operating_cash_flow,6562000000,USD,1000000,cash_flow,Cash provided by operating activities,annual,0000027419-26-000016,table 8#14 row 13
+TARGET CORP,TGT,0000027419,2026,2026-01-31,capex,3727000000,USD,1000000,cash_flow,Expenditures for property and equipment,annual,0000027419-26-000016,table 8#14 row 15
+KROGER CO,KR,0000056873,2026,2026-01-31,revenue,147642000000,USD,1000000,income,Sales,annual,0001104659-26-037723,table 8#2 row 2
+KROGER CO,KR,0000056873,2026,2026-01-31,net_income,1016000000,USD,1000000,income,Net earnings attributable to The Kroger Co.,annual,0001104659-26-037723,table 8#2 row 18
+KROGER CO,KR,0000056873,2026,2026-01-31,total_assets,49953000000,USD,1000000,balance,Total Assets,annual,0001104659-26-037723,table 8#1 row 16
+KROGER CO,KR,0000056873,2026,2026-01-31,total_liabilities,44017000000,USD,1000000,balance,Total Liabilities,annual,0001104659-26-037723,table 8#1 row 30
+KROGER CO,KR,0000056873,2026,2026-01-31,operating_cash_flow,7311000000,USD,1000000,cash_flow,Net cash provided by operating activities,annual,0001104659-26-037723,table 8#4 row 26
+KROGER CO,KR,0000056873,2026,2026-01-31,capex,3855000000,USD,1000000,cash_flow,"Payments for property and equipment, including payments for lease buyouts",annual,0001104659-26-037723,table 8#4 row 28
+DOLLAR GENERAL CORP,DG,0000029534,2026,2026-01-30,revenue,42724369000,USD,1000,income,Net sales,annual,0001104659-26-032325,table 8#2 row 3
+DOLLAR GENERAL CORP,DG,0000029534,2026,2026-01-30,net_income,1512311000,USD,1000,income,Net income,annual,0001104659-26-032325,table 8#2 row 12
+DOLLAR GENERAL CORP,DG,0000029534,2026,2026-01-30,eps_diluted,6.85,USD/shares,0.01,income,Diluted,annual_per_share,0001104659-26-032325,table 8#2 row 15
+DOLLAR GENERAL CORP,DG,0000029534,2026,2026-01-30,eps_diluted_adjusted,6.85,USD/shares,0.01,income,Diluted,adjusted,0001104659-26-032325,no split since the 10-K: as filed
+DOLLAR GENERAL CORP,DG,0000029534,2026,2026-01-30,total_assets,30963730000,USD,1000,balance,Total assets,annual,0001104659-26-032325,table 8#1 row 14
+DOLLAR GENERAL CORP,DG,0000029534,2026,2026-01-30,total_liabilities,22451768000,USD,1000,balance,Total liabilities,annual,0001104659-26-032325,table 8#1 row 27
+DOLLAR GENERAL CORP,DG,0000029534,2026,2026-01-30,stockholders_equity,8511962000,USD,1000,balance,Total shareholders’ equity,annual,0001104659-26-032325,table 8#1 row 35
+DOLLAR GENERAL CORP,DG,0000029534,2026,2026-01-30,cash,1138501000,USD,1000,balance,Cash and cash equivalents,annual,0001104659-26-032325,table 8#1 row 4
+DOLLAR GENERAL CORP,DG,0000029534,2026,2026-01-30,operating_cash_flow,3634500000,USD,1000,cash_flow,Net cash provided by (used in) operating activities,annual,0001104659-26-032325,table 8#5 row 18
+DOLLAR GENERAL CORP,DG,0000029534,2026,2026-01-30,capex,1241162000,USD,1000,cash_flow,Purchases of property and equipment,annual,0001104659-26-032325,table 8#5 row 20
+LOWES COMPANIES INC,LOW,0000060667,2026,2026-01-30,revenue,86286000000,USD,1000000,income,Net sales,annual,0000060667-26-000029,table 8#1 row 3
+LOWES COMPANIES INC,LOW,0000060667,2026,2026-01-30,net_income,6654000000,USD,1000000,income,Net earnings,annual,0000060667-26-000029,table 8#1 row 13
+LOWES COMPANIES INC,LOW,0000060667,2026,2026-01-30,eps_diluted,11.85,USD/shares,0.01,income,Diluted earnings per common share,annual_per_share,0000060667-26-000029,table 8#1 row 15
+LOWES COMPANIES INC,LOW,0000060667,2026,2026-01-30,eps_diluted_adjusted,11.85,USD/shares,0.01,income,Diluted earnings per common share,adjusted,0000060667-26-000029,no split since the 10-K: as filed
+LOWES COMPANIES INC,LOW,0000060667,2026,2026-01-30,total_assets,54144000000,USD,1000000,balance,Total assets,annual,0000060667-26-000029,table 8#3 row 16
+LOWES COMPANIES INC,LOW,0000060667,2026,2026-01-30,total_liabilities,64061000000,USD,1000000,balance,Total liabilities,annual,0000060667-26-000029,table 8#3 row 31
+LOWES COMPANIES INC,LOW,0000060667,2026,2026-01-30,stockholders_equity,-9917000000,USD,1000000,balance,Total shareholders’ deficit,annual,0000060667-26-000029,table 8#3 row 39
+LOWES COMPANIES INC,LOW,0000060667,2026,2026-01-30,cash,982000000,USD,1000000,balance,Cash and cash equivalents,annual,0000060667-26-000029,table 8#3 row 3
+LOWES COMPANIES INC,LOW,0000060667,2026,2026-01-30,long_term_debt,37490000000,USD,1000000,balance,"Long-term debt, excluding current maturities",annual,0000060667-26-000029,table 8#3 row 26
+LOWES COMPANIES INC,LOW,0000060667,2026,2026-01-30,long_term_debt_current,2431000000,USD,1000000,balance,Current maturities of long-term debt,annual,0000060667-26-000029,table 8#3 row 19
+LOWES COMPANIES INC,LOW,0000060667,2026,2026-01-30,operating_cash_flow,9864000000,USD,1000000,cash_flow,Net cash provided by operating activities,annual,0000060667-26-000029,table 8#5 row 16
+LOWES COMPANIES INC,LOW,0000060667,2026,2026-01-30,capex,2213000000,USD,1000000,cash_flow,Capital expenditures,annual,0000060667-26-000029,table 8#5 row 20
+CVS HEALTH Corp,CVS,0000064803,2025,2025-12-31,revenue,402067000000,USD,1000000,income,Total revenues,annual,0000064803-26-000010,table 8#1 row 7
+CVS HEALTH Corp,CVS,0000064803,2025,2025-12-31,net_income,1768000000,USD,1000000,income,Net income attributable to CVS Health,annual,0000064803-26-000010,table 8#1 row 25
+CVS HEALTH Corp,CVS,0000064803,2025,2025-12-31,eps_diluted,1.39,USD/shares,0.01,income,Diluted,annual_per_share,0000064803-26-000010,table 8#1 row 28
+CVS HEALTH Corp,CVS,0000064803,2025,2025-12-31,eps_diluted_adjusted,1.39,USD/shares,0.01,income,Diluted,adjusted,0000064803-26-000010,no split since the 10-K: as filed
+CVS HEALTH Corp,CVS,0000064803,2025,2025-12-31,total_assets,253538000000,USD,1000000,balance,Total assets,annual,0000064803-26-000010,table 8#3 row 16
+CVS HEALTH Corp,CVS,0000064803,2025,2025-12-31,total_liabilities,178156000000,USD,1000000,balance,Total liabilities,annual,0000064803-26-000010,table 8#3 row 33
+CVS HEALTH Corp,CVS,0000064803,2025,2025-12-31,stockholders_equity,75214000000,USD,1000000,balance,Total CVS Health shareholders’ equity,annual,0000064803-26-000010,table 8#3 row 41
+CVS HEALTH Corp,CVS,0000064803,2025,2025-12-31,cash,8453000000,USD,1000000,balance,Cash and cash equivalents,annual,0000064803-26-000010,table 8#3 row 3
+CVS HEALTH Corp,CVS,0000064803,2025,2025-12-31,long_term_debt,60502000000,USD,1000000,balance,Long-term debt,annual,0000064803-26-000010,table 8#3 row 28
+CVS HEALTH Corp,CVS,0000064803,2025,2025-12-31,long_term_debt_current,4068000000,USD,1000000,balance,Current portion of long-term debt,annual,0000064803-26-000010,table 8#3 row 25
+CVS HEALTH Corp,CVS,0000064803,2025,2025-12-31,operating_cash_flow,10639000000,USD,1000000,cash_flow,Net cash provided by operating activities,annual,0000064803-26-000010,table 8#4 row 10
+CVS HEALTH Corp,CVS,0000064803,2025,2025-12-31,capex,2832000000,USD,1000000,cash_flow,Purchases of property and equipment,annual,0000064803-26-000010,table 8#4 row 14
+Philip Morris International Inc.,PM,0001413329,2025,2025-12-31,revenue,40648000000,USD,1000000,income,Net Revenues,annual,0001628280-26-005939,table 7#8 row 4 (untitled)
+Philip Morris International Inc.,PM,0001413329,2025,2025-12-31,net_income,11348000000,USD,1000000,income,Net earnings attributable to PMI,annual,0001628280-26-005939,table 8#0 row 15
+Philip Morris International Inc.,PM,0001413329,2025,2025-12-31,eps_diluted,7.26,USD/shares,0.01,income,Diluted earnings per share,annual_per_share,0001628280-26-005939,table 8#0 row 18
+Philip Morris International Inc.,PM,0001413329,2025,2025-12-31,eps_diluted_adjusted,7.26,USD/shares,0.01,income,Diluted earnings per share,adjusted,0001628280-26-005939,no split since the 10-K: as filed
+Philip Morris International Inc.,PM,0001413329,2025,2025-12-31,total_assets,69185000000,USD,1000000,balance,Total Assets,annual,0001628280-26-005939,table 8#2 row 25
+Philip Morris International Inc.,PM,0001413329,2025,2025-12-31,total_liabilities,77213000000,USD,1000000,balance,Total liabilities,annual,0001628280-26-005939,table 8#3 row 17 (untitled)
+Philip Morris International Inc.,PM,0001413329,2025,2025-12-31,cash,4872000000,USD,1000000,balance,Cash and cash equivalents,annual,0001628280-26-005939,table 8#2 row 2
+Philip Morris International Inc.,PM,0001413329,2025,2025-12-31,long_term_debt,45134000000,USD,1000000,balance,Long-term debt (Note 6),annual,0001628280-26-005939,table 8#3 row 13 (untitled)
+Philip Morris International Inc.,PM,0001413329,2025,2025-12-31,long_term_debt_current,3533000000,USD,1000000,balance,Current portion of long-term debt (Note 6),annual,0001628280-26-005939,table 8#3 row 3 (untitled)
+Philip Morris International Inc.,PM,0001413329,2025,2025-12-31,operating_cash_flow,12233000000,USD,1000000,cash_flow,Net cash provided by (used in) operating activities,annual,0001628280-26-005939,table 8#4 row 18
+Philip Morris International Inc.,PM,0001413329,2025,2025-12-31,capex,1569000000,USD,1000000,cash_flow,Capital expenditures,annual,0001628280-26-005939,table 8#4 row 20
+GOLDMAN SACHS GROUP INC,GS,0000886982,2025,2025-12-31,revenue,58283000000,USD,1000000,income,Total net revenues,annual,0000886982-26-000091,table 8#0 row 12
+GOLDMAN SACHS GROUP INC,GS,0000886982,2025,2025-12-31,net_income,17176000000,USD,1000000,income,Net earnings,annual,0000886982-26-000091,table 8#0 row 26
+GOLDMAN SACHS GROUP INC,GS,0000886982,2025,2025-12-31,eps_diluted,51.32,USD/shares,0.01,income,Diluted,annual_per_share,0000886982-26-000091,table 8#0 row 31
+GOLDMAN SACHS GROUP INC,GS,0000886982,2025,2025-12-31,eps_diluted_adjusted,51.32,USD/shares,0.01,income,Diluted,adjusted,0000886982-26-000091,no split since the 10-K: as filed
+GOLDMAN SACHS GROUP INC,GS,0000886982,2025,2025-12-31,total_assets,1809320000000,USD,1000000,balance,Total assets,annual,0000886982-26-000091,table 8#2 row 15
+GOLDMAN SACHS GROUP INC,GS,0000886982,2025,2025-12-31,total_liabilities,1684348000000,USD,1000000,balance,Total liabilities,annual,0000886982-26-000091,table 8#2 row 27
+GOLDMAN SACHS GROUP INC,GS,0000886982,2025,2025-12-31,stockholders_equity,124972000000,USD,1000000,balance,Total shareholders’ equity,annual,0000886982-26-000091,table 8#2 row 38
+GOLDMAN SACHS GROUP INC,GS,0000886982,2025,2025-12-31,cash,164259000000,USD,1000000,balance,Cash and cash equivalents,annual,0000886982-26-000091,table 8#2 row 3
+GOLDMAN SACHS GROUP INC,GS,0000886982,2025,2025-12-31,capex,2064000000,USD,1000000,cash_flow,"Purchase of property, leasehold improvements and equipment",annual,0000886982-26-000091,table 8#4 row 18
+MORGAN STANLEY,MS,0000895421,2025,2025-12-31,revenue,70645000000,USD,1000000,income,Net revenues,annual,0000895421-26-000086,table 8#1 row 12
+MORGAN STANLEY,MS,0000895421,2025,2025-12-31,eps_diluted,10.21,USD/shares,0.01,income,Diluted,annual_per_share,0000895421-26-000086,table 8#1 row 32
+MORGAN STANLEY,MS,0000895421,2025,2025-12-31,eps_diluted_adjusted,10.21,USD/shares,0.01,income,Diluted,adjusted,0000895421-26-000086,no split since the 10-K: as filed
+MORGAN STANLEY,MS,0000895421,2025,2025-12-31,total_assets,1420270000000,USD,1000000,balance,Total assets,annual,0000895421-26-000086,table 8#4 row 16
+MORGAN STANLEY,MS,0000895421,2025,2025-12-31,total_liabilities,1307618000000,USD,1000000,balance,Total liabilities,annual,0000895421-26-000086,table 8#4 row 26
+MORGAN STANLEY,MS,0000895421,2025,2025-12-31,stockholders_equity,111632000000,USD,1000000,balance,Total Morgan Stanley shareholders’ equity,annual,0000895421-26-000086,table 8#4 row 39
+MORGAN STANLEY,MS,0000895421,2025,2025-12-31,cash,111695000000,USD,1000000,balance,Cash and cash equivalents,annual,0000895421-26-000086,table 8#4 row 2
+MORGAN STANLEY,MS,0000895421,2025,2025-12-31,operating_cash_flow,-17889000000,USD,1000000,cash_flow,Net cash provided by (used for) operating activities,annual,0000895421-26-000086,table 8#8 row 17
+SCHWAB CHARLES CORP,SCHW,0000316709,2025,2025-12-31,revenue,23921000000,USD,1000000,income,Total net revenues,annual,0000316709-26-000009,table 8#1 row 11
+SCHWAB CHARLES CORP,SCHW,0000316709,2025,2025-12-31,net_income,8852000000,USD,1000000,income,Net Income,annual,0000316709-26-000009,table 8#1 row 25
+SCHWAB CHARLES CORP,SCHW,0000316709,2025,2025-12-31,eps_diluted,4.65,USD/shares,0.01,income,Diluted,annual_per_share,0000316709-26-000009,table 8#1 row 33
+SCHWAB CHARLES CORP,SCHW,0000316709,2025,2025-12-31,eps_diluted_adjusted,4.65,USD/shares,0.01,income,Diluted,adjusted,0000316709-26-000009,no split since the 10-K: as filed
+SCHWAB CHARLES CORP,SCHW,0000316709,2025,2025-12-31,total_assets,490995000000,USD,1000000,balance,Total assets,annual,0000316709-26-000009,table 8#3 row 15
+SCHWAB CHARLES CORP,SCHW,0000316709,2025,2025-12-31,total_liabilities,441570000000,USD,1000000,balance,Total liabilities,annual,0000316709-26-000009,table 8#3 row 24
+SCHWAB CHARLES CORP,SCHW,0000316709,2025,2025-12-31,stockholders_equity,49425000000,USD,1000000,balance,Total stockholders’ equity,annual,0000316709-26-000009,table 8#3 row 33
+SCHWAB CHARLES CORP,SCHW,0000316709,2025,2025-12-31,cash,46030000000,USD,1000000,balance,Cash and cash equivalents,annual,0000316709-26-000009,table 8#3 row 4
+SCHWAB CHARLES CORP,SCHW,0000316709,2025,2025-12-31,long_term_debt,22199000000,USD,1000000,balance,Long-term debt,annual,0000316709-26-000009,table 8#3 row 23
+SCHWAB CHARLES CORP,SCHW,0000316709,2025,2025-12-31,operating_cash_flow,9311000000,USD,1000000,cash_flow,Net cash provided by (used for) operating activities,annual,0000316709-26-000009,table 8#5 row 20
+BANK OF AMERICA CORP /DE/,BAC,0000070858,2025,2025-12-31,revenue,113097000000,USD,1000000,income,"Total revenue, net of interest expense",annual,0000070858-26-000157,table 8#2 row 11
+BANK OF AMERICA CORP /DE/,BAC,0000070858,2025,2025-12-31,net_income,30509000000,USD,1000000,income,Net income,annual,0000070858-26-000157,table 8#2 row 24
+BANK OF AMERICA CORP /DE/,BAC,0000070858,2025,2025-12-31,eps_diluted,3.81,USD/shares,0.01,income,Diluted earnings per common share,annual_per_share,0000070858-26-000157,table 8#62 row 14
+BANK OF AMERICA CORP /DE/,BAC,0000070858,2025,2025-12-31,eps_diluted_adjusted,3.81,USD/shares,0.01,income,Diluted earnings per common share,adjusted,0000070858-26-000157,no split since the 10-K: as filed
+BANK OF AMERICA CORP /DE/,BAC,0000070858,2025,2025-12-31,total_assets,3411738000000,USD,1000000,balance,Total assets,annual,0000070858-26-000157,table 8#4 row 23
+BANK OF AMERICA CORP /DE/,BAC,0000070858,2025,2025-12-31,total_liabilities,3108495000000,USD,1000000,balance,Total liabilities,annual,0000070858-26-000157,table 8#4 row 38
+BANK OF AMERICA CORP /DE/,BAC,0000070858,2025,2025-12-31,stockholders_equity,303243000000,USD,1000000,balance,Total shareholders’ equity,annual,0000070858-26-000157,table 8#4 row 45
+BANK OF AMERICA CORP /DE/,BAC,0000070858,2025,2025-12-31,cash,231845000000,USD,1000000,balance,Cash and cash equivalents,annual,0000070858-26-000157,table 8#4 row 6
+BANK OF AMERICA CORP /DE/,BAC,0000070858,2025,2025-12-31,long_term_debt,317816000000,USD,1000000,balance,"Long-term debt (includes $72,591 and $50,005 measured at fair value)",differs,0000070858-26-000157,"table 8#4 row 37; an unclassified bank balance sheet: no noncurrent debt tag, so gold has none by design (012, 039), as JPMorgan in 10k_figures.csv"
+BANK OF AMERICA CORP /DE/,BAC,0000070858,2025,2025-12-31,operating_cash_flow,12613000000,USD,1000000,cash_flow,Net cash provided by (used in) operating activities,annual,0000070858-26-000157,table 8#6 row 17
+"PNC FINANCIAL SERVICES GROUP, INC.",PNC,0000713676,2025,2025-12-31,revenue,23099000000,USD,1000000,income,Total revenue,annual,0000713676-26-000020,table 8#1 row 24
+"PNC FINANCIAL SERVICES GROUP, INC.",PNC,0000713676,2025,2025-12-31,net_income,6997000000,USD,1000000,income,Net income,differs,0000713676-26-000020,"table 8#1 row 35; gold's TTM is 7,015: its Q1 2025 (from the Q1 2026 10-Q's comparative) and derived Q4 read ProfitLoss, which includes noncontrolling interests, where Q2 and Q3 read NetIncomeLoss: a tag mix gold should not make (for the owner)"
+"PNC FINANCIAL SERVICES GROUP, INC.",PNC,0000713676,2025,2025-12-31,eps_diluted,16.59,USD/shares,0.01,income,Diluted,annual_per_share,0000713676-26-000020,table 8#1 row 42
+"PNC FINANCIAL SERVICES GROUP, INC.",PNC,0000713676,2025,2025-12-31,eps_diluted_adjusted,16.59,USD/shares,0.01,income,Diluted,adjusted,0000713676-26-000020,no split since the 10-K: as filed
+"PNC FINANCIAL SERVICES GROUP, INC.",PNC,0000713676,2025,2025-12-31,total_assets,573572000000,USD,1000000,balance,Total assets,annual,0000713676-26-000020,table 8#3 row 15
+"PNC FINANCIAL SERVICES GROUP, INC.",PNC,0000713676,2025,2025-12-31,total_liabilities,512936000000,USD,1000000,balance,Total liabilities,annual,0000713676-26-000020,table 8#3 row 29
+"PNC FINANCIAL SERVICES GROUP, INC.",PNC,0000713676,2025,2025-12-31,stockholders_equity,60585000000,USD,1000000,balance,Total shareholders’ equity,annual,0000713676-26-000020,table 8#3 row 37
+"ZIONS BANCORPORATION, NATIONAL ASSOCIATION /UT/",ZION,0000109380,2025,2025-12-31,net_income,899000000,USD,1000000,income,Net income,annual,0000109380-26-000046,table 8#2 row 42
+"ZIONS BANCORPORATION, NATIONAL ASSOCIATION /UT/",ZION,0000109380,2025,2025-12-31,eps_diluted,6.01,USD/shares,0.01,income,Diluted,annual_per_share,0000109380-26-000046,table 8#2 row 51
+"ZIONS BANCORPORATION, NATIONAL ASSOCIATION /UT/",ZION,0000109380,2025,2025-12-31,eps_diluted_adjusted,6.01,USD/shares,0.01,income,Diluted,adjusted,0000109380-26-000046,no split since the 10-K: as filed
+"ZIONS BANCORPORATION, NATIONAL ASSOCIATION /UT/",ZION,0000109380,2025,2025-12-31,total_assets,88990000000,USD,1000000,balance,Total assets,differs,0000109380-26-000046,"table 8#1 row 21; gold holds the restated year-end figure of the Q3 2026 10-Q (0000109380-26-000127: 88,690): the latest filing's figure wins, by design"
+"ZIONS BANCORPORATION, NATIONAL ASSOCIATION /UT/",ZION,0000109380,2025,2025-12-31,total_liabilities,81810000000,USD,1000000,balance,Total liabilities,differs,0000109380-26-000046,"table 8#1 row 33; gold holds the Q3 2026 10-Q's restated figure (0000109380-26-000127: 81,510), by design"
+"ZIONS BANCORPORATION, NATIONAL ASSOCIATION /UT/",ZION,0000109380,2025,2025-12-31,stockholders_equity,7180000000,USD,1000000,balance,Total shareholders’ equity,annual,0000109380-26-000046,table 8#1 row 39
+"ZIONS BANCORPORATION, NATIONAL ASSOCIATION /UT/",ZION,0000109380,2025,2025-12-31,cash,683000000,USD,1000000,balance,Cash and due from banks,annual,0000109380-26-000046,table 8#1 row 3
+"ZIONS BANCORPORATION, NATIONAL ASSOCIATION /UT/",ZION,0000109380,2025,2025-12-31,long_term_debt,1472000000,USD,1000000,balance,Long-term debt,annual,0000109380-26-000046,table 8#1 row 30
+"ZIONS BANCORPORATION, NATIONAL ASSOCIATION /UT/",ZION,0000109380,2025,2025-12-31,operating_cash_flow,1073000000,USD,1000000,cash_flow,Net cash provided by operating activities,annual,0000109380-26-000046,table 8#5 row 14
+"ZIONS BANCORPORATION, NATIONAL ASSOCIATION /UT/",ZION,0000109380,2025,2025-12-31,capex,121000000,USD,1000000,cash_flow,Purchases of premises and equipment,annual,0000109380-26-000046,table 8#5 row 23
+AMERICAN EXPRESS CO,AXP,0000004962,2025,2025-12-31,revenue,72229000000,USD,1000000,income,Total revenues net of interest expense,annual,0000004962-26-000080,table 8#1 row 17
+AMERICAN EXPRESS CO,AXP,0000004962,2025,2025-12-31,net_income,10833000000,USD,1000000,income,Net income,annual,0000004962-26-000080,table 8#1 row 34
+AMERICAN EXPRESS CO,AXP,0000004962,2025,2025-12-31,eps_diluted,15.38,USD/shares,0.01,income,Diluted,annual_per_share,0000004962-26-000080,table 8#1 row 37
+AMERICAN EXPRESS CO,AXP,0000004962,2025,2025-12-31,eps_diluted_adjusted,15.38,USD/shares,0.01,income,Diluted,adjusted,0000004962-26-000080,no split since the 10-K: as filed
+AMERICAN EXPRESS CO,AXP,0000004962,2025,2025-12-31,total_assets,300052000000,USD,1000000,balance,Total assets,annual,0000004962-26-000080,table 8#3 row 14
+AMERICAN EXPRESS CO,AXP,0000004962,2025,2025-12-31,total_liabilities,266578000000,USD,1000000,balance,Total liabilities,annual,0000004962-26-000080,table 8#3 row 22
+AMERICAN EXPRESS CO,AXP,0000004962,2025,2025-12-31,stockholders_equity,33474000000,USD,1000000,balance,Total shareholders’ equity,annual,0000004962-26-000080,table 8#3 row 30
+AMERICAN EXPRESS CO,AXP,0000004962,2025,2025-12-31,cash,47792000000,USD,1000000,balance,Cash and cash equivalents,annual,0000004962-26-000080,table 7#0 row 12
+AMERICAN EXPRESS CO,AXP,0000004962,2025,2025-12-31,long_term_debt,56387000000,USD,1000000,balance,"Long-term debt (includes debt issued by consolidated variable interest entities: 2025, $13,022; 2024, $13,880)",differs,0000004962-26-000080,"table 8#3 row 20; American Express is on the bank list (058): no fallback debt tag at a bank, so gold has none by design"
+AMERICAN EXPRESS CO,AXP,0000004962,2025,2025-12-31,operating_cash_flow,18428000000,USD,1000000,cash_flow,Net cash provided by operating activities,annual,0000004962-26-000080,table 8#4 row 14
+AMERICAN EXPRESS CO,AXP,0000004962,2025,2025-12-31,capex,2425000000,USD,1000000,cash_flow,"Purchase of premises and equipment, net of sales: 2025, $1; 2024, $6; 2023, $2",annual,0000004962-26-000080,table 8#4 row 20
+Synchrony Financial,SYF,0001601712,2025,2025-12-31,net_income,3552000000,USD,1000000,income,Net earnings,annual,0001601712-26-000006,table 16#36 row 29
+Synchrony Financial,SYF,0001601712,2025,2025-12-31,eps_diluted,9.28,USD/shares,0.01,income,Diluted,annual_per_share,0001601712-26-000006,table 16#36 row 33
+Synchrony Financial,SYF,0001601712,2025,2025-12-31,eps_diluted_adjusted,9.28,USD/shares,0.01,income,Diluted,adjusted,0001601712-26-000006,no split since the 10-K: as filed
+Synchrony Financial,SYF,0001601712,2025,2025-12-31,total_assets,119095000000,USD,1000000,balance,Total assets,annual,0001601712-26-000006,table 16#38 row 13
+Synchrony Financial,SYF,0001601712,2025,2025-12-31,total_liabilities,102329000000,USD,1000000,balance,Total liabilities,annual,0001601712-26-000006,table 16#38 row 24
+Synchrony Financial,SYF,0001601712,2025,2025-12-31,stockholders_equity,16766000000,USD,1000000,balance,Total equity,annual,0001601712-26-000006,table 16#38 row 35
+Synchrony Financial,SYF,0001601712,2025,2025-12-31,cash,14973000000,USD,1000000,balance,Cash and equivalents,annual,0001601712-26-000006,table 16#38 row 2
+Ally Financial Inc.,ALLY,0000040729,2025,2025-12-31,revenue,7914000000,USD,1000000,income,Total net revenue,annual,0000040729-26-000005,table 8#3 row 22
+Ally Financial Inc.,ALLY,0000040729,2025,2025-12-31,net_income,852000000,USD,1000000,income,Net income,annual,0000040729-26-000005,table 8#3 row 34
+Ally Financial Inc.,ALLY,0000040729,2025,2025-12-31,total_assets,196002000000,USD,1000000,balance,Total assets,annual,0000040729-26-000005,table 8#6 row 17
+Ally Financial Inc.,ALLY,0000040729,2025,2025-12-31,total_liabilities,180504000000,USD,1000000,balance,Total liabilities,annual,0000040729-26-000005,table 8#6 row 28
+Ally Financial Inc.,ALLY,0000040729,2025,2025-12-31,stockholders_equity,15498000000,USD,1000000,balance,Total equity,annual,0000040729-26-000005,table 8#6 row 36
+Ally Financial Inc.,ALLY,0000040729,2025,2025-12-31,operating_cash_flow,3729000000,USD,1000000,cash_flow,Net cash provided by operating activities,annual,0000040729-26-000005,table 8#9 row 17
+StoneX Group Inc.,SNEX,0000913760,2025,2025-09-30,revenue,132378200000,USD,100000,income,Total revenues,annual,0000913760-25-000196,"table 8#1 row 8; physical commodities at gross: net operating revenues (2,052.8, RevenuesNetOfInterestExpense) are under 20% of it, a part (064)"
+StoneX Group Inc.,SNEX,0000913760,2025,2025-09-30,net_income,305900000.0,USD,1000000,income,Net income,annual,0000913760-25-000196,table 8#1 row 32
+StoneX Group Inc.,SNEX,0000913760,2025,2025-09-30,eps_diluted,5.89,USD/shares,0.01,income,Diluted,annual_per_share,0000913760-25-000196,table 8#1 row 35
+StoneX Group Inc.,SNEX,0000913760,2025,2025-09-30,eps_diluted_adjusted,5.89,USD/shares,0.01,income,Diluted,adjusted,0000913760-25-000196,no split since the 10-K: as filed
+StoneX Group Inc.,SNEX,0000913760,2025,2025-09-30,total_assets,45268000000.0,USD,1000000,balance,Total assets,annual,0000913760-25-000196,table 8#0 row 17
+StoneX Group Inc.,SNEX,0000913760,2025,2025-09-30,total_liabilities,42890600000.0,USD,1000000,balance,Total liabilities,annual,0000913760-25-000196,table 8#0 row 33
+StoneX Group Inc.,SNEX,0000913760,2025,2025-09-30,stockholders_equity,2377400000.0,USD,1000000,balance,Total equity,annual,0000913760-25-000196,table 8#0 row 42
+StoneX Group Inc.,SNEX,0000913760,2025,2025-09-30,cash,1605800000.0,USD,1000000,balance,Cash and cash equivalents,annual,0000913760-25-000196,table 8#0 row 2
+StoneX Group Inc.,SNEX,0000913760,2025,2025-09-30,capex,65400000.0,USD,1000000,cash_flow,Purchase of property and equipment and internally developed software,annual,0000913760-25-000196,table 8#3 row 43
+"AMERICAN INTERNATIONAL GROUP, INC.",AIG,0000005272,2025,2025-12-31,revenue,26775000000,USD,1000000,income,Total revenues,annual,0000005272-26-000023,table 7A#2 row 14
+"AMERICAN INTERNATIONAL GROUP, INC.",AIG,0000005272,2025,2025-12-31,net_income,3096000000,USD,1000000,income,Net income (loss) attributable to AIG,annual,0000005272-26-000023,table 7A#2 row 32
+"AMERICAN INTERNATIONAL GROUP, INC.",AIG,0000005272,2025,2025-12-31,total_assets,161254000000,USD,1000000,balance,Total assets,annual,0000005272-26-000023,table 7A#1 row 21
+"AMERICAN INTERNATIONAL GROUP, INC.",AIG,0000005272,2025,2025-12-31,total_liabilities,120092000000,USD,1000000,balance,Total liabilities,annual,0000005272-26-000023,table 7A#1 row 35
+"AMERICAN INTERNATIONAL GROUP, INC.",AIG,0000005272,2025,2025-12-31,stockholders_equity,41139000000,USD,1000000,balance,Total AIG shareholders’ equity,annual,0000005272-26-000023,table 7A#1 row 43
+"AMERICAN INTERNATIONAL GROUP, INC.",AIG,0000005272,2025,2025-12-31,operating_cash_flow,3314000000,USD,1000000,cash_flow,Net cash provided by operating activities,annual,0000005272-26-000023,table 7A#5 row 24
+"TRAVELERS COMPANIES, INC.",TRV,0000086312,2025,2025-12-31,revenue,48828000000,USD,1000000,income,Total revenues,annual,0000086312-26-000065,table 8#2 row 7
+"TRAVELERS COMPANIES, INC.",TRV,0000086312,2025,2025-12-31,net_income,6288000000,USD,1000000,income,Net income,annual,0000086312-26-000065,table 8#2 row 16
+"TRAVELERS COMPANIES, INC.",TRV,0000086312,2025,2025-12-31,eps_diluted,27.43,USD/shares,0.01,income,Diluted,annual_per_share,0000086312-26-000065,table 8#2 row 19
+"TRAVELERS COMPANIES, INC.",TRV,0000086312,2025,2025-12-31,eps_diluted_adjusted,27.43,USD/shares,0.01,income,Diluted,adjusted,0000086312-26-000065,no split since the 10-K: as filed
+"TRAVELERS COMPANIES, INC.",TRV,0000086312,2025,2025-12-31,total_assets,143708000000,USD,1000000,balance,Total assets,annual,0000086312-26-000065,table 8#4 row 20
+"TRAVELERS COMPANIES, INC.",TRV,0000086312,2025,2025-12-31,total_liabilities,110814000000,USD,1000000,balance,Total liabilities,annual,0000086312-26-000065,table 8#4 row 29
+"TRAVELERS COMPANIES, INC.",TRV,0000086312,2025,2025-12-31,stockholders_equity,32894000000,USD,1000000,balance,Total shareholders’ equity,annual,0000086312-26-000065,table 8#4 row 35
+"TRAVELERS COMPANIES, INC.",TRV,0000086312,2025,2025-12-31,operating_cash_flow,10606000000,USD,1000000,cash_flow,Net cash provided by operating activities,annual,0000086312-26-000065,table 8#6 row 15
+METLIFE INC,MET,0001099219,2025,2025-12-31,revenue,77084000000,USD,1000000,income,Total revenues,annual,0001099219-26-000013,table 8#2 row 8
+METLIFE INC,MET,0001099219,2025,2025-12-31,net_income,3379000000,USD,1000000,income,"Net income (loss) attributable to MetLife, Inc.",annual,0001099219-26-000013,table 8#2 row 21
+METLIFE INC,MET,0001099219,2025,2025-12-31,total_assets,745166000000,USD,1000000,balance,Total assets,annual,0001099219-26-000013,table 8#1 row 23
+METLIFE INC,MET,0001099219,2025,2025-12-31,total_liabilities,716245000000,USD,1000000,balance,Total liabilities,annual,0001099219-26-000013,table 8#1 row 40
+METLIFE INC,MET,0001099219,2025,2025-12-31,stockholders_equity,28398000000,USD,1000000,balance,"Total MetLife, Inc.’s stockholders’ equity",annual,0001099219-26-000013,table 8#1 row 52
+METLIFE INC,MET,0001099219,2025,2025-12-31,operating_cash_flow,17092000000,USD,1000000,cash_flow,Net cash provided by (used in) operating activities,annual,0001099219-26-000013,table 8#6 row 21
+Chubb Ltd,CB,0000896159,2025,2025-12-31,revenue,59402000000,USD,1000000,income,Total revenues,annual,0000896159-26-000005,table 16#7 row 9
+Chubb Ltd,CB,0000896159,2025,2025-12-31,net_income,10310000000,USD,1000000,income,Net income attributable to Chubb,annual,0000896159-26-000005,table 16#7 row 24
+Chubb Ltd,CB,0000896159,2025,2025-12-31,eps_diluted,25.68,USD/shares,0.01,income,Diluted earnings per share attributable to Chubb,annual_per_share,0000896159-26-000005,table 16#7 row 40
+Chubb Ltd,CB,0000896159,2025,2025-12-31,eps_diluted_adjusted,25.68,USD/shares,0.01,income,Diluted earnings per share attributable to Chubb,adjusted,0000896159-26-000005,no split since the 10-K: as filed
+Chubb Ltd,CB,0000896159,2025,2025-12-31,total_assets,272327000000,USD,1000000,balance,Total assets,annual,0000896159-26-000005,table 16#6 row 24
+Chubb Ltd,CB,0000896159,2025,2025-12-31,total_liabilities,192548000000,USD,1000000,balance,Total liabilities,annual,0000896159-26-000005,table 16#6 row 40
+Chubb Ltd,CB,0000896159,2025,2025-12-31,stockholders_equity,73757000000,USD,1000000,balance,Total Chubb shareholders' equity,annual,0000896159-26-000005,table 16#6 row 48
+Chubb Ltd,CB,0000896159,2025,2025-12-31,long_term_debt,15728000000,USD,1000000,balance,Long-term debt,annual,0000896159-26-000005,table 16#6 row 38
+Chubb Ltd,CB,0000896159,2025,2025-12-31,operating_cash_flow,12816000000,USD,1000000,cash_flow,Net cash flows from operating activities,annual,0000896159-26-000005,table 16#9 row 22
+"Prologis, Inc.",PLD,0001045609,2025,2025-12-31,revenue,8790127000,USD,1000,income,Total revenues,annual,0001193125-26-051453,table 16#2 row 6
+"Prologis, Inc.",PLD,0001045609,2025,2025-12-31,net_income,3328231000,USD,1000,income,Net earnings attributable to controlling interests,annual,0001193125-26-051453,table 16#2 row 28
+"Prologis, Inc.",PLD,0001045609,2025,2025-12-31,eps_diluted,3.56,USD/shares,0.01,income,Diluted,annual_per_share,0001193125-26-051453,table 16#42 row 10 (untitled)
+"Prologis, Inc.",PLD,0001045609,2025,2025-12-31,eps_diluted_adjusted,3.56,USD/shares,0.01,income,Diluted,adjusted,0001193125-26-051453,no split since the 10-K: as filed
+"Prologis, Inc.",PLD,0001045609,2025,2025-12-31,total_assets,98724256000,USD,1000,balance,Total assets,annual,0001193125-26-051453,table 16#1 row 11
+"Prologis, Inc.",PLD,0001045609,2025,2025-12-31,total_liabilities,40970248000,USD,1000,balance,Total liabilities,annual,0001193125-26-051453,table 16#1 row 17
+"Prologis, Inc.",PLD,0001045609,2025,2025-12-31,stockholders_equity,53193178000,USD,1000,balance,"Total Prologis, Inc. stockholders’ equity",annual,0001193125-26-051453,table 16#1 row 25
+"Prologis, Inc.",PLD,0001045609,2025,2025-12-31,cash,1145647000,USD,1000,balance,Cash and cash equivalents,annual,0001193125-26-051453,table 16#1 row 9
+"Prologis, Inc.",PLD,0001045609,2025,2025-12-31,operating_cash_flow,5008434000,USD,1000,cash_flow,Net cash provided by (used in) operating activities,annual,0001193125-26-051453,table 16#5 row 19
+EQUINIX INC,EQIX,0001101239,2025,2025-12-31,revenue,9217000000,USD,1000000,income,Revenues,annual,0001101239-26-000032,table 16#3 row 2
+EQUINIX INC,EQIX,0001101239,2025,2025-12-31,net_income,1350000000,USD,1000000,income,Net income attributable to common stockholders,annual,0001101239-26-000032,table 16#3 row 21
+EQUINIX INC,EQIX,0001101239,2025,2025-12-31,eps_diluted,13.76,USD/shares,0.01,income,Diluted EPS,annual_per_share,0001101239-26-000032,table 16#3 row 25
+EQUINIX INC,EQIX,0001101239,2025,2025-12-31,eps_diluted_adjusted,13.76,USD/shares,0.01,income,Diluted EPS,adjusted,0001101239-26-000032,no split since the 10-K: as filed
+EQUINIX INC,EQIX,0001101239,2025,2025-12-31,total_assets,40141000000,USD,1000000,balance,Total assets,annual,0001101239-26-000032,table 16#2 row 14
+EQUINIX INC,EQIX,0001101239,2025,2025-12-31,total_liabilities,25963000000,USD,1000000,balance,Total liabilities,annual,0001101239-26-000032,table 16#2 row 30
+EQUINIX INC,EQIX,0001101239,2025,2025-12-31,stockholders_equity,14156000000,USD,1000000,balance,Total common stockholders' equity,annual,0001101239-26-000032,table 16#2 row 40
+EQUINIX INC,EQIX,0001101239,2025,2025-12-31,cash,1727000000,USD,1000000,balance,Cash and cash equivalents,annual,0001101239-26-000032,table 16#2 row 4
+EQUINIX INC,EQIX,0001101239,2025,2025-12-31,operating_cash_flow,3911000000,USD,1000000,cash_flow,Net cash provided by operating activities,annual,0001101239-26-000032,table 16#7 row 17
+AMERICAN TOWER CORP /MA/,AMT,0001053507,2025,2025-12-31,revenue,10644600000.0,USD,1000000,income,Total operating revenues,annual,0001053507-26-000035,table 16#4 row 5
+AMERICAN TOWER CORP /MA/,AMT,0001053507,2025,2025-12-31,net_income,2628500000.0,USD,1000000,income,NET INCOME,annual,0001053507-26-000035,table 16#4 row 26
+AMERICAN TOWER CORP /MA/,AMT,0001053507,2025,2025-12-31,total_assets,63190400000.0,USD,1000000,balance,Total assets,annual,0001053507-26-000035,table 16#69 row 9
+AMERICAN TOWER CORP /MA/,AMT,0001053507,2025,2025-12-31,total_liabilities,52835100000.0,USD,1000000,balance,Total liabilities,annual,0001053507-26-000035,table 16#3 row 31
+AMERICAN TOWER CORP /MA/,AMT,0001053507,2025,2025-12-31,cash,1474800000.0,USD,1000000,balance,Cash and cash equivalents,annual,0001053507-26-000035,table 16#3 row 3
+AMERICAN TOWER CORP /MA/,AMT,0001053507,2025,2025-12-31,operating_cash_flow,5464000000.0,USD,1000000,cash_flow,Cash provided by operating activities,annual,0001053507-26-000035,table 16#7 row 22
+NEXTERA ENERGY INC,NEE,0000753308,2025,2025-12-31,net_income,6835000000,USD,1000000,income,NET INCOME ATTRIBUTABLE TO NEE,annual,0000753308-26-000015,table 8#3 row 24
+NEXTERA ENERGY INC,NEE,0000753308,2025,2025-12-31,total_assets,212721000000,USD,1000000,balance,TOTAL ASSETS,annual,0000753308-26-000015,table 8#5 row 22
+NEXTERA ENERGY INC,NEE,0000753308,2025,2025-12-31,total_liabilities,146242000000,USD,1000000,balance,TOTAL LIABILITIES,annual,0000753308-26-000015,table 8#5 row 44
+NEXTERA ENERGY INC,NEE,0000753308,2025,2025-12-31,stockholders_equity,54608000000,USD,1000000,balance,Total common shareholders' equity,annual,0000753308-26-000015,table 8#5 row 52
+NEXTERA ENERGY INC,NEE,0000753308,2025,2025-12-31,cash,2812000000,USD,1000000,balance,Cash and cash equivalents,annual,0000753308-26-000015,table 8#5 row 4
+NEXTERA ENERGY INC,NEE,0000753308,2025,2025-12-31,long_term_debt,89556000000,USD,1000000,balance,"Long-term debt ($190 and $436 related to VIEs, respectively)",annual,0000753308-26-000015,table 8#5 row 37
+NEXTERA ENERGY INC,NEE,0000753308,2025,2025-12-31,long_term_debt_current,3500000000,USD,1000000,balance,"Current portion of long-term debt ($9 and $25 related to VIEs, respectively)",annual,0000753308-26-000015,table 8#5 row 27
+NEXTERA ENERGY INC,NEE,0000753308,2025,2025-12-31,operating_cash_flow,12485000000,USD,1000000,cash_flow,Net cash provided by operating activities,annual,0000753308-26-000015,table 8#6 row 22
+Duke Energy CORP,DUK,0001326160,2025,2025-12-31,net_income,4968000000,USD,1000000,income,Net Income Attributable to Duke Energy Corporation,annual,0001326160-26-000014,table 8#2 row 28
+Duke Energy CORP,DUK,0001326160,2025,2025-12-31,total_assets,195736000000,USD,1000000,balance,Total Assets,annual,0001326160-26-000014,table 8#4 row 26
+Duke Energy CORP,DUK,0001326160,2025,2025-12-31,stockholders_equity,51842000000,USD,1000000,balance,Total Duke Energy Corporation stockholders' equity,annual,0001326160-26-000014,table 8#4 row 57
+Duke Energy CORP,DUK,0001326160,2025,2025-12-31,cash,245000000,USD,1000000,balance,Cash and cash equivalents,annual,0001326160-26-000014,table 8#4 row 4
+Duke Energy CORP,DUK,0001326160,2025,2025-12-31,long_term_debt,80108000000,USD,1000000,balance,"Long-Term Debt (includes $3,308 at 2025 and $1,842 at 2024 related to VIEs)",annual,0001326160-26-000014,table 8#4 row 39
+Duke Energy CORP,DUK,0001326160,2025,2025-12-31,long_term_debt_current,7104000000,USD,1000000,balance,"Current maturities of long-term debt (includes $118 at 2025 and $1,012 at 2024 related to VIEs)",annual,0001326160-26-000014,table 8#4 row 33
+Duke Energy CORP,DUK,0001326160,2025,2025-12-31,operating_cash_flow,12330000000,USD,1000000,cash_flow,Net cash provided by operating activities,annual,0001326160-26-000014,table 8#5 row 25
+Duke Energy CORP,DUK,0001326160,2025,2025-12-31,capex,14024000000,USD,1000000,cash_flow,Capital expenditures,annual,0001326160-26-000014,table 8#5 row 27
+DTE ENERGY CO,DTE,0000936340,2025,2025-12-31,net_income,1462000000,USD,1000000,income,Net Income Attributable to DTE Energy Company,annual,0000936340-26-000054,table 8#1 row 25
+DTE ENERGY CO,DTE,0000936340,2025,2025-12-31,eps_diluted,7.03,USD/shares,0.01,income,Diluted Earnings per Common Share,annual_per_share,0000936340-26-000054,table 8#55 row 13 (untitled)
+DTE ENERGY CO,DTE,0000936340,2025,2025-12-31,eps_diluted_adjusted,7.03,USD/shares,0.01,income,Diluted Earnings per Common Share,adjusted,0000936340-26-000054,no split since the 10-K: as filed
+DTE ENERGY CO,DTE,0000936340,2025,2025-12-31,total_assets,54066000000,USD,1000000,balance,Total Assets,annual,0000936340-26-000054,table 8#3 row 37
+DTE ENERGY CO,DTE,0000936340,2025,2025-12-31,cash,208000000,USD,1000000,balance,Cash and cash equivalents,annual,0000936340-26-000054,table 8#3 row 5
+DTE ENERGY CO,DTE,0000936340,2025,2025-12-31,operating_cash_flow,3409000000,USD,1000000,cash_flow,Net cash from operating activities,annual,0000936340-26-000054,table 8#5 row 23
+FORD MOTOR CO,F,0000037996,2025,2025-12-31,revenue,187267000000,USD,1000000,income,Total revenues (Note 4),annual,0000037996-26-000015,table 16#3 row 5
+FORD MOTOR CO,F,0000037996,2025,2025-12-31,total_assets,289160000000,USD,1000000,balance,Total assets,annual,0000037996-26-000015,table 16#5 row 15
+FORD MOTOR CO,F,0000037996,2025,2025-12-31,total_liabilities,253180000000,USD,1000000,balance,Total liabilities,annual,0000037996-26-000015,table 16#5 row 28
+FORD MOTOR CO,F,0000037996,2025,2025-12-31,cash,23356000000,USD,1000000,balance,Cash and cash equivalents (Note 9),annual,0000037996-26-000015,table 16#5 row 2
+General Motors Co,GM,0001467858,2025,2025-12-31,revenue,185019000000,USD,1000000,income,Total net sales and revenue (Note 3),annual,0001467858-26-000013,table 8#0 row 5
+General Motors Co,GM,0001467858,2025,2025-12-31,net_income,2697000000,USD,1000000,income,Net income (loss) attributable to stockholders,annual,0001467858-26-000013,table 8#0 row 19
+General Motors Co,GM,0001467858,2025,2025-12-31,eps_diluted,3.27,USD/shares,0.01,income,Diluted earnings per common share,annual_per_share,0001467858-26-000013,table 8#0 row 24
+General Motors Co,GM,0001467858,2025,2025-12-31,eps_diluted_adjusted,3.27,USD/shares,0.01,income,Diluted earnings per common share,adjusted,0001467858-26-000013,no split since the 10-K: as filed
+General Motors Co,GM,0001467858,2025,2025-12-31,total_assets,281284000000,USD,1000000,balance,Total Assets,annual,0001467858-26-000013,table 8#2 row 19
+General Motors Co,GM,0001467858,2025,2025-12-31,total_liabilities,218116000000,USD,1000000,balance,Total Liabilities,annual,0001467858-26-000013,table 8#2 row 36
+General Motors Co,GM,0001467858,2025,2025-12-31,stockholders_equity,61119000000,USD,1000000,balance,Total stockholders’ equity,annual,0001467858-26-000013,table 8#2 row 43
+General Motors Co,GM,0001467858,2025,2025-12-31,cash,20945000000,USD,1000000,balance,Cash and cash equivalents (Note 4),annual,0001467858-26-000013,table 8#2 row 3
+General Motors Co,GM,0001467858,2025,2025-12-31,operating_cash_flow,26867000000,USD,1000000,cash_flow,Net cash provided by (used in) operating activities,annual,0001467858-26-000013,table 8#3 row 13
+General Motors Co,GM,0001467858,2025,2025-12-31,capex,9303000000,USD,1000000,cash_flow,Expenditures for property,annual,0001467858-26-000013,table 8#3 row 15
+CANADIAN PACIFIC KANSAS CITY LTD/CN,CP,0000016875,2025,2025-12-31,revenue,15078000000,USD,1000000,income,Total revenues,annual,0000016875-26-000008,table 8#1 row 4
+CANADIAN PACIFIC KANSAS CITY LTD/CN,CP,0000016875,2025,2025-12-31,net_income,4141000000,USD,1000000,income,Net income attributable to controlling shareholders,annual,0000016875-26-000008,table 8#1 row 26
+CANADIAN PACIFIC KANSAS CITY LTD/CN,CP,0000016875,2025,2025-12-31,eps_diluted,4.51,USD/shares,0.01,income,Diluted earnings per share,annual_per_share,0000016875-26-000008,table 8#1 row 29
+CANADIAN PACIFIC KANSAS CITY LTD/CN,CP,0000016875,2025,2025-12-31,eps_diluted_adjusted,4.51,USD/shares,0.01,income,Diluted earnings per share,adjusted,0000016875-26-000008,no split since the 10-K: as filed
+CANADIAN PACIFIC KANSAS CITY LTD/CN,CP,0000016875,2025,2025-12-31,total_assets,85945000000,USD,1000000,balance,Total assets,annual,0000016875-26-000008,table 8#3 row 14
+CANADIAN PACIFIC KANSAS CITY LTD/CN,CP,0000016875,2025,2025-12-31,total_liabilities,39120000000,USD,1000000,balance,Total liabilities,annual,0000016875-26-000008,table 8#3 row 24
+CANADIAN PACIFIC KANSAS CITY LTD/CN,CP,0000016875,2025,2025-12-31,cash,184000000,USD,1000000,balance,Cash and cash equivalents,annual,0000016875-26-000008,table 8#3 row 3
+CANADIAN PACIFIC KANSAS CITY LTD/CN,CP,0000016875,2025,2025-12-31,long_term_debt,19948000000,USD,1000000,balance,"Long-term debt (Note 17, 18, 20)",annual,0000016875-26-000008,table 8#3 row 22
+CANADIAN PACIFIC KANSAS CITY LTD/CN,CP,0000016875,2025,2025-12-31,operating_cash_flow,5309000000,USD,1000000,cash_flow,Net cash provided by operating activities,annual,0000016875-26-000008,table 8#5 row 15
+IMPERIAL OIL LTD,IMO,0000049938,2025,2025-12-31,revenue,47078000000,USD,1000000,income,Total revenues and other income,annual,0000049938-26-000009,table 16#26 row 5
+IMPERIAL OIL LTD,IMO,0000049938,2025,2025-12-31,net_income,3268000000,USD,1000000,income,Net income (loss),annual,0000049938-26-000009,table 16#5 row 2
+IMPERIAL OIL LTD,IMO,0000049938,2025,2025-12-31,eps_diluted,6.48,USD/shares,0.01,income,Net income (loss) per common share - diluted (note 10),annual_per_share,0000049938-26-000009,table 16#26 row 21
+IMPERIAL OIL LTD,IMO,0000049938,2025,2025-12-31,eps_diluted_adjusted,6.48,USD/shares,0.01,income,Net income (loss) per common share - diluted (note 10),adjusted,0000049938-26-000009,no split since the 10-K: as filed
+IMPERIAL OIL LTD,IMO,0000049938,2025,2025-12-31,total_assets,42309000000,USD,1000000,balance,Total assets,annual,0000049938-26-000009,table 16#4 row 3
+IMPERIAL OIL LTD,IMO,0000049938,2025,2025-12-31,total_liabilities,20055000000,USD,1000000,balance,Total liabilities,annual,0000049938-26-000009,table 16#28 row 23
+IMPERIAL OIL LTD,IMO,0000049938,2025,2025-12-31,stockholders_equity,22254000000,USD,1000000,balance,Total shareholders’ equity,annual,0000049938-26-000009,table 16#28 row 29
+IMPERIAL OIL LTD,IMO,0000049938,2025,2025-12-31,cash,1142000000,USD,1000000,balance,Cash and cash equivalents,annual,0000049938-26-000009,table 16#28 row 4
+IMPERIAL OIL LTD,IMO,0000049938,2025,2025-12-31,long_term_debt,3447000000,USD,1000000,balance,Long-term debt (a) (b),annual,0000049938-26-000009,table 16#66 row 2 (untitled)
+IMPERIAL OIL LTD,IMO,0000049938,2025,2025-12-31,capex,2005000000,USD,1000000,cash_flow,"Additions to property, plant and equipment",annual,0000049938-26-000009,table 16#31 row 16
+ENBRIDGE INC,ENB,0000895728,2025,2025-12-31,revenue,65194000000,USD,1000000,income,Total operating revenues (Note 4),annual,0001193125-26-049810,table 8#0 row 6
+ENBRIDGE INC,ENB,0000895728,2025,2025-12-31,eps_diluted,3.22,USD/shares,0.01,income,Diluted earnings per common share attributable to common shareholders (Note 6),annual_per_share,0001193125-26-049810,table 8#0 row 27
+ENBRIDGE INC,ENB,0000895728,2025,2025-12-31,eps_diluted_adjusted,3.22,USD/shares,0.01,income,Diluted earnings per common share attributable to common shareholders (Note 6),adjusted,0001193125-26-049810,no split since the 10-K: as filed
+ENBRIDGE INC,ENB,0000895728,2025,2025-12-31,total_assets,218475000000,USD,1000000,balance,Total assets,annual,0001193125-26-049810,table 8#4 row 18
+ENBRIDGE INC,ENB,0000895728,2025,2025-12-31,stockholders_equity,62333000000,USD,1000000,balance,Total Enbridge Inc. shareholders’ equity,annual,0001193125-26-049810,table 8#4 row 41
+ENBRIDGE INC,ENB,0000895728,2025,2025-12-31,cash,1094000000,USD,1000000,balance,Cash and cash equivalents,annual,0001193125-26-049810,table 8#4 row 4
+ENBRIDGE INC,ENB,0000895728,2025,2025-12-31,long_term_debt,98963000000,USD,1000000,balance,Long-term debt (Note 17),annual,0001193125-26-049810,table 8#4 row 28
+ENBRIDGE INC,ENB,0000895728,2025,2025-12-31,long_term_debt_current,5031000000,USD,1000000,balance,Current portion of long-term debt (Note 17),annual,0001193125-26-049810,table 8#4 row 26
+ENBRIDGE INC,ENB,0000895728,2025,2025-12-31,operating_cash_flow,12270000000,USD,1000000,cash_flow,Net cash provided by operating activities,annual,0001193125-26-049810,table 8#3 row 14
+ENBRIDGE INC,ENB,0000895728,2025,2025-12-31,capex,8973000000,USD,1000000,cash_flow,Capital expenditures,annual,0001193125-26-049810,table 8#3 row 16
+"TIGO ENERGY, INC.",TYGO,0001855447,2025,2025-12-31,revenue,103536000,USD,1000,income,Net revenue,annual,0001193125-26-115952,table 8#2 row 2
+"TIGO ENERGY, INC.",TYGO,0001855447,2025,2025-12-31,net_income,-1880000,USD,1000,income,Net loss,annual,0001193125-26-115952,table 8#2 row 21
+"TIGO ENERGY, INC.",TYGO,0001855447,2025,2025-12-31,eps_diluted,-0.03,USD/shares,0.01,income,Diluted,annual_per_share,0001193125-26-115952,table 8#2 row 27
+"TIGO ENERGY, INC.",TYGO,0001855447,2025,2025-12-31,eps_diluted_adjusted,-0.03,USD/shares,0.01,income,Diluted,adjusted,0001193125-26-115952,no split since the 10-K: as filed
+"TIGO ENERGY, INC.",TYGO,0001855447,2025,2025-12-31,total_assets,78037000,USD,1000,balance,Total assets,annual,0001193125-26-115952,table 8#1 row 15
+"TIGO ENERGY, INC.",TYGO,0001855447,2025,2025-12-31,total_liabilities,50414000,USD,1000,balance,Total liabilities,annual,0001193125-26-115952,table 8#1 row 29
+"TIGO ENERGY, INC.",TYGO,0001855447,2025,2025-12-31,stockholders_equity,27623000,USD,1000,balance,Total stockholders’ equity,annual,0001193125-26-115952,table 8#1 row 36
+"TIGO ENERGY, INC.",TYGO,0001855447,2025,2025-12-31,cash,7670000,USD,1000,balance,Cash and cash equivalents,annual,0001193125-26-115952,table 8#1 row 4
+"TIGO ENERGY, INC.",TYGO,0001855447,2025,2025-12-31,operating_cash_flow,10299000,USD,1000,cash_flow,Net cash provided by (used in) operating activities,annual,0001193125-26-115952,table 8#5 row 26
+"TIGO ENERGY, INC.",TYGO,0001855447,2025,2025-12-31,capex,642000,USD,1000,cash_flow,Purchase of property and equipment,annual,0001193125-26-115952,table 8#5 row 29
+PLEXUS CORP,PLXS,0000785786,2025,2025-09-27,revenue,4032966000,USD,1000,income,Net sales,annual,0000785786-25-000064,table 8#1 row 1
+PLEXUS CORP,PLXS,0000785786,2025,2025-09-27,net_income,172885000,USD,1000,income,Net income,annual,0000785786-25-000064,table 8#1 row 13
+PLEXUS CORP,PLXS,0000785786,2025,2025-09-27,eps_diluted,6.26,USD/shares,0.01,income,Diluted,annual_per_share,0000785786-25-000064,table 8#1 row 16
+PLEXUS CORP,PLXS,0000785786,2025,2025-09-27,eps_diluted_adjusted,6.26,USD/shares,0.01,income,Diluted,adjusted,0000785786-25-000064,no split since the 10-K: as filed
+PLEXUS CORP,PLXS,0000785786,2025,2025-09-27,total_assets,3137110000,USD,1000,balance,Total assets,annual,0000785786-25-000064,table 8#2 row 15
+PLEXUS CORP,PLXS,0000785786,2025,2025-09-27,total_liabilities,1682522000,USD,1000,balance,Total liabilities,annual,0000785786-25-000064,table 8#2 row 30
+PLEXUS CORP,PLXS,0000785786,2025,2025-09-27,stockholders_equity,1454588000,USD,1000,balance,Total shareholders’ equity,annual,0000785786-25-000064,table 8#2 row 39
+PLEXUS CORP,PLXS,0000785786,2025,2025-09-27,cash,306464000,USD,1000,balance,Cash and cash equivalents,annual,0000785786-25-000064,table 8#2 row 3
+PLEXUS CORP,PLXS,0000785786,2025,2025-09-27,capex,95264000,USD,1000,cash_flow,"Payments for property, plant and equipment",annual,0000785786-25-000064,table 8#4 row 20
+KENNAMETAL INC,KMT,0000055242,2026,2026-06-30,revenue,2356698000,USD,1000,income,Sales,annual,0001628280-26-056143,table 8#0 row 1
+KENNAMETAL INC,KMT,0000055242,2026,2026-06-30,net_income,342389000,USD,1000,income,Net income attributable to Kennametal,annual,0001628280-26-056143,table 8#0 row 15
+KENNAMETAL INC,KMT,0000055242,2026,2026-06-30,eps_diluted,4.42,USD/shares,0.01,income,Diluted earnings per share,annual_per_share,0001628280-26-056143,table 8#0 row 18
+KENNAMETAL INC,KMT,0000055242,2026,2026-06-30,eps_diluted_adjusted,4.42,USD/shares,0.01,income,Diluted earnings per share,adjusted,0001628280-26-056143,no split since the 10-K: as filed
+KENNAMETAL INC,KMT,0000055242,2026,2026-06-30,total_assets,3166752000,USD,1000,balance,Total assets,annual,0001628280-26-056143,table 8#2 row 21
+KENNAMETAL INC,KMT,0000055242,2026,2026-06-30,total_liabilities,1553315000,USD,1000,balance,Total liabilities,annual,0001628280-26-056143,table 8#2 row 39
+KENNAMETAL INC,KMT,0000055242,2026,2026-06-30,stockholders_equity,1569844000,USD,1000,balance,Total Kennametal Shareholders’ Equity,annual,0001628280-26-056143,table 8#2 row 48
+KENNAMETAL INC,KMT,0000055242,2026,2026-06-30,cash,95791000,USD,1000,balance,Cash and cash equivalents,annual,0001628280-26-056143,table 8#2 row 3
+KENNAMETAL INC,KMT,0000055242,2026,2026-06-30,long_term_debt,685280000,USD,1000,balance,"Long-term debt, less current maturities (Note 11)",annual,0001628280-26-056143,table 8#2 row 32
+KENNAMETAL INC,KMT,0000055242,2026,2026-06-30,capex,76905000,USD,1000,cash_flow,"Purchases of property, plant and equipment",annual,0001628280-26-056143,table 8#3 row 23
+VIRCO MFG CORPORATION,VIRC,0000751365,2026,2026-01-31,revenue,199652000,USD,1000,income,Net sales,annual,0001628280-26-024204,table 8#3 row 3
+VIRCO MFG CORPORATION,VIRC,0000751365,2026,2026-01-31,net_income,2568000,USD,1000,income,Net income,annual,0001628280-26-024204,table 8#3 row 13
+VIRCO MFG CORPORATION,VIRC,0000751365,2026,2026-01-31,eps_diluted,0.16,USD/shares,0.01,income,Diluted,annual_per_share,0001628280-26-024204,table 8#3 row 17
+VIRCO MFG CORPORATION,VIRC,0000751365,2026,2026-01-31,eps_diluted_adjusted,0.16,USD/shares,0.01,income,Diluted,adjusted,0001628280-26-024204,no split since the 10-K: as filed
+VIRCO MFG CORPORATION,VIRC,0000751365,2026,2026-01-31,total_assets,174179000,USD,1000,balance,Total assets,annual,0001628280-26-024204,table 8#1 row 15
+VIRCO MFG CORPORATION,VIRC,0000751365,2026,2026-01-31,stockholders_equity,105931000,USD,1000,balance,Total stockholders’ equity,annual,0001628280-26-024204,table 8#2 row 28
+VIRCO MFG CORPORATION,VIRC,0000751365,2026,2026-01-31,long_term_debt,3609000,USD,1000,balance,"Long-term debt, less current portion",annual,0001628280-26-024204,table 8#2 row 15
+VIRCO MFG CORPORATION,VIRC,0000751365,2026,2026-01-31,long_term_debt_current,269000,USD,1000,balance,Current portion of long-term debt,annual,0001628280-26-024204,table 8#2 row 7
+VIRCO MFG CORPORATION,VIRC,0000751365,2026,2026-01-31,operating_cash_flow,-841000,USD,1000,cash_flow,Net cash (used in) provided by operating activities,annual,0001628280-26-024204,table 8#6 row 23
+VIRCO MFG CORPORATION,VIRC,0000751365,2026,2026-01-31,capex,5854000,USD,1000,cash_flow,"Purchases of property, plant and equipment",annual,0001628280-26-024204,table 8#6 row 25
+"Freshpet, Inc.",FRPT,0001611647,2025,2025-12-31,revenue,1102015000,USD,1000,income,NET SALES,annual,0001611647-26-000006,table 8#2 row 2
+"Freshpet, Inc.",FRPT,0001611647,2025,2025-12-31,net_income,139137000,USD,1000,income,Net income (loss),annual,0001611647-26-000006,table 8#4 row 3
+"Freshpet, Inc.",FRPT,0001611647,2025,2025-12-31,eps_diluted,2.64,USD/shares,0.01,income,Diluted Net Income per Share,annual_per_share,0001611647-26-000006,table 8#30 row 12 (untitled)
+"Freshpet, Inc.",FRPT,0001611647,2025,2025-12-31,eps_diluted_adjusted,2.64,USD/shares,0.01,income,Diluted Net Income per Share,adjusted,0001611647-26-000006,no split since the 10-K: as filed
+"Freshpet, Inc.",FRPT,0001611647,2025,2025-12-31,total_assets,1777775000,USD,1000,balance,Total Assets,annual,0001611647-26-000006,table 8#1 row 15
+"Freshpet, Inc.",FRPT,0001611647,2025,2025-12-31,total_liabilities,569116000,USD,1000,balance,Total Liabilities,annual,0001611647-26-000006,table 8#1 row 27
+"Freshpet, Inc.",FRPT,0001611647,2025,2025-12-31,stockholders_equity,1208659000,USD,1000,balance,Total Stockholders' Equity,annual,0001611647-26-000006,table 8#1 row 35
+"Freshpet, Inc.",FRPT,0001611647,2025,2025-12-31,cash,277975000,USD,1000,balance,Cash and cash equivalents,annual,0001611647-26-000006,table 8#1 row 3
+"Freshpet, Inc.",FRPT,0001611647,2025,2025-12-31,operating_cash_flow,160561000,USD,1000,cash_flow,Net cash flows provided by operating activities,annual,0001611647-26-000006,table 8#4 row 23
+"Freshpet, Inc.",FRPT,0001611647,2025,2025-12-31,capex,148184000,USD,1000,cash_flow,"Acquisitions of property, plant and equipment, software and deposits on equipment",annual,0001611647-26-000006,table 8#4 row 25
+Amplify Energy Corp.,AMPY,0001533924,2025,2025-12-31,revenue,263361000,USD,1000,income,Total revenues,annual,0001104659-26-025299,table 8#2 row 6
+Amplify Energy Corp.,AMPY,0001533924,2025,2025-12-31,net_income,43968000,USD,1000,income,Net income (loss),annual,0001104659-26-025299,table 8#2 row 28
+Amplify Energy Corp.,AMPY,0001533924,2025,2025-12-31,eps_diluted,1.03,USD/shares,0.01,income,Diluted (1),annual_per_share,0001104659-26-025299,table 8#18 row 12 (untitled)
+Amplify Energy Corp.,AMPY,0001533924,2025,2025-12-31,eps_diluted_adjusted,1.03,USD/shares,0.01,income,Diluted (1),adjusted,0001104659-26-025299,no split since the 10-K: as filed
+Amplify Energy Corp.,AMPY,0001533924,2025,2025-12-31,total_assets,600900000,USD,1000,balance,Total assets,annual,0001104659-26-025299,table 8#1 row 20
+Amplify Energy Corp.,AMPY,0001533924,2025,2025-12-31,total_liabilities,142177000,USD,1000,balance,Total liabilities,annual,0001104659-26-025299,table 8#1 row 31
+Amplify Energy Corp.,AMPY,0001533924,2025,2025-12-31,stockholders_equity,458723000,USD,1000,balance,Total stockholders' equity (deficit),annual,0001104659-26-025299,table 8#1 row 39
+Amplify Energy Corp.,AMPY,0001533924,2025,2025-12-31,cash,60666000,USD,1000,balance,Cash and cash equivalents,annual,0001104659-26-025299,table 8#1 row 4
+Amplify Energy Corp.,AMPY,0001533924,2025,2025-12-31,long_term_debt,0,USD,1000,balance,Long-term debt (see Note 9),annual,0001104659-26-025299,table 8#1 row 27
+Amplify Energy Corp.,AMPY,0001533924,2025,2025-12-31,operating_cash_flow,49200000,USD,1000,cash_flow,Net cash provided by operating activities,annual,0001104659-26-025299,table 8#3 row 23
+Booking Holdings Inc.,BKNG,0001075531,2025,2025-12-31,revenue,26917000000,USD,1000000,income,Total revenues,annual,0001075531-26-000009,table 16#4 row 5
+Booking Holdings Inc.,BKNG,0001075531,2025,2025-12-31,net_income,5404000000,USD,1000000,income,Net income,differs,0001075531-26-000009,"table 16#4 row 22; gold has no net income for Booking after 2015: its 10-Ks and 10-Qs tag the line NetIncomeLossAvailableToCommonStockholdersBasic (no preferred stock, so the same figure), which isn't a net_income tag, and its only NetIncomeLoss facts are the proxy statements' (024 ignores them). Mapping that tag as a last net_income fallback is a gold rule change (for the owner)"
+Booking Holdings Inc.,BKNG,0001075531,2025,2025-12-31,eps_diluted,165.57,USD/shares,0.01,income,Net income applicable to common stockholders per diluted common share,annual_per_share,0001075531-26-000009,table 16#4 row 25
+Booking Holdings Inc.,BKNG,0001075531,2025,2025-12-31,eps_diluted_adjusted,6.6228,USD/shares,0.0004,income,Net income applicable to common stockholders per diluted common share,adjusted,0001075531-26-000009,as filed 165.57 / 25 (25-for-1 split after the 10-K)
+Booking Holdings Inc.,BKNG,0001075531,2025,2025-12-31,total_assets,29264000000,USD,1000000,balance,Total assets,annual,0001075531-26-000009,table 16#3 row 15
+Booking Holdings Inc.,BKNG,0001075531,2025,2025-12-31,total_liabilities,34842000000,USD,1000000,balance,Total liabilities,annual,0001075531-26-000009,table 16#3 row 28
+Booking Holdings Inc.,BKNG,0001075531,2025,2025-12-31,stockholders_equity,-5578000000,USD,1000000,balance,Total stockholders' deficit,annual,0001075531-26-000009,table 16#3 row 36
+Booking Holdings Inc.,BKNG,0001075531,2025,2025-12-31,cash,17203000000,USD,1000000,balance,Cash and cash equivalents,annual,0001075531-26-000009,table 16#3 row 4
+Booking Holdings Inc.,BKNG,0001075531,2025,2025-12-31,long_term_debt,16856000000,USD,1000000,balance,Long-term debt,annual,0001075531-26-000009,table 16#3 row 27
+Booking Holdings Inc.,BKNG,0001075531,2025,2025-12-31,long_term_debt_current,1880000000,USD,1000000,balance,Short-term debt,annual,0001075531-26-000009,table 16#3 row 21
+Booking Holdings Inc.,BKNG,0001075531,2025,2025-12-31,operating_cash_flow,9409000000,USD,1000000,cash_flow,Net cash provided by operating activities,annual,0001075531-26-000009,table 16#7 row 20
+Booking Holdings Inc.,BKNG,0001075531,2025,2025-12-31,capex,322000000,USD,1000000,cash_flow,Additions to property and equipment,annual,0001075531-26-000009,table 16#7 row 24
+KLA CORP,KLAC,0000319201,2026,2026-06-30,revenue,13579476000,USD,1000,income,Total revenues,annual,0000319201-26-000027,table 8#2 row 5
+KLA CORP,KLAC,0000319201,2026,2026-06-30,net_income,4830771000,USD,1000,income,Net income,annual,0000319201-26-000027,table 8#2 row 15
+KLA CORP,KLAC,0000319201,2026,2026-06-30,eps_diluted,3.66,USD/shares,0.01,income,Diluted,annual_per_share,0000319201-26-000027,table 8#2 row 18
+KLA CORP,KLAC,0000319201,2026,2026-06-30,eps_diluted_adjusted,3.66,USD/shares,0.01,income,Diluted,adjusted,0000319201-26-000027,no split since the 10-K: as filed
+KLA CORP,KLAC,0000319201,2026,2026-06-30,total_assets,17951535000,USD,1000,balance,Total assets,annual,0000319201-26-000027,table 8#1 row 15
+KLA CORP,KLAC,0000319201,2026,2026-06-30,total_liabilities,11601715000,USD,1000,balance,Total liabilities,annual,0000319201-26-000027,table 8#1 row 27
+KLA CORP,KLAC,0000319201,2026,2026-06-30,stockholders_equity,6349820000,USD,1000,balance,Total stockholders’ equity,annual,0000319201-26-000027,table 8#1 row 35
+KLA CORP,KLAC,0000319201,2026,2026-06-30,cash,1649842000,USD,1000,balance,Cash and cash equivalents,annual,0000319201-26-000027,table 8#1 row 4
+KLA CORP,KLAC,0000319201,2026,2026-06-30,long_term_debt,5887415000,USD,1000,balance,Long-term debt,annual,0000319201-26-000027,table 8#1 row 23
+KLA CORP,KLAC,0000319201,2026,2026-06-30,operating_cash_flow,4143079000,USD,1000,cash_flow,Net cash provided by operating activities,annual,0000319201-26-000027,table 8#5 row 21
+KLA CORP,KLAC,0000319201,2026,2026-06-30,capex,375945000,USD,1000,cash_flow,Capital expenditures,annual,0000319201-26-000027,table 8#5 row 24
+"CrowdStrike Holdings, Inc.",CRWD,0001535527,2026,2026-01-31,revenue,4812005000,USD,1000,income,Total revenue,annual,0001535527-26-000010,table 8#2 row 5
+"CrowdStrike Holdings, Inc.",CRWD,0001535527,2026,2026-01-31,net_income,-162502000,USD,1000,income,Net income (loss) attributable to CrowdStrike,differs,0001535527-26-000010,"table 8#2 row 24; gold's TTM is -149.0M: Q1 and Q2 FY2026 were restated in the FY2027 10-Qs (by 13.5M), Q3 and the derived Q4 were not: a TTM of restated and original quarters (072's annual_sum, rule 'quarter')"
+"CrowdStrike Holdings, Inc.",CRWD,0001535527,2026,2026-01-31,eps_diluted,-0.65,USD/shares,0.01,income,Diluted,annual_per_share,0001535527-26-000010,table 8#2 row 27
+"CrowdStrike Holdings, Inc.",CRWD,0001535527,2026,2026-01-31,eps_diluted_adjusted,-0.1625,USD/shares,0.0025,income,Diluted,adjusted,0001535527-26-000010,as filed -0.65 / 4 (4-for-1 split after the 10-K)
+"CrowdStrike Holdings, Inc.",CRWD,0001535527,2026,2026-01-31,total_assets,11086684000,USD,1000,balance,Total assets,annual,0001535527-26-000010,table 8#1 row 16
+"CrowdStrike Holdings, Inc.",CRWD,0001535527,2026,2026-01-31,total_liabilities,6614079000,USD,1000,balance,Total liabilities,annual,0001535527-26-000010,table 8#1 row 30
+"CrowdStrike Holdings, Inc.",CRWD,0001535527,2026,2026-01-31,stockholders_equity,4428390000,USD,1000,balance,"Total CrowdStrike Holdings, Inc. stockholders’ equity",annual,0001535527-26-000010,table 8#1 row 38
+"CrowdStrike Holdings, Inc.",CRWD,0001535527,2026,2026-01-31,cash,5230125000,USD,1000,balance,Cash and cash equivalents,annual,0001535527-26-000010,table 8#1 row 4
+"CrowdStrike Holdings, Inc.",CRWD,0001535527,2026,2026-01-31,long_term_debt,745471000,USD,1000,balance,Long-term debt,annual,0001535527-26-000010,table 8#1 row 26
+"CrowdStrike Holdings, Inc.",CRWD,0001535527,2026,2026-01-31,operating_cash_flow,1612349000,USD,1000,cash_flow,Net cash provided by operating activities,annual,0001535527-26-000010,table 8#5 row 24
+"CrowdStrike Holdings, Inc.",CRWD,0001535527,2026,2026-01-31,capex,302108000,USD,1000,cash_flow,Purchases of property and equipment,annual,0001535527-26-000010,table 8#5 row 26
+ARES CAPITAL CORP,ARCC,0001287750,2025,2025-12-31,eps_diluted,1.86,USD/shares,0.01,income,Diluted,annual_per_share,0001287750-26-000006,table 1#1 row 58
+ARES CAPITAL CORP,ARCC,0001287750,2025,2025-12-31,eps_diluted_adjusted,1.86,USD/shares,0.01,income,Diluted,adjusted,0001287750-26-000006,no split since the 10-K: as filed
+ARES CAPITAL CORP,ARCC,0001287750,2025,2025-12-31,operating_cash_flow,-1717000000,USD,1000000,cash_flow,Net cash provided by (used in) operating activities,annual,0001287750-26-000006,table 1#154 row 28
+"United States Oil Fund, LP",USO,0001327068,2025,2025-12-31,net_income,-64657517,USD,1,income,Net Income (Loss),annual,0001104659-26-021501,table 8#8 row 19
+"United States Oil Fund, LP",USO,0001327068,2025,2025-12-31,total_assets,889618360,USD,1,balance,Total Assets,annual,0001104659-26-021501,table 8#1 row 13
+"United States Oil Fund, LP",USO,0001327068,2025,2025-12-31,total_liabilities,3541948,USD,1,balance,Total Liabilities,annual,0001104659-26-021501,table 8#1 row 22
+"United States Oil Fund, LP",USO,0001327068,2025,2025-12-31,cash,651873522,USD,1,balance,Cash and cash equivalents,annual,0001104659-26-021501,table 8#10 row 28
+"United States Oil Fund, LP",USO,0001327068,2025,2025-12-31,operating_cash_flow,-21869115,USD,1,cash_flow,Net cash provided by (used in) operating activities,annual,0001104659-26-021501,table 8#10 row 19
+SPDR GOLD TRUST,GLD,0001222333,2025,2025-09-30,total_assets,124571115000,USD,1000,balance,Total Assets,annual,0001437749-25-036305,table 16#2 row 4
+SPDR GOLD TRUST,GLD,0001222333,2025,2025-09-30,total_liabilities,38255000,USD,1000,balance,Total Liabilities,annual,0001437749-25-036305,table 16#2 row 8
+SPDR GOLD TRUST,GLD,0001222333,2025,2025-09-30,operating_cash_flow,0,USD,1000,cash_flow,Net cash provided by operating activities,annual,0001437749-25-036305,table 16#7 row 10 (untitled)
+Monster Beverage Corp,MNST,0000865752,2025,2025-12-31,revenue,8294343000,USD,1000,income,NET SALES,annual,0001104659-26-020831,table 16#8 row 1
+Monster Beverage Corp,MNST,0000865752,2025,2025-12-31,net_income,1905432000,USD,1000,income,NET INCOME,annual,0001104659-26-020831,table 16#8 row 9
+Monster Beverage Corp,MNST,0000865752,2025,2025-12-31,total_assets,9988945000,USD,1000,balance,Total Assets,annual,0001104659-26-020831,table 16#7 row 17
+Monster Beverage Corp,MNST,0000865752,2025,2025-12-31,stockholders_equity,8254108000,USD,1000,balance,Total stockholders’ equity,annual,0001104659-26-020831,table 16#7 row 37
+Monster Beverage Corp,MNST,0000865752,2025,2025-12-31,cash,2088117000,USD,1000,balance,Cash and cash equivalents,annual,0001104659-26-020831,table 16#7 row 4
+Monster Beverage Corp,MNST,0000865752,2025,2025-12-31,operating_cash_flow,2098177000,USD,1000,cash_flow,Net cash provided by operating activities,annual,0001104659-26-020831,table 16#11 row 24
+Monster Beverage Corp,MNST,0000865752,2025,2025-12-31,capex,132275000,USD,1000,cash_flow,Purchases of property and equipment,annual,0001104659-26-020831,table 16#11 row 29
+FIRST NORTHERN COMMUNITY BANCORP,FNRN,0001114927,2025,2025-12-31,net_income,21128000,USD,1000,income,Net income,annual,0001437749-26-008040,table 8#3 row 36
+FIRST NORTHERN COMMUNITY BANCORP,FNRN,0001114927,2025,2025-12-31,eps_diluted,1.27,USD/shares,0.01,income,Diluted income per share,annual_per_share,0001437749-26-008040,table 8#3 row 38
+FIRST NORTHERN COMMUNITY BANCORP,FNRN,0001114927,2025,2025-12-31,eps_diluted_adjusted,1.27,USD/shares,0.01,income,Diluted income per share,adjusted,0001437749-26-008040,no split since the 10-K: as filed
+FIRST NORTHERN COMMUNITY BANCORP,FNRN,0001114927,2025,2025-12-31,total_assets,1910950000,USD,1000,balance,Total Assets,annual,0001437749-26-008040,table 8#2 row 11
+FIRST NORTHERN COMMUNITY BANCORP,FNRN,0001114927,2025,2025-12-31,total_liabilities,1698932000,USD,1000,balance,Total Liabilities,annual,0001437749-26-008040,table 8#2 row 22
+FIRST NORTHERN COMMUNITY BANCORP,FNRN,0001114927,2025,2025-12-31,stockholders_equity,212018000,USD,1000,balance,Total Stockholders’ Equity,annual,0001437749-26-008040,table 8#2 row 29
+FIRST NORTHERN COMMUNITY BANCORP,FNRN,0001114927,2025,2025-12-31,cash,145554000,USD,1000,balance,Cash and cash equivalents,annual,0001437749-26-008040,table 8#2 row 2
+FIRST NORTHERN COMMUNITY BANCORP,FNRN,0001114927,2025,2025-12-31,operating_cash_flow,6898000,USD,1000,cash_flow,Net cash provided by operating activities,annual,0001437749-26-008040,table 8#6 row 20
+Siddhi Acquisition Corp,SDHI,0002034037,2025,2025-12-31,net_income,-223387,USD,1,income,Net loss,annual,0001213900-26-028326,table 16#4 row 9
+Siddhi Acquisition Corp,SDHI,0002034037,2025,2025-12-31,total_assets,286743485,USD,1,balance,TOTAL ASSETS,annual,0001213900-26-028326,table 16#3 row 10
+Siddhi Acquisition Corp,SDHI,0002034037,2025,2025-12-31,total_liabilities,16683674,USD,1,balance,TOTAL LIABILITIES,annual,0001213900-26-028326,table 16#3 row 19
+Siddhi Acquisition Corp,SDHI,0002034037,2025,2025-12-31,stockholders_equity,-15921630,USD,1,balance,TOTAL SHAREHOLDERS’ DEFICIT,annual,0001213900-26-028326,table 16#3 row 28
+Siddhi Acquisition Corp,SDHI,0002034037,2025,2025-12-31,operating_cash_flow,-603305,USD,1,cash_flow,Net cash used in operating activities,annual,0001213900-26-028326,table 16#6 row 11 (untitled)

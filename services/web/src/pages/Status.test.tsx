@@ -101,7 +101,7 @@ describe("Status", () => {
       "97.5%", "39,000 of 40,000 filings", "6,025", "265,625", "1,780,000", "43,012", "21 days checked",
       "all on 1 of those days", "6,024 companies checked, 13,790,000 figures", "Access: 59 attempts to reach data a user can't read, 0 succeeded", "4 of 4 ordinary",
       "Citations: 128 of 128 figures traced", "30 of 30 answers using data", "Figures against the filings: 149 numbers printed in 5 10-Ks",
-      "2 known gaps asserted absent", "21 of the figures", "last recorded results, not live"]) {
+      "2 known gaps asserted and explained", "21 of the figures", "last recorded results, not live"]) {
       expect(t).toContain(s);
     }
     // in words an analyst or a reviewer understands: no percentile jargon, model names or hashes on screen

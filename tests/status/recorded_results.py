@@ -23,6 +23,7 @@ OUT = ROOT / "services/query-api/src/query_api/data/recorded_results.json"
 ADVERSARIAL = ROOT / "tests/adversarial"
 CITATIONS = ROOT / "tests/citations"
 GOLDEN = ROOT / "tests/golden/10k_figures.csv"
+REFERENCE = ROOT / "tests/golden/reference_set.csv"  # data trust, part 2: about 100 more companies
 # first line under the title of report.md (adversarial/run.py, citations/run.py)
 RUN_HEADER = re.compile(r"^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}) UTC, `([^`]+)`\.$", re.M)
 
@@ -92,17 +93,20 @@ def citations() -> dict:
 
 
 def golden() -> dict:
-    with GOLDEN.open(newline="") as f:
-        rows = list(csv.DictReader(f))
+    """Both golden CSVs: the five companies in full and the reference set."""
+    rows: list[dict] = []
+    for path in (GOLDEN, REFERENCE):
+        with path.open(newline="") as f:
+            rows += list(csv.DictReader(f))
     checks: dict[str, int] = {}
     for r in rows:
         checks[r["check"]] = checks.get(r["check"], 0) + 1
     return {
         "figures": len(rows),
-        "companies": len({r["cik"] for r in rows}),
+        "companies": len({r.get("cik") or r["company_id"] for r in rows}),
         "filings": len({r["accession_no"] for r in rows}),
         "checks": dict(sorted(checks.items())),
-        "hand_checked": sum(bool(r["verified_by"].strip()) for r in rows),
+        "hand_checked": sum(bool((r.get("verified_by") or "").strip()) for r in rows),
         "readme": "tests/golden/README.md",
     }
 
@@ -116,7 +120,7 @@ INPUTS = {"adversarial": [ADVERSARIAL / "recordings", ADVERSARIAL / "report.md",
                           ADVERSARIAL / "adversarial_cases.py"],
           "citations": [CITATIONS / "recordings", CITATIONS / "report.md",
                         CITATIONS / "citation_cases.py"],
-          "golden": [GOLDEN]}
+          "golden": [GOLDEN, REFERENCE]}
 
 
 def _git(*args: str) -> str:

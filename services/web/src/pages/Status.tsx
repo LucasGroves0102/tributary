@@ -242,6 +242,7 @@ const MEANING: Record<string, string> = {
   impossible_value: "Negative revenue, assets or share counts, or a part larger than its total (gross profit above revenue): one of the figures is tagged wrongly in the filing",
   overlapping_quarters: "A quarter that starts before the previous one ends, usually a change of fiscal calendar: comparisons across it may be off",
   "tag_disagreement:warning": "The filing tags one line two ways that can't both be right (one figure in two scales, a total under a fifth of its own part, two names of a line 5× apart); the figure shown is one of them",
+  "statement_mismatch:warning": "The filing's own statement table prints another revenue, net income or total assets than the figure shown, which its XBRL states: one of the two is mistagged, or the table was misread",
   "outlier:warning": "A quarter 10× or more the quarters around it: a one-off, or a scale slip in the filing",
   "outlier:info": "A 10× swing on a line that swings by nature (cash flow subtotals, the change in cash, buybacks, dividends, income tax)",
   "sign_flip:warning": "A cost or outflow with the opposite sign to the quarters around it, usually a sign slip in the filing",
@@ -428,6 +429,9 @@ function RunLine({ run, path }: { run: RecordedRun; path: string }) {
 
 function Recorded({ data }: { data: DataStatus }) {
   const { adversarial: a, citations: c, golden: g } = data.recorded;
+  // printed figures gold doesn't hold, each documented: `absent` (10k_figures.csv) and `differs`
+  // (the reference set's exceptions, tests/golden README)
+  const gaps = (g.checks.absent ?? 0) + (g.checks.differs ?? 0);
   return (
     <section className="card">
       <div className="card-h">
@@ -463,7 +467,7 @@ function Recorded({ data }: { data: DataStatus }) {
           </b>
           <span>
             The financials pipeline must reproduce what {g.companies} companies printed in their 10-Ks
-            {g.checks.absent ? `, with ${g.checks.absent} known gaps asserted absent` : ""}; {g.hand_checked} of the
+            {gaps ? `, with ${gaps} known gaps asserted and explained` : ""}; {g.hand_checked} of the
             figures were also checked by hand against the filings. Re-checked on every code change, and a new version
             ships only after it passes.
           </span>
