@@ -116,7 +116,8 @@ A third gap, closed by migration 038. Its row was `absent` until then, written t
    bring every comparative filed since. For 038 only the tags its fix needs were added, from the
    payload in bronze on hermes (fetched from the SEC 2026-10-19), with `trim_facts.py`'s own window:
    Nvidia's `DebtSecuritiesCurrent` and `EquitySecuritiesFvNi`, two facts each. No other fixture
-   changed; a test that needs another new tag's facts adds them the same way.
+   changed; a test that needs another new tag's facts adds them the same way. 077 added Booking's
+   `NetIncomeLossAvailableToCommonStockholdersBasic` (26 facts) to its reference fixture.
 
 ## Reference set
 
@@ -163,8 +164,6 @@ Rows where gold holds another figure (`differs`):
 
 | Company | Line | Printed | Gold | Why |
 |---|---|---|---|---|
-| Booking | net income | 5,404 | none after 2015 | its 10-Ks and 10-Qs tag net income as NetIncomeLossAvailableToCommonStockholdersBasic, not a net_income tag; its only NetIncomeLoss facts are the proxies' (024 ignores them). **Gold gap: map that tag as a last fallback (a rule change)** |
-| PNC | net income | 6,997 | 7,015 | Q1 2025 (a later 10-Q's comparative) and the derived Q4 read ProfitLoss, Q2-Q3 NetIncomeLoss: **a tag mix gold shouldn't make** |
 | CrowdStrike | net income | -162.5M | -149.0M | Q1-Q2 FY2026 restated in the FY2027 10-Qs, Q3 and Q4 not: TTM of restated and original quarters (072 `annual_sum` 'quarter') |
 | Zions | total assets, liabilities | 88,990; 81,810 | 88,690; 81,510 | the Q3 2026 10-Q restated Dec 31, 2025; the latest filing wins, by design |
 | FedEx | cash, current debt | 13,311; 1,676 | 13,060; 1,633 | the Q2 FY2027 10-Q restated May 31, 2026 (FedEx Freight's separation), by design |
