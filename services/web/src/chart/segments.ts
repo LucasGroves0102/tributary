@@ -35,7 +35,18 @@
  *     printing a share or a bar it can't defend.
  * `contrib` applies that to every chart, saved ones too: dropped members draw nothing, and a period
  * where the kept members' change still exceeds the company's by more than OVERLAP_TOLERANCE of its
- * revenue draws no bars at all, so a stack can't overshoot the total (`contributionPlan`). */
+ * revenue draws no bars at all, so a stack can't overshoot the total (`contributionPlan`).
+ *
+ * `memberTree` is the one parent/child model every table and chart of an axis reads (Riley 29-31: NVIDIA's
+ * Compute drawn beside Data Center, Hyperscale and AI Clouds shares on top of Data Center's): a dropped
+ * member is the CHILD of the kept member that a set of dropped members adds up to (the same partition rule,
+ * with that member as the total, to PARENT_TIERS: a real parent is its children's sum to the rounding, and
+ * at 0.5% eight of Microsoft's product lines made its Service line by chance), held in at least half the
+ * periods where both report; a dropped member with no such parent is ANOTHER
+ * CUT of the same revenue (Microsoft's product lines beside Product and Service). Tables list children
+ * indented under their parent and other cuts after; charts draw only the kept members, so nothing is
+ * counted twice. The SQL check (migration 070, ops.check_segments) asks the same question, whether any set
+ * of members makes revenue, and no longer reports overlap as a deviation. */
 
 import type { FinancialRow, FormulaPoint, FormulaSeries, SegmentRow } from "../types";
 import { periodKey } from "./series";
@@ -88,6 +99,8 @@ interface Total {
 /** Members may add up to this much over revenue before they are taken to overlap. */
 export const OVERLAP_TOLERANCE = 0.02;
 const PARTITION_TIERS = [0.0002, 0.001, 0.005];
+/** A parent and its children agree to the rounding (memberTree). */
+const PARENT_TIERS = [0.0002, 0.001];
 const PARTITION_BUCKETS = 10_000;
 /** More members than this and a subset matching revenue says nothing: some always will. */
 const MAX_SEPARABLE = 24;
@@ -120,11 +133,11 @@ const better = (a: number, b: number): boolean => {
  * filing (the earlier Map of arrays copied every reachable sum per member: 5.9 s on 40 periods of
  * 20 countries and a member overlapping three of them). Only sums that can be within the widest
  * tier are measured. */
-export function partition(members: [string, number][], total: number): Set<string> | null {
+export function partition(members: [string, number][], total: number, tiers: number[] = PARTITION_TIERS): Set<string> | null {
   const ordered = members.filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
   const n = ordered.length;
   if (n > MAX_SEPARABLE) return null;
-  const widest = PARTITION_TIERS.at(-1)!;
+  const widest = tiers.at(-1)!;
   const scale = PARTITION_BUCKETS / total;
   const limit = Math.ceil(PARTITION_BUCKETS * (1 + widest)) + n;
   const best = new Int32Array(limit + 1).fill(-1); // best[sum]: the pick reaching it, -1 none
@@ -159,7 +172,7 @@ export function partition(members: [string, number][], total: number): Set<strin
     for (let i = 0; i < n; i++) if (picks & (1 << i)) value += ordered[i]![1];
     candidates.push({ picks, off: Math.abs(value - total) / total });
   }
-  for (const tier of PARTITION_TIERS) {
+  for (const tier of tiers) {
     let found: number | null = null;
     for (const c of candidates) if (c.off <= tier && (found === null || better(c.picks, found))) found = c.picks;
     if (found !== null) return new Set(ordered.filter((_, i) => found! & (1 << i)).map(([m]) => m));
@@ -216,6 +229,58 @@ function separate(periods: Map<number, Map<string, number>>, totals: Map<number,
     if (Math.abs(sum / total - 1) > OVERLAP_TOLERANCE) unreliable.add(key);
   }
   return { drop, unreliable };
+}
+
+export interface MemberTree extends Separation {
+  /** a member that is part of another: child → parent (both on the axis) */
+  parent: Map<string, string>;
+  /** overlapping members that aren't part of one other member: another cut of the same revenue */
+  otherCut: Set<string>;
+}
+
+/** Parents and children over these periods (module docstring): separateMembers' drop, each dropped
+ * member placed under the kept member a set of dropped members makes most often. */
+export function memberTree(periods: Map<number, Map<string, number>>, totals: Map<number, number>): MemberTree {
+  const separation = separateMembers(periods, totals);
+  const { drop } = separation;
+  const votes = new Map<string, Map<string, number>>();
+  const together = (a: string, b: string) => [...periods.values()].filter((m) => m.has(a) && m.has(b)).length;
+  if (drop.size) {
+    for (const members of periods.values()) {
+      const dropped = [...members].filter(([m, v]) => drop.has(m) && v > 0);
+      if (dropped.length < 2) continue;
+      for (const [k, total] of members) {
+        if (drop.has(k) || total <= 0) continue;
+        const parts = partition(dropped.filter(([, v]) => v < total), total, PARENT_TIERS);
+        for (const c of parts ?? []) {
+          const of = votes.get(c) ?? new Map<string, number>();
+          of.set(k, (of.get(k) ?? 0) + 1);
+          votes.set(c, of);
+        }
+      }
+    }
+  }
+  const parent = new Map<string, string>();
+  for (const [child, of] of votes) {
+    const [best] = [...of].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+    if (best && best[1] * 2 >= together(child, best[0])) parent.set(child, best[0]);
+  }
+  const otherCut = new Set([...drop].filter((m) => !parent.has(m)));
+  return { ...separation, parent, otherCut };
+}
+
+/** Members in table order: each kept member followed by its children, other cuts last (their order
+ * within each group as given). */
+export function treeOrder<T>(rows: T[], member: (r: T) => string, tree: MemberTree): T[] {
+  const children = new Map<string, T[]>();
+  for (const r of rows) {
+    const p = tree.parent.get(member(r));
+    if (p !== undefined && rows.some((x) => member(x) === p)) children.set(p, [...(children.get(p) ?? []), r]);
+  }
+  const placed = new Set([...children.values()].flat());
+  const top = rows.filter((r) => !placed.has(r) && !tree.otherCut.has(member(r)));
+  const cuts = rows.filter((r) => !placed.has(r) && tree.otherCut.has(member(r)));
+  return [...top.flatMap((r) => [r, ...(children.get(member(r)) ?? [])]), ...cuts];
 }
 
 export interface ContributionPlan extends Separation {

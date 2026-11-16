@@ -537,3 +537,12 @@ migrations that define those objects.
   same 198 ms as without it for every company's latest period on hermes. "Today" is `current_date`
   unless the session sets `tributary.today` (the DB tests pin it). Function-only, no rebuild; backout
   `backout/readings_069.sql`.
+- `070_check_segments_overlap.sql` (Riley, test 6, finding 8): `ops.check_segments` = 037's body + one edit:
+  a quarter whose members don't add up is flagged only when no set of them makes the consolidated figure
+  within 0.5% (`ops.segment_cover(parts, target, tolerance)`, a pruned depth-first search with a 200,000-step
+  budget; positive parts only, else NULL and 037's rule). Overlap (Microsoft's two complete cuts, 100.0%
+  more; NVIDIA's Data Center beside Hyperscale and AI Clouds; Costco's Product beside two categories) is
+  not a deviation; the web's `memberTree` (chart/segments.ts) shows it as children and other cuts. Over
+  hermes' 38,461 stored findings (2026-11-15): 11,430 go, 15,764 stay, 11,267 have a negative member and
+  keep 037's rule. Stored findings change when the check runs again (`SELECT ops.check_segments(array_agg(
+  DISTINCT company_id)) FROM gold.segment_financials;`). No backout file (037's body undoes it).

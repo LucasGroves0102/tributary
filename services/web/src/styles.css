@@ -2930,6 +2930,31 @@ button.chip:disabled {
   color: var(--text-3);
 }
 
+/* a member that is part of the row above (chart/segments.ts memberTree, Riley 31): indented, its figures
+   quieter, so its share never reads as one more slice on top of its parent's */
+.t tr.child td.first {
+  padding-left: calc(var(--sp-3, 12px) + 1.25em);
+}
+.t tr.child td.first::before {
+  content: "";
+  display: inline-block;
+  width: 0.75em;
+  margin-left: -1em;
+  margin-right: 0.25em;
+  border-bottom: 1px solid var(--line-2);
+  vertical-align: middle;
+}
+.t tr.child td:not(.first) {
+  color: var(--text-2);
+}
+/* another breakdown of the same revenue, after the members it overlaps */
+.t tr.other-cut td {
+  color: var(--text-2);
+}
+.t tr.other-cut:not(.other-cut + .other-cut) td {
+  border-top: 1px solid var(--line-2);
+}
+
 /* the filer's "All other" under its segments (#171): set apart, not a segment */
 .t tr.reconciling td {
   border-top: 1px solid var(--line-2);

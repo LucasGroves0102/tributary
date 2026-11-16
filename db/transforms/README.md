@@ -42,7 +42,7 @@ the parser image's `parser-peers` job, not in SQL.
 | Function | Latest definition |
 |---|---|
 | `ops.check_financials(text[])` (debt compared with liabilities and assets in its own currency) | `057_currency_readings.sql` (before: `050_filers_debt_signs.sql` SBC benefits as info, `debt_parts_scale`; `041_quality_findings.sql` `mistagged_fact`, `net_debt_gap`, a repeated `series_gap`, the annual comparison through `gold.best_facts`; `023_data_notes.sql` restatement; `018_segments.sql`; `014_gold_calendar.sql`) |
-| `ops.check_segments(text[])` (a reconciliation member restating the segments' sum isn't added) | `037_check_segments_subtotal.sql` (before: `018_segments.sql`) |
+| `ops.check_segments(text[])` (a reconciliation member restating the segments' sum isn't added; members that overlap, some set of them making the figure, aren't a deviation: `ops.segment_cover`) | `070_check_segments_overlap.sql` (before: `037_check_segments_subtotal.sql`, `018_segments.sql`) |
 
 ## Readings (read, not refreshed)
 

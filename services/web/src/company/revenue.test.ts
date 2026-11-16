@@ -23,12 +23,15 @@ describe("members that overlap", () => {
   const rows = Object.entries(PRODUCTS).flatMap(([m, v]) => member(m, v, { axis: "product_service" }));
   const revenue = total([110, 121, 132, 143, 165, 200]);
 
-  it("stay in the table, marked, out of the sum and off the stack", () => {
+  it("stay in the table under their parent, out of the sum and off every chart (Riley 29)", () => {
     const t = axisTable(rows, "product_service", revenue);
-    expect(t.rows.map((r) => [r.label, r.overlaps ?? false])).toEqual([
-      ["DataCenter", false], ["Gaming", false], ["Compute", true], ["Networking", true],
+    expect(t.rows.map((r) => [r.label, r.overlaps ?? false, r.parent ?? null])).toEqual([
+      ["DataCenter", false, null], ["Compute", true, "x:DataCenter"], ["Networking", true, "x:DataCenter"],
+      ["Gaming", false, null],
     ]);
-    expect(t.rows.find((r) => r.label === "Compute")!.note).toBe("overlaps the others");
+    expect(t.rows.find((r) => r.label === "Compute")!.note).toBe("part of DataCenter");
+    // as lines too: Compute is never drawn beside Data Center
+    expect(axisChart({ ...t, additive: false }, NVDA, "NVDA", "ttm").layers.map((l) => l.name)).toEqual(["DataCenter", "Gaming"]);
     expect(t.coverage.map((c) => Math.round(c! * 100))).toEqual([100, 100, 100, 100, 100, 100]);
     expect(t.additive).toBe(true);
     const layers = axisChart(t, NVDA, "NVDA", "ttm").layers;

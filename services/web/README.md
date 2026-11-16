@@ -1044,8 +1044,14 @@ Revenue had a Quarterly switch until F7b; its tables were Segments' revenue tabl
   Q1" / "until FY2023 Q4". The 6 largest members (by the latest period) are named, the rest folded
   into "Other (n members)" (the sum of those reporting each period). Members that overlap the rest
   (a parent beside its children, a second cut of the same revenue: `chart/segments.ts`
-  `separateMembers`, rules in its docstring) are listed as reported, marked "overlaps the others",
-  and left out of every sum. Finding them is a subset sum over 10,000 buckets of revenue, kept in one
+  `separateMembers`, rules in its docstring) are left out of every sum and every chart, lines too, and
+  read through one parent/child model per axis (`memberTree`, Riley 29-31): a child is listed indented
+  under the member it is part of ("part of Data Center": NVIDIA's Hyperscale and AI Clouds), another cut
+  after the rest ("another breakdown of the same revenue": Microsoft's product lines beside Product and
+  Service), on the Revenue and Segments tabs alike; a parent is a set of children's sum to 0.1% in at
+  least half the periods both report (at 0.5% Microsoft's lines made its Service line by chance). The
+  data notes' check (migration 070) asks the same question and no longer calls overlap a deviation.
+  Finding them is a subset sum over 10,000 buckets of revenue, kept in one
   typed array of bitmask picks: at most 24 members x 10,074 steps a period, about 25 ms for 40 periods
   of 20 countries and a region overlapping three (5.9 s before), and remembered by input, so a
   re-render, the decomposition and saved charts don't search again (`overlap.test.ts` checks the

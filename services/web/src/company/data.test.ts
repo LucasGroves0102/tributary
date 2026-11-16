@@ -469,7 +469,11 @@ describe("segment shares", () => {
     expect(t!.shareOf).toBe("consolidated");
     expect(t!.rows.find((r) => r.label === "Data Center")!.share).toBeCloseTo(0.9252, 3);
     expect(t!.rows.find((r) => r.label === "Hyperscale")!.share).toBeCloseTo(0.5062, 3);
-    expect(t!.overlapNote).toContain("Hyperscale, AI Clouds are part of another line");
+    expect(t!.overlapNote).toContain("Hyperscale, AI Clouds are part of Data Center, indented under it");
+    // the children straight after their parent (Riley 31: their shares read as slices on top of it)
+    const order = t!.rows.map((r) => [r.label, r.parent ?? null]);
+    const at = order.findIndex(([l]) => l === "Data Center");
+    expect(order.slice(at, at + 3).map(([l]) => l)).toEqual(["Data Center", "Hyperscale", "AI Clouds"]);
     expect(t!.rows.filter((r) => r.overlaps).map((r) => r.label)).toEqual(["Hyperscale", "AI Clouds"]);
   });
 

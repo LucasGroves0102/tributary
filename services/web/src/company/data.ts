@@ -9,7 +9,7 @@ import { BANK_NA, NO_DATA, NO_DATA_TITLE, NOT_APPLICABLE, NOT_MEANINGFUL, NOT_RE
 import { change, currencyOf, day, inWords, money, moneyRow, pct } from "../format";
 import { num } from "../home/data";
 import { EIGHT_K_ITEMS } from "../reader/sections";
-import { separateMembers } from "../chart/segments";
+import { memberTree, treeOrder } from "../chart/segments";
 import type { Callout, FinancialRow, NotMeaningfulPeriod, Recap, RecapValue, ScreenerRow, SegmentRow, ValueReading, ValueSource } from "../types";
 
 export type Fmt = "usd" | "pct" | "growth" | "x" | "eps" | "shares";
@@ -1063,6 +1063,11 @@ export interface SegmentTable {
     yoyNotMeaningful: boolean;
     /** part of another member, or another cut of the same revenue */
     overlaps: boolean;
+    /** the member it is part of (`memberTree`): listed under it, indented; its share is already in
+     * the parent's */
+    parent?: string;
+    /** another cut of the same revenue (`memberTree`): listed after the members it overlaps */
+    otherCut?: boolean;
     /** the member's last period, when it stopped before the table's newest ("FY2025 Q3"): an old
      * segmentation, listed after the current members */
     until: string | null;
@@ -1186,7 +1191,7 @@ export function segmentTables(rows: SegmentRow[], revenue: FinancialRow[] = []):
       const v = consolidatedAt(e);
       return v ? [[i, v]] : [];
     }));
-    const separated = metric === "revenue" ? separateMembers(periods, totals) : null;
+    const separated = metric === "revenue" ? memberTree(periods, totals) : null;
     const latestIndex = ends.length - 1;
     const total = latest === undefined ? null : consolidatedAt(latest);
     const memberSum = rs.filter((r) => r.period_end === latest).reduce((s, r) => s + (num(r.value) ?? 0), 0);
@@ -1231,21 +1236,33 @@ export function segmentTables(rows: SegmentRow[], revenue: FinancialRow[] = []):
         yoy: last !== null && yearAgo !== null && yearAgo > 0 ? last / yearAgo - 1 : null,
         yoyNotMeaningful: last !== null && yearAgo !== null && yearAgo <= 0,
         overlaps: separated?.drop.has(member) ?? false,
+        ...(separated?.parent.has(member) ? { parent: separated.parent.get(member)! } : {}),
+        ...(separated?.otherCut.has(member) ? { otherCut: true } : {}),
         until: lastEnd === latest ? null : columns[ends.indexOf(lastEnd)]!.label,
       };
     });
-    // current members by their newest value, then the ones that stopped, by their last
+    // current members by their newest value, then the ones that stopped, by their last; a child
+    // straight after its parent, other cuts after the rest (memberTree, Riley 31)
     const lastValue = (r: (typeof out)[number]) => num(at(r.member, lastOf(r.member))?.value) ?? -Infinity;
     out.sort((a, b) => Number(a.until !== null) - Number(b.until !== null) || lastValue(b) - lastValue(a));
+    if (separated) out.splice(0, out.length, ...treeOrder(out, (r) => r.member, separated));
     const other = axis === "business_segment" && !separated?.drop.size
       ? reconcilingRow(rows.filter((r) => r.axis === "reconciliation" && r.metric === metric), ends, columns,
         (end) => consolidatedOf(metric, end), (end) => members.reduce((s, [m]) => s + (num(at(m, end)?.value) ?? 0), 0))
       : null;
     if (other) out.push(other);
     // a member that stopped is said once, below; it stays out of sums either way
-    const parts = out.filter((r) => r.overlaps && r.until === null).map((r) => r.label);
-    const overlapNote = parts.length
-      ? `${listOf(parts)} ${parts.length === 1 ? "is" : "are"} part of another line here, or another cut of the same revenue, so the lines add up to more than revenue. Each share is of consolidated revenue.`
+    const labelOf = (m: string) => out.find((r) => r.member === m)?.label ?? m;
+    const children = out.filter((r) => r.parent && r.until === null);
+    const byParent = new Map<string, string[]>();
+    for (const r of children) byParent.set(r.parent!, [...(byParent.get(r.parent!) ?? []), r.label]);
+    const cuts = out.filter((r) => r.otherCut && r.until === null).map((r) => r.label);
+    const sentences = [
+      ...[...byParent].map(([p, kids]) => `${listOf(kids)} ${kids.length === 1 ? "is" : "are"} part of ${labelOf(p)}, indented under it`),
+      ...(cuts.length ? [`${listOf(cuts)} ${cuts.length === 1 ? "is" : "are"} another breakdown of the same revenue, listed last`] : []),
+    ];
+    const overlapNote = sentences.length
+      ? `${sentences.join("; ")}. None of them is added to the others; each share is of consolidated revenue.`
       : separated?.unreliable.has(latestIndex)
         ? "These lines add up to more than revenue and can't be separated: some overlap, or include sales between segments. Each share is of consolidated revenue, so don't add them up."
         : null;

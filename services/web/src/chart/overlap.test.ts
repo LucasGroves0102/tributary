@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { fin, seg } from "../fixtures";
-import { contributionPlan, partition, segmentSeries, separateMembers, type SegmentRequest } from "./segments";
+import { contributionPlan, memberTree, partition, segmentSeries, separateMembers, treeOrder, type SegmentRequest } from "./segments";
 
 const periods = (rows: Record<string, Record<string, number>>) =>
   new Map(Object.entries(rows).map(([k, m]) => [Number(k), new Map(Object.entries(m))]));
@@ -206,5 +206,33 @@ describe("a contribution layer draws what can be defended", () => {
     // the same request but for a plain view is as reported
     const plain = { segment: { ...req(["x:A"]).segment, transform: "ttm" as const } };
     expect(segmentSeries(plain, data, totals_).points).toHaveLength(2);
+  });
+});
+
+describe("memberTree: one parent/child model per axis (Riley 29-31, MSFT's 100% more)", () => {
+  const one = (members: Record<string, number>, total: number) =>
+    [new Map([[0, new Map(Object.entries(members))]]), new Map([[0, total]])] as const;
+
+  it("a member a set of others adds up to is their parent, beside a top-level member with none (NVIDIA FY2027)", () => {
+    const [periods, totals] = one({ DataCenter: 89.02, Hyperscale: 48.71, AIClouds: 40.31, Edge: 7.2 }, 96.22);
+    const tree = memberTree(periods, totals);
+    expect([...tree.drop].sort()).toEqual(["AIClouds", "Hyperscale"]);
+    expect(Object.fromEntries(tree.parent)).toEqual({ Hyperscale: "DataCenter", AIClouds: "DataCenter" });
+    expect([...tree.otherCut]).toEqual([]);
+    const rows = ["DataCenter", "Edge", "Hyperscale", "AIClouds"];
+    expect(treeOrder(rows, (r) => r, tree)).toEqual(["DataCenter", "Hyperscale", "AIClouds", "Edge"]);
+  });
+
+  it("two complete cuts: the other one is another breakdown, not children (Microsoft's product lines)", () => {
+    const [periods, totals] = one({
+      ServiceOther: 77.65, Azure: 33.17, M365Cloud: 27.78, Product: 14.63, ProductivityServer: 8.41, Search: 6.55,
+      Xbox: 5.38, Industry: 5.34, WindowsOEM: 3.55, Frontier: 2.11,
+    }, 92.28);
+    const tree = memberTree(periods, totals);
+    expect([...tree.drop].sort()).toEqual(["Azure", "Frontier", "Industry", "M365Cloud", "ProductivityServer", "Search", "WindowsOEM", "Xbox"]);
+    // none of the product lines' subsets makes Service or Product to the rule's precision
+    expect(tree.parent.size).toBe(0);
+    expect(tree.otherCut.size).toBe(8);
+    expect(treeOrder(["Azure", "ServiceOther", "Product"], (r) => r, tree)).toEqual(["ServiceOther", "Product", "Azure"]);
   });
 });

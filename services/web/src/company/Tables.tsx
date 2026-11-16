@@ -552,9 +552,11 @@ export function Segments({ token, companyId, name }: { token: string; companyId:
                     </thead>
                     <tbody>
                       {t.rows.map((r) => (
-                        <tr key={r.member} className={r.until ? "retired" : r.reconciling ? "reconciling" : undefined}>
+                        <tr key={r.member} className={[r.until ? "retired" : r.reconciling ? "reconciling" : "", r.parent ? "child" : "", r.otherCut ? "other-cut" : ""].filter(Boolean).join(" ") || undefined}>
                           <td className="first" title={r.until ? `${r.member}: last reported for ${r.until}`
                             : r.reconciling ? "What the company reports outside its segments (corporate costs, items it doesn't allocate), shown for the quarters where it and the segments come to the reported total"
+                            : r.parent ? `Part of ${t.rows.find((x) => x.member === r.parent)?.label ?? r.parent}: already in its figure, so never added to it`
+                            : r.otherCut ? "Another breakdown of the same revenue: it overlaps the lines above, so it isn't added to them"
                             : r.member}>
                             {r.label}
                             {r.until && <span className="until">until {r.until}</span>}

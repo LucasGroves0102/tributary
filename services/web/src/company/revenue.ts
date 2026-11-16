@@ -12,8 +12,9 @@
  *   - At most SHOWN members are drawn by name (the largest by their latest value); the rest are
  *     folded into one "Other (n members)" row and layer: the sum of those that report each
  *     period. Reconciliation members (corporate, eliminations) are left out, as on Segments.
- *   - Overlap (chart/segments.ts `separateMembers`): a member that is part of another, or another
- *     cut of the same revenue, stays in the table, marked, but is left out of every sum. Beyond
+ *   - Overlap (chart/segments.ts `memberTree`): a member that is part of another is listed under it,
+ *     indented; another cut of the same revenue is listed after the rest. Both are left out of every
+ *     sum and every chart, lines too (Riley 29: NVIDIA's Compute drawn beside Data Center). Beyond
  *     SHOWN, only the members that don't overlap are folded; the overlapping ones past SHOWN are
  *     counted, not listed.
  *   - Coverage: per period, the sum of the members that don't overlap over the company's reported
@@ -41,7 +42,7 @@
  * is a prompt to read the filing (MD&A, the receivables note), not a verdict. */
 
 import type { ChartState, Layer } from "../chart/model";
-import { contributionPlan, SEGMENT_AXES, separateMembers, type SegmentAxisKind } from "../chart/segments";
+import { contributionPlan, memberTree, SEGMENT_AXES, treeOrder, type SegmentAxisKind } from "../chart/segments";
 import { periodKey } from "../chart/series";
 import type { FinancialRow, SegmentRow } from "../types";
 import { OVERLAP_TOLERANCE } from "../chart/segments";
@@ -69,6 +70,8 @@ export interface MemberRow {
   sources: (string | null)[];
   /** part of another member, or another cut of the same revenue: in no sum */
   overlaps?: boolean;
+  /** the member it is part of (chart/segments.ts memberTree): drawn indented under it */
+  parent?: string;
 }
 
 export interface AxisTable {
@@ -154,7 +157,8 @@ export function axisTable(rows: SegmentRow[], axis: SegmentAxisKind, totals: Map
     const c = m.get(k);
     return c ? [[member, c.value]] : [];
   }))]));
-  const { drop, unreliable } = separateMembers(byPeriod, totals);
+  const tree = memberTree(byPeriod, totals);
+  const { drop, unreliable } = tree;
   // largest first by the latest period's value; members that stopped reporting go after the
   // ones still reporting, by their own latest value
   const now = keys.at(-1);
@@ -210,18 +214,22 @@ export function axisTable(rows: SegmentRow[], axis: SegmentAxisKind, totals: Map
   });
   const additive = coverage.length > 0 && coverage.every((c) => c !== null && Math.abs(c - 1) <= COVERAGE_TOLERANCE);
   // listed after what they overlap, in no sum and on no stack
-  const listed = overlapping.slice(0, SHOWN).map(([member, m]): MemberRow => ({
-    members: [member],
-    label: labels.get(member) ?? member,
-    note: "overlaps the others",
-    values: keys.map((k) => m.get(k)?.value ?? null),
-    sources: keys.map((k) => source(m.get(k))),
-    overlaps: true,
-  }));
+  const listed = overlapping.slice(0, SHOWN).map(([member, m]): MemberRow => {
+    const parent = tree.parent.get(member);
+    return {
+      members: [member],
+      label: labels.get(member) ?? member,
+      note: parent ? `part of ${labels.get(parent) ?? parent}` : "another breakdown of the same revenue",
+      values: keys.map((k) => m.get(k)?.value ?? null),
+      sources: keys.map((k) => source(m.get(k))),
+      overlaps: true,
+      ...(parent ? { parent } : {}),
+    };
+  });
   return {
     axis,
     periods: keys.map((k) => ({ key: k, label: ends.get(k)!.label, end: ends.get(k)!.end })),
-    rows: [...out, ...listed],
+    rows: treeOrder([...out, ...listed], (r) => r.members.length === 1 ? r.members[0]! : "", tree),
     coverage,
     additive,
     unreliable: keys.map((k) => unreliable.has(k)),
@@ -230,8 +238,9 @@ export function axisTable(rows: SegmentRow[], axis: SegmentAxisKind, totals: Map
 }
 
 function segmentLayers(t: AxisTable, companyId: string, transform: Layer["transform"], type: Layer["type"], startId: number): Layer[] {
-  // members that overlap have no place on a stack or among contributions; as lines they're as reported
-  const drawn = type === "line" ? t.rows : t.rows.filter((r) => !r.overlaps);
+  // members that overlap have no place on any chart: a child is already in its parent's line or bar, and
+  // another cut would draw the same revenue twice (Riley 29); the table lists them
+  const drawn = t.rows.filter((r) => !r.overlaps);
   return drawn.slice(0, 11).map((r, i) => ({
     id: startId + i,
     kind: "segment",

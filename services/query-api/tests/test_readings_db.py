@@ -1007,6 +1007,43 @@ def test_a_real_reconciling_item_still_counts(conn):
     )
 
 
+def _segment_findings(conn, cid):
+    return conn.execute(
+        "SELECT check_name, (detail->>'deviation')::numeric FROM ops.quality_findings"
+        " WHERE company_id = %s AND check_name LIKE 'segment%%' ORDER BY 1", (cid,)).fetchall()
+
+
+def test_overlapping_members_are_not_a_deviation_but_a_missing_one_is(conn):
+    """070 (Riley 8): NVIDIA's Data Center beside Hyperscale and AI Clouds, and Microsoft's two
+    complete cuts, read "members sum to 100% more"; some set of members makes revenue, so they
+    overlap. A breakdown that misses revenue in every combination is still flagged."""
+    end = date(2026, 7, 26)
+    reported(conn, STALE, "revenue", end, 96_221)
+    for member, value in (("DataCenter", 89_023), ("Hyperscale", 48_710), ("AIClouds", 40_313),
+                          ("Edge", 7_198)):
+        segment(conn, STALE, "product_service", member, value, end, metric="revenue")
+    # two cuts of the same revenue, each exact (Microsoft's product lines beside Product/Service)
+    for member, value in (("Service", 77_650), ("Product", 18_571), ("Azure", 33_170),
+                          ("M365", 27_780), ("Other", 35_271)):
+        segment(conn, STALE, "geography", member, value, end, metric="revenue")
+    conn.execute("SELECT ops.check_segments(%s)", ([STALE],))
+    assert _segment_findings(conn, STALE) == []
+    # a member missing: no set of them makes revenue, so that's still a deviation
+    conn.execute("DELETE FROM gold.segment_financials WHERE company_id = %s AND member = 'Edge'",
+                 (STALE,))
+    conn.execute("UPDATE gold.segment_financials SET value = 70000 WHERE company_id = %s"
+                 " AND member = 'Hyperscale'", (STALE,))
+    conn.execute("SELECT ops.check_segments(%s)", ([STALE],))
+    assert [c for c, _ in _segment_findings(conn, STALE)] == ["segment_sum_product_service"]
+
+
+def test_segment_cover_searches_positive_parts_only(conn):
+    cover = "SELECT ops.segment_cover(%s::numeric[], %s::numeric, %s::numeric)"
+    assert conn.execute(cover, ([89.02, 48.71, 40.31, 7.2], 96.22, 0.48)).fetchone()[0] is True
+    assert conn.execute(cover, ([60, 30], 100, 0.5)).fetchone()[0] is False
+    assert conn.execute(cover, ([60, -30], 30, 0.5)).fetchone()[0] is None  # an operating loss
+
+
 def test_the_screener_files_a_first_week_year_end_under_the_month_before(conn, token):
     """J&J's 0103 is a December year, Target's 0201 a January one, NVIDIA's 0131 stays January: the
     filter and the sort read silver.fiscal_year_end_month (migration 042). What's stored, and what
