@@ -16,6 +16,9 @@ were extracted) get theirs.
 
 --rebuild re-projects every stored extract (raw_gzip) with the current silver.segment_axes and
 labels, then re-derives silver and gold: no document is re-read.
+
+A run that leaves nothing pending then spends up to --catchup-seconds on catchup.py: companies whose
+gold or quality checks an older rule built (migration 071).
 """
 
 import argparse
@@ -29,6 +32,7 @@ from dataclasses import dataclass, field
 
 import psycopg
 
+from facts_fetcher import catchup
 from facts_fetcher.ixbrl import EXTRACTOR_VERSION, Extract, Fact, extract_gzip, plain
 from facts_fetcher.labels import member_label
 from tributary_telemetry import configure_logging
@@ -324,6 +328,11 @@ def main(argv: Iterable[str] | None = None) -> None:
                         help="pause between rounds (default: $SEGMENTS_PAUSE_SECONDS or 0)")
     parser.add_argument("--rebuild", action="store_true",
                         help="re-project stored extracts and re-derive silver and gold")
+    parser.add_argument("--catchup-seconds", type=float,
+                        default=float(os.environ.get("CATCHUP_SECONDS", catchup.SECONDS)),
+                        help="after a run that left nothing pending: seconds spent rebuilding gold"
+                             " and re-running checks an older rule built (default:"
+                             f" $CATCHUP_SECONDS or {catchup.SECONDS}; 0: none)")
     args = parser.parse_args(None if argv is None else list(argv))
     configure_logging()
     started = time.monotonic()
@@ -333,10 +342,12 @@ def main(argv: Iterable[str] | None = None) -> None:
         else:
             stats = run_rounds(lambda: run(conn, args.limit, args.batch), args.rounds,
                                args.pause_seconds)
-    log.info("%s: %d documents, %d with iXBRL, %d silver rows, %d gold rows in %.0fs",
-             "complete" if stats.completed else "limit reached, run again to continue",
-             stats.documents, stats.ok, stats.silver_rows, stats.gold_rows,
-             time.monotonic() - started)
+        log.info("%s: %d documents, %d with iXBRL, %d silver rows, %d gold rows in %.0fs",
+                 "complete" if stats.completed else "limit reached, run again to continue",
+                 stats.documents, stats.ok, stats.silver_rows, stats.gold_rows,
+                 time.monotonic() - started)
+        if stats.completed and not args.rebuild and args.catchup_seconds > 0:
+            catchup.run(conn, catchup.budget(args.catchup_seconds, time.monotonic() - started))
 
 
 if __name__ == "__main__":
