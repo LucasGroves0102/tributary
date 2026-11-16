@@ -9,6 +9,7 @@ import re
 from contextlib import contextmanager
 from datetime import date, timedelta
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -95,6 +96,8 @@ def derived(conn, cid, metric, end, value, inputs, span="ttm", unit="ratio"):
 @pytest.fixture
 def conn():
     with psycopg.connect(DSN) as conn, conn.transaction(force_rollback=True):
+        # 069's stale rule reads today: pinned, so these 2026 figures stay current as time passes
+        conn.execute("SET tributary.today = '2026-11-15'")
         for cid, name, sic, industry in (
             (NORMAL, "Normal Co", "3674", "Semiconductors"),
             (ABSURD, "Absurd Co", "7372", "Prepackaged Software"),
@@ -933,6 +936,25 @@ def test_annual_per_share_reads_the_latest_10k_never_a_proxy_and_respects_the_re
         cur.execute("RESET ROLE")
 
 
+def test_per_share_reads_one_companys_figures_under_rls(conn, token):
+    """Riley (test 6): /per-share over Store.per_share_inputs, as query_api with RLS."""
+    end = date(2025, 12, 31)
+    annual_fact(conn, NORMAL, "eps_diluted", end, Decimal("4.90"), "0000000000-26-000010",
+                date(2026, 2, 1))
+    reported(conn, NORMAL, "eps_diluted", LATEST, Decimal("1.25"))
+    r = api(conn).get(f"/v1/companies/{NORMAL}/per-share", headers=token(USER),
+                      params={"view": "annual"})
+    assert r.status_code == 200, r.text
+    assert [(x["metric"], x["value"]) for x in r.json()["rows"]] == [("eps_diluted", "4.90")]
+    q = api(conn).get(f"/v1/companies/{NORMAL}/per-share", headers=token(USER)).json()
+    assert [(x["metric"], x["value"], x["as_filed"]) for x in q["rows"]] == [
+        ("eps_diluted", "1.25", "1.25")]
+    for view in ("annual", "quarter"):  # RLS alone: nothing for a user who reads nothing
+        nobody = api(conn).get(f"/v1/companies/{NORMAL}/per-share", headers=token("t-nobody"),
+                               params={"view": view}).json()
+        assert nobody["rows"] == [] and nobody["splits"] == []
+
+
 def test_annual_per_share_needs_the_tier_first(conn, token):
     r = api(conn, Closed()).get(f"/v1/companies/{STALE}/annual-per-share", headers=token(USER))
     assert r.status_code == 403
@@ -985,6 +1007,43 @@ def test_a_real_reconciling_item_still_counts(conn):
     )
 
 
+def _segment_findings(conn, cid):
+    return conn.execute(
+        "SELECT check_name, (detail->>'deviation')::numeric FROM ops.quality_findings"
+        " WHERE company_id = %s AND check_name LIKE 'segment%%' ORDER BY 1", (cid,)).fetchall()
+
+
+def test_overlapping_members_are_not_a_deviation_but_a_missing_one_is(conn):
+    """070 (Riley 8): NVIDIA's Data Center beside Hyperscale and AI Clouds, and Microsoft's two
+    complete cuts, read "members sum to 100% more"; some set of members makes revenue, so they
+    overlap. A breakdown that misses revenue in every combination is still flagged."""
+    end = date(2026, 7, 26)
+    reported(conn, STALE, "revenue", end, 96_221)
+    for member, value in (("DataCenter", 89_023), ("Hyperscale", 48_710), ("AIClouds", 40_313),
+                          ("Edge", 7_198)):
+        segment(conn, STALE, "product_service", member, value, end, metric="revenue")
+    # two cuts of the same revenue, each exact (Microsoft's product lines beside Product/Service)
+    for member, value in (("Service", 77_650), ("Product", 18_571), ("Azure", 33_170),
+                          ("M365", 27_780), ("Other", 35_271)):
+        segment(conn, STALE, "geography", member, value, end, metric="revenue")
+    conn.execute("SELECT ops.check_segments(%s)", ([STALE],))
+    assert _segment_findings(conn, STALE) == []
+    # a member missing: no set of them makes revenue, so that's still a deviation
+    conn.execute("DELETE FROM gold.segment_financials WHERE company_id = %s AND member = 'Edge'",
+                 (STALE,))
+    conn.execute("UPDATE gold.segment_financials SET value = 70000 WHERE company_id = %s"
+                 " AND member = 'Hyperscale'", (STALE,))
+    conn.execute("SELECT ops.check_segments(%s)", ([STALE],))
+    assert [c for c, _ in _segment_findings(conn, STALE)] == ["segment_sum_product_service"]
+
+
+def test_segment_cover_searches_positive_parts_only(conn):
+    cover = "SELECT ops.segment_cover(%s::numeric[], %s::numeric, %s::numeric)"
+    assert conn.execute(cover, ([89.02, 48.71, 40.31, 7.2], 96.22, 0.48)).fetchone()[0] is True
+    assert conn.execute(cover, ([60, 30], 100, 0.5)).fetchone()[0] is False
+    assert conn.execute(cover, ([60, -30], 30, 0.5)).fetchone()[0] is None  # an operating loss
+
+
 def test_the_screener_files_a_first_week_year_end_under_the_month_before(conn, token):
     """J&J's 0103 is a December year, Target's 0201 a January one, NVIDIA's 0131 stays January: the
     filter and the sort read silver.fiscal_year_end_month (migration 042). What's stored, and what
@@ -1004,3 +1063,133 @@ def test_the_screener_files_a_first_week_year_end_under_the_month_before(conn, t
     assert sorted(fyes(fiscal_year_end_month=12)) == ["0103", "1231"]
     assert sorted(fyes(fiscal_year_end_month=1)) == ["0131", "0201"]
     assert fyes(sort="fiscal_year_end")[-2:] in (["0103", "1231"], ["1231", "0103"])
+
+
+# --- 069: why a blank is blank, and a company whose latest period is long past -----------------
+
+ROOT = Path(__file__).resolve().parents[3]
+
+
+def _sic_exclusions_in_043() -> tuple[re.Pattern, re.Pattern]:
+    """The two SIC tests on 039's computed gross profit, read from its latest body (043)."""
+    sql = (ROOT / "db" / "migrations" / "043_interest_expense_sign.sql").read_text()
+    found = re.findall(r"co\.sic !~ '([^']+)'", sql)
+    assert len(found) == 2, found
+    return re.compile(found[0]), re.compile(found[1])
+
+
+def test_not_computed_names_every_industry_039_leaves_out(conn):
+    """gold.not_computed words 039's industries; the SIC list must stay the gold rule's own."""
+    prefix, exact = _sic_exclusions_in_043()
+    lines = (Path(__file__).parent / "fixtures" / "sic_codes.csv").read_text().splitlines()
+    codes = [line.split(",")[0].strip('"') for line in lines[1:] if line.strip()]
+    assert len(codes) > 300
+    rows = dict(conn.execute(
+        "SELECT s, gold.not_computed('gross_margin', s) FROM unnest(%s::text[]) s",
+        (codes,)).fetchall())
+    for sic in codes:
+        left_out = bool(prefix.search(sic) or exact.search(sic))
+        assert (rows[sic] is not None) == left_out, sic
+    assert conn.execute("SELECT gold.not_computed('gross_margin', NULL)").fetchone()[0]
+    assert conn.execute("SELECT gold.not_computed('gross_profit', '5331')").fetchone()[0]
+    assert conn.execute("SELECT gold.not_computed('revenue', '5331')").fetchone()[0] is None
+
+
+WAREHOUSE, PRINTS_ITS_OWN, TELECOM = "9200000031", "9200000032", "9200000033"
+
+
+def test_a_gross_margin_tributary_does_not_compute_says_why(conn, token):
+    """Riley 3: Walmart's and Costco's gross margin read a bare blank. A 5331 company that prints
+    its own gross profit (Dollar General, Target) keeps its figure."""
+    for cid, name, sic in ((WAREHOUSE, "Warehouse Club Co", "5331"),
+                           (PRINTS_ITS_OWN, "Dollar Store Co", "5331"),
+                           (TELECOM, "Telecom Co", "4813")):
+        listed(conn, cid, name)
+        conn.execute("UPDATE silver.companies SET sic = %s WHERE company_id = %s", (sic, cid))
+        reported(conn, cid, "revenue", LATEST, 50_000_000_000)
+    derived(conn, PRINTS_ITS_OWN, "gross_margin", LATEST, Decimal("0.31"),
+            {"revenue": 5e10, "gross_profit": 1.55e10})
+    # an old figure from a year that printed one (Costco's 2019 dot) reads the same way
+    derived(conn, TELECOM, "gross_margin", date(2019, 12, 31), Decimal("0.6"), {"revenue": 1e9})
+    body = screen(conn, token, columns=["gross_margin_ttm", "revenue_q"], sort="-gross_margin_ttm",
+                  limit=50)
+    club = row_of(body, "Warehouse Club Co")["readings"]["gross_margin_ttm"]
+    assert club["status"] == "not_computed"
+    assert "membership fees" in club["reason"]
+    telecom = row_of(body, "Telecom Co")
+    assert telecom["readings"]["gross_margin_ttm"]["status"] == "not_computed"
+    assert "network costs" in telecom["readings"]["gross_margin_ttm"]["reason"]
+    own = row_of(body, "Dollar Store Co")
+    assert own["readings"].get("gross_margin_ttm") is None
+    assert names(body).index("Dollar Store Co") < names(body).index("Telecom Co")
+    # the statements ask with readings: the blank's reason comes with them
+    r = api(conn).get(f"/v1/companies/{WAREHOUSE}/financials", headers=token(USER),
+                      params={"view": "ttm", "metrics": ["revenue", "gross_margin"],
+                              "readings": "true"})
+    assert r.status_code == 200, r.text
+    assert "membership fees" in r.json()["not_computed"]["gross_margin"]
+    plain = api(conn).get(f"/v1/companies/{WAREHOUSE}/financials", headers=token(USER),
+                          params={"view": "ttm", "metrics": ["revenue", "gross_margin"]}).json()
+    assert "not_computed" not in plain  # the agent's JSON is unchanged
+
+
+QUARTERS_STOPPED, TWENTY_F, TWENTY_F_LATE, TEN_K_ONLY = (f"92000000{i}" for i in range(41, 45))
+
+
+def _ttm(conn, cid, end, margin, form="10-Q"):
+    derived(conn, cid, "operating_margin", end, Decimal(margin), {"revenue": 1e9})
+    conn.execute("UPDATE gold.derived_financials SET form = %s WHERE company_id = %s",
+                 (form, cid))
+
+
+def test_a_company_long_past_its_latest_period_is_stale_and_out_of_sorts(conn, token):
+    """Aphoenity (Riley 23): figures to Sep 2024 topped the operating margin sort in Nov 2026.
+    Quarterly filers are stale 270 days after their latest period, annual filers (a 20-F, or no
+    quarters: owner decision 4) 500 days after it, when their next annual report is overdue."""
+    listed(conn, QUARTERS_STOPPED, "Stopped Co")
+    for i in range(4):
+        reported(conn, QUARTERS_STOPPED, "revenue", date(2024, 9, 30) - timedelta(days=91 * i), 1)
+    _ttm(conn, QUARTERS_STOPPED, date(2024, 9, 30), "0.85")
+    listed(conn, TWENTY_F, "Twenty-F Co")  # its year to Dec 2025: current until its next 20-F
+    reported(conn, TWENTY_F, "total_assets", date(2025, 12, 31), 1)
+    _ttm(conn, TWENTY_F, date(2025, 12, 31), "0.6", form="20-F")
+    listed(conn, TWENTY_F_LATE, "Late Twenty-F Co")  # Dec 2024: its 2025 20-F was due in April
+    reported(conn, TWENTY_F_LATE, "total_assets", date(2024, 12, 31), 1)
+    _ttm(conn, TWENTY_F_LATE, date(2024, 12, 31), "0.7", form="20-F")
+    listed(conn, TEN_K_ONLY, "Ten-K Only Co")  # no quarters in gold, a year to Sep 2025
+    reported(conn, TEN_K_ONLY, "total_assets", date(2025, 9, 30), 1)
+    _ttm(conn, TEN_K_ONLY, date(2025, 9, 30), "0.65", form="10-K")
+    body = screen(conn, token, columns=["operating_margin_ttm"], sort="-operating_margin_ttm",
+                  limit=50)
+    ranked = names(body)
+    stopped = row_of(body, "Stopped Co")
+    assert stopped["readings"]["operating_margin_ttm"]["status"] == "stale"
+    assert "Sep 30, 2024" in stopped["readings"]["operating_margin_ttm"]["reason"]
+    assert Decimal(str(stopped["values"]["operating_margin_ttm"])) == Decimal("0.85")
+    late = row_of(body, "Late Twenty-F Co")["readings"]["operating_margin_ttm"]
+    assert late["status"] == "stale"
+    assert row_of(body, "Twenty-F Co")["readings"].get("operating_margin_ttm") is None
+    assert row_of(body, "Ten-K Only Co")["readings"].get("operating_margin_ttm") is None
+    # stale figures don't win the sort; current ones rank by their value
+    assert ranked.index("Twenty-F Co") < ranked.index("Normal Co")
+    assert ranked.index("Stopped Co") > ranked.index("Normal Co")
+    assert ranked.index("Late Twenty-F Co") > ranked.index("Normal Co")
+    # nor pass a range filter
+    filtered = screen(conn, token, columns=["operating_margin_ttm"],
+                      where=["operating_margin_ttm:gte:0.5"], sort="name")
+    assert "Stopped Co" not in names(filtered) and "Twenty-F Co" in names(filtered)
+
+
+def test_stale_reads_today_from_the_clock_unless_a_session_pins_it(conn):
+    listed(conn, QUARTERS_STOPPED, "Stopped Co")
+    reported(conn, QUARTERS_STOPPED, "revenue", date(2026, 3, 31), 1)
+    _ttm(conn, QUARTERS_STOPPED, date(2026, 3, 31), "0.4")
+    sql = ("SELECT r.status FROM gold.latest_period(%s) lp, "
+           "gold.latest_reading(%s, 'ttm', 'operating_margin', '2800', lp.latest) r")
+    conn.execute("SET tributary.today = '2026-11-15'")
+    assert conn.execute(sql, (QUARTERS_STOPPED, QUARTERS_STOPPED)).fetchone()[0] is None
+    conn.execute("SET tributary.today = '2027-01-15'")
+    assert conn.execute(sql, (QUARTERS_STOPPED, QUARTERS_STOPPED)).fetchone()[0] == "stale"
+    conn.execute("RESET tributary.today")
+    want = "stale" if (date.today() - date(2026, 3, 31)).days > 270 else None
+    assert conn.execute(sql, (QUARTERS_STOPPED, QUARTERS_STOPPED)).fetchone()[0] == want

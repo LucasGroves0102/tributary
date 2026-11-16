@@ -1,4 +1,5 @@
 import { displayNames } from "./format";
+import type { PerShare } from "./types";
 import type { ModelRun } from "./models/model";
 import type {
   AgentEvent,
@@ -476,6 +477,14 @@ export const recentDataNotes = (token: string, limit = 8, companies?: string[]) 
   );
 
 /** The 10-K's own EPS and weighted shares per fiscal year: quarters can't give them. */
+/** Per-share figures on one share basis (split-adjusted unless `asFiled`), derived Q4 and TTM; null
+ * from an older API (404), which then shows the statements' own figures as before. */
+export const perShare = (token: string, companyId: string, view: PerShare["view"], basis: "fiscal" | "calendar",
+  asFiled: boolean, quarters: number) =>
+  orNullOn404(get<PerShare>(token, `/v1/companies/${companyId}/per-share`, {
+    view, basis, quarters, ...(asFiled ? { shares: "as_filed" } : {}),
+  }));
+
 export const annualPerShare = (token: string, companyId: string, years = 10) =>
   get<{ as_of: string; rows: FinancialRow[] }>(token, `/v1/companies/${companyId}/annual-per-share`, { years });
 
@@ -692,7 +701,7 @@ export const financialsView = (
   /** view quarter: ask for the statement callouts (F5); an older API ignores it and sends none */
   callouts = false,
 ) =>
-  withinOlderCap((older) => get<{ as_of: string; rows: FinancialRow[]; not_meaningful_periods?: NotMeaningfulPeriod[]; callouts?: Callout[]; currency?: string; cadence?: "annual" }>(token, `/v1/companies/${companyId}/financials`, {
+  withinOlderCap((older) => get<{ as_of: string; rows: FinancialRow[]; not_meaningful_periods?: NotMeaningfulPeriod[]; not_computed?: Record<string, string>; callouts?: Callout[]; currency?: string; cadence?: "annual" }>(token, `/v1/companies/${companyId}/financials`, {
     ...(readings ? { readings: "true" } : {}),
     ...(callouts ? { callouts: "true" } : {}),
     quarters: older ? OLDER_QUARTERS : quarters,

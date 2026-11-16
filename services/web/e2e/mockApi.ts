@@ -379,6 +379,10 @@ export async function mockApi(page: Page): Promise<Fake> {
     // F7b: the Filings tab's insider filings (Insider and All)
     m = path.match(/^\/v1\/companies\/(\d{10})\/insiders$/);
     if (m) return json({ company_id: m[1], filings: [], has_more: false });
+    // Riley (test 6): the Statements tab's EPS and shares on one share basis
+    m = path.match(/^\/v1\/companies\/(\d{10})\/per-share$/);
+    if (m) return json({ company_id: m[1], view: q.get("view") ?? "quarter", basis: q.get("basis") ?? "fiscal",
+      shares: q.get("shares") ?? "adjusted", as_of: "", splits: [], rows: [] });
     m = path.match(/^\/v1\/companies\/(\d{10})\/data-notes$/);
     if (m || path === "/v1/data-notes") {
       const id = m?.[1] ?? PEP;

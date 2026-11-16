@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { entry, TESLA } from "../fixtures";
 import type { ScreenerRow } from "../types";
-import { MASKED_TITLE, screenRow } from "./rows";
+import { currencyFoot, MASKED_TITLE, screenRow } from "./rows";
 import { activeFilters, describe as describeScreen, fraction, fyeMonth, parseScreen, screenParams, screenQuery } from "./screen";
 
 describe("screen filters", () => {
@@ -125,6 +125,18 @@ describe("how a row reads what the API says about each value", () => {
     expect(r.cells.gross_margin_ttm?.text).toBe("—");
     expect(r.cells.gross_margin_ttm?.title).toContain("can't be computed");
     expect(r.cells.revenue_ttm).toMatchObject({ text: "$180.0B", value: 180000000000 });
+  });
+
+  it("the foot says dollars unless the page holds another currency (Riley 2: TSMC under 'US dollars')", () => {
+    const dollars = screenRow(row({ values: { revenue_ttm: "180000000000" } }));
+    expect(currencyFoot([dollars])).toBe("US dollars.");
+    const tsmc = screenRow(row({
+      values: { revenue_ttm: "2894307700000" },
+      sources: { revenue_ttm: { ...SRC, form: "20-F" } },
+      readings: { revenue_ttm: { status: "other_currency", unit: "TWD" } },
+    }));
+    expect(tsmc.cells.revenue_ttm).toMatchObject({ value: null, currency: "TWD" });
+    expect(currencyFoot([dollars, tsmc])).toMatch(/^US dollars, except the amounts shown in TWD: .*aren't sorted, filtered or averaged with dollars/);
   });
 
   it("a value that isn't meaningful reads n/m and can't rank, with the exact figure and the reason", () => {

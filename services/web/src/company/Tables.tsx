@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 
-import { annualPerShare, ApiError, financialsView, segments as fetchSegments } from "../api";
+import { annualPerShare, ApiError, financialsView, perShare as fetchPerShare, segments as fetchSegments } from "../api";
 import { NO_DATA, NO_DATA_TITLE, NOT_APPLICABLE, NOT_MEANINGFUL } from "../blanks";
 import { download } from "../download";
 import { change, day, moneyRow, paren, pct } from "../format";
@@ -18,6 +18,7 @@ import {
   type Line,
   metricTable,
   RANGE_QUARTERS,
+  BANK_RATIOS,
   RATIOS,
   segmentTables,
   statementRequest,
@@ -30,6 +31,7 @@ import {
   type StatementRange,
   type TableCell,
   withAnnualPerShare,
+  withPerShare,
   withBridges,
   statementSection,
   figuresBehind,
@@ -53,6 +55,7 @@ const BASES: [Basis, string][] = [
   ["fiscal", "Fiscal"],
   ["calendar", "Calendar"],
 ];
+const SHARE_BASES: [string, string][] = [["adjusted", "Split-adjusted"], ["filed", "As filed"]];
 
 const RANGES: [StatementRange, string][] = [
   ["8q", "8 quarters"],
@@ -284,7 +287,8 @@ export function Statements({ token, companyId, name, ticker, notApplicable = [],
   // standard statement then, as before
   const bank = notApplicable.length > 0;
   const annual = period === "a" && kind === "is";
-  const load = useLoad(`${companyId}|${kind}|${period}|${basis}|${req.quarters}|${bank}`, async (): Promise<{ rows: FinancialRow[]; metrics: Line[]; callouts: Callout[]; annualOnly: boolean }> => {
+  const asFiled = view.shares === "filed";
+  const load = useLoad(`${companyId}|${kind}|${period}|${basis}|${req.quarters}|${bank}|${asFiled}`, async (): Promise<{ rows: FinancialRow[]; metrics: Line[]; callouts: Callout[]; annualOnly: boolean; perShare: boolean }> => {
     const once = (rows: Line[]) => financialsView(token, companyId, req.quarters, rows.map(([m]) => m), req.view, basis, false, period === "q")
       .then((f) => ({ f, metrics: rows }));
     // an API older than migration 049 refuses its metrics (422): the statement without them
@@ -301,12 +305,22 @@ export function Statements({ token, companyId, name, ticker, notApplicable = [],
             throw e;
           })
         : ask(STATEMENTS[kind].rows),
-      // a company with no annual per-share facts, or an older API, still has its statement
-      annual ? annualPerShare(token, companyId).catch(() => ({ rows: [] as FinancialRow[] })) : { rows: [] as FinancialRow[] },
+      // EPS and shares on one share basis, derived Q4 and TTM (owner decisions 1-2); an older API
+      // (null) or a failure leaves the statement's own figures, the annual table the 10-K's
+      kind === "is"
+        ? fetchPerShare(token, companyId, period === "a" ? "annual" : period === "ttm" ? "ttm" : "quarter", basis, asFiled,
+          Math.min(req.quarters, 120)).catch(() => null)
+        : null,
     ]);
-    return { rows: annual ? withAnnualPerShare(fin.f.rows, perShare.rows, basis) : fin.f.rows, metrics: fin.metrics, callouts: fin.f.callouts ?? [],
+    const older = kind === "is" && perShare === null && annual
+      ? await annualPerShare(token, companyId).then((a) => a.rows).catch(() => [] as FinancialRow[])
+      : null;
+    const rows = perShare
+      ? withPerShare(fin.f.rows, perShare.rows, period, basis)
+      : older ? withAnnualPerShare(fin.f.rows, older, basis) : fin.f.rows;
+    return { rows, metrics: fin.metrics, callouts: fin.f.callouts ?? [],
       // a 20-F/40-F filer's figures are years (migration 056); an older API doesn't say
-      annualOnly: fin.f.cadence === "annual" };
+      annualOnly: fin.f.cadence === "annual", perShare: perShare !== null };
   });
   const metrics = load?.state === "ok" ? load.data.metrics : (bank ? BANK_STATEMENTS : STATEMENTS)[kind].rows;
   const table = load?.state === "ok"
@@ -351,6 +365,12 @@ export function Statements({ token, companyId, name, ticker, notApplicable = [],
         <span className="basis-choice" title="Fiscal names each quarter by the company's own fiscal year; Calendar by the calendar quarter it ends in, so companies with different years line up. For one company the figures are the same, only the column names change.">
           <Choices label="Basis" value={basis} set={(b) => set({ basis: b })} options={BASES} />
         </span>
+        {kind === "is" && (
+          <span className="basis-choice" title="EPS and shares: split-adjusted restates every period to today's share basis, using the company's own restated figures where it filed them and the split's ratio before that; as filed is each filing's own figure.">
+            <Choices label="Per share" value={view.shares === "filed" ? "filed" : "adjusted"}
+              set={(s) => set({ shares: s === "filed" ? "filed" : undefined })} options={SHARE_BASES} />
+          </span>
+        )}
         <span className="grow" />
         <button className="btn sm" onClick={exportCsv} disabled={!table?.rows.length}>Export CSV</button>
       </div>
@@ -401,12 +421,15 @@ export function Statements({ token, companyId, name, ticker, notApplicable = [],
           {period === "a"
             ? basis === "calendar"
               ? "Annual = the calendar year: the four quarters ending nearest each calendar Q4, balances at its end. "
-              : "Annual = the fiscal year: four quarters to each fiscal Q4, balances at the year end, EPS and shares as the latest 10-K to state them, so years before a stock split may not be adjusted for it. "
+              : "Annual = the fiscal year: four quarters to each fiscal Q4, balances at the year end, EPS and shares as the 10-K states them. "
             : period === "ttm"
-              ? "TTM = trailing twelve months to each quarter end. Per-share figures don't add across quarters: n/a. "
+              ? "TTM = trailing twelve months to each quarter end; TTM EPS is the four quarters' EPS added, TTM shares their average by days. "
               : kind === "is"
-                ? "EPS and diluted shares have no fiscal Q4: a 10-K states the year, and the year less nine months isn't the quarter when the share count changes. "
+                ? "A fiscal Q4's EPS is derived: its net income over its diluted shares, worked out from the year's shares less the first three quarters'. "
                 : ""}
+          {kind === "is" && (asFiled
+            ? "EPS and shares are as each filing states them, so periods before a stock split are on the old share basis. "
+            : "EPS and shares are split-adjusted: every period on today's share basis, the company's own restated figure where it filed one, else the split's ratio (the figure as filed is in the hover). ")}
           {kind === "cf" && "Outflows (capex, dividends, buybacks) are shown negative, as the cash flow statement prints them; the CSV too. Their XBRL tags carry the amount paid, so the chart builder and screener list them as positive amounts. "}
           {kind === "cf" && "Cash at the start of a period is the end of the period before; the reconciliation checks start + change = end. "}
           {period === "q" && "A marked quarter is far from the quarters beside it, or of the other sign (listed under the table). "}
@@ -426,9 +449,23 @@ export function Ratios({ token, companyId, name, ticker, notApplicable = [] }: T
   // with readings, the API says where debt/equity and ROE read n/m on negative equity
   // (`not_meaningful_periods`, from the company's own equity periods), so those aren't gaps;
   // equity comes along so its dates are columns
-  const load = useLoad(companyId, () => financialsView(token, companyId, 8, [...RATIOS.map(([m]) => m), "stockholders_equity"], "ttm", "fiscal", true));
+  // a bank (the API's not_applicable list, 035/058) reads its own ratios; an older API refuses a bank
+  // line's name (422): the usual ratios then, as before
+  const bank = notApplicable.length > 0;
+  const load = useLoad(`${companyId}|${bank}`, async () => {
+    const ask = (lines: Line[]) => financialsView(token, companyId, 8, [...lines.map(([m]) => m), "stockholders_equity"], "ttm", "fiscal", true)
+      .then((f) => ({ ...f, lines }));
+    return bank
+      ? ask(BANK_RATIOS).catch((e) => {
+        if (e instanceof ApiError && e.status === 422) return ask(RATIOS);
+        throw e;
+      })
+      : ask(RATIOS);
+  });
+  const lines = load?.state === "ok" ? load.data.lines : bank ? BANK_RATIOS : RATIOS;
   const table = load?.state === "ok"
-    ? metricTable(load.data.rows, RATIOS, "ttm", "fiscal", notApplicable, undefined, load.data.not_meaningful_periods)
+    ? metricTable(load.data.rows, lines, "ttm", "fiscal", notApplicable, undefined, load.data.not_meaningful_periods,
+        [], load.data.not_computed ?? {})
     : null;
   return (
     <section className="card">
@@ -457,6 +494,13 @@ export function Ratios({ token, companyId, name, ticker, notApplicable = [] }: T
           return (
             <>
               <MetricTableView table={table!} first="Ratio" companyId={companyId} open={opened?.metric ?? null} onOpen={openRow} />
+              {lines === BANK_RATIOS && (
+                <p className="foot bank-note">
+                  {name} is a bank, so it reads a bank's ratios: the efficiency ratio (noninterest expense over net interest
+                  and noninterest income) and CET1 where it tags one. Net interest margin, tangible book value and return on
+                  tangible equity aren't here: no standard tag carries their inputs each quarter.
+                </p>
+              )}
               {opened && row && (
                 <ComponentsPanel token={token} companyId={companyId} metric={opened.metric} label={row.label} view="ttm"
                   columns={table!.columns.filter((_, i) => row.cells[i]?.opens)} periodEnd={opened.periodEnd}
@@ -529,9 +573,11 @@ export function Segments({ token, companyId, name }: { token: string; companyId:
                     </thead>
                     <tbody>
                       {t.rows.map((r) => (
-                        <tr key={r.member} className={r.until ? "retired" : r.reconciling ? "reconciling" : undefined}>
+                        <tr key={r.member} className={[r.until ? "retired" : r.reconciling ? "reconciling" : "", r.parent ? "child" : "", r.otherCut ? "other-cut" : ""].filter(Boolean).join(" ") || undefined}>
                           <td className="first" title={r.until ? `${r.member}: last reported for ${r.until}`
                             : r.reconciling ? "What the company reports outside its segments (corporate costs, items it doesn't allocate), shown for the quarters where it and the segments come to the reported total"
+                            : r.parent ? `Part of ${t.rows.find((x) => x.member === r.parent)?.label ?? r.parent}: already in its figure, so never added to it`
+                            : r.otherCut ? "Another breakdown of the same revenue: it overlaps the lines above, so it isn't added to them"
                             : r.member}>
                             {r.label}
                             {r.until && <span className="until">until {r.until}</span>}

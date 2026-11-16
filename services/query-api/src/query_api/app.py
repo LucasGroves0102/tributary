@@ -15,6 +15,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from prometheus_client import Counter
 from pydantic import BaseModel, Field
 
+from query_api import per_share
 from query_api.alerts import AppAlerts, add_alert_routes
 from query_api.api_keys import ApiKeys, KeyAuth, Limits, add_api_key_routes, is_api_key, key_info
 from query_api.auth import Unauthenticated, mint, verify_claims
@@ -403,8 +404,9 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
             = "json",
         readings: Annotated[bool, Query(
             description="add `not_meaningful` (why a ratio reads n/m, migration 035) to each row, "
-                        "and `not_meaningful_periods` for periods a ratio has no row because of "
-                        "the company's equity")]
+                        "`not_meaningful_periods` for periods a ratio has no row because of "
+                        "the company's equity, and `not_computed` (metric: why Tributary computes "
+                        "none for this kind of company, migration 069)")]
             = False,
         callouts: Annotated[bool, Query(
             description="view=quarter: add `callouts`, quarters far outside their series or "
@@ -445,6 +447,8 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
                 {"metric": m, "period_end": end, "reason": reason}
                 for (m, end), reason in sorted(by_equity.items(),
                                                key=lambda x: (x[0][0], -x[0][1].toordinal()))]
+            # why a figure is blank for this kind of company (069: Walmart's gross margin)
+            meta["not_computed"] = store.not_computed(user_id, company_id, metrics or every)
         if callouts and view == "quarter" and fmt == "json":
             # every quarter of the series, not just the window: a quarter's neighbours can be
             # outside it (F5; only for the web's statements, so the agent's JSON is unchanged)
@@ -479,14 +483,48 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
             } for r in rows
         ]}
 
+    @app.get("/v1/companies/{company_id}/per-share", response_model=dict)
+    def per_share_figures(
+        user_id: User, company_id: CompanyId,
+        view: Annotated[Literal["quarter", "ttm", "annual"], Query(
+            description="quarter, trailing twelve months to each quarter end, or fiscal year")]
+            = "quarter",
+        basis: Annotated[Literal["fiscal", "calendar"], Query(
+            description="fiscal: every fiscal quarter; calendar: one per calendar quarter")]
+            = "fiscal",
+        shares: Annotated[Literal["adjusted", "as_filed"], Query(
+            description="adjusted: every period on today's share basis (stock splits applied); "
+                        "as_filed: as each filing states it")] = "adjusted",
+        quarters: Annotated[int, Query(ge=1, le=MAX_FINANCIAL_QUARTERS)] = 40,
+    ) -> dict:
+        """EPS and weighted shares on one share basis by quarter, year or TTM, with the fiscal Q4
+        and TTM figures derived (per_share.py's docstring is the spec). Gold and /financials keep
+        every figure as filed."""
+        require(user_id, "financials", company_id)
+        out = per_share.compute(store.per_share_inputs(user_id, company_id), view, shares)
+        kept: dict[str, int] = {}
+        rows = []
+        for r in out["rows"]:  # newest first per metric
+            if view != "annual" and basis == "calendar" and not r.pop("calendar_primary", True):
+                continue
+            r.pop("calendar_primary", None)
+            if kept.get(r["metric"], 0) >= quarters:
+                continue
+            kept[r["metric"]] = kept.get(r["metric"], 0) + 1
+            c = r["citation"]
+            c["filing_url"] = filing_url(c.pop("filer_cik", None), c["accession_no"])
+            rows.append(r)
+        return {"company_id": company_id, "view": view, "basis": basis, "shares": shares,
+                "as_of": _now(), "splits": out["splits"], "rows": rows}
+
     @app.get("/v1/companies/{company_id}/annual-per-share", response_model=dict)
     def annual_per_share(
         user_id: User, company_id: CompanyId,
         years: Annotated[int, Query(ge=1, le=30)] = 10,
     ) -> dict:
-        """EPS and weighted shares for each fiscal year, as the 10-K states them. Quarterly and TTM
-        figures come from /financials; these exist only here, because per-share amounts don't add
-        across quarters (the share count changes), so gold derives neither a TTM nor a fiscal Q4."""
+        """EPS and weighted shares for each fiscal year, as the 10-K states them (gold keeps
+        per-share figures as filed). The split-adjusted history, the derived fiscal Q4 and TTM are
+        /per-share's (per_share.py)."""
         require(user_id, "financials", company_id)
         rows = store.annual_per_share(user_id, company_id, years)
         return {"company_id": company_id, "as_of": _now(), "rows": [

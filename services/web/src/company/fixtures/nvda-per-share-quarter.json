@@ -1,0 +1,1669 @@
+{
+ "company_id": "0001045810",
+ "view": "quarter",
+ "basis": "fiscal",
+ "shares": "adjusted",
+ "as_of": "2026-11-15T00:00:00Z",
+ "splits": [
+  {
+   "label": "4-for-1",
+   "reverse": false,
+   "first_filed": "2021-08-20",
+   "first_accession": "0001045810-21-000131",
+   "ratio": 4.0
+  },
+  {
+   "label": "10-for-1",
+   "reverse": false,
+   "first_filed": "2024-08-28",
+   "first_accession": "0001045810-24-000264",
+   "ratio": 10.0
+  }
+ ],
+ "rows": [
+  {
+   "metric": "weighted_shares_diluted",
+   "period_start": "2026-04-27",
+   "period_end": "2026-07-26",
+   "fiscal_period": "FY2027 Q2",
+   "calendar_period": "CY2026 Q2",
+   "value": "24285000000",
+   "unit": "shares",
+   "value_source": "reported",
+   "as_filed": "24285000000",
+   "splits": [],
+   "citation": {
+    "accession_no": "0001045810-26-000075",
+    "form": "10-Q",
+    "filed": "2026-08-26",
+    "xbrl_tag": "us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding",
+    "source_accessions": [
+     "0001045810-26-000075"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000075/"
+   },
+   "freshness": {
+    "filed": "2026-08-26",
+    "ingested_at": null
+   }
+  },
+  {
+   "metric": "weighted_shares_diluted",
+   "period_start": "2026-01-26",
+   "period_end": "2026-04-26",
+   "fiscal_period": "FY2027 Q1",
+   "calendar_period": "CY2026 Q1",
+   "value": "24391000000",
+   "unit": "shares",
+   "value_source": "reported",
+   "as_filed": "24391000000",
+   "splits": [],
+   "citation": {
+    "accession_no": "0001045810-26-000052",
+    "form": "10-Q",
+    "filed": "2026-05-20",
+    "xbrl_tag": "us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding",
+    "source_accessions": [
+     "0001045810-26-000052"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000052/"
+   },
+   "freshness": {
+    "filed": "2026-05-20",
+    "ingested_at": null
+   }
+  },
+  {
+   "period_start": "2025-10-27",
+   "period_end": "2026-01-25",
+   "fiscal_period": "FY2026 Q4",
+   "calendar_period": "CY2025 Q4",
+   "citation": {
+    "accession_no": "0001045810-26-000021",
+    "form": "10-K",
+    "filed": "2026-02-25",
+    "xbrl_tag": null,
+    "source_accessions": [
+     "0001045810-26-000021"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
+   },
+   "freshness": {
+    "filed": "2026-02-25",
+    "ingested_at": null
+   },
+   "metric": "weighted_shares_diluted",
+   "value": "24430000000",
+   "unit": "shares",
+   "value_source": "derived",
+   "as_filed": null,
+   "splits": [],
+   "derivation": {
+    "method": "q4_shares",
+    "inputs": [
+     {
+      "role": "year",
+      "metric": "weighted_shares_diluted",
+      "period_end": "2026-01-25",
+      "value": "24514000000",
+      "accession_no": "0001045810-26-000021",
+      "form": "10-K"
+     },
+     {
+      "role": "Q1",
+      "metric": "weighted_shares_diluted",
+      "period_end": "2025-04-27",
+      "value": "24611000000",
+      "accession_no": "0001045810-26-000052",
+      "form": "10-Q"
+     },
+     {
+      "role": "Q2",
+      "metric": "weighted_shares_diluted",
+      "period_end": "2025-07-27",
+      "value": "24532000000",
+      "accession_no": "0001045810-26-000075",
+      "form": "10-Q"
+     },
+     {
+      "role": "Q3",
+      "metric": "weighted_shares_diluted",
+      "period_end": "2025-10-26",
+      "value": "24483000000",
+      "accession_no": "0001045810-25-000230",
+      "form": "10-Q"
+     }
+    ]
+   }
+  },
+  {
+   "metric": "weighted_shares_diluted",
+   "period_start": "2025-07-28",
+   "period_end": "2025-10-26",
+   "fiscal_period": "FY2026 Q3",
+   "calendar_period": "CY2025 Q3",
+   "value": "24483000000",
+   "unit": "shares",
+   "value_source": "reported",
+   "as_filed": "24483000000",
+   "splits": [],
+   "citation": {
+    "accession_no": "0001045810-25-000230",
+    "form": "10-Q",
+    "filed": "2025-11-19",
+    "xbrl_tag": "us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding",
+    "source_accessions": [
+     "0001045810-25-000230"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581025000230/"
+   },
+   "freshness": {
+    "filed": "2025-11-19",
+    "ingested_at": null
+   }
+  },
+  {
+   "metric": "weighted_shares_diluted",
+   "period_start": "2025-04-28",
+   "period_end": "2025-07-27",
+   "fiscal_period": "FY2026 Q2",
+   "calendar_period": "CY2025 Q2",
+   "value": "24532000000",
+   "unit": "shares",
+   "value_source": "reported",
+   "as_filed": "24532000000",
+   "splits": [],
+   "citation": {
+    "accession_no": "0001045810-26-000075",
+    "form": "10-Q",
+    "filed": "2026-08-26",
+    "xbrl_tag": "us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding",
+    "source_accessions": [
+     "0001045810-26-000075"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000075/"
+   },
+   "freshness": {
+    "filed": "2026-08-26",
+    "ingested_at": null
+   }
+  },
+  {
+   "metric": "weighted_shares_diluted",
+   "period_start": "2025-01-27",
+   "period_end": "2025-04-27",
+   "fiscal_period": "FY2026 Q1",
+   "calendar_period": "CY2025 Q1",
+   "value": "24611000000",
+   "unit": "shares",
+   "value_source": "reported",
+   "as_filed": "24611000000",
+   "splits": [],
+   "citation": {
+    "accession_no": "0001045810-26-000052",
+    "form": "10-Q",
+    "filed": "2026-05-20",
+    "xbrl_tag": "us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding",
+    "source_accessions": [
+     "0001045810-26-000052"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000052/"
+   },
+   "freshness": {
+    "filed": "2026-05-20",
+    "ingested_at": null
+   }
+  },
+  {
+   "period_start": "2024-10-28",
+   "period_end": "2025-01-26",
+   "fiscal_period": "FY2025 Q4",
+   "calendar_period": "CY2024 Q4",
+   "citation": {
+    "accession_no": "0001045810-26-000021",
+    "form": "10-K",
+    "filed": "2026-02-25",
+    "xbrl_tag": null,
+    "source_accessions": [
+     "0001045810-26-000021"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
+   },
+   "freshness": {
+    "filed": "2026-02-25",
+    "ingested_at": null
+   },
+   "metric": "weighted_shares_diluted",
+   "value": "24704000000",
+   "unit": "shares",
+   "value_source": "derived",
+   "as_filed": null,
+   "splits": [],
+   "derivation": {
+    "method": "q4_shares",
+    "inputs": [
+     {
+      "role": "year",
+      "metric": "weighted_shares_diluted",
+      "period_end": "2025-01-26",
+      "value": "24804000000",
+      "accession_no": "0001045810-26-000021",
+      "form": "10-K"
+     },
+     {
+      "role": "Q1",
+      "metric": "weighted_shares_diluted",
+      "period_end": "2024-04-28",
+      "value": "24890000000",
+      "accession_no": "0001045810-25-000116",
+      "form": "10-Q"
+     },
+     {
+      "role": "Q2",
+      "metric": "weighted_shares_diluted",
+      "period_end": "2024-07-28",
+      "value": "24848000000",
+      "accession_no": "0001045810-25-000209",
+      "form": "10-Q"
+     },
+     {
+      "role": "Q3",
+      "metric": "weighted_shares_diluted",
+      "period_end": "2024-10-27",
+      "value": "24774000000",
+      "accession_no": "0001045810-25-000230",
+      "form": "10-Q"
+     }
+    ]
+   }
+  },
+  {
+   "metric": "weighted_shares_diluted",
+   "period_start": "2024-07-29",
+   "period_end": "2024-10-27",
+   "fiscal_period": "FY2025 Q3",
+   "calendar_period": "CY2024 Q3",
+   "value": "24774000000",
+   "unit": "shares",
+   "value_source": "reported",
+   "as_filed": "24774000000",
+   "splits": [],
+   "citation": {
+    "accession_no": "0001045810-25-000230",
+    "form": "10-Q",
+    "filed": "2025-11-19",
+    "xbrl_tag": "us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding",
+    "source_accessions": [
+     "0001045810-25-000230"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581025000230/"
+   },
+   "freshness": {
+    "filed": "2025-11-19",
+    "ingested_at": null
+   }
+  },
+  {
+   "metric": "weighted_shares_diluted",
+   "period_start": "2024-04-29",
+   "period_end": "2024-07-28",
+   "fiscal_period": "FY2025 Q2",
+   "calendar_period": "CY2024 Q2",
+   "value": "24848000000",
+   "unit": "shares",
+   "value_source": "reported",
+   "as_filed": "24848000000",
+   "splits": [],
+   "citation": {
+    "accession_no": "0001045810-25-000209",
+    "form": "10-Q",
+    "filed": "2025-08-27",
+    "xbrl_tag": "us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding",
+    "source_accessions": [
+     "0001045810-25-000209"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581025000209/"
+   },
+   "freshness": {
+    "filed": "2025-08-27",
+    "ingested_at": null
+   }
+  },
+  {
+   "metric": "weighted_shares_diluted",
+   "period_start": "2024-01-29",
+   "period_end": "2024-04-28",
+   "fiscal_period": "FY2025 Q1",
+   "calendar_period": "CY2024 Q1",
+   "value": "24890000000",
+   "unit": "shares",
+   "value_source": "reported",
+   "as_filed": "24890000000",
+   "splits": [],
+   "citation": {
+    "accession_no": "0001045810-25-000116",
+    "form": "10-Q",
+    "filed": "2025-05-28",
+    "xbrl_tag": "us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding",
+    "source_accessions": [
+     "0001045810-25-000116"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581025000116/"
+   },
+   "freshness": {
+    "filed": "2025-05-28",
+    "ingested_at": null
+   }
+  },
+  {
+   "period_start": "2023-10-30",
+   "period_end": "2024-01-28",
+   "fiscal_period": "FY2024 Q4",
+   "calendar_period": "CY2023 Q4",
+   "citation": {
+    "accession_no": "0001045810-26-000021",
+    "form": "10-K",
+    "filed": "2026-02-25",
+    "xbrl_tag": null,
+    "source_accessions": [
+     "0001045810-26-000021"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
+   },
+   "freshness": {
+    "filed": "2026-02-25",
+    "ingested_at": null
+   },
+   "metric": "weighted_shares_diluted",
+   "value": "24926000000",
+   "unit": "shares",
+   "value_source": "derived",
+   "as_filed": null,
+   "splits": [],
+   "derivation": {
+    "method": "q4_shares",
+    "inputs": [
+     {
+      "role": "year",
+      "metric": "weighted_shares_diluted",
+      "period_end": "2024-01-28",
+      "value": "24940000000",
+      "accession_no": "0001045810-26-000021",
+      "form": "10-K"
+     },
+     {
+      "role": "Q1",
+      "metric": "weighted_shares_diluted",
+      "period_end": "2023-04-30",
+      "value": "24900000000",
+      "accession_no": "0001045810-24-000124",
+      "form": "10-Q"
+     },
+     {
+      "role": "Q2",
+      "metric": "weighted_shares_diluted",
+      "period_end": "2023-07-30",
+      "value": "24994000000",
+      "accession_no": "0001045810-24-000264",
+      "form": "10-Q"
+     },
+     {
+      "role": "Q3",
+      "metric": "weighted_shares_diluted",
+      "period_end": "2023-10-29",
+      "value": "24940000000",
+      "accession_no": "0001045810-24-000316",
+      "form": "10-Q"
+     }
+    ]
+   }
+  },
+  {
+   "metric": "weighted_shares_diluted",
+   "period_start": "2023-07-31",
+   "period_end": "2023-10-29",
+   "fiscal_period": "FY2024 Q3",
+   "calendar_period": "CY2023 Q3",
+   "value": "24940000000",
+   "unit": "shares",
+   "value_source": "reported",
+   "as_filed": "24940000000",
+   "splits": [],
+   "citation": {
+    "accession_no": "0001045810-24-000316",
+    "form": "10-Q",
+    "filed": "2024-11-20",
+    "xbrl_tag": "us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding",
+    "source_accessions": [
+     "0001045810-24-000316"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581024000316/"
+   },
+   "freshness": {
+    "filed": "2024-11-20",
+    "ingested_at": null
+   }
+  },
+  {
+   "metric": "weighted_shares_basic",
+   "period_start": "2026-04-27",
+   "period_end": "2026-07-26",
+   "fiscal_period": "FY2027 Q2",
+   "calendar_period": "CY2026 Q2",
+   "value": "24190000000",
+   "unit": "shares",
+   "value_source": "reported",
+   "as_filed": "24190000000",
+   "splits": [],
+   "citation": {
+    "accession_no": "0001045810-26-000075",
+    "form": "10-Q",
+    "filed": "2026-08-26",
+    "xbrl_tag": "us-gaap:WeightedAverageNumberOfSharesOutstandingBasic",
+    "source_accessions": [
+     "0001045810-26-000075"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000075/"
+   },
+   "freshness": {
+    "filed": "2026-08-26",
+    "ingested_at": null
+   }
+  },
+  {
+   "metric": "weighted_shares_basic",
+   "period_start": "2026-01-26",
+   "period_end": "2026-04-26",
+   "fiscal_period": "FY2027 Q1",
+   "calendar_period": "CY2026 Q1",
+   "value": "24286000000",
+   "unit": "shares",
+   "value_source": "reported",
+   "as_filed": "24286000000",
+   "splits": [],
+   "citation": {
+    "accession_no": "0001045810-26-000052",
+    "form": "10-Q",
+    "filed": "2026-05-20",
+    "xbrl_tag": "us-gaap:WeightedAverageNumberOfSharesOutstandingBasic",
+    "source_accessions": [
+     "0001045810-26-000052"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000052/"
+   },
+   "freshness": {
+    "filed": "2026-05-20",
+    "ingested_at": null
+   }
+  },
+  {
+   "period_start": "2025-10-27",
+   "period_end": "2026-01-25",
+   "fiscal_period": "FY2026 Q4",
+   "calendar_period": "CY2025 Q4",
+   "citation": {
+    "accession_no": "0001045810-26-000021",
+    "form": "10-K",
+    "filed": "2026-02-25",
+    "xbrl_tag": null,
+    "source_accessions": [
+     "0001045810-26-000021"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
+   },
+   "freshness": {
+    "filed": "2026-02-25",
+    "ingested_at": null
+   },
+   "metric": "weighted_shares_basic",
+   "value": "24302000000",
+   "unit": "shares",
+   "value_source": "derived",
+   "as_filed": null,
+   "splits": [],
+   "derivation": {
+    "method": "q4_shares",
+    "inputs": [
+     {
+      "role": "year",
+      "metric": "weighted_shares_basic",
+      "period_end": "2026-01-25",
+      "value": "24359000000",
+      "accession_no": "0001045810-26-000021",
+      "form": "10-K"
+     },
+     {
+      "role": "Q1",
+      "metric": "weighted_shares_basic",
+      "period_end": "2025-04-27",
+      "value": "24441000000",
+      "accession_no": "0001045810-26-000052",
+      "form": "10-Q"
+     },
+     {
+      "role": "Q2",
+      "metric": "weighted_shares_basic",
+      "period_end": "2025-07-27",
+      "value": "24366000000",
+      "accession_no": "0001045810-26-000075",
+      "form": "10-Q"
+     },
+     {
+      "role": "Q3",
+      "metric": "weighted_shares_basic",
+      "period_end": "2025-10-26",
+      "value": "24327000000",
+      "accession_no": "0001045810-25-000230",
+      "form": "10-Q"
+     }
+    ]
+   }
+  },
+  {
+   "metric": "weighted_shares_basic",
+   "period_start": "2025-07-28",
+   "period_end": "2025-10-26",
+   "fiscal_period": "FY2026 Q3",
+   "calendar_period": "CY2025 Q3",
+   "value": "24327000000",
+   "unit": "shares",
+   "value_source": "reported",
+   "as_filed": "24327000000",
+   "splits": [],
+   "citation": {
+    "accession_no": "0001045810-25-000230",
+    "form": "10-Q",
+    "filed": "2025-11-19",
+    "xbrl_tag": "us-gaap:WeightedAverageNumberOfSharesOutstandingBasic",
+    "source_accessions": [
+     "0001045810-25-000230"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581025000230/"
+   },
+   "freshness": {
+    "filed": "2025-11-19",
+    "ingested_at": null
+   }
+  },
+  {
+   "metric": "weighted_shares_basic",
+   "period_start": "2025-04-28",
+   "period_end": "2025-07-27",
+   "fiscal_period": "FY2026 Q2",
+   "calendar_period": "CY2025 Q2",
+   "value": "24366000000",
+   "unit": "shares",
+   "value_source": "reported",
+   "as_filed": "24366000000",
+   "splits": [],
+   "citation": {
+    "accession_no": "0001045810-26-000075",
+    "form": "10-Q",
+    "filed": "2026-08-26",
+    "xbrl_tag": "us-gaap:WeightedAverageNumberOfSharesOutstandingBasic",
+    "source_accessions": [
+     "0001045810-26-000075"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000075/"
+   },
+   "freshness": {
+    "filed": "2026-08-26",
+    "ingested_at": null
+   }
+  },
+  {
+   "metric": "weighted_shares_basic",
+   "period_start": "2025-01-27",
+   "period_end": "2025-04-27",
+   "fiscal_period": "FY2026 Q1",
+   "calendar_period": "CY2025 Q1",
+   "value": "24441000000",
+   "unit": "shares",
+   "value_source": "reported",
+   "as_filed": "24441000000",
+   "splits": [],
+   "citation": {
+    "accession_no": "0001045810-26-000052",
+    "form": "10-Q",
+    "filed": "2026-05-20",
+    "xbrl_tag": "us-gaap:WeightedAverageNumberOfSharesOutstandingBasic",
+    "source_accessions": [
+     "0001045810-26-000052"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000052/"
+   },
+   "freshness": {
+    "filed": "2026-05-20",
+    "ingested_at": null
+   }
+  },
+  {
+   "period_start": "2024-10-28",
+   "period_end": "2025-01-26",
+   "fiscal_period": "FY2025 Q4",
+   "calendar_period": "CY2024 Q4",
+   "citation": {
+    "accession_no": "0001045810-26-000021",
+    "form": "10-K",
+    "filed": "2026-02-25",
+    "xbrl_tag": null,
+    "source_accessions": [
+     "0001045810-26-000021"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
+   },
+   "freshness": {
+    "filed": "2026-02-25",
+    "ingested_at": null
+   },
+   "metric": "weighted_shares_basic",
+   "value": "24489000000",
+   "unit": "shares",
+   "value_source": "derived",
+   "as_filed": null,
+   "splits": [],
+   "derivation": {
+    "method": "q4_shares",
+    "inputs": [
+     {
+      "role": "year",
+      "metric": "weighted_shares_basic",
+      "period_end": "2025-01-26",
+      "value": "24555000000",
+      "accession_no": "0001045810-26-000021",
+      "form": "10-K"
+     },
+     {
+      "role": "Q1",
+      "metric": "weighted_shares_basic",
+      "period_end": "2024-04-28",
+      "value": "24620000000",
+      "accession_no": "0001045810-25-000116",
+      "form": "10-Q"
+     },
+     {
+      "role": "Q2",
+      "metric": "weighted_shares_basic",
+      "period_end": "2024-07-28",
+      "value": "24578000000",
+      "accession_no": "0001045810-25-000209",
+      "form": "10-Q"
+     },
+     {
+      "role": "Q3",
+      "metric": "weighted_shares_basic",
+      "period_end": "2024-10-27",
+      "value": "24533000000",
+      "accession_no": "0001045810-25-000230",
+      "form": "10-Q"
+     }
+    ]
+   }
+  },
+  {
+   "metric": "weighted_shares_basic",
+   "period_start": "2024-07-29",
+   "period_end": "2024-10-27",
+   "fiscal_period": "FY2025 Q3",
+   "calendar_period": "CY2024 Q3",
+   "value": "24533000000",
+   "unit": "shares",
+   "value_source": "reported",
+   "as_filed": "24533000000",
+   "splits": [],
+   "citation": {
+    "accession_no": "0001045810-25-000230",
+    "form": "10-Q",
+    "filed": "2025-11-19",
+    "xbrl_tag": "us-gaap:WeightedAverageNumberOfSharesOutstandingBasic",
+    "source_accessions": [
+     "0001045810-25-000230"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581025000230/"
+   },
+   "freshness": {
+    "filed": "2025-11-19",
+    "ingested_at": null
+   }
+  },
+  {
+   "metric": "weighted_shares_basic",
+   "period_start": "2024-04-29",
+   "period_end": "2024-07-28",
+   "fiscal_period": "FY2025 Q2",
+   "calendar_period": "CY2024 Q2",
+   "value": "24578000000",
+   "unit": "shares",
+   "value_source": "reported",
+   "as_filed": "24578000000",
+   "splits": [],
+   "citation": {
+    "accession_no": "0001045810-25-000209",
+    "form": "10-Q",
+    "filed": "2025-08-27",
+    "xbrl_tag": "us-gaap:WeightedAverageNumberOfSharesOutstandingBasic",
+    "source_accessions": [
+     "0001045810-25-000209"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581025000209/"
+   },
+   "freshness": {
+    "filed": "2025-08-27",
+    "ingested_at": null
+   }
+  },
+  {
+   "metric": "weighted_shares_basic",
+   "period_start": "2024-01-29",
+   "period_end": "2024-04-28",
+   "fiscal_period": "FY2025 Q1",
+   "calendar_period": "CY2024 Q1",
+   "value": "24620000000",
+   "unit": "shares",
+   "value_source": "reported",
+   "as_filed": "24620000000",
+   "splits": [],
+   "citation": {
+    "accession_no": "0001045810-25-000116",
+    "form": "10-Q",
+    "filed": "2025-05-28",
+    "xbrl_tag": "us-gaap:WeightedAverageNumberOfSharesOutstandingBasic",
+    "source_accessions": [
+     "0001045810-25-000116"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581025000116/"
+   },
+   "freshness": {
+    "filed": "2025-05-28",
+    "ingested_at": null
+   }
+  },
+  {
+   "period_start": "2023-10-30",
+   "period_end": "2024-01-28",
+   "fiscal_period": "FY2024 Q4",
+   "calendar_period": "CY2023 Q4",
+   "citation": {
+    "accession_no": "0001045810-26-000021",
+    "form": "10-K",
+    "filed": "2026-02-25",
+    "xbrl_tag": null,
+    "source_accessions": [
+     "0001045810-26-000021"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
+   },
+   "freshness": {
+    "filed": "2026-02-25",
+    "ingested_at": null
+   },
+   "metric": "weighted_shares_basic",
+   "value": "24651000000",
+   "unit": "shares",
+   "value_source": "derived",
+   "as_filed": null,
+   "splits": [],
+   "derivation": {
+    "method": "q4_shares",
+    "inputs": [
+     {
+      "role": "year",
+      "metric": "weighted_shares_basic",
+      "period_end": "2024-01-28",
+      "value": "24690000000",
+      "accession_no": "0001045810-26-000021",
+      "form": "10-K"
+     },
+     {
+      "role": "Q1",
+      "metric": "weighted_shares_basic",
+      "period_end": "2023-04-30",
+      "value": "24700000000",
+      "accession_no": "0001045810-24-000124",
+      "form": "10-Q"
+     },
+     {
+      "role": "Q2",
+      "metric": "weighted_shares_basic",
+      "period_end": "2023-07-30",
+      "value": "24729000000",
+      "accession_no": "0001045810-24-000264",
+      "form": "10-Q"
+     },
+     {
+      "role": "Q3",
+      "metric": "weighted_shares_basic",
+      "period_end": "2023-10-29",
+      "value": "24680000000",
+      "accession_no": "0001045810-24-000316",
+      "form": "10-Q"
+     }
+    ]
+   }
+  },
+  {
+   "metric": "weighted_shares_basic",
+   "period_start": "2023-07-31",
+   "period_end": "2023-10-29",
+   "fiscal_period": "FY2024 Q3",
+   "calendar_period": "CY2023 Q3",
+   "value": "24680000000",
+   "unit": "shares",
+   "value_source": "reported",
+   "as_filed": "24680000000",
+   "splits": [],
+   "citation": {
+    "accession_no": "0001045810-24-000316",
+    "form": "10-Q",
+    "filed": "2024-11-20",
+    "xbrl_tag": "us-gaap:WeightedAverageNumberOfSharesOutstandingBasic",
+    "source_accessions": [
+     "0001045810-24-000316"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581024000316/"
+   },
+   "freshness": {
+    "filed": "2024-11-20",
+    "ingested_at": null
+   }
+  },
+  {
+   "metric": "eps_diluted",
+   "period_start": "2026-04-27",
+   "period_end": "2026-07-26",
+   "fiscal_period": "FY2027 Q2",
+   "calendar_period": "CY2026 Q2",
+   "value": "2.46",
+   "unit": "USD/shares",
+   "value_source": "reported",
+   "as_filed": "2.46",
+   "splits": [],
+   "citation": {
+    "accession_no": "0001045810-26-000075",
+    "form": "10-Q",
+    "filed": "2026-08-26",
+    "xbrl_tag": "us-gaap:EarningsPerShareDiluted",
+    "source_accessions": [
+     "0001045810-26-000075"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000075/"
+   },
+   "freshness": {
+    "filed": "2026-08-26",
+    "ingested_at": null
+   }
+  },
+  {
+   "metric": "eps_diluted",
+   "period_start": "2026-01-26",
+   "period_end": "2026-04-26",
+   "fiscal_period": "FY2027 Q1",
+   "calendar_period": "CY2026 Q1",
+   "value": "2.39",
+   "unit": "USD/shares",
+   "value_source": "reported",
+   "as_filed": "2.39",
+   "splits": [],
+   "citation": {
+    "accession_no": "0001045810-26-000052",
+    "form": "10-Q",
+    "filed": "2026-05-20",
+    "xbrl_tag": "us-gaap:EarningsPerShareDiluted",
+    "source_accessions": [
+     "0001045810-26-000052"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000052/"
+   },
+   "freshness": {
+    "filed": "2026-05-20",
+    "ingested_at": null
+   }
+  },
+  {
+   "period_start": "2025-10-27",
+   "period_end": "2026-01-25",
+   "fiscal_period": "FY2026 Q4",
+   "calendar_period": "CY2025 Q4",
+   "citation": {
+    "accession_no": "0001045810-26-000021",
+    "form": "10-K",
+    "filed": "2026-02-25",
+    "xbrl_tag": null,
+    "source_accessions": [
+     "0001045810-26-000021"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
+   },
+   "freshness": {
+    "filed": "2026-02-25",
+    "ingested_at": null
+   },
+   "metric": "eps_diluted",
+   "value": "1.7585",
+   "unit": "USD/shares",
+   "value_source": "derived",
+   "as_filed": null,
+   "splits": [],
+   "derivation": {
+    "method": "q4_eps",
+    "inputs": [
+     {
+      "role": "Q4 net income",
+      "metric": "net_income",
+      "period_end": "2026-01-25",
+      "value": "42960000000",
+      "accession_no": "0001045810-26-000021",
+      "form": "10-K"
+     },
+     {
+      "role": "Q4 shares",
+      "metric": "weighted_shares_diluted",
+      "period_end": "2026-01-25",
+      "value": "24430000000",
+      "accession_no": null,
+      "form": null
+     },
+     {
+      "role": "year",
+      "metric": "eps_diluted",
+      "period_end": "2026-01-25",
+      "value": "4.9",
+      "accession_no": "0001045810-26-000021",
+      "form": "10-K"
+     }
+    ]
+   }
+  },
+  {
+   "metric": "eps_diluted",
+   "period_start": "2025-07-28",
+   "period_end": "2025-10-26",
+   "fiscal_period": "FY2026 Q3",
+   "calendar_period": "CY2025 Q3",
+   "value": "1.3",
+   "unit": "USD/shares",
+   "value_source": "reported",
+   "as_filed": "1.3",
+   "splits": [],
+   "citation": {
+    "accession_no": "0001045810-25-000230",
+    "form": "10-Q",
+    "filed": "2025-11-19",
+    "xbrl_tag": "us-gaap:EarningsPerShareDiluted",
+    "source_accessions": [
+     "0001045810-25-000230"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581025000230/"
+   },
+   "freshness": {
+    "filed": "2025-11-19",
+    "ingested_at": null
+   }
+  },
+  {
+   "metric": "eps_diluted",
+   "period_start": "2025-04-28",
+   "period_end": "2025-07-27",
+   "fiscal_period": "FY2026 Q2",
+   "calendar_period": "CY2025 Q2",
+   "value": "1.08",
+   "unit": "USD/shares",
+   "value_source": "reported",
+   "as_filed": "1.08",
+   "splits": [],
+   "citation": {
+    "accession_no": "0001045810-26-000075",
+    "form": "10-Q",
+    "filed": "2026-08-26",
+    "xbrl_tag": "us-gaap:EarningsPerShareDiluted",
+    "source_accessions": [
+     "0001045810-26-000075"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000075/"
+   },
+   "freshness": {
+    "filed": "2026-08-26",
+    "ingested_at": null
+   }
+  },
+  {
+   "metric": "eps_diluted",
+   "period_start": "2025-01-27",
+   "period_end": "2025-04-27",
+   "fiscal_period": "FY2026 Q1",
+   "calendar_period": "CY2025 Q1",
+   "value": "0.76",
+   "unit": "USD/shares",
+   "value_source": "reported",
+   "as_filed": "0.76",
+   "splits": [],
+   "citation": {
+    "accession_no": "0001045810-26-000052",
+    "form": "10-Q",
+    "filed": "2026-05-20",
+    "xbrl_tag": "us-gaap:EarningsPerShareDiluted",
+    "source_accessions": [
+     "0001045810-26-000052"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000052/"
+   },
+   "freshness": {
+    "filed": "2026-05-20",
+    "ingested_at": null
+   }
+  },
+  {
+   "period_start": "2024-10-28",
+   "period_end": "2025-01-26",
+   "fiscal_period": "FY2025 Q4",
+   "calendar_period": "CY2024 Q4",
+   "citation": {
+    "accession_no": "0001045810-26-000021",
+    "form": "10-K",
+    "filed": "2026-02-25",
+    "xbrl_tag": null,
+    "source_accessions": [
+     "0001045810-26-000021"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
+   },
+   "freshness": {
+    "filed": "2026-02-25",
+    "ingested_at": null
+   },
+   "metric": "eps_diluted",
+   "value": "0.8942",
+   "unit": "USD/shares",
+   "value_source": "derived",
+   "as_filed": null,
+   "splits": [],
+   "derivation": {
+    "method": "q4_eps",
+    "inputs": [
+     {
+      "role": "Q4 net income",
+      "metric": "net_income",
+      "period_end": "2025-01-26",
+      "value": "22091000000",
+      "accession_no": "0001045810-26-000021",
+      "form": "10-K"
+     },
+     {
+      "role": "Q4 shares",
+      "metric": "weighted_shares_diluted",
+      "period_end": "2025-01-26",
+      "value": "24704000000",
+      "accession_no": null,
+      "form": null
+     },
+     {
+      "role": "year",
+      "metric": "eps_diluted",
+      "period_end": "2025-01-26",
+      "value": "2.94",
+      "accession_no": "0001045810-26-000021",
+      "form": "10-K"
+     }
+    ]
+   }
+  },
+  {
+   "metric": "eps_diluted",
+   "period_start": "2024-07-29",
+   "period_end": "2024-10-27",
+   "fiscal_period": "FY2025 Q3",
+   "calendar_period": "CY2024 Q3",
+   "value": "0.78",
+   "unit": "USD/shares",
+   "value_source": "reported",
+   "as_filed": "0.78",
+   "splits": [],
+   "citation": {
+    "accession_no": "0001045810-25-000230",
+    "form": "10-Q",
+    "filed": "2025-11-19",
+    "xbrl_tag": "us-gaap:EarningsPerShareDiluted",
+    "source_accessions": [
+     "0001045810-25-000230"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581025000230/"
+   },
+   "freshness": {
+    "filed": "2025-11-19",
+    "ingested_at": null
+   }
+  },
+  {
+   "metric": "eps_diluted",
+   "period_start": "2024-04-29",
+   "period_end": "2024-07-28",
+   "fiscal_period": "FY2025 Q2",
+   "calendar_period": "CY2024 Q2",
+   "value": "0.67",
+   "unit": "USD/shares",
+   "value_source": "reported",
+   "as_filed": "0.67",
+   "splits": [],
+   "citation": {
+    "accession_no": "0001045810-25-000209",
+    "form": "10-Q",
+    "filed": "2025-08-27",
+    "xbrl_tag": "us-gaap:EarningsPerShareDiluted",
+    "source_accessions": [
+     "0001045810-25-000209"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581025000209/"
+   },
+   "freshness": {
+    "filed": "2025-08-27",
+    "ingested_at": null
+   }
+  },
+  {
+   "metric": "eps_diluted",
+   "period_start": "2024-01-29",
+   "period_end": "2024-04-28",
+   "fiscal_period": "FY2025 Q1",
+   "calendar_period": "CY2024 Q1",
+   "value": "0.6",
+   "unit": "USD/shares",
+   "value_source": "reported",
+   "as_filed": "0.6",
+   "splits": [],
+   "citation": {
+    "accession_no": "0001045810-25-000116",
+    "form": "10-Q",
+    "filed": "2025-05-28",
+    "xbrl_tag": "us-gaap:EarningsPerShareDiluted",
+    "source_accessions": [
+     "0001045810-25-000116"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581025000116/"
+   },
+   "freshness": {
+    "filed": "2025-05-28",
+    "ingested_at": null
+   }
+  },
+  {
+   "period_start": "2023-10-30",
+   "period_end": "2024-01-28",
+   "fiscal_period": "FY2024 Q4",
+   "calendar_period": "CY2023 Q4",
+   "citation": {
+    "accession_no": "0001045810-26-000021",
+    "form": "10-K",
+    "filed": "2026-02-25",
+    "xbrl_tag": null,
+    "source_accessions": [
+     "0001045810-26-000021"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
+   },
+   "freshness": {
+    "filed": "2026-02-25",
+    "ingested_at": null
+   },
+   "metric": "eps_diluted",
+   "value": "0.4929",
+   "unit": "USD/shares",
+   "value_source": "derived",
+   "as_filed": null,
+   "splits": [],
+   "derivation": {
+    "method": "q4_eps",
+    "inputs": [
+     {
+      "role": "Q4 net income",
+      "metric": "net_income",
+      "period_end": "2024-01-28",
+      "value": "12285000000",
+      "accession_no": "0001045810-26-000021",
+      "form": "10-K"
+     },
+     {
+      "role": "Q4 shares",
+      "metric": "weighted_shares_diluted",
+      "period_end": "2024-01-28",
+      "value": "24926000000",
+      "accession_no": null,
+      "form": null
+     },
+     {
+      "role": "year",
+      "metric": "eps_diluted",
+      "period_end": "2024-01-28",
+      "value": "1.19",
+      "accession_no": "0001045810-26-000021",
+      "form": "10-K"
+     }
+    ]
+   }
+  },
+  {
+   "metric": "eps_diluted",
+   "period_start": "2023-07-31",
+   "period_end": "2023-10-29",
+   "fiscal_period": "FY2024 Q3",
+   "calendar_period": "CY2023 Q3",
+   "value": "0.37",
+   "unit": "USD/shares",
+   "value_source": "reported",
+   "as_filed": "0.37",
+   "splits": [],
+   "citation": {
+    "accession_no": "0001045810-24-000316",
+    "form": "10-Q",
+    "filed": "2024-11-20",
+    "xbrl_tag": "us-gaap:EarningsPerShareDiluted",
+    "source_accessions": [
+     "0001045810-24-000316"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581024000316/"
+   },
+   "freshness": {
+    "filed": "2024-11-20",
+    "ingested_at": null
+   }
+  },
+  {
+   "metric": "eps_basic",
+   "period_start": "2026-04-27",
+   "period_end": "2026-07-26",
+   "fiscal_period": "FY2027 Q2",
+   "calendar_period": "CY2026 Q2",
+   "value": "2.47",
+   "unit": "USD/shares",
+   "value_source": "reported",
+   "as_filed": "2.47",
+   "splits": [],
+   "citation": {
+    "accession_no": "0001045810-26-000075",
+    "form": "10-Q",
+    "filed": "2026-08-26",
+    "xbrl_tag": "us-gaap:EarningsPerShareBasic",
+    "source_accessions": [
+     "0001045810-26-000075"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000075/"
+   },
+   "freshness": {
+    "filed": "2026-08-26",
+    "ingested_at": null
+   }
+  },
+  {
+   "metric": "eps_basic",
+   "period_start": "2026-01-26",
+   "period_end": "2026-04-26",
+   "fiscal_period": "FY2027 Q1",
+   "calendar_period": "CY2026 Q1",
+   "value": "2.4",
+   "unit": "USD/shares",
+   "value_source": "reported",
+   "as_filed": "2.4",
+   "splits": [],
+   "citation": {
+    "accession_no": "0001045810-26-000052",
+    "form": "10-Q",
+    "filed": "2026-05-20",
+    "xbrl_tag": "us-gaap:EarningsPerShareBasic",
+    "source_accessions": [
+     "0001045810-26-000052"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000052/"
+   },
+   "freshness": {
+    "filed": "2026-05-20",
+    "ingested_at": null
+   }
+  },
+  {
+   "period_start": "2025-10-27",
+   "period_end": "2026-01-25",
+   "fiscal_period": "FY2026 Q4",
+   "calendar_period": "CY2025 Q4",
+   "citation": {
+    "accession_no": "0001045810-26-000021",
+    "form": "10-K",
+    "filed": "2026-02-25",
+    "xbrl_tag": null,
+    "source_accessions": [
+     "0001045810-26-000021"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
+   },
+   "freshness": {
+    "filed": "2026-02-25",
+    "ingested_at": null
+   },
+   "metric": "eps_basic",
+   "value": "1.7678",
+   "unit": "USD/shares",
+   "value_source": "derived",
+   "as_filed": null,
+   "splits": [],
+   "derivation": {
+    "method": "q4_eps",
+    "inputs": [
+     {
+      "role": "Q4 net income",
+      "metric": "net_income",
+      "period_end": "2026-01-25",
+      "value": "42960000000",
+      "accession_no": "0001045810-26-000021",
+      "form": "10-K"
+     },
+     {
+      "role": "Q4 shares",
+      "metric": "weighted_shares_basic",
+      "period_end": "2026-01-25",
+      "value": "24302000000",
+      "accession_no": null,
+      "form": null
+     },
+     {
+      "role": "year",
+      "metric": "eps_basic",
+      "period_end": "2026-01-25",
+      "value": "4.93",
+      "accession_no": "0001045810-26-000021",
+      "form": "10-K"
+     }
+    ]
+   }
+  },
+  {
+   "metric": "eps_basic",
+   "period_start": "2025-07-28",
+   "period_end": "2025-10-26",
+   "fiscal_period": "FY2026 Q3",
+   "calendar_period": "CY2025 Q3",
+   "value": "1.31",
+   "unit": "USD/shares",
+   "value_source": "reported",
+   "as_filed": "1.31",
+   "splits": [],
+   "citation": {
+    "accession_no": "0001045810-25-000230",
+    "form": "10-Q",
+    "filed": "2025-11-19",
+    "xbrl_tag": "us-gaap:EarningsPerShareBasic",
+    "source_accessions": [
+     "0001045810-25-000230"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581025000230/"
+   },
+   "freshness": {
+    "filed": "2025-11-19",
+    "ingested_at": null
+   }
+  },
+  {
+   "metric": "eps_basic",
+   "period_start": "2025-04-28",
+   "period_end": "2025-07-27",
+   "fiscal_period": "FY2026 Q2",
+   "calendar_period": "CY2025 Q2",
+   "value": "1.08",
+   "unit": "USD/shares",
+   "value_source": "reported",
+   "as_filed": "1.08",
+   "splits": [],
+   "citation": {
+    "accession_no": "0001045810-26-000075",
+    "form": "10-Q",
+    "filed": "2026-08-26",
+    "xbrl_tag": "us-gaap:EarningsPerShareBasic",
+    "source_accessions": [
+     "0001045810-26-000075"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000075/"
+   },
+   "freshness": {
+    "filed": "2026-08-26",
+    "ingested_at": null
+   }
+  },
+  {
+   "metric": "eps_basic",
+   "period_start": "2025-01-27",
+   "period_end": "2025-04-27",
+   "fiscal_period": "FY2026 Q1",
+   "calendar_period": "CY2025 Q1",
+   "value": "0.77",
+   "unit": "USD/shares",
+   "value_source": "reported",
+   "as_filed": "0.77",
+   "splits": [],
+   "citation": {
+    "accession_no": "0001045810-26-000052",
+    "form": "10-Q",
+    "filed": "2026-05-20",
+    "xbrl_tag": "us-gaap:EarningsPerShareBasic",
+    "source_accessions": [
+     "0001045810-26-000052"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000052/"
+   },
+   "freshness": {
+    "filed": "2026-05-20",
+    "ingested_at": null
+   }
+  },
+  {
+   "period_start": "2024-10-28",
+   "period_end": "2025-01-26",
+   "fiscal_period": "FY2025 Q4",
+   "calendar_period": "CY2024 Q4",
+   "citation": {
+    "accession_no": "0001045810-26-000021",
+    "form": "10-K",
+    "filed": "2026-02-25",
+    "xbrl_tag": null,
+    "source_accessions": [
+     "0001045810-26-000021"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
+   },
+   "freshness": {
+    "filed": "2026-02-25",
+    "ingested_at": null
+   },
+   "metric": "eps_basic",
+   "value": "0.9021",
+   "unit": "USD/shares",
+   "value_source": "derived",
+   "as_filed": null,
+   "splits": [],
+   "derivation": {
+    "method": "q4_eps",
+    "inputs": [
+     {
+      "role": "Q4 net income",
+      "metric": "net_income",
+      "period_end": "2025-01-26",
+      "value": "22091000000",
+      "accession_no": "0001045810-26-000021",
+      "form": "10-K"
+     },
+     {
+      "role": "Q4 shares",
+      "metric": "weighted_shares_basic",
+      "period_end": "2025-01-26",
+      "value": "24489000000",
+      "accession_no": null,
+      "form": null
+     },
+     {
+      "role": "year",
+      "metric": "eps_basic",
+      "period_end": "2025-01-26",
+      "value": "2.97",
+      "accession_no": "0001045810-26-000021",
+      "form": "10-K"
+     }
+    ]
+   }
+  },
+  {
+   "metric": "eps_basic",
+   "period_start": "2024-07-29",
+   "period_end": "2024-10-27",
+   "fiscal_period": "FY2025 Q3",
+   "calendar_period": "CY2024 Q3",
+   "value": "0.79",
+   "unit": "USD/shares",
+   "value_source": "reported",
+   "as_filed": "0.79",
+   "splits": [],
+   "citation": {
+    "accession_no": "0001045810-25-000230",
+    "form": "10-Q",
+    "filed": "2025-11-19",
+    "xbrl_tag": "us-gaap:EarningsPerShareBasic",
+    "source_accessions": [
+     "0001045810-25-000230"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581025000230/"
+   },
+   "freshness": {
+    "filed": "2025-11-19",
+    "ingested_at": null
+   }
+  },
+  {
+   "metric": "eps_basic",
+   "period_start": "2024-04-29",
+   "period_end": "2024-07-28",
+   "fiscal_period": "FY2025 Q2",
+   "calendar_period": "CY2024 Q2",
+   "value": "0.68",
+   "unit": "USD/shares",
+   "value_source": "reported",
+   "as_filed": "0.68",
+   "splits": [],
+   "citation": {
+    "accession_no": "0001045810-25-000209",
+    "form": "10-Q",
+    "filed": "2025-08-27",
+    "xbrl_tag": "us-gaap:EarningsPerShareBasic",
+    "source_accessions": [
+     "0001045810-25-000209"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581025000209/"
+   },
+   "freshness": {
+    "filed": "2025-08-27",
+    "ingested_at": null
+   }
+  },
+  {
+   "metric": "eps_basic",
+   "period_start": "2024-01-29",
+   "period_end": "2024-04-28",
+   "fiscal_period": "FY2025 Q1",
+   "calendar_period": "CY2024 Q1",
+   "value": "0.6",
+   "unit": "USD/shares",
+   "value_source": "reported",
+   "as_filed": "0.6",
+   "splits": [],
+   "citation": {
+    "accession_no": "0001045810-25-000116",
+    "form": "10-Q",
+    "filed": "2025-05-28",
+    "xbrl_tag": "us-gaap:EarningsPerShareBasic",
+    "source_accessions": [
+     "0001045810-25-000116"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581025000116/"
+   },
+   "freshness": {
+    "filed": "2025-05-28",
+    "ingested_at": null
+   }
+  },
+  {
+   "period_start": "2023-10-30",
+   "period_end": "2024-01-28",
+   "fiscal_period": "FY2024 Q4",
+   "calendar_period": "CY2023 Q4",
+   "citation": {
+    "accession_no": "0001045810-26-000021",
+    "form": "10-K",
+    "filed": "2026-02-25",
+    "xbrl_tag": null,
+    "source_accessions": [
+     "0001045810-26-000021"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
+   },
+   "freshness": {
+    "filed": "2026-02-25",
+    "ingested_at": null
+   },
+   "metric": "eps_basic",
+   "value": "0.4984",
+   "unit": "USD/shares",
+   "value_source": "derived",
+   "as_filed": null,
+   "splits": [],
+   "derivation": {
+    "method": "q4_eps",
+    "inputs": [
+     {
+      "role": "Q4 net income",
+      "metric": "net_income",
+      "period_end": "2024-01-28",
+      "value": "12285000000",
+      "accession_no": "0001045810-26-000021",
+      "form": "10-K"
+     },
+     {
+      "role": "Q4 shares",
+      "metric": "weighted_shares_basic",
+      "period_end": "2024-01-28",
+      "value": "24651000000",
+      "accession_no": null,
+      "form": null
+     },
+     {
+      "role": "year",
+      "metric": "eps_basic",
+      "period_end": "2024-01-28",
+      "value": "1.21",
+      "accession_no": "0001045810-26-000021",
+      "form": "10-K"
+     }
+    ]
+   }
+  },
+  {
+   "metric": "eps_basic",
+   "period_start": "2023-07-31",
+   "period_end": "2023-10-29",
+   "fiscal_period": "FY2024 Q3",
+   "calendar_period": "CY2023 Q3",
+   "value": "0.37",
+   "unit": "USD/shares",
+   "value_source": "reported",
+   "as_filed": "0.37",
+   "splits": [],
+   "citation": {
+    "accession_no": "0001045810-24-000316",
+    "form": "10-Q",
+    "filed": "2024-11-20",
+    "xbrl_tag": "us-gaap:EarningsPerShareBasic",
+    "source_accessions": [
+     "0001045810-24-000316"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581024000316/"
+   },
+   "freshness": {
+    "filed": "2024-11-20",
+    "ingested_at": null
+   }
+  }
+ ]
+}

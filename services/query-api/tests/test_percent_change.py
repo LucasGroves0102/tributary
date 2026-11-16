@@ -36,3 +36,13 @@ def test_a_base_that_makes_it_mislead_gives_none_and_the_reason(current, earlier
 def test_ratios_change_in_points_with_no_reason():
     assert percent_change(D("0.72"), D("0.75"), "ratio") == (None, None)
     assert percent_change(D("0.12"), D("-0.05"), "pure") == (None, None)
+
+
+def test_a_huge_change_from_a_small_dollar_base_says_why():
+    """Riley 45: Pro-Dex's cash from $33K to $11.76M read +35,533.3%. 035's revenue growth bound,
+    for any dollar amount; another currency's base isn't dollars (057)."""
+    from query_api.shapes import PCT_SMALL_BASE
+    assert percent_change(D("11760000"), D("33000"), "USD") == (None, PCT_SMALL_BASE)
+    assert percent_change(D("90000000"), D("9000000"), "USD") == (D("9.000000"), None)  # 900%
+    assert percent_change(D("11760000"), D("33000"), "JPY")[1] is None
+    assert percent_change(D("11760000"), D("33000"), "shares")[1] is None

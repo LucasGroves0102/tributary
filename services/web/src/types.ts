@@ -572,6 +572,36 @@ export interface FinancialRow {
     filing_url: string | null;
   };
   freshness: { filed: string; ingested_at: string };
+  /** /per-share only (query_api/per_share.py): the filing's own figure, the splits applied to it
+   * (split-adjusted figures), and how a derived fiscal Q4 or TTM was worked out */
+  as_filed?: string | null;
+  splits?: PerShareSplit[];
+  derivation?: PerShareDerivation;
+}
+
+/** A stock split as the split notes establish it: before its first restating filing, figures are on
+ * the old share basis. */
+export interface PerShareSplit {
+  label: string;
+  reverse: boolean;
+  first_filed: string;
+  first_accession: string | null;
+  ratio?: number;
+}
+
+export interface PerShareDerivation {
+  method: "q4_eps" | "q4_shares" | "ttm_eps" | "ttm_shares";
+  inputs: { role: string; metric: string; period_end: string; value: string; accession_no: string | null; form: string | null; derived?: boolean }[];
+  note?: string;
+}
+
+/** GET /v1/companies/{id}/per-share: EPS and weighted shares on one share basis (owner decisions 1-2). */
+export interface PerShare {
+  company_id: string;
+  view: "quarter" | "ttm" | "annual";
+  shares: "adjusted" | "as_filed";
+  splits: PerShareSplit[];
+  rows: FinancialRow[];
 }
 
 /** /financials with `callouts` (F5, query_api.notes): a quarter far outside its series (041's outlier
@@ -832,8 +862,11 @@ export interface ColumnInfo {
 /** How to read a screener value (migration 035): not_applicable and not_meaningful give a reason,
  * old and behind are about its date (blanks.ts has what each shows). */
 export interface ValueReading {
-  /** other_currency (migration 056): an amount in a currency other than the dollar, with `unit` */
-  status: "not_applicable" | "not_meaningful" | "old" | "behind" | "other_currency";
+  /** other_currency (migration 056): an amount in a currency other than the dollar, with `unit`;
+   * not_computed (069): no figure because Tributary computes none for this kind of company (Walmart's
+   * gross margin), the reason says why; stale (069): the company's latest period is long past (a
+   * quarterly filer's 270 days, an annual filer's 500), the figure kept but out of sorts and medians */
+  status: "not_applicable" | "not_meaningful" | "old" | "behind" | "other_currency" | "not_computed" | "stale";
   reason?: string | null;
   unit?: string | null;
 }
@@ -1259,7 +1292,9 @@ export interface SectionChanges {
       text: string | null;
       prior_text: string | null;
       /** word runs: "=" in both, "-" prior only, "+" this filing only */
-      words: [string, string][] | null;
+      /** "=", "-", "+" runs; an "=" run may carry the earlier filing's own words third (a calendar
+       * swap shown unmarked: "fiscal year 2026" a year later reads 2027), for that filing's side */
+      words: ([string, string] | [string, string, string])[] | null;
       citation: ChangeCitation | null;
       prior_citation: ChangeCitation | null;
       /** F3 */

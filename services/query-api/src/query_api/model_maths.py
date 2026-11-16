@@ -20,7 +20,9 @@ more than half in a year is a split or a merger, not buybacks (the 10-Ks state t
 different share bases): that year has no share change or EPS growth (`share_break`), and the
 years before it no P/E (`earlier_share_basis`). `ttm` is the newest TTM when its quarter
 isn't a fiscal Q4 (else the newest year is the TTM): the same lines, the latest quarter's diluted
-weighted shares, no EPS (per-share figures don't add across quarters).
+weighted shares, no EPS (its P/E reads price over net income per diluted share, like every
+column's price over EPS; the Statements tab's TTM EPS, the four quarters added, is
+query_api.per_share's).
 
 One-off adjustments (the user's, `adjustments`): `one_off` is an amount booked in a fiscal
 quarter's operating income (positive: it raised it, like a refund; negative: a charge). Adjusted
@@ -94,7 +96,11 @@ Valuation (only with the user's own `price`; nothing is fetched or stored beyond
 market cap = price x the latest shares outstanding (else the latest diluted weighted shares,
 said so); EV = market cap + net debt, only when net debt's reading is current or merely behind
 (035: an old, not meaningful, not applicable or absent net debt leaves EV blank, with the reason);
-per column: P/E = price / adjusted diluted EPS (TTM: market cap / adjusted TTM net income),
+per column: P/E = price / adjusted diluted EPS, one method in every column (Riley 11: the
+TTM column read market cap / net income, 45.6x for Costco, beside a base year at price / EPS,
+45.8x); the TTM column's EPS is its adjusted net income over the latest quarter's diluted weighted
+shares (no fiscal-year EPS states twelve months to a quarter), market cap / net income only when
+that share count is missing,
 EV/Revenue, EV/EBIT (adjusted operating income), FCF yield = FCF / market cap. A multiple over
 zero or negative earnings, revenue or EBIT is not meaningful. Columns: the current twelve months
 (`ttm`; when the newest TTM ends at a fiscal Q4 it is the base year, the one entry in `history`)
@@ -775,7 +781,10 @@ def user_set(st: dict, assumptions: list[dict], defaults_: list[dict]) -> list[b
 
 # --- valuation ------------------------------------------------------------------------------
 
-USABLE = (None, "behind")
+# a reading that can value the company. 069's `stale` (the company's latest period long past) is the
+# company's own latest balance: the whole model is on that period, so its net debt and shares
+# still value it (the screener leaves them out of comparisons with other companies instead)
+USABLE = (None, "behind", "stale")
 
 
 def _reading(r: dict | None) -> dict | None:
@@ -794,8 +803,11 @@ def _multiples(col: dict, price: float, cap: float, ev: float | None, ttm: bool 
             return None
         return "n/m" if den <= 0 else num / den
 
+    # one method in every column (module docstring): price over adjusted diluted EPS; the TTM
+    # column's EPS from its net income and the latest quarter's diluted shares
     if ttm:
-        pe = nm(cap, col.get("net_income_adjusted"))
+        ni, shares = col.get("net_income_adjusted"), col.get("shares")
+        pe = nm(price, ni / shares) if ni is not None and shares else nm(cap, ni)
     elif col.get("earlier_share_basis"):
         pe = None  # EPS on the share basis before a split: today's price doesn't divide by it
     else:

@@ -162,7 +162,7 @@ function AxisBlock({ t, view, token, companyId, ticker, saved, onOpenChart, labe
             {t.rows.map((r) => {
               const texts = moneyRow(r.values);
               return (
-                <tr key={r.members.join("|")}>
+                <tr key={r.members.join("|")} className={r.parent ? "child" : r.overlaps ? "other-cut" : undefined}>
                   <td className="first" title={r.members.join(", ")}>
                     {r.label}
                     {r.note && <span className="faint small"> · {r.note}</span>}
@@ -190,8 +190,9 @@ function AxisBlock({ t, view, token, companyId, ticker, saved, onOpenChart, labe
       {t.rows.some((r) => r.overlaps) && (
         <p className="small muted">
           {t.rows.filter((r) => r.overlaps).map((r) => r.label).join(", ")}
-          {t.moreOverlapping > 0 ? ` and ${t.moreOverlapping} more` : ""} overlap the other lines: part of one of them, or another
-          cut of the same revenue. They're listed as reported, and left out of the sum.
+          {t.moreOverlapping > 0 ? ` and ${t.moreOverlapping} more` : ""} overlap the other lines: an indented line is part of
+          the one above it, the rest are another breakdown of the same revenue. They're listed as reported, and left out of
+          the sum and the chart.
         </p>
       )}
       {off.length > 0 && (

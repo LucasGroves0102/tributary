@@ -42,7 +42,7 @@ the parser image's `parser-peers` job, not in SQL.
 | Function | Latest definition |
 |---|---|
 | `ops.check_financials(text[])` (debt compared with liabilities and assets in its own currency) | `057_currency_readings.sql` (before: `050_filers_debt_signs.sql` SBC benefits as info, `debt_parts_scale`; `041_quality_findings.sql` `mistagged_fact`, `net_debt_gap`, a repeated `series_gap`, the annual comparison through `gold.best_facts`; `023_data_notes.sql` restatement; `018_segments.sql`; `014_gold_calendar.sql`) |
-| `ops.check_segments(text[])` (a reconciliation member restating the segments' sum isn't added) | `037_check_segments_subtotal.sql` (before: `018_segments.sql`) |
+| `ops.check_segments(text[])` (a reconciliation member restating the segments' sum isn't added; members that overlap, some set of them making the figure, aren't a deviation: `ops.segment_cover`) | `070_check_segments_overlap.sql` (before: `037_check_segments_subtotal.sql`, `018_segments.sql`) |
 
 ## Readings (read, not refreshed)
 
@@ -54,7 +54,8 @@ How a stored figure may be read, called by the Query API under RLS or with
 | `gold.not_meaningful` (five arguments: the dollar bases only for dollar amounts; the four-argument form reads as dollars) | `057_currency_readings.sql` (before: `035_value_readings.sql`) |
 | `gold.not_applicable_metrics` (the one list of banks: depository SICs, Goldman Sachs, Morgan Stanley, Schwab, American Express, Synchrony, Ally) | `058_bank_holding_companies.sql` (before: `049_kpis_cash_flow.sql` adds `cash_and_investments`; `035_value_readings.sql`) |
 | `gold.period_status`, `gold.latest_period` | `035_value_readings.sql` |
-| `gold.latest_reading` (`other_currency` and the unit; the base's currency from `gold.amount_currency_of`, inlined) | `061_screener_currency_inline.sql` (before: `060_annual_filer_currency.sql`, `057_currency_readings.sql`, `056_ifrs_currencies.sql`, `035_value_readings.sql`) |
+| `gold.latest_reading` (`other_currency` and the unit; the base's currency from `gold.amount_currency_of`, inlined; `not_computed` and `stale`) | `069_readings_not_computed_stale.sql` (before: `061_screener_currency_inline.sql`, `060_annual_filer_currency.sql`, `057_currency_readings.sql`, `056_ifrs_currencies.sql`, `035_value_readings.sql`) |
+| `gold.not_computed(metric, sic)` (why Tributary computes no gross profit for this kind of company: 039's industries, worded) | `069_readings_not_computed_stale.sql` |
 | `gold.amount_currency_of(company)` (the rule: latest quarterly revenue's unit, else net income's, else the TTM rows', else USD; one row, set-returning so a caller's plan inlines it) and `gold.amount_currency(company)` (that row's unit, for scalar callers) | `061_screener_currency_inline.sql` (before: `060_annual_filer_currency.sql`, `057_currency_readings.sql`) |
 | `gold.latest_value(company, span, metric)` | `032_open_access_speed.sql` |
 | `gold.figure_facts(company, metric, period_end)` (the facts behind one figure, for `/components`) | `056_ifrs_currencies.sql` (taxonomy, company tags, the company's currency; before: `049_kpis_cash_flow.sql`) |

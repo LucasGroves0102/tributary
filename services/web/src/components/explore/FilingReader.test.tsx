@@ -36,7 +36,7 @@ const CHANGES = {
     changes: [
       { kind: "new", similarity: null, text: "Export controls on our data center products may tighten.", prior_text: null, words: null, citation: cite("II-1A", START + 33), prior_citation: null },
       { kind: "rewritten", similarity: 0.7, text: "Competition could reduce margins.", prior_text: "Competition may reduce margins.",
-        words: [["=", "Competition"], ["-", "may"], ["+", "could"], ["=", "reduce margins."]], citation: null, prior_citation: null },
+        words: [["=", "Competition"], ["-", "may"], ["+", "could"], ["=", "reduce margins in 2027.", "reduce margins in 2026."]], citation: null, prior_citation: null },
       { kind: "removed", similarity: null, text: null, prior_text: "Pandemic supply issues.", words: null, citation: null, prior_citation: null },
     ],
     freshness: { filed: "", ingested_at: "", computed_at: "" },
@@ -133,6 +133,9 @@ it("shows What changed side by side: prior on the left, this filing on the right
   expect(rows[1]!.querySelector(".old del")?.textContent).toBe("may ");
   expect(rows[1]!.querySelector(".old ins")).toBeNull();
   expect(rows[1]!.querySelector(".new ins")?.textContent).toBe("could ");
+  // a calendar swap shown unmarked keeps each filing's own year on its side (Riley 5)
+  expect(rows[1]!.querySelector(".old")?.textContent).toContain("reduce margins in 2026.");
+  expect(rows[1]!.querySelector(".new")?.textContent).toContain("reduce margins in 2027.");
   expect(rows[2]!.querySelector(".old")?.textContent).toBe("Pandemic supply issues.");
   expect($(".sbs-h a")?.getAttribute("href")).toBe(`#/filing/${NVDA}/${PRIOR}/II-1A`);
   expect(toggle.getAttribute("aria-pressed")).toBe("true");

@@ -554,7 +554,8 @@ function SideBySide({ diff, companyId, basis, form, onBasis }: {
                 {ch.kind === "new" ? (
                   <span className="faint">not in the prior filing</span>
                 ) : ch.kind === "rewritten" && ch.words ? (
-                  ch.words.filter(([op]) => op !== "+").map(([op, t], j) => (op === "-" ? <del key={j}>{t} </del> : <span key={j}>{t} </span>))
+                  // the earlier filing's own words: a calendar swap's "=" run carries them third (Riley 5)
+                  ch.words.filter(([op]) => op !== "+").map(([op, t, before], j) => (op === "-" ? <del key={j}>{t} </del> : <span key={j}>{before ?? t} </span>))
                 ) : (
                   ch.prior_text
                 )}

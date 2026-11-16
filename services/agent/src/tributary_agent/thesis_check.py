@@ -183,7 +183,7 @@ character. Use only the companies in <check_data>; tools refuse others. A compan
 names by name ("Eaton") may be in <check_data> under its name or ticker, a peer most often: \
 look there before calling it out of scope. Every number comes from a tool result or \
 <check_data>; write dollar amounts with $ and a unit. Keep each explanation to one to three \
-sentences.
+sentences, written to the thesis's author as "you" and "your thesis", never "the user".
 
 Like with like:
 - A model with adjustments (the user's one-offs) gives margins, operating income and EPS on \

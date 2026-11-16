@@ -45,7 +45,9 @@ ROUTES = ["/v1/screener?limit=50", "/v1/screener?limit=50&access=financials",
           f"/v1/companies/{NVDA}/peers/check/{TSLA}", "/v1/sectors",
           "/v1/search?q=supply+chain&from=2025-11-01&to=2026-11-01&window=exact",
           "/v1/search?q=supply+chain&window=exact&sort=date",
-          f"/v1/companies/{NVDA}/insiders?limit=100&cursor=2026-09-18_0001588670-26-000014"]
+          f"/v1/companies/{NVDA}/insiders?limit=100&cursor=2026-09-18_0001588670-26-000014",
+          # Riley (test 6): one company's per-share figures on one share basis
+          f"/v1/companies/{NVDA}/per-share?view=ttm"]
 # POST routes: path, body
 POSTS = [(f"/v1/companies/{NVDA}/model",
           {"companyId": NVDA, "historyYears": 8, "ytd": True,
@@ -98,6 +100,9 @@ class RecordingStore:
                               "metric": "revenue", "period_end": date(2026, 1, 1), "detail": {},
                               "checked_at": None} for c in (NVDA, OUTSIDE)],
                 "derived": [], "behind": [], "checked_at": None}
+
+    def answer_per_share_inputs(self, *_):
+        return {"quarters": [], "annual": [], "findings": []}
 
     def answer_latest_filings(self, *_):
         return [{"company_id": c, "accession_no": "a"} for c in (NVDA, OUTSIDE)]

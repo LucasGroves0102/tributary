@@ -174,7 +174,9 @@ the EDGAR link sits beside it on hover);
 `#/thesis/<id>`, `#/model/<id>` saved work (below); `#/chart` the chart
 builder (each layer a `/v1/formulas/evaluate` request; plain SVG; CSV, SVG and PNG export);
 `#/ask` the assistant full width, with streamed answers, the lookups it made and verified citation links
-(an answer's figures not found in the data are named under it, each a button that scrolls to and
+(the badge says "N figures found in the data it was given": each figure was found in what the tools
+returned and each cited filing is one a tool returned, its hover says it doesn't mean the passage a
+citation points to was read: Riley 4; an answer's figures not found in the data are named under it, each a button that scrolls to and
 flashes its mark in the answer: `components/FigureFlags.tsx`, the same in the check panel; a
 question that got no answer says it didn't count, after agent-api's `refunded` event);
 `#/compare` the comps table; `#/analysis` the Analysis tab (guided research projects, below; `#/analysis?start=<company_id>` opens New analysis on that company, from the company page's "Start an analysis", which reads "Open analysis" when there is one: beside New thesis and New model, whose forms say a thesis or model there is a single item, without the steps); `#/about` says what Tributary covers and doesn't (no prices, consensus or
@@ -1001,7 +1003,11 @@ efficiency ratio, provision for credit losses, net income, EPS, loans, deposits,
 tags it), ROE, revenue growth and net margin; Statements show a bank's income statement (net interest
 income, noninterest income, net revenue, noninterest expense, provision, pretax and net income) and
 balance sheet (cash and due from banks, loans net of the allowance, total assets, deposits, total
-liabilities, equity, CET1). Both say what isn't shown and why: net interest margin, tangible book value
+liabilities, equity, CET1); Ratios show `BANK_RATIOS` (efficiency ratio, CET1, net margin, ROE, revenue
+and net income growth, payout ratio; Riley 58: six of ten rows read n/a (bank)), the standard ratios
+again from an older API that refuses the bank lines (422). JPMorgan, Bank of America and Wells Fargo tag
+CET1 only under their own XBRL tags, with dimensions (the firm and the Basel III method), so their CET1
+row stays blank until a dimensional pick reads it. All say what isn't shown and why: net interest margin, tangible book value
 per share and ROTCE (migration 048's header). Which companies are banks is the API's alone (migration
 058 added Schwab, American Express, Synchrony and Ally); nothing here lists one.
 
@@ -1044,8 +1050,14 @@ Revenue had a Quarterly switch until F7b; its tables were Segments' revenue tabl
   Q1" / "until FY2023 Q4". The 6 largest members (by the latest period) are named, the rest folded
   into "Other (n members)" (the sum of those reporting each period). Members that overlap the rest
   (a parent beside its children, a second cut of the same revenue: `chart/segments.ts`
-  `separateMembers`, rules in its docstring) are listed as reported, marked "overlaps the others",
-  and left out of every sum. Finding them is a subset sum over 10,000 buckets of revenue, kept in one
+  `separateMembers`, rules in its docstring) are left out of every sum and every chart, lines too, and
+  read through one parent/child model per axis (`memberTree`, Riley 29-31): a child is listed indented
+  under the member it is part of ("part of Data Center": NVIDIA's Hyperscale and AI Clouds), another cut
+  after the rest ("another breakdown of the same revenue": Microsoft's product lines beside Product and
+  Service), on the Revenue and Segments tabs alike; a parent is a set of children's sum to 0.1% in at
+  least half the periods both report (at 0.5% Microsoft's lines made its Service line by chance). The
+  data notes' check (migration 070) asks the same question and no longer calls overlap a deviation.
+  Finding them is a subset sum over 10,000 buckets of revenue, kept in one
   typed array of bitmask picks: at most 24 members x 10,074 steps a period, about 25 ms for 40 periods
   of 20 countries and a region overlapping three (5.9 s before), and remembered by input, so a
   re-render, the decomposition and saved charts don't search again (`overlap.test.ts` checks the
@@ -1212,7 +1224,15 @@ days behind the company's latest period, so the company stopped tagging it) is n
 company's current figure: it reads **— since Sep '14** in a table and "not reported since Sep 30, 2014"
 in the Overview's ledger (no seal), with the last figure on file, its period and its filing in the hover
 (analyst test 4: Deckers' 2014 net debt, Eaton's 2019 and Johnson Controls' 2016 operating margins
-read as current). One merely behind shows its date and still counts. Neither n/m, n/a nor old enters a
+read as current). One merely behind shows its date and still counts. Migration 069 adds two readings:
+**n/a** for a figure Tributary computes none of for the company's industry, the API's reason in the hover
+(Walmart's and Costco's gross margin: revenue includes membership fees; AT&T's and Verizon's: network
+costs outside cost of revenue; also the Ratios table's blank row, from `/financials`' `not_computed`), and
+*stale*, a company whose latest period is long past (a quarterly filer's 270 days, an annual filer's 500):
+its figure shows with its date but leaves sorts, filters and medians (Aphoenity's Sep 2024 margin topped
+a Nov 2026 sort). A figure from a 20-F or 40-F says **annual, period ended Dec '25** under it, the fiscal
+year's full date in the hover (owner decision 4: an annual filer is current until its next annual report
+is due). The screener's foot says when the page holds an amount in another currency. Neither n/m, n/a nor old enters a
 median, a sort or a size band. A company reporting in another currency (a
 20-F/40-F filer, migration 056) shows its amounts in it, never converted: `money()` writes the symbol or
 the ISO code (€2.10B, CAD 1.20B, €1.87 a share); a screener, Peers or Compare cell the API reads
@@ -1226,9 +1246,14 @@ currencies is refused by the API (code `currency`) and its layer shows why; an o
 dollars. Alert red lines on an amount show its `unit` (CN¥1.00T). A bank reads "n/a (bank)" for gross and
 operating margin, FCF, FCF margin, net debt, debt to equity and the current ratio whether or not it
 tags them, by the API's `not_applicable` list. Statements: a balance sheet has no TTM (the button is off,
-and a saved one reads as quarters); EPS and diluted shares read n/a in TTM, — in a fiscal Q4 (the 10-K
-states the year, and they aren't derived by subtraction) and come from the 10-K itself in Annual
-(`/v1/companies/{id}/annual-per-share`). Column pickers don't offer a balance's `_ttm` column.
+and a saved one reads as quarters). EPS and weighted shares come from the Query API's one per-share
+pipeline (`/v1/companies/{id}/per-share`, owner decisions 1 and 2): split-adjusted to today's share basis
+by default, with **Per share: Split-adjusted / As filed** beside Basis (`shares=filed` in the address)
+and the figure as filed, its filing and the splits applied in every adjusted cell's hover; a fiscal Q4
+derived from its net income over the year's shares less the first three quarters', TTM EPS the four
+quarters' EPS added, both italic and their inputs in the hover (`perShareTitle`). A cell the pipeline
+leaves blank says why. An older API (404) leaves the statement's own figures, the 10-K's in Annual.
+Column pickers don't offer a balance's `_ttm` column.
 What a statement's lines can't say is a computed row (`withBridges`, data.ts), italic and never in the
 CSV: "Other items, net" between operating and net income where the filing tags no pretax income
 (Guerrilla RF's warrant revaluation), "Not itemised" where assets aren't liabilities plus equity

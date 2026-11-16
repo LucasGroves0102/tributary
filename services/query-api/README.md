@@ -64,7 +64,8 @@ tokens: `make token USER=alice`.
 | `GET /v1/companies/{id}/events` | filings | 8-K filings since the latest 10-Q/10-K period end, newest first: items (SEC title, kind), an excerpt of the 8-K's own words, the press release exhibit, `announced` (a completed deal or new financing read from a 7.01/8.01 announcement), and `stale`: figures at that period end an event after it may have changed ([Earnings and events](#earnings-and-events)) |
 | `GET /v1/companies/{id}/earnings?quarters=&tables=` | filings | each quarter's earnings release (8-K Item 2.02), newest first, `quarters` 1-8 (default 4): the release, its headline, outlook passages and management's adjustments (reconciliation tables, dollar notes), each with offsets into the release; `tables=true`: outlook and reconciliation passages carry `parts`, the tables they quote as grids (parser v7); no beat or miss ([Earnings and events](#earnings-and-events)) |
 | `GET /v1/companies/{id}/data-notes` | financials | data-quality and freshness notes: gaps, overlapping quarters, restatements, derived quarters, filings companyfacts doesn't carry yet, each with its filings ([Data notes](#data-notes)) |
-| `GET /v1/companies/{id}/annual-per-share?years=` | financials | EPS and weighted shares per fiscal year, as the 10-K states them (migration 036; `years` 1-30, default 10): per-share figures don't add, so quarters can't give them |
+| `GET /v1/companies/{id}/annual-per-share?years=` | financials | EPS and weighted shares per fiscal year, as the 10-K states them (migration 036; `years` 1-30, default 10) |
+| `GET /v1/companies/{id}/per-share?view=&basis=&shares=&quarters=` | financials | EPS and weighted shares on one share basis by quarter, TTM or fiscal year: split-adjusted by default (`shares=as_filed` for each filing's figure), fiscal Q4 and TTM derived and labelled ([Per-share figures](#per-share-figures-on-one-share-basis)) |
 | `GET /v1/data-notes?limit=&company_id=` | financials (every company covered) | the newest notes across the caller's companies, or the named ones of them (at most 50), without derived-quarters notes ([Data notes](#data-notes)) |
 | `POST /v1/formulas/validate` | token | AST, unit and inputs, or errors with positions |
 | `POST /v1/formulas/evaluate` | financials, every company in the formula | series; each point cites every input's filing |
@@ -270,7 +271,14 @@ $100K, debt over 100 times equity, debt or equity below zero, ROE or payout over
 ratio over 100x. `not_applicable` (with `reason`): a bank's gross and operating margin, FCF, FCF margin,
 net debt, cash and investments, debt to equity and current ratio, whether or not a value exists. `old`: more than 300 days
 before the company's `latest_period` (the newest of its revenue, net income and total assets, never a
-future date). `behind`: more than 45. `other_currency` (migration 056, with `reason` and `unit`): an
+future date). `behind`: more than 45. `stale` (migration 069, with `reason`): the company's latest
+period itself is long past today, more than 270 days for a quarterly filer and 500 for an annual one (a
+20-F, 40-F or 6-K reading, or no quarterly revenue or net income within 200 days of its latest period:
+its next annual report isn't due yet before that); the figure is kept, dated, out of sorts and
+medians. `not_computed` (069, with `reason`): no figure, or only an old one, because Tributary
+computes none for this kind of company (`gold.not_computed`: 039's industries without a gross profit
+line, Walmart's and Costco's membership fees, a telecom's network costs), only where the caller reads
+the company's figures. `other_currency` (migration 056, with `reason` and `unit`): an
 amount or per-share figure in a currency other than the dollar (a 20-F filer's euros: `unit` "EUR" or
 "EUR/shares"); ratios have no currency and read as anyone's. `values` keeps the exact figure in every
 case, but all except `behind` sort after real values and never pass a `where` or a size band: sorting
@@ -280,7 +288,8 @@ ROE on that period's negative equity first) and `not_meaningful_periods: [{metri
 reason}]`, the periods a requested metric has no row because of the company's equity there (gold has
 no debt/equity or ROE on negative equity), taken from the company's own latest `quarters` equity
 periods whatever metrics were asked (`debt_to_equity` alone still gets them), both by
-`gold.not_meaningful` (`Store.equity_readings`, under RLS, after `require()`); off
+`gold.not_meaningful` (`Store.equity_readings`, under RLS, after `require()`), and
+`not_computed: {metric: reason}` (069, `Store.not_computed`, from the company's SIC); off
 by default, so the agent's tool sees what it always did. The web app reads these instead of working
 out equity itself.
 
@@ -291,6 +300,32 @@ the value, and evaluating it would be an oracle), and a value sort puts them las
 (`screener.py`) holds no user input: column and sort keys come from fixed catalogs, every
 value is a bind parameter.
 
+
+## Per-share figures on one share basis
+
+`GET /v1/companies/{id}/per-share` (query_api/per_share.py, its docstring is the spec; Riley, test 6;
+owner decisions 1 and 2, 2026-11-15) is the one per-share pipeline the Statements tab reads for
+quarters, TTM and years. Gold and `/financials` keep every per-share figure as filed (the agent's tool
+is unchanged); this route reads one company's gold quarters of EPS, weighted shares and net income,
+the 10-K's per-share facts (036) and its restatement findings, under RLS after `require(financials)`.
+
+- **Split-adjusted by default.** A stock split is what the data notes call one (restated shares at a
+  clean ratio, EPS at its reciprocal, in one filing); it applies to every figure filed before its first
+  restating filing. Where the company restated a period itself, gold already holds that figure and only
+  later splits apply. NVIDIA's FY2019 EPS $6.63 (filed before the 2021 4-for-1 and the 2024 10-for-1)
+  reads $0.17; each row keeps `as_filed` and the `splits` applied. `shares=as_filed` gives the filings'
+  own figures.
+- **Fiscal Q4, derived** (`derivation.method` `q4_eps`, `q4_shares`): Q4 shares = the year's weighted
+  shares x its days less Q1-Q3's x theirs, over Q4's days; Q4 EPS = Q4 net income / Q4 shares, scaled
+  by the year's EPS x shares / net income when preferred dividends make that more than 1% (beyond the
+  filed EPS's rounding) from 1 (JPMorgan's Q4 2024: $4.79 against the reported $4.81). Kept only when
+  the shares are within 25% of the year's and EPS within max($0.03, 15%) of the year less nine months.
+- **TTM, derived** (`ttm_eps`, `ttm_shares`): EPS = the four quarters' EPS added (the market
+  convention), shares = their day-weighted average; four quarters in a row, 350-380 days.
+- On hermes (2026-11-15) the split notes establish 1,603 splits at 1,061 companies (1,298 reverse; 1,234
+  since 2019), so those companies' per-share history now reads on one basis.
+
+`/annual-per-share` stays (the 10-K's own figures; MCP's tools read it).
 ## Watchlist and calendar
 
 `GET /v1/watchlist` reads the caller's rows in the app database's `watchlists`
@@ -324,7 +359,8 @@ span (`quarter`, `ttm`) the `current` value (period ending within 7 days of the 
 report), `prior_quarter` (80-120 days earlier) and `year_ago` (350-380 days), each with
 citation and freshness, and `change` / `pct_change` (6 decimals; null for ratios, where
 `change` is in ratio points). `shapes.percent_change` is the one rule for a percentage change (the
-recap's and alerts'): none from a zero or negative base, nor into a negative figure, and the recap
+recap's and alerts'): none from a zero or negative base, nor into a negative figure, nor over 1,000% from
+a dollar base under $10M (035's revenue growth bound: Pro-Dex's cash +35,533.3%, Riley 45), and the recap
 says why in `pct_not_meaningful` (additive; JPMorgan's operating cash flow from -$25.28B to $33.16B
 read "+231%" by |earlier|, analyst test 4). Values are as currently in gold, so a restated value
 cites the restating filing. With `filings` access, `flags` lists one-time-item keyword matches
@@ -532,7 +568,9 @@ base case also has the B2 `check` and `user_set` the thesis check reads. A model
 after the reported quarters, which the web app offers to rebuild year 1 from without changing it. With a `price`,
 `valuation`: market cap (price x latest shares outstanding), net debt with its date and reading,
 EV (only when net debt is current or merely behind; `ev_note` says why not: `old`, `absent`, ...)
-and P/E, EV/Revenue, EV/EBIT and FCF yield for the current twelve months (`ttm`; when the newest
+and P/E (price over adjusted diluted EPS in every column, the TTM column's EPS its net income over the
+latest quarter's diluted shares: Riley 11 found it read market cap over net income beside a base year at
+price over EPS), EV/Revenue, EV/EBIT and FCF yield for the current twelve months (`ttm`; when the newest
 TTM ends at a fiscal Q4 there is no TTM column and `history` holds that one base year) and each
 case's years; `"n/m"` over losses. No other history year (analyst test 4): today's price over
 FY2021's EPS read as "P/E FY2021 560.6x" at Vertiv, a multiple it never traded at, and Tributary
@@ -1020,9 +1058,9 @@ RLS is per company, not per user). The valuation joins them in Python: gold thro
 | EV | market cap + `net_debt` (long-term debt incl. current − cash − short-term investments) |
 | EV/EBIT | EV / TTM `operating_income` (≤ 0 or no net debt: not shown) |
 
-P/E is market cap over TTM net income, not price over TTM diluted EPS: gold has no TTM EPS
-(fiscal Q4 EPS is never reported or derived, migration 014); the two differ by the diluted vs
-outstanding share count and preferred dividends. The close used is the newest within 14 days.
+P/E here is market cap over TTM net income (the Price tab, off on hermes); the model's is price over
+diluted EPS. The two differ by the diluted vs outstanding share count and preferred dividends, and
+each page says which it uses. The close used is the newest within 14 days.
 A company with several share classes (several current tickers) prices one class against the
 total share count; the response lists them in `share_classes`.
 
@@ -1469,7 +1507,9 @@ no stored row changes and nothing is rebuilt.
   much; + new and removed figures; + how far figures moved; + new risk wording), halved under
   12 words. `ranking` is the one line that says so. In a rewritten passage's `words`, a
   calendar-only swap ("second" → "third" quarter, "June 30, 2025" → "September 30, 2026") is shown
-  as the new words, unmarked; every other word change is marked.
+  as the new words, unmarked, with the earlier filing's own words third in that "=" run (`["=", new, old]`) so the
+  side-by-side reader quotes each filing as it was (Riley 5: an Aug 2025 10-Q read "fiscal year 2027");
+  every other word change is marked.
 - Filters, after the pass: `q` (2-100 characters; every word must appear in the passage or its
   compared one, as a word prefix with a plural dropped, so "tariffs" finds "tariff"; "quoted
   phrases" as written), `numbers=new` (passages with a new figure), `kind`, `section`. The answer

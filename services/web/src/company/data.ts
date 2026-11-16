@@ -9,7 +9,7 @@ import { BANK_NA, NO_DATA, NO_DATA_TITLE, NOT_APPLICABLE, NOT_MEANINGFUL, NOT_RE
 import { change, currencyOf, day, inWords, money, moneyRow, pct } from "../format";
 import { num } from "../home/data";
 import { EIGHT_K_ITEMS } from "../reader/sections";
-import { separateMembers } from "../chart/segments";
+import { memberTree, treeOrder } from "../chart/segments";
 import type { Callout, FinancialRow, NotMeaningfulPeriod, Recap, RecapValue, ScreenerRow, SegmentRow, ValueReading, ValueSource } from "../types";
 
 export type Fmt = "usd" | "pct" | "growth" | "x" | "eps" | "shares";
@@ -496,6 +496,20 @@ export const RATIOS: Line[] = [
   ratio("payout_ratio", "Payout ratio", "pct"),
 ];
 
+/** A bank's Ratios (Riley 58: six of ten rows read "n/a (bank)"): its own lines, migration 048's efficiency
+ * ratio and CET1 ratio (where the bank tags it), then the ratios that do describe a bank. No net interest
+ * margin, tangible book value or ROTCE: no standard tag carries their inputs quarterly (048's header); no
+ * net charge-offs: no metric holds them yet. The bank list is the API's (`not_applicable`), never here. */
+export const BANK_RATIOS: Line[] = [
+  ratio("efficiency_ratio", "Efficiency ratio", "pct"),
+  ratio("cet1_ratio", "CET1 ratio", "pct"),
+  ratio("net_margin", "Net margin", "pct"),
+  ratio("roe", "Return on equity", "pct"),
+  ratio("revenue_growth", "Revenue growth YoY", "growth"),
+  ratio("net_income_growth", "Net income growth YoY", "growth"),
+  ratio("payout_ratio", "Payout ratio", "pct"),
+];
+
 /** What to request for a period choice: quarterly values, TTM ending each quarter, or annual
  * (TTM at each fiscal Q4: the fiscal year; balances at its end). */
 export function statementRequest(period: Period, range: StatementRange = "8q", kind: Statement = "is"): { view: "quarter" | "ttm"; quarters: number } {
@@ -584,20 +598,65 @@ export interface MetricTable {
   rows: { metric: string; label: string; cells: (TableCell | null)[]; blanks: BlankCell[]; opts?: LineOpts }[];
 }
 
-/** Per-share figures: quarters state them, but they don't add (the share count changes), so gold
- * derives neither a TTM nor a fiscal Q4. Annual comes from the 10-K itself (annualPerShare). */
-const PER_SHARE = new Set(["eps_diluted", "eps_basic", "weighted_shares_diluted", "weighted_shares_basic"]);
-const Q4_PER_SHARE = "not reported. A 10-K gives the year's figure, not its fourth quarter's, and the year less nine " +
-  "months isn't the quarter when the share count changes, so it isn't derived as revenue is. Annual shows the year's.";
-const TTM_PER_SHARE = "not applicable. Per-share figures don't add across quarters, because the share count changes. " +
-  "Annual shows the 10-K's figure for each fiscal year.";
+/** Per-share figures come from the Query API's one per-share pipeline (`/per-share`, query_api/per_share.py:
+ * split-adjusted by default, a fiscal Q4 derived from net income and the year's shares, TTM EPS the four
+ * quarters added; owner decisions 1 and 2). These words are for a cell it left blank. */
+export const PER_SHARE = new Set(["eps_diluted", "eps_basic", "weighted_shares_diluted", "weighted_shares_basic"]);
+const Q4_PER_SHARE = "not reported, and not derived here. A 10-K gives the year's figure, not its fourth quarter's; " +
+  "Tributary works the quarter out from its net income and the year's shares less the first three quarters', and " +
+  "leaves it blank when one of those is missing or they don't describe one share count.";
+const TTM_PER_SHARE = "not derived here: the twelve months' EPS is the four quarters' added, and one of the four " +
+  "isn't on file (or, as filed, a stock split falls inside them).";
 const BANK_TITLE = "not applicable. This is a bank: deposits are its debt and lending its operations, so the figure has no comparable meaning.";
 
-function blankCell(metric: string, name: string, period: Period, column: string, notApplicable: string[]): BlankCell {
+function blankCell(metric: string, name: string, period: Period, column: string, notApplicable: string[],
+  notComputed: Record<string, string> = {}): BlankCell {
   if (notApplicable.includes(metric)) return { text: BANK_NA, title: `${name}: ${BANK_TITLE}` };
+  // Tributary computes none for this kind of company: the API's reason (migration 069, Riley 3)
+  const why = notComputed[metric];
+  if (why) return { text: NOT_APPLICABLE, title: `${name}: not computed for this company: ${why}.` };
   if (PER_SHARE.has(metric) && period === "ttm") return { text: NOT_APPLICABLE, title: `${name}: ${TTM_PER_SHARE}` };
   if (PER_SHARE.has(metric) && period === "q" && column.endsWith("Q4")) return { text: NOT_REPORTED, title: `${name}: ${Q4_PER_SHARE}` };
   return { text: NO_DATA, title: `${name}: ${NO_DATA_TITLE.toLowerCase()}` };
+}
+
+/** A per-share cell's hover: what the filing stated and the splits applied, or how a derived figure
+ * was worked out (the API's `as_filed`, `splits`, `derivation`; nothing re-derived here). */
+export function perShareTitle(label: string, r: FinancialRow): string {
+  const eps = r.metric.startsWith("eps_");
+  const when = `${label}, ${r.fiscal_period ?? day(r.period_end, true)} (period ended ${day(r.period_end, true)}).`;
+  const currency = currencyOf(r.unit);
+  // a split-adjusted EPS can be fractions of a cent (NVIDIA's FY2013, $0.0225): four places there
+  const perShare = (v: number) => Math.abs(v) < 0.1 && v !== 0
+    ? `${v < 0 ? "-" : ""}${money(Math.abs(v), r.unit).replace(/[\d.]+$/, Math.abs(v).toFixed(4))}`
+    : money(v, r.unit);
+  const figure = (v: string | null | undefined, metric = r.metric) =>
+    v == null ? "" : metric.startsWith("eps_") ? perShare(Number(v)) : `${(Number(v) / 1e9).toFixed(3)}B shares`;
+  const d = r.derivation;
+  if (d) {
+    const parts = d.inputs.map((i) => `${i.role} ${figure(i.value, i.metric)}${i.derived ? " (derived)" : ""}`);
+    const how = d.method === "q4_eps"
+      ? `Derived: Q4 net income ${money(Number(d.inputs[0]!.value), currency)} ÷ Q4 diluted shares ${figure(d.inputs[1]!.value, d.inputs[1]!.metric)} ` +
+        `(the year's shares less the first three quarters', by days). The 10-K's year: ${figure(d.inputs[2]!.value)}.`
+      : d.method === "q4_shares"
+        ? `Derived: the year's weighted shares less the first three quarters', by days (${parts.join(", ")}).`
+        : d.method === "ttm_eps"
+          ? `Derived: the four quarters' EPS added, ${parts.join(" + ")}.`
+          : `Derived: the four quarters' weighted shares, averaged by days (${parts.join(", ")}).`;
+    return `${when} ${how}${d.note ? ` Uses ${d.note}.` : ""}`;
+  }
+  const splits = r.splits ?? [];
+  const filedFig = r.as_filed ?? r.value;
+  const by = splits.map((s) => `the ${s.label} split (on the new basis from ${day(s.first_filed, true)})`).join(" and ");
+  return `${when} Split-adjusted to today's share basis: ${figure(filedFig)} as filed in the ${r.citation.form} filed ` +
+    `${day(r.citation.filed, true)}, ${eps ? "divided" : "multiplied"} for ${by}. Source: ${r.citation.accession_no}.`;
+}
+
+/** The per-share pipeline's rows in place of the statement's own per-share rows (quarterly, TTM), or
+ * placed at each fiscal year's Q4 column (annual: `withAnnualPerShare`). */
+export function withPerShare(rows: FinancialRow[], perShare: FinancialRow[], period: Period, basis: Basis): FinancialRow[] {
+  const others = rows.filter((r) => !PER_SHARE.has(r.metric));
+  return period === "a" ? withAnnualPerShare(others, perShare, basis) : [...others, ...perShare];
 }
 
 /** The 10-K's per-share rows (annualPerShare) as rows of the annual table: each takes the fiscal
@@ -614,6 +673,7 @@ export function withAnnualPerShare(rows: FinancialRow[], annual: FinancialRow[],
 }
 
 function cellTitle(label: string, r: FinancialRow): string {
+  if (r.derivation || r.splits?.length) return perShareTitle(label, r);
   const src = r.citation.xbrl_tag?.startsWith("derived:")
     ? "computed: revenue less cost of revenue, because the filing prints no gross profit"
     : r.value_source === "derived"
@@ -659,6 +719,8 @@ export function metricTable(
   meaningless: NotMeaningfulPeriod[] = [],
   /** the API's callouts (F5): a cell they name carries one; quarterly tables only */
   callouts: Callout[] = [],
+  /** the API's `not_computed` (069): metric → why Tributary computes none for this company */
+  notComputed: Record<string, string> = {},
 ): MetricTable {
   const periodOf = (r: FinancialRow) => (basis === "calendar" ? r.calendar_period : r.fiscal_period) ?? null;
   const kept = period === "a" ? rows.filter((r) => periodOf(r)?.endsWith("Q4")) : rows;
@@ -693,7 +755,7 @@ export function metricTable(
           metric,
           label: name,
           ...(opts ? { opts } : {}),
-          blanks: ends.map((_, i) => blankCell(metric, name, period, columns[i]!.label, notApplicable)),
+          blanks: ends.map((_, i) => blankCell(metric, name, period, columns[i]!.label, notApplicable, notComputed)),
           cells: ends.map((end, i): TableCell | null => {
             const r = by.get(`${metric}|${end}`);
             const v = r ? num(r.value) : null;
@@ -1015,6 +1077,11 @@ export interface SegmentTable {
     yoyNotMeaningful: boolean;
     /** part of another member, or another cut of the same revenue */
     overlaps: boolean;
+    /** the member it is part of (`memberTree`): listed under it, indented; its share is already in
+     * the parent's */
+    parent?: string;
+    /** another cut of the same revenue (`memberTree`): listed after the members it overlaps */
+    otherCut?: boolean;
     /** the member's last period, when it stopped before the table's newest ("FY2025 Q3"): an old
      * segmentation, listed after the current members */
     until: string | null;
@@ -1138,7 +1205,7 @@ export function segmentTables(rows: SegmentRow[], revenue: FinancialRow[] = []):
       const v = consolidatedAt(e);
       return v ? [[i, v]] : [];
     }));
-    const separated = metric === "revenue" ? separateMembers(periods, totals) : null;
+    const separated = metric === "revenue" ? memberTree(periods, totals) : null;
     const latestIndex = ends.length - 1;
     const total = latest === undefined ? null : consolidatedAt(latest);
     const memberSum = rs.filter((r) => r.period_end === latest).reduce((s, r) => s + (num(r.value) ?? 0), 0);
@@ -1183,21 +1250,33 @@ export function segmentTables(rows: SegmentRow[], revenue: FinancialRow[] = []):
         yoy: last !== null && yearAgo !== null && yearAgo > 0 ? last / yearAgo - 1 : null,
         yoyNotMeaningful: last !== null && yearAgo !== null && yearAgo <= 0,
         overlaps: separated?.drop.has(member) ?? false,
+        ...(separated?.parent.has(member) ? { parent: separated.parent.get(member)! } : {}),
+        ...(separated?.otherCut.has(member) ? { otherCut: true } : {}),
         until: lastEnd === latest ? null : columns[ends.indexOf(lastEnd)]!.label,
       };
     });
-    // current members by their newest value, then the ones that stopped, by their last
+    // current members by their newest value, then the ones that stopped, by their last; a child
+    // straight after its parent, other cuts after the rest (memberTree, Riley 31)
     const lastValue = (r: (typeof out)[number]) => num(at(r.member, lastOf(r.member))?.value) ?? -Infinity;
     out.sort((a, b) => Number(a.until !== null) - Number(b.until !== null) || lastValue(b) - lastValue(a));
+    if (separated) out.splice(0, out.length, ...treeOrder(out, (r) => r.member, separated));
     const other = axis === "business_segment" && !separated?.drop.size
       ? reconcilingRow(rows.filter((r) => r.axis === "reconciliation" && r.metric === metric), ends, columns,
         (end) => consolidatedOf(metric, end), (end) => members.reduce((s, [m]) => s + (num(at(m, end)?.value) ?? 0), 0))
       : null;
     if (other) out.push(other);
     // a member that stopped is said once, below; it stays out of sums either way
-    const parts = out.filter((r) => r.overlaps && r.until === null).map((r) => r.label);
-    const overlapNote = parts.length
-      ? `${listOf(parts)} ${parts.length === 1 ? "is" : "are"} part of another line here, or another cut of the same revenue, so the lines add up to more than revenue. Each share is of consolidated revenue.`
+    const labelOf = (m: string) => out.find((r) => r.member === m)?.label ?? m;
+    const children = out.filter((r) => r.parent && r.until === null);
+    const byParent = new Map<string, string[]>();
+    for (const r of children) byParent.set(r.parent!, [...(byParent.get(r.parent!) ?? []), r.label]);
+    const cuts = out.filter((r) => r.otherCut && r.until === null).map((r) => r.label);
+    const sentences = [
+      ...[...byParent].map(([p, kids]) => `${listOf(kids)} ${kids.length === 1 ? "is" : "are"} part of ${labelOf(p)}, indented under it`),
+      ...(cuts.length ? [`${listOf(cuts)} ${cuts.length === 1 ? "is" : "are"} another breakdown of the same revenue, listed last`] : []),
+    ];
+    const overlapNote = sentences.length
+      ? `${sentences.join("; ")}. None of them is added to the others; each share is of consolidated revenue.`
       : separated?.unreliable.has(latestIndex)
         ? "These lines add up to more than revenue and can't be separated: some overlap, or include sales between segments. Each share is of consolidated revenue, so don't add them up."
         : null;

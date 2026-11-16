@@ -316,7 +316,10 @@ def test_a_typed_price_gives_multiples_for_the_ttm_and_each_case_only():
     assert v["net_debt"]["value"] == -783200000 and v["net_debt"]["period_end"] == "2026-09-30"
     assert v["enterprise_value"] == pytest.approx(150 * shares - 783.2e6)
     assert out["ttm"] is not None and v["history"] == []
-    assert v["ttm"]["pe"] == pytest.approx(v["market_cap"] / out["ttm"]["net_income_adjusted"])
+    # Riley 11: one P/E method in every column, price over diluted EPS; the TTM column's EPS is its
+    # net income over the latest quarter's diluted shares (it read market cap / net income)
+    assert v["ttm"]["pe"] == pytest.approx(
+        150 / (out["ttm"]["net_income_adjusted"] / out["ttm"]["shares"]))
     assert v["ttm"]["ev_ebit"] == pytest.approx(
         v["enterprise_value"] / out["ttm"]["operating_income_adjusted"])
     assert set(v["cases"]) == {"bear", "base", "bull"}

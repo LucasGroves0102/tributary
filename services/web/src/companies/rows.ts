@@ -51,6 +51,21 @@ function title(key: string, src: ValueSource | null, long?: string): string {
   return `${label}, ${span}. Source: ${src.form} filed ${day(src.filed, true)}, ${src.accession_no}`;
 }
 
+/** The table's foot names its currency: dollars, unless the page holds an amount in another one (a
+ * 20-F filer's TWD or CNY: shown in its own currency and never ranked with dollars, migration 056).
+ * Riley 2: TSMC's "TWD 2.89T" sat under a foot that said "US dollars". A ratio sorts across currencies. */
+export function currencyFoot(rows: ScreenRow[]): string {
+  const others = new Set<string>();
+  for (const r of rows) {
+    for (const c of Object.values(r.cells)) {
+      if (c.status === "other_currency" && c.currency) others.add(c.currency);
+    }
+  }
+  if (others.size === 0) return "US dollars.";
+  return `US dollars, except the amounts shown in ${[...others].sort().join(", ")}: those companies report in ` +
+    "their own currency, so their amounts aren't sorted, filtered or averaged with dollars (their ratios are).";
+}
+
 export function screenRow(r: ScreenerRow, columns: ColumnSpec[] = DEFAULT_SPECS): ScreenRow {
   const readable = r.access.includes("financials");
   const cells: Record<string, Cell> = {};

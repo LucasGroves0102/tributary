@@ -295,7 +295,9 @@ function explainOne(n: DataNote, now: number): Explained {
             `consolidated ${m.toLowerCase()}. ` +
             (unallocated
               ? "Costs no segment carries, such as unallocated corporate costs, usually explain this; the 10-K's segment note reconciles it."
-              : "Some members overlap or one is missing; each share on the Segments tab is of consolidated revenue, so don't add them up."),
+              // migration 070: members that overlap (a parent beside its children, two cuts) aren't flagged,
+              // so what's left is a member the filings don't name, or one on another basis
+              : "No combination of them makes the reported figure: a member isn't tagged, or they're on another basis (sales between segments). Each share on the Segments tab is of consolidated revenue, so don't add them up."),
         };
       }
       return { title: `${m}: ${n.kind.replace(/_/g, " ")}`, text: `A data check flagged ${m.toLowerCase()} for ${pe}.` };

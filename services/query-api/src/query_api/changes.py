@@ -75,7 +75,10 @@ The rules (the spec; the README's "What changed" says the same):
 10. Word diffs (rewritten): a calendar-only swap inside a passage that changed otherwise
    ("second" → "third" quarter, "June 30, 2025" → "September 30, 2026": a "-" run then a "+"
    run of month names, ordinals, three/six/nine, years and day numbers only) shows as the new
-   words, unmarked (`quiet_calendar`); every other word change is marked.
+   words, unmarked (`quiet_calendar`); every other word change is marked. Such an "=" run carries
+   the earlier filing's own words as a third element (`["=", new, old]`), so the side-by-side
+   reader quotes what that filing said (Riley 5: an Aug 2025 10-Q's column read "fiscal year
+   2027"); a run without one reads the same in both. An older web app reads the first two.
 """
 
 import re
@@ -741,19 +744,23 @@ def quiet_calendar(runs: list[list[str]]) -> list[list[str]]:
     """Word runs with each calendar-only swap (a "-" run then a "+" run whose words are all month
     names, ordinals, "three/six/nine", years or day numbers: "second" → "third", "June 30, 2025"
     → "September 30, 2026") shown as the new words, unmarked (rule 10), merged into the "="
-    runs around them."""
+    runs around them; a merged run whose earlier words differ keeps them third."""
     out: list[list[str]] = []
     i = 0
     while i < len(runs):
-        op, text = runs[i]
+        op, text = runs[i][0], runs[i][1]
+        old = text
         if op == "-" and i + 1 < len(runs) and runs[i + 1][0] == "+" and all(
                 _CALENDAR_WORD.match(w) for w in (text + " " + runs[i + 1][1]).split()):
             op, text = "=", runs[i + 1][1]
             i += 1
         if out and out[-1][0] == op == "=":
-            out[-1][1] += " " + text
+            prev = out[-1]
+            before = (prev[2] if len(prev) > 2 else prev[1]) + " " + old
+            prev[1] += " " + text
+            out[-1] = prev[:2] + ([before] if before != prev[1] else [])
         else:
-            out.append([op, text])
+            out.append([op, text] + ([old] if op == "=" and old != text else []))
         i += 1
     return out
 

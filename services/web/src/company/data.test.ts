@@ -3,7 +3,11 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import { ACC, fin, NVDA, nvdaRow } from "../fixtures";
-import type { Recap, RecapValue, SegmentRow } from "../types";
+import PS_ANNUAL from "./fixtures/nvda-per-share-annual.json";
+import PS_ANNUAL_FILED from "./fixtures/nvda-per-share-annual-filed.json";
+import PS_QUARTER from "./fixtures/nvda-per-share-quarter.json";
+import PS_TTM from "./fixtures/nvda-per-share-ttm.json";
+import type { PerShare, Recap, RecapValue, SegmentRow } from "../types";
 import {
   eightKItems,
   howFiled,
@@ -26,8 +30,10 @@ import {
   segmentTables,
   STATEMENTS,
   listingLine,
+  perShareTitle,
   withAnnualPerShare,
   withBridges,
+  withPerShare,
   yearStory,
 } from "./data";
 
@@ -370,19 +376,42 @@ describe("what a blank means in a period table", () => {
     const eps = t.rows[1]!;
     expect(eps.cells[1]).toBeNull();
     expect(eps.blanks[1]).toMatchObject({ text: "—" });
-    expect(eps.blanks[1]!.title).toContain("year less nine months isn't the quarter");
+    expect(eps.blanks[1]!.title).toContain("not derived here");
     const cash = t.rows[2]!;
     expect(cash.blanks[1]).toMatchObject({ text: "·" });
     // a real zero is a figure
     expect(cash.cells[0]!.text).toBe("$0");
   });
 
-  it("TTM keeps the per-share rows, as n/a, so they don't just vanish", () => {
+  it("TTM keeps the per-share rows when the pipeline gave none, saying why", () => {
     const rows = [fin("revenue", "2026-07-26", "302", "FY2027 Q2")];
     const t = metricTable(rows, [["revenue", "Revenue", "usd"], ["eps_diluted", "EPS (diluted)", "eps"]], "ttm");
     expect(t.rows.map((r) => r.metric)).toEqual(["revenue", "eps_diluted"]);
     expect(t.rows[1]!.blanks[0]).toMatchObject({ text: "n/a" });
-    expect(t.rows[1]!.blanks[0]!.title).toContain("don't add across quarters");
+    expect(t.rows[1]!.blanks[0]!.title).toContain("the four quarters' added");
+  });
+
+  it("the per-share pipeline's rows replace the statement's: split-adjusted, a derived Q4 and TTM (Riley 1, 6, 7)", () => {
+    const quarter = PS_QUARTER as unknown as PerShare;
+    const stale = [fin("eps_diluted", "2023-04-30", "0.82", "FY2024 Q1"), fin("revenue", "2026-01-25", "68", "FY2026 Q4")];
+    const rows = withPerShare(stale, quarter.rows, "q", "fiscal");
+    expect(rows.filter((r) => r.metric === "eps_diluted" && r.period_end === "2023-04-30")).toEqual([]);  // older than the window
+    const t = metricTable(rows, [["revenue", "Revenue", "usd"], ["eps_diluted", "EPS (diluted)", "eps"]], "q", "fiscal", [], 12);
+    const eps = t.rows[1]!;
+    const q4 = eps.cells[t.columns.findIndex((c) => c.label === "FY2026 Q4")]!;
+    expect(q4).toMatchObject({ text: "$1.76", derived: true });
+    expect(q4.title).toMatch(/Derived: Q4 net income \$42\.96B ÷ Q4 diluted shares 24\.430B shares/);
+    const ttm = PS_TTM as unknown as PerShare;
+    const tt = metricTable(withPerShare([], ttm.rows, "ttm", "fiscal"), [["eps_diluted", "EPS (diluted)", "eps"]], "ttm");
+    const last = tt.rows[0]!.cells.at(-1)!;
+    expect(last.title).toContain("Derived: the four quarters' EPS added");
+    const annual = PS_ANNUAL as unknown as PerShare;
+    const fy19 = annual.rows.find((r) => r.metric === "eps_diluted" && r.period_end === "2019-01-27")!;
+    expect(perShareTitle("EPS (diluted)", fy19)).toMatch(
+      /Split-adjusted to today's share basis: \$6\.63 as filed in the 10-K filed .*divided for the 4-for-1 split \(on the new basis from Aug 20, 2021\) and the 10-for-1 split \(on the new basis from Aug 28, 2024\)/);
+    expect(fy19.value).toBe("0.1658");
+    const filed = PS_ANNUAL_FILED as unknown as PerShare;
+    expect(filed.rows.find((r) => r.metric === "eps_diluted" && r.period_end === "2019-01-27")!.value).toBe("6.63");
   });
 
   it("Annual takes EPS from the 10-K, in the column of the year it ends, a day's difference allowed", () => {
@@ -440,7 +469,11 @@ describe("segment shares", () => {
     expect(t!.shareOf).toBe("consolidated");
     expect(t!.rows.find((r) => r.label === "Data Center")!.share).toBeCloseTo(0.9252, 3);
     expect(t!.rows.find((r) => r.label === "Hyperscale")!.share).toBeCloseTo(0.5062, 3);
-    expect(t!.overlapNote).toContain("Hyperscale, AI Clouds are part of another line");
+    expect(t!.overlapNote).toContain("Hyperscale, AI Clouds are part of Data Center, indented under it");
+    // the children straight after their parent (Riley 31: their shares read as slices on top of it)
+    const order = t!.rows.map((r) => [r.label, r.parent ?? null]);
+    const at = order.findIndex(([l]) => l === "Data Center");
+    expect(order.slice(at, at + 3).map(([l]) => l)).toEqual(["Data Center", "Hyperscale", "AI Clouds"]);
     expect(t!.rows.filter((r) => r.overlaps).map((r) => r.label)).toEqual(["Hyperscale", "AI Clouds"]);
   });
 
