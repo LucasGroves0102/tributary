@@ -6,100 +6,50 @@ FR9, week 2. Claude agent that answers questions about SEC filings through the
 
 The agent holds the asking user's Query API token and its tools take no user parameter, so it
 sees exactly what that user may read. Tool results are treated as data; denied calls come back
-as tool errors the model must report.
+as tool errors the model must report. Design notes, measurements and the full behaviour of
+reports and thesis checks: [DESIGN.md](DESIGN.md).
 
 | Tool | Query API route |
 |---|---|
 | `whoami` | `GET /v1/me` |
 | `search_companies` | `GET /v1/companies/search` |
-| `get_financials` | `GET /v1/companies/{id}/financials` |
+| `get_financials` | `GET /v1/companies/{id}/financials` (metric names from `GET /v1/metrics`; at most 40 quarters whatever the model passes) |
 | `list_filings` | `GET /v1/companies/{id}/filings` |
-| `get_section` | `GET /v1/companies/{id}/sections/{key}` |
+| `get_section` | `GET /v1/companies/{id}/sections/{key}` (`max_chars` default 8,000, up to 20,000) |
 | `get_section_changes` | `GET /v1/companies/{id}/filings/{accession}/changes` (keeps the first `max_changes`, default 20, max 50; says how many it left out) |
 | `get_material_changes` | `GET /v1/companies/{id}/filings/{accession}/changes?view=ranked` (`topic` → `q`, `new_figures` → `numbers=new`; keeps the `max_changes` highest scores across sections, default 15, max 50, says how many it left out, and drops the echoed filters) |
 | `search_filings` | `GET /v1/search` (`limit` up to 20, `offset` 0-1,000 as its schema says, clamped in `_route`) |
 | `get_earnings_release` | `GET /v1/companies/{id}/earnings` (`quarters` 1-4, default 1; a quarter's quoted adjustments whole up to 6,000 characters, the rest keep heading and citation and say to read them with `get_section`) |
-| `get_events_since_report` | `GET /v1/companies/{id}/events` |
+| `get_events_since_report` | `GET /v1/companies/{id}/events` (an event flagged from its 7.01/8.01 announcement carries `announced`) |
 
-`get_earnings_release` and `get_events_since_report` (Query API README, "Earnings and events") give
-the quarterly earnings release (its headline, the outlook it states, management's reconciliation
-tables and dollar notes, each quoted with its citation) and the 8-Ks filed since the latest
-10-Q/10-K period end, with the balance-sheet figures an event after it may have changed (an event
-flagged from its 7.01/8.01 announcement carries `announced`: the words that matched, quoted with a
-citation, so the model can say so). They were
-added without re-recording: the recorded suites don't depend on the tool list, and the chat and
-report prompts and existing tools are unchanged (`tests/adversarial`, `tests/citations` still 97
-passing). Both need the `filings` tier, so the adversarial harness counts a result for a company
-the user can't read filings for as a leak, as it does for `search_filings`.
-
-`get_material_changes` (F3) reads What changed for materiality (Query API README, "Read for
-materiality"): a 10-Q against the same quarter a year earlier unless the model asks for `prior`,
-split paragraphs, calendar rollovers and figure-only rows left out and counted, each change with
-its period, new and removed figures, a score and why. It is a new tool, not new parameters on
-`get_section_changes` (whose schema and answer are unchanged): no re-recording (97 replays pass),
-in `report.COMPANY_TOOLS` and in the harness's TOOL_TIER as `filings`. The answer drops the
-echoed `filters`: a topic is the model's own words, never evidence for a figure it writes
-(verify.py). Check my thesis lists it beside `get_section_changes` and, when it calls a risk
-factor new, says what the filing was compared with (tester 1 saw the check call a covenant
-"new" while What changed, against the prior 10-Q, showed nothing new: against a year ago,
-Vertiv's covenant risk factors are new).
+The filings tools need the `filings` tier: the adversarial harness counts a result for a company
+the user can't read filings for as a leak. Tools added after the recorded suites
+(`search_filings`, `get_section_changes`, `get_material_changes`, the earnings and events tools)
+needed no re-recording: the suites don't depend on the tool list
+([DESIGN.md](DESIGN.md#tools-added-after-the-recordings)).
 
 `get_financials`' metric names come from `GET /v1/metrics` (`MetricTools`, fetched once; until
-the Query API answers, the tool lists no names and the API rejects unknown ones).
+the Query API answers, the tool lists no names and the API rejects unknown ones). For a company
+reporting in another currency it says so per row (`unit`) and on the answer (`currency`).
 
-At the round limit (6 rounds of tool calls in chat, 12 in a report, 16 in a thesis check) the agent
-doesn't give up and discard what it found: one more call (`agent.CLOSING`, `tool_choice` none)
-answers from the tool results so far and says first what it couldn't look up or finish; the
-answer's `stop` is `max_rounds`. Each model call is logged with its stop reason and token counts
-(output tokens include thinking), so a `max_tokens` stop can be traced to the reply that hit it.
+At the round limit (6 rounds of tool calls in chat, 12 in a report, 16 in a thesis check) one
+more call without tools answers from what was found and says first what it couldn't finish; the
+answer's `stop` is `max_rounds`. Each model call is logged with its stop reason and token counts.
 
-Before an answer is returned, `verify.py` checks every dollar figure against the tool results
-(matched, derived as a sum or difference of one metric, or quoted from filing text) and every
-accession number against what the tools returned; the result is part of the answer as
-`verification`. A derived metric's `inputs` count as returned values (net debt's cash and debt, a
-growth rate's year-ago value, a TTM's quarters), and a filing table's cells are read at the scale
-that governs them, decimals included. Those two came after the recorded suites and only apply to a
-figure the original rules left unverified; a figure that isn't in the data still fails. Cells are
-read per section: a section stating no scale note ("(In thousands)", "($ in millions)") reads in
-millions; one stating exactly one scale reads its cells after that note at that scale (before it,
-in millions); one stating several reads in millions only. So no section is read more loosely than
-millions alone: a share note "(in thousands)" below statements "(In millions)", a prose "(in
-billions)" or a later note no longer makes the statements' 96,221 read as $96.2M or $96.2T. What
-it can't do: in a section with several scales, a cell that really is in thousands still reads in
-millions, as it always did. A figure written without a unit ("$96,221") isn't quoted from a
-section that states a scale.
-A sum or difference pairs only values that can be compared: like with like (quarters with
-quarters, TTMs with TTMs: a TTM plus one of its own quarters is reported nowhere), one company's
-adjacent quarters or the same quarter a year apart, or two companies' periods ending within 45
-days (with forty TTM quarters in a thesis check, any two made coincidences: NVIDIA's TTM operating
-income of July 2025 less April 2018's "verified" a made-up $99.9B). `/v1/search`'s echo of the
-query is never evidence (a searched figure would quote itself); its snippets are filing text,
-read without the « » marks. Every verdict in the recordings is unchanged, so they replay as
-recorded.
-Total debt (analyst test 4): one side of a derived row's inputs, summed at that row's date, also
-verifies, after every other rule (`INPUT_TOTALS`): long-term debt plus its current portion (net
-debt's debts, debt/equity's numerator) and cash plus short-term investments (net debt's cash). A
-filing prints them as separate lines, so Vertiv's "debt $2,928.5M" ($2,925.1M + $3.4M) was "not in
-the data"; any other sum across two metrics (debt plus cash, debt plus equity) still isn't. It runs
-only for a figure rules 1-4 left unverified: every recording replays with a byte-identical
-verification.
-Currencies (F8b): since migration 056 a foreign filer's figures are in its own currency, and
-`get_financials` says so per row (`unit` "EUR", "EUR/shares") and on the answer (`currency`, only
-when not USD). The system prompt still says to write dollars (changing it needs a re-record), so
-`verify.py` guards the other side: a figure written with "$" that the rules verified or derived from
-a row or input in another currency is checked again with dollar rows only, and is unverified unless
-those verify it ("$2,097M" about Birkenstock's €2,097M fails; "2,097 million" still matches). Every
-row in the recordings is in USD (a test reads them), so they replay as recorded. Not covered: a "$"
-figure quoted from a euro filing's text ("2,097 million" in a 20-F) still counts as quoted.
-The thesis check's H2 guard (`filing_checks`) reads the cited filing's figures with their `unit`
-(057): a "$" figure never agrees with a figure in another currency, and its note words the
-filing's figure in it ("net debt of €10.9B"); the stored filing figure keeps its fields (no unit:
-query_api's `FilingFigure` is strict). Every amount the model reads for a non-USD company says its
-currency where it reads it: the `get_financials` answer (above), the thesis check's prefetched
-history (the same answer) and each model's history in `<check_data>` (`currency` beside the
-amounts, from the model run's own, only when not USD so a dollar company's block is unchanged).
-The other tools return no amounts of Tributary's (events, filings, search) or quote the filing's
-own text, its currency sign included (sections, changes, earnings releases).
+## Verification
+
+Before an answer is returned, `verify.py` checks every dollar figure and accession number against
+the tool results; the result is the answer's `verification`. A figure is verified when it equals
+a returned value at the precision written, derived when it is a sum or difference of two
+comparable values of one metric (like with like; one company's adjacent quarters or a year apart;
+two companies within 45 days), and quoted when it appears in filing text (table cells at the
+scale their section states, never looser than millions). After the recorded suites, and only for
+a figure those rules leave unverified: a derived metric's `inputs`, and one side of its inputs
+summed (total debt; cash plus short-term investments). A "$" figure resting on a row in another
+currency is checked again over dollar rows only. `/v1/search`'s echo of the query is never
+evidence. Every recorded verdict replays unchanged. The MCP server's `verify_figures` tool
+([mcp-server](../mcp-server)) imports this module, so it uses the standard library only. Details
+and known limits: [DESIGN.md](DESIGN.md#verification-verifypy).
 
 ## agent-api
 
@@ -114,57 +64,33 @@ Every route takes a sign-in's token only: a personal API key (`trb_...`, Query A
 keys") is refused with 403 before anything is charged or asked, on `/v1/ask`, reports, thesis
 checks and `/v1/allowance` alike, so a script can't spend a user's questions.
 
-The web app also sends `context` (its page, company and company tab, the reader's filing and
-section, the search page's words, chart layers, screener filters, the comps set;
-`ui.UiContext`: strict fields, at most 4,000 bytes). It reaches the model as a block of data
-marked untrusted and never decides who the user is: that is still only the token. agent-api adds
-a `propose_ui_action` tool (set/add/remove chart layers, chart options, screener filters, the
-comps table's company and peers, add or remove a watchlist company). Each proposal is checked as
-the user through the Query API (`/v1/me`, `/v1/companies/search`, `/v1/formulas/validate`): chart companies must be readable,
-unknown and ungranted ones get the same refusal (with `/v1/me`'s public catalog open with
-financials, every company the search resolves is readable). Accepted ones stream as `action` events (also in
-`answer.actions`) for the app to apply with Undo; the app reads any data itself, through the
-Query API. `save_to_workspace` (item `chart`, `comps` or `screen`, a name, a workspace name)
-saves what the screen shows: it is accepted only if the context showed that item or an accepted
-action in the same answer built it, and names are trimmed, capped and free of control
-characters. The app then saves it through the Query API (which validates the state again, for
-this user only) and Undo deletes the saved item. Without the web app (CLI, recorded suites)
-requests are unchanged.
+The web app also sends `context` (its page, company, filing, search, chart, screener or comps
+state; `ui.UiContext`, strict, at most 4,000 bytes). It reaches the model as data marked
+untrusted and never decides who the user is. agent-api adds `propose_ui_action` (chart layers and
+options, screener filters, comps, watchlist) and `save_to_workspace` (a chart, comps or screen the
+screen shows); each proposal is checked as the user through the Query API and streams as an
+`action` event for the app to apply with Undo
+([DESIGN.md](DESIGN.md#page-context-and-ui-actions)). The web app's `context.page` is one of home,
+companies, company, filing, chart, compare, search, ask, about, workspace, report, thesis, model.
 
 `GET /v1/allowance` says what's left before anything is spent, for the assistant panel's meter:
-`per_hour`, `network_per_hour`, `left_this_hour` (the tighter of the two), `per_day` and
-`left_today` (from the Query API, null where it doesn't count them), `paused` (the day's budget is
-gone), what a report and a thesis check take (`report_questions`, `check_questions`) and how long a
-check usually runs (`check_seconds`, 120: about two minutes in production). The web app says both
-before a check starts from these numbers, never its own copy. No model call, takes nothing.
+`per_hour`, `network_per_hour`, `left_this_hour`, `per_day` and `left_today` (from the Query API,
+null where it doesn't count them), `paused` (the day's budget is gone), `report_questions`,
+`check_questions` and `check_seconds` (how long a check usually runs, 120). No model call.
 
-Limits: questions per hour per user and per client IP (`X-Client-IP`, set by the web proxy from
-Cloudflare's `CF-Connecting-IP`), and a daily model budget across all users. Over a limit → 429.
-Before each question it also takes the user's persistent daily allowance from the Query API
-(`/v1/demo/agent-quota`): a demo sandbox's or GitHub account's demo caps, or an owner-created
-password account's own `questions_per_day` (Query API README, "Password accounts"); the
-Query API decides from the token, and its 429 message is shown as is. Production raises
-`AGENT_IP_RATE_PER_HOUR` to 40 (Flux release): a tester on the owner's network shares the
-owner's address, and the per-account daily caps still hold.
-A report counts as 3 questions ([Reports](#reports)), a thesis check 4
-([Thesis checks](#thesis-checks)). Questions are taken before the model runs (so parallel requests
-can't overspend). Every model call that returns is added to the day's model budget as it returns
-(the agent's internal `usage` events, never sent to the browser), so a run that fails later, or a
-client that goes away, still counts what it cost. Questions are given back only for a failure that
-is ours and can't be caused on purpose, and at most twice per user per UTC day (`REFUNDS_PER_DAY`,
-in-process like the hour's limits): a model API error (outage, overload) before any model call
-returned and before any text streamed, or a thesis check that saved nothing because its replies
-were cut off at max_tokens (`server.Charge`; the Query API's `POST /v1/demo/agent-quota/refund`
-for the daily caps). The stream then carries `{"type": "refunded", "questions": n}`, and the web
-app says the run didn't count only then. Nothing else is given back: an error after a paid round
-(a long enough tool result can push the next call past the model's context), a model that chose
-not to submit, a save refused because the thesis or workspace was deleted mid-run, a client that
-disconnects. A result counts, partial ones included. A refused daily quota gives the hour's
-allowance back. `get_financials` asks for at most 40 quarters whatever the model passes (the
-schema's limit; the Query API itself takes 120 for the web app).
+### Limits
 
-The web app's `context.page` is one of home, companies, company, filing, chart, compare,
-search, ask, about, workspace, report, thesis, model.
+Questions per hour per user and per client IP (`X-Client-IP`, from Cloudflare's
+`CF-Connecting-IP` via the web proxy), a daily model budget across all users, and the user's
+persistent daily allowance from the Query API (`/v1/demo/agent-quota`: a sandbox's or GitHub
+account's caps, a password account's own `questions_per_day`). Over a limit → 429. A report
+counts as 3 questions ([Reports](#reports)), a thesis check 4 ([Thesis checks](#thesis-checks)),
+taken before the model runs. Every model call that returns is added to the day's budget at once.
+Questions are given back only for a model API error before any output, or a thesis check cut off
+at max_tokens that saved nothing, at most twice per user per UTC day (`REFUNDS_PER_DAY`); the
+stream then carries `{"type": "refunded", "questions": n}`. Nothing else is given back. The hour's
+limits and refunds are in-process (they reset on restart). Details:
+[DESIGN.md](DESIGN.md#allowance-limits-and-refunds).
 
 ## Reports
 
@@ -174,30 +100,16 @@ kind `report` (`report.py`; Query API README, "Reports"). Streams the same event
 plus a `report` event (the saved item and whether every figure verified) or an `error` event if
 it couldn't be saved, before `done`.
 
-- **The user's own workspace, read as the user.** The workspace comes from the Query API with
-  the user's token (`GET /v1/workspaces/{id}`): someone else's is the same 404 as a missing one,
-  and nothing is spent. Its first 8 charts, comps sets and screens are the report's items
-  (`REPORT_KINDS`; the user's theses and models, app migration 009, and earlier reports are
-  skipped: never sent to the model, never embedded, and a workspace holding only those is a
-  422 "save a chart … first"); the model gets them as a `<workspace>` data block (names are labels, `<`/`>` escaped so a name
-  can't close the block) with what the user can read of each company (`/v1/me`: its listed
-  companies' tiers, plus the public catalog's tiers for every company while it is open).
-- **Only the workspace's companies.** The tools are the chat tools as the user, but limited to the
-  companies the items name (chart layers and formula tickers, comps target and peers, each saved
-  screen's top 8 rows from the screener run as the user); anything else is refused before any
-  request. Ungranted companies get the Query API's permission denied, as in chat.
-- **Structure.** Title, summary, one section per item with its embed marker
-  (`[[embed:item-N]]`, where the web app draws the saved chart or table from its saved state),
-  then risks and what changed when the user can read filings. Markers for unknown items are
-  dropped; an item the model skipped still gets its own section.
-- **Every number cited, every unverified figure flagged.** The answer goes through the same
-  `verify.py` check as chat; any figure or accession number it can't trace to a tool result is
-  listed in an "Unverified" section of the report (and highlighted inline by the web app), never
-  silently kept. Citations, the newest `as_of` the tools returned and the writing time are stored
-  with it.
-- **Counts as 3 questions** (`REPORT_QUESTIONS`) against every limit: per user and per IP per
-  hour, the daily budget, and a demo sandbox's daily caps (taken all at once, or refused with a
-  message saying how many are left). Up to 12 tool rounds.
+- The workspace is read as the user (someone else's is a 404, nothing spent). Its first 8
+  charts, comps sets and screens are the items (`REPORT_KINDS`); theses, models and earlier
+  reports are skipped.
+- The tools are the chat tools as the user, limited to the companies the items name.
+- Title, summary, one section per item with its `[[embed:item-N]]` marker, then risks and what
+  changed when the user can read filings.
+- The same `verify.py` check as chat; unverified figures are listed in an "Unverified" section.
+- Counts as 3 questions (`REPORT_QUESTIONS`) against every limit; up to 12 tool rounds.
+
+Full behaviour: [DESIGN.md](DESIGN.md#reports).
 
 ## Thesis checks
 
@@ -206,135 +118,32 @@ the data and saves the result with it (`thesis_check.py`; Query API README, "The
 Streams the same events as `/v1/ask`, plus a `check` event (the saved check's summary and its
 result) or an `error` event if it couldn't be saved or the model never submitted, before `done`.
 
-- **The user's own thesis, read as the user.** `GET /v1/workspace-items/{id}` with the user's
-  token: someone else's thesis, a missing one and an item that isn't a thesis are the same 404,
-  and nothing is spent; an empty thesis is a 422. The models it embeds (`[[embed:<id>]]` lines
-  naming `model` items of its workspace, first 4) come from `GET /v1/workspaces/{id}`; in an
-  analysis project (the workspace's `project`) the project's other models of its company count
-  too, after the embedded ones (`embedded: false` in the data).
-- **Assumptions computed, not written by the model.** For each model, its company's history is
-  read as the user (`get_financials`, TTM, 40 quarters: the evidence its figures verify against)
-  and the model is **run by the Query API** (`model_stats.run_model`: `POST
-  /v1/companies/{id}/model` with the saved state, as the user). Since F2 that route is the one
-  copy of a model's maths (Query API README, "Models: one copy of the maths"); agent-api no
-  longer ports the web app's. The run gives the 5-fiscal-year revenue CAGR, mean operating margin
-  and its [min, max], each forecast year's full-year growth minus the CAGR and two flags:
-  **growth more than 10 percentage points above or below the CAGR, or a margin outside the
-  5-year [min, max]**. The numbers go to the model as data; it only writes the commentary. Each
-  forecast year also says whether the user set it (`user_set`): a year equal to a default a new
-  model starts from (the run-rate rule, or the flat 5-year CAGR and average margin of models made
-  before it) is Tributary's, not the user's view, and `CHECK_RULES` tells the model not to endorse
-  it as such; the rates a year leaves at their defaults are listed (`defaulted`: tax rate,
-  interest and other, share change, FCF margin) under the same rule. The data also carries the
-  TTM run rate (`ttm_growth_pct`, `ttm_margin_pct`), each year's net income, diluted EPS and its
-  growth, share change and FCF margin, and `reported_quarters`. Since analyst test 4 it also
-  carries what the model page shows, on both bases where the user has one-offs (finding 10:
-  "21.0%" is the reported FY2026 margin, 21.24% the adjusted one, and the check read one against
-  the other): each year's revenue, operating income and margin reported and adjusted, adjusted
-  EPS and net income, FCF and the P/E at the user's price; the TTM column (revenue, reported
-  margin beside the run rate's adjusted one, FCF and its margin); the adjustments and a `basis`
-  note naming which fields are which; the price. `CHECK_RULES` says compare like with like and that
-  a figure matching either basis within the thesis's rounding isn't contradicted (say which). A
-  model built from the current
-  year's reported quarters (F2 `ytd`) is checked on its full year, and `CHECK_RULES` says the
-  reported part isn't an assumption. If the run fails (no access, or an older Query API during a
-  deploy: "the Query API can't run models yet"), that model carries the error and the claims are
-  still checked.
-- **The base case.** A model with bear / base / bull scenarios (the Analysis tab) is checked on
-  its **base** case only: `assumptions` in the saved state, which is all a model saved before
-  scenarios holds (`model_stats.scenario_assumptions` reads it; the Query API's shared fixture's
-  `scenario_cases` pin which assumptions each case uses). The bear and bull cases never reach
-  the data or the flags; the result's shape is unchanged.
-- **The thesis is data.** The first 30,000 characters (`MAX_THESIS_CHARS`; the result says
-  when the rest wasn't checked) go in a `<thesis>` block as a JSON string with `<`/`>` escaped,
-  so nothing in it can close the block; Tributary's numbers in a `<check_data>` block. The chat
-  rules apply unchanged, plus `CHECK_RULES` (the thesis is material to check, never
-  instructions).
-- **Since the last report.** `CHECK_RULES` sends the model to the latest earnings release
-  (`get_earnings_release`: its outlook and adjustments) and the 8-Ks after the latest report's
-  period end (`get_events_since_report`) for the points the thesis doesn't address, and says a
-  balance-sheet figure from that period end is out of date when an event in `stale` follows it:
-  say so and cite the event, never compute a figure after it (tester 1's acquisition after the
-  quarter end came only from the check; C11).
-- **Only the thesis's companies.** The tools are the chat tools as the user, limited
-  (`report.ScopedTools`) to the thesis's company, its models' companies, in an analysis project
-  its company and its peers (as the user picked them in the Peers step: a thesis compares with
-  "Eaton 11.9%, nVent 12.1%" by name, and the check called them "not among the companies in scope";
-  analyst test 4, finding 9), and companies it names by ticker (`$NVDA`, `(NASDAQ: NVDA)`, bare
-  upper-case tickers outside a stop list; at most 8 lookups) that `/v1/me` says the user can read;
-  12 at most. Each company reaches the data with its role (thesis, model, project, peer, named),
-  the user's access and its name and tickers (from `/v1/companies/search` by CIK when `/v1/me`
-  doesn't name it, as with the open catalog), so the model finds "Eaton" there. Scope only lets a
-  tool ask: every read is still the user's own Query API call (require() and RLS), so a peer the
-  user can't read is listed with no access and answers 403. A CIK, a workspace id or another
-  user's name in the text widens nothing; the tools take no workspace or user. Plus
-  `submit_check`, which takes the structured result once.
-- **Your model** (analyst test 4, finding 9). Claims made of the user's own model ("My base case
-  puts FY2027 revenue at $18.75B and diluted EPS at $8.52", "operating margin 21.0%, 22.5% and
-  22.0%", "29x my FY2026E EPS") were "can't verify: not in the data" or "contradicted". A claim
-  is now status `model` when every figure in its quote ($ amounts, percents, multiples) is one the
-  model run shows (`model_claim` over `model_figures`: each saved case's forecast years, reported
-  and adjusted, the current year's reported quarters and remainder, the multiples at the user's
-  price, the price, their adjustments; at the precision written, in the years the quote names)
-  and the claim is about the model (the model said `model`, two or more figures match, it names a
-  forecast year, or it says "my", "model", "base case" and the like). A claim the data supports
-  stays supported (supported, with every dollar figure one the tools returned: a model built on a
-  reported quarter or the guidance shows the same numbers). A `model` claim needs no citation,
-  carries `model` {ref, item_id, name, currency, matches[] {figure, line, fy, case, kind, value}}
-  for the web app's link, and its explanation and citations are replaced unless the model wrote
-  `model` itself ("21.24%, not 21.0%" read the other basis, citing the 10-Q for it). A claim the model calls `model` whose figures aren't
-  the model's is unverifiable with a note naming them. A dollar figure the tools didn't return but
-  the model run did (to at least three significant digits: "$3.0B" is within rounding of too many
-  of ~150 amounts) is a `model` figure, not "not in the data". TTM free cash flow is in the
-  prefetch now (`model_stats.HISTORY_METRICS`), so the model page's $3.15B verifies.
-- **Every claim cited, every figure verified.** Each citation is checked against the filings the
-  tools returned (form, date, EDGAR URL, section, the newest `as_of` of the results that held
-  it); one the tools never returned is kept but flagged and listed. Every explanation,
-  commentary, point and summary goes through `verify.py` as in chat; unverified figures are
-  flagged. A supported or contradicted claim without a citation of a filing the tools returned
-  becomes "unverifiable" (`downgraded`); so does a supported claim with a dollar figure that isn't
-  in the data, in the thesis's own words, its explanation or a citation's figure (the note names
-  them: "supported" certifies the numbers). A "not mentioned" point without a citation is dropped
-  (and the notes say so). Quotes are checked against the thesis text (`quote_found`).
-- **A computed figure against the cited filing's own (H2).** Agreeing with Tributary's computed
-  figure isn't agreeing with the filing: Riley's "Net debt was $10.92B" matched a net debt that left
-  NVIDIA's $99.37B of securities out and was certified. A supported claim whose figure (in the quote
-  or a citation's `figure`) is one of the computed figures the tools returned (`GUARDED`: net debt,
-  cash and investments, free cash flow; quarter view) is compared with the same figure computed from
-  each verified citation's own facts (`GET /v1/companies/{id}/filings/{accession}/figures`, read as
-  the user, never a tool result, cached per check). A difference beyond the claim's rounding and
-  0.5% makes it unverifiable with what the filing gives ("the 10-Q filed ... gives net debt of
-  -$66.0B at ... from its own figures, not $10.92B"); each comparison is kept on the claim
-  (`filing_figures`). A filing that doesn't give the figure isn't compared; an older Query API
-  without the route changes nothing. `CHECK_RULES` tells the model so (cite the filing whose
-  statement you checked the inputs against); `CheckResult` refuses a supported claim with a
-  disagreeing filing figure.
-- **Saved with the thesis.** Through the Query API with the user's token
-  (`POST /v1/thesis-checks/{id}`, off the public site), with the SHA-256 of the company id and
-  the text it checked (`text_hash`), the model, rounds, token usage and estimated cost.
-- **What it knew of the filings (Revisit).** Before the loop, `read_filings` asks
-  `/v1/companies/{id}/filing-index?form=10-K&form=10-Q&limit=1` as the user for each company in
-  the scope (public SEC index metadata; a failure leaves it unknown). The result's `filings[]`
-  holds per company `latest` (the newest 10-K/10-Q in the index when the check ran) and
-  `evidence` (the newest filing among the result's verified citations of that company). The
-  index answer is never a tool result: it reaches neither the model nor the evidence, so it
-  can't verify a citation. The web app offers a re-check when the index later has a newer
-  10-K/10-Q than `latest`.
-- **Counts as 4 questions** (`CHECK_QUESTIONS`) against every limit, like a report's 3, and
-  usually takes about two minutes (`CHECK_SECONDS`); `/v1/allowance` says both so the web app
-  shows them before a check starts (analyst test 4, finding 22). A check
-  runs up to 16 tool rounds (`CHECK_ROUNDS`), about 4 rounds per question as reports (12 rounds,
-  3 questions); refused with a message saying so when it doesn't fit. A check that saved
-  nothing counts, unless it failed in one of the two ways that are given back (see the limits
-  above): a refused save, a deleted thesis or a model that didn't submit are not.
-- **Room to finish** (C1). `submit_check` for a full-length thesis, after thinking, ran past the
-  chat's 8,000 tokens per reply on every run; a check now has `CHECK_MAX_TOKENS` (32,000, thinking
-  included, streamed). A reply cut off while thinking or calling a tool is dropped and the model
-  asked once to submit more briefly (`CHECK_RETRY`); at the round limit a closing call
-  (`CHECK_CLOSING`, tools kept) asks it to submit what it has checked. A result submitted that
-  way is saved like any other, with the stop in `stop` and a note; one that never comes is an
-  error that says why. Cut off at max_tokens even after the retry, the check is given back
-  (`cut_off` on the error event, which the server strips); stopping any other way, it counts.
+- **Read as the user.** The thesis (`GET /v1/workspace-items/{id}`) and its workspace: someone
+  else's thesis, a missing one or another item is one 404, nothing spent; an empty thesis is a 422.
+- **Models run by the Query API.** Each model it embeds (first 4; in an analysis project, the
+  project's other models of its company too) is run by `POST /v1/companies/{id}/model` as the
+  user, on its base case only; the numbers (CAGR, margins, flags, both bases where the user has
+  one-offs, the TTM column, `user_set` and `defaulted` years) go to the model as data. A failed run
+  leaves that model's error; the claims are still checked.
+- **Scope.** The thesis's company, its models' companies, an analysis project's company and peers,
+  and tickers it names that the user can read; 12 at most. Every read is still the user's own
+  Query API call. Plus `submit_check`.
+- **Since the last report.** The latest earnings release and the 8-Ks since the period end; a
+  balance-sheet figure an event in `stale` follows is out of date: say so and cite it.
+- **Verdicts.** supported, contradicted, unverifiable, or `model` ("Your model": every figure in
+  the quote is one the model run shows). A supported or contradicted claim needs a citation of a
+  filing the tools returned, and a supported one needs every figure verified, or it becomes
+  unverifiable. A supported net debt, cash and investments or free cash flow is also compared with
+  the cited filing's own figure (`/filings/{accession}/figures`); beyond rounding and 0.5% it is
+  unverifiable. Explanations speak to the author ("you", "your thesis").
+- **Saved with the thesis** (`POST /v1/thesis-checks/{id}`, off the public site) with
+  `text_hash`, the model, rounds, usage and cost, and per company the newest 10-K/10-Q in the
+  index when it ran (`filings[]`: the web app offers a re-check when a newer one is filed).
+- **Counts as 4 questions** (`CHECK_QUESTIONS`), up to 16 tool rounds (`CHECK_ROUNDS`), about two
+  minutes (`CHECK_SECONDS`), up to 32,000 tokens per reply (`CHECK_MAX_TOKENS`) with one retry
+  and a closing call that asks it to submit what it has checked.
+
+Full behaviour, rules and the cases behind them: [DESIGN.md](DESIGN.md#thesis-checks).
 
 Result shape (`query_api.thesis_checks.CheckResult`): `thesis` (item, title, company,
 `text_hash`, characters checked, truncated), `summary`, `claims[]` (`quote`, `quote_found`,
