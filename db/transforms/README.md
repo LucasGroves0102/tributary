@@ -24,15 +24,18 @@ starting from the latest definition listed here (and regenerate the backout guar
 
 | Function | Latest definition |
 |---|---|
-| `gold.refresh_financials(text[])` (quarters, then derived metrics, then the checks, for a batch of companies) | `014_gold_calendar.sql` |
+| `gold.refresh_financials(text[])` (quarters, then derived metrics, then the checks, for a batch of companies; takes the companies' locks and stamps `ops.company_builds`) | `071_auto_catchup.sql` (before: `014_gold_calendar.sql`) |
+| `gold.rules_version()` (the gold rules' version: replace it with the number of a migration that changes them), `gold.lock_companies(text[])` | `071_auto_catchup.sql` |
 | `gold.usable_facts(text[])` (which facts gold may read: tags by taxonomy and company, each company in its reporting currency, sums, dropped facts; interest expense and debt without their sign; a filing's facts to the filer its XBRL names) | `056_ifrs_currencies.sql` (before: `055_filing_xbrl_facts.sql`, `050_filers_debt_signs.sql`, `043_interest_expense_sign.sql`, `039_gold_fact_selection.sql`) |
 | `gold.best_facts(text[])` (which fact gold believes: revenue's zero and part rules, then tag priority) | `064_revenue_net_of_interest_part.sql` (net revenue under 20% of the gross line is a part; a revenue tag 1,000x another of its period is a scale slip, which one by the period's other figures; before: `039_gold_fact_selection.sql`) |
 | `gold.refresh_quarterly_financials(text[])` | `043_interest_expense_sign.sql` (a negative derived interest expense quarter is left out; before: `039_gold_fact_selection.sql` reads `gold.best_facts`, drops a quarter rounded for a sentence, gross profit as revenue less cost behind a guard; `031_gold_one_quarter_series.sql` one non-overlapping series of quarters per company and metric, chosen by calendar votes; `029_gold_quality_fixes.sql` instants only for balance-sheet metrics, no negative derived quarter for metrics that can't be negative; `024_gold_ignores_proxy_statements.sql` skips proxy-statement facts; `015_gold_tiebreaks.sql` deterministic tie-breaks; `011_bulk_financials.sql`; `003_financials.sql`) |
 | `gold.refresh_derived_financials(text[])` | `063_rebuild_speed.sql` (040's two-stated-years rule as a window; before: `056_ifrs_currencies.sql` computed amounts in the company's currency; `049_kpis_cash_flow.sql` `cash_and_investments`; `048_bank_metrics.sql` the efficiency ratio; `040_gold_derived_rules.sql` TTM from a stated year, net debt absent when investments or debt can't be read; `014_gold_calendar.sql`) |
 | `gold.companies_for_ciks(text[])` (the companies a changed payload reaches, borrowers included), `gold.filed_by(accession, cik)` | `050_filers_debt_signs.sql` |
-| `gold.refresh_segments(text[])` | `018_segments.sql` |
+| `gold.refresh_segments(text[])` (stamps `check_segments`) | `071_auto_catchup.sql` (before: `018_segments.sql`) |
 | `gold.refresh_segment_financials(text[])` (a restated year-to-date difference from one reporting cycle; one company at a time) | `062_segment_refresh_speed.sql` (before: `053_segment_same_basis.sql`, `018_segments.sql`) |
-| `gold.refresh_section_search(text[])` (search passages); `ops.section_index_priors(text[])`, `ops.section_index_pending(text, int)` (parser-index work); the diffs themselves are Python (`filing_parser/diff.py`) | `021_section_diffs_search.sql` |
+| `gold.refresh_section_search(text[])` (search passages, page furniture blanked) | `068_search_page_furniture.sql` (before: `021_section_diffs_search.sql`) |
+| `ops.section_index_priors(text[])` (parser-index work); the diffs themselves are Python (`filing_parser/diff.py`) | `021_section_diffs_search.sql` |
+| `ops.section_index_pending(text, int)` (filings never indexed or diffed first) | `071_auto_catchup.sql` (before: `021_section_diffs_search.sql`) |
 
 Business profiles and peers (`gold.business_*`, `047_business_peers.sql`) are computed in Python by
 the parser image's `parser-peers` job, not in SQL.
@@ -43,6 +46,13 @@ the parser image's `parser-peers` job, not in SQL.
 |---|---|
 | `ops.check_financials(text[])` (debt compared with liabilities and assets in its own currency) | `057_currency_readings.sql` (before: `050_filers_debt_signs.sql` SBC benefits as info, `debt_parts_scale`; `041_quality_findings.sql` `mistagged_fact`, `net_debt_gap`, a repeated `series_gap`, the annual comparison through `gold.best_facts`; `023_data_notes.sql` restatement; `018_segments.sql`; `014_gold_calendar.sql`) |
 | `ops.check_segments(text[])` (a reconciliation member restating the segments' sum isn't added; members that overlap, some set of them making the figure, aren't a deviation: `ops.segment_cover`) | `070_check_segments_overlap.sql` (before: `037_check_segments_subtotal.sql`, `018_segments.sql`) |
+| `ops.check_financials_version()`, `ops.check_segments_version()` (bump with a check's replace), `ops.recheck(kind, text[])` | `071_auto_catchup.sql` |
+
+## Catch-up
+
+| Function | Latest definition |
+|---|---|
+| `ops.company_backlog(kind)`, `ops.stamp_builds`, `ops.build_failed`, `ops.catchup_begin`, `ops.catchup_record`, `ops.parser_catchup` (documents of an older parser back through the crawl's outbox), view `ops.catchup_status` | `071_auto_catchup.sql` |
 
 ## Readings (read, not refreshed)
 

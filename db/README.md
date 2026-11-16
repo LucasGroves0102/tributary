@@ -46,9 +46,9 @@ Files are numbered (`001_bronze.sql`, ...) and never edited after they land: cha
 new file. On k3s, the Helm chart's `migrate` pre-install/upgrade Job runs the same script from
 the image built by [`Dockerfile`](Dockerfile) and seeds demo users when `demo.enabled`.
 
-A migration that changes which facts gold reads or what it computes reaches existing rows only
-after one `facts-fetcher --rebuild` (`make financials-rebuild`; production: the
-`financials-rebuild` job, [deploy/helm/tributary](../deploy/helm/tributary/README.md)). Those that
+A migration that changes which facts gold reads or what it computes reaches existing rows by
+itself ([below](#versions-and-catch-up)); `facts-fetcher --rebuild` (`make financials-rebuild`;
+production: the `financials-rebuild` job) does it all at once. Those that
 replaced gold functions since 038 can be undone by hand from [`backout/`](backout/README.md):
 newest first, as the migrate login; each file's guard refuses any other order or login and changes
 nothing. Each migration's header has the measurements behind its thresholds and its lock impact on
@@ -56,6 +56,28 @@ production.
 
 [`rls/`](rls) and [`transforms/`](transforms) hold no SQL; their READMEs point to the
 migrations that define those objects.
+
+### Versions and catch-up
+
+Stored data records the version of the rule that built it, and the hourly jobs bring older data up
+to date by themselves, oldest first, a budget per run, after their own work (migration 071):
+
+| Kind | Current version | Stamp | Caught up by |
+|---|---|---|---|
+| parser | `PARSER_VERSION` (sections.py, both parsers) | `silver.filing_sections.parser_version` | `section-index` re-queues documents for `parser-backfill` |
+| passages | `SEARCH_RULE` (index.py) | `ops.section_index.passages_rule` | `section-index` |
+| diffs | `diff.ALGORITHM` | `ops.section_index.algorithm` | `section-index` (its own run) |
+| gold | `gold.rules_version()` | `ops.company_builds` ('gold') | `segments`: the rebuild path, per company |
+| checks | `ops.check_financials_version()`, `ops.check_segments_version()` | `ops.company_builds` | `segments`: the check re-run |
+
+**A migration that changes gold's rules or `silver.metric_tags` (anything that needed
+financials-rebuild) replaces `gold.rules_version()` with its own number; one that replaces
+`ops.check_financials` or `ops.check_segments` bumps that check's version.** Every refresh stamps the
+companies it built (`gold.refresh_financials`, `gold.refresh_segments`); a company without a stamp was
+built with `ops.catchup.baseline`. Gold writers of one company take turns (`gold.lock_companies`).
+Progress for ops_reader: `ops.catchup_status` (behind, in flight, failed, the last day's pace, ETA);
+pause a kind with `UPDATE ops.catchup SET paused = true WHERE kind = '...'`. A backout leaves the
+versions as they are: run `financials-rebuild` after one.
 
 ### What each migration adds
 
@@ -131,3 +153,4 @@ One line each; the full notes (what it changes, why, the measurements) are in [D
 - [`068_search_page_furniture.sql`](DESIGN.md#068_search_page_furnituresql): search passages without page furniture.
 - [`069_readings_not_computed_stale.sql`](DESIGN.md#069_readings_not_computed_stalesql): readings `not_computed` and `stale`.
 - [`070_check_segments_overlap.sql`](DESIGN.md#070_check_segments_overlapsql): `ops.check_segments`: overlapping members aren't a deviation when a set adds up.
+- [`071_auto_catchup.sql`](DESIGN.md#071_auto_catchupsql): rule versions, per-company build stamps and the catch-up's state, status and parser re-queue.
