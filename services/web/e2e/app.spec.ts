@@ -189,7 +189,7 @@ test("save a chart to a new workspace and reopen it", async ({ page }) => {
   await page.getByRole("button", { name: /with a template/ }).click();
   await page.getByRole("menuitem", { name: "Leverage" }).click();
   await expect(page.getByLabel("Chart title")).toHaveValue(""); // written from the layers
-  await expect(page.locator(".lchart-svg .ch-title").first()).toContainText("Debt to equity");
+  await expect(page.locator(".lchart-svg .ch-title").first()).toContainText("Debt / equity");
   await page.locator('button[title="Open in Chart builder: Margin check"]').click();
   await expect(page.locator(".lchart-svg .ch-title").first()).toContainText("Operating margin");
   await expect(page.locator(".savebar")).toContainText("Margin check");

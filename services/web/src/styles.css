@@ -6306,6 +6306,11 @@ button.chip.on {
   .search-box {
     padding: 5px 8px;
   }
+
+  /* the theme menu's caret goes before anything is pushed off the bar */
+  .theme-btn .more-caret {
+    display: none;
+  }
 }
 
 .page-bar {
