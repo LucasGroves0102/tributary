@@ -11,6 +11,9 @@ class Succession:
     predecessor_cik: str
     successor_cik: str
     effective: date
+    # a re-registration linked after the successor was already a company here (its users, grants
+    # and saved work hold its id): the lineage keeps the successor's id (re_registrations.csv)
+    keeps_successor_id: bool = False
 
 
 @dataclass(frozen=True)
@@ -35,9 +38,15 @@ def tracked_tickers() -> list[str]:
 
 
 def successions() -> list[Succession]:
+    """successions.csv (the lineage's first CIK is the company) and re_registrations.csv
+    (predecessors linked with evidence to a successor that keeps its id)."""
     return [
         Succession(r["predecessor_cik"], r["successor_cik"], date.fromisoformat(r["effective"]))
         for r in _rows("successions.csv")
+    ] + [
+        Succession(r["predecessor_cik"], r["successor_cik"], date.fromisoformat(r["effective"]),
+                   keeps_successor_id=True)
+        for r in _rows("re_registrations.csv")
     ]
 
 

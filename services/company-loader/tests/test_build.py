@@ -79,3 +79,48 @@ def test_tracked_ciks_include_predecessors(tickers):
 def test_unknown_tracked_ticker_raises(tickers):
     with pytest.raises(ValueError, match="NOPE"):
         tracked_ciks(tickers, ["AAPL", "NOPE"], Lineage([]))
+
+
+AVAGO, BROADCOM_LTD, BROADCOM = "0001441634", "0001649338", "0001730168"
+MARVELL_LTD, MARVELL = "0001058057", "0001835632"
+
+
+def test_re_registration_keeps_the_successors_id():
+    """A predecessor linked after its successor was a company here (re_registrations.csv) joins
+    the successor's company: Broadcom Inc. keeps its id through Broadcom Ltd and Avago."""
+    lineage = Lineage(curated.successions())
+    assert lineage.root(BROADCOM) == AVAGO
+    assert lineage.members(AVAGO) == [AVAGO, BROADCOM_LTD, BROADCOM]
+    assert {lineage.company_id(c) for c in (AVAGO, BROADCOM_LTD, BROADCOM)} == {BROADCOM}
+    assert lineage.company_id(MARVELL_LTD) == MARVELL
+    assert lineage.company_id(ALPHABET) == GOOGLE_INC  # successions.csv: the first CIK still
+
+
+def test_re_registered_company_owns_its_predecessors_ciks(inputs):
+    snap = build(**inputs)
+    by_cik = {k.cik: k for k in snap.ciks}
+    assert {by_cik[c].company_id for c in (AVAGO, BROADCOM_LTD, BROADCOM)} == {BROADCOM}
+    assert by_cik[MARVELL_LTD].valid_to == by_cik[MARVELL].valid_from == date(2021, 4, 20)
+    assert company(snap, BROADCOM).current_cik == BROADCOM
+    assert not any(c.company_id in (AVAGO, BROADCOM_LTD, MARVELL_LTD) for c in snap.companies)
+
+
+def test_curated_links_are_one_to_one():
+    links = curated.successions()
+    assert len({s.successor_cik for s in links}) == len(links)
+    assert len({s.predecessor_cik for s in links}) == len(links)
+    with pytest.raises(ValueError, match=MARVELL):
+        Lineage([*links, curated.Succession("0000000001", MARVELL, links[0].effective)])
+
+
+def test_every_re_registration_names_its_evidence_and_company():
+    import csv
+    from importlib.resources import files
+
+    with files("company_loader").joinpath("data", "re_registrations.csv").open(newline="") as f:
+        rows = list(csv.DictReader(f))
+    lineage = Lineage(curated.successions())
+    assert len(rows) > 50
+    for r in rows:
+        assert r["evidence"].startswith("8-K12"), r
+        assert lineage.company_id(r["predecessor_cik"]) == r["company_id"], r

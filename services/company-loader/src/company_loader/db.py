@@ -98,6 +98,20 @@ _DELETE_MERGED = """
 # 7. metadata and names from the bulk submissions load (bronze.submissions), where present
 _REFRESH_METADATA = "SELECT silver.refresh_company_metadata()"
 
+# Before step 2: the companies whose CIKs this load changes (a CIK new to a company, or moved
+# from one to another), the old and the new company. A re-registration linked
+# (re_registrations.csv) reaches gold through them: ops.rebuild_soon (076) marks their gold built
+# at the epoch, so the hourly catch-up rebuilds them first, with the linked CIK's companyfacts.
+_RELINKED = """
+    SELECT DISTINCT x.company_id
+    FROM stg_ciks s
+    LEFT JOIN silver.company_ciks k USING (cik)
+    CROSS JOIN LATERAL (VALUES (s.company_id), (k.company_id)) x(company_id)
+    WHERE k.company_id IS DISTINCT FROM s.company_id AND x.company_id IS NOT NULL
+    ORDER BY 1
+"""
+_REBUILD_SOON = "SELECT ops.rebuild_soon(%s)"
+
 
 def load(conn: psycopg.Connection, snap: Snapshot, today: date) -> dict[str, int]:
     """Apply a snapshot atomically. Returns row counts for logging."""
@@ -108,6 +122,8 @@ def load(conn: psycopg.Connection, snap: Snapshot, today: date) -> dict[str, int
         _copy(cur, "stg_aliases", [astuple(a) for a in snap.aliases])
         _copy(cur, "stg_tickers", sorted(snap.current_tickers))
 
+        cur.execute(_RELINKED)
+        relinked = [r[0] for r in cur.fetchall()]
         for sql in _MERGE:
             cur.execute(sql)
         cur.execute("SELECT NOT EXISTS (SELECT 1 FROM silver.company_aliases"
@@ -121,12 +137,15 @@ def load(conn: psycopg.Connection, snap: Snapshot, today: date) -> dict[str, int
         cur.execute(_DELETE_MERGED)
         merged = cur.rowcount
         cur.execute(_REFRESH_METADATA)
+        if relinked:
+            cur.execute(_REBUILD_SOON, (relinked,))
     return {
         "companies": len(snap.companies),
         "tracked": sum(c.tracked for c in snap.companies),
         "tickers_opened": opened,
         "tickers_closed": closed,
         "companies_merged": merged,
+        "companies_relinked": len(relinked),
     }
 
 

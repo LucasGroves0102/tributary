@@ -15,10 +15,20 @@ Sources:
     companies plus TSLA (the demo watchlist trap) and LLY (in the adversarial ground truth).
     Every ticker must be in `tests/fixtures/company_tickers.json`
   - `successions.csv`: old CIK → new CIK (e.g. Google Inc. → Alphabet)
+  - `re_registrations.csv`: a predecessor CIK linked to a successor issuer (8-K12B/8-K12G3) that was
+    already a company here, which keeps its id (Broadcom Inc. through Broadcom Ltd and Avago;
+    Marvell). Each row has its evidence: the successor's own figures for periods before the move
+    equal the predecessor's, or (before XBRL) the same name plus address or phone, and the
+    predecessor's 10-K/10-Q/20-F/40-F stop at the move. Candidates the rules refused (mergers,
+    predecessors still reporting, two candidates, figures that disagree) are in
+    `re_registrations_uncertain.csv` beside this README, for the owner
   - `ticker_history.csv`: retired tickers (e.g. FB)
 
 `company_id` is the first CIK in a company's lineage, so it never changes when a successor
-appears. Tickers from `company_tickers.json` are tracked over time: when one disappears its
+appears; a re-registration link keeps the successor's id instead (its users, grants and saved work
+hold it). A load that links a CIK to a company drops the company's gold build stamp
+(`ops.rebuild_soon`, migration 076): the hourly catch-up rebuilds it first, with the linked CIK's
+companyfacts. Tickers from `company_tickers.json` are tracked over time: when one disappears its
 row gets a `valid_to` instead of being deleted.
 
 Look up a company: `SELECT * FROM silver.resolve_company('FB');`

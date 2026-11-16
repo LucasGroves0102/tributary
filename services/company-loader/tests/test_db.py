@@ -82,3 +82,24 @@ def test_new_succession_merges_companies(conn, inputs):
     assert conn.execute(
         "SELECT count(*) FROM silver.companies WHERE company_id = '0002115436'"
     ).fetchone()[0] == 0
+
+
+def test_a_linked_re_registration_rebuilds_the_company_first(conn, inputs):
+    """Day 2 links Marvell's predecessor: the company keeps its id, gains the CIK, and its gold
+    reads as built at the epoch so the catch-up rebuilds it first (076's ops.rebuild_soon)."""
+    marvell, old = "0001835632", "0001058057"
+    without = [s for s in inputs["successions"] if s.predecessor_cik != old]
+    load(conn, build(**{**inputs, "successions": without}), DAY1)
+    conn.execute("INSERT INTO ops.company_builds (kind, company_id, version, built_at)"
+                 " VALUES ('gold', %s, 999, now()), ('gold', '0000320193', 999, now())"
+                 " ON CONFLICT (kind, company_id) DO UPDATE SET version = 999,"
+                 " built_at = now()", (marvell,))
+    counts = load(conn, build(**inputs), DAY2)
+    assert counts["companies_relinked"] == 1
+    assert conn.execute("SELECT company_id FROM silver.company_ciks WHERE cik = %s",
+                        (old,)).fetchone()[0] == marvell
+    stamps = conn.execute("SELECT company_id, version, built_at = 'epoch'"
+                          " FROM ops.company_builds WHERE kind = 'gold'"
+                          " AND company_id IN (%s, '0000320193') ORDER BY 1", (marvell,)).fetchall()
+    assert stamps == [("0000320193", 999, False), (marvell, 0, True)]
+    assert load(conn, build(**inputs), DAY2)["companies_relinked"] == 0
