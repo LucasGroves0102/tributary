@@ -24,7 +24,8 @@ most. When a run reaches the end it also builds gold for companies that have sil
 no gold rows (a CIK mapped after its facts were loaded). `--zip PATH` loads a local file;
 `--dir` sets the download directory. `--rounds N --pause-seconds S` (`$BULK_ROUNDS`,
 `$BULK_PAUSE_SECONDS`) runs up to N batches from one download with a pause between them,
-stopping once the file is fully loaded.
+stopping once the file is fully loaded. Last (an unchanged zip too) it refreshes the
+[extremes report](#extremes-report).
 
 Bronze keeps, per distinct payload, only the facts of tags in `silver.metric_tags`
 (`payload`, what SQL reads) plus the full payload gzip-compressed (`raw_gzip`) for the latest
@@ -73,6 +74,25 @@ payload changes both jobs refresh `gold.companies_for_ciks` of the changed CIKs 
 CIKs' own companies plus any whose filing the SEC put under them. The named entity comes from the stored
 document's extract (`bronze.filing_xbrl.entity_cik`, the segments job), so it applies to filings the
 document crawl and doc-fetcher store.
+
+### Extremes report
+
+`extremes.py` (migration 072): for every screener value column (`ops.extreme_columns`, the formula
+CATALOG's), the top and bottom 20 companies as the screener sorts them (`gold.latest_reading`, readings
+applied), each with the checks that have a finding on its metric or inputs in the year to its period
+(`derived_quarter` for a quarter derived from year-to-date figures). A row nothing explains is flagged
+`review`: an extreme no reading, check or data note accounts for is the likeliest wrong figure a reader
+meets first. `ops.refresh_extremes` rebuilds `ops.extremes` at the end of the nightly `financials-bulk`
+run (a failure is logged, never the job's); `ops.extremes_report` adds names for ops_reader. Never
+public: it names companies.
+
+```bash
+make extremes            # rows to review: column, side, rank, company, figure, period, filing
+make extremes ALL=1      # every row, with what explains each
+make extremes REFRESH=1  # recompute first
+```
+
+On hermes, read-only: `SELECT * FROM ops.extremes_report WHERE review ORDER BY column_key, side, rank;`
 
 ## Foreign filers and currencies
 
@@ -249,7 +269,7 @@ CronJobs on k3s (New York time; [helm chart](../../deploy/helm/tributary/README.
 | Job | Command | When |
 |---|---|---|
 | `financials` | `facts-fetcher` | nightly 04:00 |
-| `financials-bulk` | `facts-fetcher-bulk` | nightly 05:00, up to 60 rounds of 500 changed companies, no pause |
+| `financials-bulk` | `facts-fetcher-bulk` | nightly 05:00, up to 60 rounds of 500 changed companies, no pause; then the extremes report |
 | `filing-facts` | `facts-fetcher-filings` | daily 09:30; ships suspended until its first run by hand |
 | `segments` | `facts-fetcher-segments` | hourly at :20, then the catch-up (above); ships suspended, unsuspended in the Flux release; no SEC access |
 | `financials-rebuild` | `facts-fetcher --rebuild` | suspended: an emergency rebuild of everything at once; no SEC access |
@@ -277,7 +297,8 @@ companyfacts payloads in `tests/fixtures/` (`test_pipeline.py`; shared `conn` / 
 fixtures in `conftest.py`), and the bulk loader on small zips. `test_filings.py`: instances (trimmed real
 ones in `tests/fixtures/instance/`, made with `tests/trim_instance.py`), projection, and with a database the
 gap, catch-up, instance, extension-tag and member-sum paths; `test_ifrs.py`: IFRS filers, currencies, half years and
-borrowings (056). `test_golden_10k.py` checks gold
+borrowings (056). `test_extremes_db.py`: the extremes report's ranks, explanations and CLI (072).
+`test_golden_10k.py` checks gold
 against 149 figures printed in five companies' 10-Ks, loading their companyfacts from
 `tests/fixtures/golden/` ([tests/golden](../../tests/golden/README.md)). Database tests
 need `TEST_DATABASE_URL`.

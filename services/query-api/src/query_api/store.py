@@ -705,7 +705,7 @@ class Store:
     def data_status(self) -> dict:
         """The public status page's aggregates (migration 028's SECURITY DEFINER functions):
         counts and timestamps only, no user. {freshness, ingest, completeness, coverage,
-        quality: [one row per check]}."""
+        quality: [one row per check and severity], parser: [one row per parser check] (072)}."""
         with self._session("") as cur:
             out = {}
             cur.execute("SELECT * FROM ops.feed_status()")
@@ -718,6 +718,8 @@ class Store:
             out["coverage"] = cur.fetchone() or {}
             cur.execute("SELECT * FROM ops.public_quality()")
             out["quality"] = cur.fetchall()
+            cur.execute("SELECT * FROM ops.public_parser_quality()")
+            out["parser"] = cur.fetchall()
             return out
 
     def segment_metric_names(self) -> list[str]:

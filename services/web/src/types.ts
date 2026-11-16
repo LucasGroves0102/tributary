@@ -1361,6 +1361,10 @@ export interface DataNotes {
   notes: DataNote[];
 }
 
+/** A data-quality finding's group on the status page (query-api status.py): a figure shown that can't
+ * be right, one to double-check, one the data leaves out, one missing, or information. */
+export type QualityTier = "error" | "warning" | "kept_out" | "coverage" | "info";
+
 /** GET /v1/status/data (public, no token): the status page. Aggregate counts and timestamps
  * only, from the production database (cached up to `max_age_seconds`), plus the last recorded
  * runs of the test suites. */
@@ -1402,7 +1406,26 @@ export interface DataStatus {
   quality: {
     companies_checked: number;
     last_checked_at: string | null;
-    checks: { check: string; severity: "error" | "warning" | "info"; findings: number; companies: number }[];
+    /** gold figures (quarters, TTM and computed) of the companies checked: per_1000's base; absent
+     * from an older API */
+    figures?: number | null;
+    checks: {
+      check: string;
+      severity: "error" | "warning" | "info";
+      /** what a finding means for a reader (migration 072's ops.quality_tier); an older API sends
+       * none: read it from the severity */
+      tier?: QualityTier;
+      findings: number;
+      companies: number;
+      /** findings per 1,000 figures; null before the checks have counted their figures */
+      per_1000?: number | null;
+    }[];
+  };
+  /** the parser-output checks (072): documents, never a company; absent from an older API */
+  parser?: {
+    documents_checked: number;
+    last_checked_at: string | null;
+    checks: { check: string; severity: "error" | "warning" | "info"; documents: number; per_1000: number | null }[];
   };
   recorded: {
     adversarial: RecordedRun & {

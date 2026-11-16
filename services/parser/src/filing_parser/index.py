@@ -2,7 +2,8 @@
 
 Each run asks ops.section_index_pending for work and processes it in transactions of --batch
 filings. Per filing: (re)index when its sections are new or re-parsed (checkpoint row in
-ops.section_index, passages via gold.refresh_section_search), then, for 10-K and 10-Q, compare
+ops.section_index, passages via gold.refresh_section_search, the parser-output checks via
+ops.check_sections, migration 072), then, for 10-K and 10-Q, compare
 Risk Factors and MD&A with the comparable filings (ops.section_index_priors) and replace its
 gold.section_diffs / gold.section_changes rows. Everything for a filing commits together, so a
 stopped run resumes where it left off and a re-run changes nothing.
@@ -15,7 +16,8 @@ are, so What changed never goes stale and nothing is diffed again.
 Work order: filings never indexed (never diffed) first, then re-indexing and re-diffing oldest first
 (migration 071), so history being upgraded never delays a new filing. Once a run has done all its
 work, catchup.py upgrades a budget of older history: documents an older parser split (re-queued
-for parser-backfill) and passages an older SEARCH_RULE built (CATCHUP_SECONDS). A run that finds the
+for parser-backfill), documents an older version of the parser-output checks saw (072), and
+passages an older SEARCH_RULE built (CATCHUP_SECONDS). A run that finds the
 lock taken (another run, or the hand-run section-passages) does nothing and says so.
 """
 
@@ -51,6 +53,7 @@ class Stats:
     section_diffs: int = 0
     changes: int = 0
     errors: int = 0
+    section_findings: int = 0  # the parser-output checks' findings on the filings indexed
     completed: bool = False
     locked_out: bool = False  # another run holds the lock: nothing was done
 
@@ -116,6 +119,7 @@ def process(conn: psycopg.Connection, accessions: list[str], reindex: set[str],
             stats.passages += conn.execute("SELECT gold.refresh_section_search(%s)",
                                            (fresh,)).fetchone()[0]  # type: ignore[index]
             count_passages(conn, fresh)
+            stats.section_findings += check_sections(conn, fresh)
         priors = conn.execute(
             "SELECT p.accession_no, i.company_id, i.form, p.prior_accession_no,"
             "       p.year_ago_accession_no"
@@ -150,6 +154,21 @@ def process(conn: psycopg.Connection, accessions: list[str], reindex: set[str],
                 " year_ago_accession_no = %s, diffed_at = clock_timestamp(), diff_error = %s"
                 " WHERE accession_no = %s", (ALGORITHM, prior, year_ago, error, accession_no))
             stats.diffed += 1
+
+
+def check_sections(conn: psycopg.Connection, accessions: list[str]) -> int:
+    """The parser-output checks (migration 072, ops.check_sections) on the filings just indexed:
+    keys the form has, core items, empty and repeated sections. Inside the filing's transaction; a
+    check that raises leaves the filing indexed, unchecked (the catch-up checks it later)."""
+    try:
+        with conn.transaction():
+            row = conn.execute("SELECT ops.check_sections(%s)", (accessions,)).fetchone()
+        return row[0] if row else 0
+    except psycopg.Error:
+        if conn.broken:
+            raise
+        log.exception("parser checks failed for %d filings; the catch-up retries", len(accessions))
+        return 0
 
 
 def count_passages(conn: psycopg.Connection, accessions: list[str]) -> None:
@@ -294,9 +313,9 @@ def main(argv: Iterable[str] | None = None) -> None:
             return
         stats = run(conn, args.limit, args.batch)
         log.info("%s: %d filings, %d indexed (%d passages), %d diffed (%d section diffs,"
-                 " %d changes, %d errors) in %.0fs", outcome(stats), stats.filings,
-                 stats.indexed, stats.passages, stats.diffed, stats.section_diffs, stats.changes,
-                 stats.errors, time.monotonic() - started)
+                 " %d changes, %d errors; %d parser findings) in %.0fs", outcome(stats),
+                 stats.filings, stats.indexed, stats.passages, stats.diffed, stats.section_diffs,
+                 stats.changes, stats.errors, stats.section_findings, time.monotonic() - started)
         if stats.completed:
             from filing_parser import catchup  # imports this module
 

@@ -45,14 +45,15 @@ def refreshed(conn) -> list[tuple]:
 def test_every_refresh_stamps_its_companies(loaded):
     assert {c: v[0] for c, v in stamps(loaded, "gold").items()} == dict.fromkeys(ALL, 64)
     assert {c: v[0] for c, v in stamps(loaded, "check_financials").items()} == \
-        dict.fromkeys(ALL, 57)
+        dict.fromkeys(ALL, 72)
 
 
 def test_first_deploy_counts_every_company_current(loaded):
     loaded.execute("DELETE FROM ops.company_builds")  # as on the day 071 lands
     results = catchup.run(loaded, 60)
+    # current at 071's baseline, except the checks 072 changed: every company re-checked
     assert [(r.kind, r.done, r.behind, r.failed) for r in results] == [
-        ("check_segments", 0, 0, 0), ("check_financials", 0, 0, 0), ("gold", 0, 0, 0)]
+        ("check_segments", 5, 0, 0), ("check_financials", 5, 0, 0), ("gold", 0, 0, 0)]
 
 
 def test_a_rules_bump_rebuilds_every_company_in_budgeted_batches(loaded):
@@ -65,7 +66,7 @@ def test_a_rules_bump_rebuilds_every_company_in_budgeted_batches(loaded):
     rest = catchup.catch_up(loaded, "gold", FOREVER, batch=2)
     assert (rest.done, rest.behind) == (3, 0)
     assert gold(loaded) == before  # same rules, same gold
-    assert {v[0] for v in stamps(loaded, "check_financials").values()} == {57}
+    assert {v[0] for v in stamps(loaded, "check_financials").values()} == {72}
     # idempotent: nothing left, nothing touched
     at = stamps(loaded, "gold")
     again = catchup.catch_up(loaded, "gold", FOREVER)

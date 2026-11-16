@@ -700,7 +700,8 @@ route. The result is cached per process for 60 s (`max_age_seconds`).
 | `ingest` | `ops.public_ingest()`: filings accepted in the last 7 days, how many the live feed caught (`live_pct`), and p50/p95 seconds from EDGAR acceptance to bronze for those (feed rows only, as `ops.filing_latency`) |
 | `completeness` | `ops.public_completeness()`: the nightly completeness check (`ops.filing_completeness`, 027) over the last 30 days: days checked, accessions in EDGAR's daily indexes, missing at each day's latest check (then republished), rows republished. `days_checked` is 0 until the first run |
 | `coverage` | `ops.public_coverage()`: companies with `gold.quarterly_financials` rows, `bronze.filing_documents` rows, search-indexed filings and their sections (`ops.section_index`) |
-| `quality` | `ops.public_quality()`: `ops.quality_summary` (findings and companies per check, companies checked, last run) |
+| `quality` | `ops.public_quality()`: `ops.quality_tiers`, one row per check and severity (072: a check can have two) with its `tier` (`error` a figure shown that can't be right, `warning` one to double-check, `kept_out` one the data leaves out, `coverage` one missing, `info`; an older database: the severity), findings, companies, `per_1000` (findings per 1,000 gold figures of the companies checked), companies checked, `figures`, last run |
+| `parser` | `ops.public_parser_quality()` (072): per parser-output check, documents with a finding and `per_1000` of the documents checked, documents checked, last check |
 | `recorded` | `query_api/data/recorded_results.json`: the last recorded adversarial and citation runs and the golden 10-K figures, with the commit that last changed each; written by `make status-results` ([tests/status](../../tests/status)) |
 
 ```json
@@ -712,8 +713,11 @@ route. The result is cached per process for 60 s (`max_age_seconds`).
                   "missing": null, "republished": null, "days_with_missing": 0, "last_checked_at": null},
  "coverage": {"companies_with_financials": 0, "documents": 0, "indexed_filings": 0, "sections": 0,
               "last_indexed_at": null},
- "quality": {"companies_checked": 0, "last_checked_at": null,
-             "checks": [{"check": "impossible_value", "severity": "error", "findings": 0, "companies": 0}]},
+ "quality": {"companies_checked": 0, "last_checked_at": null, "figures": 0,
+             "checks": [{"check": "impossible_value", "severity": "error", "tier": "error",
+                         "findings": 0, "companies": 0, "per_1000": 0.0}]},
+ "parser": {"documents_checked": 0, "last_checked_at": null,
+            "checks": [{"check": "invalid_key", "severity": "error", "documents": 0, "per_1000": null}]},
  "recorded": {"adversarial": {"recorded_at": "2026-10-18T20:51:00Z", "attacks": 59, "leaks": 0, "…": "…"},
               "citations": {"…": "…"}, "golden": {"…": "…"}}}
 ```

@@ -4741,6 +4741,27 @@ button.link.num {
   }
 }
 
+/* Data status' checks grouped by what a finding means for a reader (migration 072's tiers): a plain
+   heading row per group, never the screener's red rubric */
+.quality-table tr.tier-h th {
+  position: static;
+  text-align: left;
+  padding-top: var(--sp-6);
+  background: var(--sheet);
+  color: var(--ink);
+  font-weight: 600;
+  border-bottom: 1px solid var(--rule);
+}
+
+.quality-table tr.tier-h th .faint {
+  font-weight: 400;
+}
+
+/* the parser-output checks under the figures' checks, in the same card */
+.card-h.parser-h {
+  border-top: 1px solid var(--line);
+}
+
 /* Theses and models: what the user writes (thesis/, models/) */
 
 .tag.thesis,

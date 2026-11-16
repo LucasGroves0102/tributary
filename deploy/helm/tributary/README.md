@@ -68,13 +68,13 @@ CronJob schedules are New York time (`timeZone`). Every job has `concurrencyPoli
 | `backfill` | poller (`poller-backfill --days 30`) | daily 02:00 | on | completeness check against 30 days of EDGAR's daily indexes; republishes missing filings (027) |
 | `companies` | company-loader | daily 03:00 | on | company identity: CIKs, tickers, former names |
 | `financials` | facts-fetcher | daily 04:00 | on | tracked companies' XBRL companyfacts → bronze, silver, gold |
-| `financials-bulk` | facts-fetcher (`facts-fetcher-bulk`) | daily 05:00 | on | every filer's XBRL facts from `companyfacts.zip`, in batches of 500 changed companies |
+| `financials-bulk` | facts-fetcher (`facts-fetcher-bulk`) | daily 05:00 | on | every filer's XBRL facts from `companyfacts.zip`, in batches of 500 changed companies; then the extremes report (072, `ops.extremes`) |
 | `submissions` | company-loader (`company-loader-submissions`) | daily 05:30 | on | every filer's filing history and metadata from `submissions.zip` |
 | `insiders-catchup` | doc-fetcher (`doc-fetcher-insiders`) | daily 08:45 | on | Forms 3/4/5 of the last 7 days the live doc-fetcher missed (059) |
 | `filing-facts` | facts-fetcher (`facts-fetcher-filings`) | daily 09:30 | on (Flux release) | filings companyfacts lacks, from their own XBRL (055) |
 | `demo-cleanup` | query-api (`query-api-demo-cleanup`) | hourly at :15 | on | deletes expired demo sandboxes |
 | `segments` | facts-fetcher (`facts-fetcher-segments`) | hourly at :20 | on (Flux release) | segment and KPI facts from the stored documents' inline XBRL (018); then up to 20 min of catch-up: gold and checks an older rule built (071) |
-| `section-index` | parser (`parser-index`) | hourly at :40 | on (Flux release) | search passages and section diffs (021); then catch-up: re-queues 3,000 documents of an older parser for `parser-backfill` (paused until the owner starts it), up to 20 min of older passages (071) |
+| `section-index` | parser (`parser-index`) | hourly at :40 | on (Flux release) | search passages and section diffs (021) and the parser-output checks of what it indexes (072); then catch-up: re-queues 3,000 documents of an older parser for `parser-backfill` (paused until the owner starts it), up to 5 min of parser checks on older documents (072), the rest of 20 min on older passages (071) |
 | `alerts` | query-api (`query-api-alerts`) | every 10 minutes | on | filing alerts and webhooks (app migration 016) |
 | `business-peers` | parser (`parser-peers`) | Sundays 05:30 | on | peers by business (047) |
 | `financials-rebuild` | facts-fetcher (`facts-fetcher --rebuild`) | suspended | emergency only | re-derives silver and gold from bronze, all at once (the `segments` catch-up does it by itself) |

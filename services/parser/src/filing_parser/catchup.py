@@ -11,9 +11,13 @@ a new filing:
    targets of its own pending, the outbox holds under OUTBOX events and under IN_FLIGHT of the last
    day's requests wait for parser-backfill. A document is re-queued once per version: a crawl
    target published since the catch-up first saw the version counts as requested.
-2. passages: index.refresh_passages for up to `seconds` (filings whose passages an older SEARCH_RULE
-   built, oldest first), under the lock section-index and section-passages share.
-3. diffs: measured only; the run itself recomputes diffs of an older diff.ALGORITHM.
+2. check_sections: ops.check_sections (migration 072, the parser-output checks) on every stored
+   document no check of ops.check_sections_version() has seen, oldest filing first, SECTIONS_BATCH
+   documents a transaction, for up to SECTIONS_SECONDS of the budget. section-index itself checks
+   the filings it indexes; this covers the rest once per version (and documents with no sections).
+3. passages: index.refresh_passages for the rest of `seconds` (filings whose passages an older
+   SEARCH_RULE built, oldest first), under the lock section-index and section-passages share.
+4. diffs: measured only; the run itself recomputes diffs of an older diff.ALGORITHM.
 
 Each kind records a row in ops.catchup_runs (read ops.catchup_status). `UPDATE ops.catchup SET
 paused = true WHERE kind = ...` stops a kind's work and keeps measuring it. Everything is keyed on
@@ -38,7 +42,9 @@ PER_RUN = 3000      # documents re-queued per run, at most
 OUTBOX = 3000       # ... while the crawl's outbox holds fewer unpublished events
 IN_FLIGHT = 6000    # ... and fewer of the last day's requests wait for parser-backfill
 CRAWL_BUSY = 1000   # ... and the crawl has fewer targets of its own pending
-SECONDS = 1200      # passages rebuilt per run, in seconds
+SECONDS = 1200      # passages rebuilt per run, in seconds (after the parser checks' share)
+SECTIONS_SECONDS = 300  # documents checked per run, in seconds, out of SECONDS
+SECTIONS_BATCH = 500    # ... a transaction
 JOB_SECONDS = 3000  # ... within 50 minutes of the job's start: the next hourly run is never skipped
 
 
@@ -114,6 +120,32 @@ def passages(conn: psycopg.Connection, seconds: float, *,
     return r
 
 
+def sections(conn: psycopg.Connection, seconds: float, *, batch: int = SECTIONS_BATCH,
+             clock: Callable[[], float] = time.monotonic) -> Result:
+    """Documents the current parser-output checks haven't seen, checked oldest filing first until
+    `seconds` (clock time) run out; each batch commits alone, so a stopped run loses nothing."""
+    started = clock()
+    with conn.transaction():
+        version = conn.execute("SELECT ops.check_sections_version()").fetchone()[0]  # type: ignore[index]
+        paused, _ = begin(conn, "check_sections", str(version))
+    r = Result("check_sections", str(version), paused=paused)
+    while not paused and clock() < started + seconds:
+        with conn.transaction():
+            ids = [x[0] for x in conn.execute(
+                "SELECT accession_no FROM ops.section_check_backlog(%s)"
+                " ORDER BY filed, accession_no LIMIT %s", (version, batch))]
+            if ids:
+                conn.execute("SELECT ops.check_sections(%s)", (ids,))
+        if not ids:
+            break
+        r.done += len(ids)
+    with conn.transaction():
+        r.behind, r.oldest = conn.execute(  # type: ignore[misc]
+            "SELECT count(*), min(filed) FROM ops.section_check_backlog(%s)", (version,)).fetchone()
+        record(conn, r, clock() - started)
+    return r
+
+
 def diffs(conn: psycopg.Connection, diffed: int) -> Result:
     """The run recomputes diffs of an older ALGORITHM itself: this only measures what is left."""
     with conn.transaction():
@@ -129,12 +161,16 @@ def diffs(conn: psycopg.Connection, diffed: int) -> Result:
 
 
 def run(conn: psycopg.Connection, seconds: float = SECONDS, per_run: int = PER_RUN,
-        diffed: int = 0, clock: Callable[[], float] = time.monotonic) -> list[Result]:
-    """Every kind, after a parser-index run that finished its own work. A kind that raises is
-    logged and left for the next run; a lost connection stops the job."""
+        diffed: int = 0, clock: Callable[[], float] = time.monotonic,
+        sections_seconds: float = SECTIONS_SECONDS) -> list[Result]:
+    """Every kind, after a parser-index run that finished its own work: the parser checks get up to
+    `sections_seconds` of `seconds`, the passages what is left. A kind that raises is logged and
+    left for the next run; a lost connection stops the job."""
+    deadline = clock() + seconds
     steps: list[Callable[[], Result]] = [
         lambda: parser(conn, per_run),
-        lambda: passages(conn, seconds, clock=clock),
+        lambda: sections(conn, min(sections_seconds, max(0.0, deadline - clock())), clock=clock),
+        lambda: passages(conn, max(0.0, deadline - clock()), clock=clock),
         lambda: diffs(conn, diffed),
     ]
     results = []

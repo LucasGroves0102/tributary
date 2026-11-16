@@ -35,7 +35,7 @@ rules are off.
   (uid `tributary`) on the `ops` views, used by the freshness dashboard, and the ops-exporter
   queries (`files/ops-exporter-queries.yaml`): `tributary_companyfacts_*{company}` from
   `ops.companyfacts_lag`, `tributary_financials_quality_*{check_name,severity}` from
-  `ops.quality_summary`, `tributary_doc_crawl_*{form}` from `ops.doc_crawl_progress`, and
+  `ops.quality_summary` (one series per check and severity since 072), `tributary_doc_crawl_*{form}` from `ops.doc_crawl_progress`, and
   `tributary_catchup_*{kind}` from `ops.catchup_status`.
   `opsDatabase.enabled` is off in the chart and in hermes' release (it needs the `grafana_reader`
   login and the `grafana-postgres` secret, below), so on hermes those panels are empty and

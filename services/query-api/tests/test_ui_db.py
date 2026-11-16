@@ -600,12 +600,24 @@ def test_status_data_runs_as_query_api_without_bronze_or_ops_access(conn):
                               " FROM ops.public_completeness()") == [(2, 150, 1, 2, 1)]
     coverage = as_query_api(conn, "SELECT * FROM ops.public_coverage()")[0]
     assert coverage[:4] == (before[0] + 1, before[1] + 1, before[2] + 1, before[3] + 7)
-    # 023's eleven checks, plus 041's mistagged_fact and net_debt_gap
-    assert len(as_query_api(conn, "SELECT * FROM ops.public_quality()")) == 13
+    # 023's eleven checks, 041's mistagged_fact and net_debt_gap, 072's tag_disagreement, and the
+    # checks with findings of two severities (outlier, sign_flip, annual_sum): one row each, by tier
+    quality = as_query_api(conn, "SELECT check_name, severity, tier FROM ops.public_quality()")
+    assert len(quality) == 17
+    assert [t for _, _, t in quality] == sorted(
+        (t for _, _, t in quality),
+        key=["error", "warning", "kept_out", "coverage", "info"].index)
+    assert ("mistagged_fact", "info", "kept_out") in quality
+    assert ("series_gap", "info", "coverage") in quality
+    assert len(as_query_api(conn, "SELECT * FROM ops.public_parser_quality()")) == 5
 
     body = client(conn).get("/v1/status/data").json()  # no token
     assert body["ingest"]["filings"] == 2 and body["ingest"]["live_pct"] == 50.0
     assert body["completeness"]["days_checked"] == 2
+    assert {c["tier"] for c in body["quality"]["checks"]} == {
+        "error", "warning", "kept_out", "coverage", "info"}
+    assert {c["check"] for c in body["parser"]["checks"]} == {
+        "invalid_key", "no_sections", "missing_core_item", "duplicate_section", "empty_section"}
     for table in ("bronze.filings", "ops.filing_completeness", "ops.section_index"):
         with pytest.raises(psycopg.errors.InsufficientPrivilege):
             with conn.transaction():

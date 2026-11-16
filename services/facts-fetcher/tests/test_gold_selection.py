@@ -51,6 +51,9 @@ METRICS = {
     "Liabilities": "total_liabilities",
     "LiabilitiesCurrent": "current_liabilities",
     "AccountsReceivableNetCurrent": "receivables",
+    "ReceivablesNetCurrent": "receivables",
+    "EarningsPerShareBasicAndDiluted": "eps_basic",
+    "NetCashProvidedByUsedInFinancingActivities": "financing_cash_flow",
     "InventoryNet": "inventory",
     "StockholdersEquity": "stockholders_equity",
     "LongTermDebtNoncurrent": "long_term_debt",
@@ -1611,3 +1614,99 @@ def test_a_cost_that_flips_sign_is_still_a_warning(conn):
                ("PaymentsToAcquireProductiveAssets", *Q2, -90, "q2", "2026-08-01"),
                ("PaymentsToAcquireProductiveAssets", *Q3, 110, "q3", "2026-11-02")])
     assert sign_flips(conn) == [(date(2026, 6, 30), "warning", None)]
+
+
+# --- 072: checks that say what they mean --------------------------------------------------------
+
+
+def tags_disagree(conn):
+    return [(m, str(e), d["rule"], d["tag"], d["other_tag"], d["factor"])
+            for m, e, d in findings(conn, "tag_disagreement")]
+
+
+def test_a_total_under_a_fifth_of_its_own_part_is_a_tag_disagreement(conn):
+    # Sempra's 10-Q for 2010: receivables $141M under the accounts receivable it files beside them
+    put(conn, [("ReceivablesNetCurrent", None, END, 141_000_000, "q", FILED),
+               ("AccountsReceivableNetCurrent", None, END, 891_000_000, "q", FILED)])
+    assert gold(conn, "receivables", END) == (141_000_000, "ReceivablesNetCurrent")
+    assert tags_disagree(conn) == [("receivables", END, "total_below_part", "ReceivablesNetCurrent",
+                                    "AccountsReceivableNetCurrent", 6.319149)]
+    ((_, _, detail),) = findings(conn, "tag_disagreement")
+    assert detail["accession_no"] == "q" and "value" not in detail  # never the figures (014)
+
+
+def test_a_normal_sub_total_is_no_disagreement(conn):
+    # a bank: contract revenue (fees) a tenth of Revenues; receivables above accounts receivable
+    put(conn, [("Revenues", *Q3, 10_000_000_000, "q", FILED),
+               ("RevenueFromContractWithCustomerExcludingAssessedTax", *Q3, 1_000_000_000, "q",
+                FILED),
+               ("ReceivablesNetCurrent", None, END, 900, "q", FILED),
+               ("AccountsReceivableNetCurrent", None, END, 100, "q", FILED)])
+    assert tags_disagree(conn) == []
+
+
+def test_one_figure_in_two_scales_and_two_names_of_a_line(conn):
+    # Dominari's cash: $4.5M beside a Cash tag in thousands of thousands; EPS beside EPS basic and
+    # diluted 16.8 times it (Artesian's 2011 10-K)
+    put(conn, [("CashAndCashEquivalentsAtCarryingValue", None, END, 4_498_237, "q", FILED),
+               ("Cash", None, END, 4_500_000_000_000, "q", FILED),
+               ("EarningsPerShareBasic", *Q3, Decimal("0.83"), "q", FILED),
+               ("EarningsPerShareBasicAndDiluted", *Q3, Decimal("13.91"), "q", FILED)])
+    assert [(m, r) for m, _, r, *_ in tags_disagree(conn)] == [("cash", "scale"),
+                                                               ("eps_basic", "same_line")]
+
+
+def test_revenue_in_two_scales_is_resolved_not_flagged(conn):
+    # 064: Plexus' contract revenue in thousands beside its Revenues; best_facts reads the dollars
+    put(conn, [("Revenues", *Q3, 982_607_000, "q", FILED),
+               ("RevenueFromContractWithCustomerExcludingAssessedTax", *Q3, 982_607, "q", FILED),
+               ("CostOfRevenue", *Q3, 880_000_000, "q", FILED)])
+    assert gold(conn, "revenue", END)[0] == 982_607_000
+    assert tags_disagree(conn) == []
+
+
+def test_kept_out_and_coverage_findings_are_info(conn):
+    # Legacy Housing: a period after its filing is kept out, not an error a reader sees
+    put(conn, [("Revenues", "2032-10-01", "2032-12-31", 5, "q", FILED),
+               ("Revenues", *Q3, 100, "q", FILED)])
+    assert {s for (s,) in conn.execute(
+        "SELECT severity FROM ops.quality_findings WHERE company_id = %s"
+        " AND check_name = 'mistagged_fact'", (CO,))} == {"info"}
+    assert conn.execute("SELECT ops.quality_tier('mistagged_fact', 'error'),"
+                        " ops.quality_tier('series_gap', 'warning'),"
+                        " ops.quality_tier('outlier', 'warning'), ops.quality_tier('outlier', 'info')"
+                        ).fetchone() == ("kept_out", "coverage", "warning", "info")
+    figures = conn.execute("SELECT figures FROM ops.quality_companies WHERE company_id = %s",
+                           (CO,)).fetchone()[0]
+    assert figures == conn.execute(
+        "SELECT (SELECT count(*) FROM gold.quarterly_financials WHERE company_id = %s)"
+        " + (SELECT count(*) FROM gold.derived_financials WHERE company_id = %s)",
+        (CO, CO)).fetchone()[0] > 0
+
+
+def test_a_swing_on_a_lumpy_line_is_info(conn):
+    # a debt raise: financing cash flow 40 times the quarters beside it
+    put(conn, [("NetCashProvidedByUsedInFinancingActivities", *Q1, 10, "q1", "2026-05-01"),
+               ("NetCashProvidedByUsedInFinancingActivities", *Q2, 400, "q2", "2026-08-01"),
+               ("NetCashProvidedByUsedInFinancingActivities", *Q3, 12, "q3", "2026-11-02")])
+    assert conn.execute(
+        "SELECT severity, detail->>'rule' FROM ops.quality_findings WHERE company_id = %s"
+        " AND check_name = 'outlier'", (CO,)).fetchall() == [("info", "lumpy")]
+
+
+def test_a_year_restated_after_its_quarters_explains_their_sum(conn):
+    """The 10-K's year, restated by the next 10-K, against quarters on the old basis: info, restated
+    'year'. The same mismatch with nothing restated stays a warning."""
+    quarters = [("Revenues", "2025-01-01", "2025-03-31", 100, "q1", "2025-05-01"),
+                ("Revenues", "2025-04-01", "2025-06-30", 100, "q2", "2025-08-01"),
+                ("Revenues", "2025-07-01", "2025-09-30", 100, "q3", "2025-11-01"),
+                ("Revenues", "2025-10-01", "2025-12-31", 100, "k1", "2026-02-20", "10-K")]
+    put(conn, [*quarters, ("Revenues", *FY, 400, "k1", "2026-02-20", "10-K"),
+               ("Revenues", *FY, 440, "k2", "2027-02-20", "10-K")])
+    rows = conn.execute("SELECT severity, detail->>'restated' FROM ops.quality_findings"
+                        " WHERE company_id = %s AND check_name = 'annual_sum'", (CO,)).fetchall()
+    assert rows == [("info", "year")]
+    put(conn, [*quarters, ("Revenues", *FY, 440, "k1", "2026-02-20", "10-K")])
+    rows = conn.execute("SELECT severity, detail->>'restated' FROM ops.quality_findings"
+                        " WHERE company_id = %s AND check_name = 'annual_sum'", (CO,)).fetchall()
+    assert rows == [("warning", None)]

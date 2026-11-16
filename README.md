@@ -166,6 +166,11 @@ in front (Terraform). GitHub Actions runs every test and builds the images
 - **Stored data upgrades itself.** Every parsed document, search passage, gold company and quality
   check records the rule version that built it; after a deploy, hourly jobs bring history up to the
   new rule in the background, oldest first, never ahead of new filings.
+- **Checks that find wrong numbers first.** Nightly checks flag a filing that tags one line two ways
+  that can't both be right, a parsed section under an item its form doesn't have, and every
+  screener extreme nothing explains; the status page groups findings by what they mean for a reader
+  (errors, to double-check, kept out, coverage, information) per 1,000 figures
+  ([db](db/DESIGN.md#072_data_trust_checkssql)).
 - **Rules, not a model, where the answer must be exact**, each measured on real filings.
 - **One SEC rate limit across every pod**: a token bucket in one Postgres row.
 - **Rust where it pays.** The parser was rewritten in Rust against a written spec and swapped in

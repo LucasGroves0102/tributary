@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "../App";
 import type { DataStatus } from "../types";
-import { companiesNote, duration, share, Status } from "./Status";
+import { companiesNote, duration, meaning, perThousand, share, Status, tierOf } from "./Status";
 
 const NOW = Date.parse("2026-11-02T15:00:00Z");
 
@@ -26,10 +26,21 @@ function status(over: Partial<DataStatus> = {}): DataStatus {
       last_indexed_at: "2026-11-02T14:00:00Z",
     },
     quality: {
-      companies_checked: 6024, last_checked_at: "2026-11-02T08:00:00Z",
+      companies_checked: 6024, last_checked_at: "2026-11-02T08:00:00Z", figures: 13_790_000,
       checks: [
-        { check: "impossible_value", severity: "error", findings: 3, companies: 2 },
-        { check: "restatement", severity: "info", findings: 1200, companies: 800 },
+        { check: "impossible_value", severity: "error", tier: "error", findings: 1410, companies: 517, per_1000: 0.102 },
+        { check: "outlier", severity: "warning", tier: "warning", findings: 7389, companies: 2900, per_1000: 0.536 },
+        { check: "mistagged_fact", severity: "info", tier: "kept_out", findings: 634, companies: 262, per_1000: 0.046 },
+        { check: "series_gap", severity: "info", tier: "coverage", findings: 19534, companies: 3865, per_1000: 1.417 },
+        { check: "outlier", severity: "info", tier: "info", findings: 5855, companies: 2700, per_1000: 0.425 },
+        { check: "restatement", severity: "info", tier: "info", findings: 1200, companies: 800, per_1000: 0.087 },
+      ],
+    },
+    parser: {
+      documents_checked: 580000, last_checked_at: "2026-11-02T09:00:00Z",
+      checks: [
+        { check: "invalid_key", severity: "error", documents: 6300, per_1000: 10.862 },
+        { check: "empty_section", severity: "info", documents: 0, per_1000: 0 },
       ],
     },
     recorded: {
@@ -88,7 +99,7 @@ describe("Status", () => {
     expect(container.querySelector("h1")?.textContent).toBe("Data status");
     for (const s of ["3 min ago", "2 min ago", "43 s", "95% within 1.8 min", "39,000 live-feed filings, last 7 days",
       "97.5%", "39,000 of 40,000 filings", "6,025", "265,625", "1,780,000", "43,012", "21 days checked",
-      "all on 1 of those days", "6,024 companies checked", "Access: 59 attempts to reach data a user can't read, 0 succeeded", "4 of 4 ordinary",
+      "all on 1 of those days", "6,024 companies checked, 13,790,000 figures", "Access: 59 attempts to reach data a user can't read, 0 succeeded", "4 of 4 ordinary",
       "Citations: 128 of 128 figures traced", "30 of 30 answers using data", "Figures against the filings: 149 numbers printed in 5 10-Ks",
       "2 known gaps asserted absent", "21 of the figures", "last recorded results, not live"]) {
       expect(t).toContain(s);
@@ -99,10 +110,21 @@ describe("Status", () => {
     }
     // every time says its zone
     expect(container.querySelector(".status-strip .p")?.textContent).toMatch(/\b(UTC|GMT|[A-Z]{2,4}T)\b|GMT[+-]\d+/);
-    const rows = [...container.querySelectorAll("tbody tr")].map((r) => r.textContent);
-    expect(rows[0]).toContain("Impossible values");
-    expect(rows[0]).toContain("error");
-    expect(rows[1]).toContain("1,200");
+    // the checks grouped by what a finding means for a reader, each group headed, in the tiers' order
+    const quality = container.querySelector(".quality-table")!;
+    expect([...quality.querySelectorAll("tr.tier-h")].map((r) => r.textContent?.split(":")[0])).toEqual(
+      ["Errors readers could see", "To double-check", "Kept out", "Coverage", "Information"]);
+    const rows = [...quality.querySelectorAll("tbody tr:not(.tier-h)")].map((r) => r.textContent);
+    expect(rows[0]).toContain("Negative revenue, assets or share counts");
+    expect(rows[0]).toContain("517");
+    expect(rows[0]).toContain("0.10"); // per 1,000 figures
+    expect(rows[3]).toContain("A quarter missing from a series");
+    expect(rows[4]).toContain("swings by nature");
+    expect(rows[5]).toContain("1,200");
+    // the parser's checks: filings, never a company
+    expect(t).toContain("580,000 filings checked");
+    expect(t).toContain("A section labelled with an item its form doesn't have");
+    expect(t).toContain("10.9");
     const links = [...container.querySelectorAll("a")].map((a) => a.getAttribute("href"));
     expect(links).toContain("https://github.com/LucasGroves0102/tributary/blob/02ca3b2/tests/adversarial/report.md");
     expect(links).toContain("https://github.com/LucasGroves0102/tributary/blob/9d9f318/tests/golden/README.md");
@@ -216,6 +238,43 @@ describe("companiesNote (#24: each company count says what it counts)", () => {
   });
 });
 
+describe("an older API, without tiers or parser checks", () => {
+  it("groups by severity and says nothing it wasn't sent", async () => {
+    const old = status({
+      quality: {
+        companies_checked: 6024, last_checked_at: "2026-11-02T08:00:00Z",
+        checks: [
+          { check: "impossible_value", severity: "error", findings: 3, companies: 2 },
+          { check: "restatement", severity: "info", findings: 1200, companies: 800 },
+        ],
+      },
+      parser: undefined,
+    });
+    await mount(<Status load={async () => old} now={() => NOW} />);
+    expect([...container.querySelectorAll("tr.tier-h")].map((r) => r.textContent?.split(":")[0])).toEqual(
+      ["Errors readers could see", "Information"]);
+    expect(text()).not.toContain("filings checked");
+    expect(text()).not.toContain("NaN");
+  });
+});
+
+describe("the checks' words", () => {
+  it("say what a finding means, by check and severity", () => {
+    expect(meaning("outlier", "warning")).toContain("a scale slip");
+    expect(meaning("outlier", "info")).toContain("swings by nature");
+    expect(meaning("annual_sum", "info")).toContain("restated");
+    expect(meaning("tag_disagreement", "warning")).toContain("can't both be right");
+    expect(meaning("something_new", "warning")).toBe("something new");
+    expect(tierOf({ severity: "warning" })).toBe("warning");
+    expect(tierOf({ severity: "info", tier: "kept_out" })).toBe("kept_out");
+  });
+
+  it("per 1,000 never reads 0 for a real finding", () => {
+    expect([perThousand(0.102), perThousand(13.91), perThousand(0.004), perThousand(0, 3), perThousand(0, 0), perThousand(null)])
+      .toEqual(["0.10", "13.9", "<0.01", "<0.01", "0.00", "—"]);
+  });
+});
+
 describe("share", () => {
   it("is the percentage of companies checked, never 0% for a real finding", () => {
     expect(share(834, 7058)).toBe("11.8%");
@@ -232,7 +291,7 @@ it("a signed-in reader can follow a check to the screener; signed out, the page 
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   await act(async () => root.render(<Status load={async () => status()} now={() => NOW} />));
   for (let i = 0; i < 2; i++) await act(async () => {});
-  const row = [...container.querySelectorAll("tr")].find((r) => r.textContent?.includes("Impossible values"))!;
+  const row = [...container.querySelectorAll("tr")].find((r) => r.textContent?.includes("Negative revenue"))!;
   expect(row.querySelector("a")?.getAttribute("href")).toBe("#/companies?issue=impossible_value");
   await act(async () => root.render(<Status load={async () => status()} now={() => NOW} signedOut />));
   for (let i = 0; i < 2; i++) await act(async () => {});

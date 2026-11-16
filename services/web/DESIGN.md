@@ -183,7 +183,11 @@ assistant's empty state; `#/status` the data status page (`pages/Status.tsx`, `G
 freshness, how long a filing takes from EDGAR to here (typical, and 95% within), live-feed share,
 completeness against EDGAR's daily indexes (business days only, which is why fewer days than the window
 are checked), coverage counts, data-quality check totals (reconciled: every company with XBRL figures is
-checked, and those without a quarterly series are why fewer show as having financials) and the last
+checked, and those without a quarterly series are why fewer show as having financials), grouped by what a
+finding means for a reader (migration 072's tiers, `Status.tsx` `TIERS`: errors readers could see, to
+double-check, kept out, coverage, information; each row worded by check and severity, `meaning`, with
+companies affected and findings per 1,000 figures; an older API's rows group by severity), the
+filing-section checks (documents, per 1,000 filings; absent from an older API) and the last
 recorded results of the adversarial, citation and golden-figure suites (linked to their reports on GitHub at
 the commit they were recorded in, which shows only on the link's hover). It is public: signed out, `#/status` renders it without the
 app shell (and without calling `/v1/me`), linked from the front door; signed in, from the

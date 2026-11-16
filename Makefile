@@ -1,4 +1,4 @@
-.PHONY: up up-all down logs topics consume migrate seed-app authz authz-test cdc propagation-test token backfill companies financials financials-bulk financials-rebuild segments segments-rebuild seed-documents crawl reparse section-index psql lint test hooks secrets ask adversarial web citations typecheck exhibits status-results
+.PHONY: up up-all down logs topics consume migrate seed-app authz authz-test cdc propagation-test token backfill companies financials financials-bulk financials-rebuild extremes segments segments-rebuild seed-documents crawl reparse section-index psql lint test hooks secrets ask adversarial web citations typecheck exhibits status-results
 
 COMPOSE := $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo docker-compose)
 # use the repo virtualenv when there is one, so `make test` works without activating it
@@ -88,6 +88,9 @@ segments: ## segment/KPI facts from stored 10-K/10-Q inline XBRL (no SEC calls):
 
 segments-rebuild: ## re-project stored segment extracts and re-derive silver/gold (after changing axes, tags or labels)
 	@set -a; . ./.env; set +a; $(BIN)facts-fetcher-segments --rebuild
+
+extremes: ## the screener's top and bottom 20 per column that no reading or check explains (ALL=1 every row, REFRESH=1 recompute)
+	@set -a; . ./.env; set +a; $(BIN)python -m facts_fetcher.extremes $(if $(REFRESH),--refresh) $(if $(ALL),--all)
 
 seed-documents: ## publish tracked companies' recent 10-K/10-Q/8-K filings to filings.raw
 	$(COMPOSE) --profile app build doc-fetcher

@@ -37,7 +37,7 @@ BEGIN
         ('gold.refresh_derived_financials(text[])', '7349566dfd5a8b5357be80633bcecc61'),
         ('gold.refresh_quarterly_financials(text[])', '84ce53d8fc3987c84012b4360b69fed4'),
         ('gold.usable_facts(text[])', '0b0c7a112a9761106084a4fd15dd2a56'),
-        ('ops.check_financials(text[])', '510eaedc79ece7e71f7b8b0fb0b6a339'),
+        ('ops.check_financials(text[])', '91b100fb34e623d52fa0282fe6466c20'),
         ('silver.refresh_filing_facts(text[])', '566a561f85a949551ee2cdef2cf576f3'),
         ('silver.refresh_financial_facts(text[])', '813785ee2a47de9ea6e3a86f6176fef2')
     ) v(fn, want) LOOP
