@@ -7,17 +7,19 @@
 --    structured data hasn't it: no XBRL, no reports, an extension tag), out_of_scope (funds,
 --    asset-backed issuers, figures filed in a parent's report). detail holds dates, forms,
 --    accessions, metric names and counts, never values or text (014's rule). Kinds and causes:
---      no_figures          no gold row at all. fund (N-CSR/N-PORT/485BPOS filers), abs (10-D),
---                          filed_with_parent (its 10-K/10-Q are a parent's combined filing),
---                          foreign (20-F/40-F; fixable when the 20-F has XBRL: roadmap f),
---                          no_xbrl, stopped (no 10-K/10-Q for 400 days), awaiting (its first
+--      no_figures          no gold row at all. fund (N-CSR/N-PORT/485BPOS filers), abs (10-D, or
+--                          SIC 6189: structured-product trusts), filed_with_parent (its 10-K/10-Q
+--                          are a parent's combined filing), foreign (20-F/40-F; fixable when the
+--                          20-F has XBRL: roadmap f), no_xbrl (no XBRL 10-K/10-Q in two years:
+--                          royalty trusts), stopped (no 10-K/10-Q for 400 days), awaiting (its first
 --                          XBRL 10-K/10-Q is under 30 days old), bank_regulator (a bank on EDGAR
 --                          over a year that never filed a periodic report: it files with its bank
 --                          regulator), no_reports_yet, no_sec_reports, other (fixable)
 --      figures_behind      the latest 10-K/10-Q/20-F/40-F (filed 7+ days ago, 30+ for 20-F/40-F)
 --                          covers a period 45+ days after gold's last core figure: pipeline
 --                          (companyfacts has the filing; gold left it out), companyfacts_lacks
---                          (055's job should read it), no_xbrl, foreign
+--                          (055's job should read it), filed_with_parent, no_xbrl, foreign
+--                          (detail.in_companyfacts says whether companyfacts carries the filing)
 --      history_short       figures start a year or more after the company's first XBRL 10-K/10-Q
 --                          (or revenue a year after its net income): re_registration, revenue_tag
 --                          (revenue under a tag gold doesn't read as revenue: Church & Dwight's
@@ -36,13 +38,27 @@
 --                          re_registrations.csv)
 --      documents_missing   10-K/10-Qs filed since 2016 (the crawl's window) not stored: none, or
 --                          under half of 8+ (partial)
---      statements_exhibit  the latest stored 10-K's Item 8 is a short pointer: ex13 (to Exhibit 13
---                          or the annual report to shareholders, not stored), not_in_item_8
---    First pass (docs/runbooks, 2026-11-16): 747 without derived revenue, net income or assets; by
---    this file's rule (no gold row at all) 475: funds and ABS 361, no periodic reports 46, foreign 36,
---    10-K/10-Q filers 23 (royalty and structured-product trusts without XBRL, Entergy's utilities
---    filed in the parent's report), SPACs not yet reporting 9. The other 272 have figures (new
---    listings with under four quarters, SPACs' quarters without TTM).
+--      statements_exhibit  the latest stored 10-K's Item 8 is a short pointer to Exhibit 13 or the
+--                          annual report to shareholders, and no EX-13 is stored (doc-fetcher
+--                          stores it with a 10-K since this change): ex13
+--    Measured on hermes (the whole sweep 34 s): 1,569 gaps at 1,505 of 6,068 listed companies.
+--      no_figures 475: out of scope 375 (fund 358, abs 11, filed_with_parent 6); not in the SEC's
+--        data 71 (no_reports_yet 30, no_sec_reports 22, no_xbrl 9, foreign without XBRL 7, bank_
+--        regulator 3: Bank OZK, Preferred Bank, Georgia Banking); fixable 29 (foreign with XBRL)
+--      figures_behind 221: foreign 215 (214 a 20-F/40-F companyfacts lacks: 055's job reads only
+--        10-K/10-Q gaps, roadmap f), companyfacts_lacks 3 (investment vehicles 055 read without
+--        mapped facts), filed_with_parent 2 (Southern California Edison, EIDP), pipeline 1
+--      history_short 652: revenue_tag 639 (a sample of 30: 11 an industry revenue tag gold doesn't
+--        map, RealEstateRevenueNet, UtilityRevenue, OilAndGasRevenue...; 6 goods or services
+--        lines alone; 13 mapped tags only yearly), companyfacts_gold 8, companyfacts 4,
+--        re_registration 1
+--      metric_missing 124: revenue 100, equity 14, operating cash flow 10, assets 7, net income 3
+--      re_registration 63 (24 linked by this change's re_registrations.csv), statements_exhibit 14
+--        (IBM, Wells Fargo...), documents_missing 20 (all without figures: the crawl plans
+--        operating companies only)
+--    The first pass (docs/runbooks, 2026-11-16) counted 747 without figures (no TTM revenue, net
+--    income or assets: 139 of its 166 10-K/10-Q filers are new listings with quarters) and 37
+--    figures behind by TTM (25 of them have current quarters: Ferguson, James Hardie, Greif).
 --
 -- 2. ops.refresh_coverage() rebuilds it (rows not found again go, first_seen stays while a gap
 --    stays) and records the run in ops.coverage_runs; the nightly financials-bulk job calls it after
