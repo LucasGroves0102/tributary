@@ -4885,10 +4885,13 @@ button.link.num {
   padding: var(--sp-5) var(--sp-6);
   display: grid;
   gap: var(--sp-4);
-  max-height: calc(100vh - 120px);
+  /* under the top bar, as tall as the window leaves it, scrolling inside (Riley 53: it clipped its own text
+     under the bar) */
+  max-height: calc(100vh - var(--topbar-h) - 24px);
   overflow: auto;
+  overscroll-behavior: contain;
   position: sticky;
-  top: var(--sp-6);
+  top: calc(var(--topbar-h) + 12px);
 }
 
 .check-panel h2,
