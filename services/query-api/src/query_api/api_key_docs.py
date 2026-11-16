@@ -92,7 +92,8 @@ ROUTE_DOCS: dict[tuple[str, str], tuple[str, str]] = {
         "Data notes",
         "Notes on one company's figures (gaps, overlapping quarters, restatements, quarters "
         "computed from year-to-date figures, filings the SEC's XBRL data doesn't reflect yet), "
-        "each with its filings, most important first."),
+        "each with its filings, most important first; `coverage`: what is missing from its "
+        "figures or documents and why (fixable, not in the SEC's data, or out of scope)."),
     ("GET", "/v1/data-notes"): (
         "Recent data notes",
         "The newest data notes across the companies whose financials you can read, or the ones "
