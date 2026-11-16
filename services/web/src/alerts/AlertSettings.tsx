@@ -142,7 +142,7 @@ function Companies({ token, settings }: { token: string; settings: AlertSettings
             {settings.companies.map((c) => (
               <tr key={c.company_id}>
                 <td className="first"><a href={href({ view: "company", companyId: c.company_id })}>{directory.label(c.company_id)}</a></td>
-                <td className="muted small">{c.sources.map((s) => SOURCE_WORDS[s]).join(" · ")} · since {day(c.since, true)}</td>
+                <td className="muted small">{c.sources.map((s) => SOURCE_WORDS[s]).join(" and ")}, since {day(c.since, true)}</td>
                 {FORMS.map((f) => (
                   <td key={f} className="n">
                     <input type="checkbox" checked={(forms[c.company_id] ?? FORMS).includes(f)}

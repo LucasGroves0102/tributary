@@ -4752,6 +4752,9 @@ button.link.num {
 
 .thesis-page .seg {
   margin-bottom: var(--sp-4);
+  /* as wide as its four choices, not the page (a column stretched its frame to the edge) */
+  align-self: flex-start;
+  justify-self: start;
 }
 
 .thesis-panes {

@@ -70,7 +70,7 @@ export function NotificationList({ token, companyId, empty, limit = 50, onLoaded
             {n.crossed > 0 && <span className="tag crossed">{n.crossed} red line{n.crossed === 1 ? "" : "s"} crossed</span>}
             <span className="grow" />
             <span className="faint small" title={`Noticed ${localTime(n.created_at, true)}`}>
-              {n.sources.map((s) => SOURCE_WORDS[s]).join(" · ")}
+              {n.sources.map((s) => SOURCE_WORDS[s]).join(" and ")}
             </span>
           </div>
           {n.form === "8-K" && n.items.length > 0 && (
