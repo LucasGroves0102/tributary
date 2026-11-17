@@ -882,3 +882,43 @@ catch-ups, Python). The parser-output checks' backlog was a LEFT JOIN with an OR
 from stale statistics: a nested loop over company_ciks per document, 149 s per batch on hermes, so
 4,000 documents a run (6.5 days for 630,653); as NOT EXISTS 0.17 s; `ops.statement_backlog` likewise.
 `gold.search_passages` and the nine-argument `gold.search_page` dropped: nothing calls them since 065.
+
+### 080_revenue_industry_tags.sql
+
+Revenue under industry tags (coverage, part 2). Before 2018 many filers tagged their total revenue with
+an industry line: `SalesRevenueGoodsNet` (manufacturers' net sales), `SalesRevenueServicesNet`,
+`RealEstateRevenueNet` (REITs); 639 listed companies' revenue started a year or more after their net
+income because gold read none of them. Each candidate was measured by 038's method over the raw
+companyfacts of four samples (the 639, 500 drawn at random, the 124 with a metric missing lately, 91
+partnerships): where a filing without the tag gives the same period under a tag gold trusts, is the
+tag that total? Goods 92.5% of 1,242 periods (a part 0.9%), services 85.9% of 562 (2.7%), real estate
+90.9% of 274 (2.9%), against 89.4% of 963 (1.2%) for `SalesRevenueNet`, trusted since 003; the
+printed statements read so far agree (goods 79 of 83). Contracts, licenses, oil and gas, health care,
+royalties, hotels and REIT lease income measured worse or too thinly and stay out. The three are
+priority 11-13, after every revenue tag, and `gold.best_facts` keeps them from being read as a part:
+never at a company whose filings give one under 80% of another revenue tag of the same period, never
+two in one period, never at or below zero; and another revenue tag under 20% of one is a part (039's
+rule): Conagra's FY2012-2016 revenue was a $1.6-1.7B line beside $13.5B of net sales, Materion's
+2012-2016 quarters $1.5-21M beside $250-300M, Camden's Q2 2018 $1.8M of contract revenue. Total
+assets falls back to `LiabilitiesAndStockholdersEquity` (equal to Assets in 99.96% of 59,863 filings'
+dates; SEI Investments stopped tagging Assets in 2025). Rebuilt on a throwaway database from the
+samples' stored companyfacts (gold at 077 equal to hermes' for the 639): 240 of the 639 get their revenue
+history back (5,979 quarters; Consumer Staples 31 of 37, Consumer Discretionary 45 of 60, Industrials 53
+of 93, Real Estate 33 of 56, Health Care 16 of 191, mostly biotechs with no revenue yet); 95 existing
+quarters change at 10 companies, each a zero or a part replaced (Churchill Downs' 2012-2016 quarters of
+0); 2 move series (Aytu); the random 500 gain 70 quarters, none changed. `silver.industry_total_exclusions`
+(the owner's call) keeps three companies out: Brown-Forman's and Constellation's pre-2017 goods tag is
+sales before excise taxes (tag less ExciseAndSalesTaxes equals the later net sales; the only excise cases
+among the 25 whose industry total exceeds the later total by 5%+), and Skyline Champion's is legacy
+Skyline's, the registrant, not Champion, the accounting acquirer.
+`gold.rules_version()` 80: the catch-up rebuilds every company.
+
+### 081_coverage_notes.sql
+
+The coverage sweep's notes say what is left after 080. history_short `revenue_yearly` (not in the
+SEC's data): gold reads the company's revenue for years, from the 10-Ks, 400+ days before its first
+quarter, because its 10-Qs tag none (70 listed companies on hermes before 080). metric_missing's
+`gold_dropped` counts only silver facts under a tag gold reads as the line (a bank sum's parts aren't:
+41 -> 5); `trust` (SIC 6221 commodity pools: net assets, no balance sheet totals or cash flow
+statement; out of scope, 13); `partners_capital` (a partnership's or LLC's equity, 8; 080 measured
+partners' capital as not safe to read as stockholders' equity). Words: web `company/coverage.ts`.

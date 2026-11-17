@@ -167,3 +167,5 @@ One line each; the full notes (what it changes, why, the measurements) are in [D
 - [`072_data_trust_checks.sql`](DESIGN.md#072_data_trust_checkssql): the tag-disagreement check, check tiers and findings per 1,000 figures, parser-output checks, the extremes report.
 - [`078_screener_figures.sql`](DESIGN.md#078_screener_figuressql): the screener's latest figures, stored by the gold build; the readings' rules in `gold.reading`.
 - [`079_catchup_status_cleanups.sql`](DESIGN.md#079_catchup_status_cleanupssql): catch-up status says why a run did nothing; backlogs as anti-joins; search's old forms dropped.
+- [`080_revenue_industry_tags.sql`](DESIGN.md#080_revenue_industry_tagssql): revenue under industry totals (goods, services, real estate) where no other tag gives it; total assets from liabilities and equity.
+- [`081_coverage_notes.sql`](DESIGN.md#081_coverage_notessql): the coverage sweep's notes after 080: revenue tagged only yearly, commodity trusts, partners' capital.

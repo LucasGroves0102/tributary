@@ -79,10 +79,28 @@ export function coverageWords(g: CoverageGap, name: string, nameOf: (id: string)
         text: `${name} re-registered with the SEC on ${on(d.moved_on)}${d.form ? ` (${d.form})` : ""}. Its earlier reports are under its previous registration, which isn't linked here yet, so figures start in ${year(d.figures_from)}.`,
       };
     case "history_short":
+      if (g.cause === "revenue_yearly") {
+        return {
+          title: `Quarterly revenue starts in ${year(d.revenue_from)}`,
+          text: `${name}'s 10-Ks give its revenue for the year from ${year(d.revenue_years_from)}, but its 10-Qs don't tag the quarters' revenue, so quarterly revenue starts in ${year(d.revenue_from)}. Its other figures go back to ${year(d.figures_from)}.`,
+        };
+      }
+      if (g.cause === "revenue_excise") {
+        return {
+          title: `Revenue starts in ${year(d.revenue_from)}`,
+          text: `Before ${year(d.revenue_from)}, ${name}'s filings tag its sales before excise taxes as revenue and its net sales under its own tag, so Tributary leaves that revenue blank rather than show the gross figure. Its other figures go back to ${year(d.figures_from)}.`,
+        };
+      }
+      if (g.cause === "revenue_predecessor") {
+        return {
+          title: `Revenue starts in ${year(d.revenue_from)}`,
+          text: `Before ${year(d.revenue_from)}, this registration's filings are those of the company ${name} combined with, not of the business its figures follow, so its revenue starts in ${year(d.revenue_from)}.`,
+        };
+      }
       if (g.cause === "revenue_tag") {
         return {
           title: `Revenue starts in ${year(d.revenue_from)}`,
-          text: `Revenue before ${year(d.revenue_from)} is filed under a tag Tributary doesn't read as revenue yet (a sales line for goods or services alone, or ${name}'s own tag); the filings have it. Its other figures go back to ${year(d.figures_from)}.`,
+          text: `Revenue before ${year(d.revenue_from)} isn't under a revenue tag Tributary reads: an industry line it doesn't take as the total, ${name}'s own tag, or no revenue yet. Its other figures go back to ${year(d.figures_from)}.`,
         };
       }
       return {
@@ -91,6 +109,18 @@ export function coverageWords(g: CoverageGap, name: string, nameOf: (id: string)
       };
     case "metric_missing": {
       const ms = (d.metrics ?? []).map((m) => `${metricLabel(m.metric).toLowerCase()} after ${on(m.last)}`);
+      if (g.cause === "trust") {
+        return {
+          title: "A trust's statements",
+          text: `${name} is a commodity trust: it states its net assets, not the balance-sheet totals and cash flows Tributary reads, so there is no ${list(ms)}.`,
+        };
+      }
+      if (g.cause === "partners_capital") {
+        return {
+          title: "Equity as partners' capital",
+          text: `${name} files its equity as partners' or members' capital, which Tributary doesn't read as stockholders' equity yet, so there is no ${list(ms)}.`,
+        };
+      }
       return {
         title: ms.length === 1 ? `${metricLabel(d.metrics![0]!.metric)} missing lately` : "Figures missing lately",
         text: `${capital(list(ms))} ${ms.length === 1 ? "isn't" : "aren't"} in the figures Tributary reads from ${name}'s filings, though its other figures go on.`,
