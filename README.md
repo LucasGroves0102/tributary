@@ -99,6 +99,11 @@ with its measurements.
   per key, revoked at once, the same two permission layers; a public "Using the API" page and a
   one-file Python client ([query-api](services/query-api/README.md#api-keys),
   [client](clients/python/README.md)).
+- **In your spreadsheet.** An Excel add-in (`=TRIBUTARY.VALUE`, `.SERIES`, `.SOURCE`) and a Google
+  Sheets script (`=TRIBUTARY`), with the same key: up to 200 figures a request, each with its filing,
+  and the reason instead of a number where a figure is stale, n/m or in another currency
+  ([web](services/web/README.md#spreadsheet-add-ins),
+  [query-api](services/query-api/README.md#spreadsheets)).
 - **Your own AI model, through MCP.** A remote MCP server at `/mcp` with 25 read-only tools that
   cite their sources, authenticated by the same API key and holding no database login
   ([mcp-server](services/mcp-server/README.md)).

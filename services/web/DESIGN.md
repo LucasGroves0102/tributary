@@ -1437,6 +1437,12 @@ API keys (Query API README, "API keys"; `src/apikeys/`):
   (`apiKeys.ts` `mcpUrl`: origin + `/mcp`, [mcp-server](../mcp-server)) to a client that sends a header
   (the Claude Code command), what its tools read, and that claude.ai's and ChatGPT's directories need
   OAuth, which comes later. The assistant reads it as `about` (agent-api has no "api" page).
+- **In your spreadsheet** (`pages/Spreadsheets.tsx`, on Using the API): the Excel and Google Sheets
+  formulas with examples, install steps (the manifest and script as same-origin downloads from
+  `/addins/`), the sharing caveat (Google runs formulas with the owner's key), limits and how
+  citations and readings reach a cell. The script's text is fetched only when "The script" is opened
+  (nothing new on load, so #68's clean console holds), with Copy. The add-ins themselves are static
+  files: README "Spreadsheet add-ins".
 
 ## End-to-end flows
 

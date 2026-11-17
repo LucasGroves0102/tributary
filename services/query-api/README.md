@@ -77,6 +77,7 @@ tokens: `make token USER=alice`.
 | `GET /v1/data-notes?limit=&company_id=` | financials (every company covered) | the newest notes across the caller's companies, or up to 50 named ones |
 | `POST /v1/formulas/validate` | token | AST, unit and inputs, or errors with positions ([Formulas](#formulas)) |
 | `POST /v1/formulas/evaluate` | financials, every company in the formula | series; each point cites every input's filing |
+| `POST /v1/sheets/values` | financials, once per company asked | up to 200 figures (25 companies) for a spreadsheet, each answered alone: value or the reason there is none, with its period and citation ([Spreadsheets](#spreadsheets)) |
 | `GET /v1/screener?columns=&where=&...&metric=&format=` | token | companies with a figure in these columns: metadata + latest values where permitted, each with how to read it ([Screener](#screener)); `metric`: up to 5 of the caller's own metrics as columns ([Your data](#your-data)) |
 | `GET /v1/screener/columns` | | column keys, filer categories, size bands |
 | `GET /v1/watchlist?columns=&sort=&format=` | token, app DB | the caller's watchlist: metadata, last report, next expected filing, values where permitted |
@@ -243,6 +244,20 @@ per-share pipeline the Statements tab reads. Split-adjusted by default (each row
 and the `splits` applied); fiscal Q4 and TTM are derived and labelled (`derivation`). Gold and
 `/financials` keep every per-share figure as filed. `/annual-per-share` stays (the 10-K's own
 figures; MCP's tools read it). Rules: [DESIGN.md](DESIGN.md#per-share-figures-on-one-share-basis).
+
+## Spreadsheets
+
+`POST /v1/sheets/values` (`sheets.py`, its docstring is the spec) serves the Excel add-in and the
+Google Sheets script (web `public/addins`): up to 200 asks of `{company, metric, period, as_of,
+currency, shares, count}`, a ticker or CIK each, answered in order. One `allowed()` per distinct
+company before any read, then the single routes' Store reads under RLS (`financials`,
+`per_share_inputs`, and `sheet_readings`: `gold.latest_reading` and `gold.period_status`); an unknown
+name and an unreadable company read the same (`not_permitted`). `value` only when a cell may show a
+number (`current`, `behind`, `ok`), else `status` and `reason` (stale, old, not_meaningful,
+not_applicable, not_computed, other_currency, no_figure, invalid). Periods: latest, TTM, FY, FY2024,
+FY2024 Q3, CY2024 Q3, a quarter's end day, TTM before a quarter. An amount is a number only in the
+currency asked (default USD). Counts once against a key's limits; at most 25 companies (and as-of
+days) per request, 40 periods a series. Rules: [DESIGN.md](DESIGN.md#spreadsheets).
 
 ## Point in time
 
@@ -429,7 +444,8 @@ Personal access tokens for a user's own scripts and their own AI models through 
 - **Who**: any signed-in account but a demo sandbox, 5 active keys each, expiry 30, 90 or 365 days.
 - **Docs**: `GET /v1/openapi-keys.json` is generated from the app; the words come from
   `api_key_docs.py` (`ROUTE_DOCS`), never from docstrings. A one-file Python client is in
-  [clients/python](../../clients/python/README.md).
+  [clients/python](../../clients/python/README.md); the spreadsheet add-ins use
+  [`POST /v1/sheets/values`](#spreadsheets).
 
 ```bash
 curl -H "Authorization: Bearer $TRIBUTARY_API_KEY" \

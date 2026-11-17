@@ -64,7 +64,7 @@ Hash routes (`src/route.ts`; an unknown route goes Home, `#/explore` to Companie
 | `#/settings` | filing alerts, Connect your data (when on), API keys | [Price](DESIGN.md#price-connect-your-data), [API keys](DESIGN.md#api-keys-and-using-the-api) |
 | `#/about` | what Tributary covers and doesn't | [Screens](DESIGN.md#screens-hash-routes) |
 | `#/status` | Data status: freshness, completeness, quality checks by what they mean for a reader, filing-section checks, recorded suites; public | [Screens](DESIGN.md#screens-hash-routes) |
-| `#/api` | Using the API: keys, examples, the routes a key can use, connecting an AI model; public | [API keys](DESIGN.md#api-keys-and-using-the-api) |
+| `#/api` | Using the API: keys, examples, in your spreadsheet (Excel, Google Sheets), the routes a key can use, connecting an AI model; public | [API keys](DESIGN.md#api-keys-and-using-the-api), [Spreadsheet add-ins](#spreadsheet-add-ins) |
 | `#/signed-in?token=…` | where GitHub sign-in and an owner-issued link land | [Sign-in](DESIGN.md#sign-in-and-access) |
 
 `#/status` and `#/api` render signed out too, without the shell.
@@ -185,6 +185,38 @@ the app prefetches them. At the last measurement (2026-11-09) the shell and Home
 (154.4 kB gzip) of JS on a first visit. Evaluate answers are cached in memory per (token, request) for
 the session (`src/chart/cache.ts`). Per-route sizes: [DESIGN.md, Performance](DESIGN.md#performance).
 
+## Spreadsheet add-ins
+
+Static files in `public/addins/` (copied to the image as they are; no build step), both calling the
+Query API's `POST /v1/sheets/values` with the user's own API key, the key only in `Authorization`:
+
+- **Excel** (`addins/excel/`): `manifest.xml` (XML add-in manifest, shared runtime, id fixed, every
+  URL `https://tributary.lucasgroves.dev/addins/excel/...`), `functions.json` + `functions.js`
+  (`=TRIBUTARY.VALUE`, `.SERIES`, `.SOURCE`: cells batched for 50 ms into requests of 200 asks and 25
+  companies, one at a time, answers kept 10 minutes, the API's reasons as `#N/A`, bad arguments as
+  `#VALUE!`), `taskpane.html/.js/.css` (save or remove the key in `OfficeRuntime.storage`, Refresh
+  figures, Check the key) and the seal at 16/32/64/80 px. Sideload the manifest (Using the API says
+  how); AppSource listing is the owner's step later. Schema validation needs Microsoft's online
+  validator (`npx office-addin-manifest validate manifest.xml`): run it before listing; the tests
+  check the XML offline (well-formed, resources defined, files present, functions match).
+- **Google Sheets** (`addins/sheets/Tributary.gs`, served as text): pasted into Extensions, Apps
+  Script. `=TRIBUTARY`, `=TRIBUTARY_SERIES`, `=TRIBUTARY_SOURCE`; a range is one request; the key in
+  user properties (the menu), answers in the script cache six hours; Refresh sets every TRIBUTARY
+  formula again. Google runs formulas with the owner's properties: editors of a sheet can use its
+  owner's key (said on the page).
+- `location /addins/` sends `deploy/addin-headers.conf`: headers.conf's headers but a CSP that lets
+  Office's web hosts frame the pages (`frame-ancestors`) and loads Office.js from
+  `appsforoffice.microsoft.com`; no inline script or style, `connect-src 'self'`. Nothing under
+  `/addins/` falls back to `index.html`.
+- Cloudflare: Apps Script's `UrlFetchApp` sends `Mozilla/5.0 (compatible; Google-Apps-Script; ...)`
+  from Google's addresses. That user agent passes the zone's checks (2026-11-17, from outside
+  Google; Python's default `Python-urllib` gets 1010). Google's addresses weren't testable from
+  here: if Sheets users see "a proxy or firewall page", add the skip rule in
+  [deploy/terraform](../../deploy/terraform/README.md#spreadsheets-and-the-cloudflare-zone).
+- Tests: `src/addins/addins.test.ts` runs both files as served (`node:vm`, fakes for Office and
+  Apps Script services), checks the manifest and that addin-headers.conf differs from headers.conf
+  only in its CSP.
+
 ## Production
 
 `Dockerfile` builds the bundle and serves it from `nginx-unprivileged` on port 8080
@@ -205,7 +237,8 @@ measured). The CSP stays as it is; if the beacon still shows up, turn the zone's
 automatic setup off in the Cloudflare dashboard.
 
 A location with its own `add_header` drops the server-level headers, so each includes
-`/etc/nginx/headers.conf`. nginx resolves `mcp-server` when it starts, so that Service must exist
+`/etc/nginx/headers.conf` (`/addins/` includes `addin-headers.conf` instead: see
+[Spreadsheet add-ins](#spreadsheet-add-ins)). nginx resolves `mcp-server` when it starts, so that Service must exist
 wherever this image runs (Helm creates it even at `replicas: 0`; compose has the service).
 
 One Helm upgrade rolls every service at once, so for a minute this page can talk to a Query API one
