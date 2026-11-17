@@ -102,6 +102,8 @@ export interface Me {
   sandbox?: SandboxInfo;
   github?: GitHubInfo;
   account?: AccountInfo;
+  /** only for a request made with a connected app's token (the MCP server's), never the web's */
+  connected_app?: { name: string; scopes: string[]; expires_at: string };
 }
 
 export interface Citation {
@@ -2176,6 +2178,46 @@ export interface ApiKeys {
   scopes: ApiKeyScope[];
   limits: { per_minute: number; per_day: number };
   keys: ApiKey[];
+}
+
+/** POST /v1/oauth/consent: what the consent screen shows for a request to connect an app
+ * (Query API oauth.py). `publisher`: the host that published the app's metadata document (null for
+ * an app that registered itself); `loopback`: it sends the user back to their own computer. */
+export interface ConnectRequest {
+  client: {
+    name: string;
+    kind: "metadata_document" | "registered";
+    publisher: string | null;
+    registered_at: string | null;
+    redirect_uri: string;
+    redirect_host: string | null;
+    loopback: boolean;
+  };
+  scopes: string[];
+  /** false for a demo sandbox: it can't connect apps */
+  allowed: boolean;
+  expires_at: string;
+}
+
+/** POST /v1/oauth/consent/approve or /deny: where the browser goes next (the app's redirect URI). */
+export interface ConnectDecision {
+  redirect: string;
+}
+
+/** GET /v1/oauth/connections: the apps connected to the account. `allowed` false: a demo sandbox. */
+export interface ConnectedApps {
+  allowed: boolean;
+  connections: ConnectedApp[];
+}
+
+export interface ConnectedApp {
+  connection_id: string;
+  name: string;
+  kind: "metadata_document" | "registered";
+  publisher: string | null;
+  redirect_hosts: string[];
+  connected_at: string;
+  last_used_at: string | null;
 }
 
 /** POST /v1/api-keys: the new key, shown this once. */

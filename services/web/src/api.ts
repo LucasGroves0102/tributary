@@ -12,6 +12,9 @@ import type {
   ApiKeys,
   ApiKeyScope,
   CompanyDatasets,
+  ConnectDecision,
+  ConnectedApps,
+  ConnectRequest,
   Dataset,
   DatasetProblem,
   Datasets,
@@ -253,6 +256,23 @@ export async function keyRoutes(): Promise<KeyRoutesDoc | null> {
   if (!r.ok) throw new ApiError(noDetail(r.status, r.statusText), r.status);
   return (await r.json()) as KeyRoutesDoc;
 }
+
+/** Connecting an app (Query API oauth.py): what the consent screen shows for a sealed request. The
+ * browser's nonce cookie (set when the app sent the user here) goes with it: same origin. */
+export const connectRequest = (token: string, request: string) =>
+  sendJson<ConnectRequest>(token, "POST", "/v1/oauth/consent", { request });
+
+/** Approve or deny a request to connect an app: the answer says where the browser goes next. */
+export const decideConnect = (token: string, request: string, approve: boolean) =>
+  sendJson<ConnectDecision>(token, "POST", `/v1/oauth/consent/${approve ? "approve" : "deny"}`, { request });
+
+/** The apps connected to the account; null from a Query API without connected apps (404: the
+ * deploy window, or OAuth off), and the Settings section hides. */
+export const connectedApps = (token: string) => orNullOn404(get<ConnectedApps>(token, "/v1/oauth/connections"));
+
+/** Disconnects an app: every token it holds is refused from its next request. */
+export const disconnectApp = (token: string, connectionId: string) =>
+  sendJson<{ connection_id: string; disconnected: boolean }>(token, "DELETE", `/v1/oauth/connections/${enc(connectionId)}`);
 
 /** "Connect your data": null when the server has it off (404). */
 export async function marketConnections(token: string): Promise<MarketConnections | null> {

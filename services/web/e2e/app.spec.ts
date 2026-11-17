@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 
 import { expect, test } from "@playwright/test";
 
-import { byId, GITHUB_SESSION, KO, mockApi, NEW_API_KEY, NVDA, PEP, screenerRow, startDemo } from "./mockApi";
+import { byId, CONNECT_REDIRECT, GITHUB_SESSION, KO, mockApi, NEW_API_KEY, NVDA, PEP, screenerRow, startDemo } from "./mockApi";
 
 test("try the demo lands on Home with the sandbox and its watchlist", async ({ page }) => {
   await mockApi(page);
@@ -615,12 +615,56 @@ test("API keys: a GitHub account makes a key, sees it once, and revokes it after
   expect(fake.calls.filter((c) => c.startsWith("DELETE /api/query/v1/api-keys/"))).toHaveLength(1);
 });
 
+test("Connect an app: the consent screen names the app and where it goes back to; Approve follows the API's redirect", async ({ page }) => {
+  const fake = await mockApi(page);
+  const back: string[] = [];
+  // the app's loopback redirect: answered here, so nothing outside the test is called
+  await page.route(`${CONNECT_REDIRECT}**`, (route) => {
+    back.push(route.request().url());
+    return route.fulfill({ contentType: "text/html", body: "<p>Back in the app</p>" });
+  });
+  await page.addInitScript((session) => localStorage.setItem("tributary.session", JSON.stringify(session)), GITHUB_SESSION);
+  const sealed = "eyJjIjoidHJjX0FBQUEifQ." + "s".repeat(43);
+  await page.goto(`/#/connect?request=${sealed}`);
+  const sheet = page.locator(".connect-sheet");
+  await expect(sheet.getByRole("heading", { level: 1 })).toHaveText("Connect Claude to Tributary");
+  await expect(sheet.locator(".connect-host")).toHaveText("127.0.0.1");
+  await expect(sheet.locator(".connect-warn")).toContainText("An app on this computer");
+  await expect(sheet).toContainText("read-only: no changes, no portfolio, no account settings");
+  await expect(page.locator(".sidebar")).toHaveCount(0);
+  await sheet.getByRole("button", { name: "Approve" }).click();
+  await expect(page.locator("body")).toHaveText("Back in the app");
+  expect(back).toHaveLength(1);
+  expect(new URL(back[0]!).searchParams.get("code")).toBe("e2e-code");
+  expect(fake.calls.filter((c) => c.startsWith("POST /api/query/v1/oauth/consent"))).toEqual([
+    "POST /api/query/v1/oauth/consent", "POST /api/query/v1/oauth/consent/approve"]);
+});
+
+test("Connected apps: Settings lists an app and disconnects it after a confirm", async ({ page }) => {
+  const fake = await mockApi(page);
+  fake.connectedApps = [{ connection_id: "4b6f8a52-63f4-4d6e-9d0e-2f4d3b8a1c11", name: "Claude", kind: "metadata_document",
+    publisher: "claude.ai", redirect_hosts: ["claude.ai"], connected_at: "2026-11-17T09:01:00Z", last_used_at: null }];
+  await page.addInitScript((session) => localStorage.setItem("tributary.session", JSON.stringify(session)), GITHUB_SESSION);
+  await page.goto("/#/settings");
+  const apps = page.locator("section.connected-apps");
+  await expect(apps.getByRole("heading", { name: "Connected apps" })).toBeVisible();
+  const row = apps.locator("table.connected-app-list tbody tr").first();
+  await expect(row.locator("td")).toHaveText(["Claudepublished by claude.ai", "claude.ai", /2026/, "Not yet", "Disconnect"]);
+  await row.getByRole("button", { name: "Disconnect Claude" }).click();
+  const confirm = page.locator(".ws-confirm");
+  await expect(confirm).toContainText("Disconnect Claude?");
+  await confirm.getByRole("button", { name: "Disconnect" }).click();
+  await expect(apps).toContainText("No apps are connected.");
+  expect(fake.calls.filter((c) => c.startsWith("DELETE /api/query/v1/oauth/connections/"))).toHaveLength(1);
+});
+
 test("API keys: a demo sandbox's Settings has none to offer", async ({ page }) => {
   await mockApi(page);
   await startDemo(page);
   await page.goto("/#/settings");
   await expect(page.getByRole("heading", { name: "Filing alerts" })).toBeVisible();
   await expect(page.locator("section.api-keys")).toHaveCount(0);
+  await expect(page.locator("section.connected-apps")).toHaveCount(0);
 });
 
 test("Using the API is public: the front door links it, and its routes come from the API", async ({ page }) => {

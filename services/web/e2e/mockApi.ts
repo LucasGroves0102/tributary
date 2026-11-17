@@ -101,6 +101,8 @@ export interface Fake {
   checks: Map<string, Record<string, unknown>[]>;
   /** the account's API keys (/v1/api-keys), as the Query API lists them */
   apiKeys: Record<string, unknown>[];
+  /** apps connected to the account (/v1/oauth/connections, query_api/oauth.py) */
+  connectedApps: Record<string, unknown>[];
   /** the portfolio (query_api/portfolio.py): holdings with their lots, and journal entries */
   holdings: PortfolioHolding[];
   journal: Record<string, unknown>[];
@@ -168,6 +170,8 @@ const FIDELITY_PREVIEW = {
 /** A GitHub account's session (stored in localStorage as the app keeps one): API keys need a
  * permanent account, so Settings offers them only to it, never to the demo sandbox. */
 export const GITHUB_TOKEN = "github-e2e-token";
+/** Where an app connected in the e2e flows is sent back to (intercepted by the test). */
+export const CONNECT_REDIRECT = "http://127.0.0.1:59999/callback";
 export const GITHUB_SESSION = {
   kind: "github", token: GITHUB_TOKEN, userId: "gh-e2e", login: "e2e-analyst", companies: [],
   expiresAt: "2099-01-01T00:00:00.000Z",
@@ -218,7 +222,7 @@ function reportState(workspaceId: string, items: Record<string, unknown>[]) {
 }
 
 export async function mockApi(page: Page): Promise<Fake> {
-  const fake: Fake = { watched: new Set([NVDA, PEP]), calls: [], workspaces: [], items: new Map(), asked: [], views: {}, reports: [], checkResult: null, checks: new Map(), apiKeys: [], holdings: [], journal: [], datasets: [], watches: new Map(), screenAlerts: [] };
+  const fake: Fake = { watched: new Set([NVDA, PEP]), calls: [], workspaces: [], items: new Map(), asked: [], views: {}, reports: [], checkResult: null, checks: new Map(), apiKeys: [], connectedApps: [], holdings: [], journal: [], datasets: [], watches: new Map(), screenAlerts: [] };
   let seq = 0;
   const now = () => new Date(Date.UTC(2026, 9, 21, 12, 0, seq++)).toISOString();
 
@@ -370,6 +374,28 @@ export async function mockApi(page: Page): Promise<Fake> {
     if (revoked && method === "DELETE") {
       fake.apiKeys = fake.apiKeys.map((x) => (x.key_id === revoked[1] ? { ...x, status: "revoked", revoked_at: now() } : x));
       return json({ key_id: revoked[1], revoked: true });
+    }
+    // Connected apps (Settings) and the consent screen (#/connect): a GitHub account may connect apps,
+    // a sandbox is told it can't (allowed false); approving sends the browser back to the app's
+    // loopback redirect, which the test intercepts (no third party is ever called)
+    if (path === "/v1/oauth/connections" && method === "GET") {
+      return json({ allowed: github, connections: github ? fake.connectedApps : [] });
+    }
+    const disconnected = path.match(/^\/v1\/oauth\/connections\/([^/]+)$/);
+    if (disconnected && method === "DELETE") {
+      fake.connectedApps = fake.connectedApps.filter((a) => a.connection_id !== disconnected[1]);
+      return json({ connection_id: disconnected[1], disconnected: true });
+    }
+    if (path === "/v1/oauth/consent" && method === "POST") {
+      return json({ client: { name: "Claude", kind: "metadata_document", publisher: "claude.ai", registered_at: null,
+        redirect_uri: CONNECT_REDIRECT, redirect_host: "127.0.0.1", loopback: true },
+      scopes: ["read"], allowed: github, expires_at: new Date(Date.now() + 600_000).toISOString() });
+    }
+    if (path === "/v1/oauth/consent/approve" && method === "POST") {
+      return json({ redirect: `${CONNECT_REDIRECT}?code=e2e-code&state=e2e&iss=http%3A%2F%2Flocalhost` });
+    }
+    if (path === "/v1/oauth/consent/deny" && method === "POST") {
+      return json({ redirect: `${CONNECT_REDIRECT}?error=access_denied&state=e2e&iss=http%3A%2F%2Flocalhost` });
     }
     // "Using the API": the Query API's generated OpenAPI of the key routes (a few of them here)
     if (path === "/v1/openapi-keys.json") {

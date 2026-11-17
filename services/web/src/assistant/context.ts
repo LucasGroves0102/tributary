@@ -220,6 +220,8 @@ export function pageContext(
       return { label: "Using the API", suggestions: [] };
     case "settings":
       return { label: "Settings", suggestions: [] };
+    case "connect":
+      return { label: "Connect an app", suggestions: [] };
     case "alerts":
       return { label: "Alerts", suggestions: general(watched).slice(0, 2) };
     case "screen":

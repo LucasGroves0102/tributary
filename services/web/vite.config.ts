@@ -13,6 +13,10 @@ export default defineConfig({
     proxy: {
       "/api/query": { target: QUERY_API, rewrite: (p) => p.replace(/^\/api\/query/, "") },
       "/api/agent": { target: AGENT_API, rewrite: (p) => p.replace(/^\/api\/agent/, "") },
+      // connected apps (MCP OAuth): the authorization server at the site's root, as in nginx; the
+      // MCP server itself (/mcp, its resource metadata) has no dev proxy: the app never calls it
+      "/oauth": { target: QUERY_API },
+      "/.well-known/oauth-authorization-server": { target: QUERY_API },
     },
   },
   // e2e/ is Playwright (npm run e2e), not vitest

@@ -5,14 +5,16 @@
  * shows of a saved key is the provider, "…last4" and dates, as the API returns them.
  * Disconnecting deletes the key and every price fetched with it.
  *
- * Settings also holds filing alerts (first) and, last, the user's own API keys
- * (apikeys/ApiKeysSection.tsx: hidden for a demo sandbox and an API without keys). */
+ * Settings also holds filing alerts (first), the apps connected to the account (connect/
+ * ConnectedApps.tsx) and, last, the user's own API keys (apikeys/ApiKeysSection.tsx); both hidden
+ * for a demo sandbox and an API without them. */
 
 import { useState, type FormEvent } from "react";
 
 import { AlertSettingsSection } from "../alerts/AlertSettings";
 import { ApiKeysSection } from "../apikeys/ApiKeysSection";
 import { connectMarketData, disconnectMarketData, failureReason } from "../api";
+import { ConnectedAppsSection } from "../connect/ConnectedApps";
 import { Skeleton } from "../components/States";
 import { localDay } from "../format";
 import { refreshMarketData, useMarketData } from "../market/useMarketData";
@@ -51,6 +53,7 @@ export function Settings({ token }: { token: string }) {
         </div>
       </section>
       )}
+      <ConnectedAppsSection token={token} />
       <ApiKeysSection token={token} />
     </div>
   );
