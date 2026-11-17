@@ -9,7 +9,9 @@
 # newest FULL_KEEP of those are kept (the old one is deleted only after the new one is
 # published). Full dumps still leave out the data of what the section-index job derives from
 # the parsed sections (search passages, diffs and its checkpoint, ~35 GB): the restored
-# checkpoint is empty, so the job re-indexes everything. Each dump lists its schema-only tables
+# checkpoint is empty, so the job re-indexes everything. Both dumps leave out gold's history of
+# itself (gold.financials_known, ~8-10 GB, and gold.known_companies, db/DESIGN.md "086"): a restore
+# finds them empty and the hourly catch-up replays every company (about a day). Each dump lists its schema-only tables
 # in <db>.schema-only-tables and comes with <db>.rowcounts, every table's row count in the dump's
 # own snapshot, which pg-restore-test.sh checks the restore against. Dumps are compressed with
 # COMPRESS (zstd:1): document bodies are already gzip, and pg_dump's default gzip spent most of
@@ -26,9 +28,10 @@ compress="${COMPRESS:-zstd:1}"
 slim_exclude=(bronze.filing_documents bronze.filing_exhibits bronze.filing_xbrl
               silver.filing_sections silver.filing_tables silver.segment_facts gold.segment_financials
               gold.section_search gold.section_diffs gold.section_changes ops.section_index
-              ops.doc_crawl_targets)
+              ops.doc_crawl_targets gold.financials_known gold.known_companies)
 if [[ -n "${SLIM_EXCLUDE_DATA:-}" ]]; then read -ra slim_exclude <<<"$SLIM_EXCLUDE_DATA"; fi
-full_exclude=(gold.section_search gold.section_diffs gold.section_changes ops.section_index)
+full_exclude=(gold.section_search gold.section_diffs gold.section_changes ops.section_index
+              gold.financials_known gold.known_companies)
 if [[ -n "${FULL_EXCLUDE_DATA:-}" ]]; then read -ra full_exclude <<<"$FULL_EXCLUDE_DATA"; fi
 
 full=false

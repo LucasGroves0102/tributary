@@ -989,6 +989,15 @@ golden set's batches of 25 build in 0.42 s (quarters) and 0.45 s (derived) again
 084. 077's two correlated subqueries stay: per company they scan a handful of rows (its ProfitLoss
 years), and a replay runs per company (086).
 
+On hermes, read-only (2026-11-16, before the 080 catch-up reached them): these bodies inlined as one
+SELECT over hermes' own gold.best_facts, pure (the derived step over the quarters just computed, as a
+replay reads them), for 500 companies drawn at random among those the current functions built (stamped
+77: 080's new tags have no silver facts until a company is re-projected, so 080's best_facts reads them
+as 077's did), 50 at a time outside the hourly rebuild, EXCEPT ALL both ways against
+gold.quarterly_financials and gold.derived_financials: 891,221 quarterly rows and 1,016,679 derived
+rows, 0 differences either way. `filed` is one date per accession there too (0 of the 29,845 accessions
+of those companies).
+
 ### 086_financials_known.sql
 
 Point in time, part 2: gold's history of itself. `gold.financials_known` holds every version of every
@@ -1027,6 +1036,18 @@ Measured. Locally, the golden reference set (97 companies, two fiscal years each
 a view); the open versions equal gold row for row, and at every filing date and the day before it
 the history equals gold.financial_rows (tests/golden/test_point_in_time.py).
 
+On hermes, read-only (2026-11-16): gold holds 6.62M quarterly and 7.23M derived rows (7.8 GB), so the
+history at the golden set's 1.06x is about 14.7M versions, 8-10 GB with its covering key. Filing dates
+per company over the 500 sampled above: mean 59, median 64, p90 70, max 76 (a sample of long-listed
+companies; the catalog-wide count is about 225,000 company-dates, measured for the design). One view as of
+2024-08-15, the bodies inlined (usable_facts computed once; a replay computes it twice, about a third
+more): Apple 418 ms, JPMorgan 322 ms, CrowdStrike 127 ms. So a replay is a few seconds to about half a
+minute a company, and the whole catalog about 16 hours of one core: the 'known' catch-up's 20 minutes an
+hour finish it in about two days, after the gold kind's own (rules 80: 7,202 companies behind at about
+900 an hour on 2026-11-16). Until a company's history is built, its as-of reads replay at read time
+(087). Faster replays, later if needed: one best_facts per view (derived_rows reading the view's own
+best facts), or set-based view keys.
+
 ### 087_point_in_time_reads.sql
 
 Point in time, part 3: reading gold as of a day. `gold.financials_at(day)` is gold.financials over
@@ -1043,3 +1064,13 @@ path's, unchanged: no TRUNCATE. `gold.annual_per_share(company, years, day)`: 10
 day. `gold.restatements(company, day)`: consecutive versions whose value differs (quarters and TTM
 sums, not computed ratios), each side's citation and first day, and whether the tag stayed the same;
 the kinds (split, another line, same line) are query_api/point_in_time.py's.
+
+Measured on a catalog-sized local copy (the golden set's histories under 6,693 company ids, 3.40M
+versions, 1.7 GB; hermes' would be about four times as deep per company), as query_api with the catalog
+open: the default screen as of 2025-06-30 0.52 s after a Postgres restart (the OS cache warm: no root to
+drop it), 0.36 s warm, a growth sort 0.34 s, against 0.15 s for today's stored figures; one company's
+page as of the day (two statements with their originals, ratios, per-share) 0.06 s from its history,
+0.20 s replayed at read time (on hermes a replay costs about a view, 0.1-0.6 s, per call, while the
+company's history is behind the rules). gold.company_confidence (074) read tributary.today with a bare
+cast: an as-of session sets it locally, and a pooled connection then reads '' (never NULL again), so the
+next screen on that connection failed; it reads it through nullif now, as gold.is_stale does.
