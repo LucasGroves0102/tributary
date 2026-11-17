@@ -156,8 +156,9 @@ parser-index --passages         # only the passages built before migration 068 (
 The parity tests prove Python and Rust agree; these prove what they agree on is right ("Item
 7.01Regulation" keyed 3,465 8-K sections "7" in both). Each filing section-index indexes goes through
 `ops.check_sections`: `invalid_key` (a key the form doesn't have: 8-K items 1.01-9.01, 10-K items with
-4A, 10-Q items of their Part, exhibit keys), `missing_core_item` (an original 10-K without 1, 1A, 7 or
-8 unless it has a cross-reference index; a 10-Q without Part I items 1 and 2), `duplicate_section`,
+4A, 10-Q items of their Part, 20-F items with 3.D, 6-K and 40-F documents (095), exhibit keys),
+`missing_core_item` (an original 10-K without 1, 1A, 7 or 8, or 20-F without 3.D, 4, 5 or 18, unless
+it has a cross-reference index; a 10-Q without Part I items 1 and 2), `duplicate_section`,
 `empty_section` (nothing past the heading; a 10-K's reserved Item 6 isn't one) and `no_sections` (a
 stored document a day old the parser couldn't split). Findings in `ops.section_findings` (keys and
 counts, never text), stamps in `ops.section_checks`; counts for ops_reader in

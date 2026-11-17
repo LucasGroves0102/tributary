@@ -143,6 +143,15 @@ has those. Rebuilt from production's payloads of the 517 listed 20-F/40-F filers
 get figures (74 s locally), Birkenstock's FY2025 revenue €2,097.4M and its December 2025 quarter's
 €401.9M among them.
 
+companyfacts stopped carrying most foreign annual reports in 2026 (of the XBRL 20-Fs filed in its
+second quarter it has 330 of 517); the coverage sweep (076) found 215 listed foreign filers whose
+figures stop before their latest 20-F or 40-F, 212 of them because companyfacts lacks it (TSMC's
+FY2025 20-F, filed 2026-04-16: its figures ended at FY2024). Since migration 095 the filing-facts
+job reads those from the filing's own XBRL ([below](#filings-companyfacts-lacks)): all 212 are in
+its 400-day window (210 with an earlier 20-F or 40-F whose tags gold already reads), so they
+become current on its first run; the other 3 are two 20-Fs without XBRL and a 40-F companyfacts
+has. 28 of the 29 listed foreign filers with no figures have an XBRL 20-F or 40-F in the window too.
+
 Nothing here converts currencies. Every gold row keeps its `unit`, and where a reading needs a
 company's currency it asks `gold.amount_currency` (migration 057: its latest quarterly revenue or net
 income row, and since 060 an annual-only filer's stated-year TTM rows). 035's dollar bases (revenue
@@ -160,11 +169,13 @@ facts. A run:
    of their facts) leave silver: `silver.supersede_filing_facts`, then those CIKs' companyfacts
    payloads are refreshed into silver again and the companies' gold rebuilt. A filing's facts are in
    silver once, from one source.
-2. **Gaps**: 10-K and 10-Q filings with XBRL, filed from `--since` (default 400 days back) to
-   `--after-days` ago (default 3; companyfacts normally has a filing within a day), at a company
-   here, with no fact in silver under any CIK. Not amendments: 1,830 of the 2,051 filings since 2019
-   companyfacts lacks are 10-K/As and 10-Q/As, nearly all Part III alone (name one with `--accessions`
-   if it restates the statements). The stored document's extract (`bronze.filing_xbrl.raw_gzip`,
+2. **Gaps**: 10-K, 10-Q, 20-F and 40-F filings with XBRL (and 20-F/A, 40-F/A: companyfacts carries
+   foreign amendments, and one with only a cover page maps no fact), filed from `--since` (default
+   400 days back) to `--after-days` ago (default 3; companyfacts normally has a filing within a day),
+   at a company here, with no fact in silver under any CIK (367 foreign ones on the first run, 2
+   SEC requests each: no 20-F has a stored extract). Not 10-K/10-Q amendments: 1,830 of the 2,051
+   filings since 2019 companyfacts lacks are 10-K/As and 10-Q/As, nearly all Part III alone (name
+   one with `--accessions` if it restates the statements). The stored document's extract (`bronze.filing_xbrl.raw_gzip`,
    every numeric fact, from the segments job) when it has at least 10 undimensioned facts of mapped
    tags, else the filing's **instance**: the folder's `index.json`, then `<document>_htm.xml` (EDGAR's
    extract of an inline filing, which holds every document's facts: Clorox's statements are in its

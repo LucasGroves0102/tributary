@@ -214,3 +214,25 @@ it("flags Vertiv's Sep 30 cash and net debt on the Overview's key stats, with th
   // one request for the card and the flags
   expect(vi.mocked(fetch).mock.calls.filter(([u]) => String(u).includes("/events"))).toHaveLength(1);
 });
+
+it("a foreign filer's 6-K results release beside its 20-F, worded as such (migration 095)", async () => {
+  const q = earnings!.quarters[0]!;
+  const sixK = { ...q.release!, form: "6-K", items: [], section_key: "EX-99.1" };
+  earnings!.quarters = [
+    { ...q, period_end: "2026-09-30", estimated: false, report: null, release: sixK,
+      other_releases: [{ accession_no: "0001046179-26-000801", filed: "2026-11-13", filing_url: null }] },
+    { ...q, period_end: "2025-12-31", estimated: false, release: null, headline: null, outlook: [], adjustments: [],
+      other_releases: [], report: { accession_no: "0001628280-26-025362", form: "20-F", filed: "2026-04-16" } },
+  ];
+  await render(view());
+  expect($(".release-card .sub")?.textContent).toBe("Period ended Sep 30, 2026");
+  expect($(".release-card")?.textContent).toContain("6-K filed");
+  expect($(".release-card")?.textContent).toContain("results release · Exhibit 99.1");
+  expect($(".release-card")?.textContent).toContain("Also stored for this period: 6-K of Nov 13, 2026");
+  expect(container.textContent).toContain("files its annual report on Form 20-F or 40-F and its results on 6-K");
+  await act(async () => $$(".earnings-pick .seg button").find((b) => b.textContent?.startsWith("Dec 31, 2025"))!.click());
+  expect($(".release-card .sub")?.textContent).toBe("Fiscal year ended Dec 31, 2025");
+  expect($(".release-card")?.textContent).toContain("No results release (a 6-K) stored for this year");
+  // no recap for a 20-F: its figures are by fiscal year, on the Financials tab
+  expect(vi.mocked(fetch).mock.calls.filter(([u]) => String(u).includes("/recap"))).toHaveLength(0);
+});

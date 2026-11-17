@@ -15,7 +15,7 @@ document, fetched from EDGAR once and stored (bronze.filing_instances). A run:
    amendments: of the 2,051 since 2019 companyfacts lacks, 1,830 are amendments, nearly all Part
    III alone (an amendment with statements can be named with --accessions). Foreign annual reports
    are (roadmap f): companyfacts carried 330 of the 517 XBRL 20-Fs filed in 2026's second quarter
-   and lacked the latest 20-F or 40-F of 214 listed foreign filers (TSMC's FY2025, filed
+   and lacked the latest 20-F or 40-F of 212 listed foreign filers (TSMC's FY2025, filed
    2026-04-16); their amendments as companyfacts carries them (one with only a cover page maps no
    fact). The stored extract when it has at least MIN_STATEMENT_FACTS undimensioned facts of
    mapped tags, else the instance: two SEC requests (the folder's index.json and the instance),
