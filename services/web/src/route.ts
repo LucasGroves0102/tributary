@@ -69,6 +69,8 @@ export type Route =
   | { view: "alerts" }
   /** the user's holdings (no holdingId), one holding with its journal, or the Fidelity import */
   | { view: "portfolio"; holdingId?: string; import?: boolean }
+  /** Your data (B2): the user's own datasets (CSV uploads) and metrics (saved formulas) */
+  | { view: "data" }
   /** one saved workspace: its items and reports, "Write a report" */
   | { view: "workspace"; workspaceId: string }
   /** a report the assistant wrote (a workspace item of kind report) */
@@ -82,7 +84,7 @@ export type Route =
   | { view: "analysis"; projectId?: string; step?: ProjectStep; itemId?: string; start?: string };
 
 /** Screens in the left nav: routes without parameters. */
-export type NavView = "home" | "analysis" | "portfolio" | "companies" | "chart" | "compare" | "ask";
+export type NavView = "home" | "analysis" | "portfolio" | "companies" | "chart" | "compare" | "data" | "ask";
 
 /** The left nav: label and the key after "g" that opens it. */
 export const NAV: { view: NavView; label: string; key: string }[] = [
@@ -92,6 +94,7 @@ export const NAV: { view: NavView; label: string; key: string }[] = [
   { view: "companies", label: "Companies", key: "c" },
   { view: "chart", label: "Chart builder", key: "b" },
   { view: "compare", label: "Compare", key: "x" },
+  { view: "data", label: "Your data", key: "d" },
   { view: "ask", label: "Ask", key: "a" },
 ];
 
@@ -111,7 +114,7 @@ export function asOfDay(value: string | null | undefined): string | undefined {
   const d = new Date(`${value}T00:00:00Z`);
   return Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== value ? undefined : value;
 }
-const SIMPLE = new Set(["chart", "ask", "about", "status", "api", "settings", "alerts"]);
+const SIMPLE = new Set(["chart", "ask", "about", "status", "api", "settings", "alerts", "data"]);
 
 /** "#/company/0001045810" → route; anything unrecognized is Home. Companies keeps its
  * screener filters in a query ("#/companies?band=1b-10b"), Compare its comps
@@ -131,7 +134,7 @@ export function parse(hash: string): Route {
     const search = parseSearch(query);
     return search ? { view, search } : { view };
   }
-  if (view && SIMPLE.has(view)) return { view: view as "chart" | "ask" | "about" | "status" | "api" | "settings" | "alerts" };
+  if (view && SIMPLE.has(view)) return { view: view as "chart" | "ask" | "about" | "status" | "api" | "settings" | "alerts" | "data" };
   if (view === "explore") return { view: "companies" }; // links from before the v3 shell
   if (view === "portfolio") {
     if (a === "import") return { view: "portfolio", import: true };

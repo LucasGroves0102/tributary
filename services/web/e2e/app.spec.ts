@@ -387,7 +387,7 @@ test("#68: the main screens load with a clean console", async ({ page }) => {
   await mockApi(page);
   await startDemo(page);
   errors.length = 0; // signed in from here
-  for (const hash of ["#/", "#/companies", `#/company/${NVDA}`, `#/company/${NVDA}/statements`, `#/compare?target=${PEP}&peers=${KO}`, "#/chart", "#/analysis", "#/alerts", "#/portfolio", "#/portfolio/import", "#/settings", "#/status", "#/api"]) {
+  for (const hash of ["#/", "#/companies", `#/company/${NVDA}`, `#/company/${NVDA}/statements`, `#/compare?target=${PEP}&peers=${KO}`, "#/chart", "#/analysis", "#/alerts", "#/portfolio", "#/portfolio/import", "#/data", "#/settings", "#/status", "#/api"]) {
     await page.goto(`/${hash}`);
     await page.waitForLoadState("networkidle");
   }
@@ -397,7 +397,7 @@ test("#68: the main screens load with a clean console", async ({ page }) => {
 test("no screen scrolls sideways, on a phone, at 1024 or at 1440 with the panel open", async ({ page }) => {
   await mockApi(page);
   await startDemo(page);
-  const screens = ["#/", "#/companies", `#/company/${NVDA}`, `#/company/${NVDA}/statements`, `#/company/${NVDA}/peers`, `#/compare?target=${PEP}&peers=${KO}`, "#/chart", "#/portfolio"];
+  const screens = ["#/", "#/companies", `#/company/${NVDA}`, `#/company/${NVDA}/statements`, `#/company/${NVDA}/peers`, `#/compare?target=${PEP}&peers=${KO}`, "#/chart", "#/portfolio", "#/data"];
   for (const [width, height, panel] of [[390, 844, false], [1024, 768, false], [1440, 900, true]] as const) {
     await page.setViewportSize({ width, height });
     await page.evaluate((open) => localStorage.setItem("tributary.assistant", open ? "open" : "closed"), panel);
@@ -589,6 +589,39 @@ test("Using the API is public: the front door links it, and its routes come from
   await expect(page.getByText("60 requests a minute and 10,000 a day")).toBeVisible();
   await page.locator(".status-home").click();
   await expect(page.getByRole("button", { name: "Try the demo" })).toBeVisible();
+});
+
+test("your data: a CSV checked, then stored, and its rows on the company page", async ({ page }) => {
+  const fake = await mockApi(page);
+  await startDemo(page);
+  await page.goto("/#/data");
+  await expect(page.locator(".folio").first()).toContainText("No datasets yet");
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "Store counts.csv", mimeType: "text/csv",
+    buffer: Buffer.from("Ticker,Date,Stores\nNVDA,2026-07-26,12\nNOPE,2026-07-26,1\n"),
+  });
+  await expect(page.locator("form.data-form select").first()).toHaveValue("Ticker");
+  await page.getByRole("button", { name: "Check it" }).click();
+  await expect(page.locator(".data-check")).toContainText("1 row for 1 company");
+  await expect(page.locator(".data-check")).toContainText("(row 3)");
+  expect(fake.datasets).toEqual([]);
+  await page.getByRole("button", { name: "Store 1 row" }).click();
+  await expect(page.locator(".data-table tbody tr")).toHaveCount(1);
+  await expect(page.locator(".data-table tbody tr")).toContainText("mine.store_counts");
+  await page.goto(`/#/company/${NVDA}`);
+  await expect(page.locator(".your-data")).toContainText("Your own figures on");
+  await expect(page.locator(".your-data tbody td").nth(1)).toHaveText("12");
+
+  // a metric over it, saved into "Your metrics", then a screener column
+  await page.goto("/#/data");
+  await page.getByPlaceholder("Revenue per store").fill("Revenue per store");
+  await page.locator("form.data-metric-form input.field").nth(1).fill("revenue / mine.store_counts.stores");
+  await page.getByRole("button", { name: "Save metric" }).click();
+  await expect(page.locator(".data-table").nth(1)).toContainText("revenue / mine.store_counts.stores");
+  await page.getByRole("link", { name: "Screen with it" }).click();
+  await expect(page).toHaveURL(/#\/companies\?metric=/);
+  await expect(page.locator("table.screen thead")).toContainText("Revenue per store");
+  expect(fake.calls.some((c) => c.startsWith("GET /api/query/v1/screener?") && c.includes("metric="))).toBe(true);
 });
 
 test("portfolio: a Fidelity export previewed then added, a holding by hand, and the journal's first entries", async ({ page }) => {

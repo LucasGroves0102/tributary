@@ -20,6 +20,7 @@ export const KIND_LABELS: Record<ItemKind, string> = {
   report: "Report",
   thesis: "Thesis",
   model: "Model",
+  metric: "Metric",
 };
 export const KIND_PAGES: Record<ItemKind, string> = {
   chart: "Chart builder",
@@ -28,6 +29,7 @@ export const KIND_PAGES: Record<ItemKind, string> = {
   report: "the report view",
   thesis: "the thesis editor",
   model: "the model",
+  metric: "Your data",
 };
 /** Kinds a page's Save bar keeps "open" (reports, theses and models have their own pages). */
 export const isPageKind = (k: ItemKind): k is SavedKind => k === "chart" || k === "comps" || k === "screen";
@@ -118,6 +120,8 @@ export function restoreScreen(state: unknown): ScreenFilters {
     if (k === "page") continue;
     if (typeof v === "string" || typeof v === "number") p.set(k, String(v));
     else if (v === true) p.set(k, "1");
+    // own metrics (B2d): a list of item ids
+    else if (k === "metric" && Array.isArray(v)) for (const m of v) if (typeof m === "string") p.append(k, m);
   }
   return parseScreen(p.toString());
 }

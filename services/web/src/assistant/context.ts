@@ -225,6 +225,9 @@ export function pageContext(
     case "portfolio":
       // the assistant can't read holdings (no tool, by design): nothing to suggest about them
       return { label: "Portfolio", suggestions: [] };
+    case "data":
+      // nor the user's own datasets (no tool; MCP reads them with the user's own key)
+      return { label: "Your data", suggestions: [] };
     case "workspace":
       return { label: "Workspace", suggestions: general(watched).slice(0, 2) };
     case "report":

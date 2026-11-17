@@ -7840,6 +7840,77 @@ label.check {
   align-items: center;
 }
 
+/* Your data (B2): the user's own datasets and metrics */
+.data-table .data-name {
+  display: block;
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+
+.data-table .data-fields {
+  max-width: 36ch;
+  white-space: normal;
+}
+
+.data-field {
+  display: inline-block;
+  margin: 0 var(--sp-2) var(--sp-1) 0;
+  padding: 0 6px;
+  border: 1px solid var(--rule-2);
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+
+.data-form {
+  margin-top: var(--sp-6);
+}
+
+.data-units {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
+  gap: var(--sp-4) var(--sp-6);
+}
+
+.data-unit {
+  display: grid;
+  gap: var(--sp-2);
+  min-width: 0;
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}
+
+.pf-field .field.data-currency {
+  width: 72px;
+  text-transform: uppercase;
+}
+
+.data-check {
+  border-left: 2px solid var(--rule-2);
+  padding-left: var(--sp-4);
+}
+
+.data-check p {
+  margin: 0 0 var(--sp-2);
+}
+
+.data-howto {
+  margin: 0;
+  padding-left: 1.2em;
+  max-width: 76ch;
+}
+
+.data-howto li {
+  margin-bottom: var(--sp-2);
+}
+
+.data-metric-form {
+  margin-top: var(--sp-6);
+}
+
+.your-dataset + .your-dataset {
+  margin-top: var(--sp-6);
+}
+
 @container main (max-width: 600px) {
   .pf-field.wide,
   .pf-field.full {

@@ -93,6 +93,8 @@ export function toSeries(
     const y = Number(p.value);
     const seen = new Map<string, Source>();
     for (const x of p.inputs) {
+      // the user's own data (B2c, value_source "yours") has no filing to cite
+      if (!x.citation) continue;
       const companyId = data.inputs.find((i) => i.input === x.input)?.company_id ?? undefined;
       seen.set(x.citation.accession_no, {
         form: x.citation.form,

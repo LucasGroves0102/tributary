@@ -234,8 +234,9 @@ class ScreenState(_Strict):
     mine: bool | None = None
     sort: str | None = Field(default=None,
                              pattern=rf"^-?({'|'.join(SCREEN_SORTS)}|m_[0-9a-f]{{32}})$")
-    # B2d: the user's own metrics as columns (item ids); sort may name one (m_<id, no dashes>)
-    metrics: list[Annotated[str, Field(pattern=UUID_TEXT)]] | None = Field(
+    # B2d: the user's own metrics as columns (item ids, the screener's `metric`); sort may name
+    # one (m_<id without dashes>)
+    metric: list[Annotated[str, Field(pattern=UUID_TEXT)]] | None = Field(
         default=None, min_length=1, max_length=MAX_SCREEN_METRICS)
 
 
