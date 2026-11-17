@@ -102,7 +102,7 @@ class BusinessStore(PeerStore):
         super().__init__()
         self.bank = bank
 
-    def screen(self, user_id, compiled):
+    def screen(self, user_id, compiled, known_on=None):
         rows = super().screen(user_id, compiled)
         if AMD in compiled.params.get("ids", []):  # values for every company, as RLS off
             rows.append({**meta(AMD, "ADVANCED MICRO DEVICES INC"), "total": 3,

@@ -24,7 +24,7 @@ class Allow:
 
 
 class Store:
-    def per_share_inputs(self, user_id, company_id):
+    def per_share_inputs(self, user_id, company_id, as_of=None):
         return json.loads((HERE / "nvda.json").read_text())
 
 

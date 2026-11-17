@@ -19,6 +19,7 @@ import psycopg
 from fastapi import Depends, FastAPI, HTTPException, Path, Query
 from fastapi.responses import Response
 
+from query_api import point_in_time
 from query_api.authorizer import Readable
 from query_api.csv_export import csv_response
 from query_api.peers import FALLBACK_METHOD as PEER_FALLBACK_METHOD
@@ -124,7 +125,7 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
             compiled = compile_screen(screen, access.ids("financials"))
         except ScreenError as e:
             raise HTTPException(422, str(e)) from None
-        rows = store.screen(user_id, compiled)
+        rows = store.screen(user_id, compiled, screen.as_of)
         # layer 1 again on every row, also when no id list went into the query
         shaped = [{**shape(r, compiled, "financials" in access.get(r["company_id"], set())),
                    "access": sorted(access.get(r["company_id"], set()))} for r in rows]
@@ -171,12 +172,17 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
         limit: Annotated[int, Query(ge=1, le=5000)] = 50,
         offset: Annotated[int, Query(ge=0, le=1_000_000)] = 0,
         fmt: Format = "json",
+        as_of: Annotated[date | None, Query(
+            description="a past day (YYYY-MM-DD): each company's figures as they stood at its "
+                        "end (echoed as `known_on`)")] = None,
     ) -> dict | Response:
         """Companies with a figure in at least one of these columns (naming a company or a data
         check lists it whatever it has). Metadata is public; values only for companies the caller
         can read financials for. Value filters exclude companies without readable values. A value
         that reads as not meaningful, not applicable or old (`readings`, migration 035) is still
-        returned, exact, but sorts last and never passes a value filter."""
+        returned, exact, but sorts last and never passes a value filter. `as_of`: as of a past
+        day (point_in_time.py); stale is against that day."""
+        known_on = point_in_time.check(as_of, clock())
         if fmt == "json" and limit > MAX_JSON_ROWS:
             raise HTTPException(422, f"limit: at most {MAX_JSON_ROWS} rows as JSON")
         if any(len(s) != 4 or not s.isdigit() for s in sic or []):
@@ -207,7 +213,8 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
             exchanges=exchange or [], fye_months=fiscal_year_end_month or [],
             filer_categories=list(filer_category or []), issue=issue, filters=filters,
             sectors=sector or [], sector_industries=sector_industry or [],
-            granted_only=access == "financials", sort=sort, limit=limit, offset=offset)
+            granted_only=access == "financials", sort=sort, limit=limit, offset=offset,
+            as_of=known_on)
         compiled, rows, total = run_screen(user_id, screen, readable(user_id))
         joint = co_registrants(user_id)
         for r in rows:
@@ -218,7 +225,8 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
                  *(r["values"][k] for k in compiled.columns), notes_of(r)] for r in rows))
         # `issue` echoed: an API that ignored it (older than the filter) would list everyone, and
         # the web app can tell the two apart
-        return {"as_of": _now(), "total": total, "limit": limit, "offset": offset, "sort": sort,
+        return {"as_of": _now(), **({"known_on": known_on} if known_on is not None else {}),
+                "total": total, "limit": limit, "offset": offset, "sort": sort,
                 "columns": column_info(compiled.columns), "rows": rows,
                 **({"issue": issue} if issue else {})}
 

@@ -15,7 +15,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from prometheus_client import Counter
 from pydantic import BaseModel, Field
 
-from query_api import per_share
+from query_api import per_share, point_in_time
 from query_api.alerts import AppAlerts, add_alert_routes
 from query_api.api_keys import ApiKeys, KeyAuth, Limits, add_api_key_routes, is_api_key, key_info
 from query_api.auth import Unauthenticated, mint, verify_claims
@@ -108,6 +108,8 @@ class FormulaRequest(BaseModel):
     view: Literal["quarter", "ttm"] = "quarter"
     start: date | None = Field(None, alias="from", description="earliest period end")
     end: date | None = Field(None, alias="to", description="latest period end")
+    as_of: date | None = Field(None, description="a past day: the inputs as they stood at its "
+                                                 "end (point_in_time.py)")
 
 
 def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
@@ -425,18 +427,29 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
             description="view=quarter: add `callouts`, quarters far outside their series or "
                         "of the other sign from the quarters beside them (query_api.notes)")]
             = False,
+        as_of: Annotated[date | None, Query(
+            description="a past day (YYYY-MM-DD): figures as they stood at its end, from the "
+                        "filings filed by then (echoed as `known_on`)")] = None,
+        originals: Annotated[bool, Query(
+            description="add `original` to each row whose value a later filing changed: the "
+                        "first value, its filing and day, and the change's kind "
+                        "(point_in_time.py)")] = False,
     ) -> dict | Response:
         """A company's figures by quarter or TTM, fiscal or calendar, each with its citation
-        (filing, form, XBRL tag) and freshness; `format=csv` for one row per value."""
+        (filing, form, XBRL tag) and freshness; `format=csv` for one row per value. `as_of`: as
+        they stood at the end of a past day (point_in_time.py)."""
         names = metric_names()
         every = names["metrics"] + names["derived_metrics"]
         unknown = set(metrics or []) - set(every)
         if unknown:
             raise HTTPException(422, f"unknown metrics: {sorted(unknown)}")
+        known_on = point_in_time.check(as_of, (today or today_eastern)())
         require(user_id, "financials", company_id)
-        rows = store.financials(user_id, company_id, metrics or every, quarters, view, basis)
+        rows = store.financials(user_id, company_id, metrics or every, quarters, view, basis,
+                                known_on)
         meta: dict[str, Any] = {"company_id": company_id, "view": view, "basis": basis,
-                                "as_of": _now()}
+                                "as_of": _now(),
+                                **({"known_on": known_on} if known_on is not None else {})}
         # additive, only when not the usual (migration 056): the currency the company's amounts
         # are in, and that its figures are fiscal years (a 20-F/40-F filer), never quarters
         # any amount's, per-share ones too ("EUR/shares": a request for EPS alone, 057)
@@ -451,7 +464,7 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
             # the company's own equity periods in the window, not just the rows' ends: a request
             # for debt_to_equity alone has no row at a negative-equity date to hang it on
             for e in store.equity_readings(user_id, company_id, metrics or every, quarters, view,
-                                           basis):
+                                           basis, known_on):
                 by_equity[(e["metric"], e["period_end"])] = e["reason"]
             for r in rows:
                 if (r["metric"], r["period_end"]) in by_equity:
@@ -466,9 +479,13 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
             # every quarter of the series, not just the window: a quarter's neighbours can be
             # outside it (F5; only for the web's statements, so the agent's JSON is unchanged)
             base = sorted(set(metrics or every) & set(names["metrics"]))
-            series = store.metric_series(user_id, [company_id], base) if base else {}
+            series = store.metric_series(user_id, [company_id], base, known_on) if base else {}
             meta["callouts"] = [c for (_, m), s in sorted(series.items())
                                 for c in statement_callouts(m, s)]
+        found: dict[tuple, dict] = {}
+        if originals and fmt == "json" and rows:
+            found = point_in_time.originals(company_id, rows, store.originals(
+                user_id, company_id, view, sorted({r["metric"] for r in rows}), known_on))
         if fmt == "csv":
             return csv_response(f"{company_id}-financials-{view}-{basis}.csv", FINANCIALS_CSV, ([
                 r["metric"], view, r["period_start"], r["period_end"],
@@ -488,6 +505,7 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
                 "value": r["value"], "unit": r["unit"], "value_source": r["value_source"],
                 **({"inputs": r["inputs"]} if r.get("inputs") else {}),
                 **({"not_meaningful": r.get("not_meaningful")} if readings else {}),
+                **({"original": found.get((r["metric"], r["period_end"]))} if originals else {}),
                 "citation": {"accession_no": r["accession_no"], "form": r["form"],
                              "filed": r["filed"], "xbrl_tag": r["source_tag"],
                              "source_accessions": r["source_accessions"],
@@ -509,12 +527,17 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
             description="adjusted: every period on today's share basis (stock splits applied); "
                         "as_filed: as each filing states it")] = "adjusted",
         quarters: Annotated[int, Query(ge=1, le=MAX_FINANCIAL_QUARTERS)] = 40,
+        as_of: Annotated[date | None, Query(
+            description="a past day (YYYY-MM-DD): figures as they stood at its end, from the "
+                        "filings filed by then (echoed as `known_on`)")] = None,
     ) -> dict:
         """EPS and weighted shares on one share basis by quarter, year or TTM, with the fiscal Q4
         and TTM figures derived (per_share.py's docstring is the spec). Gold and /financials keep
-        every figure as filed."""
+        every figure as filed. `as_of`: on the share basis of that day (splits restated by then)."""
+        known_on = point_in_time.check(as_of, (today or today_eastern)())
         require(user_id, "financials", company_id)
-        out = per_share.compute(store.per_share_inputs(user_id, company_id), view, shares)
+        out = per_share.compute(store.per_share_inputs(user_id, company_id, known_on), view,
+                                shares)
         kept: dict[str, int] = {}
         rows = []
         for r in out["rows"]:  # newest first per metric
@@ -528,19 +551,25 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
             c["filing_url"] = filing_url(c.pop("filer_cik", None), c["accession_no"])
             rows.append(r)
         return {"company_id": company_id, "view": view, "basis": basis, "shares": shares,
-                "as_of": _now(), "splits": out["splits"], "rows": rows}
+                "as_of": _now(), **({"known_on": known_on} if known_on is not None else {}),
+                "splits": out["splits"], "rows": rows}
 
     @app.get("/v1/companies/{company_id}/annual-per-share", response_model=dict)
     def annual_per_share(
         user_id: User, company_id: CompanyId,
         years: Annotated[int, Query(ge=1, le=30)] = 10,
+        as_of: Annotated[date | None, Query(
+            description="a past day (YYYY-MM-DD): figures as they stood at its end, from the "
+                        "filings filed by then (echoed as `known_on`)")] = None,
     ) -> dict:
         """EPS and weighted shares for each fiscal year, as the 10-K states them (gold keeps
         per-share figures as filed). The split-adjusted history, the derived fiscal Q4 and TTM are
-        /per-share's (per_share.py)."""
+        /per-share's (per_share.py). `as_of`: the 10-Ks filed by the end of that day."""
+        known_on = point_in_time.check(as_of, (today or today_eastern)())
         require(user_id, "financials", company_id)
-        rows = store.annual_per_share(user_id, company_id, years)
-        return {"company_id": company_id, "as_of": _now(), "rows": [
+        rows = store.annual_per_share(user_id, company_id, years, known_on)
+        return {"company_id": company_id, "as_of": _now(),
+                **({"known_on": known_on} if known_on is not None else {}), "rows": [
             {
                 "metric": r["metric"], "period_start": r["period_start"],
                 "period_end": r["period_end"], "fiscal_period": None, "calendar_period": None,
@@ -552,6 +581,22 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
                 "freshness": {"filed": r["filed"], "ingested_at": r["ingested_at"]},
             } for r in rows
         ]}
+
+    @app.get("/v1/companies/{company_id}/restatements", response_model=dict)
+    def restatements(user_id: User, company_id: CompanyId, as_of: Annotated[date | None, Query(
+            description="a past day (YYYY-MM-DD): figures as they stood at its end, from the "
+                        "filings filed by then (echoed as `known_on`)")] = None) -> dict:
+        """Every figure a later filing changed: the value first believed and the one after, each
+        with its filing and the day, and the kind (split, another_line, same_line;
+        point_in_time.py). Quarters and trailing twelve months' sums; `as_of`: changes filed by
+        the end of that day. `history` false: no history is kept for the company yet."""
+        known_on = point_in_time.check(as_of, (today or today_eastern)())
+        require(user_id, "financials", company_id)
+        found = store.restatements(user_id, company_id, known_on)
+        return {"company_id": company_id, "as_of": _now(),
+                **({"known_on": known_on} if known_on is not None else {}),
+                "history": found["history"],
+                "rows": point_in_time.restatement_rows(company_id, found["rows"])}
 
     segment_known: list[str] = []
 
@@ -622,11 +667,16 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
                 accession_no: Annotated[str | None, Query(
                     pattern=r"^\d{10}-\d{2}-\d{6}$",
                     description="only this filing (any age): the reader's outline")] = None,
+                as_of: Annotated[date | None, Query(
+                    description="a past day: filings filed by its end (echoed as `known_on`)")]
+                = None,
                 ) -> dict:
         """Parsed filings, newest first, with their sections (titles and sizes, no text)."""
+        known_on = point_in_time.check(as_of, (today or today_eastern)())
         require(user_id, "filings", company_id)
         return {"company_id": company_id, "as_of": _now(),
-                "filings": store.filings(user_id, company_id, limit, accession_no)}
+                **({"known_on": known_on} if known_on is not None else {}),
+                "filings": store.filings(user_id, company_id, limit, accession_no, known_on)}
 
     @app.get("/v1/filings/latest")
     def latest_filings(user_id: User,
@@ -649,14 +699,19 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
         limit: Annotated[int, Query(ge=1, le=5)] = 1,
         max_chars: Annotated[int, Query(ge=100, le=1_000_000, description=(
             "the web reader asks for the whole section; the longest are about 400,000"))] = 8_000,
+        as_of: Annotated[date | None, Query(
+            description="a past day: the newest filings filed by its end (echoed as "
+                        "`known_on`)")] = None,
     ) -> dict:
         """A section's text (10-K "1A", 10-Q "II-1A", 8-K "2.02", "EX-99.1") from the company's
         newest filings that have it (`limit`, of one `form` if given) or from the filing named,
         with its citation and character offsets."""
+        known_on = point_in_time.check(as_of, (today or today_eastern)())
         require(user_id, "filings", company_id)
         rows = store.sections(user_id, company_id, section_key, form, accession_no, limit,
-                              max_chars)
-        return {"company_id": company_id, "as_of": _now(), "sections": [
+                              max_chars, known_on)
+        return {"company_id": company_id, "as_of": _now(),
+                **({"known_on": known_on} if known_on is not None else {}), "sections": [
             {
                 "section_key": r["section_key"], "title": r["title"], "text": r["text"],
                 "truncated": r["total_chars"] > len(r["text"]),
@@ -732,7 +787,8 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
                 denied[t] = p
         if denied:
             raise HTTPException(403, {"errors": not_yours(user_id, denied)})
-        compiled = compile_formula(ast, a, companies, body.basis, body.start, body.end)
+        known_on = point_in_time.check(body.as_of, (today or today_eastern)())
+        compiled = compile_formula(ast, a, companies, body.basis, body.start, body.end, known_on)
         rows = store.formula(user_id, compiled)
         # 057: amounts are in each company's own currency (056). Inputs in two currencies can't be
         # added, subtracted or divided: Tributary converts none. One currency: the series' money is
@@ -748,6 +804,7 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
             **({"currency": currency} if currency != "USD" and a.unit in MONEY_UNITS else {}),
             "basis": body.basis, "view": body.view,
             "alignment": compiled.alignment, "as_of": _now(),
+            **({"known_on": known_on} if known_on is not None else {}),
             "inputs": _inputs(a, companies, currencies),
             "points": [_point(r, compiled.alignment, [i.ref for i in a.inputs]) for r in rows],
         }

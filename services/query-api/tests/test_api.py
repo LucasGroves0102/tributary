@@ -45,7 +45,7 @@ class FakeStore:
     def cadence(self, user_id, company_id):
         return "quarterly"
 
-    def financials(self, user_id, company_id, metrics, quarters, view, basis):
+    def financials(self, user_id, company_id, metrics, quarters, view, basis, as_of=None):
         self.calls.append(("financials", user_id, company_id))
         self.financials_args = (metrics, quarters, view, basis)
         return [{"metric": "revenue", "period_start": date(2026, 4, 27),
@@ -179,7 +179,7 @@ def test_filings_of_one_accession_for_the_reader(token):
     r = c.get(f"/v1/companies/{NVDA}/filings?accession_no=0001045810-24-000001",
               headers=token("bob"))
     assert r.status_code == 200
-    assert store.filings_args == (8, "0001045810-24-000001")
+    assert store.filings_args == (8, "0001045810-24-000001", None)
     assert c.get(f"/v1/companies/{NVDA}/filings?accession_no=x",
                  headers=token("bob")).status_code == 422
 

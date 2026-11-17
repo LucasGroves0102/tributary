@@ -130,7 +130,7 @@ class Store:
     def __init__(self):
         self.calls = []
 
-    def per_share_inputs(self, user_id, company_id):
+    def per_share_inputs(self, user_id, company_id, as_of=None):
         self.calls.append(company_id)
         return inputs("nvda")
 

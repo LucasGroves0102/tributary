@@ -73,6 +73,7 @@ tokens: `make token USER=alice`.
 | `GET /v1/companies/{id}/data-notes` | financials | data-quality and freshness notes, ranked, each with its filings, and the company's coverage gaps ([Data notes](#data-notes)) |
 | `GET /v1/companies/{id}/annual-per-share?years=` | financials | EPS and weighted shares per fiscal year as the 10-K states them (036; `years` 1-30, default 10) |
 | `GET /v1/companies/{id}/per-share?view=&basis=&shares=&quarters=` | financials | EPS and weighted shares on one share basis: `view` quarter, ttm or annual; `shares` adjusted (default) or as_filed; `quarters` 1-120 (default 40) ([Per-share figures](#per-share-figures-on-one-share-basis)) |
+| `GET /v1/companies/{id}/restatements?as_of=` | financials | every quarter or TTM sum a later filing changed: original and restated value, each with its filing and day, and the kind (`split`, `another_line`, `same_line`) ([Point in time](#point-in-time)) |
 | `GET /v1/data-notes?limit=&company_id=` | financials (every company covered) | the newest notes across the caller's companies, or up to 50 named ones |
 | `POST /v1/formulas/validate` | token | AST, unit and inputs, or errors with positions ([Formulas](#formulas)) |
 | `POST /v1/formulas/evaluate` | financials, every company in the formula | series; each point cites every input's filing |
@@ -231,6 +232,17 @@ per-share pipeline the Statements tab reads. Split-adjusted by default (each row
 and the `splits` applied); fiscal Q4 and TTM are derived and labelled (`derivation`). Gold and
 `/financials` keep every per-share figure as filed. `/annual-per-share` stays (the 10-K's own
 figures; MCP's tools read it). Rules: [DESIGN.md](DESIGN.md#per-share-figures-on-one-share-basis).
+
+## Point in time
+
+`as_of` (a past day) on `/financials`, `/per-share`, `/annual-per-share`, `/formulas/evaluate`
+(body), `/screener`, `/filings`, `/sections`, `/search` and `/restatements`: what Tributary would
+have shown at the end of that day, from the filings filed by then (gold's history, migrations
+085-087). The day is echoed as `known_on` (`as_of` stays the response's time); before 2009 or after
+today is a 422. `/financials?originals=true` adds `original` to each figure a later filing changed
+(opt-in: the agent's JSON is unchanged). Readings are against the day (stale); segments, data notes
+and the confidence mark stay today's. Spec: `point_in_time.py`'s docstring; rules:
+[DESIGN.md](DESIGN.md#point-in-time).
 
 ## Watchlist and calendar
 

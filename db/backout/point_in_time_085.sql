@@ -1,10 +1,15 @@
--- Backout of 085_point_in_time_pipeline.sql, 086_financials_known.sql (never a migration: README.md): everything point-in-time
--- undone, newest first: 086's history (gold.financials_known, gold.known_companies and their
--- functions dropped; gold.refresh_financials back to 078's body; the 'known' catch-up kind and its
--- stamps removed, ops.company_rule_version, ops.company_backlog and ops.rebuild_soon back to 071's,
--- 074's and 076's), then 085's pipeline (gold.usable_facts and gold.best_facts with one argument,
--- 056's and 080's; the writers 043's and 084's; the pure functions and their types dropped). Gold's
--- own rows are the same either way: nothing to rebuild.
+-- Backout of 085_point_in_time_pipeline.sql, 086_financials_known.sql and
+-- 087_point_in_time_reads.sql (never a migration: README.md): everything point-in-time
+-- undone, newest first: 087's reads (gold.financials_at, company_financials_at, restatements dropped;
+-- the readings' probes back to one signature each: gold.latest_row, latest_equity and
+-- quarterly_recent 078's, amount_currency_of 061's, latest_period 035's, latest_reading 083's;
+-- gold.annual_per_share 056's two-argument form), then 086's history (gold.financials_known,
+-- gold.known_companies and their functions dropped; gold.refresh_financials back to 078's body;
+-- the 'known' catch-up kind and its stamps removed, ops.company_rule_version, ops.company_backlog
+-- and ops.rebuild_soon back to 071's, 074's and 076's), then 085's pipeline (gold.usable_facts and
+-- gold.best_facts with one argument, 056's and 080's; the writers 043's and 084's; the pure
+-- functions and their types dropped). Deploy the previous query-api image first (it calls the as-of
+-- forms). Gold's own rows are the same either way: nothing to rebuild.
 --
 -- Run it as the migration owner, the migrate login `tributary` (SET ROLE as below): run as
 -- postgres, a function it drops and re-creates would belong to postgres, and the non-superuser
@@ -26,23 +31,36 @@ DECLARE
 BEGIN
     FOR w IN SELECT v.fn, v.want, to_regprocedure(v.fn) AS id FROM (VALUES
         ('gold.amount_currency(text)', 'd59a928b3b91fb9a6da98fc15e72a536'),
-        ('gold.amount_currency_of(text)', '6d18237414dd02bfe4078cac3f7b429e'),
-        ('gold.annual_per_share(text,integer)', '663430e80a6341f8a0e4227e1491e657'),
+        ('gold.amount_currency_of(text)', NULL),
+        ('gold.amount_currency_of(text,date)', '7ef505eacda72c0de066a26d5f3303ed'),
+        ('gold.annual_per_share(text,integer)', NULL),
+        ('gold.annual_per_share(text,integer,date)', 'c27e50f38738222c370bb9b834620cab'),
         ('gold.best_facts(text[])', NULL),
         ('gold.best_facts(text[],date)', '6950247dc6c9f51d99de4b12e906dc5a'),
         ('gold.companies_for_ciks(text[])', '5f02b9f1e395d7f743635d0a399f8f6c'),
+        ('gold.company_financials_at(text,date,text,text[])', '63de4900f9b4285f61d220d0141ceda7'),
         ('gold.derived_rows(text[],date,gold.quarter_row[])', 'd22751c4c57103d6fda7665e6477a179'),
         ('gold.figure_facts(text,text,date)', '6789892e97611dd6c0260a25f695d7fc'),
         ('gold.filing_figures(text,text)', '51376508ac8a1a66d7e42cc92852346f'),
         ('gold.financial_rows(text[],date)', '861bf05e3f8d8f5743e946c9761e291d'),
+        ('gold.financials_at(date)', '9bdd938e555828de0b4eed294e0dad5d'),
         ('gold.input_values(jsonb)', '06de5fab08b2d846d578a006a9efc859'),
         ('gold.knowledge_facts(text)', '18e26ac36e3c21f7ce905a870362750c'),
         ('gold.known_changed_from(text)', '61c37386d5747694eadbb421824e579f'),
-        ('gold.latest_reading(text,text,text,text,date)', '097ab17641e6893f4284b9d08c621637'),
+        ('gold.latest_equity(text)', NULL),
+        ('gold.latest_equity(text,date)', '1890ba1959496c3ea2c74996620e23c1'),
+        ('gold.latest_period(text)', NULL),
+        ('gold.latest_period(text,date)', 'a666140990b5da7e3a53846f08a39bf6'),
+        ('gold.latest_reading(text,text,text,text,date)', NULL),
+        ('gold.latest_reading(text,text,text,text,date,date)', '57d405f2fb1fd44c33a77abaa962cd08'),
+        ('gold.latest_row(text,text,text)', NULL),
+        ('gold.latest_row(text,text,text,date)', '78b74abf479901f860df8e016ef725fb'),
         ('gold.not_applicable_metrics(text,text)', '31aa1cba6092282684aaf6b699539359'),
         ('gold.not_computed(text,text)', 'a1d6b45f36a10d029335de6f30893f96'),
         ('gold.not_meaningful(text,numeric,jsonb,numeric)', '472cb5abb2f6cb3ad0cbf64734468ee4'),
-        ('gold.not_meaningful(text,numeric,jsonb,numeric,text)', '81ab67cd9d086d5c9184ffb843304748'),
+        ('gold.not_meaningful(text,numeric,jsonb,numeric,text)', '9f4c2cd4aeaefa663263efb806700f5d'),
+        ('gold.quarterly_recent(text,date)', NULL),
+        ('gold.quarterly_recent(text,date,date)', 'b7e20593a6dc7b936c9a138a15fb0951'),
         ('gold.quarterly_rows(text[],date)', '58f05bc5ff7d5f1f6bce48ec05d1201a'),
         ('gold.rebuild_known(text[])', '7c0e1472047486fb812194cfe5b5919b'),
         ('gold.refresh_derived_financials(text[])', '6e9debd1c4fec0936d3498b7a9e4c147'),
@@ -51,6 +69,7 @@ BEGIN
         ('gold.refresh_quarterly_financials(text[])', '4cf929c3db5e1b7830220b9b3574bfe2'),
         ('gold.replay_companies(text[],boolean)', 'a88eba6b35d5504daf597ad643fe35a0'),
         ('gold.replay_known(text,date)', '39c0339c527f6718a084b2bc4c656f29'),
+        ('gold.restatements(text,date)', '7097e219996f52c772e678e98917ef29'),
         ('gold.screen_backlog()', '972441f449f03e3d8fa36a9748610e85'),
         ('gold.screen_company(text)', 'd0ab770fb304683145115aeb8dcee30d'),
         ('gold.screen_reading(text,text,text,text,date,boolean,numeric,text,boolean)', 'f110e0894f0dff22b6fb8fe0423313fe'),
@@ -78,6 +97,184 @@ BEGIN
 END
 $guard$;
 -- end guard
+
+-- 087: the reads as of a day
+DROP FUNCTION gold.restatements(text, date);
+DROP FUNCTION gold.company_financials_at(text, date, text, text[]);
+DROP FUNCTION gold.financials_at(date);
+DROP FUNCTION gold.latest_reading(text, text, text, text, date, date);
+DROP FUNCTION gold.latest_row(text, text, text, date);
+DROP FUNCTION gold.latest_equity(text, date);
+DROP FUNCTION gold.quarterly_recent(text, date, date);
+DROP FUNCTION gold.amount_currency_of(text, date);
+DROP FUNCTION gold.latest_period(text, date);
+DROP FUNCTION gold.annual_per_share(text, int, date);
+
+-- 078's gold.latest_row, latest_equity and quarterly_recent, copied unchanged
+CREATE FUNCTION gold.latest_row(p_company_id text, p_span text, p_metric text)
+RETURNS TABLE (period_end date, value numeric, accession_no text, form text, filed date,
+               inputs jsonb, unit text)
+LANGUAGE sql STABLE PARALLEL SAFE SECURITY INVOKER AS $$
+    SELECT y.period_end, y.value, y.accession_no, y.form, y.filed, y.inputs, y.unit
+    FROM (
+        (SELECT q.period_end, q.value, q.accession_no, q.form, q.filed, NULL::jsonb AS inputs,
+                q.unit
+         FROM gold.quarterly_financials q
+         WHERE q.company_id = p_company_id AND q.metric = p_metric
+           AND (p_span = 'quarter'
+                OR (p_span = 'ttm' AND EXISTS (SELECT 1 FROM silver.metrics m
+                                               WHERE m.metric = p_metric AND m.kind = 'instant')))
+         ORDER BY q.period_end DESC LIMIT 1)
+        UNION ALL
+        (SELECT d.period_end, d.value, d.accession_no, d.form, d.filed, d.inputs, d.unit
+         FROM gold.derived_financials d
+         WHERE d.company_id = p_company_id AND d.span = p_span AND d.metric = p_metric
+         ORDER BY d.period_end DESC LIMIT 1)
+    ) y
+    ORDER BY y.period_end DESC LIMIT 1
+$$;
+CREATE FUNCTION gold.latest_equity(p_company_id text)
+RETURNS TABLE (value numeric)
+LANGUAGE sql STABLE PARALLEL SAFE SECURITY INVOKER AS $$
+    SELECT q.value FROM gold.quarterly_financials q
+    WHERE q.company_id = p_company_id AND q.metric = 'stockholders_equity'
+      AND q.period_end <= current_date
+    ORDER BY q.period_end DESC LIMIT 1
+$$;
+CREATE FUNCTION gold.quarterly_recent(p_company_id text, p_latest date)
+RETURNS TABLE (recent boolean)
+LANGUAGE sql STABLE PARALLEL SAFE SECURITY INVOKER AS $$
+    SELECT EXISTS (SELECT 1 FROM gold.quarterly_financials q
+                   WHERE q.company_id = p_company_id
+                     AND q.metric IN ('revenue', 'net_income')
+                     AND q.period_end > p_latest - 200
+                     AND q.period_end <= p_latest)
+$$;
+
+-- 061's gold.amount_currency_of, copied unchanged
+CREATE FUNCTION gold.amount_currency_of(p_company_id text) RETURNS TABLE (unit text)
+LANGUAGE sql STABLE PARALLEL SAFE SECURITY INVOKER AS $$
+    SELECT coalesce(
+        (SELECT q.unit FROM gold.quarterly_financials q
+         WHERE q.company_id = p_company_id AND q.metric = 'revenue'
+         ORDER BY q.period_end DESC LIMIT 1),
+        (SELECT q.unit FROM gold.quarterly_financials q
+         WHERE q.company_id = p_company_id AND q.metric = 'net_income'
+         ORDER BY q.period_end DESC LIMIT 1),
+        -- 060: an annual-only filer's (20-F, 40-F) revenue and net income are its stated years,
+        -- kept only as TTM rows of gold.derived_financials (PK probes, like the two above)
+        (SELECT d.unit FROM gold.derived_financials d
+         WHERE d.company_id = p_company_id AND d.span = 'ttm' AND d.metric = 'revenue'
+         ORDER BY d.period_end DESC LIMIT 1),
+        (SELECT d.unit FROM gold.derived_financials d
+         WHERE d.company_id = p_company_id AND d.span = 'ttm' AND d.metric = 'net_income'
+         ORDER BY d.period_end DESC LIMIT 1),
+        'USD')
+$$;
+
+-- 035's gold.latest_period, copied unchanged
+CREATE FUNCTION gold.latest_period(p_company_id text)
+RETURNS TABLE (latest date)
+LANGUAGE sql STABLE PARALLEL SAFE SECURITY INVOKER AS $$
+    SELECT max(x.period_end)
+    FROM (
+        (SELECT q.period_end FROM gold.quarterly_financials q
+         WHERE q.company_id = p_company_id AND q.metric = 'revenue'
+           AND q.period_end <= current_date
+         ORDER BY q.period_end DESC LIMIT 1)
+        UNION ALL
+        (SELECT q.period_end FROM gold.quarterly_financials q
+         WHERE q.company_id = p_company_id AND q.metric = 'net_income'
+           AND q.period_end <= current_date
+         ORDER BY q.period_end DESC LIMIT 1)
+        UNION ALL
+        (SELECT q.period_end FROM gold.quarterly_financials q
+         WHERE q.company_id = p_company_id AND q.metric = 'total_assets'
+           AND q.period_end <= current_date
+         ORDER BY q.period_end DESC LIMIT 1)
+    ) x
+$$;
+
+-- 083's gold.latest_reading, copied unchanged
+CREATE FUNCTION gold.latest_reading(p_company_id text, p_span text, p_metric text, p_sic text,
+                                    p_latest date)
+RETURNS TABLE (period_end date, value numeric, accession_no text, form text, filed date,
+               status text, reason text, unit text)
+LANGUAGE sql STABLE PARALLEL SAFE SECURITY INVOKER AS $$
+    SELECT x.period_end, x.value, x.accession_no, x.form, x.filed, r.status, r.reason, x.unit
+    FROM (SELECT 1) one
+    LEFT JOIN LATERAL gold.latest_row(p_company_id, p_span, p_metric) x ON true
+    LEFT JOIN LATERAL (
+        SELECT q.value FROM gold.quarterly_financials q
+        WHERE p_metric IN ('debt_to_equity', 'roe')
+          AND q.company_id = p_company_id AND q.metric = 'stockholders_equity'
+          AND q.period_end <= current_date
+        ORDER BY q.period_end DESC LIMIT 1
+    ) e ON true
+    -- 057/060/061: the currency of the amounts a rule's base is in, only for the readings with a base
+    LEFT JOIN LATERAL (
+        SELECT c.unit FROM gold.amount_currency_of(p_company_id) c
+        WHERE p_metric IN ('gross_margin', 'operating_margin', 'net_margin', 'fcf_margin',
+                           'revenue_growth', 'net_income_growth')
+        LIMIT 1
+    ) cu ON true
+    -- 083: cost of revenue at the revenue's period end, only where revenue can be gross sales
+    LEFT JOIN LATERAL (
+        SELECT c.value FROM gold.latest_row(p_company_id, p_span, 'cost_of_revenue') c
+        WHERE p_metric = 'revenue' AND gold.gross_sales_sic(p_sic) AND c.period_end = x.period_end
+        LIMIT 1
+    ) gs ON true
+    -- 069: the recent-quarters probe, only when the stale answer depends on it
+    LEFT JOIN LATERAL (
+        SELECT qr.recent FROM gold.quarterly_recent(p_company_id, p_latest) qr
+        WHERE gold.is_stale(p_latest, x.form, true) AND NOT gold.is_stale(p_latest, x.form, false)
+        LIMIT 1
+    ) st ON true
+    CROSS JOIN LATERAL gold.reading(p_company_id, p_metric, p_sic, p_latest, x.period_end, x.value,
+                                    gold.with_cost(x.inputs, gs.value),  -- 083
+                                    x.unit, x.form, e.value, cu.unit, st.recent) r
+$$;
+
+GRANT EXECUTE ON FUNCTION gold.latest_row(text, text, text), gold.latest_equity(text),
+    gold.quarterly_recent(text, date), gold.amount_currency_of(text), gold.latest_period(text),
+    gold.latest_reading(text, text, text, text, date) TO query_api;
+
+-- 056's gold.annual_per_share, copied unchanged
+CREATE FUNCTION gold.annual_per_share(p_company_id text, p_years int)
+RETURNS TABLE (metric text, period_start date, period_end date, value numeric, unit text,
+               source_tag text, accession_no text, filer_cik text, form text, filed date,
+               ingested_at timestamptz)
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $fn$
+    SELECT y.metric, y.period_start, y.period_end, y.value, y.unit, y.source_tag, y.accession_no,
+           y.cik, y.form, y.filed, y.ingested_at
+    FROM (
+        SELECT DISTINCT ON (f.metric, f.period_end)
+               f.metric, f.period_start, f.period_end, f.value, f.unit, f.tag AS source_tag,
+               f.accession_no, f.cik, f.form, f.filed, f.ingested_at,
+               dense_rank() OVER (PARTITION BY f.metric ORDER BY f.period_end DESC) AS recency
+        FROM silver.company_ciks k
+        JOIN silver.financial_facts f ON f.cik = k.cik
+        JOIN silver.metric_tags t ON t.metric = f.metric AND t.tag = f.tag
+                                 AND t.taxonomy = f.taxonomy AND t.company_id IS NULL
+        JOIN silver.metrics m ON m.metric = f.metric
+        CROSS JOIN LATERAL (
+            SELECT coalesce((SELECT q.unit FROM gold.quarterly_financials q
+                             WHERE q.company_id = p_company_id AND q.unit ~ '^[A-Z]{3}$'
+                             ORDER BY q.period_end DESC LIMIT 1), 'USD') AS currency
+        ) cu
+        WHERE k.company_id = p_company_id
+          AND k.company_id IN (SELECT r FROM authz.readable_companies('financials') r)
+          AND f.metric IN ('eps_diluted', 'eps_basic', 'weighted_shares_diluted',
+                           'weighted_shares_basic')
+          AND f.unit = CASE m.unit WHEN 'USD/shares' THEN cu.currency || '/shares' ELSE m.unit END
+          AND f.period_type = 'annual'
+          AND coalesce(f.form, '') !~ '^(DEF|PRE)'
+        ORDER BY f.metric, f.period_end, t.priority, f.filed DESC, f.accession_no DESC
+    ) y
+    WHERE y.recency <= p_years
+$fn$;
+REVOKE EXECUTE ON FUNCTION gold.annual_per_share(text, int) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION gold.annual_per_share(text, int) TO query_api;
 
 -- 086: the history
 -- 078's gold.refresh_financials, copied unchanged

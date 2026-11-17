@@ -179,3 +179,4 @@ One line each; the full notes (what it changes, why, the measurements) are in [D
 - [`084_net_sales_gross_margin.sql`](DESIGN.md#084_net_sales_gross_marginsql): Walmart's and Costco's net sales, and their gross margin on them.
 - [`085_point_in_time_pipeline.sql`](DESIGN.md#085_point_in_time_pipelinesql): gold's pipeline as pure functions of a knowledge date (`p_as_of`); the same rows.
 - [`086_financials_known.sql`](DESIGN.md#086_financials_knownsql): gold's history of itself (`gold.financials_known`): every version of every row, from the filing that first stated it; the 'known' catch-up kind.
+- [`087_point_in_time_reads.sql`](DESIGN.md#087_point_in_time_readssql): reading gold as of a day: `gold.financials_at`, the single-company read, the readings' probes with `p_as_of`, restatements.

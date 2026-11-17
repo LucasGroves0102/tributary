@@ -48,6 +48,13 @@ ROUTES = ["/v1/screener?limit=50", "/v1/screener?limit=50&access=financials",
           f"/v1/companies/{NVDA}/insiders?limit=100&cursor=2026-09-18_0001588670-26-000014",
           # Riley (test 6): one company's per-share figures on one share basis
           f"/v1/companies/{NVDA}/per-share?view=ttm",
+          # B1: point in time (085-087), a past day
+          f"/v1/companies/{NVDA}/financials?quarters=8&as_of=2024-06-30&originals=true",
+          f"/v1/companies/{NVDA}/per-share?as_of=2024-06-30",
+          f"/v1/companies/{NVDA}/restatements?as_of=2024-06-30",
+          "/v1/screener?limit=50&as_of=2024-06-30",
+          "/v1/screener?where=revenue_ttm:gte:1&as_of=2024-06-30",
+          "/v1/search?q=supply+chain&as_of=2024-06-30",
           # the portfolio: the caller's own holdings' companies only
           "/v1/portfolio"]
 # POST routes: path, body
@@ -84,7 +91,7 @@ class RecordingStore:
             return getattr(self, f"answer_{name}", lambda *_: [])(*args)
         return call
 
-    def answer_screen(self, user_id, compiled):
+    def answer_screen(self, user_id, compiled, known_on=None):
         self.calls.append(("screen.params", (compiled.params,), {}))
         return [{**meta(c), "total": 2,
                  **{f"v{i}": Decimal("7") for i in compiled.slots.values()},
@@ -105,6 +112,9 @@ class RecordingStore:
 
     def answer_per_share_inputs(self, *_):
         return {"quarters": [], "annual": [], "findings": []}
+
+    def answer_restatements(self, *_):
+        return {"rows": [], "history": True}
 
     def answer_latest_filings(self, *_):
         return [{"company_id": c, "accession_no": "a"} for c in (NVDA, OUTSIDE)]

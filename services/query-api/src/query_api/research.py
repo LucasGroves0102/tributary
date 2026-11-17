@@ -23,6 +23,7 @@ from typing import Annotated, Literal
 from fastapi import Depends, FastAPI, HTTPException, Path, Query
 
 from query_api import changes as material
+from query_api import point_in_time
 from query_api.authorizer import Readable
 from query_api.shapes import filing_url, newest_windows
 from query_api.store import SearchTooBroad, Store
@@ -276,6 +277,9 @@ def add_research_routes(app: FastAPI, *, store: Store, current_user: Callable[..
             description="auto: with the catalog public and no company, the newest window that"
                         " fills the page; exact: exactly from-to (may be too broad: 422)")]
             = "auto",
+        as_of: Annotated[date | None, Query(
+            description="a past day: only filings filed by its end (echoed as `known_on`)")]
+            = None,
     ) -> dict:
         """Full-text search over the parsed sections of the companies whose filings the caller
         can read: the best-matching passage per section, ranked (or newest first with
@@ -283,7 +287,11 @@ def add_research_routes(app: FastAPI, *, store: Store, current_user: Callable[..
         `total` is how many sections match in the range searched (None past the last page).
         With the catalog public, no `company` and `window=auto`, `searched_from` says how far
         back the ranked filings go: the newest window that fills the page, wider only when
-        there are few matches. `sort` and `window` are echoed (additive)."""
+        there are few matches. `sort` and `window` are echoed (additive). `as_of`: filed by the
+        end of that day (point_in_time.py): `to` is at most that day."""
+        known_on = point_in_time.check(as_of, datetime.now(UTC).date())
+        if known_on is not None:
+            end = known_on if end is None else min(end, known_on)
         if company is not None:
             require(user_id, "filings", company)
             granted: list[str] | None = [company]
@@ -296,7 +304,8 @@ def add_research_routes(app: FastAPI, *, store: Store, current_user: Callable[..
         windowed: dict[str, date | None] = {}
         try:
             if granted is None and window == "auto":
-                today = datetime.now(UTC).date()  # EDGAR dates are US Eastern, never later
+                # EDGAR dates are US Eastern, never later; as of a day, that day
+                today = known_on or datetime.now(UTC).date()
                 for lower in newest_windows(SEARCH_WINDOW_DAYS, start, end, today):
                     rows = store.search_sections(user_id, None, q, form, section, lower, end,
                                                  limit + 1, offset, sort=sort)
@@ -311,7 +320,9 @@ def add_research_routes(app: FastAPI, *, store: Store, current_user: Callable[..
                                      " date filter, or more specific words") from None
         total = rows[0].get("total") if rows else (0 if offset == 0 else None)
         return {
-            "query": q, "as_of": _now(), "limit": limit, "offset": offset, **windowed,
+            "query": q, "as_of": _now(),
+            **({"known_on": known_on} if known_on is not None else {}),
+            "limit": limit, "offset": offset, **windowed,
             "sort": sort, "window": window, "total": total,
             "has_more": len(rows) > limit,  # layer 1 on every row below, also without an id list
             "results": [{

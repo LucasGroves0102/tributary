@@ -125,7 +125,7 @@ class Store(FakeStore):
         return {c: {NVDA: ["NVDA"], AAPL: ["AAPL"]}[c] for c in company_ids
                 if c in (NVDA, AAPL)}
 
-    def financials(self, user_id, company_id, metrics, quarters, view, basis):
+    def financials(self, user_id, company_id, metrics, quarters, view, basis, as_of=None):
         self.calls.append(("financials", user_id, company_id, tuple(metrics), view))
         row = {"period_start": None, "accession_no": "0001045810-26-000075", "form": "10-Q",
                "filed": date(2026, 8, 26), "source_tag": "us-gaap:X",

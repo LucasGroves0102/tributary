@@ -8,7 +8,7 @@ in the order they run ([Order](#order)), the two independent ones last.
 
 | File | Undoes | Then |
 |---|---|---|
-| [`point_in_time_085.sql`](point_in_time_085.sql) | 085-086, point in time, newest first: 086's history (`gold.financials_known`, `gold.known_companies` and their functions dropped, the 'known' catch-up kind and its stamps removed; `gold.refresh_financials` back to 078's body, `ops.company_rule_version`, `ops.company_backlog` and `ops.rebuild_soon` to 071's, 074's and 076's), then 085's pipeline (`gold.usable_facts` and `gold.best_facts` with one argument, 056's and 080's; the writers 043's and 084's; `gold.quarterly_rows`, `gold.derived_rows` and their types dropped). Gold's rows are the same either way. Tested: 086 then this, every function equal to the migration's before | none |
+| [`point_in_time_085.sql`](point_in_time_085.sql) | 085-087, point in time, newest first: 087's reads (`gold.financials_at`, `company_financials_at`, `restatements` dropped; the readings' probes back to one signature each: `gold.latest_row`, `latest_equity` and `quarterly_recent` 078's, `amount_currency_of` 061's, `latest_period` 035's, `latest_reading` 083's; `gold.annual_per_share` 056's), 086's history (`gold.financials_known`, `gold.known_companies` and their functions dropped, the 'known' catch-up kind and its stamps removed; `gold.refresh_financials` back to 078's body, `ops.company_rule_version`, `ops.company_backlog` and `ops.rebuild_soon` to 071's, 074's and 076's), then 085's pipeline (`gold.usable_facts` and `gold.best_facts` with one argument, 056's and 080's; the writers 043's and 084's; `gold.quarterly_rows`, `gold.derived_rows` and their types dropped). Deploy the previous query-api image first (it calls the as-of forms). Gold's rows are the same either way. Tested: 087 then this, every function equal to the migration's before | none |
 | [`revenue_fallbacks_080.sql`](revenue_fallbacks_080.sql) | 080: `gold.best_facts` back to 077's body (a revenue tag under a fifth of an industry total believed again: Conagra's FY2012-2016 Revenues of $1.6-1.7B), revenue's industry tags (`RealEstateRevenueNet`, `SalesRevenueGoodsNet`, `SalesRevenueServicesNet`) and total assets' `LiabilitiesAndStockholdersEquity` removed with their silver facts (revenue history starting late again at those companies). Tested: 080 then this, the function equal to 077's | `financials-rebuild` job |
 | [`screener_figures_078.sql`](screener_figures_078.sql) | 078: `gold.latest_reading` back to 069's body (the same readings, its rules inline again), `gold.refresh_financials` to 071's, `gold.financials_coverage` to 017's view; the screener reads live (`gold.screen_company`/`screen_reading` live only, the backlog empty, both tables emptied: the cold first request as slow as before). Same signatures: no other image needed. Tested: 078 then this, both functions equal to 069's and 071's | none |
 | [`net_income_077.sql`](net_income_077.sql) | 077: `gold.best_facts` back to 064's body (a year tagged ProfitLoss reads NetIncomeLoss again where later comparatives tag it: PNC's 2025 TTM 7,015), net income's last fallback tag (`NetIncomeLossAvailableToCommonStockholdersBasic`) and its silver facts removed (Booking without net income after 2015 again). Tested: 077 then this, the function equal to 064's | `financials-rebuild` job |
@@ -71,9 +71,10 @@ it has once the files above have run and this one hasn't. Run out of order, a fi
 older function over a newer rule: 048's, 049's or 050's alone on a database at 056 or 057 brought back
 pre-056 functions and dropped the currency rule. Run twice, it refuses too. Why each pair is ordered:
 
-- 085 first (point in time, 085-086 in one file, newest first): it drops the history and the as-of
-  forms and puts back 078's `gold.refresh_financials` and the one-argument `gold.usable_facts` and
-  `gold.best_facts` (080's body) that 080's and 078's files then replace.
+- 085 first (point in time, 085-087 in one file, newest first): it drops the reads, the history and
+  the as-of forms and puts back 083's `gold.latest_reading`, 078's `gold.refresh_financials` and the
+  one-argument `gold.usable_facts` and `gold.best_facts` (080's body) that 080's and 078's files then
+  replace.
 - 069 first: its file puts back 061's `gold.latest_reading` (and drops `gold.not_computed`); 061's then
   puts back 060's.
 - 064 next: no other file touches `gold.best_facts`, but every guard checks it, so 064's file runs

@@ -85,6 +85,17 @@ def client():
                 " ARRAY[%s], now())", (cid, f"{cid}-26-000001", cid, f"{cid}-26-000001"))
         # 078: the screener's stored figures, as the gold build writes them
         conn.execute("SELECT gold.refresh_screen(%s)", ([A, B],))
+        # 086: gold's history, believed from the filing date (as a replay writes it)
+        conn.execute(
+            "INSERT INTO gold.financials_known (company_id, span, metric, period_end, known_from,"
+            " period_start, value, unit, value_source, source_tag, accession_no, form, filed,"
+            " source_accessions, ingested_at)"
+            " SELECT company_id, 'quarter', metric, period_end, filed, period_start, value, unit,"
+            " value_source, source_tag, accession_no, form, filed, source_accessions, ingested_at"
+            " FROM gold.quarterly_financials WHERE company_id IN (%s, %s)", (A, B))
+        conn.execute("SELECT ops.stamp_builds('known', %s, gold.rules_version())", ([A, B],))
+        conn.execute("INSERT INTO gold.known_companies (company_id, dates, facts, ids, replayed_at)"
+                     " VALUES (%s, '{}', '{}', '{}', now()), (%s, '{}', '{}', '{}', now())", (A, B))
         conn.execute("UPDATE silver.companies SET sic = '2080', sic_description = 'Beverages',"
                      " exchanges = '{NYSE}' WHERE company_id = %s", (A,))
         conn.execute("DELETE FROM authz.user_access WHERE user_id LIKE 't-%'")
@@ -130,6 +141,20 @@ def test_ttm_and_calendar_views_respect_rls(client, token, query):
     assert len(financials(client, token, "t-free", A, query)) == 1
     assert financials(client, token, "t-free", B, query) == []
     assert financials(client, token, "t-nobody", A, query) == []
+
+
+def test_point_in_time_reads_respect_rls(client, token):
+    """086-087: as of a day, from the history, under the same rule."""
+    assert len(financials(client, token, "t-free", A, "as_of=2026-09-01")) == 1
+    assert financials(client, token, "t-free", A, "as_of=2026-07-31") == []  # not filed yet
+    assert financials(client, token, "t-free", B, "as_of=2026-09-01") == []
+    assert financials(client, token, "t-nobody", A, "as_of=2026-09-01") == []
+    for user, want in (("t-free", [(A,)]), ("t-nobody", [])):
+        assert visible(client.app_conn, user,
+                       "SELECT DISTINCT company_id FROM gold.financials_at('2026-09-01')"
+                       " WHERE company_id IN (%s, %s)", (A, B)) == want
+        r = client.get(f"/v1/companies/{B}/restatements", headers=token(user))
+        assert r.status_code == 200 and r.json()["history"] is False
 
 
 def test_derived_financials_hidden_without_a_grant(client):
@@ -761,6 +786,7 @@ RLS_TABLES = {  # every table with a granted_* policy, and how to find a company
     "gold.quarterly_financials": "company_id", "gold.derived_financials": "company_id",
     "gold.segment_financials": "company_id", "gold.filing_sections": "company_id",
     "gold.screen_companies": "company_id", "gold.screen_figures": "company_id",  # 078
+    "gold.financials_known": "company_id",  # 086
 }
 
 

@@ -35,7 +35,7 @@ class ScreenStore:
     def __init__(self):
         self.compiled = []
 
-    def screen(self, user_id, compiled):
+    def screen(self, user_id, compiled, known_on=None):
         self.compiled.append(compiled)
         rows = []
         for cid, name in ((NVDA, "NVIDIA CORP"), (TSLA, "Tesla, Inc.")):

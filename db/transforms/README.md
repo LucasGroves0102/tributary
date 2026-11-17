@@ -65,7 +65,8 @@ the parser image's `parser-peers` job, not in SQL.
 | `ops.statement_backlog(reader)` (10-K/10-Qs with tables this statements.READER hasn't read) | `079_catchup_status_cleanups.sql` (before: `074_statement_reconciliation_confidence.sql`) |
 | `ops.section_check_backlog(int)` (documents no check of this version has seen; an anti-join) | `079_catchup_status_cleanups.sql` (before: `072_data_trust_checks.sql`) |
 | `ops.catchup_record` (nine arguments, with a note), `ops.catchup_skipped`, view `ops.catchup_status` (`note`; a skip counts as progress) | `079_catchup_status_cleanups.sql` (before: `071_auto_catchup.sql`) |
-| `gold.latest_row`, `gold.latest_equity`, `gold.quarterly_recent`, `gold.is_stale`, `gold.reading` (the readings' parts and rules), `gold.refresh_screen`, `gold.screen_backlog`, `gold.refresh_screen_backlog`, `gold.screen_company` | `078_screener_figures.sql` |
+| `gold.latest_row`, `gold.latest_equity`, `gold.quarterly_recent` (each with `p_as_of`: the history's versions believed then) | `087_point_in_time_reads.sql` (before: `078_screener_figures.sql`) |
+| `gold.is_stale`, `gold.reading` (the readings' parts and rules), `gold.refresh_screen`, `gold.screen_backlog`, `gold.refresh_screen_backlog`, `gold.screen_company` | `078_screener_figures.sql` |
 | `gold.screen_reading` (the stored cost of revenue beside a gross-sales venue's revenue) | `083_gross_sales_revenue.sql` (before: `078_screener_figures.sql`) |
 | `ops.stamp_builds`, `ops.build_failed`, `ops.catchup_begin`, `ops.catchup_record`, `ops.parser_catchup` (documents of an older parser back through the crawl's outbox), view `ops.catchup_status` | `071_auto_catchup.sql` |
 
@@ -91,3 +92,11 @@ How a stored figure may be read, called by the Query API under RLS or with
 | `gold.disagreeing_figures(companies)` (a tag disagreement's two figures, for the data notes; DEFINER, the access rule its only rule) | `075_disagreeing_figures.sql` |
 
 See [`../migrations/`](../migrations).
+
+## Point in time (read, not refreshed)
+
+| Function | Latest definition |
+|---|---|
+| `gold.financials_at(date)` (gold.financials as of a day, from the history), `gold.company_financials_at(company, day, span, metrics)` (one company: the history, else replayed at read time; SECURITY DEFINER, the read rule), `gold.restatements(company, day)` (consecutive versions whose value differs) | `087_point_in_time_reads.sql` |
+| `gold.latest_period`, `gold.amount_currency_of`, `gold.latest_reading` (`p_as_of`) | `087_point_in_time_reads.sql` (before: 035's, 061's and 083's) |
+| `gold.annual_per_share(company, years, day)` (the 10-K figures filed by the day) | `087_point_in_time_reads.sql` (before: `056_ifrs_currencies.sql`) |

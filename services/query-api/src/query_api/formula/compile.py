@@ -15,6 +15,10 @@ euro company's revenue is "EUR"), which the route reads as the series' currency.
 The SQL text is built only from fixed fragments and input indexes; companies, metrics, spans,
 lags, constants and dates are all bind parameters. The keyed rows also filter on the input
 companies as a literal array so the filter reaches gold.financials' base tables.
+
+As of a day (`as_of`, migrations 085-087; query_api.point_in_time): each input reads its company's
+rows as they stood at the end of that day (gold.company_financials_at, one company, span and metric
+an input) and the currency then (gold.amount_currency_of with the day); the rest is the same.
 """
 
 from dataclasses import dataclass
@@ -37,8 +41,10 @@ def alignment(basis: str, company_ids: set[str]) -> str:
 
 
 def compile_formula(ast: Node, a: Analysis, companies: dict[str | None, str], basis: str,
-                    start: date | None = None, end: date | None = None) -> Compiled:
-    """companies: ticker (None = default company) → company_id for every input."""
+                    start: date | None = None, end: date | None = None,
+                    as_of: date | None = None) -> Compiled:
+    """companies: ticker (None = default company) → company_id for every input. as_of: the
+    inputs as they stood at the end of that day."""
     params: list[Any] = []
     rows = []
     for i, inp in enumerate(a.inputs):
@@ -47,6 +53,17 @@ def compile_formula(ast: Node, a: Analysis, companies: dict[str | None, str], ba
     align = alignment(basis, {companies[i.ticker] for i in a.inputs})
     fiscal = align == "fiscal"
 
+    source = ("""CROSS JOIN LATERAL (SELECT gold.amount_currency(l.company_id) AS currency) cu
+    JOIN gold.financials f
+      ON f.company_id = l.company_id AND f.metric = l.metric AND f.span = l.span"""
+              if as_of is None else
+              # one input's company, span and metric as of the day (087)
+              """CROSS JOIN LATERAL (SELECT c.unit AS currency
+                        FROM gold.amount_currency_of(l.company_id, %s::date) c) cu
+    CROSS JOIN LATERAL gold.company_financials_at(l.company_id, %s::date, l.span,
+                                                  ARRAY[l.metric]) f""")
+    if as_of is not None:
+        params += [as_of, as_of]
     pivots = ",\n".join(f"max(value) FILTER (WHERE i = {i}) AS v{i}"
                         for i in range(len(a.inputs)))
     expr_params: list[Any] = []
@@ -62,9 +79,7 @@ keyed AS (
            (SELECT ff.cik FROM silver.financial_facts ff
             WHERE ff.accession_no = f.accession_no LIMIT 1) AS filer_cik
     FROM input l
-    CROSS JOIN LATERAL (SELECT gold.amount_currency(l.company_id) AS currency) cu
-    JOIN gold.financials f
-      ON f.company_id = l.company_id AND f.metric = l.metric AND f.span = l.span
+    {source}
     CROSS JOIN LATERAL (SELECT CASE WHEN %s AND f.fiscal_year IS NOT NULL
                                     THEN f.fiscal_year * 4 + f.fiscal_quarter - 1
                                     ELSE f.calendar_year * 4 + f.calendar_quarter - 1

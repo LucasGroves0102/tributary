@@ -1026,3 +1026,20 @@ Measured. Locally, the golden reference set (97 companies, two fiscal years each
 49,314 versions for 46,636 rows of gold (1.06x), 2,678 closed; 45 s for all (0.47 s a company, ~39 ms
 a view); the open versions equal gold row for row, and at every filing date and the day before it
 the history equals gold.financial_rows (tests/golden/test_point_in_time.py).
+
+### 087_point_in_time_reads.sql
+
+Point in time, part 3: reading gold as of a day. `gold.financials_at(day)` is gold.financials over
+the versions believed then (the same labels; inlined, RLS). `gold.company_financials_at(company,
+day, span, metrics)` (SECURITY DEFINER, `authz.readable_companies('financials')` its only rule,
+figure_facts' pattern) serves the single-company routes: the history when today's rules built it,
+else gold's pipeline replayed at read time (the same values, citing the latest filing to state a
+figure by then). The readings' probes take `p_as_of DEFAULT NULL` (gold.latest_row, latest_equity,
+quarterly_recent, amount_currency_of, latest_period, latest_reading): NULL is the old probes, a day
+reads the history's primary key behind one-time filters (UNION ALL / coalesce), so each stays one
+inlined SELECT and gold.reading stays the one definition of the rules; stale is against
+tributary.today, which the Query API sets to the day. The stored screener figures (078) are the NULL
+path's, unchanged: no TRUNCATE. `gold.annual_per_share(company, years, day)`: 10-K facts filed by the
+day. `gold.restatements(company, day)`: consecutive versions whose value differs (quarters and TTM
+sums, not computed ratios), each side's citation and first day, and whether the tag stayed the same;
+the kinds (split, another line, same line) are query_api/point_in_time.py's.
