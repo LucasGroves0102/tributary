@@ -332,6 +332,23 @@ back in Customize.
 
 ## Company page
 
+### As of a past day
+
+Point in time (query-api `point_in_time.py`): an "As of" date field under the head's actions, in the
+address as `?asof=YYYY-MM-DD` on every tab (`route.ts` `asOfDay`: a real day from 2009; today or
+later is today). Set, the key figures in the head (the screener row), Statements and Ratios read the
+Query API with `as_of`: the figures as they stood at the end of that day, from the filings filed by
+then, each citing the first filing that stated it, readings against that day. A quiet note under the
+field says so, that segments, data notes and the confidence mark are today's, and on other tabs that
+the day applies to Statements, Ratios and the key figures; "Back to today" clears it. No banner
+colour: the note is ink-2, like the head's meta.
+
+Restated figures: Statements asks for `originals=true`, today or as of a day, and a figure a later
+filing changed carries a small hollow square (ink-3, before the figure, like a callout's dot) and its
+hover the first figure, the filing that stated it and the day, and what changed it: a stock split,
+another line of the filings, or the company restating the same line (`data.ts` `restatedText`). The
+cell's text stays the figure.
+
 ### Head and Overview
 
 Seal pages so far (the first batch): the front door (the seal and name, a headline, the way in under

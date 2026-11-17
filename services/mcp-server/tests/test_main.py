@@ -18,7 +18,7 @@ def test_the_environment_sets_the_port_and_the_hosts_and_origins_it_accepts(h):
                           (LIST, {**host_ok, "Origin": "https://tributary.lucasgroves.dev"})],
                          app=app)
     assert [r.status_code for r in replies] == [421, 200, 403]
-    assert len(json.loads(replies[1].text)["result"]["tools"]) == 25
+    assert len(json.loads(replies[1].text)["result"]["tools"]) == 26
 
 
 def test_defaults(h):

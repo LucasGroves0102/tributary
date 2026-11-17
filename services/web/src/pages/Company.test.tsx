@@ -181,14 +181,14 @@ afterEach(() => {
   window.location.hash = "";
 });
 
-async function render(tab: CompanyTab = "overview", companyId = NVDA, scope: Scope | null = null, statements?: StatementView) {
+async function render(tab: CompanyTab = "overview", companyId = NVDA, scope: Scope | null = null, statements?: StatementView, asOf?: string) {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
   await act(async () =>
     root.render(
       <ScopeContext.Provider value={scope}>
-        <Company token="t" companyId={companyId} tab={tab} statements={statements} watched={false} onWatch={onWatch}
+        <Company token="t" companyId={companyId} tab={tab} statements={statements} asOf={asOf} watched={false} onWatch={onWatch}
           onChart={onChart} onChartMany={onChartMany} onAsk={onAsk} />
       </ScopeContext.Provider>,
     ),
@@ -401,6 +401,31 @@ it("statements: what's chosen comes from the address and goes back to it", async
   expect(window.location.hash).toBe(`#/company/${NVDA}/statements?kind=cf&period=ttm&basis=calendar&range=max`);
   await click(button("Income statement"));
   expect(window.location.hash).toBe(`#/company/${NVDA}/statements?period=ttm&basis=calendar&range=5y`);
+});
+
+it("as of a past day: the key figures and the statements read it, a note says so, and today is one click away", async () => {
+  await render("statements", NVDA, null, { kind: "bs" }, "2025-06-30");
+  const fin = paths().find((u) => u.pathname.endsWith("/financials"))!;
+  expect(fin.searchParams.get("as_of")).toBe("2025-06-30");
+  expect(fin.searchParams.get("originals")).toBe("true");
+  // the key figures as of the day; the confidence mark from today's row (it has no past)
+  expect(paths().filter((u) => u.pathname.endsWith("/screener")).map((u) => u.searchParams.get("as_of")))
+    .toEqual(expect.arrayContaining(["2025-06-30", null]));
+  const note = $(".co-asof-note")!;
+  expect(note.textContent).toContain("as they stood at the end of Jun 30, 2025");
+  expect(note.textContent).toContain("data notes and the confidence mark are today's");
+  expect(note.querySelector("a")!.getAttribute("href")).toBe(`#/company/${NVDA}/statements?kind=bs`);
+  expect(($(".co-asof-field input") as HTMLInputElement).value).toBe("2025-06-30");
+  // the tabs keep the day
+  expect([...container.querySelectorAll(".co-tabs a")].map((a) => a.getAttribute("href"))).toContain(`#/company/${NVDA}/ratios?asof=2025-06-30`);
+});
+
+it("today: no note, and the statements still ask for each restated figure's first version", async () => {
+  await render("statements");
+  expect($(".co-asof-note")).toBeNull();
+  const fin = paths().find((u) => u.pathname.endsWith("/financials"))!;
+  expect(fin.searchParams.get("as_of")).toBeNull();
+  expect(fin.searchParams.get("originals")).toBe("true");
 });
 
 it("statements: a balance sheet has no TTM, so it shows quarters and says why", async () => {

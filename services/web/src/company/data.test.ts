@@ -104,6 +104,21 @@ describe("header and key stats", () => {
   });
 });
 
+describe("a restated figure (point in time, query_api/point_in_time.py)", () => {
+  it("is marked, its hover giving the first figure, its filing, the day and what changed it", () => {
+    const now = { ...fin("net_income", "2025-01-31", "-88252000", "FY2025 Q4"),
+      original: { value: "-92282000", xbrl_tag: "us-gaap:NetIncomeLoss", accession_no: "0001535527-25-000008",
+        form: "10-K", filed: "2025-03-10", known_from: "2025-03-10", filing_url: null, kind: "same_line" as const } };
+    const t = metricTable([now, fin("revenue", "2025-01-31", "1058541000", "FY2025 Q4")], STATEMENTS.is.rows, "q");
+    const net = t.rows.find((r) => r.metric === "net_income")!.cells[0]!;
+    expect(net.restated).toBe("Restated: first reported as -$92.28M in the 10-K filed Mar 10, 2025 " +
+      "(0001535527-25-000008); the company restated it since.");
+    expect(net.title).toContain(net.restated!);
+    expect(net.text).toBe("-$88.25M"); // the figure stays the cell's text
+    expect(t.rows.find((r) => r.metric === "revenue")!.cells[0]!.restated).toBeUndefined();
+  });
+});
+
 describe("a company reporting in euros (migration 056)", () => {
   const eur = (metric: string, end: string, value: string, fiscal: string) =>
     ({ ...fin(metric, end, value, fiscal), unit: metric === "eps_diluted" ? "EUR/shares" : "EUR" });

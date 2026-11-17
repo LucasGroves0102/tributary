@@ -20,7 +20,7 @@ import { confidenceWords } from "../companies/rows";
 import { Folio } from "../components/Folio";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { day } from "../format";
-import { COMPANY_TABS, go, href, type CompanyTab } from "../route";
+import { COMPANY_TABS, EARLIEST_AS_OF, asOfDay, go, href, type CompanyTab } from "../route";
 import { NEW_WORK_TITLE, NewWorkForm, newWorkOffline } from "../workspaces/NewWork";
 import type { WrittenKind } from "../types";
 import type { Saved } from "../workspaces/useSaved";
@@ -36,6 +36,8 @@ interface Props {
   statements?: StatementView;
   /** the Filings tab opens What changed on this 10-K/10-Q (an alert's link) */
   changes?: string;
+  /** a past day (YYYY-MM-DD, `?asof=`): the figures as they stood at its end */
+  asOf?: string;
   /** null while the watchlist loads or is unavailable */
   watched: boolean | null;
   onWatch: (watch: boolean) => Promise<void>;
@@ -50,16 +52,20 @@ interface Props {
 
 /** The tearsheet: who the company is (public metadata), then its data by tab. Identity, the
  * filing index and expected dates are public; values need financials, text needs filings. */
-export function Company({ token, companyId, tab, statements, changes, watched, onWatch, onChart, onChartMany, onOpenChart, onAsk, saved }: Props) {
-  const meta = useLoad(companyId, () =>
+export function Company({ token, companyId, tab, statements, changes, asOf, watched, onWatch, onChart, onChartMany, onOpenChart, onAsk, saved }: Props) {
+  const meta = useLoad(`${companyId}|${asOf ?? ""}`, () =>
     // a bank's key stats need its own columns (F4); an older API refuses them (422): the standard set
-    screener(token, { company_id: [companyId], columns: HEADER_COLUMNS_WITH_BANK, sort: "name", limit: 1 }).catch((e) => {
-      if (e instanceof ApiError && e.status === 422) return screener(token, { company_id: [companyId], columns: HEADER_COLUMNS, sort: "name", limit: 1 });
+    screener(token, { company_id: [companyId], columns: HEADER_COLUMNS_WITH_BANK, sort: "name", limit: 1, ...(asOf ? { as_of: asOf } : {}) }).catch((e) => {
+      if (e instanceof ApiError && e.status === 422) return screener(token, { company_id: [companyId], columns: HEADER_COLUMNS, sort: "name", limit: 1, ...(asOf ? { as_of: asOf } : {}) });
       throw e;
     }).then(
       (r) => r.rows.find((x) => x.company_id === companyId) ?? null,
     ),
   );
+  // the confidence mark is today's (074): as of a past day the row has none, so today's row says it
+  const todayRow = useLoad(asOf ? companyId : null, () =>
+    screener(token, { company_id: [companyId], columns: HEADER_COLUMNS, sort: "name", limit: 1 })
+      .then((r) => r.rows.find((x) => x.company_id === companyId) ?? null));
   const expected = useLoad(companyId, () => expectedFilingsOf(token, companyId));
   // New thesis / New model from the More menu: its form opens under the actions
   const [newKind, setNewKind] = useState<WrittenKind | null>(null);
@@ -95,6 +101,7 @@ export function Company({ token, companyId, tab, statements, changes, watched, o
   // the SEC's code for where it is incorporated, in words ("Y9" is Jersey); a code EDGAR doesn't list isn't shown
   const place = placeName(h.state);
   const more = h.tickers.length > 1 ? h.tickers.slice(1) : [];
+  const confidence = asOf ? (todayRow?.state === "ok" ? todayRow.data?.confidence ?? null : null) : row.confidence;
 
   return (
     <div className="page company-page">
@@ -115,8 +122,8 @@ export function Company({ token, companyId, tab, statements, changes, watched, o
           {place && <span title={`EDGAR's code: ${h.state}`}>Incorporated in {place}</span>}
           {h.currency && <span>Figures in {h.currency}</span>}
           {/* 074: how far to trust the figures, quiet, its reasons in the hover */}
-          {row.confidence && (() => {
-            const c = confidenceWords(row.confidence);
+          {confidence && (() => {
+            const c = confidenceWords(confidence);
             return <span className="defined co-confidence" title={c.hover}>{c.label}</span>;
           })()}
           {/* what this user's access covers is the CIK's hover, not a mark in the masthead */}
@@ -197,9 +204,10 @@ export function Company({ token, companyId, tab, statements, changes, watched, o
           <NewWorkForm key={newKind} kind={newKind} token={token} saved={saved} company={{ id: companyId, name: ticker }}
             onDone={() => setNewKind(null)} />
         )}
+        <AsOfControl companyId={companyId} tab={tab} asOf={asOf} statements={statements} />
         <nav className="tabs co-tabs" aria-label="Company sections">
           {tabs.map(([t, label]) => (
-            <a key={t} href={href({ view: "company", companyId, tab: t })} aria-current={t === tab ? "page" : undefined}>
+            <a key={t} href={href({ view: "company", companyId, tab: t, ...(asOf ? { asOf } : {}) })} aria-current={t === tab ? "page" : undefined}>
               {label}
             </a>
           ))}
@@ -211,16 +219,49 @@ export function Company({ token, companyId, tab, statements, changes, watched, o
         <EarningsView token={token} companyId={companyId} name={h.name} canReadFilings={row.access.includes("filings")}
           canReadFinancials={row.access.includes("financials")} />
       )}
-      {tab === "statements" && <Statements token={token} companyId={companyId} name={h.name} ticker={ticker} notApplicable={row.not_applicable} view={statements} />}
+      {tab === "statements" && <Statements token={token} companyId={companyId} name={h.name} ticker={ticker} notApplicable={row.not_applicable} view={statements} asOf={asOf} />}
       {tab === "revenue" && (
         <Revenue token={token} companyId={companyId} name={h.name} ticker={ticker} saved={saved ?? null} onOpenChart={onOpenChart} />
       )}
       {tab === "segments" && <Segments token={token} companyId={companyId} name={h.name} />}
-      {tab === "ratios" && <Ratios token={token} companyId={companyId} name={h.name} ticker={ticker} notApplicable={row.not_applicable} />}
+      {tab === "ratios" && <Ratios token={token} companyId={companyId} name={h.name} ticker={ticker} notApplicable={row.not_applicable} asOf={asOf} />}
       {tab === "filings" && <Filings key={changes ?? ""} token={token} companyId={companyId} name={h.name} canRead={row.access.includes("filings")} fiscalYearEnd={row.fiscal_year_end} initialDiff={changes} />}
       {tab === "notes" && <DataNotes token={token} companyId={companyId} name={h.name} canReadFilings={row.access.includes("filings")} />}
       {tab === "peers" && <Peers token={token} companyId={companyId} name={h.name} onChart={onChartMany} />}
       {tab === "price" && <Price token={token} companyId={companyId} name={h.name} />}
+    </div>
+  );
+}
+
+/** The tabs whose figures follow the As of day; the others show today's (the banner says so). */
+const AS_OF_TABS: readonly CompanyTab[] = ["statements", "ratios"];
+
+/** "As of": a past day for the figures (point in time, query-api point_in_time.py), in the address
+ * (`?asof=`) so it can be linked. Empty is today. Set, a quiet note says what it means and what
+ * stays today's, with the way back. */
+function AsOfControl({ companyId, tab, asOf, statements }: { companyId: string; tab: CompanyTab; asOf?: string; statements?: StatementView }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const set = (value: string) => {
+    const picked = asOfDay(value);
+    go({ view: "company", companyId, tab, ...(statements ? { statements } : {}), ...(picked && picked < today ? { asOf: picked } : {}) });
+  };
+  return (
+    <div className="co-asof">
+      <label className="co-asof-field">
+        <span>As of</span>
+        <input type="date" className="field narrow" min={EARLIEST_AS_OF} max={today} value={asOf ?? ""}
+          aria-describedby={asOf ? "co-asof-note" : undefined}
+          title="A past day: the figures as they stood at its end, from the filings filed by then"
+          onChange={(e) => set(e.target.value)} />
+      </label>
+      {asOf && (
+        <p className="meta co-asof-note" id="co-asof-note" role="note">
+          Figures as they stood at the end of {day(asOf, true)}, from the filings filed by then
+          {AS_OF_TABS.includes(tab) ? "" : " (on the Statements and Ratios tabs and the key figures above)"}.
+          Segments, data notes and the confidence mark are today's.{" "}
+          <a href={href({ view: "company", companyId, tab, ...(statements ? { statements } : {}) })}>Back to today</a>
+        </p>
+      )}
     </div>
   );
 }

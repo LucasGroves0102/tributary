@@ -529,6 +529,8 @@ export interface TableCell {
   derived: boolean;
   /** a quarter called out by the API (company/callouts.ts words it) */
   callout?: Callout;
+  /** a later filing changed the figure (`original`): what it was first, in words (restatedText) */
+  restated?: string;
   /** what the figure is made of can be opened (F5): a derived figure, a computed one, a sum of tags */
   opens?: boolean;
   /** shown by a style: a reconciliation that ties, or doesn't */
@@ -672,6 +674,18 @@ export function withAnnualPerShare(rows: FinancialRow[], annual: FinancialRow[],
   return [...rows, ...placed];
 }
 
+/** What a restated figure was first (query_api/point_in_time.py): the value, the filing that stated
+ * it, the day, and what changed it. */
+export function restatedText(o: NonNullable<FinancialRow["original"]>, kind: Parameters<typeof fmt>[0], sign: number,
+  currency: string): string {
+  const first = Number(o.value);
+  const what = o.kind === "split" ? "a stock split restated it since"
+    : o.kind === "another_line" ? "read from another line of the filings since"
+      : "the company restated it since";
+  return `Restated: first reported as ${Number.isFinite(first) ? fmt(kind, sign * first, currency) : o.value}` +
+    ` in the ${o.form ?? "filing"} filed ${day(o.filed, true)} (${o.accession_no}); ${what}.`;
+}
+
 function cellTitle(label: string, r: FinancialRow): string {
   if (r.derivation || r.splits?.length) return perShareTitle(label, r);
   const src = r.citation.xbrl_tag?.startsWith("derived:")
@@ -785,7 +799,10 @@ export function metricTable(
             }
             const callout = called.get(`${metric}|${end}`);
             const outflow = sign < 0 ? ` Shown negative: an ${OUTFLOW}; the filing tags the amount paid, ${fmt(kind, v, currency)}.` : "";
-            return { ...source, text: figure, title: cellTitle(name, r) + outflow, ...(callout ? { callout } : {}) };
+            const restated = r.original ? restatedText(r.original, kind, sign, currency) : null;
+            const title = cellTitle(name, r) + outflow;
+            return { ...source, text: figure, title: restated ? `${title}${title.endsWith(".") ? "" : "."} ${restated}` : title,
+              ...(callout ? { callout } : {}), ...(restated ? { restated } : {}) };
           }),
         };
       })

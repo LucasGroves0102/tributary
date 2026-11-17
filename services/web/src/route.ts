@@ -40,6 +40,8 @@ export type Route =
       statements?: StatementView;
       /** the Filings tab with What changed open on this 10-K/10-Q (an alert's link) */
       changes?: string;
+      /** a past day (YYYY-MM-DD): the figures as they stood at its end (`?asof=`, any tab) */
+      asOf?: string;
     }
   | {
       view: "filing";
@@ -100,6 +102,15 @@ const ACCESSION = /^\d{10}-\d{2}-\d{6}$/;
 /** Section keys as the Query API takes them: 10-K "1A", 10-Q "II-1A", 8-K "2.02", "EX-99.1". */
 export const SECTION = /^[A-Z0-9.?-]{1,8}$/;
 const MAX_Q = 200;
+/** The first day point-in-time figures go back to (query-api point_in_time.EARLIEST). */
+export const EARLIEST_AS_OF = "2009-01-01";
+
+/** A past day as the address may name it: YYYY-MM-DD, a real date, from EARLIEST_AS_OF. */
+export function asOfDay(value: string | null | undefined): string | undefined {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value) || value < EARLIEST_AS_OF) return undefined;
+  const d = new Date(`${value}T00:00:00Z`);
+  return Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== value ? undefined : value;
+}
 const SIMPLE = new Set(["chart", "ask", "about", "status", "api", "settings", "alerts"]);
 
 /** "#/company/0001045810" → route; anything unrecognized is Home. Companies keeps its
@@ -140,7 +151,8 @@ export function parse(hash: string): Route {
     return view === "workspace" ? { view, workspaceId: a! } : { view, itemId: a! };
   }
   if (view === "company" && CIK.test(a ?? "")) {
-    if (!b || b === "overview" || !TABS.has(b)) return { view: "company", companyId: a! };
+    const asOf = asOfDay(new URLSearchParams(query).get("asof"));
+    if (!b || b === "overview" || !TABS.has(b)) return { view: "company", companyId: a!, ...(asOf ? { asOf } : {}) };
     const statements = b === "statements" ? parseStatementView(query) : {};
     const changes = b === "filings" ? new URLSearchParams(query).get("changes") : null;
     return {
@@ -149,6 +161,7 @@ export function parse(hash: string): Route {
       tab: b as CompanyTab,
       ...(Object.keys(statements).length ? { statements } : {}),
       ...(changes && ACCESSION.test(changes) ? { changes } : {}),
+      ...(asOf ? { asOf } : {}),
     };
   }
   if (view === "filing" && CIK.test(a ?? "") && ACCESSION.test(b ?? "")) {
@@ -195,8 +208,9 @@ export function href(route: Route): string {
     case "model":
       return `#/${route.view}/${encodeURIComponent(route.itemId)}`;
     case "company": {
-      const q = route.tab === "statements" && route.statements ? statementQuery(route.statements)
+      const tabQ = route.tab === "statements" && route.statements ? statementQuery(route.statements)
         : route.tab === "filings" && route.changes ? `changes=${route.changes}` : "";
+      const q = [tabQ, route.asOf ? `asof=${route.asOf}` : ""].filter(Boolean).join("&");
       return `#/company/${route.companyId}` + (route.tab && route.tab !== "overview" ? `/${route.tab}` : "") + (q ? `?${q}` : "");
     }
     case "filing": {

@@ -6806,6 +6806,21 @@ table.t.release-grid {
 }
 
 /* the mark sits just before the figure it is about */
+/* a figure a later filing changed (point in time): a small hollow square, ink; the first figure,
+   its filing and day are in the cell's hover */
+.restated-mark {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border: 1px solid var(--ink-3);
+  vertical-align: middle;
+}
+
+.t td.n.restated > .restated-mark {
+  margin-right: 5px;
+  vertical-align: 1px;
+}
+
 .t td.n.called > .callout-mark {
   margin-right: 5px;
   vertical-align: 1px;

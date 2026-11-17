@@ -87,13 +87,15 @@ function Cell({ cell, blank = NO_DATA_CELL, companyId, note }: { cell: TableCell
   }
   const { reader, edgar } = cellLinks(cell, companyId);
   const form = cell.source?.form ?? "filing";
-  const classes = ["n", cell.derived && "derived", cell.callout && "called", cell.tone && `tone-${cell.tone}`].filter(Boolean).join(" ");
+  const classes = ["n", cell.derived && "derived", cell.callout && "called", cell.restated && "restated", cell.tone && `tone-${cell.tone}`].filter(Boolean).join(" ");
   // a negative amount in parentheses, as a filing prints it; the hover and the CSV keep the sign
   const text = paren(cell.text);
   return (
     <td className={classes} title={note ? `${note}\n\n${cell.title}` : cell.title}>
       {/* a callout's mark: the sentence is in the hover and listed under the table */}
       {cell.callout && <span className="callout-mark" aria-hidden="true" />}
+      {/* restated since first reported: the first figure, its filing and day are in the hover */}
+      {cell.restated && <span className="restated-mark" aria-hidden="true" />}
       {reader ? (
         <a href={reader} aria-label={`${text}: open the ${form} in Tributary's reader`}>{text}</a>
       ) : edgar ? (
@@ -274,22 +276,23 @@ export function BlanksLegend() {
 
 /** Statement, period, basis and range live in the address (route.ts), so a view can be linked,
  * bookmarked and undone with Back. Range applies to Quarterly and TTM; Annual is ten years. */
-export function Statements({ token, companyId, name, ticker, notApplicable = [], view = {} }: TableProps & { view?: StatementView }) {
+export function Statements({ token, companyId, name, ticker, notApplicable = [], view = {}, asOf }: TableProps & { view?: StatementView; asOf?: string }) {
   const kind: Statement = view.kind ?? "is";
   // the address keeps TTM for the statements that have one
   const period: Period = kind === "bs" && view.period === "ttm" ? "q" : view.period ?? "q";
   const basis: Basis = view.basis ?? "fiscal";
   const range: StatementRange = view.range ?? "8q";
   const set = (patch: StatementView) =>
-    go({ view: "company", companyId, tab: "statements", statements: { ...view, ...patch } });
+    go({ view: "company", companyId, tab: "statements", statements: { ...view, ...patch }, ...(asOf ? { asOf } : {}) });
   const req = statementRequest(period, range, kind);
   // a bank (035's rule) gets its own lines (F4); an older API refuses their names (422): the
   // standard statement then, as before
   const bank = notApplicable.length > 0;
   const annual = period === "a" && kind === "is";
   const asFiled = view.shares === "filed";
-  const load = useLoad(`${companyId}|${kind}|${period}|${basis}|${req.quarters}|${bank}|${asFiled}`, async (): Promise<{ rows: FinancialRow[]; metrics: Line[]; callouts: Callout[]; annualOnly: boolean; perShare: boolean }> => {
-    const once = (rows: Line[]) => financialsView(token, companyId, req.quarters, rows.map(([m]) => m), req.view, basis, false, period === "q")
+  const load = useLoad(`${companyId}|${kind}|${period}|${basis}|${req.quarters}|${bank}|${asFiled}|${asOf ?? ""}`, async (): Promise<{ rows: FinancialRow[]; metrics: Line[]; callouts: Callout[]; annualOnly: boolean; perShare: boolean }> => {
+    // each figure a later filing changed comes with its first version (`original`): its cell is marked
+    const once = (rows: Line[]) => financialsView(token, companyId, req.quarters, rows.map(([m]) => m), req.view, basis, false, period === "q", asOf, true)
       .then((f) => ({ f, metrics: rows }));
     // an API older than migration 049 refuses its metrics (422): the statement without them
     const ask = (rows: Line[]) => once(rows).catch((e) => {
@@ -309,11 +312,11 @@ export function Statements({ token, companyId, name, ticker, notApplicable = [],
       // (null) or a failure leaves the statement's own figures, the annual table the 10-K's
       kind === "is"
         ? fetchPerShare(token, companyId, period === "a" ? "annual" : period === "ttm" ? "ttm" : "quarter", basis, asFiled,
-          Math.min(req.quarters, 120)).catch(() => null)
+          Math.min(req.quarters, 120), asOf).catch(() => null)
         : null,
     ]);
     const older = kind === "is" && perShare === null && annual
-      ? await annualPerShare(token, companyId).then((a) => a.rows).catch(() => [] as FinancialRow[])
+      ? await annualPerShare(token, companyId, 10, asOf).then((a) => a.rows).catch(() => [] as FinancialRow[])
       : null;
     const rows = perShare
       ? withPerShare(fin.f.rows, perShare.rows, period, basis)
@@ -444,7 +447,7 @@ export function Statements({ token, companyId, name, ticker, notApplicable = [],
   );
 }
 
-export function Ratios({ token, companyId, name, ticker, notApplicable = [] }: TableProps) {
+export function Ratios({ token, companyId, name, ticker, notApplicable = [], asOf }: TableProps & { asOf?: string }) {
   const [opened, setOpened] = useState<{ metric: string; periodEnd: string } | null>(null);
   // with readings, the API says where debt/equity and ROE read n/m on negative equity
   // (`not_meaningful_periods`, from the company's own equity periods), so those aren't gaps;
@@ -452,8 +455,8 @@ export function Ratios({ token, companyId, name, ticker, notApplicable = [] }: T
   // a bank (the API's not_applicable list, 035/058) reads its own ratios; an older API refuses a bank
   // line's name (422): the usual ratios then, as before
   const bank = notApplicable.length > 0;
-  const load = useLoad(`${companyId}|${bank}`, async () => {
-    const ask = (lines: Line[]) => financialsView(token, companyId, 8, [...lines.map(([m]) => m), "stockholders_equity"], "ttm", "fiscal", true)
+  const load = useLoad(`${companyId}|${bank}|${asOf ?? ""}`, async () => {
+    const ask = (lines: Line[]) => financialsView(token, companyId, 8, [...lines.map(([m]) => m), "stockholders_equity"], "ttm", "fiscal", true, false, asOf)
       .then((f) => ({ ...f, lines }));
     return bank
       ? ask(BANK_RATIOS).catch((e) => {

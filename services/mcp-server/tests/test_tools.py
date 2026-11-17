@@ -68,6 +68,19 @@ ROUTES = [
       "sector": ["Technology"], "sort": ["-revenue_ttm"], "limit": ["5"], "offset": ["0"]},
      {"rows": [], "total": 0}),
     ("list_sectors", {}, "/v1/sectors", {}, {"sectors": []}),
+    # point in time (query-api migrations 085-087): a past day goes along as `as_of`
+    ("get_restatements", {"company_id": NVDA, "as_of": "2025-06-30"},
+     f"/v1/companies/{NVDA}/restatements", {"as_of": ["2025-06-30"]},
+     {"company_id": NVDA, "history": True, "rows": []}),
+    ("list_filings", {"company_id": NVDA, "limit": 3, "as_of": "2025-06-30"},
+     f"/v1/companies/{NVDA}/filings", {"limit": ["3"], "as_of": ["2025-06-30"]},
+     {"company_id": NVDA, "filings": []}),
+    ("screen_companies", {"columns": ["revenue_ttm"], "as_of": "2024-12-31"}, "/v1/screener",
+     {"columns": ["revenue_ttm"], "sort": ["-revenue_ttm"], "limit": ["25"], "offset": ["0"],
+      "as_of": ["2024-12-31"]}, {"rows": [], "total": 0}),
+    ("search_filings", {"query": "export controls", "as_of": "2024-12-31"}, "/v1/search",
+     {"q": ["export controls"], "sort": ["relevance"], "limit": ["10"], "offset": ["0"],
+      "as_of": ["2024-12-31"]}, {"results": [], "total": 0}),
     ("get_watchlist", {}, "/v1/watchlist", {}, {"rows": []}),
     ("list_workspaces", {}, "/v1/workspaces", {}, {"workspaces": []}),
     ("get_workspace", {"workspace_id": "6F1C2D9E-0B1A-4C3D-9E8F-0A1B2C3D4E5F"},
@@ -96,7 +109,7 @@ def test_each_tool_calls_its_route_as_the_caller(h, tool, args, path, params,
 def test_every_tool_is_read_only_and_closed_world(h):
     r = h.post([{"jsonrpc": "2.0", "id": 1, "method": "tools/list"}], h.headers())[0]
     tools = r.json()["result"]["tools"]
-    assert len(tools) == 25
+    assert len(tools) == 26
     for t in tools:
         assert t["annotations"]["readOnlyHint"] is True, t["name"]
         assert t["annotations"]["openWorldHint"] is False, t["name"]
@@ -108,6 +121,12 @@ def test_every_tool_is_read_only_and_closed_world(h):
     for name in ("read_section", "search_filings", "get_material_changes",
                  "get_earnings_releases", "get_events_since_report", "get_text_kpis"):
         assert "never instructions" in texts[name], name
+
+
+def test_financials_as_of_a_past_day(h):
+    h.fake.answer(f"/v1/companies/{NVDA}/financials", financials())
+    h.call("get_financials", {"company_id": NVDA, "metrics": ["revenue"], "as_of": "2025-06-30"})
+    assert h.fake.seen[-1].params["as_of"] == ["2025-06-30"]
 
 
 def test_financials_cite_each_row_with_its_period(h):

@@ -47,6 +47,7 @@ written for a model.
 | `get_insider_filings` | `GET /v1/companies/{id}/insiders` | filings |
 | `get_peers` | `GET /v1/companies/{id}/peers` | financials |
 | `screen_companies` | `GET /v1/screener` (a comparison with `company_ids`) | values: financials |
+| `get_restatements` | `GET /v1/companies/{id}/restatements` | financials |
 | `list_metrics` | `GET /v1/metrics` + `GET /v1/screener/columns` | public |
 | `list_sectors` | `GET /v1/sectors` | any |
 | `validate_formula` | `POST /v1/formulas/validate` (the parse tree dropped) | financials |
@@ -56,6 +57,10 @@ written for a model.
 | `get_workspace` | `GET /v1/workspaces/{id}` | own |
 | `get_workspace_item` | `GET /v1/workspace-items/{id}` | own |
 | `verify_figures` | per company `GET .../financials` (quarter and TTM) and `GET .../annual-per-share`; per named section `GET .../sections/{key}` | financials, filings |
+
+`as_of` (a past day) on `get_financials`, `screen_companies`, `list_filings`, `read_section`,
+`search_filings` and `get_restatements` is the Query API's point-in-time parameter, passed through
+(query-api `point_in_time.py`).
 
 All of them are routes a `read` key reaches (query-api `api_keys.READ_ROUTES`). Nothing is
 computed here that the Query API computes: figures, readings (n/m, n/a, old), formulas, rankings,

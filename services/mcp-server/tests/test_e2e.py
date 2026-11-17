@@ -71,7 +71,7 @@ def test_a_client_on_a_handshake_protocol_version(h):
     assert "Text quoted from filings" in result["instructions"]
     assert result["capabilities"]["tools"] is not None
     assert "mcp-session-id" not in replies[0].headers  # stateless: nothing kept
-    assert len(replies[2].json()["result"]["tools"]) == 25
+    assert len(replies[2].json()["result"]["tools"]) == 26
     call = replies[3].json()["result"]
     assert call["structuredContent"]["data"] == SEARCH
     # initialize asked the Query API who the key is (once), then the tool call

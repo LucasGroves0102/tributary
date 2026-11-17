@@ -48,7 +48,7 @@ Hash routes (`src/route.ts`; an unknown route goes Home, `#/explore` to Companie
 |---|---|---|
 | `#/` | Home: Start an analysis, the watchlist, new filings, data notes; Customize for more cards | [Home](DESIGN.md#home) |
 | `#/companies?<filters>` | the screener (`/v1/screener`): filters in the URL, sectors, columns, CSV through the API | [Screens](DESIGN.md#screens-hash-routes) |
-| `#/company/<id>[/<tab>]` | a company: Overview, Earnings, Statements, Revenue, Segments, Ratios, Filings, Data notes, Peers, Price (only with Connect your data) | [Company page](DESIGN.md#company-page) |
+| `#/company/<id>[/<tab>][?asof=<day>]` | a company: Overview, Earnings, Statements, Revenue, Segments, Ratios, Filings, Data notes, Peers, Price (only with Connect your data); `asof`: its figures as they stood at the end of a past day | [Company page](DESIGN.md#company-page), [As of](DESIGN.md#as-of-a-past-day) |
 | `#/filing/<id>/<accession>[/<section>]` | the filing reader: whole sections as paragraphs and tables, search, side by side | [Filing reader](DESIGN.md#filing-reader) |
 | `#/search` | full-text search across filings | [Search](DESIGN.md#search) |
 | `#/chart` | the chart builder (formula layers, CSV, SVG and PNG export) | [Chart builder](DESIGN.md#chart-builder) |
