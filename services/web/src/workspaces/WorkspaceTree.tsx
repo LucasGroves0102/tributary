@@ -20,6 +20,8 @@ interface Props {
   saved: Saved;
   onOpen: (itemId: string) => void;
   onError: (message: string) => void;
+  /** saved screens that are watched (watches/useWatches): marked with a bell */
+  watched?: ReadonlySet<string>;
 }
 
 const why = (e: unknown) => failureReason(e);
@@ -28,7 +30,7 @@ const why = (e: unknown) => failureReason(e);
  * folder; its name opens the workspace page (or the analysis), where rename, duplicate and delete
  * have a proper place (workspaces/Actions.tsx). An item's name opens the item. "⋯" on a row is the
  * shortcut to the same actions: a strip under the row, so the name never gives up room for them. */
-export function WorkspaceTree({ saved, onOpen, onError }: Props) {
+export function WorkspaceTree({ saved, onOpen, onError, watched }: Props) {
   const [editing, setEditing] = useState<Editing>(null);
   const [closed, setClosed] = useState<ReadonlySet<string>>(new Set());
   const [menu, setMenu] = useState<string | null>(null);
@@ -85,6 +87,7 @@ export function WorkspaceTree({ saved, onOpen, onError }: Props) {
               workspace={w}
               collapsed={closed.has(w.workspace_id)}
               openIds={openIds}
+              watched={watched}
               editing={editing}
               edit={edit}
               menu={menu}
@@ -127,6 +130,7 @@ function Folder({
   workspace: w,
   collapsed,
   openIds,
+  watched,
   editing,
   edit,
   menu,
@@ -139,6 +143,7 @@ function Folder({
   workspace: SavedWorkspace;
   collapsed: boolean;
   openIds: Set<string | undefined>;
+  watched?: ReadonlySet<string>;
   editing: Editing;
   edit: (e: Editing) => void;
   menu: string | null;
@@ -206,7 +211,7 @@ function Folder({
       {!collapsed && w.items.length === 0 && <p className="side-note">Empty. Use Save on a chart, Compare or Companies.</p>}
       {!collapsed &&
         w.items.map((i) => (
-          <Item key={i.item_id} item={i} on={openIds.has(i.item_id)} editing={editing} edit={edit} menu={menu} setMenu={setMenu} onOpen={onOpen} run={run} saved={saved} />
+          <Item key={i.item_id} item={i} on={openIds.has(i.item_id)} watchedItem={!!watched?.has(i.item_id)} editing={editing} edit={edit} menu={menu} setMenu={setMenu} onOpen={onOpen} run={run} saved={saved} />
         ))}
     </div>
   );
@@ -215,6 +220,7 @@ function Folder({
 function Item({
   item: i,
   on,
+  watchedItem,
   editing,
   edit,
   menu,
@@ -225,6 +231,8 @@ function Item({
 }: {
   item: SavedItem;
   on: boolean;
+  /** a watched saved screen */
+  watchedItem: boolean;
   editing: Editing;
   edit: (e: Editing) => void;
   menu: string | null;
@@ -250,6 +258,13 @@ function Item({
       <div className={on ? "ws-row it on" : "ws-row it"}>
         <button className="ws-open" onClick={() => onOpen(i.item_id)} title={`Open in ${KIND_PAGES[i.kind]}: ${i.name}`}>
           <span className={`tag ${i.kind}`}>{KIND_LABELS[i.kind]}</span> <span className="ws-name">{i.name}</span>
+          {watchedItem && (
+            <svg className="ws-watched" width="12" height="12" viewBox="0 0 16 16" role="img" aria-label="watched">
+              <title>Watched: you hear when companies enter or leave it</title>
+              <path d="M8 1.5a4 4 0 0 0-4 4v2.6L2.6 11h10.8L12 8.1V5.5a4 4 0 0 0-4-4zM6.3 12.5a1.8 1.8 0 0 0 3.4 0"
+                fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
+            </svg>
+          )}
         </button>
         <Dots open={menu === key} label={`Actions for ${i.name}`} onClick={() => setMenu(menu === key ? null : key)} />
       </div>

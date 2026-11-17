@@ -2023,6 +2023,8 @@ export interface WebhookDelivery {
   id: string;
   webhook_id: string;
   notification_id: string | null;
+  /** a watched screen's alert (app migration 024; absent otherwise and from an older API) */
+  screen_alert_id?: string;
   test: boolean;
   status: "pending" | "delivered" | "failed";
   attempts: number;
@@ -2064,6 +2066,86 @@ export interface AlertSettings {
   schedule: string;
   lookback_days: number;
   pending_days: number;
+}
+
+// --- saved screens that alert (Query API /v1/watches, /v1/alerts/screens; query_api/watches.py) --
+
+/** A line on a watched screen: a column's value rising above or falling below `threshold` (API
+ * units: ratios as fractions), for one company or (null) any company in the screen. */
+export interface WatchLine {
+  column: string;
+  label: string;
+  direction: "above" | "below";
+  threshold: string;
+  company_id: string | null;
+}
+
+/** null: not checked yet; baseline: the first check recorded who's in it (no alert); ok; too_broad:
+ * more companies than `max_companies`, nothing alerted; failed: it couldn't be read (a metric it
+ * shows is gone, or it took too long), waits for the next night. */
+export type WatchOutcome = "baseline" | "ok" | "too_broad" | "failed" | null;
+
+export interface ScreenWatch {
+  id: string;
+  source: "screen";
+  /** the saved screen (a workspace item of kind screen) */
+  item_id: string;
+  name: string;
+  entering: boolean;
+  leaving: boolean;
+  /** the screener columns it was shown with when the watch was saved */
+  columns: string[];
+  lines: WatchLine[];
+  checked_at: string | null;
+  outcome: WatchOutcome;
+  /** companies in it at the last check */
+  companies: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ScreenWatches {
+  watches: ScreenWatch[];
+  max_watches: number;
+  max_lines: number;
+  max_companies: number;
+  max_listed: number;
+  schedule: string;
+}
+
+export interface ScreenAlertCrossing {
+  line: number;
+  column: string;
+  label: string;
+  direction: "above" | "below";
+  threshold: string;
+  company_id: string | null;
+  unit: string | null;
+  display: string | null;
+  companies: { company_id: string; value: string }[];
+  more: number;
+}
+
+/** One check that found something: companies listed are only those the user still reads
+ * (`hidden` counts the rest); `more`: listed beyond the alert's cap. */
+export interface ScreenAlert {
+  id: string;
+  watch_id: string;
+  item_id: string;
+  name: string;
+  figures_at?: string | null;
+  crossed?: ScreenAlertCrossing[];
+  entered?: { companies: string[]; more: number };
+  left?: { companies: string[]; more: number };
+  hidden: number;
+  created_at: string;
+  read_at: string | null;
+}
+
+export interface ScreenAlerts {
+  alerts: ScreenAlert[];
+  has_more: boolean;
+  schedule: string;
 }
 
 /** A personal API key as the Query API lists it (query_api/api_keys.py): never the key itself,

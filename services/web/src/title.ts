@@ -55,6 +55,8 @@ function what(route: Route, k: Known): string {
       return k.saved?.(route.itemId) ?? "Thesis";
     case "model":
       return k.saved?.(route.itemId) ?? "Model";
+    case "screen":
+      return k.saved?.(route.itemId) ?? "Saved screen";
     case "analysis":
       return (route.projectId && k.saved?.(route.projectId)) || "Analysis";
     default:

@@ -222,6 +222,9 @@ export function pageContext(
       return { label: "Settings", suggestions: [] };
     case "alerts":
       return { label: "Alerts", suggestions: general(watched).slice(0, 2) };
+    case "screen":
+      // a saved screen's link, on its way to Companies
+      return { label: "Companies", suggestions: [] };
     case "portfolio":
       // the assistant can't read holdings (no tool, by design): nothing to suggest about them
       return { label: "Portfolio", suggestions: [] };

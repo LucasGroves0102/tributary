@@ -102,6 +102,8 @@ export function uiContext(route: Route, chart: ChartState, name: (id: string) =>
     page: route.view === "status" || route.view === "settings" || route.view === "api" || route.view === "portfolio"
       || route.view === "data" ? "about"
       : route.view === "alerts" ? "home"
+      // a saved screen's link is Companies a moment later (agent-api's pages have no "screen")
+      : route.view === "screen" ? "companies"
       : route.view === "analysis" ? (route.step === "thesis" || route.step === "model" ? route.step : "workspace")
       : route.view,
   };

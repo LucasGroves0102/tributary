@@ -47,8 +47,12 @@ import type {
   Recap,
   SandboxCreated,
   SandboxOffer,
+  ScreenAlerts,
   Screener,
   ScreenerColumns,
+  ScreenWatch,
+  ScreenWatches,
+  WatchLine,
   SearchResult,
   Section,
   Sectors,
@@ -961,6 +965,31 @@ export const testWebhook = (token: string, id: string) =>
 
 export const webhookDeliveries = (token: string, webhookId?: string) =>
   get<{ deliveries: WebhookDelivery[]; retries: number[] }>(token, "/v1/alerts/deliveries", webhookId ? { webhook_id: webhookId } : {});
+
+// --- saved screens that alert (query_api/watches.py) -------------------------------------------
+// An older Query API has no /v1/watches (the deploy window): null, and watching isn't offered.
+
+export const screenWatches = (token: string) => orNullOn404(get<ScreenWatches>(token, "/v1/watches"));
+
+/** What a watch saves: the API words a line's `label` when it has none. */
+export interface WatchBody {
+  entering: boolean;
+  leaving: boolean;
+  columns: string[];
+  lines: (Omit<WatchLine, "label"> & { label?: string })[];
+}
+
+export const putScreenWatch = (token: string, itemId: string, body: WatchBody) =>
+  sendJson<{ watch: ScreenWatch }>(token, "PUT", `/v1/watches/screen/${enc(itemId)}`, body);
+
+export const deleteScreenWatch = (token: string, itemId: string) =>
+  sendJson<{ deleted: boolean }>(token, "DELETE", `/v1/watches/screen/${enc(itemId)}`);
+
+export const screenAlerts = (token: string, q: { itemId?: string; limit?: number } = {}) =>
+  orNullOn404(get<ScreenAlerts>(token, "/v1/alerts/screens", {
+    ...(q.itemId ? { item_id: q.itemId } : {}),
+    ...(q.limit ? { limit: q.limit } : {}),
+  }));
 
 // --- portfolio and decision journal (query_api/portfolio.py, journal.py) ----------------------
 // Account routes: the user's own holdings, never readable with an API key. An older Query API has
