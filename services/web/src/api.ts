@@ -487,13 +487,14 @@ export const recentDataNotes = (token: string, limit = 8, companies?: string[]) 
 /** Per-share figures on one share basis (split-adjusted unless `asFiled`), derived Q4 and TTM; null
  * from an older API (404), which then shows the statements' own figures as before. */
 export const perShare = (token: string, companyId: string, view: PerShare["view"], basis: "fiscal" | "calendar",
-  asFiled: boolean, quarters: number) =>
+  asFiled: boolean, quarters: number, asOf?: string) =>
   orNullOn404(get<PerShare>(token, `/v1/companies/${companyId}/per-share`, {
-    view, basis, quarters, ...(asFiled ? { shares: "as_filed" } : {}),
+    view, basis, quarters, ...(asFiled ? { shares: "as_filed" } : {}), ...(asOf ? { as_of: asOf } : {}),
   }));
 
-export const annualPerShare = (token: string, companyId: string, years = 10) =>
-  get<{ as_of: string; rows: FinancialRow[] }>(token, `/v1/companies/${companyId}/annual-per-share`, { years });
+export const annualPerShare = (token: string, companyId: string, years = 10, asOf?: string) =>
+  get<{ as_of: string; rows: FinancialRow[] }>(token, `/v1/companies/${companyId}/annual-per-share`,
+    { years, ...(asOf ? { as_of: asOf } : {}) });
 
 export const expectedFilings = (token: string, days: number, scope: "watchlist" | "readable") =>
   get<Calendar>(token, "/v1/calendar/expected-filings", { days, scope });
@@ -707,10 +708,16 @@ export const financialsView = (
   readings = false,
   /** view quarter: ask for the statement callouts (F5); an older API ignores it and sends none */
   callouts = false,
+  /** a past day (YYYY-MM-DD): the figures as they stood at its end (query_api/point_in_time.py) */
+  asOf?: string,
+  /** ask for each restated figure's first version (`original`); an older API ignores it */
+  originals = false,
 ) =>
-  withinOlderCap((older) => get<{ as_of: string; rows: FinancialRow[]; not_meaningful_periods?: NotMeaningfulPeriod[]; not_computed?: Record<string, string>; callouts?: Callout[]; currency?: string; cadence?: "annual" }>(token, `/v1/companies/${companyId}/financials`, {
+  withinOlderCap((older) => get<{ as_of: string; known_on?: string; rows: FinancialRow[]; not_meaningful_periods?: NotMeaningfulPeriod[]; not_computed?: Record<string, string>; callouts?: Callout[]; currency?: string; cadence?: "annual" }>(token, `/v1/companies/${companyId}/financials`, {
     ...(readings ? { readings: "true" } : {}),
     ...(callouts ? { callouts: "true" } : {}),
+    ...(asOf ? { as_of: asOf } : {}),
+    ...(originals ? { originals: "true" } : {}),
     quarters: older ? OLDER_QUARTERS : quarters,
     metrics,
     view,

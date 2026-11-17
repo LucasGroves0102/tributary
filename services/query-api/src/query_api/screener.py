@@ -11,7 +11,11 @@ migrations 032 and 035) and carries its own period_end, filing and how to read i
 not meaningful, old, or just behind the company's latest period. The rules are in 035, once; this
 module only asks. The figures come from what the gold build stores for the screener (migration
 078: gold.screen_company and gold.screen_reading, read under RLS with today's date and the
-caller's SIC, the same rules); a company with nothing stored is read live, as before. Sorts and
+caller's SIC, the same rules); a company with nothing stored is read live, as before. As of a
+past day (`as_of`, migrations 085-087) every company is read live from gold's history
+(gold.latest_period and gold.latest_reading with the day: the versions believed at its end), in
+a session whose "today" is that day (stale is against it); hide_blank probes the history the
+same way. The confidence mark is today's only: as of a day its row has none. Sorts and
 range filters take the comparable value, `k<i>`, which is NULL for all of them but "behind": the
 exact figure stays in `v<i>`, so a
 209,828% gross margin is still returned, with its reason, and doesn't win a sort or pass a filter.
@@ -34,6 +38,7 @@ sort on a value column puts them last.
 """
 
 from dataclasses import dataclass, field
+from datetime import date
 from decimal import Decimal, InvalidOperation
 from typing import Literal, get_args
 
@@ -107,6 +112,7 @@ class Screen:
     sort: str = "-revenue_ttm"
     limit: int = 50
     offset: int = 0
+    as_of: date | None = None              # gold as it stood at the end of that day (087)
 
 
 @dataclass(frozen=True)
@@ -169,15 +175,21 @@ def _gate(company: str, granted: list[str] | None) -> str:
 INPUTS = ("latest", "equity", "currency", "recent", "cached")
 
 
-def _latest(company: str, granted: list[str] | None) -> str:
+def _latest(company: str, granted: list[str] | None, as_of: bool = False) -> str:
     """Lateral `a`: the company's latest period (what "old" is against) and the stored inputs of
-    its readings, or its latest period read live when nothing is stored (gold.screen_company)."""
+    its readings, or its latest period read live when nothing is stored (gold.screen_company).
+    As of a day: its latest period then, from the history (nothing stored applies)."""
+    if as_of:
+        return ("LEFT JOIN LATERAL (SELECT p.latest, NULL::numeric AS equity,"
+                " NULL::text AS currency, NULL::boolean AS recent, false AS cached"
+                f" FROM gold.latest_period({company}, %(as_of)s) p{_gate(company, granted)}) a"
+                " ON true")
     return (f"LEFT JOIN LATERAL (SELECT {', '.join(f'p.{c}' for c in INPUTS)}"
             f" FROM gold.screen_company({company}) p{_gate(company, granted)}) a ON true")
 
 
 def _values(slots: dict[str, int], company: str, sic: str, inputs: tuple[str, ...],
-            granted: list[str] | None) -> str:
+            granted: list[str] | None, as_of: bool = False) -> str:
     """A lateral row with v<i> (the value), src<i> (its filing), st<i> and why<i> (how to read it)
     and k<i> (what it sorts and filters by) of these slots, for the company in the column
     `company`: gold.screen_reading, which is gold.latest_reading's row, read from the stored
@@ -194,10 +206,35 @@ def _values(slots: dict[str, int], company: str, sic: str, inputs: tuple[str, ..
                     f"x{i}.status AS st{i}", f"x{i}.reason AS why{i}", f"x{i}.unit AS u{i}",
                     f"CASE WHEN x{i}.status IS NULL OR x{i}.status = 'behind'"
                     f" THEN x{i}.value END AS k{i}"]
-        joins.append(f"LEFT JOIN LATERAL gold.screen_reading({company}, %(s{i})s, %(m{i})s,"
-                     f" {sic}, {latest}, {cached}, {equity}, {currency}, {recent}) x{i} ON true")
+        joins.append(
+            # 087: as of a day, gold.latest_reading over the history (the same rules)
+            f"LEFT JOIN LATERAL gold.latest_reading({company}, %(s{i})s, %(m{i})s, {sic},"
+            f" {latest}, %(as_of)s) x{i} ON true" if as_of else
+            f"LEFT JOIN LATERAL gold.screen_reading({company}, %(s{i})s, %(m{i})s,"
+            f" {sic}, {latest}, {cached}, {equity}, {currency}, {recent}) x{i} ON true")
     return (f"(SELECT {', '.join(outputs)} FROM (SELECT 1{_gate(company, granted)}) one "
             f"{' '.join(joins)})")
+
+
+def _has_value_at(columns: list[str], granted: list[str] | None, params: dict) -> str:
+    """_has_value as of a day: one probe of the history (086) per span, the versions believed
+    then (a balance's TTM column is its quarter row)."""
+    tests = []
+    for span in ("quarter", "ttm"):
+        names = sorted({COLUMNS[k][0] for k in columns if COLUMNS[k][1] == span})
+        if span == "quarter":
+            balances = (COLUMNS[k][0] for k in columns
+                        if COLUMNS[k][1] == "ttm" and COLUMNS[k][0] in POINT_IN_TIME)
+            names = sorted({*names, *balances})
+        if names:
+            params[f"has_{span}"] = names
+            tests.append("(SELECT true FROM gold.financials_known k"
+                         f" WHERE k.company_id = c.company_id AND k.span = '{span}'"
+                         f" AND k.metric = ANY(%(has_{span})s::text[])"
+                         " AND k.known_from <= %(as_of)s"
+                         " AND (k.known_to IS NULL OR k.known_to > %(as_of)s) LIMIT 1) IS NOT NULL")
+    test = " OR ".join(tests) or "FALSE"
+    return f"({test})" if granted is None else f"(c.company_id <> ALL(%(granted)s) OR {test})"
 
 
 def _has_value(columns: list[str], granted: list[str] | None, params: dict) -> str:
@@ -255,6 +292,9 @@ def compile_screen(s: Screen, granted: list[str] | None) -> Compiled:
     params: dict = {"limit": s.limit, "offset": s.offset}
     if granted is not None:
         params["granted"] = granted
+    at = s.as_of is not None
+    if at:
+        params["as_of"] = s.as_of
     meta = ["TRUE"]
     if s.coverage:
         # 078: the stored metric lists (a company with quarterly rows) when this caller reads them,
@@ -265,7 +305,8 @@ def compile_screen(s: Screen, granted: list[str] | None) -> Compiled:
                     " (SELECT true FROM gold.financials_coverage v"
                     " WHERE v.company_id = c.company_id LIMIT 1), false)")
     if s.hide_blank:
-        meta.append(_has_value(s.columns, granted, params))
+        meta.append(_has_value_at(s.columns, granted, params) if at
+                    else _has_value(s.columns, granted, params))
     if s.company_ids is not None:
         meta.append("c.company_id = ANY(%(ids)s)")
         params["ids"] = s.company_ids
@@ -343,6 +384,11 @@ def compile_screen(s: Screen, granted: list[str] | None) -> Compiled:
                               else ("", ""))
     page_sector, page_join = (("", "") if sector_early
                               else (sector_cols, sector_join.format("r")))
+    # the confidence mark (074) is today's: as of a past day there is none to give
+    confidence = ("LEFT JOIN LATERAL (SELECT NULL::text AS level, NULL::text[] AS reasons) cf"
+                  " ON true" if at else
+                  "LEFT JOIN LATERAL gold.company_confidence(r.company_id, r.sic,"
+                  f" {page_latest}) cf ON true")
     sql = f"""
 WITH base AS (
     SELECT c.company_id, c.name, c.tickers, c.exchanges, c.sic,
@@ -358,8 +404,8 @@ ranked AS (
     SELECT b.*{carried if early else ''}{ranked_outputs},
            count(*) OVER () AS total
     FROM base b
-    {_latest('b.company_id', granted) if early else ''}
-    LEFT JOIN LATERAL {_values(ranked, 'b.company_id', 'b.sic', a_inputs, granted)} v ON true
+    {_latest('b.company_id', granted, at) if early else ''}
+    LEFT JOIN LATERAL {_values(ranked, 'b.company_id', 'b.sic', a_inputs, granted, at)} v ON true
     WHERE {' AND '.join(where)}
     ORDER BY {order} {direction} NULLS LAST, b.company_id
     LIMIT %(limit)s OFFSET %(offset)s
@@ -367,9 +413,9 @@ ranked AS (
 SELECT r.*{'' if early else ', a.latest AS latest_period'}{page_outputs}{page_sector},
        cf.level AS confidence, cf.reasons AS confidence_reasons
 FROM ranked r
-{'' if early else _latest('r.company_id', granted)}
-LEFT JOIN LATERAL {_values(page, 'r.company_id', 'r.sic', page_inputs, granted)} w ON true
-LEFT JOIN LATERAL gold.company_confidence(r.company_id, r.sic, {page_latest}) cf ON true
+{'' if early else _latest('r.company_id', granted, at)}
+LEFT JOIN LATERAL {_values(page, 'r.company_id', 'r.sic', page_inputs, granted, at)} w ON true
+{confidence}
 {page_join}
 ORDER BY {final} {direction} NULLS LAST, r.company_id
 """

@@ -28,6 +28,7 @@ BACKOUT = ROOT / "db" / "backout"
 
 # Newest first: the order they run in. Undoing one migration means running every file before it too.
 CHAIN = [
+    "point_in_time_085.sql",
     "revenue_fallbacks_080.sql",
     "screener_figures_078.sql",
     "net_income_077.sql",
@@ -90,7 +91,7 @@ def snapshot(cur) -> dict[str, str]:
 
 def owner(cur) -> str:
     cur.execute("SELECT pg_get_userbyid(proowner) FROM pg_proc"
-                " WHERE oid = 'gold.usable_facts(text[])'::regprocedure")
+                " WHERE oid = 'gold.refresh_financials(text[])'::regprocedure")
     return cur.fetchone()[0]
 
 

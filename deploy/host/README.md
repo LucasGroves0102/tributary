@@ -13,7 +13,8 @@ Files installed directly on the server, outside Kubernetes. Postgres 16 runs on 
 Settings (env, with defaults): `BACKUP_DIR` (`/var/backups/postgres`), `KEEP_DAYS` (14),
 `DATABASES` (`tributary app openfga`), `TEXTFILE_DIR`
 (`/var/lib/node_exporter/textfile_collector`), `FULL_WEEKDAY` (7, Sunday), `FULL_KEEP` (1),
-`SLIM_EXCLUDE_DATA` and `FULL_EXCLUDE_DATA` (space-separated tables; defaults in the script),
+`SLIM_EXCLUDE_DATA` and `FULL_EXCLUDE_DATA` (space-separated tables; defaults in the script, both
+leaving out gold's history `gold.financials_known` and `gold.known_companies`, rebuilt by the catch-up),
 `COMPRESS` (`zstd:1`, `pg_dump --compress`). The restore test also reads
 `RESTORE_FROM` (`full`), `FREE_SPACE_FACTOR` (2), `RESTORE_JOBS` (2, `pg_restore --jobs`),
 `RESTORE_TEST_DIR` (`/var/lib/postgresql/restore-test`; the systemd unit's `ReadWritePaths` must

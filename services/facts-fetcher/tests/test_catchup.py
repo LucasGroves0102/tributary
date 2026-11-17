@@ -10,4 +10,4 @@ def test_the_budget_keeps_the_hourly_job_inside_its_hour():
 
 
 def test_cheap_kinds_go_first():
-    assert catchup.KINDS == ("check_segments", "check_financials", "gold")
+    assert catchup.KINDS == ("check_segments", "check_financials", "gold", "known")

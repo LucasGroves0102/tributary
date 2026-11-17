@@ -572,11 +572,28 @@ export interface FinancialRow {
     filing_url: string | null;
   };
   freshness: { filed: string; ingested_at: string };
+  /** asked for with `originals` (query_api/point_in_time.py): a figure a later filing changed, its
+   * first value and filing; null when it stands as first reported */
+  original?: FinancialOriginal | null;
   /** /per-share only (query_api/per_share.py): the filing's own figure, the splits applied to it
    * (split-adjusted figures), and how a derived fiscal Q4 or TTM was worked out */
   as_filed?: string | null;
   splits?: PerShareSplit[];
   derivation?: PerShareDerivation;
+}
+
+/** A restated figure's first version (query_api/point_in_time.py): the value first believed, the
+ * filing that stated it and the day, and what changed it: a stock split, another line of the filings,
+ * or the company restating the same line. */
+export interface FinancialOriginal {
+  value: string;
+  xbrl_tag: string | null;
+  accession_no: string;
+  form: string | null;
+  filed: string;
+  known_from: string | null;
+  filing_url: string | null;
+  kind: "split" | "another_line" | "same_line";
 }
 
 /** A stock split as the split notes establish it: before its first restating filing, figures are on
@@ -1072,6 +1089,8 @@ export interface FormulaSeries {
 
 export interface Screener {
   as_of: string;
+  /** the past day the figures are as of (`as_of` asked for), echoed */
+  known_on?: string;
   /** null when the page is past the end */
   total: number | null;
   limit: number;

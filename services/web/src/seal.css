@@ -255,6 +255,30 @@ h1.co-name {
   display: contents;
 }
 
+/* "As of" (point in time): a date field under the actions; set, a quiet note on what it means */
+.co-asof {
+  margin-top: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 16px;
+}
+
+.co-asof-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--sans);
+  font-size: var(--fs-meta);
+  color: var(--ink-2);
+}
+
+.co-asof-note {
+  margin: 0;
+  color: var(--ink-2);
+  max-width: 72ch;
+}
+
 .co-head .save-form {
   margin-top: 14px;
   max-width: 560px;

@@ -115,7 +115,7 @@ class SeriesStore:
     def cadence(self, *_):
         return "quarterly"
 
-    def metric_series(self, user_id, company_ids, metrics):
+    def metric_series(self, user_id, company_ids, metrics, as_of=None):
         self.asked.append((company_ids, metrics))
         return {("0001045810", "dividends_paid"): NVDA_DIVIDENDS}
 

@@ -94,7 +94,10 @@ class Store:
         self._pool = pool
 
     @contextmanager
-    def _session(self, user_id: str) -> Iterator[psycopg.Cursor]:
+    def _session(self, user_id: str, known_on: date | None = None) -> Iterator[psycopg.Cursor]:
+        """A transaction as query_api with app.user_id set (RLS). known_on: an as-of read (B1,
+        migrations 085-087): "today" is that day for the readings (gold.is_stale reads
+        tributary.today), for this transaction only."""
         with self._pool.connection() as conn, conn.transaction(), \
                 conn.cursor(row_factory=dict_row) as cur:
             cur.execute("SET LOCAL ROLE query_api")
@@ -104,6 +107,9 @@ class Store:
             # save nothing (hermes and local plans, migration 032).
             cur.execute("SET LOCAL jit = off")
             cur.execute("SELECT set_config('app.user_id', %s, true)", (user_id,))
+            if known_on is not None:
+                cur.execute("SELECT set_config('tributary.today', %s, true)",
+                            (known_on.isoformat(),))
             try:
                 yield cur
             finally:  # don't leak the role or user into an enclosing transaction
@@ -184,9 +190,10 @@ class Store:
             cur.execute(compiled.sql, compiled.params)  # pyright: ignore[reportArgumentType]
             return cur.fetchall()
 
-    def screen(self, user_id: str, compiled: Screen) -> list[dict]:
-        """Rows of a compiled screen (query_api.screener)."""
-        with self._session(user_id) as cur:
+    def screen(self, user_id: str, compiled: Screen, known_on: date | None = None) -> list[dict]:
+        """Rows of a compiled screen (query_api.screener); known_on: one compiled as of that day,
+        read with "today" that day."""
+        with self._session(user_id, known_on) as cur:
             cur.execute(compiled.sql, compiled.params)  # pyright: ignore[reportArgumentType]
             return cur.fetchall()
 
@@ -499,13 +506,24 @@ class Store:
             row = cur.fetchone()
             return cadence_of(**row) if row else None
 
+    # One company's rows: gold.financials, or as of a day gold.company_financials_at (087: its
+    # history, else gold's pipeline replayed at read time; SECURITY DEFINER with the read rule).
+    # Each takes (company, span, metrics) and gives gold.financials' columns.
+    TODAY = ("(SELECT * FROM gold.financials WHERE company_id = %(c)s AND span = %(span)s"
+             " AND metric = ANY(%(metrics)s))")
+    AS_OF = "gold.company_financials_at(%(c)s, %(as_of)s, %(span)s, %(metrics)s)"
+
+    def _rows_of(self, as_of: date | None) -> str:
+        return self.AS_OF if as_of is not None else self.TODAY
+
     def financials(self, user_id: str, company_id: str, metrics: list[str], quarters: int,
-                   view: str = "quarter", basis: str = "fiscal") -> list[dict]:
+                   view: str = "quarter", basis: str = "fiscal",
+                   as_of: date | None = None) -> list[dict]:
         """view: quarter | ttm. basis: fiscal (every fiscal period) | calendar (one row per
-        calendar quarter)."""
-        with self._session(user_id) as cur:
+        calendar quarter). as_of: gold as it stood at the end of that day (migrations 085-087)."""
+        with self._session(user_id, as_of) as cur:
             cur.execute(
-                """
+                f"""
                 SELECT metric, period_start, period_end, fiscal_year, fiscal_quarter,
                        calendar_year, calendar_quarter, value, unit, value_source,
                        source_tag, inputs, accession_no, form, filed, source_accessions,
@@ -517,15 +535,55 @@ class Store:
                         WHERE f.accession_no = q.accession_no LIMIT 1) AS filer_cik
                 FROM (
                     SELECT *, row_number() OVER (PARTITION BY metric ORDER BY period_end DESC)
-                    FROM gold.financials
-                    WHERE company_id = %s AND span = %s AND metric = ANY(%s)
-                      AND (%s = 'fiscal' OR calendar_primary)
+                    FROM {self._rows_of(as_of)} f
+                    WHERE (%(basis)s = 'fiscal' OR calendar_primary)
                 ) q
-                CROSS JOIN (SELECT gold.amount_currency(%s) AS currency) cu
-                WHERE row_number <= %s
+                CROSS JOIN (SELECT c.unit AS currency
+                            FROM gold.amount_currency_of(%(c)s, %(as_of)s) c) cu
+                WHERE row_number <= %(quarters)s
                 ORDER BY metric, period_end DESC
-                """, (company_id, view, metrics, basis, company_id, quarters))
+                """, {"c": company_id, "span": view, "metrics": metrics, "basis": basis,
+                      "as_of": as_of, "quarters": quarters})
             return cur.fetchall()
+
+    def originals(self, user_id: str, company_id: str, span: str, metrics: list[str],
+                  as_of: date | None = None) -> list[dict]:
+        """Each changed figure's first version (migration 086's history, under RLS): for every
+        (metric, period) whose value was changed by a later filing by `as_of` (None: today), the
+        first value believed, its citation and day, and the restatements' rows
+        (gold.restatements, 087) to word the change. One company."""
+        with self._session(user_id, as_of) as cur:
+            cur.execute(
+                """
+                SELECT r.*, (SELECT f.cik FROM silver.financial_facts f
+                             WHERE f.accession_no = r.original_accession LIMIT 1) AS filer_cik
+                FROM gold.restatements(%(c)s, %(as_of)s) r
+                WHERE (r.span = %(span)s OR (%(span)s = 'ttm' AND r.span = 'quarter'))
+                  AND r.metric = ANY(%(metrics)s)
+                ORDER BY r.metric, r.period_end, r.original_known_from
+                """, {"c": company_id, "span": span, "metrics": metrics, "as_of": as_of})
+            return cur.fetchall()
+
+    def restatements(self, user_id: str, company_id: str, as_of: date | None) -> dict:
+        """The company's restatements by `as_of` (gold.restatements, 087, under RLS), whether its
+        history is built by today's rules, and its stock-split findings (the notes' split rule
+        reads them with the changes). One company."""
+        with self._session(user_id, as_of) as cur:
+            cur.execute(
+                """
+                SELECT r.*,
+                       (SELECT f.cik FROM silver.financial_facts f
+                        WHERE f.accession_no = r.original_accession LIMIT 1) AS original_cik,
+                       (SELECT f.cik FROM silver.financial_facts f
+                        WHERE f.accession_no = r.restated_accession LIMIT 1) AS restated_cik
+                FROM gold.restatements(%s, %s) r
+                ORDER BY r.metric, r.span, r.period_end, r.restated_known_from
+                """, (company_id, as_of))
+            rows = cur.fetchall()
+            cur.execute("SELECT EXISTS (SELECT 1 FROM gold.financials_known k"
+                        " WHERE k.company_id = %s) AS history", (company_id,))
+            row = cur.fetchone()
+        return {"rows": rows, "history": bool(row and row["history"])}
 
     FIGURE = """
         SELECT metric, period_start, period_end, fiscal_year, fiscal_quarter, value, unit,
@@ -603,7 +661,8 @@ class Store:
             return {r["metric"]: r["reason"] for r in cur.fetchall()}
 
     def equity_readings(self, user_id: str, company_id: str, metrics: list[str], quarters: int,
-                        view: str = "quarter", basis: str = "fiscal") -> list[dict]:
+                        view: str = "quarter", basis: str = "fiscal",
+                        as_of: date | None = None) -> list[dict]:
         """Why a metric reads n/m because of the company's stockholders' equity, at each of its
         latest `quarters` equity periods (the window financials() reads), whatever metrics the
         rows hold: by migration 035's gold.not_meaningful (debt/equity and ROE on negative
@@ -611,42 +670,47 @@ class Store:
         [{metric, period_end, reason}]."""
         if not metrics:
             return []
-        with self._session(user_id) as cur:
+        with self._session(user_id, as_of) as cur:
             cur.execute(
-                """
+                f"""
                 SELECT m.metric, e.period_end, r.reason
                 FROM (
-                    SELECT period_end, value FROM gold.financials
-                    WHERE company_id = %s AND span = %s AND metric = 'stockholders_equity'
-                      AND (%s = 'fiscal' OR calendar_primary)
-                    ORDER BY period_end DESC LIMIT %s
+                    SELECT period_end, value FROM {self._rows_of(as_of)} f
+                    WHERE (%(basis)s = 'fiscal' OR calendar_primary)
+                    ORDER BY period_end DESC LIMIT %(quarters)s
                 ) e
-                CROSS JOIN unnest(%s::text[]) AS m(metric)
+                CROSS JOIN unnest(%(wanted)s::text[]) AS m(metric)
                 CROSS JOIN LATERAL (
                     SELECT gold.not_meaningful(m.metric, NULL, NULL, e.value) AS reason) r
                 WHERE r.reason IS NOT NULL
                 ORDER BY m.metric, e.period_end DESC
-                """, (company_id, view, basis, quarters, metrics))
+                """, {"c": company_id, "span": view, "metrics": ["stockholders_equity"],
+                      "basis": basis, "quarters": quarters, "wanted": metrics,
+                      "as_of": as_of})
             return cur.fetchall()
 
-    def annual_per_share(self, user_id: str, company_id: str, years: int) -> list[dict]:
+    def annual_per_share(self, user_id: str, company_id: str, years: int,
+                         as_of: date | None = None) -> list[dict]:
         """The 10-K's own EPS and weighted shares per fiscal year (gold.annual_per_share,
-        migration 036): gold's quarters have no annual per-share figure, and these don't add."""
-        with self._session(user_id) as cur:
-            cur.execute("SELECT * FROM gold.annual_per_share(%s, %s)"
-                        " ORDER BY metric, period_end DESC", (company_id, years))
+        migration 036; 087: filed by `as_of`): gold's quarters have no annual per-share figure,
+        and these don't add."""
+        with self._session(user_id, as_of) as cur:
+            cur.execute("SELECT * FROM gold.annual_per_share(%s, %s, %s)"
+                        " ORDER BY metric, period_end DESC", (company_id, years, as_of))
             return cur.fetchall()
 
-    def per_share_inputs(self, user_id: str, company_id: str) -> dict:
+    def per_share_inputs(self, user_id: str, company_id: str, as_of: date | None = None) -> dict:
         """What query_api.per_share reads, in one session under RLS: gold's fiscal quarters of the
         per-share metrics and net income (newest 120 each), the 10-K's per-share facts by year
         (gold.annual_per_share, 036: its own read rule) and the company's restatement findings on
-        share counts and EPS (ops.quality_findings, the split notes' source). One company."""
+        share counts and EPS (ops.quality_findings, the split notes' source). One company.
+        as_of (087): gold's quarters and the 10-K figures as they stood at the end of that day,
+        and only the restatements filed by then (a split first restated later isn't applied)."""
         from query_api.per_share import FINDING_METRICS, INPUT_METRICS
 
-        with self._session(user_id) as cur:
+        with self._session(user_id, as_of) as cur:
             cur.execute(
-                """
+                f"""
                 SELECT metric, period_start, period_end, fiscal_year, fiscal_quarter,
                        calendar_year, calendar_quarter, calendar_primary, value, unit,
                        value_source, source_tag, accession_no, form, filed, source_accessions,
@@ -655,23 +719,24 @@ class Store:
                         WHERE f.accession_no = q.accession_no LIMIT 1) AS filer_cik
                 FROM (
                     SELECT *, row_number() OVER (PARTITION BY metric ORDER BY period_end DESC)
-                    FROM gold.financials
-                    WHERE company_id = %s AND span = 'quarter' AND metric = ANY(%s)
+                    FROM {self._rows_of(as_of)} f
                 ) q
                 WHERE row_number <= 120
                 ORDER BY metric, period_end DESC
-                """, (company_id, list(INPUT_METRICS)))
+                """, {"c": company_id, "span": "quarter", "metrics": list(INPUT_METRICS),
+                      "as_of": as_of})
             quarters = cur.fetchall()
-            cur.execute("SELECT * FROM gold.annual_per_share(%s, 30)"
-                        " ORDER BY metric, period_end DESC", (company_id,))
+            cur.execute("SELECT * FROM gold.annual_per_share(%s, 30, %s)"
+                        " ORDER BY metric, period_end DESC", (company_id, as_of))
             annual = cur.fetchall()
             cur.execute(
                 """
                 SELECT company_id, check_name, metric, period_end, severity, detail
                 FROM ops.quality_findings
                 WHERE company_id = %s AND check_name = 'restatement' AND metric = ANY(%s)
+                  AND (%s::date IS NULL OR (detail->>'restated_filed')::date <= %s::date)
                 ORDER BY metric, period_end
-                """, (company_id, list(FINDING_METRICS)))
+                """, (company_id, list(FINDING_METRICS), as_of, as_of))
             findings = cur.fetchall()
         return {"quarters": quarters, "annual": annual, "findings": findings}
 
@@ -839,8 +904,9 @@ class Store:
             return [{**f, "lines": lines.get(f["accession_no"], [])} for f in filings]
 
     def filings(self, user_id: str, company_id: str, limit: int,
-                accession_no: str | None = None) -> list[dict]:
-        """Recent filings (or one filing) with the sections each contains (no text)."""
+                accession_no: str | None = None, as_of: date | None = None) -> list[dict]:
+        """Recent filings (or one filing) with the sections each contains (no text); as_of:
+        filed by the end of that day."""
         with self._session(user_id) as cur:
             cur.execute(
                 """
@@ -852,10 +918,11 @@ class Store:
                                 ORDER BY section_key LIKE 'EX-%%', char_start) AS sections
                 FROM gold.filing_sections
                 WHERE company_id = %s AND (%s::text IS NULL OR accession_no = %s)
+                  AND (%s::date IS NULL OR filed <= %s::date)
                 GROUP BY accession_no, form, filed, period_of_report
                 ORDER BY filed DESC
                 LIMIT %s
-                """, (company_id, accession_no, accession_no, limit))
+                """, (company_id, accession_no, accession_no, as_of, as_of, limit))
             return cur.fetchall()
 
     def periodic_reports(self, user_id: str, company_id: str) -> list[dict]:
@@ -1072,7 +1139,10 @@ class Store:
             return cur.fetchall()
 
     def sections(self, user_id: str, company_id: str, section_key: str, form: str | None,
-                 accession_no: str | None, limit: int, max_chars: int) -> list[dict]:
+                 accession_no: str | None, limit: int, max_chars: int,
+                 as_of: date | None = None) -> list[dict]:
+        """A section's text from the company's newest filings that have it (as_of: filed by the
+        end of that day), or from the filing named."""
         with self._session(user_id) as cur:
             cur.execute(
                 """
@@ -1083,10 +1153,11 @@ class Store:
                 WHERE company_id = %s AND section_key = %s
                   AND (%s::text IS NULL OR form = %s)
                   AND (%s::text IS NULL OR accession_no = %s)
+                  AND (%s::date IS NULL OR filed <= %s::date)
                 ORDER BY filed DESC
                 LIMIT %s
                 """, (max_chars, company_id, section_key, form, form, accession_no,
-                      accession_no, limit))
+                      accession_no, as_of, as_of, limit))
             return cur.fetchall()
 
     def section_diffs(self, user_id: str, company_id: str, accession_no: str,
@@ -1323,15 +1394,25 @@ class Store:
             return {"findings": findings, "derived": rows, "behind": behind,
                     "checked_at": checked}
 
-    def metric_series(self, user_id: str, company_ids: list[str],
-                      metrics: list[str]) -> dict[tuple[str, str], list[tuple[date, float]]]:
+    def metric_series(self, user_id: str, company_ids: list[str], metrics: list[str],
+                      as_of: date | None = None) -> dict[tuple[str, str], list[tuple[date, float]]]:
         """(company, metric) → its quarters, oldest first (a data note's one-quarter spike, read
-        against the other years). A few companies and metrics at most, under RLS."""
-        with self._session(user_id) as cur:
-            cur.execute("SELECT company_id, metric, period_end, value"
-                        " FROM gold.quarterly_financials"
-                        " WHERE company_id = ANY(%s) AND metric = ANY(%s)"
-                        " ORDER BY company_id, metric, period_end", (company_ids, metrics))
+        against the other years). A few companies and metrics at most, under RLS. as_of: one
+        company's quarters as they stood at the end of that day (087)."""
+        with self._session(user_id, as_of) as cur:
+            if as_of is not None:
+                cur.execute("SELECT company_id, metric, period_end, value"
+                            " FROM unnest(%s::text[]) c(id)"
+                            " CROSS JOIN LATERAL gold.company_financials_at(c.id, %s, 'quarter',"
+                            "                                               %s) f"
+                            " WHERE f.value_source <> 'computed'"
+                            " ORDER BY company_id, metric, period_end",
+                            (company_ids, as_of, metrics))
+            else:
+                cur.execute("SELECT company_id, metric, period_end, value"
+                            " FROM gold.quarterly_financials"
+                            " WHERE company_id = ANY(%s) AND metric = ANY(%s)"
+                            " ORDER BY company_id, metric, period_end", (company_ids, metrics))
             out: dict[tuple[str, str], list[tuple[date, float]]] = {}
             for r in cur.fetchall():
                 out.setdefault((r["company_id"], r["metric"]), []).append(

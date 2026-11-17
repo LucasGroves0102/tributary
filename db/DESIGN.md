@@ -954,3 +954,123 @@ cost of revenue) / net sales for every period with both, its inputs saying so; g
 computed. Walmart's quarter to Jul 2026 reads 25.4%, Costco's FY2026 11.1%. Reaches hermes like 073: the
 filing-facts job's extras pass reads both companies' stored documents and rebuilds their gold; no
 rules_version bump.
+
+### 085_point_in_time_pipeline.sql
+
+Point in time, part 1 (B1): gold's pipeline as pure functions of a knowledge date, so the rows gold
+believed on any past day can be computed by the very rules that build gold today. `gold.usable_facts`
+and `gold.best_facts` take `p_as_of` (facts filed by the end of that day; NULL: every fact): the
+filter sits in usable_facts' `facts` CTE, so the currency, borrowing, balance and debt rules see only
+what was filed by then. `filed` is the same for every fact of an accession (no exception on the
+golden set), so a filing is all in or all out. The bodies of 043's quarters and 084's derived rows
+became `gold.quarterly_rows(ids, p_as_of)` and `gold.derived_rows(ids, p_as_of, p_quarters)`; the
+writers are DELETE + INSERT from them, and refresh_quarterly_financials still returns the series' rows.
+
+Where a statement read back rows an earlier one had inserted, it reads a CTE of them, and the reads by
+key that had used gold's primary keys became sort passes (a CTE has no index and the planner
+estimates it at one row, so a join on it can turn into a scan per row: the first draft's derived step
+was 2.3x slower on the golden set and quadratic in a batch):
+- 043's gross profit: the quarter's revenue, cost, operating income, SG&A and R&D side by side by one
+  GROUP BY; its "no gross profit line overlapping by more than 7 days" by one window: a series' lines
+  overlap by 7 days at most and last 79-120 days, so none lies inside another and only the first
+  ending on or after the quarter's start + 7 can overlap it.
+- 040's sum of a stated year's quarters: those ending by its end + 7 less those starting before its
+  start - 7 (a quarter of at most 120 days starting that early ends before the year does), two
+  running sums; `in_series` a window over the same rows.
+- 063's two stated years within 7 days and "no TTM sum within 7 days": one window over the years and
+  the sums.
+- 040's latest short-term investments in the two years before a period and the TTM interest expense
+  at it: windows over the inputs `periods` is built from (end and value as text: the latest sorts last).
+
+Equal row for row. Locally: the golden reference set (97 companies) built at 084 and at 085:
+gold.quarterly_financials (24,252 rows), gold.derived_financials (22,384), ops.quality_findings (342)
+and gold.screen_figures (7,811) identical, EXCEPT both ways, every column but refreshed_at. Cost: the
+golden set's batches of 25 build in 0.42 s (quarters) and 0.45 s (derived) against 0.42 s and 0.42 s at
+084. 077's two correlated subqueries stay: per company they scan a handful of rows (its ProfitLoss
+years), and a replay runs per company (086).
+
+On hermes, read-only (2026-11-16, before the 080 catch-up reached them): these bodies inlined as one
+SELECT over hermes' own gold.best_facts, pure (the derived step over the quarters just computed, as a
+replay reads them), for 500 companies drawn at random among those the current functions built (stamped
+77: 080's new tags have no silver facts until a company is re-projected, so 080's best_facts reads them
+as 077's did), 50 at a time outside the hourly rebuild, EXCEPT ALL both ways against
+gold.quarterly_financials and gold.derived_financials: 891,221 quarterly rows and 1,016,679 derived
+rows, 0 differences either way. `filed` is one date per accession there too (0 of the 29,845 accessions
+of those companies).
+
+### 086_financials_known.sql
+
+Point in time, part 2: gold's history of itself. `gold.financials_known` holds every version of every
+gold row (quarters as span `quarter`, derived rows with their span; a balance's TTM row is read from
+its quarter, as in gold.financials): a run of the same (value, unit, period start, value source,
+source tag, inputs' values) across the days the company's filings were filed, `known_from` the first
+such day (filed by its end), `known_to` the day a filing changed it or took it away (exclusive), the
+citation the one gold gave on `known_from` (the first filing to state it: the owner's call, so a
+later filing restating the same value doesn't move it). Inputs are compared without their quarters'
+accession numbers (`gold.input_values`). Owner's decisions (2026-11-16): a day is the filing date,
+acceptance times wait for the backtests (B3).
+
+Written only by gold's own pipeline: `gold.replay_known(company, from)` deletes the versions
+starting on or after `from`, reopens those open then, and for each filing date from there runs
+`gold.financial_rows(company, day)` (085's quarterly_rows, then derived_rows over those very
+quarters) and diffs it against the open versions in one statement (a FULL JOIN on the key: closed,
+written). The dates come from `gold.knowledge_facts`: per filing date, the count and sum of fact ids
+of the company's own CIKs' facts and of filings whose XBRL names it (a superset of usable_facts' facts:
+a date that changes nothing writes nothing). `gold.known_companies` keeps that list from the last
+replay; `gold.refresh_known`, called by `gold.refresh_financials` under the same locks and in the same
+transaction, replays a company from the first date whose pair changed (a new filing: one view; facts
+that arrived late for an older filing: from that filing; a superseded fact: its date). The facts are
+read before the views, so a fact committed meanwhile is found next time; ingested_at isn't used (a
+concurrent load can commit an older timestamp after a build). Only companies stamped 'known' at the
+current gold.rules_version() are kept this way; any other is the catch-up's.
+
+Catch-up kind `known` (baseline 0: every company is behind at the deploy; not paused, the owner's
+call): `gold.rebuild_known` replays whole histories under the gold locks, 5 companies a transaction,
+after the gold kind and only for companies whose gold is current (ops.company_backlog, as
+check_financials). A rules_version bump replays every company again; ops.rebuild_soon marks 'known'
+with 'gold'. Not detected (until the next replay): a change of a company's SIC or a filing's XBRL
+attribution with no fact added or removed.
+
+Measured. Locally, the golden reference set (97 companies, two fiscal years each, 9-14 filing dates):
+49,314 versions for 46,636 rows of gold (1.06x), 2,678 closed; 45 s for all (0.47 s a company, ~39 ms
+a view); the open versions equal gold row for row, and at every filing date and the day before it
+the history equals gold.financial_rows (tests/golden/test_point_in_time.py).
+
+On hermes, read-only (2026-11-16): gold holds 6.62M quarterly and 7.23M derived rows (7.8 GB), so the
+history at the golden set's 1.06x is about 14.7M versions, 8-10 GB with its covering key. Filing dates
+per company over the 500 sampled above: mean 59, median 64, p90 70, max 76 (a sample of long-listed
+companies; the catalog-wide count is about 225,000 company-dates, measured for the design). One view as of
+2024-08-15, the bodies inlined (usable_facts computed once; a replay computes it twice, about a third
+more): Apple 418 ms, JPMorgan 322 ms, CrowdStrike 127 ms. So a replay is a few seconds to about half a
+minute a company, and the whole catalog about 16 hours of one core: the 'known' catch-up's 20 minutes an
+hour finish it in about two days, after the gold kind's own (rules 80: 7,202 companies behind at about
+900 an hour on 2026-11-16). Until a company's history is built, its as-of reads replay at read time
+(087). Faster replays, later if needed: one best_facts per view (derived_rows reading the view's own
+best facts), or set-based view keys.
+
+### 087_point_in_time_reads.sql
+
+Point in time, part 3: reading gold as of a day. `gold.financials_at(day)` is gold.financials over
+the versions believed then (the same labels; inlined, RLS). `gold.company_financials_at(company,
+day, span, metrics)` (SECURITY DEFINER, `authz.readable_companies('financials')` its only rule,
+figure_facts' pattern) serves the single-company routes: the history when today's rules built it,
+else gold's pipeline replayed at read time (the same values, citing the latest filing to state a
+figure by then). The readings' probes take `p_as_of DEFAULT NULL` (gold.latest_row, latest_equity,
+quarterly_recent, amount_currency_of, latest_period, latest_reading): NULL is the old probes, a day
+reads the history's primary key behind one-time filters (UNION ALL / coalesce), so each stays one
+inlined SELECT and gold.reading stays the one definition of the rules; stale is against
+tributary.today, which the Query API sets to the day. The stored screener figures (078) are the NULL
+path's, unchanged: no TRUNCATE. `gold.annual_per_share(company, years, day)`: 10-K facts filed by the
+day. `gold.restatements(company, day)`: consecutive versions whose value differs (quarters and TTM
+sums, not computed ratios), each side's citation and first day, and whether the tag stayed the same;
+the kinds (split, another line, same line) are query_api/point_in_time.py's.
+
+Measured on a catalog-sized local copy (the golden set's histories under 6,693 company ids, 3.40M
+versions, 1.7 GB; hermes' would be about four times as deep per company), as query_api with the catalog
+open: the default screen as of 2025-06-30 0.52 s after a Postgres restart (the OS cache warm: no root to
+drop it), 0.36 s warm, a growth sort 0.34 s, against 0.15 s for today's stored figures; one company's
+page as of the day (two statements with their originals, ratios, per-share) 0.06 s from its history,
+0.20 s replayed at read time (on hermes a replay costs about a view, 0.1-0.6 s, per call, while the
+company's history is behind the rules). gold.company_confidence (074) read tributary.today with a bare
+cast: an as-of session sets it locally, and a pooled connection then reads '' (never NULL again), so the
+next screen on that connection failed; it reads it through nullif now, as gold.is_stale does.

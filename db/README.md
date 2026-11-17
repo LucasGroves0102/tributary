@@ -70,6 +70,7 @@ to date by themselves, oldest first, a budget per run, after their own work (mig
 | diffs | `diff.ALGORITHM` | `ops.section_index.algorithm` | `section-index` (its own run) |
 | gold | `gold.rules_version()` | `ops.company_builds` ('gold') | `segments`: the rebuild path, per company |
 | checks | `ops.check_financials_version()`, `ops.check_segments_version()` | `ops.company_builds` | `segments`: the check re-run |
+| known | `gold.rules_version()` | `ops.company_builds` ('known') and a `gold.known_companies` row | `segments`: each company's history replayed after its gold (086) |
 | parser checks | `ops.check_sections_version()` | `ops.section_checks.version` | `section-index` (072) |
 
 **A migration that changes gold's rules or `silver.metric_tags` (anything that needed
@@ -87,7 +88,11 @@ A run that did nothing says why in `note` (079: `skipped: lock held` while a han
 parser-index's lock, with the last count), and a new version's backlog is recorded when its first
 run starts. The screener's stored figures (078: `gold.screen_companies`, `gold.screen_figures`) are
 written by every gold build and filled for companies without them by the `segments` job's catch-up,
-first (`gold.refresh_screen_backlog`); a company without them is read live.
+first (`gold.refresh_screen_backlog`); a company without them is read live. Gold's history
+(086: `gold.financials_known`) is kept by every gold build for a company the current rules replayed
+(the filing dates whose facts changed), and replayed whole by the 'known' kind (every company after
+the deploy and after every rules bump; it runs from the deploy, pausable like the others). The dumps
+leave the history out: after a restore, the catch-up replays every company.
 
 ### What each migration adds
 
@@ -172,3 +177,6 @@ One line each; the full notes (what it changes, why, the measurements) are in [D
 - [`082_sector_hvac_controls.sql`](DESIGN.md#082_sector_hvac_controlssql): SIC 3822 (Trane) in Industrials with the HVAC makers.
 - [`083_gross_sales_revenue.sql`](DESIGN.md#083_gross_sales_revenuesql): a trading venue's gross sales read as not-meaningful revenue (Bullish).
 - [`084_net_sales_gross_margin.sql`](DESIGN.md#084_net_sales_gross_marginsql): Walmart's and Costco's net sales, and their gross margin on them.
+- [`085_point_in_time_pipeline.sql`](DESIGN.md#085_point_in_time_pipelinesql): gold's pipeline as pure functions of a knowledge date (`p_as_of`); the same rows.
+- [`086_financials_known.sql`](DESIGN.md#086_financials_knownsql): gold's history of itself (`gold.financials_known`): every version of every row, from the filing that first stated it; the 'known' catch-up kind.
+- [`087_point_in_time_reads.sql`](DESIGN.md#087_point_in_time_readssql): reading gold as of a day: `gold.financials_at`, the single-company read, the readings' probes with `p_as_of`, restatements.

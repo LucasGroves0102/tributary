@@ -127,6 +127,21 @@ it("round-trips the Statements tab's choices, dropping defaults and anything unk
   expect(href({ view: "company", companyId: id, tab: "filings", statements: { kind: "bs" } })).toBe(`#/company/${id}/filings`);
 });
 
+it("keeps a company's As of day in the address on every tab, a real day from 2009 only", () => {
+  const id = "0001045810";
+  const views: Route[] = [
+    { view: "company", companyId: id, asOf: "2025-06-30" },
+    { view: "company", companyId: id, tab: "ratios", asOf: "2024-02-29" },
+    { view: "company", companyId: id, tab: "statements", statements: { kind: "bs" }, asOf: "2025-06-30" },
+  ];
+  for (const r of views) expect(parse(href(r))).toEqual(r);
+  expect(href(views[2]!)).toBe(`#/company/${id}/statements?kind=bs&asof=2025-06-30`);
+  expect(href(views[0]!)).toBe(`#/company/${id}?asof=2025-06-30`);
+  for (const bad of ["2025-02-30", "2008-12-31", "June", "2025-6-30"]) {
+    expect(parse(`#/company/${id}/statements?asof=${bad}`)).toEqual({ view: "company", companyId: id, tab: "statements" });
+  }
+});
+
 it("keeps a known data check in the screener's address and drops anything else", () => {
   expect(parse("#/companies?issue=impossible_value")).toEqual({ view: "companies", screen: { issue: "impossible_value" } });
   expect(href({ view: "companies", screen: { issue: "impossible_value" } })).toBe("#/companies?issue=impossible_value");

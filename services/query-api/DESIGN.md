@@ -315,6 +315,35 @@ the value, and evaluating it would be an oracle), and a value sort puts them las
 (`screener.py`) holds no user input: column and sort keys come from fixed catalogs, every
 value is a bind parameter.
 
+## Point in time
+
+Gold keeps a history of itself (db/DESIGN.md "086"): each version of a figure, from the day a filing
+first stated it to the day a filing changed it, built by gold's own pipeline as of each filing date
+(085: `p_as_of` on gold.usable_facts). The routes read it under RLS:
+
+- One company (`/financials`, `/per-share`, formulas, callouts): `gold.company_financials_at`
+  (SECURITY DEFINER, `authz.readable_companies` its only rule) returns gold.financials' rows as of
+  the day from the history, or, while today's rules haven't built the company's history yet (a
+  rules_version bump, a new company), from gold's pipeline replayed at read time: the same values,
+  0.2-1 s, citing the latest filing to state a figure by then instead of the first.
+- The screener: every company read live, `gold.latest_period` and `gold.latest_reading` with the
+  day (each probe a one-time-filtered branch into the history's primary key; nothing stored is
+  used), in a session whose `tributary.today` is the day, so stale is against it and the readings'
+  rules are the same function (`gold.reading`). Equal to the company page's latest row
+  (tests/golden/test_point_in_time.py).
+- Per share: the 10-K figures filed by the day (`gold.annual_per_share` with `p_as_of`) and only the
+  restatement findings whose restating filing was filed by then, so a split first restated later
+  isn't applied (findings are today's check; their `restated_filed` dates them).
+- Filings, sections, search: `filed <= day`.
+- Restatements: `gold.restatements` lists consecutive versions whose value differs; the kind is
+  decided in Python by the notes' one split rule (`notes._split_events` over the changes as
+  restatement findings), then by whether the XBRL tag stayed the same. `originals=true` compares each
+  row with its period's first version.
+
+What isn't point in time: segments, data notes, coverage and the confidence mark (today's; the web
+labels them, and an as-of screen's rows carry no confidence: the web asks for today's), and a
+figure's citation for a company replayed at read time (above).
+
 ## Per-share figures on one share basis
 
 `GET /v1/companies/{id}/per-share` (query_api/per_share.py, its docstring is the spec; Riley, test 6;

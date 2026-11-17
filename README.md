@@ -38,6 +38,11 @@ with its measurements.
 - **Statements, reported vs standardised.** Every quarter on file; a standardised line opens into
   the tags and filings it is made of; outliers and sign flips are marked with their filing
   ([query-api](services/query-api/README.md#statement-callouts)).
+- **As of any past day.** Every figure as it stood at the end of a chosen day, from the filings filed
+  by then, each citing the filing that first stated it; restated figures marked with what they were
+  first, and why they changed (a split, another line, the company's restatement). Gold keeps a
+  history of itself, built by its own pipeline ([db](db/DESIGN.md#086_financials_knownsql),
+  [query-api](services/query-api/README.md#point-in-time)).
 - **Revenue and segments** by business, geography and product, overlapping members never summed
   ([web](services/web/README.md)).
 - **Earnings and events.** Each release beside the 10-Q, the outlook quoted from the release, its
