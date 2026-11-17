@@ -77,6 +77,8 @@ import { Recent } from "./workspaces/Recent";
 import { SaveBar } from "./workspaces/SaveBar";
 import { useSaved } from "./workspaces/useSaved";
 import { WorkspaceTree } from "./workspaces/WorkspaceTree";
+import { useWatches } from "./watches/useWatches";
+import { SavedScreens, WatchControl } from "./watches/WatchControl";
 import { UndoDeletes } from "./workspaces/Actions";
 import { toast } from "./components/Toasts";
 
@@ -176,6 +178,8 @@ export function App(props: Props = {}) {
   const market = useMarketData(token);
   // F6: the bell's count (null: no alerts on this server, so no bell)
   const alertCount = useAlertsUnread(token);
+  // saved screens that alert (null: an older API, nothing offered)
+  const watching = useWatches(token);
   const reload = saved.reload;
   // a report saved: refresh the lists, and show it if its workspace is still on screen
   const writer = useReportWriter(token, user, useCallback((itemId: string, workspaceId: string) => {
@@ -398,6 +402,29 @@ export function App(props: Props = {}) {
     },
     [saved, setChart, keepDraft],
   );
+
+  // an alert's link to a saved screen (#/screen/<id>): opened as Companies' open screen, in place of
+  // the link (Back goes where the user came from, not to the link again)
+  useEffect(() => {
+    if (route.view !== "screen" || !token) return;
+    let live = true;
+    saved
+      .openItem(route.itemId)
+      .then((item) => live && window.location.replace(href(item.kind === "screen" ? itemRoute("screen", item.state) : { view: "home" })))
+      .catch(() => {
+        if (!live) return;
+        setError("Couldn't open that saved screen. It may have been deleted.");
+        window.location.replace(href({ view: "companies" }));
+      });
+    return () => {
+      live = false;
+    };
+    // the link's item only
+  }, [route.view === "screen" ? route.itemId : null, token]);
+  // the user's saved screens, listed on Companies
+  const savedScreens = useMemo(() => saved.list.state === "ok"
+    ? saved.list.workspaces.flatMap((w) => w.items.filter((i) => i.kind === "screen").map((i) => ({ item_id: i.item_id, name: i.name })))
+    : [], [saved.list]);
 
   // the user's own metrics (B2d, Your data): offered as screener columns
   const ownMetrics = useMemo(() => saved.list.state === "ok"
@@ -655,7 +682,7 @@ export function App(props: Props = {}) {
           onShortcuts={() => setHelp(true)}
           connections={market?.enabled ?? false}
           sandboxResetsIn={session?.kind === "sandbox" ? resetsIn(session.expiresAt, clock) : null}
-          workspaces={token ? <WorkspaceTree saved={saved} onOpen={openSaved} onError={setError} /> : null}
+          workspaces={token ? <WorkspaceTree saved={saved} onOpen={openSaved} onError={setError} watched={watching.watched} /> : null}
           onSignOut={(session?.kind === "github" || session?.kind === "account" || session?.kind === "sandbox") ? () => signOut(null) : undefined}
           signOutLabel={session?.kind === "sandbox" ? "End demo" : "Sign out"}
         />
@@ -755,6 +782,13 @@ export function App(props: Props = {}) {
                   go({ view: "chart" });
                 }}
                 saveBar={saveBar({ kind: "screen", screen: route.screen ?? {} })}
+                savedScreens={<SavedScreens screens={savedScreens} watched={watching.watched}
+                  openId={saved.open.screen?.itemId ?? null} onOpen={openSaved} />}
+                watch={saved.open.screen && watching.list ? (columns) => (
+                  <WatchControl token={token} itemId={saved.open.screen!.itemId} name={saved.open.screen!.name}
+                    watching={watching} columns={columns} shown={screenCols.map((c) => c.key)}
+                    dirty={currentFingerprint({ kind: "screen", screen: route.screen ?? {} }) !== saved.open.screen!.saved} />
+                ) : undefined}
                 columns={screenCols}
                 ownMetrics={ownMetrics}
                 columnPicker={views.editable ? (
@@ -909,6 +943,8 @@ export function App(props: Props = {}) {
             ) : route.view === "model" ? (
               <ModelPage key={`${user}-${route.itemId}`} token={token} itemId={route.itemId} saved={saved}
                 label={companyLabel} />
+            ) : route.view === "screen" ? (
+              <div className="page"><Skeleton lines={4} label="Opening the saved screen" /></div>
             ) : route.view === "report" ? (
               <ReportView
                 key={`${user}-${route.itemId}`}

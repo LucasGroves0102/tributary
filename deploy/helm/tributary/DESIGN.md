@@ -40,6 +40,13 @@ default, equal to `ALERT_SMTP_PORT`): that renders `allow-smtp`, the SMTP port t
 for pods that `uses: email` (only the alerts job; `tests/check_alert_email.py` checks both renders
 in CI). query-api also `uses: webhooks`, for the settings page's "Send a test".
 
+The same job checks users' watched screens (Query API README, "Saved screens that alert"; app
+migration 024, tributary 110): each watch once after `ops.figures_landed_at()` moves (the
+`financials-bulk` run's last step, its coverage report), as its owner (OpenFGA, then RLS), at most
+60 s a run between making filing alerts and sending, so their webhooks go out in the same run. It
+needs nothing new: no CronJob, no `uses`, no env, no role; the deploy's migrate hook adds the tables
+and the function.
+
 `filing-facts` (facts-fetcher image, `facts-fetcher-filings`, migration 055) reads filings SEC
 companyfacts lacks from their own XBRL, daily at 09:30 once enabled (`uses: postgres, sec`: an
 instance fetch is two requests at the batch class). It ships suspended; the first run goes back to

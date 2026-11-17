@@ -69,6 +69,15 @@ it("round-trips thesis and model routes and refuses odd ids", () => {
   expect(parse("#/model/")).toEqual({ view: "home" });
 });
 
+it("round-trips a saved screen's link (alerts point at it) and refuses odd ids", () => {
+  const id = "3f2b8c1e-5d4a-4f6b-9c2d-1a2b3c4d5e6f";
+  const r: Route = { view: "screen", itemId: id };
+  expect(href(r)).toBe(`#/screen/${id}`);
+  expect(parse(href(r))).toEqual(r);
+  expect(parse("#/screen/<b>")).toEqual({ view: "home" });
+  expect(parse("#/screen/")).toEqual({ view: "home" });
+});
+
 it("sends old explore links to Companies", () => {
   expect(parse("#/explore")).toEqual({ view: "companies" });
 });

@@ -79,6 +79,8 @@ export type Route =
   | { view: "thesis"; itemId: string }
   /** a revenue model: history + the user's assumptions → forecast (item of kind model) */
   | { view: "model"; itemId: string }
+  /** a saved screen by id (alert links): opened as Companies with its filters, as the saved item */
+  | { view: "screen"; itemId: string }
   /** the Analysis tab: your projects (no projectId), or one project at a guided step (a model
    * or thesis step may name which of the project's items) */
   | { view: "analysis"; projectId?: string; step?: ProjectStep; itemId?: string; start?: string };
@@ -150,7 +152,7 @@ export function parse(hash: string): Route {
     const step = b as ProjectStep;
     return c && ITEM_STEPS.has(step) && ID.test(c) ? { view, projectId: a, step, itemId: c } : { view, projectId: a, step };
   }
-  if ((view === "workspace" || view === "report" || view === "thesis" || view === "model") && ID.test(a ?? "")) {
+  if ((view === "workspace" || view === "report" || view === "thesis" || view === "model" || view === "screen") && ID.test(a ?? "")) {
     return view === "workspace" ? { view, workspaceId: a! } : { view, itemId: a! };
   }
   if (view === "company" && CIK.test(a ?? "")) {
@@ -209,6 +211,7 @@ export function href(route: Route): string {
     case "report":
     case "thesis":
     case "model":
+    case "screen":
       return `#/${route.view}/${encodeURIComponent(route.itemId)}`;
     case "company": {
       const tabQ = route.tab === "statements" && route.statements ? statementQuery(route.statements)
@@ -245,6 +248,7 @@ export function pageOf(route: Route): string {
     case "report":
     case "thesis":
     case "model":
+    case "screen":
       return `${route.view}/${route.itemId}`;
     case "analysis":
       return `analysis/${route.projectId ?? ""}/${route.step ?? ""}/${route.itemId ?? ""}`;

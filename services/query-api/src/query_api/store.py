@@ -5,7 +5,7 @@ skipped."""
 import re
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any, Protocol
 
@@ -153,6 +153,15 @@ class Store:
         with self._session(user_id) as cur:
             cur.execute("SELECT DISTINCT company_id FROM authz.public_access")
             return frozenset(r["company_id"] for r in cur.fetchall())
+
+    def figures_landed_at(self) -> datetime | None:
+        """When the nightly figures last landed (tributary 110, ops.figures_landed_at: the
+        financials-bulk job's coverage report, its last step); None before any run. A timestamp
+        only, read without a user (the alerts job's watches, watch_job.py)."""
+        with self._session("") as cur:
+            cur.execute("SELECT ops.figures_landed_at() AS at")
+            row = cur.fetchone()
+            return row["at"] if row else None
 
     def profiles(self, user_id: str, company_ids: list[str]) -> dict[str, dict]:
         """company_id → name, sic, industry, exchanges."""

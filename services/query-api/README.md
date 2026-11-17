@@ -92,9 +92,9 @@ tokens: `make token USER=alice`.
 | `DELETE /v1/connections/{provider}` | `DATA_CONNECTIONS_KEY`, token | deletes the key and every price fetched with it |
 | `GET /v1/companies/{id}/prices?from=&to=` | `DATA_CONNECTIONS_KEY`, financials, own connection | the caller's end-of-day closes, refreshed at most once per US Eastern day |
 | `GET /v1/companies/{id}/valuation` | `DATA_CONNECTIONS_KEY`, financials, own connection | market cap, P/E, P/S, EV/EBIT from the caller's latest close and the latest gold figures |
-| `GET /v1/alerts/unread` | token, app DB | the bell: unread alerts, the newest one's time, the job's last look ([Filing alerts](#filing-alerts)) |
+| `GET /v1/alerts/unread` | token, app DB | the bell: unread alerts (filings and watched screens), the newest one's time, the job's last look ([Filing alerts](#filing-alerts)) |
 | `GET /v1/alerts/notifications?company_id=&limit=` | token, app DB (figures: financials now) | the caller's alerts, newest first, with key figures and red lines where still readable |
-| `POST /v1/alerts/notifications/read` | token, app DB | `{"ids": [...]}`, `{"company_id": ...}` or `{"all": true}` |
+| `POST /v1/alerts/notifications/read` | token, app DB | `{"ids": [...]}` (filing or screen alerts), `{"company_id": ...}` (filing alerts) or `{"all": true}` |
 | `GET /v1/alerts/settings` | token, app DB | followed companies and their forms, webhooks (masked), email status, the last check |
 | `PUT /v1/alerts/settings/{id}` | token, app DB | `{"forms": [...], "other_8ks": bool}` for one company (`other_8ks` absent = unchanged) |
 | `GET /v1/alerts/red-lines?company_id=&evaluate=` | token, app DB (`evaluate`: financials) | the caller's red lines; `evaluate=true` checks each on the latest figures |
@@ -106,7 +106,11 @@ tokens: `make token USER=alice`.
 | `POST /v1/alerts/webhooks/{id}/rotate` | token, app DB | a new signing secret, shown once |
 | `DELETE /v1/alerts/webhooks/{id}` | token, app DB | the webhook and its delivery log |
 | `POST /v1/alerts/webhooks/{id}/test` | token, app DB | a signed test event now (5 an hour) |
-| `GET /v1/alerts/deliveries?webhook_id=&limit=` | token, app DB | the delivery log: status, attempts, last HTTP status, error code, next try |
+| `GET /v1/alerts/deliveries?webhook_id=&limit=` | token, app DB | the delivery log: status, attempts, last HTTP status, error code, next try (`screen_alert_id` for a screen alert's) |
+| `GET /v1/watches` | token, app DB | the caller's watched screens: what alerts, lines, the last check (`outcome`, `companies`) and the limits ([Saved screens that alert](#saved-screens-that-alert)) |
+| `PUT /v1/watches/screen/{item}` | token, app DB | watch one of the caller's saved screens: `{entering, leaving, columns, lines: [{column, label?, direction, threshold, company_id}]}`; another's screen is the same 404; at most 20 |
+| `DELETE /v1/watches/screen/{item}` | token, app DB | stop watching (the screen stays) |
+| `GET /v1/alerts/screens?item_id=&limit=` | token, app DB (companies: financials now) | the caller's screen alerts, newest first, only companies still readable (`hidden` counts the rest) |
 
 The portfolio and decision journal (sign-in only, never an API key or the MCP server; owner-only,
 app DB; [Portfolio](#portfolio)):
@@ -464,6 +468,21 @@ webhook rules: [DESIGN.md](DESIGN.md#filing-alerts).
 Email is a provider interface, off: `ALERT_SMTP_HOST` + `ALERT_SMTP_FROM` (`ALERT_SMTP_PORT`
 default 587, `ALERT_SMTP_USER`, `ALERT_SMTP_PASSWORD`) turn it on in the job, but no user address
 is verified yet, so nothing is sent. SMTP also needs `alertEmail.enabled` in the Helm values.
+
+## Saved screens that alert
+
+A user watches one of their saved screens (a workspace item of kind `screen`) and hears when a
+company enters or leaves it, or a column's value crosses a line they set (for one company or any
+in it), once the nightly figures land: the bell, the Alerts page, their webhooks (event `screen`)
+and email once it is on (`watches.py`, its docstring is the rules; `watch_job.py`; app migration
+024, owner-only, not streamed; tributary 110). The same `query-api-alerts` CronJob checks them, no
+new job: each watch once after `ops.figures_landed_at()` (the nightly bulk job's last step) moves,
+or a day later without it, and a new or changed watch at the next run. Each screen runs AS ITS
+OWNER (OpenFGA, then Store with their `app.user_id`), only companies they can read, with the
+screener's readings (n/m, n/a, old or another currency never cross). The first check, and the first
+after the screen, the lines or the owner's access change, only records who's in it. One alert per
+watch per check, at most 20 companies listed. Design and judgment calls:
+[DESIGN.md](DESIGN.md#saved-screens-that-alert).
 
 ## Portfolio
 

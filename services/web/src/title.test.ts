@@ -19,6 +19,8 @@ it("names the screen, and what's on it", () => {
   expect(screenTitle({ view: "status" }, { company })).toBe("Data status · Tributary");
   expect(screenTitle({ view: "thesis", itemId: "t1" }, { company, saved: (id) => (id === "t1" ? "VRT thesis" : null) })).toBe("VRT thesis · Tributary");
   expect(screenTitle({ view: "thesis", itemId: "t2" }, { company, saved: () => null })).toBe("Thesis · Tributary");
+  expect(screenTitle({ view: "screen", itemId: "s1" }, { company, saved: (id) => (id === "s1" ? "Cheap growers" : null) })).toBe("Cheap growers · Tributary");
+  expect(screenTitle({ view: "screen", itemId: "s2" }, { company, saved: () => null })).toBe("Saved screen · Tributary");
 });
 
 it("never puts an id in the tab", () => {

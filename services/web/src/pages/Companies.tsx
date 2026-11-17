@@ -54,6 +54,10 @@ interface Props {
   columnPicker?: ReactNode;
   /** the user's own metrics (B2d: saved formulas, Your data), offered as columns; null: none */
   ownMetrics?: { item_id: string; name: string }[] | null;
+  /** the user's saved screens (watches/SavedScreens) */
+  savedScreens?: ReactNode;
+  /** the open saved screen's watch (watches/WatchControl), given the columns as the table shows them */
+  watch?: (columns: ColumnSpec[]) => ReactNode;
 }
 
 /** An own metric's column as the table shows it, from the API's column info (`own`). */
@@ -79,7 +83,7 @@ type State =
  * bookmarked, shared and undone with Back. In a demo sandbox (scope.ts) it screens only the
  * demo's companies (`access=financials`, the API's own filter), so "only companies I can
  * read" is always on and not offered. */
-export function Companies({ token, screen: asked, watched, onWatch, onChart, saveBar, columns: chosen = DEFAULT_SPECS, columnPicker, ownMetrics = null }: Props) {
+export function Companies({ token, screen: asked, watched, onWatch, onChart, saveBar, columns: chosen = DEFAULT_SPECS, columnPicker, ownMetrics = null, savedScreens, watch }: Props) {
   const scope = useScope();
   // in a sandbox the filters shown never include "mine": it is implied
   const screen = useMemo(() => (scope ? { ...asked, mine: undefined } : asked), [scope, asked]);
@@ -184,6 +188,8 @@ export function Companies({ token, screen: asked, watched, onWatch, onChart, sav
         {saveBar}
       </div>
       {note && <p className="empty error">{note}</p>}
+      {savedScreens}
+      {watch?.(columns)}
 
       <div className="screener">
         <FilterRail screen={screen} set={set} scoped={scope !== null} sectors={sectorList} />

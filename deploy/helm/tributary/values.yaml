@@ -448,7 +448,9 @@ jobs:
   # and material 8-K filings of each user's watched and analysed companies in the last 3 days
   # (public filing index), as in-app notifications with their key figures and the user's red
   # lines (read as that user: OpenFGA, then RLS), sent on to users' webhooks with retries.
-  # Idempotent on the filing, so a missed or repeated run loses or doubles nothing. postgres +
+  # Idempotent on the filing, so a missed or repeated run loses or doubles nothing. The same run
+  # checks users' watched screens once the nightly figures land (query_api/watch_job.py, app
+  # migration 024, tributary 110), each as its owner. postgres +
   # app-postgres + openfga = the reads; jwt = webhook signing secrets (derived, never stored);
   # webhooks = HTTPS out to public addresses only. No Kafka client, no SEC requests.
   alerts:

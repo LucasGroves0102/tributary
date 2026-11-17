@@ -106,6 +106,9 @@ export interface Fake {
   journal: Record<string, unknown>[];
   /** Your data (query_api/datasets.py): the datasets stored, each with NVDA's rows */
   datasets: Record<string, unknown>[];
+  /** saved screens that alert (query_api/watches.py): watches by saved screen, and their alerts */
+  watches: Map<string, Record<string, unknown>>;
+  screenAlerts: Record<string, unknown>[];
 }
 
 const DATA_LIMITS = { file_bytes: 20 * 2 ** 20, rows: 200000, columns: 50, datasets: 50, user_bytes: 200 * 2 ** 20, requests_per_hour: 30, uploads_per_hour: 10 };
@@ -215,7 +218,7 @@ function reportState(workspaceId: string, items: Record<string, unknown>[]) {
 }
 
 export async function mockApi(page: Page): Promise<Fake> {
-  const fake: Fake = { watched: new Set([NVDA, PEP]), calls: [], workspaces: [], items: new Map(), asked: [], views: {}, reports: [], checkResult: null, checks: new Map(), apiKeys: [], holdings: [], journal: [], datasets: [] };
+  const fake: Fake = { watched: new Set([NVDA, PEP]), calls: [], workspaces: [], items: new Map(), asked: [], views: {}, reports: [], checkResult: null, checks: new Map(), apiKeys: [], holdings: [], journal: [], datasets: [], watches: new Map(), screenAlerts: [] };
   let seq = 0;
   const now = () => new Date(Date.UTC(2026, 9, 21, 12, 0, seq++)).toISOString();
 
@@ -583,6 +586,23 @@ export async function mockApi(page: Page): Promise<Fake> {
     }
     if (path === "/v1/alerts/deliveries") return json({ deliveries: [], retries: [300, 1800, 7200, 21600] });
     if (path === "/v1/alerts/red-lines") return json({ red_lines: [], max_per_company: 10, evaluation: [], evaluated_at: now() });
+    // saved screens that alert: the Companies page and the sidebar list the watches on load, Alerts their alerts
+    if (path === "/v1/watches" && method === "GET") {
+      return json({ watches: [...fake.watches.values()], max_watches: 20, max_lines: 5, max_companies: 500, max_listed: 20,
+        schedule: "after the nightly figures land (about 6 a.m. New York time)" });
+    }
+    m = path.match(/^\/v1\/watches\/screen\/([^/]+)$/);
+    if (m && method === "PUT") {
+      const item = fake.items.get(m[1]!);
+      if (!item || item.kind !== "screen") return json({ detail: "no such saved screen" }, 404);
+      const watch = { id: `w-${m[1]}`, source: "screen", item_id: m[1], name: item.name, ...body,
+        lines: (body.lines ?? []).map((l: Record<string, unknown>) => ({ label: l.column, ...l })),
+        checked_at: null, outcome: null, companies: null, created_at: now(), updated_at: now() };
+      fake.watches.set(m[1]!, watch);
+      return json({ watch });
+    }
+    if (m && method === "DELETE") return fake.watches.delete(m[1]!) ? json({ deleted: true }) : json({ detail: "no such watch" }, 404);
+    if (path === "/v1/alerts/screens") return json({ alerts: fake.screenAlerts, has_more: false, schedule: "" });
     // Your data (query_api/datasets.py): a multipart upload, previewed (dry_run) or stored
     if (path === "/v1/datasets" && method === "GET") return json({ datasets: fake.datasets, limits: DATA_LIMITS, uploads_allowed: true });
     if (path === "/v1/datasets" && method === "POST") {

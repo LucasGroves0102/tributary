@@ -28,6 +28,7 @@ carry the README's headings, so a README section's "Design notes" link lands on 
 - [Your data](#your-data)
 - [Tests](#tests)
 - [Filing alerts](#filing-alerts)
+- [Saved screens that alert](#saved-screens-that-alert)
 - [Statement callouts](#statement-callouts)
 - [Reported vs standardised](#reported-vs-standardised)
 - [Data notes](#data-notes)
@@ -1347,6 +1348,65 @@ migrations 016 and 017 (owner-only, forced RLS, not streamed).
   proved they own and none is stored yet, so nothing is sent; the settings say email isn't set up.
   The network policy opens only 443, so SMTP also needs `alertEmail.enabled` in the Helm values
   (`allow-smtp`, port 587 by default; deploy/helm/tributary README).
+
+## Saved screens that alert
+
+Direction A ("alerts on holdings (done), saved screens that alert"): a user watches a saved screen and
+hears, after the nightly figures land, which companies entered or left it and which crossed a line
+they set. Rules: `watches.py`'s docstring; the pass: `watch_job.py`; storage: app migration 024.
+
+- **A saved screen is the workspace item it always was.** Companies has saved screens as workspace
+  items of kind `screen` since Phase 6 (owner-only, forced RLS, listed in the sidebar's workspaces,
+  renamed and deleted there), so a watch points at one (`(item_id, user_id)` references the item and
+  goes with it) instead of a second kind of saved screen. The watch keeps the screener columns the
+  page showed when it was saved (`columns`: a company with no figure in any of them isn't listed, the
+  screener's rule), since those are a per-user view, not part of the screen. Limits: 20 watches a
+  user, 5 lines a watch, 500 companies a screen (`too_broad` past it: a broader screen alerts nothing,
+  its ids aren't stored), 20 companies listed an alert.
+- **A seam for saved SQL queries (B3b).** `watches.source` is `'screen'`; a saved query (a notebook's
+  SQL cell) would be another source with its own reference columns and route
+  (`PUT /v1/watches/query/{item}/{cell}`), giving `watches.Snapshot` (company ids in it, the lines'
+  values). The diff, the caps, the storage, the alerts and their delivery stay as they are.
+- **When.** The alerts CronJob (every 10 minutes) runs the pass between making filing alerts and
+  sending, so a screen alert's webhooks go out in the same run, and needs nothing new on the cluster
+  (no CronJob, no role, no env). A watch is due when `ops.figures_landed_at()` (tributary 110: the
+  newest coverage run, the bulk job's last step, about 5-6 a.m. New York time) is newer than its last
+  check, or 26 hours after it if the figures never say they landed, or at once when it is new or it
+  or its screen was saved since. Watches get at most 60 s a run, and none starts later than 20 s after
+  the filing pass's budget (the Job's 540 s deadline keeps room for the sends): one not reached waits
+  10 minutes.
+- **As whom.** The owner only. Layer 1 is the owner's `Access` (one OpenFGA Check on the catalog and
+  small lists; down: the user is skipped, fail closed); the screen is compiled by the screener with
+  `granted_only` and the owner's id list (None with the catalog open: RLS alone, never a catalog-sized
+  array) and run by Store as the owner (RLS); layer 1 drops any row it doesn't allow again. Own metrics
+  resolve through the owner's items and datasets. So a company the owner can't read is never in their
+  screen, whoever else reads it (`test_watch_screens_db.py`, catalog closed and open).
+- **Exactly the screener.** `screen_of` maps a saved state the way the web's `screenParams` and
+  `/v1/screener` do (growth and margin as minimum fractions, band, one sic, sector, exchange, filer,
+  name, issue); a DB test compares its members with `/v1/screener?access=financials` for the same
+  screen. Lines read the screener's own values: `Screen.blank_columns` adds their columns to the query
+  without changing which companies `hide_blank` lists (None: the screener's SQL byte for byte), and a
+  value compares only as k<i> would (`comparable`: none for n/m, n/a, old, another currency). A line
+  on a named company reads it like a comps table, in the screen or not.
+- **What alerts.** Entering and leaving: the difference of the company ids with the last check's. A
+  crossing: a company whose readable value was on the near side at the last check and past the line
+  now (above >, below <); for "any company", only companies in the screen now. Unreadable either side,
+  no crossing. Only company ids are stored (`members`, per line `near`), never a value; the alert
+  keeps the value it crossed with, as read for the owner.
+- **No storms.** The first check, and the first after the screen's filters, the watch's columns or
+  lines, its own metrics' formulas or the owner's access change (`basis`, a hash of them), only
+  records: so opening the catalog, a new grant or editing the screen never floods anyone. One alert
+  per watch per check; at most 20 companies listed across its sections (lines, then entering, then
+  leaving), each with "and N more". A failed check (a metric gone, a query over 5 s) keeps what it saw
+  and waits for the next landing.
+- **Delivery.** `screen_alerts` rows count on the bell and list on the Alerts page; each makes a
+  `webhook_deliveries` row per enabled webhook (`screen_alert_id`), sent by `alert_job.deliver`
+  through the same `HttpsSender`, retries and stall rules, as event `screen` with a link back to the
+  screen (`/#/screen/{item}`) and to each company. Shown and sent, a company the user can no longer
+  read is left out (`hidden` counts them), as filing alerts strip figures. Email: the same digest,
+  once a provider and a verified address exist. Kept KEEP_DAYS like notifications.
+- **Account routes only.** `/v1/watches*` and `/v1/alerts/screens` are never in `KEY_ROUTES`
+  (test_api_keys ACCOUNT); no agent tool, no MCP tool.
 
 ## Statement callouts
 

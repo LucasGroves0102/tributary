@@ -74,6 +74,10 @@ with its measurements.
   ([parser](services/parser/README.md), [query-api](services/query-api/README.md#search)).
 - **Filing alerts** for followed companies, with red lines and SSRF-safe signed webhooks
   ([query-api](services/query-api/README.md#filing-alerts)).
+- **Saved screens that alert.** Watch a saved screen and hear, after the night's figures, which
+  companies entered or left it or crossed a line you set; checked as you (only companies you can
+  read), with the screener's readings, the first check silent and each alert capped
+  ([query-api](services/query-api/README.md#saved-screens-that-alert)).
 - **Portfolio and decision journal.** Holdings from a Fidelity export (account numbers dropped as the
   file is read) or typed in, valued only on your own prices, each beside the thesis behind it; a
   journal kept as written after 24 hours, and a review due when a holding files its next 10-K or 10-Q.

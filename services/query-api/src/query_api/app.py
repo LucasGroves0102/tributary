@@ -19,7 +19,13 @@ from query_api import per_share, point_in_time
 from query_api.alerts import AppAlerts, add_alert_routes
 from query_api.api_keys import ApiKeys, KeyAuth, Limits, add_api_key_routes, is_api_key, key_info
 from query_api.auth import Unauthenticated, mint, verify_claims
-from query_api.authorizer import Access, Authorizer, AuthzUnavailable, Readable
+from query_api.authorizer import (
+    Access,
+    Authorizer,
+    AuthzUnavailable,
+    Readable,
+    readable_from,
+)
 from query_api.components import add_components_routes
 from query_api.connections import MarketData, add_connection_routes
 from query_api.csv_export import csv_response
@@ -66,6 +72,7 @@ from query_api.text_kpis import add_text_kpi_routes
 from query_api.thesis_checks import ThesisChecks, add_thesis_check_routes
 from query_api.ui import add_ui_routes, today_eastern
 from query_api.views import Views, add_view_routes
+from query_api.watches import AppWatches, add_watch_routes
 from query_api.watchlist import Watchlists
 from query_api.webhooks import Sender
 from query_api.workspace_api import add_workspace_routes
@@ -138,7 +145,8 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
                api_keys: ApiKeys | None = None,
                api_key_limits: Limits = KEY_LIMITS,
                portfolio: AppPortfolio | None = None,
-               userdata: UserData | None = None) -> FastAPI:
+               userdata: UserData | None = None,
+               watches: AppWatches | None = None) -> FastAPI:
     """demo_users: accounts anyone may sign in as without a password (empty disables it).
     today: the current US Eastern date (EDGAR's), injectable for tests.
     watchlists: the app database's watchlists (None: watchlist routes answer 503).
@@ -155,6 +163,7 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
     password_accounts: owner-created username/password accounts (query_api.password_accounts);
     None (no app database): POST /v1/auth/password answers 404 and "pw-" tokens are refused.
     alerts: filing alerts in the app database (query_api.alerts; None: its routes answer 503);
+    watches: saved screens that alert (query_api.watches; None: its routes answer 503);
     webhook_sender, webhook_resolver: how a webhook test send connects and resolves names
     (query_api.webhooks; injected in tests).
     api_keys, api_key_limits: personal API keys (query_api.api_keys; None: a "trb_" bearer is
@@ -253,13 +262,7 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
         every catalog company (one Check, then the cached list) plus their private grants.
         Layer 1's answer in Python; routes pass Readable.ids(tier) into SQL, never the whole
         list (query_api.authorizer.Readable)."""
-        access = access_of(user_id)
-        if not access.public:
-            return Readable(access.listed)
-        out = {c: set(access.public) for c in catalog(user_id)}
-        for c, tiers in access.listed.items():
-            out.setdefault(c, set()).update(tiers)
-        return Readable(out, access.public)
+        return readable_from(access_of(user_id), lambda: catalog(user_id))
 
     def own_metrics(user_id: str, item_ids: list[str]) -> dict[str, MetricColumn]:
         """The caller's saved metrics (workspace items of kind `metric`) as screener columns;
@@ -317,6 +320,7 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
                      readable=readable, jwt_secret=jwt_secret, sender=webhook_sender,
                      resolver=webhook_resolver, clock=now,
                      reviews_due=reviews_due if portfolio is not None else None)
+    add_watch_routes(app, watches=watches, current_user=current_user, readable=readable)
     add_status_routes(app, store=store, clock=now)
     add_dataset_routes(app, data=userdata, current_user=current_user,
                        today=today or today_eastern)

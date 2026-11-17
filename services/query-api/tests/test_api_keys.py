@@ -423,6 +423,10 @@ ACCOUNT = [
     ("GET", "/v1/portfolio"), ("GET", "/v1/portfolio/journal"),
     ("POST", "/v1/portfolio/holdings"), ("POST", "/v1/portfolio/import/preview"),
     ("GET", f"/v1/portfolio/position/{NVDA}"),
+    # saved screens that alert: what a user watches and hears about stays in the app
+    ("GET", "/v1/watches"), ("GET", "/v1/alerts/screens"),
+    ("PUT", "/v1/watches/screen/0b6f8a52-63f4-4d6e-9d0e-2f4d3b8a1c11"),
+    ("DELETE", "/v1/watches/screen/0b6f8a52-63f4-4d6e-9d0e-2f4d3b8a1c11"),
 ]
 
 

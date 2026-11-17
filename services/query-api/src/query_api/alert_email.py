@@ -73,9 +73,12 @@ def no_recipients(_user_id: str) -> str | None:
     return None
 
 
-def digest(messages: list[str]) -> tuple[str, str]:
-    """Subject and body of one user's alerts from one run."""
+def digest(messages: list[str], what: str = "filing alert") -> tuple[str, str]:
+    """Subject and body of one user's alerts from one run (`what`: filing alert, or screen
+    alert for watched screens, query_api/watch_job.py)."""
     n = len(messages)
-    subject = f"Tributary: {n} new filing alert{'' if n == 1 else 's'}"
+    subject = f"Tributary: {n} new {what}{'' if n == 1 else 's'}"
     body = "\n\n---\n\n".join(messages)
-    return subject, body + "\n\nChoose which filings alert in Tributary: Settings, Filing alerts.\n"
+    foot = ("Choose which filings alert in Tributary: Settings, Filing alerts."
+            if what == "filing alert" else "Change or stop watching a screen from the screen.")
+    return subject, body + "\n\n" + foot + "\n"

@@ -195,6 +195,53 @@ test("save a chart to a new workspace and reopen it", async ({ page }) => {
   await expect(page.locator(".savebar")).toContainText("Margin check");
 });
 
+test("a saved screen watched: entering, leaving and a line; marked; its alerts link back to it", async ({ page }) => {
+  const fake = await mockApi(page);
+  await startDemo(page);
+  await page.goto("/#/companies?margin=20");
+  await expect(page.locator("table.screen tbody tr").first()).toBeVisible();
+  await page.getByRole("button", { name: "Save…" }).click();
+  const form = page.getByRole("form", { name: "Save screen" });
+  await form.getByLabel("Name").fill("Cheap growers");
+  await form.getByRole("button", { name: "Save" }).click();
+  await expect(page.locator(".savebar")).toContainText("Cheap growers");
+  const item = [...fake.items.values()].find((i) => i.kind === "screen")!;
+
+  // watch it: companies entering and leaving, and operating margin falling below 15% for any company
+  const strip = page.getByRole("region", { name: "Alerts for the saved screen Cheap growers" });
+  await strip.getByRole("button", { name: "Watch…" }).click();
+  await strip.getByRole("button", { name: "Add a line" }).click();
+  await strip.getByLabel("Column").selectOption({ label: "Operating margin (TTM)" });
+  await strip.getByRole("radio", { name: "Falls below" }).click();
+  await strip.getByLabel("Value in %").fill("15");
+  await expect(strip.locator(".watch-reads")).toHaveText("Alerts when a company's Operating margin (TTM) falls below 15.0%");
+  await page.screenshot({ path: test.info().outputPath("watch-form.png") });
+  await strip.getByRole("button", { name: "Start watching" }).click();
+  await expect(strip.locator(".watch-row")).toContainText("Watching companies entering, companies leaving, 1 line");
+  const watch = fake.watches.get(String(item.item_id))!;
+  expect(watch.lines).toEqual([{ column: "operating_margin_ttm", label: "Operating margin (TTM)", direction: "below", threshold: "0.15", company_id: null }]);
+  expect(watch.columns).toEqual(expect.arrayContaining(["revenue_ttm", "operating_margin_ttm"]));
+  // listed under Companies and marked in the sidebar's workspaces
+  await expect(page.getByRole("navigation", { name: "Your saved screens" })).toContainText("Cheap growers watched");
+  await expect(page.locator(".ws-watched")).toHaveCount(1);
+
+  // an alert after the night's figures, on the Alerts page, with a link back to the screen
+  fake.screenAlerts = [{ id: "a1", watch_id: watch.id, item_id: item.item_id, name: "Cheap growers", hidden: 0,
+    created_at: "2026-10-21T10:40:00Z", read_at: null, figures_at: "2026-10-21T10:31:00Z",
+    crossed: [{ line: 0, column: "operating_margin_ttm", label: "Operating margin (TTM)", direction: "below", threshold: "0.15",
+      company_id: null, unit: "ratio", display: "percent", companies: [{ company_id: KO, value: "0.142" }], more: 0 }],
+    entered: { companies: [PEP], more: 0 } }];
+  await page.goto("/#/alerts");
+  const alert = page.locator(".alert-item", { hasText: "Cheap growers" });
+  await expect(alert).toContainText("Operating margin (TTM) fell below 15.0%");
+  await expect(alert).toContainText("14.2%");
+  await expect(alert).toContainText("Entered:");
+  await page.screenshot({ path: test.info().outputPath("screen-alert.png"), fullPage: true });
+  await alert.getByRole("link", { name: "Open the screen" }).click();
+  await expect(page).toHaveURL(/#\/companies\?margin=20$/);
+  await expect(page.locator(".savebar")).toContainText("Cheap growers");
+});
+
 test("assistant drawer opens, answers from a streamed reply, and closes", async ({ page }) => {
   const fake = await mockApi(page);
   await startDemo(page);
