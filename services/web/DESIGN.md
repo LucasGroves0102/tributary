@@ -1267,6 +1267,26 @@ for the company: each dataset's latest days, values in their field's unit and cu
 any (`chart/series.ts` skips their sources: no filing). Nothing of it reaches the assistant (the
 page is "about" to agent-api).
 
+## Notebook
+
+`#/notebook` (new) and `#/notebook/<id>` (a saved one) (`notebook/NotebookPage.tsx`,
+`notebook/notebook.ts`; query-api README "SQL workspace"), in the left nav (g n). Cells, each with
+its rubric (Query n, Note, Chart) and a More menu (move, delete): a query (a SQL editor in the
+system monospace; Run or Ctrl+Enter; the rows in a `TableScroll` table, 100 at first, Export CSV and
+Chart it), a note (the user's Markdown through `renderMarkdown`) and a chart (over a query: a column
+across, up to six columns of numbers, lines or bars, drawn by the chart builder's `LayerChart` from
+the result in the page). Run all runs the queries top to bottom, one at a time (the API runs one
+per user), stopping at the first that fails. A refusal or a Postgres error is shown under its query
+in the API's words, with a syntax error's line and column. The side panel is the schema browser
+(`/v1/sql/schema`: every view's and function's columns with their descriptions, Query it) and the
+example queries (each added as a query and run).
+
+A notebook is saved into the workspace "Notebooks" (made on first use) and holds only what was
+written: cells' SQL, notes and chart settings, never a result (`notebookState`; the CSV is made in
+the browser from the page's result, values exactly as the API sent them, a cell a spreadsheet would
+run as a formula written as text). Opening one runs nothing until asked: its charts say which query
+to run. Nothing of it reaches the assistant (`uiContext` sends the page as about).
+
 ## Finding a company
 
 Finding a company (`components/CompanySearch.tsx`): one server-backed combobox everywhere a
@@ -1509,4 +1529,7 @@ tags-only wording); nothing new is requested. Portfolio: `/v1/portfolio` and the
 the unread answer has it. Your data: `/v1/datasets` answering 404 says it isn't available on this
 server yet; the company page's Your data panel asks `/v1/companies/{id}/datasets` and shows nothing
 on a 404; a saved screen refused for its own metrics (`metric`, or a sort on an `m_` column) is
-saved again without them; the screener sends `metric` only when the user chose one.
+saved again without them; the screener sends `metric` only when the user chose one. Notebook:
+`/v1/sql/schema` answering 404 says the SQL workspace isn't available on this server yet (Run all off)
+and `/v1/sql` answering 404 says queries can't run here yet; an older API refuses a notebook save
+(an unknown kind) with its message.

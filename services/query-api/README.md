@@ -142,7 +142,7 @@ Saved work, preferences and the routes only agent-api calls (all owner-only, app
 | `GET` / `POST /v1/workspaces` | token | the caller's workspaces / a new one (`{name, project?}`) ([Workspaces](#workspaces-saved-work)) |
 | `GET` / `PATCH` / `DELETE /v1/workspaces/{id}` | token | one workspace with its items (theses' and reports' states null) / `{name?, project?}` / delete |
 | `POST /v1/workspaces/{id}/duplicate` | token | a copy, with its `project` |
-| `POST /v1/workspaces/{id}/items` | token | a new item (chart, comps, screen, thesis, model) |
+| `POST /v1/workspaces/{id}/items` | token | a new item (chart, comps, screen, thesis, model, metric, notebook) |
 | `GET` / `PUT` / `DELETE /v1/workspace-items/{id}` | token | one item with its state / save over or rename / delete |
 | `POST /v1/workspace-items/{id}/open` | token | the state, recorded for Home |
 | `POST /v1/workspace-items/{id}/duplicate` | token | a copy in the same or another workspace |
@@ -152,6 +152,8 @@ Saved work, preferences and the routes only agent-api calls (all owner-only, app
 | `POST /v1/thesis-checks/{item_id}` | agent-api only (nginx 404s it) | store a thesis check ([Thesis checks](#thesis-checks)) |
 | `GET /v1/workspace-items/{id}/checks[/{check_id}]` | token | a thesis's checks, newest first / one with its result |
 | `GET /v1/views`, `PUT` / `DELETE /v1/views/{view}` | token | saved views and defaults / save / reset ([Customizable views](#customizable-views)) |
+| `POST /v1/sql` | sign-in (never a key), app DB | `{"sql"}`: one SELECT over the `workspace` views as the caller, read only: columns, at most 10,000 rows, the statement as run, the day's budget; 422 with `code` and the reason, 429 when busy or over the budget ([SQL workspace](#sql-workspace)) |
+| `GET /v1/sql/schema` | sign-in (never a key) | the workspace's views and functions with every column described, example queries and the limits |
 
 Prometheus metrics are on `/metrics` (including `tributary_permission_checks_total{tier,result}`);
 the web proxy blocks it and `/docs` from the public. OpenAPI docs at `http://localhost:8000/docs`.
@@ -434,6 +436,9 @@ curl -H "Authorization: Bearer $TRIBUTARY_API_KEY" \
 
 Full rules, metrics and tests: [DESIGN.md](DESIGN.md#api-keys).
 
+API keys can't run SQL: `POST /v1/sql` and `GET /v1/sql/schema` are not in `KEY_ROUTES` (default
+deny), for now.
+
 ## Connect your data
 
 Each user connects their **own** market-data API key (Tiingo); the Query API fetches end-of-day
@@ -521,6 +526,42 @@ status page or anyone else's answers.
 | `USER_DATA_SPACE_MB` | every user's rows on disk at most (default 4096); past it uploads answer 507 |
 
 Design, limits' reasons, organisation sharing and own files (next): [DESIGN.md](DESIGN.md#your-data).
+
+## SQL workspace
+
+One SELECT at a time over Tributary's data and the caller's own (B3a; `sql_guard.py` and
+`sql_workspace.py`, their docstrings are the rules; tributary migration 105, schema `workspace`;
+app migration 023). The web app's Notebook runs its cells through it.
+
+- **What can be read**: the views `companies`, `metrics`, `financials`, `financials_history` (every
+  version of a figure, point in time), `latest_figures` (the screener's stored latest figures),
+  `filings` (the SEC index), `sections` (parsed sections, no text), `my_datasets`, `my_series`
+  (the caller's own data), and the functions `financials_at(day)` (the versions believed at the end
+  of a day), `restatements(company_id, as_of)` and `reading(company_id, metric, span)`. Column
+  descriptions: `GET /v1/sql/schema`.
+- **Who reads what**: exactly as everywhere else. The query runs as `workspace_reader` after the
+  server sets `app.user_id`; the tables' row-level security applies (financials and filings
+  tiers, the catalog open or closed, private grants; `userdata` only the caller's rows).
+- **What is refused before anything runs** (pglast, Postgres 16's grammar): more than one
+  statement, anything but SELECT (SET, COPY, PREPARE, EXPLAIN...), INTO, FOR UPDATE, data-modifying
+  or recursive WITH, any relation outside `workspace` (catalogs, gold, bronze...), any function
+  outside an allowlist (never `set_config`, `current_setting`, `pg_sleep`, `generate_series`,
+  advisory locks, dblink, large objects; no `array_agg`/`string_agg`: one unbounded value), casts to anything but numbers, text, booleans, dates and
+  times, `$1` parameters and NUL bytes. What runs is the checked statement as pglast prints it.
+- **Limits**: 15 s a statement, lock timeout 1 s, work_mem 32 MB, temp files 256 MB, no parallel
+  workers; a plan is refused before it runs when a step expects over `SQL_MAX_PLAN_ROWS` rows (a
+  join without a condition) or its estimated cost is over `SQL_MAX_COST`; 10,000 rows (8 MB)
+  returned through a cursor; one running query per user and 4 at once across replicas
+  (advisory locks, 429); `SQL_SECONDS_PER_DAY` of query time per user per UTC day (app DB
+  `sql_usage`). Errors carry Postgres' message and hint, never its detail.
+
+| Env | |
+|---|---|
+| `SQL_MAX_PLAN_ROWS` | the most rows any step of the plan may expect (default 1e9: legitimate queries stay under 4e6, cartesian joins of the views expect 1e10 and more) |
+| `SQL_MAX_COST` | the plan's estimated total cost at most (default 1e10: only absurd plans; RLS inflates LATERAL estimates, so cost alone can't tell slow from cheap) |
+| `SQL_SECONDS_PER_DAY` | query seconds per user per day (default 600) |
+
+Security model, measurements and the adversarial suite: [DESIGN.md](DESIGN.md#sql-workspace).
 
 ## Statement callouts
 

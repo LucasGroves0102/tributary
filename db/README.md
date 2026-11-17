@@ -19,6 +19,7 @@ OpenFGA keeps its own `openfga` database, migrated by OpenFGA itself.
 | `authz` | `user_access` (private grants: user, company, tier), `user_tiers` (each user's plan tiers), `public_access` (public catalog: company, tier); `readable_companies(tier)`, the read rule every policy uses | authz-sync |
 | `ops` | freshness and pipeline-health views for Grafana, the ops exporter and the public status page; the data-quality findings; the shared SEC rate limit; the document crawl's queue; the section index's checkpoint; daily completeness; doc-fetcher's outbox and insider queue | the services named per migration below |
 | `userdata` | a user's own data (migration 100): `datasets`, `rows` (by company, day and when known), `uploads` (the hourly limit), `series` (view); owner-only, forced RLS on `app.user_id`, nothing grants access; in every backup (it can't be rebuilt) | the Query API, as the user |
+| `workspace` | what the SQL workspace reads (migration 105): security-invoker views over gold, the filing index, sections (no text) and the caller's `userdata`, three functions; read only by the `workspace_reader` role under the tables' own RLS | nothing (views) |
 
 Transforms are SQL functions (`silver.refresh_financial_facts`, `gold.refresh_quarterly_financials`,
 `gold.refresh_derived_financials`, `silver.refresh_company_metadata`, ...: [transforms/](transforms/README.md)
@@ -54,6 +55,19 @@ replaced gold functions since 038 can be undone by hand from [`backout/`](backou
 newest first, as the migrate login; each file's guard refuses any other order or login and changes
 nothing. Each migration's header has the measurements behind its thresholds and its lock impact on
 production.
+
+### SQL workspace role
+
+Migration 105 needs a group role the migrate login can't create, query_api's right to SET ROLE to
+it, and query_api's right to lower `temp_file_limit` (a superuser-only setting). On hermes, before
+the deploy that brings 105 (once; the migration checks all three and otherwise stops, printing this):
+
+```bash
+sudo -u postgres psql -d tributary -v ON_ERROR_STOP=1 -c "CREATE ROLE workspace_reader NOLOGIN" -c "GRANT workspace_reader TO query_api WITH INHERIT FALSE, SET TRUE" -c "GRANT SET ON PARAMETER temp_file_limit TO query_api"
+```
+
+Compose and any superuser login create them in the migration; CI's production-like step creates
+them first. Undo: [`backout/sql_workspace_105.sql`](backout/README.md).
 
 [`rls/`](rls) and [`transforms/`](transforms) hold no SQL; their READMEs point to the
 migrations that define those objects. [`research/`](research) holds read-only queries behind curated
@@ -182,3 +196,4 @@ One line each; the full notes (what it changes, why, the measurements) are in [D
 - [`086_financials_known.sql`](DESIGN.md#086_financials_knownsql): gold's history of itself (`gold.financials_known`): every version of every row, from the filing that first stated it; the 'known' catch-up kind.
 - [`087_point_in_time_reads.sql`](DESIGN.md#087_point_in_time_readssql): reading gold as of a day: `gold.financials_at`, the single-company read, the readings' probes with `p_as_of`, restatements.
 - [`100_userdata.sql`](DESIGN.md#100_userdatasql): Bring your own data: the schema `userdata` (a user's own datasets, their rows by company, day and when known, the upload log), owner-only under forced RLS, in every backup.
+- [`105_sql_workspace.sql`](../services/query-api/DESIGN.md#sql-workspace): the SQL workspace (B3a): the schema `workspace` (views and functions, every column commented: the schema browser reads them), the NOLOGIN role `workspace_reader` and its grants, and ten policies naming it beside `query_api`. The migrate login can't create roles: on hermes the owner creates it first ([SQL workspace role](#sql-workspace-role)); the migration stops with the command otherwise.

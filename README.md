@@ -49,6 +49,11 @@ with its measurements.
   Tributary's figures as `mine.<dataset>.<field>`, and saved formulas become screener columns.
   Owner-only under forced row-level security, never shared or mixed into Tributary's figures
   ([query-api](services/query-api/README.md#your-data)).
+- **Notebook: SQL over the data.** One SELECT at a time over Tributary's figures, their point-in-time
+  history, the filing index and your own datasets, with notes and charts, saved without results.
+  Checked on its parse tree, run read only as a bare role under the same row-level security as every
+  screen, with a cost ceiling, a timeout, a row cap and a daily budget
+  ([query-api](services/query-api/README.md#sql-workspace)).
 - **Revenue and segments** by business, geography and product, overlapping members never summed
   ([web](services/web/README.md)).
 - **Earnings and events.** Each release beside the 10-Q, the outlook quoted from the release, its

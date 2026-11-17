@@ -6,9 +6,11 @@ in the `platform` namespace; Postgres runs on the host.
 ## Prerequisites
 
 - Postgres reachable from pods at `hostAddress` (default `10.42.0.1`, the k3s bridge), with the
-  `tributary`, `app` and `openfga` databases, the `query_api`, `ops_reader` and `sec_limiter`
-  group roles (migrations 007, 010 and 022 create them only when the login may create roles; on
-  hermes the owner made them), and `query_api` granted to the login.
+  `tributary`, `app` and `openfga` databases, the `query_api`, `ops_reader`, `sec_limiter` and
+  `workspace_reader` group roles (migrations 007, 010, 022 and 105 create them only when the login
+  may create roles; on hermes the owner made them; 105 also needs `workspace_reader` granted to
+  `query_api` WITH INHERIT FALSE, SET TRUE and SET ON PARAMETER `temp_file_limit` to `query_api`:
+  the command is in db/README "SQL workspace role"), and `query_api` granted to the login.
 - In the release namespace:
   - Secret `tributary` with keys `database-url`, `app-database-url`, `jwt-secret`,
     `anthropic-api-key`, `sec-user-agent`, `openfga-api-token` when `openfga.auth.enabled`,

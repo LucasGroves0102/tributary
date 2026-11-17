@@ -1194,6 +1194,115 @@ WHERE user_id = '<id>'` (rows cascade).
   Deployment and NetworkPolicy in the Flux release, and the ToS line on uploaded content. The
   assistant reading own files is a tool-schema change (replays re-recorded: money): MCP first.
 
+## SQL workspace
+
+B3a of the core plan: one SELECT at a time over the `workspace` views (tributary migration 105),
+run as the caller, and notebooks (app migration 023) that run their cells through it. The largest
+risk in B3 is a cross-user leak through SQL, so the request passes four independent lines before a
+row comes back, and the adversarial suite was written first.
+
+**1. The guard** (`sql_guard.py`, pglast 6.17 = libpg_query 16, hermes' Postgres 16.15). Default
+deny on the parse tree: every node type must be in `NODES`; one `SelectStmt` (no INTO, no locking
+clause, no RECURSIVE, every CTE a SELECT); every relation a `workspace` view or a CTE in scope where
+it is named (CTEs are scoped as Postgres scopes them: a CTE called `pg_class` is readable inside its
+WITH and `pg_class` outside it is refused); every function in `FUNCTIONS` (pg_catalog built-ins,
+none volatile or DEFINER: the DB test checks) or `WORKSPACE_FUNCTIONS`; casts only to numbers, text,
+booleans, dates, times and intervals (no `regclass` lookups); operators unqualified; no `$n`;
+CURRENT_DATE and the clocks the only SQL value functions. NUL is refused before parsing (libpg_query
+reads a C string: `SELECT 1\0; DROP...` would parse as `SELECT 1`). What runs is not the user's text
+but the checked tree printed by pglast and checked again: no comment, escape or quoting reaches
+Postgres that the guard didn't see.
+
+**2. The session** (`sql_workspace.run`, through `Store.run_sql`). One transaction, `SET TRANSACTION
+READ ONLY` first, then `SET LOCAL ROLE query_api`, the limits and `app.user_id` set by the server
+(from the JWT), the per-user and slot advisory locks, then `SET LOCAL ROLE workspace_reader`. The
+search path is `workspace` (pg_catalog is implicit). The transaction always rolls back.
+
+**3. The role**. `workspace_reader` is NOLOGIN, no attributes, a member of nothing; query_api's
+members may SET ROLE to it (`WITH INHERIT FALSE, SET TRUE`: query_api gains none of its rights or
+policies). It has SELECT on the views, EXECUTE on the three workspace functions, and the grants
+their bodies need (security invoker): USAGE on gold, silver, authz and userdata (SQL function bodies
+are parsed as the caller), SELECT on the tables behind the views, document metadata columns only of
+`bronze.filing_documents`. It writes nothing, creates nothing, and holds EXECUTE on no SECURITY
+DEFINER function (all are REVOKEd from PUBLIC). It can't set `temp_file_limit` (superuser-only; the
+grant is to query_api, which sets it before the switch).
+
+**4. Row-level security as today**. 105 ALTERs the ten policies the views read to name
+`workspace_reader` beside `query_api`: the same expression, so one rule (030's financials and
+filings tiers through `authz.readable_companies`, the catalog open or closed; authz's own rows;
+100's owner-only userdata). RLS quals are security-barrier quals: a user's non-leakproof qual
+(`value::text::int`) only ever sees rows RLS let through, so an error message can quote only the
+caller's own rows. No view filters for security in its WHERE.
+
+**A fifth check after the fact**: before any row is returned the session must still be
+`workspace_reader` with the same `app.user_id` in a read-only transaction, else 500 and an error
+log (a query that changed them could only exist if the guard were bypassed).
+
+Layer 1 is `access_of(user)`: OpenFGA reachable for this user (503 otherwise). A query names no
+company in advance, so, like the screener with the catalog public, the rows are RLS's alone.
+
+**Adversarial suite** (test_sql_guard.py at the parser, test_sql_workspace_db.py against Postgres,
+with the guard and, for the database cases, without it):
+
+| Attempt | Result |
+|---|---|
+| `SET`/`RESET app.user_id`, `SET ROLE`, `set_config(...)` (plain, qualified, quoted, unicode-escaped, in a subquery), `current_setting` | refused by the guard; with the guard bypassed, a changed user or role is caught after the fetch (Tampered, nothing returned) |
+| `pg_sleep`, advisory locks, `generate_series`, `repeat`/`lpad`, `WITH RECURSIVE`, `array_agg`/`string_agg` (a value no `work_mem` bounds) | refused by the guard |
+| `pg_class`, `pg_authid`, `pg_stat_activity`, `information_schema`, `TABLE pg_class`, a CTE named `pg_class` used outside its scope | refused by the guard |
+| gold/silver/bronze/userdata/authz/ops tables, another database | refused by the guard; bypassed: `permission denied for schema bronze/ops`, RLS on the rest |
+| SECURITY DEFINER functions (`company_financials_at`, `search_page`, `disagreeing_figures`, `ops.public_*`) | refused by the guard; bypassed: `permission denied`; no DEFINER function is executable by the role (DB test over pg_proc) |
+| data-modifying CTE, `SELECT INTO`, `FOR UPDATE/SHARE`, `COPY ... PROGRAM`, `CREATE`, `DO`, `CALL` | refused by the guard; bypassed: read-only transaction and no write grant |
+| several statements, a statement after a comment, `PREPARE`/`EXECUTE`/`DEALLOCATE`, `DECLARE`, `EXPLAIN ANALYZE`, `$1`, `\gexec`, NUL | refused by the guard |
+| comments, `U&"\0070g_class"`, fullwidth or zero-width letters, nested comments | the parser resolves them first: unknown names refused; comments never reach Postgres |
+| cartesian joins over the views; a correlated subquery over a view per row | refused before running: a step expecting over 1e9 rows / a cost over 1e10 (`too_costly`, nothing counted) |
+| a huge result | the first 10,000 rows (8 MB), `truncated: "rows"` |
+| a second query while one runs; a fifth across replicas | 429 `busy_user` / `busy_slots` |
+| another user's `my_series`/`my_datasets` rows, also by name; `userdata.*` with the guard bypassed | only the caller's rows |
+| a company outside the caller's grants, catalog closed; catalog open without the tier; no plan | none of its rows (financials, history, as of, latest, sections, restatements, reading) |
+| a cast that fails on a hidden row's value | never evaluated on it: the query succeeds while the row is hidden |
+| an API key | 403 on both routes |
+
+**Limits and measurements**. statement_timeout 15 s (per statement: EXPLAIN, DECLARE, each FETCH),
+lock_timeout 1 s, work_mem 32 MB, temp_file_limit 256 MB, no parallel workers, no JIT. Two plan
+ceilings, because cost alone misjudges: under RLS each LATERAL probe is charged the policy's hashed
+subplan, so `reading()` for 20 companies is estimated at 6.2e9 and runs in 0.2 s. A step expecting
+over `SQL_MAX_PLAN_ROWS` (1e9) rows is a cross product; a total cost over `SQL_MAX_COST` (1e10) is
+absurd work (a correlated subquery per row: 2.6e11). Everything else is bounded by the timeout, the
+temp-file limit, the 4 slots and the daily budget.
+
+On hermes (2026-11-17, read-only, `lucas`: no RLS): one company's revenue cost ~300; one metric
+across every company through `financials` 1.04M (6.4 s warm, 588k pages read); 8-Ks of a year in
+the index 0.49M; `count(*)` over `financials` 2.18M; financials joined to itself 4.8e9. On a
+catalog-sized local copy (6,000 companies, 3.5M quarters, 2.6M TTM rows, the same 3.5M as history,
+1.2M filings, the catalog open), through `sql_workspace.run` as `workspace_reader` (cost, max rows at
+one step, time): one company's revenue 798 / 48 / 0.01 s; one metric across every company 258k /
+288k / 0.45 s; the same from `latest_figures` 1.2k / 0.01 s; revenue as of a day for every company
+163k / 0.39 s; `count(*)` over `financials` 592k / 3.7M / 3.6 s; `reading()` for the top 20 6.2e9 /
+6k / 0.2 s; financials joined to itself 2.9e9 / 1.9e11: refused; companies x companies 1.4e10 rows:
+refused; every example under 4k cost and 0.1 s. `gold.financials_at(day)` computes every company's
+labels before any filter (its CTE is read twice, so materialized: 3.5M rows, over the temp-file
+limit), so `workspace.financials_at(day)` is the history filtered by 087's believed-on-the-day rule
+alone, which a company filter reaches through the primary key. A company list reaches `financials`
+as `company_id = ANY (ARRAY(SELECT ...))` (pushed into the view; a join computes the view for every
+company first): the examples do so.
+
+**Budget**: `sql_usage` (app 023) counts seconds per user per UTC day (`SQL_SECONDS_PER_DAY`, 600);
+checked before running, the elapsed time added after (a failed or timed-out query counts what it
+ran; a refusal by the guard or the cost ceiling counts nothing). One query per user bounds the
+overshoot to one query. App DB down: 503 (the budget can't be enforced).
+
+**Notebooks** hold cells (`sql`, `text`, `chart`: a chart names a SQL cell and columns) and never a
+result: whoever opens one runs its queries again as themselves. 60,000 bytes (the table allows
+65,536 like a model), 50 cells, 20,000 characters a cell.
+
+**Residual risks** (accepted for B3a, owner's to revisit): the guard is the only barrier against
+`set_config('role', ...)` back to the login (on hermes the services' login `tributary` owns the
+tables, so a guard bypass would read as the owner, still read-only and checked after the fetch); a
+dedicated login holding only `workspace_reader` (`SQL_DATABASE_URL`) would close that, and is the
+next step before inviting users. The cost ceiling's accept/refuse is a one-bit oracle on planner
+statistics, which are table-wide (userdata's MCV lists included). Catalog-wide queries read GBs of
+pages on the one Postgres (4 slots at most): a read replica before inviting users.
+
 ## Tests
 
 `pytest services/query-api` (install with `pip install -e 'services/query-api[test]'`).
