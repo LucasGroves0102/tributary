@@ -1,6 +1,6 @@
-"""The sector mapping (db/migrations/046_sectors.sql): ranges never overlap, every SIC code the SEC
-had assigned to a company (fixtures/sic_codes.csv, 2026-11-09) falls in exactly one, and the
-header's counts are true."""
+"""The sector mapping (db/migrations/046_sectors.sql, revised by 082): ranges never overlap, every
+SIC code the SEC had assigned to a company (fixtures/sic_codes.csv, 2026-11-09) falls in exactly
+one, and the header's counts are true."""
 
 import csv
 import re
@@ -8,7 +8,22 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 MIGRATION = (ROOT / "db" / "migrations" / "046_sectors.sql").read_text()
-ROWS = re.findall(r"\('(\d{4})', '(\d{4})', '([^']+)', '([^']+)'\)", MIGRATION)
+TUPLE = r"\('(\d{4})', '(\d{4})', '([^']+)', '([^']+)'\)"
+# later migrations replace a range by its sic_from (DELETE, then the new ranges) or add one
+REVISIONS = [(ROOT / "db" / "migrations" / f).read_text()
+             for f in ("082_sector_hvac_controls.sql",)]
+
+
+def _rows() -> list[tuple[str, str, str, str]]:
+    rows = {r[0]: r for r in re.findall(TUPLE, MIGRATION)}
+    for sql in REVISIONS:
+        for gone in re.findall(r"DELETE FROM silver\.sic_sectors WHERE sic_from = '(\d{4})'", sql):
+            del rows[gone]
+        rows.update({r[0]: r for r in re.findall(TUPLE, sql)})
+    return sorted(rows.values())
+
+
+ROWS = _rows()
 CODES = list(csv.DictReader((Path(__file__).parent / "fixtures" / "sic_codes.csv").open()))
 
 
@@ -49,6 +64,11 @@ def test_judgment_calls_land_where_the_header_says():
     assert sector_of("3533")[0][0] == sector_of("4922")[0][0] == "Energy"
     assert sector_of("5331") == [("Consumer Staples", "Food & general merchandise retail")]
     assert sector_of("0000") == []
+    # 082: Trane (3822) with the HVAC makers (3585); laboratory instruments (3826) in Health Care
+    assert sector_of("3822") == sector_of("3585") == [("Industrials", "Building & office products")]
+    assert sector_of("3826") == [("Health Care", "Life sciences tools & services")]
+    assert sector_of("3821")[0][0] == sector_of("3823")[0][0] == sector_of("3829")[0][0] \
+        == "Technology"
 
 
 def test_industries_belong_to_one_sector():
