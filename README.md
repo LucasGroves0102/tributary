@@ -104,9 +104,13 @@ with its measurements.
   and the reason instead of a number where a figure is stale, n/m or in another currency
   ([web](services/web/README.md#spreadsheet-add-ins),
   [query-api](services/query-api/README.md#spreadsheets)).
-- **Your own AI model, through MCP.** A remote MCP server at `/mcp` with 25 read-only tools that
-  cite their sources, authenticated by the same API key and holding no database login
-  ([mcp-server](services/mcp-server/README.md)).
+- **Your own AI model, through MCP.** A remote MCP server at `/mcp` with 28 read-only tools that
+  cite their sources and hold no database login. Add it in claude.ai or ChatGPT by its URL: the app
+  sends you to Tributary to sign in and approve it (OAuth 2.1 with PKCE, client ID metadata
+  documents or dynamic registration, tokens bound to `/mcp` and stored hashed), and Settings lists
+  connected apps to disconnect; or use the same API key
+  ([mcp-server](services/mcp-server/README.md),
+  [query-api](services/query-api/README.md#connected-apps-oauth)).
 - **Connect your data** (off until the deployment has its key): your own market-data key for prices
   and a valuation ([query-api](services/query-api/README.md#connect-your-data)).
 - **The look ("Seal").** An annual report kept as a ledger: serif figures, red rubrics, and a wax
@@ -164,7 +168,7 @@ flowchart LR
   sync --> rls
   web --> api
   web --> agent --> api
-  mcp -- the user's API key --> api
+  mcp -- the user's app token or key --> api
   scripts --> api
   api -- check first --> fga
   api -- then query as the user --> gold

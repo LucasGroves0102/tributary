@@ -210,10 +210,17 @@ services:
     uses: [kafka, postgres, openfga]
   query-api:
     port: 8000
-    # webhooks: the alert settings' "Send a test" (query_api/alerts.py, 5 an hour per user)
+    # webhooks: the alert settings' "Send a test" (query_api/alerts.py, 5 an hour per user); the
+    # same 443-to-public-addresses egress fetches connected apps' client metadata documents
+    # (query_api/client_metadata.py: webhooks.py's address rules, no redirects, 8 KB, 5 s)
     uses: [postgres, app-postgres, openfga, jwt, demo, github, market-data, webhooks]
     from: [web, agent-api, mcp-server]
     env:
+      # Connected apps (query_api/oauth.py): the OAuth authorization server for the MCP server.
+      # The issuer is the site (its metadata at /.well-known/oauth-authorization-server, nginx);
+      # tokens are bound to OAUTH_ISSUER + /mcp. Tables in the app database (migration 025); no
+      # secret of its own (requests are sealed with a key derived from the JWT secret).
+      OAUTH_ISSUER: https://tributary.lucasgroves.dev
       # Your data (query_api/datasets.py): every user's uploaded rows on disk, at most; past it
       # uploads are refused (507) until datasets are deleted. Per-user quotas are in the code.
       USER_DATA_SPACE_MB: "4096"
@@ -240,9 +247,10 @@ services:
         memory: 128Mi
       limits:
         memory: 384Mi
-  # MCP server (services/mcp-server): a user's own AI model reads Tributary through it with their
-  # API key, at https://<site>/mcp (the web image's nginx routes it here). No database login and
-  # no secrets: every tool calls the Query API with the caller's key (OpenFGA + RLS as that user).
+  # MCP server (services/mcp-server): a user's own AI model reads Tributary through it, connected
+  # by OAuth (Settings, Connected apps) or with an API key, at https://<site>/mcp (the web image's
+  # nginx routes it here). No database login and no secrets: every tool calls the Query API with
+  # the caller's own token or key (OpenFGA + RLS as that user).
   # In: web only (nginx). Out: query-api and DNS only (`uses: [query-api]` adds no egress label;
   # query-api's `from` lists it). Shipped stopped like doc-crawler; the Flux release turns it on.
   mcp-server:
@@ -254,6 +262,9 @@ services:
       # Host and Origin the SDK accepts (DNS rebinding protection): nginx sends the Service's host
       MCP_ALLOWED_HOSTS: "mcp-server:*,localhost:*,127.0.0.1:*"
       MCP_ALLOWED_ORIGINS: https://tributary.lucasgroves.dev
+      # Connected apps: the Query API's issuer; the 401 points at this server's resource metadata
+      # (/.well-known/oauth-protected-resource/mcp), so claude.ai and ChatGPT can sign users in
+      OAUTH_ISSUER: https://tributary.lucasgroves.dev
     resources:
       requests:
         cpu: 25m

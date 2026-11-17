@@ -161,12 +161,17 @@ Every pod runs as non-root with a read-only root filesystem, no capabilities, th
 ## MCP server
 
 `mcp-server` ([services/mcp-server](../../../services/mcp-server)) lets a user connect their own AI
-model to Tributary with a personal API key: remote MCP over Streamable HTTP at
-`https://tributary.lucasgroves.dev/mcp`. The web image's nginx routes exactly `/mcp` to it (no
-buffering, 300 s read timeout, the security headers); its health and metrics stay inside the
-cluster. It holds no database login and no secrets (`uses: [query-api]` only): each tool calls the
-Query API with the caller's own `Authorization: Bearer trb_...`, so OpenFGA, row-level security,
-the key's scope and its rate limits apply as for any API-key request. NetworkPolicies: in from `web`
+model to Tributary: remote MCP over Streamable HTTP at `https://tributary.lucasgroves.dev/mcp`,
+added in claude.ai or ChatGPT by that URL (OAuth: the app signs the user in at Tributary, which
+asks them to approve it) or with a personal API key. The web image's nginx routes exactly `/mcp`
+to it (no buffering, 300 s read timeout, the security headers), and its protected resource
+metadata (`/.well-known/oauth-protected-resource[/mcp]`); the authorization server
+(`/.well-known/oauth-authorization-server`, `/oauth/*`) is the Query API's. Its health and metrics
+stay inside the cluster. It holds no database login and no secrets (`uses: [query-api]` only): each
+tool calls the Query API with the caller's own `Authorization: Bearer tro_...` (an app's token)
+or `trb_...` (a key), so OpenFGA, row-level security, read-only routes and the per-key limits apply
+as for any API-key request. `OAUTH_ISSUER` (values.yaml, on both query-api and mcp-server) is the
+site's origin; unset, connected apps are off and only keys work. NetworkPolicies: in from `web`
 pods (and the node, for probes) only; out to `query-api` (listed in query-api's `from`) and DNS
 only. `MCP_ALLOWED_HOSTS` / `MCP_ALLOWED_ORIGINS` (values.yaml) are the Host and Origin values the
 SDK accepts: nginx sends the Service's host, and non-browser clients send no Origin.

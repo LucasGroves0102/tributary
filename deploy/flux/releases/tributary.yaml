@@ -53,8 +53,9 @@ spec:
       agent-api:
         env:
           AGENT_IP_RATE_PER_HOUR: "40"
-      # The MCP server at /mcp (services/mcp-server): users' own AI models, with their API keys.
-      # No secrets of its own; every tool goes through the Query API as the key's user.
+      # The MCP server at /mcp (services/mcp-server): users' own AI models, connected by OAuth
+      # (claude.ai, ChatGPT) or with their API keys. No secrets of its own; every tool goes
+      # through the Query API as the token's or key's user.
       mcp-server:
         replicas: 1
     # The jobs that read the crawled documents run hourly.
