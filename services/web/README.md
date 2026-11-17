@@ -57,7 +57,8 @@ Hash routes (`src/route.ts`; an unknown route goes Home, `#/explore` to Companie
 | `#/analysis[/<id>[/<step>[/<item>]]]`, `#/analysis?start=<id>` | guided research projects in 8 steps | [Analysis](DESIGN.md#analysis) |
 | `#/workspace/<id>`, `#/report/<id>` | saved work and research notes the assistant writes | [Saved work and reports](DESIGN.md#saved-work-and-reports) |
 | `#/thesis/<id>`, `#/model/<id>` | a thesis (Write view, Check my thesis, Revisit) and a model | [Theses and models](DESIGN.md#theses-and-models) |
-| `#/alerts` | filing alerts | [Filing alerts](DESIGN.md#filing-alerts) |
+| `#/alerts` | filing alerts and your watched screens' alerts | [Filing alerts](DESIGN.md#filing-alerts), [Watched screens](DESIGN.md#watched-screens) |
+| `#/screen/<id>` | a saved screen's link (alerts point at it): opens it as Companies' open screen, in place of the link | [Watched screens](DESIGN.md#watched-screens) |
 | `#/portfolio[/<holding>]`, `#/portfolio/import` | your holdings on your own prices, a holding's buys, sales and journal, the Fidelity import | [Portfolio](DESIGN.md#portfolio) |
 | `#/data` | Your data: your datasets (CSV upload, checked before storing), your metrics (saved formulas, screener columns) | [Your data](DESIGN.md#your-data) |
 | `#/settings` | filing alerts, Connect your data (when on), API keys | [Price](DESIGN.md#price-connect-your-data), [API keys](DESIGN.md#api-keys-and-using-the-api) |

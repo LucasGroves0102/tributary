@@ -1086,3 +1086,14 @@ day with gold.financials' fiscal and calendar rules (014) for formulas; `series`
 for a later SQL workspace. Wide rows: the densest 20 MB file allowed (180,000 rows of 48 fields) is
 ~100 MB stored against ~1 GB one value a row, and stores in ~7 s (measured locally). In every
 backup (nothing here can be rebuilt). Query API side: services/query-api DESIGN.md "Your data".
+
+### 110_figures_landed.sql
+
+Saved screens that alert (app migration 024) are checked once after each night's figures, not every
+ten minutes. `ops.figures_landed_at()` answers when that was: the newest `ops.coverage_runs` row, the
+financials-bulk job's last step (076's coverage report runs once gold is current for the night, changed
+zip or not). DEFINER because `query_api` has no grant on the table; one timestamp, nothing else
+(aggregate-only like `ops.public_coverage_gaps`), search_path pinned, EXECUTE only `query_api`; `max()`
+of the primary key is one index probe. NULL before any run: the alerts job then checks a watch once a
+day (query-api `watches.FALLBACK`). CREATE FUNCTION only. Query API side: services/query-api DESIGN.md
+"Saved screens that alert".

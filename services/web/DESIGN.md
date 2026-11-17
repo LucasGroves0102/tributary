@@ -1218,6 +1218,24 @@ and the delivery log in words ("Retrying: it answered 500; tried 2 times"); an E
 server has email. `alerts/alerts.ts` only words what the API
 decided.
 
+## Watched screens
+
+Saved screens that alert (`src/watches/`, Query API README "Saved screens that alert"). A saved
+screen is the workspace item Companies' Save… makes; under the page bar Companies lists the user's
+saved screens (`SavedScreens`, "watched" beside the watched ones, the open one marked) and, while a
+saved screen is open, its watch (`WatchControl`): whether it is watched, what its last check found
+(`watches.ts` `lastCheck`, the API's outcome: the first check only records), and Watch… / Change…,
+a form for companies entering, leaving and up to the API's `max_lines` lines (a column of the table
+as shown, own metrics included; Rises above / Falls below; a value typed as the table reads it: a
+percent for a ratio, $ millions for an amount; any company in it, or one picked with
+`CompanySearch`). It saves the columns the page shows with the watch; with unsaved changes it says the
+watch checks the screen as saved. The sidebar's workspaces mark a watched screen with a bell. The
+Alerts page lists screen alerts above filings (`ScreenAlerts.tsx`): the screen (a link to
+`#/screen/<id>`), what crossed a line with the value as the API read it, entered and left, each
+company a link, "and N more", and how many it no longer lists because the user can't read them;
+opening the list marks what it shows read. `#/screen/<id>` opens the saved item and replaces itself
+with Companies' address (`location.replace`). Nothing here decides a reading or a crossing: the API's.
+
 ## Portfolio
 
 `src/portfolio/` (Query API README "Portfolio" decides every figure; `portfolio.ts` only words
@@ -1509,4 +1527,6 @@ tags-only wording); nothing new is requested. Portfolio: `/v1/portfolio` and the
 the unread answer has it. Your data: `/v1/datasets` answering 404 says it isn't available on this
 server yet; the company page's Your data panel asks `/v1/companies/{id}/datasets` and shows nothing
 on a 404; a saved screen refused for its own metrics (`metric`, or a sort on an `m_` column) is
-saved again without them; the screener sends `metric` only when the user chose one.
+saved again without them; the screener sends `metric` only when the user chose one. Watched
+screens: `/v1/watches` and `/v1/alerts/screens` answering 404 (or a 503 without the app database)
+show no watch and no screen alerts (`orNullOn404`); nothing else is asked differently.

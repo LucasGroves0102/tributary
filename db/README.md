@@ -5,7 +5,7 @@ All SQL for Tributary. Two Postgres databases on one server:
 | Database | Migrations | Contents |
 |---|---|---|
 | `tributary` | [`migrations/`](migrations) | the bronze / silver / gold medallion, the access tables, ops tables and views |
-| `app` | [`app/migrations/`](app) | users, organizations, plans, grants, watchlists, saved work, filing alerts ([app/README.md](app/README.md)) |
+| `app` | [`app/migrations/`](app) | users, organizations, plans, grants, watchlists, saved work, filing alerts, watched screens ([app/README.md](app/README.md)) |
 
 OpenFGA keeps its own `openfga` database, migrated by OpenFGA itself.
 
@@ -182,3 +182,4 @@ One line each; the full notes (what it changes, why, the measurements) are in [D
 - [`086_financials_known.sql`](DESIGN.md#086_financials_knownsql): gold's history of itself (`gold.financials_known`): every version of every row, from the filing that first stated it; the 'known' catch-up kind.
 - [`087_point_in_time_reads.sql`](DESIGN.md#087_point_in_time_readssql): reading gold as of a day: `gold.financials_at`, the single-company read, the readings' probes with `p_as_of`, restatements.
 - [`100_userdata.sql`](DESIGN.md#100_userdatasql): Bring your own data: the schema `userdata` (a user's own datasets, their rows by company, day and when known, the upload log), owner-only under forced RLS, in every backup.
+- [`110_figures_landed.sql`](DESIGN.md#110_figures_landedsql): `ops.figures_landed_at()`, when the nightly figures last landed (the bulk job's coverage run): when watched screens are checked.
